@@ -67,6 +67,11 @@ MCP servers (§ below): same JSON entries, via `.mcp.json` / `claude mcp add-jso
 `~/.cursor/mcp.json`. Datadog: use the `datadog` Claude Code plugin's `ddsetup` skill instead of the
 Cursor Datadog plugin. Full mapping: [claude-code-setup.md](../docs/skill-framework/shared/claude-code-setup.md).
 
+### Kiro / in-repo discovery
+
+Working directly in this repo (not via an installed copy)? `.cursor/rules/incident-rca.mdc` and
+`.kiro/steering/incident-rca.md` point Cursor/Kiro at `incident-rca/SKILL.md` without an install step.
+
 ## Minimum viable setup
 
 This skill lists 5 MCP servers below plus an external skill and an optional CLI — that's the full

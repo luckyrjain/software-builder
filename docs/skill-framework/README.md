@@ -1,7 +1,11 @@
 # Skill Framework — Shared Reference Library
 
-Normative conventions for **pr-review**, **incident-rca**, **k8s-overprovisioning-datadog**, **domain-comprehension**, **squad-map**, and **mysql-to-postgres-sql**.  
+Normative conventions for **pr-review**, **incident-rca**, **k8s-overprovisioning-datadog**, **domain-comprehension**, **squad-map**, **mysql-to-postgres-sql**, and **loop-task-implementer**.
 Design spec: [2025-06-30-unified-skill-framework-design.md](../superpowers/specs/2025-06-30-unified-skill-framework-design.md).
+
+`loop-task-implementer` is platform-neutral and host-agent-driven rather than Datadog/GitLab/Jira-MCP-driven,
+so `confidence-bands.md` and `phase-glossary.md` don't apply to it — everything else (file anatomy,
+workflow frontmatter, escalation, examples depth, smoke/pressure tests, cross-agent discovery) does.
 
 Skills reference these files by relative link from `SETUP.md` or `SKILL.md`. Do not duplicate full tables inline — link here and add skill-specific deltas only.
 

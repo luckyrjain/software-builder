@@ -1,6 +1,6 @@
 # Cross-skill escalation (shared)
 
-**Normative.** Symmetric escalation matrix for pr-review, incident-rca, k8s-overprovisioning-datadog, domain-comprehension, squad-map, and mysql-to-postgres-sql.
+**Normative.** Symmetric escalation matrix for pr-review, incident-rca, k8s-overprovisioning-datadog, domain-comprehension, squad-map, mysql-to-postgres-sql, and loop-task-implementer.
 
 **Consumers:** `SKILL.md` in each skill (link here; keep ≤10 skill-specific rows max).
 
@@ -28,6 +28,10 @@
 | Cutover wrong results / outage | mysql-to-postgres-sql → incident-rca | Service + window + shadow diff | "RCA for `{service}` {window} — PG cutover query regression" |
 | RCA recommends monitor/alert fix | incident-rca → kubesense-alerts | Monitor query + threshold from RCA | "Create or update alert for `{query}` — RCA `{service}` {window}" |
 | RCA needs dashboard for verification | incident-rca → kubesense-dashboards | Metric panels from RCA evidence | "Dashboard for `{service}` post-incident / soak verification" |
+| Builder needs an MR reviewed beyond its own lenses | loop-task-implementer → pr-review | MR !IID + task ID | "Review MR !{iid} for task `{task_id}`" |
+| Task implementation causes or needs incident investigation | loop-task-implementer → incident-rca | Service + window + task ref | "RCA for `{service}` {window} — regression from task `{task_id}`" |
+| Task requires understanding an unfamiliar domain/codebase first | loop-task-implementer → domain-comprehension | Repo/workspace + task ref | "Map domain for `{workspace}` before implementing task `{task_id}`" |
+| Task touches MySQL-dialect SQL during a PG migration | loop-task-implementer → mysql-to-postgres-sql | Service + repo | "Scan/rewrite MySQL dialect in `{service}` for task `{task_id}`" |
 
 Skill-specific rows in each `SKILL.md` MUST be a subset of this table plus local deltas only.
 
@@ -45,6 +49,8 @@ Skill-specific rows in each `SKILL.md` MUST be a subset of this table plus local
 | domain-comprehension completes P5 | squad-map refresh if ownership changed | "Refresh squad map — domain comprehension found new services in `{workspace}`" |
 | PG cutover regression confirmed in RCA | mysql-to-postgres-sql audit on failing query | "Audit native SQL in `{service}` for PG semantic mismatch — RCA found query regression" |
 | Migration rewrites complete | pr-review on migration MR | "Review MR !{iid} for MySQL→PostgreSQL migration in `{service}`" |
+| pr-review approves a loop-task-implementer task MR | loop-task-implementer resumes and selects the next task | "Continue loop-task-implementer — MR !{iid} merged, select next task" |
+| incident-rca confirms a regression tied to a task branch | loop-task-implementer dispatches Builder remediation | "Dispatch Builder remediation for task `{task_id}` — RCA confirmed regression {window}" |
 
 ## 3. Handoff block (required fields)
 
@@ -85,6 +91,7 @@ When `MYSQL_TO_PG_SQL_REWRITES.md` exists in the workspace deliverable directory
 | Squad / repo ownership mapping | squad-map |
 | Domain / subsystem map, bounded contexts, data ownership | domain-comprehension |
 | MySQL scrub / native SQL PG migration / jdbc:postgresql cutover | mysql-to-postgres-sql |
+| Autonomous multi-task implement → review → remediate → PR loop | loop-task-implementer |
 | Live rollback / kubectl apply | Out of scope — human operator |
 | Security-only deep review | pr-review with security persona |
 | Cost/billing investigation across services | Canvas + appropriate skill; not auto-routed |

@@ -1,0 +1,10 @@
+---
+description: Invoke the repository incident-rca skill for post-incident root-cause investigation in a time window.
+alwaysApply: false
+---
+
+When the user asks for an RCA, root cause, postmortem, or references an incident/INC-/P1/P2 in a
+time window, read `incident-rca/SKILL.md` and follow it.
+
+Phase index: `incident-rca/reference/phase-index.md`. Reference loads: `incident-rca/reference/lazy-load-index.md`.
+Read-only investigation — never applies fixes, rollbacks, or scales.

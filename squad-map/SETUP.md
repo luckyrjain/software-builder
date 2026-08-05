@@ -23,6 +23,11 @@ No restart needed — a new Claude Code session picks it up. See
 [claude-code-setup.md](../docs/skill-framework/shared/claude-code-setup.md) for MCP config location
 differences (GitLab/Datadog server entries are unchanged).
 
+### Kiro / in-repo discovery
+
+Working directly in this repo (not via an installed copy)? `.cursor/rules/squad-map.mdc` and
+`.kiro/steering/squad-map.md` point Cursor/Kiro at `squad-map/SKILL.md` without an install step.
+
 ## Prerequisites
 
 | Requirement | Notes |

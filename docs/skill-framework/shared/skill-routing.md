@@ -16,6 +16,7 @@ When adding a new skill, add it here first; then each existing skill only needs 
 | Domain comprehension, bounded context, data ownership, critical path, architecture smells, subsystem onboarding, multi-repo ground truth, five questions | **domain-comprehension** | squad-map (ownership only), incident-rca |
 | Squad map, ownership, who owns, CODEOWNERS, GitLab group, Datadog team, team reconciliation | **squad-map** | domain-comprehension (full map) |
 | MySQL scrub, jdbc:postgresql, TIMESTAMPDIFF, DATE_FORMAT, native SQL rewrite, mysql2→pg, SQLAlchemy PG cutover, collection P0/P1 cooling SQL | **mysql-to-postgres-sql** | domain-comprehension (full map), squad-map (ownership only) |
+| Implement task/issue autonomously, independent review + remediation loop, adjudicate findings, work through a task queue | **loop-task-implementer** | pr-review (reviewing someone else's existing MR only) |
 | GitHub pull request, local uncommitted diff, review unstaged | **review-bugbot** (external) | pr-review |
 | Datadog MCP missing / 403, configure Datadog | **ddsetup** / **ddconfig** | all others |
 | Live rollback, kubectl apply, deploy, restart pods | **Out of scope** — human operator | all skills |

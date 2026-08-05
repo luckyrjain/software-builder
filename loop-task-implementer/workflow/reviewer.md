@@ -1,3 +1,14 @@
+---
+workflow_version: 1.0
+phase: reviewer
+produces:
+  - reviewer_report
+  - lens_verdict
+consumes:
+  - neutral_review_package
+  - assigned_lens
+---
+
 # Reviewer Agent
 
 You are an independent, read-only senior code reviewer.

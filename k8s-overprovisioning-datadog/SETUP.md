@@ -30,6 +30,13 @@ the `datadog` Claude Code plugin and run its `ddsetup` skill instead of the Curs
 `~/.cursor/mcp.json`. Full mapping:
 [claude-code-setup.md](../docs/skill-framework/shared/claude-code-setup.md).
 
+### Kiro / in-repo discovery
+
+Working directly in this repo (not via an installed copy)?
+`.cursor/rules/k8s-overprovisioning-datadog.mdc` and
+`.kiro/steering/k8s-overprovisioning-datadog.md` point Cursor/Kiro at
+`k8s-overprovisioning-datadog/SKILL.md` without an install step.
+
 ## 2. Enable Datadog MCP
 
 1. Install the **Datadog** Cursor plugin (provides `plugin-datadog-datadog`).

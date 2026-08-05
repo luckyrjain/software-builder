@@ -144,6 +144,11 @@ the same JSON snippets from § 3 below, placed in `.mcp.json` / via `claude mcp 
 `@zereight/mcp-gitlab` inline-posting entry instead. Full mapping:
 [claude-code-setup.md](../docs/skill-framework/shared/claude-code-setup.md).
 
+### Kiro / in-repo discovery
+
+Working directly in this repo (not via an installed copy)? `.cursor/rules/pr-review.mdc` and
+`.kiro/steering/pr-review.md` point Cursor/Kiro at `pr-review/SKILL.md` without an install step.
+
 ## 3. Configure MCP servers (`.cursor/mcp.json`)
 
 All snippets below go inside the top-level `mcpServers` object in `~/.cursor/mcp.json`. Use

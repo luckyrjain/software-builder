@@ -1,3 +1,16 @@
+---
+workflow_version: 1.0
+phase: builder
+produces:
+  - implementation_diff
+  - pull_request
+  - builder_report
+consumes:
+  - task_assignment
+  - acceptance_criteria
+  - accepted_findings
+---
+
 # Builder Agent
 
 You are the implementation agent for one assigned software task.

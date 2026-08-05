@@ -23,6 +23,12 @@ No restart needed — a new Claude Code session picks it up. This skill has no r
 see [claude-code-setup.md](../docs/skill-framework/shared/claude-code-setup.md) if you wire the
 optional post-cutover Datadog check.
 
+### Kiro / in-repo discovery
+
+Working directly in this repo (not via an installed copy)? `.cursor/rules/mysql-to-postgres-sql.mdc`
+and `.kiro/steering/mysql-to-postgres-sql.md` point Cursor/Kiro at
+`mysql-to-postgres-sql/SKILL.md` without an install step.
+
 ## Prerequisites
 
 | Requirement | Notes |

@@ -23,6 +23,12 @@ No restart needed — a new Claude Code session picks it up. See
 [claude-code-setup.md](../docs/skill-framework/shared/claude-code-setup.md) for MCP config location
 differences (this skill's optional GitLab/Datadog enrichments use the same server entries).
 
+### Kiro / in-repo discovery
+
+Working directly in this repo (not via an installed copy)? `.cursor/rules/domain-comprehension.mdc`
+and `.kiro/steering/domain-comprehension.md` point Cursor/Kiro at `domain-comprehension/SKILL.md`
+without an install step.
+
 ## Prerequisites
 
 | Requirement | Notes |

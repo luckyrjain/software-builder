@@ -1,4 +1,4 @@
-.PHONY: install install-pr-review install-k8s-overprovisioning install-incident-rca install-incident-rca-deps install-domain-comprehension install-squad-map install-mysql-to-postgres-sql install-claude install-claude-pr-review install-claude-k8s-overprovisioning install-claude-incident-rca install-claude-domain-comprehension install-claude-squad-map install-claude-mysql-to-postgres-sql lint lint-framework lint-pr-review lint-k8s-skill lint-k8s lint-incident-rca lint-domain-comprehension lint-squad-map lint-mysql-to-postgres-sql setup-hooks setup kubesense-errors
+.PHONY: install install-pr-review install-k8s-overprovisioning install-incident-rca install-incident-rca-deps install-domain-comprehension install-squad-map install-mysql-to-postgres-sql install-loop-task-implementer install-claude install-claude-pr-review install-claude-k8s-overprovisioning install-claude-incident-rca install-claude-domain-comprehension install-claude-squad-map install-claude-mysql-to-postgres-sql install-claude-loop-task-implementer lint lint-framework lint-pr-review lint-k8s-skill lint-k8s lint-incident-rca lint-domain-comprehension lint-squad-map lint-mysql-to-postgres-sql lint-loop-task-implementer setup-hooks setup kubesense-errors
 
 install:
 	bash scripts/install.sh
@@ -24,6 +24,9 @@ install-squad-map:
 install-mysql-to-postgres-sql:
 	bash scripts/install.sh mysql-to-postgres-sql
 
+install-loop-task-implementer:
+	bash scripts/install.sh loop-task-implementer
+
 install-claude:
 	bash scripts/install.sh --agent claude-user
 
@@ -45,13 +48,16 @@ install-claude-squad-map:
 install-claude-mysql-to-postgres-sql:
 	bash scripts/install.sh --agent claude-user mysql-to-postgres-sql
 
+install-claude-loop-task-implementer:
+	bash scripts/install.sh --agent claude-user loop-task-implementer
+
 setup:
 	@echo "setup: installing Python dev dependencies (requirements.txt)"
 	@python3 -m pip install -r requirements.txt 2>/dev/null || \
 		python3 -m pip install --user --break-system-packages -r requirements.txt
 	@$(MAKE) setup-hooks
 
-lint: lint-framework lint-pr-review lint-k8s-skill lint-incident-rca lint-domain-comprehension lint-squad-map lint-mysql-to-postgres-sql
+lint: lint-framework lint-pr-review lint-k8s-skill lint-incident-rca lint-domain-comprehension lint-squad-map lint-mysql-to-postgres-sql lint-loop-task-implementer
 	@for f in scripts/*.sh; do \
 		echo "shellcheck $$f"; \
 		if command -v shellcheck >/dev/null 2>&1; then \
@@ -534,6 +540,50 @@ lint-mysql-to-postgres-sql:
 	fi
 	@echo "  ok (framework refs + shellcheck)"
 
+lint-loop-task-implementer:
+	@echo "lint-loop-task-implementer: SKILL.md line count (<= 180)"
+	@test -f loop-task-implementer/SKILL.md || \
+		{ echo "error: missing loop-task-implementer/SKILL.md" >&2; exit 1; }
+	@lines=$$(wc -l < loop-task-implementer/SKILL.md | tr -d ' '); \
+	if [ -z "$$lines" ] || [ "$$lines" -eq 0 ]; then \
+		echo "error: loop-task-implementer/SKILL.md is empty" >&2; exit 1; \
+	elif [ "$$lines" -gt 180 ]; then \
+		echo "error: loop-task-implementer SKILL.md $$lines lines (> 180)" >&2; \
+		exit 1; \
+	fi; \
+	echo "  ok ($$lines lines)"
+	@echo "lint-loop-task-implementer: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
+	@fail=0; \
+	for f in loop-task-implementer/workflow/*.md; do \
+		fm=$$(awk '/^---$$/{c++; next} c==1' "$$f"); \
+		for key in workflow_version phase produces consumes; do \
+			if ! printf '%s\n' "$$fm" | grep -q "^$$key:"; then \
+				echo "  missing $$key frontmatter: $$f" >&2; fail=1; \
+			fi; \
+		done; \
+	done; \
+	if [ "$$fail" -ne 0 ]; then echo "error: loop-task-implementer workflow/*.md must declare workflow_version, phase, produces, consumes" >&2; exit 1; fi; \
+	echo "  ok"
+	@echo "lint-loop-task-implementer: dangling markdown links"
+	@bash scripts/lint-dangling-md-links.sh loop-task-implementer/*.md loop-task-implementer/reference/*.md loop-task-implementer/workflow/*.md && echo "  ok" || \
+		{ echo "error: dangling reference link(s) found" >&2; exit 1; }
+	@echo "lint-loop-task-implementer: required files"
+	@for f in SETUP.md README.md examples.md report-template.md; do \
+		test -f loop-task-implementer/$$f || \
+			{ echo "error: missing loop-task-implementer/$$f" >&2; exit 1; }; \
+	done
+	@for f in phase-index lazy-load-index mcp-capabilities smoke-test pressure-tests platform-adapters; do \
+		test -f loop-task-implementer/reference/$$f.md || \
+			{ echo "error: missing loop-task-implementer/reference/$$f.md" >&2; exit 1; }; \
+	done
+	@test -f loop-task-implementer/reference/state-schema.yaml || \
+		{ echo "error: missing loop-task-implementer/reference/state-schema.yaml" >&2; exit 1; }
+	@grep -q 'skill-framework' loop-task-implementer/SETUP.md || \
+		{ echo "error: loop-task-implementer/SETUP.md must link to docs/skill-framework" >&2; exit 1; }
+	@grep -q 'cross-skill-escalation' loop-task-implementer/SKILL.md || \
+		{ echo "error: loop-task-implementer SKILL.md must link to shared cross-skill-escalation" >&2; exit 1; }
+	@echo "  ok"
+
 lint-framework:
 	@echo "lint-framework: shared docs present"
 	@test -f docs/skill-framework/README.md
@@ -558,7 +608,7 @@ lint-framework:
 	@grep -q '^## 1\. Required sections' docs/skill-framework/shared/examples-conventions.md
 	@grep -q '^## 2\. Scenario format' docs/skill-framework/shared/examples-conventions.md
 	@grep -q '^## 5\. Anti-patterns' docs/skill-framework/shared/examples-conventions.md
-	@for skill in pr-review incident-rca k8s-overprovisioning-datadog domain-comprehension squad-map mysql-to-postgres-sql; do \
+	@for skill in pr-review incident-rca k8s-overprovisioning-datadog domain-comprehension squad-map mysql-to-postgres-sql loop-task-implementer; do \
 		test -f $$skill/examples.md || \
 			{ echo "error: missing $$skill/examples.md (examples-conventions)" >&2; exit 1; }; \
 		grep -q '## Invocation' $$skill/examples.md || \
@@ -604,7 +654,7 @@ lint-framework:
 	done; \
 	if [ "$$fail" -ne 0 ]; then exit 1; fi
 	@grep -q '| Complete |' docs/skill-framework/README.md
-	@for skill in pr-review incident-rca k8s-overprovisioning-datadog domain-comprehension squad-map mysql-to-postgres-sql; do \
+	@for skill in pr-review incident-rca k8s-overprovisioning-datadog domain-comprehension squad-map mysql-to-postgres-sql loop-task-implementer; do \
 		grep -q 'skill-framework' $$skill/SETUP.md || \
 			{ echo "error: $$skill/SETUP.md must link to docs/skill-framework" >&2; exit 1; }; \
 		grep -q 'docs/skill-framework/shared/skill-routing.md' $$skill/SKILL.md || \
@@ -620,7 +670,8 @@ lint-framework:
 		"k8s-overprovisioning-datadog:workflow/collect-metrics.md" \
 		"domain-comprehension:workflow/session-0.md" \
 		"squad-map:workflow/inputs.md" \
-		"mysql-to-postgres-sql:workflow/migrate-service.md"; do \
+		"mysql-to-postgres-sql:workflow/migrate-service.md" \
+		"loop-task-implementer:workflow/orchestrator.md"; do \
 		skill=$${pair%%:*}; file=$${pair#*:}; \
 		if ! grep -qiE 'untrusted|prompt-injection' $$skill/$$file; then \
 			echo "error: $$skill/$$file must declare untrusted-content guard" >&2; fail=1; \
@@ -628,6 +679,16 @@ lint-framework:
 	done; \
 	if [ "$$fail" -ne 0 ]; then exit 1; fi
 	@echo "lint-framework: all SETUP.md links ok"
+	@echo "lint-framework: cross-agent discovery files (.cursor/rules + .kiro/steering)"
+	@fail=0; \
+	for skill in pr-review incident-rca k8s-overprovisioning-datadog domain-comprehension squad-map mysql-to-postgres-sql loop-task-implementer; do \
+		test -f .cursor/rules/$$skill.mdc || \
+			{ echo "  missing .cursor/rules/$$skill.mdc" >&2; fail=1; }; \
+		test -f .kiro/steering/$$skill.md || \
+			{ echo "  missing .kiro/steering/$$skill.md" >&2; fail=1; }; \
+	done; \
+	if [ "$$fail" -ne 0 ]; then echo "error: every skill needs a Cursor rule and Kiro steering discovery file" >&2; exit 1; fi; \
+	echo "  ok"
 	@echo "lint-framework: metadata footer examples present"
 	@for f in review-metadata.example.yaml assessment-metadata-rca.example.yaml \
 		assessment-metadata-k8s.example.yaml; do \
