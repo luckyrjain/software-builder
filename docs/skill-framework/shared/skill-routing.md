@@ -21,6 +21,7 @@ When adding a new skill, add it here first; then each existing skill only needs 
 | New engineer onboarding, new-hire tour, "joining the squad", first-week orientation, **a person is named** (interactive, conversational) | **new-hire-guide** | squad-map (ownership only, no tour), domain-comprehension (subsystem/domain onboarding with **no person named** — "subsystem onboarding" is domain-comprehension's own trigger phrase too; the person-named test is what disambiguates, not the word "onboarding") |
 | Release readiness, "is this release ready to ship?", release go/no-go, pre-release check with a `release_manifest` (interactive, conversational) | **release-readiness-checker** | pr-review (one specific MR only), k8s-overprovisioning-datadog (one service only), incident-rca (full root-cause investigation, not a Phase-1-only signal check) |
 | MySQL scrub, jdbc:postgresql, TIMESTAMPDIFF, DATE_FORMAT, native SQL rewrite, mysql2→pg, SQLAlchemy PG cutover, collection P0/P1 cooling SQL | **mysql-to-postgres-sql** | domain-comprehension (full map), squad-map (ownership only) |
+| Org-wide migration status, migration program, "which services/squads are stuck migrating", stalled migration escalation, migration MR rollup across many repos with a `program_manifest` | **migration-program-manager** | mysql-to-postgres-sql (one workspace's own migration status), squad-map (ownership lookup only, no migration status) |
 | Implement task/issue autonomously, independent review + remediation loop, adjudicate findings, work through a task queue (interactive, human-driven) | **loop-task-implementer** | pr-review (reviewing someone else's existing MR only) |
 | Scheduled trigger pulling N tickets from a tracker query, overnight/unattended, no human turn available | **backlog-runner** | loop-task-implementer (that's what it delegates to internally — do not call loop-task-implementer directly for an unattended scheduled sweep; use it for a single-task or human-driven multi-task request) |
 | GitHub pull request, local uncommitted diff, review unstaged | **review-bugbot** (external) | pr-review |
@@ -55,6 +56,9 @@ When adding a new skill, add it here first; then each existing skill only needs 
 15. **Release-wide go/no-go request with a `release_manifest`** → release-readiness-checker; **one
     specific MR** → pr-review directly; **one specific service's rightsizing** → k8s-overprovisioning-datadog
     directly; **full RCA on a known/suspected incident** → incident-rca directly
+16. **Org-wide migration status across many workspaces with a `program_manifest`** →
+    migration-program-manager; **one workspace's own migration status** → mysql-to-postgres-sql directly;
+    **plain "who owns X?" with no migration angle** → squad-map directly
 
 ## Ambiguous requests — ask
 

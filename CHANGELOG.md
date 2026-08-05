@@ -140,6 +140,36 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
   README, docs/README, docs/REPOSITORY, skill-routing.md, cross-skill-escalation.md, prompt-injection.md,
   phase-glossary.md.
 
+## migration-program-manager
+
+### Initial release (2026-08-05)
+
+- New skill — item #8 of the [team-facing agents roadmap](docs/superpowers/plans/2026-08-05-team-facing-agents-roadmap.md):
+  an org-wide rollup over **mysql-to-postgres-sql**'s per-workspace `MIGRATION_STATUS.yaml`, joined to
+  squad ownership via **squad-map**'s `SQUAD_MAP.md`, implementing
+  [org-rollup-schema.md](docs/skill-framework/shared/org-rollup-schema.md)'s `pg_migration_gate` adapter
+  designed in Phase 4.
+- A **pure read-only aggregator**: never invokes mysql-to-postgres-sql or squad-map live, only reads their
+  already-produced files — a deliberate design choice to eliminate the entire class of risk that caused
+  new-hire-guide's round-1 bug (a narrowed live wrapped-skill invocation cascading into an unintended
+  side effect on shared state). No gate-policy file, because nothing is ever invoked live to have gates.
+- Genuinely new logic, none of it borrowed from an existing skill: the first "many workspaces at once"
+  input (`program_manifest`) in the repo; the first programmatic `SQUAD_MAP.md` table parser
+  (`scripts/aggregate_migration_status.py`, tolerant of the Conflicts/Unmapped/Archived sections that
+  follow the join table in the same file); and the first persisted cross-run state
+  (`migration_program_state.json`, `{gate_signature, first_observed_at}` per `(workspace_root,
+  service_name)`) to compute per-gate staleness that `MIGRATION_STATUS.yaml` itself has no timestamp for
+  — owned exclusively by this skill, never read or written by mysql-to-postgres-sql.
+- `scripts/aggregate_migration_status.py` — stdlib + PyYAML only, `main(argv) -> int` CLI entrypoint,
+  15 pytest cases under `tests/test_aggregate_migration_status.py` covering the squad-map parser, the
+  path/name join, status derivation, and staleness reset-vs-accrue behavior.
+- No `disable-model-invocation` — ambiently invocable, like new-hire-guide/release-readiness-checker; no
+  wrapped-skill gate to police since nothing is invoked live.
+- Design spec: [docs/superpowers/specs/2026-08-05-migration-program-manager-design.md](docs/superpowers/specs/2026-08-05-migration-program-manager-design.md).
+- Wired into `make install-migration-program-manager` / `make lint-migration-program-manager` (the first
+  lint target in this phase's build to also run a real pytest suite), root README, docs/README,
+  docs/REPOSITORY, skill-routing.md, cross-skill-escalation.md, prompt-injection.md, phase-glossary.md.
+
 ## who-owns-x-bot
 
 ### Initial release (2026-08-05)

@@ -1,4 +1,4 @@
-.PHONY: install install-pr-review install-pr-gatekeeper install-k8s-overprovisioning install-incident-rca install-incident-rca-deps install-incident-triage-agent install-domain-comprehension install-squad-map install-who-owns-x-bot install-new-hire-guide install-release-readiness-checker install-mysql-to-postgres-sql install-loop-task-implementer install-backlog-runner install-claude install-claude-pr-review install-claude-pr-gatekeeper install-claude-k8s-overprovisioning install-claude-incident-rca install-claude-incident-triage-agent install-claude-domain-comprehension install-claude-squad-map install-claude-who-owns-x-bot install-claude-new-hire-guide install-claude-release-readiness-checker install-claude-mysql-to-postgres-sql install-claude-loop-task-implementer install-claude-backlog-runner lint lint-framework lint-pr-review lint-pr-gatekeeper lint-k8s-skill lint-k8s lint-incident-rca lint-incident-triage-agent lint-domain-comprehension lint-squad-map lint-who-owns-x-bot lint-new-hire-guide lint-release-readiness-checker lint-mysql-to-postgres-sql lint-loop-task-implementer lint-backlog-runner setup-hooks setup kubesense-errors
+.PHONY: install install-pr-review install-pr-gatekeeper install-k8s-overprovisioning install-incident-rca install-incident-rca-deps install-incident-triage-agent install-domain-comprehension install-squad-map install-who-owns-x-bot install-new-hire-guide install-release-readiness-checker install-migration-program-manager install-mysql-to-postgres-sql install-loop-task-implementer install-backlog-runner install-claude install-claude-pr-review install-claude-pr-gatekeeper install-claude-k8s-overprovisioning install-claude-incident-rca install-claude-incident-triage-agent install-claude-domain-comprehension install-claude-squad-map install-claude-who-owns-x-bot install-claude-new-hire-guide install-claude-release-readiness-checker install-claude-migration-program-manager install-claude-mysql-to-postgres-sql install-claude-loop-task-implementer install-claude-backlog-runner lint lint-framework lint-pr-review lint-pr-gatekeeper lint-k8s-skill lint-k8s lint-incident-rca lint-incident-triage-agent lint-domain-comprehension lint-squad-map lint-who-owns-x-bot lint-new-hire-guide lint-release-readiness-checker lint-migration-program-manager lint-mysql-to-postgres-sql lint-loop-task-implementer lint-backlog-runner setup-hooks setup kubesense-errors
 
 install:
 	bash scripts/install.sh
@@ -35,6 +35,9 @@ install-new-hire-guide: install-domain-comprehension install-squad-map
 
 install-release-readiness-checker: install-pr-review install-k8s-overprovisioning install-incident-rca
 	bash scripts/install.sh release-readiness-checker
+
+install-migration-program-manager: install-mysql-to-postgres-sql install-squad-map
+	bash scripts/install.sh migration-program-manager
 
 install-mysql-to-postgres-sql:
 	bash scripts/install.sh mysql-to-postgres-sql
@@ -78,6 +81,9 @@ install-claude-new-hire-guide: install-claude-domain-comprehension install-claud
 install-claude-release-readiness-checker: install-claude-pr-review install-claude-k8s-overprovisioning install-claude-incident-rca
 	bash scripts/install.sh --agent claude-user release-readiness-checker
 
+install-claude-migration-program-manager: install-claude-mysql-to-postgres-sql install-claude-squad-map
+	bash scripts/install.sh --agent claude-user migration-program-manager
+
 install-claude-mysql-to-postgres-sql:
 	bash scripts/install.sh --agent claude-user mysql-to-postgres-sql
 
@@ -93,7 +99,7 @@ setup:
 		python3 -m pip install --user --break-system-packages -r requirements.txt
 	@$(MAKE) setup-hooks
 
-lint: lint-framework lint-pr-review lint-pr-gatekeeper lint-k8s-skill lint-incident-rca lint-incident-triage-agent lint-domain-comprehension lint-squad-map lint-who-owns-x-bot lint-new-hire-guide lint-release-readiness-checker lint-mysql-to-postgres-sql lint-loop-task-implementer lint-backlog-runner
+lint: lint-framework lint-pr-review lint-pr-gatekeeper lint-k8s-skill lint-incident-rca lint-incident-triage-agent lint-domain-comprehension lint-squad-map lint-who-owns-x-bot lint-new-hire-guide lint-release-readiness-checker lint-migration-program-manager lint-mysql-to-postgres-sql lint-loop-task-implementer lint-backlog-runner
 	@for f in scripts/*.sh; do \
 		echo "shellcheck $$f"; \
 		if command -v shellcheck >/dev/null 2>&1; then \
@@ -691,6 +697,54 @@ lint-release-readiness-checker:
 		{ echo "error: release-readiness-checker/SETUP.md must link to docs/skill-framework" >&2; exit 1; }
 	@echo "  ok (framework refs)"
 
+lint-migration-program-manager:
+	@echo "lint-migration-program-manager: SKILL.md line count (<= 180)"
+	@test -f migration-program-manager/SKILL.md || \
+		{ echo "error: missing migration-program-manager/SKILL.md" >&2; exit 1; }
+	@lines=$$(wc -l < migration-program-manager/SKILL.md | tr -d ' '); \
+	if [ -z "$$lines" ] || [ "$$lines" -eq 0 ]; then \
+		echo "error: migration-program-manager/SKILL.md is empty" >&2; exit 1; \
+	elif [ "$$lines" -gt 180 ]; then \
+		echo "error: migration-program-manager SKILL.md $$lines lines (> 180) — keep orchestrator thin; detail in workflow/" >&2; \
+		exit 1; \
+	fi; \
+	echo "  ok ($$lines lines)"
+	@echo "lint-migration-program-manager: disable-model-invocation NOT set (ambiently invocable, no live wrapped-skill invocation to gate)"
+	@grep -q '^disable-model-invocation:' migration-program-manager/SKILL.md && \
+		{ echo "error: migration-program-manager/SKILL.md must NOT set disable-model-invocation" >&2; exit 1; } || true
+	@echo "  ok"
+	@echo "lint-migration-program-manager: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
+	@fail=0; \
+	for f in migration-program-manager/workflow/*.md; do \
+		fm=$$(awk '/^---$$/{c++; next} c==1' "$$f"); \
+		for key in workflow_version phase produces consumes; do \
+			if ! printf '%s\n' "$$fm" | grep -q "^$$key:"; then \
+				echo "  missing $$key frontmatter: $$f" >&2; fail=1; \
+			fi; \
+		done; \
+	done; \
+	if [ "$$fail" -ne 0 ]; then echo "error: migration-program-manager workflow/*.md must declare workflow_version, phase, produces, consumes" >&2; exit 1; fi; \
+	echo "  ok"
+	@echo "lint-migration-program-manager: dangling markdown links"
+	@bash scripts/lint-dangling-md-links.sh migration-program-manager/*.md migration-program-manager/reference/*.md migration-program-manager/workflow/*.md && echo "  ok" || \
+		{ echo "error: dangling reference link(s) found" >&2; exit 1; }
+	@echo "lint-migration-program-manager: required reference files"
+	@for f in phase-index lazy-load-index report-format smoke-test; do \
+		test -f migration-program-manager/reference/$$f.md || \
+			{ echo "error: missing migration-program-manager/reference/$$f.md" >&2; exit 1; }; \
+	done
+	@test -f migration-program-manager/scripts/aggregate_migration_status.py || \
+		{ echo "error: missing migration-program-manager/scripts/aggregate_migration_status.py" >&2; exit 1; }
+	@grep -q 'skill-framework' migration-program-manager/SETUP.md || \
+		{ echo "error: migration-program-manager/SETUP.md must link to docs/skill-framework" >&2; exit 1; }
+	@echo "lint-migration-program-manager: aggregator pytest"
+	@if python3 -c "import pytest" >/dev/null 2>&1; then \
+		python3 -m pytest -p no:cacheprovider migration-program-manager/tests/ -q || exit 1; \
+	else \
+		echo "pytest not installed — install with 'python3 -m pip install pytest' to run migration-program-manager tests" >&2; \
+	fi
+	@echo "  ok (framework refs + aggregator tests)"
+
 lint-mysql-to-postgres-sql:
 	@echo "lint-mysql-to-postgres-sql: SKILL.md line count (<= 180)"
 	@test -f mysql-to-postgres-sql/SKILL.md || \
@@ -886,7 +940,7 @@ lint-framework:
 	@grep -q '^## 1\. Required sections' docs/skill-framework/shared/examples-conventions.md
 	@grep -q '^## 2\. Scenario format' docs/skill-framework/shared/examples-conventions.md
 	@grep -q '^## 5\. Anti-patterns' docs/skill-framework/shared/examples-conventions.md
-	@for skill in pr-review pr-gatekeeper incident-rca incident-triage-agent k8s-overprovisioning-datadog domain-comprehension squad-map who-owns-x-bot new-hire-guide release-readiness-checker mysql-to-postgres-sql loop-task-implementer backlog-runner; do \
+	@for skill in pr-review pr-gatekeeper incident-rca incident-triage-agent k8s-overprovisioning-datadog domain-comprehension squad-map who-owns-x-bot new-hire-guide release-readiness-checker migration-program-manager mysql-to-postgres-sql loop-task-implementer backlog-runner; do \
 		test -f $$skill/examples.md || \
 			{ echo "error: missing $$skill/examples.md (examples-conventions)" >&2; exit 1; }; \
 		grep -q '## Invocation' $$skill/examples.md || \
@@ -932,7 +986,7 @@ lint-framework:
 	done; \
 	if [ "$$fail" -ne 0 ]; then exit 1; fi
 	@grep -q '| Complete |' docs/skill-framework/README.md
-	@for skill in pr-review pr-gatekeeper incident-rca incident-triage-agent k8s-overprovisioning-datadog domain-comprehension squad-map who-owns-x-bot new-hire-guide release-readiness-checker mysql-to-postgres-sql loop-task-implementer backlog-runner; do \
+	@for skill in pr-review pr-gatekeeper incident-rca incident-triage-agent k8s-overprovisioning-datadog domain-comprehension squad-map who-owns-x-bot new-hire-guide release-readiness-checker migration-program-manager mysql-to-postgres-sql loop-task-implementer backlog-runner; do \
 		grep -q 'skill-framework' $$skill/SETUP.md || \
 			{ echo "error: $$skill/SETUP.md must link to docs/skill-framework" >&2; exit 1; }; \
 		grep -q 'docs/skill-framework/shared/skill-routing.md' $$skill/SKILL.md || \
@@ -953,6 +1007,7 @@ lint-framework:
 		"who-owns-x-bot:workflow/inputs.md" \
 		"new-hire-guide:workflow/inputs.md" \
 		"release-readiness-checker:workflow/inputs.md" \
+		"migration-program-manager:workflow/inputs.md" \
 		"mysql-to-postgres-sql:workflow/migrate-service.md" \
 		"loop-task-implementer:workflow/orchestrator.md" \
 		"backlog-runner:workflow/inputs.md"; do \
@@ -965,7 +1020,7 @@ lint-framework:
 	@echo "lint-framework: all SETUP.md links ok"
 	@echo "lint-framework: cross-agent discovery files (.cursor/rules + .kiro/steering)"
 	@fail=0; \
-	for skill in pr-review pr-gatekeeper incident-rca incident-triage-agent k8s-overprovisioning-datadog domain-comprehension squad-map who-owns-x-bot new-hire-guide release-readiness-checker mysql-to-postgres-sql loop-task-implementer backlog-runner; do \
+	for skill in pr-review pr-gatekeeper incident-rca incident-triage-agent k8s-overprovisioning-datadog domain-comprehension squad-map who-owns-x-bot new-hire-guide release-readiness-checker migration-program-manager mysql-to-postgres-sql loop-task-implementer backlog-runner; do \
 		test -f .cursor/rules/$$skill.mdc || \
 			{ echo "  missing .cursor/rules/$$skill.mdc" >&2; fail=1; }; \
 		test -f .kiro/steering/$$skill.md || \

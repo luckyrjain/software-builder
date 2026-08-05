@@ -29,6 +29,7 @@ Each skill is a self-contained directory copied to `~/.cursor/skills/<name>/` on
 | **who-owns-x-bot** | [who-owns-x-bot/README.md](../who-owns-x-bot/README.md) | [who-owns-x-bot/SKILL.md](../who-owns-x-bot/SKILL.md) | [who-owns-x-bot/SETUP.md](../who-owns-x-bot/SETUP.md) |
 | **new-hire-guide** | [new-hire-guide/README.md](../new-hire-guide/README.md) | [new-hire-guide/SKILL.md](../new-hire-guide/SKILL.md) | [new-hire-guide/SETUP.md](../new-hire-guide/SETUP.md) |
 | **release-readiness-checker** | [release-readiness-checker/README.md](../release-readiness-checker/README.md) | [release-readiness-checker/SKILL.md](../release-readiness-checker/SKILL.md) | [release-readiness-checker/SETUP.md](../release-readiness-checker/SETUP.md) |
+| **migration-program-manager** | [migration-program-manager/README.md](../migration-program-manager/README.md) | [migration-program-manager/SKILL.md](../migration-program-manager/SKILL.md) | [migration-program-manager/SETUP.md](../migration-program-manager/SETUP.md) |
 | **mysql-to-postgres-sql** | [mysql-to-postgres-sql/README.md](../mysql-to-postgres-sql/README.md) | [mysql-to-postgres-sql/SKILL.md](../mysql-to-postgres-sql/SKILL.md) | [mysql-to-postgres-sql/SETUP.md](../mysql-to-postgres-sql/SETUP.md) |
 | **loop-task-implementer** | [loop-task-implementer/README.md](../loop-task-implementer/README.md) | [loop-task-implementer/SKILL.md](../loop-task-implementer/SKILL.md) | [loop-task-implementer/SETUP.md](../loop-task-implementer/SETUP.md) |
 | **backlog-runner** | [backlog-runner/README.md](../backlog-runner/README.md) | [backlog-runner/SKILL.md](../backlog-runner/SKILL.md) | [backlog-runner/SETUP.md](../backlog-runner/SETUP.md) |
@@ -47,6 +48,7 @@ Each skill is a self-contained directory copied to `~/.cursor/skills/<name>/` on
 | **who-owns-x-bot** | Structured `query`, not ambient chat (`/who-owns <name>` Slack slash command) | Single-shot "who owns X" Slack reply — thin wrapper delegating the lookup entirely to squad-map |
 | **new-hire-guide** | Natural language ("onboard `<name>`, joining `<squad>`") | Personalized onboarding tour: squad-map resolves the new hire's repos, domain-comprehension runs unscoped, `ONBOARDING_TOUR.md` curates down to those repos |
 | **release-readiness-checker** | Natural language ("is this release ready?" + `release_manifest`) | Release go/no-go report: pr-review (MRs since last release, never posts) + k8s-overprovisioning-datadog (per-service verdict) + incident-rca (per-service incident signal, Phase 1 only) |
+| **migration-program-manager** | Natural language ("migration status across all repos" + `program_manifest`) | Org-wide rollup of `MIGRATION_STATUS.yaml` joined to `SQUAD_MAP.md`, ranked by staleness/blocked count per squad — pure read-only aggregator, no live wrapped-skill invocation |
 | **mysql-to-postgres-sql** | Natural language ("MySQL scrub …", "jdbc:postgresql …") | MySQL-dialect scan gate + PostgreSQL rewrite for a `jdbc:mysql`→`jdbc:postgresql` migration |
 | **loop-task-implementer** | Natural language ("implement issue 42 …") | Autonomous multi-task loop: isolated Builder → two-lens independent Reviewer → adjudicated remediation → PR; platform-neutral, no MCP dependency |
 | **backlog-runner** | Scheduled trigger, not ambient chat | Queue-management wrapper: pulls N tickets from a tracker query, runs loop-task-implementer per ticket overnight in dependency order, never merges |
@@ -77,6 +79,8 @@ Skills reference each other when a finding belongs in another workflow:
 | release-readiness-checker | Caller wants one MR reviewed, not a release-wide sweep | pr-review |
 | release-readiness-checker | Caller wants one service's rightsizing question, not a release sweep | k8s-overprovisioning-datadog |
 | release-readiness-checker | A flagged service needs the full incident investigation | incident-rca |
+| migration-program-manager | Caller wants one workspace's own migration status, not the org-wide rollup | mysql-to-postgres-sql |
+| migration-program-manager | A workspace has no SQUAD_MAP.md — services join as UNKNOWN | squad-map |
 | domain-comprehension | Produced `MYSQL_TO_PG_SQL_REWRITES.md` | mysql-to-postgres-sql |
 | mysql-to-postgres-sql | Migration MR needs review | pr-review |
 | mysql-to-postgres-sql | Cutover regression / wrong query results | incident-rca |
@@ -107,6 +111,7 @@ Full symmetric matrix (forward + reverse escalations):
 | [superpowers/specs/2026-08-05-domain-comprehension-proposal-check-mode-design.md](superpowers/specs/2026-08-05-domain-comprehension-proposal-check-mode-design.md) | domain-comprehension `PROPOSAL_CHECK` mode design — item #6 of the team-facing agents roadmap (a mode addition, not a new skill) |
 | [superpowers/specs/2026-08-05-new-hire-guide-design.md](superpowers/specs/2026-08-05-new-hire-guide-design.md) | new-hire-guide design — item #5 of the team-facing agents roadmap |
 | [superpowers/specs/2026-08-05-release-readiness-checker-design.md](superpowers/specs/2026-08-05-release-readiness-checker-design.md) | release-readiness-checker design — item #9 of the team-facing agents roadmap |
+| [superpowers/specs/2026-08-05-migration-program-manager-design.md](superpowers/specs/2026-08-05-migration-program-manager-design.md) | migration-program-manager design — item #8 of the team-facing agents roadmap |
 
 These are planning artifacts; the live behavior is defined in `pr-review/SKILL.md` and `pr-review/reference/`.
 
@@ -197,6 +202,16 @@ These are planning artifacts; the live behavior is defined in `pr-review/SKILL.m
 | `workflow/run-check.md` | Resolve MR ranges (paginated), invoke pr-review / k8s / incident-rca per manifest entry per gate-policy.md, aggregate |
 | `reference/gate-policy.md` | Normative gate answers for all three wrapped skills: pr-review (reuses pr-gatekeeper's policy), k8s (ambiguous-service ask), incident-rca (Phase 1 checkpoint, "stop here" every signal density) |
 | `reference/report-format.md` | Normative `RELEASE_READINESS_REPORT.md` structure + verdict derivation |
+| `reference/smoke-test.md` | Post-install validation steps |
+
+## migration-program-manager file map
+
+| Path | What it does |
+|------|--------------|
+| `workflow/inputs.md` | Parse `program_manifest` + `staleness_threshold_days` + `state_path`; HARD STOP on missing required fields |
+| `workflow/run-rollup.md` | Invoke the aggregator script, rank/group by squad, build the report + rollup JSON |
+| `scripts/aggregate_migration_status.py` | Parse `MIGRATION_STATUS.yaml` × N + `SQUAD_MAP.md`, join, compute staleness against persisted state |
+| `reference/report-format.md` | Normative `MIGRATION_PROGRAM_REPORT.md` + `migration_program_rollup.json` structure |
 | `reference/smoke-test.md` | Post-install validation steps |
 
 ## mysql-to-postgres-sql file map

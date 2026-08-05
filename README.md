@@ -28,6 +28,7 @@ Each skill has a human **`README.md`** (what it does) separate from **`SKILL.md`
 | [who-owns-x-bot](who-owns-x-bot/) | `/who-owns <name>` (Slack slash command; not ambient chat) | Single-shot "who owns X" Slack reply — thin wrapper delegating to squad-map | [README](who-owns-x-bot/README.md) · [SETUP](who-owns-x-bot/SETUP.md) |
 | [new-hire-guide](new-hire-guide/) | "onboard `<name>`, joining `<squad>`" | Personalized onboarding tour: resolves the new hire's squad's repos via squad-map, runs domain-comprehension unscoped, curates `ONBOARDING_TOUR.md` down to those repos | [README](new-hire-guide/README.md) · [SETUP](new-hire-guide/SETUP.md) |
 | [release-readiness-checker](release-readiness-checker/) | "is this release ready to ship?" with a `release_manifest` | Release go/no-go report: pr-review (MRs since last release, never posts) + k8s-overprovisioning-datadog (per-service verdict) + incident-rca (per-service incident signal, Phase 1 only) | [README](release-readiness-checker/README.md) · [SETUP](release-readiness-checker/SETUP.md) |
+| [migration-program-manager](migration-program-manager/) | "migration status across all repos" with a `program_manifest` | Org-wide rollup of `MIGRATION_STATUS.yaml` joined to `SQUAD_MAP.md`, ranked by staleness/blocked count per squad — pure read-only aggregator | [README](migration-program-manager/README.md) · [SETUP](migration-program-manager/SETUP.md) |
 | [mysql-to-postgres-sql](mysql-to-postgres-sql/) | "MySQL scrub …", "jdbc:postgresql …", "TIMESTAMPDIFF …" | Native SQL + JDBC rewrite for MySQL→PostgreSQL; scan gate, collection P0/P1 | [README](mysql-to-postgres-sql/README.md) · [SETUP](mysql-to-postgres-sql/SETUP.md) |
 | [loop-task-implementer](loop-task-implementer/) | "implement issue 42 …", "work through these tasks …" | Autonomous multi-task loop: isolated Builder → two-lens independent Reviewer → adjudicated remediation → PR. Platform-neutral, no Datadog/GitLab/Jira MCP required | [README](loop-task-implementer/README.md) · [SETUP](loop-task-implementer/SETUP.md) |
 | [backlog-runner](backlog-runner/) | Scheduled trigger (not human chat) | Pulls N tickets from a tracker query, runs loop-task-implementer per ticket overnight in dependency order, never merges | [README](backlog-runner/README.md) · [SETUP](backlog-runner/SETUP.md) |
@@ -53,6 +54,7 @@ make install-squad-map
 make install-who-owns-x-bot
 make install-new-hire-guide
 make install-release-readiness-checker
+make install-migration-program-manager
 make install-mysql-to-postgres-sql
 make install-loop-task-implementer
 make install-backlog-runner
@@ -75,6 +77,7 @@ bash scripts/install.sh squad-map
 bash scripts/install.sh who-owns-x-bot
 bash scripts/install.sh new-hire-guide
 bash scripts/install.sh release-readiness-checker
+bash scripts/install.sh migration-program-manager
 bash scripts/install.sh mysql-to-postgres-sql
 bash scripts/install.sh loop-task-implementer
 bash scripts/install.sh backlog-runner
@@ -131,6 +134,7 @@ make lint-squad-map             # squad-map SKILL line limit, frontmatter, ancho
 make lint-who-owns-x-bot        # who-owns-x-bot SKILL line limit, frontmatter, anchors, required files
 make lint-new-hire-guide        # new-hire-guide SKILL line limit, frontmatter, anchors, required files
 make lint-release-readiness-checker # release-readiness-checker SKILL line limit, frontmatter, anchors, required files
+make lint-migration-program-manager # migration-program-manager SKILL line limit, frontmatter, anchors, aggregator pytest
 make lint-mysql-to-postgres-sql # mysql SKILL line limit, scan fixtures, pressure harness, shellcheck
 make lint-loop-task-implementer # loop-task-implementer SKILL line limit, workflow frontmatter, required files, anchors
 make lint-backlog-runner        # backlog-runner SKILL line limit, frontmatter, anchors, required files
@@ -148,6 +152,7 @@ make lint-backlog-runner        # backlog-runner SKILL line limit, frontmatter, 
 | `lint-who-owns-x-bot` | `SKILL.md` ≤ 180 lines; `disable-model-invocation: true` set; workflow frontmatter; dangling anchors; required reference files |
 | `lint-new-hire-guide` | `SKILL.md` ≤ 180 lines; `disable-model-invocation` **not** set; workflow frontmatter; dangling anchors; required reference files |
 | `lint-release-readiness-checker` | `SKILL.md` ≤ 180 lines; `disable-model-invocation` **not** set; workflow frontmatter; dangling anchors; required reference files |
+| `lint-migration-program-manager` | `SKILL.md` ≤ 180 lines; `disable-model-invocation` **not** set; workflow frontmatter; dangling anchors; required reference files; aggregator pytest |
 | `lint-mysql-to-postgres-sql` | `SKILL.md` ≤ 180 lines; workflow frontmatter; required references; scan fixtures + pressure harness; shellcheck on scan scripts |
 | `lint-loop-task-implementer` | `SKILL.md` ≤ 180 lines; workflow frontmatter; dangling anchors; required files (`SETUP.md`/`README.md`/`examples.md`/`report-template.md`/`reference/*`) |
 | `lint-backlog-runner` | `SKILL.md` ≤ 180 lines; `disable-model-invocation: true` set; workflow frontmatter; dangling anchors; required reference files |
@@ -175,6 +180,7 @@ or a Docker/Linux runner (deps installed via `apt-get` in the pipeline).
 | who-owns-x-bot | None of its own — delegates to squad-map | [who-owns-x-bot/SETUP.md](who-owns-x-bot/SETUP.md) |
 | new-hire-guide | None of its own — inherits domain-comprehension's + squad-map's | [new-hire-guide/SETUP.md](new-hire-guide/SETUP.md) |
 | release-readiness-checker | None of its own — inherits pr-review's, k8s-overprovisioning-datadog's, and incident-rca's | [release-readiness-checker/SETUP.md](release-readiness-checker/SETUP.md) |
+| migration-program-manager | None of its own — no MCP calls at all, pure file aggregation | [migration-program-manager/SETUP.md](migration-program-manager/SETUP.md) |
 | mysql-to-postgres-sql | None (code scan + rewrite) | Datadog (optional; post-cutover APM) — [mysql-to-postgres-sql/SETUP.md](mysql-to-postgres-sql/SETUP.md) |
 | loop-task-implementer | None (uses the host agent's own repo/git access, not an MCP server) | [loop-task-implementer/reference/mcp-capabilities.md](loop-task-implementer/reference/mcp-capabilities.md) |
 | backlog-runner | Issue-tracker MCP (Jira or GitHub Issues) — required for this skill, optional for loop-task-implementer itself | [backlog-runner/SETUP.md](backlog-runner/SETUP.md) |
@@ -450,6 +456,31 @@ being human-invoked."
   rightsizing (k8s's own verdict, unmodified), per-service incident signal (clear/flagged)
 - No GitLab post, no manifest change, no full RCA — every wrapped skill's own analysis is surfaced as-is,
   never reinterpreted
+
+---
+
+## Usage (migration-program-manager)
+
+**Pure read-only aggregator** — never invokes mysql-to-postgres-sql or squad-map live, only reads their
+existing output files (`MIGRATION_STATUS.yaml`, `SQUAD_MAP.md`). No gate policy needed: there's nothing
+to confirm when nothing is invoked live. Tracks its own staleness state across runs since
+`MIGRATION_STATUS.yaml` has no per-gate timestamp.
+
+### Examples
+
+| You say | What happens |
+|----------------|----------------|
+| "Migration status across all repos" with `program_manifest` + `staleness_threshold_days` | Reads every workspace's `MIGRATION_STATUS.yaml` + `SQUAD_MAP.md`, joins, computes staleness against persisted state, writes `MIGRATION_PROGRAM_REPORT.md` + `migration_program_rollup.json` |
+| A workspace has no `SQUAD_MAP.md` | Its services join as `squad: UNKNOWN` — squad-map is never invoked to fill the gap |
+| A service's gate signature is unchanged past the threshold | Escalated as stalled, ranked by staleness within its squad |
+| "What's the migration status for this one repo?" | **Wrong skill** → mysql-to-postgres-sql directly |
+
+### What you get (migration-program-manager)
+
+- `MIGRATION_PROGRAM_REPORT.md` — per-squad blocked/stalled/in-progress/done, plus a `UNKNOWN squad`
+  group and a Workspace gaps section
+- `migration_program_rollup.json` — the computed `org_rollup_item` list, for a future Weekly Squad Digest
+  to reuse without re-aggregating
 
 ---
 

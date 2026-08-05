@@ -165,6 +165,18 @@ User approval gate between P0.25 and P0.5 (mechanical scope checkpoint).
 Single-workflow skill — no numbered phases. Optional domain pack load for org file paths; fleet rollup via
 `templates/MIGRATION_STATUS.yaml`.
 
+### migration-program-manager mapping
+
+| Phase | File | Canonical |
+|-------|------|-----------|
+| Inputs | `workflow/inputs.md` | Detect (`program_manifest`, `staleness_threshold_days`, `state_path`) |
+| Run rollup | `workflow/run-rollup.md` | Gather (read `MIGRATION_STATUS.yaml` + `SQUAD_MAP.md` per workspace, never invoked live) + Analyze (squad join, staleness computation, rank/group) + Report (`MIGRATION_PROGRAM_REPORT.md` + `migration_program_rollup.json`) |
+
+Not exempt from Analyze the way a pure scheduling wrapper is — this skill has real Analyze logic of its
+own: the squad join (path/name match against `SQUAD_MAP.md`), the staleness computation against its own
+persisted state, and the rank/group by squad. Same reasoning as release-readiness-checker's mapping above:
+aggregation over already-computed inputs is still Analyze, not a pass-through.
+
 ## 5. Cross-skill analogies
 
 | Concept | pr-review | incident-rca | k8s | domain-comprehension | squad-map | mysql-to-postgres-sql |
@@ -204,4 +216,7 @@ When writing cross-skill examples, use analogies above: "pr-review Phase 1 ≈ k
 | `SERVICE_PG_MIGRATION.md` | mysql-to-postgres-sql | migrate workflow closeout |
 | `MIGRATION_STATUS.yaml` | mysql-to-postgres-sql | fleet workspace root (from template) |
 | `assessment_metadata` | domain-comprehension, squad-map, mysql-to-postgres-sql | P5 / Phase 1 / migrate closeout |
-| `org_rollup_item` | *(future — no implementing skill yet)* | see [org-rollup-schema.md](org-rollup-schema.md); normalizes `MIGRATION_STATUS.yaml` and `decision_graph` for future items #8/#10/#11 |
+| `org_rollup_item` | migration-program-manager (implemented); k8s decision_graph adapter still pending item #10 | see [org-rollup-schema.md](org-rollup-schema.md); normalizes `MIGRATION_STATUS.yaml` (`pg_migration_gate` adapter, live) and `decision_graph` (`k8s_waste` adapter, pending item #10) |
+| `MIGRATION_PROGRAM_REPORT.md` | migration-program-manager | Run rollup |
+| `migration_program_rollup.json` | migration-program-manager | Run rollup |
+| `migration_program_state.json` | migration-program-manager | Run rollup (persisted across runs, owned exclusively by this skill) |
