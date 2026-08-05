@@ -1,5 +1,13 @@
 # domain-comprehension — Setup
 
+## Ambient discovery is intended
+
+This skill deliberately does **not** set `disable-model-invocation` in its frontmatter, so the agent
+can auto-apply it when you ask to map a domain, understand bounded contexts, or onboard into an
+unfamiliar codebase in natural language — e.g. "map the lending domain across these repos", "what
+are the bounded contexts here?" — as well as an explicit invocation. Leave it unset unless you want
+invocation to require an explicit ask.
+
 ## Install
 
 ```bash

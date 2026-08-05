@@ -1,5 +1,12 @@
 # squad-map — Setup
 
+## Ambient discovery is intended
+
+This skill deliberately does **not** set `disable-model-invocation` in its frontmatter, so the agent
+can auto-apply it when you ask about squad ownership, who owns a repo, or team mapping in natural
+language — e.g. "who owns api-disbursement?" — as well as an explicit invocation. Leave it unset
+unless you want invocation to require an explicit ask.
+
 ## Install
 
 ```bash

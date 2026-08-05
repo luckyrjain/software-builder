@@ -5,6 +5,13 @@ remediation → validation → pull-request → completion. No Datadog/GitLab/Ji
 [reference/mcp-capabilities.md](reference/mcp-capabilities.md) for what it does need from the host
 agent.
 
+## Ambient discovery is intended
+
+This skill deliberately does **not** set `disable-model-invocation` in its frontmatter, so the agent
+can auto-apply it when you ask to implement a task, work through a queue, or take something to PR in
+natural language — no slash command exists for this skill. Leave it unset unless you want invocation
+to require an explicit ask.
+
 ## Quickstart
 
 1. `git clone` this repo (see root [README.md § Install](../README.md#install)), then

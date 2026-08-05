@@ -1,5 +1,12 @@
 # mysql-to-postgres-sql — Setup
 
+## Ambient discovery is intended
+
+This skill deliberately does **not** set `disable-model-invocation` in its frontmatter, so the agent
+can auto-apply it when you ask about a MySQL scrub, `jdbc:postgresql` migration, or native-query
+dialect audit in natural language — as well as an explicit invocation. Leave it unset unless you want
+invocation to require an explicit ask.
+
 ## Install
 
 ```bash

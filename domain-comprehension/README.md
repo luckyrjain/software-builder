@@ -3,6 +3,10 @@
 **Verifiable, evidence-backed** domain mapping from executable source code and runtime validation.
 **Prefer UNKNOWN over speculation.** Deterministic phase outputs for repeatable agent runs.
 
+Auto-invokes from natural language when you ask to map a domain, understand bounded contexts, or
+onboard into an unfamiliar codebase — no slash command required (e.g. "map the lending domain across
+these repos", "what are the bounded contexts and who owns the data?").
+
 ## What it does
 
 1. **Mandatory phase artifacts** — [phase-outputs.md](reference/phase-outputs.md) + completion gate

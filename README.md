@@ -317,7 +317,7 @@ scan/rewrite via ripgrep (needs PCRE2 support: `rg --pcre2-version`).
 - `MIGRATION_STATUS.yaml` + `templates/SERVICE_PG_MIGRATION.md` per-service deliverable
 - Escalates to **pr-review** for the migration MR and to **incident-rca** on a cutover regression
 
-Does not auto-invoke ambiently — see [mysql-to-postgres-sql/SETUP.md](mysql-to-postgres-sql/SETUP.md).
+Auto-invokes from natural-language asks — see [mysql-to-postgres-sql/SETUP.md](mysql-to-postgres-sql/SETUP.md).
 
 ---
 
