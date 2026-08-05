@@ -33,7 +33,7 @@ Routing table: [skill-routing.md](../docs/skill-framework/shared/skill-routing.m
 |-----|-----|
 | Scheduled/cron trigger pulling a ticket queue | Human typing "implement issue 42" → **loop-task-implementer** directly |
 | Unattended overnight sweep across many tickets | Human typing "work through these tasks" (already a first-class loop-task-implementer pattern) → **loop-task-implementer** directly |
-| — | Auto-merging anything — never built, see Non-goals |
+| — | Auto-merging anything — never built, see the [design spec](../docs/superpowers/specs/2026-08-05-backlog-runner-design.md) § Non-goals |
 
 ## Deliverable
 

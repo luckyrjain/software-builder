@@ -42,7 +42,7 @@ agent reads, only from the caller's own upfront config).
 ## Non-negotiable, not an input
 
 `autonomous_merge_authorized` is **never** parsed from this skill's inputs — it is always `false` for
-every task this skill runs, hardcoded, not configurable. See [SKILL.md](../SKILL.md) Non-goals and
+every task this skill runs, hardcoded, not configurable. See the [design spec](../../docs/superpowers/specs/2026-08-05-backlog-runner-design.md) § Non-goals and
 [reference/queue-policy.md](../reference/queue-policy.md).
 
 ## Embedded invocation

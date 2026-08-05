@@ -3,7 +3,10 @@
 Run after install or any edit to this skill. Use a repo with loop-task-implementer already working
 interactively (see [loop-task-implementer/reference/smoke-test.md](../../loop-task-implementer/reference/smoke-test.md)
 to confirm that first), and an issue-tracker query returning at least 2 tickets, one declaring a
-dependency on the other.
+dependency on the other. **Run this smoke test across two separate invocations on two different
+"nights"** (not just a single run with both tickets in the same batch) — the single-run case doesn't
+exercise the cross-run dependency-satisfaction rule (queue-policy.md § 2 rule 4), which is this skill's
+one previously-broken piece of genuinely new logic.
 
 Conventions: [smoke-test-conventions](../../docs/skill-framework/shared/smoke-test-conventions.md)
 
@@ -42,3 +45,4 @@ then dependency order announced, before the first loop-task-implementer invocati
 | 3 consecutive `ESCALATED` outcomes | Run stops pulling further tickets (`CONSECUTIVE_ESCALATION_BREAKER`); summary still produced |
 | A pulled ticket already has an open PR from a prior run | Skipped at the pull step, not re-attempted, recorded in the summary's Skipped section |
 | `deadline` reached mid-run | No new ticket started after it; the in-flight one finishes; summary produced with `DEADLINE_REACHED` |
+| **Night 2: a dependent ticket's prerequisite reached `HUMAN_ACTION_REQUIRED` on night 1 and no longer matches `tracker_query`** | The dependent is attempted on night 2 (existing-PR evidence satisfies the dependency), **not** left `DEFERRED` — this is the regression case to watch for; see [examples.md § Multi-night dependency](../examples.md) |

@@ -41,9 +41,21 @@ backlog_run:
    loop-task-implementer's own task-selection logic checks *one* task's dependencies at pick time, it
    never orders a whole pulled batch. If ticket B declares a dependency on ticket A and both are in this
    run's batch, attempt A first.
-4. A ticket whose declared dependency is itself outside this run's pulled batch, or whose dependency's
-   own outcome this run was not `HUMAN_ACTION_REQUIRED` (i.e. the dependency didn't reach a PR), is
-   `DEFERRED` — do not attempt it this run, record why.
+4. **A ticket's dependency is satisfied — checked across runs, never only "this run's batch"** — this
+   skill runs nightly, and a dependency reaching `HUMAN_ACTION_REQUIRED` on a *prior* night must still
+   count as satisfied tonight, or a dependent ticket would stay `DEFERRED` forever the moment its
+   prerequisite's ticket ages out of `tracker_query` (once a PR exists, or once the ticket is closed, it
+   commonly no longer matches a "ready for dev"-style query — it can never again appear "in this run's
+   batch"). A dependency counts as satisfied when **any** of:
+   - It's in this run's batch and reached `HUMAN_ACTION_REQUIRED` this run, **or**
+   - It already has an existing branch/PR from a **prior** run (the same check as rule 2 —
+     `SKIPPED_EXISTING` **is** satisfaction evidence, not a reason to keep deferring the dependent), **or**
+   - The dependency ticket itself is closed/merged/resolved in the tracker (the strongest signal —
+     query the tracker for the dependency ticket's own current state when it's not in this run's batch
+     at all, don't assume "not pulled" means "not done").
+
+   A dependency satisfying **none** of these is `DEFERRED` — do not attempt its dependent this run,
+   record why, and re-check next run (this is the one case that legitimately needs another night).
 
 ## 3. Invoking loop-task-implementer — one task per invocation
 
@@ -62,9 +74,25 @@ grammar).
 hardcoded. loop-task-implementer's own rule already defaults it to `false` and explicitly refuses to
 accept it from repository-file prose; this skill simply never supplies the caller-side override either.
 
+**Known interaction risk this skill cannot fully resolve from documentation alone:**
+loop-task-implementer's own `orchestrator.md` §2 gates task selection partly on *"its declared
+dependencies are complete"* — but loop-task-implementer's own `state-schema.yaml` only marks a task
+`COMPLETE` after an **authorized merge** (§18), which never happens under this skill. It's not
+documented whether that same-task eligibility check still applies when the caller (this skill) has
+already named one specific ticket to implement, rather than asking loop-task-implementer to pick from a
+pool. **Mitigation, not a guaranteed fix:** when a ticket's dependency was satisfied per rule 4 above via
+the `SKIPPED_EXISTING`/closed-ticket paths (not literally `COMPLETE` in loop-task-implementer's own
+sense), include that evidence directly in the task text handed to loop-task-implementer — e.g. *"Depends
+on `<dependency_task_id>`, already addressed: `<pull_request_url or 'ticket closed'>`."* This gives
+loop-task-implementer's own Orchestrator the evidence to proceed if it does re-check dependencies; if it
+doesn't, the note is harmless extra context. **If loop-task-implementer still escalates a dependent
+ticket on this ground**, treat the escalation as genuine (per §4 below) rather than silently
+overriding it — this skill never bypasses loop-task-implementer's own safety judgment, even one this
+skill suspects is a false positive.
+
 ## 4. The continuation decision — resolved explicitly, not inherited ambiguous
 
-loop-task-implementer's own `orchestrator.md` §17–18 documents "select the next eligible task" only
+loop-task-implementer's own `orchestrator.md` §18 documents "select the next eligible task" only
 *after an authorized merge* — since this skill never authorizes merge, that instruction never fires
 inside any single loop-task-implementer invocation. That's expected, not a gap: **this skill's own
 workflow is the layer that decides the next task**, across separate invocations, not
@@ -88,6 +116,12 @@ mid-Builder-dispatch — when any of:
 | `consumed_tokens` reaches `session_token_budget` (if set) | `TOKEN_BUDGET_EXHAUSTED` |
 | **3 consecutive `ESCALATED` outcomes** (systemic-failure signal — distinct from any single task's own per-task circuit breakers, which stay loop-task-implementer's own and unchanged) | `CONSECUTIVE_ESCALATION_BREAKER` |
 | Queue (after skip/defer/order) is empty | `QUEUE_EXHAUSTED` |
+
+**"Consecutive" is counted over attempted tickets only** — `SKIPPED_EXISTING` and `DEFERRED` outcomes
+don't reset or advance the count, since they were never actually attempted; only `HUMAN_ACTION_REQUIRED`
+(resets the count to 0) and `ESCALATED` (increments it) affect it. A sequence like `ESCALATED, DEFERRED,
+ESCALATED, DEFERRED, ESCALATED` — plausible given rule 4's dependency-deferral behavior — **does** trip
+the breaker at the third escalation, even though the raw queue order interleaves deferrals between them.
 
 The consecutive-escalation breaker exists because three escalations in a row more likely signals a
 systemic problem (broken CI, a bad base branch, a misconfigured repo) than three independent hard tasks

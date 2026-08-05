@@ -15,6 +15,8 @@ Conventions: [examples-conventions](../docs/skill-framework/shared/examples-conv
 | 7 | Every attempted ticket reaches `HUMAN_ACTION_REQUIRED` | Inputs → Run queue → `QUEUE_EXHAUSTED` (normal, expected outcome) — N PRs opened, none merged |
 | 8 | "Implement issue 42" typed in an interactive chat session | **Wrong skill** → loop-task-implementer (this skill doesn't auto-invoke; see `disable-model-invocation`) |
 | 9 | "Work through these tasks one by one" typed in an interactive session | **Wrong skill** → loop-task-implementer (already a first-class pattern there) |
+| 10 | Ticket B depends on A; A reached `HUMAN_ACTION_REQUIRED` **last night**, so A no longer matches tonight's `tracker_query` (its PR is already open) | Inputs → Run queue → A's existing PR counts as dependency-satisfaction evidence (queue-policy.md § 2 rule 4) — B is attempted tonight, not deferred again |
+| 11 | Ticket B depends on A; A was merged and its ticket closed since the last run | Inputs → Run queue → dependency satisfied (closed ticket is the strongest signal) — B is attempted |
 
 ---
 
@@ -70,6 +72,26 @@ order.
 |--------|------------|
 | BACKLOG-201 | BACKLOG-200 |
 ```
+
+---
+
+### Scenario: Multi-night dependency — satisfied across runs, not just this run's batch
+
+**Night 1 scheduler:** `tracker_query` pulls `BACKLOG-300` only (`BACKLOG-301`, which depends on it,
+isn't ready yet / not in scope this run).
+
+**Night 1 agent:** `BACKLOG-300` reaches `HUMAN_ACTION_REQUIRED` — PR opened, unmerged.
+
+**Night 2 scheduler:** `tracker_query` now pulls `BACKLOG-301` (declares a dependency on `BACKLOG-300`).
+`BACKLOG-300` itself no longer matches the query (it already has an open PR, so it's no longer
+"ready for dev").
+
+**Night 2 agent:** `BACKLOG-300` is **not** in tonight's pulled batch — but per
+[queue-policy.md § 2 rule 4](reference/queue-policy.md#2-queue-pull-and-ordering),
+its dependency status is checked directly: it has an existing open PR from last night, which **counts as
+satisfaction evidence**. `BACKLOG-301` is attempted tonight, not deferred. (Before this rule existed,
+`BACKLOG-301` would have stayed `DEFERRED` forever — its prerequisite can never again appear "in a
+pulled batch" once it has an open PR, and never again after the ticket closes either.)
 
 ---
 

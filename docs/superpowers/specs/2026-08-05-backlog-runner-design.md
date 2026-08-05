@@ -92,7 +92,7 @@ review-isolation logic, no relaxation of any existing circuit breaker. It:
 | `session_token_budget` | No | Session-level token ceiling across all tasks this run |
 | `repo_context` | Yes | Same repository-access/authorization-policy inputs loop-task-implementer itself requires — passed through unchanged |
 
-**Output:** a morning summary — see [reference/morning-summary-format.md](../../backlog-runner/reference/morning-summary-format.md).
+**Output:** a morning summary — see [reference/morning-summary-format.md](../../../backlog-runner/reference/morning-summary-format.md).
 
 ## Acceptance criteria
 
@@ -119,8 +119,9 @@ review-isolation logic, no relaxation of any existing circuit breaker. It:
 - A ticket that already has an in-progress branch/PR from a prior run is skipped at the queue-pull step,
   not re-attempted from scratch.
 - `make lint-backlog-runner` and `make lint-framework` pass; skill wired into root README.md,
-  docs/README.md, docs/REPOSITORY.md, `skill-routing.md`, `phase-glossary.md`, `cross-skill-escalation.md`,
-  `prompt-injection.md`, `CHANGELOG.md`.
+  docs/README.md, docs/REPOSITORY.md, `skill-routing.md`, `cross-skill-escalation.md`,
+  `prompt-injection.md`, `CHANGELOG.md`. **Not** `phase-glossary.md` — see § Implementation plan step 7:
+  loop-task-implementer itself is exempt, and this wrapper inherits that exemption.
 
 ## Implementation plan
 

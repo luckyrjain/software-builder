@@ -15,7 +15,7 @@ consumes:
 
 **Goal:** Work through as much of the backlog as the session's stop conditions allow, one
 loop-task-implementer invocation per ticket, and always produce a morning summary. No new
-Builder/Reviewer/PR logic here — see [SKILL.md](../SKILL.md) Non-goals and
+Builder/Reviewer/PR logic here — see the [design spec](../../docs/superpowers/specs/2026-08-05-backlog-runner-design.md) § Non-goals and
 [reference/queue-policy.md](../reference/queue-policy.md).
 
 ## Steps
