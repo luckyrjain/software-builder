@@ -37,10 +37,17 @@ const pool = new Pool({
   // schema + app name for PG observability (ARCH §6 / §9)
   options: `-c search_path=${process.env.DB_SCHEMA}`,
   application_name: process.env.APP_NAME || 'your-service-name',
+  idleTimeoutMillis: 30000,   // close idle pool clients — set below your LB idle timeout
 });
 ```
 
 **Placeholder change:** MySQL `?` → PG `$1`, `$2`, … (or named params via ORM).
+
+**Connection hygiene:** `node-postgres`'s `idleTimeoutMillis` is the Node-side equivalent of Python's
+`pool_recycle` (see [migration-edge-cases.md § D](migration-edge-cases.md)) — set it below your load
+balancer's idle timeout so the pool proactively closes connections instead of handing the app a
+connection the LB has already dropped. On the PG server side, also consider
+`idle_in_transaction_session_timeout` to bound a client that opened a transaction and stalled.
 
 **Remove:** `mysql` / `mysql2` from `package.json`; add `pg`.
 

@@ -11,16 +11,21 @@ ai-skills/
 ├── Makefile                  # install + lint targets
 ├── docs/
 │   ├── README.md             # Documentation index (this tree)
-│   └── REPOSITORY.md         # This file
+│   ├── REPOSITORY.md         # This file
+│   └── skill-framework/      # Shared normative conventions + reference library
 ├── scripts/
 │   └── install.sh            # Copies skill dirs → ~/.cursor/skills/ + ~/.claude/skills/ (default)
 ├── .githooks/
 │   └── pre-commit            # shellcheck on staged scripts/*.sh
-├── pr-review/                # GitLab MR review skill
-├── incident-rca/             # Post-incident RCA skill
+├── .cursor/rules/             # Per-skill Cursor discovery rules (in-repo, no install needed)
+├── .kiro/steering/            # Per-skill Kiro discovery files (in-repo, no install needed)
+├── pr-review/                 # GitLab MR review skill
+├── incident-rca/              # Post-incident RCA skill
 ├── k8s-overprovisioning-datadog/  # K8s rightsizing / DORA skill
-├── mysql-to-postgres-sql/    # MySQL → PostgreSQL native SQL migration skill
-└── squad-map/                # Repo-to-squad ownership mapping
+├── domain-comprehension/      # Evidence-backed domain/architecture mapping skill
+├── squad-map/                 # Repo-to-squad ownership mapping skill
+├── mysql-to-postgres-sql/     # MySQL → PostgreSQL native SQL migration skill
+└── loop-task-implementer/     # Autonomous multi-task implement/review/PR loop skill
 ```
 
 Each skill directory follows the same pattern:
@@ -45,7 +50,10 @@ make install          # all skills with a SKILL.md at repo root level
 make install-pr-review
 make install-k8s-overprovisioning
 make install-incident-rca
+make install-domain-comprehension
+make install-squad-map
 make install-mysql-to-postgres-sql
+make install-loop-task-implementer
 ```
 
 `scripts/install.sh` copies the entire skill directory to **both** `~/.cursor/skills/<skill-name>/`
@@ -58,15 +66,21 @@ Install one skill explicitly:
 bash scripts/install.sh pr-review
 bash scripts/install.sh k8s-overprovisioning-datadog
 bash scripts/install.sh incident-rca
+bash scripts/install.sh domain-comprehension
+bash scripts/install.sh squad-map
 bash scripts/install.sh mysql-to-postgres-sql
+bash scripts/install.sh loop-task-implementer
 ```
 
-With no arguments, `install.sh` discovers every `*/SKILL.md` under the repo root and installs each.
+With no arguments, `install.sh` discovers every `*/SKILL.md` under the repo root and installs each —
+adding an 8th skill directory needs no script change to be picked up.
 
 To install for only one editor, pass `--agent cursor` (Cursor only) or `--agent claude-user` (Claude
 Code only, installs to `~/.claude/skills/`) — or use the `install-claude*` Makefile targets below for
-the Claude-Code-only form. See
-[docs/skill-framework/shared/claude-code-setup.md](skill-framework/shared/claude-code-setup.md).
+the Claude-Code-only form. Kiro and ChatGPT/Codex aren't wired into this script (Kiro needs no install
+step — see `.kiro/steering/`; Codex's skills directory isn't uniform, copy manually). See root
+[README.md § Install for your specific coding agent](../README.md#install-for-your-specific-coding-agent)
+and [docs/skill-framework/shared/claude-code-setup.md](skill-framework/shared/claude-code-setup.md).
 
 ## Makefile targets
 
@@ -75,18 +89,22 @@ the Claude-Code-only form. See
 | `make install` | Run `scripts/install.sh` for all skills |
 | `make install-pr-review` | Install only `pr-review/` |
 | `make install-k8s-overprovisioning` | Install only `k8s-overprovisioning-datadog/` |
-| `make install-incident-rca` | Install only `incident-rca/` |
+| `make install-incident-rca` | Install only `incident-rca/` (also runs `install-incident-rca-deps`) |
+| `make install-domain-comprehension` | Install only `domain-comprehension/` (also runs `install-squad-map`) |
+| `make install-squad-map` | Install only `squad-map/` |
 | `make install-mysql-to-postgres-sql` | Install only `mysql-to-postgres-sql/` |
+| `make install-loop-task-implementer` | Install only `loop-task-implementer/` |
 | `make install-claude` | Run `scripts/install.sh --agent claude-user` for all skills |
-| `make install-claude-<skill>` | Install only `<skill>/` for Claude Code (`pr-review`, `k8s-overprovisioning`, `incident-rca`, `domain-comprehension`, `squad-map`, `mysql-to-postgres-sql`) |
+| `make install-claude-<skill>` | Install only `<skill>/` for Claude Code (`pr-review`, `k8s-overprovisioning`, `incident-rca`, `domain-comprehension`, `squad-map`, `mysql-to-postgres-sql`, `loop-task-implementer`) |
 | `make lint` | Run all lint targets below + shellcheck on `scripts/*.sh` |
-| `make lint-pr-review` | pr-review `SKILL.md` ≤ 180 lines; each `workflow/*.md` has `workflow_version` frontmatter; dangling markdown anchors; script pytest |
+| `make lint-pr-review` | pr-review `SKILL.md` ≤ 180 lines; each `workflow/*.md` has `workflow_version`/`phase`/`produces`/`consumes` frontmatter; dangling markdown anchors; script pytest |
 | `make lint-k8s-skill` | k8s `SKILL.md` ≤ 150 lines; workflow frontmatter; decision graph schema v3; render/markdown.md; dangling anchors; memory-sizing p95 rule; templates |
-| `make lint-incident-rca` | incident-rca `SKILL.md` ≤ 180 lines; each `workflow/*.md` has `workflow_version` frontmatter; valid `evidence.example.json`; dangling anchors; causal-graph example validated (CG-01–CG-08) |
-| `make lint-domain-comprehension` | domain-comprehension `SKILL.md` ≤ 180 lines; workflow frontmatter; dangling anchors; `templates/manifest.yaml` validator + pytest |
-| `make lint-squad-map` | squad-map `SKILL.md` ≤ 180 lines; workflow frontmatter; dangling anchors; required reference files |
+| `make lint-incident-rca` | incident-rca `SKILL.md` ≤ 180 lines; workflow frontmatter; valid `evidence.example.json`; dangling anchors; causal-graph example validated |
+| `make lint-domain-comprehension` | domain-comprehension `SKILL.md` ≤ 180 lines; workflow frontmatter; dangling anchors; `templates/manifest.yaml` validator + pytest; pressure harness |
+| `make lint-squad-map` | squad-map `SKILL.md` ≤ 180 lines; workflow frontmatter; dangling anchors; required reference files; pytest |
 | `make lint-mysql-to-postgres-sql` | mysql `SKILL.md` ≤ 180 lines; workflow frontmatter; required references; scan fixtures + pressure harness; shellcheck on scan scripts |
-| `make lint-framework` | shared `docs/skill-framework/` files present; required sections; SETUP.md links; metadata footer examples parse |
+| `make lint-loop-task-implementer` | loop-task-implementer `SKILL.md` ≤ 180 lines; workflow frontmatter; dangling anchors; required files (`SETUP.md`, `README.md`, `examples.md`, `report-template.md`, `reference/*`) |
+| `make lint-framework` | shared `docs/skill-framework/` files present; required sections; SETUP.md links; metadata footer examples parse; every skill has a `.cursor/rules/*.mdc` + `.kiro/steering/*.md` discovery file |
 | `make setup-hooks` | Set `git config core.hooksPath .githooks` (shellcheck pre-commit) |
 
 ### lint-incident-rca
@@ -181,6 +199,9 @@ To disable the gate later, set the same field to `false`.
 | pr-review | GitLab (read; write for posting) | Jira (ticket context + write-back) |
 | incident-rca | ≥1 observability (Datadog or KubeSense) | GitLab, Jenkins, Jira; optional `incident-rca` CLI |
 | k8s-overprovisioning-datadog | Datadog | Git provider (manifest drift) |
+| domain-comprehension | None | GitLab (Session 0b via squad-map), Datadog (P2b runtime validation) |
+| squad-map | None | GitLab, Datadog (CODEOWNERS fallback when both absent) |
 | mysql-to-postgres-sql | None | Datadog (optional; post-cutover APM verification) |
+| loop-task-implementer | None — uses the host agent's own repo/git access, not an MCP server | See [loop-task-implementer/reference/mcp-capabilities.md](../loop-task-implementer/reference/mcp-capabilities.md) for host-capability requirements |
 
 Per-skill setup: see each skill's `SETUP.md`.

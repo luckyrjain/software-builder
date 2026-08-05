@@ -48,8 +48,10 @@ Skill-specific rows in each `SKILL.md` MUST be a subset of this table plus local
 | domain-comprehension P3b flags security issue | pr-review on affected MR/repo | "Review MR !{iid} for `{finding_type}` in `{service}` — flagged during domain analysis" |
 | domain-comprehension completes P5 | squad-map refresh if ownership changed | "Refresh squad map — domain comprehension found new services in `{workspace}`" |
 | PG cutover regression confirmed in RCA | mysql-to-postgres-sql audit on failing query | "Audit native SQL in `{service}` for PG semantic mismatch — RCA found query regression" |
-| Migration rewrites complete | pr-review on migration MR | "Review MR !{iid} for MySQL→PostgreSQL migration in `{service}`" |
+| pr-review approves a mysql-to-postgres-sql migration MR | mysql-to-postgres-sql marks that repo's rewrites complete in `MIGRATION_STATUS.yaml` | "Mark `{repo}` migration complete — MR !{iid} for MySQL→PostgreSQL rewrites merged" |
+| mysql-to-postgres-sql completes rewrites from a domain-comprehension handoff artifact | domain-comprehension records the outcome (e.g. `PROGRESS.md`) | "Record MySQL→PG rewrite completion for `{service}` in domain comprehension progress" |
 | pr-review approves a loop-task-implementer task MR | loop-task-implementer resumes and selects the next task | "Continue loop-task-implementer — MR !{iid} merged, select next task" |
+| mysql-to-postgres-sql completes rewrites for a loop-task-implementer task's repo | loop-task-implementer resumes remediation/verification for that task | "Continue task `{task_id}` — PG rewrites applied to `{repo}`" |
 | incident-rca confirms a regression tied to a task branch | loop-task-implementer dispatches Builder remediation | "Dispatch Builder remediation for task `{task_id}` — RCA confirmed regression {window}" |
 | squad-map resolves the owning team for an incident | incident-rca resumes with squad context (e.g. paging, ownership-scoped evidence) | "Resume RCA for `{service}` {window} — owning squad is `{squad}`" |
 | incident-rca links a recurring architecture smell to a service | domain-comprehension re-run or update on that bounded context | "Update domain analysis for `{service}` — RCA found recurring {smell} across {n} incidents" |

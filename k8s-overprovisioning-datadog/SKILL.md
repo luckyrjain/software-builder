@@ -4,7 +4,8 @@ description: >-
   Use when the user asks whether a Kubernetes deployment or service is overprovisioned, right-sized,
   underprovisioned, or ready for resource optimization in Datadog. Keywords: overprovisioned,
   right-size, rightsizing, CPU/memory requests, HPA, replicas, throttling, OOM, Kafka consumer lag,
-  cost/waste, namespace waste ranking.
+  cost/waste, namespace waste ranking. Not for root-cause/outage investigation (incident-rca), MR
+  review (pr-review), or applying manifest changes (recommendations only).
 ---
 
 # K8s resource optimization (Datadog)

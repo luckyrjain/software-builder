@@ -73,6 +73,15 @@ else
   fail "#16 scan false-positived on lowercase if(...) control flow or getYear()-style identifier"
 fi
 
+# #18 — lowercase MySQL SQL (ORMs, some style guides) must not be invisible to the scan; the
+# case-insensitive pattern group must catch it while the case-sensitive group (IF/YEAR/MONTH/
+# WEEK/DIV/LIMIT) stays uppercase-only per #16 above.
+if "$SCAN" "$SKILL_ROOT/tests/fixtures/mysql-dialect/hits/LowercaseQuery.java" >/dev/null 2>&1; then
+  fail "#18 scan must detect lowercase timestampdiff(...)/date_format(...)"
+else
+  pass "#18 scan detects lowercase MySQL SQL via case-insensitive pattern group"
+fi
+
 # #17 — remaining previously-untested dialect constructs (GROUP_CONCAT, ON DUPLICATE KEY, INSERT
 # IGNORE, FIND_IN_SET, INSTR, REGEXP/RLIKE, ISNULL, ADDTIME, SUBSTRING_INDEX, CONVERT_TZ, JSON_*,
 # YEAR/MONTH/WEEK) must each still be caught — one line per construct in the fixture, so dropping

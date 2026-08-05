@@ -24,6 +24,8 @@ Each skill is a self-contained directory copied to `~/.cursor/skills/<name>/` on
 | **k8s-overprovisioning-datadog** | [k8s-overprovisioning-datadog/README.md](../k8s-overprovisioning-datadog/README.md) | [k8s-overprovisioning-datadog/SKILL.md](../k8s-overprovisioning-datadog/SKILL.md) | [k8s-overprovisioning-datadog/SETUP.md](../k8s-overprovisioning-datadog/SETUP.md) |
 | **domain-comprehension** | [domain-comprehension/README.md](../domain-comprehension/README.md) | [domain-comprehension/SKILL.md](../domain-comprehension/SKILL.md) | [domain-comprehension/SETUP.md](../domain-comprehension/SETUP.md) |
 | **squad-map** | [squad-map/README.md](../squad-map/README.md) | [squad-map/SKILL.md](../squad-map/SKILL.md) | [squad-map/SETUP.md](../squad-map/SETUP.md) |
+| **mysql-to-postgres-sql** | [mysql-to-postgres-sql/README.md](../mysql-to-postgres-sql/README.md) | [mysql-to-postgres-sql/SKILL.md](../mysql-to-postgres-sql/SKILL.md) | [mysql-to-postgres-sql/SETUP.md](../mysql-to-postgres-sql/SETUP.md) |
+| **loop-task-implementer** | [loop-task-implementer/README.md](../loop-task-implementer/README.md) | [loop-task-implementer/SKILL.md](../loop-task-implementer/SKILL.md) | [loop-task-implementer/SETUP.md](../loop-task-implementer/SETUP.md) |
 
 ### One-line summary
 
@@ -34,6 +36,8 @@ Each skill is a self-contained directory copied to `~/.cursor/skills/<name>/` on
 | **k8s-overprovisioning-datadog** | Natural language ("is X overprovisioned?") | Datadog-driven K8s deployment optimization assessment: CPU/memory/replica verdicts, waste estimate, cost, rollback guidance |
 | **domain-comprehension** | Natural language ("map the domain …") | Evidence-backed domain comprehension across repos: bounded contexts, data ownership, dependency graphs, business flows, exec summary with confidence |
 | **squad-map** | Natural language ("map squads …", "who owns …") | Repo-to-squad mapping via GitLab group hierarchy + Datadog team tags → `SQUAD_MAP.md` with confidence and conflict flags |
+| **mysql-to-postgres-sql** | Natural language ("MySQL scrub …", "jdbc:postgresql …") | MySQL-dialect scan gate + PostgreSQL rewrite for a `jdbc:mysql`→`jdbc:postgresql` migration |
+| **loop-task-implementer** | Natural language ("implement issue 42 …") | Autonomous multi-task loop: isolated Builder → two-lens independent Reviewer → adjudicated remediation → PR; platform-neutral, no MCP dependency |
 
 ## Cross-skill routing
 
@@ -53,6 +57,16 @@ Skills reference each other when a finding belongs in another workflow:
 | domain-comprehension | Squad / repo ownership only | squad-map |
 | squad-map | Full domain map / bounded contexts | domain-comprehension |
 | incident-rca | Unclear service owner during RCA | squad-map |
+| domain-comprehension | Produced `MYSQL_TO_PG_SQL_REWRITES.md` | mysql-to-postgres-sql |
+| mysql-to-postgres-sql | Migration MR needs review | pr-review |
+| mysql-to-postgres-sql | Cutover regression / wrong query results | incident-rca |
+| loop-task-implementer | Task's MR needs review beyond its own lenses | pr-review |
+| loop-task-implementer | Task implementation causes/needs incident investigation | incident-rca |
+| loop-task-implementer | Task needs unfamiliar-codebase context first | domain-comprehension |
+| loop-task-implementer | Task touches MySQL-dialect SQL during a PG migration | mysql-to-postgres-sql |
+
+Full symmetric matrix (forward + reverse escalations):
+[docs/skill-framework/shared/cross-skill-escalation.md](skill-framework/shared/cross-skill-escalation.md).
 
 ## Design specs (internal)
 

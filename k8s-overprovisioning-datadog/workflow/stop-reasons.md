@@ -42,6 +42,7 @@ Canonical halt/block registry. **Priority 0** — check before recommendations o
 | `missing_kafka_lag` | Medium | Block replica cut | Instrument lag per group |
 | `missing_pdb` | Medium | Cap replica confidence | Ask user for PDB |
 | `missing_partition_distribution` | Medium | Block replica cut | Validate assignment |
+| `missing_keda_metrics` | Medium | Block replica verdict | Only for confirmed KEDA workloads (`OBS_KEDA_SCALER_ACTIVE`) missing scaler metrics — see [replica-analysis.md](replica-analysis.md#keda) |
 | `conflicting_signals` | Medium | **No cut recommendations**; cap assessment confidence at **0.60** | Contradiction table — must show Resolved or Unresolved |
 | `scale_down_policy_lag` | Medium | Do not read as overscaled | Note HPA behavior |
 | `optimization_not_feasible` | Medium | **Skip cost** | `cost_skipped: <reason>` |

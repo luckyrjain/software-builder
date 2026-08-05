@@ -17,11 +17,36 @@ ROOT="${1:-.}"
 # jsonb operators use identical syntax, so they're not a MySQL-only dialect signal).
 # MATCH...AGAINST — require both tokens together (fulltext idiom); bare AGAINST is too common
 # a word to scan alone.
+#
+# Two pattern groups, scanned separately:
+#   PATTERN_CI (case-insensitive): tokens that are not plausible English words/identifiers
+#   regardless of case (TIMESTAMPDIFF, DATE_FORMAT(, JSON_*(, etc.) — safe to catch lowercase SQL,
+#   which ORMs and some style guides emit routinely and which the original all-uppercase pattern
+#   silently missed.
+#   PATTERN_CS (case-sensitive, uppercase-only): DIV, LIMIT, IF(, YEAR(, MONTH(, WEEK( — tokens
+#   where case-sensitivity is load-bearing to avoid false positives on ordinary code identifiers
+#   and control flow (HTML <div>, `if (`, `getYear()`, `LIMIT_KEY`, etc.). Do not relax these to -i.
 # shellcheck disable=SC2016
-PATTERN='TIMESTAMPDIFF|DATE_FORMAT\(|DATE_ADD\(|IFNULL\(|\bIF\(|ISNULL\(|ADDTIME\(|SUBSTRING_INDEX|CONVERT_TZ|CAST\([^)]{0,80}AS CHAR\)|ON DUPLICATE KEY|INSERT IGNORE|GROUP_CONCAT\(|FIND_IN_SET\(|UNIX_TIMESTAMP\(|CURDATE\(|LAST_INSERT_ID\(|INSTR\(|\bREGEXP\b|\bRLIKE\b|DATEDIFF\(|STR_TO_DATE\(|\bYEAR\(|\bMONTH\(|\bWEEK\(|LIMIT[\s"'"'"'+.]{1,40}[0-9]+[\s"'"'"'+.]{0,10},[\s"'"'"'+.]{0,20}[0-9]+|(?<![</a-zA-Z])\bDIV\b(?=[\s"'"'"'+.]{0,20}[0-9'"'"'(])|JSON_EXTRACT\(|JSON_UNQUOTE\(|JSON_ARRAYAGG\(|JSON_OBJECTAGG\(|JSON_CONTAINS\(|JSON_SET\(|JSON_REMOVE\(|JSON_MERGE\(|\bMATCH\s*\([^)]{0,80}\)\s*AGAINST\s*\('
+PATTERN_CI='TIMESTAMPDIFF|DATE_FORMAT\(|DATE_ADD\(|IFNULL\(|ISNULL\(|ADDTIME\(|SUBSTRING_INDEX|CONVERT_TZ|CAST\([^)]{0,80}AS CHAR\)|ON DUPLICATE KEY|INSERT IGNORE|GROUP_CONCAT\(|FIND_IN_SET\(|UNIX_TIMESTAMP\(|CURDATE\(|LAST_INSERT_ID\(|INSTR\(|\bREGEXP\b|\bRLIKE\b|DATEDIFF\(|STR_TO_DATE\(|JSON_EXTRACT\(|JSON_UNQUOTE\(|JSON_ARRAYAGG\(|JSON_OBJECTAGG\(|JSON_CONTAINS\(|JSON_SET\(|JSON_REMOVE\(|JSON_MERGE\(|\bMATCH\s*\([^)]{0,80}\)\s*AGAINST\s*\('
+# shellcheck disable=SC2016
+PATTERN_CS='\bIF\(|\bYEAR\(|\bMONTH\(|\bWEEK\(|LIMIT[\s"'"'"'+.]{1,40}[0-9]+[\s"'"'"'+.]{0,10},[\s"'"'"'+.]{0,20}[0-9]+|(?<![</a-zA-Z])\bDIV\b(?=[\s"'"'"'+.]{0,20}[0-9'"'"'(])'
+
+GLOB_ARGS=(
+  --glob '*.java'
+  --glob '*.php'
+  --glob '*.sql'
+  --glob '*.py'
+  --glob '*.js'
+  --glob '*.ts'
+  --glob '!**/vendor/**'
+  --glob '!**/node_modules/**'
+  --glob '!**/dist/**'
+  --glob '!**/.understand-anything/**'
+)
 
 echo "Scanning for MySQL-only SQL under: $ROOT"
-echo "Pattern: $PATTERN"
+echo "Case-insensitive pattern: $PATTERN_CI"
+echo "Case-sensitive pattern:   $PATTERN_CS"
 echo "Note: backtick identifiers and sql_mode GROUP BY issues require manual audit — see reference/migration-edge-cases.md"
 echo
 
@@ -35,18 +60,15 @@ if ! rg --pcre2-version >/dev/null 2>&1; then
   exit 1
 fi
 
-if rg -n -U --pcre2 "$PATTERN" \
-  --glob '*.java' \
-  --glob '*.php' \
-  --glob '*.sql' \
-  --glob '*.py' \
-  --glob '*.js' \
-  --glob '*.ts' \
-  --glob '!**/vendor/**' \
-  --glob '!**/node_modules/**' \
-  --glob '!**/dist/**' \
-  --glob '!**/.understand-anything/**' \
-  "$ROOT"; then
+FOUND=0
+if rg -n -U -i --pcre2 "$PATTERN_CI" "${GLOB_ARGS[@]}" "$ROOT"; then
+  FOUND=1
+fi
+if rg -n -U --pcre2 "$PATTERN_CS" "${GLOB_ARGS[@]}" "$ROOT"; then
+  FOUND=1
+fi
+
+if [ "$FOUND" -eq 1 ]; then
   echo
   echo "FAIL: MySQL-only dialect constructs found. Rewrite before PG cutover."
   echo "See reference/function-translations.md and reference/migration-edge-cases.md"

@@ -6,7 +6,8 @@ description: >-
   Use when the user asks who owns a repo or service, squad mapping, team
   ownership, GitLab group to Datadog team reconciliation, or org structure for a
   multi-repo workspace. Keywords: squad map, ownership, CODEOWNERS, GitLab
-  group, Datadog team, who owns.
+  group, Datadog team, who owns. Not for a full bounded-context/domain map
+  (domain-comprehension) or MR review (pr-review).
 ---
 
 # Squad Map

@@ -71,6 +71,9 @@ search_datadog_services(
 - Prefer **exact** `name` match; then **fuzzy** match — longest prefix match (e.g. repo `payments-api`
   matching Datadog service `payments-api-worker` via prefix, no exact `payments-api` service present)
 - Multiple services → pick highest traffic / exact name; list alternates in Notes column
+- **One service, multiple `team` tags** — don't silently pick one; cap confidence at **MEDIUM**, list
+  all tagged teams in the Conflicts table. Multiple team tags on one service is itself often a sign of
+  an ownership problem worth surfacing, not hiding.
 - No match → Datadog team **UNKNOWN** (not inferred from repo name)
 
 ### Domain-wide query (optional)

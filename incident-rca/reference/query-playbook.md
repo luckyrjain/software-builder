@@ -682,6 +682,17 @@ AND (summary ~ "<symptom>" OR description ~ "<symptom>" OR labels = "<service>")
 ORDER BY created DESC
 ```
 
+**Relevance filter before scoring use:** this JQL is a broad text/label match — a ticket matched only
+via `labels = "<service>"` (no symptom overlap in summary/description) can be about an unrelated issue
+on the same service. Before letting a matched ticket's content feed `deploy_regression`'s "Jira
+comment attributes the incident to a deploy" signal, `detected_by`, or `first_alert_at`, apply the
+same **same-failure-mode** check phase-3's recurrence filter uses
+([phase-3.md § Recurrence similarity filter](../workflow/phase-3.md#recurrence-similarity-filter-same-failure-mode)):
+require ≥2 of {symptom match, service/component match, signal overlap in ticket body}. A ticket that
+matched on `labels` alone (service match only) does not clear this bar by itself — still record it in
+`jira_issues[]` for context, but do not let it drive a scoring signal or `detected_by`/`first_alert_at`
+without a second matching criterion.
+
 **Map to JSON:**
 ```json
 {

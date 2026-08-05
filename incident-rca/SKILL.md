@@ -76,18 +76,21 @@ Org-specific profiles (OpenSearch, acme): [org-profiles.md](reference/org-profil
 Phase index: [reference/phase-index.md](reference/phase-index.md). Lazy-load:
 [reference/lazy-load-index.md](reference/lazy-load-index.md).
 
-## Red flags — STOP (universal)
+## Hard stops (halt the phase)
+
+- Phase 4 with empty `error_signals` **and** `infra_signals` → blocked report, no ranking
+- **Circular causal graph** → acyclic graph required; feedback loops in prose only
+- **Best-guess primary** when all hypotheses ≤ MEDIUM → *No defensible root cause*
+
+## Confidence caps and corrections (continue, downgrade or fix)
 
 - **HIGH** with one observability source → cap **MEDIUM**
 - Assert cause at **LOW/UNKNOWN** → hypothesis + gaps
 - CLI absent but claim CLI ranking → manual scoring + Gaps note
-- Phase 4 with empty `error_signals` **and** `infra_signals` → blocked report, no ranking
 - **Infrastructure symptom alone** as root cause without trigger + systemic layer — [root-cause-depth.md](reference/root-cause-depth.md)
 - **KubeSense ✅ but skipped** when log fallback triggered → `mcp_process_failure`
 - **Split one causal chain into multiple hypotheses** — merge into graph
 - **Conflicting evidence ignored** → explain in Gaps; unresolved → max **MEDIUM**
-- **Circular causal graph** → acyclic graph required; feedback loops in prose only
-- **Best-guess primary** when all hypotheses ≤ MEDIUM → *No defensible root cause*
 
 Org-specific STOP rules: [org-profiles.md](reference/org-profiles.md). Hypothesis types:
 [evidence-schema.md](reference/evidence-schema.md).

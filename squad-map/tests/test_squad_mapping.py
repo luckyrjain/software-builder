@@ -78,6 +78,14 @@ class TestReconcile:
         assert conf == "MEDIUM"
         assert conflict is True
 
+    def test_boundary_shift_names_not_falsely_merged(self):
+        # Concatenation-based normalization would collapse both of these to
+        # "paymentsteam" and falsely call them a match — token-set comparison
+        # must keep them distinct.
+        conf, conflict = reconcile_confidence("payments-team", "payment-steam")
+        assert conf == "MEDIUM"
+        assert conflict is True
+
 
 class TestCodeownersFallback:
     def test_capped_at_low(self):

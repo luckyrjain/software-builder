@@ -30,7 +30,10 @@ Optional: any service directory with native SQL on your machine. Domain packs (s
 Scanning for MySQL-only SQL under: mysql-to-postgres-sql/tests/fixtures/mysql-dialect/hits
 ```
 
-Followed by FAIL with `TIMESTAMPDIFF` / `DATE_ADD` lines, or OK if path is clean.
+Followed by FAIL with `TIMESTAMPDIFF` / `DATE_ADD` lines, or OK if path is clean. The scan matches
+lowercase SQL too (`select timestampdiff(...)`) via a case-insensitive pattern group — see
+[pressure-tests.md](pressure-tests.md) #18. `DIV`/`IF`/`YEAR`/`MONTH`/`WEEK`/`LIMIT` stay
+case-sensitive-uppercase-only by design (see #16) to avoid false-positiving on ordinary code.
 
 ## Platform paths
 

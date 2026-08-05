@@ -6,7 +6,8 @@ description: >-
   validates behavior, not intent. Use for subsystem onboarding, multi-repo
   architecture ground truth, bounded-context mapping, and engineering-leader
   summaries. Keywords: domain comprehension, bounded context, data ownership,
-  critical path, architecture smells, five questions.
+  critical path, architecture smells, five questions. Not for squad/ownership
+  lookup only (squad-map) or MR review (pr-review).
 ---
 
 # Domain Comprehension

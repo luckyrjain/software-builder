@@ -21,15 +21,19 @@ def extract_squad_from_namespace(namespace_path: str, squad_path_segment: int) -
     return parts[squad_path_segment - 1]
 
 
-def _normalize(value: str) -> str:
-    """Case- and separator-insensitive form for squad/team name comparison.
+def _normalize(value: str) -> frozenset[str]:
+    """Case- and separator-insensitive token set for squad/team name comparison.
 
     `payments-squad`, `payments_squad`, and `payments squad` are the same team by
-    any human reading — strip non-alphanumeric separators before comparing so
-    naming-convention differences between GitLab groups and Datadog team tags
-    don't register as a false conflict.
+    any human reading — split on non-alphanumeric separators and compare as a
+    token set (not a concatenated string) so naming-convention differences
+    between GitLab groups and Datadog team tags don't register as a false
+    conflict. Token-set comparison (not concatenation) matters: concatenating
+    `payments-team` and `payment-steam` both produce "paymentsteam" — a false
+    match between two genuinely different names. Comparing {"payments","team"}
+    vs {"payment","steam"} correctly keeps them distinct.
     """
-    return re.sub(r"[^a-z0-9]+", "", value.lower())
+    return frozenset(t for t in re.split(r"[^a-z0-9]+", value.lower()) if t)
 
 
 def reconcile_confidence(

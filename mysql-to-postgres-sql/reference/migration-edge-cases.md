@@ -120,3 +120,23 @@ Set on every driver, then use `pg_stat_activity.application_name` or Datadog `db
 ## E. 200+ tables vs 14 custom columns
 
 Org estimate: **200+** tables used MySQL `ON UPDATE CURRENT_TIMESTAMP`. Most use standard `created_at` / `updated_at` (§1 auditing). The **14-table** list is only non-standard **last-updated** column names — not an exhaustive table census. Use [your migration tracker](<link to your migration tracker>) for repo scope.
+
+## F. Implicit type coercion
+
+MySQL silently casts in comparisons — `WHERE varchar_col = 123` coerces `123` to a string and still
+uses an index. PostgreSQL raises a type error (`operator does not exist: character varying = integer`)
+for the same query, or — if the app already casts to avoid the error — can silently skip the index
+and force a sequential scan. Common in native SQL and ORM-generated queries alike where a numeric ID
+or boolean flag was stored in a `VARCHAR`/`TEXT` column and compared against a bound integer/boolean
+parameter. The scan gate (`scripts/scan-mysql-dialect.sh`) cannot catch this class of break — it's a
+type-shape mismatch, not a MySQL-only function/syntax signal.
+
+**Before (MySQL):** `SELECT * FROM tbl_flags WHERE status = 1` — `status` is `VARCHAR`; works via
+implicit coercion.
+**After (PG):** either fix the column type to match what's actually stored, or make the comparison
+explicit — `WHERE status = '1'` if genuinely a string, or `WHERE status::int = 1` if accepting the
+cast (check whether it defeats an existing index and needs a functional index instead).
+
+Audit: grep for numeric/boolean literals compared against columns whose declared type isn't confirmed
+numeric, e.g. `rg -n '\w+\s*=\s*[0-9]+\b' --glob '*.sql' <service_dir>` then check each column's
+actual DDL type.

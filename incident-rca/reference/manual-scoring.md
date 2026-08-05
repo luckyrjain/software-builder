@@ -65,12 +65,9 @@ counter_penalty, gap_penalty on top of raw_score). CLI output overrides manual c
 
 ## Confidence band (apply the guardrails)
 
-| Confidence | Required |
-|------------|----------|
-| **HIGH** | ≥2 **independent signal types** agree (e.g. a change story **and** an error spike; or a feature flag event **and** an error spike) **and** counter-evidence/alternates stated **and** every counted signal's `detected_at` falls within `[window.from_time, window.to_time]` |
-| **MEDIUM** | One strong signal, **or** only one source responded (hard cap — never exceed MEDIUM on a single source) — signals must still be within the incident window |
-| **LOW** | Circumstantial / timing-only overlap, **or** signals outside the incident window |
-| **UNKNOWN** | No overlapping evidence — `inconclusive` wins |
+Band definitions and required evidence are normative in
+[thresholds.md § Confidence bands (incident-rca)](thresholds.md#confidence-bands-incident-rca) — do
+not restate the table here; this section only adds manual-scoring-specific elaboration on top of it.
 
 **Signal timing rule:** before assigning HIGH or MEDIUM, verify each signal timestamp lies inside the
 incident window. A log spike or metric anomaly detected after `window.to_time` (e.g. 55 min later)

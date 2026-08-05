@@ -66,6 +66,7 @@ Restart Cursor. Setup: [SETUP.md](SETUP.md).
 - **domain-comprehension** — `MYSQL_TO_PG_SQL_REWRITES.md`; escalates SQL implementation here
 - **pr-review** — migration MR review
 - **incident-rca** — post-cutover query/regression investigation
+- **loop-task-implementer** — can pick up and implement the resulting rewrite tasks autonomously
 
 Agent instructions: [SKILL.md](SKILL.md) · contract: [reference/skill-contract.md](reference/skill-contract.md) · lazy-load: [reference/lazy-load-index.md](reference/lazy-load-index.md).
 

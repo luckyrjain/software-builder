@@ -6,6 +6,59 @@ the create-skill anti-pattern on time-sensitive info).
 
 Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/README.md).
 
+## loop-task-implementer
+
+### Rename, framework compliance, and safety fixes (2026-08-05)
+
+- Renamed from `software-builder` to `loop-task-implementer`; updated all internal references,
+  `.cursor/rules/`, and `.kiro/steering/`.
+- Brought into the same shared-framework conventions as the other 6 skills: added `SETUP.md`,
+  `README.md`, `examples.md`, `report-template.md`, and `reference/{phase-index,lazy-load-index,
+  mcp-capabilities,smoke-test,pressure-tests}.md`.
+- Fixed a real installability bug: `orchestrator.md`, `builder.md`, `reviewer.md`, and
+  `state-schema.yaml` lived at the repo root, outside the skill directory, so `scripts/install.sh`
+  shipped installs missing its own role prompts. Moved them into `workflow/` and `reference/` with
+  proper frontmatter.
+- Safety fixes (autonomous-merge skill): assigned review-thread resolution to the Orchestrator
+  explicitly (previously unowned, could stall completion); tightened `autonomous_merge_authorized` so
+  repository-file prose can't grant it; added a response-wait budget for a hung Builder/Reviewer
+  dispatch; gave the "sequential role simulation" fallback a concrete procedure; added the missing
+  "When NOT to use" table; fixed `report-template.md`'s completion-state vocabulary to match
+  `state-schema.yaml`'s actual enum.
+
+## Repository
+
+### Cross-agent discovery for all skills (2026-08-05)
+
+- Added `.cursor/rules/<skill>.mdc` and `.kiro/steering/<skill>.md` for pr-review, incident-rca,
+  k8s-overprovisioning-datadog, domain-comprehension, squad-map, and mysql-to-postgres-sql, matching
+  the in-repo discovery pattern loop-task-implementer already had — lets Cursor/Kiro find any skill
+  directly in a cloned working copy with no install step.
+- `lint-framework` now enforces both discovery files exist for every skill.
+
+### Deep gap analysis and fixes across all 7 skills (2026-08-05)
+
+- Multi-pass deep content/logic audit (beyond structural framework compliance) found and fixed real
+  bugs: a confidence-cap that could promote UNKNOWN→LOW (incident-rca); a workload-routing bug that
+  misrouted non-autoscaled K8s workloads into the KEDA path (k8s-overprovisioning-datadog); a fuzzy
+  squad-match that silently dropped its own conflict flag (squad-map); an inline-comment
+  mis-anchoring risk on headerless multi-file diff batches (pr-review); three undetected MySQL
+  dialect constructs (`IF()`, `YEAR()`/`MONTH()`/`WEEK()`) in the PG-migration scan gate
+  (mysql-to-postgres-sql); a leaked real internal tracker URL (mysql-to-postgres-sql).
+- Closed 4 missing reverse rows in the cross-skill escalation matrix
+  ([cross-skill-escalation.md](docs/skill-framework/shared/cross-skill-escalation.md)) to restore the
+  symmetry the file claims.
+- See each skill's section below/above for the skill-specific entries.
+
+### Six-skill framework rollout + org-content scrub (2026-08-05)
+
+- Landed the shared skill-framework scaffolding (docs, scripts, templates, tests) for pr-review,
+  incident-rca, k8s-overprovisioning-datadog, domain-comprehension, squad-map, and
+  mysql-to-postgres-sql in this repo.
+- Removed all references to a specific former employer/organization from skill docs, fixtures, and
+  domain packs, replacing real internal URLs/company names with generic placeholders — skills ship
+  portable, with no leaked org-specific content.
+
 ## mysql-to-postgres-sql
 
 ### v1.6 — framework compliance & prompt review (2026-07-07)
@@ -180,8 +233,8 @@ _Pre-merge WIP on `feat/squad-map-skill` (internal v1.0–v1.5) is consolidated 
 
 ### Agent skills vendored under `.agents/skills/` (2026-07-01)
 
-- **kubesense-mcp** — APM, logs, metrics sub-skills; [multi-query.md](.agents/skills/kubesense-mcp/multi-query.md)
-- **kubesense-alerts** — alert authoring; [datadog-migration.md](.agents/skills/kubesense-alerts/datadog-migration.md)
+- **kubesense-mcp** — APM, logs, metrics sub-skills; `multi-query.md` (external skill, not in this repo)
+- **kubesense-alerts** — alert authoring; `datadog-migration.md` (external skill, not in this repo)
 - **kubesense-dashboards** — dashboard workflows
 - **incident-rca** — `dependencies.md` resolves `~/.cursor/skills/kubesense-mcp` or `.agents/skills/kubesense-mcp`
 

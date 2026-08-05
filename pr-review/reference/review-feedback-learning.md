@@ -93,7 +93,7 @@ For each category in `ignored_categories`:
 | Prior finding severity in ignored category | Action |
 |------------------------------------------|--------|
 | **Medium / Low / nit** | **Omit** new findings in that category unless the defect is **materially worse** than prior ones (new production path, higher blast radius, or Critical hard floor would apply). Mention once in chat: *"Feedback learning: `{category}` often ignored on this MR — omitted N low-value repeats."* |
-| **High** (non-security) | **Downgrade to chat-only** (no post, no table row) unless regression or new hot path. |
+| **High** (non-security) | **Downgrade to chat-only** (no post, no table row) **only when the new finding is the same recurring defect** (same root cause / location pattern as a prior ignored High in this category) — regression, new hot path, or a **materially worse** instance (new production path, higher blast radius) is reported at full severity, same as prior ones. A finding must recur, not merely share a category label, to qualify for suppression — do not let 2 unrelated High findings in one category soften scrutiny of a third, different High finding. |
 | **Critical / security / AC** | **Always report** — never suppress |
 
 When downgrading or omitting, list suppressed count in chat only — increment

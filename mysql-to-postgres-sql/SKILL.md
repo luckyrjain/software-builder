@@ -8,8 +8,8 @@ description: >-
   Spring, legacy PHP, Python, and Node.js services. Use when migrating
   jdbc:mysql/mysql2/psycopg2 connections to PostgreSQL, scrubbing MySQL
   dialect, auditing native queries, or loading a domain pack for P0/P1
-  file-level rewrites. Aligns with ARCH Confluence MySQL→PG migration guide
-  (Java, Python, Node.js; timestamps, types, case sensitivity).
+  file-level rewrites (timestamps, types, case sensitivity). Not for a full
+  domain/bounded-context map (domain-comprehension) or MR review (pr-review).
 ---
 
 # MySQL → PostgreSQL SQL Migration
@@ -70,7 +70,7 @@ Full per-service steps: [workflow/migrate-service.md](workflow/migrate-service.m
 
 | Tier | Risk | Examples |
 |------|------|----------|
-| **P0** | Compliance / consent gates | SMS cooling (`TIMESTAMPDIFF`, `DATE_ADD`) |
+| **P0** | Compliance/consent-window timestamp comparisons | e.g. SMS cooldown (`TIMESTAMPDIFF`, `DATE_ADD`) |
 | **P1** | Core read paths | `DATE_FORMAT`, `CAST AS CHAR`, `IFNULL` |
 | **P2** | Legacy PHP mirrors | `CONVERT_TZ`, `ADDTIME`, `SUBSTRING_INDEX` |
 | **Portable** | Dialect only | `CONCAT_WS`, `COALESCE`, `LIMIT`, `ROW_NUMBER()` |

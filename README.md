@@ -1,6 +1,8 @@
 # ai-skills
 
-Shared [Cursor Agent Skills](https://cursor.com/docs/agent/skills) for the team.
+Shared agent skills for the team — [Cursor Agent Skills](https://cursor.com/docs/agent/skills) natively,
+plus cross-agent support for Claude Code, Kiro, and ChatGPT/Codex. See
+[Install for your specific coding agent](#install-for-your-specific-coding-agent) below.
 
 ## Documentation
 
@@ -22,6 +24,7 @@ Each skill has a human **`README.md`** (what it does) separate from **`SKILL.md`
 | [domain-comprehension](domain-comprehension/) | "map the domain …", "bounded contexts for …" | Evidence-backed domain map: bounded contexts, data ownership, dependency graphs, business flows, exec summary | [README](domain-comprehension/README.md) · [SETUP](domain-comprehension/SETUP.md) |
 | [squad-map](squad-map/) | "map squads …", "who owns …" | Repo-to-squad mapping: GitLab group hierarchy + Datadog team tags → `SQUAD_MAP.md` | [README](squad-map/README.md) · [SETUP](squad-map/SETUP.md) |
 | [mysql-to-postgres-sql](mysql-to-postgres-sql/) | "MySQL scrub …", "jdbc:postgresql …", "TIMESTAMPDIFF …" | Native SQL + JDBC rewrite for MySQL→PostgreSQL; scan gate, collection P0/P1 | [README](mysql-to-postgres-sql/README.md) · [SETUP](mysql-to-postgres-sql/SETUP.md) |
+| [loop-task-implementer](loop-task-implementer/) | "implement issue 42 …", "work through these tasks …" | Autonomous multi-task loop: isolated Builder → two-lens independent Reviewer → adjudicated remediation → PR. Platform-neutral, no Datadog/GitLab/Jira MCP required | [README](loop-task-implementer/README.md) · [SETUP](loop-task-implementer/SETUP.md) |
 
 ## Install
 
@@ -40,6 +43,7 @@ make install-incident-rca
 make install-domain-comprehension
 make install-squad-map
 make install-mysql-to-postgres-sql
+make install-loop-task-implementer
 ```
 
 `install-incident-rca` also installs the external **`kubesense-mcp`** skill dependency
@@ -55,27 +59,37 @@ bash scripts/install.sh incident-rca
 bash scripts/install.sh domain-comprehension
 bash scripts/install.sh squad-map
 bash scripts/install.sh mysql-to-postgres-sql
+bash scripts/install.sh loop-task-implementer
 ```
 
-By default, all targets copy skill directories to **both** `~/.cursor/skills/` and
-`~/.claude/skills/`. **Restart Cursor** and start a new Claude Code session after installing.
+With no arguments, `install.sh` discovers every `*/SKILL.md` under the repo root and installs all of
+them — so a newly-added 8th skill needs no script changes to be picked up by `make install`.
 
-To install for **only one editor**, use `--agent`:
+### Install for your specific coding agent
 
-```bash
-bash scripts/install.sh --agent cursor            # Cursor only
-bash scripts/install.sh --agent claude-user       # Claude Code only, all skills → ~/.claude/skills/
-make install-claude                               # same, via Makefile
-make install-claude-pr-review
-make install-claude-k8s-overprovisioning
-make install-claude-incident-rca
-make install-claude-domain-comprehension
-make install-claude-squad-map
-make install-claude-mysql-to-postgres-sql
+By default, `make install` / `bash scripts/install.sh` copies skill directories to **both**
+`~/.cursor/skills/` and `~/.claude/skills/`. **Restart Cursor** and start a new Claude Code session
+after installing. For a different agent, or to install to only one:
+
+| Agent | Command | Notes |
+|-------|---------|-------|
+| **Cursor** | `bash scripts/install.sh --agent cursor` (or `make install-<skill>` then ignore the Claude Code copy) | Installs to `~/.cursor/skills/<skill>/`. Skills ship in stable Cursor builds as of early 2026 — update Cursor if `/pr-review` etc. don't appear after restart. |
+| **Claude Code** | `bash scripts/install.sh --agent claude-user` (all skills, `~/.claude/skills/`) or `make install-claude`; per-skill: `make install-claude-<skill>` | No restart needed — a new Claude Code session picks it up. `--agent claude-project --target-dir <repo>` installs into one project's `.claude/skills/` only, instead of user-wide. Full MCP-path mapping: [claude-code-setup.md](docs/skill-framework/shared/claude-code-setup.md). |
+| **Kiro** | No install step — keep this repo cloned and open it (or symlink `.kiro/steering/` into your project). Ask Kiro to "use the `<skill>` steering workflow"; it reads `.kiro/steering/<skill>.md`, which points at `<skill>/SKILL.md` in this tree. | Steering files exist for every skill in `.kiro/steering/`. |
+| **ChatGPT / Codex** | `mkdir -p ~/.agents/skills && cp -R <skill> ~/.agents/skills/<skill>` (repeat per skill, or loop over `*/SKILL.md`) | Not wired into `scripts/install.sh` — Codex's skills directory convention isn't uniform across setups, so copy manually. Prefer separate Codex tasks or fresh agent sessions for role isolation where a skill needs it (loop-task-implementer). |
+| **Any other repo-capable agent (generic fallback)** | Point the agent at `<skill>/SKILL.md` directly, state the active role/phase if the skill has one, and don't hand it other roles' private context. | No install needed if the agent can just read files from a working copy of this repo. |
+
+**Working directly in this repo** (not via an installed copy)? Every skill also has an in-repo
+discovery file so Cursor/Kiro can find it without an install step:
+
+```
+.cursor/rules/<skill>.mdc       # Cursor rule — points at <skill>/SKILL.md
+.kiro/steering/<skill>.md       # Kiro steering — same
 ```
 
-Or `--agent claude-project --target-dir <repo>` to install into one project's `.claude/skills/` only.
-Details: [docs/skill-framework/shared/claude-code-setup.md](docs/skill-framework/shared/claude-code-setup.md).
+See each skill's `SETUP.md` § "Kiro / in-repo discovery" (or, for loop-task-implementer, the fuller
+[reference/platform-adapters.md](loop-task-implementer/reference/platform-adapters.md), which is the
+canonical cross-agent reference this table summarizes).
 
 ## Develop
 
@@ -88,24 +102,26 @@ make setup
 Run lint manually:
 
 ```bash
-make lint               # all skill lint targets + shellcheck on scripts/*.sh
+make lint               # all skill lint targets + lint-framework + shellcheck on scripts/*.sh
 make lint-pr-review     # pr-review SKILL line limit, workflow frontmatter, anchors, pytest
 make lint-k8s-skill     # k8s SKILL line limit, workflow frontmatter, report schema, anchors
 make lint-incident-rca  # incident-rca SKILL line limit, workflow frontmatter, evidence JSON, anchors
 make lint-domain-comprehension  # domain-comprehension SKILL line limit, frontmatter, anchors, manifest validator
 make lint-squad-map             # squad-map SKILL line limit, frontmatter, anchors
 make lint-mysql-to-postgres-sql # mysql SKILL line limit, scan fixtures, pressure harness, shellcheck
+make lint-loop-task-implementer # loop-task-implementer SKILL line limit, workflow frontmatter, required files, anchors
 ```
 
 | Target | Checks |
 |--------|--------|
-| `lint-pr-review` | `SKILL.md` ≤ 180 lines; `workflow_version` frontmatter; dangling markdown anchors under `pr-review/`; `py_compile` + pytest for `diff-to-positions.py` |
+| `lint-pr-review` | `SKILL.md` ≤ 180 lines; `workflow_version`/`phase`/`produces`/`consumes` frontmatter; dangling markdown anchors under `pr-review/`; `py_compile` + pytest for `diff-to-positions.py` |
 | `lint-k8s-skill` | `SKILL.md` ≤ 150 lines; frontmatter; `report-schema.md` + templates; memory-sizing p95 rule; anchors |
-| `lint-incident-rca` | `SKILL.md` ≤ 180 lines; frontmatter; valid `evidence.example.json`; causal-graph validator (CG-01–CG-08); anchors |
-| `lint-framework` | shared `docs/skill-framework/` docs present; required sections; SETUP.md links; metadata footer examples parse |
-| `lint-domain-comprehension` | `SKILL.md` ≤ 180 lines; workflow frontmatter; dangling anchors; `templates/manifest.yaml` validator + pytest |
-| `lint-squad-map` | `SKILL.md` ≤ 180 lines; workflow frontmatter; dangling anchors; required reference files |
+| `lint-incident-rca` | `SKILL.md` ≤ 180 lines; frontmatter; valid `evidence.example.json`; causal-graph validator; anchors |
+| `lint-domain-comprehension` | `SKILL.md` ≤ 180 lines; workflow frontmatter; dangling anchors; `templates/manifest.yaml` validator + pytest; pressure harness |
+| `lint-squad-map` | `SKILL.md` ≤ 180 lines; workflow frontmatter; dangling anchors; required reference files; pytest |
 | `lint-mysql-to-postgres-sql` | `SKILL.md` ≤ 180 lines; workflow frontmatter; required references; scan fixtures + pressure harness; shellcheck on scan scripts |
+| `lint-loop-task-implementer` | `SKILL.md` ≤ 180 lines; workflow frontmatter; dangling anchors; required files (`SETUP.md`/`README.md`/`examples.md`/`report-template.md`/`reference/*`) |
+| `lint-framework` | shared `docs/skill-framework/` docs present; required sections; SETUP.md links; metadata footer examples parse; every skill has a `.cursor/rules/*.mdc` + `.kiro/steering/*.md` discovery file |
 
 Full detail: [docs/REPOSITORY.md](docs/REPOSITORY.md).
 
@@ -125,6 +141,7 @@ or a Docker/Linux runner (deps installed via `apt-get` in the pipeline).
 | domain-comprehension | GitLab (optional, Session 0b via squad-map), Datadog (optional, P2b runtime validation) | [domain-comprehension/SETUP.md](domain-comprehension/SETUP.md) |
 | squad-map | GitLab, Datadog (optional; CODEOWNERS fallback when both absent) | [squad-map/SETUP.md](squad-map/SETUP.md) |
 | mysql-to-postgres-sql | None (code scan + rewrite) | Datadog (optional; post-cutover APM) — [mysql-to-postgres-sql/SETUP.md](mysql-to-postgres-sql/SETUP.md) |
+| loop-task-implementer | None (uses the host agent's own repo/git access, not an MCP server) | [loop-task-implementer/reference/mcp-capabilities.md](loop-task-implementer/reference/mcp-capabilities.md) |
 
 ---
 
@@ -276,3 +293,59 @@ Attach the skill or ask in natural language. Maps repos to GitLab org squads and
 - Summary in chat: mapped count, confidence breakdown, conflict count
 
 Auto-invokes from natural-language asks — see [squad-map/SETUP.md](squad-map/SETUP.md).
+
+---
+
+## Usage (mysql-to-postgres-sql)
+
+Attach the skill or ask in natural language. Scans a repo for MySQL-only SQL dialect and rewrites it
+for PostgreSQL during a `jdbc:mysql` → `jdbc:postgresql` cutover. No MCP required — pure static
+scan/rewrite via ripgrep (needs PCRE2 support: `rg --pcre2-version`).
+
+### Examples
+
+| You say | What happens |
+|---------|----------------|
+| `Scan this repo for MySQL dialect before the PG cutover` | Runs `scripts/scan-mysql-dialect.sh`, reports hits with file:line |
+| `Migrate this service's native SQL to PostgreSQL` | Per-service inventory → scan → rewrite → datasource config → verify → merge gate |
+| `Rewrite TIMESTAMPDIFF and DATE_FORMAT calls for PG` | Applies `reference/function-translations.md` mappings |
+
+### What you get (mysql-to-postgres-sql)
+
+- Scan gate result (exit 0/1) with exact file:line hits, or a clean pass
+- Rewritten SQL/JDBC config following `reference/function-translations.md` and `reference/migration-edge-cases.md`
+- `MIGRATION_STATUS.yaml` + `templates/SERVICE_PG_MIGRATION.md` per-service deliverable
+- Escalates to **pr-review** for the migration MR and to **incident-rca** on a cutover regression
+
+Does not auto-invoke ambiently — see [mysql-to-postgres-sql/SETUP.md](mysql-to-postgres-sql/SETUP.md).
+
+---
+
+## Usage (loop-task-implementer)
+
+Attach the skill or ask in natural language — platform-neutral, works the same in Cursor,
+ChatGPT/Codex, Claude Code, or Kiro. Takes one or more tasks from requirements to a verified,
+PR-ready state: isolated Builder implements, two independent Reviewer lenses (Safety/State and
+Contracts/Operations) each run in a fresh context, findings are adjudicated with evidence, and the
+Orchestrator only completes the repository action when explicitly authorized.
+
+### Examples
+
+| You say | What happens |
+|---------|----------------|
+| `Use loop-task-implementer to complete the next task.` | Discovers repo policy, selects one eligible task, dispatches a fresh Builder |
+| `Implement issue 42, review it deeply, fix findings, and open a PR.` | Full loop: Builder → Lens A/B → adjudicate → remediate → PR |
+| `Work through these tasks one by one and stop when each is ready to merge.` | Repeats the loop per task, stopping at `HUMAN_ACTION_REQUIRED` unless autonomous merge is authorized |
+
+### What you get (loop-task-implementer)
+
+- A completion report per task (task/repo, branch/PR, lens statuses, accepted/contested findings,
+  authoritative checks, completion state, exact human action required if any) — see
+  [loop-task-implementer/report-template.md](loop-task-implementer/report-template.md)
+- Never merges without explicit authorization — `autonomous_merge_authorized` defaults to `false`
+- No Datadog/GitLab/Jira MCP dependency; see
+  [loop-task-implementer/reference/mcp-capabilities.md](loop-task-implementer/reference/mcp-capabilities.md)
+  for what it needs from the host agent instead
+
+Setup, cross-agent install paths, and the full role-prompt reference:
+[loop-task-implementer/SETUP.md](loop-task-implementer/SETUP.md).

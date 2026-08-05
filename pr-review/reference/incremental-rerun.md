@@ -60,6 +60,14 @@ one per occurrence.
 
 - **`full` mode** — match new findings against prior **inline threads** by `file:line` + snippet hash.
   Same `file:line` with a **different** hash is a **new** finding (the line changed).
+  **Line-shift fallback:** before concluding a prior finding with no exact `file:line` match is
+  resolved, search the **same file** within a **±20 line window** of the prior line for a diff line
+  whose snippet hash matches. A match there means the finding's anchor line shifted (e.g. an import or
+  unrelated line was added/removed above it) — **preserve the prior ID and evidence**, update
+  `file:line` to the new location, keep `status: open`. Only treat a finding as resolved when no
+  matching snippet hash is found anywhere in the file (or the file was deleted/renamed — see below). A
+  finding whose surrounding code changed enough that its exact snippet hash no longer appears anywhere
+  is correctly treated as resolved, not lost — this fallback only recovers **unchanged code that moved**.
 - **`summary-only` / `general-only`** — the prior **summary note** lists only `file:line` (no snippet
   text/hash), so the snippet hash is **not recoverable** from the note alone. **Fallback: dedupe on
   `file:line` only.** To recover the prior lines' snippet hashes you must reconstruct the diff **at the

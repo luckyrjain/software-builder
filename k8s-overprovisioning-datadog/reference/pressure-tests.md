@@ -45,6 +45,7 @@ re-run attestation and phase-index rows after any model routing change.
 | Default appendix Assessment Metadata | Factor list only — no `0.35 ×` weighted-sum arithmetic |
 | KEDA ScaledObject detected; `keda.scaler.active` = true; `keda.scaler.metrics_value` = 12; target = 100 | Replica verdict uses external metric (not CPU %); no CPU-target recommendation emitted |
 | KEDA workload; `keda.scaler.active` missing from Datadog | `STOP_REASON: missing_keda_metrics`; defer replica verdict; note metric gap |
+| No KEDA ScaledObject at all; `hpa_*` metrics also null (no HPA either) | **Fixed-replica path** per `thresholds.md` — must NOT emit `STOP_REASON: missing_keda_metrics`; that STOP_REASON applies only to a workload confirmed KEDA-managed (`OBS_KEDA_SCALER_ACTIVE` observed at all, even if now unavailable) with missing telemetry. Regression guard for the null-HPA→KEDA misrouting bug fixed this session — see `replica-analysis.md` §KEDA. |
 | CPU limit = 500m, CPU request = 480m (limit ≈ request), CPU usage avg 40% | Flag tight CPU limits — any burst will throttle; do not recommend CPU request trim |
 | Memory limit = 512Mi, memory request = 500Mi; OOM kill count = 3 (7d) | Memory limit too tight; block memory trim; recommend raising both limit and request |
 | VPA present on CPU + HPA using `targetAverageUtilization` (CPU %); agent proposes a VPA-based CPU cut | `STOP_REASON: vpa_hpa_conflict_cpu`; block VPA cut recommendation; explain oscillation risk |
