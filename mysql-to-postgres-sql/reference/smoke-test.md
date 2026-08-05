@@ -8,8 +8,8 @@ Use scan fixtures (no org-specific paths required):
 
 `mysql-to-postgres-sql/tests/fixtures/mysql-dialect/hits/` (must fail) and `clean/` (must pass).
 
-Optional: any service directory with native SQL on your machine. Domain packs (e.g.
-[collection-mpokket.md](domain-packs/collection-mpokket.md)) list org-specific paths when loaded.
+Optional: any service directory with native SQL on your machine. Domain packs (see
+[domain-packs/README.md](domain-packs/README.md)) list org-specific paths when loaded.
 
 ## Invocation
 
@@ -39,7 +39,7 @@ Followed by FAIL with `TIMESTAMPDIFF` / `DATE_ADD` lines, or OK if path is clean
 | Scan gate | Scan `tests/fixtures/mysql-dialect/hits` for MySQL-only SQL |
 | Node | Migrate this service from mysql2 to pg — Sequelize config |
 | Python | Cut over SQLAlchemy to postgresql+psycopg2 with pool_recycle |
-| Domain pack | Load collection-mpokket pack — P0 SMS cooling file list |
+| Domain pack | Load org-specific domain pack — P0 SMS cooling file list |
 | Escalation | Review MR !123 for MySQL to PostgreSQL migration → **pr-review** |
 
 ## Script self-test

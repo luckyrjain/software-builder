@@ -69,7 +69,7 @@ do **not** pick highest score as primary. Phase exit gates: [phase-exit-criteria
 ([dependencies.md](dependencies.md)). Optional: GitLab, Jenkins, Jira, correlator CLI ([SETUP.md](SETUP.md)).
 `telemetry.intent` on every Datadog call. Smoke: [reference/smoke-test.md](reference/smoke-test.md).
 
-Org-specific profiles (OpenSearch, mpokket): [org-profiles.md](reference/org-profiles.md).
+Org-specific profiles (OpenSearch, acme): [org-profiles.md](reference/org-profiles.md).
 
 ## Workflow
 

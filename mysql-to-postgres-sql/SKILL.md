@@ -98,11 +98,6 @@ See full table: [reference/function-translations.md](reference/function-translat
 
 Org-specific P0/P1 file lists and wiki links: [reference/domain-packs/README.md](reference/domain-packs/README.md)
 
-| Pack | When |
-|------|------|
-| [collection-mpokket](reference/domain-packs/collection-mpokket.md) | mpokket `collection` workspace — SMS cooling P0, EMS/SWS P1 |
-| [mpokket-org-wiki](reference/domain-packs/mpokket-org-wiki.md) | ARCH Confluence + migration tracker URLs |
-
 Comprehension artifact mirror (when present): `<workspace>/MYSQL_TO_PG_SQL_REWRITES.md`
 
 **Fleet status:** copy [templates/MIGRATION_STATUS.yaml](templates/MIGRATION_STATUS.yaml) to workspace root;

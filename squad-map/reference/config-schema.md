@@ -56,7 +56,7 @@ Split `namespace.full_path` on `/` and take segment `squad_path_segment` (1-base
 path. `org_prefix` does **not** strip segments before indexing — it scopes `group_prefixes` for bulk
 discovery only.
 
-Example: `mpokket/disbursement/api-disbursement` with `squad_path_segment: 2` → squad **`disbursement`**.
+Example: `acme/disbursement/api-disbursement` with `squad_path_segment: 2` → squad **`disbursement`**.
 
 If path has fewer segments than configured → squad **UNKNOWN**; record full namespace.
 
@@ -65,9 +65,9 @@ If path has fewer segments than configured → squad **UNKNOWN**; record full na
 The example above uses someone else's namespace — find yours instead of guessing:
 
 1. `git remote get-url origin` in one of your repos — e.g.
-   `https://gitlab.example.com/mpokket/disbursement/api-disbursement.git`.
-2. Take the path after the host and strip `.git`: `mpokket/disbursement/api-disbursement`.
-3. Split on `/` and count 1-based: segment 1 = `mpokket`, segment 2 = `disbursement`, segment 3 =
+   `https://gitlab.example.com/acme/disbursement/api-disbursement.git`.
+2. Take the path after the host and strip `.git`: `acme/disbursement/api-disbursement`.
+3. Split on `/` and count 1-based: segment 1 = `acme`, segment 2 = `disbursement`, segment 3 =
    `api-disbursement`. Pick the segment that names your **squad/team**, not the org or the repo itself
    — usually segment 2 in a two-level group structure, but confirm against your own GitLab group
    nesting since this varies by org.
@@ -81,16 +81,16 @@ agree, recheck `squad_path_segment` first before trusting the output.
 
 ## Example
 
-Uses this repo's own org (mpokket) since it's a real structure to anchor the example to — replace every
+Uses this repo's own org (acme) since it's a real structure to anchor the example to — replace every
 value with your own org/squad/service names, this isn't a fixed convention.
 
 ```yaml
 ownership:
   gitlab:
-    org_prefix: mpokket
+    org_prefix: acme
     squad_path_segment: 2
     group_prefixes:
-      - mpokket/disbursement
+      - acme/disbursement
   datadog:
     service_aliases:
       disbursement-service: neo-disbursement-service

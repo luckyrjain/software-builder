@@ -1,12 +1,12 @@
 # Org profiles (domain guardrails)
 
 Load during **Phase 1** when OpenSearch/Elasticsearch, search/DB saturation, or **KubeSense-primary**
-(`logs_primary: kubesense`, e.g. **mpokket**) applies. Universal STOP rules stay in [SKILL.md](../SKILL.md).
+(`logs_primary: kubesense`, e.g. **acme**) applies. Universal STOP rules stay in [SKILL.md](../SKILL.md).
 
-**This file holds real, org-specific guardrails, not illustrative examples.** The "mpokket /
+**This file holds real, org-specific guardrails, not illustrative examples.** The "acme /
 KubeSense-primary" section below applies only to that org's actual observability topology (Datadog logs
 genuinely aren't populated there). A different org with a different setup should add its own section
-following the same pattern — do not assume mpokket's guardrails apply to your org's Datadog/KubeSense
+following the same pattern — do not assume acme's guardrails apply to your org's Datadog/KubeSense
 mix without checking.
 
 ## OpenSearch / Elasticsearch
@@ -26,7 +26,7 @@ mix without checking.
 - **ES saturation without MCP body attempt** when log text needed → `mcp_process_failure`; SPL CLI
   only after MCP `body` fails — cap trigger attribution at **MEDIUM** if both fail
 
-## mpokket / KubeSense-primary
+## acme / KubeSense-primary
 
 - Datadog application log queries are **N/A** — read **`kubesense-mcp`** + **`kubesense-logs`** skills;
   use KubeSense `analyze-logs` + `search-logs` with `body`
@@ -43,4 +43,4 @@ mix without checking.
   **KubeSense** (this org's actual log pipe), not Datadog. Record as a standing P0 gap, not a
   per-incident one, until closed.
 
-Detail: [query-playbook.md](query-playbook.md) §Org profile — mpokket · [kubesense-spl.md](kubesense-spl.md)
+Detail: [query-playbook.md](query-playbook.md) §Org profile — acme · [kubesense-spl.md](kubesense-spl.md)

@@ -75,7 +75,7 @@ window, pivot **in parallel** (same turn when possible):
 
 1. **Datadog** — `analyze_datadog_logs` GROUP BY message on `service:<caller> status:error`
 2. **KubeSense** — when KubeSense ✅ in profile: `get-trace-or-log-fields` first, then:
-   - Map caller → `workload = '<caller>'` when discovery shows `workload` and no `service` (mpokket)
+   - Map caller → `workload = '<caller>'` when discovery shows `workload` and no `service` (acme)
    - Else map `service` → `server` / `service` per discovery
    - `analyze-logs`: `level = 'ERROR' AND workload = '<caller>'`, GROUP BY `workload` — **≤1h windows**
    - If discovery shows **no** `body` / `message`: **skip text search** for URIs, query strings, or
@@ -83,7 +83,7 @@ window, pivot **in parallel** (same turn when possible):
      `search-traces` on the caller for endpoint / resource attribution instead.
 
 **URI / query-string hunts:** when MCP discovery lists `body` or `message`, use MCP filters. When
-On KubeSense-primary orgs (mpokket), read **`kubesense-logs`** skill — use MCP `search-logs` with
+On KubeSense-primary orgs (acme), read **`kubesense-logs`** skill — use MCP `search-logs` with
 `body` or `body LIKE` filters. SPL CLI per [kubesense-spl.md](kubesense-spl.md) only when MCP body
 fails. If both return no rows, state in Gaps: *"Cannot
 confirm query string from KubeSense logs."* Otherwise use endpoint attribution from traces only.
@@ -126,7 +126,7 @@ rejections, queue at max, or HTTP **429** on `service:elasticsearch` spans.
 
 **Run in Phase 1 immediately after** the APM pass and wildcard auto-flag — **before the Phase 1
 checkpoint** and **before** ranking `traffic_spike` or pure `infra_capacity`. Detail for Step 4b
-pipeline lives below; this subsection is the **onset gate** agents skipped when the mpokket
+pipeline lives below; this subsection is the **onset gate** agents skipped when the acme
 2026-06-21 incident was mis-attributed to BFF traffic.
 
 ### 1 — CPU vs throughput divergence (disproves volume spike)
@@ -206,7 +206,7 @@ code path). Record in `query_signals[]` with `detected_at` = onset.
 
 When step 1 or 3 suggests `query_governance`, hunt the **query string** — not just error counts:
 
-1. **Datadog** — only when org ingests Datadog logs (not mpokket).
+1. **Datadog** — only when org ingests Datadog logs (not acme).
 2. **KubeSense MCP body** — **mandatory** on KubeSense-primary orgs: `search-logs` with `body` on the
    caller `workload` in the **onset slice**; SPL per [kubesense-spl.md](kubesense-spl.md) if MCP fails;
    scan `body`
@@ -220,7 +220,7 @@ different purpose** and cannot be logged as "query-string hunt attempted" even w
 The mandatory query here is scoped **narrowly**: single `workload` = top caller, window = onset slice
 (`from_time` ±1–2 min), filter on `body` text — not error level or row count alone. A single malformed
 request (as few as 1–4 rows) will not surface in a broad aggregate and must not be treated as "no
-signal" until the narrow-scope query has actually run. (Root-cause miss on the mpokket 2026-06-21
+signal" until the narrow-scope query has actually run. (Root-cause miss on the acme 2026-06-21
 incident: a broad `analyze-logs GROUP BY workload` returned 0 rows and was logged as a gap; the narrow
 `body`-scoped query that would have found the 4 malformed-request log lines at the exact onset second
 was never run. A service-owner's manual log search found it 5 days later.)

@@ -1,6 +1,6 @@
 # KubeSense SPL — MCP body fallback (incident-rca)
 
-On **mpokket** (and any org with `logs_primary: kubesense`), **application logs are not stored in
+On **acme** (and any org with `logs_primary: kubesense`), **application logs are not stored in
 Datadog**. KubeSense is the **only** source for log bodies, query strings, URIs, client channels, and
 `sample_messages`. Datadog provides APM, metrics, and change stories only.
 
@@ -12,7 +12,7 @@ windows, discovery-first).
 (`unable to fetch logs` or empty body rows when errors are confirmed by `analyze-logs`).
 
 **Prerequisite:** `KUBESENSE_API_KEY` in the environment (same key as MCP Bearer token). Optional:
-`KUBESENSE_BASE_URL` (default `https://kubesense.mpokket.org`).
+`KUBESENSE_BASE_URL` (default `https://kubesense.example.com`).
 
 ## When to run (Phase 1)
 
@@ -20,9 +20,9 @@ windows, discovery-first).
 |-----------|--------|
 | **MCP `search-logs` with `body` succeeds** | Use MCP output — **do not** run SPL |
 | **MCP body fetch fails after retry** | Run SPL CLI below |
-| **mpokket / `logs_primary: kubesense`** | MCP first; SPL when MCP body unavailable |
+| **acme / `logs_primary: kubesense`** | MCP first; SPL when MCP body unavailable |
 | Expensive-query / wildcard ES incident | SPL on top caller `workload` — onset slice only if MCP body failed |
-| Datadog already has `sample_messages` | SPL optional — **rare on mpokket** |
+| Datadog already has `sample_messages` | SPL optional — **rare on acme** |
 
 **Do not** record `kubesense_metadata_only` or a Gaps note about missing message body until **both**
 MCP `body` attempt and SPL CLI (when `KUBESENSE_API_KEY` is set) have been tried.
@@ -30,7 +30,7 @@ MCP `body` attempt and SPL CLI (when `KUBESENSE_API_KEY` is set) have been tried
 ## Workflow
 
 1. **Read `kubesense-logs` skill** — discovery-first MCP workflow.
-2. **Map service → workload** — mpokket uses `workload = '<service>'` (not `service` filter).
+2. **Map service → workload** — acme uses `workload = '<service>'` (not `service` filter).
 3. **MCP `search-logs`** — include `body` in `fields`; 15–30 min window; retry once if fetch fails.
 4. **SPL fallback only if step 3 fails** — list clusters when `--cluster` unknown:
 
@@ -109,7 +109,7 @@ If SPL returns rows but no URI match, widen `--level` to `WARN` once — some se
 | MCP `unable to fetch logs` | Narrow window; retry once; then SPL |
 | `KUBESENSE_API_KEY` unset | `kubesense-spl ❌` on profile; Gaps note |
 | SPL returns 0 rows | `kubesense_metadata_only` in `evidence_links[]` only after MCP + SPL both tried |
-| MCP counts + SPL text | **Do not** set `kubesense_schema_profile: "mpokket"` alone as blocker |
+| MCP counts + SPL text | **Do not** set `kubesense_schema_profile: "acme"` alone as blocker |
 
 ## Makefile shortcut
 

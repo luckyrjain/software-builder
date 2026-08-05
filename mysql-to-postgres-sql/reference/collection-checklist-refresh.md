@@ -1,6 +1,6 @@
 # Refresh domain pack file checklists
 
-Domain pack markdown (e.g. [domain-packs/collection-mpokket.md](domain-packs/collection-mpokket.md)) is a **curated** P0/P1 list. After PRs land, refresh from scan output so the checklist does not rot.
+Domain pack markdown is a **curated** P0/P1 list. After PRs land, refresh from scan output so the checklist does not rot.
 
 ## Regenerate hit report
 

@@ -39,7 +39,7 @@ detail in reference files). Use each skill's `README.md` for a plain-language ov
 ## Install
 
 ```bash
-git clone https://gitlab-ee.mpokket.org/lucky.jain/ai-skills.git
+git clone https://gitlab.example.com/lucky.jain/ai-skills.git
 cd ai-skills
 make install          # all skills with a SKILL.md at repo root level
 make install-pr-review
@@ -158,7 +158,7 @@ would block the whole team.
 ```bash
 # Example (requires Maintainer + API token) — do not run until a group runner is online
 curl --request PUT --header "PRIVATE-TOKEN: <token>" \
-  "https://gitlab-ee.mpokket.org/api/v4/projects/<project_id>" \
+  "https://gitlab.example.com/api/v4/projects/<project_id>" \
   --data "only_allow_merge_if_pipeline_succeeds=true"
 ```
 

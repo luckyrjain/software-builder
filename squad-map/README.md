@@ -30,7 +30,7 @@ changes.
 ## Invocation examples
 
 ```
-Map squads for repos in /Users/me/Projects — org prefix mpokket, squad segment 2
+Map squads for repos in /Users/me/Projects — org prefix acme, squad segment 2
 Who owns api-disbursement?
 Refresh squad map for the disbursement workspace
 Squad mapping for these repos: api-disbursement, disbursement-service

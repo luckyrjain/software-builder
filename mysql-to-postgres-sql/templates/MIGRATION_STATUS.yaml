@@ -3,7 +3,7 @@
 schema_version: 1
 org: "{{ORG_NAME}}"
 workspace: "{{WORKSPACE_ROOT}}"
-domain_pack: "{{DOMAIN_PACK}}"  # optional — e.g. collection-mpokket
+domain_pack: "{{DOMAIN_PACK}}"  # optional — e.g. collection-acme
 last_updated: "{{ISO8601_TIMESTAMP}}"
 
 summary:

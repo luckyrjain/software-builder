@@ -57,16 +57,16 @@ Do not guess field names — discovery-first per the official skill.
 
 | Generic / Datadog | KubeSense (varies by cluster) |
 |-------------------|-------------------------------|
-| `service:<name>` | `workload`, `server`, or `service` — **mpokket uses `workload` only** |
+| `service:<name>` | `workload`, `server`, or `service` — **acme uses `workload` only** |
 | `status:error` | `level = 'ERROR'` |
 | log message / URI / query text | MCP `search-logs` with `body` field; filter with `body LIKE '%…%'` |
 
-**Org profile — mpokket:** application logs are **not ingested to Datadog** (`logs_primary: kubesense`).
+**Org profile — acme:** application logs are **not ingested to Datadog** (`logs_primary: kubesense`).
 Read **`kubesense-logs`** skill; use 15–30 min windows for `search-logs`; retry once on fetch errors.
 If MCP `body` fails → [kubesense-spl.md](kubesense-spl.md). Full recipes:
-[query-playbook.md](query-playbook.md) §KubeSense → Org profile — mpokket.
+[query-playbook.md](query-playbook.md) §KubeSense → Org profile — acme.
 
-**Log workflow (mpokket):** KubeSense `analyze-logs` + MCP `search-logs` with `body` — **do not** query
+**Log workflow (acme):** KubeSense `analyze-logs` + MCP `search-logs` with `body` — **do not** query
 Datadog logs or record `log_coverage_gap` for Datadog 0 rows.
 
 **Log coverage fallback (other orgs):** when Datadog returns 0 rows for a blast-radius service and

@@ -198,7 +198,7 @@ All major routes closed: OOM/lag disambiguation, migration MR → pr-review, dom
 | Item | Status |
 |------|--------|
 | incident-rca dependency resolution | Good — `dependencies.md` + `skills-lock.json` |
-| Org profiles (mpokket) | Good — `org-profiles.md` |
+| Org profiles (acme) | Good — `org-profiles.md` |
 | KubeSense pressure tests in rca | Good — rows 73–77 |
 | kubesense-alerts/dashboards in escalation matrix | **P3 gap** — RCA monitor/dashboard fixes have no handoff row |
 

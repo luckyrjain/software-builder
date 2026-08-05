@@ -1,6 +1,6 @@
 # Domain pack: fintech-payout
 
-Example pack for disbursement / payout / bank-rail subsystems (derived from mPokket disbursement comprehension).
+Example pack for disbursement / payout / bank-rail subsystems (derived from Acme disbursement comprehension).
 
 Merge into `domain-config.yaml` at Session 0.
 
@@ -223,10 +223,10 @@ deliverables:
 ```yaml
 ownership:
   gitlab:
-    org_prefix: mpokket
+    org_prefix: acme
     squad_path_segment: 2
     group_prefixes:
-      - mpokket/disbursement
+      - acme/disbursement
   datadog:
     service_aliases:
       disbursement-service: neo-disbursement-service

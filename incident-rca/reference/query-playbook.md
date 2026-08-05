@@ -228,31 +228,31 @@ Run `get-trace-or-log-fields` with `datasource: logs` (and `datasource: traces` 
 Do not guess field names — discovery output is authoritative for this cluster.
 
 **Default profile selection:** when discovery lists `workload` and org confirms logs are KubeSense-only,
-apply the **mpokket** org profile below. Discovery may omit `body` even when MCP returns it — still
+apply the **acme** org profile below. Discovery may omit `body` even when MCP returns it — still
 request `body` in `search-logs` per the official skill.
 
-### Org profile — mpokket
+### Org profile — acme
 
 Use when `get-trace-or-log-fields` shows `workload` and **no** `service` / `message` fields — or when
 the user confirms **logs are not stored in Datadog** (KubeSense is the **primary and only** log source).
 
-| Log source | mpokket |
+| Log source | acme |
 |------------|---------|
 | **Application / access logs** | **KubeSense only** — do not ingest to Datadog |
 | **Datadog Logs** | **Not used** — `analyze_datadog_logs` / `search_datadog_logs` for `sample_messages` or query text will return **0 rows by design** |
 | **Datadog APM + metrics** | **Used** — traces, metrics, change stories, RUM |
 | **Log bodies / query strings** | **MCP `search-logs` with `body`** per **`kubesense-logs`** skill; SPL CLI fallback |
 
-Set `kubesense_schema_profile: "mpokket"` and `logs_primary: "kubesense"` in evidence JSON.
+Set `kubesense_schema_profile: "acme"` and `logs_primary: "kubesense"` in evidence JSON.
 
-**Do not** record `log_coverage_gap` for Datadog returning 0 log rows on mpokket — that is **expected**,
+**Do not** record `log_coverage_gap` for Datadog returning 0 log rows on acme — that is **expected**,
 not missing telemetry. Record instead:
 
 ```json
 {
   "signal_type": "logs_source_profile",
   "source": "org_profile",
-  "finding": "mpokket — KubeSense primary; Datadog logs not ingested"
+  "finding": "acme — KubeSense primary; Datadog logs not ingested"
 }
 ```
 
@@ -269,7 +269,7 @@ not missing telemetry. Record instead:
 windows). Filter with `body LIKE '%keyword%'` when hunting query strings. SPL CLI only when MCP body
 fetch fails — see [kubesense-spl.md](kubesense-spl.md).
 
-**Workflow for log text (mandatory on mpokket when RCA needs query strings, URIs, client channel, or
+**Workflow for log text (mandatory on acme when RCA needs query strings, URIs, client channel, or
 `sample_messages`):**
 
 1. Read **`kubesense-mcp` + `kubesense-logs`** skills ([dependencies.md](../dependencies.md)).
@@ -280,7 +280,7 @@ fetch fails — see [kubesense-spl.md](kubesense-spl.md).
 
 Do **not** treat empty Datadog log queries as a investigation blocker — go straight to steps 1–2.
 
-Record `kubesense_schema_profile: "mpokket"` and `logs_primary: "kubesense"` in evidence.
+Record `kubesense_schema_profile: "acme"` and `logs_primary: "kubesense"` in evidence.
 
 **Time windows:** keep `analyze-logs` windows **≤1 hour** per call. Heavy `groupBy` queries on wider
 windows can timeout (~2.5 min). Split the incident window into 1h slices and merge top workloads.
@@ -290,7 +290,7 @@ window (e.g. last 30–60 min of the slice). Only after retry fails → `observa
 
 ### Error count by workload
 
-**Tool:** `analyze-logs` — use `workload` when discovery shows it (mpokket default).
+**Tool:** `analyze-logs` — use `workload` when discovery shows it (acme default).
 
 ```json
 {
@@ -366,9 +366,9 @@ API: `POST /api/logs/spl/execute`. Auth: `X-API-Key` / `KUBESENSE_API_KEY`.
 
 ---
 
-## Log coverage — KubeSense-primary (mpokket)
+## Log coverage — KubeSense-primary (acme)
 
-**When `logs_primary: kubesense` or mpokket profile applies:** skip Datadog log queries for
+**When `logs_primary: kubesense` or acme profile applies:** skip Datadog log queries for
 `sample_messages` and query text — they are **N/A**, not empty. Run KubeSense directly.
 
 For each blast-radius service **S** (primary + ES callers + dependency tree):
@@ -396,7 +396,7 @@ Append `evidence_links[]`:
 - `{ "signal_type": "mcp_process_failure", ... }` — only when KubeSense or SPL **skipped** while ✅
 - `{ "signal_type": "observability_backend_error", ... }` — KubeSense/SPL backend error after retry
 
-**Do not** use `log_coverage_gap` with `source: datadog` on mpokket — mislabels expected N/A as a gap.
+**Do not** use `log_coverage_gap` with `source: datadog` on acme — mislabels expected N/A as a gap.
 
 ### Log coverage fallback (other orgs — Datadog + KubeSense)
 
@@ -424,7 +424,7 @@ When the org **does** ingest Datadog logs and `analyze_datadog_logs` returns **0
 
 **Parallel caller log pivot:** when a top `@base_service` caller is identified:
 
-- **mpokket / KubeSense-primary:** KubeSense MCP `body` (+ SPL fallback) in parallel with Datadog APM —
+- **acme / KubeSense-primary:** KubeSense MCP `body` (+ SPL fallback) in parallel with Datadog APM —
   **do not** wait for Datadog logs.
 - **Other orgs:** Datadog logs + KubeSense when Datadog empty — see [query-investigation.md](query-investigation.md).
 

@@ -83,7 +83,7 @@ Minimum steps (same turn when possible):
 3. **Onset APM slice** — `aggregate_spans` on `from_time` −2m → `from_time` +5m only (not full window).
 4. **Wildcard auto-flag** — any `POST /?/_search` row → `query_governance` lead + log/query-string hunt.
 5. **KubeSense SPL query-string hunt** on top caller — [kubesense-spl.md](../reference/kubesense-spl.md)
-   §Query-string hunt. On mpokket / KubeSense-primary: **mandatory** (Datadog logs not ingested).
+   §Query-string hunt. On acme / KubeSense-primary: **mandatory** (Datadog logs not ingested).
 
 **Red flag:** Datadog `traffic_anomaly` change story at the same timestamp as CPU onset is
 **correlation only** until the **ES caller's** request rate rises ≥2× baseline.
@@ -95,15 +95,15 @@ Announce at checkpoint:
 
 **Cannot proceed to Phase 2** until steps 1 and 3 complete; step 4 attempted when logs/SPL available.
 
-## Log coverage — KubeSense-primary (mpokket)
+## Log coverage — KubeSense-primary (acme)
 
 **Read** [query-playbook.md](../reference/query-playbook.md) §Log coverage — KubeSense-primary when
-the user confirms logs are **not in Datadog** or `kubesense_schema_profile: "mpokket"`.
+the user confirms logs are **not in Datadog** or `kubesense_schema_profile: "acme"`.
 
 For **each service S** in blast radius:
 
 1. **Read `kubesense-mcp` + `kubesense-logs` skills** ([dependencies.md](../dependencies.md)).
-2. **Do not** call `analyze_datadog_logs` / `search_datadog_logs` for log text — N/A on mpokket.
+2. **Do not** call `analyze_datadog_logs` / `search_datadog_logs` for log text — N/A on acme.
 3. `get-trace-or-log-fields` (`datasource: logs`) before filters.
 4. `analyze-logs` — error counts: `level = 'ERROR' AND workload = '<S>'` — **≤1h slices**.
 5. **`search-logs` with `body` in `fields`** — 15–30 min windows; mandatory when query strings, URIs,
@@ -132,7 +132,7 @@ returns **0 rows**:
 5. **KubeSense SPL CLI** — [kubesense-spl.md](../reference/kubesense-spl.md) only when MCP body fails.
 6. **KubeSense query limits:** `search-logs` in **15–30 min** slices; `analyze-logs` **≤1h**; retry once on fetch error.
 7. Record in `evidence_links[]`:
-   - `log_coverage_gap` — Datadog returned 0 rows for S (**not** on mpokket — use `logs_source_profile`)
+   - `log_coverage_gap` — Datadog returned 0 rows for S (**not** on acme — use `logs_source_profile`)
    - `mcp_process_failure` — KubeSense MCP body / SPL skipped while ✅
    - `observability_backend_error` — KubeSense backend error after retry
 
@@ -142,7 +142,7 @@ at **MEDIUM** in Phase 4/5 and always flag in **Gaps**.
 **Gaps — missing log text:** only after MCP `body` attempt **and** SPL CLI attempt fail (or
 `KUBESENSE_API_KEY` unset when SPL needed) — note: *"KubeSense MCP body unavailable; SPL CLI
 unavailable or returned no rows — error volume may still be confirmed by `analyze-logs`."* Set
-`kubesense_schema_profile: "mpokket"` when org profile matches; use `kubesense_metadata_only` in
+`kubesense_schema_profile: "acme"` when org profile matches; use `kubesense_metadata_only` in
 `evidence_links[]` only when both MCP body and SPL were attempted or API key absent.
 
 ## Phase 1 checkpoint (before Phase 2)

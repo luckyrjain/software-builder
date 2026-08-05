@@ -7,7 +7,7 @@ Conventions: [examples-conventions](../docs/skill-framework/shared/examples-conv
 | # | User says | Resolves to | Notes |
 |---|-----------|-------------|-------|
 | 1 | `Scan tests/fixtures/mysql-dialect/hits for MySQL-only SQL` | Scan → hit list → function-translations | Happy path (fixture) |
-| 2 | `Load collection-mpokket pack — P0 SMS cooling files` | domain-packs/collection-mpokket + function-translations | Domain pack |
+| 2 | `Load org-specific domain pack — P0 SMS cooling files` | domain-packs/<pack> + function-translations | Domain pack |
 | 3 | `Migrate Node service from mysql2 to pg — Sequelize config and timestamp hooks` | nodejs-migration + timestamp-handling | Node path |
 | 4 | `Cut over SQLAlchemy engine to postgresql+psycopg2 with search_path and pool_recycle` | python-migration | Python path |
 | 5 | `Org-wide MySQL scrub — what native queries break on jdbc:postgresql?` | migrate-service workflow + scan per repo | Multi-service |
@@ -21,7 +21,7 @@ Conventions: [examples-conventions](../docs/skill-framework/shared/examples-conv
 
 **Agent:**
 1. Run `scripts/scan-mysql-dialect.sh tests/fixtures/mysql-dialect/hits`
-2. Map hits to rewrite patterns in function-translations (load collection-mpokket pack if org context given)
+2. Map hits to rewrite patterns in function-translations (load the org's domain pack if org context given)
 3. Propose PG rewrites from cooling pattern when applicable
 
 **Expected fragments:**

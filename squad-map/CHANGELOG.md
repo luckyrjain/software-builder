@@ -14,7 +14,7 @@ should match the version of the latest entry below that names that file.
 - **README.md** — rendered `SQUAD_MAP.md` excerpt in "What you get"
 
 ### Changed
-- Marked mpokket-shaped examples (config-schema.md, gold-squad-map-excerpt.md) as illustrative — this
+- Marked acme-shaped examples (config-schema.md, gold-squad-map-excerpt.md) as illustrative — this
   org's real structure used to anchor the example, not a fixed convention
 
 ## [1.2.3] — 2026-07-31

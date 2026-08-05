@@ -78,7 +78,7 @@ Repos: 38/44 squad-mapped (6 no Datadog service)
 ```
 
 ```
-| api-disbursement | mpokket/disbursement/api-disbursement | disbursement | neo-disbursement-service | disbursement-platform | HIGH |
+| api-disbursement | acme/disbursement/api-disbursement | disbursement | neo-disbursement-service | disbursement-platform | HIGH |
 ```
 
 ---

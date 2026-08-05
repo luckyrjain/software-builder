@@ -63,7 +63,7 @@ All four skills stop at a report. The panel split on whether to add write capabi
 
 ### T5. The moat is the evidence discipline, not the skills
 
-Cursor, Copilot, and Devin will commoditize generic "review a PR" and "explain this code." They will not have: the mpokket-specific evidence hierarchy, KubeSense-primary log routing, calibrated confidence caps, the cross-skill escalation matrix, or a golden corpus of this organization's incidents. Strategy: double down on the org-specific evidence layer and the eval corpus; never compete on generic capability.
+Cursor, Copilot, and Devin will commoditize generic "review a PR" and "explain this code." They will not have: the acme-specific evidence hierarchy, KubeSense-primary log routing, calibrated confidence caps, the cross-skill escalation matrix, or a golden corpus of this organization's incidents. Strategy: double down on the org-specific evidence layer and the eval corpus; never compete on generic capability.
 
 ---
 
@@ -149,7 +149,7 @@ Gaps in priority order:
 
 The platform runs *on* Cursor; Cursor, Copilot, and Devin are substrate and adjacent tooling, not rivals to beat on codegen. Genuine differentiators:
 
-1. **Org evidence layer** — the mpokket-specific source hierarchy, KubeSense routing, and escalation matrix. Not replicable by any vendor.
+1. **Org evidence layer** — the acme-specific source hierarchy, KubeSense routing, and escalation matrix. Not replicable by any vendor.
 2. **Calibrated-confidence culture** — reports leadership trusts because UNKNOWN is an allowed answer. Vendor tools optimize for always answering.
 3. **Golden corpus** — accumulating org-specific ground truth on incidents, MRs, and domains. It compounds; a vendor starts from zero on this organization.
 4. **Cross-domain chains** — vendor tools are single-surface (IDE or PR page). The incident → code → infra → cost chains here span surfaces under one evidence framework.

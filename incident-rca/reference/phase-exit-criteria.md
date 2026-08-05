@@ -30,7 +30,7 @@ link one-line reminders.
 - [ ] **Expensive-query onset signature** completed when ES saturated (CPU vs throughput, onset APM slice, caller baseline)
 - [ ] Wildcard `POST /?/_search` (or equivalent) flagged → query-string hunt attempted
 - [ ] Log-coverage fallback attempted when triggered (KubeSense mandatory)
-- [ ] **KubeSense-primary profile** — when `logs_primary: kubesense` / mpokket: MCP `body` attempted for log text (SPL if MCP fails); no Datadog log gap recorded
+- [ ] **KubeSense-primary profile** — when `logs_primary: kubesense` / acme: MCP `body` attempted for log text (SPL if MCP fails); no Datadog log gap recorded
 - [ ] Phase 1 checkpoint announced (signal density: strong / sparse / none)
 - [ ] User proceed confirmed when **sparse**; do not auto-advance on **none** without user OK
 

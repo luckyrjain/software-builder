@@ -10,7 +10,7 @@ For each domain, record **status**, **coverage %**, **freshness**, and whether i
 | Domain | Typical sources | N/A when |
 |--------|-----------------|----------|
 | Traces | Datadog APM, KubeSense traces | Pure infra-only with no APM |
-| Logs | KubeSense MCP `body` (+ SPL fallback); Datadog logs only if org ingests them | mpokket: Datadog logs **N/A** — assess KubeSense counts + MCP body, not Datadog log queries |
+| Logs | KubeSense MCP `body` (+ SPL fallback); Datadog logs only if org ingests them | acme: Datadog logs **N/A** — assess KubeSense counts + MCP body, not Datadog log queries |
 | Metrics | Datadog metrics, KubeSense metrics | — |
 | Deploy metadata | `get_change_stories`, Jenkins | No deploy hypothesis |
 | Git diff | GitLab MR/commit diff | No deploy in window |

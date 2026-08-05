@@ -63,7 +63,7 @@ re-run attestation and Phase 4 gate rows after any model routing change.
 | MCP profile says *(not queried — Datadog sufficient)* | **Wrong** — use `(queried)` / `(attempted — no rows)` / `❌` only |
 | `query_governance` ≥5 and strong saturation metrics | Report multi-cause with `infra_capacity` co-cause; subtract 2 cross-hypothesis |
 | ES/OpenSearch example scenario | Primary `query_governance` + `infra_capacity` co-cause — not infra-only HIGH |
-| mpokket ES 2026-06-21: CPU 99% at 05:41; `elasticsearch_requests` **declining**; `onboarding-mobile-bff` traffic_anomaly at 05:40; `user-metadata-service` hits flat | **Wrong** — rank `query_governance` primary; BFF anomaly is contradicting evidence for traffic spike; hunt `POST /?/_search` + company `name=` query in logs |
+| acme ES 2026-06-21: CPU 99% at 05:41; `elasticsearch_requests` **declining**; `onboarding-mobile-bff` traffic_anomaly at 05:40; `user-metadata-service` hits flat | **Wrong** — rank `query_governance` primary; BFF anomaly is contradicting evidence for traffic spike; hunt `POST /?/_search` + company `name=` query in logs |
 | ES saturation; agent uses full 55m APM window only; misses 4-request onset | **Wrong** — onset slice `from_time`−2m→+5m mandatory |
 | Backend on-call: "no request spike; long Unicode wildcard from CWJ client" | **Reconcile** — revise RCA; record `service_owner_finding`; do not keep traffic primary |
 | `POST /?/_search` spans from top caller in onset slice | Auto-flag `query_governance`; SPL/log hunt for query text before Phase 2 |
@@ -71,9 +71,9 @@ re-run attestation and Phase 4 gate rows after any model routing change.
 | UI symptoms; server APM clean | Query Datadog RUM in Phase 1 |
 | Parallel caller log pivot skipped when Datadog empty for top caller | **Wrong** — Datadog + KubeSense pivot required (ES/OpenSearch) |
 | KubeSense discovery shows `workload`, no `service`; agent filters `service = '…'` | **Wrong** — use `workload = '…'`; empty result is silent, not proof of health |
-| KubeSense (mpokket); agent GROUP BY `message` or skips `body` in MCP | **Wrong** — read `kubesense-logs` skill; use MCP `search-logs` with `body`; SPL only if MCP fails |
-| mpokket; agent calls `analyze_datadog_logs`, gets 0 rows, records `log_coverage_gap`, skips KubeSense | **Wrong** — Datadog logs N/A; run KubeSense MCP + body; record `logs_source_profile` |
-| mpokket ES incident; query text only from service-owner after RCA | **Wrong** — MCP `body LIKE` on onset slice (SPL if MCP fails) should confirm `name=` / CWJ before Phase 4 |
+| KubeSense (acme); agent GROUP BY `message` or skips `body` in MCP | **Wrong** — read `kubesense-logs` skill; use MCP `search-logs` with `body`; SPL only if MCP fails |
+| acme; agent calls `analyze_datadog_logs`, gets 0 rows, records `log_coverage_gap`, skips KubeSense | **Wrong** — Datadog logs N/A; run KubeSense MCP + body; record `logs_source_profile` |
+| acme ES incident; query text only from service-owner after RCA | **Wrong** — MCP `body LIKE` on onset slice (SPL if MCP fails) should confirm `name=` / CWJ before Phase 4 |
 | KubeSense `analyze-logs` on 6h window times out | **Wrong** — split into ≤1h slices; retry once on fetch error with narrower window |
 | **Happy:** Deploy regression HIGH — complete RCA | 15 mandatory sections; metrics once in exec summary; `assessment_metadata` appendix only |
 | **Edge:** `validate_causal_graph.py` fails on critical CG violation | Return to Phase 4; no polished full RCA — graph + Gaps or violations |

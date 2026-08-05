@@ -3,7 +3,7 @@
 Load in **Phase 1** before writing `SQUAD_MAP.md`. Match table columns and confidence rules — do not
 copy fictional repo names into real workspaces.
 
-**On the values below:** this repo's own org (mpokket) is used for the example since that's a real,
+**On the values below:** this repo's own org (acme) is used for the example since that's a real,
 concrete structure — not because these repo/squad names are fixed or special. Adapting this skill for
 a different org means different namespace/squad/service names throughout, nothing else changes.
 
@@ -21,8 +21,8 @@ a different org means different namespace/squad/service names throughout, nothin
 
 | Repo | GitLab namespace | GitLab squad | Datadog service | Datadog team | Confidence | Evidence |
 |------|------------------|--------------|-----------------|--------------|------------|----------|
-| api-disbursement | mpokket/disbursement/api-disbursement | disbursement | neo-disbursement-service | disbursement | HIGH | GitLab get_project; Datadog search_datadog_services |
-| legacy-ledger | mpokket/payments/legacy-ledger | payments | ledger-sync | collections | MEDIUM ⚠️ | GitLab get_project; Datadog search_datadog_services — squad mismatch |
+| api-disbursement | acme/disbursement/api-disbursement | disbursement | neo-disbursement-service | disbursement | HIGH | GitLab get_project; Datadog search_datadog_services |
+| legacy-ledger | acme/payments/legacy-ledger | payments | ledger-sync | collections | MEDIUM ⚠️ | GitLab get_project; Datadog search_datadog_services — squad mismatch |
 
 ## Conflicts (GitLab squad ≠ Datadog team)
 

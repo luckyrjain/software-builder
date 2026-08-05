@@ -12,7 +12,7 @@ outrank everything.
 | **5** | Correlator CLI output (when present) | Manual re-ranking | Phase 5 merge logic |
 | **6** | [manual-scoring.md](manual-scoring.md) | Ad-hoc weights | Signal weights when CLI absent |
 | **7** | [thresholds.md](thresholds.md) | Heuristic guesses | Numeric cutoffs (throttle %, onset windows) |
-| **8** | [org-profiles.md](org-profiles.md) | Generic search/DB heuristics | OpenSearch/mpokket branches |
+| **8** | [org-profiles.md](org-profiles.md) | Generic search/DB heuristics | OpenSearch/acme branches |
 
 ## Scoring conflicts
 

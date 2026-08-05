@@ -1,11 +1,11 @@
 # Org migration coverage vs ARCH wiki
 
 Generic coverage map for MySQL→PostgreSQL migrations. **Org-specific wiki URLs and trackers** live in
-[domain-packs/](domain-packs/README.md) (e.g. [mpokket-org-wiki.md](domain-packs/mpokket-org-wiki.md)).
+[domain-packs/](domain-packs/README.md).
 
 This skill spans **native SQL + connection config** (scan gate) and **application-layer gaps** documented in sibling reference files.
 
-**No org wiki?** The `Wiki §` column below is mpokket's ARCH Confluence guide — if your org has no
+**No org wiki?** The `Wiki §` column below maps to an example org's ARCH Confluence guide — if your org has no
 equivalent migration wiki, treat that column as `N/A` and use the `Skill reference` / `Scan gate`
 columns directly; they're the org-agnostic part and don't depend on a wiki existing at all.
 
@@ -24,10 +24,6 @@ columns directly; they're the org-agnostic part and don't depend on a wiki exist
 | §9 | Backticks, `application_name`, schema param | migrate workflow + §6 | Partial — backticks in scan |
 
 ## Domain-specific checklists
-
-| Domain | Pack |
-|--------|------|
-| mpokket collection (SMS cooling, legacy PHP) | [domain-packs/collection-mpokket.md](domain-packs/collection-mpokket.md) |
 
 Load [domain-packs/README.md](domain-packs/README.md) for the full pack index.
 

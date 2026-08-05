@@ -4,7 +4,7 @@
     "from_time": "2026-06-21T05:40:00Z",
     "to_time": "2026-06-21T06:35:00Z"
   },
-  "service": "mpokket-prod-es-cluster-2",
+  "service": "acme-prod-es-cluster-2",
   "symptom": "OpenSearch CPU 99%; search thread-pool rejections; HTTP 429 to callers",
   "environment": "production",
   "error_signals": [
@@ -27,14 +27,14 @@
       "status": "Done",
       "priority": "P0/Critical",
       "created_at": "2026-06-21T08:36:58Z",
-      "link": "https://mpokket.atlassian.net/browse/PRIN-434",
+      "link": "https://example.atlassian.net/browse/PRIN-434",
       "source": "jira"
     }
   ],
   "infra_signals": [
     {
       "source": "datadog",
-      "service": "mpokket-prod-es-cluster-2",
+      "service": "acme-prod-es-cluster-2",
       "signal_type": "cpu_saturation",
       "detected_at": "2026-06-21T05:41:00Z",
       "magnitude": "CPU 99% sustained ~35 min",
@@ -44,7 +44,7 @@
     },
     {
       "source": "datadog",
-      "service": "mpokket-prod-es-cluster-2",
+      "service": "acme-prod-es-cluster-2",
       "signal_type": "expensive_query_signature",
       "detected_at": "2026-06-21T05:40:00Z",
       "magnitude": "CPU 24.5%→89.75% while elasticsearch_requests 2659→1979/min (declining)",
@@ -54,7 +54,7 @@
     },
     {
       "source": "datadog",
-      "service": "mpokket-prod-es-cluster-2",
+      "service": "acme-prod-es-cluster-2",
       "signal_type": "thread_pool_rejected",
       "detected_at": "2026-06-21T05:48:00Z",
       "magnitude": "threadpool_search_rejected cumulative ~2.09M",
@@ -78,7 +78,7 @@
     {
       "signal_type": "logs_source_profile",
       "source": "org_profile",
-      "finding": "mpokket — KubeSense primary; Datadog logs not ingested"
+      "finding": "acme — KubeSense primary; Datadog logs not ingested"
     }
   ],
   "query_references": [
@@ -89,7 +89,7 @@
     "manual: user-metadata-service owner — no request volume spike at 11:10 IST"
   ],
   "recurrence_history": [],
-  "kubesense_schema_profile": "mpokket",
+  "kubesense_schema_profile": "acme",
   "logs_primary": "kubesense",
   "query_signals": [
     {

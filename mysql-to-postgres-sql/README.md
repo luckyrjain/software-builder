@@ -46,7 +46,7 @@ Aligned with org ARCH wiki via [domain-packs/](reference/domain-packs/README.md)
 
 ```
 Scan tests/fixtures/mysql-dialect/hits for MySQL-only SQL before PG cutover
-Load collection-mpokket domain pack — P0 SMS cooling file list
+Load org-specific domain pack — P0 SMS cooling file list
 Org-wide MySQL scrub — what native queries break on jdbc:postgresql?
 Migrate Node service from mysql2 to pg — Sequelize dialect and timestamp hooks
 Python SQLAlchemy cutover — postgresql+psycopg2 and pool_recycle

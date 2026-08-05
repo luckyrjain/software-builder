@@ -17,12 +17,12 @@ from squad_mapping import (  # noqa: E402
 class TestExtractSquad:
     def test_segment_two(self):
         assert (
-            extract_squad_from_namespace("mpokket/disbursement/api-disbursement", 2)
+            extract_squad_from_namespace("acme/disbursement/api-disbursement", 2)
             == "disbursement"
         )
 
     def test_too_few_segments(self):
-        assert extract_squad_from_namespace("mpokket/disbursement", 3) == "UNKNOWN"
+        assert extract_squad_from_namespace("acme/disbursement", 3) == "UNKNOWN"
 
     def test_segment_one(self):
         assert extract_squad_from_namespace("org/squad/repo", 1) == "org"

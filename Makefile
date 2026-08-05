@@ -482,8 +482,6 @@ lint-mysql-to-postgres-sql:
 		{ echo "error: missing mysql-to-postgres-sql/templates/MIGRATION_STATUS.yaml" >&2; exit 1; }
 	@test -f mysql-to-postgres-sql/reference/domain-packs/README.md || \
 		{ echo "error: missing mysql-to-postgres-sql/reference/domain-packs/README.md" >&2; exit 1; }
-	@test -f mysql-to-postgres-sql/reference/domain-packs/collection-mpokket.md || \
-		{ echo "error: missing mysql-to-postgres-sql/reference/domain-packs/collection-mpokket.md" >&2; exit 1; }
 	@grep -q 'domain-packs' mysql-to-postgres-sql/SKILL.md || \
 		{ echo "error: mysql-to-postgres-sql SKILL.md must reference domain-packs" >&2; exit 1; }
 	@grep -q 'MIGRATION_STATUS' mysql-to-postgres-sql/SKILL.md || \
@@ -635,7 +633,7 @@ lint-framework:
 	@echo "lint-framework: ok"
 
 # Fetch KubeSense error logs with full body via SPL REST API.
-# Example: make kubesense-errors WORKLOAD=autodebit-service CLUSTER=mpokket-neo-prod-eks-cluster
+# Example: make kubesense-errors WORKLOAD=autodebit-service CLUSTER=acme-neo-prod-eks-cluster
 kubesense-errors:
 	@test -n "$(WORKLOAD)" || { echo "error: set WORKLOAD=<k8s-workload>" >&2; exit 1; }
 	@args="$(WORKLOAD)"; \

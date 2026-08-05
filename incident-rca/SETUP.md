@@ -95,7 +95,7 @@ Configure in **Cursor Settings → MCP**. All are read-only for RCA.
 | Jenkins | `user-jenkins` | Recommended | Prod build SHA + change sets |
 | Jira | `user-Atlassian-MCP-Server` | Optional | Incident tickets, human context |
 
-**KubeSense log bodies (mpokket):** read the official **`kubesense-mcp`** skill first. Use MCP
+**KubeSense log bodies (acme):** read the official **`kubesense-mcp`** skill first. Use MCP
 `search-logs` with `body` in `fields` (15–30 min windows). If MCP body fetch fails after one retry,
 run `python3 incident-rca/scripts/kubesense_logs.py <workload>` (or `make kubesense-errors`). See
 [dependencies.md](dependencies.md) and [reference/kubesense-spl.md](reference/kubesense-spl.md).

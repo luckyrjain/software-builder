@@ -34,8 +34,8 @@ Optional top-level field when KubeSense field discovery matches a known org prof
 
 | Field | When to set |
 |-------|-------------|
-| `kubesense_schema_profile` | `"mpokket"` when MCP discovery shows `workload` and no `service` / `message` |
-| `logs_primary` | `"kubesense"` when org does not ingest Datadog logs (mpokket default) |
+| `kubesense_schema_profile` | `"acme"` when MCP discovery shows `workload` and no `service` / `message` |
+| `logs_primary` | `"kubesense"` when org does not ingest Datadog logs (acme default) |
 
 When set, use MCP `search-logs` with `body` per **`kubesense-logs`** skill ([dependencies.md](../dependencies.md)).
 Map MCP output to `error_signals[]` with `source: "kubesense-mcp"`. **Run SPL CLI** per
@@ -109,11 +109,11 @@ when [query-investigation.md](query-investigation.md) runs for other engines or 
 | `evidence_links[]` | Notable finding + URL | All sources |
 | `query_references[]` | Query strings used (appendix) | All sources |
 | `recurrence_history[].key` / `summary` / `created_at` | Similar past incident ticket | Phase 3 recurrence JQL results |
-| `evidence_links[].signal_type: "log_coverage_gap"` | Datadog returned 0 log rows for service S | Phase 1 fallback — **not** mpokket (use `logs_source_profile`) |
-| `evidence_links[].signal_type: "logs_source_profile"` | Org uses KubeSense as primary log store; Datadog logs N/A | mpokket / `logs_primary: kubesense` |
+| `evidence_links[].signal_type: "log_coverage_gap"` | Datadog returned 0 log rows for service S | Phase 1 fallback — **not** acme (use `logs_source_profile`) |
+| `evidence_links[].signal_type: "logs_source_profile"` | Org uses KubeSense as primary log store; Datadog logs N/A | acme / `logs_primary: kubesense` |
 | `evidence_links[].signal_type: "mcp_process_failure"` | KubeSense connected but agent skipped mandatory attempt | Phase 1 gate violation |
 | `evidence_links[].signal_type: "observability_backend_error"` | KubeSense called; backend returned fetch error **after retry** | Distinct from skip — backend/MCP failure |
-| `evidence_links[].signal_type: "kubesense_metadata_only"` | KubeSense returned counts/metadata only — no log message body | mpokket / metadata-only profiles |
+| `evidence_links[].signal_type: "kubesense_metadata_only"` | KubeSense returned counts/metadata only — no log message body | acme / metadata-only profiles |
 | `evidence_links[].signal_type: "expensive_query_candidate"` | Wildcard / cross-index APM resource at onset | Phase 1 wildcard auto-flag |
 | `evidence_links[].signal_type: "expensive_query_signature"` | CPU↑ while ES throughput flat/declining at onset | Phase 1 onset metric pair |
 | `evidence_links[].signal_type: "service_owner_finding"` | Backend/on-call log or query text from user | User reconciliation step |
@@ -146,7 +146,7 @@ When KubeSense **was attempted** but returned "unable to fetch logs" or equivale
 - Record `observability_backend_error` — **not** `mcp_process_failure`.
 - Note backend error in Gaps; confidence cap follows single-source rules if KubeSense was the only log source.
 
-**Metadata-only KubeSense (mpokket):** error counts by `workload` are valid signals; empty
+**Metadata-only KubeSense (acme):** error counts by `workload` are valid signals; empty
 `sample_messages` is expected — do not downgrade to "no logs". Note text attribution gap in Gaps.
 
 ## Hypothesis types (correlator output)
@@ -220,8 +220,8 @@ Order is caller → root. Each hop should have corroborating `error_signals`, `q
 | "No deploy found, so it must be infra." | Absence of a deploy event is not evidence of infra cause — `get_change_stories` may be incomplete; say so. |
 | "The CLI isn't installed but I'll present ranked hypotheses anyway." | Without the CLI, label ranking **manual** and add a Gaps note. |
 | "Ticket says X, so X is the root cause." | Tickets capture human hypotheses, not verified causes — corroborate with telemetry. |
-| "Datadog logs empty — skip KubeSense, Datadog is enough." | On mpokket, Datadog logs are **N/A** — KubeSense MCP body (+ SPL fallback) mandatory for log text. |
-| "Datadog logs empty — log coverage gap." | On mpokket, **wrong** — record `logs_source_profile`, run KubeSense MCP; 0 Datadog rows is expected. |
+| "Datadog logs empty — skip KubeSense, Datadog is enough." | On acme, Datadog logs are **N/A** — KubeSense MCP body (+ SPL fallback) mandatory for log text. |
+| "Datadog logs empty — log coverage gap." | On acme, **wrong** — record `logs_source_profile`, run KubeSense MCP; 0 Datadog rows is expected. |
 | "KubeSense failed — same as skipped." | Backend fetch error → `observability_backend_error`; skip while ✅ → `mcp_process_failure`. |
 | "`traffic_anomaly` change story at onset — must be the trigger." | Change stories are **correlated** events — require caller request rate ≥2× baseline **and** ES throughput ≥2× before `traffic_spike` primary; else run expensive-query onset signature. |
 | "Top ES caller has most spans in the full window — traffic spike." | Full-window counts include **retry storms** after saturation; use onset slice (`from_time` ±5m) and caller baseline. |

@@ -65,7 +65,7 @@ More patterns: [examples.md](examples.md)
 
 ## Install
 
-**Canonical source:** edit this directory in the [ai-skills](https://gitlab-ee.mpokket.org/lucky.jain/ai-skills) repo at
+**Canonical source:** edit this directory in the [ai-skills](https://gitlab.example.com/lucky.jain/ai-skills) repo at
 `domain-comprehension/`, then install to `~/.cursor/skills/domain-comprehension`:
 
 ```bash

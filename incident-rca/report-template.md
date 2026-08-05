@@ -428,12 +428,12 @@ If no query identified after attempts, state what was tried — do not leave bla
 
 [Missing evidence or analysis not yet done — telemetry holes, untested cascade hops, correlator absent,
 **process failures** (`mcp_process_failure`), **observability backend errors** (`observability_backend_error`),
-log coverage gaps (`log_coverage_gap` — not mpokket), **`logs_source_profile`** (KubeSense-primary orgs),
+log coverage gaps (`log_coverage_gap` — not acme), **`logs_source_profile`** (KubeSense-primary orgs),
 **KubeSense metadata-only** (`kubesense_metadata_only`).]
 
 - [ ] …
 
-**KubeSense-primary (mpokket)** — Datadog logs are **not ingested**; KubeSense MCP (`kubesense-mcp` skill) is the log path:
+**KubeSense-primary (acme)** — Datadog logs are **not ingested**; KubeSense MCP (`kubesense-mcp` skill) is the log path:
 
 - [ ] *"logs_primary: kubesense — Datadog log queries N/A."*
 - [ ] *"KubeSense MCP `search-logs` with `body` attempted per `kubesense-logs` skill — [messages captured / fetch failed]."*
@@ -607,7 +607,7 @@ from markdown. Strip internal-only debug lines and **`assessment_metadata`**.
 ## Appendix: query references
 
 - `datadog: trace.servlet.request.errors{service:neo-disbursement-service}`
-- `kubesense: analyze-logs level=ERROR groupBy workload` *(mpokket — use `workload`, not `service`)*
+- `kubesense: analyze-logs level=ERROR groupBy workload` *(acme — use `workload`, not `service`)*
 - `kubesense-mcp: search-logs body field workload=<workload>` *(primary log text path)*
 - `kubesense-spl: scripts/kubesense_logs.py <workload> --evidence` *(fallback when MCP body fails)*
 - `jira: project=INC AND created >= …`

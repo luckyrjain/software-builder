@@ -26,10 +26,10 @@ Config ([config-schema.md](config-schema.md)):
 ```yaml
 ownership:
   gitlab:
-    org_prefix: mpokket              # for group_prefixes only — not squad indexing
+    org_prefix: acme              # for group_prefixes only — not squad indexing
     squad_path_segment: 2            # see config-schema.md § squad_path_segment indexing
     group_prefixes:                  # optional bulk discovery
-      - mpokket/disbursement
+      - acme/disbursement
 ```
 
 **Indexing rule:** [config-schema.md § squad_path_segment indexing](config-schema.md#squadpathsegment-indexing-normative).
@@ -41,7 +41,7 @@ If path has fewer segments than configured → squad **UNKNOWN**; record full na
 When `group_prefixes` set:
 
 ```
-list_group_projects(group_id: "mpokket/disbursement", include_subgroups: true)
+list_group_projects(group_id: "acme/disbursement", include_subgroups: true)
 ```
 
 Maps all GitLab projects under prefix → seed cross-check against local census (repos without local checkout still listed as GitLab-only if relevant).

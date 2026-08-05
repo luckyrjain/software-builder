@@ -4,7 +4,7 @@
 Fallback when MCP `search-logs` with `body` fails. Primary path: read the official `kubesense-mcp`
 / `kubesense-logs` skills and use MCP tools (see incident-rca/dependencies.md).
 
-Requires KUBESENSE_API_KEY. Optional KUBESENSE_BASE_URL (default: https://kubesense.mpokket.org).
+Requires KUBESENSE_API_KEY. Optional KUBESENSE_BASE_URL (default: https://kubesense.example.com).
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-DEFAULT_BASE_URL = "https://kubesense.mpokket.org"
+DEFAULT_BASE_URL = "https://kubesense.example.com"
 
 REDACT_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r'("Authorization"\s*:\s*")[^"]*(")', re.IGNORECASE), r'\1[REDACTED]\2'),

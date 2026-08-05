@@ -21,7 +21,7 @@ from kubesense_logs import (  # noqa: E402
 
 HIERARCHY = [
     {
-        "name": "mpokket-neo-prod-eks-cluster",
+        "name": "acme-neo-prod-eks-cluster",
         "type": "cluster",
         "childs": [
             {
@@ -34,7 +34,7 @@ HIERARCHY = [
         ],
     },
     {
-        "name": "mpokket-neo-uat-eks-cluster",
+        "name": "acme-neo-uat-eks-cluster",
         "type": "cluster",
         "childs": [
             {
@@ -50,14 +50,14 @@ HIERARCHY = [
 
 
 def test_redact_secrets_masks_authorization():
-    raw = '{"requestHeaders":{"Authorization":"Basic SECRETTOKEN","x-merchantid":"mpokket"}}'
+    raw = '{"requestHeaders":{"Authorization":"Basic SECRETTOKEN","x-merchantid":"acme"}}'
     redacted = redact_secrets(raw)
     assert "SECRETTOKEN" not in redacted
     assert "[REDACTED]" in redacted
 
 
 def test_redact_secrets_masks_token_after_redacted_marker():
-    raw = "requestHeaders={Authorization=[REDACTED] MDEzMUEyRDBDNkY0NEQ0QjFGNDIwODk2NkY1MTlF, x-merchantid=mpokket}"
+    raw = "requestHeaders={Authorization=[REDACTED] MDEzMUEyRDBDNkY0NEQ0QjFGNDIwODk2NkY1MTlF, x-merchantid=acme}"
     redacted = redact_secrets(raw)
     assert "MDEzMUEy" not in redacted
     assert "Authorization=[REDACTED]" in redacted
@@ -82,13 +82,13 @@ def test_find_workload_locations():
 def test_choose_cluster_auto_selects_single_prod():
     locations = find_workload_locations(HIERARCHY, "autodebit-service")
     loc = choose_cluster(locations, cluster=None, namespace=None)
-    assert loc.cluster == "mpokket-neo-prod-eks-cluster"
+    assert loc.cluster == "acme-neo-prod-eks-cluster"
 
 
 def test_choose_cluster_requires_flag_when_multiple_prod():
     hierarchy = [
         {
-            "name": "mpokket-neo-prod-eks-cluster",
+            "name": "acme-neo-prod-eks-cluster",
             "type": "cluster",
             "childs": [
                 {
@@ -99,7 +99,7 @@ def test_choose_cluster_requires_flag_when_multiple_prod():
             ],
         },
         {
-            "name": "mpokket-gj-prod-ekscluster",
+            "name": "acme-gj-prod-ekscluster",
             "type": "cluster",
             "childs": [
                 {
@@ -120,8 +120,8 @@ def test_choose_cluster_requires_flag_when_multiple_prod():
 
 def test_choose_cluster_explicit():
     locations = find_workload_locations(HIERARCHY, "autodebit-service")
-    loc = choose_cluster(locations, cluster="mpokket-neo-prod-eks-cluster", namespace=None)
-    assert loc.cluster == "mpokket-neo-prod-eks-cluster"
+    loc = choose_cluster(locations, cluster="acme-neo-prod-eks-cluster", namespace=None)
+    assert loc.cluster == "acme-neo-prod-eks-cluster"
 
 
 def test_build_spl_query_includes_filters():
@@ -181,7 +181,7 @@ def test_build_evidence_fragment_maps_error_signal():
         service="autodebit-service",
         from_time="2026-07-01T09:40:00Z",
         to_time="2026-07-01T09:45:00Z",
-        cluster="mpokket-neo-prod-eks-cluster",
+        cluster="acme-neo-prod-eks-cluster",
         namespace="domain",
         limit=10,
     )

@@ -26,7 +26,7 @@ Each skill has a human **`README.md`** (what it does) separate from **`SKILL.md`
 ## Install
 
 ```bash
-git clone https://gitlab-ee.mpokket.org/lucky.jain/ai-skills.git
+git clone https://gitlab.example.com/lucky.jain/ai-skills.git
 cd ai-skills
 make install
 ```
@@ -141,8 +141,8 @@ Auto-invokes from natural-language asks when the request clearly targets a GitLa
 Common forms:
 
 ```
-/pr-review https://gitlab-ee.mpokket.org/lucky.jain/ai-skills/-/merge_requests/1
-review this pr https://gitlab-ee.mpokket.org/lucky.jain/ai-skills/-/merge_requests/1
+/pr-review https://gitlab.example.com/lucky.jain/ai-skills/-/merge_requests/1
+review this pr https://gitlab.example.com/lucky.jain/ai-skills/-/merge_requests/1
 /pr-review !482 in backend/payments
 review this MR !482
 /pr-review                       # current branch's MR, or pick from open MRs
@@ -265,7 +265,7 @@ Attach the skill or ask in natural language. Maps repos to GitLab org squads and
 
 | You say | What happens |
 |---------|----------------|
-| `Map squads for repos in /Projects — org mpokket, segment 2` | Discovers repos → GitLab + Datadog MCP → `SQUAD_MAP.md` |
+| `Map squads for repos in /Projects — org acme, segment 2` | Discovers repos → GitLab + Datadog MCP → `SQUAD_MAP.md` |
 | `Who owns api-disbursement?` | Single-repo lookup with confidence and evidence |
 | `Refresh squad map` | Re-queries MCP even if `SQUAD_MAP.md` exists |
 

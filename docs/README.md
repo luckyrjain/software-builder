@@ -113,7 +113,7 @@ These are planning artifacts; the live behavior is defined in `pr-review/SKILL.m
 |------|--------------|
 | `workflow/migrate-service.md` | Per-service inventory → scan → rewrite → config → verify → merge gate |
 | `reference/function-translations.md` | MySQL → PostgreSQL function mapping + cooling-period pattern |
-| `reference/collection-domain-files.md` | mpokket collection P0/P1/P2 file-level rewrite checklist |
+| `reference/collection-domain-files.md` | collection domain P0/P1/P2 file-level rewrite checklist |
 | `reference/org-migration-gaps.md` | Coverage map vs ARCH Confluence wiki |
 | `reference/timestamp-handling.md` | `ON UPDATE CURRENT_TIMESTAMP` + 14 custom column tables |
 | `reference/data-type-mapping.md` | Type mapping, ENUM, boolean, UNSIGNED |

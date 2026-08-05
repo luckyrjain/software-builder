@@ -6,7 +6,7 @@ Conventions: [examples-conventions](../docs/skill-framework/shared/examples-conv
 
 | # | User says | Behavior |
 |---|-----------|----------|
-| 1 | "Map squads for repos in `/Projects` — org mpokket, segment 2" | Inputs → Phase 0 → Phase 1 → `SQUAD_MAP.md` |
+| 1 | "Map squads for repos in `/Projects` — org acme, segment 2" | Inputs → Phase 0 → Phase 1 → `SQUAD_MAP.md` |
 | 2 | "Who owns api-disbursement?" | Single-repo scope → GitLab + Datadog lookup |
 | 3 | "Refresh squad map" | `refresh: true` → re-query MCP even if artifact exists |
 | 4 | "Squad mapping for disbursement-service, neo-disbursement-service" | Explicit repo list + aliases from config |
@@ -19,7 +19,7 @@ Conventions: [examples-conventions](../docs/skill-framework/shared/examples-conv
 
 ### Scenario: Multi-repo workspace — happy path
 
-**User:** "Map squads for repos in `/Users/me/Projects/disbursement` — org prefix mpokket, squad segment 2."
+**User:** "Map squads for repos in `/Users/me/Projects/disbursement` — org prefix acme, squad segment 2."
 
 **Agent:**
 
@@ -34,7 +34,7 @@ Squad map MCP profile: GitLab ✅ (queried) | Datadog ✅ (queried)
 ```
 
 ```
-| api-disbursement | mpokket/disbursement/api-disbursement | disbursement | neo-disbursement-service | disbursement-platform | HIGH | GitLab get_project; Datadog name:neo-disbursement-service* |
+| api-disbursement | acme/disbursement/api-disbursement | disbursement | neo-disbursement-service | disbursement-platform | HIGH | GitLab get_project; Datadog name:neo-disbursement-service* |
 ```
 
 ```
@@ -56,7 +56,7 @@ Squad map MCP profile: GitLab ✅ (queried) | Datadog ❌
 ```
 
 ```
-| auth-gateway | mpokket/platform/auth-gateway | platform | UNKNOWN | UNKNOWN | MEDIUM | GitLab get_project |
+| auth-gateway | acme/platform/auth-gateway | platform | UNKNOWN | UNKNOWN | MEDIUM | GitLab get_project |
 ```
 
 ---
