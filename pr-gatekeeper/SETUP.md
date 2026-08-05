@@ -56,11 +56,12 @@ who-owns-x-bot's Slack handler. The handler you build:
    whatever you pass here, it has no other source. After a run completes (posted or held — both count as
    "processed"), update your stored value to the new `head_sha`.
 4. Implements the **deterministic-reply protocol** pr-gatekeeper's workflow depends on — see
-   [reference/auto-post-policy.md § The protocol](reference/auto-post-policy.md#the-protocol-every-pr-review-ask-point-gets-one-deterministic-answer-never-a-hang):
-   send the opening invocation, then answer **every** gate pr-review's session stops at with its one
-   designated reply (large-MR/pagination caps → "review the partial boundary as-is"; baseline-staleness
-   offer → "continue incrementally"; Phase 3 confirmation, if it stops → `"Hold — don't post"`). Never
-   send any other reply, and never leave a stopped session unanswered.
+   [reference/auto-post-policy.md § The protocol](reference/auto-post-policy.md#the-protocol-every-pr-review-ask-point-gets-one-deterministic-answer-never-a-hang)
+   for the full, exhaustive list (currently 7 gate types — merged/closed-MR stop, early 200-file cap
+   warning, pagination-cap hit, baseline-staleness offer, Phase 3 posting confirmation, and the
+   post-Phase-5 Jira/Slack offers): send the opening invocation, then answer **every** gate pr-review's
+   session stops at with its one designated reply from that list. Never send any other reply, never
+   invent an answer to a gate not on the list, and never leave a stopped session unanswered.
 5. When the run reports a routed notification instead of a posted comment, deliver it to wherever
    § Config points (Slack channel, email, etc.) — pr-gatekeeper's own output is just text, the handler
    does the actual delivery, same division of labor as who-owns-x-bot's Slack `response_url` posting.

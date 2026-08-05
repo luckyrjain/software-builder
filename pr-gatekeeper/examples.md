@@ -15,8 +15,10 @@ Conventions: [examples-conventions](../docs/skill-framework/shared/examples-conv
 | 7 | Label added / comment posted on !482 (not a push event) | Inputs short-circuit — pr-gatekeeper only reacts to push events |
 | 8 | "Review this MR" typed in an interactive chat session | **Wrong skill** → pr-review (this skill doesn't auto-invoke; see `disable-model-invocation`) |
 | 9 | pr-review's own `chat-only` mode detected (read-only GitLab MCP) | Phase 3 skipped entirely by pr-review's own rules; nothing posted; routed notification same as a Hold outcome |
-| 10 | Push to MR !482 with 250 changed files | pr-review's early 200-file cap warning fires before Phase 2 → "review the partial boundary as-is" → review continues on the fetched subset |
+| 10 | Push to MR !482 with 250 changed files | Early 200-file cap warning fires first → `proceed`; pagination then hits the 200-file cap at page 2 → "review the partial boundary as-is" |
 | 11 | Push is the 35th commit since !482's last reviewed baseline | pr-review's baseline-staleness offer fires → "continue incrementally" → declines the full-re-review offer |
+| 12 | Webhook dispatches for !482, but it was merged/closed between the handler's check and pr-review's own fetch | pr-review's merged/closed state-check stop fires → declines the post-merge-audit confirmation → no review |
+| 13 | Push to MR !482 with a linked Jira ticket, `jira_write_available: true` | Phase 5 renders normally; Jira write-back offer declines; Slack/Teams notification offer (if any) also declines — pr-gatekeeper's own routing is the only notification sent |
 
 ---
 
