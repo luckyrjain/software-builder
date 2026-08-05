@@ -61,6 +61,14 @@ Squad Digest can read this file directly instead of re-running the aggregator.
 
 ## Rules
 
+- **Each service appears in exactly one of the four sub-sections (Blocked/Stalled/In progress/Done),
+  chosen by its persisted `status` field from `migration_program_rollup.json` — never by independently
+  re-checking `value.scan_gate`/`value.shadow_compare`/`value.config_cutover` for `fail` or
+  `staleness_days` against `staleness_threshold_days` while rendering.** `status` is already mutually
+  exclusive (`blocked` always wins over staleness — see [workflow/run-rollup.md](../workflow/run-rollup.md)
+  § 2); a blocked service's `staleness_days` can independently exceed the threshold too (its failing gate
+  just hasn't changed in a while), which would otherwise put the same service in both the Blocked and
+  Stalled tables.
 - **Every `program_manifest` entry appears** — either contributing services to the per-squad sections, or
   as a row in Workspace gaps (or both, if some services parsed and others in the same workspace didn't).
 - **`squad: UNKNOWN` services are never dropped and never guessed into a named squad** — their own section,

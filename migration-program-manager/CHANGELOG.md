@@ -159,3 +159,36 @@ All notable changes to the migration-program-manager skill. Per-file `workflow_v
   `state` input with a key that happened to already match the code under test.
 - 3 new pytest cases (`compute_staleness` key-match unit tests for missing/null `name`, 1
   `build_rollup`-level two-run round-trip regression) — 50 total, up from 47.
+
+### Fixed (round-7 review, same day)
+- **`workflow/run-rollup.md` § 2 and `reference/report-format.md` described Blocked/Stalled section
+  membership by restating each status's raw criteria (`blocked` = "any gate `fail`", `stalled` =
+  "staleness ≥ `staleness_threshold_days`") instead of pointing at the single, already-finalized `status`
+  field `build_rollup` persists into `migration_program_rollup.json`.** Those two criteria aren't
+  mutually exclusive on their own: a `blocked` service's `staleness_days` can independently exceed the
+  threshold too (its failing gate just hasn't changed in a while) — confirmed with a real two-run CLI
+  round trip (`scan_gate: fail` held unchanged 20 days past a 14-day threshold) that produces exactly
+  this shape in the persisted rollup: `{"status": "blocked", "staleness_days": 20, "value":
+  {"scan_gate": "fail", ...}}`. The script itself never double-counts this (`build_rollup`'s status
+  override only fires for `status == "in_progress"`, same guard round 2 added), but an agent rendering
+  `MIGRATION_PROGRAM_REPORT.md` from the two docs' literal wording — independently re-checking "any gate
+  fail" and "staleness ≥ threshold" as separate conditions per service, rather than reading the one
+  `status` field the aggregator already committed to disk — could place that same service in *both* the
+  Blocked and Stalled tables, silently drifting from the rollup JSON's own single source of truth. The
+  same failure shape as round 1's stdout double-count, relocated from the script to the docs that drive
+  the agent's report-rendering step. Fixed: both docs now explicitly instruct grouping by the persisted
+  `status` field (mutually exclusive, `blocked` wins) and call out the blocked-and-stale case by name as
+  the reason not to re-derive membership from `value.*`/`staleness_days` while rendering.
+- No script change, no new pytest cases (a workflow-doc clarification, not a code path) — 50 total,
+  unchanged from round 6. Verified via real `--state-path` round trips through the actual CLI
+  (`python3 scripts/aggregate_migration_status.py ...`, not direct function calls): (1) an `in_progress`
+  service across 3 runs — unchanged same-day, then unchanged 15 days later past a 14-day threshold —
+  correctly reaches `stalled`; (2) a `stalled` service whose `MIGRATION_STATUS.yaml` gate values then
+  change (progress made) correctly resets to `staleness_days: 0` / `status: in_progress`, not stuck;
+  (3) a workspace removed from `program_manifest` between runs has its services' state entries fully
+  pruned from `state.json` on the very next run (`new_state` is rebuilt fresh from the current manifest
+  each run and `save_state` overwrites, never merges) — no stale-state leak if that workspace's name is
+  ever reused. All three round trips executed clean; `gate_signature`, `evidence_ref`, and the
+  `workspace_root::name` state key each have exactly one production call site (`compute_staleness`,
+  `build_rollup`, and `compute_staleness`+`build_rollup` sharing the identical `coerce_str(...)`
+  expression respectively) — no other latent two-call-site drift risk found in the script itself.

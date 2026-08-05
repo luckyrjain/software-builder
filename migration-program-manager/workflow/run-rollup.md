@@ -50,9 +50,19 @@ The script (see the script's own module docstring for its exact function-level c
 
 ## 2. Rank and group
 
-Per squad: **blocked** (any gate `fail`) first, then **stalled** (staleness ≥ `staleness_threshold_days`)
-ranked by staleness descending, then **in_progress**, then **done**. `squad: UNKNOWN` items form their own
-group, always rendered last — never silently merged into a named squad's section.
+**Group by each item's persisted `status` field from `migration_program_rollup.json` — never re-derive
+membership from `value.scan_gate`/`value.shadow_compare`/`value.config_cutover` or `staleness_days`
+yourself.** Step 1.4's aggregator already finalized `status` as one of exactly `blocked` / `stalled` /
+`in_progress` / `done` per service — mutually exclusive, `blocked` always wins over staleness there. A
+service can be `status: "blocked"` while its `staleness_days` also happens to exceed
+`staleness_threshold_days` (its failing gate simply hasn't changed in a while); re-checking "any gate
+`fail`" and "staleness ≥ threshold" as two independent conditions while rendering would put that one
+service in **both** the Blocked and Stalled tables, contradicting the rollup JSON's own single, already-
+exclusive `status` value. Render each item into exactly the one section matching its `status` field.
+
+Per squad, section order: **blocked** first, then **stalled** (ranked by `staleness_days` descending),
+then **in_progress**, then **done**. `squad: UNKNOWN` items form their own group, always rendered last —
+never silently merged into a named squad's section.
 
 ## 3. Render `MIGRATION_PROGRAM_REPORT.md`
 
