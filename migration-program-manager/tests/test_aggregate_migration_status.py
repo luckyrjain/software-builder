@@ -9,12 +9,16 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
 import pytest  # noqa: E402
 
+import json  # noqa: E402
+from datetime import date  # noqa: E402
+
 from aggregate_migration_status import (  # noqa: E402
     build_rollup,
     compute_staleness,
     derive_status,
     gate_signature,
     join_squad,
+    json_safe,
     load_manifest,
     load_state,
     normalize_confidence,
@@ -118,6 +122,19 @@ class TestNormalizeConfidence:
         assert normalize_confidence("") == "UNKNOWN"
         assert normalize_confidence(None) == "UNKNOWN"
         assert normalize_confidence("n/a") == "UNKNOWN"
+
+
+class TestJsonSafe:
+    def test_primitives_pass_through_unchanged(self):
+        assert json_safe("pass") == "pass"
+        assert json_safe(None) is None
+        assert json_safe(True) is True
+        assert json_safe(3) == 3
+
+    def test_non_primitive_is_stringified(self):
+        # yaml.safe_load auto-types an unquoted date-shaped scalar (e.g. mr_url: 2026-08-05)
+        # into a datetime.date object, which json.dumps can't serialize.
+        assert json_safe(date(2026, 8, 5)) == "2026-08-05"
 
 
 class TestDeriveStatus:
@@ -276,6 +293,23 @@ class TestBuildRollup:
         assert items[0].status == "done"
         assert items[0].staleness_days == 20
 
+    def test_yaml_auto_typed_date_scalar_does_not_break_json_serialization(self, tmp_path):
+        # A hand-edited MIGRATION_STATUS.yaml leaving mr_url as an unquoted date-shaped value
+        # (e.g. "mr_url: 2026-08-05" instead of a real URL) is auto-typed by yaml.safe_load into
+        # a datetime.date -- the rollup must still be JSON-serializable end to end.
+        ws = tmp_path / "ws"
+        ws.mkdir()
+        (ws / "MIGRATION_STATUS.yaml").write_text(
+            "schema_version: 1\nservices:\n  - name: svc-a\n    path: svc-a\n"
+            "    tier_focus: P0\n    scan_gate: pass\n    shadow_compare: pass\n    config_cutover: done\n"
+            "    mr_url: 2026-08-05\n",
+            encoding="utf-8",
+        )
+        manifest = [ManifestEntry(workspace_root=str(ws))]
+        items, gaps, new_state = build_rollup(manifest, {}, datetime.now(timezone.utc), staleness_threshold_days=14)
+        json.dumps([i.to_dict() for i in items])  # must not raise
+        assert items[0].value["mr_url"] == "2026-08-05"
+
     def test_blocked_outranks_stalled(self, tmp_path):
         ws = tmp_path / "ws"
         ws.mkdir()
@@ -345,6 +379,11 @@ class TestLoadState:
     def test_missing_state_file_returns_empty(self, tmp_path):
         assert load_state(str(tmp_path / "nope.json")) == {}
 
+    def test_non_mapping_top_level_falls_back_to_empty(self, tmp_path):
+        p = tmp_path / "state.json"
+        p.write_text('["not", "a", "mapping"]', encoding="utf-8")
+        assert load_state(str(p)) == {}
+
 
 class TestLoadManifest:
     def test_parses_valid_manifest(self, tmp_path):
@@ -371,3 +410,33 @@ class TestLoadManifest:
         p.write_text('{"workspace_root": "/ws1"}', encoding="utf-8")
         with pytest.raises(ManifestError):
             load_manifest(str(p))
+
+    def test_non_string_workspace_root_raises_manifest_error(self, tmp_path):
+        p = tmp_path / "manifest.json"
+        p.write_text('[{"workspace_root": 12345}]', encoding="utf-8")
+        with pytest.raises(ManifestError):
+            load_manifest(str(p))
+
+    def test_non_string_squad_map_path_raises_manifest_error(self, tmp_path):
+        p = tmp_path / "manifest.json"
+        p.write_text('[{"workspace_root": "/ws1", "squad_map_path": ["a", "b"]}]', encoding="utf-8")
+        with pytest.raises(ManifestError):
+            load_manifest(str(p))
+
+
+class TestMainCli:
+    def test_negative_staleness_threshold_rejected_cleanly(self, tmp_path, capsys):
+        from aggregate_migration_status import main
+
+        manifest = tmp_path / "manifest.json"
+        manifest.write_text('[{"workspace_root": "/does/not/matter"}]', encoding="utf-8")
+        rc = main(
+            [
+                "--manifest", str(manifest),
+                "--staleness-threshold-days", "-5",
+                "--state-path", str(tmp_path / "state.json"),
+                "--out-rollup", str(tmp_path / "rollup.json"),
+            ]
+        )
+        assert rc == 1
+        assert "must be >= 0" in capsys.readouterr().err

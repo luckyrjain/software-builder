@@ -28,6 +28,17 @@ def now_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def json_safe(value: Any) -> Any:
+    """Coerce a value pulled from a parsed MIGRATION_STATUS.yaml into a JSON-serializable type.
+    yaml.safe_load auto-types an unquoted date-shaped scalar (e.g. mr_url: 2026-08-05, entirely
+    plausible in a hand-edited file) into a datetime.date object, which json.dumps can't
+    serialize -- stringify anything that isn't already a JSON primitive rather than let one
+    field crash the whole run's output."""
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    return str(value)
+
+
 def parse_iso(value: str) -> datetime:
     return datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
 
@@ -98,9 +109,13 @@ def load_manifest(path: str) -> list[ManifestEntry]:
     for i, entry in enumerate(raw):
         if not isinstance(entry, dict) or not entry.get("workspace_root"):
             raise ManifestError(f"{path}[{i}] is missing required field 'workspace_root'")
-        entries.append(
-            ManifestEntry(workspace_root=entry["workspace_root"], squad_map_path=entry.get("squad_map_path"))
-        )
+        workspace_root = entry["workspace_root"]
+        if not isinstance(workspace_root, str):
+            raise ManifestError(f"{path}[{i}].workspace_root must be a string, got {type(workspace_root).__name__}")
+        squad_map_path = entry.get("squad_map_path")
+        if squad_map_path is not None and not isinstance(squad_map_path, str):
+            raise ManifestError(f"{path}[{i}].squad_map_path must be a string, got {type(squad_map_path).__name__}")
+        entries.append(ManifestEntry(workspace_root=workspace_root, squad_map_path=squad_map_path))
     return entries
 
 
@@ -227,10 +242,14 @@ def load_state(state_path: str) -> dict[str, dict[str, str]]:
         return {}
     try:
         with open(p, encoding="utf-8") as fh:
-            return json.load(fh)
+            loaded = json.load(fh)
     except json.JSONDecodeError as exc:
         print(f"warning: {state_path} is not valid JSON ({exc}); starting from empty state", file=sys.stderr)
         return {}
+    if not isinstance(loaded, dict):
+        print(f"warning: {state_path} top level must be a mapping; starting from empty state", file=sys.stderr)
+        return {}
+    return loaded
 
 
 def save_state(state_path: str, state: dict[str, dict[str, str]]) -> None:
@@ -308,12 +327,12 @@ def build_rollup(
                     source_skill="mysql-to-postgres-sql",
                     metric_type="pg_migration_gate",
                     status=status,
-                    priority=svc.get("tier_focus") if svc.get("tier_focus") != "dialect-only" else None,
+                    priority=json_safe(svc.get("tier_focus")) if svc.get("tier_focus") != "dialect-only" else None,
                     value={
-                        "scan_gate": svc.get("scan_gate"),
-                        "shadow_compare": svc.get("shadow_compare"),
-                        "config_cutover": svc.get("config_cutover"),
-                        "mr_url": svc.get("mr_url", ""),
+                        "scan_gate": json_safe(svc.get("scan_gate")),
+                        "shadow_compare": json_safe(svc.get("shadow_compare")),
+                        "config_cutover": json_safe(svc.get("config_cutover")),
+                        "mr_url": json_safe(svc.get("mr_url", "")),
                     },
                     evidence_ref=str(Path(entry.workspace_root) / "MIGRATION_STATUS.yaml"),
                     last_updated=now_iso(),
@@ -330,6 +349,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--state-path", required=True)
     parser.add_argument("--out-rollup", required=True, help="Where to write migration_program_rollup.json")
     args = parser.parse_args(argv)
+
+    if args.staleness_threshold_days < 0:
+        print("error: --staleness-threshold-days must be >= 0", file=sys.stderr)
+        return 1
 
     try:
         manifest = load_manifest(args.manifest)

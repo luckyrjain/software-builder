@@ -18,7 +18,7 @@ All notable changes to the migration-program-manager skill. Per-file `workflow_v
   Out-of-scope sections — the repo's first markdown-table parser), joins, computes staleness against
   persisted cross-run state (`gate_signature` + `first_observed_at` per service — genuinely new since
   `MIGRATION_STATUS.yaml` has no per-gate timestamp), `main(argv) -> int` CLI entrypoint, stdlib + PyYAML
-  only, 36 pytest cases in `tests/test_aggregate_migration_status.py`
+  only, 43 pytest cases in `tests/test_aggregate_migration_status.py`
 - Never invokes mysql-to-postgres-sql or squad-map live — pure file reads; a missing `SQUAD_MAP.md` joins
   as `squad: UNKNOWN` rather than triggering squad-map itself (same lesson `new-hire-guide`'s round-1
   review learned about narrowing a live wrapped-skill invocation's scope — this skill avoids the whole
@@ -93,3 +93,30 @@ All notable changes to the migration-program-manager skill. Per-file `workflow_v
   `first_observed_at` reset to now) instead of raising `KeyError`/`ValueError`.
 - 5 new pytest cases (3 for `parse_migration_status`'s type validation, 2 for
   `compute_staleness`'s corrupted-entry handling) — 36 total, up from 31.
+
+### Fixed (round-4 review, same day)
+- **`load_state` never validated the parsed JSON's top-level shape**, only that it was valid
+  JSON — the same gap round 3 closed for `parse_migration_status`'s top level, missed here. A
+  `state_path` file that's valid JSON but not a mapping (e.g. a bare list) crashed
+  `compute_staleness`'s `state.get(key)` with a raw `AttributeError`. Fixed: `load_state` now
+  falls back to empty state (with a stderr warning) on a non-mapping top level too.
+- **A YAML-auto-typed date scalar crashed the final `json.dumps`.** `yaml.safe_load` converts an
+  unquoted date-shaped value (e.g. `mr_url: 2026-08-05`, a plausible hand-edit of a free-text
+  template field) into a `datetime.date` object; that object flowed untouched into
+  `RollupItem.value`/`priority` and blew up JSON serialization at the very last step, after every
+  workspace had already been processed. Added `json_safe()` — stringifies anything that isn't
+  already a JSON primitive — applied to every pass-through field
+  (`scan_gate`/`shadow_compare`/`config_cutover`/`mr_url`/`tier_focus`) before it reaches
+  `RollupItem`.
+- **`load_manifest` validated `workspace_root`/`squad_map_path` were present but not that they
+  were strings.** A manifest entry with a JSON number, list, or bool for either field passed
+  validation and crashed downstream (`Path(12345)`, `TypeError`) with a raw traceback — directly
+  contradicting `ManifestError`'s own "never a raw traceback" contract. Fixed: both fields are now
+  type-checked as part of manifest validation.
+- **`--staleness-threshold-days` accepted a negative value**, which silently flagged every
+  freshly-observed `in_progress` service as `stalled` on its very first run (`0 >= negative` is
+  always true). Added a clean `>= 0` validation in `main()` instead of a confusing first-run
+  result.
+- 7 new pytest cases (`load_state` shape, `json_safe` unit test + an end-to-end
+  `build_rollup`-through-`json.dumps` regression test, 2 `load_manifest` type-validation cases, 1
+  CLI-level negative-threshold case) — 43 total, up from 36.
