@@ -18,7 +18,7 @@ All notable changes to the migration-program-manager skill. Per-file `workflow_v
   Out-of-scope sections — the repo's first markdown-table parser), joins, computes staleness against
   persisted cross-run state (`gate_signature` + `first_observed_at` per service — genuinely new since
   `MIGRATION_STATUS.yaml` has no per-gate timestamp), `main(argv) -> int` CLI entrypoint, stdlib + PyYAML
-  only, 31 pytest cases in `tests/test_aggregate_migration_status.py`
+  only, 36 pytest cases in `tests/test_aggregate_migration_status.py`
 - Never invokes mysql-to-postgres-sql or squad-map live — pure file reads; a missing `SQUAD_MAP.md` joins
   as `squad: UNKNOWN` rather than triggering squad-map itself (same lesson `new-hire-guide`'s round-1
   review learned about narrowing a live wrapped-skill invocation's scope — this skill avoids the whole
@@ -76,3 +76,20 @@ All notable changes to the migration-program-manager skill. Per-file `workflow_v
   with exit code 1 instead of a stack trace.
 - 5 new pytest cases (`TestLoadManifest` × 4, plus a `done`-stays-`done`-under-staleness regression
   test) — 31 total, up from 26.
+
+### Fixed (round-3 review, same day)
+- **`parse_migration_status` only guarded YAML *syntax* errors, not *shape* errors.** A
+  syntactically valid `MIGRATION_STATUS.yaml` whose top level wasn't a mapping (e.g. a bare list),
+  whose `services` key wasn't a list, or whose `services` list contained a non-mapping entry (a
+  stray string from a hand-edit) crashed `build_rollup` with a raw `AttributeError` and took down
+  the *entire* multi-workspace run — the exact crash class round-1 claimed to have closed, just one
+  layer deeper (type validation, not just parse-error handling). Fixed: `parse_migration_status` now
+  validates the top level is a mapping and `services` is a list (gap on either), and silently skips
+  non-mapping entries within an otherwise-valid `services` list rather than crashing on them.
+- **`compute_staleness` crashed on a state-file entry with a missing or unparseable
+  `first_observed_at`.** `load_state`'s existing malformed-JSON guard only covers the whole file
+  being invalid JSON, not a validly-parsed-but-wrong-shape entry inside it. Fixed: a missing or
+  unparseable `first_observed_at` is now treated the same as a first observation (staleness 0,
+  `first_observed_at` reset to now) instead of raising `KeyError`/`ValueError`.
+- 5 new pytest cases (3 for `parse_migration_status`'s type validation, 2 for
+  `compute_staleness`'s corrupted-entry handling) — 36 total, up from 31.

@@ -116,7 +116,15 @@ def parse_migration_status(workspace_root: str) -> tuple[list[dict[str, Any]], G
             data = yaml.safe_load(fh) or {}
     except yaml.YAMLError as exc:
         return [], Gap(workspace_root, f"MIGRATION_STATUS.yaml is not valid YAML: {exc}")
+    if not isinstance(data, dict):
+        return [], Gap(workspace_root, "MIGRATION_STATUS.yaml top level must be a mapping")
     services = data.get("services") or []
+    if not isinstance(services, list):
+        return [], Gap(workspace_root, "MIGRATION_STATUS.yaml 'services' must be a list")
+    # Syntactically valid YAML can still smuggle a non-mapping entry into services (a stray
+    # string/number from a hand-edit) -- skip it rather than let it crash the whole run, same
+    # tolerance parse_squad_map applies to a malformed table row.
+    services = [svc for svc in services if isinstance(svc, dict)]
     return services, None
 
 
@@ -239,10 +247,18 @@ def compute_staleness(
     key = f"{workspace_root}::{svc.get('name')}"
     sig = gate_signature(svc)
     prior = state.get(key)
-    if prior is None or prior.get("gate_signature") != sig:
+    if prior is None or not isinstance(prior, dict) or prior.get("gate_signature") != sig:
         entry = {"gate_signature": sig, "first_observed_at": now_iso()}
         return 0, entry
-    first_observed = parse_iso(prior["first_observed_at"])
+    try:
+        first_observed = parse_iso(prior["first_observed_at"])
+    except (KeyError, ValueError, TypeError):
+        # A corrupted/hand-edited state entry (missing or unparseable first_observed_at) is
+        # treated the same as a first observation, not a crash -- state_path is this skill's own
+        # round-tripped file, but external tampering or a future format change shouldn't take the
+        # whole run down.
+        entry = {"gate_signature": sig, "first_observed_at": now_iso()}
+        return 0, entry
     staleness_days = (now - first_observed).days
     return staleness_days, prior
 

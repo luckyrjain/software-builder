@@ -162,6 +162,21 @@ class TestStaleness:
         assert days == 0
         assert entry["gate_signature"] == gate_signature(new_svc)
 
+    def test_missing_first_observed_at_treated_as_first_observation(self):
+        now = datetime.now(timezone.utc)
+        svc = {"name": "api-disbursement", "scan_gate": "pass", "shadow_compare": "pending", "config_cutover": "pending"}
+        state = {"ws1::api-disbursement": {"gate_signature": gate_signature(svc)}}
+        days, entry = compute_staleness("ws1", svc, state, now)
+        assert days == 0
+        assert entry["gate_signature"] == gate_signature(svc)
+
+    def test_unparseable_first_observed_at_treated_as_first_observation(self):
+        now = datetime.now(timezone.utc)
+        svc = {"name": "api-disbursement", "scan_gate": "pass", "shadow_compare": "pending", "config_cutover": "pending"}
+        state = {"ws1::api-disbursement": {"gate_signature": gate_signature(svc), "first_observed_at": "not-a-date"}}
+        days, entry = compute_staleness("ws1", svc, state, now)
+        assert days == 0
+
 
 class TestBuildRollup:
     def test_missing_migration_status_is_a_gap_not_a_crash(self, tmp_path):
@@ -287,6 +302,38 @@ class TestParseMigrationStatus:
         assert services == []
         assert gap is not None
         assert "not valid YAML" in gap.reason
+
+    def test_top_level_list_returns_gap_not_raises(self, tmp_path):
+        ws = tmp_path / "ws"
+        ws.mkdir()
+        (ws / "MIGRATION_STATUS.yaml").write_text("- foo\n- bar\n", encoding="utf-8")
+        services, gap = parse_migration_status(str(ws))
+        assert services == []
+        assert gap is not None
+        assert "must be a mapping" in gap.reason
+
+    def test_non_list_services_returns_gap_not_raises(self, tmp_path):
+        ws = tmp_path / "ws"
+        ws.mkdir()
+        (ws / "MIGRATION_STATUS.yaml").write_text("services: not-a-list\n", encoding="utf-8")
+        services, gap = parse_migration_status(str(ws))
+        assert services == []
+        assert gap is not None
+        assert "must be a list" in gap.reason
+
+    def test_non_dict_service_entries_are_skipped_not_a_crash(self, tmp_path):
+        ws = tmp_path / "ws"
+        ws.mkdir()
+        (ws / "MIGRATION_STATUS.yaml").write_text(
+            "services:\n  - name: svc-a\n    path: svc-a\n"
+            "    tier_focus: P0\n    scan_gate: pass\n    shadow_compare: pass\n    config_cutover: done\n"
+            "  - just-a-stray-string\n",
+            encoding="utf-8",
+        )
+        services, gap = parse_migration_status(str(ws))
+        assert gap is None
+        assert len(services) == 1
+        assert services[0]["name"] == "svc-a"
 
 
 class TestLoadState:
