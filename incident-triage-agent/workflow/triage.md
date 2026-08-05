@@ -26,22 +26,23 @@ or ownership logic here — see [SKILL.md](../SKILL.md) Non-goals and
    Never use wall-clock "now" — invocation latency must not shrink the window below the 30-minute
    guarantee.
 
-2. **Invoke incident-rca**, following its own canonical invocation phrasing
-   ([incident-rca/reference/smoke-test.md](../../incident-rca/reference/smoke-test.md)):
+2. **Invoke incident-rca**, following its own canonical invocation phrasing verbatim, with no invented
+   trailing directives ([incident-rca/reference/smoke-test.md](../../incident-rca/reference/smoke-test.md)):
    `"RCA for <service> between <from_time> and <to_time> UTC — <alert_title/symptom, if present>
-   (PagerDuty alert <alert_id>, severity <severity>) — skip Jira ticket search and deep
-   query-investigation for speed."` The trailing instruction keeps this mode fast (avoids
-   [reference/unattended-gate-policy.md](../reference/unattended-gate-policy.md) gate #8 by never running
-   Phase 3 Jira search in this mode at all) — postmortem mode does **not** include it.
+   (PagerDuty alert <alert_id>, severity <severity>)."` incident-rca has no documented mechanism for a
+   leading "skip investigation steps" instruction — the actual speed lever for this mode is the Phase 2
+   checkpoint reply in the next step, not the opening message.
 
 3. **Answer every gate incident-rca stops at**, per
    [reference/unattended-gate-policy.md § incident-rca gates](../reference/unattended-gate-policy.md#incident-rca-gates) —
-   deterministically, never guessing beyond that table.
+   deterministically, never guessing beyond that table. **This is where triage mode's speed comes from:**
+   when Phase 2's checkpoint fires (it does on essentially every run), always reply `"skip Phase 3"` —
+   gate #8 in that table — which jumps straight to Phase 4 ranking without Jira/recurrence search.
 
 4. **Invoke squad-map** for `service` (single-repo/service lookup, per
    [squad-map/workflow/inputs.md](../../squad-map/workflow/inputs.md) § Repo scope), scoped to
-   `workspace_root`. If squad-map HARD STOPs, apply
-   [reference/unattended-gate-policy.md § squad-map gate](../reference/unattended-gate-policy.md#squad-map-gate) —
+   `workspace_root`. If squad-map is unreachable or HARD STOPs, apply
+   [reference/unattended-gate-policy.md § squad-map gates](../reference/unattended-gate-policy.md#squad-map-gates) —
    proceed with owner `UNKNOWN`, never block the triage doc on this.
 
 5. **Assemble the triage doc** per

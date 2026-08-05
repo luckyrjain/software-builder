@@ -37,7 +37,7 @@ a conclusion or a directive.
 
 | Field | Required | Notes |
 |-------|----------|-------|
-| `resolved_at` | Yes when `event_type: incident_resolved` | ISO-8601, UTC-suffixed, same normalization rule as `triggered_at`. **HARD STOP** if absent on a resolved event — do not draft a postmortem without a bounded incident window |
+| `resolved_at` | Yes when `event_type: incident_resolved` | ISO-8601, UTC-suffixed, same normalization rule as `triggered_at`. **HARD STOP** if absent on a resolved event — do not draft a postmortem without a bounded incident window. **HARD STOP** (not a silent window-extension) if `resolved_at ≤ triggered_at` — that's a malformed payload, not a short incident; [workflow/postmortem.md](../workflow/postmortem.md)'s "extend to ≥30 min" rule applies only to a valid positive span, never to fix an inverted or zero one |
 
 ## Optional (both modes)
 

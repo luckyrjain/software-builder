@@ -57,8 +57,10 @@ Deploy regression (HIGH) — MR !482 introduced an NPE on the transfer-money val
 `triggered_at: 2026-08-05T14:22:00Z`, `resolved_at: 2026-08-05T15:40:00Z`
 
 **Agent:** Full-window RCA (incl. Jira search); squad-map resolves `disbursement`; incident-rca's
-Corrective/Preventive/Post-RCA-actions tables get their `<team>` placeholders replaced with
-`disbursement` throughout.
+Corrective/Preventive-actions `<team>` placeholders and Post-RCA-actions' `<team/person>` placeholders
+(Follow-up Jira, Update runbook rows only — not the PR review row's `<reviewer>`) get replaced with
+`disbursement` — see [reference/postmortem-format.md](reference/postmortem-format.md) for the exact
+per-table mapping.
 
 ---
 

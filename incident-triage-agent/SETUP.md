@@ -68,8 +68,9 @@ who-owns-x-bot's Slack handler and pr-gatekeeper's GitLab handler. The handler y
 | Setting | Where | Purpose |
 |---------|-------|---------|
 | Default `workspace_root` | Handler config, passed as input | Where squad-map should look for `SQUAD_MAP.md` / config |
-| `jira_project_keys` | Handler config, or pre-provisioned via incident-rca's own org profile | Avoids [reference/unattended-gate-policy.md](reference/unattended-gate-policy.md) gate #8 in Postmortem mode — recommended, not required (the gate degrades gracefully if unset) |
+| `jira_project_keys` | Handler config, or pre-provisioned via incident-rca's own org profile | Avoids [reference/unattended-gate-policy.md](reference/unattended-gate-policy.md) gate #9 in Postmortem mode — recommended, not required (the gate degrades gracefully if unset) |
 | Pre-provisioned `squad-map-config.yaml` / `domain-config.yaml` at `workspace_root` | Repo config file | Avoids the squad-map HARD STOP gate entirely — recommended, not required (degrades to owner UNKNOWN if unset) |
+| `ownership.datadog.service_aliases` in `squad-map-config.yaml` | Repo config file | Maps the paging system's `service` field to squad-map's expected repo/Datadog service name when they don't match verbatim — see [reference/unattended-gate-policy.md § squad-map gates](reference/unattended-gate-policy.md#squad-map-gates). Without it, a name mismatch degrades silently to owner UNKNOWN rather than failing loudly, so this is worth setting up even though nothing hangs without it |
 | Notification target(s) | Handler config | Where triage docs / postmortem drafts get routed — on-call channel for triage, incident-retro channel or wiki for postmortem |
 
 ## Framework links

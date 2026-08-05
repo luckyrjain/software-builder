@@ -6,11 +6,20 @@ contribution:
 
 ## Owner-column substitution
 
-In the **Corrective actions**, **Preventive actions**, and **Post-RCA actions** tables (report-template.md
-§ same names), replace every `<team>` placeholder in the Owner column with squad-map's resolved squad
-name for `service` — or leave it as `<team>` **only** when squad-map returned `UNKNOWN`, with a note in
-the report's own Gaps/investigation-follow-up section: *"Owning team could not be resolved (squad-map:
-UNKNOWN) — action items need manual owner assignment."*
+**The exact placeholder string differs by table** (report-template.md's actual text, not a uniform
+`<team>` across all three — verify against the live template if it changes):
+
+| Table | Owner-column placeholder | Substitute? |
+|-------|---------------------------|--------------|
+| **Corrective actions** | `` `<team>` `` | Yes — every row |
+| **Preventive actions** | `` `<team>` `` | Yes — every row |
+| **Post-RCA actions**, "Follow-up Jira" / "Update runbook" rows | `` `<team/person>` `` | Yes — those two rows only |
+| **Post-RCA actions**, "PR review" row | `` `<reviewer>` `` | **No** — this is a named-person reviewer slot, not a team assignment; leave it as-is |
+
+Replace the applicable placeholder with squad-map's resolved squad name for `service` — or leave it
+unchanged **only** when squad-map returned `UNKNOWN`, with a note in the report's own
+Gaps/investigation-follow-up section: *"Owning team could not be resolved (squad-map: UNKNOWN) — action
+items need manual owner assignment."*
 
 Never invent an owner squad-map didn't actually return, and never apply a different team than the one
 squad-map resolved for `service` even if the report references other services in passing (e.g. a
