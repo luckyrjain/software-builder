@@ -46,6 +46,23 @@ resolve `squad`/`squad_confidence` by matching the source artifact's service/rep
 [squad-map/reference/squad-mapping.md](../../../squad-map/reference/squad-mapping.md)). When no match is
 found, `squad: UNKNOWN`, `squad_confidence: UNKNOWN` — never silently drop the item, never guess.
 
+**On a row in `SQUAD_MAP.md`'s own Conflicts table** (GitLab squad ≠ Datadog team for that repo/service),
+`squad` takes **squad-map's own documented tiebreak** — "Datadog team (runtime); note GitLab in conflict
+table" (`squad-mapping.md` § Reconciliation) — never invent a different tiebreak here; this schema reuses
+squad-map's existing rule rather than layering a second one on top.
+
+**The name doesn't always match verbatim — this is a real, not hypothetical, mismatch.** Confirmed
+directly against squad-map's own canonical k8s example: `decision-graph.example.yaml`'s `metadata.service`
+(`example-payment-consumer`) differs from its own `scope`'s `kube_deployment:` tag (`payment-consumer`).
+Per adapter:
+- **k8s items:** match against `SQUAD_MAP.md`'s `Datadog service` column (both Datadog-side identifiers);
+  when it still doesn't match verbatim, use squad-map's own `ownership.datadog.service_aliases` config
+  ([squad-map/reference/config-schema.md](../../../squad-map/reference/config-schema.md)) — an aggregator
+  is a *consumer* of that existing alias mechanism, never a place to build a second one.
+- **mysql-to-postgres-sql items:** match `services[].path` against `SQUAD_MAP.md`'s `Repo` column first
+  (a folder name is more likely to equal a repo name than a free-form `services[].name`), falling back to
+  `services[].name` if `path` doesn't match.
+
 `SQUAD_MAP.md` is a **markdown table, not YAML/JSON** — parsing it is new territory in this repo (no
 existing script reads it programmatically). A parser must tolerate the file's own Conflicts / Unmapped
 repos / Out of scope (archived) sections without treating rows there as part of the main join table.
@@ -69,16 +86,20 @@ Source: `MIGRATION_STATUS.yaml` `services[]` rows
 
 Source: one `decision_graph` YAML **per single-deployment run**
 ([k8s-overprovisioning-datadog/reference/decision-graph-schema.md](../../../k8s-overprovisioning-datadog/reference/decision-graph-schema.md))
-— there is no org-wide k8s mode; the consuming skill (#10) must loop k8s-overprovisioning-datadog once
-per deployment in scope and collect N graphs before this adapter runs. See the design spec § Multi-
-deployment k8s sweep.
+— there is no *full-assessment* org-wide k8s mode; the consuming skill (#10) must loop
+k8s-overprovisioning-datadog once per deployment in scope and collect N graphs before this adapter runs.
+**But evaluate reusing k8s-overprovisioning-datadog's own Phase 0b "Namespace ranking"** (a cheap
+multi-deployment waste-% ranking, top 5 per namespace — see
+[k8s-overprovisioning-datadog/workflow/resolve-service.md](../../../k8s-overprovisioning-datadog/workflow/resolve-service.md)
+§Namespace ranking) as a pre-filter before running full assessments, rather than always assessing every
+deployment from scratch. See the design spec § Multi-deployment k8s sweep.
 
 | `org_rollup_item` field | Derived from |
 |--------------------------|----------------|
 | `service` | The graph's deployment/service identifier (`metadata` block) |
 | `status` | `recommendations[].status` (`READY\|BLOCKED\|DEFERRED\|REJECTED\|COMPLETED`) |
 | `priority` | `recommendations[].priority` (`P0\|P1\|P2`) |
-| `value` | `{freed_cpu_cores, freed_giB, monthly_savings_total, cost_basis}` — **computed** per [k8s-overprovisioning-datadog/cost-estimation.md](../../../k8s-overprovisioning-datadog/cost-estimation.md)'s formulas, not read off a single stored field (the graph has none) |
+| `value` | `{freed_cpu_cores, freed_giB, monthly_savings_total, cost_basis}` — **prefer `appendix.cost` when the graph's optional COST phase ran** (it stores `$/core`, `$/GiB`, savings already); only derive these yourself per [k8s-overprovisioning-datadog/cost-estimation.md](../../../k8s-overprovisioning-datadog/cost-estimation.md)'s formulas when `appendix.cost` is absent (COST is skippable — `cost_skipped: <reason>` means "not assessed," never treat it as "$0") |
 | `evidence_ref` | The specific `decision_graph` YAML this run produced |
 
 A deployment with `assessment.final_decision: KEEP_CONFIGURATION` still produces an `org_rollup_item`

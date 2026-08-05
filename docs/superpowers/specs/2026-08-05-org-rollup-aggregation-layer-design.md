@@ -62,10 +62,25 @@ services:
 (`k8s-overprovisioning-datadog/reference/decision-graph-schema.md`). Relevant fields per run:
 `assessment.final_decision` (`KEEP_CONFIGURATION|TRIM_RESOURCES|SCALE_UP|DEFER`),
 `recommendations[].priority` (`P0|P1|P2`), `recommendations[].status`
-(`READY|BLOCKED|DEFERRED|REJECTED|COMPLETED`). **No stored `$`/waste field** — dollar figures are
-*computed*, not stored, per `cost-estimation.md`'s formulas (`freed_cpu_cores`, `freed_giB`,
-`monthly_savings_total`, cost-basis label `observed|estimated|resource-only`). An aggregator must derive
-these per graph, not read one canonical key.
+(`READY|BLOCKED|DEFERRED|REJECTED|COMPLETED`). **Dollar figures are conditionally stored, not always
+computed fresh:** the optional COST phase ([workflow/cost-analysis.md](../../../k8s-overprovisioning-datadog/workflow/cost-analysis.md))
+populates `appendix.cost` on the graph (`$/core`, `$/GiB`, savings) **when it runs** — it's explicitly
+skippable (`cost_skipped: <reason>` on a Critical stop, no savings-relevant dimension, or a
+replicas/throttle-only ask). **Prefer `appendix.cost` when present; only fall back to deriving
+`freed_cpu_cores`/`freed_giB`/`monthly_savings_total` yourself per `cost-estimation.md`'s formulas when
+`appendix.cost` is absent** — never silently re-derive a number the graph already computed, and never
+treat `cost_skipped` as "$0 savings" (it means "not assessed," not "no waste").
+
+**k8s-overprovisioning-datadog already has a lightweight cluster-wide sweep — reuse it, don't bypass it.**
+Phase 0b "Namespace ranking" ([workflow/resolve-service.md](../../../k8s-overprovisioning-datadog/workflow/resolve-service.md)
+§Namespace ranking) runs a namespace-wide waste-% query across multiple deployments (`(reserved − used) /
+reserved × 100`, ranks top 5) *before* drilling into one deployment for a full assessment. This is not a
+full org-wide sweep — it's a cheap ranking pass over one namespace, capped at the top 5, that doesn't
+itself produce full `decision_graph`s with recommendations for every deployment it ranks. Item #10's own
+future design should evaluate reusing this ranking pass as a **pre-filter** (rank first, then run full
+single-deployment assessments only on the worst offenders across all namespaces in scope) rather than
+always running a full assessment on every deployment from scratch — cheaper, and reuses existing machinery
+instead of quietly duplicating it.
 
 ### `SQUAD_MAP.md` (squad-map)
 
@@ -76,9 +91,22 @@ Markdown table, not YAML/JSON (`squad-map/templates/SQUAD_MAP.md`):
 ```
 
 `Confidence`: `HIGH|MEDIUM|LOW|UNKNOWN`. This is the **only correct join key for ownership** — never trust
-`MIGRATION_STATUS.yaml`'s free-text `owner` field or infer a squad from a decision_graph's metadata; join
-by matching `MIGRATION_STATUS.yaml`'s `services[].name`/`path` or the k8s graph's deployment/service name
-against `SQUAD_MAP.md`'s `Repo` / `Datadog service` columns.
+`MIGRATION_STATUS.yaml`'s free-text `owner` field or infer a squad from a decision_graph's metadata.
+
+**The join is a real, unsolved naming problem, not a detail to wave away** — confirmed directly against
+squad-map's own canonical k8s example: `decision-graph.example.yaml`'s `metadata.service` is
+`example-payment-consumer` while its own `scope` field carries the Datadog tag
+`kube_deployment:payment-consumer` — the two don't match verbatim even in the skill's own reference
+example. Match against `SQUAD_MAP.md`'s **`Datadog service`** column (not `Repo`) for k8s items, since
+both are Datadog-side identifiers — and when they still don't match verbatim, use squad-map's own
+`ownership.datadog.service_aliases` config mechanism
+([squad-map/reference/config-schema.md](../../../squad-map/reference/config-schema.md)) rather than
+inventing a second alias system; a future aggregator is a *consumer* of squad-map's existing alias
+config, not a place to duplicate it. For `MIGRATION_STATUS.yaml` rows, match `services[].path` (a folder
+name) against `SQUAD_MAP.md`'s **`Repo`** column first, falling back to `services[].name`; when neither
+matches, `squad: UNKNOWN` with a note — never guess. See
+[org-rollup-schema.md § 3](../../skill-framework/shared/org-rollup-schema.md) for the normative version
+of this rule.
 
 ## The normalized rollup item — one shape, three adapters
 
