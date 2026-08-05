@@ -181,3 +181,4 @@ When writing cross-skill examples, use analogies above: "pr-review Phase 1 ≈ k
 | `SERVICE_PG_MIGRATION.md` | mysql-to-postgres-sql | migrate workflow closeout |
 | `MIGRATION_STATUS.yaml` | mysql-to-postgres-sql | fleet workspace root (from template) |
 | `assessment_metadata` | domain-comprehension, squad-map, mysql-to-postgres-sql | P5 / Phase 1 / migrate closeout |
+| `org_rollup_item` | *(future — no implementing skill yet)* | see [org-rollup-schema.md](org-rollup-schema.md); normalizes `MIGRATION_STATUS.yaml` and `decision_graph` for future items #8/#10/#11 |

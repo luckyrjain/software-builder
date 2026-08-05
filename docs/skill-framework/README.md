@@ -1,12 +1,14 @@
 # Skill Framework — Shared Reference Library
 
-Normative conventions for **pr-review**, **incident-rca**, **k8s-overprovisioning-datadog**, **domain-comprehension**, **squad-map**, **who-owns-x-bot**, **mysql-to-postgres-sql**, and **loop-task-implementer**.
+Normative conventions for **pr-review**, **pr-gatekeeper**, **incident-rca**, **incident-triage-agent**,
+**k8s-overprovisioning-datadog**, **domain-comprehension**, **squad-map**, **who-owns-x-bot**,
+**mysql-to-postgres-sql**, and **loop-task-implementer**.
 Design spec: [2025-06-30-unified-skill-framework-design.md](../superpowers/specs/2025-06-30-unified-skill-framework-design.md).
 
-`who-owns-x-bot` is not yet in `lint-framework`'s per-skill enforcement loops (Makefile) — it has its own
-`lint-who-owns-x-bot` target instead, following the file-anatomy and workflow-frontmatter conventions
-here without requiring every hardcoded `lint-framework` check (e.g. it has no scripts/tests to run, and
-its confidence handling is entirely relayed from squad-map, not computed).
+`who-owns-x-bot`, `pr-gatekeeper`, and `incident-triage-agent` are each in `lint-framework`'s per-skill
+enforcement loops (Makefile) alongside their own dedicated `lint-<skill>` target — all three are thin
+webhook-triggered wrappers around one or more of the other skills, with `disable-model-invocation: true`
+and no confidence/investigation logic of their own (relayed from whatever they wrap).
 
 `loop-task-implementer` is platform-neutral and host-agent-driven rather than Datadog/GitLab/Jira-MCP-driven,
 so `confidence-bands.md` and `phase-glossary.md` don't apply to it — everything else (file anatomy,
@@ -29,6 +31,7 @@ Skills reference these files by relative link from `SETUP.md` or `SKILL.md`. Do 
 | [shared/phase-glossary.md](shared/phase-glossary.md) | Phase name mapping across pr-review, rca, k8s, domain-comprehension, and squad-map pipelines |
 | [shared/review-metadata-schema.md](shared/review-metadata-schema.md) | Normative metadata YAML — `review_metadata` (pr-review), `assessment_metadata` (rca, k8s); v2 analytics blocks |
 | [shared/claude-code-setup.md](shared/claude-code-setup.md) | Claude Code install paths + MCP config location, mapped from the Cursor equivalents used throughout each skill's `SETUP.md` |
+| [shared/org-rollup-schema.md](shared/org-rollup-schema.md) | Forward-looking — normalized cross-repo rollup item shape for future items #8/#10/#11 (no implementing skill yet) |
 
 ## How skills link here
 
@@ -60,6 +63,7 @@ A skill is framework-compliant when it passes the checklist in the design spec �
 | phase-glossary.md | Complete |
 | review-metadata-schema.md | Complete — v2 pr-review + assessment_metadata (rca, k8s) + repository_health dimensions |
 | claude-code-setup.md | Complete |
+| org-rollup-schema.md | Design complete, **unimplemented** — no skill consumes it yet; written ahead of items #8/#10/#11 per the team-facing agents roadmap's own build order |
 
 ## Deferred (P3 roadmap)
 

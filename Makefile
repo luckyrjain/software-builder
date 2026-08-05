@@ -729,7 +729,7 @@ lint-framework:
 	@test -f docs/skill-framework/README.md
 	@for f in confidence-bands cross-skill-escalation post-action-templates \
 		smoke-test-conventions examples-conventions phase-glossary review-metadata-schema \
-		skill-routing prompt-injection claude-code-setup; do \
+		skill-routing prompt-injection claude-code-setup org-rollup-schema; do \
 		test -f docs/skill-framework/shared/$$f.md || exit 1; \
 		test -s docs/skill-framework/shared/$$f.md || \
 			{ echo "error: docs/skill-framework/shared/$$f.md is empty" >&2; exit 1; }; \
