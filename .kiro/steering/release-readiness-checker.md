@@ -10,5 +10,6 @@ For a release go/no-go report (composing pr-review, k8s-overprovisioning-datadog
 
 Phase index: `release-readiness-checker/reference/phase-index.md`. Reference loads:
 `release-readiness-checker/reference/lazy-load-index.md`.
-Read-only throughout — pr-review runs `chat-only` (never posts to GitLab), k8s and incident-rca are
-already read-only. No manifest changes, no merges, no Jira/Slack write-back.
+Read-only throughout — pr-review is invoked per `reference/gate-policy.md`, which always answers "Hold —
+don't post" regardless of which posting mode pr-review's own Phase 0 detects (never posts to GitLab); k8s
+and incident-rca are already read-only. No manifest changes, no merges, no Jira/Slack write-back.

@@ -20,8 +20,11 @@ same way pr-gatekeeper's own automation does when `auto_post_authorized: false`
 ([pr-gatekeeper/reference/auto-post-policy.md](../../pr-gatekeeper/reference/auto-post-policy.md)):
 
 1. **Invocation phrase:** `"review !<merge_request_iid> in <project>"` — **never** "review and post,"
-   for every resolved MR. This is the exact phrase pr-review's own
-   [inputs.md § Resolution branches](../../pr-review/workflow/inputs.md#resolution-branches) documents.
+   for every resolved MR. This is the exact example phrase pr-review's own
+   [SETUP.md](../../pr-review/SETUP.md) (`"/pr-review !482 in backend/payments — or review !482 in
+   backend/payments"`) and [README.md](../../pr-review/README.md) document — `workflow/inputs.md`'s own
+   Resolution branches section describes the resolution *logic* (IID + explicit project) but doesn't
+   itself contain a literal example phrase.
 2. Every other ask-point pr-review may hit follows
    [pr-gatekeeper's own enumerated policy](../../pr-gatekeeper/reference/auto-post-policy.md) verbatim —
    merged/closed-MR stop (decline the post-merge audit), early 200-file cap warning (`proceed`),
