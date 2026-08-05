@@ -41,34 +41,46 @@ backlog_run:
    loop-task-implementer's own task-selection logic checks *one* task's dependencies at pick time, it
    never orders a whole pulled batch. If ticket B declares a dependency on ticket A and both are in this
    run's batch, attempt A first.
-4. **A ticket's dependency is satisfied — checked across runs, never only "this run's batch"** — this
-   skill runs nightly, and a dependency reaching `HUMAN_ACTION_REQUIRED` on a *prior* night must still
+4. **A ticket's dependency is satisfied — checked directly against the dependency's own current state,
+   never only "this run's batch," and never assumed from mere existence of a branch/PR/closed ticket
+   without checking it actually succeeded** — this skill runs nightly, and a dependency reaching
+   `HUMAN_ACTION_REQUIRED` on a *prior* night (or done by a human entirely outside this skill) must still
    count as satisfied tonight, or a dependent ticket would stay `DEFERRED` forever the moment its
    prerequisite's ticket ages out of `tracker_query` (once a PR exists, or once the ticket is closed, it
    commonly no longer matches a "ready for dev"-style query — it can never again appear "in this run's
-   batch"). A dependency counts as satisfied when **any** of:
+   batch"). Look up the dependency ticket's own current state directly — **regardless of whether this
+   skill ever pulled it itself** — and treat it as satisfied when **any** of:
    - It's in this run's batch and reached `HUMAN_ACTION_REQUIRED` this run, **or**
-   - It already has an existing branch/PR from a **prior** run (the same check as rule 2 —
+   - It has an existing **open** branch/PR (whether from a prior run of this skill or opened by a human
+     directly — the check is the same one rule 2 uses, per-ticket-ID, and doesn't care who opened it;
      `SKIPPED_EXISTING` **is** satisfaction evidence, not a reason to keep deferring the dependent), **or**
-   - The dependency ticket itself is closed/merged/resolved in the tracker (the strongest signal —
-     query the tracker for the dependency ticket's own current state when it's not in this run's batch
-     at all, don't assume "not pulled" means "not done").
+   - The dependency ticket itself is closed **as done/resolved/merged** in the tracker (the strongest
+     signal — query the tracker for the dependency ticket's own current state when it's not in this run's
+     batch at all, don't assume "not pulled" means "not done").
 
-   A dependency satisfying **none** of these is `DEFERRED` — do not attempt its dependent this run,
-   record why, and re-check next run (this is the one case that legitimately needs another night).
+   **None of these count when the outcome was unsuccessful** — a PR that was opened and later closed
+   *without* merging (abandoned/rejected), or a ticket closed as won't-fix/invalid/duplicate/cancelled,
+   is **not** satisfaction evidence; treat that dependency as unresolved (`DEFERRED`, same as no evidence
+   at all) rather than building on top of work that didn't land. Checking the tracker's own
+   resolution/closure reason, not just "is it closed," is required here — a bare "closed" boolean is not
+   enough to distinguish the two.
+
+   A dependency satisfying none of the successful-outcome bullets is `DEFERRED` — do not attempt its
+   dependent this run, record why, and re-check next run (this is the one case that legitimately needs
+   another night).
 
 ## 3. Invoking loop-task-implementer — one task per invocation
 
 **Each pulled ticket is a separate loop-task-implementer invocation, sequential, not a single "work
 through this list" request to loop-task-implementer itself.** loop-task-implementer *does* have its own
 documented multi-task natural-language pattern ("work through these tasks one by one") — this skill
-deliberately does not use it, because the queue-ordering, skip-existing, and session-level stop-condition
-logic in §2 and §4 need to run **between** tasks, which requires this skill's own workflow to be the one
-deciding what happens next, not loop-task-implementer's internal continuation. Pass each ticket's
-title/description/acceptance-criteria as `repo_context`-scoped task input, exactly as if a human had
-pasted that ticket's text and said "implement this" — no different phrasing, no trailing directives
-invented (same lesson as `pr-gatekeeper`/`incident-triage-agent`: don't invent unverified invocation
-grammar).
+deliberately does not use it, because the queue-ordering/skip-existing/dependency logic in §2 and the
+session-level stop-condition logic in §5 need to run **between** tasks, which requires this skill's own
+workflow to be the one deciding what happens next, not loop-task-implementer's internal continuation.
+Pass each ticket's title/description/acceptance-criteria as `repo_context`-scoped task input, exactly as
+if a human had pasted that ticket's text and said "implement this" — no different phrasing, no trailing
+directives invented (same lesson as `pr-gatekeeper`/`incident-triage-agent`: don't invent unverified
+invocation grammar).
 
 **`autonomous_merge_authorized` is never passed as `true`** — every invocation runs with it unset/`false`,
 hardcoded. loop-task-implementer's own rule already defaults it to `false` and explicitly refuses to
@@ -82,8 +94,9 @@ documented whether that same-task eligibility check still applies when the calle
 already named one specific ticket to implement, rather than asking loop-task-implementer to pick from a
 pool. **Mitigation, not a guaranteed fix:** when a ticket's dependency was satisfied per rule 4 above via
 the `SKIPPED_EXISTING`/closed-ticket paths (not literally `COMPLETE` in loop-task-implementer's own
-sense), include that evidence directly in the task text handed to loop-task-implementer — e.g. *"Depends
-on `<dependency_task_id>`, already addressed: `<pull_request_url or 'ticket closed'>`."* This gives
+sense), **prepend** one line to that ticket's *description* (the same field its acceptance criteria and
+body text already go in per §3 above — not a separate field) — e.g. *"Depends on
+`<dependency_task_id>`, already addressed: `<pull_request_url or 'ticket closed'>`."* This gives
 loop-task-implementer's own Orchestrator the evidence to proceed if it does re-check dependencies; if it
 doesn't, the note is harmless extra context. **If loop-task-implementer still escalates a dependent
 ticket on this ground**, treat the escalation as genuine (per §4 below) rather than silently
