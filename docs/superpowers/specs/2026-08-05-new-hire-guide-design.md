@@ -93,6 +93,15 @@ unscoped invocation would (same census, same Session 0b call, same file state it
 own); this skill's own tour-building step (Approach point 6) is where the curation to the new hire's
 repos actually happens, over domain-comprehension's full, unmodified output.
 
+**Accepted cost — deliberate, not silent:** on a large multi-repo workspace, this means running
+domain-comprehension's full census/analysis once for the whole workspace even when the tour only needs
+2-3 repos, rather than the (unsafe) narrower run the original design attempted. This is the same cost a
+human would pay running domain-comprehension directly on a workspace this size, and it's paid once per
+`workspace_root` regardless of how many `new-hire-guide` calls follow — `RESUME`/`DELTA` mode (existing
+domain-comprehension behavior, unmodified) means a second new hire onboarding onto the same workspace
+reuses the prior run's `manifest.yaml` rather than re-analyzing from scratch. Correctness (not corrupting
+the shared `SQUAD_MAP.md`) is preferred over this efficiency cost — not a close call.
+
 ## Non-goals (explicitly out of scope)
 
 - **No new squad-map logic.** Squad-first filtering is done by this skill reading `SQUAD_MAP.md`'s
