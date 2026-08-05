@@ -2,17 +2,20 @@
 
 Normative conventions for **pr-review**, **pr-gatekeeper**, **incident-rca**, **incident-triage-agent**,
 **k8s-overprovisioning-datadog**, **domain-comprehension**, **squad-map**, **who-owns-x-bot**,
-**mysql-to-postgres-sql**, and **loop-task-implementer**.
+**mysql-to-postgres-sql**, **loop-task-implementer**, and **backlog-runner**.
 Design spec: [2025-06-30-unified-skill-framework-design.md](../superpowers/specs/2025-06-30-unified-skill-framework-design.md).
 
-`who-owns-x-bot`, `pr-gatekeeper`, and `incident-triage-agent` are each in `lint-framework`'s per-skill
-enforcement loops (Makefile) alongside their own dedicated `lint-<skill>` target — all three are thin
-webhook-triggered wrappers around one or more of the other skills, with `disable-model-invocation: true`
+`who-owns-x-bot`, `pr-gatekeeper`, `incident-triage-agent`, and `backlog-runner` are each in
+`lint-framework`'s per-skill enforcement loops (Makefile) alongside their own dedicated `lint-<skill>`
+target — all four are thin trigger-driven wrappers around one or more of the other skills, with
+`disable-model-invocation: true`
 and no confidence/investigation logic of their own (relayed from whatever they wrap).
 
 `loop-task-implementer` is platform-neutral and host-agent-driven rather than Datadog/GitLab/Jira-MCP-driven,
 so `confidence-bands.md` and `phase-glossary.md` don't apply to it — everything else (file anatomy,
 workflow frontmatter, escalation, examples depth, smoke/pressure tests, cross-agent discovery) does.
+`backlog-runner` inherits the same `confidence-bands.md`/`phase-glossary.md` exemption, since it wraps
+loop-task-implementer and adds no confidence or phase concepts of its own.
 
 Skills reference these files by relative link from `SETUP.md` or `SKILL.md`. Do not duplicate full tables inline — link here and add skill-specific deltas only.
 

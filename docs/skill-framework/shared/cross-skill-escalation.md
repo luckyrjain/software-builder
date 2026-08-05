@@ -1,6 +1,6 @@
 # Cross-skill escalation (shared)
 
-**Normative.** Symmetric escalation matrix for pr-review, pr-gatekeeper, incident-rca, incident-triage-agent, k8s-overprovisioning-datadog, domain-comprehension, squad-map, who-owns-x-bot, mysql-to-postgres-sql, and loop-task-implementer.
+**Normative.** Symmetric escalation matrix for pr-review, pr-gatekeeper, incident-rca, incident-triage-agent, k8s-overprovisioning-datadog, domain-comprehension, squad-map, who-owns-x-bot, mysql-to-postgres-sql, loop-task-implementer, and backlog-runner.
 
 **Consumers:** `SKILL.md` in each skill (link here; keep ≤10 skill-specific rows max).
 
@@ -34,6 +34,7 @@ know about — don't treat it as a "you may want to" row the way every other row
 | Caller wants an interactive, on-demand review instead of the webhook-triggered auto-run | pr-gatekeeper → pr-review | MR !IID + project | "Review MR !{iid} for `{project}`" |
 | Caller wants an interactive, on-demand RCA instead of the paging-webhook-triggered triage/postmortem | incident-triage-agent → incident-rca | Service + window | "RCA for `{service}` `{window}`" |
 | Caller wants an interactive, on-demand ownership lookup instead of the paging-webhook-triggered flow | incident-triage-agent → squad-map | Service name | "Who owns `{service}`?" |
+| Caller wants a single, interactive, on-demand task instead of the scheduled overnight queue sweep | backlog-runner → loop-task-implementer | Task/ticket ID | "Implement `{task_id}`" |
 | Security finding in domain analysis (P3b) | domain-comprehension → pr-review | Repo + file path + finding type | "Review MR !{iid} for credential exposure in `{service}`" |
 | Architecture smell needs RCA context | domain-comprehension → incident-rca | Service + smell + time window | "RCA for `{service}` {window} — recurring {smell} identified in domain analysis" |
 | Domain map reveals overprovisioned service | domain-comprehension → k8s | Service + env from runtime validation | "Assess rightsizing for `{service}` in `{env}` — domain analysis found low utilization" |
@@ -114,7 +115,8 @@ When `MYSQL_TO_PG_SQL_REWRITES.md` exists in the workspace deliverable directory
 | Single-shot automated ownership lookup (Slack `/who-owns` slash command) | who-owns-x-bot |
 | Domain / subsystem map, bounded contexts, data ownership | domain-comprehension |
 | MySQL scrub / native SQL PG migration / jdbc:postgresql cutover | mysql-to-postgres-sql |
-| Autonomous multi-task implement → review → remediate → PR loop | loop-task-implementer |
+| Autonomous multi-task implement → review → remediate → PR loop (interactive, human-driven) | loop-task-implementer |
+| Scheduled overnight ticket-queue sweep (unattended) | backlog-runner |
 | Live rollback / kubectl apply | Out of scope — human operator |
 | Security-only deep review | pr-review with security persona |
 | Cost/billing investigation across services | Canvas + appropriate skill; not auto-routed |

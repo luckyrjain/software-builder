@@ -1,0 +1,14 @@
+---
+description: Invoke the backlog-runner skill for scheduled, unattended overnight sweeps of a ticket queue via loop-task-implementer.
+alwaysApply: false
+---
+
+Do not auto-apply this from ambient human chat — this skill sets `disable-model-invocation: true`.
+When a scheduler passes a structured payload (`tracker_query`, `max_tasks_per_run`, optionally
+`deadline`/`session_token_budget`, `repo_context`), read `backlog-runner/SKILL.md` and follow it. A human
+asking to implement one or several tasks conversationally should route to
+`loop-task-implementer/SKILL.md` instead — it already handles both patterns interactively.
+
+Phase index: `backlog-runner/reference/phase-index.md`. Reference loads:
+`backlog-runner/reference/lazy-load-index.md`.
+Never merges — `autonomous_merge_authorized` has no input path in this skill.

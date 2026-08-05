@@ -28,6 +28,7 @@ Each skill has a human **`README.md`** (what it does) separate from **`SKILL.md`
 | [who-owns-x-bot](who-owns-x-bot/) | `/who-owns <name>` (Slack slash command; not ambient chat) | Single-shot "who owns X" Slack reply — thin wrapper delegating to squad-map | [README](who-owns-x-bot/README.md) · [SETUP](who-owns-x-bot/SETUP.md) |
 | [mysql-to-postgres-sql](mysql-to-postgres-sql/) | "MySQL scrub …", "jdbc:postgresql …", "TIMESTAMPDIFF …" | Native SQL + JDBC rewrite for MySQL→PostgreSQL; scan gate, collection P0/P1 | [README](mysql-to-postgres-sql/README.md) · [SETUP](mysql-to-postgres-sql/SETUP.md) |
 | [loop-task-implementer](loop-task-implementer/) | "implement issue 42 …", "work through these tasks …" | Autonomous multi-task loop: isolated Builder → two-lens independent Reviewer → adjudicated remediation → PR. Platform-neutral, no Datadog/GitLab/Jira MCP required | [README](loop-task-implementer/README.md) · [SETUP](loop-task-implementer/SETUP.md) |
+| [backlog-runner](backlog-runner/) | Scheduled trigger (not human chat) | Pulls N tickets from a tracker query, runs loop-task-implementer per ticket overnight in dependency order, never merges | [README](backlog-runner/README.md) · [SETUP](backlog-runner/SETUP.md) |
 
 ## Install
 
@@ -50,6 +51,7 @@ make install-squad-map
 make install-who-owns-x-bot
 make install-mysql-to-postgres-sql
 make install-loop-task-implementer
+make install-backlog-runner
 ```
 
 `install-incident-rca` also installs the external **`kubesense-mcp`** skill dependency
@@ -69,6 +71,7 @@ bash scripts/install.sh squad-map
 bash scripts/install.sh who-owns-x-bot
 bash scripts/install.sh mysql-to-postgres-sql
 bash scripts/install.sh loop-task-implementer
+bash scripts/install.sh backlog-runner
 ```
 
 With no arguments, `install.sh` discovers every `*/SKILL.md` under the repo root and installs all of
@@ -122,6 +125,7 @@ make lint-squad-map             # squad-map SKILL line limit, frontmatter, ancho
 make lint-who-owns-x-bot        # who-owns-x-bot SKILL line limit, frontmatter, anchors, required files
 make lint-mysql-to-postgres-sql # mysql SKILL line limit, scan fixtures, pressure harness, shellcheck
 make lint-loop-task-implementer # loop-task-implementer SKILL line limit, workflow frontmatter, required files, anchors
+make lint-backlog-runner        # backlog-runner SKILL line limit, frontmatter, anchors, required files
 ```
 
 | Target | Checks |
@@ -136,6 +140,7 @@ make lint-loop-task-implementer # loop-task-implementer SKILL line limit, workfl
 | `lint-who-owns-x-bot` | `SKILL.md` ≤ 180 lines; `disable-model-invocation: true` set; workflow frontmatter; dangling anchors; required reference files |
 | `lint-mysql-to-postgres-sql` | `SKILL.md` ≤ 180 lines; workflow frontmatter; required references; scan fixtures + pressure harness; shellcheck on scan scripts |
 | `lint-loop-task-implementer` | `SKILL.md` ≤ 180 lines; workflow frontmatter; dangling anchors; required files (`SETUP.md`/`README.md`/`examples.md`/`report-template.md`/`reference/*`) |
+| `lint-backlog-runner` | `SKILL.md` ≤ 180 lines; `disable-model-invocation: true` set; workflow frontmatter; dangling anchors; required reference files |
 | `lint-framework` | shared `docs/skill-framework/` docs present; required sections; SETUP.md links; metadata footer examples parse; every skill has a `.cursor/rules/*.mdc` + `.kiro/steering/*.md` discovery file |
 
 Full detail: [docs/REPOSITORY.md](docs/REPOSITORY.md).
@@ -160,6 +165,7 @@ or a Docker/Linux runner (deps installed via `apt-get` in the pipeline).
 | who-owns-x-bot | None of its own — delegates to squad-map | [who-owns-x-bot/SETUP.md](who-owns-x-bot/SETUP.md) |
 | mysql-to-postgres-sql | None (code scan + rewrite) | Datadog (optional; post-cutover APM) — [mysql-to-postgres-sql/SETUP.md](mysql-to-postgres-sql/SETUP.md) |
 | loop-task-implementer | None (uses the host agent's own repo/git access, not an MCP server) | [loop-task-implementer/reference/mcp-capabilities.md](loop-task-implementer/reference/mcp-capabilities.md) |
+| backlog-runner | Issue-tracker MCP (Jira or GitHub Issues) — required for this skill, optional for loop-task-implementer itself | [backlog-runner/SETUP.md](backlog-runner/SETUP.md) |
 
 ---
 
@@ -433,3 +439,27 @@ Orchestrator only completes the repository action when explicitly authorized.
 
 Setup, cross-agent install paths, and the full role-prompt reference:
 [loop-task-implementer/SETUP.md](loop-task-implementer/SETUP.md).
+
+---
+
+## Usage (backlog-runner)
+
+A scheduler (cron, scheduled CI job) invokes this skill with a structured payload — it does **not**
+auto-invoke from ambient chat (`disable-model-invocation: true`). A human asking to implement one or
+several tasks routes to **loop-task-implementer** directly (see
+[backlog-runner/SETUP.md](backlog-runner/SETUP.md)).
+
+### Examples
+
+| Scheduler sends | What happens |
+|--------------------|----------------|
+| `tracker_query: project = BACKLOG AND status = "Ready for Dev", max_tasks_per_run: 5` | Pulls up to 5 tickets, dependency-orders them, runs loop-task-implementer once per ticket |
+| Same, with a declared dependency between two pulled tickets | Prerequisite runs first; the dependent is deferred if the prerequisite doesn't reach `HUMAN_ACTION_REQUIRED` this run |
+| Same, 3 consecutive escalations | Session-level circuit breaker stops pulling further tickets; morning summary still produced |
+
+### What you get (backlog-runner)
+
+- One PR per completed ticket — loop-task-implementer's own deliverable, unedited; never merged
+  (`autonomous_merge_authorized` has no input path in this skill at all)
+- A morning summary: shipped (PR links), blocked (escalated + why), deferred (dependency unmet), skipped
+  (already in progress)

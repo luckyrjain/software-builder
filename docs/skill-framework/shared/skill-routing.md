@@ -19,7 +19,8 @@ When adding a new skill, add it here first; then each existing skill only needs 
 | Squad map, ownership, who owns, CODEOWNERS, GitLab group, Datadog team, team reconciliation (interactive, conversational) | **squad-map** | domain-comprehension (full map) |
 | `/who-owns` Slack slash command, single-shot automated ownership lookup with a structured `query`, no follow-up turn possible | **who-owns-x-bot** | squad-map (that's what it delegates to internally — do not call squad-map directly for a single-shot Slack reply, its output contract is a markdown file + chat summary, not one message) |
 | MySQL scrub, jdbc:postgresql, TIMESTAMPDIFF, DATE_FORMAT, native SQL rewrite, mysql2→pg, SQLAlchemy PG cutover, collection P0/P1 cooling SQL | **mysql-to-postgres-sql** | domain-comprehension (full map), squad-map (ownership only) |
-| Implement task/issue autonomously, independent review + remediation loop, adjudicate findings, work through a task queue | **loop-task-implementer** | pr-review (reviewing someone else's existing MR only) |
+| Implement task/issue autonomously, independent review + remediation loop, adjudicate findings, work through a task queue (interactive, human-driven) | **loop-task-implementer** | pr-review (reviewing someone else's existing MR only) |
+| Scheduled trigger pulling N tickets from a tracker query, overnight/unattended, no human turn available | **backlog-runner** | loop-task-implementer (that's what it delegates to internally — do not call loop-task-implementer directly for an unattended scheduled sweep; use it for a single-task or human-driven multi-task request) |
 | GitHub pull request, local uncommitted diff, review unstaged | **review-bugbot** (external) | pr-review |
 | Datadog MCP missing / 403, configure Datadog | **ddsetup** / **ddconfig** | all others |
 | Live rollback, kubectl apply, deploy, restart pods | **Out of scope** — human operator | all skills |
@@ -43,6 +44,8 @@ When adding a new skill, add it here first; then each existing skill only needs 
 12. **Page-fire or incident-resolved event from a paging system, no human turn available** →
     incident-triage-agent; **RCA or ownership request from an interactive human turn** → incident-rca /
     squad-map directly
+13. **Scheduled overnight ticket-queue sweep, no human turn available** → backlog-runner; **single-task or
+    human-driven multi-task request** → loop-task-implementer directly
 
 ## Ambiguous requests — ask
 

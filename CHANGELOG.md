@@ -64,6 +64,31 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
   docs/README, docs/REPOSITORY, skill-routing.md, phase-glossary.md, cross-skill-escalation.md,
   prompt-injection.md — and added to `lint-framework`'s 4 hardcoded per-skill loops from the start.
 
+## backlog-runner
+
+### Initial release (2026-08-05)
+
+- New skill — item #7 of the [team-facing agents roadmap](docs/superpowers/plans/2026-08-05-team-facing-agents-roadmap.md):
+  a scheduled queue-management wrapper around **loop-task-implementer** — pulls N tickets from a
+  Jira/GitHub Issues query, works through them overnight in dependency order, opens a PR per task, never
+  merges.
+- Confirmed (not assumed) that loop-task-implementer, unlike pr-review/incident-rca, already has no live
+  synchronous "ask and wait" chat gates — every stop resolves to a terminal per-task report state
+  (`HUMAN_ACTION_REQUIRED`/`ESCALATED`). This skill needed no `pr-gatekeeper`-style "answer every gate"
+  policy, only new session-level queue bookkeeping loop-task-implementer's own per-task
+  `state-schema.yaml` doesn't cover.
+- `reference/queue-policy.md` resolves one real ambiguity in loop-task-implementer's own documented
+  workflow explicitly: `HUMAN_ACTION_REQUIRED` (PR opened, not merged) continues the run — the expected
+  outcome every night — while a new session-level circuit breaker (task cap, deadline, token budget, or
+  3 consecutive escalations) is what actually stops it early.
+- `autonomous_merge_authorized` has no input path in this skill at all — hardcoded never-`true`.
+- `disable-model-invocation: true` — does not compete with loop-task-implementer's ambient invocation.
+- Design spec: [docs/superpowers/specs/2026-08-05-backlog-runner-design.md](docs/superpowers/specs/2026-08-05-backlog-runner-design.md).
+- Wired into `make install-backlog-runner` / `make lint-backlog-runner`, root README, docs/README,
+  docs/REPOSITORY, skill-routing.md, cross-skill-escalation.md, prompt-injection.md — and added to
+  `lint-framework`'s 4 hardcoded per-skill loops from the start. `phase-glossary.md` doesn't apply,
+  inheriting loop-task-implementer's own exemption.
+
 ## who-owns-x-bot
 
 ### Initial release (2026-08-05)
