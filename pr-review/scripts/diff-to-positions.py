@@ -232,6 +232,33 @@ def main() -> None:
             print(json.dumps({"error": f"invalid batch JSON: {exc}"}), file=sys.stderr)
             sys.exit(2)
 
+        if not _has_file_headers(diff_text):
+            # A headerless diff (GitLab MCP per-file hunk) belongs entirely to ONE file.
+            # Batching items for more than one distinct path against it is ambiguous:
+            # iter_diff_lines() would silently treat the whole blob as every path's
+            # file, matching by line number alone and mis-anchoring findings onto the
+            # wrong file's diff content. Fail loudly instead of guessing.
+            distinct_paths = sorted(
+                {item.get("path") for item in items if isinstance(item, dict) and item.get("path")}
+            )
+            if len(distinct_paths) > 1:
+                print(
+                    json.dumps(
+                        {
+                            "error": (
+                                "headerless diff (--diff-text/--diff-file with no file headers) "
+                                "can only resolve findings for one file, but batch items reference "
+                                f"{len(distinct_paths)} distinct paths: {distinct_paths}. Invoke "
+                                "--batch once per file with that file's own headerless hunk, or "
+                                "wrap multi-file GitLab diffs with proper `+++ b/<path>` headers "
+                                "first (see reference/gitlab-inline-comments.md)."
+                            )
+                        }
+                    ),
+                    file=sys.stderr,
+                )
+                sys.exit(2)
+
         positions = []
         had_error = False
         for item in items:

@@ -26,7 +26,7 @@ Remove MySQL pool from config after shadow period passes and scan is clean.
 
 - **No cross-DB joins** in one service — call peer service APIs instead of federated SQL.
 - **Eventual consistency:** Kafka/outbox payloads must not assume MySQL `AUTO_INCREMENT` ids match PG sequences.
-- **Shared tables:** coordinate cutover order via [Detailed migration tracker](https://docs.google.com/spreadsheets/d/1TzlHh-tfc-usiF3qAEUIeGbND9-9yZ9L5pBRBXFY0ZA/edit?usp=sharing).
+- **Shared tables:** coordinate cutover order via [your migration tracker](<link to your migration tracker>).
 
 ## Rollback
 

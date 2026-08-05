@@ -58,6 +58,26 @@ class TestReconcile:
         assert conf == "LOW"
         assert conflict is False
 
+    def test_fuzzy_alias_disagreement_still_flags_conflict(self):
+        conf, conflict = reconcile_confidence("payments", "collections", fuzzy_alias_match=True)
+        assert conf == "LOW"
+        assert conflict is True
+
+    def test_fuzzy_alias_single_source_low(self):
+        conf, conflict = reconcile_confidence("payments", None, fuzzy_alias_match=True)
+        assert conf == "LOW"
+        assert conflict is False
+
+    def test_separator_insensitive_match(self):
+        conf, conflict = reconcile_confidence("payments-squad", "Payments_Squad")
+        assert conf == "HIGH"
+        assert conflict is False
+
+    def test_separator_insensitive_still_catches_real_mismatch(self):
+        conf, conflict = reconcile_confidence("payments-squad", "collections-squad")
+        assert conf == "MEDIUM"
+        assert conflict is True
+
 
 class TestCodeownersFallback:
     def test_capped_at_low(self):

@@ -61,6 +61,28 @@ else
   fail "#15 scan false-positived on ordinary LIMIT_*/DIV-mentioning code (see PortableQuery.java)"
 fi
 
+# #16 — IF() SQL function must be detected; lowercase `if (` control flow must not false-positive
+if "$SCAN" "$SKILL_ROOT/tests/fixtures/mysql-dialect/hits/IfFunctionQuery.java" >/dev/null 2>&1; then
+  fail "#16 scan must detect MySQL IF(...) SQL expression function"
+else
+  pass "#16 scan detects IF(...) SQL function"
+fi
+if "$SCAN" "$SKILL_ROOT/tests/fixtures/mysql-dialect/clean/PortableQuery.java" >/dev/null 2>&1; then
+  pass "#16 scan does not false-positive on lowercase if(...)/getYear()-style control flow"
+else
+  fail "#16 scan false-positived on lowercase if(...) control flow or getYear()-style identifier"
+fi
+
+# #17 — remaining previously-untested dialect constructs (GROUP_CONCAT, ON DUPLICATE KEY, INSERT
+# IGNORE, FIND_IN_SET, INSTR, REGEXP/RLIKE, ISNULL, ADDTIME, SUBSTRING_INDEX, CONVERT_TZ, JSON_*,
+# YEAR/MONTH/WEEK) must each still be caught — one line per construct in the fixture, so dropping
+# any single pattern from the regex fails this check.
+if "$SCAN" "$SKILL_ROOT/tests/fixtures/mysql-dialect/hits/RemainingConstructs.java" >/dev/null 2>&1; then
+  fail "#17 scan must detect every construct in RemainingConstructs.java"
+else
+  pass "#17 scan detects GROUP_CONCAT/ON DUPLICATE KEY/INSERT IGNORE/FIND_IN_SET/INSTR/REGEXP/RLIKE/ISNULL/ADDTIME/SUBSTRING_INDEX/CONVERT_TZ/JSON_*/YEAR/MONTH/WEEK"
+fi
+
 # #11 — rg missing must not silently pass (static + runtime)
 if ! grep -q 'ripgrep (rg) not found' "$SCAN"; then
   fail "#11 scan script must error when rg missing"

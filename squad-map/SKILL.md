@@ -59,7 +59,9 @@ Config resolution: [config-schema.md](reference/config-schema.md).
 
 ### Critical config: `squad_path_segment`
 
-**HARD STOP if missing** when GitLab MCP is available — do not proceed to Phase 0 without it.
+**HARD STOP if missing** — Inputs asks for this before GitLab MCP availability is even known (that's
+determined in Phase 0), so ask unconditionally at Inputs unless the user has already said GitLab is
+out of scope; do not proceed to Phase 0 without an answer or that explicit opt-out.
 Normative indexing rule and resolution order: [config-schema.md](reference/config-schema.md).
 
 ## Prerequisites

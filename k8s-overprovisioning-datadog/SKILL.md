@@ -26,6 +26,7 @@ Primary artifact: [decision-graph-schema.md](reference/decision-graph-schema.md)
 | Live apply of manifest changes | Out of scope — recommendations only; user applies |
 | **VPA + HPA on same dimension** | Do not propose VPA-based cuts — see [reason.md](workflow/reason.md#vpa-hpa-coexistence-conflict); resolve controller conflict first |
 | **KEDA ScaledObject workload** | Do not use CPU % HPA targets for replica verdict — follow [replica-analysis.md](workflow/replica-analysis.md#keda) external-metric path |
+| **Per-container sizing within a multi-container pod** | Out of scope — this skill sizes at pod level (and fleet level); a right-sized pod total can still hide one oversized sidecar against one right-sized main container |
 
 ## Routing
 

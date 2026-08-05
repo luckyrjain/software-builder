@@ -36,6 +36,11 @@ If traces, logs, and metrics disagree on timing or attribution:
 2. **STOP** ranking until contradiction is explained in **Gaps** or one signal is excluded with reason.
 3. Unresolved conflict → confidence cap **MEDIUM** maximum.
 
+**Clock skew, not a real conflict:** when two sources disagree on a shared event's timestamp by **under
+2 minutes** (e.g. Datadog vs KubeSense for the same event), presume ordinary clock/ingestion skew, not
+a genuine conflict — do not STOP or cap confidence for this alone. Escalate to a real conflict only if
+the skew is large enough to change which event is causally first.
+
 ## Hypothesis deduplication (before ranking)
 
 Review candidate hypotheses **before** writing evidence JSON:
@@ -62,6 +67,14 @@ IF error_signals is empty AND infra_signals is empty
 
 Deploy events, Jira tickets, or known-issue matches alone are **not** sufficient to rank hypotheses —
 at least one `error_signals` or `infra_signals` entry is required.
+
+**Truncated-window check:** if the earliest `error_signals`/`infra_signals` timestamp falls within a
+few minutes of the queried window's `from_time`, treat the trigger as possibly cut off — the true
+onset may be before the window. Re-query error/infra signals for an additional **±30 min before**
+`from_time` (same expansion the deploy-correlation lookup already uses per
+[inputs.md](inputs.md)) and check for earlier evidence **before** ranking, rather than ranking against
+a truncated causal chain. Note in **Gaps** when backward widening was attempted and found nothing
+further.
 
 **When the correlator CLI ranks this run's hypotheses:** read the pinned commit SHA from
 `skills-lock.json` → `optionalExternal.incident-rca-correlator-cli.commitSha` and record it as

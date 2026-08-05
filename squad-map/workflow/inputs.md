@@ -39,7 +39,11 @@ Resolve per [config-schema.md](../reference/config-schema.md):
 2. Else `domain-config.yaml` → `ownership:` block
 3. Else **HARD STOP** — present the following to the user and **do not proceed to Phase 0** until
    answered:
-   - `squad_path_segment` (required when GitLab ✅) — see [config-schema.md § squad_path_segment indexing](../reference/config-schema.md#squadpathsegment-indexing-normative)
+   - `squad_path_segment` — Inputs runs before Phase 0 determines GitLab MCP availability, so ask for
+     this unconditionally at this step (unless the user has already stated GitLab is unavailable /
+     out of scope for this run) — see [config-schema.md § squad_path_segment indexing](../reference/config-schema.md#squadpathsegment-indexing-normative).
+     If Phase 0 later finds GitLab ❌, the answer is simply unused; that's cheaper than blocking on a
+     value Inputs cannot yet know it needs.
    - `org_prefix` (optional) — scopes `group_prefixes` bulk discovery
    - `service_aliases` (optional) — repo name → Datadog service name mappings
 

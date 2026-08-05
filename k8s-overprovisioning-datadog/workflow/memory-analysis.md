@@ -40,10 +40,15 @@ After collecting `OBS_MEMORY_LIMIT` and `OBS_MEMORY_REQUEST`, compute the ratio 
 
 | Pattern | Risk | Action |
 |---------|------|--------|
-| `OBS_MEMORY_LIMIT ≈ OBS_MEMORY_REQUEST` (ratio < 1.1×) | High OOM risk on any burst | **Block memory request trim**; recommend raising limit first |
+| `OBS_MEMORY_LIMIT ≈ OBS_MEMORY_REQUEST` (ratio < 1.1×) | High OOM risk on any burst | Subset of the `< 1.5×` BLOCKED rule below — additionally recommend raising the limit first, not just blocking the trim |
 | `OBS_MEMORY_LIMIT ≥ 2× OBS_MEMORY_REQUEST` | Safe headroom | Reduce request toward `peak_proxy × 1.15` (~15% above peak proxy), rounded to 64Mi/128Mi |
 | Peak usage > `OBS_MEMORY_REQUEST` but < `OBS_MEMORY_LIMIT` | Running on limit buffer | Increase request to ~15% above peak proxy (`peak_proxy × 1.15`, rounded to 64Mi/128Mi) before any trim |
 | Peak usage > `OBS_MEMORY_LIMIT` | OOM inevitable | Increase both; `STOP_REASON: oom_kills` |
+
+**Authoritative threshold:** emit `DEC_MEMORY_REQUEST` as BLOCKED with reason `tight_memory_limits`
+when ratio `< 1.5×`, regardless of utilization — mirrors `cpu-analysis.md`'s CPU rule. Memory gets the
+*same* cutoff, not a laxer one, even though CPU only throttles on breach: an OOM kill is a hard
+process kill, so a tight memory limit is at least as risky as a tight CPU limit at the same ratio.
 
 Include `OBS_MEMORY_LIMIT / OBS_MEMORY_REQUEST` ratio in the Human Report whenever recommending
 a memory request change.

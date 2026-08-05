@@ -46,6 +46,10 @@ Every construct matched by `scripts/scan-mysql-dialect.sh` has a row below. Edge
 | `JSON_CONTAINS(col, val)` | `col @> val::jsonb` | Verify containment direction/semantics match |
 | `JSON_SET(col, '$.path', val)` | `jsonb_set(col, '{path}', to_jsonb(val))` | Path syntax differs (`$.a.b` → `'{a,b}'`) |
 | `JSON_REMOVE(col, '$.path')` | `col #- '{path}'` | |
+| `JSON_MERGE(a, b)` | `a::jsonb || b::jsonb` | MySQL `JSON_MERGE` (and its alias `JSON_MERGE_PRESERVE`) does a **shallow** top-level merge — same as PG `\|\|`. If the app actually needs `JSON_MERGE_PATCH` (deep/recursive merge) semantics, `\|\|` is wrong — verify which one the code relies on before translating |
+| `YEAR(ts)` | `EXTRACT(YEAR FROM ts)` | Returns numeric; cast to `int` if the app compares as integer |
+| `MONTH(ts)` | `EXTRACT(MONTH FROM ts)` | |
+| `WEEK(ts)` | `EXTRACT(WEEK FROM ts)` | **Not a drop-in** — MySQL `WEEK()` mode defaults and week-numbering (Sun/Mon start, ISO vs non-ISO) differ from PG's ISO-8601 `EXTRACT(WEEK ...)`; verify the MySQL call's mode argument before translating |
 | `MATCH(cols) AGAINST('term')` | `to_tsvector('simple', cols) @@ plainto_tsquery('simple', 'term')` | **Not syntax-only** — needs a `tsvector` column/expression + GIN index; escalate to manual design review, see edge cases |
 
 ### Manual audit (not in scan)

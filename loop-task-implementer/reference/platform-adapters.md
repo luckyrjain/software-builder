@@ -67,6 +67,27 @@ Natural-language examples:
 
 Use Kiro specs for task requirements, but keep workflow state separate from product requirements.
 
+## Sequential role simulation (last-resort fallback)
+
+Use only when the host has no subagent, fresh-session, or worktree primitive at all. This is the
+riskiest isolation mode — it runs every role in the same conversation, so an explicit context reset
+is not optional narration, it is a concrete step:
+
+1. Before switching role, write and keep only a **role handoff note** — the exact fields
+   `workflow/orchestrator.md` §6 lists for the neutral review package (or the Builder inputs list,
+   when switching to Builder). Discard everything else from working memory: prior role's scratchpad,
+   self-review language, PR narrative, branch/commit-message framing.
+2. State explicitly, in the conversation, which role is now active and that prior-role reasoning is
+   being disregarded — e.g. "Switching to Reviewer, Lens A. Ignoring all Builder reasoning above;
+   working only from the handoff note below."
+3. Re-derive facts the new role needs from the repository directly (re-read the diff, re-run checks)
+   rather than trusting a summary carried over from the prior role's turn.
+4. Never let the same turn both implement/fix code and adjudicate whether that fix is acceptable —
+   even in sequential simulation, adjudication happens only after the role-switch step above.
+
+If you cannot honestly perform steps 1–3, do not claim role isolation — report degraded-mode findings
+as `NEEDS_EVIDENCE` rather than `PROPOSED_BLOCKING`/`CLEAN`, since the review is not truly independent.
+
 ## Generic agent fallback
 
 For an agent without skill discovery:

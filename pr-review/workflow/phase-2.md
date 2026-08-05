@@ -132,8 +132,8 @@ When no YAML, fall back to `reference/domain-overrides.md`.
 Once enough merge-blocking signal exists, **stop opening new hunks/dimensions** — finish current hunk
 (including non-negotiable), then proceed to output.
 
-Thresholds (≥2 Critical, ≥5 High, ≥10 total) are defined **only** in
-`reference/severity-rubric.md` §Stop searching — do not duplicate numbers here.
+Thresholds are defined **only** in `reference/severity-rubric.md` §Stop searching — do not duplicate
+numbers here.
 
 Count **emitted** findings after pipeline (exclude nits/praise). **Exhaustive override:** user said
 *exhaustive review* / *full pass* / *don't stop early*.

@@ -15,8 +15,12 @@ Checklist: [checklists.md](checklists.md#replica-hpa).
 
 ## KEDA
 
-If `hpa_*` null or `OBS_KEDA_SCALER_ACTIVE` is set, this is a KEDA-managed workload. Follow the
-KEDA path — do **not** use CPU target % for the replica verdict.
+If `OBS_KEDA_SCALER_ACTIVE` is set, this is a KEDA-managed workload. Follow the KEDA path — do
+**not** use CPU target % for the replica verdict.
+
+Null `hpa_*` alone (with `OBS_KEDA_SCALER_ACTIVE` **not** set) is not KEDA — it means no autoscaler
+is configured at all. Route to the fixed-replica path instead: `thresholds.md` § "No HPA (metrics
+absent)" → fixed replica count, use `replicas_ready` only. See also `anomalies.md` § "HPA disabled".
 
 ### Collection
 Load `OBS_KEDA_SCALER_TYPE`, `OBS_KEDA_METRIC_VALUE`, and `OBS_KEDA_METRIC_TARGET` from COLLECT

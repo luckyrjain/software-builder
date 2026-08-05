@@ -26,6 +26,9 @@ def highest_severity(severities: list[str]) -> Severity:
 
 
 def recommendation_from_highest(highest: Severity) -> tuple[RecommendationSlug, RecommendationDisplay]:
+    # Display-only label for the executive summary text. SKILL.md's guardrail is absolute:
+    # this skill never calls a GitLab approve/merge API. Never wire this return value into
+    # an approval-triggering MCP call.
     if highest in ("critical", "high"):
         return "request_changes", "🔴 Request changes"
     if highest == "medium":

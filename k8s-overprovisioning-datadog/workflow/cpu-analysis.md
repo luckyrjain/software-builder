@@ -65,9 +65,10 @@ After collecting `OBS_CPU_LIMIT` and `OBS_CPU_REQUEST`, compute the ratio and ev
 |-------|-------|--------|
 | `OBS_CPU_LIMIT / OBS_CPU_REQUEST > 4×` | Limit likely too high | Note in observations; scheduling visibility reduced |
 | `2–4×` | Acceptable headroom | No action |
-| `< 2×` | Tight limits | **Do not trim CPU requests** — any burst will immediately throttle at the limit |
-| `OBS_CPU_LIMIT ≈ OBS_CPU_REQUEST` (< 1.1×) | Near-zero burst headroom | Block CPU request trim; recommend raising limit first |
+| `1.5–2×` | Tight limits (advisory) | Flag in observations — worth a human look, but does not itself set `DEC_CPU_REQUEST: BLOCKED` (see authoritative threshold below) |
+| `OBS_CPU_LIMIT ≈ OBS_CPU_REQUEST` (< 1.1×) | Near-zero burst headroom | Subset of the `< 1.5×` BLOCKED rule below — additionally recommend raising the limit first, not just blocking the trim |
 
-Emit `DEC_CPU_REQUEST` as BLOCKED with reason `tight_cpu_limits` when ratio < 1.5× regardless
-of utilization — a seemingly over-provisioned request against a tight limit creates a silent throttle
-trap on any load spike.
+**Authoritative threshold:** emit `DEC_CPU_REQUEST` as BLOCKED with reason `tight_cpu_limits` when
+ratio `< 1.5×`, regardless of utilization — a seemingly over-provisioned request against a tight
+limit creates a silent throttle trap on any load spike. The `1.5–2×` table row above is advisory
+only; only this rule sets formal `BLOCKED` status.

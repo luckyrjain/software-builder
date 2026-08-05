@@ -100,7 +100,9 @@ Requires `manifest.yaml` with at least P0 complete. If not present, fall back to
 2. Determine **affected phases** from the changed set:
    - **P0, P1**: re-run for every repo in the changed set
    - **P0.25**: re-run contract rows for changed repos only; carry forward unchanged repos' rows
-   - **P2**: re-run if any Tier 0/1 repo changed (flow likely affected)
+   - **P2**: re-run if any Tier 0/1 repo changed (flow likely affected), **or** if step P0.25 added or
+     removed any contract row for a changed repo at *any* tier — a low-tier repo gaining/losing a
+     producer/consumer contract changes the flow diagram even when the repo itself isn't Tier 0/1
    - **P2b**: re-run if P2 re-ran and Datadog ✅
    - **P3**: re-run if any Tier 0/1 repo changed
    - **P3b**: re-run if P3 re-ran

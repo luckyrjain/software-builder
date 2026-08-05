@@ -21,5 +21,7 @@ Run when editing `SKILL.md`, `workflow/`, `reference/`, or scan scripts. Targets
 | 13 | `CAST(x AS CHAR)` split across concatenated string literals (`"CAST(x " + "AS CHAR)"`) | Scan detects it (multi-line-aware, bounded span) — not a silent miss |
 | 14 | `JSON_EXTRACT(...)` / `MATCH(...) AGAINST(...)` in native SQL; Java lambda `x -> x+1` and bare `col->'key'` jsonb access nearby | Scan flags the JSON/fulltext functions; does not false-positive on `->` used as a lambda arrow or PG-compatible jsonb operator |
 | 15 | `LIMIT_KEY`/`RATE_LIMIT_THRESHOLD` constants; a comment mentioning "DIV nodes" | Scan stays clean — LIMIT/DIV glue is bounded to plausible string-concatenation punctuation, not any code |
+| 16 | `IF(status=1,'active','inactive')` in a native SQL string, alongside ordinary lowercase `if (...) else if (...)` Java control flow and a `getYear()`-style method name | Scan detects the uppercase `IF(...)` SQL function; does not false-positive on lowercase `if (` control flow or `getYear()`/`fiscalYear()`-style identifiers |
+| 17 | `GROUP_CONCAT`, `ON DUPLICATE KEY`, `INSERT IGNORE`, `FIND_IN_SET`, `INSTR`, `REGEXP`/`RLIKE`, `ISNULL`, `ADDTIME`, `SUBSTRING_INDEX`, `CONVERT_TZ`, remaining `JSON_*` functions, `YEAR`/`MONTH`/`WEEK` | Scan detects each — every construct in the scan `PATTERN` has a dedicated fixture line, so a future regex edit that drops one fails the pressure harness |
 
 Smoke invocation strings: [smoke-test.md](smoke-test.md).

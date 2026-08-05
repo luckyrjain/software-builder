@@ -16,7 +16,10 @@ escalates.
 
 **Authoritative checks:** `<name>: PASS|FAIL|PENDING (commit <sha>)` — one row per required check
 
-**Completion state:** READY_TO_MERGE | MERGED | HUMAN_ACTION_REQUIRED | ESCALATED
+**Completion state:** NONE | MERGED | HUMAN_ACTION_REQUIRED — matches `completion.repository_action`
+in [reference/state-schema.yaml](reference/state-schema.yaml) exactly. `HUMAN_ACTION_REQUIRED` covers
+both "verified ready, waiting for authorized merge" and "escalated" — check `escalation.active` to
+tell them apart.
 
 **Human action required:** `<exact action, or "none">`
 ```

@@ -59,6 +59,9 @@ run when Jira, user calendar, or GitLab merge-freeze MCP is available; skip othe
 ```
 START → resolve-service.md
   ↓
+Workload kind = StatefulSet (per resolve-service.md `kube_statefulset`)? YES → load
+  [workload-analysis.md § StatefulSets](workload-analysis.md#statefulsets) before REASON
+  ↓
 Pre-flight: active incident + redeploy staleness + VPA read ([collect-metrics.md](collect-metrics.md#pre-flight-before-metric-queries))
   ↓
 Metrics? NO → insufficient_metrics → minimal blocked graph → render

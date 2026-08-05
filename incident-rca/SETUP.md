@@ -88,6 +88,11 @@ picture, not the starting point. You don't need all of it for a first, real RCA:
 
 Configure Datadog + GitLab first, run one real RCA, then add the rest as you find you need it.
 
+**Before adopting elsewhere:** [reference/org-profiles.md](reference/org-profiles.md) documents real,
+org-specific guardrails (not illustrative examples) for the org this skill was built against —
+adopters at a different org should add their own section there rather than inherit those STOP rules
+as-is.
+
 ## MCP servers
 
 Configure in **Cursor Settings → MCP**. All are read-only for RCA.

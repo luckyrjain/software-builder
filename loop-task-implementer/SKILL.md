@@ -27,6 +27,17 @@ Users can invoke the skill without memorizing commands:
 
 Interpret equivalent natural language as invocation.
 
+## When NOT to use
+
+| Request | Use instead |
+|---------|-------------|
+| Review someone else's already-open MR, not your own task loop | **pr-review** |
+| Root cause / outage / error spike investigation | **incident-rca** |
+| Kubernetes rightsizing / resource optimization | **k8s-overprovisioning-datadog** |
+| Understand an unfamiliar domain/codebase before any implementation | **domain-comprehension** |
+| MySQL-dialect scrub / PG cutover, no autonomous task loop needed | **mysql-to-postgres-sql** |
+| Live rollback / kubectl apply / production deploy | Out of scope — human operator |
+
 ## Roles
 
 Use isolated contexts whenever the platform supports subagents, tasks, worktrees, or fresh sessions.
@@ -65,15 +76,12 @@ Both lenses must be clean for the same normalized diff fingerprint.
 
 ## Blocking standard
 
-A finding is blocking only when evidence shows at least one of:
-
-1. An explicit acceptance criterion is violated.
-2. An enforced repository, security, compatibility, or deployment rule is violated.
-3. A demonstrable input, state, race, failure, or deployment path is materially incorrect or unsafe.
-4. A reproducible check fails because of the change.
-5. The change materially exposes or worsens a pre-existing defect.
-
-Style preferences, optional metrics, speculative risks, and unrelated cleanup are not blocking.
+A finding is blocking only when evidence shows at least one of: an explicit acceptance criterion is
+violated; an enforced repository, security, compatibility, or deployment rule is violated; a
+demonstrable input/state/race/failure/deployment path is materially incorrect or unsafe; a
+reproducible check fails because of the change; or the change materially exposes/worsens a
+pre-existing defect. Style preferences, optional metrics, speculative risks, and unrelated cleanup
+are not blocking.
 
 ## Adjudication
 
@@ -107,6 +115,7 @@ Stop and escalate when any applies:
 - Missing product, architecture, access, or destructive-operation decision
 - Unrecognized third-party branch changes
 - CI cannot be diagnosed within the configured budget
+- A dispatched Builder or Reviewer session exceeds its response-wait budget
 - Time or token budget is exhausted
 
 Clean reviews do not consume the dirty-review budget.

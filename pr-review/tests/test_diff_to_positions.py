@@ -359,3 +359,33 @@ def test_batch_multi_file_resolves_each_to_its_own_file():
     assert "error" not in out[0]
     assert out[1]["new_path"] == "src/bar.py" and out[1]["new_line"] == 2
     assert "error" not in out[1]
+
+
+def test_batch_headerless_multiple_paths_raises():
+    # A headerless diff (GitLab MCP per-file hunk) belongs to exactly one file. If a
+    # caller mistakenly batches items for two different paths against one headerless
+    # blob, iter_diff_lines() would treat the whole blob as belonging to whichever path
+    # it's asked about — silently resolving item B's line against item A's hunk content.
+    # This must fail loudly instead of guessing.
+    items = [
+        {"path": "src/foo.py", "line": 2},
+        {"path": "src/bar.py", "line": 2},
+    ]
+    rc, out, err = run(["--batch", "--diff-text", HEADERLESS_HUNK], stdin=json.dumps(items))
+    assert rc == 2, err
+    assert "headerless" in err
+    assert "src/foo.py" in err and "src/bar.py" in err
+
+
+def test_batch_headerless_single_path_still_works():
+    # Sanity check: headerless + --batch is fine as long as every item shares one path
+    # (the documented per-file GitLab MCP use case) — must not be broken by the new guard.
+    items = [
+        {"path": "src/foo.py", "line": 2},
+        {"path": "src/foo.py", "line": 3},
+    ]
+    rc, out, err = run(["--batch", "--diff-text", HEADERLESS_HUNK], stdin=json.dumps(items))
+    assert rc == 0, err
+    assert isinstance(out, list)
+    assert len(out) == 2
+    assert out[0]["new_line"] == 2 and "error" not in out[0]

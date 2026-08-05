@@ -14,4 +14,21 @@ public class PortableQuery {
     private static final int RATE_LIMIT_THRESHOLD = computeThreshold(baseValue, 42);
     // DIV as a standalone word (not a SQL operator) followed by digits/quotes nearby.
     // Splitting work across DIV nodes: worker '0' handles even, worker 1 handles odd.
+
+    // Ordinary lowercase control-flow keyword must not false-positive as the uppercase MySQL SQL
+    // expression function (scan pattern is case-sensitive, uppercase-only).
+    int classify(int status) {
+        if (status == 1) {
+            return 1;
+        } else if (status == 2) {
+            return 2;
+        }
+        return 0;
+    }
+
+    // getYear()/fiscalYear()-style identifiers (lowercase after the initial letter) must not
+    // false-positive as the uppercase MySQL date-part functions.
+    int getYear() {
+        return currentYear;
+    }
 }

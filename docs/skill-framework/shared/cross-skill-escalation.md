@@ -51,6 +51,10 @@ Skill-specific rows in each `SKILL.md` MUST be a subset of this table plus local
 | Migration rewrites complete | pr-review on migration MR | "Review MR !{iid} for MySQL→PostgreSQL migration in `{service}`" |
 | pr-review approves a loop-task-implementer task MR | loop-task-implementer resumes and selects the next task | "Continue loop-task-implementer — MR !{iid} merged, select next task" |
 | incident-rca confirms a regression tied to a task branch | loop-task-implementer dispatches Builder remediation | "Dispatch Builder remediation for task `{task_id}` — RCA confirmed regression {window}" |
+| squad-map resolves the owning team for an incident | incident-rca resumes with squad context (e.g. paging, ownership-scoped evidence) | "Resume RCA for `{service}` {window} — owning squad is `{squad}`" |
+| incident-rca links a recurring architecture smell to a service | domain-comprehension re-run or update on that bounded context | "Update domain analysis for `{service}` — RCA found recurring {smell} across {n} incidents" |
+| k8s confirms a service is overprovisioned per domain-comprehension's referral | domain-comprehension records the outcome in its runtime-validation section | "Record k8s rightsizing outcome for `{service}` in domain comprehension runtime validation" |
+| domain-comprehension identifies implementation work loop-task-implementer should carry out | loop-task-implementer picks up the resulting task(s) | "Implement `{task_id}` per domain-comprehension findings for `{workspace}`" |
 
 ## 3. Handoff block (required fields)
 

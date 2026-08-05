@@ -72,10 +72,18 @@ Normative rules: [squad-mapping.md](../reference/squad-mapping.md). Config:
    - **Multi-instance:** when repos span multiple GitLab hosts, match each repo's `origin` host against
      `GITLAB_API_URL`; route queries to the correct MCP instance. If an instance is unavailable, mark
      affected repos GitLab squad UNKNOWN and note the host in Unmapped repos.
+   - **Multi-instance, no origin remote:** with 2+ configured GitLab instances and a repo with no `origin`
+     (so there's no host to match), do not guess which instance to search. Run `search_repositories`
+     against **every** configured instance; if exactly one returns a match, use it. If more than one
+     instance returns a match, or none do, mark GitLab squad UNKNOWN and list all candidate matches (or
+     the searched instances, if none matched) in Unmapped repos for the user to disambiguate.
 
-3. **Datadog team** (per repo) when Datadog ✅:
+3. **Datadog team** (per repo, or per monorepo subdirectory row) when Datadog ✅:
+   - Monorepo subdirectory rows: resolve the service-name guess via `service_aliases["<repo>/<subdir>"]`
+     → else `service_aliases["<repo>"]` → else the subdirectory's own basename — see
+     [config-schema.md § monorepo](../reference/config-schema.md). Non-monorepo rows: apply
+     `ownership.datadog.service_aliases["<repo>"]` when repo name ≠ service name.
    - `search_datadog_services` with `name:<service>*` (`telemetry.intent` required)
-   - Apply `ownership.datadog.service_aliases` when repo name ≠ service name
    - Record `team` from matched service
    - **Pagination:** if results indicate more pages (cursor or `next_page`), continue until all matching
      services are fetched or 200 services total. Prefer the exact-name match; if multiple services

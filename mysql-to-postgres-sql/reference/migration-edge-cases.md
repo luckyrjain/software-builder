@@ -111,7 +111,7 @@ Shared cache across MySQL/PG services can hydrate wrong types (`boolean` vs `0/1
 
 ### `pool_recycle=85` (Python)
 
-ARCH wiki example value — tune to **below** your load balancer idle timeout (e.g. NLB ~350s). `85` is aggressive; increase if connection churn is high.
+Example value from an internal architecture wiki — tune to **below** your load balancer idle timeout (e.g. NLB ~350s). `85` is aggressive; increase if connection churn is high.
 
 ### `application_name`
 
@@ -119,4 +119,4 @@ Set on every driver, then use `pg_stat_activity.application_name` or Datadog `db
 
 ## E. 200+ tables vs 14 custom columns
 
-Org estimate: **200+** tables used MySQL `ON UPDATE CURRENT_TIMESTAMP`. Most use standard `created_at` / `updated_at` (§1 auditing). The **14-table** list is only non-standard **last-updated** column names — not an exhaustive table census. Use the [migration tracker](https://docs.google.com/spreadsheets/d/1TzlHh-tfc-usiF3qAEUIeGbND9-9yZ9L5pBRBXFY0ZA/edit?usp=sharing) for repo scope.
+Org estimate: **200+** tables used MySQL `ON UPDATE CURRENT_TIMESTAMP`. Most use standard `created_at` / `updated_at` (§1 auditing). The **14-table** list is only non-standard **last-updated** column names — not an exhaustive table census. Use [your migration tracker](<link to your migration tracker>) for repo scope.

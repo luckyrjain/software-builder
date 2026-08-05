@@ -52,6 +52,11 @@ class TestConfidenceCaps:
     def test_single_source_caps_high_to_medium(self):
         assert apply_confidence_cap("high", single_source=True) == "medium"
 
+    def test_unresolved_contradiction_caps_high_to_medium(self):
+        # Distinct trigger from single_source — must cap on its own, not only in combination.
+        assert apply_confidence_cap("high", unresolved_contradiction=True) == "medium"
+        assert apply_confidence_cap("high", single_source=False, unresolved_contradiction=True) == "medium"
+
     def test_assumed_only_caps_to_low(self):
         assert apply_confidence_cap("high", assumed_only=True) == "low"
 
@@ -68,6 +73,15 @@ class TestGithubEarlyExit:
 class TestFindingGates:
     def test_speculative_race_suppressed_at_guess(self):
         assert should_suppress_at_guess_gate(True, infers_unseen_callers=True) is True
+
+    def test_no_diff_anchor_suppressed_regardless_of_callers(self):
+        # has_diff_anchor=False must short-circuit to suppressed even when
+        # infers_unseen_callers is False — this early-return branch was untested.
+        assert should_suppress_at_guess_gate(False, infers_unseen_callers=False) is True
+        assert should_suppress_at_guess_gate(False, infers_unseen_callers=True) is True
+
+    def test_has_diff_anchor_and_no_unseen_callers_not_suppressed(self):
+        assert should_suppress_at_guess_gate(True, infers_unseen_callers=False) is False
 
     def test_guarded_null_deref_suppressed_at_path(self):
         assert should_suppress_at_path_gate(False, is_non_negotiable_observable=False) is True

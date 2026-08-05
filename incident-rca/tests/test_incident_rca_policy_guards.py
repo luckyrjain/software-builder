@@ -20,6 +20,15 @@ class TestConfidenceCaps:
     def test_assumed_only_low(self):
         assert apply_confidence_cap("HIGH", assumed_only=True) == "LOW"
 
+    def test_assumed_only_does_not_promote_unknown(self):
+        assert apply_confidence_cap("UNKNOWN", assumed_only=True) == "UNKNOWN"
+
+    def test_assumed_only_preserves_low(self):
+        assert apply_confidence_cap("LOW", assumed_only=True) == "LOW"
+
+    def test_assumed_only_caps_medium(self):
+        assert apply_confidence_cap("MEDIUM", assumed_only=True) == "LOW"
+
     def test_unresolved_contradiction_caps_high(self):
         assert apply_confidence_cap("HIGH", unresolved_contradiction=True) == "MEDIUM"
 

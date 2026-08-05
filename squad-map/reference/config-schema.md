@@ -24,6 +24,7 @@ ownership:
   datadog:
     service_aliases:              # repo folder name → Datadog service name
       <repo-name>: <service-name>
+      <repo-name>/<subdir>: <service-name>   # monorepo subdirectory override — see § monorepo below
     domain_service_query: "name:<keyword>*"   # optional bulk search_datadog_services
   monorepo_service_dirs:            # per-repo service subdirectories — consumed by both MCP mapping
     <repo-name>:                    # (Step 2) and CODEOWNERS fallback (Step 7)
@@ -45,7 +46,14 @@ ownership:
 When `monorepo_service_dirs` lists multiple paths for one repo, emit one `SQUAD_MAP.md` row per
 subdirectory (repo name suffix: for `<repo-name>: [src/payments, src/notifications]` above, rows
 `<repo-name>/payments` and `<repo-name>/notifications`). GitLab squad is shared; Datadog team may differ
-per alias in `service_aliases`.
+per subdirectory — resolve each row's Datadog service name in this order:
+
+1. `service_aliases["<repo-name>/<subdir-basename>"]` (e.g. `service_aliases["disbursement-service/payments"]`)
+2. Else `service_aliases["<repo-name>"]` (repo-level alias, applied to every subdirectory row)
+3. Else query Datadog using the subdirectory's own basename (e.g. `payments`) as the service-name guess
+
+Without a matching alias at either level, Datadog team for that row is `UNKNOWN` — do not silently
+reuse another subdirectory's team.
 
 When neither config file exists, collect `squad_path_segment` and optional aliases from the user before
 any MCP query.
