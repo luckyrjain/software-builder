@@ -48,7 +48,8 @@ Because nothing is merged and `manifest.yaml` is never written, `PROPOSAL_CHECK`
 
 **In:**
 - New `PROPOSAL_CHECK` delivery mode: 1 new required input (`proposal`), 1 new precondition (existing
-  `manifest.yaml` with P0/P1 complete for the repos the proposal would touch), reuse of `ADD_REPO`'s
+  `manifest.yaml`, engagement-wide status bar, and per-repo `inventory`/`deep_dive` complete-or-skipped
+  for the repos the proposal would touch), reuse of `ADD_REPO`'s
   overlap taxonomy against the *existing* `BOUNDED_CONTEXTS.md` / `DATA_OWNERSHIP.md` / `API_CATALOG.md`
   / `EVENT_CATALOG.md` (read-only), one new deliverable template `PROPOSAL_CHECK_REPORT.md`.
 - SKILL.md footprint kept to the minimum the 180-line cap allows (174/180 used today, 6 lines of
@@ -79,10 +80,14 @@ Because nothing is merged and `manifest.yaml` is never written, `PROPOSAL_CHECK`
 
 ## Precondition — HARD STOP, not a live gate
 
-`PROPOSAL_CHECK` requires `manifest.yaml` at `workspace_root` with `schema_version: 2` and at least P0/P1
-`complete` for every repo the proposal's claims would touch (same bar `ADD_REPO` already requires before
-its merge gate can trust existing rows as ground truth). If `manifest.yaml` is absent, or the relevant
-repos' P0/P1 phases aren't `complete`:
+`PROPOSAL_CHECK` requires `manifest.yaml` at `workspace_root` with `schema_version: 2` and
+`engagement.status` of `IN_PROGRESS` or `FIRST_PASS_COMPLETE` (the same engagement-wide bar `ADD_REPO`
+itself requires), **and**, per repo the proposal's claims would touch, `repos[].inventory: complete` and
+`repos[].deep_dive` either `complete` or `skipped` — `skipped` counts, since a Tier 2/3 repo skipped per
+[large-scale-execution.md](large-scale-execution.md) is a legitimate terminal state on a finished
+engagement, not an incomplete one; requiring literal `complete` would wrongly HARD STOP on every large
+multi-repo engagement the framework itself already considers done. If `manifest.yaml` is absent, or a
+touched repo's `inventory` is still `pending` or its `deep_dive` is `pending`:
 
 > **Stop.** Tell the user: "PROPOSAL_CHECK compares a proposal against existing, evidence-backed
 > deliverables — it doesn't create them. Run `FULL` or `QUICK` domain comprehension for this workspace

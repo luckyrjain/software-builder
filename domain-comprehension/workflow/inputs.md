@@ -171,11 +171,18 @@ changed); regenerate other repos' `/understand` graphs, only merge the new one i
 
 ### PROPOSAL_CHECK mode — procedure
 
-Requires `manifest.yaml` at `workspace_root` with `schema_version: 2`, and P0/P1 `status: complete` for
-every repo plausibly touched by the proposal's claims (if the proposal names specific repos, check those;
-if it doesn't, check every repo in `manifest.repos[]`). If unmet: **Stop.** Tell the user to run `FULL` or
-`QUICK` comprehension for this workspace first — do not fall back automatically, do not check against
-incomplete deliverables.
+Requires `manifest.yaml` at `workspace_root` with `schema_version: 2` and `engagement.status` of
+`IN_PROGRESS` or `FIRST_PASS_COMPLETE` (same engagement-wide bar `ADD_REPO` requires — see its own
+precondition above), **and**, for every repo plausibly touched by the proposal's claims (if the proposal
+names specific repos, check those; if it doesn't, check every repo in `manifest.repos[]`), that repo's own
+`repos[].inventory: complete` **and** `repos[].deep_dive` is `complete` **or** `skipped`. `skipped` counts
+as satisfied here — per [large-scale-execution.md](../reference/large-scale-execution.md) ("P1 | Deep dive
+tier 0/1 only unless flow-critical"), a Tier 2/3 repo with `deep_dive: skipped` is a legitimate, correctly
+terminal state on a finished engagement, not an incomplete one; requiring literal `complete` would HARD
+STOP on every large multi-repo engagement the framework itself considers done. If any touched repo's
+`inventory` is still `pending`, or its `deep_dive` is `pending` (not yet reached, unlike a deliberate
+`skipped`): **Stop.** Tell the user to run `FULL` or `QUICK` comprehension for this workspace first — do
+not fall back automatically, do not check against incomplete deliverables.
 
 1. Load `manifest.yaml`, `BOUNDED_CONTEXTS.md`, `DATA_OWNERSHIP.md`, `API_CATALOG.md`, `EVENT_CATALOG.md`.
 2. Parse the proposal's claims into the same three categories the merge gate checks: bounded-context

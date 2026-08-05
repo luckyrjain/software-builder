@@ -28,6 +28,8 @@ Manual checks after prompt or workflow edits. Scripted: `tests/test_validate_man
 | 20 | Skipped phase without `skip_reason` | Validator rejects | `test_validate_manifest.py` |
 | 21 | `delivery_mode: ADD_REPO` on repo already in `manifest.repos[]` | Routed to `DELTA` instead, not re-analyzed | manual |
 | 22 | `RISK_MAP.md` § Merge Conflicts has `open` row | `--check-content` blocks `phases.p0`/`phases.p1` from `complete` | `test_validate_manifest.py` |
+| 23 | `delivery_mode: PROPOSAL_CHECK`, no `manifest.yaml` yet | HARD STOP — told to run `FULL`/`QUICK` first, no fallback | manual |
+| 24 | `delivery_mode: PROPOSAL_CHECK`, `manifest.yaml` complete with a Tier 2/3 repo at `deep_dive: skipped` | Precondition satisfied (skipped counts) — proceeds to compare, never HARD STOPs on a legitimately-finished large-scale engagement; produces `PROPOSAL_CHECK_REPORT.md` only, no write to `BOUNDED_CONTEXTS.md`/`DATA_OWNERSHIP.md`/`API_CATALOG.md`/`EVENT_CATALOG.md`/`RISK_MAP.md`/`manifest.yaml` | manual |
 
 ## Render attestation (P5)
 
