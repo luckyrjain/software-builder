@@ -545,7 +545,7 @@ contested_findings:
     builder_position:
 fix_attempts:
   - finding_id:
-    attempt_number:
+    fix_attempt_number:
     head_commit:
     outcome: FIXED | STILL_OPEN
 rebuttal_log:
