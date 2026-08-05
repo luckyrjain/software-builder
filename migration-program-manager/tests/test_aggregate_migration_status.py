@@ -7,17 +7,21 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
+import pytest  # noqa: E402
+
 from aggregate_migration_status import (  # noqa: E402
     build_rollup,
     compute_staleness,
     derive_status,
     gate_signature,
     join_squad,
+    load_manifest,
     load_state,
     normalize_confidence,
     parse_migration_status,
     parse_squad_map,
     ManifestEntry,
+    ManifestError,
 )
 
 SQUAD_MAP_FIXTURE = """# Squad Map
@@ -238,6 +242,25 @@ class TestBuildRollup:
         items, gaps, new_state = build_rollup(manifest, state, now, staleness_threshold_days=14)
         assert items[0].status == "stalled"
 
+    def test_done_service_never_flagged_stalled_regardless_of_staleness(self, tmp_path):
+        # A finished migration's gate signature is expected to stay unchanged forever -- staleness
+        # must only ever escalate a genuinely still-unsettled ("in_progress") service, never "done".
+        ws = tmp_path / "ws"
+        ws.mkdir()
+        (ws / "MIGRATION_STATUS.yaml").write_text(
+            "schema_version: 1\nservices:\n  - name: svc-a\n    path: svc-a\n"
+            "    tier_focus: P0\n    scan_gate: pass\n    shadow_compare: pass\n    config_cutover: done\n",
+            encoding="utf-8",
+        )
+        now = datetime.now(timezone.utc)
+        sig = gate_signature({"scan_gate": "pass", "shadow_compare": "pass", "config_cutover": "done"})
+        twenty_days_ago = (now - timedelta(days=20)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        state = {f"{ws}::svc-a": {"gate_signature": sig, "first_observed_at": twenty_days_ago}}
+        manifest = [ManifestEntry(workspace_root=str(ws))]
+        items, gaps, new_state = build_rollup(manifest, state, now, staleness_threshold_days=14)
+        assert items[0].status == "done"
+        assert items[0].staleness_days == 20
+
     def test_blocked_outranks_stalled(self, tmp_path):
         ws = tmp_path / "ws"
         ws.mkdir()
@@ -274,3 +297,30 @@ class TestLoadState:
 
     def test_missing_state_file_returns_empty(self, tmp_path):
         assert load_state(str(tmp_path / "nope.json")) == {}
+
+
+class TestLoadManifest:
+    def test_parses_valid_manifest(self, tmp_path):
+        p = tmp_path / "manifest.json"
+        p.write_text('[{"workspace_root": "/ws1"}, {"workspace_root": "/ws2", "squad_map_path": "/other.md"}]', encoding="utf-8")
+        entries = load_manifest(str(p))
+        assert [e.workspace_root for e in entries] == ["/ws1", "/ws2"]
+        assert entries[1].squad_map_path == "/other.md"
+
+    def test_malformed_json_raises_manifest_error_not_a_raw_traceback(self, tmp_path):
+        p = tmp_path / "manifest.json"
+        p.write_text("{not valid json", encoding="utf-8")
+        with pytest.raises(ManifestError):
+            load_manifest(str(p))
+
+    def test_entry_missing_workspace_root_raises_manifest_error(self, tmp_path):
+        p = tmp_path / "manifest.json"
+        p.write_text('[{"squad_map_path": "/other.md"}]', encoding="utf-8")
+        with pytest.raises(ManifestError):
+            load_manifest(str(p))
+
+    def test_non_array_top_level_raises_manifest_error(self, tmp_path):
+        p = tmp_path / "manifest.json"
+        p.write_text('{"workspace_root": "/ws1"}', encoding="utf-8")
+        with pytest.raises(ManifestError):
+            load_manifest(str(p))

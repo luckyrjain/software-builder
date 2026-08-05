@@ -18,7 +18,7 @@ All notable changes to the migration-program-manager skill. Per-file `workflow_v
   Out-of-scope sections — the repo's first markdown-table parser), joins, computes staleness against
   persisted cross-run state (`gate_signature` + `first_observed_at` per service — genuinely new since
   `MIGRATION_STATUS.yaml` has no per-gate timestamp), `main(argv) -> int` CLI entrypoint, stdlib + PyYAML
-  only, 26 pytest cases in `tests/test_aggregate_migration_status.py`
+  only, 31 pytest cases in `tests/test_aggregate_migration_status.py`
 - Never invokes mysql-to-postgres-sql or squad-map live — pure file reads; a missing `SQUAD_MAP.md` joins
   as `squad: UNKNOWN` rather than triggering squad-map itself (same lesson `new-hire-guide`'s round-1
   review learned about narrowing a live wrapped-skill invocation's scope — this skill avoids the whole
@@ -58,3 +58,21 @@ All notable changes to the migration-program-manager skill. Per-file `workflow_v
 - 11 new pytest cases added covering the conflict tiebreak, confidence normalization, the dialect-only
   `done` case, malformed-YAML/malformed-state gap handling, and the `stalled` status derivation (26 total,
   up from 15).
+
+### Fixed (round-2 review, same day)
+- **The round-1 "stalled" fix over-applied the staleness override.** It escalated *any* non-`blocked`
+  status to `stalled` once staleness crossed the threshold, including `done` — since a completed
+  migration's gate signature is expected to stay unchanged forever once finished, every completed
+  migration eventually got flagged as a false "stalled" alarm on later runs. Fixed: the staleness
+  override now only applies to `status == "in_progress"`, per org-rollup-schema.md's own adapter
+  wording ("a gate has been pending/not_run past threshold") — `done` and `blocked` are never
+  reclassified by staleness.
+- **`load_manifest` had an unguarded `json.load` and unguarded `entry["workspace_root"]` access**,
+  the same crash class round-1 fixed for `MIGRATION_STATUS.yaml` and the state file, missed here. A
+  malformed `--manifest` or an entry missing `workspace_root` raised a raw Python traceback instead of
+  a clear error — worse than the other two cases, since a bad manifest kills the entire run before any
+  per-workspace gap is even possible. Added `ManifestError` (raised for invalid JSON, a non-array
+  top level, or a missing `workspace_root`); `main()` catches it and prints a one-line `error:` message
+  with exit code 1 instead of a stack trace.
+- 5 new pytest cases (`TestLoadManifest` × 4, plus a `done`-stays-`done`-under-staleness regression
+  test) — 31 total, up from 26.

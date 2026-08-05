@@ -79,16 +79,29 @@ class Gap:
     reason: str
 
 
+class ManifestError(ValueError):
+    """Raised when --manifest itself is missing/malformed. program_manifest is a top-level
+    caller input (workflow/inputs.md's HARD STOP), not a per-workspace artifact -- unlike a bad
+    MIGRATION_STATUS.yaml or state file, there is no single workspace to scope a gap to, so this
+    is surfaced as a clear error for the caller to fix, never a raw traceback."""
+
+
 def load_manifest(path: str) -> list[ManifestEntry]:
-    with open(path, encoding="utf-8") as fh:
-        raw = json.load(fh)
-    return [
-        ManifestEntry(
-            workspace_root=entry["workspace_root"],
-            squad_map_path=entry.get("squad_map_path"),
+    try:
+        with open(path, encoding="utf-8") as fh:
+            raw = json.load(fh)
+    except json.JSONDecodeError as exc:
+        raise ManifestError(f"{path} is not valid JSON: {exc}") from exc
+    if not isinstance(raw, list):
+        raise ManifestError(f"{path} must be a JSON array of {{workspace_root, squad_map_path?}} objects")
+    entries: list[ManifestEntry] = []
+    for i, entry in enumerate(raw):
+        if not isinstance(entry, dict) or not entry.get("workspace_root"):
+            raise ManifestError(f"{path}[{i}] is missing required field 'workspace_root'")
+        entries.append(
+            ManifestEntry(workspace_root=entry["workspace_root"], squad_map_path=entry.get("squad_map_path"))
         )
-        for entry in raw
-    ]
+    return entries
 
 
 def parse_migration_status(workspace_root: str) -> tuple[list[dict[str, Any]], Gap | None]:
@@ -263,9 +276,12 @@ def build_rollup(
 
             # org-rollup-schema.md's pg_migration_gate adapter documents 4 status values:
             # blocked / stalled / in_progress / done. blocked always wins (an active failure
-            # outranks mere inaction); otherwise a gate unchanged past the threshold is stalled.
+            # outranks mere inaction). staleness only escalates a gate that's genuinely still
+            # unsettled ("in_progress") -- a "done" service's gate signature is expected to stay
+            # unchanged forever once it's finished, so it must never be flagged as stalled just
+            # for staying done.
             status = derive_status(svc)
-            if status != "blocked" and staleness_days >= staleness_threshold_days:
+            if status == "in_progress" and staleness_days >= staleness_threshold_days:
                 status = "stalled"
 
             items.append(
@@ -299,7 +315,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out-rollup", required=True, help="Where to write migration_program_rollup.json")
     args = parser.parse_args(argv)
 
-    manifest = load_manifest(args.manifest)
+    try:
+        manifest = load_manifest(args.manifest)
+    except ManifestError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    if not manifest:
+        print(f"error: {args.manifest} is empty — program_manifest requires at least one workspace", file=sys.stderr)
+        return 1
     state = load_state(args.state_path)
     now = datetime.now(timezone.utc)
 
