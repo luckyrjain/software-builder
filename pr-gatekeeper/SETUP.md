@@ -1,0 +1,89 @@
+# pr-gatekeeper — Setup
+
+## Ambient discovery is deliberately disabled
+
+Unlike pr-review, this skill sets `disable-model-invocation: true` — it does not auto-apply from a
+human's natural-language chat turn. It's meant to be invoked explicitly, with a structured push-webhook
+payload, by the automation described below. A human asking to review an MR interactively should keep
+routing to **pr-review** directly.
+
+## Install
+
+```bash
+cd ai-skills
+make install-pr-gatekeeper
+```
+
+This chains `make install-pr-review` first — pr-gatekeeper has no review logic of its own and is useless
+without pr-review installed alongside it. Restart Cursor so both skills reload.
+
+### Claude Code
+
+```bash
+cd ai-skills
+make install-claude-pr-gatekeeper
+```
+
+No restart needed. See [claude-code-setup.md](../docs/skill-framework/shared/claude-code-setup.md).
+
+### Kiro / in-repo discovery
+
+Working directly in this repo? `.cursor/rules/pr-gatekeeper.mdc` and `.kiro/steering/pr-gatekeeper.md`
+point Cursor/Kiro at `pr-gatekeeper/SKILL.md` without an install step.
+
+## Prerequisites
+
+| Requirement | Notes |
+|-------------|-------|
+| pr-review installed and configured | GitLab MCP with write access for `full`/`summary-only` posting — see [pr-review/SETUP.md](../pr-review/SETUP.md) |
+| A push-webhook handler | Registers the GitLab webhook and invokes an agent session with this skill — see § Integration contract |
+
+## Integration contract (for whoever builds the webhook handler)
+
+This repo ships **agent instructions**, not a running webhook receiver — same boundary as
+who-owns-x-bot's Slack handler. The handler you build:
+
+1. Registers a GitLab **Push Events** webhook on the project(s) you want auto-reviewed, pointed at your
+   handler's endpoint.
+2. On each delivery, resolves the pushed branch to an open MR (GitLab's push webhook payload does not
+   always include the MR directly — you may need `GET /projects/:id/merge_requests?source_branch=...` to
+   find it). No open MR → no-op.
+3. Starts (or reuses) an agent session with this skill installed, passing `project`, `merge_request_iid`,
+   `head_sha`, and the project's configured `auto_post_authorized`.
+4. Implements the **two-message protocol** pr-gatekeeper's workflow depends on — see
+   [reference/auto-post-policy.md § The protocol](reference/auto-post-policy.md#the-protocol-exactly-two-messages-never-a-hang):
+   send the opening invocation, and if — and only if — the session's response is a Phase 3 confirmation
+   prompt from pr-review, send back the literal text `"Hold — don't post"` as the next turn. Never send
+   any other reply.
+5. When the run reports a routed notification instead of a posted comment, deliver it to wherever
+   § Config points (Slack channel, email, etc.) — pr-gatekeeper's own output is just text, the handler
+   does the actual delivery, same division of labor as who-owns-x-bot's Slack `response_url` posting.
+6. Debounce duplicate webhook deliveries for the same `head_sha` at the handler level too, if your GitLab
+   instance is known to redeliver — [workflow/inputs.md](workflow/inputs.md) also short-circuits on this,
+   but skipping the agent invocation entirely at the handler is cheaper.
+
+## Config
+
+| Setting | Where | Purpose |
+|---------|-------|---------|
+| `auto_post_authorized` | Handler config, per GitLab project, passed as input | Upfront human grant — never inferred. Off by default: a project only auto-posts once a maintainer explicitly turns it on. |
+| Notification target | Handler config | Where a held (not auto-posted) review gets routed — reuses pr-review's own [manual-notify template](../pr-review/workflow/posting.md#manual-notify-template-no-slack-mcp) |
+
+## Framework links
+
+- [skill-framework README](../docs/skill-framework/README.md)
+- [confidence-bands](../docs/skill-framework/shared/confidence-bands.md)
+- [cross-skill-escalation](../docs/skill-framework/shared/cross-skill-escalation.md)
+
+## Smoke test
+
+After install, run the invocation in [reference/smoke-test.md](reference/smoke-test.md) against an MR
+you're authorized to post to.
+
+## Troubleshooting
+
+| Symptom | Fix |
+|---------|-----|
+| Every run ends in "Hold" even with `auto_post_authorized: true` | Check pr-review's own detected posting mode and draft state — `general-only` and drafts always hold, by pr-review's own design, regardless of authorization |
+| Handler hangs waiting for a reply that never comes | Handler isn't implementing the two-message protocol (§ Integration contract step 4) — it must answer "Hold — don't post" whenever Phase 3 stops, not wait indefinitely |
+| Duplicate comments on the same push | Check webhook redelivery isn't bypassing the `head_sha` short-circuit — see § Integration contract step 6 |

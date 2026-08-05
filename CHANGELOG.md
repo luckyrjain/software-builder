@@ -26,6 +26,24 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
   "When NOT to use" table; fixed `report-template.md`'s completion-state vocabulary to match
   `state-schema.yaml`'s actual enum.
 
+## pr-gatekeeper
+
+### Initial release (2026-08-05)
+
+- New skill — item #2 of the [team-facing agents roadmap](docs/superpowers/plans/2026-08-05-team-facing-agents-roadmap.md):
+  a thin push-webhook-triggered wrapper that auto-runs **pr-review** on every push to an open MR and
+  posts inline when pr-review's own rules allow unattended posting.
+- `reference/auto-post-policy.md` — a deterministic two-message protocol (opening phrase depends on
+  `auto_post_authorized`; a single "Hold — don't post" reply whenever pr-review's Phase 3 stops and
+  waits) that never bypasses pr-review's `general-only`/draft-MR confirmation gates — those still always
+  hold, by pr-review's own non-negotiable rules.
+- `disable-model-invocation: true` — does not compete with pr-review's ambient chat invocation.
+- Design spec: [docs/superpowers/specs/2026-08-05-pr-gatekeeper-design.md](docs/superpowers/specs/2026-08-05-pr-gatekeeper-design.md).
+- Wired into `make install-pr-gatekeeper` / `make lint-pr-gatekeeper`, root README, docs/README,
+  docs/REPOSITORY, skill-routing.md, phase-glossary.md, cross-skill-escalation.md, prompt-injection.md —
+  and added to `lint-framework`'s 4 hardcoded per-skill loops from the start (a gap found and fixed
+  after-the-fact on who-owns-x-bot).
+
 ## who-owns-x-bot
 
 ### Initial release (2026-08-05)

@@ -20,6 +20,7 @@ Each skill is a self-contained directory copied to `~/.cursor/skills/<name>/` on
 | Skill | Human overview | Agent entry | Setup |
 |-------|----------------|-------------|-------|
 | **pr-review** | [pr-review/README.md](../pr-review/README.md) | [pr-review/SKILL.md](../pr-review/SKILL.md) | [pr-review/SETUP.md](../pr-review/SETUP.md) |
+| **pr-gatekeeper** | [pr-gatekeeper/README.md](../pr-gatekeeper/README.md) | [pr-gatekeeper/SKILL.md](../pr-gatekeeper/SKILL.md) | [pr-gatekeeper/SETUP.md](../pr-gatekeeper/SETUP.md) |
 | **incident-rca** | [incident-rca/README.md](../incident-rca/README.md) | [incident-rca/SKILL.md](../incident-rca/SKILL.md) | [incident-rca/SETUP.md](../incident-rca/SETUP.md) |
 | **k8s-overprovisioning-datadog** | [k8s-overprovisioning-datadog/README.md](../k8s-overprovisioning-datadog/README.md) | [k8s-overprovisioning-datadog/SKILL.md](../k8s-overprovisioning-datadog/SKILL.md) | [k8s-overprovisioning-datadog/SETUP.md](../k8s-overprovisioning-datadog/SETUP.md) |
 | **domain-comprehension** | [domain-comprehension/README.md](../domain-comprehension/README.md) | [domain-comprehension/SKILL.md](../domain-comprehension/SKILL.md) | [domain-comprehension/SETUP.md](../domain-comprehension/SETUP.md) |
@@ -33,6 +34,7 @@ Each skill is a self-contained directory copied to `~/.cursor/skills/<name>/` on
 | Skill | Invoke | Does |
 |-------|--------|------|
 | **pr-review** | `/pr-review` or "review this MR/PR …" | Reviews GitLab merge requests: loads diff + Jira context, emits severity-tagged findings, optionally posts inline threads and a summary note via GitLab MCP |
+| **pr-gatekeeper** | Push webhook, not ambient chat | Auto-runs pr-review on every push to an open MR; posts when pr-review's own confirmation rules allow it unattended, otherwise routes to notification |
 | **incident-rca** | Natural language ("RCA for …") | Multi-source post-incident investigation (Datadog, KubeSense, GitLab, Jenkins, Jira) → manager-ready RCA report with hypotheses and evidence |
 | **k8s-overprovisioning-datadog** | Natural language ("is X overprovisioned?") | Datadog-driven K8s deployment optimization assessment: CPU/memory/replica verdicts, waste estimate, cost, rollback guidance |
 | **domain-comprehension** | Natural language ("map the domain …") | Evidence-backed domain comprehension across repos: bounded contexts, data ownership, dependency graphs, business flows, exec summary with confidence |
@@ -65,6 +67,7 @@ Skills reference each other when a finding belongs in another workflow:
 | mysql-to-postgres-sql | Migration MR needs review | pr-review |
 | mysql-to-postgres-sql | Cutover regression / wrong query results | incident-rca |
 | loop-task-implementer | Task's MR needs review beyond its own lenses | pr-review |
+| pr-gatekeeper | Caller wants an interactive, on-demand review | pr-review |
 | loop-task-implementer | Task implementation causes/needs incident investigation | incident-rca |
 | loop-task-implementer | Task needs unfamiliar-codebase context first | domain-comprehension |
 | loop-task-implementer | Task touches MySQL-dialect SQL during a PG migration | mysql-to-postgres-sql |
@@ -82,6 +85,7 @@ Full symmetric matrix (forward + reverse escalations):
 | [superpowers/specs/2026-07-02-platform-evolution-strategy-design.md](superpowers/specs/2026-07-02-platform-evolution-strategy-design.md) | 12–24 month platform evolution strategy: maturity assessment, eval harness, distribution, roadmap |
 | [superpowers/plans/2026-08-05-team-facing-agents-roadmap.md](superpowers/plans/2026-08-05-team-facing-agents-roadmap.md) | Team-facing agents brainstorm: 11 candidate bots/jobs composing the 7 skills for real team workflows |
 | [superpowers/specs/2026-08-05-who-owns-x-bot-design.md](superpowers/specs/2026-08-05-who-owns-x-bot-design.md) | who-owns-x-bot design — item #1 of the team-facing agents roadmap |
+| [superpowers/specs/2026-08-05-pr-gatekeeper-design.md](superpowers/specs/2026-08-05-pr-gatekeeper-design.md) | pr-gatekeeper design — item #2 of the team-facing agents roadmap |
 
 These are planning artifacts; the live behavior is defined in `pr-review/SKILL.md` and `pr-review/reference/`.
 
@@ -103,6 +107,15 @@ These are planning artifacts; the live behavior is defined in `pr-review/SKILL.m
 | `scripts/diff-to-positions.py` | Map diff hunks to GitLab inline comment positions |
 | `tests/test_diff_to_positions.py` | Pytest suite for the position helper |
 | `examples/review-rules.yaml` | Starter template for per-repo review overrides |
+
+## pr-gatekeeper file map
+
+| Path | What it does |
+|------|--------------|
+| `workflow/inputs.md` | Webhook event filtering, `head_sha` dedupe short-circuit |
+| `workflow/gatekeep.md` | Invoke pr-review, apply auto-post-policy, route notification |
+| `reference/auto-post-policy.md` | The two-message protocol reconciling unattended runs with pr-review's Phase 3 gate |
+| `reference/smoke-test.md` | Post-install validation steps |
 
 ## incident-rca file map
 

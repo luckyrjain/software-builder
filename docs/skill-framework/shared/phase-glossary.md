@@ -29,6 +29,17 @@
 
 Posting phases (3–4) are sub-steps of Report; Phase 5 executive summary is the primary deliverable.
 
+### pr-gatekeeper mapping
+
+| Phase | File | Canonical |
+|-------|------|-----------|
+| Inputs | `workflow/inputs.md` | Detect (partial — webhook event filtering) |
+| Gatekeep | `workflow/gatekeep.md` | Gather + Report (delegated entirely to pr-review's own phases) |
+
+No Analyze/Correlate/Rank of its own — pr-gatekeeper's only original logic is the auto-post decision
+(`reference/auto-post-policy.md`), which reconciles with pr-review's own Validate/Report phases rather
+than replacing them.
+
 ## 3. incident-rca mapping
 
 | Phase | File | Canonical |

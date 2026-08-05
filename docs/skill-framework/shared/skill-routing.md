@@ -12,7 +12,8 @@ When adding a new skill, add it here first; then each existing skill only needs 
 |------------------------|----------|-----------|
 | Overprovisioned, right-size, rightsizing, CPU/memory requests, HPA, replicas, throttling, OOM (sizing context), Kafka consumer lag (scaling), cost/waste, namespace waste ranking | **k8s-overprovisioning-datadog** | incident-rca, pr-review |
 | RCA, root cause, postmortem, incident, outage, 5xx spike, error spike, deploy regression (time-window), consumer lag (incident), SLO breach, P1/P2, INC-, on-call | **incident-rca** | k8s, pr-review |
-| Review MR, review merge request, review !IID, /pr-review, re-review, post-merge audit, list open MRs, review as SRE/security/architect | **pr-review** | incident-rca, k8s |
+| Review MR, review merge request, review !IID, /pr-review, re-review, post-merge audit, list open MRs, review as SRE/security/architect (interactive, conversational) | **pr-review** | incident-rca, k8s |
+| GitLab push-event webhook, automated review on every push, no follow-up turn possible | **pr-gatekeeper** | pr-review (that's what it delegates to internally — do not call pr-review directly for an unattended webhook run, its own posting confirmation is designed to wait for a human chat turn) |
 | Domain comprehension, bounded context, data ownership, critical path, architecture smells, subsystem onboarding, multi-repo ground truth, five questions | **domain-comprehension** | squad-map (ownership only), incident-rca |
 | Squad map, ownership, who owns, CODEOWNERS, GitLab group, Datadog team, team reconciliation (interactive, conversational) | **squad-map** | domain-comprehension (full map) |
 | `/who-owns` Slack slash command, single-shot automated ownership lookup with a structured `query`, no follow-up turn possible | **who-owns-x-bot** | squad-map (that's what it delegates to internally — do not call squad-map directly for a single-shot Slack reply, its output contract is a markdown file + chat summary, not one message) |
@@ -36,6 +37,8 @@ When adding a new skill, add it here first; then each existing skill only needs 
 9. **Migration MR review** → pr-review (even if diff is SQL rewrites)
 10. **Ownership request from an automated, single-shot caller** (Slack slash command, no follow-up turn) →
     who-owns-x-bot; **ownership request from an interactive human turn** → squad-map directly
+11. **Review request from a push webhook, no human turn available** → pr-gatekeeper; **review request from
+    an interactive human turn** → pr-review directly
 
 ## Ambiguous requests — ask
 

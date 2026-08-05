@@ -1,0 +1,74 @@
+# Examples — invocation patterns
+
+Conventions: [examples-conventions](../docs/skill-framework/shared/examples-conventions.md).
+
+## Invocation table
+
+| # | Webhook event | Behavior |
+|---|------------------|----------|
+| 1 | Push to MR !482, `auto_post_authorized: true`, pr-review detects `full` mode, MR not draft | Inputs → Gatekeep → "review and post" → skip condition met → posted, no Phase 3 prompt |
+| 2 | Push to MR !482, `auto_post_authorized: true`, pr-review detects `general-only` | Inputs → Gatekeep → Phase 3 always prompts (pr-review's own rule) → "Hold — don't post" → routed notification |
+| 3 | Push to MR !482, `auto_post_authorized: true`, MR is a draft | Inputs → Gatekeep → draft-MR warning prompts → "Hold — don't post" → routed notification |
+| 4 | Push to MR !482, `auto_post_authorized: false` | Inputs → Gatekeep → no post phrase supplied → Phase 3 prompts → "Hold — don't post" → routed notification |
+| 5 | Push with `head_sha` identical to the last processed push on !482 (duplicate webhook delivery) | Inputs short-circuit — Gatekeep never runs, no second pr-review invocation |
+| 6 | Push to a branch with no open MR | Inputs short-circuit — no-op |
+| 7 | Label added / comment posted on !482 (not a push event) | Inputs short-circuit — pr-gatekeeper only reacts to push events |
+| 8 | "Review this MR" typed in an interactive chat session | **Wrong skill** → pr-review (this skill doesn't auto-invoke; see `disable-model-invocation`) |
+| 9 | pr-review's own `chat-only` mode detected (read-only GitLab MCP) | Phase 3 skipped entirely by pr-review's own rules; nothing posted; routed notification same as a Hold outcome |
+
+---
+
+### Scenario: Auto-posted — happy path
+
+**Webhook:** push to MR !482, `auto_post_authorized: true`
+
+**Agent:**
+
+1. Inputs — new `head_sha`, resolves to open MR !482
+2. Gatekeep — invokes pr-review with "review and post !482 in acme/backend"; pr-review detects `full`
+   mode, MR is not draft → skip condition met, Phase 3 never prompts
+3. pr-review posts inline threads + summary note; Phase 5 executive summary renders
+4. Outcome: posted, no notification needed
+
+---
+
+### Scenario: Held — general-only mode
+
+**Webhook:** push to MR !482, `auto_post_authorized: true`, project's GitLab MCP is the official
+`general-only` server
+
+**Agent:** pr-review's Phase 0 shows the ⚠️ general-only warning; Phase 3 **always** prompts regardless
+of phrasing → automation replies `"Hold — don't post"` → pr-review completes Phase 5 in chat only →
+pr-gatekeeper routes the rendered review via the configured notification.
+
+**Expected fragment (routed notification):**
+
+```
+Subject: MR !482 review — Comment
+
+Reviewed 2026-08-05T14:02:00Z on head 9f1a2c3.
+Recommendation: Comment
+Blocking: None
+Summary: Two medium findings, no criticals.
+MR: https://gitlab.example.com/acme/backend/-/merge_requests/482
+```
+
+---
+
+### Scenario: Held — not authorized
+
+**Webhook:** push to MR !482, `auto_post_authorized: false` (default — maintainer hasn't opted the
+project in yet)
+
+**Agent:** Opening message omits "review and post" → pr-review's Phase 3 prompts regardless of mode →
+`"Hold — don't post"` → routed notification, same shape as the general-only case above.
+
+---
+
+### Scenario: Cross-skill — wrong entry point
+
+**Caller:** (human, typing in an interactive session) "Review MR !482"
+
+**Agent:** This skill does not auto-invoke (`disable-model-invocation: true`); the request routes to
+**pr-review** instead, per pr-review's own invocation table
+([pr-review/examples.md § Invocation](../pr-review/examples.md)).

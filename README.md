@@ -19,6 +19,7 @@ Each skill has a human **`README.md`** (what it does) separate from **`SKILL.md`
 | Skill | Invoke | What it does | Docs |
 |-------|--------|--------------|------|
 | [pr-review](pr-review/) | `/pr-review` or "review this MR/PR …" | GitLab MR review: diff + Jira AC, severity findings, optional inline posts | [README](pr-review/README.md) · [SETUP](pr-review/SETUP.md) |
+| [pr-gatekeeper](pr-gatekeeper/) | Push webhook (not human chat) | Auto-runs pr-review on every push to an open MR; posts inline when pr-review's own rules allow unattended posting | [README](pr-gatekeeper/README.md) · [SETUP](pr-gatekeeper/SETUP.md) |
 | [k8s-overprovisioning-datadog](k8s-overprovisioning-datadog/) | "Is `<service>` overprovisioned?" | K8s DORA report: CPU/memory/replica verdicts, waste, cost via Datadog | [README](k8s-overprovisioning-datadog/README.md) · [SETUP](k8s-overprovisioning-datadog/SETUP.md) |
 | [incident-rca](incident-rca/) | "RCA for … between …" | Multi-source post-incident RCA (Datadog, KubeSense, GitLab, Jenkins, Jira) | [README](incident-rca/README.md) · [SETUP](incident-rca/SETUP.md) |
 | [domain-comprehension](domain-comprehension/) | "map the domain …", "bounded contexts for …" | Evidence-backed domain map: bounded contexts, data ownership, dependency graphs, business flows, exec summary | [README](domain-comprehension/README.md) · [SETUP](domain-comprehension/SETUP.md) |
@@ -39,6 +40,7 @@ Install a single skill:
 
 ```bash
 make install-pr-review
+make install-pr-gatekeeper
 make install-k8s-overprovisioning
 make install-incident-rca
 make install-domain-comprehension
@@ -56,6 +58,7 @@ Or run the script directly:
 ```bash
 bash scripts/install.sh                    # all skills
 bash scripts/install.sh pr-review          # one skill
+bash scripts/install.sh pr-gatekeeper
 bash scripts/install.sh k8s-overprovisioning-datadog
 bash scripts/install.sh incident-rca
 bash scripts/install.sh domain-comprehension
@@ -107,6 +110,7 @@ Run lint manually:
 ```bash
 make lint               # all skill lint targets + lint-framework + shellcheck on scripts/*.sh
 make lint-pr-review     # pr-review SKILL line limit, workflow frontmatter, anchors, pytest
+make lint-pr-gatekeeper # pr-gatekeeper SKILL line limit, frontmatter, anchors, required files
 make lint-k8s-skill     # k8s SKILL line limit, workflow frontmatter, report schema, anchors
 make lint-incident-rca  # incident-rca SKILL line limit, workflow frontmatter, evidence JSON, anchors
 make lint-domain-comprehension  # domain-comprehension SKILL line limit, frontmatter, anchors, manifest validator
@@ -119,6 +123,7 @@ make lint-loop-task-implementer # loop-task-implementer SKILL line limit, workfl
 | Target | Checks |
 |--------|--------|
 | `lint-pr-review` | `SKILL.md` ≤ 180 lines; `workflow_version`/`phase`/`produces`/`consumes` frontmatter; dangling markdown anchors under `pr-review/`; `py_compile` + pytest for `diff-to-positions.py` |
+| `lint-pr-gatekeeper` | `SKILL.md` ≤ 180 lines; `disable-model-invocation: true` set; workflow frontmatter; dangling anchors; required reference files |
 | `lint-k8s-skill` | `SKILL.md` ≤ 150 lines; frontmatter; `report-schema.md` + templates; memory-sizing p95 rule; anchors |
 | `lint-incident-rca` | `SKILL.md` ≤ 180 lines; frontmatter; valid `evidence.example.json`; causal-graph validator; anchors |
 | `lint-domain-comprehension` | `SKILL.md` ≤ 180 lines; workflow frontmatter; dangling anchors; `templates/manifest.yaml` validator + pytest; pressure harness |
@@ -141,6 +146,7 @@ or a Docker/Linux runner (deps installed via `apt-get` in the pipeline).
 | Skill | MCP servers | Setup |
 |-------|-------------|-------|
 | pr-review | GitLab (required), Jira (optional) | [pr-review/SETUP.md](pr-review/SETUP.md) |
+| pr-gatekeeper | None of its own — delegates to pr-review | [pr-gatekeeper/SETUP.md](pr-gatekeeper/SETUP.md) |
 | k8s-overprovisioning-datadog | Datadog | [k8s-overprovisioning-datadog/SETUP.md](k8s-overprovisioning-datadog/SETUP.md) |
 | incident-rca | Datadog, KubeSense, GitLab, Jenkins, Jira (+ optional correlator CLI) | [incident-rca/SETUP.md](incident-rca/SETUP.md) |
 | domain-comprehension | GitLab (optional, Session 0b via squad-map), Datadog (optional, P2b runtime validation) | [domain-comprehension/SETUP.md](domain-comprehension/SETUP.md) |
@@ -189,6 +195,28 @@ live in [pr-review/examples.md](pr-review/examples.md).
 - Full review in chat (findings table, verdict, pipeline status)
 - Optional GitLab posts: inline threads on diff lines + summary note (depends on MCP — see SETUP.md)
 - Jira acceptance-criteria check when a ticket key is found in the MR title, branch, labels, or links
+
+---
+
+## Usage (pr-gatekeeper)
+
+A GitLab push webhook invokes this skill with a structured payload — it does **not** auto-invoke from
+ambient chat (`disable-model-invocation: true`). A human asking to review an MR routes to **pr-review**
+directly (see [pr-gatekeeper/SETUP.md](pr-gatekeeper/SETUP.md)).
+
+### Examples
+
+| Webhook sends | What happens |
+|------------------|----------------|
+| Push to MR !482, project authorized, `full`/`summary-only` mode, non-draft | pr-review posts inline, no confirmation prompt (pr-review's own skip condition met) |
+| Push to MR !482, `general-only` mode or draft MR | pr-review always holds — routed to notification instead |
+| Push to MR !482, project not authorized to auto-post | Same as above — held, routed to notification |
+
+### What you get (pr-gatekeeper)
+
+- Whatever pr-review itself produces — this skill adds no review logic of its own
+- A routed notification (reusing pr-review's own manual-notify template) whenever pr-review's own rules
+  mean this push can't auto-post
 
 ---
 
