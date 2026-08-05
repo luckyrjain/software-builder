@@ -38,7 +38,11 @@ The script (see the script's own module docstring for its exact function-level c
 4. Loads the prior run's state from `state_path` (absent on first run — treat as empty, every service
    starts at staleness 0, not an error). Computes each service's `gate_signature`
    (`scan_gate`/`shadow_compare`/`config_cutover` tuple); unchanged since last run → staleness = now −
-   stored `first_observed_at`; changed or new → reset `first_observed_at` to now, staleness 0.
+   stored `first_observed_at`; changed or new → reset `first_observed_at` to now, staleness 0. The item's
+   `status` (per org-rollup-schema.md's `pg_migration_gate` adapter: `blocked` / `stalled` / `in_progress`
+   / `done`) is finalized here, not just at render time — `blocked` always wins over staleness; otherwise a
+   service whose staleness has reached `staleness_threshold_days` is written as `stalled` directly into
+   `migration_program_rollup.json`, so a downstream reader of the JSON never has to re-derive it.
 5. Writes the updated state back to `state_path` — **this file belongs to this skill alone**;
    mysql-to-postgres-sql never reads or knows about it.
 6. Emits `migration_program_rollup.json` (the full `org_rollup_item` list) and structured rollup data for

@@ -98,8 +98,11 @@ def parse_migration_status(workspace_root: str) -> tuple[list[dict[str, Any]], G
         return [], Gap(workspace_root, "MIGRATION_STATUS.yaml not found — run mysql-to-postgres-sql first")
     if yaml is None:  # pragma: no cover - exercised only without PyYAML installed
         return [], Gap(workspace_root, "PyYAML not installed — cannot parse MIGRATION_STATUS.yaml")
-    with open(status_path, encoding="utf-8") as fh:
-        data = yaml.safe_load(fh) or {}
+    try:
+        with open(status_path, encoding="utf-8") as fh:
+            data = yaml.safe_load(fh) or {}
+    except yaml.YAMLError as exc:
+        return [], Gap(workspace_root, f"MIGRATION_STATUS.yaml is not valid YAML: {exc}")
     services = data.get("services") or []
     return services, None
 
@@ -144,24 +147,51 @@ def parse_squad_map(squad_map_path: Path) -> list[dict[str, str]]:
     return rows
 
 
+def normalize_confidence(raw: str | None) -> str:
+    """Squad-map's own Confidence cells sometimes carry an annotation (e.g. 'MEDIUM ⚠️' on a
+    Conflicts-adjacent row) -- take the leading token only, and fall back to UNKNOWN for
+    anything outside the org-rollup-schema.md squad_confidence enum (HIGH/MEDIUM/LOW/UNKNOWN)."""
+    if not raw or not raw.strip():
+        return "UNKNOWN"
+    token = raw.strip().split()[0].upper()
+    return token if token in {"HIGH", "MEDIUM", "LOW"} else "UNKNOWN"
+
+
 def join_squad(service_path: str, service_name: str, squad_rows: list[dict[str, str]]) -> tuple[str, str]:
-    """Match a MIGRATION_STATUS.yaml service to a squad. Returns (squad, confidence)."""
+    """Match a MIGRATION_STATUS.yaml service to a squad. Returns (squad, confidence).
+
+    When a row carries both a GitLab squad and a Datadog team and they differ (squad-map's own
+    Conflicts case), prefer Datadog team -- squad-map's documented tiebreak (runtime ownership
+    over static GitLab grouping), per org-rollup-schema.md and squad-mapping.md's Reconciliation
+    table. Never invent a different tiebreak here.
+    """
     for candidate in (service_path, service_name):
         if not candidate:
             continue
         for row in squad_rows:
             if row.get("Repo", "").strip() == candidate.strip():
-                squad = row.get("GitLab squad") or row.get("Datadog team") or "UNKNOWN"
-                confidence = row.get("Confidence", "UNKNOWN")
-                return squad or "UNKNOWN", confidence or "UNKNOWN"
+                gitlab_squad = (row.get("GitLab squad") or "").strip()
+                datadog_team = (row.get("Datadog team") or "").strip()
+                if gitlab_squad and datadog_team and gitlab_squad != datadog_team:
+                    squad = datadog_team
+                else:
+                    squad = gitlab_squad or datadog_team or "UNKNOWN"
+                confidence = normalize_confidence(row.get("Confidence"))
+                return squad, confidence
     return "UNKNOWN", "UNKNOWN"
 
 
 def derive_status(svc: dict[str, Any]) -> str:
-    gates = (svc.get("scan_gate"), svc.get("shadow_compare"), svc.get("config_cutover"))
-    if "fail" in gates:
+    scan_gate = svc.get("scan_gate")
+    shadow_compare = svc.get("shadow_compare")
+    config_cutover = svc.get("config_cutover")
+    if "fail" in (scan_gate, shadow_compare, config_cutover):
         return "blocked"
-    if svc.get("scan_gate") == "pass" and svc.get("shadow_compare") == "pass" and svc.get("config_cutover") == "done":
+    # shadow_compare/config_cutover legitimately settle at "n/a" for dialect-only services with
+    # nothing to shadow-compare or cut over (mysql-to-postgres-sql's own template documents this).
+    shadow_settled = shadow_compare in ("pass", "n/a")
+    cutover_settled = config_cutover in ("done", "n/a")
+    if scan_gate == "pass" and shadow_settled and cutover_settled:
         return "done"
     return "in_progress"
 
@@ -174,8 +204,12 @@ def load_state(state_path: str) -> dict[str, dict[str, str]]:
     p = Path(state_path)
     if not p.exists():
         return {}
-    with open(p, encoding="utf-8") as fh:
-        return json.load(fh)
+    try:
+        with open(p, encoding="utf-8") as fh:
+            return json.load(fh)
+    except json.JSONDecodeError as exc:
+        print(f"warning: {state_path} is not valid JSON ({exc}); starting from empty state", file=sys.stderr)
+        return {}
 
 
 def save_state(state_path: str, state: dict[str, dict[str, str]]) -> None:
@@ -204,6 +238,7 @@ def build_rollup(
     manifest: list[ManifestEntry],
     state: dict[str, dict[str, str]],
     now: datetime,
+    staleness_threshold_days: int,
 ) -> tuple[list[RollupItem], list[Gap], dict[str, dict[str, str]]]:
     items: list[RollupItem] = []
     gaps: list[Gap] = []
@@ -226,6 +261,13 @@ def build_rollup(
             staleness_days, state_entry = compute_staleness(entry.workspace_root, svc, state, now)
             new_state[f"{entry.workspace_root}::{name}"] = state_entry
 
+            # org-rollup-schema.md's pg_migration_gate adapter documents 4 status values:
+            # blocked / stalled / in_progress / done. blocked always wins (an active failure
+            # outranks mere inaction); otherwise a gate unchanged past the threshold is stalled.
+            status = derive_status(svc)
+            if status != "blocked" and staleness_days >= staleness_threshold_days:
+                status = "stalled"
+
             items.append(
                 RollupItem(
                     service=name,
@@ -233,7 +275,7 @@ def build_rollup(
                     squad_confidence=confidence,
                     source_skill="mysql-to-postgres-sql",
                     metric_type="pg_migration_gate",
-                    status=derive_status(svc),
+                    status=status,
                     priority=svc.get("tier_focus") if svc.get("tier_focus") != "dialect-only" else None,
                     value={
                         "scan_gate": svc.get("scan_gate"),
@@ -261,7 +303,7 @@ def main(argv: list[str] | None = None) -> int:
     state = load_state(args.state_path)
     now = datetime.now(timezone.utc)
 
-    items, gaps, new_state = build_rollup(manifest, state, now)
+    items, gaps, new_state = build_rollup(manifest, state, now, args.staleness_threshold_days)
     save_state(args.state_path, new_state)
 
     Path(args.out_rollup).write_text(
@@ -272,7 +314,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"gap: {gap.workspace_root}: {gap.reason}", file=sys.stderr)
 
     blocked = sum(1 for i in items if i.status == "blocked")
-    stalled = sum(1 for i in items if i.staleness_days >= args.staleness_threshold_days)
+    stalled = sum(1 for i in items if i.status == "stalled")
     print(f"{len(items)} services, {blocked} blocked, {stalled} stalled, {len(gaps)} workspace gaps")
     return 0
 

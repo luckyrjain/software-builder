@@ -13,6 +13,9 @@ from aggregate_migration_status import (  # noqa: E402
     derive_status,
     gate_signature,
     join_squad,
+    load_state,
+    normalize_confidence,
+    parse_migration_status,
     parse_squad_map,
     ManifestEntry,
 )
@@ -88,6 +91,30 @@ class TestJoinSquad:
         assert squad == "UNKNOWN"
         assert confidence == "UNKNOWN"
 
+    def test_conflict_row_prefers_datadog_team_over_gitlab_squad(self):
+        # squad-map's own documented tiebreak (runtime ownership over static GitLab grouping,
+        # per org-rollup-schema.md and squad-mapping.md's Reconciliation table) -- never GitLab
+        # squad when the two disagree.
+        rows = [{"Repo": "legacy-ledger", "GitLab squad": "payments", "Datadog team": "collections", "Confidence": "MEDIUM"}]
+        squad, confidence = join_squad("legacy-ledger", "legacy-ledger", rows)
+        assert squad == "collections"
+
+    def test_confidence_annotation_normalized_to_enum(self):
+        rows = [{"Repo": "legacy-ledger", "GitLab squad": "payments", "Datadog team": "collections", "Confidence": "MEDIUM ⚠️ conflict"}]
+        _, confidence = join_squad("legacy-ledger", "legacy-ledger", rows)
+        assert confidence == "MEDIUM"
+
+
+class TestNormalizeConfidence:
+    def test_plain_values_pass_through(self):
+        assert normalize_confidence("HIGH") == "HIGH"
+        assert normalize_confidence("low") == "LOW"
+
+    def test_unrecognized_or_empty_falls_back_to_unknown(self):
+        assert normalize_confidence("") == "UNKNOWN"
+        assert normalize_confidence(None) == "UNKNOWN"
+        assert normalize_confidence("n/a") == "UNKNOWN"
+
 
 class TestDeriveStatus:
     def test_blocked_on_any_fail(self):
@@ -98,6 +125,11 @@ class TestDeriveStatus:
 
     def test_in_progress_otherwise(self):
         assert derive_status({"scan_gate": "pass", "shadow_compare": "pending", "config_cutover": "pending"}) == "in_progress"
+
+    def test_done_when_dialect_only_gates_are_not_applicable(self):
+        # mysql-to-postgres-sql's own template documents n/a as the legitimate terminal value for
+        # a dialect-only service with nothing to shadow-compare or cut over.
+        assert derive_status({"scan_gate": "pass", "shadow_compare": "n/a", "config_cutover": "n/a"}) == "done"
 
 
 class TestStaleness:
@@ -132,7 +164,7 @@ class TestBuildRollup:
         ws = tmp_path / "empty-workspace"
         ws.mkdir()
         manifest = [ManifestEntry(workspace_root=str(ws))]
-        items, gaps, state = build_rollup(manifest, {}, datetime.now(timezone.utc))
+        items, gaps, state = build_rollup(manifest, {}, datetime.now(timezone.utc), staleness_threshold_days=14)
         assert items == []
         assert len(gaps) == 1
         assert "MIGRATION_STATUS.yaml not found" in gaps[0].reason
@@ -146,7 +178,7 @@ class TestBuildRollup:
             encoding="utf-8",
         )
         manifest = [ManifestEntry(workspace_root=str(ws))]
-        items, gaps, state = build_rollup(manifest, {}, datetime.now(timezone.utc))
+        items, gaps, state = build_rollup(manifest, {}, datetime.now(timezone.utc), staleness_threshold_days=14)
         assert len(items) == 1
         assert items[0].squad == "UNKNOWN"
         assert any("SQUAD_MAP.md" in g.reason for g in gaps)
@@ -167,9 +199,78 @@ class TestBuildRollup:
             encoding="utf-8",
         )
         manifest = [ManifestEntry(workspace_root=str(ws1)), ManifestEntry(workspace_root=str(ws2))]
-        items, gaps, state = build_rollup(manifest, {}, datetime.now(timezone.utc))
+        items, gaps, state = build_rollup(manifest, {}, datetime.now(timezone.utc), staleness_threshold_days=14)
         names = {i.service for i in items}
         assert names == {"svc-a", "svc-b"}
         statuses = {i.service: i.status for i in items}
         assert statuses["svc-a"] == "done"
         assert statuses["svc-b"] == "blocked"
+
+    def test_malformed_yaml_is_a_gap_not_a_crash_for_other_workspaces(self, tmp_path):
+        broken = tmp_path / "broken"
+        broken.mkdir()
+        (broken / "MIGRATION_STATUS.yaml").write_text("services: [unterminated", encoding="utf-8")
+        ok = tmp_path / "ok"
+        ok.mkdir()
+        (ok / "MIGRATION_STATUS.yaml").write_text(
+            "schema_version: 1\nservices:\n  - name: svc-a\n    path: svc-a\n"
+            "    tier_focus: P0\n    scan_gate: pass\n    shadow_compare: pass\n    config_cutover: done\n",
+            encoding="utf-8",
+        )
+        manifest = [ManifestEntry(workspace_root=str(broken)), ManifestEntry(workspace_root=str(ok))]
+        items, gaps, state = build_rollup(manifest, {}, datetime.now(timezone.utc), staleness_threshold_days=14)
+        assert {i.service for i in items} == {"svc-a"}
+        assert any("not valid YAML" in g.reason for g in gaps if g.workspace_root == str(broken))
+
+    def test_unchanged_signature_past_threshold_is_stalled_not_in_progress(self, tmp_path):
+        ws = tmp_path / "ws"
+        ws.mkdir()
+        (ws / "MIGRATION_STATUS.yaml").write_text(
+            "schema_version: 1\nservices:\n  - name: svc-a\n    path: svc-a\n"
+            "    tier_focus: P0\n    scan_gate: pass\n    shadow_compare: pending\n    config_cutover: pending\n",
+            encoding="utf-8",
+        )
+        now = datetime.now(timezone.utc)
+        sig = gate_signature({"scan_gate": "pass", "shadow_compare": "pending", "config_cutover": "pending"})
+        twenty_days_ago = (now - timedelta(days=20)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        state = {f"{ws}::svc-a": {"gate_signature": sig, "first_observed_at": twenty_days_ago}}
+        manifest = [ManifestEntry(workspace_root=str(ws))]
+        items, gaps, new_state = build_rollup(manifest, state, now, staleness_threshold_days=14)
+        assert items[0].status == "stalled"
+
+    def test_blocked_outranks_stalled(self, tmp_path):
+        ws = tmp_path / "ws"
+        ws.mkdir()
+        (ws / "MIGRATION_STATUS.yaml").write_text(
+            "schema_version: 1\nservices:\n  - name: svc-a\n    path: svc-a\n"
+            "    tier_focus: P0\n    scan_gate: fail\n    shadow_compare: pending\n    config_cutover: pending\n",
+            encoding="utf-8",
+        )
+        now = datetime.now(timezone.utc)
+        sig = gate_signature({"scan_gate": "fail", "shadow_compare": "pending", "config_cutover": "pending"})
+        twenty_days_ago = (now - timedelta(days=20)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        state = {f"{ws}::svc-a": {"gate_signature": sig, "first_observed_at": twenty_days_ago}}
+        manifest = [ManifestEntry(workspace_root=str(ws))]
+        items, gaps, new_state = build_rollup(manifest, state, now, staleness_threshold_days=14)
+        assert items[0].status == "blocked"
+
+
+class TestParseMigrationStatus:
+    def test_malformed_yaml_returns_gap_not_raises(self, tmp_path):
+        ws = tmp_path / "ws"
+        ws.mkdir()
+        (ws / "MIGRATION_STATUS.yaml").write_text("services: [unterminated", encoding="utf-8")
+        services, gap = parse_migration_status(str(ws))
+        assert services == []
+        assert gap is not None
+        assert "not valid YAML" in gap.reason
+
+
+class TestLoadState:
+    def test_corrupted_state_file_falls_back_to_empty(self, tmp_path):
+        p = tmp_path / "state.json"
+        p.write_text("{not valid json", encoding="utf-8")
+        assert load_state(str(p)) == {}
+
+    def test_missing_state_file_returns_empty(self, tmp_path):
+        assert load_state(str(tmp_path / "nope.json")) == {}
