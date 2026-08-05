@@ -29,8 +29,9 @@ Conventions: [examples-conventions](../docs/skill-framework/shared/examples-conv
 **Agent:**
 
 1. Inputs — all required fields present
-2. Triage — window `14:02:00Z`–`14:32:00Z`; invokes incident-rca with the fast phrasing (Jira search
-   skipped); invokes squad-map for `neo-disbursement-service`
+2. Triage — window `14:02:00Z`–`14:32:00Z`; invokes incident-rca with its unmodified canonical phrasing;
+   Phase 2's checkpoint fires and gets the `"skip Phase 3"` reply, jumping straight to Phase 4; invokes
+   squad-map for `neo-disbursement-service`
 3. incident-rca returns a HIGH-confidence `deploy_regression` hypothesis; squad-map returns `disbursement`
    squad, HIGH confidence
 4. Assembles and routes the triage doc

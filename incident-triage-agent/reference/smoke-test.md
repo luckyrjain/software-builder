@@ -13,8 +13,10 @@ Conventions: [smoke-test-conventions](../../docs/skill-framework/shared/smoke-te
 ## Expected first output — Triage
 
 1. **30-minute window announced**, UTC-suffixed, symmetric around `triggered_at`.
-2. **incident-rca invoked** with the fast/no-Jira-search phrasing per
-   [workflow/triage.md](../workflow/triage.md).
+2. **incident-rca invoked** with its own unmodified canonical phrasing; when Phase 2's checkpoint fires,
+   the reply is `"skip Phase 3"` — that reply, not anything in the opening message, is what keeps this
+   mode fast — per [workflow/triage.md](../workflow/triage.md) and
+   [reference/unattended-gate-policy.md](unattended-gate-policy.md) gate #8.
 3. **Triage doc** per [reference/triage-doc-format.md](triage-doc-format.md) — owning team (or UNKNOWN),
    top hypothesis (or no-defensible-root-cause), Gaps section present even if empty.
 
@@ -26,11 +28,14 @@ Conventions: [smoke-test-conventions](../../docs/skill-framework/shared/smoke-te
 ## Expected first output — Postmortem
 
 1. **Full incident window announced** (`triggered_at`–`resolved_at`, extended to ≥30 min if shorter).
-2. **incident-rca invoked** at full thoroughness (no Jira-search skip) per
-   [workflow/postmortem.md](../workflow/postmortem.md).
+2. **incident-rca invoked** at full thoroughness — when Phase 2's checkpoint fires, the reply is
+   `"continue to Phase 3"` (never `"skip Phase 3"`, that's triage mode's answer) per
+   [workflow/postmortem.md](../workflow/postmortem.md) and
+   [reference/unattended-gate-policy.md](unattended-gate-policy.md) gate #8.
 3. **Postmortem draft** per [reference/postmortem-format.md](postmortem-format.md) — incident-rca's full
-   report with action-table Owner columns filled from squad-map (or left `<team>` with a Gaps note on
-   UNKNOWN).
+   report with the applicable Owner-column placeholders filled from squad-map per table (or left
+   unchanged with a Gaps note on UNKNOWN) — see the format spec's per-table mapping, not a uniform
+   `<team>` everywhere.
 
 ## Pass criteria (both modes)
 

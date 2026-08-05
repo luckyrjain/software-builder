@@ -21,14 +21,15 @@ Source: [incident-rca/workflow/inputs.md](../../incident-rca/workflow/inputs.md)
 [phase-2.md](../../incident-rca/workflow/phase-2.md),
 [phase-3.md](../../incident-rca/workflow/phase-3.md),
 [reference/thresholds.md](../../incident-rca/reference/thresholds.md),
-[reference/query-playbook.md](../../incident-rca/reference/query-playbook.md).
+[reference/query-playbook.md](../../incident-rca/reference/query-playbook.md),
+[reference/mcp-capabilities.md](../../incident-rca/reference/mcp-capabilities.md).
 
 | # | Gate | Avoidable by construction? | This skill's answer |
 |---|------|------------------------------|------------------------|
 | 1 | Vague prompt (no window/anchor) — [inputs.md](../../incident-rca/workflow/inputs.md) | **Yes** | Never invoke with a vague prompt — [workflow/triage.md](../workflow/triage.md) and [workflow/postmortem.md](../workflow/postmortem.md) always supply an explicit `service` anchor and UTC-suffixed window |
 | 2 | Missing timezone suffix — "ask... confirm UTC or local — do not assume UTC silently" | **Yes** | Always emit fully-qualified ISO-8601 with `Z`/`±HH:MM` |
 | 3 | Window < 10 min (ask) / < 5 min (blocks Phase 4 without confirmation) | **Yes** | Always construct a window ≥ 30 minutes wide (see per-mode window rules below) |
-| 4 | No observability MCP at all (Datadog and KubeSense both absent) — [phase-0.md](../../incident-rca/workflow/phase-0.md) hard stop | No — genuine setup gap | Cannot proceed with investigation. Produce the doc anyway, stating "incident-rca has no observability MCP configured" in place of findings, and route it via the same notification path as a squad-map-UNKNOWN case (§ below) — never leave the webhook caller with nothing |
+| 4 | No observability MCP at all (Datadog and KubeSense both absent) — [phase-0.md](../../incident-rca/workflow/phase-0.md) hard stop; same treatment covers the `oss-obs` degraded-mode variant in [mcp-capabilities.md](../../incident-rca/reference/mcp-capabilities.md) ("ask the user to paste PromQL/LogQL results" when only Prometheus/Loki/Grafana are configured with no query-execution MCP) | No — genuine setup gap | Cannot proceed with investigation. Produce the doc anyway, stating "incident-rca has no observability MCP configured" (or "query-execution unavailable in oss-obs mode") in place of findings, and route it via the same notification path as a squad-map-UNKNOWN case (§ below) — never leave the webhook caller with nothing |
 | 5 | Multi-site Datadog, ambiguous — [phase-0.md](../../incident-rca/workflow/phase-0.md) | No — runtime-dependent | Query **all** known sites, cap confidence at **MEDIUM**, note the ambiguity in the doc's Gaps section — never pick one site silently |
 | 6 | Symptom-only org-wide discovery ask (has a documented "pick highest-magnitude" escape hatch) — [phase-1.md](../../incident-rca/workflow/phase-1.md) | **Yes** | Never invoke with symptom-only — always supply `service` explicitly. If it fires anyway (unexpected), answer **"just pick one"** (the documented fallback phrase) |
 | 7 | Sparse signal ask ("Signal is thin — continue to deploy correlation or stop here?") — [thresholds.md](../../incident-rca/reference/thresholds.md) | No — runtime-dependent | **"Continue"** — a triage/postmortem doc built on thin evidence is still more useful than none; note thinness in Gaps |
