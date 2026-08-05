@@ -1,6 +1,6 @@
 # Cross-skill escalation (shared)
 
-**Normative.** Symmetric escalation matrix for pr-review, pr-gatekeeper, incident-rca, incident-triage-agent, k8s-overprovisioning-datadog, domain-comprehension, squad-map, who-owns-x-bot, new-hire-guide, mysql-to-postgres-sql, loop-task-implementer, and backlog-runner.
+**Normative.** Symmetric escalation matrix for pr-review, pr-gatekeeper, incident-rca, incident-triage-agent, k8s-overprovisioning-datadog, domain-comprehension, squad-map, who-owns-x-bot, new-hire-guide, release-readiness-checker, mysql-to-postgres-sql, loop-task-implementer, and backlog-runner.
 
 **Consumers:** `SKILL.md` in each skill (link here; keep ≤10 skill-specific rows max).
 
@@ -32,7 +32,10 @@ know about — don't treat it as a "you may want to" row the way every other row
 | Caller wants bounded contexts / domain map, not just ownership | who-owns-x-bot → domain-comprehension | `query` (repo/service name) | "Map bounded contexts and data ownership for `{domain}` — full domain comprehension" |
 | `query` names a service mid-incident (surfaced as a suggestion in the reply only — a single-shot Slack reply cannot itself switch skills) | who-owns-x-bot → incident-rca | Service name from `query` | "RCA for `{service}` — is there an active incident?" |
 | Caller wants a one-off ownership lookup, not a tour | new-hire-guide → squad-map | `workspace_root` | "Who owns `{repo}`?" |
-| Caller wants the full org-wide domain map, not scoped to one person | new-hire-guide → domain-comprehension | `workspace_root` (no `scope.seed_repos` filter) | "Map bounded contexts and data ownership for `{domain}` — full domain comprehension" |
+| Caller wants the full org-wide domain map, not scoped to one person | new-hire-guide → domain-comprehension | `workspace_root` | "Map bounded contexts and data ownership for `{domain}` — full domain comprehension" |
+| Caller wants one MR reviewed, not a release-wide sweep | release-readiness-checker → pr-review | MR !IID + project | "Review MR !{iid} for `{project}`" |
+| Caller wants one service's rightsizing question, not a release sweep | release-readiness-checker → k8s-overprovisioning-datadog | Service + env | "Assess rightsizing for `{deployment}` in `{env}`" |
+| A flagged service needs the full incident investigation | release-readiness-checker → incident-rca | Service + window (same used for the Phase 1 check) | "RCA for `{service}` `{window}`" |
 | Caller wants an interactive, on-demand review instead of the webhook-triggered auto-run | pr-gatekeeper → pr-review | MR !IID + project | "Review MR !{iid} for `{project}`" |
 | Caller wants an interactive, on-demand RCA instead of the paging-webhook-triggered triage/postmortem | incident-triage-agent → incident-rca | Service + window | "RCA for `{service}` `{window}`" |
 | Caller wants an interactive, on-demand ownership lookup instead of the paging-webhook-triggered flow | incident-triage-agent → squad-map | Service name | "Who owns `{service}`?" |
@@ -116,6 +119,7 @@ When `MYSQL_TO_PG_SQL_REWRITES.md` exists in the workspace deliverable directory
 | Squad / repo ownership mapping (interactive, conversational) | squad-map |
 | Single-shot automated ownership lookup (Slack `/who-owns` slash command) | who-owns-x-bot |
 | New-hire onboarding tour scoped to one person's repos | new-hire-guide |
+| Release go/no-go report across MRs/services since last release | release-readiness-checker |
 | Domain / subsystem map, bounded contexts, data ownership | domain-comprehension |
 | MySQL scrub / native SQL PG migration / jdbc:postgresql cutover | mysql-to-postgres-sql |
 | Autonomous multi-task implement → review → remediate → PR loop (interactive, human-driven) | loop-task-implementer |

@@ -26,7 +26,8 @@ Each skill has a human **`README.md`** (what it does) separate from **`SKILL.md`
 | [domain-comprehension](domain-comprehension/) | "map the domain …", "bounded contexts for …" | Evidence-backed domain map: bounded contexts, data ownership, dependency graphs, business flows, exec summary | [README](domain-comprehension/README.md) · [SETUP](domain-comprehension/SETUP.md) |
 | [squad-map](squad-map/) | "map squads …", "who owns …" | Repo-to-squad mapping: GitLab group hierarchy + Datadog team tags → `SQUAD_MAP.md` | [README](squad-map/README.md) · [SETUP](squad-map/SETUP.md) |
 | [who-owns-x-bot](who-owns-x-bot/) | `/who-owns <name>` (Slack slash command; not ambient chat) | Single-shot "who owns X" Slack reply — thin wrapper delegating to squad-map | [README](who-owns-x-bot/README.md) · [SETUP](who-owns-x-bot/SETUP.md) |
-| [new-hire-guide](new-hire-guide/) | "onboard `<name>`, joining `<squad>`" | Personalized onboarding tour: resolves the new hire's squad's repos via squad-map, scopes domain-comprehension to just those, writes `ONBOARDING_TOUR.md` | [README](new-hire-guide/README.md) · [SETUP](new-hire-guide/SETUP.md) |
+| [new-hire-guide](new-hire-guide/) | "onboard `<name>`, joining `<squad>`" | Personalized onboarding tour: resolves the new hire's squad's repos via squad-map, runs domain-comprehension unscoped, curates `ONBOARDING_TOUR.md` down to those repos | [README](new-hire-guide/README.md) · [SETUP](new-hire-guide/SETUP.md) |
+| [release-readiness-checker](release-readiness-checker/) | "is this release ready to ship?" with a `release_manifest` | Release go/no-go report: pr-review (MRs since last release, chat-only) + k8s-overprovisioning-datadog (per-service verdict) + incident-rca (per-service incident signal, Phase 1 only) | [README](release-readiness-checker/README.md) · [SETUP](release-readiness-checker/SETUP.md) |
 | [mysql-to-postgres-sql](mysql-to-postgres-sql/) | "MySQL scrub …", "jdbc:postgresql …", "TIMESTAMPDIFF …" | Native SQL + JDBC rewrite for MySQL→PostgreSQL; scan gate, collection P0/P1 | [README](mysql-to-postgres-sql/README.md) · [SETUP](mysql-to-postgres-sql/SETUP.md) |
 | [loop-task-implementer](loop-task-implementer/) | "implement issue 42 …", "work through these tasks …" | Autonomous multi-task loop: isolated Builder → two-lens independent Reviewer → adjudicated remediation → PR. Platform-neutral, no Datadog/GitLab/Jira MCP required | [README](loop-task-implementer/README.md) · [SETUP](loop-task-implementer/SETUP.md) |
 | [backlog-runner](backlog-runner/) | Scheduled trigger (not human chat) | Pulls N tickets from a tracker query, runs loop-task-implementer per ticket overnight in dependency order, never merges | [README](backlog-runner/README.md) · [SETUP](backlog-runner/SETUP.md) |
@@ -51,6 +52,7 @@ make install-domain-comprehension
 make install-squad-map
 make install-who-owns-x-bot
 make install-new-hire-guide
+make install-release-readiness-checker
 make install-mysql-to-postgres-sql
 make install-loop-task-implementer
 make install-backlog-runner
@@ -72,6 +74,7 @@ bash scripts/install.sh domain-comprehension
 bash scripts/install.sh squad-map
 bash scripts/install.sh who-owns-x-bot
 bash scripts/install.sh new-hire-guide
+bash scripts/install.sh release-readiness-checker
 bash scripts/install.sh mysql-to-postgres-sql
 bash scripts/install.sh loop-task-implementer
 bash scripts/install.sh backlog-runner
@@ -127,6 +130,7 @@ make lint-domain-comprehension  # domain-comprehension SKILL line limit, frontma
 make lint-squad-map             # squad-map SKILL line limit, frontmatter, anchors
 make lint-who-owns-x-bot        # who-owns-x-bot SKILL line limit, frontmatter, anchors, required files
 make lint-new-hire-guide        # new-hire-guide SKILL line limit, frontmatter, anchors, required files
+make lint-release-readiness-checker # release-readiness-checker SKILL line limit, frontmatter, anchors, required files
 make lint-mysql-to-postgres-sql # mysql SKILL line limit, scan fixtures, pressure harness, shellcheck
 make lint-loop-task-implementer # loop-task-implementer SKILL line limit, workflow frontmatter, required files, anchors
 make lint-backlog-runner        # backlog-runner SKILL line limit, frontmatter, anchors, required files
@@ -143,6 +147,7 @@ make lint-backlog-runner        # backlog-runner SKILL line limit, frontmatter, 
 | `lint-squad-map` | `SKILL.md` ≤ 180 lines; workflow frontmatter; dangling anchors; required reference files; pytest |
 | `lint-who-owns-x-bot` | `SKILL.md` ≤ 180 lines; `disable-model-invocation: true` set; workflow frontmatter; dangling anchors; required reference files |
 | `lint-new-hire-guide` | `SKILL.md` ≤ 180 lines; `disable-model-invocation` **not** set; workflow frontmatter; dangling anchors; required reference files |
+| `lint-release-readiness-checker` | `SKILL.md` ≤ 180 lines; `disable-model-invocation` **not** set; workflow frontmatter; dangling anchors; required reference files |
 | `lint-mysql-to-postgres-sql` | `SKILL.md` ≤ 180 lines; workflow frontmatter; required references; scan fixtures + pressure harness; shellcheck on scan scripts |
 | `lint-loop-task-implementer` | `SKILL.md` ≤ 180 lines; workflow frontmatter; dangling anchors; required files (`SETUP.md`/`README.md`/`examples.md`/`report-template.md`/`reference/*`) |
 | `lint-backlog-runner` | `SKILL.md` ≤ 180 lines; `disable-model-invocation: true` set; workflow frontmatter; dangling anchors; required reference files |
@@ -169,6 +174,7 @@ or a Docker/Linux runner (deps installed via `apt-get` in the pipeline).
 | squad-map | GitLab, Datadog (optional; CODEOWNERS fallback when both absent) | [squad-map/SETUP.md](squad-map/SETUP.md) |
 | who-owns-x-bot | None of its own — delegates to squad-map | [who-owns-x-bot/SETUP.md](who-owns-x-bot/SETUP.md) |
 | new-hire-guide | None of its own — inherits domain-comprehension's + squad-map's | [new-hire-guide/SETUP.md](new-hire-guide/SETUP.md) |
+| release-readiness-checker | None of its own — inherits pr-review's, k8s-overprovisioning-datadog's, and incident-rca's | [release-readiness-checker/SETUP.md](release-readiness-checker/SETUP.md) |
 | mysql-to-postgres-sql | None (code scan + rewrite) | Datadog (optional; post-cutover APM) — [mysql-to-postgres-sql/SETUP.md](mysql-to-postgres-sql/SETUP.md) |
 | loop-task-implementer | None (uses the host agent's own repo/git access, not an MCP server) | [loop-task-implementer/reference/mcp-capabilities.md](loop-task-implementer/reference/mcp-capabilities.md) |
 | backlog-runner | Issue-tracker MCP (Jira or GitHub Issues) — required for this skill, optional for loop-task-implementer itself | [backlog-runner/SETUP.md](backlog-runner/SETUP.md) |
@@ -416,6 +422,32 @@ side effect, see [new-hire-guide/SETUP.md](new-hire-guide/SETUP.md)).
   domain-comprehension's/squad-map's own deliverables (curates and links, never restates)
 - Both wrapped skills' own live questions (domain-comprehension's Session 0 checkpoint, squad-map's
   `squad_path_segment` HARD STOP) surface to you directly — this skill never scripts an answer
+
+---
+
+## Usage (release-readiness-checker)
+
+Ambiently invocable, like new-hire-guide. A release manager is present, but the fan-out over potentially
+many MRs and services means this skill still scripts one gate's answer (incident-rca's Phase 1
+checkpoint, always "stop here") to avoid turning one report into N live interruptions — see
+[release-readiness-checker/SKILL.md](release-readiness-checker/SKILL.md) § "Why a gate policy, despite
+being human-invoked."
+
+### Examples
+
+| You say | What happens |
+|----------------|----------------|
+| "Is this release ready?" with `release_manifest: [{repo: api-disbursement, service: disbursement-service, since: v2.3.0}]` | Resolves MRs since `v2.3.0`, reviews each `chat-only`, gets `disbursement-service`'s k8s verdict, checks its incident-rca Phase 1 signal, writes `RELEASE_READINESS_REPORT.md` |
+| A reviewed MR has a Critical finding, or a service's k8s verdict is BLOCKED, or a service is flagged | Overall verdict: **Not ready** |
+| A service has a strong incident-rca signal | Answered "stop here" anyway — service flagged, full RCA never runs |
+| "Review MR !482" | **Wrong skill** → pr-review directly |
+
+### What you get (release-readiness-checker)
+
+- `RELEASE_READINESS_REPORT.md` — overall verdict, MRs reviewed (severity summary), per-service
+  rightsizing (k8s's own verdict, unmodified), per-service incident signal (clear/flagged)
+- No GitLab post, no manifest change, no full RCA — every wrapped skill's own analysis is surfaced as-is,
+  never reinterpreted
 
 ---
 

@@ -117,6 +117,17 @@ zero-match logic in Run tour — squad-to-repo resolution is squad-map's, compre
 domain-comprehension's. Report here means "curate and link `ONBOARDING_TOUR.md`," not re-run either
 wrapped skill's own analysis.
 
+### release-readiness-checker mapping
+
+| Phase | File | Canonical |
+|-------|------|-----------|
+| Inputs | `workflow/inputs.md` | Detect (partial) |
+| Run check | `workflow/run-check.md` | Gather (MR-range resolution, delegated pr-review/k8s/incident-rca invocations) + Analyze (verdict aggregation, overall Ready/Not-ready derivation) + Report (`RELEASE_READINESS_REPORT.md`) |
+
+The MR-range resolver (§ Run check step 1) is this skill's one genuinely new Gather-equivalent logic —
+every other Gather step is fully delegated. Analyze here is aggregation only (deriving one verdict from
+three already-computed verdicts), never re-scoring any wrapped skill's own findings.
+
 ### domain-comprehension mapping
 
 | Phase | File | Canonical |
