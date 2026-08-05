@@ -22,6 +22,7 @@ Each skill has a human **`README.md`** (what it does) separate from **`SKILL.md`
 | [pr-gatekeeper](pr-gatekeeper/) | Push webhook (not human chat) | Auto-runs pr-review on every push to an open MR; posts inline when pr-review's own rules allow unattended posting | [README](pr-gatekeeper/README.md) · [SETUP](pr-gatekeeper/SETUP.md) |
 | [k8s-overprovisioning-datadog](k8s-overprovisioning-datadog/) | "Is `<service>` overprovisioned?" | K8s DORA report: CPU/memory/replica verdicts, waste, cost via Datadog | [README](k8s-overprovisioning-datadog/README.md) · [SETUP](k8s-overprovisioning-datadog/SETUP.md) |
 | [incident-rca](incident-rca/) | "RCA for … between …" | Multi-source post-incident RCA (Datadog, KubeSense, GitLab, Jenkins, Jira) | [README](incident-rca/README.md) · [SETUP](incident-rca/SETUP.md) |
+| [incident-triage-agent](incident-triage-agent/) | Paging webhook (not human chat) | Page-fire triage doc + incident-resolved postmortem draft, composing incident-rca + squad-map | [README](incident-triage-agent/README.md) · [SETUP](incident-triage-agent/SETUP.md) |
 | [domain-comprehension](domain-comprehension/) | "map the domain …", "bounded contexts for …" | Evidence-backed domain map: bounded contexts, data ownership, dependency graphs, business flows, exec summary | [README](domain-comprehension/README.md) · [SETUP](domain-comprehension/SETUP.md) |
 | [squad-map](squad-map/) | "map squads …", "who owns …" | Repo-to-squad mapping: GitLab group hierarchy + Datadog team tags → `SQUAD_MAP.md` | [README](squad-map/README.md) · [SETUP](squad-map/SETUP.md) |
 | [who-owns-x-bot](who-owns-x-bot/) | `/who-owns <name>` (Slack slash command; not ambient chat) | Single-shot "who owns X" Slack reply — thin wrapper delegating to squad-map | [README](who-owns-x-bot/README.md) · [SETUP](who-owns-x-bot/SETUP.md) |
@@ -43,6 +44,7 @@ make install-pr-review
 make install-pr-gatekeeper
 make install-k8s-overprovisioning
 make install-incident-rca
+make install-incident-triage-agent
 make install-domain-comprehension
 make install-squad-map
 make install-who-owns-x-bot
@@ -61,6 +63,7 @@ bash scripts/install.sh pr-review          # one skill
 bash scripts/install.sh pr-gatekeeper
 bash scripts/install.sh k8s-overprovisioning-datadog
 bash scripts/install.sh incident-rca
+bash scripts/install.sh incident-triage-agent
 bash scripts/install.sh domain-comprehension
 bash scripts/install.sh squad-map
 bash scripts/install.sh who-owns-x-bot
@@ -113,6 +116,7 @@ make lint-pr-review     # pr-review SKILL line limit, workflow frontmatter, anch
 make lint-pr-gatekeeper # pr-gatekeeper SKILL line limit, frontmatter, anchors, required files
 make lint-k8s-skill     # k8s SKILL line limit, workflow frontmatter, report schema, anchors
 make lint-incident-rca  # incident-rca SKILL line limit, workflow frontmatter, evidence JSON, anchors
+make lint-incident-triage-agent # incident-triage-agent SKILL line limit, frontmatter, anchors, required files
 make lint-domain-comprehension  # domain-comprehension SKILL line limit, frontmatter, anchors, manifest validator
 make lint-squad-map             # squad-map SKILL line limit, frontmatter, anchors
 make lint-who-owns-x-bot        # who-owns-x-bot SKILL line limit, frontmatter, anchors, required files
@@ -126,6 +130,7 @@ make lint-loop-task-implementer # loop-task-implementer SKILL line limit, workfl
 | `lint-pr-gatekeeper` | `SKILL.md` ≤ 180 lines; `disable-model-invocation: true` set; workflow frontmatter; dangling anchors; required reference files |
 | `lint-k8s-skill` | `SKILL.md` ≤ 150 lines; frontmatter; `report-schema.md` + templates; memory-sizing p95 rule; anchors |
 | `lint-incident-rca` | `SKILL.md` ≤ 180 lines; frontmatter; valid `evidence.example.json`; causal-graph validator; anchors |
+| `lint-incident-triage-agent` | `SKILL.md` ≤ 180 lines; `disable-model-invocation: true` set; workflow frontmatter; dangling anchors; required reference files |
 | `lint-domain-comprehension` | `SKILL.md` ≤ 180 lines; workflow frontmatter; dangling anchors; `templates/manifest.yaml` validator + pytest; pressure harness |
 | `lint-squad-map` | `SKILL.md` ≤ 180 lines; workflow frontmatter; dangling anchors; required reference files; pytest |
 | `lint-who-owns-x-bot` | `SKILL.md` ≤ 180 lines; `disable-model-invocation: true` set; workflow frontmatter; dangling anchors; required reference files |
@@ -149,6 +154,7 @@ or a Docker/Linux runner (deps installed via `apt-get` in the pipeline).
 | pr-gatekeeper | None of its own — delegates to pr-review | [pr-gatekeeper/SETUP.md](pr-gatekeeper/SETUP.md) |
 | k8s-overprovisioning-datadog | Datadog | [k8s-overprovisioning-datadog/SETUP.md](k8s-overprovisioning-datadog/SETUP.md) |
 | incident-rca | Datadog, KubeSense, GitLab, Jenkins, Jira (+ optional correlator CLI) | [incident-rca/SETUP.md](incident-rca/SETUP.md) |
+| incident-triage-agent | None of its own — delegates to incident-rca + squad-map | [incident-triage-agent/SETUP.md](incident-triage-agent/SETUP.md) |
 | domain-comprehension | GitLab (optional, Session 0b via squad-map), Datadog (optional, P2b runtime validation) | [domain-comprehension/SETUP.md](domain-comprehension/SETUP.md) |
 | squad-map | GitLab, Datadog (optional; CODEOWNERS fallback when both absent) | [squad-map/SETUP.md](squad-map/SETUP.md) |
 | who-owns-x-bot | None of its own — delegates to squad-map | [who-owns-x-bot/SETUP.md](who-owns-x-bot/SETUP.md) |
@@ -281,6 +287,29 @@ via a manual-scoring fallback. See the
 
 Auto-invokes from natural-language asks (no slash command) — see why `disable-model-invocation` is left
 unset in [incident-rca/SETUP.md](incident-rca/SETUP.md).
+
+---
+
+## Usage (incident-triage-agent)
+
+A PagerDuty/Opsgenie webhook invokes this skill with a structured payload — it does **not** auto-invoke
+from ambient chat (`disable-model-invocation: true`). A human asking for an RCA or ownership lookup
+routes to **incident-rca** / **squad-map** directly (see
+[incident-triage-agent/SETUP.md](incident-triage-agent/SETUP.md)).
+
+### Examples
+
+| Webhook sends | What happens |
+|-------------------|----------------|
+| `event_type: page_triggered` | Fast, 30-min-window incident-rca run + squad-map ownership → on-call triage doc |
+| `event_type: incident_resolved` | Full-window, full-thoroughness incident-rca run + squad-map ownership → postmortem draft with pre-assigned follow-up owners |
+
+### What you get (incident-triage-agent)
+
+- **Triage:** likely cause (or "no defensible root cause"), owning team (or UNKNOWN), gaps, pointer to
+  the full RCA
+- **Postmortem:** incident-rca's full report, unedited except for squad-map owner-column substitution in
+  its own Corrective/Preventive/Post-RCA-actions tables
 
 ---
 

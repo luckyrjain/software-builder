@@ -1,4 +1,4 @@
-.PHONY: install install-pr-review install-pr-gatekeeper install-k8s-overprovisioning install-incident-rca install-incident-rca-deps install-domain-comprehension install-squad-map install-who-owns-x-bot install-mysql-to-postgres-sql install-loop-task-implementer install-claude install-claude-pr-review install-claude-pr-gatekeeper install-claude-k8s-overprovisioning install-claude-incident-rca install-claude-domain-comprehension install-claude-squad-map install-claude-who-owns-x-bot install-claude-mysql-to-postgres-sql install-claude-loop-task-implementer lint lint-framework lint-pr-review lint-pr-gatekeeper lint-k8s-skill lint-k8s lint-incident-rca lint-domain-comprehension lint-squad-map lint-who-owns-x-bot lint-mysql-to-postgres-sql lint-loop-task-implementer setup-hooks setup kubesense-errors
+.PHONY: install install-pr-review install-pr-gatekeeper install-k8s-overprovisioning install-incident-rca install-incident-rca-deps install-incident-triage-agent install-domain-comprehension install-squad-map install-who-owns-x-bot install-mysql-to-postgres-sql install-loop-task-implementer install-claude install-claude-pr-review install-claude-pr-gatekeeper install-claude-k8s-overprovisioning install-claude-incident-rca install-claude-incident-triage-agent install-claude-domain-comprehension install-claude-squad-map install-claude-who-owns-x-bot install-claude-mysql-to-postgres-sql install-claude-loop-task-implementer lint lint-framework lint-pr-review lint-pr-gatekeeper lint-k8s-skill lint-k8s lint-incident-rca lint-incident-triage-agent lint-domain-comprehension lint-squad-map lint-who-owns-x-bot lint-mysql-to-postgres-sql lint-loop-task-implementer setup-hooks setup kubesense-errors
 
 install:
 	bash scripts/install.sh
@@ -17,6 +17,9 @@ install-incident-rca-deps:
 
 install-incident-rca: install-incident-rca-deps
 	bash scripts/install.sh incident-rca
+
+install-incident-triage-agent: install-incident-rca install-squad-map
+	bash scripts/install.sh incident-triage-agent
 
 install-domain-comprehension: install-squad-map
 	bash scripts/install.sh domain-comprehension
@@ -48,6 +51,9 @@ install-claude-k8s-overprovisioning:
 install-claude-incident-rca: install-incident-rca-deps
 	bash scripts/install.sh --agent claude-user incident-rca
 
+install-claude-incident-triage-agent: install-claude-incident-rca install-claude-squad-map
+	bash scripts/install.sh --agent claude-user incident-triage-agent
+
 install-claude-domain-comprehension: install-claude-squad-map
 	bash scripts/install.sh --agent claude-user domain-comprehension
 
@@ -69,7 +75,7 @@ setup:
 		python3 -m pip install --user --break-system-packages -r requirements.txt
 	@$(MAKE) setup-hooks
 
-lint: lint-framework lint-pr-review lint-pr-gatekeeper lint-k8s-skill lint-incident-rca lint-domain-comprehension lint-squad-map lint-who-owns-x-bot lint-mysql-to-postgres-sql lint-loop-task-implementer
+lint: lint-framework lint-pr-review lint-pr-gatekeeper lint-k8s-skill lint-incident-rca lint-incident-triage-agent lint-domain-comprehension lint-squad-map lint-who-owns-x-bot lint-mysql-to-postgres-sql lint-loop-task-implementer
 	@for f in scripts/*.sh; do \
 		echo "shellcheck $$f"; \
 		if command -v shellcheck >/dev/null 2>&1; then \
@@ -353,6 +359,46 @@ lint-incident-rca:
 		exit 1; \
 	fi; \
 	echo "  ok"
+
+lint-incident-triage-agent:
+	@echo "lint-incident-triage-agent: SKILL.md line count (<= 180)"
+	@test -f incident-triage-agent/SKILL.md || \
+		{ echo "error: missing incident-triage-agent/SKILL.md" >&2; exit 1; }
+	@lines=$$(wc -l < incident-triage-agent/SKILL.md | tr -d ' '); \
+	if [ -z "$$lines" ] || [ "$$lines" -eq 0 ]; then \
+		echo "error: incident-triage-agent/SKILL.md is empty" >&2; exit 1; \
+	elif [ "$$lines" -gt 180 ]; then \
+		echo "error: incident-triage-agent SKILL.md $$lines lines (> 180) — keep orchestrator thin; detail in workflow/" >&2; \
+		exit 1; \
+	fi; \
+	echo "  ok ($$lines lines)"
+	@echo "lint-incident-triage-agent: disable-model-invocation set (automation entry point, must not compete with incident-rca/squad-map's ambient invocation)"
+	@grep -q '^disable-model-invocation: true' incident-triage-agent/SKILL.md || \
+		{ echo "error: incident-triage-agent/SKILL.md must set disable-model-invocation: true" >&2; exit 1; }
+	@echo "  ok"
+	@echo "lint-incident-triage-agent: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
+	@fail=0; \
+	for f in incident-triage-agent/workflow/*.md; do \
+		fm=$$(awk '/^---$$/{c++; next} c==1' "$$f"); \
+		for key in workflow_version phase produces consumes; do \
+			if ! printf '%s\n' "$$fm" | grep -q "^$$key:"; then \
+				echo "  missing $$key frontmatter: $$f" >&2; fail=1; \
+			fi; \
+		done; \
+	done; \
+	if [ "$$fail" -ne 0 ]; then echo "error: incident-triage-agent workflow/*.md must declare workflow_version, phase, produces, consumes" >&2; exit 1; fi; \
+	echo "  ok"
+	@echo "lint-incident-triage-agent: dangling markdown links"
+	@bash scripts/lint-dangling-md-links.sh incident-triage-agent/*.md incident-triage-agent/reference/*.md incident-triage-agent/workflow/*.md && echo "  ok" || \
+		{ echo "error: dangling reference link(s) found" >&2; exit 1; }
+	@echo "lint-incident-triage-agent: required reference files"
+	@for f in phase-index lazy-load-index unattended-gate-policy triage-doc-format postmortem-format smoke-test; do \
+		test -f incident-triage-agent/reference/$$f.md || \
+			{ echo "error: missing incident-triage-agent/reference/$$f.md" >&2; exit 1; }; \
+	done
+	@grep -q 'skill-framework' incident-triage-agent/SETUP.md || \
+		{ echo "error: incident-triage-agent/SETUP.md must link to docs/skill-framework" >&2; exit 1; }
+	@echo "  ok (framework refs)"
 
 lint-domain-comprehension: lint-domain-comprehension-skill lint-domain-comprehension-scripts
 
@@ -702,7 +748,7 @@ lint-framework:
 	@grep -q '^## 1\. Required sections' docs/skill-framework/shared/examples-conventions.md
 	@grep -q '^## 2\. Scenario format' docs/skill-framework/shared/examples-conventions.md
 	@grep -q '^## 5\. Anti-patterns' docs/skill-framework/shared/examples-conventions.md
-	@for skill in pr-review pr-gatekeeper incident-rca k8s-overprovisioning-datadog domain-comprehension squad-map who-owns-x-bot mysql-to-postgres-sql loop-task-implementer; do \
+	@for skill in pr-review pr-gatekeeper incident-rca incident-triage-agent k8s-overprovisioning-datadog domain-comprehension squad-map who-owns-x-bot mysql-to-postgres-sql loop-task-implementer; do \
 		test -f $$skill/examples.md || \
 			{ echo "error: missing $$skill/examples.md (examples-conventions)" >&2; exit 1; }; \
 		grep -q '## Invocation' $$skill/examples.md || \
@@ -748,7 +794,7 @@ lint-framework:
 	done; \
 	if [ "$$fail" -ne 0 ]; then exit 1; fi
 	@grep -q '| Complete |' docs/skill-framework/README.md
-	@for skill in pr-review pr-gatekeeper incident-rca k8s-overprovisioning-datadog domain-comprehension squad-map who-owns-x-bot mysql-to-postgres-sql loop-task-implementer; do \
+	@for skill in pr-review pr-gatekeeper incident-rca incident-triage-agent k8s-overprovisioning-datadog domain-comprehension squad-map who-owns-x-bot mysql-to-postgres-sql loop-task-implementer; do \
 		grep -q 'skill-framework' $$skill/SETUP.md || \
 			{ echo "error: $$skill/SETUP.md must link to docs/skill-framework" >&2; exit 1; }; \
 		grep -q 'docs/skill-framework/shared/skill-routing.md' $$skill/SKILL.md || \
@@ -762,6 +808,7 @@ lint-framework:
 		"pr-review:workflow/inputs.md" \
 		"pr-gatekeeper:workflow/inputs.md" \
 		"incident-rca:workflow/inputs.md" \
+		"incident-triage-agent:workflow/inputs.md" \
 		"k8s-overprovisioning-datadog:workflow/collect-metrics.md" \
 		"domain-comprehension:workflow/session-0.md" \
 		"squad-map:workflow/inputs.md" \
@@ -777,7 +824,7 @@ lint-framework:
 	@echo "lint-framework: all SETUP.md links ok"
 	@echo "lint-framework: cross-agent discovery files (.cursor/rules + .kiro/steering)"
 	@fail=0; \
-	for skill in pr-review pr-gatekeeper incident-rca k8s-overprovisioning-datadog domain-comprehension squad-map who-owns-x-bot mysql-to-postgres-sql loop-task-implementer; do \
+	for skill in pr-review pr-gatekeeper incident-rca incident-triage-agent k8s-overprovisioning-datadog domain-comprehension squad-map who-owns-x-bot mysql-to-postgres-sql loop-task-implementer; do \
 		test -f .cursor/rules/$$skill.mdc || \
 			{ echo "  missing .cursor/rules/$$skill.mdc" >&2; fail=1; }; \
 		test -f .kiro/steering/$$skill.md || \

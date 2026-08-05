@@ -55,6 +55,19 @@ than replacing them.
 
 Phase 0b is conditional — runs when user anchors on Jira ticket instead of explicit window.
 
+### incident-triage-agent mapping
+
+| Phase | File | Canonical |
+|-------|------|-----------|
+| Inputs | `workflow/inputs.md` | Detect (partial — paging webhook event filtering, mode selection) |
+| Triage | `workflow/triage.md` | Gather + Report (delegated to incident-rca + squad-map) |
+| Postmortem | `workflow/postmortem.md` | Gather + Report (delegated to incident-rca + squad-map) |
+
+No Analyze/Correlate/Rank of its own — all investigation and ownership analysis is incident-rca's and
+squad-map's. The only original logic is the unattended-gate answering
+(`reference/unattended-gate-policy.md`), which reconciles with both wrapped skills' own phases rather
+than replacing them.
+
 ## 4. k8s mapping
 
 | Phase | File | Canonical |

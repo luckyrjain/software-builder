@@ -44,6 +44,26 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
   and added to `lint-framework`'s 4 hardcoded per-skill loops from the start (a gap found and fixed
   after-the-fact on who-owns-x-bot).
 
+## incident-triage-agent
+
+### Initial release (2026-08-05)
+
+- New skill — items #3+#4 of the [team-facing agents roadmap](docs/superpowers/plans/2026-08-05-team-facing-agents-roadmap.md):
+  a paging-webhook-triggered composition of **incident-rca** (root cause) and **squad-map** (owning
+  team), two modes in one agent — Triage on page-fire, Postmortem on incident-resolved.
+- `reference/unattended-gate-policy.md` — exhaustive enumeration of every blocking gate in both wrapped
+  skills with a deterministic answer, written exhaustive from the start using the lesson from
+  pr-gatekeeper's `auto-post-policy.md` (which needed three review rounds to reach full coverage for a
+  single wrapped skill — this file covers two).
+- Postmortem mode reuses incident-rca's own Corrective/Preventive/Post-RCA-actions tables verbatim — its
+  only original contribution is squad-map owner-column substitution, no new action-item schema.
+- `disable-model-invocation: true` — does not compete with incident-rca's or squad-map's ambient chat
+  invocation.
+- Design spec: [docs/superpowers/specs/2026-08-05-incident-triage-agent-design.md](docs/superpowers/specs/2026-08-05-incident-triage-agent-design.md).
+- Wired into `make install-incident-triage-agent` / `make lint-incident-triage-agent`, root README,
+  docs/README, docs/REPOSITORY, skill-routing.md, phase-glossary.md, cross-skill-escalation.md,
+  prompt-injection.md — and added to `lint-framework`'s 4 hardcoded per-skill loops from the start.
+
 ## who-owns-x-bot
 
 ### Initial release (2026-08-05)

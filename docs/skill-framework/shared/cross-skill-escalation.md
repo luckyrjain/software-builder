@@ -1,6 +1,6 @@
 # Cross-skill escalation (shared)
 
-**Normative.** Symmetric escalation matrix for pr-review, pr-gatekeeper, incident-rca, k8s-overprovisioning-datadog, domain-comprehension, squad-map, who-owns-x-bot, mysql-to-postgres-sql, and loop-task-implementer.
+**Normative.** Symmetric escalation matrix for pr-review, pr-gatekeeper, incident-rca, incident-triage-agent, k8s-overprovisioning-datadog, domain-comprehension, squad-map, who-owns-x-bot, mysql-to-postgres-sql, and loop-task-implementer.
 
 **Consumers:** `SKILL.md` in each skill (link here; keep ≤10 skill-specific rows max).
 
@@ -32,6 +32,8 @@ know about — don't treat it as a "you may want to" row the way every other row
 | Caller wants bounded contexts / domain map, not just ownership | who-owns-x-bot → domain-comprehension | `query` (repo/service name) | "Map bounded contexts and data ownership for `{domain}` — full domain comprehension" |
 | `query` names a service mid-incident (surfaced as a suggestion in the reply only — a single-shot Slack reply cannot itself switch skills) | who-owns-x-bot → incident-rca | Service name from `query` | "RCA for `{service}` — is there an active incident?" |
 | Caller wants an interactive, on-demand review instead of the webhook-triggered auto-run | pr-gatekeeper → pr-review | MR !IID + project | "Review MR !{iid} for `{project}`" |
+| Caller wants an interactive, on-demand RCA instead of the paging-webhook-triggered triage/postmortem | incident-triage-agent → incident-rca | Service + window | "RCA for `{service}` `{window}`" |
+| Caller wants an interactive, on-demand ownership lookup instead of the paging-webhook-triggered flow | incident-triage-agent → squad-map | Service name | "Who owns `{service}`?" |
 | Security finding in domain analysis (P3b) | domain-comprehension → pr-review | Repo + file path + finding type | "Review MR !{iid} for credential exposure in `{service}`" |
 | Architecture smell needs RCA context | domain-comprehension → incident-rca | Service + smell + time window | "RCA for `{service}` {window} — recurring {smell} identified in domain analysis" |
 | Domain map reveals overprovisioned service | domain-comprehension → k8s | Service + env from runtime validation | "Assess rightsizing for `{service}` in `{env}` — domain analysis found low utilization" |
@@ -106,7 +108,8 @@ When `MYSQL_TO_PG_SQL_REWRITES.md` exists in the workspace deliverable directory
 | Size K8s deployment / rightsizing | k8s-overprovisioning-datadog |
 | Review GitLab MR (interactive, conversational) | pr-review |
 | Automated, unattended review on every push (webhook-triggered) | pr-gatekeeper |
-| Post-incident RCA / root cause | incident-rca |
+| Post-incident RCA / root cause (interactive, conversational) | incident-rca |
+| PagerDuty/Opsgenie page-fire or incident-resolved webhook (unattended) | incident-triage-agent |
 | Squad / repo ownership mapping (interactive, conversational) | squad-map |
 | Single-shot automated ownership lookup (Slack `/who-owns` slash command) | who-owns-x-bot |
 | Domain / subsystem map, bounded contexts, data ownership | domain-comprehension |

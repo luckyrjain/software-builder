@@ -22,6 +22,7 @@ Each skill is a self-contained directory copied to `~/.cursor/skills/<name>/` on
 | **pr-review** | [pr-review/README.md](../pr-review/README.md) | [pr-review/SKILL.md](../pr-review/SKILL.md) | [pr-review/SETUP.md](../pr-review/SETUP.md) |
 | **pr-gatekeeper** | [pr-gatekeeper/README.md](../pr-gatekeeper/README.md) | [pr-gatekeeper/SKILL.md](../pr-gatekeeper/SKILL.md) | [pr-gatekeeper/SETUP.md](../pr-gatekeeper/SETUP.md) |
 | **incident-rca** | [incident-rca/README.md](../incident-rca/README.md) | [incident-rca/SKILL.md](../incident-rca/SKILL.md) | [incident-rca/SETUP.md](../incident-rca/SETUP.md) |
+| **incident-triage-agent** | [incident-triage-agent/README.md](../incident-triage-agent/README.md) | [incident-triage-agent/SKILL.md](../incident-triage-agent/SKILL.md) | [incident-triage-agent/SETUP.md](../incident-triage-agent/SETUP.md) |
 | **k8s-overprovisioning-datadog** | [k8s-overprovisioning-datadog/README.md](../k8s-overprovisioning-datadog/README.md) | [k8s-overprovisioning-datadog/SKILL.md](../k8s-overprovisioning-datadog/SKILL.md) | [k8s-overprovisioning-datadog/SETUP.md](../k8s-overprovisioning-datadog/SETUP.md) |
 | **domain-comprehension** | [domain-comprehension/README.md](../domain-comprehension/README.md) | [domain-comprehension/SKILL.md](../domain-comprehension/SKILL.md) | [domain-comprehension/SETUP.md](../domain-comprehension/SETUP.md) |
 | **squad-map** | [squad-map/README.md](../squad-map/README.md) | [squad-map/SKILL.md](../squad-map/SKILL.md) | [squad-map/SETUP.md](../squad-map/SETUP.md) |
@@ -36,6 +37,7 @@ Each skill is a self-contained directory copied to `~/.cursor/skills/<name>/` on
 | **pr-review** | `/pr-review` or "review this MR/PR …" | Reviews GitLab merge requests: loads diff + Jira context, emits severity-tagged findings, optionally posts inline threads and a summary note via GitLab MCP |
 | **pr-gatekeeper** | Push webhook, not ambient chat | Auto-runs pr-review on every push to an open MR; posts when pr-review's own confirmation rules allow it unattended, otherwise routes to notification |
 | **incident-rca** | Natural language ("RCA for …") | Multi-source post-incident investigation (Datadog, KubeSense, GitLab, Jenkins, Jira) → manager-ready RCA report with hypotheses and evidence |
+| **incident-triage-agent** | Paging webhook, not ambient chat | Page-fire triage doc + incident-resolved postmortem draft, composing incident-rca (root cause) + squad-map (owner) |
 | **k8s-overprovisioning-datadog** | Natural language ("is X overprovisioned?") | Datadog-driven K8s deployment optimization assessment: CPU/memory/replica verdicts, waste estimate, cost, rollback guidance |
 | **domain-comprehension** | Natural language ("map the domain …") | Evidence-backed domain comprehension across repos: bounded contexts, data ownership, dependency graphs, business flows, exec summary with confidence |
 | **squad-map** | Natural language ("map squads …", "who owns …") | Repo-to-squad mapping via GitLab group hierarchy + Datadog team tags → `SQUAD_MAP.md` with confidence and conflict flags |
@@ -61,6 +63,7 @@ Skills reference each other when a finding belongs in another workflow:
 | domain-comprehension | Squad / repo ownership only | squad-map |
 | squad-map | Full domain map / bounded contexts | domain-comprehension |
 | incident-rca | Unclear service owner during RCA | squad-map |
+| incident-triage-agent | Caller wants an interactive, on-demand RCA or ownership lookup | incident-rca / squad-map |
 | who-owns-x-bot | Caller wants the full mapping table, not one answer | squad-map |
 | who-owns-x-bot | Caller wants bounded contexts / domain map | domain-comprehension |
 | domain-comprehension | Produced `MYSQL_TO_PG_SQL_REWRITES.md` | mysql-to-postgres-sql |
@@ -86,6 +89,7 @@ Full symmetric matrix (forward + reverse escalations):
 | [superpowers/plans/2026-08-05-team-facing-agents-roadmap.md](superpowers/plans/2026-08-05-team-facing-agents-roadmap.md) | Team-facing agents brainstorm: 11 candidate bots/jobs composing the 7 skills for real team workflows |
 | [superpowers/specs/2026-08-05-who-owns-x-bot-design.md](superpowers/specs/2026-08-05-who-owns-x-bot-design.md) | who-owns-x-bot design — item #1 of the team-facing agents roadmap |
 | [superpowers/specs/2026-08-05-pr-gatekeeper-design.md](superpowers/specs/2026-08-05-pr-gatekeeper-design.md) | pr-gatekeeper design — item #2 of the team-facing agents roadmap |
+| [superpowers/specs/2026-08-05-incident-triage-agent-design.md](superpowers/specs/2026-08-05-incident-triage-agent-design.md) | incident-triage-agent design — items #3+#4 of the team-facing agents roadmap |
 
 These are planning artifacts; the live behavior is defined in `pr-review/SKILL.md` and `pr-review/reference/`.
 
@@ -127,6 +131,16 @@ These are planning artifacts; the live behavior is defined in `pr-review/SKILL.m
 | `reference/evidence.example.json` | Canonical evidence bundle shape (`schema_version: 4`; see [evidence-schema.md](../incident-rca/reference/evidence-schema.md)) |
 | `report-template.md` | Output sections and quality checklist |
 | `reference/smoke-test.md` | Post-install validation steps |
+
+## incident-triage-agent file map
+
+| Path | What it does |
+|------|--------------|
+| `workflow/inputs.md` | Parse paging webhook payload, select Triage/Postmortem mode |
+| `workflow/triage.md` | Fast 30-min-window incident-rca + squad-map → triage doc |
+| `workflow/postmortem.md` | Full-window incident-rca + squad-map → postmortem draft |
+| `reference/unattended-gate-policy.md` | Exhaustive incident-rca + squad-map blocking-gate answers |
+| `reference/triage-doc-format.md`, `reference/postmortem-format.md` | Output shape for each mode |
 
 ## squad-map file map
 

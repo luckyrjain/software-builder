@@ -22,6 +22,7 @@ ai-skills/
 ├── pr-review/                 # GitLab MR review skill
 ├── pr-gatekeeper/             # Push-webhook-triggered pr-review auto-run wrapper
 ├── incident-rca/              # Post-incident RCA skill
+├── incident-triage-agent/     # Paging-webhook-triggered incident-rca + squad-map composition
 ├── k8s-overprovisioning-datadog/  # K8s rightsizing / DORA skill
 ├── domain-comprehension/      # Evidence-backed domain/architecture mapping skill
 ├── squad-map/                 # Repo-to-squad ownership mapping skill
@@ -53,6 +54,7 @@ make install-pr-review
 make install-pr-gatekeeper
 make install-k8s-overprovisioning
 make install-incident-rca
+make install-incident-triage-agent
 make install-domain-comprehension
 make install-squad-map
 make install-who-owns-x-bot
@@ -71,6 +73,7 @@ bash scripts/install.sh pr-review
 bash scripts/install.sh pr-gatekeeper
 bash scripts/install.sh k8s-overprovisioning-datadog
 bash scripts/install.sh incident-rca
+bash scripts/install.sh incident-triage-agent
 bash scripts/install.sh domain-comprehension
 bash scripts/install.sh squad-map
 bash scripts/install.sh who-owns-x-bot
@@ -97,18 +100,20 @@ and [docs/skill-framework/shared/claude-code-setup.md](skill-framework/shared/cl
 | `make install-pr-gatekeeper` | Install only `pr-gatekeeper/` (also runs `install-pr-review`) |
 | `make install-k8s-overprovisioning` | Install only `k8s-overprovisioning-datadog/` |
 | `make install-incident-rca` | Install only `incident-rca/` (also runs `install-incident-rca-deps`) |
+| `make install-incident-triage-agent` | Install only `incident-triage-agent/` (also runs `install-incident-rca` and `install-squad-map`) |
 | `make install-domain-comprehension` | Install only `domain-comprehension/` (also runs `install-squad-map`) |
 | `make install-squad-map` | Install only `squad-map/` |
 | `make install-who-owns-x-bot` | Install only `who-owns-x-bot/` (also runs `install-squad-map`) |
 | `make install-mysql-to-postgres-sql` | Install only `mysql-to-postgres-sql/` |
 | `make install-loop-task-implementer` | Install only `loop-task-implementer/` |
 | `make install-claude` | Run `scripts/install.sh --agent claude-user` for all skills |
-| `make install-claude-<skill>` | Install only `<skill>/` for Claude Code (`pr-review`, `pr-gatekeeper`, `k8s-overprovisioning`, `incident-rca`, `domain-comprehension`, `squad-map`, `who-owns-x-bot`, `mysql-to-postgres-sql`, `loop-task-implementer`) |
+| `make install-claude-<skill>` | Install only `<skill>/` for Claude Code (`pr-review`, `pr-gatekeeper`, `k8s-overprovisioning`, `incident-rca`, `incident-triage-agent`, `domain-comprehension`, `squad-map`, `who-owns-x-bot`, `mysql-to-postgres-sql`, `loop-task-implementer`) |
 | `make lint` | Run all lint targets below + shellcheck on `scripts/*.sh` |
 | `make lint-pr-review` | pr-review `SKILL.md` ≤ 180 lines; each `workflow/*.md` has `workflow_version`/`phase`/`produces`/`consumes` frontmatter; dangling markdown anchors; script pytest |
 | `make lint-pr-gatekeeper` | pr-gatekeeper `SKILL.md` ≤ 180 lines; `disable-model-invocation: true` set; workflow frontmatter; dangling anchors; required reference files |
 | `make lint-k8s-skill` | k8s `SKILL.md` ≤ 150 lines; workflow frontmatter; decision graph schema v3; render/markdown.md; dangling anchors; memory-sizing p95 rule; templates |
 | `make lint-incident-rca` | incident-rca `SKILL.md` ≤ 180 lines; workflow frontmatter; valid `evidence.example.json`; dangling anchors; causal-graph example validated |
+| `make lint-incident-triage-agent` | incident-triage-agent `SKILL.md` ≤ 180 lines; `disable-model-invocation: true` set; workflow frontmatter; dangling anchors; required reference files |
 | `make lint-domain-comprehension` | domain-comprehension `SKILL.md` ≤ 180 lines; workflow frontmatter; dangling anchors; `templates/manifest.yaml` validator + pytest; pressure harness |
 | `make lint-squad-map` | squad-map `SKILL.md` ≤ 180 lines; workflow frontmatter; dangling anchors; required reference files; pytest |
 | `make lint-who-owns-x-bot` | who-owns-x-bot `SKILL.md` ≤ 180 lines; `disable-model-invocation: true` set; workflow frontmatter; dangling anchors; required reference files |
@@ -122,6 +127,17 @@ and [docs/skill-framework/shared/claude-code-setup.md](skill-framework/shared/cl
 `incident-rca/SKILL.md` must stay at or under **180 lines**. Each file under `workflow/` must declare
 `workflow_version`, `produces`, and `consumes` in YAML frontmatter. Validates `reference/evidence.example.json`
 parses as JSON and checks markdown anchor links under `incident-rca/` (including `workflow/`).
+
+### lint-incident-triage-agent
+
+`incident-triage-agent/SKILL.md` must stay at or under **180 lines** and must set
+`disable-model-invocation: true` (it is a paging-webhook-only automation entry point, not an
+ambient-chat skill — unlike incident-rca or squad-map). Each file under `workflow/` must declare
+`workflow_version`, `phase`, `produces`, and `consumes` in YAML frontmatter. Checks markdown anchor links
+and required `reference/` files (`phase-index.md`, `lazy-load-index.md`, `unattended-gate-policy.md`,
+`triage-doc-format.md`, `postmortem-format.md`, `smoke-test.md`). No scripts or tests — this skill has no
+investigation or ownership logic of its own beyond deciding when to invoke incident-rca/squad-map and how
+to answer their gates unattended.
 
 ### lint-pr-review
 
@@ -227,6 +243,7 @@ To disable the gate later, set the same field to `false`.
 | pr-review | GitLab (read; write for posting) | Jira (ticket context + write-back) |
 | pr-gatekeeper | None — delegates to pr-review | Requires pr-review installed and configured for GitLab posting |
 | incident-rca | ≥1 observability (Datadog or KubeSense) | GitLab, Jenkins, Jira; optional `incident-rca` CLI |
+| incident-triage-agent | None — delegates to incident-rca + squad-map | Requires both installed and configured |
 | k8s-overprovisioning-datadog | Datadog | Git provider (manifest drift) |
 | domain-comprehension | None | GitLab (Session 0b via squad-map), Datadog (P2b runtime validation) |
 | squad-map | None | GitLab, Datadog (CODEOWNERS fallback when both absent) |
