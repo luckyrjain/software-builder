@@ -95,13 +95,21 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 
 - New skill — item #5 of the [team-facing agents roadmap](docs/superpowers/plans/2026-08-05-team-facing-agents-roadmap.md):
   a thin composition wrapper around **domain-comprehension** + **squad-map** that resolves a new hire's
-  squad to its repos, runs domain-comprehension scoped to just those, and writes `ONBOARDING_TOUR.md`.
+  squad to its repos, runs domain-comprehension **unscoped**, and curates `ONBOARDING_TOUR.md` down to
+  just those repos afterward.
 - No `disable-model-invocation` — ambiently invocable, unlike who-owns-x-bot/pr-gatekeeper/
   incident-triage-agent/backlog-runner, since a human is always present for this flow. Both wrapped
   skills' own live gates (domain-comprehension's Session 0 checkpoint, squad-map's `squad_path_segment`
   HARD STOP) surface unscripted — no gate-policy override file.
 - Zero-match squad-name handling: never produces a silent empty tour — asks for confirmation, listing the
   squad names that actually exist in `SQUAD_MAP.md`.
+- **Round-1 review fix (same day):** the initial design scoped domain-comprehension via
+  `scope.seed_repos`, which cascaded through its mandatory Session 0b squad-map delegation and silently
+  archived every other squad's rows out of the shared `SQUAD_MAP.md` on every run (squad-map's own
+  scope-shrink rule, triggered as an unintended side effect). Fixed by always running domain-comprehension
+  unscoped and curating downstream instead. Also corrected a false claim about no ambient-routing
+  collision with domain-comprehension (its "subsystem onboarding" trigger phrase does overlap — resolved
+  via an explicit person-named disambiguation rule in `skill-routing.md`).
 - Design spec: [docs/superpowers/specs/2026-08-05-new-hire-guide-design.md](docs/superpowers/specs/2026-08-05-new-hire-guide-design.md).
 - Wired into `make install-new-hire-guide` / `make lint-new-hire-guide`, root README, docs/README,
   docs/REPOSITORY, skill-routing.md, cross-skill-escalation.md, prompt-injection.md, phase-glossary.md.

@@ -46,6 +46,7 @@ Routing table: [skill-routing.md](../docs/skill-framework/shared/skill-routing.m
 | Bounded contexts, data ownership | **pr-review** (MR) |
 | Critical path + runtime validation | **k8s-overprovisioning-datadog** |
 | Squad / repo ownership only | **squad-map** |
+| Onboarding a **named new hire** (not a subsystem) | **new-hire-guide** |
 
 ## Prerequisites
 

@@ -397,15 +397,18 @@ session routes to **squad-map** directly (see [who-owns-x-bot/SETUP.md](who-owns
 Ambiently invocable, unlike who-owns-x-bot/pr-gatekeeper/incident-triage-agent/backlog-runner — a human
 is always present for this flow, so `disable-model-invocation` is deliberately **not** set. Say something
 like "onboard Jane, she's joining payments" and the skill resolves her squad's repos via squad-map, then
-runs domain-comprehension scoped to just those.
+runs domain-comprehension **unscoped** and curates the result down to those repos (deliberately not
+scoped via domain-comprehension's own `seed_repos` — that cascades into a shared-`SQUAD_MAP.md`-corrupting
+side effect, see [new-hire-guide/SETUP.md](new-hire-guide/SETUP.md)).
 
 ### Examples
 
 | You say | What happens |
 |----------------|----------------|
-| "Onboard Jane, she's joining payments" | Resolves squad → repos via squad-map, runs domain-comprehension `QUICK` scoped to those repos, writes `ONBOARDING_TOUR.md` |
+| "Onboard Jane, she's joining payments" | Resolves squad → repos via squad-map, runs domain-comprehension `QUICK` unscoped, curates the tour to those repos, writes `ONBOARDING_TOUR.md` |
 | Squad name doesn't match any `SQUAD_MAP.md` row | Asks you to confirm/correct, listing the squads that do exist — never a silent empty tour |
 | "Give Jane the full deep-dive" | `delivery_mode: FULL` passed through to domain-comprehension unchanged |
+| "Help me onboard to the payments subsystem" (no person named) | **Wrong skill** → domain-comprehension directly — subsystem onboarding, not a new-hire tour |
 
 ### What you get (new-hire-guide)
 

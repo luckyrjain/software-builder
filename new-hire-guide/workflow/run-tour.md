@@ -21,7 +21,11 @@ finding out.
 **Do not set `refresh: true`.** squad-map's own default (`refresh: false`) already "skip[s] re-query
 when `SQUAD_MAP.md` exists and repo list unchanged" — reusing an existing, unstale `SQUAD_MAP.md` is
 squad-map's own behavior, not new logic this skill needs to duplicate. If the caller explicitly asks for
-a fresh mapping ("re-check ownership first"), pass `refresh: true` through unchanged.
+a fresh mapping ("re-check ownership first"), pass `refresh: true` through unchanged. **Known limitation:**
+squad-map's own staleness skip is keyed on the repo census being unchanged, not on GitLab-group/Datadog-
+team reassignment — a repo whose team tag changed without the repo list itself changing could be missed
+by a reused `SQUAD_MAP.md`. If a new hire's expected repo doesn't appear, suggest `refresh: true` before
+concluding the squad owns nothing.
 
 squad-map's own live gates (Phase 0 MCP profile check, the `squad_path_segment` **HARD STOP** if
 unconfigured) run exactly as they would for a direct squad-map invocation — this skill does not
@@ -42,36 +46,52 @@ likely than a squad that genuinely owns zero repos yet. Do not proceed to step 3
 user explicitly confirms the squad has no repos yet (rare — record this in the tour instead of
 attempting scope).
 
-## 3. Invoke domain-comprehension scoped to the resolved repos
+## 3. Invoke domain-comprehension — unscoped, never narrowed via `seed_repos`
 
-Invoke **domain-comprehension** with:
+Invoke **domain-comprehension** over the same `workspace_root`, with `delivery_mode` —
+`new_hire.delivery_mode` if the caller set one, else `QUICK` (default — a new hire wants fast
+orientation, not a multi-session engagement) — **exactly as a direct invocation would run it**, with no
+`domain-config.yaml` `scope.seed_repos` override and no other scope narrowing.
 
-- `workspace_root` — unchanged, same workspace
-- `delivery_mode` — `new_hire.delivery_mode` if the caller set one, else `QUICK` (default — a new hire
-  wants fast orientation, not a multi-session engagement)
-- `domain-config.yaml` `scope.seed_repos` — set to exactly the repo names matched in step 2 (per
-  [domain-config-schema.md](../../domain-comprehension/reference/domain-config-schema.md) — `seed_repos`
-  is "optional hints — agent still verifies," so domain-comprehension's own Session 0 census still runs
-  normally, just filtered to this set)
+**Do not narrow domain-comprehension's own census to the matched repos, even though `seed_repos` exists
+for exactly this kind of purpose.** This was the original design and was reverted: `seed_repos` narrows
+Session 0's own repo census, and domain-comprehension's Session 0b squad-map enrichment is a **mandatory,
+non-optional subroutine** (see [cross-skill-escalation.md](../../docs/skill-framework/shared/cross-skill-escalation.md)
+§ 1 — "Session 0b (subroutine, not optional)") that passes that narrowed census straight to squad-map as
+its own `repos` input, per squad-map's documented [Embedded invocation (domain-comprehension)](../../squad-map/workflow/inputs.md#embedded-invocation-domain-comprehension)
+contract. squad-map's own idempotency rule ([phase-1.md](../../squad-map/workflow/phase-1.md) §
+"Idempotency & partial runs" — "**Scope shrink:** when the in-scope repo census is smaller than the prior
+run..., move rows for repos no longer in scope to `SQUAD_MAP.md` § Out of scope (archived)" — and this
+holds for **both** `refresh: true` and `refresh: false`) then archives every other squad's rows out of the
+**same shared `SQUAD_MAP.md`** this skill just read in step 1 — silently corrupting a file every other
+squad-map/who-owns-x-bot/pr-review caller depends on, for the sake of one onboarding tour. Curating to the
+new hire's repos happens entirely in step 4 below, on domain-comprehension's own unscoped output — never
+by narrowing what domain-comprehension itself analyzes or reports to squad-map.
+
+If `workspace_root` already has a `manifest.yaml`, domain-comprehension resolves its own mode per its own
+`RESUME`/`DELTA` rules, same as any direct invocation — this skill neither forces nor blocks that.
 
 domain-comprehension's own live gate (Session 0 step 11, "Scope & budget checkpoint... Ask user to
-approve mechanical-analysis scope") runs exactly as it would for a direct invocation — this skill does
-not pre-answer it.
+approve mechanical-analysis scope," which only fires ahead of P0.5 — not guaranteed on every
+`delivery_mode`, e.g. `QUICK`'s own definition stops before P0.5) runs exactly as it would for a direct
+invocation, whenever domain-comprehension's own rules would trigger it — this skill does not pre-answer
+it and does not need to, since nothing about this invocation differs from a direct one.
 
-If `workspace_root` already has a `manifest.yaml` from a prior, broader engagement, domain-comprehension
-resolves its own mode per its own `RESUME`/`DELTA` rules — this skill does not override that; it only
-supplies `scope.seed_repos`.
-
-## 4. Build `ONBOARDING_TOUR.md`
+## 4. Build `ONBOARDING_TOUR.md` — curate domain-comprehension's full output down to the matched repos
 
 Per [reference/tour-format.md](../reference/tour-format.md), using:
 
 - `new_hire.name`, `new_hire.squad`, `new_hire.start_date`/`role` if given — welcome section
-- The resolved repo list from step 2, each repo's one-line purpose from domain-comprehension's P0 census
-  / `EXEC_SUMMARY.md`
-- Squad ownership/contact evidence from `SQUAD_MAP.md`
+- **Filter** domain-comprehension's per-repo P0 census / `EXEC_SUMMARY.md` down to just the repo list
+  matched in step 2 — domain-comprehension itself analyzed the whole workspace; this skill's curation
+  step is what narrows the *tour*, not domain-comprehension's own scope or deliverables
+- Squad ownership/contact evidence from `SQUAD_MAP.md`, **including cross-checking `SQUAD_MAP.md` §
+  Conflicts for any matched repo** — a conflicted row (GitLab squad ≠ Datadog team) must be surfaced
+  plainly in the tour per [tour-format.md](../reference/tour-format.md)'s "never resolved on the caller's
+  behalf" rule, not silently picked one way
 - Links (not restated content) into `EXEC_SUMMARY.md` and the other domain-comprehension deliverables for
-  anyone who wants more depth
+  anyone who wants more depth — those deliverables cover the whole workspace, not just this tour's repos;
+  say so rather than implying they're pre-filtered
 
 ## Required outputs
 

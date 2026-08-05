@@ -15,10 +15,10 @@ When adding a new skill, add it here first; then each existing skill only needs 
 | PagerDuty/Opsgenie page-fire or incident-resolved webhook, no follow-up turn possible | **incident-triage-agent** | incident-rca, squad-map (that's what it delegates to internally — do not call either directly for an unattended paging event, their own confirmation gates are designed to wait for a human chat turn) |
 | Review MR, review merge request, review !IID, /pr-review, re-review, post-merge audit, list open MRs, review as SRE/security/architect (interactive, conversational) | **pr-review** | incident-rca, k8s |
 | GitLab push-event webhook, automated review on every push, no follow-up turn possible | **pr-gatekeeper** | pr-review (that's what it delegates to internally — do not call pr-review directly for an unattended webhook run, its own posting confirmation is designed to wait for a human chat turn) |
-| Domain comprehension, bounded context, data ownership, critical path, architecture smells, subsystem onboarding, multi-repo ground truth, five questions | **domain-comprehension** | squad-map (ownership only), incident-rca |
+| Domain comprehension, bounded context, data ownership, critical path, architecture smells, subsystem onboarding **with no person named**, multi-repo ground truth, five questions | **domain-comprehension** | squad-map (ownership only), incident-rca, new-hire-guide (onboarding **a named person**, not a subsystem) |
 | Squad map, ownership, who owns, CODEOWNERS, GitLab group, Datadog team, team reconciliation (interactive, conversational) | **squad-map** | domain-comprehension (full map) |
 | `/who-owns` Slack slash command, single-shot automated ownership lookup with a structured `query`, no follow-up turn possible | **who-owns-x-bot** | squad-map (that's what it delegates to internally — do not call squad-map directly for a single-shot Slack reply, its output contract is a markdown file + chat summary, not one message) |
-| New engineer onboarding, new-hire tour, "joining the squad", first-week orientation scoped to one person's repos (interactive, conversational) | **new-hire-guide** | squad-map (ownership only, no tour), domain-comprehension (full org-wide map, not scoped to one person) |
+| New engineer onboarding, new-hire tour, "joining the squad", first-week orientation, **a person is named** (interactive, conversational) | **new-hire-guide** | squad-map (ownership only, no tour), domain-comprehension (subsystem/domain onboarding with **no person named** — "subsystem onboarding" is domain-comprehension's own trigger phrase too; the person-named test is what disambiguates, not the word "onboarding") |
 | MySQL scrub, jdbc:postgresql, TIMESTAMPDIFF, DATE_FORMAT, native SQL rewrite, mysql2→pg, SQLAlchemy PG cutover, collection P0/P1 cooling SQL | **mysql-to-postgres-sql** | domain-comprehension (full map), squad-map (ownership only) |
 | Implement task/issue autonomously, independent review + remediation loop, adjudicate findings, work through a task queue (interactive, human-driven) | **loop-task-implementer** | pr-review (reviewing someone else's existing MR only) |
 | Scheduled trigger pulling N tickets from a tracker query, overnight/unattended, no human turn available | **backlog-runner** | loop-task-implementer (that's what it delegates to internally — do not call loop-task-implementer directly for an unattended scheduled sweep; use it for a single-task or human-driven multi-task request) |
@@ -47,9 +47,10 @@ When adding a new skill, add it here first; then each existing skill only needs 
     squad-map directly
 13. **Scheduled overnight ticket-queue sweep, no human turn available** → backlog-runner; **single-task or
     human-driven multi-task request** → loop-task-implementer directly
-14. **"Onboard `<name>`, joining `<squad>`"** (new-hire input given) → new-hire-guide; **plain "who owns
-    X?"** (no new-hire input) → squad-map directly; **full org-wide domain map** (no one-person scope) →
-    domain-comprehension directly
+14. **Onboarding request naming a person** ("onboard `<name>`, joining `<squad>`") → new-hire-guide;
+    **onboarding request naming a subsystem/domain, no person named** ("help me onboard to the payments
+    subsystem") → domain-comprehension directly, even though both skills use the word "onboarding";
+    **plain "who owns X?"** (no new-hire input) → squad-map directly
 
 ## Ambiguous requests — ask
 
