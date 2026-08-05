@@ -1,0 +1,68 @@
+# Domain config — copy to workspace_root/domain-config.yaml at Session 0
+# Schema: reference/domain-config-schema.md
+
+domain:
+  name: example
+  display_name: Example Domain
+  description: One-line scope
+
+workspace:
+  root: /absolute/path/to/workspace
+  layout: sibling-repos  # sibling-repos | monorepo | single-repo
+
+scope:
+  include_keywords: []
+  exclude_patterns: []
+  seed_repos: []
+
+five_questions:
+  - id: Q1
+    question: What component performs the core side effect of this domain?
+    search_terms: []
+  - id: Q2
+    question: What prevents duplicate processing (idempotency / dedup)?
+    search_terms: []
+  - id: Q3
+    question: What is the source of truth for domain state?
+    search_terms: []
+  - id: Q4
+    question: How is reconciliation or consistency performed across systems?
+    search_terms: []
+  - id: Q5
+    question: What happens when the primary operation fails?
+    search_terms: []
+
+critical_path_tiers:
+  tier_0:
+    label: Side-effect executor
+    definition: Repos that perform irreversible domain side effects
+    provisional: []
+  tier_1:
+    label: Orchestration
+    definition: Repos that coordinate tier-0 execution
+    provisional: []
+  tier_2:
+    label: Recon / ops
+    definition: Reconciliation, reporting, operational tooling
+    provisional: []
+  tier_3:
+    label: BFF / gates
+    definition: API gateways and presentation layers
+    provisional: []
+  flow_critical_gates: []
+
+deliverables:
+  map_file: DOMAIN_MAP.md  # e.g. DISBURSEMENT_MAP.md when domain.name is disbursement
+  core_section: Core Domain Deep Dive
+
+memory_bank:
+  consume_existing: true
+  export_mode: optional  # never | optional | p5
+  init_tool: none        # none | templates-only | cursor-bank
+  merge_strategy: hand_wins
+  per_repo_export: tier_0_1_only
+
+api_tooling:
+  export_mode: never     # never | optional | p5
+  otp_helper: auto        # auto | always | never
+  envs: [qa, uat, prod]

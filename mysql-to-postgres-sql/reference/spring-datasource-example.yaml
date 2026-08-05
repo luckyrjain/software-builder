@@ -1,0 +1,22 @@
+# Spring Boot PostgreSQL datasource — ARCH wiki §6 example
+# Rename bean key (e.g. datasource-mysql → datasource-postgres) per service conventions.
+
+datasource-postgres:
+  url: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}?currentSchema=${DB_SCHEMA}
+  username: ${DB_USERNAME}
+  password: ${DB_PASSWORD}
+  driver-class-name: org.postgresql.Driver
+  hikari:
+    pool-name: PostgreSQLMasterPool
+    auto-commit: true
+    register-mbeans: true  # JMX metrics (ARCH wiki §6)
+
+spring:
+  jpa:
+  # Replace org.hibernate.dialect.MySQL8Dialect (or MySQLDialect) on cutover:
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+  datasource:
+    hikari:
+      register-mbeans: true
+
+# Optional: application_name for PG connection tracing (URL param or Hikari data-source property)

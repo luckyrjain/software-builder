@@ -1,0 +1,88 @@
+{
+  "schema_version": 4,
+  "window": {
+    "from_time": "2026-06-28T14:00:00Z",
+    "to_time": "2026-06-28T16:00:00Z"
+  },
+  "service": "neo-disbursement-service",
+  "symptom": "5xx spike on transfer-money",
+  "environment": "production",
+  "error_signals": [
+    {
+      "source": "datadog",
+      "service": "neo-disbursement-service",
+      "signal_type": "error_rate",
+      "detected_at": "2026-06-28T14:45:00Z",
+      "magnitude": "12% error rate (baseline 0.3%)",
+      "sample_messages": [
+        "NullPointerException in TransferMoneyHandler",
+        "HTTP 500 on POST /transfer-money"
+      ],
+      "link": "https://app.datadoghq.com/apm/traces?query=service%3Aneo-disbursement-service",
+      "raw_summary": "Error rate elevated from 0.3% to 12% starting 14:45 UTC"
+    },
+    {
+      "source": "kubesense-mcp",
+      "service": "neo-disbursement-service",
+      "signal_type": "log_error",
+      "detected_at": "2026-06-28T14:46:00Z",
+      "magnitude": "38 matching stack traces in 5m window",
+      "sample_messages": [
+        "java.lang.NullPointerException: at TransferMoneyHandler.validate(TransferMoneyHandler.java:142)"
+      ],
+      "link": "kubesense://search-logs?service=neo-disbursement-service&level=ERROR",
+      "raw_summary": "Pod logs corroborate the Datadog error-rate spike with the exact NPE stack trace"
+    }
+  ],
+  "deploy_events": [
+    {
+      "source": "jenkins",
+      "deployed_at": "2026-06-28T14:20:00Z",
+      "project": "tech-disbursement/disbursement-service",
+      "environment": "production",
+      "sha": "abc123def4567890abcdef1234567890abcd",
+      "author": "dev.user",
+      "change_summary": "MR !482: Refactor transfer-money validation",
+      "mr_url": "https://gitlab.example.com/tech-disbursement/disbursement-service/-/merge_requests/482",
+      "mr_iid": 482,
+      "services": ["neo-disbursement-service"],
+      "link": "https://jenkins.example.com/job/prod-disbursement-service/1234/"
+    }
+  ],
+  "jira_issues": [
+    {
+      "key": "INC-4521",
+      "summary": "Production 5xx on transfer-money",
+      "status": "Investigating",
+      "priority": "P1",
+      "created_at": "2026-06-28T14:50:00Z",
+      "link": "https://jira.example.com/browse/INC-4521",
+      "comment_snippets": [
+        "Started after 14:30 deploy per on-call"
+      ]
+    }
+  ],
+  "infra_signals": [],
+  "known_issue_matches": [],
+  "evidence_links": [
+    {
+      "source": "datadog",
+      "finding": "12% error rate on transfer-money endpoint",
+      "link": "https://app.datadoghq.com/apm/traces?query=service%3Aneo-disbursement-service"
+    },
+    {
+      "source": "jenkins",
+      "finding": "Prod deploy build #1234 at 14:20 UTC",
+      "link": "https://jenkins.example.com/job/prod-disbursement-service/1234/"
+    }
+  ],
+  "query_references": [
+    "datadog: trace.servlet.request.errors{service:neo-disbursement-service,env:production}",
+    "kubesense: analyze-logs level=ERROR service=neo-disbursement-service",
+    "gitlab: list_merge_requests state=merged updated_after=2026-06-28T13:30:00Z + get_commit (match deploy SHA)",
+    "jenkins: getBuildScm prod-disbursement-service #1234",
+    "jira: project=INC AND created >= 2026-06-28 AND summary ~ transfer-money"
+  ],
+  "recurrence_history": [],
+  "query_signals": []
+}

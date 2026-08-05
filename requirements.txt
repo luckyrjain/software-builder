@@ -1,0 +1,3 @@
+# Dev dependencies for make lint (pr-review pytest, k8s decision-graph validator)
+pytest>=7.0
+PyYAML>=6.0

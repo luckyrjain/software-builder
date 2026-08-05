@@ -1,0 +1,19 @@
+assessment_metadata:
+  assessment_type: full
+  started: "2026-06-28T11:00:00Z"
+  finished: "2026-06-28T11:18:00Z"
+  service: neo-disbursement
+  final_decision: KEEP_CONFIGURATION
+  assessment_confidence: 0.9
+  assessment_complete: true
+  precision:
+    recommendations_evaluated: 4
+    recommendations_ready: 0
+    recommendations_deferred: 2
+    recommendations_blocked: 1
+    avg_decision_confidence: 0.9
+  investigation_quality:
+    coverage_pct: 100
+    evidence_pct: 95
+    telemetry_coverage_stars: 3
+    confidence: very_high

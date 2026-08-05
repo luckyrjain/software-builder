@@ -1,0 +1,26 @@
+{
+  "active_env": "qa",
+  "envs": {
+    "qa": {
+      "baseUrl": "https://qa-api.example.com/<bff>/<service>",
+      "directBaseUrl": "https://qa-<service>.example.ai",
+      "appVersion": "1.0.0",
+      "versionCode": "100",
+      "signatureSalt": "${SIGNATURE_SALT_QA}"
+    },
+    "uat": {
+      "baseUrl": "https://uat-api.example.com/<bff>/<service>",
+      "directBaseUrl": "https://uat-<service>.example.ai",
+      "appVersion": "1.0.0",
+      "versionCode": "100",
+      "signatureSalt": "${SIGNATURE_SALT_UAT}"
+    },
+    "prod": {
+      "baseUrl": "https://api.example.com/<bff>/<service>",
+      "directBaseUrl": "https://<service>.example.ai",
+      "appVersion": "1.0.0",
+      "versionCode": "100",
+      "signatureSalt": "${SIGNATURE_SALT_PROD}"
+    }
+  }
+}

@@ -1,0 +1,66 @@
+review_metadata:
+  review_type: incremental
+  started: "2026-06-25T10:10:00Z"
+  finished: "2026-06-25T10:15:00Z"
+  baseline_sha: "abc123def4567890abcdef1234567890abcdef12"
+  head_sha: "def4567890abcdef1234567890abcdef12345678"
+  review_hash:
+    scope: incremental
+    files: 3
+    head: "def45678"
+    persona: principal_engineer
+  findings:
+    - id: PRR-TEST-001
+      category: TEST
+      severity: medium
+      confidence: high
+      status: open
+      location: payments/refund_test.py:12
+      evidence: [payments/refund_test.py:12]
+  findings_stats:
+    previous: 2
+    resolved: 1
+    remaining: 1
+    new: 1
+  regression_check: pass
+  recommendation: approve
+  confidence: high
+  review_complete: true
+  history:
+    approval_iteration: 2
+    first_review:
+      head_sha: "abc123def4567890abcdef1234567890abcdef12"
+      finished: "2026-06-24T14:00:00Z"
+      findings_count: 2
+      highest_severity: high
+      recommendation: request_changes
+    prior_review:
+      head_sha: "abc123def4567890abcdef1234567890abcdef12"
+      finished: "2026-06-24T14:00:00Z"
+      findings_count: 2
+      highest_severity: high
+      recommendation: request_changes
+    regressions: []
+  precision:
+    prior_total: 2
+    prior_resolved: 1
+    prior_resolved_pct: 50
+    regression_count: 0
+    regression_rate: 0.0
+    false_positives_withdrawn: 0
+    candidates: 8
+    emitted: 1
+    finding_precision: 0.125
+  review_quality:
+    coverage_pct: 100
+    evidence_pct: 100
+    confidence: high
+    finding_precision: 0.125
+  repository_health:
+    schema_version: 2
+    dimensions:
+      ci: 8
+      documentation: 9
+      validation: 10
+      automation: 7
+      observability: null
