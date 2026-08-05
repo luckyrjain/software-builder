@@ -26,8 +26,8 @@ message. No new ownership logic here — see [SKILL.md](../SKILL.md) Non-goals.
    - **Exact match:** exactly one row's `Repo` column equals `query` → use that row, skip to Step 4.
    - **Substring/prefix match:** no exact match, but `query` is a substring or prefix of one or more
      `Repo` values (e.g. `query: ledger` against rows `legacy-ledger`, `ledger-service`) → if exactly one
-     row matches, use it; if more than one row matches, that **is** the "matches more than one repo"
-     Ambiguous case — go straight to Step 4 with those candidate rows, do not run Step 3.
+     row matches, use it and skip to Step 4; if more than one row matches, that **is** the "matches more
+     than one repo" Ambiguous case — go straight to Step 4 with those candidate rows, do not run Step 3.
    - **No match at all** → go to Step 3.
 
 3. **Otherwise, invoke squad-map** scoped to a single, exact repo name (`query`) — equivalent to a user

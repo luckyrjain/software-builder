@@ -30,6 +30,7 @@ know about — don't treat it as a "you may want to" row the way every other row
 | Incident + unclear service owner | incident-rca → squad-map | Service name + window | "Who owns `{service}`? — need squad for RCA follow-up" |
 | Caller wants the full mapping table, not one Slack answer | who-owns-x-bot → squad-map | `workspace_root` | "Map squads for repos in `{workspace}` — org prefix `{org}`, segment `{n}`" |
 | Caller wants bounded contexts / domain map, not just ownership | who-owns-x-bot → domain-comprehension | `query` (repo/service name) | "Map bounded contexts and data ownership for `{domain}` — full domain comprehension" |
+| `query` names a service mid-incident (surfaced as a suggestion in the reply only — a single-shot Slack reply cannot itself switch skills) | who-owns-x-bot → incident-rca | Service name from `query` | "RCA for `{service}` — is there an active incident?" |
 | Security finding in domain analysis (P3b) | domain-comprehension → pr-review | Repo + file path + finding type | "Review MR !{iid} for credential exposure in `{service}`" |
 | Architecture smell needs RCA context | domain-comprehension → incident-rca | Service + smell + time window | "RCA for `{service}` {window} — recurring {smell} identified in domain analysis" |
 | Domain map reveals overprovisioned service | domain-comprehension → k8s | Service + env from runtime validation | "Assess rightsizing for `{service}` in `{env}` — domain analysis found low utilization" |
