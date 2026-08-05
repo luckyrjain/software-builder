@@ -45,10 +45,11 @@ Parse per [workflow/inputs.md](workflow/inputs.md).
 
 | Input | Required | Default |
 |-------|----------|---------|
-| `project` | Yes | — (GitLab project path or ID from the webhook payload) |
+| `project` | Yes | — (GitLab project path, preferred, from the webhook payload) |
 | `merge_request_iid` | Yes | — |
 | `head_sha` | Yes | The pushed commit's SHA |
 | `auto_post_authorized` | No | `false` — see [SETUP.md](SETUP.md) § Config; upfront, per-project human grant, never inferred |
+| `last_processed_head_sha` | No | None — the calling handler's own dedupe state; this skill persists nothing itself, see [SETUP.md](SETUP.md) § Integration contract |
 
 ## Prerequisites
 

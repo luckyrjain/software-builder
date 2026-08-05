@@ -10,11 +10,13 @@ Conventions: [examples-conventions](../docs/skill-framework/shared/examples-conv
 | 2 | Push to MR !482, `auto_post_authorized: true`, pr-review detects `general-only` | Inputs → Gatekeep → Phase 3 always prompts (pr-review's own rule) → "Hold — don't post" → routed notification |
 | 3 | Push to MR !482, `auto_post_authorized: true`, MR is a draft | Inputs → Gatekeep → draft-MR warning prompts → "Hold — don't post" → routed notification |
 | 4 | Push to MR !482, `auto_post_authorized: false` | Inputs → Gatekeep → no post phrase supplied → Phase 3 prompts → "Hold — don't post" → routed notification |
-| 5 | Push with `head_sha` identical to the last processed push on !482 (duplicate webhook delivery) | Inputs short-circuit — Gatekeep never runs, no second pr-review invocation |
+| 5 | Push with `head_sha` == caller-supplied `last_processed_head_sha` for !482 (duplicate webhook delivery) | Inputs short-circuit — Gatekeep never runs, no second pr-review invocation |
 | 6 | Push to a branch with no open MR | Inputs short-circuit — no-op |
 | 7 | Label added / comment posted on !482 (not a push event) | Inputs short-circuit — pr-gatekeeper only reacts to push events |
 | 8 | "Review this MR" typed in an interactive chat session | **Wrong skill** → pr-review (this skill doesn't auto-invoke; see `disable-model-invocation`) |
 | 9 | pr-review's own `chat-only` mode detected (read-only GitLab MCP) | Phase 3 skipped entirely by pr-review's own rules; nothing posted; routed notification same as a Hold outcome |
+| 10 | Push to MR !482 with 250 changed files | pr-review's early 200-file cap warning fires before Phase 2 → "review the partial boundary as-is" → review continues on the fetched subset |
+| 11 | Push is the 35th commit since !482's last reviewed baseline | pr-review's baseline-staleness offer fires → "continue incrementally" → declines the full-re-review offer |
 
 ---
 
@@ -41,7 +43,8 @@ Conventions: [examples-conventions](../docs/skill-framework/shared/examples-conv
 of phrasing → automation replies `"Hold — don't post"` → pr-review completes Phase 5 in chat only →
 pr-gatekeeper routes the rendered review via the configured notification.
 
-**Expected fragment (routed notification):**
+**Expected fragment (routed notification — `Full review:` carries the pasted executive summary, since
+nothing posted to link to):**
 
 ```
 Subject: MR !482 review — Comment
@@ -51,6 +54,7 @@ Recommendation: Comment
 Blocking: None
 Summary: Two medium findings, no criticals.
 MR: https://gitlab.example.com/acme/backend/-/merge_requests/482
+Full review: [pasted Phase 5 executive summary — findings table, root-cause groups, evidence]
 ```
 
 ---

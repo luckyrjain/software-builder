@@ -48,19 +48,24 @@ who-owns-x-bot's Slack handler. The handler you build:
 2. On each delivery, resolves the pushed branch to an open MR (GitLab's push webhook payload does not
    always include the MR directly — you may need `GET /projects/:id/merge_requests?source_branch=...` to
    find it). No open MR → no-op.
-3. Starts (or reuses) an agent session with this skill installed, passing `project`, `merge_request_iid`,
-   `head_sha`, and the project's configured `auto_post_authorized`.
-4. Implements the **two-message protocol** pr-gatekeeper's workflow depends on — see
-   [reference/auto-post-policy.md § The protocol](reference/auto-post-policy.md#the-protocol-exactly-two-messages-never-a-hang):
-   send the opening invocation, and if — and only if — the session's response is a Phase 3 confirmation
-   prompt from pr-review, send back the literal text `"Hold — don't post"` as the next turn. Never send
-   any other reply.
+3. **The handler owns `head_sha` dedupe state — pr-gatekeeper does not persist anything itself.** Track,
+   per MR, the last `head_sha` you dispatched to pr-gatekeeper (a row in whatever store the handler
+   already uses for webhook state). On each delivery, pass that stored value as
+   `last_processed_head_sha` alongside `project`, `merge_request_iid`, the new `head_sha`, and
+   `auto_post_authorized` — [workflow/inputs.md](workflow/inputs.md)'s short-circuit compares against
+   whatever you pass here, it has no other source. After a run completes (posted or held — both count as
+   "processed"), update your stored value to the new `head_sha`.
+4. Implements the **deterministic-reply protocol** pr-gatekeeper's workflow depends on — see
+   [reference/auto-post-policy.md § The protocol](reference/auto-post-policy.md#the-protocol-every-pr-review-ask-point-gets-one-deterministic-answer-never-a-hang):
+   send the opening invocation, then answer **every** gate pr-review's session stops at with its one
+   designated reply (large-MR/pagination caps → "review the partial boundary as-is"; baseline-staleness
+   offer → "continue incrementally"; Phase 3 confirmation, if it stops → `"Hold — don't post"`). Never
+   send any other reply, and never leave a stopped session unanswered.
 5. When the run reports a routed notification instead of a posted comment, deliver it to wherever
    § Config points (Slack channel, email, etc.) — pr-gatekeeper's own output is just text, the handler
    does the actual delivery, same division of labor as who-owns-x-bot's Slack `response_url` posting.
-6. Debounce duplicate webhook deliveries for the same `head_sha` at the handler level too, if your GitLab
-   instance is known to redeliver — [workflow/inputs.md](workflow/inputs.md) also short-circuits on this,
-   but skipping the agent invocation entirely at the handler is cheaper.
+6. If your GitLab instance is known to redeliver the same webhook, debounce at the handler level too
+   (skipping the agent invocation entirely is cheaper than relying on step 3's comparison alone).
 
 ## Config
 
@@ -85,5 +90,5 @@ you're authorized to post to.
 | Symptom | Fix |
 |---------|-----|
 | Every run ends in "Hold" even with `auto_post_authorized: true` | Check pr-review's own detected posting mode and draft state — `general-only` and drafts always hold, by pr-review's own design, regardless of authorization |
-| Handler hangs waiting for a reply that never comes | Handler isn't implementing the two-message protocol (§ Integration contract step 4) — it must answer "Hold — don't post" whenever Phase 3 stops, not wait indefinitely |
-| Duplicate comments on the same push | Check webhook redelivery isn't bypassing the `head_sha` short-circuit — see § Integration contract step 6 |
+| Handler hangs waiting for a reply that never comes | Handler isn't answering every gate in the deterministic-reply protocol (§ Integration contract step 4) — a large MR or a stale incremental baseline stops pr-review just as surely as Phase 3 does |
+| Re-reviews the same push repeatedly, or duplicate notifications | Handler isn't passing `last_processed_head_sha` (§ Integration contract step 3) — without it, `workflow/inputs.md` has nothing to compare the new `head_sha` against and can't short-circuit |

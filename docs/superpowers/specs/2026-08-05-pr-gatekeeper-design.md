@@ -21,14 +21,17 @@ on every push to an MR automatically, without a human remembering to ask.
 2. Delegates the entire review to **pr-review** — same phases, same findings pipeline, same posting
    templates, same cross-session incremental-rerun dedupe. No new review logic, no new severity rubric,
    no new posting templates.
-3. Handles exactly one problem pr-review cannot solve for itself: **pr-review's Phase 3 posting
-   confirmation is designed to require a literal human chat message** (see
+3. Handles the problem pr-review cannot solve for itself: **pr-review is designed to stop and wait for a
+   literal human chat reply at several points, not only its Phase 3 posting confirmation** — the early
+   200-file cap warning and pagination-cap ask in Phase 1 Gather, the baseline-staleness offer in
+   incremental re-review, and Phase 3 itself (see
    [reference/auto-post-policy.md](../../pr-gatekeeper/reference/auto-post-policy.md)) — correctly so,
-   for interactive use. A webhook has no chat turn to supply that. pr-gatekeeper's entire job is
-   deciding, for each push, whether pr-review's own existing "review and post" skip condition already
-   covers this case (and if so, supplying it) — or whether pr-review's own rules mean this push must
-   **not** auto-post, in which case pr-gatekeeper produces the review without posting and hands off to a
-   human notification path instead.
+   for interactive use. A webhook has no chat turn to supply any of them. pr-gatekeeper's entire job is
+   answering each of these deterministically (never expanding scope on its own judgment) and, for Phase 3
+   specifically, deciding whether pr-review's own existing "review and post" skip condition already
+   covers this case — or whether pr-review's own rules mean this push must **not** auto-post, in which
+   case pr-gatekeeper produces the review without posting and hands off to a human notification path
+   instead, with the full executive summary intact (not just a one-line stub).
 
 ## Why this needs its own skill instead of "just say 'review and post' in the webhook handler"
 
@@ -84,10 +87,18 @@ handling; those still hold every time, per pr-review's own rules.
   auto-posts; it produces the review and routes it via the configured notification path instead.
 - Given `auto_post_authorized: false` (or unset) → pr-gatekeeper never posts, always routes to
   notification, regardless of mode/draft state.
-- Given no new commits since the last recorded `head_sha` → pr-gatekeeper does not re-invoke pr-review at
-  all (this is a wrapper-level short-circuit — invoking pr-review anyway would hit its own "No new
-  commits" short-circuit and skip Phase 3/4, but skipping the invocation entirely avoids the cost of a
-  full agent run that pr-review would immediately no-op).
+- Given a routed notification (not posted) → the notification carries pr-review's full Phase 5 executive
+  summary, not just a one-line stub — the manual-notify template's `Full review:` field is populated with
+  the pasted summary, since there's no GitLab link to use instead.
+- Given `last_processed_head_sha` supplied by the caller and equal to the new `head_sha` → pr-gatekeeper
+  does not re-invoke pr-review at all (this is a wrapper-level short-circuit — invoking pr-review anyway
+  would hit its own "No new commits" short-circuit and skip Phase 3/4, but skipping the invocation
+  entirely avoids the cost of a full agent run that pr-review would immediately no-op). **This dedupe
+  state is the caller's responsibility, not pr-gatekeeper's** — the skill has no persistence of its own
+  and does not attempt to derive "last processed" on its own initiative.
+- Given a Phase 1 large-MR/pagination-cap ask or an incremental baseline-staleness offer → pr-gatekeeper
+  answers deterministically ("review the partial boundary as-is" / "continue incrementally") rather than
+  leaving the session waiting on either.
 - `make lint-pr-gatekeeper` and `make lint-framework` pass; skill wired into root README.md,
   docs/README.md, docs/REPOSITORY.md, `skill-routing.md`, `phase-glossary.md`, `cross-skill-escalation.md`,
   `CHANGELOG.md`.
