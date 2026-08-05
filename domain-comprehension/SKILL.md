@@ -155,6 +155,12 @@ Template in [phase-completion-gate.md](reference/phase-completion-gate.md) after
 
 [sub-agent-orchestration.md](reference/sub-agent-orchestration.md) · [cross-skill-escalation.md](../docs/skill-framework/shared/cross-skill-escalation.md)
 
+## Post-actions
+
+None — deliverables are markdown/manifest artifacts written to the workspace, not ticket or chat
+write-backs. Optional Memory Bank / Postman exports are covered in [phase-5.md](workflow/phase-5.md), not
+[post-action-templates.md](../docs/skill-framework/shared/post-action-templates.md).
+
 ## Framework
 
 [docs/skill-framework/README.md](../docs/skill-framework/README.md) · [prompt-injection.md](../docs/skill-framework/shared/prompt-injection.md)

@@ -1,6 +1,19 @@
 ---
-workflow_version: 1.13
+workflow_version: 1.14
 phase: 1
+produces:
+  - per_repo_deep_dives
+  - ownership_cards
+  - bounded_contexts
+  - data_ownership
+  - domain_glossary
+  - smells_initial
+  - auth_gateway_table
+consumes:
+  - inventory
+  - contract_inventory
+  - domain_graph
+  - mechanical_insights
 ---
 
 # Comprehension Phase P1 — Domain Deep Dive

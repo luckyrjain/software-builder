@@ -1,6 +1,23 @@
 ---
-workflow_version: 1.6
+workflow_version: 1.7
 phase: 5
+produces:
+  - final_five_questions
+  - overall_confidence_final
+  - engineering_leader_summary
+  - architecture_decisions
+  - repo_map_table
+  - evidence_summary_final
+  - section_confidences
+  - progress_status
+consumes:
+  - quality_ops_section
+  - runbook
+  - top_smells
+  - change_risk_map
+  - evidence_summary
+  - core_domain_deep_dive
+  - fraud_compliance_review
 ---
 
 # Comprehension Phase P5 — Delivery and handoff

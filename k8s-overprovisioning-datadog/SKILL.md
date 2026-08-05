@@ -11,6 +11,9 @@ description: >-
 
 **Graph-first audit engine.** Skill **v3.3** · `schema_version: 3`.
 
+**Read-only.** This skill never applies manifest changes — it only reads Datadog telemetry and produces
+recommendations; applying any change is the user's action.
+
 Primary artifact: [decision-graph-schema.md](reference/decision-graph-schema.md). Renderers: [render/README.md](render/README.md).
 
 ## When NOT to use

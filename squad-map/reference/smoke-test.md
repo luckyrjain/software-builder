@@ -37,3 +37,8 @@ When Datadog ❌:
 - No application source modified.
 - `SQUAD_MAP.md` exists with MCP profile header and ≥1 data row.
 - Read-only MCP — no writes, deploys, or mutations.
+
+## Deep edge cases
+
+See [pressure-tests.md](pressure-tests.md) — e.g. "One MCP ❌" (other lens only, capped confidence) and
+"Both MCP ❌" (CODEOWNERS fallback, confidence LOW max).

@@ -40,4 +40,5 @@ From the **repo root** (ai-skills clone), the same checks run via: `make lint-pr
 
 All tests should pass and `py_compile` should print nothing (exit 0).
 
-Maintainer pressure scenarios: [pressure-tests.md](pressure-tests.md).
+Maintainer pressure scenarios: [pressure-tests.md](pressure-tests.md) (≥2 rows — e.g. revert MR standard
+checklist, bot MR skipping human-commit hunks).

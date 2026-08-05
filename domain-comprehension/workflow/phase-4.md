@@ -1,6 +1,19 @@
 ---
-workflow_version: 1.8
+workflow_version: 1.9
 phase: 4
+produces:
+  - quality_ops_section
+  - runbook
+  - smells_full
+  - top_smells
+  - change_impact
+  - change_risk_map
+  - evidence_summary
+consumes:
+  - core_domain_deep_dive
+  - fraud_compliance_review
+  - bounded_contexts
+  - smells_initial
 ---
 
 # Comprehension Phase P4 — Risk and resilience

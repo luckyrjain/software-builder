@@ -95,6 +95,11 @@ Full matrix: [cross-skill-escalation.md](../docs/skill-framework/shared/cross-sk
 | Ownership unclear + active incident | **incident-rca** (then return here if needed) |
 | MR touches squad with conflict flag | **pr-review** with ownership context from `SQUAD_MAP.md` |
 
+## Post-actions
+
+None — squad-map is read-only and produces no Jira/Slack/canvas write-back. Output lives entirely in
+`SQUAD_MAP.md`. See [post-action-templates.md](../docs/skill-framework/shared/post-action-templates.md).
+
 ## Framework
 
 Routing: [skill-routing.md](../docs/skill-framework/shared/skill-routing.md) · shared conventions:

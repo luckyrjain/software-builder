@@ -1,6 +1,18 @@
 ---
-workflow_version: 1.2
+workflow_version: 1.3
 phase: 3
+produces:
+  - core_domain_deep_dive
+  - implementation_matrix
+  - data_ownership_refined
+  - draft_five_questions
+  - overall_confidence
+consumes:
+  - bounded_contexts
+  - data_ownership
+  - business_flows
+  - state_machine
+  - runtime_validation_table
 ---
 
 # Comprehension Phase P3 — Core domain section

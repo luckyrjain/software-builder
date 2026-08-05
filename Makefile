@@ -89,14 +89,17 @@ lint-pr-review-skill:
 		exit 1; \
 	fi; \
 	echo "  ok ($$lines lines)"
-	@echo "lint-pr-review-skill: workflow frontmatter (workflow_version in each workflow/*.md)"
+	@echo "lint-pr-review-skill: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
 	@fail=0; \
 	for f in pr-review/workflow/*.md; do \
-		if ! head -n 8 "$$f" | grep -q '^workflow_version:'; then \
-			echo "  missing workflow_version frontmatter: $$f" >&2; fail=1; \
-		fi; \
+		fm=$$(awk '/^---$$/{c++; next} c==1' "$$f"); \
+		for key in workflow_version phase produces consumes; do \
+			if ! printf '%s\n' "$$fm" | grep -q "^$$key:"; then \
+				echo "  missing $$key frontmatter: $$f" >&2; fail=1; \
+			fi; \
+		done; \
 	done; \
-	if [ "$$fail" -ne 0 ]; then echo "error: pr-review workflow/*.md must declare workflow_version, produces, consumes" >&2; exit 1; fi; \
+	if [ "$$fail" -ne 0 ]; then echo "error: pr-review workflow/*.md must declare workflow_version, phase, produces, consumes" >&2; exit 1; fi; \
 	echo "  ok"
 	@echo "lint-pr-review-skill: dangling markdown links"
 	@bash scripts/lint-dangling-md-links.sh pr-review/*.md pr-review/reference/*.md pr-review/workflow/*.md && echo "  ok" || \
@@ -125,14 +128,17 @@ lint-k8s-skill:
 		exit 1; \
 	fi; \
 	echo "  ok ($$lines lines)"
-	@echo "lint-k8s-skill: workflow frontmatter (workflow_version in each workflow/*.md)"
+	@echo "lint-k8s-skill: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
 	@fail=0; \
 	for f in k8s-overprovisioning-datadog/workflow/*.md; do \
-		if ! head -n 8 "$$f" | grep -q '^workflow_version:'; then \
-			echo "  missing workflow_version frontmatter: $$f" >&2; fail=1; \
-		fi; \
+		fm=$$(awk '/^---$$/{c++; next} c==1' "$$f"); \
+		for key in workflow_version phase produces consumes; do \
+			if ! printf '%s\n' "$$fm" | grep -q "^$$key:"; then \
+				echo "  missing $$key frontmatter: $$f" >&2; fail=1; \
+			fi; \
+		done; \
 	done; \
-	if [ "$$fail" -ne 0 ]; then echo "error: k8s workflow/*.md must declare workflow_version, produces, consumes" >&2; exit 1; fi; \
+	if [ "$$fail" -ne 0 ]; then echo "error: k8s workflow/*.md must declare workflow_version, phase, produces, consumes" >&2; exit 1; fi; \
 	echo "  ok"
 	@echo "lint-k8s-skill: dangling markdown links"
 	@bash scripts/lint-dangling-md-links.sh k8s-overprovisioning-datadog/*.md k8s-overprovisioning-datadog/workflow/*.md k8s-overprovisioning-datadog/reference/*.md k8s-overprovisioning-datadog/render/*.md k8s-overprovisioning-datadog/templates/*.md && echo "  ok" || \
@@ -221,14 +227,17 @@ lint-incident-rca:
 		exit 1; \
 	fi; \
 	echo "  ok ($$lines lines)"
-	@echo "lint-incident-rca: workflow frontmatter (workflow_version in each workflow/*.md)"
+	@echo "lint-incident-rca: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
 	@fail=0; \
 	for f in incident-rca/workflow/*.md; do \
-		if ! head -n 8 "$$f" | grep -q '^workflow_version:'; then \
-			echo "  missing workflow_version frontmatter: $$f" >&2; fail=1; \
-		fi; \
+		fm=$$(awk '/^---$$/{c++; next} c==1' "$$f"); \
+		for key in workflow_version phase produces consumes; do \
+			if ! printf '%s\n' "$$fm" | grep -q "^$$key:"; then \
+				echo "  missing $$key frontmatter: $$f" >&2; fail=1; \
+			fi; \
+		done; \
 	done; \
-	if [ "$$fail" -ne 0 ]; then echo "error: incident-rca workflow/*.md must declare workflow_version, produces, consumes" >&2; exit 1; fi; \
+	if [ "$$fail" -ne 0 ]; then echo "error: incident-rca workflow/*.md must declare workflow_version, phase, produces, consumes" >&2; exit 1; fi; \
 	echo "  ok"
 	@echo "lint-incident-rca: evidence.example.json parses as JSON"
 	@cache="$(CURDIR)/.pycache-lint-rca"; \
@@ -339,14 +348,17 @@ lint-domain-comprehension-skill:
 		exit 1; \
 	fi; \
 	echo "  ok ($$lines lines)"
-	@echo "lint-domain-comprehension: workflow frontmatter (workflow_version in each workflow/*.md)"
+	@echo "lint-domain-comprehension: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
 	@fail=0; \
 	for f in domain-comprehension/workflow/*.md; do \
-		if ! head -n 8 "$$f" | grep -q '^workflow_version:'; then \
-			echo "  missing workflow_version frontmatter: $$f" >&2; fail=1; \
-		fi; \
+		fm=$$(awk '/^---$$/{c++; next} c==1' "$$f"); \
+		for key in workflow_version phase produces consumes; do \
+			if ! printf '%s\n' "$$fm" | grep -q "^$$key:"; then \
+				echo "  missing $$key frontmatter: $$f" >&2; fail=1; \
+			fi; \
+		done; \
 	done; \
-	if [ "$$fail" -ne 0 ]; then echo "error: domain-comprehension workflow/*.md must declare workflow_version, produces, consumes" >&2; exit 1; fi; \
+	if [ "$$fail" -ne 0 ]; then echo "error: domain-comprehension workflow/*.md must declare workflow_version, phase, produces, consumes" >&2; exit 1; fi; \
 	echo "  ok"
 	@echo "lint-domain-comprehension: dangling markdown links"
 	@bash scripts/lint-dangling-md-links.sh domain-comprehension/*.md domain-comprehension/reference/*.md domain-comprehension/workflow/*.md domain-comprehension/reference/domain-packs/*.md && echo "  ok" || \
@@ -392,14 +404,17 @@ lint-squad-map:
 		exit 1; \
 	fi; \
 	echo "  ok ($$lines lines)"
-	@echo "lint-squad-map: workflow frontmatter (workflow_version in each workflow/*.md)"
+	@echo "lint-squad-map: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
 	@fail=0; \
 	for f in squad-map/workflow/*.md; do \
-		if ! head -n 8 "$$f" | grep -q '^workflow_version:'; then \
-			echo "  missing workflow_version frontmatter: $$f" >&2; fail=1; \
-		fi; \
+		fm=$$(awk '/^---$$/{c++; next} c==1' "$$f"); \
+		for key in workflow_version phase produces consumes; do \
+			if ! printf '%s\n' "$$fm" | grep -q "^$$key:"; then \
+				echo "  missing $$key frontmatter: $$f" >&2; fail=1; \
+			fi; \
+		done; \
 	done; \
-	if [ "$$fail" -ne 0 ]; then echo "error: squad-map workflow/*.md must declare workflow_version" >&2; exit 1; fi; \
+	if [ "$$fail" -ne 0 ]; then echo "error: squad-map workflow/*.md must declare workflow_version, phase, produces, consumes" >&2; exit 1; fi; \
 	echo "  ok"
 	@echo "lint-squad-map: dangling markdown links"
 	@bash scripts/lint-dangling-md-links.sh squad-map/*.md squad-map/reference/*.md squad-map/workflow/*.md && echo "  ok" || \
@@ -446,14 +461,17 @@ lint-mysql-to-postgres-sql:
 		exit 1; \
 	fi; \
 	echo "  ok ($$lines lines)"
-	@echo "lint-mysql-to-postgres-sql: workflow frontmatter (workflow_version in each workflow/*.md)"
+	@echo "lint-mysql-to-postgres-sql: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
 	@fail=0; \
 	for f in mysql-to-postgres-sql/workflow/*.md; do \
-		if ! head -n 8 "$$f" | grep -q '^workflow_version:'; then \
-			echo "  missing workflow_version frontmatter: $$f" >&2; fail=1; \
-		fi; \
+		fm=$$(awk '/^---$$/{c++; next} c==1' "$$f"); \
+		for key in workflow_version phase produces consumes; do \
+			if ! printf '%s\n' "$$fm" | grep -q "^$$key:"; then \
+				echo "  missing $$key frontmatter: $$f" >&2; fail=1; \
+			fi; \
+		done; \
 	done; \
-	if [ "$$fail" -ne 0 ]; then echo "error: mysql-to-postgres-sql workflow/*.md must declare workflow_version" >&2; exit 1; fi; \
+	if [ "$$fail" -ne 0 ]; then echo "error: mysql-to-postgres-sql workflow/*.md must declare workflow_version, phase, produces, consumes" >&2; exit 1; fi; \
 	echo "  ok"
 	@echo "lint-mysql-to-postgres-sql: required reference files"
 	@for f in function-translations collection-domain-files smoke-test org-migration-gaps timestamp-handling data-type-mapping case-sensitivity nodejs-migration python-migration migration-prompts shadow-migration lazy-load-index collection-checklist-refresh migration-edge-cases calibration-snippets; do \

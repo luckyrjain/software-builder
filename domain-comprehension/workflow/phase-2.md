@@ -1,6 +1,21 @@
 ---
-workflow_version: 1.10
+workflow_version: 1.11
 phase: 2
+produces:
+  - trigger_catalog
+  - runtime_sequence
+  - business_flows
+  - critical_path
+  - state_machine
+  - deployment_graph
+  - sync_async_boundary_table
+  - code_graph_divergence
+consumes:
+  - per_repo_deep_dives
+  - ownership_cards
+  - bounded_contexts
+  - data_ownership
+  - domain_graph
 ---
 
 # Comprehension Phase P2 — Static Flow Analysis

@@ -140,6 +140,11 @@ Shadow / dual-run cutover: [reference/shadow-migration.md](reference/shadow-migr
 
 Translation caveats (TZ, OAuth `expires`, scan limits): [reference/migration-edge-cases.md](reference/migration-edge-cases.md).
 
+## Post-actions
+
+None — this skill produces no ticket/chat output. Migration status lives in `MIGRATION_STATUS.yaml`; see
+[post-action-templates.md](../docs/skill-framework/shared/post-action-templates.md).
+
 ## Framework
 
 Routing: [skill-routing.md](../docs/skill-framework/shared/skill-routing.md) · shared conventions:

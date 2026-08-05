@@ -1,6 +1,19 @@
 ---
-workflow_version: 1.8
+workflow_version: 1.9
 phase: 2b
+produces:
+  - runtime_validation_table
+  - kubesense_log_evidence
+  - runtime_graph
+  - datadog_subgraphs
+  - exercise_updates
+consumes:
+  - trigger_catalog
+  - runtime_sequence
+  - critical_path
+  - deployment_graph
+  - code_graph_divergence
+  - mcp_profile
 ---
 
 # Comprehension Phase P2b — Runtime Validation
