@@ -1,0 +1,14 @@
+interface:
+  display_name: software builder
+  short_description: Use when autonomously implementing one or more software tasks
+    through isolated build, evidence-based review, remediation, validation, pull-request,
+    and completion workflows across coding agents.
+  icon_small: assets/icon.svg
+  icon_large: assets/icon.svg
+policy:
+  products:
+  - chatgpt
+  - codex
+  - api
+  - atlas
+  allow_implicit_invocation: true
