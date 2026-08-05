@@ -84,7 +84,7 @@ Because nothing is merged and `manifest.yaml` is never written, `PROPOSAL_CHECK`
 `engagement.status` of `IN_PROGRESS` or `FIRST_PASS_COMPLETE` (the same engagement-wide bar `ADD_REPO`
 itself requires), **and**, per repo the proposal's claims would touch, `repos[].inventory: complete` and
 `repos[].deep_dive` either `complete` or `skipped` — `skipped` counts, since a Tier 2/3 repo skipped per
-[large-scale-execution.md](large-scale-execution.md) is a legitimate terminal state on a finished
+[large-scale-execution.md](../../../domain-comprehension/reference/large-scale-execution.md) is a legitimate terminal state on a finished
 engagement, not an incomplete one; requiring literal `complete` would wrongly HARD STOP on every large
 multi-repo engagement the framework itself already considers done. If `manifest.yaml` is absent, or a
 touched repo's `inventory` is still `pending` or its `deep_dive` is `pending`:
@@ -145,11 +145,18 @@ New subsection, placed after `### ADD_REPO mode — procedure` and before `## Re
 ```markdown
 ### PROPOSAL_CHECK mode — procedure
 
-Requires `manifest.yaml` at `workspace_root` with `schema_version: 2`, and P0/P1 `status: complete` for
-every repo plausibly touched by the proposal's claims (if the proposal names specific repos, check those;
-if it doesn't, check every repo in `manifest.repos[]`). If unmet: **Stop.** Tell the user to run `FULL` or
-`QUICK` comprehension for this workspace first — do not fall back automatically, do not check against
-incomplete deliverables.
+Requires `manifest.yaml` at `workspace_root` with `schema_version: 2` and `engagement.status` of
+`IN_PROGRESS` or `FIRST_PASS_COMPLETE` (same engagement-wide bar `ADD_REPO` requires — see its own
+precondition above), **and**, for every repo plausibly touched by the proposal's claims (if the proposal
+names specific repos, check those; if it doesn't, check every repo in `manifest.repos[]`), that repo's own
+`repos[].inventory: complete` **and** `repos[].deep_dive` is `complete` **or** `skipped`. `skipped` counts
+as satisfied here — per [large-scale-execution.md](../../../domain-comprehension/reference/large-scale-execution.md) ("P1 | Deep dive
+tier 0/1 only unless flow-critical"), a Tier 2/3 repo with `deep_dive: skipped` is a legitimate, correctly
+terminal state on a finished engagement, not an incomplete one; requiring literal `complete` would HARD
+STOP on every large multi-repo engagement the framework itself considers done. If any touched repo's
+`inventory` is still `pending`, or its `deep_dive` is `pending` (not yet reached, unlike a deliberate
+`skipped`): **Stop.** Tell the user to run `FULL` or `QUICK` comprehension for this workspace first — do
+not fall back automatically, do not check against incomplete deliverables.
 
 1. Load `manifest.yaml`, `BOUNDED_CONTEXTS.md`, `DATA_OWNERSHIP.md`, `API_CATALOG.md`, `EVENT_CATALOG.md`.
 2. Parse the proposal's claims into the same three categories the merge gate checks: bounded-context
@@ -224,7 +231,9 @@ Add a row to the Split deliverables table (after the `E2E_FLOW.md` row, marked o
 - `reference/workflow-changelog.md`: new row `1.15 | 2026-08-05 | inputs.md, SKILL.md,
   deliverable-templates.md, templates/PROPOSAL_CHECK_REPORT.md | New PROPOSAL_CHECK delivery mode —
   compare a proposal against existing deliverables, reusing ADD_REPO's merge-gate overlap taxonomy
-  read-only; HARD STOP if manifest.yaml/P0/P1 incomplete`.
+  read-only` (precondition wording corrected in a follow-up `1.16` row once the real
+  `engagement.status`/`inventory`/`deep_dive` schema fields were used instead of a non-existent per-repo
+  "P0/P1 status" field — see round-1 review fix).
 
 ## Verification
 

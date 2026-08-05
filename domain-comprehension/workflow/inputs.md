@@ -1,5 +1,5 @@
 ---
-workflow_version: 1.15
+workflow_version: 1.16
 phase: inputs
 produces:
   - workspace_root

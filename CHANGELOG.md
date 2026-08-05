@@ -163,8 +163,9 @@ _Pre-merge WIP on `feat/squad-map-skill` (internal v1.0–v1.5) is consolidated 
   proposed feature/service against the existing engagement's `BOUNDED_CONTEXTS.md` / `DATA_OWNERSHIP.md`
   / `API_CATALOG.md` / `EVENT_CATALOG.md`, reusing `ADD_REPO`'s merge-gate overlap taxonomy read-only.
 - Writes only `PROPOSAL_CHECK_REPORT.md` — never merges into shared deliverables or `manifest.yaml`.
-- HARD STOP if `manifest.yaml`/P0/P1 aren't already complete for the touched repos — no automatic
-  fallback to `FULL`, no partial check against incomplete deliverables.
+- HARD STOP if `manifest.yaml` is absent, `engagement.status` isn't `IN_PROGRESS`/`FIRST_PASS_COMPLETE`,
+  or a touched repo's `inventory`/`deep_dive` isn't complete-or-skipped — no automatic fallback to `FULL`,
+  no partial check against incomplete deliverables.
 
 ### ADD_REPO delivery mode (2026-07-30)
 

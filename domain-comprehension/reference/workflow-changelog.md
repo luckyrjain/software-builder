@@ -17,7 +17,8 @@
 | 1.12 | 2026-07-31 | session-0b.md | Corrected Squad map artifact field list — squad-map's `SQUAD_MAP.md` main table has no `Conflict` column; conflicts live in a separate § Conflicts table (cross-skill gap audit finding) |
 | 1.13 | 2026-07-31 | phase-1.md | Env bypass rules recipe made multiline-aware (`-U`/`(?s)`, bounded `{0,80}` span) — previously only matched same-line `signature...bypass` text, missed the same config expressed as nested YAML blocks (long-deferred known gap, closed) |
 | 1.14 | 2026-07-31 | inputs.md | Default `delivery_mode` for a first-time engagement (no `manifest.yaml` yet) changed from `FULL` to `QUICK` — a first-timer who just names a domain no longer gets dropped into the full 12-phase pipeline unasked (team-adoption-readiness audit finding) |
-| 1.15 | 2026-08-05 | inputs.md, SKILL.md, deliverable-templates.md, templates/PROPOSAL_CHECK_REPORT.md | New `PROPOSAL_CHECK` delivery mode — compare a proposal against existing deliverables, reusing `ADD_REPO`'s merge-gate overlap taxonomy read-only; HARD STOP if `manifest.yaml`/P0/P1 incomplete |
+| 1.15 | 2026-08-05 | inputs.md, SKILL.md, deliverable-templates.md, templates/PROPOSAL_CHECK_REPORT.md | New `PROPOSAL_CHECK` delivery mode — compare a proposal against existing deliverables, reusing `ADD_REPO`'s merge-gate overlap taxonomy read-only |
+| 1.16 | 2026-08-05 | inputs.md | `PROPOSAL_CHECK` precondition fix (round-1 review finding) — was checking a non-existent per-repo "P0/P1 status: complete" field; corrected to the real schema (`engagement.status` IN_PROGRESS/FIRST_PASS_COMPLETE, per-repo `inventory: complete` + `deep_dive` complete-or-**skipped**), since literal `complete` would wrongly HARD STOP on every finished large-scale engagement with Tier 2/3 repos skipped per large-scale-execution.md |
 
 ## Versioning rule
 
