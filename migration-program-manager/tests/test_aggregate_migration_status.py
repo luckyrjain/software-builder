@@ -14,6 +14,7 @@ from datetime import date  # noqa: E402
 
 from aggregate_migration_status import (  # noqa: E402
     build_rollup,
+    coerce_str,
     compute_staleness,
     derive_status,
     gate_signature,
@@ -135,6 +136,23 @@ class TestJsonSafe:
         # yaml.safe_load auto-types an unquoted date-shaped scalar (e.g. mr_url: 2026-08-05)
         # into a datetime.date object, which json.dumps can't serialize.
         assert json_safe(date(2026, 8, 5)) == "2026-08-05"
+
+
+class TestCoerceStr:
+    def test_string_passes_through_unchanged(self):
+        assert coerce_str("svc-a") == "svc-a"
+
+    def test_none_becomes_empty_string(self):
+        assert coerce_str(None) == ""
+
+    def test_non_string_scalars_are_stringified(self):
+        # A service's 'name'/'path' field is used in join_squad's .strip() and becomes
+        # RollupItem.service -- unlike json_safe(), an int/bool/float here must not stay
+        # non-str, or the later .strip() call crashes.
+        assert coerce_str(date(2026, 8, 5)) == "2026-08-05"
+        assert coerce_str(12345) == "12345"
+        assert coerce_str(True) == "True"
+        assert coerce_str([1, 2]) == "[1, 2]"
 
 
 class TestDeriveStatus:
@@ -309,6 +327,26 @@ class TestBuildRollup:
         items, gaps, new_state = build_rollup(manifest, {}, datetime.now(timezone.utc), staleness_threshold_days=14)
         json.dumps([i.to_dict() for i in items])  # must not raise
         assert items[0].value["mr_url"] == "2026-08-05"
+
+    def test_yaml_auto_typed_name_and_path_do_not_crash_squad_join(self, tmp_path):
+        # A hand-edited MIGRATION_STATUS.yaml leaving 'name' or 'path' as an unquoted date- or
+        # number-shaped value (e.g. a service literally named after a date or ticket number) is
+        # auto-typed by yaml.safe_load into a non-str -- join_squad's candidate.strip() must not
+        # crash on it once a populated SQUAD_MAP.md is present (the normal case), and the whole
+        # run must not die for the other workspaces/services in the manifest.
+        ws = tmp_path / "ws"
+        ws.mkdir()
+        (ws / "MIGRATION_STATUS.yaml").write_text(
+            "schema_version: 1\nservices:\n  - name: 2026-08-05\n    path: 12345\n"
+            "    tier_focus: P0\n    scan_gate: pass\n    shadow_compare: pass\n    config_cutover: done\n",
+            encoding="utf-8",
+        )
+        (ws / "SQUAD_MAP.md").write_text(SQUAD_MAP_FIXTURE, encoding="utf-8")
+        manifest = [ManifestEntry(workspace_root=str(ws))]
+        items, gaps, new_state = build_rollup(manifest, {}, datetime.now(timezone.utc), staleness_threshold_days=14)
+        assert items[0].service == "2026-08-05"
+        assert items[0].squad == "UNKNOWN"  # no matching row, but no crash
+        json.dumps([i.to_dict() for i in items])  # must not raise
 
     def test_blocked_outranks_stalled(self, tmp_path):
         ws = tmp_path / "ws"

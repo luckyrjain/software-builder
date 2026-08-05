@@ -18,7 +18,7 @@ All notable changes to the migration-program-manager skill. Per-file `workflow_v
   Out-of-scope sections — the repo's first markdown-table parser), joins, computes staleness against
   persisted cross-run state (`gate_signature` + `first_observed_at` per service — genuinely new since
   `MIGRATION_STATUS.yaml` has no per-gate timestamp), `main(argv) -> int` CLI entrypoint, stdlib + PyYAML
-  only, 43 pytest cases in `tests/test_aggregate_migration_status.py`
+  only, 47 pytest cases in `tests/test_aggregate_migration_status.py`
 - Never invokes mysql-to-postgres-sql or squad-map live — pure file reads; a missing `SQUAD_MAP.md` joins
   as `squad: UNKNOWN` rather than triggering squad-map itself (same lesson `new-hire-guide`'s round-1
   review learned about narrowing a live wrapped-skill invocation's scope — this skill avoids the whole
@@ -120,3 +120,20 @@ All notable changes to the migration-program-manager skill. Per-file `workflow_v
 - 7 new pytest cases (`load_state` shape, `json_safe` unit test + an end-to-end
   `build_rollup`-through-`json.dumps` regression test, 2 `load_manifest` type-validation cases, 1
   CLI-level negative-threshold case) — 43 total, up from 36.
+
+### Fixed (round-5 review, same day)
+- **A service's `name`/`path` field left as a YAML-auto-typed non-string (e.g. an unquoted
+  date- or number-shaped service name, or a stray list/mapping from a hand-edit) crashed the
+  entire multi-workspace run**, not just the one workspace at fault — the same "never crash
+  the whole run" contract round 1 through round 4 each closed one field/layer at a time, missed
+  here. Unlike `scan_gate`/`shadow_compare`/`config_cutover`/`mr_url`/`tier_focus` (all routed
+  through round-4's `json_safe()`), `name` and `path` were read via bare `svc.get(...)` and
+  handed straight to `join_squad`, which calls `candidate.strip()` on them — an
+  `AttributeError` whenever the workspace has a populated `SQUAD_MAP.md` (the normal case),
+  raised as a raw traceback out of `build_rollup`/`main()` with no per-workspace `Gap` to catch
+  it. Added `coerce_str()` (distinct from `json_safe()` — must always produce a real `str`,
+  including for `int`/`bool`/`float`, since these need `.strip()` to work, not just JSON
+  serializability) and applied it to `name`/`path` immediately after they're read from the
+  service dict, before either reaches `join_squad` or `RollupItem.service`.
+- 4 new pytest cases (`coerce_str` unit tests × 3, 1 `build_rollup`-level regression
+  reproducing the crash with a populated `SQUAD_MAP.md`) — 47 total, up from 43.

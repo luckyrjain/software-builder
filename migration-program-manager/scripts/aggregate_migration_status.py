@@ -39,6 +39,17 @@ def json_safe(value: Any) -> Any:
     return str(value)
 
 
+def coerce_str(value: Any) -> str:
+    """Coerce a service's 'name'/'path' field into an actual str. Unlike json_safe() (which only
+    needs JSON-serializability and can leave an int/bool as-is), name/path are used in string
+    operations (join_squad's .strip()) and become RollupItem.service, so an int/bool/date/list/
+    dict here -- e.g. an unquoted numeric or date-shaped service name, or a stray list/mapping
+    from a hand-edit -- must not reach .strip() unconverted and crash the whole run."""
+    if value is None:
+        return ""
+    return value if isinstance(value, str) else str(value)
+
+
 def parse_iso(value: str) -> datetime:
     return datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
 
@@ -303,8 +314,8 @@ def build_rollup(
             gaps.append(Gap(entry.workspace_root, f"No SQUAD_MAP.md at {squad_map_path} — run squad-map directly"))
 
         for svc in services:
-            name = svc.get("name", "")
-            path = svc.get("path", "")
+            name = coerce_str(svc.get("name", ""))
+            path = coerce_str(svc.get("path", ""))
             squad, confidence = join_squad(path, name, squad_rows)
             staleness_days, state_entry = compute_staleness(entry.workspace_root, svc, state, now)
             new_state[f"{entry.workspace_root}::{name}"] = state_entry
