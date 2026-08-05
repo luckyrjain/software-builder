@@ -51,9 +51,11 @@ backlog_run:
    batch"). Look up the dependency ticket's own current state directly — **regardless of whether this
    skill ever pulled it itself** — and treat it as satisfied when **any** of:
    - It's in this run's batch and reached `HUMAN_ACTION_REQUIRED` this run, **or**
-   - It has an existing **open** branch/PR (whether from a prior run of this skill or opened by a human
-     directly — the check is the same one rule 2 uses, per-ticket-ID, and doesn't care who opened it;
-     `SKIPPED_EXISTING` **is** satisfaction evidence, not a reason to keep deferring the dependent), **or**
+   - It has an existing **open or merged** branch/PR (whether from a prior run of this skill or opened by
+     a human directly — the check is the same one rule 2 uses, per-ticket-ID, and doesn't care who opened
+     it; `SKIPPED_EXISTING` **is** satisfaction evidence, not a reason to keep deferring the dependent —
+     and a human merging a prior run's PR directly, without also separately closing the tracker ticket, is
+     satisfaction too, exactly as §4's outcome table's `MERGED` row already anticipates), **or**
    - The dependency ticket itself is closed **as done/resolved/merged** in the tracker (the strongest
      signal — query the tracker for the dependency ticket's own current state when it's not in this run's
      batch at all, don't assume "not pulled" means "not done").
@@ -63,7 +65,15 @@ backlog_run:
    is **not** satisfaction evidence; treat that dependency as unresolved (`DEFERRED`, same as no evidence
    at all) rather than building on top of work that didn't land. Checking the tracker's own
    resolution/closure reason, not just "is it closed," is required here — a bare "closed" boolean is not
-   enough to distinguish the two.
+   enough to distinguish the two. Concretely: Jira exposes this as its native `resolution` field (`Done`/
+   `Fixed` vs. `Won't Fix`/`Duplicate`/`Invalid`); GitHub Issues has no native resolution field — use the
+   `state_reason` API field (`completed` vs. `not_planned`) or, if absent, a `wontfix`/`duplicate`/`invalid`
+   label convention. **If neither signal is present** (an older or loosely-maintained tracker with a closed
+   issue and no `state_reason`/label), this degrades to "closure reason unknown," same as
+   [SETUP.md](../SETUP.md)'s unrecognized-dependency-field precedent — treat the ticket's closure as *not*
+   satisfaction evidence and fall through to `DEFERRED` rather than guessing done vs. abandoned; an
+   existing open-or-merged PR (bullet 2) remains available as an independent, unambiguous satisfaction
+   path even when the ticket's own closure reason is unreadable.
 
    A dependency satisfying none of the successful-outcome bullets is `DEFERRED` — do not attempt its
    dependent this run, record why, and re-check next run (this is the one case that legitimately needs
