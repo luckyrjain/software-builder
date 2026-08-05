@@ -1,7 +1,12 @@
 # Skill Framework — Shared Reference Library
 
-Normative conventions for **pr-review**, **incident-rca**, **k8s-overprovisioning-datadog**, **domain-comprehension**, **squad-map**, **mysql-to-postgres-sql**, and **loop-task-implementer**.
+Normative conventions for **pr-review**, **incident-rca**, **k8s-overprovisioning-datadog**, **domain-comprehension**, **squad-map**, **who-owns-x-bot**, **mysql-to-postgres-sql**, and **loop-task-implementer**.
 Design spec: [2025-06-30-unified-skill-framework-design.md](../superpowers/specs/2025-06-30-unified-skill-framework-design.md).
+
+`who-owns-x-bot` is not yet in `lint-framework`'s per-skill enforcement loops (Makefile) — it has its own
+`lint-who-owns-x-bot` target instead, following the file-anatomy and workflow-frontmatter conventions
+here without requiring every hardcoded `lint-framework` check (e.g. it has no scripts/tests to run, and
+its confidence handling is entirely relayed from squad-map, not computed).
 
 `loop-task-implementer` is platform-neutral and host-agent-driven rather than Datadog/GitLab/Jira-MCP-driven,
 so `confidence-bands.md` and `phase-glossary.md` don't apply to it — everything else (file anatomy,

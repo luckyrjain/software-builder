@@ -24,6 +24,7 @@ Each skill is a self-contained directory copied to `~/.cursor/skills/<name>/` on
 | **k8s-overprovisioning-datadog** | [k8s-overprovisioning-datadog/README.md](../k8s-overprovisioning-datadog/README.md) | [k8s-overprovisioning-datadog/SKILL.md](../k8s-overprovisioning-datadog/SKILL.md) | [k8s-overprovisioning-datadog/SETUP.md](../k8s-overprovisioning-datadog/SETUP.md) |
 | **domain-comprehension** | [domain-comprehension/README.md](../domain-comprehension/README.md) | [domain-comprehension/SKILL.md](../domain-comprehension/SKILL.md) | [domain-comprehension/SETUP.md](../domain-comprehension/SETUP.md) |
 | **squad-map** | [squad-map/README.md](../squad-map/README.md) | [squad-map/SKILL.md](../squad-map/SKILL.md) | [squad-map/SETUP.md](../squad-map/SETUP.md) |
+| **who-owns-x-bot** | [who-owns-x-bot/README.md](../who-owns-x-bot/README.md) | [who-owns-x-bot/SKILL.md](../who-owns-x-bot/SKILL.md) | [who-owns-x-bot/SETUP.md](../who-owns-x-bot/SETUP.md) |
 | **mysql-to-postgres-sql** | [mysql-to-postgres-sql/README.md](../mysql-to-postgres-sql/README.md) | [mysql-to-postgres-sql/SKILL.md](../mysql-to-postgres-sql/SKILL.md) | [mysql-to-postgres-sql/SETUP.md](../mysql-to-postgres-sql/SETUP.md) |
 | **loop-task-implementer** | [loop-task-implementer/README.md](../loop-task-implementer/README.md) | [loop-task-implementer/SKILL.md](../loop-task-implementer/SKILL.md) | [loop-task-implementer/SETUP.md](../loop-task-implementer/SETUP.md) |
 
@@ -36,6 +37,7 @@ Each skill is a self-contained directory copied to `~/.cursor/skills/<name>/` on
 | **k8s-overprovisioning-datadog** | Natural language ("is X overprovisioned?") | Datadog-driven K8s deployment optimization assessment: CPU/memory/replica verdicts, waste estimate, cost, rollback guidance |
 | **domain-comprehension** | Natural language ("map the domain …") | Evidence-backed domain comprehension across repos: bounded contexts, data ownership, dependency graphs, business flows, exec summary with confidence |
 | **squad-map** | Natural language ("map squads …", "who owns …") | Repo-to-squad mapping via GitLab group hierarchy + Datadog team tags → `SQUAD_MAP.md` with confidence and conflict flags |
+| **who-owns-x-bot** | Structured `query`, not ambient chat (`/who-owns <name>` Slack slash command) | Single-shot "who owns X" Slack reply — thin wrapper delegating the lookup entirely to squad-map |
 | **mysql-to-postgres-sql** | Natural language ("MySQL scrub …", "jdbc:postgresql …") | MySQL-dialect scan gate + PostgreSQL rewrite for a `jdbc:mysql`→`jdbc:postgresql` migration |
 | **loop-task-implementer** | Natural language ("implement issue 42 …") | Autonomous multi-task loop: isolated Builder → two-lens independent Reviewer → adjudicated remediation → PR; platform-neutral, no MCP dependency |
 
@@ -57,6 +59,8 @@ Skills reference each other when a finding belongs in another workflow:
 | domain-comprehension | Squad / repo ownership only | squad-map |
 | squad-map | Full domain map / bounded contexts | domain-comprehension |
 | incident-rca | Unclear service owner during RCA | squad-map |
+| who-owns-x-bot | Caller wants the full mapping table, not one answer | squad-map |
+| who-owns-x-bot | Caller wants bounded contexts / domain map | domain-comprehension |
 | domain-comprehension | Produced `MYSQL_TO_PG_SQL_REWRITES.md` | mysql-to-postgres-sql |
 | mysql-to-postgres-sql | Migration MR needs review | pr-review |
 | mysql-to-postgres-sql | Cutover regression / wrong query results | incident-rca |
@@ -76,6 +80,8 @@ Full symmetric matrix (forward + reverse escalations):
 | [superpowers/specs/2026-06-29-pr-review-architecture-lens-design.md](superpowers/specs/2026-06-29-pr-review-architecture-lens-design.md) | Architecture lens (§16) triggers and heuristics for MR reviews |
 | [superpowers/specs/2026-07-02-skills-roadmap-design.md](superpowers/specs/2026-07-02-skills-roadmap-design.md) | Repo hygiene + incident-rca causal-graph determinism roadmap |
 | [superpowers/specs/2026-07-02-platform-evolution-strategy-design.md](superpowers/specs/2026-07-02-platform-evolution-strategy-design.md) | 12–24 month platform evolution strategy: maturity assessment, eval harness, distribution, roadmap |
+| [superpowers/plans/2026-08-05-team-facing-agents-roadmap.md](superpowers/plans/2026-08-05-team-facing-agents-roadmap.md) | Team-facing agents brainstorm: 11 candidate bots/jobs composing the 7 skills for real team workflows |
+| [superpowers/specs/2026-08-05-who-owns-x-bot-design.md](superpowers/specs/2026-08-05-who-owns-x-bot-design.md) | who-owns-x-bot design — item #1 of the team-facing agents roadmap |
 
 These are planning artifacts; the live behavior is defined in `pr-review/SKILL.md` and `pr-review/reference/`.
 
@@ -119,6 +125,15 @@ These are planning artifacts; the live behavior is defined in `pr-review/SKILL.m
 | `reference/squad-mapping.md` | Reconciliation rules, GitLab/Datadog mapping |
 | `reference/config-schema.md` | `squad-map-config.yaml` / `domain-config.yaml` ownership block |
 | `templates/SQUAD_MAP.md` | Deliverable template |
+| `reference/smoke-test.md` | Post-install validation steps |
+
+## who-owns-x-bot file map
+
+| Path | What it does |
+|------|--------------|
+| `workflow/inputs.md` | Parse `query` + optional `workspace_root`; HARD STOP on empty query |
+| `workflow/lookup.md` | Delegate to squad-map, classify Resolved/Ambiguous/Unknown |
+| `reference/slack-format.md` | Normative three-shape Slack reply spec |
 | `reference/smoke-test.md` | Post-install validation steps |
 
 ## mysql-to-postgres-sql file map

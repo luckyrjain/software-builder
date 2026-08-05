@@ -26,6 +26,19 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
   "When NOT to use" table; fixed `report-template.md`'s completion-state vocabulary to match
   `state-schema.yaml`'s actual enum.
 
+## who-owns-x-bot
+
+### Initial release (2026-08-05)
+
+- New skill — item #1 of the [team-facing agents roadmap](docs/superpowers/plans/2026-08-05-team-facing-agents-roadmap.md):
+  a thin Slack-bot-facing wrapper that delegates ownership computation entirely to **squad-map** and
+  returns a single formatted Slack reply (Resolved / Ambiguous / Unknown — never a fabricated squad).
+- `disable-model-invocation: true` — does not compete with squad-map's ambient chat invocation; meant to
+  be called explicitly by a `/who-owns` Slack slash-command handler with a structured `query`.
+- Design spec: [docs/superpowers/specs/2026-08-05-who-owns-x-bot-design.md](docs/superpowers/specs/2026-08-05-who-owns-x-bot-design.md).
+- Wired into `make install-who-owns-x-bot` / `make lint-who-owns-x-bot`, root README, docs/README,
+  docs/REPOSITORY, skill-routing.md, phase-glossary.md.
+
 ## Repository
 
 ### Cross-agent discovery for all skills (2026-08-05)

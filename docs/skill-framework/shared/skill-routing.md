@@ -14,7 +14,8 @@ When adding a new skill, add it here first; then each existing skill only needs 
 | RCA, root cause, postmortem, incident, outage, 5xx spike, error spike, deploy regression (time-window), consumer lag (incident), SLO breach, P1/P2, INC-, on-call | **incident-rca** | k8s, pr-review |
 | Review MR, review merge request, review !IID, /pr-review, re-review, post-merge audit, list open MRs, review as SRE/security/architect | **pr-review** | incident-rca, k8s |
 | Domain comprehension, bounded context, data ownership, critical path, architecture smells, subsystem onboarding, multi-repo ground truth, five questions | **domain-comprehension** | squad-map (ownership only), incident-rca |
-| Squad map, ownership, who owns, CODEOWNERS, GitLab group, Datadog team, team reconciliation | **squad-map** | domain-comprehension (full map) |
+| Squad map, ownership, who owns, CODEOWNERS, GitLab group, Datadog team, team reconciliation (interactive, conversational) | **squad-map** | domain-comprehension (full map) |
+| `/who-owns` Slack slash command, single-shot automated ownership lookup with a structured `query`, no follow-up turn possible | **who-owns-x-bot** | squad-map (that's what it delegates to internally — do not call squad-map directly for a single-shot Slack reply, its output contract is a markdown file + chat summary, not one message) |
 | MySQL scrub, jdbc:postgresql, TIMESTAMPDIFF, DATE_FORMAT, native SQL rewrite, mysql2→pg, SQLAlchemy PG cutover, collection P0/P1 cooling SQL | **mysql-to-postgres-sql** | domain-comprehension (full map), squad-map (ownership only) |
 | Implement task/issue autonomously, independent review + remediation loop, adjudicate findings, work through a task queue | **loop-task-implementer** | pr-review (reviewing someone else's existing MR only) |
 | GitHub pull request, local uncommitted diff, review unstaged | **review-bugbot** (external) | pr-review |
@@ -33,6 +34,8 @@ When adding a new skill, add it here first; then each existing skill only needs 
 7. **Kafka lag in scaling context** → k8s; **Kafka lag in incident context** → incident-rca
 8. **Native SQL / JDBC migration to PostgreSQL** → mysql-to-postgres-sql; **domain map / bounded contexts** → domain-comprehension
 9. **Migration MR review** → pr-review (even if diff is SQL rewrites)
+10. **Ownership request from an automated, single-shot caller** (Slack slash command, no follow-up turn) →
+    who-owns-x-bot; **ownership request from an interactive human turn** → squad-map directly
 
 ## Ambiguous requests — ask
 

@@ -23,6 +23,7 @@ Each skill has a human **`README.md`** (what it does) separate from **`SKILL.md`
 | [incident-rca](incident-rca/) | "RCA for … between …" | Multi-source post-incident RCA (Datadog, KubeSense, GitLab, Jenkins, Jira) | [README](incident-rca/README.md) · [SETUP](incident-rca/SETUP.md) |
 | [domain-comprehension](domain-comprehension/) | "map the domain …", "bounded contexts for …" | Evidence-backed domain map: bounded contexts, data ownership, dependency graphs, business flows, exec summary | [README](domain-comprehension/README.md) · [SETUP](domain-comprehension/SETUP.md) |
 | [squad-map](squad-map/) | "map squads …", "who owns …" | Repo-to-squad mapping: GitLab group hierarchy + Datadog team tags → `SQUAD_MAP.md` | [README](squad-map/README.md) · [SETUP](squad-map/SETUP.md) |
+| [who-owns-x-bot](who-owns-x-bot/) | `/who-owns <name>` (Slack slash command; not ambient chat) | Single-shot "who owns X" Slack reply — thin wrapper delegating to squad-map | [README](who-owns-x-bot/README.md) · [SETUP](who-owns-x-bot/SETUP.md) |
 | [mysql-to-postgres-sql](mysql-to-postgres-sql/) | "MySQL scrub …", "jdbc:postgresql …", "TIMESTAMPDIFF …" | Native SQL + JDBC rewrite for MySQL→PostgreSQL; scan gate, collection P0/P1 | [README](mysql-to-postgres-sql/README.md) · [SETUP](mysql-to-postgres-sql/SETUP.md) |
 | [loop-task-implementer](loop-task-implementer/) | "implement issue 42 …", "work through these tasks …" | Autonomous multi-task loop: isolated Builder → two-lens independent Reviewer → adjudicated remediation → PR. Platform-neutral, no Datadog/GitLab/Jira MCP required | [README](loop-task-implementer/README.md) · [SETUP](loop-task-implementer/SETUP.md) |
 
@@ -42,6 +43,7 @@ make install-k8s-overprovisioning
 make install-incident-rca
 make install-domain-comprehension
 make install-squad-map
+make install-who-owns-x-bot
 make install-mysql-to-postgres-sql
 make install-loop-task-implementer
 ```
@@ -58,6 +60,7 @@ bash scripts/install.sh k8s-overprovisioning-datadog
 bash scripts/install.sh incident-rca
 bash scripts/install.sh domain-comprehension
 bash scripts/install.sh squad-map
+bash scripts/install.sh who-owns-x-bot
 bash scripts/install.sh mysql-to-postgres-sql
 bash scripts/install.sh loop-task-implementer
 ```
@@ -108,6 +111,7 @@ make lint-k8s-skill     # k8s SKILL line limit, workflow frontmatter, report sch
 make lint-incident-rca  # incident-rca SKILL line limit, workflow frontmatter, evidence JSON, anchors
 make lint-domain-comprehension  # domain-comprehension SKILL line limit, frontmatter, anchors, manifest validator
 make lint-squad-map             # squad-map SKILL line limit, frontmatter, anchors
+make lint-who-owns-x-bot        # who-owns-x-bot SKILL line limit, frontmatter, anchors, required files
 make lint-mysql-to-postgres-sql # mysql SKILL line limit, scan fixtures, pressure harness, shellcheck
 make lint-loop-task-implementer # loop-task-implementer SKILL line limit, workflow frontmatter, required files, anchors
 ```
@@ -119,6 +123,7 @@ make lint-loop-task-implementer # loop-task-implementer SKILL line limit, workfl
 | `lint-incident-rca` | `SKILL.md` ≤ 180 lines; frontmatter; valid `evidence.example.json`; causal-graph validator; anchors |
 | `lint-domain-comprehension` | `SKILL.md` ≤ 180 lines; workflow frontmatter; dangling anchors; `templates/manifest.yaml` validator + pytest; pressure harness |
 | `lint-squad-map` | `SKILL.md` ≤ 180 lines; workflow frontmatter; dangling anchors; required reference files; pytest |
+| `lint-who-owns-x-bot` | `SKILL.md` ≤ 180 lines; `disable-model-invocation: true` set; workflow frontmatter; dangling anchors; required reference files |
 | `lint-mysql-to-postgres-sql` | `SKILL.md` ≤ 180 lines; workflow frontmatter; required references; scan fixtures + pressure harness; shellcheck on scan scripts |
 | `lint-loop-task-implementer` | `SKILL.md` ≤ 180 lines; workflow frontmatter; dangling anchors; required files (`SETUP.md`/`README.md`/`examples.md`/`report-template.md`/`reference/*`) |
 | `lint-framework` | shared `docs/skill-framework/` docs present; required sections; SETUP.md links; metadata footer examples parse; every skill has a `.cursor/rules/*.mdc` + `.kiro/steering/*.md` discovery file |
@@ -140,6 +145,7 @@ or a Docker/Linux runner (deps installed via `apt-get` in the pipeline).
 | incident-rca | Datadog, KubeSense, GitLab, Jenkins, Jira (+ optional correlator CLI) | [incident-rca/SETUP.md](incident-rca/SETUP.md) |
 | domain-comprehension | GitLab (optional, Session 0b via squad-map), Datadog (optional, P2b runtime validation) | [domain-comprehension/SETUP.md](domain-comprehension/SETUP.md) |
 | squad-map | GitLab, Datadog (optional; CODEOWNERS fallback when both absent) | [squad-map/SETUP.md](squad-map/SETUP.md) |
+| who-owns-x-bot | None of its own — delegates to squad-map | [who-owns-x-bot/SETUP.md](who-owns-x-bot/SETUP.md) |
 | mysql-to-postgres-sql | None (code scan + rewrite) | Datadog (optional; post-cutover APM) — [mysql-to-postgres-sql/SETUP.md](mysql-to-postgres-sql/SETUP.md) |
 | loop-task-implementer | None (uses the host agent's own repo/git access, not an MCP server) | [loop-task-implementer/reference/mcp-capabilities.md](loop-task-implementer/reference/mcp-capabilities.md) |
 
@@ -293,6 +299,27 @@ Attach the skill or ask in natural language. Maps repos to GitLab org squads and
 - Summary in chat: mapped count, confidence breakdown, conflict count
 
 Auto-invokes from natural-language asks — see [squad-map/SETUP.md](squad-map/SETUP.md).
+
+---
+
+## Usage (who-owns-x-bot)
+
+A Slack slash-command handler invokes this skill with a structured `query` — it does **not** auto-invoke
+from ambient chat (`disable-model-invocation: true`). A human asking "who owns X" in an interactive
+session routes to **squad-map** directly (see [who-owns-x-bot/SETUP.md](who-owns-x-bot/SETUP.md)).
+
+### Examples
+
+| Caller sends | What happens |
+|----------------|----------------|
+| `query: api-disbursement` | Delegates to squad-map → one Slack reply: squad + confidence + evidence |
+| `query: legacy-ledger` (known GitLab/Datadog conflict) | Ambiguous reply — both squads listed, no silent pick |
+| `query:` (empty) | Usage-hint reply, no squad-map lookup |
+
+### What you get (who-owns-x-bot)
+
+- One Slack message — Resolved, Ambiguous, or Unknown (never a fabricated squad name)
+- No file written by this skill (squad-map may still write/update its own `SQUAD_MAP.md`)
 
 ---
 

@@ -1,4 +1,4 @@
-.PHONY: install install-pr-review install-k8s-overprovisioning install-incident-rca install-incident-rca-deps install-domain-comprehension install-squad-map install-mysql-to-postgres-sql install-loop-task-implementer install-claude install-claude-pr-review install-claude-k8s-overprovisioning install-claude-incident-rca install-claude-domain-comprehension install-claude-squad-map install-claude-mysql-to-postgres-sql install-claude-loop-task-implementer lint lint-framework lint-pr-review lint-k8s-skill lint-k8s lint-incident-rca lint-domain-comprehension lint-squad-map lint-mysql-to-postgres-sql lint-loop-task-implementer setup-hooks setup kubesense-errors
+.PHONY: install install-pr-review install-k8s-overprovisioning install-incident-rca install-incident-rca-deps install-domain-comprehension install-squad-map install-who-owns-x-bot install-mysql-to-postgres-sql install-loop-task-implementer install-claude install-claude-pr-review install-claude-k8s-overprovisioning install-claude-incident-rca install-claude-domain-comprehension install-claude-squad-map install-claude-who-owns-x-bot install-claude-mysql-to-postgres-sql install-claude-loop-task-implementer lint lint-framework lint-pr-review lint-k8s-skill lint-k8s lint-incident-rca lint-domain-comprehension lint-squad-map lint-who-owns-x-bot lint-mysql-to-postgres-sql lint-loop-task-implementer setup-hooks setup kubesense-errors
 
 install:
 	bash scripts/install.sh
@@ -20,6 +20,9 @@ install-domain-comprehension: install-squad-map
 
 install-squad-map:
 	bash scripts/install.sh squad-map
+
+install-who-owns-x-bot: install-squad-map
+	bash scripts/install.sh who-owns-x-bot
 
 install-mysql-to-postgres-sql:
 	bash scripts/install.sh mysql-to-postgres-sql
@@ -45,6 +48,9 @@ install-claude-domain-comprehension: install-claude-squad-map
 install-claude-squad-map:
 	bash scripts/install.sh --agent claude-user squad-map
 
+install-claude-who-owns-x-bot: install-claude-squad-map
+	bash scripts/install.sh --agent claude-user who-owns-x-bot
+
 install-claude-mysql-to-postgres-sql:
 	bash scripts/install.sh --agent claude-user mysql-to-postgres-sql
 
@@ -57,7 +63,7 @@ setup:
 		python3 -m pip install --user --break-system-packages -r requirements.txt
 	@$(MAKE) setup-hooks
 
-lint: lint-framework lint-pr-review lint-k8s-skill lint-incident-rca lint-domain-comprehension lint-squad-map lint-mysql-to-postgres-sql lint-loop-task-implementer
+lint: lint-framework lint-pr-review lint-k8s-skill lint-incident-rca lint-domain-comprehension lint-squad-map lint-who-owns-x-bot lint-mysql-to-postgres-sql lint-loop-task-implementer
 	@for f in scripts/*.sh; do \
 		echo "shellcheck $$f"; \
 		if command -v shellcheck >/dev/null 2>&1; then \
@@ -454,6 +460,46 @@ lint-squad-map:
 		exit 1; \
 	fi; \
 	echo "  ok (framework refs + squad_mapping tests)"
+
+lint-who-owns-x-bot:
+	@echo "lint-who-owns-x-bot: SKILL.md line count (<= 180)"
+	@test -f who-owns-x-bot/SKILL.md || \
+		{ echo "error: missing who-owns-x-bot/SKILL.md" >&2; exit 1; }
+	@lines=$$(wc -l < who-owns-x-bot/SKILL.md | tr -d ' '); \
+	if [ -z "$$lines" ] || [ "$$lines" -eq 0 ]; then \
+		echo "error: who-owns-x-bot/SKILL.md is empty" >&2; exit 1; \
+	elif [ "$$lines" -gt 180 ]; then \
+		echo "error: who-owns-x-bot SKILL.md $$lines lines (> 180) — keep orchestrator thin; detail in workflow/" >&2; \
+		exit 1; \
+	fi; \
+	echo "  ok ($$lines lines)"
+	@echo "lint-who-owns-x-bot: disable-model-invocation set (automation entry point, must not compete with squad-map's ambient invocation)"
+	@grep -q '^disable-model-invocation: true' who-owns-x-bot/SKILL.md || \
+		{ echo "error: who-owns-x-bot/SKILL.md must set disable-model-invocation: true" >&2; exit 1; }
+	@echo "  ok"
+	@echo "lint-who-owns-x-bot: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
+	@fail=0; \
+	for f in who-owns-x-bot/workflow/*.md; do \
+		fm=$$(awk '/^---$$/{c++; next} c==1' "$$f"); \
+		for key in workflow_version phase produces consumes; do \
+			if ! printf '%s\n' "$$fm" | grep -q "^$$key:"; then \
+				echo "  missing $$key frontmatter: $$f" >&2; fail=1; \
+			fi; \
+		done; \
+	done; \
+	if [ "$$fail" -ne 0 ]; then echo "error: who-owns-x-bot workflow/*.md must declare workflow_version, phase, produces, consumes" >&2; exit 1; fi; \
+	echo "  ok"
+	@echo "lint-who-owns-x-bot: dangling markdown links"
+	@bash scripts/lint-dangling-md-links.sh who-owns-x-bot/*.md who-owns-x-bot/reference/*.md who-owns-x-bot/workflow/*.md && echo "  ok" || \
+		{ echo "error: dangling reference link(s) found" >&2; exit 1; }
+	@echo "lint-who-owns-x-bot: required reference files"
+	@for f in phase-index lazy-load-index slack-format smoke-test; do \
+		test -f who-owns-x-bot/reference/$$f.md || \
+			{ echo "error: missing who-owns-x-bot/reference/$$f.md" >&2; exit 1; }; \
+	done
+	@grep -q 'skill-framework' who-owns-x-bot/SETUP.md || \
+		{ echo "error: who-owns-x-bot/SETUP.md must link to docs/skill-framework" >&2; exit 1; }
+	@echo "  ok (framework refs)"
 
 lint-mysql-to-postgres-sql:
 	@echo "lint-mysql-to-postgres-sql: SKILL.md line count (<= 180)"

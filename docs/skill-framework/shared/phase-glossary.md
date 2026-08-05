@@ -71,6 +71,16 @@ Phase 0 is pure MCP capability detection. Phase 1 combines Gather (MCP queries /
 (reconciliation + confidence scoring), and Report (write `SQUAD_MAP.md`). No separate Correlate or
 Validate — the skill is lightweight compared to multi-phase skills.
 
+### who-owns-x-bot mapping
+
+| Phase | File | Canonical |
+|-------|------|-----------|
+| Inputs | `workflow/inputs.md` | Detect (partial) |
+| Lookup | `workflow/lookup.md` | Gather (delegated to squad-map) + Report (Slack reply) |
+
+Thinnest skill in the repo — no Analyze, Correlate, or Validate step of its own; all ownership analysis
+is squad-map's. Report here means "format one Slack message," not "write a markdown deliverable."
+
 ### domain-comprehension mapping
 
 | Phase | File | Canonical |
