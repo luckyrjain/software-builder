@@ -32,7 +32,7 @@ backlog_run:
 
 1. Run `tracker_query` against the configured issue tracker; take results up to `max_tasks_per_run` —
    never more, even if the query returns a larger backlog.
-2. **Skip tickets that already have an in-progress branch/PR** — reuse loop-task-implementer's own
+2. **Skip tickets that already have an existing branch/PR (open or merged)** — reuse loop-task-implementer's own
    existing-branch/PR check ([orchestrator.md § 2 Task selection](../../loop-task-implementer/workflow/orchestrator.md#2-task-selection):
    *"If no shared state exists yet for this task, check for an existing branch/PR matching its ID before
    treating it as unstarted — a second Orchestrator invocation against the same repo must not duplicate
