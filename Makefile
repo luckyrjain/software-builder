@@ -656,7 +656,7 @@ lint-framework:
 	@grep -q '^## 1\. Required sections' docs/skill-framework/shared/examples-conventions.md
 	@grep -q '^## 2\. Scenario format' docs/skill-framework/shared/examples-conventions.md
 	@grep -q '^## 5\. Anti-patterns' docs/skill-framework/shared/examples-conventions.md
-	@for skill in pr-review incident-rca k8s-overprovisioning-datadog domain-comprehension squad-map mysql-to-postgres-sql loop-task-implementer; do \
+	@for skill in pr-review incident-rca k8s-overprovisioning-datadog domain-comprehension squad-map who-owns-x-bot mysql-to-postgres-sql loop-task-implementer; do \
 		test -f $$skill/examples.md || \
 			{ echo "error: missing $$skill/examples.md (examples-conventions)" >&2; exit 1; }; \
 		grep -q '## Invocation' $$skill/examples.md || \
@@ -702,7 +702,7 @@ lint-framework:
 	done; \
 	if [ "$$fail" -ne 0 ]; then exit 1; fi
 	@grep -q '| Complete |' docs/skill-framework/README.md
-	@for skill in pr-review incident-rca k8s-overprovisioning-datadog domain-comprehension squad-map mysql-to-postgres-sql loop-task-implementer; do \
+	@for skill in pr-review incident-rca k8s-overprovisioning-datadog domain-comprehension squad-map who-owns-x-bot mysql-to-postgres-sql loop-task-implementer; do \
 		grep -q 'skill-framework' $$skill/SETUP.md || \
 			{ echo "error: $$skill/SETUP.md must link to docs/skill-framework" >&2; exit 1; }; \
 		grep -q 'docs/skill-framework/shared/skill-routing.md' $$skill/SKILL.md || \
@@ -718,6 +718,7 @@ lint-framework:
 		"k8s-overprovisioning-datadog:workflow/collect-metrics.md" \
 		"domain-comprehension:workflow/session-0.md" \
 		"squad-map:workflow/inputs.md" \
+		"who-owns-x-bot:workflow/inputs.md" \
 		"mysql-to-postgres-sql:workflow/migrate-service.md" \
 		"loop-task-implementer:workflow/orchestrator.md"; do \
 		skill=$${pair%%:*}; file=$${pair#*:}; \
@@ -729,7 +730,7 @@ lint-framework:
 	@echo "lint-framework: all SETUP.md links ok"
 	@echo "lint-framework: cross-agent discovery files (.cursor/rules + .kiro/steering)"
 	@fail=0; \
-	for skill in pr-review incident-rca k8s-overprovisioning-datadog domain-comprehension squad-map mysql-to-postgres-sql loop-task-implementer; do \
+	for skill in pr-review incident-rca k8s-overprovisioning-datadog domain-comprehension squad-map who-owns-x-bot mysql-to-postgres-sql loop-task-implementer; do \
 		test -f .cursor/rules/$$skill.mdc || \
 			{ echo "  missing .cursor/rules/$$skill.mdc" >&2; fail=1; }; \
 		test -f .kiro/steering/$$skill.md || \

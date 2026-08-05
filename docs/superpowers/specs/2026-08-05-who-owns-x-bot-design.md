@@ -63,8 +63,9 @@ note re: reuse when item #11 Weekly Squad Digest is built later).
 
 **Output** — one Slack-formatted message, three possible shapes:
 
-1. **Resolved** — `api-disbursement → *disbursement* squad (HIGH confidence)` + owning contact/channel if
-   known from squad-map evidence.
+1. **Resolved** — `api-disbursement → *disbursement* squad (HIGH confidence)` + squad-map's own evidence
+   line (GitLab namespace / Datadog team tag). No separate contact/channel field — squad-map's schema
+   doesn't carry one, so this skill doesn't invent one either.
 2. **Ambiguous / conflict** — squad-map found the repo but GitLab squad ≠ Datadog team, or the query
    matched more than one repo — list up to 3 candidates, ask the human to pick.
 3. **Unknown** — squad-map returned UNKNOWN or found no match — say so plainly and suggest the human

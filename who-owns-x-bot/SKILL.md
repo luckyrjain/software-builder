@@ -40,9 +40,9 @@ Routing table: [skill-routing.md](../docs/skill-framework/shared/skill-routing.m
 
 | Shape | When |
 |-------|------|
-| Resolved | squad-map returns HIGH or MEDIUM confidence with no conflict |
-| Ambiguous | Query matches >1 repo, or GitLab squad ≠ Datadog team (conflict) |
-| Unknown | squad-map returns UNKNOWN or finds no match — never guess a squad |
+| Resolved | squad-map returns HIGH or MEDIUM confidence, not in squad-map's own Conflicts table |
+| Ambiguous | `query` matches >1 row in an existing `SQUAD_MAP.md`, or squad-map flagged the row as a conflict (GitLab ≠ Datadog, or one service with multiple `team` tags) |
+| Unknown | squad-map returns UNKNOWN/LOW confidence, finds no match, or isn't installed/configured — never guess a squad |
 
 No markdown file is written by this skill. If squad-map has to run a fresh lookup, squad-map may write
 its own `SQUAD_MAP.md` as a side effect per its own contract — that file is squad-map's artifact, not

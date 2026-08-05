@@ -1,6 +1,6 @@
 # Cross-skill escalation (shared)
 
-**Normative.** Symmetric escalation matrix for pr-review, incident-rca, k8s-overprovisioning-datadog, domain-comprehension, squad-map, mysql-to-postgres-sql, and loop-task-implementer.
+**Normative.** Symmetric escalation matrix for pr-review, incident-rca, k8s-overprovisioning-datadog, domain-comprehension, squad-map, who-owns-x-bot, mysql-to-postgres-sql, and loop-task-implementer.
 
 **Consumers:** `SKILL.md` in each skill (link here; keep ≤10 skill-specific rows max).
 
@@ -28,6 +28,8 @@ know about — don't treat it as a "you may want to" row the way every other row
 | **Session 0b (subroutine, not optional)** — every domain-comprehension run | domain-comprehension → squad-map | Workspace root + repo census | Not user-facing — Session 0b invokes squad-map directly per [session-0b.md](../../../domain-comprehension/workflow/session-0b.md) |
 | Full domain map after squad map | squad-map → domain-comprehension | `SQUAD_MAP.md` + workspace root | "Map bounded contexts and data ownership for `{domain}` — full domain comprehension" |
 | Incident + unclear service owner | incident-rca → squad-map | Service name + window | "Who owns `{service}`? — need squad for RCA follow-up" |
+| Caller wants the full mapping table, not one Slack answer | who-owns-x-bot → squad-map | `workspace_root` | "Map squads for repos in `{workspace}` — org prefix `{org}`, segment `{n}`" |
+| Caller wants bounded contexts / domain map, not just ownership | who-owns-x-bot → domain-comprehension | `query` (repo/service name) | "Map bounded contexts and data ownership for `{domain}` — full domain comprehension" |
 | Security finding in domain analysis (P3b) | domain-comprehension → pr-review | Repo + file path + finding type | "Review MR !{iid} for credential exposure in `{service}`" |
 | Architecture smell needs RCA context | domain-comprehension → incident-rca | Service + smell + time window | "RCA for `{service}` {window} — recurring {smell} identified in domain analysis" |
 | Domain map reveals overprovisioned service | domain-comprehension → k8s | Service + env from runtime validation | "Assess rightsizing for `{service}` in `{env}` — domain analysis found low utilization" |
@@ -102,7 +104,8 @@ When `MYSQL_TO_PG_SQL_REWRITES.md` exists in the workspace deliverable directory
 | Size K8s deployment / rightsizing | k8s-overprovisioning-datadog |
 | Review GitLab MR | pr-review |
 | Post-incident RCA / root cause | incident-rca |
-| Squad / repo ownership mapping | squad-map |
+| Squad / repo ownership mapping (interactive, conversational) | squad-map |
+| Single-shot automated ownership lookup (Slack `/who-owns` slash command) | who-owns-x-bot |
 | Domain / subsystem map, bounded contexts, data ownership | domain-comprehension |
 | MySQL scrub / native SQL PG migration / jdbc:postgresql cutover | mysql-to-postgres-sql |
 | Autonomous multi-task implement → review → remediate → PR loop | loop-task-implementer |

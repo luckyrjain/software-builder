@@ -20,14 +20,16 @@ GitLab namespace acme/disbursement/api-disbursement; Datadog team disbursement-p
 
 ## Ambiguous
 
-Two sub-cases, same shape — a short list, never a silent pick:
+Two sub-cases from [workflow/lookup.md](../workflow/lookup.md) Step 4, same shape — a short list, never a
+silent pick:
 
 ```
 :warning: *<query>* — ownership is unclear, need a human to confirm:
 <bulleted list of up to 3 candidates, each with its own confidence/evidence>
 ```
 
-Conflict example (GitLab squad ≠ Datadog team for the same repo):
+**Conflict** (single row, but squad-map's own Conflicts table has it — GitLab squad ≠ Datadog team, or
+one Datadog service tagged with more than one `team`):
 
 ```
 :warning: *legacy-ledger* — GitLab and Datadog disagree, need a human to confirm:
@@ -35,7 +37,9 @@ Conflict example (GitLab squad ≠ Datadog team for the same repo):
 • Datadog team: *collections* (service tag on legacy-ledger-svc)
 ```
 
-Multiple-match example:
+**Multiple candidates** — only reachable via a substring/prefix match against an *existing*
+`SQUAD_MAP.md`'s rows ([lookup.md](../workflow/lookup.md) Step 2); a fresh single-repo squad-map lookup
+on an exact `query` (Step 3) never itself returns more than one candidate:
 
 ```
 :warning: *ledger* matched more than one repo — which did you mean?
@@ -47,7 +51,9 @@ Multiple-match example:
 ## Unknown
 
 Never fabricate a squad name. Say plainly that it's unknown and point at a human fallback (the fallback
-channel/contact is configured per Slack workspace — see [SETUP.md](../SETUP.md) § Config).
+channel/contact is configured per Slack workspace — see [SETUP.md](../SETUP.md) § Config). Also used when
+squad-map itself is not installed ([lookup.md](../workflow/lookup.md) Step 1) or its config resolution
+HARD STOPs (Step 3) — a setup problem is still reported as Unknown, not a stuck/errored reply.
 
 ```
 :grey_question: Couldn't find ownership for *<query>*. <fallback_contact from SETUP.md config>

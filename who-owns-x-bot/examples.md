@@ -8,7 +8,7 @@ Conventions: [examples-conventions](../docs/skill-framework/shared/examples-conv
 |---|----------------|----------|
 | 1 | `query: api-disbursement` | Inputs → Lookup → Resolved reply |
 | 2 | `query: legacy-ledger` (known GitLab/Datadog conflict) | Inputs → Lookup → Ambiguous reply |
-| 3 | `query: ledger` (matches 3 repos) | Inputs → Lookup → Ambiguous reply, up to 3 candidates listed |
+| 3 | `query: ledger` (substring-matches 3 rows in an existing `SQUAD_MAP.md`) | Inputs → Lookup → Ambiguous reply, up to 3 candidates listed |
 | 4 | `query: some-typo-repo` (no match) | Inputs → Lookup → Unknown reply |
 | 5 | `query: ` (empty) | Inputs HARD STOP → usage-hint reply, Lookup never runs |
 | 6 | `query: payment-service`, squad-map has no MCP (CODEOWNERS fallback, LOW confidence) | Unknown reply — LOW confidence never surfaces as Resolved |
