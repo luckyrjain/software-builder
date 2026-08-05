@@ -212,6 +212,27 @@ class TestStaleness:
         days, entry = compute_staleness("ws1", svc, state, now)
         assert days == 0
 
+    def test_state_key_for_missing_name_matches_build_rollups_write_key(self):
+        # compute_staleness's read key must be built the exact same way build_rollup builds the
+        # write key (workspace_root :: coerce_str(svc.get("name", ""))) or a service missing
+        # 'name' can never find its own persisted state on the next run -- staleness would
+        # silently reset to 0 forever instead of ever reaching "stalled". A bare
+        # f"{svc.get('name')}" would produce the literal string "None" here, not "".
+        now = datetime.now(timezone.utc)
+        svc = {"scan_gate": "pass", "shadow_compare": "pending", "config_cutover": "pending"}  # no 'name'
+        ten_days_ago = (now - timedelta(days=10)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        state = {"ws1::": {"gate_signature": gate_signature(svc), "first_observed_at": ten_days_ago}}
+        days, entry = compute_staleness("ws1", svc, state, now)
+        assert days == 10
+
+    def test_state_key_for_null_name_matches_build_rollups_write_key(self):
+        now = datetime.now(timezone.utc)
+        svc = {"name": None, "scan_gate": "pass", "shadow_compare": "pending", "config_cutover": "pending"}
+        ten_days_ago = (now - timedelta(days=10)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        state = {"ws1::": {"gate_signature": gate_signature(svc), "first_observed_at": ten_days_ago}}
+        days, entry = compute_staleness("ws1", svc, state, now)
+        assert days == 10
+
 
 class TestBuildRollup:
     def test_missing_migration_status_is_a_gap_not_a_crash(self, tmp_path):
@@ -347,6 +368,30 @@ class TestBuildRollup:
         assert items[0].service == "2026-08-05"
         assert items[0].squad == "UNKNOWN"  # no matching row, but no crash
         json.dumps([i.to_dict() for i in items])  # must not raise
+
+    def test_staleness_survives_a_real_two_run_round_trip_when_name_is_missing(self, tmp_path):
+        # A true round trip: feed build_rollup's OWN persisted new_state back in as the next
+        # run's state, the way main() actually does via load_state/save_state. Every other
+        # staleness test hand-constructs its `state` input with a key that happens to already
+        # match -- this is the only test that would catch a mismatch between the key
+        # compute_staleness reads and the key build_rollup writes.
+        ws = tmp_path / "ws"
+        ws.mkdir()
+        (ws / "MIGRATION_STATUS.yaml").write_text(
+            # deliberately no 'name' field -- a hand-edit omission, not a crash-causing type
+            "schema_version: 1\nservices:\n  - path: svc-a\n"
+            "    tier_focus: P0\n    scan_gate: pass\n    shadow_compare: pending\n    config_cutover: pending\n",
+            encoding="utf-8",
+        )
+        manifest = [ManifestEntry(workspace_root=str(ws))]
+        run1 = datetime.now(timezone.utc)
+        items1, _, state_after_run1 = build_rollup(manifest, {}, run1, staleness_threshold_days=5)
+        assert items1[0].staleness_days == 0
+
+        run2 = run1 + timedelta(days=10)  # same gate signature, 10 days later
+        items2, _, state_after_run2 = build_rollup(manifest, state_after_run1, run2, staleness_threshold_days=5)
+        assert items2[0].staleness_days == 10
+        assert items2[0].status == "stalled"
 
     def test_blocked_outranks_stalled(self, tmp_path):
         ws = tmp_path / "ws"

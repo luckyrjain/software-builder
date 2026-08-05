@@ -274,7 +274,15 @@ def compute_staleness(
     now: datetime,
 ) -> tuple[int, dict[str, str]]:
     """Returns (staleness_days, updated_state_entry). Mutates nothing -- caller persists."""
-    key = f"{workspace_root}::{svc.get('name')}"
+    # Must match build_rollup's own state-key computation exactly (workspace_root ::
+    # coerce_str(svc.get("name", ""))). A bare f"{svc.get('name')}" diverges from that whenever
+    # name is missing or explicitly null: svc.get('name') is None either way, and f"{None}"
+    # stringifies to the literal "None", while coerce_str(svc.get("name", "")) -- what
+    # build_rollup actually writes new_state under -- yields "" for both. That mismatch means
+    # this function's read key can never find the entry build_rollup persisted last run, so
+    # staleness silently resets to 0 forever for any service lacking a 'name' field, defeating
+    # the whole stalled-detection feature without ever raising an error.
+    key = f"{workspace_root}::{coerce_str(svc.get('name', ''))}"
     sig = gate_signature(svc)
     prior = state.get(key)
     if prior is None or not isinstance(prior, dict) or prior.get("gate_signature") != sig:

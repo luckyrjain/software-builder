@@ -224,7 +224,7 @@ invocation. Each file under `workflow/` must declare `workflow_version`, `phase`
 in YAML frontmatter. Checks markdown anchor links and required `reference/` files (`phase-index.md`,
 `lazy-load-index.md`, `report-format.md`, `smoke-test.md`) plus `scripts/aggregate_migration_status.py`'s
 existence. Runs `python3 -m pytest migration-program-manager/tests/ -q`
-(`tests/test_aggregate_migration_status.py`, 47 cases covering the `SQUAD_MAP.md` parser, the squad join,
+(`tests/test_aggregate_migration_status.py`, 50 cases covering the `SQUAD_MAP.md` parser, the squad join,
 status derivation, and staleness tracking) if pytest is installed.
 
 ### lint-mysql-to-postgres-sql

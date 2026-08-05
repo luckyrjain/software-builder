@@ -18,7 +18,7 @@ All notable changes to the migration-program-manager skill. Per-file `workflow_v
   Out-of-scope sections — the repo's first markdown-table parser), joins, computes staleness against
   persisted cross-run state (`gate_signature` + `first_observed_at` per service — genuinely new since
   `MIGRATION_STATUS.yaml` has no per-gate timestamp), `main(argv) -> int` CLI entrypoint, stdlib + PyYAML
-  only, 47 pytest cases in `tests/test_aggregate_migration_status.py`
+  only, 50 pytest cases in `tests/test_aggregate_migration_status.py`
 - Never invokes mysql-to-postgres-sql or squad-map live — pure file reads; a missing `SQUAD_MAP.md` joins
   as `squad: UNKNOWN` rather than triggering squad-map itself (same lesson `new-hire-guide`'s round-1
   review learned about narrowing a live wrapped-skill invocation's scope — this skill avoids the whole
@@ -137,3 +137,25 @@ All notable changes to the migration-program-manager skill. Per-file `workflow_v
   service dict, before either reaches `join_squad` or `RollupItem.service`.
 - 4 new pytest cases (`coerce_str` unit tests × 3, 1 `build_rollup`-level regression
   reproducing the crash with a populated `SQUAD_MAP.md`) — 47 total, up from 43.
+
+### Fixed (round-6 review, same day)
+- **`compute_staleness`'s state-lookup key silently diverged from `build_rollup`'s state-write
+  key whenever a service's `name` field was missing or explicitly `null`**, latent since round 1
+  (not introduced by round 5) and never a crash — that's exactly why 5 rounds of crash-hunting
+  missed it. `compute_staleness` built its read key as `f"{workspace_root}::{svc.get('name')}"`;
+  when `name` is absent or `null`, `svc.get('name')` is `None` either way, and an f-string
+  stringifies that to the literal `"None"`. `build_rollup` builds its write key from
+  `coerce_str(svc.get("name", ""))`, which yields `""` for both of those same cases. The read key
+  (`"...::None"`) and the write key (`"...::"`) never matched, so a service without a `name` could
+  never find the `first_observed_at` it persisted last run — every run looked like a first
+  observation, staleness silently pinned at 0 forever, and such a service could never reach
+  `"stalled"` no matter how long its gate signature stayed unchanged. No error, no gap, no
+  traceback — the staleness feature (this skill's core purpose per its own module docstring) was
+  just silently inert for these services. Fixed `compute_staleness` to build its key with the
+  exact same `coerce_str(svc.get("name", ""))` expression `build_rollup` uses.
+- Found by feeding `build_rollup`'s own persisted `new_state` back into a second `build_rollup`
+  call — a true round-trip through the exact `load_state`/`save_state` path `main()` uses — which
+  no test across 5 prior rounds had done; every existing staleness test hand-constructed its
+  `state` input with a key that happened to already match the code under test.
+- 3 new pytest cases (`compute_staleness` key-match unit tests for missing/null `name`, 1
+  `build_rollup`-level two-run round-trip regression) — 50 total, up from 47.

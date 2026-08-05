@@ -161,7 +161,7 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
   service_name)`) to compute per-gate staleness that `MIGRATION_STATUS.yaml` itself has no timestamp for
   — owned exclusively by this skill, never read or written by mysql-to-postgres-sql.
 - `scripts/aggregate_migration_status.py` — stdlib + PyYAML only, `main(argv) -> int` CLI entrypoint,
-  47 pytest cases under `tests/test_aggregate_migration_status.py` covering the squad-map parser, the
+  50 pytest cases under `tests/test_aggregate_migration_status.py` covering the squad-map parser, the
   path/name join, status derivation, and staleness reset-vs-accrue behavior.
 - No `disable-model-invocation` — ambiently invocable, like new-hire-guide/release-readiness-checker; no
   wrapped-skill gate to police since nothing is invoked live.
