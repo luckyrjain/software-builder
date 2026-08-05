@@ -1,0 +1,13 @@
+---
+description: Invoke the repository loop-task-implementer skill for autonomous task implementation, independent review, remediation, and PR completion.
+alwaysApply: false
+---
+
+When the user asks to implement a task through review, remediation, CI, or PR completion, read `loop-task-implementer/SKILL.md` and follow it.
+
+Load only the active role prompt:
+- Orchestrator: `orchestrator.md`
+- Builder: `builder.md`
+- Reviewer: `reviewer.md`
+
+Keep Builder and Reviewer contexts isolated. Treat CI and exact-commit checks as authoritative.

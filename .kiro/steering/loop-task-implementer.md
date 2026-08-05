@@ -2,7 +2,7 @@
 inclusion: manual
 ---
 
-For autonomous implementation, independent review, remediation, CI validation, or pull-request completion, read `software-builder/SKILL.md`.
+For autonomous implementation, independent review, remediation, CI validation, or pull-request completion, read `loop-task-implementer/SKILL.md`.
 
 Load only the active role prompt:
 - Orchestrator: `orchestrator.md`

@@ -1,9 +1,9 @@
 ---
-name: software-builder
+name: loop-task-implementer
 description: Use when autonomously implementing one or more software tasks through isolated build, evidence-based review, remediation, validation, pull-request, and completion workflows across coding agents.
 ---
 
-# Software Builder
+# Loop Task Implementer
 
 ## Overview
 
@@ -17,11 +17,11 @@ This skill is platform-neutral. The active coding agent may be Cursor, ChatGPT/C
 
 Users can invoke the skill without memorizing commands:
 
-- “Use software-builder to complete the next task.”
+- “Use loop-task-implementer to complete the next task.”
 - “Implement issue 42, review it deeply, fix findings, and open a PR.”
 - “Work through these tasks one by one and stop when each is ready to merge.”
 - “Take this PR through independent review and remediation.”
-- “Resume the software-builder workflow for the current branch.”
+- “Resume the loop-task-implementer workflow for the current branch.”
 - “Run only reviewer Lens A on this change.”
 - “Adjudicate the review findings instead of blindly fixing them.”
 
