@@ -26,6 +26,7 @@ Each skill has a human **`README.md`** (what it does) separate from **`SKILL.md`
 | [domain-comprehension](domain-comprehension/) | "map the domain …", "bounded contexts for …" | Evidence-backed domain map: bounded contexts, data ownership, dependency graphs, business flows, exec summary | [README](domain-comprehension/README.md) · [SETUP](domain-comprehension/SETUP.md) |
 | [squad-map](squad-map/) | "map squads …", "who owns …" | Repo-to-squad mapping: GitLab group hierarchy + Datadog team tags → `SQUAD_MAP.md` | [README](squad-map/README.md) · [SETUP](squad-map/SETUP.md) |
 | [who-owns-x-bot](who-owns-x-bot/) | `/who-owns <name>` (Slack slash command; not ambient chat) | Single-shot "who owns X" Slack reply — thin wrapper delegating to squad-map | [README](who-owns-x-bot/README.md) · [SETUP](who-owns-x-bot/SETUP.md) |
+| [new-hire-guide](new-hire-guide/) | "onboard `<name>`, joining `<squad>`" | Personalized onboarding tour: resolves the new hire's squad's repos via squad-map, scopes domain-comprehension to just those, writes `ONBOARDING_TOUR.md` | [README](new-hire-guide/README.md) · [SETUP](new-hire-guide/SETUP.md) |
 | [mysql-to-postgres-sql](mysql-to-postgres-sql/) | "MySQL scrub …", "jdbc:postgresql …", "TIMESTAMPDIFF …" | Native SQL + JDBC rewrite for MySQL→PostgreSQL; scan gate, collection P0/P1 | [README](mysql-to-postgres-sql/README.md) · [SETUP](mysql-to-postgres-sql/SETUP.md) |
 | [loop-task-implementer](loop-task-implementer/) | "implement issue 42 …", "work through these tasks …" | Autonomous multi-task loop: isolated Builder → two-lens independent Reviewer → adjudicated remediation → PR. Platform-neutral, no Datadog/GitLab/Jira MCP required | [README](loop-task-implementer/README.md) · [SETUP](loop-task-implementer/SETUP.md) |
 | [backlog-runner](backlog-runner/) | Scheduled trigger (not human chat) | Pulls N tickets from a tracker query, runs loop-task-implementer per ticket overnight in dependency order, never merges | [README](backlog-runner/README.md) · [SETUP](backlog-runner/SETUP.md) |
@@ -49,6 +50,7 @@ make install-incident-triage-agent
 make install-domain-comprehension
 make install-squad-map
 make install-who-owns-x-bot
+make install-new-hire-guide
 make install-mysql-to-postgres-sql
 make install-loop-task-implementer
 make install-backlog-runner
@@ -69,6 +71,7 @@ bash scripts/install.sh incident-triage-agent
 bash scripts/install.sh domain-comprehension
 bash scripts/install.sh squad-map
 bash scripts/install.sh who-owns-x-bot
+bash scripts/install.sh new-hire-guide
 bash scripts/install.sh mysql-to-postgres-sql
 bash scripts/install.sh loop-task-implementer
 bash scripts/install.sh backlog-runner
@@ -123,6 +126,7 @@ make lint-incident-triage-agent # incident-triage-agent SKILL line limit, frontm
 make lint-domain-comprehension  # domain-comprehension SKILL line limit, frontmatter, anchors, manifest validator
 make lint-squad-map             # squad-map SKILL line limit, frontmatter, anchors
 make lint-who-owns-x-bot        # who-owns-x-bot SKILL line limit, frontmatter, anchors, required files
+make lint-new-hire-guide        # new-hire-guide SKILL line limit, frontmatter, anchors, required files
 make lint-mysql-to-postgres-sql # mysql SKILL line limit, scan fixtures, pressure harness, shellcheck
 make lint-loop-task-implementer # loop-task-implementer SKILL line limit, workflow frontmatter, required files, anchors
 make lint-backlog-runner        # backlog-runner SKILL line limit, frontmatter, anchors, required files
@@ -138,6 +142,7 @@ make lint-backlog-runner        # backlog-runner SKILL line limit, frontmatter, 
 | `lint-domain-comprehension` | `SKILL.md` ≤ 180 lines; workflow frontmatter; dangling anchors; `templates/manifest.yaml` validator + pytest; pressure harness |
 | `lint-squad-map` | `SKILL.md` ≤ 180 lines; workflow frontmatter; dangling anchors; required reference files; pytest |
 | `lint-who-owns-x-bot` | `SKILL.md` ≤ 180 lines; `disable-model-invocation: true` set; workflow frontmatter; dangling anchors; required reference files |
+| `lint-new-hire-guide` | `SKILL.md` ≤ 180 lines; `disable-model-invocation` **not** set; workflow frontmatter; dangling anchors; required reference files |
 | `lint-mysql-to-postgres-sql` | `SKILL.md` ≤ 180 lines; workflow frontmatter; required references; scan fixtures + pressure harness; shellcheck on scan scripts |
 | `lint-loop-task-implementer` | `SKILL.md` ≤ 180 lines; workflow frontmatter; dangling anchors; required files (`SETUP.md`/`README.md`/`examples.md`/`report-template.md`/`reference/*`) |
 | `lint-backlog-runner` | `SKILL.md` ≤ 180 lines; `disable-model-invocation: true` set; workflow frontmatter; dangling anchors; required reference files |
@@ -163,6 +168,7 @@ or a Docker/Linux runner (deps installed via `apt-get` in the pipeline).
 | domain-comprehension | GitLab (optional, Session 0b via squad-map), Datadog (optional, P2b runtime validation) | [domain-comprehension/SETUP.md](domain-comprehension/SETUP.md) |
 | squad-map | GitLab, Datadog (optional; CODEOWNERS fallback when both absent) | [squad-map/SETUP.md](squad-map/SETUP.md) |
 | who-owns-x-bot | None of its own — delegates to squad-map | [who-owns-x-bot/SETUP.md](who-owns-x-bot/SETUP.md) |
+| new-hire-guide | None of its own — inherits domain-comprehension's + squad-map's | [new-hire-guide/SETUP.md](new-hire-guide/SETUP.md) |
 | mysql-to-postgres-sql | None (code scan + rewrite) | Datadog (optional; post-cutover APM) — [mysql-to-postgres-sql/SETUP.md](mysql-to-postgres-sql/SETUP.md) |
 | loop-task-implementer | None (uses the host agent's own repo/git access, not an MCP server) | [loop-task-implementer/reference/mcp-capabilities.md](loop-task-implementer/reference/mcp-capabilities.md) |
 | backlog-runner | Issue-tracker MCP (Jira or GitHub Issues) — required for this skill, optional for loop-task-implementer itself | [backlog-runner/SETUP.md](backlog-runner/SETUP.md) |
@@ -383,6 +389,30 @@ session routes to **squad-map** directly (see [who-owns-x-bot/SETUP.md](who-owns
 
 - One Slack message — Resolved, Ambiguous, or Unknown (never a fabricated squad name)
 - No file written by this skill (squad-map may still write/update its own `SQUAD_MAP.md`)
+
+---
+
+## Usage (new-hire-guide)
+
+Ambiently invocable, unlike who-owns-x-bot/pr-gatekeeper/incident-triage-agent/backlog-runner — a human
+is always present for this flow, so `disable-model-invocation` is deliberately **not** set. Say something
+like "onboard Jane, she's joining payments" and the skill resolves her squad's repos via squad-map, then
+runs domain-comprehension scoped to just those.
+
+### Examples
+
+| You say | What happens |
+|----------------|----------------|
+| "Onboard Jane, she's joining payments" | Resolves squad → repos via squad-map, runs domain-comprehension `QUICK` scoped to those repos, writes `ONBOARDING_TOUR.md` |
+| Squad name doesn't match any `SQUAD_MAP.md` row | Asks you to confirm/correct, listing the squads that do exist — never a silent empty tour |
+| "Give Jane the full deep-dive" | `delivery_mode: FULL` passed through to domain-comprehension unchanged |
+
+### What you get (new-hire-guide)
+
+- `ONBOARDING_TOUR.md` — welcome section, repo list with one-line purpose, squad contacts, links into
+  domain-comprehension's/squad-map's own deliverables (curates and links, never restates)
+- Both wrapped skills' own live questions (domain-comprehension's Session 0 checkpoint, squad-map's
+  `squad_path_segment` HARD STOP) surface to you directly — this skill never scripts an answer
 
 ---
 

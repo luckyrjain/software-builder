@@ -105,6 +105,18 @@ Validate — the skill is lightweight compared to multi-phase skills.
 Thinnest skill in the repo — no Analyze, Correlate, or Validate step of its own; all ownership analysis
 is squad-map's. Report here means "format one Slack message," not "write a markdown deliverable."
 
+### new-hire-guide mapping
+
+| Phase | File | Canonical |
+|-------|------|-----------|
+| Inputs | `workflow/inputs.md` | Detect (partial) |
+| Run tour | `workflow/run-tour.md` | Gather (delegated to squad-map + domain-comprehension) + Analyze (squad-column matching, zero-match handling) + Report (`ONBOARDING_TOUR.md`) |
+
+Like who-owns-x-bot, no Analyze/Correlate/Validate of its own beyond the squad-column-matching and
+zero-match logic in Run tour — squad-to-repo resolution is squad-map's, comprehension is
+domain-comprehension's. Report here means "curate and link `ONBOARDING_TOUR.md`," not re-run either
+wrapped skill's own analysis.
+
 ### domain-comprehension mapping
 
 | Phase | File | Canonical |

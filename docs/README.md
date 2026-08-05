@@ -27,6 +27,7 @@ Each skill is a self-contained directory copied to `~/.cursor/skills/<name>/` on
 | **domain-comprehension** | [domain-comprehension/README.md](../domain-comprehension/README.md) | [domain-comprehension/SKILL.md](../domain-comprehension/SKILL.md) | [domain-comprehension/SETUP.md](../domain-comprehension/SETUP.md) |
 | **squad-map** | [squad-map/README.md](../squad-map/README.md) | [squad-map/SKILL.md](../squad-map/SKILL.md) | [squad-map/SETUP.md](../squad-map/SETUP.md) |
 | **who-owns-x-bot** | [who-owns-x-bot/README.md](../who-owns-x-bot/README.md) | [who-owns-x-bot/SKILL.md](../who-owns-x-bot/SKILL.md) | [who-owns-x-bot/SETUP.md](../who-owns-x-bot/SETUP.md) |
+| **new-hire-guide** | [new-hire-guide/README.md](../new-hire-guide/README.md) | [new-hire-guide/SKILL.md](../new-hire-guide/SKILL.md) | [new-hire-guide/SETUP.md](../new-hire-guide/SETUP.md) |
 | **mysql-to-postgres-sql** | [mysql-to-postgres-sql/README.md](../mysql-to-postgres-sql/README.md) | [mysql-to-postgres-sql/SKILL.md](../mysql-to-postgres-sql/SKILL.md) | [mysql-to-postgres-sql/SETUP.md](../mysql-to-postgres-sql/SETUP.md) |
 | **loop-task-implementer** | [loop-task-implementer/README.md](../loop-task-implementer/README.md) | [loop-task-implementer/SKILL.md](../loop-task-implementer/SKILL.md) | [loop-task-implementer/SETUP.md](../loop-task-implementer/SETUP.md) |
 | **backlog-runner** | [backlog-runner/README.md](../backlog-runner/README.md) | [backlog-runner/SKILL.md](../backlog-runner/SKILL.md) | [backlog-runner/SETUP.md](../backlog-runner/SETUP.md) |
@@ -43,6 +44,7 @@ Each skill is a self-contained directory copied to `~/.cursor/skills/<name>/` on
 | **domain-comprehension** | Natural language ("map the domain …") | Evidence-backed domain comprehension across repos: bounded contexts, data ownership, dependency graphs, business flows, exec summary with confidence |
 | **squad-map** | Natural language ("map squads …", "who owns …") | Repo-to-squad mapping via GitLab group hierarchy + Datadog team tags → `SQUAD_MAP.md` with confidence and conflict flags |
 | **who-owns-x-bot** | Structured `query`, not ambient chat (`/who-owns <name>` Slack slash command) | Single-shot "who owns X" Slack reply — thin wrapper delegating the lookup entirely to squad-map |
+| **new-hire-guide** | Natural language ("onboard `<name>`, joining `<squad>`") | Personalized onboarding tour: squad-map resolves the new hire's repos, domain-comprehension runs scoped to just those, `ONBOARDING_TOUR.md` output |
 | **mysql-to-postgres-sql** | Natural language ("MySQL scrub …", "jdbc:postgresql …") | MySQL-dialect scan gate + PostgreSQL rewrite for a `jdbc:mysql`→`jdbc:postgresql` migration |
 | **loop-task-implementer** | Natural language ("implement issue 42 …") | Autonomous multi-task loop: isolated Builder → two-lens independent Reviewer → adjudicated remediation → PR; platform-neutral, no MCP dependency |
 | **backlog-runner** | Scheduled trigger, not ambient chat | Queue-management wrapper: pulls N tickets from a tracker query, runs loop-task-implementer per ticket overnight in dependency order, never merges |
@@ -68,6 +70,8 @@ Skills reference each other when a finding belongs in another workflow:
 | incident-triage-agent | Caller wants an interactive, on-demand RCA or ownership lookup | incident-rca / squad-map |
 | who-owns-x-bot | Caller wants the full mapping table, not one answer | squad-map |
 | who-owns-x-bot | Caller wants bounded contexts / domain map | domain-comprehension |
+| new-hire-guide | Caller wants a one-off ownership lookup, not a tour | squad-map |
+| new-hire-guide | Caller wants the full org-wide domain map, not scoped to one person | domain-comprehension |
 | domain-comprehension | Produced `MYSQL_TO_PG_SQL_REWRITES.md` | mysql-to-postgres-sql |
 | mysql-to-postgres-sql | Migration MR needs review | pr-review |
 | mysql-to-postgres-sql | Cutover regression / wrong query results | incident-rca |
@@ -95,6 +99,8 @@ Full symmetric matrix (forward + reverse escalations):
 | [superpowers/specs/2026-08-05-incident-triage-agent-design.md](superpowers/specs/2026-08-05-incident-triage-agent-design.md) | incident-triage-agent design — items #3+#4 of the team-facing agents roadmap |
 | [superpowers/specs/2026-08-05-org-rollup-aggregation-layer-design.md](superpowers/specs/2026-08-05-org-rollup-aggregation-layer-design.md) | Shared cross-repo aggregation layer design — no implementation yet, informs future items #8/#10/#11 |
 | [superpowers/specs/2026-08-05-backlog-runner-design.md](superpowers/specs/2026-08-05-backlog-runner-design.md) | backlog-runner design — item #7 of the team-facing agents roadmap |
+| [superpowers/specs/2026-08-05-domain-comprehension-proposal-check-mode-design.md](superpowers/specs/2026-08-05-domain-comprehension-proposal-check-mode-design.md) | domain-comprehension `PROPOSAL_CHECK` mode design — item #6 of the team-facing agents roadmap (a mode addition, not a new skill) |
+| [superpowers/specs/2026-08-05-new-hire-guide-design.md](superpowers/specs/2026-08-05-new-hire-guide-design.md) | new-hire-guide design — item #5 of the team-facing agents roadmap |
 
 These are planning artifacts; the live behavior is defined in `pr-review/SKILL.md` and `pr-review/reference/`.
 
@@ -166,6 +172,15 @@ These are planning artifacts; the live behavior is defined in `pr-review/SKILL.m
 | `workflow/inputs.md` | Parse `query` + optional `workspace_root`; HARD STOP on empty query |
 | `workflow/lookup.md` | Delegate to squad-map, classify Resolved/Ambiguous/Unknown |
 | `reference/slack-format.md` | Normative three-shape Slack reply spec |
+| `reference/smoke-test.md` | Post-install validation steps |
+
+## new-hire-guide file map
+
+| Path | What it does |
+|------|--------------|
+| `workflow/inputs.md` | Parse `new_hire` (name, squad) + `workspace_root` + `delivery_mode`; HARD STOP on missing required fields |
+| `workflow/run-tour.md` | Resolve squad → repos via squad-map, invoke domain-comprehension scoped, build `ONBOARDING_TOUR.md` |
+| `reference/tour-format.md` | Normative `ONBOARDING_TOUR.md` structure |
 | `reference/smoke-test.md` | Post-install validation steps |
 
 ## mysql-to-postgres-sql file map

@@ -89,6 +89,23 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
   `lint-framework`'s 4 hardcoded per-skill loops from the start. `phase-glossary.md` doesn't apply,
   inheriting loop-task-implementer's own exemption.
 
+## new-hire-guide
+
+### Initial release (2026-08-05)
+
+- New skill — item #5 of the [team-facing agents roadmap](docs/superpowers/plans/2026-08-05-team-facing-agents-roadmap.md):
+  a thin composition wrapper around **domain-comprehension** + **squad-map** that resolves a new hire's
+  squad to its repos, runs domain-comprehension scoped to just those, and writes `ONBOARDING_TOUR.md`.
+- No `disable-model-invocation` — ambiently invocable, unlike who-owns-x-bot/pr-gatekeeper/
+  incident-triage-agent/backlog-runner, since a human is always present for this flow. Both wrapped
+  skills' own live gates (domain-comprehension's Session 0 checkpoint, squad-map's `squad_path_segment`
+  HARD STOP) surface unscripted — no gate-policy override file.
+- Zero-match squad-name handling: never produces a silent empty tour — asks for confirmation, listing the
+  squad names that actually exist in `SQUAD_MAP.md`.
+- Design spec: [docs/superpowers/specs/2026-08-05-new-hire-guide-design.md](docs/superpowers/specs/2026-08-05-new-hire-guide-design.md).
+- Wired into `make install-new-hire-guide` / `make lint-new-hire-guide`, root README, docs/README,
+  docs/REPOSITORY, skill-routing.md, cross-skill-escalation.md, prompt-injection.md, phase-glossary.md.
+
 ## who-owns-x-bot
 
 ### Initial release (2026-08-05)

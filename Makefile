@@ -1,4 +1,4 @@
-.PHONY: install install-pr-review install-pr-gatekeeper install-k8s-overprovisioning install-incident-rca install-incident-rca-deps install-incident-triage-agent install-domain-comprehension install-squad-map install-who-owns-x-bot install-mysql-to-postgres-sql install-loop-task-implementer install-backlog-runner install-claude install-claude-pr-review install-claude-pr-gatekeeper install-claude-k8s-overprovisioning install-claude-incident-rca install-claude-incident-triage-agent install-claude-domain-comprehension install-claude-squad-map install-claude-who-owns-x-bot install-claude-mysql-to-postgres-sql install-claude-loop-task-implementer install-claude-backlog-runner lint lint-framework lint-pr-review lint-pr-gatekeeper lint-k8s-skill lint-k8s lint-incident-rca lint-incident-triage-agent lint-domain-comprehension lint-squad-map lint-who-owns-x-bot lint-mysql-to-postgres-sql lint-loop-task-implementer lint-backlog-runner setup-hooks setup kubesense-errors
+.PHONY: install install-pr-review install-pr-gatekeeper install-k8s-overprovisioning install-incident-rca install-incident-rca-deps install-incident-triage-agent install-domain-comprehension install-squad-map install-who-owns-x-bot install-new-hire-guide install-mysql-to-postgres-sql install-loop-task-implementer install-backlog-runner install-claude install-claude-pr-review install-claude-pr-gatekeeper install-claude-k8s-overprovisioning install-claude-incident-rca install-claude-incident-triage-agent install-claude-domain-comprehension install-claude-squad-map install-claude-who-owns-x-bot install-claude-new-hire-guide install-claude-mysql-to-postgres-sql install-claude-loop-task-implementer install-claude-backlog-runner lint lint-framework lint-pr-review lint-pr-gatekeeper lint-k8s-skill lint-k8s lint-incident-rca lint-incident-triage-agent lint-domain-comprehension lint-squad-map lint-who-owns-x-bot lint-new-hire-guide lint-mysql-to-postgres-sql lint-loop-task-implementer lint-backlog-runner setup-hooks setup kubesense-errors
 
 install:
 	bash scripts/install.sh
@@ -29,6 +29,9 @@ install-squad-map:
 
 install-who-owns-x-bot: install-squad-map
 	bash scripts/install.sh who-owns-x-bot
+
+install-new-hire-guide: install-domain-comprehension install-squad-map
+	bash scripts/install.sh new-hire-guide
 
 install-mysql-to-postgres-sql:
 	bash scripts/install.sh mysql-to-postgres-sql
@@ -66,6 +69,9 @@ install-claude-squad-map:
 install-claude-who-owns-x-bot: install-claude-squad-map
 	bash scripts/install.sh --agent claude-user who-owns-x-bot
 
+install-claude-new-hire-guide: install-claude-domain-comprehension install-claude-squad-map
+	bash scripts/install.sh --agent claude-user new-hire-guide
+
 install-claude-mysql-to-postgres-sql:
 	bash scripts/install.sh --agent claude-user mysql-to-postgres-sql
 
@@ -81,7 +87,7 @@ setup:
 		python3 -m pip install --user --break-system-packages -r requirements.txt
 	@$(MAKE) setup-hooks
 
-lint: lint-framework lint-pr-review lint-pr-gatekeeper lint-k8s-skill lint-incident-rca lint-incident-triage-agent lint-domain-comprehension lint-squad-map lint-who-owns-x-bot lint-mysql-to-postgres-sql lint-loop-task-implementer lint-backlog-runner
+lint: lint-framework lint-pr-review lint-pr-gatekeeper lint-k8s-skill lint-incident-rca lint-incident-triage-agent lint-domain-comprehension lint-squad-map lint-who-owns-x-bot lint-new-hire-guide lint-mysql-to-postgres-sql lint-loop-task-implementer lint-backlog-runner
 	@for f in scripts/*.sh; do \
 		echo "shellcheck $$f"; \
 		if command -v shellcheck >/dev/null 2>&1; then \
@@ -599,6 +605,46 @@ lint-who-owns-x-bot:
 		{ echo "error: who-owns-x-bot/SETUP.md must link to docs/skill-framework" >&2; exit 1; }
 	@echo "  ok (framework refs)"
 
+lint-new-hire-guide:
+	@echo "lint-new-hire-guide: SKILL.md line count (<= 180)"
+	@test -f new-hire-guide/SKILL.md || \
+		{ echo "error: missing new-hire-guide/SKILL.md" >&2; exit 1; }
+	@lines=$$(wc -l < new-hire-guide/SKILL.md | tr -d ' '); \
+	if [ -z "$$lines" ] || [ "$$lines" -eq 0 ]; then \
+		echo "error: new-hire-guide/SKILL.md is empty" >&2; exit 1; \
+	elif [ "$$lines" -gt 180 ]; then \
+		echo "error: new-hire-guide SKILL.md $$lines lines (> 180) — keep orchestrator thin; detail in workflow/" >&2; \
+		exit 1; \
+	fi; \
+	echo "  ok ($$lines lines)"
+	@echo "lint-new-hire-guide: disable-model-invocation NOT set (ambiently invocable, unlike the webhook/schedule wrappers)"
+	@grep -q '^disable-model-invocation:' new-hire-guide/SKILL.md && \
+		{ echo "error: new-hire-guide/SKILL.md must NOT set disable-model-invocation — a human is always present for this flow" >&2; exit 1; } || true
+	@echo "  ok"
+	@echo "lint-new-hire-guide: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
+	@fail=0; \
+	for f in new-hire-guide/workflow/*.md; do \
+		fm=$$(awk '/^---$$/{c++; next} c==1' "$$f"); \
+		for key in workflow_version phase produces consumes; do \
+			if ! printf '%s\n' "$$fm" | grep -q "^$$key:"; then \
+				echo "  missing $$key frontmatter: $$f" >&2; fail=1; \
+			fi; \
+		done; \
+	done; \
+	if [ "$$fail" -ne 0 ]; then echo "error: new-hire-guide workflow/*.md must declare workflow_version, phase, produces, consumes" >&2; exit 1; fi; \
+	echo "  ok"
+	@echo "lint-new-hire-guide: dangling markdown links"
+	@bash scripts/lint-dangling-md-links.sh new-hire-guide/*.md new-hire-guide/reference/*.md new-hire-guide/workflow/*.md && echo "  ok" || \
+		{ echo "error: dangling reference link(s) found" >&2; exit 1; }
+	@echo "lint-new-hire-guide: required reference files"
+	@for f in phase-index lazy-load-index tour-format smoke-test; do \
+		test -f new-hire-guide/reference/$$f.md || \
+			{ echo "error: missing new-hire-guide/reference/$$f.md" >&2; exit 1; }; \
+	done
+	@grep -q 'skill-framework' new-hire-guide/SETUP.md || \
+		{ echo "error: new-hire-guide/SETUP.md must link to docs/skill-framework" >&2; exit 1; }
+	@echo "  ok (framework refs)"
+
 lint-mysql-to-postgres-sql:
 	@echo "lint-mysql-to-postgres-sql: SKILL.md line count (<= 180)"
 	@test -f mysql-to-postgres-sql/SKILL.md || \
@@ -794,7 +840,7 @@ lint-framework:
 	@grep -q '^## 1\. Required sections' docs/skill-framework/shared/examples-conventions.md
 	@grep -q '^## 2\. Scenario format' docs/skill-framework/shared/examples-conventions.md
 	@grep -q '^## 5\. Anti-patterns' docs/skill-framework/shared/examples-conventions.md
-	@for skill in pr-review pr-gatekeeper incident-rca incident-triage-agent k8s-overprovisioning-datadog domain-comprehension squad-map who-owns-x-bot mysql-to-postgres-sql loop-task-implementer backlog-runner; do \
+	@for skill in pr-review pr-gatekeeper incident-rca incident-triage-agent k8s-overprovisioning-datadog domain-comprehension squad-map who-owns-x-bot new-hire-guide mysql-to-postgres-sql loop-task-implementer backlog-runner; do \
 		test -f $$skill/examples.md || \
 			{ echo "error: missing $$skill/examples.md (examples-conventions)" >&2; exit 1; }; \
 		grep -q '## Invocation' $$skill/examples.md || \
@@ -840,7 +886,7 @@ lint-framework:
 	done; \
 	if [ "$$fail" -ne 0 ]; then exit 1; fi
 	@grep -q '| Complete |' docs/skill-framework/README.md
-	@for skill in pr-review pr-gatekeeper incident-rca incident-triage-agent k8s-overprovisioning-datadog domain-comprehension squad-map who-owns-x-bot mysql-to-postgres-sql loop-task-implementer backlog-runner; do \
+	@for skill in pr-review pr-gatekeeper incident-rca incident-triage-agent k8s-overprovisioning-datadog domain-comprehension squad-map who-owns-x-bot new-hire-guide mysql-to-postgres-sql loop-task-implementer backlog-runner; do \
 		grep -q 'skill-framework' $$skill/SETUP.md || \
 			{ echo "error: $$skill/SETUP.md must link to docs/skill-framework" >&2; exit 1; }; \
 		grep -q 'docs/skill-framework/shared/skill-routing.md' $$skill/SKILL.md || \
@@ -859,6 +905,7 @@ lint-framework:
 		"domain-comprehension:workflow/session-0.md" \
 		"squad-map:workflow/inputs.md" \
 		"who-owns-x-bot:workflow/inputs.md" \
+		"new-hire-guide:workflow/inputs.md" \
 		"mysql-to-postgres-sql:workflow/migrate-service.md" \
 		"loop-task-implementer:workflow/orchestrator.md" \
 		"backlog-runner:workflow/inputs.md"; do \
@@ -871,7 +918,7 @@ lint-framework:
 	@echo "lint-framework: all SETUP.md links ok"
 	@echo "lint-framework: cross-agent discovery files (.cursor/rules + .kiro/steering)"
 	@fail=0; \
-	for skill in pr-review pr-gatekeeper incident-rca incident-triage-agent k8s-overprovisioning-datadog domain-comprehension squad-map who-owns-x-bot mysql-to-postgres-sql loop-task-implementer backlog-runner; do \
+	for skill in pr-review pr-gatekeeper incident-rca incident-triage-agent k8s-overprovisioning-datadog domain-comprehension squad-map who-owns-x-bot new-hire-guide mysql-to-postgres-sql loop-task-implementer backlog-runner; do \
 		test -f .cursor/rules/$$skill.mdc || \
 			{ echo "  missing .cursor/rules/$$skill.mdc" >&2; fail=1; }; \
 		test -f .kiro/steering/$$skill.md || \

@@ -27,6 +27,7 @@ ai-skills/
 ├── domain-comprehension/      # Evidence-backed domain/architecture mapping skill
 ├── squad-map/                 # Repo-to-squad ownership mapping skill
 ├── who-owns-x-bot/            # Single-shot Slack-bot-facing "who owns X" wrapper around squad-map
+├── new-hire-guide/            # Personalized onboarding tour wrapper around domain-comprehension + squad-map
 ├── mysql-to-postgres-sql/     # MySQL → PostgreSQL native SQL migration skill
 ├── loop-task-implementer/     # Autonomous multi-task implement/review/PR loop skill
 └── backlog-runner/            # Scheduled queue-management wrapper around loop-task-implementer
@@ -59,6 +60,7 @@ make install-incident-triage-agent
 make install-domain-comprehension
 make install-squad-map
 make install-who-owns-x-bot
+make install-new-hire-guide
 make install-mysql-to-postgres-sql
 make install-loop-task-implementer
 make install-backlog-runner
@@ -79,6 +81,7 @@ bash scripts/install.sh incident-triage-agent
 bash scripts/install.sh domain-comprehension
 bash scripts/install.sh squad-map
 bash scripts/install.sh who-owns-x-bot
+bash scripts/install.sh new-hire-guide
 bash scripts/install.sh mysql-to-postgres-sql
 bash scripts/install.sh loop-task-implementer
 bash scripts/install.sh backlog-runner
@@ -107,11 +110,12 @@ and [docs/skill-framework/shared/claude-code-setup.md](skill-framework/shared/cl
 | `make install-domain-comprehension` | Install only `domain-comprehension/` (also runs `install-squad-map`) |
 | `make install-squad-map` | Install only `squad-map/` |
 | `make install-who-owns-x-bot` | Install only `who-owns-x-bot/` (also runs `install-squad-map`) |
+| `make install-new-hire-guide` | Install only `new-hire-guide/` (also runs `install-domain-comprehension` and `install-squad-map`) |
 | `make install-mysql-to-postgres-sql` | Install only `mysql-to-postgres-sql/` |
 | `make install-loop-task-implementer` | Install only `loop-task-implementer/` |
 | `make install-backlog-runner` | Install only `backlog-runner/` (also runs `install-loop-task-implementer`) |
 | `make install-claude` | Run `scripts/install.sh --agent claude-user` for all skills |
-| `make install-claude-<skill>` | Install only `<skill>/` for Claude Code (`pr-review`, `pr-gatekeeper`, `k8s-overprovisioning`, `incident-rca`, `incident-triage-agent`, `domain-comprehension`, `squad-map`, `who-owns-x-bot`, `mysql-to-postgres-sql`, `loop-task-implementer`, `backlog-runner`) |
+| `make install-claude-<skill>` | Install only `<skill>/` for Claude Code (`pr-review`, `pr-gatekeeper`, `k8s-overprovisioning`, `incident-rca`, `incident-triage-agent`, `domain-comprehension`, `squad-map`, `who-owns-x-bot`, `new-hire-guide`, `mysql-to-postgres-sql`, `loop-task-implementer`, `backlog-runner`) |
 | `make lint` | Run all lint targets below + shellcheck on `scripts/*.sh` |
 | `make lint-pr-review` | pr-review `SKILL.md` ≤ 180 lines; each `workflow/*.md` has `workflow_version`/`phase`/`produces`/`consumes` frontmatter; dangling markdown anchors; script pytest |
 | `make lint-pr-gatekeeper` | pr-gatekeeper `SKILL.md` ≤ 180 lines; `disable-model-invocation: true` set; workflow frontmatter; dangling anchors; required reference files |
@@ -121,6 +125,7 @@ and [docs/skill-framework/shared/claude-code-setup.md](skill-framework/shared/cl
 | `make lint-domain-comprehension` | domain-comprehension `SKILL.md` ≤ 180 lines; workflow frontmatter; dangling anchors; `templates/manifest.yaml` validator + pytest; pressure harness |
 | `make lint-squad-map` | squad-map `SKILL.md` ≤ 180 lines; workflow frontmatter; dangling anchors; required reference files; pytest |
 | `make lint-who-owns-x-bot` | who-owns-x-bot `SKILL.md` ≤ 180 lines; `disable-model-invocation: true` set; workflow frontmatter; dangling anchors; required reference files |
+| `make lint-new-hire-guide` | new-hire-guide `SKILL.md` ≤ 180 lines; `disable-model-invocation` **not** set; workflow frontmatter; dangling anchors; required reference files |
 | `make lint-mysql-to-postgres-sql` | mysql `SKILL.md` ≤ 180 lines; workflow frontmatter; required references; scan fixtures + pressure harness; shellcheck on scan scripts |
 | `make lint-loop-task-implementer` | loop-task-implementer `SKILL.md` ≤ 180 lines; workflow frontmatter; dangling anchors; required files (`SETUP.md`, `README.md`, `examples.md`, `report-template.md`, `reference/*`) |
 | `make lint-backlog-runner` | backlog-runner `SKILL.md` ≤ 180 lines; `disable-model-invocation: true` set; workflow frontmatter; dangling anchors; required reference files |
@@ -177,6 +182,16 @@ squad-map). Each file under `workflow/` must declare `workflow_version`, `phase`
 `consumes` in YAML frontmatter. Checks markdown anchor links and required `reference/` files
 (`phase-index.md`, `lazy-load-index.md`, `slack-format.md`, `smoke-test.md`). No scripts or tests — this
 skill has no logic of its own beyond delegating to squad-map and formatting the reply.
+
+### lint-new-hire-guide
+
+`new-hire-guide/SKILL.md` must stay at or under **180 lines** and must **not** set
+`disable-model-invocation` — unlike who-owns-x-bot/pr-gatekeeper/incident-triage-agent/backlog-runner, a
+human is always present for this flow, so ambient chat invocation is intended. Each file under
+`workflow/` must declare `workflow_version`, `phase`, `produces`, and `consumes` in YAML frontmatter.
+Checks markdown anchor links and required `reference/` files (`phase-index.md`, `lazy-load-index.md`,
+`tour-format.md`, `smoke-test.md`). No scripts or tests — this skill has no logic of its own beyond
+composing domain-comprehension and squad-map and curating the result.
 
 ### lint-mysql-to-postgres-sql
 
@@ -253,6 +268,7 @@ To disable the gate later, set the same field to `false`.
 | domain-comprehension | None | GitLab (Session 0b via squad-map), Datadog (P2b runtime validation) |
 | squad-map | None | GitLab, Datadog (CODEOWNERS fallback when both absent) |
 | who-owns-x-bot | None — delegates to squad-map | Requires squad-map installed and configured |
+| new-hire-guide | None — inherits domain-comprehension's + squad-map's | Requires both installed and configured |
 | mysql-to-postgres-sql | None | Datadog (optional; post-cutover APM verification) |
 | loop-task-implementer | None — uses the host agent's own repo/git access, not an MCP server | See [loop-task-implementer/reference/mcp-capabilities.md](../loop-task-implementer/reference/mcp-capabilities.md) for host-capability requirements |
 | backlog-runner | Issue-tracker MCP (Jira or GitHub Issues) — required here, optional for loop-task-implementer itself | Requires loop-task-implementer installed and configured |

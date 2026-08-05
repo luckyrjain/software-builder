@@ -18,6 +18,7 @@ When adding a new skill, add it here first; then each existing skill only needs 
 | Domain comprehension, bounded context, data ownership, critical path, architecture smells, subsystem onboarding, multi-repo ground truth, five questions | **domain-comprehension** | squad-map (ownership only), incident-rca |
 | Squad map, ownership, who owns, CODEOWNERS, GitLab group, Datadog team, team reconciliation (interactive, conversational) | **squad-map** | domain-comprehension (full map) |
 | `/who-owns` Slack slash command, single-shot automated ownership lookup with a structured `query`, no follow-up turn possible | **who-owns-x-bot** | squad-map (that's what it delegates to internally — do not call squad-map directly for a single-shot Slack reply, its output contract is a markdown file + chat summary, not one message) |
+| New engineer onboarding, new-hire tour, "joining the squad", first-week orientation scoped to one person's repos (interactive, conversational) | **new-hire-guide** | squad-map (ownership only, no tour), domain-comprehension (full org-wide map, not scoped to one person) |
 | MySQL scrub, jdbc:postgresql, TIMESTAMPDIFF, DATE_FORMAT, native SQL rewrite, mysql2→pg, SQLAlchemy PG cutover, collection P0/P1 cooling SQL | **mysql-to-postgres-sql** | domain-comprehension (full map), squad-map (ownership only) |
 | Implement task/issue autonomously, independent review + remediation loop, adjudicate findings, work through a task queue (interactive, human-driven) | **loop-task-implementer** | pr-review (reviewing someone else's existing MR only) |
 | Scheduled trigger pulling N tickets from a tracker query, overnight/unattended, no human turn available | **backlog-runner** | loop-task-implementer (that's what it delegates to internally — do not call loop-task-implementer directly for an unattended scheduled sweep; use it for a single-task or human-driven multi-task request) |
@@ -46,6 +47,9 @@ When adding a new skill, add it here first; then each existing skill only needs 
     squad-map directly
 13. **Scheduled overnight ticket-queue sweep, no human turn available** → backlog-runner; **single-task or
     human-driven multi-task request** → loop-task-implementer directly
+14. **"Onboard `<name>`, joining `<squad>`"** (new-hire input given) → new-hire-guide; **plain "who owns
+    X?"** (no new-hire input) → squad-map directly; **full org-wide domain map** (no one-person scope) →
+    domain-comprehension directly
 
 ## Ambiguous requests — ask
 
