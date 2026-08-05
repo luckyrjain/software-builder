@@ -1,0 +1,153 @@
+# Per-task shared state schema
+# The Orchestrator is the only role that mutates the official state.
+
+workflow_version: "1.0"
+
+task:
+  task_id: null
+  title: null
+  description_ref: null
+  acceptance_criteria: []
+  dependencies: []
+  status: NOT_STARTED  # NOT_STARTED | BUILDING | REVIEWING | VALIDATING | READY | COMPLETE | ESCALATED
+  started_at: null
+  completed_at: null
+
+repository:
+  repo: null
+  base_branch: null
+  base_commit_at_start: null
+  repository_instructions_ref: null
+  branch_protection:
+    required_checks: []
+    required_approvals: 0
+    codeowners_required: false
+    branch_must_be_current: false
+    merge_queue_available: false
+    merge_strategy: null
+  autonomous_merge_authorized: false
+  autonomous_merge_authority_source: null
+
+workspace:
+  working_branch: null
+  pull_request_id: null
+  pull_request_url: null
+  current_head_commit: null
+  reviewed_head_commit: null
+  diff_fingerprint: null
+  normalized_diff_fingerprint: null
+  changed_files: 0
+  changed_lines: 0
+  last_branch_actor: null
+  last_branch_update_at: null
+  third_party_change_detected: false
+  diff_fingerprint_history: []
+
+review:
+  review_run_count: 0
+  dirty_review_count: 0
+  max_dirty_reviews: 3
+  lens_a:
+    status: NOT_RUN  # NOT_RUN | CLEAN | FINDINGS
+    reviewed_head_commit: null
+    reviewed_diff_fingerprint: null
+    completed_at: null
+    report_ref: null
+  lens_b:
+    status: NOT_RUN
+    reviewed_head_commit: null
+    reviewed_diff_fingerprint: null
+    completed_at: null
+    report_ref: null
+
+findings:
+  # keyed by stable finding ID
+  items: {}
+  # Example:
+  # AUTHZ-001:
+  #   source_lens: LENS_A
+  #   proposed_class: PROPOSED_BLOCKING
+  #   adjudication: ACCEPTED  # ACCEPTED | REJECTED | NEEDS_EVIDENCE | CONTESTED
+  #   status: OPEN            # OPEN | FIXED | REBUTTED | BLOCKED | CLOSED
+  #   first_seen_head: null
+  #   last_seen_head: null
+  #   evidence_refs: []
+  #   adjudication_rationale: null
+  #   fix_attempt_count: 0
+  #   rebuttal_attempt_count: 0
+  #   contested_round_count: 0
+  #   head_history: []
+  #   timestamps:
+  #     created_at: null
+  #     updated_at: null
+
+adjudication:
+  rebuttal_log: []
+  contested_findings: []
+  last_adjudicated_at: null
+
+checks:
+  authoritative:
+    # Each item must identify exact commit and source.
+    # - name:
+    #   source: CI | ORCHESTRATOR | REVIEWER
+    #   commit:
+    #   command_or_job:
+    #   status: PASS | FAIL | PENDING | SKIPPED
+    #   started_at:
+    #   completed_at:
+    #   evidence_ref:
+    items: []
+  builder_advisory: []
+
+ci:
+  pipeline_id: null
+  commit: null
+  status: NOT_STARTED  # NOT_STARTED | PENDING | PASS | FAIL | TIMEOUT
+  required_checks_green: false
+  active_polling_started_at: null
+  active_polling_stopped_at: null
+  failure_classification: null
+  evidence_refs: []
+
+budgets:
+  max_files_warning: 20
+  max_files_hard_stop: 40
+  max_changed_lines_warning: 800
+  max_changed_lines_hard_stop: 1500
+  max_dirty_reviews: 3
+  max_fix_attempts_per_finding: 2
+  max_contested_rounds_per_finding: 2
+  max_ci_poll_minutes: 15
+  max_task_elapsed_minutes: null
+  max_task_tokens: null
+  consumed:
+    elapsed_minutes: 0
+    estimated_tokens: 0
+
+merge_readiness:
+  acceptance_criteria_complete: false
+  lens_a_clean_for_current_fingerprint: false
+  lens_b_clean_for_current_fingerprint: false
+  accepted_blocking_findings_open: 0
+  required_checks_green: false
+  required_approvals_present: false
+  blocking_threads_open: 0
+  integration_state_valid: false
+  circuit_breaker_active: false
+  ready: false
+
+completion:
+  repository_action: NONE  # NONE | MERGED | HUMAN_ACTION_REQUIRED
+  integration_commit: null
+  integration_timestamp: null
+  target_branch_verified: false
+  source_branch_cleanup_status: null
+
+escalation:
+  active: false
+  escalation_reason: null
+  triggered_at: null
+  required_human_decision: null
+  required_access: null
+  supporting_evidence_refs: []
