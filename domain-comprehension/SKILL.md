@@ -91,6 +91,7 @@ Not all 20+ deliverables are required for every run:
 | **DELTA** | Changed files only + updated `manifest.yaml` + `PROGRESS.md` | Unchanged deliverables |
 | **ADD_REPO** | New repo's P0–P1 outputs merged (or conflict-flagged) into existing split deliverables; re-run `EXEC_SUMMARY.md`, `RISK_MAP.md`, and any phase downstream per the DELTA affected-phases table | `E2E_FLOW.md` update only if P2 reran |
 | **COMPLIANCE_RETROFIT** | `manifest.yaml`, normalize existing artifacts to schema | Do not re-analyze code |
+| **PROPOSAL_CHECK** | `PROPOSAL_CHECK_REPORT.md` only — read-only, never merges | — |
 
 For a **first-time quick orientation**, only `domain-config.yaml` and `EXEC_SUMMARY.md` are needed.
 The full deliverable set (20+ files) is the target for `FULL` mode across multiple sessions.
@@ -168,7 +169,7 @@ write-backs. Optional Memory Bank / Postman exports are covered in [phase-5.md](
 
 ## Begin
 
-1. [workflow/inputs.md](workflow/inputs.md) — set `delivery_mode` (`FULL` \| `RESUME` \| `DELTA` \| `ADD_REPO` \| `COMPLIANCE_RETROFIT`)
+1. [workflow/inputs.md](workflow/inputs.md) — set `delivery_mode` (`FULL` \| `RESUME` \| `DELTA` \| `ADD_REPO` \| `COMPLIANCE_RETROFIT` \| `PROPOSAL_CHECK`)
 2. `manifest.yaml` exists → resume; retrofit if eligible; else **Session 0**
 3. **Session 0b** — invoke **squad-map** skill ([session-0b.md](workflow/session-0b.md))
 4. P0 → … → P5 per [phase-index.md](reference/phase-index.md)

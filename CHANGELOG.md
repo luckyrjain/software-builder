@@ -157,6 +157,15 @@ _Pre-merge WIP on `feat/squad-map-skill` (internal v1.0–v1.5) is consolidated 
 
 ## domain-comprehension
 
+### PROPOSAL_CHECK delivery mode (2026-08-05)
+
+- New `PROPOSAL_CHECK` delivery mode (Architecture Decision Assistant, roadmap item #6): compare a
+  proposed feature/service against the existing engagement's `BOUNDED_CONTEXTS.md` / `DATA_OWNERSHIP.md`
+  / `API_CATALOG.md` / `EVENT_CATALOG.md`, reusing `ADD_REPO`'s merge-gate overlap taxonomy read-only.
+- Writes only `PROPOSAL_CHECK_REPORT.md` — never merges into shared deliverables or `manifest.yaml`.
+- HARD STOP if `manifest.yaml`/P0/P1 aren't already complete for the touched repos — no automatic
+  fallback to `FULL`, no partial check against incomplete deliverables.
+
 ### ADD_REPO delivery mode (2026-07-30)
 
 - New `ADD_REPO` delivery mode: onboard one repo into an already-established multi-repo engagement without re-running `FULL`.

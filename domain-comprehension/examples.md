@@ -12,6 +12,8 @@ Conventions: [examples-conventions](../docs/skill-framework/shared/examples-conv
 | 4 | "How does onboarding flow end-to-end?" (multi-repo) | Session 0 with generic five questions; FULL mode |
 | 5 | "RCA for outage yesterday" | **Wrong skill** → incident-rca |
 | 6 | "Review MR !482" | **Wrong skill** → pr-review |
+| 7 | "Does this new `refunds` service conflict with our existing domain map?" (engagement's `manifest.yaml` P0/P1 complete) | `PROPOSAL_CHECK` mode: compares the proposal against `BOUNDED_CONTEXTS.md` / `DATA_OWNERSHIP.md` / `API_CATALOG.md`, writes `PROPOSAL_CHECK_REPORT.md`, no merge |
+| 8 | Same ask, but no `manifest.yaml` exists yet for this workspace | **HARD STOP** — "run `FULL` or `QUICK` comprehension first," no automatic fallback, no partial check |
 
 ---
 
