@@ -199,7 +199,7 @@ def validate_invariants(graph: dict[str, Any]) -> list[str]:
             if abs(actual - expected) > 0.11:
                 errors.append(
                     f"INV-11: {rec_id} recommendation_confidence {actual} "
-                    f"!= factors sum {expected} (±0.1 after caps)"
+                    f"!= factors sum {expected} (±0.11 after caps)"
                 )
 
         if status == "READY" and _is_actionable_rec(rec_id):

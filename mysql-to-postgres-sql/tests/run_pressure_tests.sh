@@ -92,6 +92,15 @@ else
   pass "#17 scan detects GROUP_CONCAT/ON DUPLICATE KEY/INSERT IGNORE/FIND_IN_SET/INSTR/REGEXP/RLIKE/ISNULL/ADDTIME/SUBSTRING_INDEX/CONVERT_TZ/JSON_*/YEAR/MONTH/WEEK"
 fi
 
+# #19 — `regexp`/`rlike` as an ordinary lowercase identifier (common in JS/TS/Python) must not
+# false-positive; REGEXP/RLIKE are case-sensitive-uppercase-only for exactly this reason (moved
+# out of the case-insensitive group).
+if "$SCAN" "$SKILL_ROOT/tests/fixtures/mysql-dialect/clean/PortableQuery.java" >/dev/null 2>&1; then
+  pass "#19 scan does not false-positive on lowercase regexp/rlike identifiers"
+else
+  fail "#19 scan false-positived on lowercase regexp/rlike identifier"
+fi
+
 # #11 — rg missing must not silently pass (static + runtime)
 if ! grep -q 'ripgrep (rg) not found' "$SCAN"; then
   fail "#11 scan script must error when rg missing"

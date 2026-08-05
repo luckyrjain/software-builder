@@ -488,6 +488,8 @@ lint-mysql-to-postgres-sql:
 		{ echo "error: missing mysql-to-postgres-sql/scripts/scan-mysql-dialect.sh" >&2; exit 1; }
 	@test -f mysql-to-postgres-sql/scripts/scan-report.sh || \
 		{ echo "error: missing mysql-to-postgres-sql/scripts/scan-report.sh" >&2; exit 1; }
+	@test -f mysql-to-postgres-sql/scripts/mysql-dialect-patterns.sh || \
+		{ echo "error: missing mysql-to-postgres-sql/scripts/mysql-dialect-patterns.sh" >&2; exit 1; }
 	@test -f mysql-to-postgres-sql/reference/spring-datasource-example.yaml || \
 		{ echo "error: missing mysql-to-postgres-sql/reference/spring-datasource-example.yaml" >&2; exit 1; }
 	@grep -q 'skill-framework' mysql-to-postgres-sql/SETUP.md || \
@@ -531,10 +533,10 @@ lint-mysql-to-postgres-sql:
 		{ echo "error: dangling reference link(s) found" >&2; exit 1; }
 	@echo "lint-mysql-to-postgres-sql: shellcheck scan + test scripts"
 	@if command -v shellcheck >/dev/null 2>&1; then \
-		shellcheck mysql-to-postgres-sql/scripts/scan-mysql-dialect.sh mysql-to-postgres-sql/scripts/scan-report.sh mysql-to-postgres-sql/tests/run_pressure_tests.sh; \
+		shellcheck -x -P SCRIPTDIR mysql-to-postgres-sql/scripts/scan-mysql-dialect.sh mysql-to-postgres-sql/scripts/scan-report.sh mysql-to-postgres-sql/scripts/mysql-dialect-patterns.sh mysql-to-postgres-sql/tests/run_pressure_tests.sh; \
 	elif command -v docker >/dev/null 2>&1; then \
 		docker run --rm -v "$(CURDIR):/mnt" -w /mnt koalaman/shellcheck-alpine:stable \
-			shellcheck mysql-to-postgres-sql/scripts/scan-mysql-dialect.sh mysql-to-postgres-sql/scripts/scan-report.sh mysql-to-postgres-sql/tests/run_pressure_tests.sh; \
+			shellcheck -x -P SCRIPTDIR mysql-to-postgres-sql/scripts/scan-mysql-dialect.sh mysql-to-postgres-sql/scripts/scan-report.sh mysql-to-postgres-sql/scripts/mysql-dialect-patterns.sh mysql-to-postgres-sql/tests/run_pressure_tests.sh; \
 	else \
 		echo "error: install shellcheck or docker" >&2; exit 1; \
 	fi

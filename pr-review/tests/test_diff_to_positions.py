@@ -215,6 +215,29 @@ def test_headerless_added_line_starting_with_plus_is_content_not_header():
     assert out["old_line"] is None
 
 
+HEADERLESS_ADDED_LINE_MATCHES_HEADER_REGEX = """@@ -1,4 +1,5 @@
+ context line 1
++real added line
++++ b/other.py
+ context line 2
+ context line 3
+"""
+
+
+def test_headerless_added_line_exactly_matching_header_regex_is_content_not_header():
+    # The added line's own text is `++ b/other.py` — with the diff's `+` prefix
+    # prepended it renders as `+++ b/other.py`, which is syntactically identical
+    # to a real unified-diff file header. It must still be treated as content
+    # since it falls inside the hunk's declared line budget (5 new lines).
+    rc, out, err = run(
+        ["--path", "src/foo.py", "--line", "5"],
+        stdin=HEADERLESS_ADDED_LINE_MATCHES_HEADER_REGEX,
+    )
+    assert rc == 0, err
+    assert out["new_line"] == 5
+    assert out["old_line"] == 3
+
+
 def test_headerless_removed_line_starting_with_minus_is_content_not_header():
     rc, out, err = run(
         ["--path", "src/foo.py", "--old-line", "2"],

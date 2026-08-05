@@ -191,15 +191,29 @@ def choose_cluster(
     )
 
 
+def _spl_escape(value: str) -> str:
+    """Escape a value for embedding in a double-quoted SPL string literal.
+
+    Callers may pass workload/namespace values parsed from untrusted incident
+    data (log lines, error messages) — escape backslashes first, then quotes,
+    so an embedded `"` can't close the literal early and inject additional
+    SPL clauses.
+    """
+    return value.replace("\\", "\\\\").replace('"', '\\"')
+
+
 def build_spl_query(
     workload: str,
     level: str,
     namespace: str | None,
     limit: int,
 ) -> str:
-    filters = [f'workload = "{workload}"', f'level = "{level}"']
+    filters = [
+        f'workload = "{_spl_escape(workload)}"',
+        f'level = "{_spl_escape(level)}"',
+    ]
     if namespace:
-        filters.append(f'namespace = "{namespace}"')
+        filters.append(f'namespace = "{_spl_escape(namespace)}"')
     filter_clause = " and ".join(filters)
     return (
         "fields @timestamp, workload, level, body, pod_name, namespace "

@@ -69,15 +69,74 @@ def _matches_target(path_token: str, target_path: str) -> bool:
     return path_token == target_path
 
 
+def _classify_diff_lines(diff_text: str) -> Iterator[Tuple[str, str]]:
+    """Yield (line, role) for each line, where role is one of:
+    "diff_git", "header_old", "header_new", "hunk", "content".
+
+    A line that syntactically matches a header pattern (`+++ b/…`, `--- a/…`) is
+    still classified as "content" when it falls inside an active hunk's declared
+    line budget (tracked from the hunk's `@@ -old,count +new,count @@` header) —
+    this is how a genuine added/removed line whose *text* happens to render as
+    `+++ b/path` (i.e. the line's own content begins with `++ b/path`) is told
+    apart from a real unified-diff file-boundary header. Real file headers only
+    ever appear between hunks, never inside one.
+    """
+    hunk_old_end: Optional[int] = None
+    hunk_new_end: Optional[int] = None
+    cur_old = 0
+    cur_new = 0
+
+    for raw in diff_text.splitlines():
+        line = raw.rstrip("\n")
+        in_hunk_body = hunk_old_end is not None and (
+            cur_old < hunk_old_end or cur_new < hunk_new_end
+        )
+
+        if line.startswith("diff --git "):
+            hunk_old_end = hunk_new_end = None
+            yield line, "diff_git"
+            continue
+        if not in_hunk_body and FILE_HEADER_OLD_RE.match(line):
+            yield line, "header_old"
+            continue
+        if not in_hunk_body and FILE_HEADER_NEW_RE.match(line):
+            yield line, "header_new"
+            continue
+
+        m = HUNK_RE.match(line)
+        if m:
+            cur_old = int(m.group(1))
+            cur_new = int(m.group(3))
+            old_count = int(m.group(2)) if m.group(2) else 1
+            new_count = int(m.group(4)) if m.group(4) else 1
+            hunk_old_end = cur_old + old_count
+            hunk_new_end = cur_new + new_count
+            yield line, "hunk"
+            continue
+
+        yield line, "content"
+        if in_hunk_body and not line.startswith("\\"):
+            prefix = line[0] if line else " "
+            if prefix == "+":
+                cur_new += 1
+            elif prefix == "-":
+                cur_old += 1
+            else:
+                cur_new += 1
+                cur_old += 1
+
+
 def _has_file_headers(diff_text: str) -> bool:
     """True if the diff carries `diff --git` or a real `+++ b/…`/`+++ /dev/null` header.
 
     GitLab `get_merge_request_diffs` returns bare hunks with neither; in that case the
     whole input belongs to the target path. Content lines that merely start with `+++`
-    (an added line whose text begins with `++ `) do NOT count as headers.
+    (an added line whose text begins with `++ `) do NOT count as headers — including
+    when that content line occurs mid-hunk, which a naive per-line regex scan would
+    misclassify (see `_classify_diff_lines`).
     """
-    for raw in diff_text.splitlines():
-        if raw.startswith("diff --git ") or FILE_HEADER_NEW_RE.match(raw):
+    for _line, role in _classify_diff_lines(diff_text):
+        if role in ("diff_git", "header_new"):
             return True
     return False
 
@@ -101,18 +160,17 @@ def iter_diff_lines(
     cur_old = 0
     last_old_token = None
 
-    for raw in diff_text.splitlines():
-        line = raw.rstrip("\n")
-        if line.startswith("diff --git "):
+    for line, role in _classify_diff_lines(diff_text):
+        if role == "diff_git":
             in_file = False
             last_old_token = None
             continue
-        if FILE_HEADER_OLD_RE.match(line):
+        if role == "header_old":
             # Remember the old path so a deleted file (new side `/dev/null`) can still
             # be matched by its old path for `--old-line` anchoring.
             last_old_token = line[4:].strip()
             continue
-        if FILE_HEADER_NEW_RE.match(line):
+        if role == "header_new":
             new_token = line[4:].strip()
             if new_token == "/dev/null":
                 in_file = _matches_target(last_old_token or "", target_path)
@@ -121,11 +179,12 @@ def iter_diff_lines(
             continue
         if not in_file:
             continue
-        m = HUNK_RE.match(line)
-        if m:
+        if role == "hunk":
+            m = HUNK_RE.match(line)
             cur_old = int(m.group(1))
             cur_new = int(m.group(3))
             continue
+        # role == "content"
         if line.startswith("\\"):  # "\ No newline at end of file"
             continue
         prefix = line[0] if line else " "

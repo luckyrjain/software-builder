@@ -5,9 +5,9 @@ set -euo pipefail
 
 ROOT="${1:-.}"
 
-# Keep in sync with scan-mysql-dialect.sh
-# shellcheck disable=SC2016
-PATTERN='TIMESTAMPDIFF|DATE_FORMAT\(|DATE_ADD\(|IFNULL\(|ISNULL\(|ADDTIME\(|SUBSTRING_INDEX|CONVERT_TZ|CAST\([^)]{0,80}AS CHAR\)|ON DUPLICATE KEY|INSERT IGNORE|GROUP_CONCAT\(|FIND_IN_SET\(|UNIX_TIMESTAMP\(|CURDATE\(|LAST_INSERT_ID\(|INSTR\(|\bREGEXP\b|\bRLIKE\b|DATEDIFF\(|STR_TO_DATE\(|LIMIT[\s"'"'"'+.]{1,40}[0-9]+[\s"'"'"'+.]{0,10},[\s"'"'"'+.]{0,20}[0-9]+|(?<![</a-zA-Z])\bDIV\b(?=[\s"'"'"'+.]{0,20}[0-9'"'"'(])|JSON_EXTRACT\(|JSON_UNQUOTE\(|JSON_ARRAYAGG\(|JSON_OBJECTAGG\(|JSON_CONTAINS\(|JSON_SET\(|JSON_REMOVE\(|JSON_MERGE\(|\bMATCH\s*\([^)]{0,80}\)\s*AGAINST\s*\('
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=mysql-dialect-patterns.sh
+source "$SCRIPT_DIR/mysql-dialect-patterns.sh"
 
 if ! command -v rg >/dev/null 2>&1; then
   echo "error: ripgrep (rg) required" >&2
@@ -21,25 +21,19 @@ fi
 
 echo "# MySQL dialect scan report"
 echo "# root: $ROOT"
-echo "# pattern: $PATTERN"
+echo "# case-insensitive pattern: $PATTERN_CI"
+echo "# case-sensitive pattern:   $PATTERN_CS"
 echo
 
 count=0
 while IFS= read -r line; do
   echo "$line"
   count=$((count + 1))
-done < <(rg -n -U --pcre2 "$PATTERN" \
-  --glob '*.java' \
-  --glob '*.php' \
-  --glob '*.sql' \
-  --glob '*.py' \
-  --glob '*.js' \
-  --glob '*.ts' \
-  --glob '!**/vendor/**' \
-  --glob '!**/node_modules/**' \
-  --glob '!**/dist/**' \
-  --glob '!**/.understand-anything/**' \
-  "$ROOT" || true)
+done < <(
+  { rg -n -U -i --pcre2 "$PATTERN_CI" "${GLOB_ARGS[@]}" "$ROOT" || true
+    rg -n -U --pcre2 "$PATTERN_CS" "${GLOB_ARGS[@]}" "$ROOT" || true
+  } | sort -u
+)
 
 echo
 echo "# total hits: $count"

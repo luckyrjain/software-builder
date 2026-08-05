@@ -132,6 +132,20 @@ def test_build_spl_query_includes_filters():
     assert "| limit 10" in query
 
 
+def test_build_spl_query_escapes_embedded_quotes():
+    # A workload value containing `"` must not be able to close the string
+    # literal early and inject additional SPL clauses.
+    query = build_spl_query('svc" or workload != "x', "ERROR", None, 10)
+    assert 'workload = "svc\\" or workload != \\"x"' in query
+    # The vulnerable, unescaped form (early-closed literal) must not appear.
+    assert 'workload = "svc" or workload != "x"' not in query
+
+
+def test_build_spl_query_escapes_backslashes():
+    query = build_spl_query('svc\\', "ERROR", None, 10)
+    assert 'workload = "svc\\\\"' in query
+
+
 def test_spl_rows_to_logs_maps_columns():
     spl_data = {
         "columns": ["timestamp", "workload", "level", "body", "pod_name", "namespace"],

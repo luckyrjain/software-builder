@@ -31,4 +31,12 @@ public class PortableQuery {
     int getYear() {
         return currentYear;
     }
+
+    // Lowercase `regexp`/`rlike` as an ordinary identifier must not false-positive — the
+    // corresponding MySQL keywords are case-sensitive-uppercase-only in the scan pattern
+    // precisely because these are common variable names in JS/TS/Python.
+    java.util.regex.Pattern regexp = java.util.regex.Pattern.compile("^[a-z]+$");
+    boolean rlike(String input) {
+        return regexp.matcher(input).matches();
+    }
 }

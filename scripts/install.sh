@@ -53,6 +53,16 @@ dest_roots() {
 install_skill() {
   local skill="$1"
   local dest_root="$2"
+
+  # Reject path-traversal / directory-separator components before building
+  # skill_dest, since it's later passed to `rm -rf` — a skill name should
+  # always be a single directory-name component, never `../` or an absolute
+  # path.
+  if [[ "${skill}" == *"/"* || "${skill}" == "." || "${skill}" == ".." ]]; then
+    echo "error: invalid skill name '${skill}' (must be a single directory name, no path separators)" >&2
+    return 1
+  fi
+
   local skill_src="${REPO_ROOT}/${skill}"
   local skill_dest="${dest_root}/${skill}"
 
