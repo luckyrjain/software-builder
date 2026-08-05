@@ -1,0 +1,57 @@
+# Companion to evidence.example.json — validated by scripts/validate_causal_graph.py
+schema_version: 1
+service: neo-disbursement-service
+window:
+  from_time: "2026-06-28T14:00:00Z"
+  to_time: "2026-06-28T16:00:00Z"
+trigger_status: identified
+observability_sources_responded: 2  # datadog + kubesense-mcp (see evidence.example.json error_signals[1])
+nodes:
+  - id: trigger_deploy
+    kind: trigger
+    label: "Production deploy build #1234 at 14:20 UTC (MR !482)"
+  - id: root_cause_npe
+    kind: root_cause
+    label: "NullPointerException in TransferMoneyHandler introduced by MR !482 validation refactor"
+  - id: event_5xx
+    kind: event
+    label: "5xx spike on transfer-money from 14:45 UTC (12% vs 0.3% baseline)"
+edges:
+  - from: trigger_deploy
+    to: root_cause_npe
+    evidence: ["deploy_events[0]"]
+  - from: root_cause_npe
+    to: event_5xx
+    evidence: ["error_signals[0]", "error_signals[1]", "evidence_links[0]"]
+hypotheses:
+  - id: H1
+    type: deploy_regression
+    base: 45
+    quality_bonus: 7        # error_rate Observed (+5) + deploy Correlated (+2)
+    source_bonus: 10        # deploy + error = 2 independent signal types
+    counter_penalty: 0
+    gap_penalty: 0          # diff on failing path confirmed
+    adjusted: 62
+    display_score: 86       # 62 / 72
+    band: HIGH
+    unresolved_contradictions: 0
+    supporting_quality: [Observed, Correlated]
+    ruled_out: false
+  - id: H2
+    type: infra_capacity
+    base: 10
+    quality_bonus: 0
+    source_bonus: 0
+    counter_penalty: 0
+    gap_penalty: 0
+    adjusted: 10
+    display_score: 14       # 10 / 72
+    band: UNKNOWN
+    unresolved_contradictions: 0
+    supporting_quality: []
+    ruled_out: true         # 10 < 0.5 × 62
+conclusion:
+  primary: H1
+  statement: >-
+    MR !482 introduced an NPE on the transfer-money validation path; the 14:20 UTC
+    production deploy caused the 14:45 5xx spike.

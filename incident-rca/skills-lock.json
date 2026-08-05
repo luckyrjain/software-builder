@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "skillsCliVersion": "1.5.14",
+  "skills": {
+    "kubesense-mcp": {
+      "source": "kubesense-ai/kubesense-mcp-skills",
+      "sourceType": "github",
+      "commitSha": "05033e00bf63b4ad7773faa516d0a528c81feb8a",
+      "skillPath": "kubesense-mcp/SKILL.md",
+      "computedHash": "sha256:94ec6dc6adb59f5daa3e79662a630ba1f38631a5dce21ab95add87158a0dfcf7"
+    }
+  },
+  "optionalExternal": {
+    "incident-rca-correlator-cli": {
+      "note": "Separate correlator repo (not this skills monorepo). Set commitSha when installed.",
+      "commitSha": null,
+      "verifyCommand": "incident-rca --help"
+    }
+  }
+}

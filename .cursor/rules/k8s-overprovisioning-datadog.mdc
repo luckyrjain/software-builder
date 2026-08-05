@@ -1,0 +1,12 @@
+---
+description: Invoke the repository k8s-overprovisioning-datadog skill for Kubernetes rightsizing and resource-optimization assessment.
+alwaysApply: false
+---
+
+When the user asks whether a Kubernetes deployment/service is overprovisioned, right-sized, or
+ready for resource optimization (CPU/memory requests, HPA, replicas, throttling, OOM, cost/waste),
+read `k8s-overprovisioning-datadog/SKILL.md` and follow it.
+
+Phase index: `k8s-overprovisioning-datadog/reference/phase-index.md`. Reference loads:
+`k8s-overprovisioning-datadog/reference/lazy-load-index.md`. Read-only — recommendations only, never
+applies manifest changes.

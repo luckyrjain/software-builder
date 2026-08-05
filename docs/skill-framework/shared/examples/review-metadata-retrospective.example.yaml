@@ -1,0 +1,29 @@
+review_metadata:
+  review_type: full
+  review_mode: retrospective
+  audit_type: retrospective
+  started: "2026-06-30T18:00:00Z"
+  finished: "2026-06-30T18:25:00Z"
+  head_sha: "abc123def4567890abcdef1234567890abcdef12"
+  review_hash:
+    scope: full
+    files: 24
+    head: "abc123de"
+    persona: principal_engineer
+  findings: []
+  recommendation: retrospective_observation
+  confidence: high
+  review_complete: true
+  merge_before_review: true
+  merge_before_ci_green: true
+  code_blockers_found: 0
+  process_findings: 1
+  suppressions_validated: 2
+  review_context:
+    mode: retrospective
+    lifecycle: post_merge
+    merge_blocking: false
+  review_quality:
+    coverage_pct: 100
+    evidence_pct: 100
+    confidence: high

@@ -1,0 +1,11 @@
+---
+description: Invoke the repository domain-comprehension skill for evidence-backed business-domain and architecture mapping.
+alwaysApply: false
+---
+
+When the user asks for subsystem onboarding, a multi-repo architecture ground-truth map, bounded
+contexts, data ownership, or an engineering-leader summary, read `domain-comprehension/SKILL.md`
+and follow it.
+
+Phase index: `domain-comprehension/reference/phase-index.md`. Reference loads:
+`domain-comprehension/reference/lazy-load-index.md`.

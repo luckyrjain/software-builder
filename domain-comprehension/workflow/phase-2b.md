@@ -1,0 +1,44 @@
+---
+workflow_version: 1.9
+phase: 2b
+produces:
+  - runtime_validation_table
+  - kubesense_log_evidence
+  - runtime_graph
+  - datadog_subgraphs
+  - exercise_updates
+consumes:
+  - trigger_catalog
+  - runtime_sequence
+  - critical_path
+  - deployment_graph
+  - code_graph_divergence
+  - mcp_profile
+---
+
+# Comprehension Phase P2b — Runtime Validation
+
+Validate static flow analysis against Datadog runtime traces, updating graphs and artifacts with observed patterns.
+
+## Runtime validation location (normative)
+
+**Always** write `{map_file}` § **Runtime validation (Datadog)** with the three-way table per hop.
+
+When E2E/runtime detail is large, add a **stub** in the map section (heading + one-line summary) and put
+the full table in `E2E_FLOW.md` § Runtime validation — link from the map stub. Do **not** skip the map
+section entirely.
+
+## Required outputs
+
+| Artifact | Location | Key fields | If absent |
+|----------|----------|------------|-----------|
+| Runtime validation table | `{map_file}` § Runtime validation **or** `E2E_FLOW.md` § Runtime validation (with map stub+link) | From→To, Code (P2), Graph, Datadog, Verdict, Confidence, Evidence | Phase incomplete if Datadog ✅ |
+| KubeSense log evidence | `{map_file}` § Runtime validation | Exact quoted error strings, workload, namespace, filter SQL | Phase incomplete if KubeSense ✅ |
+| Runtime graph | `DEPENDENCY_GRAPH.md` § Runtime | Datadog-confirmed edges, Mermaid | Phase incomplete if Datadog ✅ |
+| Exercise updates | `API_CATALOG.md`, `EVENT_CATALOG.md`, `BUSINESS_FLOWS.md` | `runtime_confirmed` where applicable | Phase incomplete if Datadog ✅ |
+| Datadog subgraphs | `.understand-anything/diagrams/datadog-service-deps.md` | Per entry service | Phase incomplete if Datadog ✅ |
+| Skip record | `{map_file}` § Flow stub + `KNOWN_OMISSIONS.md` | Skip reason | Required when Datadog ❌ |
+
+## Checkpoint
+
+[phase-completion-gate.md](../reference/phase-completion-gate.md)

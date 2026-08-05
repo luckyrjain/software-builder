@@ -1,0 +1,288 @@
+# Decision graph — bursty Java + Kafka (Scenario A)
+# Canonical shape: reference/decision-graph-schema.md
+
+schema_version: 3
+skill_version: v3.0
+
+metadata:
+  generated: "2026-06-29T12:00:00Z"
+  service: example-payment-consumer
+  scope: "kube_deployment:payment-consumer,env:production"
+  window_utilization: 7d
+  window_cost: 30d
+  metrics_queried: 34
+  missing_metrics: [OBS_PDB_STATUS]
+  datadog_org: app.datadoghq.com
+  analysis_duration_seconds: 22
+  fingerprint:
+    service: example-payment-consumer
+    window: 7d
+    threshold_version: "2026-06"
+    threshold_hash: sha256:placeholder
+    manifest_hash: sha256:placeholder
+    metric_query_hash: sha256:placeholder
+    schema_version: 3
+    skill_version: v3.0
+
+decision_history:
+  previous_final_decision: KEEP_CONFIGURATION
+  current_final_decision: KEEP_CONFIGURATION
+  changed: false
+  review_count: 4
+
+assessment:
+  final_decision: KEEP_CONFIGURATION
+  severity: WARNING
+  severity_reason: replica_optimization_blocked
+  review_after: 14d
+  assessment_confidence:
+    value: 0.9
+    band: Very High
+    factors:
+      evidence_completeness: 0.9
+      evidence_quality: 0.9
+      contradiction_resolution: 1.0
+      telemetry_availability: 0.9
+    arithmetic: "0.35×0.9 + 0.35×0.9 + 0.15×1.0 + 0.15×0.9 = 0.915 → 0.9"
+
+observations:
+  - id: OBS_CPU_USAGE_AVG
+    value: 0.10
+    unit: cores
+    scope: app_container
+    window: 7d
+    quality: measured
+  - id: OBS_CPU_REQUEST
+    value: 1.05
+    unit: cores
+    scope: deployment
+    window: null
+    quality: measured
+  - id: OBS_CPU_P95_FLEET
+    value: 86
+    unit: percent
+    scope: pod
+    window: 7d
+    quality: measured
+  - id: OBS_CPU_MAX_POD
+    value: 2.4
+    unit: cores
+    scope: app_container
+    window: 7d
+    quality: measured
+  - id: OBS_CPU_THROTTLE_RATE
+    value: 0
+    unit: percent
+    scope: app_container
+    window: 7d
+    quality: measured
+  - id: OBS_DERIVED_CPU_UTIL_P95
+    value: 86
+    unit: percent
+    formula: OBS_CPU_P95_FLEET ÷ OBS_CPU_REQUEST
+    quality: measured
+  - id: OBS_PDB_STATUS
+    value: null
+    unit: null
+    scope: deployment
+    window: null
+    quality: missing
+  - id: OBS_REPLICA_COUNT
+    value: 8
+    unit: count
+    scope: deployment
+    window: 7d
+    quality: measured
+  - id: OBS_KAFKA_LAG_MAX_PAYMENTS
+    value: null
+    unit: messages
+    scope: consumer_group
+    window: null
+    quality: missing
+
+evidence:
+  - id: EVID_CPU_USAGE_AVG
+    observation_id: OBS_CPU_USAGE_AVG
+    source: datadog
+    metric: kubernetes.cpu.usage.total
+    aggregation: avg
+    window: 7d
+    scope: app_container
+    quality: measured
+    weight: medium
+  - id: EVID_CPU_P95_FLEET
+    observation_id: OBS_CPU_P95_FLEET
+    source: datadog
+    metric: kubernetes.pod.cpu.usage.dist
+    aggregation: p95.dist
+    window: 7d
+    scope: pod-scoped
+    quality: measured
+    weight: critical
+  - id: EVID_CPU_REQUEST
+    observation_id: OBS_CPU_REQUEST
+    source: datadog
+    metric: kubernetes.cpu.requests
+    aggregation: avg
+    window: null
+    scope: deployment
+    quality: measured
+    weight: medium
+  - id: EVID_CPU_MAX_POD
+    observation_id: OBS_CPU_MAX_POD
+    source: datadog
+    metric: kubernetes.cpu.usage.total
+    aggregation: max
+    window: 7d
+    scope: app_container
+    quality: measured
+    weight: medium
+  - id: EVID_CPU_THROTTLE_RATE
+    observation_id: OBS_CPU_THROTTLE_RATE
+    source: datadog
+    metric: kubernetes.cpu.cfs.throttled.periods
+    aggregation: avg
+    window: 7d
+    scope: app_container
+    quality: measured
+    weight: high
+  - id: EVID_DERIVED_CPU_UTIL_P95
+    observation_id: OBS_DERIVED_CPU_UTIL_P95
+    source: derived
+    metric: null
+    aggregation: formula
+    window: 7d
+    scope: deployment
+    quality: measured
+    weight: critical
+  - id: EVID_REPLICA_COUNT
+    observation_id: OBS_REPLICA_COUNT
+    source: datadog
+    metric: kubernetes_state.deployment.replicas_ready
+    aggregation: avg
+    window: 7d
+    scope: deployment
+    quality: measured
+    weight: medium
+  - id: EVID_KAFKA_LAG_MAX_PAYMENTS
+    observation_id: OBS_KAFKA_LAG_MAX_PAYMENTS
+    source: null
+    metric: kafka.consumer_lag
+    aggregation: max
+    window: null
+    scope: consumer_group
+    quality: missing
+    weight: low
+  - id: EVID_PDB_STATUS
+    observation_id: OBS_PDB_STATUS
+    source: null
+    metric: poddisruptionbudget
+    aggregation: null
+    window: null
+    scope: deployment
+    quality: missing
+    weight: low
+
+telemetry:
+  score_stars: 3
+  telemetry_availability: 0.85
+  present: [OBS_CPU_P95_FLEET, OBS_CPU_USAGE_AVG]
+  missing: [OBS_PDB_STATUS]
+  unknown: []
+  not_applicable: []
+
+assumptions:
+  - id: ASSUME_HPA_INTENTIONAL
+    text: Fixed HPA is intentional (warm JVMs, SLAs)
+    if_violated: accidental overscale
+  - id: ASSUME_P95_REPRESENTATIVE
+    text: Fleet p95 represents production traffic
+    if_violated: peak window differs
+
+interpretations:
+  - dimension: cpu
+    inference: bursty; fleet p95 uses headroom
+    confidence: { value: 0.8, band: High }
+  - dimension: replicas
+    inference: cannot reduce — lag incomplete
+    confidence: { value: 0.4, band: Low }
+
+decisions:
+  - id: DEC_CPU_REQUEST
+    status: BLOCKED
+    supports: [OBS_CPU_P95_FLEET, OBS_CPU_MAX_POD, OBS_CPU_USAGE_AVG]
+    blocking: [OBS_CPU_P95_FLEET]
+    missing: []
+    reason: fleet_p95_above_trim_threshold
+    explanation: Fleet p95 exceeds sizing threshold.
+  - id: DEC_REPLICAS
+    status: DEFER
+    supports: [OBS_REPLICA_COUNT]
+    blocking: []
+    missing: [OBS_PDB_STATUS]
+    reason: missing_kafka_lag
+    explanation: Lag coverage incomplete.
+
+contradictions:
+  - ids: [OBS_DERIVED_CPU_UTIL_AVG, OBS_DERIVED_CPU_UTIL_P95]
+    status: Resolved
+    resolution: Sizing follows OBS_CPU_P95_FLEET
+
+recommendations:
+  - id: REC_CPU_KEEP
+    priority: P0
+    status: BLOCKED
+    depends_on:
+      decisions: [DEC_CPU_REQUEST]
+      observations: [OBS_CPU_P95_FLEET, OBS_CPU_THROTTLE_RATE]
+      assumptions: [ASSUME_P95_REPRESENTATIVE]
+    recommendation_confidence:
+      value: 1.0
+      band: Very High
+      factors:
+        support_completeness: 1.0
+        support_quality: 1.0
+        contradiction_resolution: 1.0
+        telemetry_availability: 0.9
+      arithmetic: "0.40×1.0 + 0.30×1.0 + 0.15×1.0 + 0.15×0.9 = 0.985 → 1.0"
+    risk: { likelihood: Low, impact: Low, score: Low, residual: Low }
+  - id: REC_CPU_REDUCE
+    priority: P2
+    status: REJECTED
+    depends_on:
+      decisions: [DEC_CPU_REQUEST]
+      observations: [OBS_CPU_P95_FLEET, OBS_CPU_USAGE_AVG]
+    recommendation_confidence:
+      value: 0.3
+      band: Very Low
+      factors:
+        support_completeness: 1.0
+        support_quality: 1.0
+        contradiction_resolution: 1.0
+        telemetry_availability: 0.9
+      arithmetic: "capped 0.3 — DEC_CPU_REQUEST BLOCKED"
+    risk: { likelihood: High, impact: High, score: High, residual: Medium }
+  - id: REC_REPLICA_REDUCE
+    priority: P2
+    status: DEFERRED
+    depends_on:
+      decisions: [DEC_REPLICAS]
+      observations: [OBS_KAFKA_LAG_MAX_PAYMENTS]
+    recommendation_confidence:
+      value: 0.3
+      band: Very Low
+      factors:
+        support_completeness: 0.25
+        support_quality: 0.5
+        contradiction_resolution: 1.0
+        telemetry_availability: 0.85
+      arithmetic: "0.40×0.25 + 0.30×0.5 + 0.15×1.0 + 0.15×0.85 = 0.528 → capped 0.3"
+    risk: { likelihood: Medium, impact: Critical, score: High, residual: Medium }
+
+stop_reasons: []
+
+why_this_matters:
+  - decision_id: DEC_CPU_REQUEST
+    text: >-
+      Burst-driven Kafka workload — DEC_CPU_REQUEST blocked by OBS_CPU_P95_FLEET.
+      Values in observations[].

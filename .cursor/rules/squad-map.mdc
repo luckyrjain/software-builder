@@ -1,0 +1,10 @@
+---
+description: Invoke the repository squad-map skill for repo-to-squad ownership mapping.
+alwaysApply: false
+---
+
+When the user asks who owns a repo/service, wants squad mapping, or team reconciliation between
+GitLab groups and Datadog service tags, read `squad-map/SKILL.md` and follow it.
+
+Phase index: `squad-map/reference/phase-index.md`. Reference loads: `squad-map/reference/lazy-load-index.md`.
+Read-only — no GitLab writes, Datadog mutations, deploys, or application source changes.

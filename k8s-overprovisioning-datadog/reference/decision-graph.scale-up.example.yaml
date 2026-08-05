@@ -1,0 +1,158 @@
+# Decision graph — underprovisioned / throttle (SCALE_UP)
+# Canonical shape: reference/decision-graph-schema.md
+
+schema_version: 3
+skill_version: v3.0
+
+metadata:
+  generated: "2026-06-30T11:00:00Z"
+  service: checkout-worker
+  scope: "kube_deployment:checkout-worker,env:production"
+  window_utilization: 7d
+  metrics_queried: 26
+  missing_metrics: []
+
+assessment:
+  final_decision: SCALE_UP
+  severity: CRITICAL
+  review_after: 3d
+  assessment_confidence:
+    value: 0.9
+    band: Very High
+    factors:
+      evidence_completeness: 0.85
+      evidence_quality: 0.9
+      contradiction_resolution: 1.0
+      telemetry_availability: 0.85
+    arithmetic: "0.35×0.85 + 0.35×0.9 + 0.15×1.0 + 0.15×0.85 = 0.8825 → 0.9"
+
+observations:
+  - id: OBS_CPU_USAGE_AVG
+    value: 0.95
+    unit: cores
+    quality: measured
+  - id: OBS_CPU_REQUEST
+    value: 1.0
+    unit: cores
+    quality: measured
+  - id: OBS_CPU_LIMIT
+    value: 1.1
+    unit: cores
+    quality: measured
+  - id: OBS_CPU_P95_FLEET
+    value: 98
+    unit: percent
+    quality: measured
+  - id: OBS_CPU_MAX_POD
+    value: 1.05
+    unit: cores
+    quality: measured
+  - id: OBS_CPU_THROTTLE_RATE
+    value: 12
+    unit: percent
+    quality: measured
+  - id: OBS_DERIVED_CPU_UTIL_P95
+    value: 98
+    unit: percent
+    quality: measured
+  - id: OBS_MEMORY_OOM_COUNT
+    value: 0
+    unit: count
+    quality: measured
+  - id: OBS_REPLICA_COUNT
+    value: 6
+    unit: count
+    quality: measured
+
+evidence:
+  - id: EVID_CPU_USAGE_AVG
+    observation_id: OBS_CPU_USAGE_AVG
+    source: datadog
+    quality: measured
+  - id: EVID_CPU_REQUEST
+    observation_id: OBS_CPU_REQUEST
+    source: datadog
+    quality: measured
+  - id: EVID_CPU_LIMIT
+    observation_id: OBS_CPU_LIMIT
+    source: datadog
+    quality: measured
+  - id: EVID_CPU_P95_FLEET
+    observation_id: OBS_CPU_P95_FLEET
+    source: datadog
+    quality: measured
+  - id: EVID_CPU_MAX_POD
+    observation_id: OBS_CPU_MAX_POD
+    source: datadog
+    quality: measured
+  - id: EVID_CPU_THROTTLE_RATE
+    observation_id: OBS_CPU_THROTTLE_RATE
+    source: datadog
+    quality: measured
+  - id: EVID_DERIVED_CPU_UTIL_P95
+    observation_id: OBS_DERIVED_CPU_UTIL_P95
+    source: derived
+    quality: measured
+  - id: EVID_MEMORY_OOM_COUNT
+    observation_id: OBS_MEMORY_OOM_COUNT
+    source: datadog
+    quality: measured
+  - id: EVID_REPLICA_COUNT
+    observation_id: OBS_REPLICA_COUNT
+    source: datadog
+    quality: measured
+
+decisions:
+  - id: DEC_CPU_REQUEST
+    status: ALLOW
+    supports: [OBS_CPU_THROTTLE_RATE, OBS_CPU_P95_FLEET, OBS_CPU_LIMIT]
+    blocking: [OBS_CPU_THROTTLE_RATE]
+    reason: throttle_high
+    explanation: Sustained CPU throttling — underprovisioned on CPU requests/limits.
+  - id: DEC_REPLICAS
+    status: ALLOW
+    supports: [OBS_CPU_P95_FLEET, OBS_REPLICA_COUNT]
+    blocking: []
+    reason: scale_up_advisory
+    explanation: Fleet p95 at ceiling; consider raising requests or replicas.
+
+recommendations:
+  - id: REC_CPU_INCREASE
+    priority: P0
+    status: READY
+    depends_on:
+      decisions: [DEC_CPU_REQUEST]
+      observations: [OBS_CPU_THROTTLE_RATE, OBS_CPU_P95_FLEET]
+    recommendation_confidence:
+      value: 0.9
+      band: Very High
+      factors:
+        support_completeness: 1.0
+        support_quality: 1.0
+        contradiction_resolution: 1.0
+        telemetry_availability: 0.85
+    delivery_pointer:
+      path: k8s/checkout-worker/deployment.yaml
+      field: resources.requests.cpu
+    risk: { likelihood: Low, impact: Medium, score: Low, residual: Low }
+  - id: REC_SCALE_UP_ADVISORY
+    priority: P1
+    status: READY
+    depends_on:
+      decisions: [DEC_REPLICAS]
+      observations: [OBS_CPU_P95_FLEET]
+    recommendation_confidence:
+      value: 0.8
+      band: Moderate
+      factors:
+        support_completeness: 0.9
+        support_quality: 0.9
+        contradiction_resolution: 1.0
+        telemetry_availability: 0.85
+    delivery_pointer:
+      path: k8s/checkout-worker/hpa.yaml
+      field: spec.maxReplicas
+    risk: { likelihood: Medium, impact: High, score: Medium, residual: Medium }
+
+contradictions: []
+stop_reasons: [throttle_high]

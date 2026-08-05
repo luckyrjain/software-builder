@@ -1,0 +1,28 @@
+# Fleet migration status — copy to workspace root as MIGRATION_STATUS.yaml
+# Update last_updated and per-service rows as gates complete.
+schema_version: 1
+org: "{{ORG_NAME}}"
+workspace: "{{WORKSPACE_ROOT}}"
+domain_pack: "{{DOMAIN_PACK}}"  # optional — e.g. collection-acme
+last_updated: "{{ISO8601_TIMESTAMP}}"
+
+summary:
+  total_services: 0
+  scan_clean: 0
+  shadow_verified: 0
+  config_cutover: 0
+  blocked: 0
+
+# Per-service rows — append as you migrate
+services:
+  - name: "{{SERVICE_NAME}}"
+    path: "{{SERVICE_DIR}}"
+    tier_focus: P0  # P0 | P1 | P2 | dialect-only
+    scan_gate: not_run  # pass | fail | not_run
+    shadow_compare: pending  # pass | fail | pending | n/a
+    config_cutover: pending  # done | pending | n/a
+    mr_url: ""
+    owner: ""
+    notes: ""
+
+# Gate order: scan_gate → shadow_compare → config_cutover → MR (pr-review)

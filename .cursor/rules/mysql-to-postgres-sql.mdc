@@ -1,0 +1,10 @@
+---
+description: Invoke the repository mysql-to-postgres-sql skill for MySQL-dialect scan and PostgreSQL rewrite during a PG migration.
+alwaysApply: false
+---
+
+When the user asks to scrub MySQL-native SQL, migrate jdbc:mysql to jdbc:postgresql, or audit native
+queries for PG compatibility, read `mysql-to-postgres-sql/SKILL.md` and follow it.
+
+Skill contract: `mysql-to-postgres-sql/reference/skill-contract.md`. Reference loads:
+`mysql-to-postgres-sql/reference/lazy-load-index.md`.

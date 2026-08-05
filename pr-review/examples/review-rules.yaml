@@ -1,0 +1,63 @@
+# Repository-specific review rules — copy to your repo as review-rules.yaml (root)
+# or .cursor/skills/pr-review/review-rules.yaml
+
+version: 1
+
+# Optional: default persona for this repo (see reference/review-personas.md)
+# persona: payments_sme
+
+payments:
+  critical:
+    - ledger
+    - money
+    - idempotency
+  high:
+    - webhook
+    - refund
+    - settlement
+
+search:
+  - latency
+  - elasticsearch
+  - indexer
+
+infra:
+  - terraform
+  - helm
+  - k8s
+
+# Optional: path context tiers for adaptive severity (see reference/contextual-severity.md)
+context:
+  production_critical:
+    - checkout
+    - payment
+  internal:
+    - admin
+    - dashboard
+
+# Optional: tune stop-search for large monorepos
+# stop_search:
+#   critical: 2
+#   high: 5
+#   total: 10
+
+# Optional: fast-path thresholds (see reference/fast-path.md)
+# fast_path:
+#   skip_architecture_below_files: 5
+#   skip_ci_on_docs: true
+
+# Optional: beat fast-path skips (see reference/precedence.md)
+# always_review:
+#   - observability
+#   - performance
+
+# Optional: §16 layer hints (complements ARCHITECTURE.md)
+# architecture:
+#   layers:
+#     - name: api
+#       paths: ["api/", "handlers/"]
+#     - name: billing
+#       paths: ["billing/", "payments/"]
+#   forbidden_edges:
+#     - from: api
+#       to: billing/internal

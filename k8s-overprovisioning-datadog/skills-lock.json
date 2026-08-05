@@ -1,0 +1,6 @@
+{
+  "version": 1,
+  "skillsCliVersion": null,
+  "skills": {},
+  "notes": "No vendored Cursor skills — Datadog MCP is the primary external integration."
+}

@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "domain-comprehension sub-agent merge payload",
+  "type": "object",
+  "required": ["repo", "phase", "findings", "open_questions", "conflicts", "files_read"],
+  "properties": {
+    "repo": { "type": "string", "minLength": 1 },
+    "phase": { "type": "string", "minLength": 1 },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["evidence", "conclusion", "confidence"],
+        "properties": {
+          "evidence": { "type": "string" },
+          "conclusion": { "type": "string" },
+          "confidence": {
+            "type": "string",
+            "enum": ["HIGH", "MEDIUM", "LOW", "UNKNOWN"]
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "open_questions": { "type": "array", "items": { "type": "string" } },
+    "conflicts": { "type": "array", "items": { "type": "string" } },
+    "files_read": { "type": "array", "items": { "type": "string" } }
+  },
+  "additionalProperties": false
+}

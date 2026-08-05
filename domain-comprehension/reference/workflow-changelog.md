@@ -1,0 +1,27 @@
+# Workflow changelog
+
+| Version | Date | Files | Change |
+|---------|------|-------|--------|
+| 1.0 | initial | all | Base workflow files |
+| 1.1 | 2026-06 | phase-2.md, phase-4.md | phase-2: divergence gate, product-line matrix, gate sequence diagram, sub-flows; phase-4: change-risk map section |
+| 1.2 | 2026-07-01 | all | Inline `## Required outputs` table in all 13 workflow files; P0.25: investigation grep recipes + producer/consumer heuristics; P3b: per-control grep recipes + adversarial output format; session-0b: CODEOWNERS fallback (Step 7); inputs.md: DELTA delivery mode |
+| 1.3 | 2026-07-02 | SKILL.md, inputs.md, phase-2b.md, phase-5.md, phase-outputs.md, phase-completion-gate.md, deliverable-templates.md, templates/, scripts/ | `manifest.yaml` in allowed writes; `COMPLIANCE_RETROFIT` delivery mode; P2b either/or runtime validation (map § or `E2E_FLOW.md`); P5 repo map branch+SHA; `domain-config.yaml` template; optional manifest artifacts; `--check-content` validator flag |
+| 1.4 | 2026-07-08 | SKILL.md, README.md, inputs.md, session-0.md, phase-0.md, phase-5.md, phase-outputs.md, domain-config-schema.md, domain-config.yaml, manifest.yaml, manifest-schema.md, deliverable-templates.md, lazy-load-index.md, memory-bank-integration.md, templates/memory-bank/ | Optional P5 Memory Bank export; `memory_bank` config block; consume existing banks at Session 0/P0; merge with `.generated/` appendix |
+| 1.5 | 2026-07-29 | inputs.md, pressure-tests.md, manifest-schema.md, phase-index.md, RISK_MAP.md, SKILL.md, validate_manifest_yaml.py, test_validate_manifest.py | `ADD_REPO` delivery mode — onboard one repo into an existing engagement; merge-conflict gate on `RISK_MAP.md`; reuses `DELTA`'s affected-phases rules |
+| 1.6 | 2026-07-30 | phase-1.md, phase-2.md, phase-5.md, domain-config-schema.md, manifest-schema.md, api-tooling-integration.md, deliverable-templates.md, lazy-load-index.md, phase-outputs.md, README.md, SKILL.md, domain-config.yaml, manifest.yaml, templates/postman/, validate_manifest_yaml.py, test_gen_postman.py, test_fetch_otp_from_redis.py, test_validate_manifest.py | Optional P5 `api_tooling` export — runnable Postman collection + curl generator; P1 Auth & Gateway subsection; P2 per-env base URL capture; `postman_collection.json` content-validation gate |
+| 1.7 | 2026-07-31 | phase-completion-gate.md, phase-outputs.md, deliverable-templates.md, manifest-schema.md, EXEC_SUMMARY.md | Always-on Time & Effort summary in `EXEC_SUMMARY.md`; checklist enforcement moved to phase-completion-gate.md (the file agents actually read at phase end, not the cross-cutting-rules tail of phase-outputs.md); first-row/skipped-predecessor anti-fabrication clause; stated `<h>h <m>m` time format |
+| 1.8 | 2026-07-31 | mcp-capabilities.md, phase-2b.md, phase-4.md, data-ownership.md, DATA_OWNERSHIP.md, phase-1.md | KubeSense log evidence in P2b alongside Datadog; feature-toggle/non-entity Redis/ES investigation recipes in P4; repository-method/@Query column in DATA_OWNERSHIP.md |
+| 1.9 | 2026-07-31 | phase-0-25.md, phase-0.md, data-ownership.md, phase-outputs.md | Error code catalog in P0.25 § Contracts (mirrored in phase-outputs.md); datasource env var grep hint in P0 Config surface, with corrected search-root glob; Schema evidence column rule (entity constraints/relationships) in data-ownership.md |
+| 1.10 | 2026-07-31 | phase-0-25.md, phase-2.md, DEPENDENCY_GRAPH.md, phase-outputs.md | Validation-annotation grep fallback for P0.25 when no OpenAPI spec exists; decoupled BFF/gateway base-URL capture from `api_tooling.export_mode` — now always attempted in P2, UNKNOWN with reason if not discoverable, matching every other artifact's convention |
+| 1.11 | 2026-07-31 | phase-1.md, phase-outputs.md | Decoupled Auth & Gateway capture from `api_tooling.export_mode` — now always attempted in P1, UNKNOWN with reason if not discoverable, matching every other artifact's convention (same fix class as round 3's base-URL decoupling) |
+| 1.12 | 2026-07-31 | session-0b.md | Corrected Squad map artifact field list — squad-map's `SQUAD_MAP.md` main table has no `Conflict` column; conflicts live in a separate § Conflicts table (cross-skill gap audit finding) |
+| 1.13 | 2026-07-31 | phase-1.md | Env bypass rules recipe made multiline-aware (`-U`/`(?s)`, bounded `{0,80}` span) — previously only matched same-line `signature...bypass` text, missed the same config expressed as nested YAML blocks (long-deferred known gap, closed) |
+| 1.14 | 2026-07-31 | inputs.md | Default `delivery_mode` for a first-time engagement (no `manifest.yaml` yet) changed from `FULL` to `QUICK` — a first-timer who just names a domain no longer gets dropped into the full 12-phase pipeline unasked (team-adoption-readiness audit finding) |
+
+## Versioning rule
+
+Increment the **minor version** on any behavioral change to a workflow file: new steps, new required
+outputs, new decision tables, new investigation recipes. Patch version is not used — workflow files
+are instructions, not code.
+
+When bumping: update every file in the same commit, add a row to this table.
