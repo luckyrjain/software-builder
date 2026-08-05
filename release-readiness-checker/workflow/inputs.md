@@ -29,7 +29,7 @@ handled by pr-review's own guard, not re-implemented here.
 
 | Field | Default |
 |-------|---------|
-| `incident_lookback_hours` | 48 — window width for each service's incident-rca signal check |
+| `incident_lookback_hours` | 48 — window width for each service's incident-rca signal check. **Minimum 1 hour** — a caller-supplied value below 1h is rejected (ask for a value ≥1h), well above incident-rca's own 10-minute-warn/5-minute-block thresholds ([incident-rca/workflow/inputs.md](../../incident-rca/workflow/inputs.md)), so its short-window ask never fires inside the per-service fan-out |
 | `target_branch` | The repo's configured release branch (see [SETUP.md](../SETUP.md) § Config); used by the MR-range resolver as the merge target to filter on |
 
 ## Normalization

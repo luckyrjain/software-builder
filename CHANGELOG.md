@@ -120,18 +120,21 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 
 - New skill — item #9 of the [team-facing agents roadmap](docs/superpowers/plans/2026-08-05-team-facing-agents-roadmap.md):
   a release go/no-go report composing **pr-review** (MRs merged since each repo's last release marker,
-  `chat-only` — never posts to GitLab), **k8s-overprovisioning-datadog** (per-service rightsizing
-  verdict, surfaced as-is), and **incident-rca** (per-service open-incident signal, Phase 1 evidence
-  only — never a full RCA).
+  never posts to GitLab), **k8s-overprovisioning-datadog** (per-service rightsizing verdict, surfaced
+  as-is), and **incident-rca** (per-service open-incident signal, Phase 1 evidence only — never a full
+  RCA).
 - Genuinely new logic: the MR-range resolver (pr-review's own docs only ever enumerate open MRs, never a
-  merged-in-a-date-range query) and the three-way aggregation into `RELEASE_READINESS_REPORT.md`.
+  merged-in-a-date-range query, paginated exhaustively) and the three-way aggregation into
+  `RELEASE_READINESS_REPORT.md`.
 - No `disable-model-invocation` — ambiently invocable, like `new-hire-guide`. Unlike `new-hire-guide`,
-  this skill **does** need one gate-policy file (`reference/gate-policy.md`) — even with a human present,
-  the fan-out over potentially many MRs/services means a live confirmation inside every invocation would
-  turn one report into N interruptions. pr-review's `chat-only` mode has no gate to answer; incident-rca's
-  Phase 1 checkpoint is always answered "stop here," overriding its own default-to-proceed on a strong
-  signal — every other incident-rca gate is avoided by construction (explicit UTC times, `service` anchor
-  always supplied), not scripted.
+  this skill **does** need a gate-policy file (`reference/gate-policy.md`) covering all three wrapped
+  skills' own real gates — pr-review's posting confirmation (reuses pr-gatekeeper's own real policy,
+  always "Hold — don't post"; pr-review has no caller-settable quiet mode), k8s's ambiguous-service-name
+  ask ("proceed with unknown," k8s's own documented fallback), and incident-rca's Phase 1 checkpoint
+  (always "stop here," overriding its own default-to-proceed on a strong signal) — every other
+  incident-rca gate is avoided by construction (explicit UTC times, `service` anchor always supplied,
+  1-hour minimum lookback), not scripted. A round-1 review caught and fixed a fabricated assumption that
+  pr-review had a settable gate-free posting mode; see `release-readiness-checker/CHANGELOG.md`.
 - Design spec: [docs/superpowers/specs/2026-08-05-release-readiness-checker-design.md](docs/superpowers/specs/2026-08-05-release-readiness-checker-design.md).
 - Wired into `make install-release-readiness-checker` / `make lint-release-readiness-checker`, root
   README, docs/README, docs/REPOSITORY, skill-routing.md, cross-skill-escalation.md, prompt-injection.md,

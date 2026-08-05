@@ -6,8 +6,11 @@ This skill deliberately does **not** set `disable-model-invocation` — the agen
 you ask "is this release ready to ship?" with a `release_manifest`, as well as an explicit invocation.
 Unlike `who-owns-x-bot`/`pr-gatekeeper`/`incident-triage-agent`/`backlog-runner`, a human is present for
 this flow; see [SKILL.md](SKILL.md) § "Why a gate policy, despite being human-invoked" for why it still
-needs one gate-policy file (incident-rca's Phase 1 checkpoint only — everything else either has no gate
-or is avoided by construction).
+needs one — the fan-out over potentially many MRs/services means every one of pr-review's, k8s's, and
+incident-rca's own real gates needs a scripted or constructed-away answer; see
+[reference/gate-policy.md](reference/gate-policy.md) for the full, corrected enumeration (an earlier
+draft of this skill wrongly assumed pr-review had a settable "quiet" posting mode with no gate at all —
+it doesn't; see that file's own correction note).
 
 ## Install
 
@@ -61,7 +64,9 @@ it explicitly per invocation; this skill has no per-repo default table of its ow
 your connected GitLab MCP server's `list_merge_requests` doesn't support a merge-date parameter, the
 resolver falls back to client-side filtering (list all merged MRs against `target_branch`, filter by
 `merged_at` locally) — verify this fallback works against your specific server during the smoke test, it
-hasn't been exercised against every GitLab MCP implementation.
+hasn't been exercised against every GitLab MCP implementation. **Both paths must paginate exhaustively**
+(same requirement pr-review's own open-MR listing places on itself) — a repo with more merged MRs than
+one page holds must not silently return only the first page.
 
 ## Framework links
 
@@ -78,7 +83,7 @@ After install, run the invocation in [reference/smoke-test.md](reference/smoke-t
 
 | Symptom | Fix |
 |---------|-----|
-| MR range looks wrong / includes MRs from before `since` | Check the GitLab MCP merge-date filter fallback engaged correctly — see § Config above |
+| MR range looks wrong / includes MRs from before `since`, or is missing MRs from a large repo | Check the GitLab MCP merge-date filter fallback engaged correctly, and that pagination actually ran to completion (not just page 1) — see § Config above |
 | A service never gets flagged even with a known recent incident | Check `incident_lookback_hours` covers the incident's actual time; verify incident-rca's Phase 1 checkpoint is really being answered "stop here," not silently continuing (inspect the invocation, not just the summary) |
-| pr-review posts to GitLab | Bug — `chat-only` mode should never post; verify `workflow/run-check.md` § 2 is passing `posting_mode: chat-only`, not defaulting to `full` |
-| A repo/service silently missing from the report | Should never happen — every `release_manifest` entry gets a row per [reference/report-format.md](reference/report-format.md); file a bug if one is missing |
+| pr-review posts to GitLab | Bug — verify `workflow/run-check.md` § 2 is invoking pr-review with the plain "review !`<iid>` in `<project>`" phrase (never "review and post") and that its Phase 3 confirmation, whenever it fires, is answered "Hold — don't post" per [reference/gate-policy.md](reference/gate-policy.md) — pr-review has no settable "quiet" input to depend on instead |
+| A repo/service silently missing from the report | Should never happen — every `release_manifest` entry gets a row per [reference/report-format.md](reference/report-format.md), including unresolved-`since` and `insufficient_metrics` cases; file a bug if one is missing |

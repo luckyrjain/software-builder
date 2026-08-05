@@ -46,7 +46,7 @@ Each skill is a self-contained directory copied to `~/.cursor/skills/<name>/` on
 | **squad-map** | Natural language ("map squads …", "who owns …") | Repo-to-squad mapping via GitLab group hierarchy + Datadog team tags → `SQUAD_MAP.md` with confidence and conflict flags |
 | **who-owns-x-bot** | Structured `query`, not ambient chat (`/who-owns <name>` Slack slash command) | Single-shot "who owns X" Slack reply — thin wrapper delegating the lookup entirely to squad-map |
 | **new-hire-guide** | Natural language ("onboard `<name>`, joining `<squad>`") | Personalized onboarding tour: squad-map resolves the new hire's repos, domain-comprehension runs unscoped, `ONBOARDING_TOUR.md` curates down to those repos |
-| **release-readiness-checker** | Natural language ("is this release ready?" + `release_manifest`) | Release go/no-go report: pr-review (MRs since last release, chat-only) + k8s-overprovisioning-datadog (per-service verdict) + incident-rca (per-service incident signal, Phase 1 only) |
+| **release-readiness-checker** | Natural language ("is this release ready?" + `release_manifest`) | Release go/no-go report: pr-review (MRs since last release, never posts) + k8s-overprovisioning-datadog (per-service verdict) + incident-rca (per-service incident signal, Phase 1 only) |
 | **mysql-to-postgres-sql** | Natural language ("MySQL scrub …", "jdbc:postgresql …") | MySQL-dialect scan gate + PostgreSQL rewrite for a `jdbc:mysql`→`jdbc:postgresql` migration |
 | **loop-task-implementer** | Natural language ("implement issue 42 …") | Autonomous multi-task loop: isolated Builder → two-lens independent Reviewer → adjudicated remediation → PR; platform-neutral, no MCP dependency |
 | **backlog-runner** | Scheduled trigger, not ambient chat | Queue-management wrapper: pulls N tickets from a tracker query, runs loop-task-implementer per ticket overnight in dependency order, never merges |
@@ -194,8 +194,8 @@ These are planning artifacts; the live behavior is defined in `pr-review/SKILL.m
 | Path | What it does |
 |------|--------------|
 | `workflow/inputs.md` | Parse `release_manifest` + `incident_lookback_hours` + `target_branch`; HARD STOP on empty manifest |
-| `workflow/run-check.md` | Resolve MR ranges, invoke pr-review `chat-only` / k8s / incident-rca per manifest entry, aggregate |
-| `reference/gate-policy.md` | Normative incident-rca Phase 1 checkpoint answer ("stop here," every signal density) |
+| `workflow/run-check.md` | Resolve MR ranges (paginated), invoke pr-review / k8s / incident-rca per manifest entry per gate-policy.md, aggregate |
+| `reference/gate-policy.md` | Normative gate answers for all three wrapped skills: pr-review (reuses pr-gatekeeper's policy), k8s (ambiguous-service ask), incident-rca (Phase 1 checkpoint, "stop here" every signal density) |
 | `reference/report-format.md` | Normative `RELEASE_READINESS_REPORT.md` structure + verdict derivation |
 | `reference/smoke-test.md` | Post-install validation steps |
 

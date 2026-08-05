@@ -27,7 +27,7 @@ Each skill has a human **`README.md`** (what it does) separate from **`SKILL.md`
 | [squad-map](squad-map/) | "map squads …", "who owns …" | Repo-to-squad mapping: GitLab group hierarchy + Datadog team tags → `SQUAD_MAP.md` | [README](squad-map/README.md) · [SETUP](squad-map/SETUP.md) |
 | [who-owns-x-bot](who-owns-x-bot/) | `/who-owns <name>` (Slack slash command; not ambient chat) | Single-shot "who owns X" Slack reply — thin wrapper delegating to squad-map | [README](who-owns-x-bot/README.md) · [SETUP](who-owns-x-bot/SETUP.md) |
 | [new-hire-guide](new-hire-guide/) | "onboard `<name>`, joining `<squad>`" | Personalized onboarding tour: resolves the new hire's squad's repos via squad-map, runs domain-comprehension unscoped, curates `ONBOARDING_TOUR.md` down to those repos | [README](new-hire-guide/README.md) · [SETUP](new-hire-guide/SETUP.md) |
-| [release-readiness-checker](release-readiness-checker/) | "is this release ready to ship?" with a `release_manifest` | Release go/no-go report: pr-review (MRs since last release, chat-only) + k8s-overprovisioning-datadog (per-service verdict) + incident-rca (per-service incident signal, Phase 1 only) | [README](release-readiness-checker/README.md) · [SETUP](release-readiness-checker/SETUP.md) |
+| [release-readiness-checker](release-readiness-checker/) | "is this release ready to ship?" with a `release_manifest` | Release go/no-go report: pr-review (MRs since last release, never posts) + k8s-overprovisioning-datadog (per-service verdict) + incident-rca (per-service incident signal, Phase 1 only) | [README](release-readiness-checker/README.md) · [SETUP](release-readiness-checker/SETUP.md) |
 | [mysql-to-postgres-sql](mysql-to-postgres-sql/) | "MySQL scrub …", "jdbc:postgresql …", "TIMESTAMPDIFF …" | Native SQL + JDBC rewrite for MySQL→PostgreSQL; scan gate, collection P0/P1 | [README](mysql-to-postgres-sql/README.md) · [SETUP](mysql-to-postgres-sql/SETUP.md) |
 | [loop-task-implementer](loop-task-implementer/) | "implement issue 42 …", "work through these tasks …" | Autonomous multi-task loop: isolated Builder → two-lens independent Reviewer → adjudicated remediation → PR. Platform-neutral, no Datadog/GitLab/Jira MCP required | [README](loop-task-implementer/README.md) · [SETUP](loop-task-implementer/SETUP.md) |
 | [backlog-runner](backlog-runner/) | Scheduled trigger (not human chat) | Pulls N tickets from a tracker query, runs loop-task-implementer per ticket overnight in dependency order, never merges | [README](backlog-runner/README.md) · [SETUP](backlog-runner/SETUP.md) |
@@ -428,8 +428,10 @@ side effect, see [new-hire-guide/SETUP.md](new-hire-guide/SETUP.md)).
 ## Usage (release-readiness-checker)
 
 Ambiently invocable, like new-hire-guide. A release manager is present, but the fan-out over potentially
-many MRs and services means this skill still scripts one gate's answer (incident-rca's Phase 1
-checkpoint, always "stop here") to avoid turning one report into N live interruptions — see
+many MRs and services means this skill still scripts answers to every gate its three wrapped skills can
+hit — pr-review's posting confirmation (reusing pr-gatekeeper's own real policy, always "Hold — don't
+post"), k8s's ambiguous-service-name ask ("proceed with unknown"), and incident-rca's Phase 1 checkpoint
+(always "stop here") — to avoid turning one report into N live interruptions — see
 [release-readiness-checker/SKILL.md](release-readiness-checker/SKILL.md) § "Why a gate policy, despite
 being human-invoked."
 
@@ -437,7 +439,7 @@ being human-invoked."
 
 | You say | What happens |
 |----------------|----------------|
-| "Is this release ready?" with `release_manifest: [{repo: api-disbursement, service: disbursement-service, since: v2.3.0}]` | Resolves MRs since `v2.3.0`, reviews each `chat-only`, gets `disbursement-service`'s k8s verdict, checks its incident-rca Phase 1 signal, writes `RELEASE_READINESS_REPORT.md` |
+| "Is this release ready?" with `release_manifest: [{repo: api-disbursement, service: disbursement-service, since: v2.3.0}]` | Resolves MRs since `v2.3.0`, reviews each via pr-review (never posts, per pr-gatekeeper's own gate policy), gets `disbursement-service`'s k8s verdict, checks its incident-rca Phase 1 signal, writes `RELEASE_READINESS_REPORT.md` |
 | A reviewed MR has a Critical finding, or a service's k8s verdict is BLOCKED, or a service is flagged | Overall verdict: **Not ready** |
 | A service has a strong incident-rca signal | Answered "stop here" anyway — service flagged, full RCA never runs |
 | "Review MR !482" | **Wrong skill** → pr-review directly |
