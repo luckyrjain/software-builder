@@ -247,6 +247,8 @@ A task passes independent review when both lenses return zero accepted blocking 
 
 This is not a requirement for two identical generic reviews.
 
+Record which isolation primitive actually ran each lens dispatch in `review.lens_a.isolation_primitive_used` / `review.lens_b.isolation_primitive_used` (`SUBAGENT` | `FRESH_SESSION` | `WORKTREE` | `SEQUENTIAL_SIMULATION`) — this is what makes the isolation guarantee auditable rather than merely claimed. When either lens ran under `SEQUENTIAL_SIMULATION` (no real context boundary — see [reference/platform-adapters.md](../reference/platform-adapters.md) § Sequential role simulation) on a diff touching auth, secrets, or trust boundaries, cap that lens's reported confidence and note the degraded isolation explicitly in the completion report rather than presenting a `CLEAN` verdict with the same weight as a genuinely isolated one.
+
 ---
 
 ## 8. Blocking-finding admissibility

@@ -53,12 +53,14 @@ review:
     reviewed_diff_fingerprint: null
     completed_at: null
     report_ref: null
+    isolation_primitive_used: null  # SUBAGENT | FRESH_SESSION | WORKTREE | SEQUENTIAL_SIMULATION
   lens_b:
     status: NOT_RUN
     reviewed_head_commit: null
     reviewed_diff_fingerprint: null
     completed_at: null
     report_ref: null
+    isolation_primitive_used: null  # SUBAGENT | FRESH_SESSION | WORKTREE | SEQUENTIAL_SIMULATION
 
 findings:
   # keyed by stable finding ID

@@ -8,8 +8,8 @@ escalates.
 **Branch / PR:** `<branch>` — `<pull_request_url>`
 **Head commit:** `<head_commit>` (diff fingerprint `<diff_fingerprint>`)
 
-**Lens A (Safety and State):** CLEAN | FINDINGS — `<summary>`
-**Lens B (Contracts and Operations):** CLEAN | FINDINGS — `<summary>`
+**Lens A (Safety and State):** CLEAN | FINDINGS — `<summary>` (isolation: `<SUBAGENT|FRESH_SESSION|WORKTREE|SEQUENTIAL_SIMULATION>`)
+**Lens B (Contracts and Operations):** CLEAN | FINDINGS — `<summary>` (isolation: `<same>`)
 
 **Accepted findings:** `<count>` — `<one line per finding: id, status>`
 **Contested findings:** `<count>` — `<one line per finding: id, reason>`

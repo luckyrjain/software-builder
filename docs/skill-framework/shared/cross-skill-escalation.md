@@ -4,6 +4,13 @@
 
 **Consumers:** `SKILL.md` in each skill (link here; keep ≤10 skill-specific rows max).
 
+**This table is optional escalations only — not mandatory subroutine calls.** One row below is not
+optional: domain-comprehension's Session 0b *always* invokes squad-map as a required phase (produces
+`SQUAD_MAP.md`, consumed by later phases), not a suggestion the agent may skip — see
+[phase-index.md](../../../domain-comprehension/reference/phase-index.md). It's listed here anyway,
+marked **(subroutine, not optional)**, because it's still a real cross-skill call other skills should
+know about — don't treat it as a "you may want to" row the way every other row in this table is.
+
 ## 1. Symmetric matrix (forward escalations)
 
 | Trigger | From → To | Handoff artifact | User prompt template |
@@ -18,6 +25,7 @@
 | Manifest drift + active incident | k8s → incident-rca | Drift summary + deploy timeline | "RCA `{service}` {window} — manifest drift detected during assessment" |
 | Spike + recent deploy | k8s → pr-review | Suspect MR from deploy event | "Review MR !{iid} — deploy preceded utilization spike on `{deployment}`" |
 | Squad ownership only (no domain map) | domain-comprehension → squad-map | In-scope repo census + `domain-config.yaml` ownership | "Map squads for repos in `{workspace}` — org prefix `{org}`, segment `{n}`" |
+| **Session 0b (subroutine, not optional)** — every domain-comprehension run | domain-comprehension → squad-map | Workspace root + repo census | Not user-facing — Session 0b invokes squad-map directly per [session-0b.md](../../../domain-comprehension/workflow/session-0b.md) |
 | Full domain map after squad map | squad-map → domain-comprehension | `SQUAD_MAP.md` + workspace root | "Map bounded contexts and data ownership for `{domain}` — full domain comprehension" |
 | Incident + unclear service owner | incident-rca → squad-map | Service name + window | "Who owns `{service}`? — need squad for RCA follow-up" |
 | Security finding in domain analysis (P3b) | domain-comprehension → pr-review | Repo + file path + finding type | "Review MR !{iid} for credential exposure in `{service}`" |

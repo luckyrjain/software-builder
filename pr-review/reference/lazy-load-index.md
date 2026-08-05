@@ -12,7 +12,7 @@ Read reference files **one at a time** when the active workflow phase says to �
 | Phase 1 — CI / merge train | [phase-1-gather.md](phase-1-gather.md) |
 | Phase 1 — repo rules | [review-rules.md](review-rules.md) (+ repo `review-rules.yaml` if present) |
 | Phase 1 — regulated paths (no YAML) | [domain-overrides.md](domain-overrides.md) |
-| Phase 2 — review | `finding-gates` → `finding-pipeline` → `finding-evidence-model` → `severity-rubric` → `review-checklist` → others only when triggered (see `workflow/phase-2.md`) |
+| Phase 2 — review | Batch-load the full "Also load now" set at the top of `workflow/phase-2.md` (review-personas, finding-pipeline, finding-gates, finding-evidence-model, detection-vs-judgment, precedence, contextual-severity, severity-rubric, review-checklist, review-metrics, review-rules when applicable) **before emitting any finding** — not a trickle sequence; §16 architecture-lens and others load only when triggered |
 | Phase 2 — §16 triggered | [architecture-lens.md](architecture-lens.md) |
 | Phase 2→3 — incremental | [incremental-rerun.md](incremental-rerun.md) |
 | Phase 3–4 — posting | [comment-templates.md](comment-templates.md); `full` also [gitlab-inline-comments.md](gitlab-inline-comments.md) |
