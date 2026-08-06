@@ -88,6 +88,15 @@ is not optional narration, it is a concrete step:
 If you cannot honestly perform steps 1–3, do not claim role isolation — report degraded-mode findings
 as `NEEDS_EVIDENCE` rather than `PROPOSED_BLOCKING`/`CLEAN`, since the review is not truly independent.
 
+**This primitive is `NOT_ISOLATED`, not a weaker form of independent review, for security-sensitive
+diffs.** Even when steps 1–4 above are honestly followed, a model cannot reliably discard prior-role
+reasoning from the same context the way a real process/session boundary does — the reset is a discipline,
+not a guarantee. `workflow/orchestrator.md` §7 records this primitive's `isolation_status` as
+`NOT_ISOLATED` whenever the diff touches authentication, authorization, secrets/credential handling, or a
+trust boundary, and §17's completion gates treat a `NOT_ISOLATED` lens on such a diff as an open blocking
+finding — not a `CLEAN` verdict with a footnote. Prefer escalating for a genuinely isolated primitive
+(subagent, fresh session, or worktree) over completing a security-sensitive task on this fallback alone.
+
 ## Generic agent fallback
 
 For an agent without skill discovery:

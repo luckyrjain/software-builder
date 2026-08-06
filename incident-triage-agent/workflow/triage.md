@@ -21,7 +21,8 @@ or ownership logic here — see [SKILL.md](../SKILL.md) Non-goals and
 ## Steps
 
 1. **Construct the window** — `from_time = triggered_at − 20m`, `to_time = triggered_at + 10m` (30
-   minutes, symmetric around the page) — per
+   minutes total, **weighted toward before the page** — 20 minutes pre-trigger to catch the actual cause,
+   10 minutes post-trigger to catch immediate fallout; not symmetric around `triggered_at`) — per
    [reference/unattended-gate-policy.md § Per-mode window construction](../reference/unattended-gate-policy.md#per-mode-window-construction).
    Never use wall-clock "now" — invocation latency must not shrink the window below the 30-minute
    guarantee.
@@ -53,12 +54,22 @@ or ownership logic here — see [SKILL.md](../SKILL.md) Non-goals and
    doc instead, per
    [reference/unattended-gate-policy.md § Post-report offers](../reference/unattended-gate-policy.md#post-report-offers-both-skills-always-declined).
 
-6. **Route the triage doc** to the configured notification path — see [SETUP.md](../SETUP.md) § Config.
+6. **Return the finished triage doc** for delivery to the configured notification target — see
+   [SETUP.md](../SETUP.md) § Config. This skill's own workflow never calls a Slack/Jira/PagerDuty API
+   itself; the calling handler (per [SETUP.md](../SETUP.md) § Integration contract) performs the one,
+   final delivery of the completed doc as a new message to whatever destination it's configured with —
+   distinct from the live mid-investigation writes the Read-only boundary below forbids.
 
 ## Read-only boundary
 
 Same as both wrapped skills: read + investigate + comment only. Never remediate (deploy/rollback/scale),
-never change paging-system state, never post live to Jira/Slack/PagerDuty.
+never change paging-system state. **"Never post live" (P1 fix — precise scope):** neither this skill's
+own workflow nor the wrapped incident-rca/squad-map skills ever autonomously write into Jira, PagerDuty,
+or Slack *during* the investigation — every such offer either skill surfaces (a Jira comment, a Slack
+brief, a PagerDuty update) is declined and rendered as a paste-ready block in the doc instead, per
+[reference/unattended-gate-policy.md § Post-report offers](../reference/unattended-gate-policy.md#post-report-offers-both-skills-always-declined).
+This is separate from step 6's final doc handoff: a single, human-configured, terminal delivery performed
+by the calling handler, not a live write this skill's own agentic workflow makes mid-run.
 
 ## Required outputs
 

@@ -287,7 +287,27 @@ A task passes independent review when both lenses return zero accepted blocking 
 
 This is not a requirement for two identical generic reviews.
 
-Record which isolation primitive actually ran each lens dispatch in `review.lens_a.isolation_primitive_used` / `review.lens_b.isolation_primitive_used` (`SUBAGENT` | `FRESH_SESSION` | `WORKTREE` | `SEQUENTIAL_SIMULATION`) — this is what makes the isolation guarantee auditable rather than merely claimed. When either lens ran under `SEQUENTIAL_SIMULATION` (no real context boundary — see [reference/platform-adapters.md](../reference/platform-adapters.md) § Sequential role simulation) on a diff touching auth, secrets, or trust boundaries, cap that lens's reported confidence and note the degraded isolation explicitly in the completion report rather than presenting a `CLEAN` verdict with the same weight as a genuinely isolated one.
+Record which isolation primitive actually ran each lens dispatch in `review.lens_a.isolation_primitive_used` / `review.lens_b.isolation_primitive_used` (`SUBAGENT` | `FRESH_SESSION` | `WORKTREE` | `SEQUENTIAL_SIMULATION`) — this is what makes the isolation guarantee auditable rather than merely claimed.
+
+**`isolation_status` (P1 fix — a status, not a confidence footnote):** derive `review.lens_a.isolation_status` / `review.lens_b.isolation_status` (`ISOLATED` | `NOT_ISOLATED`) from the primitive actually used:
+
+- `SUBAGENT`, `FRESH_SESSION`, `WORKTREE` → `ISOLATED`.
+- `SEQUENTIAL_SIMULATION` → `NOT_ISOLATED` **whenever the diff touches authentication, authorization,
+  secrets/credential handling, or a trust boundary** (the same class of change §7 already asks Lens A to
+  weight primarily). A model cannot reliably "discard everything else from working memory" — the honest
+  status for this case is that independent review did not actually happen, not a degraded-but-still-real
+  version of it. For a diff outside that class, `SEQUENTIAL_SIMULATION` may still be recorded `ISOLATED`
+  if the four handoff steps in [reference/platform-adapters.md](../reference/platform-adapters.md) §
+  Sequential role simulation were genuinely followed — the risk is specifically in trusting a same-context
+  "reset" on security-relevant code, not in the primitive itself.
+
+`NOT_ISOLATED` is not merely a confidence cap layered on top of a `CLEAN` verdict — §17's completion
+gates treat a `NOT_ISOLATED` lens on a security-sensitive diff as equivalent to that lens having an open
+`ACCEPTED` finding: it blocks completion until either a genuinely isolated primitive becomes available to
+re-run that lens, or a human explicitly accepts the degraded review (recorded as its own escalation, not
+silently absorbed into a passing `CLEAN`). For a diff outside the security-sensitive class,
+`SEQUENTIAL_SIMULATION` may still cap confidence and note the degraded isolation without blocking
+completion — the block is specifically for auth/secrets/trust-boundary changes.
 
 ---
 
@@ -329,6 +349,29 @@ For each proposed blocking finding:
    - `NEEDS_EVIDENCE`
    - `CONTESTED`
 5. Record the rationale and evidence.
+
+### `NEEDS_EVIDENCE` resolution (P1 fix — required, not a silent pass-through)
+
+`CLEAN` from a lens means *that lens raised no `PROPOSED_BLOCKING` finding* (`reviewer.md` §Finding
+classes) — it does not mean every plausible concern was checked off, and a `NEEDS_EVIDENCE` finding is
+exactly the gap between those two things: a plausible concern the lens could not currently prove. Neither
+`reviewer.md`'s "do not turn `NEEDS_EVIDENCE` into a blocking verdict" rule nor §17's "no accepted
+blocking finding remains open" gate, taken alone, says what happens to a finding that is adjudicated
+`NEEDS_EVIDENCE` and then never revisited — it is neither `ACCEPTED` (so it isn't "blocking") nor
+`REJECTED` (so it isn't dismissed); left alone, it would fall through both gates and the task would
+complete with an admitted, unresolved concern.
+
+For every `NEEDS_EVIDENCE` finding:
+
+1. Attempt to gather the missing evidence (re-run a check, inspect a call site, request the specific
+   artifact the finding says is missing) and reclassify to `ACCEPTED` or `REJECTED` once resolved.
+2. If evidence cannot be gathered and the finding touches **authentication, authorization,
+   secrets/credential handling, or a trust boundary**, it cannot complete unresolved — escalate per §19
+   with the specific evidence gap named, and require an explicit human decision (accept the residual risk,
+   or block) before this task reaches §17's completion gates.
+3. If evidence cannot be gathered and the finding is **outside** that class, it may remain
+   `NEEDS_EVIDENCE` at completion — but must be listed by `finding_id` and rationale in the completion
+   report (§19), never silently dropped because it was never promoted to `ACCEPTED`.
 
 ### Builder rebuttal
 
@@ -534,9 +577,18 @@ For an unrecognized content change:
 The task is ready for final repository action only when:
 
 - Acceptance criteria are complete.
-- Lens A is clean for the current fingerprint.
-- Lens B is clean for the same fingerprint.
+- Lens A is clean for the current fingerprint **and** its `isolation_status` is `ISOLATED` (§7) — a
+  `NOT_ISOLATED` lens on a security-sensitive diff is treated as an open blocking finding, not a clean
+  pass, regardless of what the lens itself reported.
+- Lens B is clean for the same fingerprint, same `isolation_status` requirement.
 - No accepted blocking finding remains open.
+- No `NEEDS_EVIDENCE` finding on authentication, authorization, secrets/credential handling, or a trust
+  boundary remains unresolved (§9 § NEEDS_EVIDENCE resolution) — a `NEEDS_EVIDENCE` verdict on those
+  dimensions must be actively resolved (evidence gathered and reclassified `ACCEPTED`/`REJECTED`, or
+  explicitly escalated with human sign-off recorded), never left open and silently excluded from "no
+  accepted blocking finding remains open" just because it was never promoted to `ACCEPTED`. A
+  `NEEDS_EVIDENCE` finding outside that class may complete with the gap disclosed in the completion
+  report — it does not need the same forced resolution.
 - Authoritative required checks are green.
 - Required approvals are present.
 - No blocking thread remains unresolved.
@@ -585,6 +637,14 @@ contested_findings:
     orchestrator_position:
     reviewer_position:
     builder_position:
+needs_evidence_findings:      # §9 § NEEDS_EVIDENCE resolution — every finding still NEEDS_EVIDENCE at stop
+  - finding_id:
+    dimension: auth | authz | secrets | trust_boundary | other
+    evidence_gap:
+    escalated: true | false   # true when dimension required escalation before completion
+lens_isolation:
+  lens_a: { primitive_used: SUBAGENT | FRESH_SESSION | WORKTREE | SEQUENTIAL_SIMULATION, isolation_status: ISOLATED | NOT_ISOLATED }
+  lens_b: { primitive_used: SUBAGENT | FRESH_SESSION | WORKTREE | SEQUENTIAL_SIMULATION, isolation_status: ISOLATED | NOT_ISOLATED }
 fix_attempts:
   - finding_id:
     fix_attempt_number:

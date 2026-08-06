@@ -74,6 +74,12 @@ finding: {
 Emit a fenced **` ```yaml `** block at the end of every summary note (first review and re-review) —
 after `### Notes`, before the closing attribution line. Schema:
 
+**`review_mode` / `audit_type` are declared once**, immediately after `review_type` below — do not
+restate them later in the same block (a P1 fix: an earlier version of this schema listed them twice,
+once here and again near `recommendation`/`confidence`; identical values made it harmless in practice,
+but a literal YAML duplicate key is undefined/last-wins behavior and misleading to a reader hand-checking
+the schema against a rendered footer).
+
 ```yaml
 review_metadata:
   review_type: full | incremental
@@ -120,8 +126,6 @@ review_metadata:
   engineering_improvements: N      # repo maturity items — not MR defects
   recommendation: approve | comment | request_changes | retrospective_observation
   confidence: high | medium | low   # overall review confidence
-  review_mode: pre_merge | incremental | retrospective
-  audit_type: pre_merge | incremental | retrospective
   merge_before_review: false
   merge_before_ci_green: false
   code_blockers_found: 0
@@ -148,12 +152,12 @@ review_metadata:
     false_positives_withdrawn: N
     candidates: N
     emitted: N
-    finding_precision: 0.0
+    emission_rate: 0.0
   review_quality:                # v2 — omit on trivial mechanical MRs
     coverage_pct: N | partial
     evidence_pct: N
     confidence: high | medium | low
-    finding_precision: 0.0
+    emission_rate: 0.0
   repository_health:             # v2 — dimensions when repo context; stub schema_version: 2 otherwise
     schema_version: 2
     dimensions:
@@ -246,7 +250,17 @@ prose subsection in executive summary for human readers — omit on trivial mech
 | **Coverage %** | `review_quality.coverage_pct` | `(changed_files_reviewed / changed_files_total) × 100` from `review_metrics.coverage` |
 | **Evidence %** | `review_quality.evidence_pct` | Share of emitted findings with ≥1 diff anchor and per-finding Confidence High or Medium |
 | **Confidence** | `review_quality.confidence` | Overall review confidence band — same as top-level `confidence` |
-| **Finding precision** | `review_quality.finding_precision` | `emitted / candidates` after pipeline filters — also in `precision.finding_precision` |
+| **Emission rate** | `review_quality.emission_rate` | `emitted / candidates` after pipeline filters — also in `precision.emission_rate` |
+
+**Not precision, by name on purpose (P1 fix):** this field was previously named `finding_precision`.
+Statistical precision is `true_positives / (true_positives + false_positives)` — it requires knowing,
+after the fact, which emitted findings were actually correct. This field has no such ground truth; it is
+`emitted / candidates`, the **share of detector hypotheses that survived the review pipeline's filters**
+— a yield/emission rate, not a correctness rate. A reviewer that emits nothing (`emitted: 0`) scores
+`0.0` here even on a perfectly clean, correctly-reviewed MR — the opposite of what "precision" implies.
+The closest thing this framework has to actual precision is `false_positives_withdrawn` below (findings
+a human later dismissed without a code change) relative to cumulative `emitted` — an approximation valid
+only for findings that were later revisited, not a live metric.
 
 **Precision block (footer):** mirrors incremental statistics for dashboards:
 
@@ -254,7 +268,7 @@ prose subsection in executive summary for human readers — omit on trivial mech
 |--------|--------------|------------|
 | Prior resolved | `precision.prior_resolved` / `precision.prior_total` | N/N from incremental dedupe |
 | Regression rate | `precision.regression_rate` | `regression_count / prior_resolved` when `prior_resolved > 0` |
-| False positives withdrawn | `precision.false_positives_withdrawn` | Prior findings withdrawn as false positive |
+| False positives withdrawn | `precision.false_positives_withdrawn` | Prior findings withdrawn as false positive — the closest available proxy to true precision, since it reflects an actual human correctness judgment rather than a pipeline yield rate |
 
 **History block (footer, incremental only):** `history.first_review`, `history.prior_review`,
 `history.regressions[]`, `history.approval_iteration` — see

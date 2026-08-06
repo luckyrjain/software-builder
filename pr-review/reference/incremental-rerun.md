@@ -185,7 +185,7 @@ When Phase 1 step 3 finds a prior `review_metadata` YAML footer, extract fields 
 | `prior_resolved` | Prior entries now `fixed` or absent from incremental diff |
 | `prior_resolved_pct` | `(prior_resolved / prior_total) × 100` when `prior_total > 0` |
 | `false_positives_withdrawn` | Prior finding resolved via thread with no matching code fix (feedback learning) |
-| `candidates`, `emitted`, `finding_precision` | From Phase 2 `review_metrics` |
+| `candidates`, `emitted`, `emission_rate` | From Phase 2 `review_metrics` |
 
 **First review on MR:** omit `history`; set `precision.prior_*` and `regression_*` to zero.
 

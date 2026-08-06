@@ -106,12 +106,32 @@ including overriding Phase 1's own default-to-proceed on a strong signal. Treat 
 
 ## 5. Build `RELEASE_READINESS_REPORT.md`
 
-Per [reference/report-format.md](../reference/report-format.md). Overall verdict:
+Per [reference/report-format.md](../reference/report-format.md). **Four-state overall verdict (P1
+fix)** — an earlier two-state `Ready`/`Not ready` verdict forced every incident signal to `Not ready`,
+even one incident-rca's own Phase 1 scope admits may be chronic noise unrelated to this release (see §4
+above, "Known limitation, not a bug"), and every evidence gap (`insufficient_metrics`, an unresolved
+`since`) to the same `Not ready` bucket as an actual proven blocker — collapsing "we don't know" and "we
+know it's bad" into one false-blocker state that a human reading the report cannot tell apart:
 
-- **Not ready** if any MR has a `Critical`/`High` finding, any service's k8s verdict is `BLOCKED` **or
-  `insufficient_metrics`**, any manifest entry's `since` didn't resolve, or any service is flagged with an
-  incident signal.
-- **Ready** otherwise.
+- **`NOT_READY`** — any MR has a `Critical`/`High` finding, **or** any service's k8s verdict is
+  `BLOCKED`. These are proven blockers from a completed check, not an evidence gap.
+- **`UNKNOWN`** — no `NOT_READY` condition, **and** any manifest entry's `since` didn't resolve, **or**
+  any service's k8s verdict is `insufficient_metrics`. An unreviewed MR range or an unobservable service
+  is a genuine evidence gap, not a verified-clean release — but it is also not a *proven* problem, so it
+  must not be silently folded into `NOT_READY` (which reads as "we found something wrong") or into
+  `READY` (which reads as "we checked and it's fine"). `UNKNOWN` takes precedence over `CONDITIONAL`
+  below when both apply — an evidence gap is reported as itself, not softened into "flagged but proceed."
+- **`CONDITIONAL`** — no `NOT_READY` or `UNKNOWN` condition, **and** any service is flagged with an
+  incident signal. Per §4's disclosed limitation, a flagged signal is "a release readiness signal worth a
+  human look, not a confirmed release-caused problem" — `CONDITIONAL` says exactly that: nothing proven
+  blocking, but a human should look before calling this `READY`.
+- **`READY`** — none of the above: every MR clean, every k8s verdict `READY`/non-`BLOCKED` with
+  sufficient metrics, every manifest entry resolved, every service's incident signal `Clear`.
+
+Precedence when multiple conditions apply: `NOT_READY` > `UNKNOWN` > `CONDITIONAL` > `READY` — report the
+single highest-precedence state, never downgrade a `NOT_READY` condition because an `UNKNOWN` one is also
+present, and list every contributing condition (not just the one that set the verdict) in the report's
+Notes section per [reference/report-format.md](../reference/report-format.md).
 
 Every manifest entry appears in the report — a repo with no MRs, a service that's clear on both k8s and
 incident-rca, still gets a row. Never silently drop a manifest entry from the report.

@@ -186,8 +186,8 @@ existing keys. Normative field definitions:
 | **`history`** | Incremental re-review **and** prior `review_metadata` parseable on MR — populate
   `approval_iteration`, `first_review`, `prior_review`, `regressions[]` |
 | **`precision`** | Every review where Phase 2 recorded `review_metrics` — `prior_*`, `regression_*`,
-  `false_positives_withdrawn`, `finding_precision` |
-| **`review_quality`** | When computable — `coverage_pct`, `evidence_pct`, `confidence`, `finding_precision`;
+  `false_positives_withdrawn`, `emission_rate` |
+| **`review_quality`** | When computable — `coverage_pct`, `evidence_pct`, `confidence`, `emission_rate`;
   omit on trivial mechanical MRs |
 | **`repository_health`** | v2 dimensions when repo context observable; stub `{ schema_version: 2 }` otherwise — [repository-health.md](../reference/repository-health.md) |
 

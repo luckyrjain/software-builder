@@ -21,6 +21,16 @@ unchanged **only** when squad-map returned `UNKNOWN`, with a note in the report'
 Gaps/investigation-follow-up section: *"Owning team could not be resolved (squad-map: UNKNOWN) — action
 items need manual owner assignment."*
 
+**Proposed, not assigned (P1 fix):** the substituted cell is never a bare team name — it always carries
+squad-map's own match confidence, because a name alone reads as a completed assignment to whoever reads
+the notification channel this draft gets routed to, not a draft awaiting review:
+
+| squad-map confidence | Substituted cell |
+|-----------------------|-------------------|
+| `HIGH` | `` `<team>` (proposed) `` |
+| `MEDIUM` / `LOW` | `` `<team>` (proposed — <confidence> confidence, verify before assigning) `` |
+| `UNKNOWN` | Leave placeholder unchanged, per the Gaps note above |
+
 Never invent an owner squad-map didn't actually return, and never apply a different team than the one
 squad-map resolved for `service` even if the report references other services in passing (e.g. a
 downstream dependency) — owner substitution applies only to the primary `service` this postmortem is for.

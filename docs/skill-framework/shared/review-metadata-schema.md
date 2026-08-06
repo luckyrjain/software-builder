@@ -140,7 +140,7 @@ precision:
   false_positives_withdrawn: 0
   candidates: 12
   emitted: 3
-  finding_precision: 0.25
+  emission_rate: 0.25
 ```
 
 | Field | Type | Rule |
@@ -153,7 +153,7 @@ precision:
 | `false_positives_withdrawn` | int | Prior findings withdrawn as false positive (author resolved thread, no code change) |
 | `candidates` | int | From `review_metrics.candidates` |
 | `emitted` | int | From `review_metrics.emitted` |
-| `finding_precision` | number | `emitted / candidates` when `candidates > 0` |
+| `emission_rate` | number | `emitted / candidates` when `candidates > 0` — **not statistical precision** (renamed from `finding_precision`, a P1 fix): this is a pipeline yield rate with no ground truth for which emitted findings were actually correct, not `true_positives / (true_positives + false_positives)`. `false_positives_withdrawn` above is the closest available proxy to real precision. |
 
 On first review: set `prior_total`, `prior_resolved`, `regression_count` to `0`; omit `prior_resolved_pct`.
 
@@ -166,7 +166,7 @@ review_quality:
   coverage_pct: 100
   evidence_pct: 85
   confidence: high
-  finding_precision: 0.25
+  emission_rate: 0.25
 ```
 
 | Field | Type | Rule |
@@ -174,7 +174,7 @@ review_quality:
 | `coverage_pct` | number \| partial | `(changed_files_reviewed / changed_files_total) × 100` |
 | `evidence_pct` | number | Share of emitted findings with ≥1 diff anchor and per-finding confidence `high` or `medium` |
 | `confidence` | enum | Overall review confidence — same as top-level `confidence` |
-| `finding_precision` | number | Same as `precision.finding_precision` |
+| `emission_rate` | number | Same as `precision.emission_rate` |
 
 ## 6. `repository_health` block
 
@@ -263,12 +263,12 @@ review_metadata:
     false_positives_withdrawn: 0
     candidates: 8
     emitted: 1
-    finding_precision: 0.125
+    emission_rate: 0.125
   review_quality:
     coverage_pct: 100
     evidence_pct: 100
     confidence: high
-    finding_precision: 0.125
+    emission_rate: 0.125
   repository_health:
     schema_version: 2
     dimensions:

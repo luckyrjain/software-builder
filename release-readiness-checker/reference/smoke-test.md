@@ -38,7 +38,9 @@ invocation starts.
 - No GitLab post (in any posting mode pr-review's Phase 0 might detect), no k8s manifest change, no
   incident-rca continuation past Phase 1.
 - Overall verdict matches the derivation rule in [report-format.md](report-format.md) exactly, including
-  `insufficient_metrics` and unresolved-`since` entries counting toward `Not ready`.
+  `insufficient_metrics` and unresolved-`since` entries counting toward `UNKNOWN` (not `NOT_READY` —
+  an evidence gap is not a proven blocker) and a flagged incident signal alone counting toward
+  `CONDITIONAL` (not `NOT_READY`).
 - A repo with zero MRs since `since` still appears in the report, not omitted.
 - A repo whose merged-MR count exceeds one API page still returns the full set — verify pagination
   actually ran to completion (test against a repo with enough merges to force ≥2 pages if possible).
@@ -51,7 +53,7 @@ invocation starts.
 | pr-review's Phase 0 detects a write-capable mode (`full`/`summary-only`/`general-only`) | Phase 3 posting confirmation fires per MR — answered "Hold — don't post"; same never-posts outcome as `chat-only` |
 | incident-rca Phase 1 finds a strong signal | Answered "stop here" anyway — service flagged, full RCA never runs |
 | incident-rca Phase 1 finds no signal | Service marked clear, partial report accepted as-is |
-| A `release_manifest` entry's `since` is an unresolvable tag | Recorded as unresolved in the report per `workflow/run-check.md` § 1 — not silently skipped, counted toward `Not ready` |
-| k8s can't resolve a service after ≥2 tag strategies | Answered "proceed with unknown" — recorded as `insufficient_metrics`, counted toward `Not ready`, never upgraded to `READY` |
+| A `release_manifest` entry's `since` is an unresolvable tag | Recorded as unresolved in the report per `workflow/run-check.md` § 1 — not silently skipped, counted toward `UNKNOWN` |
+| k8s can't resolve a service after ≥2 tag strategies | Answered "proceed with unknown" — recorded as `insufficient_metrics`, counted toward `UNKNOWN`, never upgraded to `READY` |
 | Datadog is unavailable but Kubernetes MCP supplies sufficient rightsizing evidence | The source-scoped Datadog failure is preserved in the k8s source profile; the service assessment continues and its degraded verdict is recorded as-is |
 | Kubernetes MCP is unavailable but Datadog supplies sufficient rightsizing evidence | The source-scoped Kubernetes failure is preserved; the service assessment continues with the live-state verification gap stated explicitly |

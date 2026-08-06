@@ -26,6 +26,13 @@ below and answer it with its one designated, deterministic reply — never leavi
    [inputs.md § Resolution branches](../../pr-review/workflow/inputs.md#resolution-branches) documents
    `!IID in group/repo`-shaped phrasing in its examples; a bare numeric project ID in that slot is
    unverified against any documented example and best avoided.
+   **Always also pass `expected_head_sha: <head_sha>`** as a typed invocation field alongside the phrase
+   ([pr-review/workflow/inputs.md § Typed invocation](../../pr-review/workflow/inputs.md#typed-invocation-skill-to-skill-callers)) —
+   this skill's `head_sha` input was previously accepted only for its own webhook-retry dedupe
+   (`last_processed_head_sha`) and never checked against the commit pr-review actually reviewed; a race
+   between the webhook firing and pr-review's `get_merge_request` call could silently review (and, with
+   `auto_post_authorized: true`, auto-post) a different commit than the one that triggered this run. See
+   [workflow/gatekeep.md](../workflow/gatekeep.md) step 2 for the mismatch outcome.
 
 2. **Merged/closed-MR stop** — per
    [pr-review/workflow/phase-1.md](../../pr-review/workflow/phase-1.md) step 1's state check: if the MR's
