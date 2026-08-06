@@ -44,6 +44,12 @@ pr-gatekeeper's policy fixes this skill's too.
 
 ## k8s-overprovisioning-datadog
 
+The wrapped skill starts with Kubernetes MCP-first source discovery. Authentication and capability
+failures are **source-scoped**: Datadog failure does not block a service when Kubernetes MCP supplies
+sufficient evidence, and Kubernetes MCP failure does not block a service when Datadog supplies sufficient
+evidence. Preserve the wrapped verdict; only its `auth_failure` for **all viable sources** produces a
+blocked assessment for that service.
+
 **Correction (round-1 review):** an earlier version of this file claimed k8s-overprovisioning-datadog's
 single-service path has no live gate. It does —
 [resolve-service.md](../../k8s-overprovisioning-datadog/workflow/resolve-service.md) documents two:
@@ -52,6 +58,7 @@ single-service path has no live gate. It does —
 |---|---|---|
 | Ambiguous service→tag confirmation | *"Confirm with `get_datadog_metric_context`... If ambiguous, ask the user **or default `env:production` when present**"* | Rely on the documented default — always resolve with `env:production` when present; only if genuinely still ambiguous with no `env:production` scope available does this become the next row |
 | Service name mismatch (`insufficient_metrics` path) | *"Ask the user to confirm the correct deployment name... Only emit `insufficient_metrics` after ≥2 tag strategies and user confirmation (**or explicit "proceed with unknown"**)"* | **"Proceed with unknown."** This is k8s's own documented non-guessing alternative to a live ask — never invent a deployment/namespace name on this skill's own judgment |
+| One Kubernetes MCP or Datadog source is unavailable/unauthorized | Source-scoped failure; continue when the other source covers required capabilities | Record the wrapped skill's degraded assessment as-is; never convert it into a release-wide auth failure |
 
 A service that resolves to `insufficient_metrics` this way is recorded in
 `RELEASE_READINESS_REPORT.md` **as `insufficient_metrics`, honestly** — not silently upgraded to

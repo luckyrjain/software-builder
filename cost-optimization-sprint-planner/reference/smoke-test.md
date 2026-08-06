@@ -44,5 +44,7 @@ k8s-overprovisioning-datadog invocation starts.
 | CCM has real cost data for a deployment | CCM wins for that deployment; `cost_rate` fallback not used |
 | `sweep_scope.namespace_prefilter` set with no matching namespaces | Empty candidate list, `stopped_reason: SCOPE_EXHAUSTED`, report still produced (empty, honestly) |
 | VPA active, recommendation unconfirmed on a deployment | That deployment still produces a real `decision_graph` with the affected dimension `DEFERRED` — not a sweep gap |
-| A deployment hits `STOP_REASON: auth_failure` | Sweep stops immediately (`stopped_reason: AUTH_FAILURE`) — no further candidates attempted, report still produced with k8s's own remediation pointer ("run ddsetup/ddconfig") in Notes |
+| Datadog authentication fails during an explicit-deployment assessment, but Kubernetes MCP supplies sufficient evidence | Source-scoped failure is retained in the wrapped graph; assessment and sweep continue |
+| Datadog authentication fails during direct namespace pre-filter discovery | Sweep stops before the loop with `stopped_reason: AUTH_FAILURE`; report suggests `ddsetup`/`ddconfig` or an explicit deployments list |
+| All viable sources for required assessment evidence are unauthorized | Sweep stops immediately with `stopped_reason: AUTH_FAILURE`; no further candidates attempted and the report identifies every attempted source |
 | `cost_rate.provider != aws` | CCM never queried for the whole sweep; every deployment falls straight through to the pre-resolved `cost_rate` fallback |

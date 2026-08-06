@@ -3,8 +3,8 @@
 Run after install or any edit to this skill. Use a repo with pr-review, k8s-overprovisioning-datadog, and
 incident-rca each already working interactively (see each skill's own `reference/smoke-test.md` to
 confirm those first), a `release_manifest` with 2 entries, at least one repo with ≥1 MR merged since its
-`since` marker, and at least one service with recent Datadog error/infra signal (to exercise the Phase 1
-"stop here" path, not just the clean path).
+`since` marker, and at least one service with a recent observability error/infra signal (Datadog or the
+configured incident-rca alternative) to exercise the Phase 1 "stop here" path, not just the clean path.
 
 Conventions: [smoke-test-conventions](../../docs/skill-framework/shared/smoke-test-conventions.md)
 
@@ -53,3 +53,5 @@ invocation starts.
 | incident-rca Phase 1 finds no signal | Service marked clear, partial report accepted as-is |
 | A `release_manifest` entry's `since` is an unresolvable tag | Recorded as unresolved in the report per `workflow/run-check.md` § 1 — not silently skipped, counted toward `Not ready` |
 | k8s can't resolve a service after ≥2 tag strategies | Answered "proceed with unknown" — recorded as `insufficient_metrics`, counted toward `Not ready`, never upgraded to `READY` |
+| Datadog is unavailable but Kubernetes MCP supplies sufficient rightsizing evidence | The source-scoped Datadog failure is preserved in the k8s source profile; the service assessment continues and its degraded verdict is recorded as-is |
+| Kubernetes MCP is unavailable but Datadog supplies sufficient rightsizing evidence | The source-scoped Kubernetes failure is preserved; the service assessment continues with the live-state verification gap stated explicitly |

@@ -58,6 +58,10 @@ rely on the `env:production` default, or "proceed with unknown" rather than gues
 An `insufficient_metrics` outcome is recorded honestly as such, never upgraded to READY or treated as
 BLOCKED.
 
+Kubernetes MCP and Datadog failures remain **source-scoped** inside the wrapped assessment. Continue and
+record the returned degraded verdict when Kubernetes MCP or Datadog still supplies sufficient evidence;
+only an `auth_failure` covering **all viable sources** is recorded as a blocked k8s result.
+
 ## 4. Incident signal per service — incident-rca, Phase 1 only
 
 Invoke **incident-rca** once per service named in `release_manifest`:

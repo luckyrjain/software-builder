@@ -211,7 +211,7 @@ decision_history:
 ## Pipeline
 
 ```
-COLLECT → NORMALIZE → REASON → VALIDATE → BUILD_GRAPH → VALIDATE_INVARIANTS → RENDER
+DISCOVER_SOURCES → RESOLVE → COLLECT → NORMALIZE → REASON → VALIDATE → BUILD_GRAPH → VALIDATE_INVARIANTS → RENDER
 ```
 
 Build: [workflow/build-graph.md](../workflow/build-graph.md). Render: [render/README.md](../render/README.md).

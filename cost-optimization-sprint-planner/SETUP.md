@@ -40,9 +40,9 @@ Working directly in this repo? `.cursor/rules/cost-optimization-sprint-planner.m
 
 | Requirement | Notes |
 |-------------|-------|
-| k8s-overprovisioning-datadog installed and configured | Its own prerequisites apply, including Datadog MCP — see [k8s-overprovisioning-datadog/SETUP.md](../k8s-overprovisioning-datadog/SETUP.md) |
+| k8s-overprovisioning-datadog installed and configured | Its own Kubernetes MCP-first prerequisites apply: Kubernetes MCP or Datadog must provide sufficient evidence — see [k8s-overprovisioning-datadog/SETUP.md](../k8s-overprovisioning-datadog/SETUP.md) |
 | squad-map installed and configured | Optional — a candidate deployment without a `SQUAD_MAP.md`/`ownership.datadog.service_aliases` match still rolls up, joined as `squad: UNKNOWN` — see [squad-map/SETUP.md](../squad-map/SETUP.md) |
-| Datadog MCP | Required directly by this skill too — the optional namespace pre-filter (`sweep_scope.namespace_prefilter`) runs its own waste-ranking queries, not delegated through k8s-overprovisioning-datadog |
+| Datadog MCP | Required directly only for `sweep_scope.namespace_prefilter`, whose waste-ranking queries are not delegated; an explicit `sweep_scope.deployments` list can use the wrapped skill's Kubernetes MCP or Datadog routing |
 
 No scripts of its own — unlike migration-program-manager, k8s-overprovisioning-datadog has no CLI to
 wrap; this skill is pure markdown-workflow, like release-readiness-checker.

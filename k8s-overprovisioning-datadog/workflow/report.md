@@ -11,7 +11,7 @@ consumes:
 
 **v3.0:** Graph is built in [build-graph.md](build-graph.md), validated in [validate-invariants.md](validate-invariants.md), transformed in [render.md](render.md). This file defines **how the rendered DORA reads to humans** — not graph construction.
 
-Pipeline: COLLECT → … → VALIDATE_INVARIANTS → **RENDER** ([render.md](render.md))
+Pipeline: DISCOVER_SOURCES → RESOLVE → COLLECT → … → VALIDATE_INVARIANTS → **RENDER** ([render.md](render.md))
 
 ## Two layers
 

@@ -13,7 +13,7 @@ The skill remains read-only and recommendation-only.
 
 ## Source routing
 
-At COLLECT start, inventory available tools by capability rather than matching a single server or exact tool name. Record a source profile and provenance for every observation.
+At DISCOVER_SOURCES start, inventory available tools by capability rather than matching a single server or exact tool name. Record the source profile before RESOLVE and retain provenance for every observation collected later.
 
 | Capability | Preferred source | Fallback | No source behavior |
 |---|---|---|---|
@@ -36,7 +36,12 @@ When both sources provide the same signal, retain both observations, use Kuberne
 
 ## Documentation changes
 
-Update the skill frontmatter/body, COLLECT workflow, MCP capability matrix, setup guide, README, examples, and stop-reason wording so none states that Datadog is always required. Keep the existing skill directory name for compatibility; clarify in documentation that the runtime policy is Kubernetes MCP-first despite the legacy name.
+Update the skill frontmatter/body, DISCOVER_SOURCES/COLLECT workflows, MCP capability matrix, setup
+guide, README, examples, and stop-reason wording so none states that Datadog is always required. Keep
+shared phase/error guidance and cross-skill wrappers aligned with the same source-scoped fallback policy;
+wrappers may retain a direct Datadog dependency only for a capability they invoke themselves, such as
+cost sweep namespace pre-filter discovery. Keep the existing skill directory name for compatibility;
+clarify in documentation that the runtime policy is Kubernetes MCP-first despite the legacy name.
 
 ## Verification
 
@@ -49,3 +54,7 @@ Add pressure/routing scenarios covering:
 5. Live-state-only Kubernetes MCP and no Datadog: sizing is deferred.
 6. Conflicting live versus historical evidence: preserve both and trigger the existing conflict gate.
 7. Neither source sufficient: blocked assessment; no recommendation.
+
+Add repository contract tests for living documentation so phase order, invariant range, inherited
+prerequisites, wrapper auth behavior, and delivery-path safety cannot silently drift. Preserve older
+dated specifications, plans, and changelogs as historical records.

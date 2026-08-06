@@ -73,6 +73,8 @@ than replacing them.
 | Phase | File | Canonical |
 |-------|------|-----------|
 | Orchestrator | `workflow/orchestrator.md` | Detect + route |
+| DISCOVER_SOURCES | `workflow/discover-sources.md` | Detect |
+| RESOLVE | `workflow/resolve-service.md` | Detect |
 | COLLECT | `workflow/collect-metrics.md` (+ modules) | Gather |
 | NORMALIZE | (inline in orchestrator) | Gather |
 | REASON | `workflow/reason.md`, `*-analysis.md` | Analyze |
@@ -81,7 +83,7 @@ than replacing them.
 | VALIDATE_INVARIANTS | `workflow/validate-invariants.md` | Validate |
 | RENDER | `workflow/render.md`, `report.md` | Report |
 
-Pipeline shorthand: **COLLECT → REASON → BUILD_GRAPH → VALIDATE_INVARIANTS → RENDER**.
+Pipeline shorthand: **DISCOVER_SOURCES → RESOLVE → COLLECT → REASON → BUILD_GRAPH → VALIDATE_INVARIANTS → RENDER**.
 
 ### squad-map mapping
 
@@ -207,14 +209,14 @@ does.
 
 | Concept | pr-review | incident-rca | k8s | domain-comprehension | squad-map | mysql-to-postgres-sql |
 |---------|-----------|--------------|-----|----------------------|-----------|----------------------|
-| MCP profile | Phase 0 announces GitLab + posting mode | Phase 0: `Datadog ✅ \| KubeSense …` line | Orchestrator prerequisites + Datadog profile | Session 0b: `GitLab ✅ \| Datadog ✅` line | Phase 0: `GitLab ✅ \| Datadog ✅` line | No MCP — `rg` scan gate |
+| MCP profile | Phase 0 announces GitLab + posting mode | Phase 0: `Datadog ✅ \| KubeSense …` line | DISCOVER_SOURCES source profile: `Kubernetes MCP … \| Datadog …` | Session 0b: `GitLab ✅ \| Datadog ✅` line | Phase 0: `GitLab ✅ \| Datadog ✅` line | No MCP — `rg` scan gate |
 | Boundary / scope | `review_boundary` — files, MR IID | `from_time`/`to_time`/`service` window | deployment + namespace + env + metrics window | `workspace_root` + repo census + `domain-config.yaml` | `workspace_root` + repo list | `service_path` + scan root |
 | Minimum evidence gate | phase-2-3 gate before posting | Phase 4 empty signals → blocked report | `STOP_REASON` when invariants fail or evidence insufficient | P0.5 user approval gate (mechanical scope checkpoint) | Config HARD STOP — no proceed without `squad_path_segment` | Scan exit 0 before merge |
-| Gather equivalent | Phase 1 — fetch diff, inventory | Phase 1 — metrics, logs, change stories | COLLECT — 7d Datadog series + manifest | Session 0 + P0 — census, classify, inventory | Phase 1 Steps 2–4 — GitLab + Datadog queries | Scan — dialect hit list |
+| Gather equivalent | Phase 1 — fetch diff, inventory | Phase 1 — metrics, logs, change stories | DISCOVER_SOURCES + RESOLVE, then COLLECT — routed live state + 7d series | Session 0 + P0 — census, classify, inventory | Phase 1 Steps 2–4 — GitLab + Datadog queries | Scan — dialect hit list |
 | Analyze equivalent | Phase 2 — detectors, rubrics | Phases 2–3 — correlate deploy ↔ errors | REASON — sizing analysis modules | P0.5–P3 — graphs, flows, deep dives | Phase 1 Step 5 — reconciliation + confidence | Classify + rewrite SQL + config |
 | Report equivalent | Phase 5 executive summary + metadata | Phase 5 RCA report + evidence JSON | RENDER — Human Report + decision graph | P5 — `EXEC_SUMMARY.md` + all deliverables | Phase 1 Step 1 — `SQUAD_MAP.md` | `SERVICE_PG_MIGRATION.md` + `assessment_metadata` |
 
-When writing cross-skill examples, use analogies above: "pr-review Phase 1 ≈ k8s COLLECT ≈ rca Phase 1 ≈ domain-comprehension Session 0 + P0 ≈ squad-map Phase 1 Steps 2–4 ≈ mysql Scan step".
+When writing cross-skill examples, use analogies above: "pr-review Phase 1 ≈ k8s DISCOVER_SOURCES + RESOLVE + COLLECT ≈ rca Phase 1 ≈ domain-comprehension Session 0 + P0 ≈ squad-map Phase 1 Steps 2–4 ≈ mysql Scan step".
 
 The four "own-Analyze-logic" composition skills built on top of the six above (each genuinely aggregates or
 gates, rather than just relaying — unlike the thin `disable-model-invocation: true` wrappers pr-gatekeeper/

@@ -13,8 +13,8 @@ deployment per conversational run.
    to produce a bounded candidate list before spending a full assessment on every deployment in an env.
 2. **Loops k8s-overprovisioning-datadog once per candidate, sequentially** — every live gate it might hit
    (ambiguous name, insufficient metrics, VPA-active-unconfirmed, cost-rate confirmation, CCM-empty
-   fallback) is answered with its own documented, non-guessing fallback, never an invented one. One
-   deployment's gate never aborts the sweep.
+   fallback) is answered with its own documented, non-guessing fallback, never an invented one.
+   Source-scoped failures do not abort the sweep; authentication failure across all viable sources does.
 3. **Resolves the cost rate once, sweep-wide** — never re-asked per deployment, the single biggest thing
    standing between this skill and running unattended over many deployments.
 4. **Joins each `decision_graph` to a squad** via `SQUAD_MAP.md`'s `Datadog service` column (falling back
@@ -51,8 +51,9 @@ make install-cost-optimization-sprint-planner
 ```
 
 Restart Cursor. Requires **k8s-overprovisioning-datadog** and **squad-map** installed too (the make
-target chains both automatically) — this skill only reads their output/composes their runs, but expects
-k8s-overprovisioning-datadog to already be configured with Datadog MCP.
+target chains both automatically). Per-deployment assessments inherit Kubernetes MCP or Datadog routing
+from the wrapped skill. Datadog is directly required only when using `namespace_prefilter`; explicit
+deployment lists do not add that requirement.
 
 ## Related skills
 

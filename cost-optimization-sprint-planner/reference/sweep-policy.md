@@ -49,6 +49,9 @@ sweep_run:
      `top_n_deployments_per_namespace`.
    - The resulting candidate list is **at most** `top_n_namespaces × top_n_deployments_per_namespace`
      deployments — never more, even if more namespaces/deployments show waste.
+   - Datadog is a direct dependency for this namespace pre-filter mode. If its authentication fails,
+     candidate discovery stops with `AUTH_FAILURE`; no per-deployment Kubernetes MCP fallback can replace
+     a candidate list that was never built. The caller can retry with an explicit deployments list.
 3. Apply `max_deployments_per_run` (if set) as a final cap on the candidate list, taking the
    highest-waste-ranked entries first when the pre-filter produced a ranking; taking list order when
    `sweep_scope.deployments` was explicit (caller's own order is authoritative, this skill doesn't
@@ -74,18 +77,16 @@ Every live gate that invocation might hit is answered per
 | Real `decision_graph` produced (any `assessment.final_decision`, including `KEEP_CONFIGURATION`) | `outcome: ASSESSED` — **expected, normal outcome, always joined into the rollup** (per org-rollup-schema.md's own "never omit a rollup item just because a deployment wasn't overprovisioned" rule) — continue to the next candidate |
 | `insufficient_metrics` after gate-policy's "proceed with unknown" still yields nothing | `outcome: INSUFFICIENT_METRICS` — recorded as a sweep gap (see [reference/report-format.md](report-format.md)), **continue to the next independent deployment**, never abort the sweep |
 | Ambiguous name/tag with no `sweep_scope.env` match and no resolvable default | `outcome: AMBIGUOUS_UNRESOLVED` — same as above, recorded as a gap, continue |
-| `STOP_REASON: auth_failure` (Datadog MCP auth broken — k8s's own Critical, "Halt — no metrics") | `outcome: AUTH_FAILURE` — **not isolated**, see below: stops the whole sweep, not just this deployment |
+| `STOP_REASON: auth_failure` (all viable sources for the wrapped assessment are unauthorized) | `outcome: AUTH_FAILURE` — stops the whole sweep; configure one usable evidence source before continuing |
 
 Almost every k8s-overprovisioning-datadog gate this skill can hit resolves to a documented, non-blocking,
-per-deployment fallback per `reference/gate-policy.md`, so most outcomes above are isolate-and-continue —
-there is no `ESCALATED`-equivalent outcome in loop-task-implementer's sense (a task-specific failure worth
-recording and moving past). **`auth_failure` is the one genuine exception**, per
-[reference/gate-policy.md § Sweep-wide stop](gate-policy.md#sweep-wide-stop-not-per-deployment-isolation-the-auth-failure-gate):
-it's an environment-level failure (broken/expired Datadog MCP credentials), not a per-deployment
-data-quality issue — every remaining candidate would hit the identical failure. Unlike backlog-runner's
-`CONSECUTIVE_ESCALATION_BREAKER` (which waits for a pattern across multiple items before concluding a
-systemic problem), a **single** `auth_failure` is trusted as systemic immediately and stops the sweep —
-there's no ambiguity to wait out the way there can be with three independent hard tasks.
+per-deployment fallback per `reference/gate-policy.md`. A source-scoped Datadog authentication failure
+does not produce `AUTH_FAILURE` when Kubernetes MCP still supplies sufficient evidence; the wrapped run
+continues and retains the failure in `source_profile`. The same applies in reverse. `AUTH_FAILURE` is
+reserved for either direct namespace pre-filter authentication failure (§ 2) or a wrapped assessment in
+which **all viable sources** for required evidence are unauthorized. Both are environment-level failures
+that would recur for remaining candidates, so they stop the sweep immediately. See
+[reference/gate-policy.md § Sweep-wide auth stops](gate-policy.md#sweep-wide-auth-stops-direct-namespace-pre-filter-or-all-viable-sources).
 
 ## 5. Session-level stop conditions (circuit breakers)
 
@@ -97,7 +98,7 @@ mid-run — when any of:
 | `max_deployments_per_run` deployments attempted this run | `MAX_DEPLOYMENTS_REACHED` |
 | Wall-clock reaches `deadline` (if set) | `DEADLINE_REACHED` |
 | `consumed_tokens` reaches `session_token_budget` (if set) | `TOKEN_BUDGET_EXHAUSTED` |
-| A deployment hits `outcome: AUTH_FAILURE` (§ 4) | `AUTH_FAILURE` |
+| Direct Datadog authentication fails while building the namespace pre-filter candidate list, or a deployment hits `outcome: AUTH_FAILURE` because all viable sources are unauthorized (§ 4) | `AUTH_FAILURE` |
 | § 2's candidate-list construction produced **zero** candidates (nothing to assess at all — e.g. an empty `sweep_scope.deployments`, or a `namespace_prefilter` that matched no namespaces) | `SCOPE_EXHAUSTED` |
 | Every candidate in a **non-empty** list (§ 2) was attempted, none of the conditions above fired first | `COMPLETED` |
 
@@ -113,6 +114,7 @@ Regardless of `stopped_reason`, always render
 [`COST_OPTIMIZATION_SPRINT_REPORT.md`](report-format.md) — a sweep that stops early on
 `MAX_DEPLOYMENTS_REACHED`/`DEADLINE_REACHED`/`TOKEN_BUDGET_EXHAUSTED`/`AUTH_FAILURE` still reports every
 deployment it did assess, ranked, plus an explicit note of how many candidates were never reached and why
-(never a silent partial sweep presented as complete). On `AUTH_FAILURE` specifically, include k8s's own
-remediation pointer ("run ddsetup/ddconfig") in the Notes section per
-[reference/gate-policy.md § Sweep-wide stop](gate-policy.md#sweep-wide-stop-not-per-deployment-isolation-the-auth-failure-gate).
+(never a silent partial sweep presented as complete). On `AUTH_FAILURE`, report whether the failed scope
+was the direct namespace pre-filter or all viable per-deployment evidence sources, then include the
+matching remediation from
+[reference/gate-policy.md § Sweep-wide auth stops](gate-policy.md#sweep-wide-auth-stops-direct-namespace-pre-filter-or-all-viable-sources).
