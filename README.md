@@ -51,7 +51,8 @@ file only orients; the per-skill `README.md` linked below is the source of truth
 git clone https://github.com/luckyrjain/software-builder.git
 cd software-builder
 make install                # every skill
-make install-pr-review      # one skill (make install-<skill> for any name in the table above)
+make install-pr-review      # one skill (make install-<skill> for any name in the table above —
+                             # except k8s-overprovisioning-datadog, whose target is install-k8s-overprovisioning)
 ```
 
 `scripts/install.sh` copies skill directories to **both** `~/.cursor/skills/` and `~/.claude/skills/` by
@@ -101,7 +102,8 @@ make setup
 
 ```bash
 make lint               # every skill's lint target + lint-framework + shellcheck on scripts/*.sh
-make lint-pr-review      # one skill's lint target (make lint-<skill> for any name in the Skills table above)
+make lint-pr-review      # one skill's lint target (make lint-<skill> for any name in the Skills table above —
+                          # except k8s-overprovisioning-datadog, whose target is lint-k8s-skill)
 ```
 
 What each `lint-<skill>` target actually checks (line limits, required frontmatter, schema validators,

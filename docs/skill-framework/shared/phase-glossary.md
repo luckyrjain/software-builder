@@ -218,8 +218,9 @@ When writing cross-skill examples, use analogies above: "pr-review Phase 1 ≈ k
 
 The four "own-Analyze-logic" composition skills built on top of the six above (each genuinely aggregates or
 gates, rather than just relaying — unlike the thin `disable-model-invocation: true` wrappers pr-gatekeeper/
-incident-triage-agent/who-owns-x-bot/backlog-runner, or the platform-neutral loop-task-implementer, none of
-which this file's phase vocabulary applies to per the framework README):
+incident-triage-agent/who-owns-x-bot, which each get their own mapping in §§2–4 above via the skill they
+wrap, or loop-task-implementer/backlog-runner, the two skills this file's phase vocabulary genuinely does
+not apply to per the framework README):
 
 | Concept | release-readiness-checker | migration-program-manager | cost-optimization-sprint-planner | weekly-squad-digest |
 |---------|---------------------------|----------------------------|-----------------------------------|----------------------|
