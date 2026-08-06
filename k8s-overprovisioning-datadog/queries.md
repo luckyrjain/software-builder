@@ -1,4 +1,8 @@
-# Datadog Queries Reference
+# Datadog Fallback Queries Reference
+
+Use these queries only for capabilities routed to Datadog by
+[mcp-capabilities.md](reference/mcp-capabilities.md). Kubernetes MCP remains the preferred source for
+live cluster state and equivalent metrics.
 
 Replace `{scope}` with resolved tags, e.g. `kube_deployment:example-service,env:production`.
 

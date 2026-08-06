@@ -1,5 +1,5 @@
 ---
-workflow_version: 3.0
+workflow_version: 3.4
 phase: checklists
 produces:
   - checklist_status
@@ -42,6 +42,10 @@ Single source for repeated guardrails. Complete relevant checklist before markin
 
 ## Collection / scope
 
+- [ ] Source profile inventories Kubernetes and Datadog capabilities independently
+- [ ] Kubernetes MCP used for live state when available; Datadog fallback selected per capability
+- [ ] Source/tool/query/window/aggregation recorded per observation
+- [ ] Dual-source disagreement preserved and gated as `conflicting_signals`
 - [ ] `telemetry.intent` on every Datadog call
 - [ ] `{deploy_scope}` vs `{app_scope}` correct ([queries.md](../queries.md))
 - [ ] HPA queries use resolved `horizontalpodautoscaler` tag
@@ -49,7 +53,7 @@ Single source for repeated guardrails. Complete relevant checklist before markin
 ## Report (v3.0 — graph-first)
 
 - [ ] `decision_graph` built before any markdown ([build-graph.md](../workflow/build-graph.md))
-- [ ] INV-01–INV-13 pass ([validate-invariants.md](../workflow/validate-invariants.md))
+- [ ] INV-01–INV-14 pass ([validate-invariants.md](../workflow/validate-invariants.md))
 - [ ] `schema_version: 3` on graph
 - [ ] `OBS_*` / `EVID_*` / `DEC_*` / `REC_*` namespaced IDs
 - [ ] Values only in `observations[]` — DRY elsewhere

@@ -66,11 +66,12 @@ delivery_pointer:
   verified: true | false
 ```
 
-Infer path from git MCP ([collect-metrics.md](collect-metrics.md)); when unknown use *path not verified* with
-`verified: false`. **`verified: false` blocks `READY`** — a recommendation cannot carry the "safe to
-execute" label while its own delivery pointer is unconfirmed. Downgrade the recommendation's status to
-`DEFERRED` (missing evidence: unverified delivery path) until the path is confirmed. **KEEP** / **OBSERVE**
-recs omit `delivery_pointer`. Enforced at INV-12 (**critical** — blocks RENDER).
+Obtain the path from Git-backed configuration ([collect-metrics.md](collect-metrics.md)) or explicit user
+confirmation and set `verified: true`. Never infer a delivery path. **`verified: false` blocks `READY`** —
+a recommendation cannot carry the "safe to execute" label while its own delivery pointer is unconfirmed.
+Downgrade the recommendation's status to `DEFERRED` (missing evidence: unverified delivery path) until the
+path is confirmed. **KEEP** / **OBSERVE** recs omit `delivery_pointer`. Enforced at INV-12 (**critical** —
+blocks RENDER).
 Schema: [decision-graph-schema.md](../reference/decision-graph-schema.md#recommendation).
 
 ## Cost gate

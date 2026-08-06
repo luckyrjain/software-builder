@@ -69,7 +69,7 @@ Without MCP, skill continues — CODEOWNERS fallback with confidence capped at L
 Full PAT creation steps: [pr-review/SETUP.md § Create a GitLab PAT](../pr-review/SETUP.md#create-a-gitlab-personal-access-token-pat).
 
 **Datadog MCP** — configured via the Cursor Datadog plugin, not a JSON block. Run the **ddsetup** skill
-if Datadog MCP tools are missing: [k8s-overprovisioning-datadog/SETUP.md § Enable Datadog MCP](../k8s-overprovisioning-datadog/SETUP.md#2-enable-datadog-mcp).
+if Datadog MCP tools are missing: [k8s-overprovisioning-datadog/SETUP.md § Enable Datadog MCP](../k8s-overprovisioning-datadog/SETUP.md#3-enable-datadog-mcp-fallback-and-historical-telemetry).
 
 ## Config files
 

@@ -398,20 +398,42 @@ Basis:
 
 ---
 
-### Scenario: Datadog MCP absent
+### Scenario: Datadog fallback when Kubernetes history is unavailable
 
-**User:** "Is api-gateway overprovisioned?" (Datadog tools missing)
-
-**Agent:**
-1. Prerequisites — run **ddsetup**; if still missing, stop with blocked report
+**User:** "Is api-gateway overprovisioned?" (Kubernetes MCP has live state; Datadog has 7d metrics)
 
 **Expected fragments:**
 
-```
-**k8s MCP profile:** Datadog ❌ | git MCP ✅
+```text
+**k8s source profile:** Kubernetes MCP ✅ live / ❌ history | Datadog ✅ history + monitors
 
-Cannot assess utilization without Datadog metrics. Run ddsetup, then re-run this skill.
-STOP_REASON: auth_failure
+Live requests, limits, replicas, and HPA come from Kubernetes MCP. Seven-day fleet p95 and memory
+peak use Datadog fallback because the cluster source exposes only point-in-time metrics.
+```
+
+### Scenario: Datadog absent but Kubernetes history is sufficient
+
+**User:** "Right-size api-gateway" (Kubernetes MCP has live state + equivalent 7d history)
+
+**Expected fragments:**
+
+```text
+**k8s source profile:** Kubernetes MCP ✅ live + history | Datadog ❌
+
+Assessment continues. Incident, monitor, APM, change-history, and cost signals are marked unavailable;
+their existing confidence/safety gates still apply.
+```
+
+### Scenario: neither source can support sizing
+
+**User:** "Right-size api-gateway" (Kubernetes MCP has live state only; Datadog unavailable)
+
+**Expected fragments:**
+
+```text
+Live state collected; seven-day CPU p95 and memory peak are missing.
+STOP_REASON: insufficient_metrics
+Blocked assessment — no sizing recommendation. Attempted sources and missing capabilities are listed.
 ```
 
 ---

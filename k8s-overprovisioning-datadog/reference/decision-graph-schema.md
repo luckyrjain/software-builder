@@ -4,7 +4,7 @@
 
 ```text
 schema_version: 3
-skill_version: v3.0
+skill_version: v3.4
 ```
 
 Full example: [decision-graph.example.yaml](decision-graph.example.yaml). Invariants: [invariants.md](invariants.md).
@@ -51,7 +51,8 @@ Values live **only** here. Derived observations use `OBS_DERIVED_*` with optiona
 ```yaml
 id: EVID_CPU_P95_FLEET
 observation_id: OBS_CPU_P95_FLEET   # exactly one OBS_* per EVID_*
-source: datadog                     # required unless quality: missing
+source: kubernetes-mcp              # provider slug; required unless quality: missing
+source_detail: cluster/context      # optional provider-specific identifier; no secrets
 metric: kubernetes.pod.cpu.usage.dist
 aggregation: p95.dist
 window: 7d
@@ -61,6 +62,37 @@ weight: critical                    # critical | high | medium | low
 ```
 
 No `value` field on evidence.
+
+Allowed source vocabulary: `kubernetes-mcp`, `datadog`, `gitlab`, `github`, `user-provided`, and
+`derived`. Use a stable lower-case slug for another capability-matched MCP and identify it in
+`source_detail`.
+
+Record `metadata.source_profile` with capability coverage, selected fallbacks, and source failures:
+
+```yaml
+source_profile:
+  sources:
+    kubernetes_mcp:
+      status: connected
+      capabilities: [live_state, current_metrics]
+      failures: []
+    datadog:
+      status: connected
+      capabilities: [historical_metrics, incidents_monitors]
+      failures: []
+  routes:
+    live_state: kubernetes_mcp
+    current_metrics: kubernetes_mcp
+    historical_metrics: datadog
+    incidents_monitors: datadog
+    manifest_config: kubernetes_mcp
+    cost: unavailable
+```
+
+`sources` must include `kubernetes_mcp` and `datadog`, even when absent. `routes` must include at
+least `live_state` and `historical_metrics`; use `unavailable` explicitly rather than omitting a route.
+When two sources provide the same signal, store separate observations/evidence entries and link both
+to any `conflicting_signals` contradiction.
 
 ### Decision
 
@@ -113,7 +145,7 @@ delivery_pointer:
   path: helm/payment/values.yaml
   field: resources.requests.cpu
   format: helm_values              # helm_values | kustomize | manifest | terraform | gitops
-  verified: true                   # false when path inferred or unverified
+  verified: true                   # required for READY; Git-observed or explicitly user-confirmed
 recommendation_confidence:
   value: 0.85
   band: High

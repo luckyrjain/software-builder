@@ -2,7 +2,7 @@
 # Canonical shape: reference/decision-graph-schema.md
 
 schema_version: 3
-skill_version: v3.0
+skill_version: v3.4
 
 metadata:
   generated: "2026-06-30T10:00:00Z"
@@ -11,6 +11,23 @@ metadata:
   window_utilization: 7d
   metrics_queried: 28
   missing_metrics: []
+  source_profile:
+    sources:
+      kubernetes_mcp:
+        status: connected
+        capabilities: [live_state, manifest_config]
+        failures: []
+      datadog:
+        status: connected
+        capabilities: [current_metrics, historical_metrics, incidents_monitors]
+        failures: []
+    routes:
+      live_state: kubernetes_mcp
+      current_metrics: datadog
+      historical_metrics: datadog
+      incidents_monitors: datadog
+      manifest_config: kubernetes_mcp
+      cost: unavailable
 
 assessment:
   final_decision: TRIM_RESOURCES
@@ -150,6 +167,7 @@ recommendations:
     delivery_pointer:
       path: helm/api-gateway/values.yaml
       field: resources.requests.cpu
+      verified: true
     risk: { likelihood: Low, impact: Low, score: Low, residual: Low }
 
 contradictions: []

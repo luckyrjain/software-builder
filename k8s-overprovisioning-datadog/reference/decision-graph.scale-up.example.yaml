@@ -2,7 +2,7 @@
 # Canonical shape: reference/decision-graph-schema.md
 
 schema_version: 3
-skill_version: v3.0
+skill_version: v3.4
 
 metadata:
   generated: "2026-06-30T11:00:00Z"
@@ -11,6 +11,23 @@ metadata:
   window_utilization: 7d
   metrics_queried: 26
   missing_metrics: []
+  source_profile:
+    sources:
+      kubernetes_mcp:
+        status: absent
+        capabilities: []
+        failures: [not_connected]
+      datadog:
+        status: connected
+        capabilities: [current_metrics, historical_metrics, incidents_monitors]
+        failures: []
+    routes:
+      live_state: unavailable
+      current_metrics: datadog
+      historical_metrics: datadog
+      incidents_monitors: datadog
+      manifest_config: unavailable
+      cost: unavailable
 
 assessment:
   final_decision: SCALE_UP
@@ -134,6 +151,7 @@ recommendations:
     delivery_pointer:
       path: k8s/checkout-worker/deployment.yaml
       field: resources.requests.cpu
+      verified: true
     risk: { likelihood: Low, impact: Medium, score: Low, residual: Low }
   - id: REC_SCALE_UP_ADVISORY
     priority: P1
@@ -152,6 +170,7 @@ recommendations:
     delivery_pointer:
       path: k8s/checkout-worker/hpa.yaml
       field: spec.maxReplicas
+      verified: true
     risk: { likelihood: Medium, impact: High, score: Medium, residual: Medium }
 
 contradictions: []

@@ -142,10 +142,11 @@ Do **not** emit graph enum values (`BLOCKED`, `READY`, …) in appendix recommen
 
 **`delivery_pointer` rendering:**
 
-- `verified: true` (or field absent) — render as: `Where to apply: \`<path>\` (\`<field>\`)`
-- `verified: false` — render as: `Where to apply: \`<path>\` (\`<field>\`) ⚠️ *path inferred — verify before applying*`
+- `verified: true` — render as: `Where to apply: \`<path>\` (\`<field>\`)`
+- `verified: false` on a DEFERRED rec — render as: `Where to apply: \`<path>\` (\`<field>\`) ⚠️ *path unconfirmed — verify before applying*`
 
-Never reach RENDER with READY actionable recs missing `delivery_pointer.path` (INV-12 critical). If
+Never reach RENDER with READY actionable recs missing `delivery_pointer.path` or `verified: true`
+(INV-12 critical). If
 `invariant_violations[]` lists INV-12, emit graph + violations only — do not author Human Report.
 
 ## RejectedChanges fields (human)

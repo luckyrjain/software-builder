@@ -2,11 +2,23 @@
 
 Globally stable. Prefix **required**. Registry: [id-namespaces.md](id-namespaces.md).
 
+## Dual-source companion IDs
+
+Keep the normal `OBS_<SIGNAL>` ID for the value selected by routing policy. When another source also
+provides that signal, retain it as `OBS_<SIGNAL>_ALT_<SOURCE>` and create the exactly matching
+`EVID_<SIGNAL>_ALT_<SOURCE>` row. Normalize `<SOURCE>` to an uppercase slug such as
+`KUBERNETES_MCP`, `DATADOG`, `GITLAB`, `GITHUB`, or `USER_PROVIDED`.
+
+For material disagreement, add both IDs to an Unresolved contradiction, emit
+`STOP_REASON: conflicting_signals`, and prohibit READY cut recommendations. Never overwrite one value
+or attach two evidence rows to the same observation.
+
 ## CPU
 
 | ID | Signal |
 |----|--------|
 | `OBS_CPU_USAGE_AVG` | App-container avg CPU (cores) |
+| `OBS_CPU_USAGE_CURRENT` | Point-in-time app-container CPU from live cluster metrics |
 | `OBS_CPU_REQUEST` | CPU request per pod |
 | `OBS_CPU_LIMIT` | CPU limit per pod |
 | `OBS_CPU_P95_FLEET` | Fleet p95 from `.dist` |

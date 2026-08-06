@@ -9,7 +9,15 @@ re-run attestation and phase-index rows after any model routing change.
 
 | Scenario | Expected behavior |
 |----------|-------------------|
-| Datadog returns 403 on first query | Run **ddconfig** / **ddsetup**; max two retries; then `auth_failure` blocked report — no verdict |
+| Kubernetes MCP with complete capabilities; Datadog also connected | Kubernetes supplies live state and equivalent metrics; Datadog is queried only for unique historical/operational/cost capabilities |
+| Kubernetes MCP with partial capabilities; Datadog complete | Missing capabilities fall back individually to Datadog; do not abandon Kubernetes live-state truth |
+| No Kubernetes MCP; Datadog complete | Datadog assessment continues; absence of Kubernetes MCP alone is not a blocker |
+| No Datadog with history-capable Kubernetes MCP | Assessment continues; mark Datadog-only incident/monitor/APM/change/cost signals unavailable |
+| Live-state-only Kubernetes MCP and no Datadog | Preserve live observations; defer history-dependent sizing and emit `insufficient_metrics` when no sizing dimension is supportable |
+| Conflicting live versus historical evidence | Retain both observations; Kubernetes is live-state truth, Datadog historical truth; emit `conflicting_signals` and no cut |
+| Neither source sufficient | Blocked assessment with `STOP_REASON: insufficient_metrics`, attempted sources, missing capabilities, and no recommendation |
+| Datadog returns 403; Kubernetes MCP has sufficient equivalent evidence | Record source-scoped failure and continue with Kubernetes MCP; do not emit global `auth_failure` |
+| Datadog and Kubernetes MCP both reject required reads | Retry each source at most twice; `auth_failure` blocked report with attempted sources — no verdict |
 | Service has < 24h metrics history | Report with explicit caveat or stop per user preference; never invent utilization numbers |
 | Throttle > 5% on 7d average | **Block CPU trim** recommendations; cite throttle evidence ID |
 | Fleet p95 ≥ 70% of CPU request | **Block CPU cut**; state fleet p95 in facts |
@@ -32,7 +40,7 @@ re-run attestation and phase-index rows after any model routing change.
 | Jira reports active deploy freeze | Ready recs → Deferred; Risks notes freeze — assessment not blocked |
 | Deploy freeze check unavailable (no Jira/GitLab) | Assessment completes; Risks notes *deploy freeze not checked* |
 | ≥1 Ready change rec emitted | Post-change verification block present (7d re-run instructions) |
-| Ready CPU cut rec without `delivery_pointer.path` | **Invalid** — INV-12 critical; graph + violations only — **no** Human Report until `path` set (`verified: false` allowed) |
+| Ready CPU cut rec without a confirmed `delivery_pointer.path` | **Invalid** — INV-12 critical; graph + violations only — **no** Human Report until `path` is set and `verified: true` |
 | Human Report Evidence table row order | Fleet p95 → Kafka lag → memory peak → HPA → CPU avg → HTTP → restarts → manifest |
 | Human Report recommendation line format | Decision and Decision confidence on **separate lines** — not `(Blocked, High confidence)`; keep recs use `Decision: Keep` not `State: Blocked` |
 | Human Report Recommendations sort order | Observability (instrument lag) → actionable change (raise memory) → holds (keep CPU, keep replicas) — not holds before concrete work |

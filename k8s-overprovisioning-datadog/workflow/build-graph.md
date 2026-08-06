@@ -1,5 +1,5 @@
 ---
-workflow_version: 3.0
+workflow_version: 3.4
 phase: build-graph
 produces:
   - decision_graph
@@ -11,6 +11,7 @@ consumes:
   - computed_confidence
   - assessment_fingerprint
   - cost_gate
+  - source_profile
 ---
 
 # Build decision graph
@@ -28,13 +29,15 @@ Assemble the typed `decision_graph` object per [decision-graph-schema.md](../ref
 5. Compute `assessment.assessment_confidence` and each `recommendation_confidence` per [confidence-formula.md](../reference/confidence-formula.md); store `arithmetic` string.
 6. Set `assessment.final_decision`, `severity`, `decision_history` when prior graph/report available.
 7. Add `why_this_matters[]` entries for BLOCKED/DEFER `DEC_*` — reference IDs only.
-8. **Delivery pointer (INV-12):** for each `REC_*` with `status: READY` and actionable id (`*_REDUCE`,
+8. Copy the complete `source_profile` to `metadata.source_profile`. Missing required routes is
+   `INV-14`; do not render without the profile.
+9. **Delivery pointer (INV-12):** for each `REC_*` with `status: READY` and actionable id (`*_REDUCE`,
    `*_INCREASE`, `*_ADJUST`, `REC_MANIFEST_RECONCILE`), set non-empty `delivery_pointer.path` before
    VALIDATE_INVARIANTS. Discover path from git MCP manifest/Helm/kustomize reads in COLLECT
-   ([collect-metrics.md](collect-metrics.md)); when unverified use `verified: false` and the best path
-   from deployment metadata — never omit `path` on READY actionable recs. When git MCP was ❌ during
-   COLLECT, set `verified: false` and add Human Report Risks line: *"Apply path not git-verified — confirm
-   manifest/Helm location before merge."* Gate detail:
+   ([collect-metrics.md](collect-metrics.md)). If the path is unknown, set the recommendation to
+   `DEFERRED` and ask the user to confirm it; never invent a path. A Git-observed or explicitly
+   user-confirmed path sets `verified: true`. An unconfirmed candidate path may be retained only on a
+   `DEFERRED` recommendation with `verified: false`. Gate detail:
    [validate.md § Delivery pointer gate](validate.md#delivery-pointer-gate).
 
 ## Do not

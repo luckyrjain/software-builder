@@ -8,7 +8,9 @@ only when the cost gate is open ([validate.md](../workflow/validate.md#cost-gate
 | Order | Phase | Workflow file | Produces |
 |-------|-------|---------------|----------|
 | 0 | Detect / route | [orchestrator.md](../workflow/orchestrator.md) | `intent_route`, modules to load |
-| 0b | Namespace waste ranking *(cluster-wide)* | [resolve-service.md](../workflow/resolve-service.md) §Namespace ranking | `namespace_ranking`, drill-down target |
+| 0a | DISCOVER_SOURCES | [discover-sources.md](../workflow/discover-sources.md) | `source_profile` before any workload query |
+| 0b | RESOLVE | [resolve-service.md](../workflow/resolve-service.md) | `service_identity` using selected routes |
+| 0c | Namespace waste ranking *(cluster-wide)* | [resolve-service.md](../workflow/resolve-service.md) §Namespace ranking | `namespace_ranking`, drill-down target |
 | 1 | COLLECT | [collect-metrics.md](../workflow/collect-metrics.md) | raw metrics, pre-flight |
 | 2 | NORMALIZE | [evidence.md](../workflow/evidence.md) | `OBS_*`, `EVID_*` registries |
 | 3 | REASON | [reason.md](../workflow/reason.md) (+ [confidence.md](../workflow/confidence.md) §APM latency modifier) + dimension modules | `DEC_*` candidates, inferences |
@@ -19,7 +21,7 @@ only when the cost gate is open ([validate.md](../workflow/validate.md#cost-gate
 | 8 | RENDER | [render.md](../workflow/render.md), [report.md](../workflow/report.md) | Human Report + appendix |
 
 ```
-COLLECT → NORMALIZE → REASON → VALIDATE → [COST] → BUILD_GRAPH → VALIDATE_INVARIANTS → RENDER
+DISCOVER_SOURCES → RESOLVE → COLLECT → NORMALIZE → REASON → VALIDATE → [COST] → BUILD_GRAPH → VALIDATE_INVARIANTS → RENDER
 ```
 
 Dimension modules (loaded on intent during REASON): [cpu-analysis.md](../workflow/cpu-analysis.md),

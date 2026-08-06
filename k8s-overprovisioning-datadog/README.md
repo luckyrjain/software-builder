@@ -1,8 +1,9 @@
 # k8s-overprovisioning-datadog
 
 **Kubernetes Deployment Optimization Readiness Assessment (DORA — not the DevOps Research & Assessment
-metrics acronym)** for Cursor. Queries Datadog for CPU, memory, replica, HPA, and cost signals and
-produces a structured rightsizing report — not a single "reduce requests by X%" number.
+metrics acronym)** for Cursor. Uses Kubernetes MCP first for live cluster truth and falls back to
+Datadog per missing capability, producing a structured rightsizing report — not a single "reduce
+requests by X%" number. The directory keeps its legacy name for compatibility.
 
 Auto-invokes from natural language when you ask whether a service is overprovisioned, right-sized, or
 wasting cluster cost.
@@ -11,8 +12,8 @@ wasting cluster cost.
 
 1. **Resolves the deployment** — service name → `kube_deployment`, namespace, environment (default
    `env:production`).
-2. **Collects telemetry** via Datadog MCP — utilization, requests, limits, throttling, OOM, HPA, monitors,
-   optional CCM cost.
+2. **Collects evidence by capability** — Kubernetes MCP for live state/current metrics; Datadog
+   fallback for unavailable capabilities and unique history, monitors, APM, change, and optional CCM cost.
 3. **Normalizes units** and runs intent-specific analysis modules (CPU cyclic check, memory peak proxy,
    replica/HPA, Kafka lag, SLO correlation).
 4. **Applies safety gates (P0)** — auth failure, insufficient metrics, manifest drift, active firing
@@ -57,7 +58,7 @@ internals below, which are the structural spec and machine format, not what you'
 | **Technical Appendix** | Full DORA audit trail (appendices A–E) — decision graph IDs, evidence registry, metadata, validation |
 | **Decision graph** | Typed YAML/JSON primary artifact (`schema_version: 3`) |
 | **`FINAL_DECISION`** | Machine-readable executive decision + computed confidence (appendix C) |
-| **Invariants** | Self-validating graph (INV-01–INV-13) before render |
+| **Invariants** | Self-validating graph (INV-01–INV-14) before render |
 | **JSON export** | Lossless graph view ([render/json.md](render/json.md)); summary-only markdown optional |
 
 Graph: [reference/decision-graph-schema.md](reference/decision-graph-schema.md). Render: [render/README.md](render/README.md). Presentation rules: [workflow/report.md](workflow/report.md).
@@ -65,21 +66,23 @@ Graph: [reference/decision-graph-schema.md](reference/decision-graph-schema.md).
 ## Pipeline (agent)
 
 ```
-COLLECT → NORMALIZE → REASON → VALIDATE → [COST if gated] → BUILD_GRAPH → VALIDATE_INVARIANTS → RENDER
+DISCOVER_SOURCES → RESOLVE → COLLECT → NORMALIZE → REASON → VALIDATE → [COST if gated] → BUILD_GRAPH → VALIDATE_INVARIANTS → RENDER
 ```
 
 Routing and intent shortcuts: [workflow/orchestrator.md](workflow/orchestrator.md).
 
 | Module | Role |
 |--------|------|
-| `collect-metrics.md` | Datadog queries for utilization and requests |
+| `discover-sources.md` | Capability inventory and source routes before workload queries |
+| `resolve-service.md` | Service identity through preselected routes |
+| `collect-metrics.md` | Kubernetes MCP-first capability routing and telemetry collection |
 | `cpu-analysis.md` / `memory-analysis.md` | Dimension verdicts |
 | `replica-analysis.md` | HPA / KEDA / replica count |
 | `workload-analysis.md` | Kafka lag, monitors, SLO |
 | `cost-analysis.md` | CCM (gated) |
 | `stop-reasons.md` | P0 safety registry |
 | `build-graph.md` | Assemble typed `decision_graph` (primary artifact) |
-| `validate-invariants.md` | INV-01–INV-13 gate before render |
+| `validate-invariants.md` | INV-01–INV-14 gate before render |
 | `render.md` | Human Report + Technical Appendix (markdown) and/or JSON |
 | `report.md` | Human-first presentation rules (ID translation, smoke tests) |
 
@@ -87,9 +90,15 @@ Lookup tables (do not invent inline): [queries.md](queries.md), [thresholds.md](
 
 ## Prerequisites
 
-- **Datadog MCP** (`plugin-datadog-datadog`) with metrics (+ monitors, optional CCM/traces)
-- **`telemetry.intent`** on every Datadog call (skill supplies automatically)
-- Optional **Git MCP** for manifest-vs-running drift check
+- Prefer a read-only **Kubernetes MCP** for live workloads, autoscalers, pod status, events, and any
+  current/historical metrics it exposes.
+- Configure **Datadog MCP** as the capability fallback and for historical/operational signals. It is
+  optional when Kubernetes MCP supplies equivalent history for the requested decision.
+- **`telemetry.intent`** on every Datadog call (skill supplies automatically).
+- Optional **Git MCP** for manifest fallback and delivery paths.
+
+If neither Kubernetes MCP nor Datadog supplies sufficient historical evidence, the skill returns a
+blocked assessment with `STOP_REASON: insufficient_metrics`; it never sizes from a point-in-time sample.
 
 Setup: [SETUP.md](SETUP.md).
 

@@ -1,13 +1,17 @@
 # External dependencies — k8s-overprovisioning-datadog
 
-## Required — Datadog MCP
+## Evidence sources — capability-dependent
 
-Primary data source for COLLECT. Configure per [SETUP.md](SETUP.md).
+Prefer a read-only Kubernetes MCP for live cluster state and use Datadog per missing capability and
+for unique historical/operational telemetry. Either can support a run when it supplies sufficient
+evidence for the requested decision. Configure per [SETUP.md](SETUP.md).
 
 ## Optional — Git MCP
 
-Manifest/Helm path discovery for `delivery_pointer.path` (INV-12). When absent, use `verified: false`
-and best-guess path from deployment metadata.
+Manifest/Helm path discovery for `delivery_pointer.path` (INV-12) when Kubernetes MCP cannot expose
+the running configuration. A Git-observed or explicitly user-confirmed path uses `verified: true`.
+Keep an unconfirmed candidate only on a `DEFERRED` recommendation with `verified: false`; never invent
+a best-guess path.
 
 ## Skill pin file
 
