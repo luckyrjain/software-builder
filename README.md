@@ -13,7 +13,7 @@ role boundaries, evidence rules, and reusable outputs while leaving model choice
 host agent.
 
 **Start here:** [Prerequisites](#prerequisites) · [3-minute quickstart](#3-minute-quickstart) ·
-[How it works](#how-it-works) · [Agent support](#agent-support) · [Skills](#skill-catalog) ·
+[How it works](#how-it-works) · [Agent support](#install-for-your-specific-coding-agent) · [Skills](#skills) ·
 [Integrations](#mcp-and-external-integrations) · [Documentation](#documentation)
 
 ## Why use it?
@@ -49,11 +49,12 @@ For strong Builder/Reviewer isolation, the host should provide at least one of:
 - separate tasks or fresh sessions; or
 - isolated Git worktrees.
 
-If none is available, `loop-task-implementer` can use sequential role simulation with explicit
-context resets, but it treats the resulting review as degraded evidence. To take work all the way to
-merge readiness, the host also needs repository write access and visibility into CI for the exact head
-commit. See the [platform adapters](loop-task-implementer/reference/platform-adapters.md) and
-[host-capability requirements](loop-task-implementer/reference/mcp-capabilities.md).
+If none is available, `loop-task-implementer` can use weaker, sequential role simulation. It must
+perform explicit context resets and re-derive facts from the repository for each role. If it cannot,
+the run must not claim role isolation and its findings remain `NEEDS_EVIDENCE`. To take work all the
+way to merge readiness, the host also needs repository write access and visibility into CI for the
+exact head commit. See the [platform adapters](loop-task-implementer/reference/platform-adapters.md)
+and [host-capability requirements](loop-task-implementer/reference/mcp-capabilities.md).
 
 ### Only for contributing to this repository
 
@@ -79,9 +80,11 @@ test -f ~/.cursor/skills/loop-task-implementer/SKILL.md
 Restart Cursor, open a small repository with a well-scoped task, and ask:
 
 ```text
-Use loop-task-implementer to implement issue 42, run independent review,
+Use loop-task-implementer to implement issue <issue-number>, run independent review,
 fix accepted findings, and open a PR. Do not merge.
 ```
+
+Replace `<issue-number>` with a real, well-scoped task in the repository.
 
 Expected first-run behavior: the agent reports repository-policy discovery, separates Builder and
 Reviewer contexts, runs two review lenses, verifies authoritative checks, and stops at a PR or an
@@ -104,7 +107,8 @@ test -f ~/.agents/skills/loop-task-implementer/SKILL.md
 ```
 
 Kiro needs no copy step when this repository is open; its discovery files live under
-`.kiro/steering/`. For every installation option, see [Agent support](#agent-support).
+`.kiro/steering/`. For every installation option, see
+[Install for your specific coding agent](#install-for-your-specific-coding-agent).
 
 ## How it works
 
@@ -126,7 +130,7 @@ Each skill directory has three entry points:
 | `SETUP.md` | Humans | Skill-specific installation, integrations, smoke test, and troubleshooting |
 | `SKILL.md` | Agent | Compact runtime instructions and links to on-demand workflow/reference files |
 
-## Agent support
+## Install for your specific coding agent
 
 | Host | Install or discovery | Multi-agent isolation | Notes |
 |------|----------------------|-----------------------|-------|
@@ -139,7 +143,9 @@ Each skill directory has three entry points:
 The canonical cross-harness guidance, including the neutral handoff envelope, is in
 [loop-task-implementer/reference/platform-adapters.md](loop-task-implementer/reference/platform-adapters.md).
 
-## Install all skills or one skill
+## Install
+
+Install all skills or select only the workflow you need:
 
 ```bash
 make install                         # all skills; Cursor + Claude Code by default
@@ -156,7 +162,7 @@ Review [scripts/README.md](scripts/README.md) before using a custom target or au
 > Make target names usually follow `make install-<skill>`. The exception is
 > `k8s-overprovisioning-datadog`, whose target is `make install-k8s-overprovisioning`.
 
-## Skill catalog
+## Skills
 
 | Skill | Invoke | What it does | Docs |
 |-------|--------|--------------|------|
