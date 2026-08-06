@@ -304,7 +304,7 @@ To relax the gate later, remove the required check or disable the rule.
 | pr-gatekeeper | None — delegates to pr-review | Requires pr-review installed and configured for GitLab posting |
 | incident-rca | ≥1 observability (Datadog or KubeSense) | GitLab, Jenkins, Jira; optional `incident-rca` CLI |
 | incident-triage-agent | None — delegates to incident-rca + squad-map | Requires both installed and configured |
-| k8s-overprovisioning-datadog | Datadog | Git provider (manifest drift) |
+| k8s-overprovisioning-datadog | At least one sufficient evidence source: read-only Kubernetes MCP or Datadog | Git provider (manifest drift); Datadog for unique historical/operational telemetry and cost |
 | domain-comprehension | None | GitLab (Session 0b via squad-map), Datadog (P2b runtime validation) |
 | squad-map | None | GitLab, Datadog (CODEOWNERS fallback when both absent) |
 | who-owns-x-bot | None — delegates to squad-map | Requires squad-map installed and configured |
