@@ -3,6 +3,7 @@ workflow_version: 1.0
 phase: report
 produces:
   - CONTRACT_TEST_REPORT.md
+  - CONTRACT_TEST_COVERAGE_STATE.yaml
 consumes:
   - test_files_written
   - verify_result
@@ -15,7 +16,7 @@ Render `CONTRACT_TEST_REPORT.md` at `output_dir` per
 
 ## 1. Always produced
 
-Even a single-target backfill or a zero-target run (§5 of
+Even a single-target backfill or a zero-target run (§7 of
 [select-targets.md](select-targets.md)) produces a report — "nothing to do, here's why" is a valid
 report body, not a reason to skip writing one.
 
@@ -39,8 +40,17 @@ The report header always states `Role` (`consumer`/`provider`) and `Broker` (`ye
 zero-target or fully-`UNVERIFIED` run — a reader must be able to tell which side of the contract this run
 covered without reading the target list.
 
-## 5. Close the loop
+## 5. Write incremental backfill state (optional, backfill mode only)
+
+For a backfill run, upsert `CONTRACT_TEST_COVERAGE_STATE.yaml` at `output_dir` per
+[test-creation-principles.md §6](../../docs/skill-framework/shared/test-creation-principles.md#6-incremental-backfill-state-optional):
+one entry per target this run actually attempted, and every newly `SKIPPED_MAX_FILES` target added to
+`pending_backlog`. Skip this step for a diff-mode run. Never let a write failure here block the report
+from being produced.
+
+## 6. Close the loop
 
 End the report with a one-line next step: "Ready to open as an MR" (all `WRITTEN_PASSING`/`UNVERIFIED`),
-or "N targets need attention before merge" pointing at the `NEEDS_HUMAN` / `WRITTEN_FAILING_PROD_BUG` /
-`NEEDS_OBSERVED_INTERACTION` rows.
+"N targets need attention before merge" pointing at the `NEEDS_HUMAN` / `WRITTEN_FAILING_PROD_BUG` /
+`NEEDS_OBSERVED_INTERACTION` rows, or — when `pending_backlog` is non-empty — "N targets remain; re-run
+to continue."

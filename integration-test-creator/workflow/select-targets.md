@@ -59,14 +59,24 @@ a seam must stay real when Generate tests builds the test — never a substitute
 shows the seam actually is. Absent either file, skip this step. Full artifact table and precedence rules:
 [domain-comprehension-integration.md](../../docs/skill-framework/shared/domain-comprehension-integration.md).
 
-## 5. Cap and report overflow
+## 5. Apply incremental backfill state (optional)
 
-Apply `max_files_per_run` (default 20) to the resulting `NEW` list, in prioritized order (§4) or
-discovery order when §4 didn't apply. Anything past the cap is tagged `SKIPPED_MAX_FILES` — listed by
+If `INTEGRATION_TEST_COVERAGE_STATE.yaml` exists at `output_dir` (a prior backfill run on this repo),
+drop any `NEW` target whose recorded `content_hash` still matches its current source — tag it
+`SKIPPED_ALREADY_COVERED` ("per state file"). A target whose hash has changed since `last_attempted` is
+treated as new, not stale-skipped. Move any `pending_backlog` entries that still resolve to a real seam
+to the front of the list, ahead of anything newly discovered this run. Absent the state file, skip this
+step entirely — no filtering, no reordering, no note in the report. Full schema and precedence rules:
+[test-creation-principles.md §6](../../docs/skill-framework/shared/test-creation-principles.md#6-incremental-backfill-state-optional).
+
+## 6. Cap and report overflow
+
+Apply `max_files_per_run` (default 20) to the resulting `NEW` list, in the order left by §4/§5 (or
+discovery order when neither applied). Anything past the cap is tagged `SKIPPED_MAX_FILES` — listed by
 name in `INTEGRATION_TEST_REPORT.md`, never dropped silently (see
 [gate-policy.md §7](../reference/gate-policy.md#7-maxfilesperrun-reached)).
 
-## 6. Zero targets
+## 7. Zero targets
 
 If every candidate resolves to `SKIPPED_ALREADY_COVERED` (diff mode) or `target.scope` is empty after
 expansion, or after excluding seam-less files (backfill mode), report that plainly instead of proceeding

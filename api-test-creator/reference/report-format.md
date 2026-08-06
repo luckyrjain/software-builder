@@ -62,6 +62,14 @@ One line: "Ready to open as an MR", "N targets need attention before merge — s
 "N targets blocked — supply a reachable API instance."
 ```
 
+## Secondary artifact — `API_TEST_COVERAGE_STATE.yaml`
+
+Backfill runs also upsert this file at `output_dir` per
+[workflow/report.md §5](../workflow/report.md#5-write-incremental-backfill-state-optional-backfill-mode-only)
+and [test-creation-principles.md §6](../../docs/skill-framework/shared/test-creation-principles.md#6-incremental-backfill-state-optional).
+Not part of `API_TEST_REPORT.md` itself — a separate, machine-readable file a later run reads back to
+skip already-covered endpoints and resume `pending_backlog` first. Diff-mode runs never write it.
+
 ## Rules
 
 - The `## Findings`, `## Skipped`, and `## Blocked — NEEDS_API_ENV` sections are omitted entirely when

@@ -3,6 +3,7 @@ workflow_version: 1.0
 phase: report
 produces:
   - INTEGRATION_TEST_REPORT.md
+  - INTEGRATION_TEST_COVERAGE_STATE.yaml
 consumes:
   - test_files_written
   - verify_result
@@ -16,7 +17,7 @@ Render `INTEGRATION_TEST_REPORT.md` at `output_dir` per
 
 ## 1. Always produced
 
-Even a single-target backfill or a zero-target run (§5 of
+Even a single-target backfill or a zero-target run (§7 of
 [select-targets.md](select-targets.md)) produces a report — "nothing to do, here's why" is a valid
 report body, not a reason to skip writing one.
 
@@ -40,8 +41,17 @@ Every `NEEDS_INTEGRATION_ENV` target gets a line naming exactly what's missing (
 dependency, no docker-compose file, no reachable Docker daemon) and what would unblock it — never folded
 silently into a generic "needs human" bucket, since the fix here is infrastructure, not a decision.
 
-## 5. Close the loop
+## 5. Write incremental backfill state (optional, backfill mode only)
+
+For a backfill run, upsert `INTEGRATION_TEST_COVERAGE_STATE.yaml` at `output_dir` per
+[test-creation-principles.md §6](../../docs/skill-framework/shared/test-creation-principles.md#6-incremental-backfill-state-optional):
+one entry per target this run actually attempted, and every newly `SKIPPED_MAX_FILES` target added to
+`pending_backlog`. Skip this step for a diff-mode run. Never let a write failure here block the report
+from being produced.
+
+## 6. Close the loop
 
 End the report with a one-line next step: "Ready to open as an MR" (all `WRITTEN_PASSING`/`UNVERIFIED`),
-or "N targets need attention before merge" pointing at the `NEEDS_HUMAN` / `WRITTEN_FAILING_PROD_BUG` /
-`NEEDS_INTEGRATION_ENV` rows.
+"N targets need attention before merge" pointing at the `NEEDS_HUMAN` / `WRITTEN_FAILING_PROD_BUG` /
+`NEEDS_INTEGRATION_ENV` rows, or — when `pending_backlog` is non-empty — "N targets remain; re-run to
+continue."

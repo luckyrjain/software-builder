@@ -3,6 +3,7 @@ workflow_version: 1.0
 phase: report
 produces:
   - E2E_TEST_REPORT.md
+  - E2E_TEST_COVERAGE_STATE.yaml
 consumes:
   - test_files_written
   - verify_result
@@ -16,7 +17,7 @@ Render `E2E_TEST_REPORT.md` at `output_dir` per
 
 ## 1. Always produced
 
-Even a single-journey backfill or a zero-journey diff run (§5 of
+Even a single-journey backfill or a zero-journey diff run (§7 of
 [select-targets.md](select-targets.md)) produces this deliverable — "nothing to do, here's why" is a
 valid body, not a reason to skip writing one.
 
@@ -40,9 +41,17 @@ deliverable states exactly that — never a guess at what the UI would have show
 would resolve it (a local start command, a staging URL, or a preview deployment) as the next step for
 those journeys.
 
-## 5. Close the loop
+## 5. Write incremental backfill state (optional, backfill mode only)
+
+For a backfill run, upsert `E2E_TEST_COVERAGE_STATE.yaml` at `output_dir` per
+[test-creation-principles.md §6](../../docs/skill-framework/shared/test-creation-principles.md#6-incremental-backfill-state-optional):
+one entry per journey this run actually attempted, and every newly `SKIPPED_MAX_FILES` journey added to
+`pending_backlog`. Skip this step for a diff-mode run. Never let a write failure here block the
+deliverable from being produced.
+
+## 6. Close the loop
 
 End the deliverable with a one-line next step: "Ready to open as an MR" (all `WRITTEN_PASSING`/
 `UNVERIFIED`), "N journeys need attention before merge" pointing at the `NEEDS_HUMAN` /
-`WRITTEN_FAILING_PROD_BUG` rows, or "N journeys blocked — supply a reachable app instance" for
-`NEEDS_BROWSER_ENV`.
+`WRITTEN_FAILING_PROD_BUG` rows, "N journeys blocked — supply a reachable app instance" for
+`NEEDS_BROWSER_ENV`, or — when `pending_backlog` is non-empty — "N journeys remain; re-run to continue."

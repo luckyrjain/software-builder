@@ -107,7 +107,70 @@ a fix. Report the finding with the exact assertion/expected/actual, and hand off
 **loop-task-implementer** (fix it) or **pr-review** (flag it on the MR under review) — full matrix:
 [cross-skill-escalation.md](cross-skill-escalation.md).
 
-## 6. Framework
+## 6. Incremental backfill state (optional)
+
+Backfill mode's `max_files_per_run` cap (§4 of the shared report skeleton — `SKIPPED_MAX_FILES`) bounds
+one run, but a large repo needs many runs to fully backfill. Each of the five skills may persist a small
+state file so repeated backfill runs make forward progress instead of re-discovering and re-ordering the
+same targets from scratch — this is **optional enrichment, never required**, mirroring
+[domain-comprehension-integration.md](domain-comprehension-integration.md)'s "read if present, no-op if
+absent" shape, except this file is one the skill itself writes rather than one it only reads.
+
+### File and shape
+
+One file per skill per repo, written to `output_dir`: `UNIT_TEST_COVERAGE_STATE.yaml`,
+`INTEGRATION_TEST_COVERAGE_STATE.yaml`, `CONTRACT_TEST_COVERAGE_STATE.yaml`, `E2E_TEST_COVERAGE_STATE.yaml`,
+`API_TEST_COVERAGE_STATE.yaml`.
+
+```yaml
+schema_version: 1
+level: unit                       # unit | integration | contract | e2e | api
+repo_root: <path>
+last_run: <UTC timestamp>
+targets:
+  - target: "src/payments/charge.py::apply_discount"   # the same identifier verify-and-iterate reports
+    status: WRITTEN_PASSING                             # final status from the shared vocabulary (§4)
+    content_hash: "<sha256 of the target's source region>"
+    test_file: tests/test_charge.py
+    last_attempted: <UTC timestamp>
+    attempts: 1                                          # only meaningful for NEEDS_HUMAN entries
+pending_backlog:                   # targets discovered but not yet attempted — carried to the next run
+  - "src/payments/legacy/old_gateway.py"
+```
+
+### Read at Select targets
+
+When the state file exists: a target whose `content_hash` still matches the source is skipped —
+`SKIPPED_ALREADY_COVERED`, noted as "per state file" (distinct from the diff-mode already-covered check,
+same status). A target whose hash has **changed** since `last_attempted` is treated as new — the state
+entry is stale, not authoritative; re-attempt it. `pending_backlog` entries are prioritized ahead of
+newly discovered targets when building this run's ordering (after any
+[domain-comprehension prioritization](domain-comprehension-integration.md), before the
+`max_files_per_run` cap) — a caller running backfill repeatedly on the same large scope works through the
+backlog in bounded chunks instead of restarting at the same front of the list every time.
+
+### Write after Verify & iterate
+
+Upsert an entry for every target this run actually attempted (any terminal status from §4, including
+`UNVERIFIED`). Add every target newly tagged `SKIPPED_MAX_FILES` this run to `pending_backlog` (dedup
+against existing entries); remove a target from `pending_backlog` once it gets an attempt. Report §Next
+step states the backlog size when non-empty: "N targets remain in `pending_backlog` — re-run to
+continue."
+
+### Rules
+
+- **Optional, never a gate.** No state file → every target discovered fresh, exactly as documented
+  elsewhere in `select-targets.md` — not a degraded mode, not a note in the report.
+- **Unreadable or malformed state file → ignore it and start fresh.** Log one line noting the file was
+  unreadable; never hard-fail a run over a corrupt cache.
+- **Hash, not mtime.** Checkouts, CI clones, and rebases all produce unreliable mtimes; a content hash is
+  the only staleness signal that survives them.
+- **Never authoritative over code evidence.** Same precedence rule as
+  [domain-comprehension-integration.md §3](domain-comprehension-integration.md#3-precedence-code-evidence-always-wins) —
+  the state file accelerates *ordering*, it never substitutes for actually reading the target when it's
+  this run's turn to be attempted.
+
+## 7. Framework
 
 Routing: [skill-routing.md](skill-routing.md) · prompt injection
 [prompt-injection.md](prompt-injection.md) · smoke-test conventions

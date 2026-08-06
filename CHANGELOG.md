@@ -8,6 +8,25 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 
 ## test-writer
 
+### Incremental backfill state across all five dispatch targets (2026-08-06)
+
+- Each of unit/integration/contract/e2e/api-test-creator now persists a small
+  `<LEVEL>_TEST_COVERAGE_STATE.yaml` file at `output_dir` after a backfill run (never diff mode) —
+  target/journey/endpoint identifier, final status, a content hash for staleness detection, and a
+  `pending_backlog` of targets discovered but cut off by `max_files_per_run`. A later backfill run on the
+  same repo reads it back: already-covered targets whose hash is unchanged are skipped, and
+  `pending_backlog` entries are worked through before newly discovered ones — so repeated runs on a large
+  repo make forward progress instead of re-scanning and re-ordering from scratch each time.
+- New shared doc section:
+  [test-creation-principles.md §6](docs/skill-framework/shared/test-creation-principles.md#6-incremental-backfill-state-optional)
+  — the file schema, the read/write contract, and the non-negotiables (optional and never a gate; hash
+  not mtime; a corrupt/unreadable state file is ignored, never a hard failure; the state file accelerates
+  ordering only, it's never authoritative over code evidence).
+- Each skill's `workflow/select-targets.md` gained a new "Apply incremental backfill state" step
+  (immediately before the `max_files_per_run` cap) and `workflow/report.md` gained a new "Write
+  incremental backfill state" step (immediately before "Close the loop"); each `reference/report-format.md`
+  documents the state file as a secondary artifact, distinct from the main report.
+
 ### api-test-creator added as a fifth dispatch target (2026-08-06)
 
 - **unit-test-creator/integration-test-creator/contract-test-creator/e2e-test-creator** gained an

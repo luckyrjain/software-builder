@@ -56,13 +56,24 @@ Never select a journey whose only surface is a generated/vendored/build path —
 `dist/`, `build/`, `.next/`, `.git/`, or any directory the repo's own `.gitignore` marks as generated.
 These are never hand-authored routes/pages, so a journey through them is never meaningful.
 
-## 5. Cap and report overflow
+## 5. Apply incremental backfill state (optional)
 
-Apply `max_files_per_run` (default 20) to the resulting `NEW` list of journeys, in the order they were
-discovered. Anything past the cap is tagged `SKIPPED_MAX_FILES` — listed by name in `E2E_TEST_REPORT.md`,
-never dropped silently (see [gate-policy.md §7](../reference/gate-policy.md#7-maxfilesperrun-reached)).
+If `E2E_TEST_COVERAGE_STATE.yaml` exists at `output_dir` (a prior backfill run on this repo), drop any
+`NEW` journey whose recorded `content_hash` (hashed over the matched route/page source, or the supplied
+journey description when none matched) still matches — tag it `SKIPPED_ALREADY_COVERED` ("per state
+file"). A changed hash is treated as new, not stale-skipped. Move any `pending_backlog` entries that
+still resolve to a real journey to the front of the list, ahead of anything newly discovered this run.
+Absent the state file, skip this step entirely. Full schema and precedence rules:
+[test-creation-principles.md §6](../../docs/skill-framework/shared/test-creation-principles.md#6-incremental-backfill-state-optional).
 
-## 6. Zero targets
+## 6. Cap and report overflow
+
+Apply `max_files_per_run` (default 20) to the resulting `NEW` list of journeys, in the order left by
+§3/§5 (or discovery order when neither applied). Anything past the cap is tagged `SKIPPED_MAX_FILES` —
+listed by name in `E2E_TEST_REPORT.md`, never dropped silently (see
+[gate-policy.md §7](../reference/gate-policy.md#7-maxfilesperrun-reached)).
+
+## 7. Zero targets
 
 If every candidate resolves to `SKIPPED_ALREADY_COVERED` (diff mode), report that plainly instead of
 proceeding to Generate tests with nothing to do: "No untested journeys found." This is a normal outcome,

@@ -61,6 +61,14 @@ target by name — never a bare count.
 One line: "Ready to open as an MR" or "N targets need attention before merge — see the Targets section."
 ```
 
+## Secondary artifact — `UNIT_TEST_COVERAGE_STATE.yaml`
+
+Backfill runs also upsert this file at `output_dir` per
+[workflow/report.md §5](../workflow/report.md#5-write-incremental-backfill-state-optional-backfill-mode-only)
+and [test-creation-principles.md §6](../../docs/skill-framework/shared/test-creation-principles.md#6-incremental-backfill-state-optional).
+It is not part of `UNIT_TEST_REPORT.md` itself — a separate, machine-readable file a later run reads back
+to skip already-covered targets and resume `pending_backlog` first. Diff-mode runs never write it.
+
 ## Rules
 
 - The `## Findings` and `## Skipped` sections are omitted entirely when empty — never rendered as an

@@ -3,6 +3,7 @@ workflow_version: 1.0
 phase: report
 produces:
   - API_TEST_REPORT.md
+  - API_TEST_COVERAGE_STATE.yaml
 consumes:
   - test_files_written
   - verify_result
@@ -15,7 +16,7 @@ Render `API_TEST_REPORT.md` at `output_dir` per
 
 ## 1. Always produced
 
-Even a single-target backfill or a zero-target run (§6 of
+Even a single-target backfill or a zero-target run (§7 of
 [select-targets.md](select-targets.md)) produces a report — "nothing to do, here's why" is a valid report
 body, not a reason to skip writing one.
 
@@ -38,9 +39,18 @@ The report header always states the resolved `Collection` path and `Newman` avai
 on a zero-target or fully-`UNVERIFIED`/`NEEDS_API_ENV` run — a reader must be able to tell which collection
 this run extended without reading the target list.
 
-## 5. Close the loop
+## 5. Write incremental backfill state (optional, backfill mode only)
+
+For a backfill run, upsert `API_TEST_COVERAGE_STATE.yaml` at `output_dir` per
+[test-creation-principles.md §6](../../docs/skill-framework/shared/test-creation-principles.md#6-incremental-backfill-state-optional):
+one entry per target this run actually attempted, and every newly `SKIPPED_MAX_FILES` target added to
+`pending_backlog`. Skip this step for a diff-mode run. Never let a write failure here block the report
+from being produced.
+
+## 6. Close the loop
 
 End the report with a one-line next step: "Ready to open as an MR" (all
 `WRITTEN_PASSING`/`UNVERIFIED`), "N targets need attention before merge" pointing at the `NEEDS_HUMAN` /
-`WRITTEN_FAILING_PROD_BUG` / `NEEDS_OBSERVED_ENDPOINT` rows, or "N targets blocked — supply a reachable API
-instance" when `NEEDS_API_ENV` accounts for the remainder.
+`WRITTEN_FAILING_PROD_BUG` / `NEEDS_OBSERVED_ENDPOINT` rows, "N targets blocked — supply a reachable API
+instance" when `NEEDS_API_ENV` accounts for the remainder, or — when `pending_backlog` is non-empty —
+"N targets remain; re-run to continue."
