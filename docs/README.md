@@ -34,6 +34,7 @@ Each skill is a self-contained directory copied to `~/.cursor/skills/<name>/` on
 | **mysql-to-postgres-sql** | [mysql-to-postgres-sql/README.md](../mysql-to-postgres-sql/README.md) | [mysql-to-postgres-sql/SKILL.md](../mysql-to-postgres-sql/SKILL.md) | [mysql-to-postgres-sql/SETUP.md](../mysql-to-postgres-sql/SETUP.md) |
 | **loop-task-implementer** | [loop-task-implementer/README.md](../loop-task-implementer/README.md) | [loop-task-implementer/SKILL.md](../loop-task-implementer/SKILL.md) | [loop-task-implementer/SETUP.md](../loop-task-implementer/SETUP.md) |
 | **backlog-runner** | [backlog-runner/README.md](../backlog-runner/README.md) | [backlog-runner/SKILL.md](../backlog-runner/SKILL.md) | [backlog-runner/SETUP.md](../backlog-runner/SETUP.md) |
+| **weekly-squad-digest** | [weekly-squad-digest/README.md](../weekly-squad-digest/README.md) | [weekly-squad-digest/SKILL.md](../weekly-squad-digest/SKILL.md) | [weekly-squad-digest/SETUP.md](../weekly-squad-digest/SETUP.md) |
 
 ### One-line summary
 
@@ -54,6 +55,7 @@ Each skill is a self-contained directory copied to `~/.cursor/skills/<name>/` on
 | **mysql-to-postgres-sql** | Natural language ("MySQL scrub …", "jdbc:postgresql …") | MySQL-dialect scan gate + PostgreSQL rewrite for a `jdbc:mysql`→`jdbc:postgresql` migration |
 | **loop-task-implementer** | Natural language ("implement issue 42 …") | Autonomous multi-task loop: isolated Builder → two-lens independent Reviewer → adjudicated remediation → PR; platform-neutral, no MCP dependency |
 | **backlog-runner** | Scheduled trigger, not ambient chat | Queue-management wrapper: pulls N tickets from a tracker query, runs loop-task-implementer per ticket overnight in dependency order, never merges |
+| **weekly-squad-digest** | Scheduled trigger, not ambient chat | Combines migration-program-manager's and cost-optimization-sprint-planner's own rollup JSON outputs into one squad-grouped digest — never re-runs either aggregator |
 
 ## Cross-skill routing
 
@@ -94,6 +96,7 @@ Skills reference each other when a finding belongs in another workflow:
 | loop-task-implementer | Task needs unfamiliar-codebase context first | domain-comprehension |
 | loop-task-implementer | Task touches MySQL-dialect SQL during a PG migration | mysql-to-postgres-sql |
 | backlog-runner | Caller wants a single, interactive, on-demand task | loop-task-implementer |
+| weekly-squad-digest | Caller wants a fresh single-source rollup, not the combined digest | migration-program-manager / cost-optimization-sprint-planner |
 
 Full symmetric matrix (forward + reverse escalations):
 [docs/skill-framework/shared/cross-skill-escalation.md](skill-framework/shared/cross-skill-escalation.md).
@@ -117,6 +120,7 @@ Full symmetric matrix (forward + reverse escalations):
 | [superpowers/specs/2026-08-05-release-readiness-checker-design.md](superpowers/specs/2026-08-05-release-readiness-checker-design.md) | release-readiness-checker design — item #9 of the team-facing agents roadmap |
 | [superpowers/specs/2026-08-05-migration-program-manager-design.md](superpowers/specs/2026-08-05-migration-program-manager-design.md) | migration-program-manager design — item #8 of the team-facing agents roadmap |
 | [superpowers/specs/2026-08-05-cost-optimization-sprint-planner-design.md](superpowers/specs/2026-08-05-cost-optimization-sprint-planner-design.md) | cost-optimization-sprint-planner design — item #10 of the team-facing agents roadmap |
+| [superpowers/specs/2026-08-05-weekly-squad-digest-design.md](superpowers/specs/2026-08-05-weekly-squad-digest-design.md) | weekly-squad-digest design — item #11 of the team-facing agents roadmap (the last item) |
 
 These are planning artifacts; the live behavior is defined in `pr-review/SKILL.md` and `pr-review/reference/`.
 
@@ -228,6 +232,15 @@ These are planning artifacts; the live behavior is defined in `pr-review/SKILL.m
 | `reference/gate-policy.md` | Every live k8s-overprovisioning-datadog gate and its scripted, reused answer; cost-rate resolved once, sweep-wide |
 | `reference/sweep-policy.md` | The sweep loop's own session-level state, candidate-list construction, failure isolation, stop conditions |
 | `reference/report-format.md` | Normative `COST_OPTIMIZATION_SPRINT_REPORT.md` + `cost_optimization_sprint_rollup.json` structure |
+| `reference/smoke-test.md` | Post-install validation steps |
+
+## weekly-squad-digest file map
+
+| Path | What it does |
+|------|--------------|
+| `workflow/inputs.md` | Parse `rollup_manifest` + `staleness_warning_days`; HARD STOP if neither rollup path is set |
+| `workflow/run-digest.md` | Read both rollups, group by squad then `metric_type`, compute staleness, render |
+| `reference/report-format.md` | Normative `WEEKLY_SQUAD_DIGEST.md` structure |
 | `reference/smoke-test.md` | Post-install validation steps |
 
 ## mysql-to-postgres-sql file map

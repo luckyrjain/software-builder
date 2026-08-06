@@ -33,6 +33,7 @@ Each skill has a human **`README.md`** (what it does) separate from **`SKILL.md`
 | [mysql-to-postgres-sql](mysql-to-postgres-sql/) | "MySQL scrub …", "jdbc:postgresql …", "TIMESTAMPDIFF …" | Native SQL + JDBC rewrite for MySQL→PostgreSQL; scan gate, collection P0/P1 | [README](mysql-to-postgres-sql/README.md) · [SETUP](mysql-to-postgres-sql/SETUP.md) |
 | [loop-task-implementer](loop-task-implementer/) | "implement issue 42 …", "work through these tasks …" | Autonomous multi-task loop: isolated Builder → two-lens independent Reviewer → adjudicated remediation → PR. Platform-neutral, no Datadog/GitLab/Jira MCP required | [README](loop-task-implementer/README.md) · [SETUP](loop-task-implementer/SETUP.md) |
 | [backlog-runner](backlog-runner/) | Scheduled trigger (not human chat) | Pulls N tickets from a tracker query, runs loop-task-implementer per ticket overnight in dependency order, never merges | [README](backlog-runner/README.md) · [SETUP](backlog-runner/SETUP.md) |
+| [weekly-squad-digest](weekly-squad-digest/) | Scheduled trigger (not human chat) | Combines migration-program-manager's and cost-optimization-sprint-planner's own rollup JSON outputs into one squad-grouped digest — never re-runs either aggregator | [README](weekly-squad-digest/README.md) · [SETUP](weekly-squad-digest/SETUP.md) |
 
 ## Install
 
@@ -60,6 +61,7 @@ make install-cost-optimization-sprint-planner
 make install-mysql-to-postgres-sql
 make install-loop-task-implementer
 make install-backlog-runner
+make install-weekly-squad-digest
 ```
 
 `install-incident-rca` also installs the external **`kubesense-mcp`** skill dependency
@@ -84,6 +86,7 @@ bash scripts/install.sh cost-optimization-sprint-planner
 bash scripts/install.sh mysql-to-postgres-sql
 bash scripts/install.sh loop-task-implementer
 bash scripts/install.sh backlog-runner
+bash scripts/install.sh weekly-squad-digest
 ```
 
 With no arguments, `install.sh` discovers every `*/SKILL.md` under the repo root and installs all of
@@ -142,6 +145,7 @@ make lint-cost-optimization-sprint-planner # cost-optimization-sprint-planner SK
 make lint-mysql-to-postgres-sql # mysql SKILL line limit, scan fixtures, pressure harness, shellcheck
 make lint-loop-task-implementer # loop-task-implementer SKILL line limit, workflow frontmatter, required files, anchors
 make lint-backlog-runner        # backlog-runner SKILL line limit, frontmatter, anchors, required files
+make lint-weekly-squad-digest   # weekly-squad-digest SKILL line limit, frontmatter, anchors, required files
 ```
 
 | Target | Checks |
@@ -161,6 +165,7 @@ make lint-backlog-runner        # backlog-runner SKILL line limit, frontmatter, 
 | `lint-mysql-to-postgres-sql` | `SKILL.md` ≤ 180 lines; workflow frontmatter; required references; scan fixtures + pressure harness; shellcheck on scan scripts |
 | `lint-loop-task-implementer` | `SKILL.md` ≤ 180 lines; workflow frontmatter; dangling anchors; required files (`SETUP.md`/`README.md`/`examples.md`/`report-template.md`/`reference/*`) |
 | `lint-backlog-runner` | `SKILL.md` ≤ 180 lines; `disable-model-invocation: true` set; workflow frontmatter; dangling anchors; required reference files |
+| `lint-weekly-squad-digest` | `SKILL.md` ≤ 180 lines; `disable-model-invocation: true` set; workflow frontmatter; dangling anchors; required reference files |
 | `lint-framework` | shared `docs/skill-framework/` docs present; required sections; SETUP.md links; metadata footer examples parse; every skill has a `.cursor/rules/*.mdc` + `.kiro/steering/*.md` discovery file |
 
 Full detail: [docs/REPOSITORY.md](docs/REPOSITORY.md).
@@ -190,6 +195,7 @@ or a Docker/Linux runner (deps installed via `apt-get` in the pipeline).
 | mysql-to-postgres-sql | None (code scan + rewrite) | Datadog (optional; post-cutover APM) — [mysql-to-postgres-sql/SETUP.md](mysql-to-postgres-sql/SETUP.md) |
 | loop-task-implementer | None (uses the host agent's own repo/git access, not an MCP server) | [loop-task-implementer/reference/mcp-capabilities.md](loop-task-implementer/reference/mcp-capabilities.md) |
 | backlog-runner | Issue-tracker MCP (Jira or GitHub Issues) — required for this skill, optional for loop-task-implementer itself | [backlog-runner/SETUP.md](backlog-runner/SETUP.md) |
+| weekly-squad-digest | None of its own — no MCP calls at all, pure file aggregation | [weekly-squad-digest/SETUP.md](weekly-squad-digest/SETUP.md) |
 
 ---
 
@@ -513,6 +519,33 @@ non-guessing fallback — see [cost-optimization-sprint-planner/reference/gate-p
   group, and a Sweep gaps section
 - `cost_optimization_sprint_rollup.json` — the computed `org_rollup_item` list, for a future Weekly Squad
   Digest to reuse without re-sweeping
+
+---
+
+## Usage (weekly-squad-digest)
+
+**Combines two already-computed rollups, re-runs neither.** Reads migration-program-manager's
+`migration_program_rollup.json` and cost-optimization-sprint-planner's `cost_optimization_sprint_rollup.json`
+— never invokes either skill live — and groups every item by squad, then by `metric_type` (Migration
+status / Cost optimization sub-sections, never merged into one cross-metric ranking).
+`disable-model-invocation: true` — invoked explicitly on a schedule, same pattern as backlog-runner;
+per-squad-channel delivery is an external handler's job, not built into this skill (no skill in this repo,
+including squad-map, has a real squad→channel routing mechanism — see the
+[design spec](docs/superpowers/specs/2026-08-05-weekly-squad-digest-design.md#correcting-two-claims-before-designing-against-them)).
+
+### Examples
+
+| You say | What happens |
+|----------------|----------------|
+| Scheduled trigger fires with `rollup_manifest` (both paths) | Both rollups read, grouped by squad then `metric_type`, writes `WEEKLY_SQUAD_DIGEST.md` |
+| Only one rollup path supplied | The other rollup is a Rollup gaps row; the digest still renders from the readable one |
+| An item's `last_updated` is older than `staleness_warning_days` | Flagged with its age — the item's own `status` is never changed |
+| "What's our migration status?" | **Wrong skill** → migration-program-manager directly |
+
+### What you get (weekly-squad-digest)
+
+- `WEEKLY_SQUAD_DIGEST.md` — per-squad Migration status + Cost optimization sub-sections, a
+  `UNKNOWN squad` group, and a Rollup gaps section
 
 ---
 

@@ -33,7 +33,8 @@ ai-skills/
 ├── cost-optimization-sprint-planner/ # Org-wide cost/waste sweep wrapper around k8s-overprovisioning-datadog
 ├── mysql-to-postgres-sql/     # MySQL → PostgreSQL native SQL migration skill
 ├── loop-task-implementer/     # Autonomous multi-task implement/review/PR loop skill
-└── backlog-runner/            # Scheduled queue-management wrapper around loop-task-implementer
+├── backlog-runner/            # Scheduled queue-management wrapper around loop-task-implementer
+└── weekly-squad-digest/       # Scheduled digest combining migration-program-manager's + cost-optimization-sprint-planner's rollups
 ```
 
 Each skill directory follows the same pattern:
@@ -70,6 +71,7 @@ make install-cost-optimization-sprint-planner
 make install-mysql-to-postgres-sql
 make install-loop-task-implementer
 make install-backlog-runner
+make install-weekly-squad-digest
 ```
 
 `scripts/install.sh` copies the entire skill directory to **both** `~/.cursor/skills/<skill-name>/`
@@ -94,6 +96,7 @@ bash scripts/install.sh cost-optimization-sprint-planner
 bash scripts/install.sh mysql-to-postgres-sql
 bash scripts/install.sh loop-task-implementer
 bash scripts/install.sh backlog-runner
+bash scripts/install.sh weekly-squad-digest
 ```
 
 With no arguments, `install.sh` discovers every `*/SKILL.md` under the repo root and installs each —
@@ -126,8 +129,9 @@ and [docs/skill-framework/shared/claude-code-setup.md](skill-framework/shared/cl
 | `make install-mysql-to-postgres-sql` | Install only `mysql-to-postgres-sql/` |
 | `make install-loop-task-implementer` | Install only `loop-task-implementer/` |
 | `make install-backlog-runner` | Install only `backlog-runner/` (also runs `install-loop-task-implementer`) |
+| `make install-weekly-squad-digest` | Install only `weekly-squad-digest/` (also runs `install-migration-program-manager` and `install-cost-optimization-sprint-planner`) |
 | `make install-claude` | Run `scripts/install.sh --agent claude-user` for all skills |
-| `make install-claude-<skill>` | Install only `<skill>/` for Claude Code (`pr-review`, `pr-gatekeeper`, `k8s-overprovisioning`, `incident-rca`, `incident-triage-agent`, `domain-comprehension`, `squad-map`, `who-owns-x-bot`, `new-hire-guide`, `release-readiness-checker`, `migration-program-manager`, `cost-optimization-sprint-planner`, `mysql-to-postgres-sql`, `loop-task-implementer`, `backlog-runner`) |
+| `make install-claude-<skill>` | Install only `<skill>/` for Claude Code (`pr-review`, `pr-gatekeeper`, `k8s-overprovisioning`, `incident-rca`, `incident-triage-agent`, `domain-comprehension`, `squad-map`, `who-owns-x-bot`, `new-hire-guide`, `release-readiness-checker`, `migration-program-manager`, `cost-optimization-sprint-planner`, `mysql-to-postgres-sql`, `loop-task-implementer`, `backlog-runner`, `weekly-squad-digest`) |
 | `make lint` | Run all lint targets below + shellcheck on `scripts/*.sh` |
 | `make lint-pr-review` | pr-review `SKILL.md` ≤ 180 lines; each `workflow/*.md` has `workflow_version`/`phase`/`produces`/`consumes` frontmatter; dangling markdown anchors; script pytest |
 | `make lint-pr-gatekeeper` | pr-gatekeeper `SKILL.md` ≤ 180 lines; `disable-model-invocation: true` set; workflow frontmatter; dangling anchors; required reference files |
@@ -144,6 +148,7 @@ and [docs/skill-framework/shared/claude-code-setup.md](skill-framework/shared/cl
 | `make lint-mysql-to-postgres-sql` | mysql `SKILL.md` ≤ 180 lines; workflow frontmatter; required references; scan fixtures + pressure harness; shellcheck on scan scripts |
 | `make lint-loop-task-implementer` | loop-task-implementer `SKILL.md` ≤ 180 lines; workflow frontmatter; dangling anchors; required files (`SETUP.md`, `README.md`, `examples.md`, `report-template.md`, `reference/*`) |
 | `make lint-backlog-runner` | backlog-runner `SKILL.md` ≤ 180 lines; `disable-model-invocation: true` set; workflow frontmatter; dangling anchors; required reference files |
+| `make lint-weekly-squad-digest` | weekly-squad-digest `SKILL.md` ≤ 180 lines; `disable-model-invocation: true` set; workflow frontmatter; dangling anchors; required reference files |
 | `make lint-framework` | shared `docs/skill-framework/` files present; required sections; SETUP.md links; metadata footer examples parse; every skill has a `.cursor/rules/*.mdc` + `.kiro/steering/*.md` discovery file |
 | `make setup-hooks` | Set `git config core.hooksPath .githooks` (shellcheck pre-commit) |
 
@@ -327,5 +332,6 @@ To disable the gate later, set the same field to `false`.
 | mysql-to-postgres-sql | None | Datadog (optional; post-cutover APM verification) |
 | loop-task-implementer | None — uses the host agent's own repo/git access, not an MCP server | See [loop-task-implementer/reference/mcp-capabilities.md](../loop-task-implementer/reference/mcp-capabilities.md) for host-capability requirements |
 | backlog-runner | Issue-tracker MCP (Jira or GitHub Issues) — required here, optional for loop-task-implementer itself | Requires loop-task-implementer installed and configured |
+| weekly-squad-digest | None — no MCP calls at all, pure file aggregation | Requires migration-program-manager and cost-optimization-sprint-planner each already run at least once |
 
 Per-skill setup: see each skill's `SETUP.md`.

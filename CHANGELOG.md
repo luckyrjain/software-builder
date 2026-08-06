@@ -214,6 +214,50 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
   prompt-injection.md, phase-glossary.md — and `org-rollup-schema.md`'s `k8s_waste` adapter section
   updated from "pending item #10" to "implemented by cost-optimization-sprint-planner."
 
+## weekly-squad-digest
+
+### Initial release (2026-08-05)
+
+- New skill — item #11 of the [team-facing agents roadmap](docs/superpowers/plans/2026-08-05-team-facing-agents-roadmap.md),
+  the last item on that list: a scheduled digest combining **migration-program-manager**'s
+  `migration_program_rollup.json` and **cost-optimization-sprint-planner**'s
+  `cost_optimization_sprint_rollup.json` — both already-computed `org_rollup_item` files — into one
+  squad-grouped view. Neither producing skill is invoked live; `squad`/`squad_confidence`/`status`/
+  `priority` are surfaced exactly as each already computed them. Confirmed the first skill in this repo to
+  read and combine two already-computed rollup files rather than producing one of its own — both
+  producing skills already documented "written so a future Weekly Squad Digest can reuse this," which
+  this skill's design research confirmed rather than assumed.
+- **Corrects a claim made in two other places before designing against it**: the roadmap item's own
+  wording ("squad-map — routing to the right channel") and
+  [org-rollup-aggregation-layer-design.md](docs/superpowers/specs/2026-08-05-org-rollup-aggregation-layer-design.md)
+  (which stated as settled fact that this skill would reuse "squad-map's own routing convention") both
+  imply a squad→channel delivery mechanism that doesn't exist anywhere in squad-map's actual schema —
+  confirmed by reading `SQUAD_MAP.md`'s real columns (two ownership *name* fields, no channel/contact/
+  webhook column) and both cited precedents (who-owns-x-bot/incident-triage-agent each have one
+  hardcoded/configured delivery target, not a per-squad table). This skill produces one combined markdown
+  digest instead, with per-squad-channel delivery left to an external handler documented in its own
+  `SETUP.md` — the same pattern backlog-runner's morning summary and incident-triage-agent's triage doc
+  already use.
+- `workflow/inputs.md` — `rollup_manifest` (both rollup paths individually optional, HARD STOP only if
+  neither is set) + `staleness_warning_days` (default 14, display-only — never changes a computed
+  `status`, unlike migration-program-manager's own staleness threshold, since this skill has no basis to
+  recompute a status another skill already owns)
+- `workflow/run-digest.md` — reads both rollups (a missing one is a gap, not a HARD STOP for the other),
+  groups by squad then splits by `metric_type` into Migration status / Cost optimization sub-sections
+  (never merged into one cross-metric ranking — a migration gate status and a dollar figure aren't
+  comparable, and inventing a blended score would be new analysis logic the roadmap item's own text says
+  this skill should not add)
+- **No gate policy** — same reasoning as migration-program-manager: nothing is ever invoked live (neither
+  producing skill, nor squad-map), so there's nothing to gate or confirm
+- `disable-model-invocation: true` — same scheduled-trigger pattern as backlog-runner; a human asking a
+  single-source status question still routes to migration-program-manager or
+  cost-optimization-sprint-planner directly
+- No scripts of its own — pure markdown-workflow, like cost-optimization-sprint-planner
+- Design spec: [docs/superpowers/specs/2026-08-05-weekly-squad-digest-design.md](docs/superpowers/specs/2026-08-05-weekly-squad-digest-design.md).
+- Wired into `make install-weekly-squad-digest` / `make lint-weekly-squad-digest`, root README,
+  docs/README, docs/REPOSITORY, skill-routing.md, cross-skill-escalation.md, prompt-injection.md,
+  phase-glossary.md — the last skill of the 11-item team-facing agents roadmap.
+
 ## who-owns-x-bot
 
 ### Initial release (2026-08-05)

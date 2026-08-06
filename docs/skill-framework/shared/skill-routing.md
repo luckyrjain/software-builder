@@ -25,6 +25,7 @@ When adding a new skill, add it here first; then each existing skill only needs 
 | Org-wide cost/waste ranking, cost optimization sprint, "where's the money", rightsizing sprint planning, cost savings backlog across many deployments with a `sweep_scope` | **cost-optimization-sprint-planner** | k8s-overprovisioning-datadog (one deployment's own rightsizing question), squad-map (ownership lookup only, no cost angle) |
 | Implement task/issue autonomously, independent review + remediation loop, adjudicate findings, work through a task queue (interactive, human-driven) | **loop-task-implementer** | pr-review (reviewing someone else's existing MR only) |
 | Scheduled trigger pulling N tickets from a tracker query, overnight/unattended, no human turn available | **backlog-runner** | loop-task-implementer (that's what it delegates to internally — do not call loop-task-implementer directly for an unattended scheduled sweep; use it for a single-task or human-driven multi-task request) |
+| Scheduled combined squad digest reading both migration and cost rollup files, no human turn available | **weekly-squad-digest** | migration-program-manager / cost-optimization-sprint-planner (a fresh single-source rollup, not the combined digest) |
 | GitHub pull request, local uncommitted diff, review unstaged | **review-bugbot** (external) | pr-review |
 | Datadog MCP missing / 403, configure Datadog | **ddsetup** / **ddconfig** | all others |
 | Live rollback, kubectl apply, deploy, restart pods | **Out of scope** — human operator | all skills |
@@ -63,6 +64,9 @@ When adding a new skill, add it here first; then each existing skill only needs 
 17. **Org-wide cost/waste ranking across many deployments with a `sweep_scope`** →
     cost-optimization-sprint-planner; **one deployment's own rightsizing question** →
     k8s-overprovisioning-datadog directly; **plain "who owns X?" with no cost angle** → squad-map directly
+18. **Scheduled combined squad digest, no human turn available** → weekly-squad-digest; **a fresh
+    single-source rollup, interactive** → migration-program-manager / cost-optimization-sprint-planner
+    directly
 
 ## Ambiguous requests — ask
 

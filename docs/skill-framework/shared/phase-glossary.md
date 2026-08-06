@@ -189,6 +189,20 @@ exempt, since the pre-filter ranking query pass and the squad join/rank are this
 logic, not a pass-through of k8s-overprovisioning-datadog's own analysis (which stays entirely its own,
 unmodified, inside each delegated invocation).
 
+### weekly-squad-digest mapping
+
+| Phase | File | Canonical |
+|-------|------|-----------|
+| Inputs | `workflow/inputs.md` | Detect (`rollup_manifest`, `staleness_warning_days`) |
+| Run digest | `workflow/run-digest.md` | Gather (read two already-computed rollup JSON files, never invoked live) + Analyze (group by squad then `metric_type`, compute per-item staleness) + Report (`WEEKLY_SQUAD_DIGEST.md`) |
+
+Not exempt from Analyze — the squad/metric_type grouping and the staleness computation are this skill's
+own logic, even though `squad`/`squad_confidence`/`status`/`priority` themselves are never re-derived
+(they're read as-is from each producing skill's own already-computed rollup item). Same distinction
+migration-program-manager's mapping draws between "aggregation over already-computed inputs is still
+Analyze" and "re-deriving a value another skill already computed," which this skill deliberately never
+does.
+
 ## 5. Cross-skill analogies
 
 | Concept | pr-review | incident-rca | k8s | domain-comprehension | squad-map | mysql-to-postgres-sql |
@@ -234,3 +248,4 @@ When writing cross-skill examples, use analogies above: "pr-review Phase 1 ≈ k
 | `migration_program_state.json` | migration-program-manager | Run rollup (persisted across runs, owned exclusively by this skill) |
 | `COST_OPTIMIZATION_SPRINT_REPORT.md` | cost-optimization-sprint-planner | Run sweep |
 | `cost_optimization_sprint_rollup.json` | cost-optimization-sprint-planner | Run sweep |
+| `WEEKLY_SQUAD_DIGEST.md` | weekly-squad-digest | Run digest |
