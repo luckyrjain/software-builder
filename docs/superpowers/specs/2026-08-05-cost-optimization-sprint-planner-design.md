@@ -80,8 +80,8 @@ in-scope deployment**, sequentially, collecting each run's `decision_graph`, the
    same convention as migration-program-manager.
 7. Writes **`COST_OPTIMIZATION_SPRINT_REPORT.md`** (human-readable) and
    **`cost_optimization_sprint_rollup.json`** (the computed `org_rollup_item` list, machine-readable) — the
-   latter exists for the same reason migration-program-manager's rollup JSON does: so a future **Weekly
-   Squad Digest** (item #11) can reuse this skill's own computed rollup by reading this file, rather than
+   latter exists for the same reason migration-program-manager's rollup JSON does: so **weekly-squad-digest**
+   (item #11, since shipped) can reuse this skill's own computed rollup by reading this file, rather than
    re-running the sweep.
 
 ## Cost-rate gate — resolved once, sweep-wide

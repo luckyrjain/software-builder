@@ -10,11 +10,12 @@ suggested build order.
 
 ## 1. Purpose
 
-Three future skills each need to turn many single-service reports into one org-wide, squad-grouped view.
-None of the three source skills they'll wrap (mysql-to-postgres-sql, k8s-overprovisioning-datadog,
-squad-map) has an org-wide aggregation concept today, and this repo has no cross-skill code-sharing
-mechanism — every skill directory installs standalone. This file is the **one normalized shape** each
-future skill's own aggregator independently maps its source artifact into, so #8/#10/#11 don't each
+Two skills (migration-program-manager, cost-optimization-sprint-planner) each need to turn many
+single-service reports into one org-wide, squad-grouped view; a third (weekly-squad-digest) combines both
+into one digest. None of the three source skills they wrap (mysql-to-postgres-sql,
+k8s-overprovisioning-datadog, squad-map) has an org-wide aggregation concept of its own, and this repo has
+no cross-skill code-sharing mechanism — every skill directory installs standalone. This file is the **one
+normalized shape** each aggregator independently maps its source artifact into, so #8/#10/#11 don't each
 invent a different rollup schema.
 
 ## 2. The `org_rollup_item` shape

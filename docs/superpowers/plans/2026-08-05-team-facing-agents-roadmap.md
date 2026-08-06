@@ -10,9 +10,11 @@ loop-task-implementer) for real team workflows. Distinct from repo-maintenance t
 changes skill internals; each item composes existing skills into a team-facing agent, bot, or
 scheduled job.
 
-Each item below is a candidate roadmap entry, not a committed plan. Before implementing any item,
-write a design spec (`docs/superpowers/specs/`) and implementation plan (`docs/superpowers/plans/`)
-per this repo's usual pattern — this doc is the brainstorm those should draw from.
+Each item below was a candidate roadmap entry at brainstorm time, not a committed plan — the original
+process this doc specified was: before implementing any item, write a design spec
+(`docs/superpowers/specs/`) per this repo's usual pattern, drawing from this doc's brainstorm. All 11
+items have since followed that process and shipped; this section is kept as a record of the process that
+was followed, not a standing instruction for further items.
 
 ## Priority tiers
 

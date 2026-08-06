@@ -56,8 +56,9 @@ never silently merged into a named squad.>
 A flat JSON array of `org_rollup_item` objects (per
 [org-rollup-schema.md](../../docs/skill-framework/shared/org-rollup-schema.md)), each with an added
 `staleness_days` field (this skill's own computed value, not part of the shared schema's base shape —
-schemas can be extended per-consumer as long as the base fields stay intact). Written so a future Weekly
-Squad Digest can read this file directly instead of re-running the aggregator.
+schemas can be extended per-consumer as long as the base fields stay intact). Written so
+[weekly-squad-digest](../../weekly-squad-digest/SKILL.md) can read this file directly instead of
+re-running the aggregator.
 
 ## Rules
 

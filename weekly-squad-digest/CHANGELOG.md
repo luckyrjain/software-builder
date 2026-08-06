@@ -186,3 +186,39 @@ mechanism rounds 1-4 had focused on — re-reading the roadmap, the design spec,
 this skill cites as authoritative, rather than re-checking the same eight in-skill files a third time. This
 is the same "nothing in this repo's process re-visits a 'not yet built' claim once the thing ships" gap
 class, caught here because weekly-squad-digest's own completion is what exposed it.
+
+### Fixed (round-6 review, same day)
+- **Round 5's fix pass treated 5 known instances of "future/planned Weekly Squad Digest" as the whole
+  problem instead of grepping the pattern repo-wide** — leaving the fixed files themselves with fresh
+  same-file contradictions and several unfixed sibling files carrying the identical stale phrase. Fixed in
+  one repo-wide pass:
+  - `docs/skill-framework/shared/org-rollup-schema.md` § 1 Purpose still said "Three future skills," "each
+    future skill's own aggregator," directly under the header round 5 had just changed to "Implemented by
+    all three skills." Rewritten to name the three skills and their actual roles.
+  - `docs/superpowers/plans/2026-08-05-team-facing-agents-roadmap.md`'s own "Each item below is a
+    candidate roadmap entry, not a committed plan... write a design spec... before implementing any item"
+    paragraph directly contradicted the `Status: Implemented` line two lines above it (round 5's fix).
+    Reworded as a record of the process that was followed, not a standing instruction.
+  - `docs/README.md`'s own aggregation-layer-design table row said "implemented by items #8 and #10;
+    informs future item #11," self-contradicting that same file's other three references to
+    weekly-squad-digest as shipped.
+  - Root `README.md`'s "What you get" sections for migration-program-manager and
+    cost-optimization-sprint-planner still said "for a future Weekly Squad Digest to reuse" — the exact
+    phrase fixed in the two skills' own README.md files by round 5, missed in the root README's copy.
+  - `migration-program-manager/reference/report-format.md` had the identical phrase its
+    cost-optimization-sprint-planner counterpart had (fixed by round 5) — the sibling file was missed.
+  - `docs/superpowers/specs/2026-08-05-cost-optimization-sprint-planner-design.md` and
+    `docs/superpowers/specs/2026-08-05-migration-program-manager-design.md` both still called item #11 "a
+    future Weekly Squad Digest" — updated to name the shipped skill, consistent with this repo's own
+    established convention (`phase-glossary.md` already treats design-spec currency claims as something
+    that gets updated, not frozen).
+  - `docs/superpowers/specs/2026-08-05-org-rollup-aggregation-layer-design.md`'s pervasive "future skill"
+    phrasing was deliberately left as-is — its own `Status:` field explicitly scopes it to "design only, no
+    implementation in this phase," a genuine point-in-time record rather than a living claim, the same
+    reasoning already applied to CHANGELOG entries in round 5.
+
+Found by a sixth adversarial review pass that verified round 5's 5 targeted fixes were each individually
+correct, then confirmed the underlying pattern was bigger than 5 instances by grepping repo-wide — the
+review's own recommendation ("do a single repo-wide grep... and fix all hits in one pass, then re-read the
+immediate paragraphs surrounding every Status-field edit for leftover contradicting sentences") is exactly
+what this round's fix did.

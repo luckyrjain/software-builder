@@ -491,8 +491,8 @@ to confirm when nothing is invoked live. Tracks its own staleness state across r
 
 - `MIGRATION_PROGRAM_REPORT.md` — per-squad blocked/stalled/in-progress/done, plus a `UNKNOWN squad`
   group and a Workspace gaps section
-- `migration_program_rollup.json` — the computed `org_rollup_item` list, for a future Weekly Squad Digest
-  to reuse without re-aggregating
+- `migration_program_rollup.json` — the computed `org_rollup_item` list, for weekly-squad-digest to reuse
+  without re-aggregating
 
 ---
 
@@ -517,8 +517,8 @@ non-guessing fallback — see [cost-optimization-sprint-planner/reference/gate-p
 
 - `COST_OPTIMIZATION_SPRINT_REPORT.md` — per-squad ranked by `monthly_savings_total`, a `UNKNOWN squad`
   group, and a Sweep gaps section
-- `cost_optimization_sprint_rollup.json` — the computed `org_rollup_item` list, for a future Weekly Squad
-  Digest to reuse without re-sweeping
+- `cost_optimization_sprint_rollup.json` — the computed `org_rollup_item` list, for weekly-squad-digest to
+  reuse without re-sweeping
 
 ---
 

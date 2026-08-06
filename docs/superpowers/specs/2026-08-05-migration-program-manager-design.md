@@ -46,9 +46,9 @@ invokes mysql-to-postgres-sql or squad-map live, only reads their existing outpu
 5. Ranks and groups by squad: blocked (any gate `fail`) first, then stalled (unchanged past the
    configured threshold) ranked by staleness descending, then in-progress, then done.
 6. Writes **`MIGRATION_PROGRAM_REPORT.md`** (human-readable) and **`migration_program_rollup.json`** (the
-   computed `org_rollup_item` list, machine-readable) — the latter exists specifically so a future
-   **Weekly Squad Digest** (item #11) can reuse this skill's own computed rollup by reading this file,
-   rather than re-implementing the join/aggregation itself.
+   computed `org_rollup_item` list, machine-readable) — the latter exists specifically so
+   **weekly-squad-digest** (item #11, since shipped) can reuse this skill's own computed rollup by
+   reading this file, rather than re-implementing the join/aggregation itself.
 
 ## Staleness tracking — the one new stateful mechanism
 
