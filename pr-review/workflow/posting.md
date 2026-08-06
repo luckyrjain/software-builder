@@ -37,6 +37,11 @@ otherwise print numbered options and apply the rules above.
 
 ## Phase 3 — Confirm before posting
 
+**Typed `posting_policy: forbidden`** (caller-supplied per
+[inputs.md § Typed invocation](inputs.md#typed-invocation-skill-to-skill-callers)): skip Phase 3 and
+Phase 4 entirely, identical to `chat-only` — render the full review in chat and stop. No confirmation
+prompt, nothing posted, regardless of the posting mode Phase 0 detected.
+
 > **Terminology:** "Draft" in the **Draft option** column below means posting comments as GitLab
 > **Draft Review notes** (`create_draft_note`) — *not* the same as a **Draft/WIP MR**.
 
@@ -68,10 +73,23 @@ Never offer an option the connected MCP cannot perform (e.g. drafts without `cre
 > ⚠️ **This MR is a draft** — review findings are ready but posting to a draft MR may clutter
 > early work. Post anyway, or hold until the MR is marked ready?
 
+**Incomplete review** (`review_metrics.review_complete: false` — stop-search fired, or a partial diff
+boundary accepted after a pagination/file cap, per `reference/review-metrics.md` §Recommendation
+matrix): display before the posting options, same as the draft warning:
+> ⚠️ **This review is incomplete** — [state the reason: stop-search threshold hit / diff truncated at
+> the page-or-file cap]. The recommendation below reflects only the portion reviewed and cannot be
+> Approve. Post the partial findings anyway, or hold for a complete review?
+
 Proceed only on explicit confirmation (any choice other than Hold or Cancel).
 
 Skip confirmation only when user said "review and post" **and** mode is `full` or `summary-only`
-**and** the MR is not a draft. For `general-only`, always confirm after the warning.
+**and** the MR is not a draft **and** the review is complete (`review_metrics.review_complete` is not
+`false`). An incomplete review always confirms — the same as a draft MR — even on "review and post",
+and even for an unattended caller scripted to always answer "review and post" (e.g. pr-gatekeeper with
+`auto_post_authorized: true`): that automation's own deterministic reply to a Phase 3 prompt is always
+"Hold — don't post" (`pr-gatekeeper/reference/auto-post-policy.md`), so forcing this confirmation to
+render is what keeps an incomplete review from being silently auto-posted as a finished, clean review.
+For `general-only`, always confirm after the warning.
 
 ## Critical findings — second-reviewer signal
 
@@ -89,6 +107,12 @@ merge via API; recommend a human maintainer gate and link GitLab approval rules 
 ---
 
 ## Phase 4 — Post (when mode allows)
+
+**MCP retry policy:** posting calls (`create_merge_request_thread`, `create_note`,
+`create_workitem_note`, `create_draft_note`) follow the 1-retry policy stated once in
+[phase-0.md § MCP retry policy](phase-0.md#mcp-retry-policy-all-phases) — retry once on `timeout` /
+`rate_limited` / `server_error` before a thread is counted as a failure under **Partial-post recovery**
+below.
 
 Post **only** findings that survived Phase 2 finding dedupe — never re-post same location, root cause,
 stack, or API misuse already on the MR. **Cross-session dedupe:** before posting, re-fetch MR notes and

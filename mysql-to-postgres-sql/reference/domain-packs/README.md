@@ -15,6 +15,7 @@ load a pack when you need file-level P0/P1 paths, service inventories, or org wi
 
 | Pack | File | Use when |
 |------|------|----------|
+| collection | [collection.md](collection.md) | Migrating a service in the `collection` workspace (SMS cooling, CLMS, EMS) |
 | *(blank starting point)* | [TEMPLATE.md](TEMPLATE.md) | A different workspace/org with no pack yet |
 
 ## Fleet tracking

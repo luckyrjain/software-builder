@@ -393,6 +393,24 @@ class TestBuildRollup:
         assert items2[0].staleness_days == 10
         assert items2[0].status == "stalled"
 
+    def test_staleness_threshold_zero_flags_in_progress_immediately(self, tmp_path):
+        # staleness_threshold_days: 0 is a real, if extreme, caller policy choice (workflow/inputs.md
+        # documents no default -- HARD STOP if absent, never 0 substituted for "missing"). The escalation
+        # check (staleness_days >= staleness_threshold_days) must use 0 as-given, not treat it as falsy
+        # the way an `if staleness_threshold_days:` guard would -- that would silently disable
+        # stalled-detection for every caller who deliberately asks for "flag anything not yet done".
+        ws = tmp_path / "ws"
+        ws.mkdir()
+        (ws / "MIGRATION_STATUS.yaml").write_text(
+            "schema_version: 1\nservices:\n  - name: svc-a\n    path: svc-a\n"
+            "    tier_focus: P0\n    scan_gate: pass\n    shadow_compare: pending\n    config_cutover: pending\n",
+            encoding="utf-8",
+        )
+        manifest = [ManifestEntry(workspace_root=str(ws))]
+        items, gaps, new_state = build_rollup(manifest, {}, datetime.now(timezone.utc), staleness_threshold_days=0)
+        assert items[0].status == "stalled"
+        assert items[0].staleness_days == 0
+
     def test_blocked_outranks_stalled(self, tmp_path):
         ws = tmp_path / "ws"
         ws.mkdir()

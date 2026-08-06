@@ -51,3 +51,5 @@ Conventions: [smoke-test-conventions](../../docs/skill-framework/shared/smoke-te
 | No observability MCP configured for incident-rca | Doc still produced, states the MCP gap plainly (gate #4) |
 | squad-map HARD STOPs (no config) | Doc still produced, owner `UNKNOWN`, noted in Gaps |
 | Sparse signal / multi-site ambiguity | Doc still produced, confidence capped, ambiguity noted in Gaps |
+
+Maintainer pressure scenarios: [pressure-tests.md](pressure-tests.md).

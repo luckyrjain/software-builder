@@ -57,7 +57,7 @@ P2b exercise evidence.
 2. Session 0 — census ~44 repos, classify, keyword sweep, draft Q1–Q5 → `EXEC_SUMMARY.md`
 3. Session 0b — invoke **squad-map** skill → `SQUAD_MAP.md` (GitLab squad + Datadog team)
 4. Scope checkpoint — report tier counts; ask user to approve P0.5 mechanical scope
-4. P0 → P5 per [phase-index.md](reference/phase-index.md); P2b validates flow against Datadog deps
+5. P0 → P5 per [phase-index.md](reference/phase-index.md); P2b validates flow against Datadog deps
 
 **Expected Session 0 fragments:**
 

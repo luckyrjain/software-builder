@@ -3,7 +3,7 @@ name: loop-task-implementer
 description: >-
   Use when autonomously implementing one or more software tasks through isolated build,
   evidence-based review, remediation, validation, pull-request, and completion workflows across
-  coding agents. Triggers: implement task/issue, autonomous build+review loop, work through a task
+  coding agents. Keywords: implement task/issue, autonomous build+review loop, work through a task
   queue, take this to PR, builder/reviewer/orchestrator roles. Not for reviewing someone else's
   already-open MR (pr-review), RCA (incident-rca), or K8s rightsizing (k8s-overprovisioning-datadog).
 ---

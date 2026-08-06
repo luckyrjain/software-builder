@@ -175,9 +175,13 @@ def set_custom_timestamps(mapper, connection, target):
             setattr(target, col, now)
 ```
 
-## Collection domain note
+## Domain-specific examples
 
-RCM SMS cooling queries use `added_timestamp` on `tbl_sms_capture_*` — SQL rewrites in [collection-domain-files.md](collection-domain-files.md). Verify entity save paths still set timestamp columns on PG if MySQL relied on `ON UPDATE`.
+This file covers the org-agnostic column patterns. For a worked example of a real service's custom
+timestamp columns (including one built on the compliance-timestamp pattern below) see
+[domain-packs/collection.md](domain-packs/collection.md) or your own workspace's pack under
+[domain-packs/README.md](domain-packs/README.md). Whatever the domain, verify entity save paths still
+set timestamp columns on PG if MySQL relied on `ON UPDATE`.
 
 ## Verification
 

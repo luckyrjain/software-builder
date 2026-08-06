@@ -7,6 +7,21 @@ changing pr-review's rules**. It only ever supplies inputs pr-review's own docs 
 (an initiating phrase, or one of the exact options pr-review's own Phase 3 prompt offers) — never a
 synthetic bypass.
 
+**Drift check:** this enumeration is hand-written prose, checked against pr-review's own workflow files
+only when a human remembers to re-read both side by side. After **any** edit to `pr-review/workflow/*.md`
+or to this file, run the mechanical drift check below — it flags pr-review paragraphs that look
+ask-point-shaped (contain phrasing like "wait for the user", "ask-question", "HARD STOP", "stop and
+warn ... unless the user confirms") but share too little vocabulary with this file's enumeration, which
+is the specific failure mode that leaves a future gate unanswered and hangs an unattended run:
+
+```
+python3 pr-gatekeeper/scripts/check-ask-point-drift.py
+```
+
+It is a lexical-overlap heuristic, not a semantic one — see the script's own docstring
+(`pr-gatekeeper/scripts/check-ask-point-drift.py`) for exactly what it does and does not catch. Not yet
+wired into `make lint-pr-gatekeeper` — run it manually until it is.
+
 ## The protocol — every pr-review ask-point gets one deterministic answer, never a hang
 
 **pr-review stops and waits for a human reply at more than one point, not only Phase 3.** A
@@ -26,6 +41,13 @@ below and answer it with its one designated, deterministic reply — never leavi
    [inputs.md § Resolution branches](../../pr-review/workflow/inputs.md#resolution-branches) documents
    `!IID in group/repo`-shaped phrasing in its examples; a bare numeric project ID in that slot is
    unverified against any documented example and best avoided.
+   **Always also pass `expected_head_sha: <head_sha>`** as a typed invocation field alongside the phrase
+   ([pr-review/workflow/inputs.md § Typed invocation](../../pr-review/workflow/inputs.md#typed-invocation-skill-to-skill-callers)) —
+   this skill's `head_sha` input was previously accepted only for its own webhook-retry dedupe
+   (`last_processed_head_sha`) and never checked against the commit pr-review actually reviewed; a race
+   between the webhook firing and pr-review's `get_merge_request` call could silently review (and, with
+   `auto_post_authorized: true`, auto-post) a different commit than the one that triggered this run. See
+   [workflow/gatekeep.md](../workflow/gatekeep.md) step 2 for the mismatch outcome.
 
 2. **Merged/closed-MR stop** — per
    [pr-review/workflow/phase-1.md](../../pr-review/workflow/phase-1.md) step 1's state check: if the MR's
@@ -53,7 +75,18 @@ below and answer it with its one designated, deterministic reply — never leavi
    own judgment — reviewing what was already fetched, with pr-review's own "diff truncated" note intact,
    is the one answer that doesn't require a human scope decision.
 
-5. **Baseline staleness offer during incremental re-review** — per
+5. **Merge-conflict stop** — per
+   [pr-review/workflow/phase-1.md](../../pr-review/workflow/phase-1.md) step 2's merge-conflict check:
+   when the fetched diff contains conflict markers (`<<<<<<<`/`=======`/`>>>>>>>`) or GitLab reports
+   `has_conflicts`, pr-review stops, warns (*"MR has unresolved merge conflicts — resolve conflicts and
+   re-run review"*), and skips Phase 2 **unless the user explicitly asks to review the conflicted
+   state** — the same decline-by-default shape as the merged/closed-MR stop above (item 2), not a
+   scored option list. **pr-gatekeeper's deterministic answer: decline** (never ask to review the
+   conflicted state) — let pr-review's own default (stop, skip Phase 2) stand. An unattended push that
+   lands mid-conflict is a case for a human to resolve by pushing a clean branch, not one pr-gatekeeper
+   should override to force a review of corrupted diff content.
+
+6. **Baseline staleness offer during incremental re-review** — per
    [pr-review/reference/incremental-rerun.md § Baseline staleness](../../pr-review/reference/incremental-rerun.md),
    when more than 30 commits have landed since the last reviewed `head_sha`, pr-review warns and "offers"
    a full re-review instead of incremental. **pr-gatekeeper's deterministic answer: decline the offer,
@@ -61,14 +94,14 @@ below and answer it with its one designated, deterministic reply — never leavi
    remains available any time by asking pr-review directly, per [SKILL.md](../SKILL.md) § Cross-skill
    escalation) — an unattended run should never silently expand to a full review of a long-lived MR.
 
-6. **Phase 3 posting confirmation** — **if and only if** pr-review's Phase 3 stops and shows a
+7. **Phase 3 posting confirmation** — **if and only if** pr-review's Phase 3 stops and shows a
    confirmation prompt (it may not — see the Outcome table below), the automation's designated reply is
    always the literal text **"Hold — don't post"** — one of pr-review's own offered options in every
    mode's prompt
    ([posting.md § Phase 3](../../pr-review/workflow/posting.md#phase-3-confirm-before-posting)). Never
    answer with a posting option on pr-gatekeeper's own initiative, even if it looks safe.
 
-7. **Post-Phase-5 write-back/notification offers** — pr-review may still ask twice more, **after**
+8. **Post-Phase-5 write-back/notification offers** — pr-review may still ask twice more, **after**
    Phase 5 renders:
    - **Jira write-back** ([pr-review/workflow/phase-5.md § Jira write-back](../../pr-review/workflow/phase-5.md#jira-write-back-optional)) —
      "offer to post a summary comment to Jira — proceed only if the user confirms."

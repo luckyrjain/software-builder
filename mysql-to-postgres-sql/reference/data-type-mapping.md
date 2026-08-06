@@ -43,10 +43,12 @@ Validate existing DB values map 1:1 before cutover; add migration for invalid le
 | Integer division | `SELECT 5 DIV 2` → `2` | `SELECT 5 / 2` → `2` only with `::integer` cast on operands |
 | Last insert id | `LAST_INSERT_ID()` | `INSERT … RETURNING id` or `currval()` on sequence |
 
-## Collection touchpoints
+## Domain-specific examples
 
-- **CLMS** `TblUserLoanRepository`: `is_canceled = 0` — verify PG column type
-- **EMS** `CAST(… AS CHAR)` → `::text` (see [collection-domain-files.md](collection-domain-files.md))
+This file covers the org-agnostic mapping rules. For a worked example of applying them to a real
+service — including which repository classes and columns needed the boolean and `CAST` fixes — see
+[domain-packs/collection.md](domain-packs/collection.md) or your own workspace's pack under
+[domain-packs/README.md](domain-packs/README.md).
 
 ## Verification
 

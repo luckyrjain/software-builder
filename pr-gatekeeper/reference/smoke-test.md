@@ -39,3 +39,5 @@ specific preamble (this skill adds no findings of its own).
 When pr-review itself detects `chat-only` (read-only GitLab MCP): Phase 3 is skipped entirely by
 pr-review's own rules; pr-gatekeeper routes the chat-rendered review to notification the same as a Hold
 outcome, since nothing was posted either way.
+
+Maintainer pressure scenarios: [pressure-tests.md](pressure-tests.md).

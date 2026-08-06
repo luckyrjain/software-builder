@@ -119,6 +119,39 @@ Anchor one inline thread to the **first** `file:line`.
 Pipeline step 5 — scan Phase 1 step 3 feedback. Same location, root cause, stack, or API misuse →
 suppress. Prefer silence over nagging.
 
+## CODEOWNERS approval cross-check
+
+**Moved here from Phase 5 (P0 fix):** this must run — and its finding, if any, must land in `findings` —
+**before** the Phase 2→3 gate, Phase 3 confirmation, and Phase 4 posting, not after. Running it in Phase 5
+(post-posting) meant a merge-blocking gap could be discovered only after the review had already been
+confirmed and posted as ✅ Approve. Phase 5 now only **renders** this result (see `workflow/phase-5.md`
+§CODEOWNERS Approval Gaps) — it does not compute it.
+
+Run this check when `context_cache.codeowners_rules` is populated (from Phase 1 step 7) and approval
+state is available (Phase 1 step 4):
+
+1. **Match** the path against CODEOWNERS patterns (most specific rule wins; use gitignore-style
+   glob matching — a rule for `src/payments/` is more specific than `src/` which is more specific
+   than `*`). Paths with no matching CODEOWNERS entry: skip — no ownership gate.
+
+2. **Extract** required owners (GitLab groups as `@org/team` or usernames as `@user`).
+
+3. **Check** whether at least one required owner for this path appears in the Phase 1 step 4
+   approval list (approved users / teams).
+
+4. **For each path with a gap** (no required owner has approved), emit a finding into the same
+   `findings` list the detect→judge pipeline produces (so it is counted in `review_metrics`, covered by
+   the pipeline attestation checklist below, and included in the recommendation matrix like any other
+   finding — not a late add-on):
+
+   ```
+   CODEOWNERS approval gap: `<path>` requires [<owner>] — not yet given
+   Severity: Medium
+   ```
+
+Record the full gap list (path, required owner, approved?) for Phase 5's **CODEOWNERS Approval Gaps**
+render — Phase 5 must not re-derive it.
+
 ## Repository review rules (`review-rules.yaml`)
 
 When Phase 1 matched domains (`reference/review-rules.md`):
@@ -143,7 +176,9 @@ Count **emitted** findings after pipeline (exclude nits/praise). **Exhaustive ov
 *exhaustive review* / *full pass* / *don't stop early*.
 
 When stop fires, print notice, record in Notes and executive summary **Confidence**. Set
-`review_metrics.stop_search = true`.
+`review_metrics.stop_search = true` **and** `review_metrics.review_complete = false` — the latter caps
+the Phase 5 recommendation below Approve and forces Phase 3 to always confirm before posting
+(`reference/review-metrics.md` §Recommendation matrix), not just the confidence band.
 
 ## Conditional dimensions
 
@@ -249,6 +284,7 @@ annotated with why N/A:
 - [ ] `review_metrics.suppressed` populated when any candidate was dropped at gates 3–5 or 8–9
 - [ ] root-cause grouping applied per `finding-pipeline.md` §10 (≤10 top-level rows unless exhaustive)
 - [ ] High certainty gate (step 7a) applied — no inflated High count
+- [ ] CODEOWNERS approval cross-check run (or N/A — no `codeowners_rules` cached) before this checklist
 ```
 
 Pass `findings` + `review_metrics` to Phase 2→3 gate.

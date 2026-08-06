@@ -13,6 +13,7 @@ CONSECUTIVE_ESCALATION_BREAKER | QUEUE_EXHAUSTED>
 | Ticket | PR | Notes |
 |--------|----|----|
 | <task_id> | <pull_request_url> | HUMAN_ACTION_REQUIRED — awaiting review/merge |
+| <task_id> | <pull_request_url> | HUMAN_ACTION_REQUIRED — **stacked on `<dependency_task_id>`**, merge that PR first and rebase this one before merging (`allow_stacked_dependencies` — §2 rule 4) |
 
 ## Blocked (<n> escalated)
 
@@ -24,7 +25,7 @@ CONSECUTIVE_ESCALATION_BREAKER | QUEUE_EXHAUSTED>
 
 | Ticket | Waiting on |
 |--------|------------|
-| <task_id> | <dependency task_id, itself blocked/not attempted this run> |
+| <task_id> | <dependency task_id> — <not attempted / PR open but not yet merged / escalated> |
 
 ## Skipped (<n> — already in progress)
 

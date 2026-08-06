@@ -56,3 +56,5 @@ invocation would produce — before `ONBOARDING_TOUR.md` is written.
 | `SQUAD_MAP.md` already exists, repo list unchanged | squad-map's own `refresh: false` default skips re-query — no duplicate MCP calls |
 | squad-map has no MCP available (CODEOWNERS fallback) | Repos still resolved, capped at LOW confidence — `ONBOARDING_TOUR.md` shows LOW, never upgraded |
 | `new_hire.name` or `new_hire.squad` missing | Inputs HARD STOP — ask, Run tour never starts |
+
+Maintainer pressure scenarios: [pressure-tests.md](pressure-tests.md).

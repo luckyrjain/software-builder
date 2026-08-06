@@ -27,6 +27,7 @@ Canonical halt/block registry. **Priority 0** — check before recommendations o
 |-------------|----------|--------|-------------|
 | `auth_failure` | Critical | **Halt** only when every viable source for required evidence is unauthorized | Report attempted sources and auth failures; configure one usable source |
 | `insufficient_metrics` | Critical | **Halt** — combined sources cannot support a sizing verdict | Report attempted sources, scopes, and missing capabilities; label **Unknown** |
+| `ambiguous_unresolved` | Critical | **Halt** — service→workload/environment identity is ambiguous (multiple candidates, multiple `env` values) and no ask-question tool is available to resolve it (unattended caller) | Report the candidates observed; never silently default to `env:production` or any other environment — see [resolve-service.md § Ambiguous resolution](resolve-service.md#ambiguous-resolution-no-silent-production-default) |
 | `manifest_drift` | Critical | **Block optimization** (P0) | Finding #1; cap rec confidence ≤ 0.50 |
 | `vpa_active_unconfirmed` | High | Drift may be expected | Confirm VPA bounds before flagging drift |
 | `deployment_total_mismatch` | High | Block waste/cost | Reconcile per-pod × replicas |

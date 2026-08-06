@@ -26,10 +26,11 @@ Routing table: [skill-routing.md](../docs/skill-framework/shared/skill-routing.m
 
 | Use | Not |
 |-----|-----|
-| Who owns this repo/service? | **domain-comprehension** (full domain map) |
-| Squad map for multi-repo workspace | **incident-rca** (time-window RCA) |
-| GitLab group → Datadog team reconciliation | **pr-review** (MR review) |
-| Refresh ownership after org restructure | **k8s-overprovisioning-datadog** |
+| Map bounded contexts / data flows / architecture across the workspace | **domain-comprehension** (full domain map — delegates ownership to squad-map at Session 0b, but the map itself is out of scope here) |
+| `/who-owns` Slack slash-command payload, automated single-shot caller, no follow-up turn | **who-owns-x-bot** (delegates to squad-map internally — don't call squad-map directly for an unattended single-shot reply) |
+| "Onboard `<name>`, joining the payments squad" — a person is named | **new-hire-guide** (squad-map resolves the squad's repos as one step; the onboarding tour itself lives there) |
+| Org-wide migration status / stalled-migration escalation across many workspaces | **migration-program-manager** (squad-map is ownership lookup only, no migration status) |
+| Org-wide cost/waste ranking, "where's the money", cost-optimization sprint backlog | **cost-optimization-sprint-planner** (squad-map is ownership lookup only, no cost angle) |
 
 ## Deliverable
 

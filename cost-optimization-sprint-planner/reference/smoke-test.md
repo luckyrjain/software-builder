@@ -48,3 +48,5 @@ k8s-overprovisioning-datadog invocation starts.
 | Datadog authentication fails during direct namespace pre-filter discovery | Sweep stops before the loop with `stopped_reason: AUTH_FAILURE`; report suggests `ddsetup`/`ddconfig` or an explicit deployments list |
 | All viable sources for required assessment evidence are unauthorized | Sweep stops immediately with `stopped_reason: AUTH_FAILURE`; no further candidates attempted and the report identifies every attempted source |
 | `cost_rate.provider != aws` | CCM never queried for the whole sweep; every deployment falls straight through to the pre-resolved `cost_rate` fallback |
+
+Maintainer pressure scenarios: [pressure-tests.md](pressure-tests.md).

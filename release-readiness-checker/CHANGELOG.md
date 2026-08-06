@@ -53,3 +53,21 @@ All notable changes to the release-readiness-checker skill. Per-file `workflow_v
 - **Disclosed a known limitation**: the Phase-1-only incident signal can flag baseline/chronic noise
   unrelated to the release, since Phase 1 only detects symptoms, Phase 2 (never reached here) is what
   correlates them to a cause. "Flagged" means "worth a human look," not "confirmed release-caused."
+
+### Fixed (skills audit — P0/P1 remediation)
+- **Repaired retrospective MR review.** Every MR this skill resolves is already merged by construction
+  (the `state: merged` query), but the skill previously invoked pr-review conversationally and reused
+  pr-gatekeeper's "decline the post-merge audit" answer to pr-review's merged-MR stop — meaning pr-review
+  HARD STOPped on 100% of invocations and no MR was ever actually reviewed, while the report still
+  populated an MRs-reviewed row as if a review had happened. Fixed by invoking pr-review with explicit
+  typed fields (`review_mode: retrospective`, `expected_head_sha`, `posting_policy: forbidden`) that
+  select its retrospective audit path directly, added to pr-review itself as a documented typed-invocation
+  mechanism for skill-to-skill callers.
+- **Four-state verdict** (`READY`/`CONDITIONAL`/`NOT_READY`/`UNKNOWN`) replaces the prior two-state
+  `Ready`/`Not ready`, which collapsed a proven blocker, an evidence gap (`insufficient_metrics`,
+  unresolved `since`), and an unconfirmed incident signal into the same false-blocker bucket.
+- **`ambiguous_unresolved` k8s outcome wired through** — k8s-overprovisioning-datadog no longer silently
+  defaults ambiguous service resolution to `env:production`; this skill's gate policy and report format
+  now handle the resulting `STOP_REASON: ambiguous_unresolved` the same honest-gap way as
+  `insufficient_metrics`, instead of the stale documentation this file previously carried describing the
+  removed default-to-production behavior.

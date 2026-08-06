@@ -71,6 +71,26 @@ def confidence_for_codeowners_fallback() -> Confidence:
     return "LOW"
 
 
+def codeowners_fallback_row(
+    codeowners_squad: str | None,
+    git_log_squad: str | None = None,
+) -> tuple[str, Confidence, str]:
+    """Resolve (GitLab squad, Confidence, Evidence) for Step 7 (both MCPs unavailable).
+
+    Mirrors workflow/phase-1.md § Step 7, step 4: the squad guess computed from CODEOWNERS (or
+    git-log when no CODEOWNERS pattern covers the service dir) must flow through to the structured
+    output columns that feed SQUAD_MAP.md and, downstream, org_rollup_item consumers
+    (docs/skill-framework/shared/org-rollup-schema.md) — it must never be silently replaced with
+    UNKNOWN just because it wasn't sourced from a live GitLab/Datadog query. UNKNOWN is only correct
+    when neither step 1 (CODEOWNERS) nor step 2 (git-log) produced a signal at all.
+    """
+    if codeowners_squad:
+        return codeowners_squad, confidence_for_codeowners_fallback(), "CODEOWNERS"
+    if git_log_squad:
+        return git_log_squad, confidence_for_codeowners_fallback(), "GIT_LOG"
+    return "UNKNOWN", confidence_for_codeowners_fallback(), "NONE"
+
+
 def should_hard_stop_missing_segment(
     *,
     gitlab_mcp_available: bool,
