@@ -25,11 +25,12 @@ Unlike loop-task-implementer, this skill does **not** auto-invoke from ambient c
 
 ## When to use
 
-| Use backlog-runner | Use instead |
-|------------------------|--------------|
-| Scheduled/cron trigger pulling a ticket queue | Human typing "implement issue 42" → **loop-task-implementer** directly |
-| Unattended overnight sweep across many tickets | Human typing "work through these tasks" (already a first-class loop-task-implementer pattern) → **loop-task-implementer** directly |
-| — | Auto-merging anything — never built, see design spec Non-goals |
+backlog-runner is for the **scheduled, unattended** case — a nightly cron or scheduled CI job pulling a
+whole ticket queue and working through it while no one's watching. A human typing "implement issue 42" or
+"work through these tasks" in an interactive session should route to **loop-task-implementer** directly —
+it already handles both single- and human-driven multi-task invocation, and backlog-runner adds nothing to
+that path but scheduling. Nothing here ever auto-merges — see the design spec's Non-goals. Full
+routing table: [SKILL.md](SKILL.md#when-to-use-not-to-use).
 
 ## Invocation examples
 

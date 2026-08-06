@@ -34,10 +34,13 @@ payments") since a human is always present for this flow, unlike those four unat
 
 ## When to use
 
-| Use new-hire-guide | Use instead |
-|---------------------|--------------|
-| "Onboard Jane, she's joining payments" (**a person is named**) | "Who owns the payments service?" → **squad-map** directly |
-| First-week orientation for one named person | "Help me onboard to the payments subsystem" (**no person named**) → **domain-comprehension** directly — this genuinely overlaps with domain-comprehension's own "subsystem onboarding" trigger phrase; the disambiguator is whether a person is named |
+new-hire-guide is for "Onboard Jane, she's joining payments" — a first-week orientation curated to one
+**named** person's assigned repos. "Who owns the payments service?" with no person named routes to
+**squad-map** directly, and "help me onboard to the payments subsystem" with no person named routes to
+**domain-comprehension** directly — that phrase genuinely overlaps with domain-comprehension's own
+"subsystem onboarding" trigger, and whether a person is named is the disambiguator. This skill never
+computes squad ownership or comprehension logic itself; both stay squad-map's and domain-comprehension's
+own. Full routing table: [SKILL.md](SKILL.md#when-to-use-not-to-use).
 
 ## Invocation examples
 

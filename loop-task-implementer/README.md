@@ -40,6 +40,7 @@ push, edit the PR, or merge.
 | "Work through these tasks one by one, stop when each is ready to merge" | Post-incident root cause → **incident-rca** |
 | "Run only reviewer Lens A on this change" | Understand an unfamiliar codebase first → **domain-comprehension** |
 | "Adjudicate the review findings instead of blindly fixing them" | MySQL→Postgres dialect scrub → **mysql-to-postgres-sql** |
+| Interactive, human-driven task loop | Scheduled/unattended overnight sweep across many tickets → **backlog-runner** |
 
 ## Invocation examples
 
@@ -78,5 +79,7 @@ Cursor/Kiro and the ChatGPT/Codex/generic-fallback paths: [SETUP.md](SETUP.md).
 - **incident-rca** — hand off when a task's implementation causes or requires incident investigation
 - **domain-comprehension** — hand off when a task needs unfamiliar-codebase context first
 - **mysql-to-postgres-sql** — hand off when a task touches MySQL-dialect SQL during a PG migration
+- **backlog-runner** — for scheduled/overnight batch runs across many tickets, wraps this skill on a
+  cadence instead of one interactive task loop
 
 Agent instructions: [SKILL.md](SKILL.md).

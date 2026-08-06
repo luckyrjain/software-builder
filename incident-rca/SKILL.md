@@ -51,6 +51,7 @@ do **not** pick highest score as primary. Phase exit gates: [phase-exit-criteria
 | Overprovisioned / right-sized deployment? | **k8s-overprovisioning-datadog** |
 | Review a merge request / PR | **pr-review** |
 | Datadog MCP missing / 403 | **ddsetup** / **ddconfig**, then return |
+| PagerDuty/Opsgenie page-fire or incident-resolved webhook (unattended) | **incident-triage-agent** |
 | Live remediation or rollback | Out of scope — read-only |
 
 ## Guardrails (P0)
@@ -107,6 +108,8 @@ Full matrix: [cross-skill-escalation.md](../docs/skill-framework/shared/cross-sk
 | Monitor/alert gap in RCA actions | **kubesense-alerts** |
 | Dashboard needed for soak verification | **kubesense-dashboards** |
 | Incident + unclear service owner | **squad-map** — "Who owns `{service}`? — need squad for RCA follow-up" |
+| PG cutover regression confirmed in RCA | **mysql-to-postgres-sql** audit on failing query |
+| Caller wants a release-wide go/no-go sweep, not a single incident's RCA | **release-readiness-checker** — invokes this skill per flagged service |
 
 ## Framework
 

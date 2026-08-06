@@ -144,6 +144,18 @@ directly. Restart Cursor after either fix.
 The skill probes git provider tools at runtime. If none is available it prompts you to paste manifest
 values manually — only the automated drift / VPA / PDB / ResourceQuota lookups are affected.
 
+## Troubleshooting
+
+| Problem | Fix |
+|---------|-----|
+| Datadog 403 / missing tools | Run **ddsetup** / **ddconfig**; verify site + API key; skill retries ≤2× then blocks the report with `STOP_REASON: auth_failure` — see [reference/mcp-capabilities.md](reference/mcp-capabilities.md) |
+| `npm ERR! enoent … /usr/share/cursor/resources/app/resources/lib` (Linux, GitLab/GitHub MCP via `npx`) | Cursor's bundled npm can't find its own lib path — set `"command"` to your system `npx` (`which npx`) or install the server globally; restart Cursor (§5 above) |
+| Git provider MCP configured but manifest lookup fails / hangs (dangling) | Skill falls back to asking you to paste `resources.requests/limits` and replica counts — manifest drift, VPA, PDB, and ResourceQuota checks are skipped, not blocked |
+| `get_repository_tree` returns >500 entries | Skill stops traversal and asks for the exact Deployment/Helm values path rather than enumerating the whole repo |
+| Rate limit (429) from Datadog | Narrow the time window; skill notes the gap and does not tight-loop retry |
+| CCM / cost toolset unavailable | Cost appendix skipped (`cost_skipped`); assessment continues on utilization only |
+| KubeSense-only (no Datadog) | Not supported as primary — enable Datadog or paste metric snapshots |
+
 ## Framework conventions
 
 - Index: [docs/skill-framework/README.md](../docs/skill-framework/README.md)

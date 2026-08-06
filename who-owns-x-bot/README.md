@@ -18,11 +18,11 @@ true`). It's called explicitly by the automation described in [SETUP.md](SETUP.m
 
 ## When to use
 
-| Use who-owns-x-bot | Use instead |
-|---------------------|--------------|
-| Slack `/who-owns api-disbursement` (bot integration) | Interactive "who owns X?" in a coding session → **squad-map** |
-| Any single-shot automated ownership lookup | Full squad map / multi-repo table → **squad-map** |
-| — | Bounded-context / domain map → **domain-comprehension** |
+who-owns-x-bot is for a Slack `/who-owns api-disbursement` payload or any other single-shot, no-follow-up
+automated lookup. An interactive "who owns X?" question inside a coding session should route to
+**squad-map** directly — it can hold a follow-up conversation, this skill cannot — and a request for the
+full bounded-context/domain map goes to **domain-comprehension**. Full routing table:
+[SKILL.md](SKILL.md#when-to-use-not-to-use).
 
 ## Invocation examples
 

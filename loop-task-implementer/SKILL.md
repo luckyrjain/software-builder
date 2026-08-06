@@ -12,11 +12,7 @@ description: >-
 
 ## Overview
 
-Use this skill to take software tasks from requirements to verified repository completion while separating implementation, review, and orchestration responsibilities.
-
-Core principle: **claims are advisory; repository evidence is authoritative.**
-
-This skill is platform-neutral. The active coding agent may be Cursor, ChatGPT/Codex, Claude Code, Kiro, or another repository-capable agent.
+Use this skill to take software tasks from requirements to verified repository completion while separating implementation, review, and orchestration responsibilities. Core principle: **claims are advisory; repository evidence is authoritative.** This skill is platform-neutral — the active coding agent may be Cursor, ChatGPT/Codex, Claude Code, Kiro, or another repository-capable agent.
 
 ## Natural-language invocation
 
@@ -41,6 +37,7 @@ Interpret equivalent natural language as invocation.
 | Kubernetes rightsizing / resource optimization | **k8s-overprovisioning-datadog** |
 | Understand an unfamiliar domain/codebase before any implementation | **domain-comprehension** |
 | MySQL-dialect scrub / PG cutover, no autonomous task loop needed | **mysql-to-postgres-sql** |
+| Scheduled/unattended overnight sweep across many tickets, not one interactive task loop | **backlog-runner** |
 | Live rollback / kubectl apply / production deploy | Out of scope — human operator |
 
 ## Roles

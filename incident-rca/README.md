@@ -31,6 +31,9 @@ deploy regressions.
 | "What caused the 5xx spike?" | MR code review → **pr-review** |
 | "Root cause for INC-4521" | Live rollback / paging → out of scope |
 | Symptom-only, org-wide discovery | Datadog MCP missing → **ddsetup** / **ddconfig** first |
+| — | Paging webhook / on-call auto-triage (unattended) → **incident-triage-agent** |
+| — | Release-wide go/no-go sweep across services → **release-readiness-checker** |
+| — | PG cutover regression confirmed here → follow up with **mysql-to-postgres-sql** |
 
 ## Invocation examples
 
