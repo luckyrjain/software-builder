@@ -19,7 +19,7 @@ make install
 
 Restart Cursor after installing.
 
-Workflow modules live under `workflow/` — the top-level [SKILL.md](SKILL.md) is a thin orchestrator (~42 lines).
+Workflow modules live under `workflow/` — the top-level [SKILL.md](SKILL.md) is a thin orchestrator.
 
 ### Claude Code
 
