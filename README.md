@@ -164,23 +164,48 @@ Review [scripts/README.md](scripts/README.md) before using a custom target or au
 
 ## Skills
 
+Choose a skill by the outcome you need. Each skill has one primary category even when it composes or
+routes to skills in another category.
+
+### Build, review, and release
+
 | Skill | Invoke | What it does | Docs |
 |-------|--------|--------------|------|
+| [loop-task-implementer](loop-task-implementer/) | “Implement issue 42 and open a PR” | Isolated Builder → two-lens Reviewer → adjudication → remediation → PR loop | [README](loop-task-implementer/README.md) · [SETUP](loop-task-implementer/SETUP.md) |
+| [backlog-runner](backlog-runner/) | Scheduled trigger | Pulls tracker tasks and runs `loop-task-implementer` in dependency order without merging | [README](backlog-runner/README.md) · [SETUP](backlog-runner/SETUP.md) |
 | [pr-review](pr-review/) | `/pr-review` or “review this MR/PR” | GitLab MR review with evidence-backed findings and optional inline posts | [README](pr-review/README.md) · [SETUP](pr-review/SETUP.md) |
 | [pr-gatekeeper](pr-gatekeeper/) | Push webhook | Runs `pr-review` on every push to an open MR and applies unattended posting policy | [README](pr-gatekeeper/README.md) · [SETUP](pr-gatekeeper/SETUP.md) |
+| [release-readiness-checker](release-readiness-checker/) | “Is this release ready?” | Aggregates review, Kubernetes, and incident signals into a release go/no-go report | [README](release-readiness-checker/README.md) · [SETUP](release-readiness-checker/SETUP.md) |
+
+### Incidents and reliability
+
+| Skill | Invoke | What it does | Docs |
+|-------|--------|--------------|------|
 | [incident-rca](incident-rca/) | “RCA for … between …” | Multi-source post-incident investigation across observability and delivery systems | [README](incident-rca/README.md) · [SETUP](incident-rca/SETUP.md) |
 | [incident-triage-agent](incident-triage-agent/) | Paging webhook | Produces page-fire triage and incident-resolved postmortem drafts | [README](incident-triage-agent/README.md) · [SETUP](incident-triage-agent/SETUP.md) |
-| [k8s-overprovisioning-datadog](k8s-overprovisioning-datadog/) | “Is `<service>` overprovisioned?” | Kubernetes CPU, memory, replica, waste, and cost analysis | [README](k8s-overprovisioning-datadog/README.md) · [SETUP](k8s-overprovisioning-datadog/SETUP.md) |
+
+### Architecture, ownership, and onboarding
+
+| Skill | Invoke | What it does | Docs |
+|-------|--------|--------------|------|
 | [domain-comprehension](domain-comprehension/) | “Map the domain …” | Evidence-backed bounded contexts, ownership, dependencies, and business flows | [README](domain-comprehension/README.md) · [SETUP](domain-comprehension/SETUP.md) |
 | [squad-map](squad-map/) | “Who owns …?” | Maps repositories and services to squads using GitLab, Datadog, and CODEOWNERS evidence | [README](squad-map/README.md) · [SETUP](squad-map/SETUP.md) |
 | [who-owns-x-bot](who-owns-x-bot/) | `/who-owns <name>` | Returns one Slack-ready ownership answer by delegating to `squad-map` | [README](who-owns-x-bot/README.md) · [SETUP](who-owns-x-bot/SETUP.md) |
 | [new-hire-guide](new-hire-guide/) | “Onboard `<name>` to `<squad>`” | Builds a squad-scoped onboarding tour from ownership and domain evidence | [README](new-hire-guide/README.md) · [SETUP](new-hire-guide/SETUP.md) |
-| [release-readiness-checker](release-readiness-checker/) | “Is this release ready?” | Aggregates review, Kubernetes, and incident signals into a release go/no-go report | [README](release-readiness-checker/README.md) · [SETUP](release-readiness-checker/SETUP.md) |
-| [migration-program-manager](migration-program-manager/) | “Migration status across all repos” | Rolls up `MIGRATION_STATUS.yaml` files by squad, risk, blockers, and staleness | [README](migration-program-manager/README.md) · [SETUP](migration-program-manager/SETUP.md) |
+
+### Infrastructure and cost
+
+| Skill | Invoke | What it does | Docs |
+|-------|--------|--------------|------|
+| [k8s-overprovisioning-datadog](k8s-overprovisioning-datadog/) | “Is `<service>` overprovisioned?” | Kubernetes CPU, memory, replica, waste, and cost analysis | [README](k8s-overprovisioning-datadog/README.md) · [SETUP](k8s-overprovisioning-datadog/SETUP.md) |
 | [cost-optimization-sprint-planner](cost-optimization-sprint-planner/) | “Plan a cost-optimization sprint” | Sweeps deployments for waste and ranks monthly savings by squad | [README](cost-optimization-sprint-planner/README.md) · [SETUP](cost-optimization-sprint-planner/SETUP.md) |
+
+### Migrations and program reporting
+
+| Skill | Invoke | What it does | Docs |
+|-------|--------|--------------|------|
 | [mysql-to-postgres-sql](mysql-to-postgres-sql/) | “Rewrite MySQL SQL for PostgreSQL” | Scans and rewrites native SQL and JDBC usage for PostgreSQL | [README](mysql-to-postgres-sql/README.md) · [SETUP](mysql-to-postgres-sql/SETUP.md) |
-| [loop-task-implementer](loop-task-implementer/) | “Implement issue 42 and open a PR” | Isolated Builder → two-lens Reviewer → adjudication → remediation → PR loop | [README](loop-task-implementer/README.md) · [SETUP](loop-task-implementer/SETUP.md) |
-| [backlog-runner](backlog-runner/) | Scheduled trigger | Pulls tracker tasks and runs `loop-task-implementer` in dependency order without merging | [README](backlog-runner/README.md) · [SETUP](backlog-runner/SETUP.md) |
+| [migration-program-manager](migration-program-manager/) | “Migration status across all repos” | Rolls up `MIGRATION_STATUS.yaml` files by squad, risk, blockers, and staleness | [README](migration-program-manager/README.md) · [SETUP](migration-program-manager/SETUP.md) |
 | [weekly-squad-digest](weekly-squad-digest/) | Scheduled trigger | Combines migration and cost rollups into one squad-grouped digest | [README](weekly-squad-digest/README.md) · [SETUP](weekly-squad-digest/SETUP.md) |
 
 ## MCP and external integrations
