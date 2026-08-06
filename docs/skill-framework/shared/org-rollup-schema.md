@@ -86,13 +86,16 @@ Source: `MIGRATION_STATUS.yaml` `services[]` rows
 
 Source: one `decision_graph` YAML **per single-deployment run**
 ([k8s-overprovisioning-datadog/reference/decision-graph-schema.md](../../../k8s-overprovisioning-datadog/reference/decision-graph-schema.md))
-— there is no *full-assessment* org-wide k8s mode; the consuming skill (#10) must loop
-k8s-overprovisioning-datadog once per deployment in scope and collect N graphs before this adapter runs.
-**But evaluate reusing k8s-overprovisioning-datadog's own Phase 0b "Namespace ranking"** (a cheap
-multi-deployment waste-% ranking, top 5 per namespace — see
-[k8s-overprovisioning-datadog/workflow/resolve-service.md](../../../k8s-overprovisioning-datadog/workflow/resolve-service.md)
-§Namespace ranking) as a pre-filter before running full assessments, rather than always assessing every
-deployment from scratch. See the design spec § Multi-deployment k8s sweep.
+— there is no *full-assessment* org-wide k8s mode. **Implemented by
+[cost-optimization-sprint-planner](../../../cost-optimization-sprint-planner/SKILL.md)** (item #10),
+which loops k8s-overprovisioning-datadog once per deployment in scope, collecting N graphs before this
+adapter runs, optionally pre-filtered by k8s-overprovisioning-datadog's own Phase 0b "Namespace ranking"
+query pattern (top 5 per namespace, reused directly rather than through a standalone-ranking mode
+k8s-overprovisioning-datadog doesn't document — see
+[cost-optimization-sprint-planner's design spec](../../../docs/superpowers/specs/2026-08-05-cost-optimization-sprint-planner-design.md)).
+`appendix.cost`'s exact field shape (assumed by the `value` row below) is not formally defined in
+`decision-graph-schema.md` and appears in no real example graph — treat it as assumed, not guaranteed,
+same as that design spec's own § Non-goals.
 
 | `org_rollup_item` field | Derived from |
 |--------------------------|----------------|

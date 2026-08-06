@@ -177,6 +177,18 @@ own: the squad join (path/name match against `SQUAD_MAP.md`), the staleness comp
 persisted state, and the rank/group by squad. Same reasoning as release-readiness-checker's mapping above:
 aggregation over already-computed inputs is still Analyze, not a pass-through.
 
+### cost-optimization-sprint-planner mapping
+
+| Phase | File | Canonical |
+|-------|------|-----------|
+| Inputs | `workflow/inputs.md` | Detect (`sweep_scope`, `cost_rate`, `max_deployments_per_run`, `deadline`, `session_token_budget`) |
+| Run sweep | `workflow/run-sweep.md` | Gather (optional namespace/deployment waste-ranking pre-filter query pass, then N delegated k8s-overprovisioning-datadog invocations) + Analyze (squad join, rank by `monthly_savings_total`) + Report (`COST_OPTIMIZATION_SPRINT_REPORT.md` + `cost_optimization_sprint_rollup.json`) |
+
+Same reasoning as migration-program-manager's and release-readiness-checker's mappings above — not
+exempt, since the pre-filter ranking query pass and the squad join/rank are this skill's own Analyze
+logic, not a pass-through of k8s-overprovisioning-datadog's own analysis (which stays entirely its own,
+unmodified, inside each delegated invocation).
+
 ## 5. Cross-skill analogies
 
 | Concept | pr-review | incident-rca | k8s | domain-comprehension | squad-map | mysql-to-postgres-sql |
@@ -216,7 +228,9 @@ When writing cross-skill examples, use analogies above: "pr-review Phase 1 ≈ k
 | `SERVICE_PG_MIGRATION.md` | mysql-to-postgres-sql | migrate workflow closeout |
 | `MIGRATION_STATUS.yaml` | mysql-to-postgres-sql | fleet workspace root (from template) |
 | `assessment_metadata` | domain-comprehension, squad-map, mysql-to-postgres-sql | P5 / Phase 1 / migrate closeout |
-| `org_rollup_item` | migration-program-manager (implemented); k8s decision_graph adapter still pending item #10 | see [org-rollup-schema.md](org-rollup-schema.md); normalizes `MIGRATION_STATUS.yaml` (`pg_migration_gate` adapter, live) and `decision_graph` (`k8s_waste` adapter, pending item #10) |
+| `org_rollup_item` | migration-program-manager and cost-optimization-sprint-planner (both implemented) | see [org-rollup-schema.md](org-rollup-schema.md); normalizes `MIGRATION_STATUS.yaml` (`pg_migration_gate` adapter) and `decision_graph` (`k8s_waste` adapter) |
 | `MIGRATION_PROGRAM_REPORT.md` | migration-program-manager | Run rollup |
 | `migration_program_rollup.json` | migration-program-manager | Run rollup |
 | `migration_program_state.json` | migration-program-manager | Run rollup (persisted across runs, owned exclusively by this skill) |
+| `COST_OPTIMIZATION_SPRINT_REPORT.md` | cost-optimization-sprint-planner | Run sweep |
+| `cost_optimization_sprint_rollup.json` | cost-optimization-sprint-planner | Run sweep |

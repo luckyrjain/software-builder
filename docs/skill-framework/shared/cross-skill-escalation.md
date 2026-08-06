@@ -1,6 +1,6 @@
 # Cross-skill escalation (shared)
 
-**Normative.** Symmetric escalation matrix for pr-review, pr-gatekeeper, incident-rca, incident-triage-agent, k8s-overprovisioning-datadog, domain-comprehension, squad-map, who-owns-x-bot, new-hire-guide, release-readiness-checker, mysql-to-postgres-sql, loop-task-implementer, backlog-runner, and migration-program-manager.
+**Normative.** Symmetric escalation matrix for pr-review, pr-gatekeeper, incident-rca, incident-triage-agent, k8s-overprovisioning-datadog, domain-comprehension, squad-map, who-owns-x-bot, new-hire-guide, release-readiness-checker, mysql-to-postgres-sql, loop-task-implementer, backlog-runner, migration-program-manager, and cost-optimization-sprint-planner.
 
 **Consumers:** `SKILL.md` in each skill (link here; keep ≤10 skill-specific rows max).
 
@@ -54,6 +54,8 @@ know about — don't treat it as a "you may want to" row the way every other row
 | Task touches MySQL-dialect SQL during a PG migration | loop-task-implementer → mysql-to-postgres-sql | Service + repo | "Scan/rewrite MySQL dialect in `{service}` for task `{task_id}`" |
 | Caller wants one workspace's own migration status, not an org-wide rollup | migration-program-manager → mysql-to-postgres-sql | `workspace_root` | "What's the migration status for `{workspace}`?" |
 | A workspace in the rollup has no `SQUAD_MAP.md` (services join as `squad: UNKNOWN`) | migration-program-manager → squad-map | `workspace_root` | "Map squads for repos in `{workspace}` — org prefix `{org}`, segment `{n}`" |
+| Caller wants one deployment's own rightsizing question, not a sweep | cost-optimization-sprint-planner → k8s-overprovisioning-datadog | Deployment + env | "Assess rightsizing for `{deployment}` in `{env}`" |
+| A deployment in the rollup has no `SQUAD_MAP.md`/`ownership.datadog.service_aliases` match | cost-optimization-sprint-planner → squad-map | `workspace_root` | "Map squads for repos in `{workspace}` — org prefix `{org}`, segment `{n}`" |
 
 Skill-specific rows in each `SKILL.md` MUST be a subset of this table plus local deltas only.
 
@@ -125,6 +127,7 @@ When `MYSQL_TO_PG_SQL_REWRITES.md` exists in the workspace deliverable directory
 | Domain / subsystem map, bounded contexts, data ownership | domain-comprehension |
 | MySQL scrub / native SQL PG migration / jdbc:postgresql cutover | mysql-to-postgres-sql |
 | Org-wide migration status rollup across many workspaces/squads | migration-program-manager |
+| Org-wide cost/waste ranking sweep across many deployments/squads | cost-optimization-sprint-planner |
 | Autonomous multi-task implement → review → remediate → PR loop (interactive, human-driven) | loop-task-implementer |
 | Scheduled overnight ticket-queue sweep (unattended) | backlog-runner |
 | Live rollback / kubectl apply | Out of scope — human operator |

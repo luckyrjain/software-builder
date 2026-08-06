@@ -170,6 +170,50 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
   lint target in this phase's build to also run a real pytest suite), root README, docs/README,
   docs/REPOSITORY, skill-routing.md, cross-skill-escalation.md, prompt-injection.md, phase-glossary.md.
 
+## cost-optimization-sprint-planner
+
+### Initial release (2026-08-05)
+
+- New skill — item #10 of the [team-facing agents roadmap](docs/superpowers/plans/2026-08-05-team-facing-agents-roadmap.md):
+  an org-wide cost/waste sweep that loops **k8s-overprovisioning-datadog** once per deployment in a
+  `sweep_scope`, joined to squad ownership via **squad-map**'s `SQUAD_MAP.md`, implementing
+  [org-rollup-schema.md](docs/skill-framework/shared/org-rollup-schema.md)'s `k8s_waste` adapter designed
+  in Phase 4.
+- Design research corrected two claims in the roadmap item's own wording before building against them:
+  (1) "modeled on loop-task-implementer's per-task loop pattern" is inaccurate — loop-task-implementer's
+  own orchestrator works exactly one task at a time; the real precedent for looping a single-item,
+  gate-heavy skill over many items is **backlog-runner**'s `queue-policy.md`, reused here as
+  `reference/sweep-policy.md`; (2) k8s-overprovisioning-datadog's Phase 0b "Namespace ranking" is not
+  documented as a standalone, report-only mode — its own text ties it to "drill into worst deployment,
+  then continue resolve" — so this skill reuses Phase 0b's *query pattern* directly via Datadog MCP as its
+  own pre-filter step, rather than delegating to an unsupported standalone-ranking invocation.
+- `reference/gate-policy.md` — every live k8s-overprovisioning-datadog gate (ambiguous service/tag
+  confirmation, insufficient-metrics/name-mismatch, VPA-active-unconfirmed, cost-rate confirmation,
+  CCM-empty fallback, manifest-lookup-not-found) answered with k8s's own documented, non-guessing
+  fallback. The cost-rate gate is the one genuinely new resolution: k8s's own text says to ask the user
+  for their $/core rate before citing dollar figures on every run — this skill resolves it **once, before
+  the sweep loop starts**, never per deployment, since re-deriving it per deployment would otherwise be
+  the single biggest threat to running this skill unattended over many deployments.
+- `reference/sweep-policy.md` — session-level state layered outside k8s-overprovisioning-datadog's own
+  (which has no cross-run state at all — this is the first skill in the repo to ever run it more than
+  once in a session), per-deployment failure isolation (`insufficient_metrics`/ambiguous-name never
+  aborts the sweep), and batch-level stop conditions (`max_deployments_per_run`/`deadline`/
+  `session_token_budget`) — no consecutive-failure circuit breaker, unlike backlog-runner's, since every
+  k8s-overprovisioning-datadog gate resolves to a documented non-blocking fallback rather than a genuine
+  escalation.
+- No `disable-model-invocation` — ambiently invocable, like release-readiness-checker; a human is present
+  for this flow but a gate-policy file is still needed because the fan-out over potentially many
+  deployments would otherwise interrupt once per deployment, same reasoning release-readiness-checker's
+  own gate-policy.md documents.
+- No scripts of its own — k8s-overprovisioning-datadog has no CLI to wrap (unlike mysql-to-postgres-sql,
+  which migration-program-manager wraps via a real Python script); this skill is pure markdown-workflow,
+  like release-readiness-checker.
+- Design spec: [docs/superpowers/specs/2026-08-05-cost-optimization-sprint-planner-design.md](docs/superpowers/specs/2026-08-05-cost-optimization-sprint-planner-design.md).
+- Wired into `make install-cost-optimization-sprint-planner` / `make lint-cost-optimization-sprint-planner`,
+  root README, docs/README, docs/REPOSITORY, skill-routing.md, cross-skill-escalation.md,
+  prompt-injection.md, phase-glossary.md — and `org-rollup-schema.md`'s `k8s_waste` adapter section
+  updated from "pending item #10" to "implemented by cost-optimization-sprint-planner."
+
 ## who-owns-x-bot
 
 ### Initial release (2026-08-05)

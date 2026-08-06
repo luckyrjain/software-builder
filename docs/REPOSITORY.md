@@ -30,6 +30,7 @@ ai-skills/
 ├── new-hire-guide/            # Personalized onboarding tour wrapper around domain-comprehension + squad-map
 ├── release-readiness-checker/ # Release go/no-go report wrapper around pr-review + k8s-overprovisioning-datadog + incident-rca
 ├── migration-program-manager/ # Org-wide MIGRATION_STATUS.yaml rollup, read-only aggregator (has real Python scripts)
+├── cost-optimization-sprint-planner/ # Org-wide cost/waste sweep wrapper around k8s-overprovisioning-datadog
 ├── mysql-to-postgres-sql/     # MySQL → PostgreSQL native SQL migration skill
 ├── loop-task-implementer/     # Autonomous multi-task implement/review/PR loop skill
 └── backlog-runner/            # Scheduled queue-management wrapper around loop-task-implementer
@@ -65,6 +66,7 @@ make install-who-owns-x-bot
 make install-new-hire-guide
 make install-release-readiness-checker
 make install-migration-program-manager
+make install-cost-optimization-sprint-planner
 make install-mysql-to-postgres-sql
 make install-loop-task-implementer
 make install-backlog-runner
@@ -88,6 +90,7 @@ bash scripts/install.sh who-owns-x-bot
 bash scripts/install.sh new-hire-guide
 bash scripts/install.sh release-readiness-checker
 bash scripts/install.sh migration-program-manager
+bash scripts/install.sh cost-optimization-sprint-planner
 bash scripts/install.sh mysql-to-postgres-sql
 bash scripts/install.sh loop-task-implementer
 bash scripts/install.sh backlog-runner
@@ -119,11 +122,12 @@ and [docs/skill-framework/shared/claude-code-setup.md](skill-framework/shared/cl
 | `make install-new-hire-guide` | Install only `new-hire-guide/` (also runs `install-domain-comprehension` and `install-squad-map`) |
 | `make install-release-readiness-checker` | Install only `release-readiness-checker/` (also runs `install-pr-review`, `install-k8s-overprovisioning`, and `install-incident-rca`) |
 | `make install-migration-program-manager` | Install only `migration-program-manager/` (also runs `install-mysql-to-postgres-sql` and `install-squad-map`) |
+| `make install-cost-optimization-sprint-planner` | Install only `cost-optimization-sprint-planner/` (also runs `install-k8s-overprovisioning` and `install-squad-map`) |
 | `make install-mysql-to-postgres-sql` | Install only `mysql-to-postgres-sql/` |
 | `make install-loop-task-implementer` | Install only `loop-task-implementer/` |
 | `make install-backlog-runner` | Install only `backlog-runner/` (also runs `install-loop-task-implementer`) |
 | `make install-claude` | Run `scripts/install.sh --agent claude-user` for all skills |
-| `make install-claude-<skill>` | Install only `<skill>/` for Claude Code (`pr-review`, `pr-gatekeeper`, `k8s-overprovisioning`, `incident-rca`, `incident-triage-agent`, `domain-comprehension`, `squad-map`, `who-owns-x-bot`, `new-hire-guide`, `release-readiness-checker`, `migration-program-manager`, `mysql-to-postgres-sql`, `loop-task-implementer`, `backlog-runner`) |
+| `make install-claude-<skill>` | Install only `<skill>/` for Claude Code (`pr-review`, `pr-gatekeeper`, `k8s-overprovisioning`, `incident-rca`, `incident-triage-agent`, `domain-comprehension`, `squad-map`, `who-owns-x-bot`, `new-hire-guide`, `release-readiness-checker`, `migration-program-manager`, `cost-optimization-sprint-planner`, `mysql-to-postgres-sql`, `loop-task-implementer`, `backlog-runner`) |
 | `make lint` | Run all lint targets below + shellcheck on `scripts/*.sh` |
 | `make lint-pr-review` | pr-review `SKILL.md` ≤ 180 lines; each `workflow/*.md` has `workflow_version`/`phase`/`produces`/`consumes` frontmatter; dangling markdown anchors; script pytest |
 | `make lint-pr-gatekeeper` | pr-gatekeeper `SKILL.md` ≤ 180 lines; `disable-model-invocation: true` set; workflow frontmatter; dangling anchors; required reference files |
@@ -136,6 +140,7 @@ and [docs/skill-framework/shared/claude-code-setup.md](skill-framework/shared/cl
 | `make lint-new-hire-guide` | new-hire-guide `SKILL.md` ≤ 180 lines; `disable-model-invocation` **not** set; workflow frontmatter; dangling anchors; required reference files |
 | `make lint-release-readiness-checker` | release-readiness-checker `SKILL.md` ≤ 180 lines; `disable-model-invocation` **not** set; workflow frontmatter; dangling anchors; required reference files |
 | `make lint-migration-program-manager` | migration-program-manager `SKILL.md` ≤ 180 lines; `disable-model-invocation` **not** set; workflow frontmatter; dangling anchors; required reference files; aggregator pytest |
+| `make lint-cost-optimization-sprint-planner` | cost-optimization-sprint-planner `SKILL.md` ≤ 180 lines; `disable-model-invocation` **not** set; workflow frontmatter; dangling anchors; required reference files |
 | `make lint-mysql-to-postgres-sql` | mysql `SKILL.md` ≤ 180 lines; workflow frontmatter; required references; scan fixtures + pressure harness; shellcheck on scan scripts |
 | `make lint-loop-task-implementer` | loop-task-implementer `SKILL.md` ≤ 180 lines; workflow frontmatter; dangling anchors; required files (`SETUP.md`, `README.md`, `examples.md`, `report-template.md`, `reference/*`) |
 | `make lint-backlog-runner` | backlog-runner `SKILL.md` ≤ 180 lines; `disable-model-invocation: true` set; workflow frontmatter; dangling anchors; required reference files |
@@ -227,6 +232,19 @@ existence. Runs `python3 -m pytest migration-program-manager/tests/ -q`
 (`tests/test_aggregate_migration_status.py`, 50 cases covering the `SQUAD_MAP.md` parser, the squad join,
 status derivation, and staleness tracking) if pytest is installed.
 
+### lint-cost-optimization-sprint-planner
+
+`cost-optimization-sprint-planner/SKILL.md` must stay at or under **180 lines** and must **not** set
+`disable-model-invocation` — a human is present for this flow, but the fan-out over potentially many
+deployments still needs a gate-policy file (every live k8s-overprovisioning-datadog gate answered with
+its own documented fallback, cost-rate resolved once sweep-wide) and a sweep-policy file (session-level
+state, candidate-list construction, failure isolation, batch-level stop conditions), modeled on
+backlog-runner's `queue-policy.md`. Each file under `workflow/` must declare `workflow_version`, `phase`,
+`produces`, and `consumes` in YAML frontmatter. Checks markdown anchor links and required `reference/`
+files (`phase-index.md`, `lazy-load-index.md`, `gate-policy.md`, `sweep-policy.md`, `report-format.md`,
+`smoke-test.md`). No scripts or tests — this skill has no rightsizing/cost-analysis logic of its own
+beyond the pre-filter query pass, the sweep loop, and the aggregation.
+
 ### lint-mysql-to-postgres-sql
 
 Requires **ripgrep** (`rg`) with PCRE2 on the host running lint. `mysql-to-postgres-sql/SKILL.md` must stay at or under **180 lines**. Each file under `workflow/` must declare `workflow_version` frontmatter. Runs scan gate fixtures (`tests/fixtures/mysql-dialect/`), the pressure-test harness (`tests/run_pressure_tests.sh`), dangling anchor checks, and shellcheck on `scripts/scan-mysql-dialect.sh` and `scripts/scan-report.sh`.
@@ -305,6 +323,7 @@ To disable the gate later, set the same field to `false`.
 | new-hire-guide | None — inherits domain-comprehension's + squad-map's | Requires both installed and configured |
 | release-readiness-checker | None — inherits pr-review's, k8s-overprovisioning-datadog's, and incident-rca's | Requires all three installed and configured |
 | migration-program-manager | None — no MCP calls at all, pure file aggregation | Requires mysql-to-postgres-sql (and ideally squad-map) already run in the target workspaces |
+| cost-optimization-sprint-planner | Datadog (for the namespace pre-filter) — otherwise delegates to k8s-overprovisioning-datadog's own | Requires k8s-overprovisioning-datadog installed and configured (and ideally squad-map) |
 | mysql-to-postgres-sql | None | Datadog (optional; post-cutover APM verification) |
 | loop-task-implementer | None — uses the host agent's own repo/git access, not an MCP server | See [loop-task-implementer/reference/mcp-capabilities.md](../loop-task-implementer/reference/mcp-capabilities.md) for host-capability requirements |
 | backlog-runner | Issue-tracker MCP (Jira or GitHub Issues) — required here, optional for loop-task-implementer itself | Requires loop-task-implementer installed and configured |

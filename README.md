@@ -29,6 +29,7 @@ Each skill has a human **`README.md`** (what it does) separate from **`SKILL.md`
 | [new-hire-guide](new-hire-guide/) | "onboard `<name>`, joining `<squad>`" | Personalized onboarding tour: resolves the new hire's squad's repos via squad-map, runs domain-comprehension unscoped, curates `ONBOARDING_TOUR.md` down to those repos | [README](new-hire-guide/README.md) · [SETUP](new-hire-guide/SETUP.md) |
 | [release-readiness-checker](release-readiness-checker/) | "is this release ready to ship?" with a `release_manifest` | Release go/no-go report: pr-review (MRs since last release, never posts) + k8s-overprovisioning-datadog (per-service verdict) + incident-rca (per-service incident signal, Phase 1 only) | [README](release-readiness-checker/README.md) · [SETUP](release-readiness-checker/SETUP.md) |
 | [migration-program-manager](migration-program-manager/) | "migration status across all repos" with a `program_manifest` | Org-wide rollup of `MIGRATION_STATUS.yaml` joined to `SQUAD_MAP.md`, ranked by staleness/blocked count per squad — pure read-only aggregator | [README](migration-program-manager/README.md) · [SETUP](migration-program-manager/SETUP.md) |
+| [cost-optimization-sprint-planner](cost-optimization-sprint-planner/) | "where's the money", cost optimization sprint, with a `sweep_scope` | Org-wide cost/waste sweep: loops k8s-overprovisioning-datadog once per deployment, joins to `SQUAD_MAP.md`, ranked by `monthly_savings_total` per squad | [README](cost-optimization-sprint-planner/README.md) · [SETUP](cost-optimization-sprint-planner/SETUP.md) |
 | [mysql-to-postgres-sql](mysql-to-postgres-sql/) | "MySQL scrub …", "jdbc:postgresql …", "TIMESTAMPDIFF …" | Native SQL + JDBC rewrite for MySQL→PostgreSQL; scan gate, collection P0/P1 | [README](mysql-to-postgres-sql/README.md) · [SETUP](mysql-to-postgres-sql/SETUP.md) |
 | [loop-task-implementer](loop-task-implementer/) | "implement issue 42 …", "work through these tasks …" | Autonomous multi-task loop: isolated Builder → two-lens independent Reviewer → adjudicated remediation → PR. Platform-neutral, no Datadog/GitLab/Jira MCP required | [README](loop-task-implementer/README.md) · [SETUP](loop-task-implementer/SETUP.md) |
 | [backlog-runner](backlog-runner/) | Scheduled trigger (not human chat) | Pulls N tickets from a tracker query, runs loop-task-implementer per ticket overnight in dependency order, never merges | [README](backlog-runner/README.md) · [SETUP](backlog-runner/SETUP.md) |
@@ -55,6 +56,7 @@ make install-who-owns-x-bot
 make install-new-hire-guide
 make install-release-readiness-checker
 make install-migration-program-manager
+make install-cost-optimization-sprint-planner
 make install-mysql-to-postgres-sql
 make install-loop-task-implementer
 make install-backlog-runner
@@ -78,6 +80,7 @@ bash scripts/install.sh who-owns-x-bot
 bash scripts/install.sh new-hire-guide
 bash scripts/install.sh release-readiness-checker
 bash scripts/install.sh migration-program-manager
+bash scripts/install.sh cost-optimization-sprint-planner
 bash scripts/install.sh mysql-to-postgres-sql
 bash scripts/install.sh loop-task-implementer
 bash scripts/install.sh backlog-runner
@@ -135,6 +138,7 @@ make lint-who-owns-x-bot        # who-owns-x-bot SKILL line limit, frontmatter, 
 make lint-new-hire-guide        # new-hire-guide SKILL line limit, frontmatter, anchors, required files
 make lint-release-readiness-checker # release-readiness-checker SKILL line limit, frontmatter, anchors, required files
 make lint-migration-program-manager # migration-program-manager SKILL line limit, frontmatter, anchors, aggregator pytest
+make lint-cost-optimization-sprint-planner # cost-optimization-sprint-planner SKILL line limit, frontmatter, anchors, required files
 make lint-mysql-to-postgres-sql # mysql SKILL line limit, scan fixtures, pressure harness, shellcheck
 make lint-loop-task-implementer # loop-task-implementer SKILL line limit, workflow frontmatter, required files, anchors
 make lint-backlog-runner        # backlog-runner SKILL line limit, frontmatter, anchors, required files
@@ -153,6 +157,7 @@ make lint-backlog-runner        # backlog-runner SKILL line limit, frontmatter, 
 | `lint-new-hire-guide` | `SKILL.md` ≤ 180 lines; `disable-model-invocation` **not** set; workflow frontmatter; dangling anchors; required reference files |
 | `lint-release-readiness-checker` | `SKILL.md` ≤ 180 lines; `disable-model-invocation` **not** set; workflow frontmatter; dangling anchors; required reference files |
 | `lint-migration-program-manager` | `SKILL.md` ≤ 180 lines; `disable-model-invocation` **not** set; workflow frontmatter; dangling anchors; required reference files; aggregator pytest |
+| `lint-cost-optimization-sprint-planner` | `SKILL.md` ≤ 180 lines; `disable-model-invocation` **not** set; workflow frontmatter; dangling anchors; required reference files |
 | `lint-mysql-to-postgres-sql` | `SKILL.md` ≤ 180 lines; workflow frontmatter; required references; scan fixtures + pressure harness; shellcheck on scan scripts |
 | `lint-loop-task-implementer` | `SKILL.md` ≤ 180 lines; workflow frontmatter; dangling anchors; required files (`SETUP.md`/`README.md`/`examples.md`/`report-template.md`/`reference/*`) |
 | `lint-backlog-runner` | `SKILL.md` ≤ 180 lines; `disable-model-invocation: true` set; workflow frontmatter; dangling anchors; required reference files |
@@ -181,6 +186,7 @@ or a Docker/Linux runner (deps installed via `apt-get` in the pipeline).
 | new-hire-guide | None of its own — inherits domain-comprehension's + squad-map's | [new-hire-guide/SETUP.md](new-hire-guide/SETUP.md) |
 | release-readiness-checker | None of its own — inherits pr-review's, k8s-overprovisioning-datadog's, and incident-rca's | [release-readiness-checker/SETUP.md](release-readiness-checker/SETUP.md) |
 | migration-program-manager | None of its own — no MCP calls at all, pure file aggregation | [migration-program-manager/SETUP.md](migration-program-manager/SETUP.md) |
+| cost-optimization-sprint-planner | Datadog (for the namespace pre-filter) — otherwise inherits k8s-overprovisioning-datadog's own | [cost-optimization-sprint-planner/SETUP.md](cost-optimization-sprint-planner/SETUP.md) |
 | mysql-to-postgres-sql | None (code scan + rewrite) | Datadog (optional; post-cutover APM) — [mysql-to-postgres-sql/SETUP.md](mysql-to-postgres-sql/SETUP.md) |
 | loop-task-implementer | None (uses the host agent's own repo/git access, not an MCP server) | [loop-task-implementer/reference/mcp-capabilities.md](loop-task-implementer/reference/mcp-capabilities.md) |
 | backlog-runner | Issue-tracker MCP (Jira or GitHub Issues) — required for this skill, optional for loop-task-implementer itself | [backlog-runner/SETUP.md](backlog-runner/SETUP.md) |
@@ -481,6 +487,32 @@ to confirm when nothing is invoked live. Tracks its own staleness state across r
   group and a Workspace gaps section
 - `migration_program_rollup.json` — the computed `org_rollup_item` list, for a future Weekly Squad Digest
   to reuse without re-aggregating
+
+---
+
+## Usage (cost-optimization-sprint-planner)
+
+**Org-wide sweep wrapper around k8s-overprovisioning-datadog** — loops it once per deployment in scope,
+never modifying its own read-only analysis. Resolves the cost rate once, sweep-wide, instead of once per
+deployment (the single biggest thing standing between this skill and running unattended over many
+deployments). Every live gate k8s-overprovisioning-datadog might hit is answered with its own documented,
+non-guessing fallback — see [cost-optimization-sprint-planner/reference/gate-policy.md](cost-optimization-sprint-planner/reference/gate-policy.md).
+
+### Examples
+
+| You say | What happens |
+|----------------|----------------|
+| "Where's the money?" with `sweep_scope` (explicit deployment list) + `cost_rate` | Assesses each deployment via k8s-overprovisioning-datadog, sequentially, joins to `SQUAD_MAP.md`, writes `COST_OPTIMIZATION_SPRINT_REPORT.md` + `cost_optimization_sprint_rollup.json`, ranked by `monthly_savings_total` |
+| `sweep_scope.namespace_prefilter` instead of an explicit list | Runs the namespace/deployment waste-ranking queries first to produce a bounded candidate list, then sweeps only those |
+| A deployment resolves to `insufficient_metrics` | Recorded as a sweep gap — the sweep continues to the next deployment, never aborts |
+| "Is checkout-api overprovisioned?" | **Wrong skill** → k8s-overprovisioning-datadog directly |
+
+### What you get (cost-optimization-sprint-planner)
+
+- `COST_OPTIMIZATION_SPRINT_REPORT.md` — per-squad ranked by `monthly_savings_total`, a `UNKNOWN squad`
+  group, and a Sweep gaps section
+- `cost_optimization_sprint_rollup.json` — the computed `org_rollup_item` list, for a future Weekly Squad
+  Digest to reuse without re-sweeping
 
 ---
 

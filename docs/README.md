@@ -30,6 +30,7 @@ Each skill is a self-contained directory copied to `~/.cursor/skills/<name>/` on
 | **new-hire-guide** | [new-hire-guide/README.md](../new-hire-guide/README.md) | [new-hire-guide/SKILL.md](../new-hire-guide/SKILL.md) | [new-hire-guide/SETUP.md](../new-hire-guide/SETUP.md) |
 | **release-readiness-checker** | [release-readiness-checker/README.md](../release-readiness-checker/README.md) | [release-readiness-checker/SKILL.md](../release-readiness-checker/SKILL.md) | [release-readiness-checker/SETUP.md](../release-readiness-checker/SETUP.md) |
 | **migration-program-manager** | [migration-program-manager/README.md](../migration-program-manager/README.md) | [migration-program-manager/SKILL.md](../migration-program-manager/SKILL.md) | [migration-program-manager/SETUP.md](../migration-program-manager/SETUP.md) |
+| **cost-optimization-sprint-planner** | [cost-optimization-sprint-planner/README.md](../cost-optimization-sprint-planner/README.md) | [cost-optimization-sprint-planner/SKILL.md](../cost-optimization-sprint-planner/SKILL.md) | [cost-optimization-sprint-planner/SETUP.md](../cost-optimization-sprint-planner/SETUP.md) |
 | **mysql-to-postgres-sql** | [mysql-to-postgres-sql/README.md](../mysql-to-postgres-sql/README.md) | [mysql-to-postgres-sql/SKILL.md](../mysql-to-postgres-sql/SKILL.md) | [mysql-to-postgres-sql/SETUP.md](../mysql-to-postgres-sql/SETUP.md) |
 | **loop-task-implementer** | [loop-task-implementer/README.md](../loop-task-implementer/README.md) | [loop-task-implementer/SKILL.md](../loop-task-implementer/SKILL.md) | [loop-task-implementer/SETUP.md](../loop-task-implementer/SETUP.md) |
 | **backlog-runner** | [backlog-runner/README.md](../backlog-runner/README.md) | [backlog-runner/SKILL.md](../backlog-runner/SKILL.md) | [backlog-runner/SETUP.md](../backlog-runner/SETUP.md) |
@@ -49,6 +50,7 @@ Each skill is a self-contained directory copied to `~/.cursor/skills/<name>/` on
 | **new-hire-guide** | Natural language ("onboard `<name>`, joining `<squad>`") | Personalized onboarding tour: squad-map resolves the new hire's repos, domain-comprehension runs unscoped, `ONBOARDING_TOUR.md` curates down to those repos |
 | **release-readiness-checker** | Natural language ("is this release ready?" + `release_manifest`) | Release go/no-go report: pr-review (MRs since last release, never posts) + k8s-overprovisioning-datadog (per-service verdict) + incident-rca (per-service incident signal, Phase 1 only) |
 | **migration-program-manager** | Natural language ("migration status across all repos" + `program_manifest`) | Org-wide rollup of `MIGRATION_STATUS.yaml` joined to `SQUAD_MAP.md`, ranked by staleness/blocked count per squad — pure read-only aggregator, no live wrapped-skill invocation |
+| **cost-optimization-sprint-planner** | Natural language ("where's the money" + `sweep_scope`) | Org-wide cost/waste sweep: loops k8s-overprovisioning-datadog once per deployment, joins to `SQUAD_MAP.md`, ranked by `monthly_savings_total` per squad |
 | **mysql-to-postgres-sql** | Natural language ("MySQL scrub …", "jdbc:postgresql …") | MySQL-dialect scan gate + PostgreSQL rewrite for a `jdbc:mysql`→`jdbc:postgresql` migration |
 | **loop-task-implementer** | Natural language ("implement issue 42 …") | Autonomous multi-task loop: isolated Builder → two-lens independent Reviewer → adjudicated remediation → PR; platform-neutral, no MCP dependency |
 | **backlog-runner** | Scheduled trigger, not ambient chat | Queue-management wrapper: pulls N tickets from a tracker query, runs loop-task-implementer per ticket overnight in dependency order, never merges |
@@ -81,6 +83,8 @@ Skills reference each other when a finding belongs in another workflow:
 | release-readiness-checker | A flagged service needs the full incident investigation | incident-rca |
 | migration-program-manager | Caller wants one workspace's own migration status, not the org-wide rollup | mysql-to-postgres-sql |
 | migration-program-manager | A workspace has no SQUAD_MAP.md — services join as UNKNOWN | squad-map |
+| cost-optimization-sprint-planner | Caller wants one deployment's own rightsizing question, not a sweep | k8s-overprovisioning-datadog |
+| cost-optimization-sprint-planner | A deployment has no SQUAD_MAP.md/service-alias match — joins as UNKNOWN | squad-map |
 | domain-comprehension | Produced `MYSQL_TO_PG_SQL_REWRITES.md` | mysql-to-postgres-sql |
 | mysql-to-postgres-sql | Migration MR needs review | pr-review |
 | mysql-to-postgres-sql | Cutover regression / wrong query results | incident-rca |
@@ -106,12 +110,13 @@ Full symmetric matrix (forward + reverse escalations):
 | [superpowers/specs/2026-08-05-who-owns-x-bot-design.md](superpowers/specs/2026-08-05-who-owns-x-bot-design.md) | who-owns-x-bot design — item #1 of the team-facing agents roadmap |
 | [superpowers/specs/2026-08-05-pr-gatekeeper-design.md](superpowers/specs/2026-08-05-pr-gatekeeper-design.md) | pr-gatekeeper design — item #2 of the team-facing agents roadmap |
 | [superpowers/specs/2026-08-05-incident-triage-agent-design.md](superpowers/specs/2026-08-05-incident-triage-agent-design.md) | incident-triage-agent design — items #3+#4 of the team-facing agents roadmap |
-| [superpowers/specs/2026-08-05-org-rollup-aggregation-layer-design.md](superpowers/specs/2026-08-05-org-rollup-aggregation-layer-design.md) | Shared cross-repo aggregation layer design — no implementation yet, informs future items #8/#10/#11 |
+| [superpowers/specs/2026-08-05-org-rollup-aggregation-layer-design.md](superpowers/specs/2026-08-05-org-rollup-aggregation-layer-design.md) | Shared cross-repo aggregation layer design — implemented by items #8 and #10; informs future item #11 |
 | [superpowers/specs/2026-08-05-backlog-runner-design.md](superpowers/specs/2026-08-05-backlog-runner-design.md) | backlog-runner design — item #7 of the team-facing agents roadmap |
 | [superpowers/specs/2026-08-05-domain-comprehension-proposal-check-mode-design.md](superpowers/specs/2026-08-05-domain-comprehension-proposal-check-mode-design.md) | domain-comprehension `PROPOSAL_CHECK` mode design — item #6 of the team-facing agents roadmap (a mode addition, not a new skill) |
 | [superpowers/specs/2026-08-05-new-hire-guide-design.md](superpowers/specs/2026-08-05-new-hire-guide-design.md) | new-hire-guide design — item #5 of the team-facing agents roadmap |
 | [superpowers/specs/2026-08-05-release-readiness-checker-design.md](superpowers/specs/2026-08-05-release-readiness-checker-design.md) | release-readiness-checker design — item #9 of the team-facing agents roadmap |
 | [superpowers/specs/2026-08-05-migration-program-manager-design.md](superpowers/specs/2026-08-05-migration-program-manager-design.md) | migration-program-manager design — item #8 of the team-facing agents roadmap |
+| [superpowers/specs/2026-08-05-cost-optimization-sprint-planner-design.md](superpowers/specs/2026-08-05-cost-optimization-sprint-planner-design.md) | cost-optimization-sprint-planner design — item #10 of the team-facing agents roadmap |
 
 These are planning artifacts; the live behavior is defined in `pr-review/SKILL.md` and `pr-review/reference/`.
 
@@ -212,6 +217,17 @@ These are planning artifacts; the live behavior is defined in `pr-review/SKILL.m
 | `workflow/run-rollup.md` | Invoke the aggregator script, rank/group by squad, build the report + rollup JSON |
 | `scripts/aggregate_migration_status.py` | Parse `MIGRATION_STATUS.yaml` × N + `SQUAD_MAP.md`, join, compute staleness against persisted state |
 | `reference/report-format.md` | Normative `MIGRATION_PROGRAM_REPORT.md` + `migration_program_rollup.json` structure |
+| `reference/smoke-test.md` | Post-install validation steps |
+
+## cost-optimization-sprint-planner file map
+
+| Path | What it does |
+|------|--------------|
+| `workflow/inputs.md` | Parse `sweep_scope` + `cost_rate` + `max_deployments_per_run`/`deadline`/`session_token_budget`; HARD STOP on missing required fields |
+| `workflow/run-sweep.md` | Optional namespace pre-filter, loop k8s-overprovisioning-datadog per deployment, join, rank, render |
+| `reference/gate-policy.md` | Every live k8s-overprovisioning-datadog gate and its scripted, reused answer; cost-rate resolved once, sweep-wide |
+| `reference/sweep-policy.md` | The sweep loop's own session-level state, candidate-list construction, failure isolation, stop conditions |
+| `reference/report-format.md` | Normative `COST_OPTIMIZATION_SPRINT_REPORT.md` + `cost_optimization_sprint_rollup.json` structure |
 | `reference/smoke-test.md` | Post-install validation steps |
 
 ## mysql-to-postgres-sql file map
