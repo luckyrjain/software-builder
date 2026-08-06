@@ -28,7 +28,7 @@ concern, handled by its own guard, not re-implemented here.
 
 | Field | Required | Notes |
 |-------|----------|-------|
-| `sweep_scope` | Yes | **HARD STOP if neither `deployments` nor `namespace_prefilter` is set** — ask which to use |
+| `sweep_scope` | Yes | **HARD STOP if `env` is absent; if neither `deployments` nor `namespace_prefilter` is set; or if `namespace_prefilter` is set (and `deployments` is absent) but missing `top_n_namespaces` or `top_n_deployments_per_namespace`** — ask which to use / ask for the missing field |
 | `cost_rate` | Yes | **HARD STOP if absent, or if present but missing `provider`, `dollars_per_core_month`, or `dollars_per_gib_month`** — ask; no default, see [SKILL.md § Why a gate policy AND a sweep policy](../SKILL.md#why-a-gate-policy-and-a-sweep-policy) |
 
 ### `sweep_scope` shape
@@ -46,6 +46,30 @@ sweep_scope:
 If both are present, `deployments` wins (the more specific, caller-verified scope) and
 `namespace_prefilter` is ignored; note this in the report's sweep-config summary so the caller sees which
 mode actually ran.
+
+`env` is required **regardless of which selection mode is used** — it isn't part of the
+`deployments`/`namespace_prefilter` choice, so the "exactly one selection mode" rule above doesn't cover
+it, and nothing else in this table catches its absence either. It's passed unconditionally to every
+k8s-overprovisioning-datadog invocation (see Normalization below and
+[workflow/run-sweep.md § 2](run-sweep.md#2-loop-k8s-overprovisioning-datadog-once-per-candidate-sequentially)),
+exactly as if a human had typed "assess `<deployment>` in `<env>`"
+([reference/sweep-policy.md § 3](../reference/sweep-policy.md#3-invoking-k8s-overprovisioning-datadog-one-deployment-per-invocation-sequential))
+— an absent `env` would leave that instruction with no environment to scope the metrics query against,
+silently querying whichever environment the underlying Datadog MCP happens to default to rather than the
+one the caller meant, on every deployment in the sweep. It also feeds a direct comparison in
+[reference/gate-policy.md](../reference/gate-policy.md)'s ambiguous service→tag fallback
+(`sweep_scope.env == production`), which needs a real value to compare against. HARD STOP on `env` being
+absent now, at Inputs, same as `cost_rate`'s required sub-fields.
+
+When `namespace_prefilter` is the selection mode in use (i.e. `deployments` is absent), `top_n_namespaces`
+and `top_n_deployments_per_namespace` are both required together — neither has a stated default, and
+[reference/sweep-policy.md § 2](../reference/sweep-policy.md#2-candidate-deployment-list) has no documented
+fallback for either being missing. Treating a missing value as `0` would silently produce an empty
+candidate list (a sweep that looks like `SCOPE_EXHAUSTED` for a scope the caller never actually intended
+to be empty); treating it as unbounded would silently rank and assess every namespace or every deployment
+within a namespace, defeating the entire point of a bounded pre-filter and burning far more of
+`session_token_budget`/wall-clock time than the caller asked for. HARD STOP on either being absent when
+`namespace_prefilter` is the active mode, rather than guessing which interpretation the caller meant.
 
 ### `cost_rate` shape
 

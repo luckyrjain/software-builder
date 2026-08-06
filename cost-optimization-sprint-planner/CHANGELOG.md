@@ -161,3 +161,35 @@ Found by a fourth adversarial review agent, tasked specifically with re-running 
 facts, and the `stopped_reason` six-value enum were all re-checked across every file that asserts them and
 found consistent; this was the one genuinely new gap, a completeness gap in round 3's own fix rather than
 a contradiction between files.
+
+### Fixed (round-5 review, same day)
+- **`sweep_scope.env` was marked "required" in its own shape comment but, like `cost_rate`'s dollar fields
+  before round 4, had no enforced HARD STOP.** `workflow/inputs.md`'s Required table only checked that one
+  of `deployments`/`namespace_prefilter` was set — a `sweep_scope` with one of those but no `env` would
+  pass Inputs cleanly, then leave `workflow/run-sweep.md` §2 and `reference/sweep-policy.md` §3's "assess
+  `<deployment>` in `<env>`" invocation template with no environment to scope the metrics query against on
+  every deployment in the sweep — a silent wrong-environment result, not a caught error, and exactly the
+  kind of unenforced-but-load-bearing sub-field round 4's reviewer flagged as worth a follow-up skim.
+- **`sweep_scope.namespace_prefilter.top_n_namespaces`/`top_n_deployments_per_namespace` had no stated
+  default and no enforcement when one was missing while the other was present.**
+  `reference/sweep-policy.md` §2 uses both directly with no documented fallback; guessing `0` would
+  silently produce an empty candidate list indistinguishable from a genuinely empty scope, guessing
+  "unbounded" would silently assess every deployment in every ranked namespace, blowing past the bounded
+  pre-filter the caller asked for and burning far more of `session_token_budget`/wall-clock time than
+  intended.
+- Fixed: `workflow/inputs.md`'s Required table and `sweep_scope` shape prose, `SKILL.md`'s mirrored table,
+  `reference/phase-index.md`'s quick-paths table, and `examples.md`'s HARD STOP scenario row now all HARD
+  STOP on `sweep_scope` missing `env`, missing both `deployments` and `namespace_prefilter`, or
+  `namespace_prefilter` being the active mode but missing `top_n_namespaces`/`top_n_deployments_per_namespace`
+  — the same file set round 4 touched for `cost_rate`, updated the same way for `sweep_scope`'s own
+  equivalent gap.
+
+Found by a fifth adversarial review agent, tasked narrowly with (a) confirming round 4's `cost_rate` fix
+propagated cleanly (it had — no further fix needed there; `docs/superpowers/specs/2026-08-05-
+cost-optimization-sprint-planner-design.md`'s Interface Contract table is stale against it, but design
+specs in this repo are established as point-in-time planning artifacts, not living docs — confirmed by
+checking migration-program-manager's own design spec, never touched across that skill's seven review
+rounds — so left as-is) and (b) one more skim for the same "effectively required but unenforced sub-field"
+shape elsewhere in `sweep_scope`/`cost_rate`. `cost_rate.cost_basis` and the stated Optional-table defaults
+(`max_deployments_per_run`/`deadline`/`session_token_budget`/`output_dir`/`squad_map_config_path`) were all
+re-checked and found genuinely fine — cleared, not just unexamined.
