@@ -72,10 +72,13 @@ directly instead of re-running the sweep.
 - **A sweep-gap deployment is never assigned a `$0` savings row** — `$0` means k8s-overprovisioning-datadog
   actually assessed it and found nothing to cut; a gap means it was never actually assessed. Conflating
   the two would hide real coverage gaps behind what looks like a clean bill of health.
-- **`evidence_ref` points at a real file this skill itself wrote** — the `decision-graph-<deployment>.json`
-  artifact k8s-overprovisioning-datadog's own JSON renderer produces only when explicitly requested (see
-  [workflow/run-sweep.md § 2](../workflow/run-sweep.md#2-loop-k8s-overprovisioning-datadog-once-per-candidate-sequentially)),
-  never an assumed path to a file k8s-overprovisioning-datadog wouldn't otherwise create on its own.
+- **`evidence_ref` points at a real file this skill itself wrote** — k8s-overprovisioning-datadog's own
+  JSON renderer only ever produces one hardcoded filename (`decision-graph.json`, requested but never
+  renamed by the renderer itself); this skill's own workflow moves/renames that file to
+  `decision-graph-<deployment>.json` immediately after each invocation returns (see
+  [workflow/run-sweep.md § 2](../workflow/run-sweep.md#2-loop-k8s-overprovisioning-datadog-once-per-candidate-sequentially)) —
+  `evidence_ref` points at the result of that move, never an assumed path k8s-overprovisioning-datadog
+  itself produced directly.
 - **`squad_confidence` is carried through, never dropped** — `HIGH`/`MEDIUM`/`LOW` from a direct
   `SQUAD_MAP.md` row, `MEDIUM` from a `service_aliases` reverse-lookup match, `UNKNOWN` when neither
   resolves. A LOW/UNKNOWN match is a real signal a consuming reader should be able to see, not just data

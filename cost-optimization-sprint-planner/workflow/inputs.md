@@ -29,7 +29,7 @@ concern, handled by its own guard, not re-implemented here.
 | Field | Required | Notes |
 |-------|----------|-------|
 | `sweep_scope` | Yes | **HARD STOP if neither `deployments` nor `namespace_prefilter` is set** — ask which to use |
-| `cost_rate` | Yes | **HARD STOP if absent** — ask; no default, see [SKILL.md § Why a gate policy AND a sweep policy](../SKILL.md#why-a-gate-policy-and-a-sweep-policy) |
+| `cost_rate` | Yes | **HARD STOP if absent, or if present but missing `provider`** — ask; no default, see [SKILL.md § Why a gate policy AND a sweep policy](../SKILL.md#why-a-gate-policy-and-a-sweep-policy) |
 
 ### `sweep_scope` shape
 

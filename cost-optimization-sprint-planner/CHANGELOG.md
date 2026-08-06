@@ -115,3 +115,27 @@ this skill's own docs.
 Found by a second adversarial review agent verifying round-1's fixes against the sources they cited
 rather than trusting the round-1 commit message — in three of six cases, the fix's own cited source
 didn't actually support the conclusion drawn from it.
+
+### Fixed (round-3 review, same day)
+- **Round-2's JSON-artifact-path fix was applied to `workflow/run-sweep.md` but not propagated to two
+  other reference files that describe the identical mechanism.** `reference/sweep-policy.md`'s
+  `decision_graph_ref` state comment and `reference/report-format.md`'s `evidence_ref` rule both still
+  asserted the disproven round-1 mechanism verbatim — "this skill's own invocation always requests [a
+  per-deployment filename], never the renderer's own single default filename" — the literal opposite of
+  what `run-sweep.md` §2 now correctly says (the renderer only ever supports its own single default
+  filename; this skill's own workflow moves/renames it afterward). Since both files are independently
+  lazy-loadable during the Run sweep phase, an implementer loading either one without cross-checking
+  `run-sweep.md` word-for-word would be pointed straight back at the retired mechanism. Fixed: both files
+  now match `run-sweep.md`'s corrected description exactly.
+- **`cost_rate.provider` had no enforced HARD STOP.** `workflow/inputs.md`'s Required table only
+  triggered its HARD STOP on `cost_rate` being entirely absent — a `cost_rate` present but missing
+  `provider` would silently pass Inputs despite prose elsewhere (and `reference/gate-policy.md`'s own
+  non-AWS CCM gate) treating `provider` as required. `sweep_scope`'s own row in the same table already
+  demonstrated the right pattern (a sub-field-level HARD STOP condition); extended it to `cost_rate` too.
+- Tightened the `squad_confidence` normalization instruction to call out the empty/whitespace-only
+  Confidence cell case explicitly (`UNKNOWN` directly), matching migration-program-manager's real
+  `normalize_confidence()` guard as precisely as the earlier round's fix only did in spirit.
+
+Found by a third adversarial review agent specifically hunting for "fixed the concept in one place but
+left contradicting prose elsewhere" — the same failure shape round 2 found twice in round 1's fixes,
+recurring once more in round 2's own JSON-artifact-path fix.

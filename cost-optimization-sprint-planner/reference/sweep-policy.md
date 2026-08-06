@@ -21,14 +21,16 @@ sweep_run:
       namespace: "<namespace>"
       env: "<env>"
       outcome: PENDING | ASSESSED | INSUFFICIENT_METRICS | AMBIGUOUS_UNRESOLVED | AUTH_FAILURE
-      decision_graph_ref: null   # path to the requested decision-graph.json file artifact, when ASSESSED
-                                 # -- k8s-overprovisioning-datadog's own JSON renderer will write this file
-                                 # only when explicitly asked (render/json.md: "optionally write to
-                                 # decision-graph.json if user requests a file artifact"); this skill's own
-                                 # invocation (workflow/run-sweep.md § 2) always requests it, one file per
-                                 # deployment under a caller-configured output directory, never the
-                                 # renderer's own single default filename (which would collide across a
-                                 # multi-deployment sweep)
+      decision_graph_ref: null   # path to this deployment's own decision-graph-<deployment>.json, when
+                                 # ASSESSED -- k8s-overprovisioning-datadog's own JSON renderer only
+                                 # supports ONE hardcoded filename (render/json.md: "optionally write to
+                                 # decision-graph.json if user requests a file artifact" -- no parameter
+                                 # for a caller-specified name/path). This skill's own workflow requests
+                                 # that single file, then immediately moves/renames it itself to
+                                 # <output_dir>/decision-graph-<deployment>.json before the next candidate
+                                 # runs (workflow/run-sweep.md § 2) -- a file-move step this skill
+                                 # performs, never a capability requested of the renderer, which would
+                                 # otherwise collide across a multi-deployment sweep
   stopped_reason: null          # MAX_DEPLOYMENTS_REACHED | DEADLINE_REACHED | TOKEN_BUDGET_EXHAUSTED | AUTH_FAILURE | SCOPE_EXHAUSTED | COMPLETED
 ```
 

@@ -69,9 +69,10 @@ when `appendix.cost` is absent.
 **Squad match, in order:**
 
 1. `SQUAD_MAP.md`'s `Datadog service` column, matched against the graph's `metadata.service` verbatim.
-   `squad_confidence` = that row's own `Confidence` column value, **normalized** — take the leading
-   enum token, uppercased (`HIGH`/`MEDIUM`/`LOW`), falling back to `UNKNOWN` for anything else. Never
-   copy the cell verbatim: a real `SQUAD_MAP.md` Confidence cell can carry an annotation (e.g. `MEDIUM
+   `squad_confidence` = that row's own `Confidence` column value, **normalized** — an empty or
+   whitespace-only cell is `UNKNOWN` directly; otherwise take the leading token, uppercased
+   (`HIGH`/`MEDIUM`/`LOW`), falling back to `UNKNOWN` for anything else. Never copy the cell verbatim: a
+   real `SQUAD_MAP.md` Confidence cell can carry an annotation (e.g. `MEDIUM
    ⚠️` on a Conflicts-adjacent row, per
    [squad-map/reference/gold-squad-map-excerpt.md](../../squad-map/reference/gold-squad-map-excerpt.md)),
    which would otherwise violate `org-rollup-schema.md`'s own `HIGH | MEDIUM | LOW | UNKNOWN` enum — the
