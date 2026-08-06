@@ -65,7 +65,7 @@ Parse per [workflow/inputs.md](workflow/inputs.md).
 | Input | Required | Notes |
 |-------|----------|-------|
 | `sweep_scope` | Yes | **HARD STOP if neither `deployments` nor `namespace_prefilter` is set** — `{env, deployments?: [...], namespace_prefilter?: {top_n_namespaces, top_n_deployments_per_namespace}}` |
-| `cost_rate` | Yes | **HARD STOP if absent, or if present but missing `provider`** — no default, `{provider, dollars_per_core_month, dollars_per_gib_month, cost_basis}` |
+| `cost_rate` | Yes | **HARD STOP if absent, or if present but missing `provider`, `dollars_per_core_month`, or `dollars_per_gib_month`** — no default, `{provider, dollars_per_core_month, dollars_per_gib_month, cost_basis}` |
 | `max_deployments_per_run` | No | Default: all in-scope deployments |
 | `deadline` / `session_token_budget` | No | Same optional circuit breakers as backlog-runner |
 | `output_dir` | No | Default: current working directory — where per-deployment `decision-graph-<deployment>.json` files and the report/rollup are written |

@@ -139,3 +139,25 @@ didn't actually support the conclusion drawn from it.
 Found by a third adversarial review agent specifically hunting for "fixed the concept in one place but
 left contradicting prose elsewhere" — the same failure shape round 2 found twice in round 1's fixes,
 recurring once more in round 2's own JSON-artifact-path fix.
+
+### Fixed (round-4 review, same day)
+- **`cost_rate.provider`'s new HARD STOP (round 3) didn't go far enough — `dollars_per_core_month` and
+  `dollars_per_gib_month` were just as effectively required as `provider` but still unenforced.**
+  `workflow/inputs.md`'s prose only ever called out `provider` as "a required field within `cost_rate`,"
+  and the Required table's HARD STOP only checked for it. But whether any given deployment's own graph
+  will have real CCM cost data isn't knowable until that deployment is actually assessed
+  (`reference/gate-policy.md`'s own "CCM empty" row) — a `cost_rate` that HARD-STOP-passed Inputs with
+  `provider` set but no dollar figures would leave `cost-estimation.md`'s `monthly_savings_cpu`/
+  `monthly_savings_mem` formulas with no `$/core/mo`/`$/GiB/mo` to multiply by on the first CCM-empty
+  deployment the sweep hit — undefined cost math on `monthly_savings_total`, the field this skill ranks
+  its entire report by. Fixed: `workflow/inputs.md`'s Required table and prose, `SKILL.md`'s mirrored
+  table, `reference/phase-index.md`, and `examples.md`'s HARD STOP scenario row now all HARD STOP on
+  `cost_rate` missing `provider`, `dollars_per_core_month`, *or* `dollars_per_gib_month` — not `provider`
+  alone.
+
+Found by a fourth adversarial review agent, tasked specifically with re-running round 3's own
+"propagation failure" hunt as a general methodology rather than a one-off — the JSON-artifact-path and
+`AUTH_FAILURE` mechanisms, the `cost_rate.provider`/`squad_confidence`/`service_aliases`/`output_dir`
+facts, and the `stopped_reason` six-value enum were all re-checked across every file that asserts them and
+found consistent; this was the one genuinely new gap, a completeness gap in round 3's own fix rather than
+a contradiction between files.

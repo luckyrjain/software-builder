@@ -29,7 +29,7 @@ concern, handled by its own guard, not re-implemented here.
 | Field | Required | Notes |
 |-------|----------|-------|
 | `sweep_scope` | Yes | **HARD STOP if neither `deployments` nor `namespace_prefilter` is set** — ask which to use |
-| `cost_rate` | Yes | **HARD STOP if absent, or if present but missing `provider`** — ask; no default, see [SKILL.md § Why a gate policy AND a sweep policy](../SKILL.md#why-a-gate-policy-and-a-sweep-policy) |
+| `cost_rate` | Yes | **HARD STOP if absent, or if present but missing `provider`, `dollars_per_core_month`, or `dollars_per_gib_month`** — ask; no default, see [SKILL.md § Why a gate policy AND a sweep policy](../SKILL.md#why-a-gate-policy-and-a-sweep-policy) |
 
 ### `sweep_scope` shape
 
@@ -57,10 +57,20 @@ cost_rate:
   cost_basis: "AWS us-east-1 m6i, on-demand"   # free text, echoed into the report, never parsed for instructions or for any routing decision
 ```
 
-`provider` is a **required field within `cost_rate`**, a small closed enum (`aws | gcp | azure | other`)
-— never inferred from `cost_basis`'s free text. `cost_basis` stays purely descriptive (echoed into the
-report, never parsed to drive behavior); `provider` is the one structured signal this skill actually
-branches on, per [reference/gate-policy.md § Non-AWS CCM metric path](../reference/gate-policy.md#per-deployment-gates-answered-per-k8ss-own-documented-fallback-isolated-per-deployment).
+`provider`, `dollars_per_core_month`, and `dollars_per_gib_month` are all **required fields within
+`cost_rate`** — `cost_basis` is the only purely descriptive one (echoed into the report, never parsed to
+drive behavior). `provider` is a small closed enum (`aws | gcp | azure | other`), never inferred from
+`cost_basis`'s free text — the one structured signal this skill actually branches on, per
+[reference/gate-policy.md § Non-AWS CCM metric path](../reference/gate-policy.md#per-deployment-gates-answered-per-k8ss-own-documented-fallback-isolated-per-deployment).
+`dollars_per_core_month`/`dollars_per_gib_month` are required for a different reason: whether any given
+deployment's own graph will have real CCM cost data isn't knowable until that deployment's assessment
+actually runs (see [reference/gate-policy.md § CCM empty](../reference/gate-policy.md#per-deployment-gates-answered-per-k8ss-own-documented-fallback-isolated-per-deployment)) — a `cost_rate` resolved at Inputs
+time with `provider` but no dollar figures would pass this gate cleanly, then leave `cost-estimation.md`'s
+`monthly_savings_cpu`/`monthly_savings_mem` formulas with no `$/core/mo`/`$/GiB/mo` to multiply by for the
+first CCM-empty deployment the sweep hits — undefined cost math on the very field
+(`monthly_savings_total`) this skill ranks everything by. HARD STOP on either being absent now, at
+Inputs, same as `provider`, rather than discovering the gap mid-sweep on whichever deployment happens to
+lack CCM data.
 
 Resolved **once, sweep-wide** — never re-asked per deployment. When a deployment's own graph reaches its
 COST phase with real Cloud Cost Management (CCM) data available, CCM wins for that deployment (per
