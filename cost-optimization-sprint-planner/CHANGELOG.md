@@ -193,3 +193,30 @@ rounds — so left as-is) and (b) one more skim for the same "effectively requir
 shape elsewhere in `sweep_scope`/`cost_rate`. `cost_rate.cost_basis` and the stated Optional-table defaults
 (`max_deployments_per_run`/`deadline`/`session_token_budget`/`output_dir`/`squad_map_config_path`) were all
 re-checked and found genuinely fine — cleared, not just unexamined.
+
+### Fixed (round-6 review, confirmatory pass, same day)
+- **Round 5's `sweep_scope.env`/`top_n_*` fix propagated its Required-table wording to `SKILL.md`,
+  `reference/phase-index.md`, and `examples.md`, but dropped the "(and `deployments` is absent)"
+  qualifier that `workflow/inputs.md`'s own Required table carries.** Read literally, those three
+  mirrored tables said HARD STOP whenever `namespace_prefilter` is set but incomplete — full stop,
+  regardless of whether `deployments` is also set. But `inputs.md`'s own authoritative rule (and the
+  `sweep_scope` shape prose immediately below its Required table) says the opposite for that case:
+  when both are present, `deployments` wins and `namespace_prefilter` is ignored entirely, so an
+  incomplete `namespace_prefilter` alongside a valid `deployments` list shouldn't stop anything. An
+  implementer following only the summary table in `SKILL.md`/`phase-index.md`/`examples.md` (without
+  cross-checking `inputs.md`'s fuller prose) would have HARD-STOPPED on a caller-supplied scope that
+  should have run cleanly. Fixed: all three now carry the same "(and `deployments` absent)" qualifier
+  `inputs.md` already had, closing the gap without changing `inputs.md` itself (it was already correct).
+
+Found by a sixth adversarial review agent, a short confirmatory pass after three consecutive rounds (3,
+4, 5) each found one more unenforced-required-sub-field instance. A field-by-field re-check of every
+`sweep_scope`/`cost_rate` sub-field (including the empty-`namespace_prefilter: {}` edge case, the
+`deployments`/`namespace_prefilter` OR-condition, and every Optional-table default) found the
+enforcement logic itself now genuinely complete and correctly OR'd — round 5's substantive fix holds.
+The one real remaining gap was the propagation-consistency class this repo has hit every round so far:
+not a new unenforced field, but three summary tables that restated round 5's own fix slightly less
+precisely than the source of truth they mirror. A full source-quote re-verification against
+k8s-overprovisioning-datadog/squad-map/org-rollup-schema.md and a fresh read of the shared framework
+docs (skill-routing.md, cross-skill-escalation.md, prompt-injection.md, phase-glossary.md, root
+CHANGELOG.md) turned up nothing else — no logic errors in ranking/grouping/join, no Makefile/wiring
+drift, no stale quotes. This phase is genuinely clean; recommend closing the review loop here.
