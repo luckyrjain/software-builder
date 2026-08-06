@@ -318,7 +318,7 @@ Ticket comment ("started after 14:30 deploy") corroborates telemetry.
    **ES APM pass** — `aggregate_spans` (`service:elasticsearch`, group by `resource_name` +
    `@base_service`) → top `GET /metadata/_search` from metadata-api
 2. Phase 3 — **query investigation** follow-up: logs for slowlog (none ingested)
-3. Phase 4 — `query_governance` primary (**MEDIUM**–**HIGH**); **`infra_capacity` co-cause** (multi-cause)
+3. Phase 4 — `query_governance` primary (**HIGH**); **`infra_capacity` co-cause** (multi-cause)
 4. Phase 5 — layered root cause, **Query execution profile**, **Executed queries investigated**,
    recovery MTTR, lessons learned
 
@@ -329,7 +329,7 @@ Ticket comment ("started after 14:30 deploy") corroborates telemetry.
 
 Between 05:30–06:49 UTC, OpenSearch search failures degraded seven downstream services. CPU reached 99%,
 search throughput collapsed, and ~2.09M searches were rejected. Blue/Green scale-up restored service by
-06:49. Leading hypothesis: **query_governance** (**MEDIUM**–**HIGH**) with **`infra_capacity` co-cause**
+06:49. Leading hypothesis: **query_governance** (**HIGH**) with **`infra_capacity` co-cause**
 (multi-cause). Immediate trigger: heavy `GET /metadata/_search` from metadata-api at onset (APM). Mitigation:
 vertical scale — not a permanent fix; introduce query governance.
 ```
@@ -455,13 +455,13 @@ OpenSearch
 ```
 
 ```
-**Primary:** query_governance (score 0.55, **MEDIUM**–**HIGH**)
+**Primary:** query_governance (score 0.55, **HIGH**)
 **Co-cause:** infra_capacity (score 0.45, **MEDIUM**)
 **Causality:** multi-cause — expensive query workload exhausted shared cluster headroom; scaling mitigated symptoms only.
 ```
 
 ```
-**Confidence:** MEDIUM–HIGH
+**Confidence:** HIGH
 
 **Reason**
 ✓ APM identifies top workload + caller in first 10m
