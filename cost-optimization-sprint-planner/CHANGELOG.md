@@ -81,3 +81,37 @@ All notable changes to the cost-optimization-sprint-planner skill. Per-file `wor
 Found by an adversarial review agent that cross-checked every quoted gate/field/schema claim against the
 real k8s-overprovisioning-datadog, squad-map, and org-rollup-schema.md source files rather than trusting
 this skill's own docs.
+
+### Fixed (round-2 review, same day)
+- **Round-1's `squad_confidence` fix carried the `SQUAD_MAP.md` Confidence cell through unnormalized.**
+  A real Confidence cell can carry an annotation (`MEDIUM ⚠️` on a Conflicts-adjacent row), which round 1
+  claimed to carry through "unchanged" — that would violate `org-rollup-schema.md`'s own `HIGH | MEDIUM |
+  LOW | UNKNOWN` enum, the exact bug migration-program-manager's `normalize_confidence()` was built to
+  close on this identical schema, cited by round 1's own commit message but not actually applied. Fixed:
+  take the leading enum token, uppercased, falling back to `UNKNOWN`.
+- **Round-1's per-deployment JSON file artifact request asked k8s-overprovisioning-datadog for a
+  capability its own docs don't support.** `render/json.md` documents only one hardcoded filename
+  (`decision-graph.json`), no parameter for a caller-specified path — so requesting
+  `decision-graph-<deployment>.json` per invocation wasn't achievable through k8s's documented interface,
+  and `evidence_ref` risked pointing at nothing reliable (or a collided file across deployments). Fixed:
+  this skill's own workflow now moves/renames the resulting `decision-graph.json` to
+  `<output_dir>/decision-graph-<deployment>.json` itself, immediately after each invocation returns — a
+  file-move step this skill controls, never a capability requested of the wrapped skill.
+- **`workflow/run-sweep.md`'s frontmatter `consumes` list was stale** — missing the two new inputs
+  (`output_dir`, `squad_map_config_path`) round 1 itself introduced and the workflow body already read.
+- **The `service_aliases` reverse-lookup had no tie-break for an ambiguous map** (two repo-name keys
+  mapping to the same Datadog service name — plausible in a monorepo-heavy org per
+  `config-schema.md`'s own monorepo section). Fixed: an ambiguous match is treated as no match at all
+  (falls through to `squad: UNKNOWN`) rather than silently picking whichever key the search hits first.
+- **The non-AWS CCM gate's scripted answer required parsing `cost_rate.cost_basis`'s free text** for a
+  cloud-provider name, with no defined algorithm for the no-provider-named or ambiguous case — and sat in
+  tension with `workflow/inputs.md`'s own "never parsed for instructions" framing of that field. Fixed:
+  added a required, structured `cost_rate.provider` enum (`aws | gcp | azure | other`) that the gate
+  branches on directly; `cost_basis` stays purely descriptive, never parsed to drive behavior.
+- **`reference/smoke-test.md` had no scenario for the new `AUTH_FAILURE` sweep-stop path or the new
+  `cost_rate.provider` gate**, both genuinely new behavior with no smoke coverage. Added both to the
+  Degraded paths table.
+
+Found by a second adversarial review agent verifying round-1's fixes against the sources they cited
+rather than trusting the round-1 commit message — in three of six cases, the fix's own cited source
+didn't actually support the conclusion drawn from it.

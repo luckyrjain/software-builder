@@ -9,8 +9,9 @@ Conventions: [smoke-test-conventions](../../docs/skill-framework/shared/smoke-te
 
 ## Invocation
 
-> `sweep_scope: {env: production, deployments: [<svc1>, <svc2>]}`, `cost_rate: {dollars_per_core_month:
-> 24.00, dollars_per_gib_month: 3.50, cost_basis: "<your provider/region/node type>"}`
+> `sweep_scope: {env: production, deployments: [<svc1>, <svc2>]}`, `cost_rate: {provider: aws,
+> dollars_per_core_month: 24.00, dollars_per_gib_month: 3.50, cost_basis: "<your provider/region/node
+> type>"}`
 
 ## Expected first output
 
@@ -43,3 +44,5 @@ k8s-overprovisioning-datadog invocation starts.
 | CCM has real cost data for a deployment | CCM wins for that deployment; `cost_rate` fallback not used |
 | `sweep_scope.namespace_prefilter` set with no matching namespaces | Empty candidate list, `stopped_reason: SCOPE_EXHAUSTED`, report still produced (empty, honestly) |
 | VPA active, recommendation unconfirmed on a deployment | That deployment still produces a real `decision_graph` with the affected dimension `DEFERRED` — not a sweep gap |
+| A deployment hits `STOP_REASON: auth_failure` | Sweep stops immediately (`stopped_reason: AUTH_FAILURE`) — no further candidates attempted, report still produced with k8s's own remediation pointer ("run ddsetup/ddconfig") in Notes |
+| `cost_rate.provider != aws` | CCM never queried for the whole sweep; every deployment falls straight through to the pre-resolved `cost_rate` fallback |

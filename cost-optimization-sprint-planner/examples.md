@@ -21,8 +21,8 @@ Conventions: [examples-conventions](../docs/skill-framework/shared/examples-conv
 ### Scenario: Explicit deployment list — happy path
 
 **Caller:** `sweep_scope: {env: production, deployments: [api-disbursement, api-payouts]}`,
-`cost_rate: {dollars_per_core_month: 24.00, dollars_per_gib_month: 3.50, cost_basis: "AWS us-east-1 m6i,
-on-demand"}`
+`cost_rate: {provider: aws, dollars_per_core_month: 24.00, dollars_per_gib_month: 3.50, cost_basis: "AWS
+us-east-1 m6i, on-demand"}`
 
 **Agent:**
 

@@ -35,7 +35,7 @@ deployment per conversational run.
 
 ```
 sweep_scope: {env: production, namespace_prefilter: {top_n_namespaces: 5, top_n_deployments_per_namespace: 5}}
-cost_rate: {dollars_per_core_month: 24.00, dollars_per_gib_month: 3.50, cost_basis: "AWS us-east-1 m6i, on-demand"}
+cost_rate: {provider: aws, dollars_per_core_month: 24.00, dollars_per_gib_month: 3.50, cost_basis: "AWS us-east-1 m6i, on-demand"}
 ```
 
 ## What you get

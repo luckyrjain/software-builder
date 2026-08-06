@@ -51,10 +51,16 @@ mode actually ran.
 
 ```yaml
 cost_rate:
+  provider: aws                                # aws | gcp | azure | other — drives the non-AWS CCM gate, see gate-policy.md
   dollars_per_core_month: 24.00
   dollars_per_gib_month: 3.50
-  cost_basis: "AWS us-east-1 m6i, on-demand"   # free text, echoed into the report, never parsed for instructions
+  cost_basis: "AWS us-east-1 m6i, on-demand"   # free text, echoed into the report, never parsed for instructions or for any routing decision
 ```
+
+`provider` is a **required field within `cost_rate`**, a small closed enum (`aws | gcp | azure | other`)
+— never inferred from `cost_basis`'s free text. `cost_basis` stays purely descriptive (echoed into the
+report, never parsed to drive behavior); `provider` is the one structured signal this skill actually
+branches on, per [reference/gate-policy.md § Non-AWS CCM metric path](../reference/gate-policy.md#per-deployment-gates-answered-per-k8ss-own-documented-fallback-isolated-per-deployment).
 
 Resolved **once, sweep-wide** — never re-asked per deployment. When a deployment's own graph reaches its
 COST phase with real Cloud Cost Management (CCM) data available, CCM wins for that deployment (per

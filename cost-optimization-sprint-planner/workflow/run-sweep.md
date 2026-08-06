@@ -10,6 +10,8 @@ consumes:
   - max_deployments_per_run
   - deadline
   - session_token_budget
+  - output_dir
+  - squad_map_config_path
 ---
 
 # Run sweep — pre-filter, loop, join, rank, render
@@ -28,9 +30,15 @@ Per [reference/sweep-policy.md § 3–4](../reference/sweep-policy.md#3-invoking
 1. Invoke k8s-overprovisioning-datadog with the deployment name + `sweep_scope.env` (+ namespace, when
    known from the pre-filter), **explicitly requesting the JSON file artifact** per
    [render/json.md](../../k8s-overprovisioning-datadog/render/json.md) ("optionally write to
-   `decision-graph.json` if user requests a file artifact") — write it to
-   `<output_dir>/decision-graph-<deployment>.json` (from [workflow/inputs.md](inputs.md)'s `output_dir`),
-   never k8s's own single default filename, which would collide across a multi-deployment sweep.
+   `decision-graph.json` if user requests a file artifact"). k8s-overprovisioning-datadog's own renderer
+   only documents that one hardcoded filename — it has no parameter for a caller-specified path or name —
+   so **this skill's own workflow, immediately after that invocation returns**, moves/renames the
+   resulting `decision-graph.json` to `<output_dir>/decision-graph-<deployment>.json` (from
+   [workflow/inputs.md](inputs.md)'s `output_dir`) before starting the next candidate. This is a plain
+   file-move step this skill performs itself, not a capability requested of
+   k8s-overprovisioning-datadog — it never needs to know a sweep is even running. Skip this step entirely
+   for an outcome that never reaches COST/RENDER (`INSUFFICIENT_METRICS`/`AMBIGUOUS_UNRESOLVED`/
+   `AUTH_FAILURE` — no file to move).
 2. Answer every live gate that invocation hits per [reference/gate-policy.md](../reference/gate-policy.md)
    — the cost-rate gate is **never** re-asked here, it was already resolved once before this loop started
    (§ 0 below); a `STOP_REASON: auth_failure` is **not** answered per-deployment — it stops the whole
@@ -61,10 +69,14 @@ when `appendix.cost` is absent.
 **Squad match, in order:**
 
 1. `SQUAD_MAP.md`'s `Datadog service` column, matched against the graph's `metadata.service` verbatim.
-   `squad_confidence` = that row's own `Confidence` column value, carried through unchanged (never
-   re-derived or dropped — per
-   [org-rollup-schema.md § 2](../../docs/skill-framework/shared/org-rollup-schema.md#2-the-orgrollupitem-shape),
-   this exists precisely so a consumer can decide whether to trust a LOW-confidence match).
+   `squad_confidence` = that row's own `Confidence` column value, **normalized** — take the leading
+   enum token, uppercased (`HIGH`/`MEDIUM`/`LOW`), falling back to `UNKNOWN` for anything else. Never
+   copy the cell verbatim: a real `SQUAD_MAP.md` Confidence cell can carry an annotation (e.g. `MEDIUM
+   ⚠️` on a Conflicts-adjacent row, per
+   [squad-map/reference/gold-squad-map-excerpt.md](../../squad-map/reference/gold-squad-map-excerpt.md)),
+   which would otherwise violate `org-rollup-schema.md`'s own `HIGH | MEDIUM | LOW | UNKNOWN` enum — the
+   exact bug migration-program-manager's own `normalize_confidence()` was built to close on this same
+   schema; reuse that fix's shape here rather than re-discovering it.
 2. **Else**, when `squad_map_config_path` is supplied (see [workflow/inputs.md](inputs.md)): a **reverse**
    lookup against that config's `ownership.datadog.service_aliases` map
    ([squad-map/reference/config-schema.md](../../squad-map/reference/config-schema.md) —
@@ -73,9 +85,12 @@ when `appendix.cost` is absent.
    column. This is the real, documented `metadata.service` vs. `scope`'s `kube_deployment:` tag mismatch
    org-rollup-schema.md itself flags — the alias map exists specifically to bridge it, but only in this
    reverse direction, since `service_aliases` is authored as repo→service (squad-map's own resolution
-   direction when it first builds `SQUAD_MAP.md`), not service→repo. `squad_confidence` for a
-   reverse-lookup match is **MEDIUM**, never HIGH — it's an indirect match through a config file, not a
-   direct `SQUAD_MAP.md` row.
+   direction when it first builds `SQUAD_MAP.md`), not service→repo. **If more than one key maps to the
+   same service-name value** (plausible in a monorepo-heavy org — `config-schema.md`'s own
+   `<repo-name>/<subdir>` keys can collide on the same Datadog service name), the match is ambiguous —
+   treat it the same as no match at all (fall through to step 3) rather than silently picking whichever
+   key the search hits first. `squad_confidence` for a genuine (non-ambiguous) reverse-lookup match is
+   **MEDIUM**, never HIGH — it's an indirect match through a config file, not a direct `SQUAD_MAP.md` row.
 3. **Else** `squad: UNKNOWN`, `squad_confidence: UNKNOWN` — never guessed, never silently dropped.
 
 A `squad_confidence` of `LOW` or `UNKNOWN` is surfaced in the report's Notes section (see
