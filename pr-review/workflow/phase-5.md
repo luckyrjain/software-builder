@@ -28,37 +28,16 @@ lockfile-only, docs-only, or markdown-only (`reference/fast-path.md`).
 - `reference/executive-summary.md` — always (final capstone)
 - `reference/review-metrics.md` — review cost metrics, duration telemetry, optional Notes line when Phase 2 recorded metrics
 
-## CODEOWNERS approval cross-check
+## CODEOWNERS Approval Gaps (render only — computed in Phase 2)
 
-Run this check **before** the recommendation matrix when `context_cache.codeowners_rules` is
-populated (from Phase 1 step 7) and approval state is available (Phase 1 step 4).
+**Moved to Phase 2 (P0 fix):** the CODEOWNERS approval cross-check now runs in
+[workflow/phase-2.md](phase-2.md#codeowners-approval-cross-check), before the Phase 2→3 gate, Phase 3
+confirmation, and Phase 4 posting — a merge-blocking gap must be known before a recommendation is
+confirmed and posted, not discovered afterward. Phase 5 **renders** the gap list Phase 2 already recorded
+(and the Medium finding it already emitted into `findings`, already reflected in the recommendation
+matrix below) — it does not compute or add new findings here.
 
-For each path in `review_boundary.changed_paths`:
-
-1. **Match** the path against CODEOWNERS patterns (most specific rule wins; use gitignore-style
-   glob matching — a rule for `src/payments/` is more specific than `src/` which is more specific
-   than `*`). Paths with no matching CODEOWNERS entry: skip — no ownership gate.
-
-2. **Extract** required owners (GitLab groups as `@org/team` or usernames as `@user`).
-
-3. **Check** whether at least one required owner for this path appears in the Phase 1 step 4
-   approval list (approved users / teams).
-
-4. **For each path with a gap** (no required owner has approved):
-
-   Emit a finding in the review findings list:
-
-   ```
-   CODEOWNERS approval gap: `<path>` requires [<owner>] — not yet given
-   Severity: Medium
-   ```
-
-**Recommendation raise:** if any CODEOWNERS gap exists AND the current recommendation is
-✅ **Approve** (no Critical/High findings), raise to 💬 **Comment** and add to **Reason:**
-
-> *"CODEOWNERS approval pending for <N> path(s) — merge blocked until required owners approve."*
-
-**CODEOWNERS Approval Gaps block (in executive summary, when gaps exist):**
+**CODEOWNERS Approval Gaps block (in executive summary, when Phase 2 recorded gaps):**
 
 ```
 ### CODEOWNERS Approval Gaps
@@ -128,8 +107,8 @@ Count **emitted** review findings only; take **highest severity**; apply edge-ca
 
 | Condition | Effect |
 |-----------|--------|
-| CODEOWNERS approval gap (§CODEOWNERS approval cross-check) | Raise ✅ Approve → 💬 **Comment** |
-| Stop-search threshold hit | Matrix verdict unchanged; cap overall **Confidence** at **Medium**; note partial coverage |
+| CODEOWNERS approval gap (already emitted as a Medium finding in Phase 2 — [§CODEOWNERS approval cross-check](phase-2.md#codeowners-approval-cross-check)) | Already reflected in the matrix via the emitted Medium finding; this row documents why, it does not re-raise |
+| `review_metrics.review_complete: false` (stop-search threshold hit, or a partial diff boundary accepted after the Phase 1 pagination/file cap) | **Recommendation capped — never ✅ Approve.** When the matrix says Approve, downgrade to 💬 **Comment** and label it **INCOMPLETE REVIEW** in the Recommendation line; cap overall **Confidence** at **Medium**; list unreviewed files/dimensions in **Reason**. Posting always requires explicit confirmation for this MR — see `workflow/posting.md` §Phase 3 — even when the caller said "review and post" (never auto-posted as a complete review). |
 | Head pipeline pending/failed (related) | May raise per modifiers below |
 | Unmet AC | May raise to 🔴 **Request changes** |
 

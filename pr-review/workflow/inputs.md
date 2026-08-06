@@ -1,5 +1,5 @@
 ---
-workflow_version: 1.10
+workflow_version: 1.11
 phase: inputs
 produces:
   - project_id
@@ -7,6 +7,9 @@ produces:
 consumes:
   - user_message
   - git_remote_url
+  - review_mode
+  - posting_policy
+  - expected_head_sha
 ---
 
 # Inputs — resolve the target first
@@ -35,6 +38,22 @@ Resolve to `{ project_id, merge_request_iid }`. `project_id` may be numeric or U
 > **Probe MCP capabilities first.** Resolution branches 4 (list/look up open MRs) depend on which
 > GitLab tools exist, so run Phase 0 capability detection (or at least a quick "is there a list tool?"
 > probe) **before** resolving an implicit target. A URL/IID (branches 1–3) can be resolved without it.
+
+## Typed invocation (skill-to-skill callers)
+
+A wrapping skill (e.g. release-readiness-checker) may supply these fields alongside `merge_request_iid` /
+`project` instead of relying on conversational phrasing or ask-point replies. When present, they are
+**deterministic, not advisory** — they replace the corresponding conversational gate outright rather than
+scripting an answer to it:
+
+| Field | Effect |
+|-------|--------|
+| `review_mode: retrospective` | Selects the retrospective audit path directly for this invocation — the merged/closed-MR stop in [phase-1.md](phase-1.md) step 1 is never entered; treated identically to a user-confirmed post-merge audit. |
+| `posting_policy: forbidden` | Phase 3/4 never run and never prompt — equivalent to `chat-only`, regardless of what posting mode Phase 0 detects. Nothing is ever posted to GitLab under this invocation. |
+| `expected_head_sha` | Compared against the resolved MR's `merge_commit_sha` (retrospective) or `diff_refs.head_sha` (pre-merge) immediately after `get_merge_request` in Phase 1 step 1. On mismatch, stop and report the anomaly — never silently review a different commit than the caller expected. |
+
+These fields are for programmatic callers only — a human typing in chat still uses the conversational
+phrasing (`"review !482 in group/repo"`, `"review and post !482 in group/repo"`) documented below.
 
 ## Resolution branches
 

@@ -11,36 +11,42 @@ where pr-review is also configured for normal write-capable use (which this skil
 `summary-only`/`general-only` — every one of which has a live Phase 3 posting-confirmation gate. This
 file is corrected below to give pr-review its own real gate policy instead of assuming one away.
 
-## pr-review — reuses pr-gatekeeper's own policy, unchanged
+## pr-review — retrospective audit mode (typed invocation, not conversational)
 
-pr-gatekeeper already solved exactly this problem — automating pr-review with no live human to answer
-its posting confirmation — and its policy is exactly what this skill needs too, with one input fixed
-permanently: **`auto_post_authorized` is always treated as `false`.** This skill invokes pr-review the
-same way pr-gatekeeper's own automation does when `auto_post_authorized: false`
-([pr-gatekeeper/reference/auto-post-policy.md](../../pr-gatekeeper/reference/auto-post-policy.md)):
+**Correction (P0 fix):** an earlier version of this file reused pr-gatekeeper's policy verbatim,
+including its scripted "decline the post-merge audit" answer to pr-review's merged/closed-MR stop
+([phase-1.md](../../pr-review/workflow/phase-1.md) step 1). That answer is correct for pr-gatekeeper,
+where a merged MR is an unexpected race against a webhook that normally fires on open MRs. It is wrong
+here: every MR this skill resolves (step 1's `state: merged` query) is merged by construction, so
+"decline" fired on **100% of invocations** — pr-review immediately HARD STOPped and never actually
+reviewed anything, while the report still populated an MRs-reviewed row as if a review had happened.
 
-1. **Invocation phrase:** `"review !<merge_request_iid> in <project>"` — **never** "review and post,"
-   for every resolved MR. This is the exact example phrase pr-review's own
-   [SETUP.md](../../pr-review/SETUP.md) (`"/pr-review !482 in backend/payments — or review !482 in
-   backend/payments"`) and [README.md](../../pr-review/README.md) document — `workflow/inputs.md`'s own
-   Resolution branches section describes the resolution *logic* (IID + explicit project) but doesn't
-   itself contain a literal example phrase.
-2. Every other ask-point pr-review may hit follows
-   [pr-gatekeeper's own enumerated policy](../../pr-gatekeeper/reference/auto-post-policy.md) verbatim —
-   merged/closed-MR stop (decline the post-merge audit), early 200-file cap warning (`proceed`),
-   pagination cap hit (`review the partial boundary as-is`), baseline staleness offer (decline, continue
-   incrementally), **Phase 3 posting confirmation** (`"Hold — don't post"` — one of pr-review's own
-   offered options, in every mode, including `general-only`'s always-on prompt and any draft-MR warning),
-   and the post-Phase-5 Jira/Slack write-back offers (decline both).
-3. Whether pr-review's Phase 0 detects `chat-only` (no prompt, nothing to reply to) or a write-capable
-   mode (`full`/`summary-only`/`general-only`, Phase 3 always answered "Hold"), **nothing is ever posted
-   to GitLab** — the outcome is identical either way, per pr-gatekeeper's own Outcome table. This skill
-   takes pr-review's Phase 5 chat-rendered findings (severity-tagged), same as pr-gatekeeper does for its
-   own held-review notification path, for the MRs-reviewed section of `RELEASE_READINESS_REPORT.md`.
+This skill invokes pr-review with **explicit typed fields**, not a conversational exchange:
 
-No separate enumeration duplicated here — [pr-gatekeeper's own file](../../pr-gatekeeper/reference/auto-post-policy.md)
-is the single source of truth for pr-review's gates; if pr-review adds a new ask-point, fixing
-pr-gatekeeper's policy fixes this skill's too.
+- `review_mode: retrospective`, `audit_type: retrospective` — selects pr-review's retrospective audit
+  path directly (`phase-1.md` step 1's "If user confirms post-merge audit →" branch) so the merged-MR
+  stop and its confirmation ask are avoided by construction, never scripted as "decline."
+- `expected_head_sha` — the MR's `merge_commit_sha` captured in step 1. If pr-review's own
+  `get_merge_request` returns a different SHA, treat it as a genuine anomaly (§Escalation, not override),
+  not something to silently review past.
+- `posting_policy: forbidden` — a typed field pr-review honors identically to
+  `auto_post_authorized: false`, not the conversational "Hold — don't post" reply pr-gatekeeper's
+  automation types back to a live ask.
+
+Every ask-point pr-review may still hit **other than** the merged-MR stop follows
+[pr-gatekeeper's own enumerated policy](../../pr-gatekeeper/reference/auto-post-policy.md) verbatim —
+early 200-file cap warning (`proceed`), pagination cap hit (`review the partial boundary as-is`),
+baseline staleness offer (decline, continue incrementally), **Phase 3 posting confirmation**
+(`"Hold — don't post"` — redundant with but not replaced by `posting_policy: forbidden`, in case a future
+pr-review version still renders the prompt), and the post-Phase-5 Jira/Slack write-back offers (decline
+both). Whether pr-review's Phase 0 detects `chat-only` or a write-capable mode, **nothing is ever posted
+to GitLab** — `posting_policy: forbidden` guarantees this independent of which mode is detected.
+
+This skill takes pr-review's Phase 5 chat-rendered findings (severity-tagged, retrospective-observation
+labeled per `reference/review-modes.md`) — now from a **real, completed** review — for the MRs-reviewed
+section of `RELEASE_READINESS_REPORT.md`. Every ask-point *other than* the merged-MR stop remains
+[pr-gatekeeper's own file](../../pr-gatekeeper/reference/auto-post-policy.md) as single source of truth;
+if pr-review adds a new ask-point, fixing pr-gatekeeper's policy fixes this skill's too.
 
 ## k8s-overprovisioning-datadog
 

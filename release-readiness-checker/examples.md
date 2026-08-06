@@ -103,7 +103,7 @@ configured (the normal case for a team that also uses pr-review interactively).
 
 **Agent:** pr-review's own Phase 0 detects `full` posting mode (not `chat-only`) and, per its own rules,
 Phase 3 stops with a posting confirmation prompt for each MR. This skill answers **"Hold — don't post"**
-per [gate-policy.md § pr-review](reference/gate-policy.md#pr-review-reuses-pr-gatekeepers-own-policy-unchanged) —
+per [gate-policy.md § pr-review](reference/gate-policy.md#pr-review-retrospective-audit-mode-typed-invocation-not-conversational) —
 the same reply pr-gatekeeper's own automation gives. Nothing is posted to GitLab; the MRs-reviewed table
 shows `full` in the posting-mode column instead of `chat-only`, but the report is otherwise identical.
 

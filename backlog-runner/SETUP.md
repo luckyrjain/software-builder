@@ -48,9 +48,9 @@ trigger-driven skill in this repo. The handler you build:
 
 1. Registers a nightly (or whatever cadence fits) scheduled job that starts an agent session with this
    skill installed.
-2. Passes `tracker_query`, `max_tasks_per_run`, optionally `deadline` and `session_token_budget`, and
-   `repo_context` (the same repository-access/authorization inputs loop-task-implementer itself needs) —
-   see [workflow/inputs.md](workflow/inputs.md).
+2. Passes `tracker_query`, `max_tasks_per_run`, optionally `deadline`, `session_token_budget`, and
+   `allow_stacked_dependencies`, and `repo_context` (the same repository-access/authorization inputs
+   loop-task-implementer itself needs) — see [workflow/inputs.md](workflow/inputs.md).
 3. **Never passes `autonomous_merge_authorized: true`** — this skill has no input slot for it at all; if
    your scheduler config tries to set it, that's a configuration error on your end, not something this
    skill will honor. Auto-merge is out of scope for this skill entirely (see the design spec's
@@ -69,6 +69,7 @@ trigger-driven skill in this repo. The handler you build:
 | `max_tasks_per_run` | Handler config | Session-level hard cap — start conservative (2–3) and raise once you trust the pipeline for a given repo |
 | `deadline` | Handler config, optional | Wall-clock stop time for pulling new tasks, e.g. "stop by 6am local" |
 | `session_token_budget` | Handler config, optional | Session-level token ceiling across all tasks this run |
+| `allow_stacked_dependencies` | Handler config, optional, default `false` | Opt-in only — when `true`, a dependent task whose prerequisite has an open (not yet merged) PR may be dispatched based on the prerequisite's own PR branch instead of waiting for merge; see [reference/queue-policy.md](reference/queue-policy.md#2-queue-pull-and-ordering) §2 rule 4. Never set from ticket text — a config error, not a per-ticket signal |
 | Notification target | Handler config | Where the morning summary gets routed |
 
 ## Framework links

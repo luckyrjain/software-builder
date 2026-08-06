@@ -212,6 +212,10 @@ never `request_changes` as merge gate.
 
 **Low-only → Approve (not Comment):** Low findings belong in **Nice to have** (P2/P3), not a blocking Comment verdict.
 
+**Incomplete review overrides the matrix:** when `review_metrics.review_complete: false`, the matrix
+result above is capped by the Raises table below — an incomplete review can never render ✅ Approve
+regardless of what severity was found in the portion actually reviewed.
+
 **Retrospective override** (`review_mode: retrospective`):
 
 | Any emitted findings | `review_metadata.recommendation` | Display |
@@ -222,12 +226,12 @@ never `request_changes` as merge gate.
 
 | Condition | Effect |
 |-----------|--------|
-| CODEOWNERS approval gap on changed path | Minimum 💬 **Comment** when matrix would be ✅ Approve |
+| CODEOWNERS approval gap on changed path | Emitted as a Medium finding in Phase 2 ([workflow/phase-2.md](../workflow/phase-2.md#codeowners-approval-cross-check)) — already reflected via the matrix, not a post-hoc raise |
 | Head pipeline pending/running/failed (related) | May raise per `reference/severity-rubric.md` §The blocking gate |
 | Unmet AC | May raise to 🔴 **Request changes** |
-| Stop-search threshold hit | Matrix verdict **unchanged**; cap overall confidence at Medium |
+| `review_metrics.review_complete: false` (stop-search fired, or a partial diff boundary accepted after a pagination/file cap — see `workflow/phase-1.md` step 2 and `workflow/phase-2.md` §Stop searching) | **Caps the verdict — never ✅ Approve.** Downgrade Approve to 💬 **Comment**, label **INCOMPLETE REVIEW**; cap overall confidence at Medium. Also forces Phase 3 to always confirm before posting, even on "review and post" (`workflow/posting.md` §Phase 3) — an incomplete review is never auto-posted as a finished one. |
 
-Pipeline and AC rules may **raise** the verdict but must **not** downgrade below what findings alone require without explicit **Reason** text.
+Pipeline and AC rules may **raise** the verdict but must **not** downgrade below what findings alone require without explicit **Reason** text. The `review_complete: false` row is a **cap**, not a raise — it can only push the displayed recommendation down from Approve, never up past what findings otherwise require.
 
 **Pointers only elsewhere:** `reference/severity-rubric.md` §The blocking gate (CI/pipeline modifiers) ·
 `workflow/phase-5.md` §Recommendation · `reference/executive-summary.md` §Gate matrix.

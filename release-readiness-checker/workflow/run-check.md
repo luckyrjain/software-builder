@@ -36,16 +36,34 @@ For each `release_manifest` entry:
 3. Record the resolved MR list per repo. A repo with zero MRs since `since` is not an error — record it
    as "no changes this release" in the report, not a HARD STOP.
 
-## 2. Review each resolved MR — pr-review, per gate-policy.md
+## 2. Review each resolved MR — pr-review, retrospective mode, per gate-policy.md
 
-Invoke **pr-review** once per resolved MR with the phrase `"review !<merge_request_iid> in <project>"`
-(never "review and post") and answer every ask-point per
-[reference/gate-policy.md § pr-review](../reference/gate-policy.md#pr-review-reuses-pr-gatekeepers-own-policy-unchanged) —
-this reuses pr-gatekeeper's own real, working policy rather than assuming pr-review has a settable
-"quiet" mode (it doesn't — `posting_mode` is derived by pr-review's own Phase 0 from connected MCP write
-tools, never a caller input). Whatever mode pr-review's Phase 0 detects, nothing is ever posted to
-GitLab, per that policy. Record each MR's severity-tagged findings summary (counts by severity, not the
-full rendered chat review) for the report's MRs-reviewed section.
+Every MR resolved in step 1 is **already merged** — that is the query condition (`state: merged`). Invoke
+**pr-review** per resolved MR with **explicit typed fields**, never a conversational exchange:
+
+- `merge_request_iid`, `project`
+- `review_mode: retrospective`, `audit_type: retrospective`
+- `expected_head_sha`: the MR's `merge_commit_sha` (or `diff_refs.head_sha` recorded at merge time from
+  step 1's `list_merge_requests` result)
+- `posting_policy: forbidden`
+
+Do **not** invoke with the bare phrase `"review !<iid> in <project>"` and rely on pr-review's own
+merged-MR HARD STOP + a scripted "decline the post-merge audit" reply — declining is correct for
+pr-gatekeeper's use case (a merged MR there is an unexpected race), but here it is the **normal, 100%
+case**. Declining on every invocation would mean this skill never actually reviews a single MR while
+still populating an MRs-reviewed row, which is the exact failure this typed invocation avoids: the typed
+`review_mode: retrospective` selects pr-review's retrospective audit path directly (per
+[phase-1.md](../../pr-review/workflow/phase-1.md) step 1's "If user confirms post-merge audit →" branch),
+so the merged-MR stop and its confirmation ask never fire — avoided by construction, not scripted.
+
+Full protocol: [reference/gate-policy.md § pr-review](../reference/gate-policy.md#pr-review-retrospective-audit-mode-typed-invocation-not-conversational).
+Every *other* ask-point pr-review may still hit (200-file cap, pagination cap, baseline staleness,
+Jira/Slack write-back) follows pr-gatekeeper's own enumerated policy verbatim, and `posting_policy:
+forbidden` guarantees nothing is ever posted to GitLab regardless of which posting mode pr-review's own
+Phase 0 detects. If pr-review's `get_merge_request` returns a `merge_commit_sha` different from
+`expected_head_sha`, treat it as a genuine anomaly (§Escalation, not override) — record it in the report
+rather than silently reviewing whatever commit pr-review found. Record each MR's severity-tagged findings
+summary (counts by severity, not the full rendered chat review) for the report's MRs-reviewed section.
 
 ## 3. Rightsizing verdict per service — k8s-overprovisioning-datadog
 
