@@ -1,5 +1,5 @@
 ---
-workflow_version: 3.0
+workflow_version: 3.4
 phase: normalize-evidence
 produces:
   - observation_registry
@@ -7,6 +7,7 @@ produces:
   - assessment_fingerprint
 consumes:
   - raw_metrics
+  - source_profile
   - metrics_queried_count
   - query_references
   - manifest_bytes
@@ -32,6 +33,8 @@ Build and link with IDs; translate at render time.
 ## Fingerprint
 
 Include `threshold_hash`, `manifest_hash`, `metric_query_hash` in the graph — render to **Assessment Metadata** appendix only ([templates/metadata.md](../templates/metadata.md)).
+Carry `source_profile` unchanged for BUILD_GRAPH; NORMALIZE may append source failures observed during
+queries but must not rewrite successful route selections without recording the reason.
 
 ## Example
 
@@ -39,7 +42,13 @@ Include `threshold_hash`, `manifest_hash`, `metric_query_hash` in the graph — 
 
 **Observations:** `OBS_CPU_P95_FLEET = 0.90 cores`
 
-**Evidence:** `EVID_CPU_P95_FLEET` → Datadog · `kubernetes.pod.cpu.usage.dist` · p95.dist · …
+**Evidence:** `EVID_CPU_P95_FLEET` → `<selected source>` · `<metric/query>` · p95 · 7d · …
+
+Every evidence row records the actual source selected for that capability. When Kubernetes MCP and
+Datadog both supply the signal, keep the routed value on the canonical ID and create an
+`_ALT_<SOURCE>` observation/evidence pair for the other value per
+[observation-ids.md](../reference/observation-ids.md). This preserves INV-03's one-to-one provenance;
+never overwrite one source or attach two evidence rows to one observation.
 
 **Decision:** `DEC_CPU_REQUEST` BLOCKED — `Reasons: ✓ OBS_CPU_P95_FLEET` — no value repeated.
 

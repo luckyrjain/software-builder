@@ -7,7 +7,7 @@ Presentation: [workflow/report.md](../workflow/report.md).
 
 ```text
 schema_version: 3
-skill_version: v3.0
+skill_version: v3.4
 ```
 
 ## Human Report (primary)

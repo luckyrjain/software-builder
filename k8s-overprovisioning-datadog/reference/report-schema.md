@@ -49,4 +49,4 @@ Renderer: [render/markdown.md](../render/markdown.md). Template index: [template
 2. DRY in **graph and appendix** — values in `observations[]`; elsewhere reference IDs
 3. **Human Report inverts DRY for readability** — repeat values with human labels; never expose registry IDs
 4. `ASSESSMENT_CONFIDENCE` ≠ `RECOMMENDATION_CONFIDENCE` (appendix may show both numerically; human view shows bands only)
-5. Invariants INV-01–INV-13 must pass before render; results → Validation appendix only
+5. Invariants INV-01–INV-14 must pass before render; results → Validation appendix only

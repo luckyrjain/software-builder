@@ -302,7 +302,8 @@ lint-k8s-skill:
 	python3 -m py_compile k8s-overprovisioning-datadog/scripts/validate_decision_graph.py || exit 1; \
 	for g in k8s-overprovisioning-datadog/reference/decision-graph.example.yaml \
 		k8s-overprovisioning-datadog/reference/decision-graph.trim.example.yaml \
-		k8s-overprovisioning-datadog/reference/decision-graph.scale-up.example.yaml; do \
+		k8s-overprovisioning-datadog/reference/decision-graph.scale-up.example.yaml \
+		k8s-overprovisioning-datadog/reference/decision-graph.insufficient-metrics.example.yaml; do \
 		python3 k8s-overprovisioning-datadog/scripts/validate_decision_graph.py "$$g" || exit 1; \
 	done; \
 	if python3 -c "import pytest" >/dev/null 2>&1; then \

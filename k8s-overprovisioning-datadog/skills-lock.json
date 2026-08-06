@@ -2,5 +2,5 @@
   "version": 1,
   "skillsCliVersion": null,
   "skills": {},
-  "notes": "No vendored Cursor skills — Datadog MCP is the primary external integration."
+  "notes": "No vendored Cursor skills — runtime discovers Kubernetes and Datadog MCP capabilities."
 }

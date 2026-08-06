@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate k8s decision graph YAML against INV-01–INV-13."""
+"""Validate k8s decision graph YAML against INV-01–INV-14."""
 
 from __future__ import annotations
 
@@ -206,6 +206,11 @@ def validate_invariants(graph: dict[str, Any]) -> list[str]:
             pointer = rec.get("delivery_pointer") or {}
             if not pointer.get("path"):
                 errors.append(f"INV-12: {rec_id} READY actionable rec missing delivery_pointer.path")
+            if pointer.get("verified") is not True:
+                errors.append(
+                    f"INV-12: {rec_id} READY actionable rec requires "
+                    "delivery_pointer.verified: true"
+                )
 
     # INV-10
     ref_fields = ("supports", "blocking", "missing")
@@ -254,6 +259,92 @@ def validate_invariants(graph: dict[str, Any]) -> list[str]:
                     f"not in assumptions[]"
                 )
 
+    # INV-14
+    metadata = graph.get("metadata") or {}
+    source_profile = metadata.get("source_profile")
+    if not isinstance(source_profile, dict):
+        errors.append("INV-14: metadata.source_profile must be a mapping")
+    else:
+        sources = source_profile.get("sources")
+        routes = source_profile.get("routes")
+        valid_statuses = {"connected", "absent", "unreachable", "unauthorized"}
+        required_routes = (
+            "live_state",
+            "current_metrics",
+            "historical_metrics",
+            "incidents_monitors",
+            "manifest_config",
+            "cost",
+        )
+        allowed_routes = {
+            "live_state": {"kubernetes_mcp", "unavailable"},
+            "current_metrics": {"kubernetes_mcp", "datadog", "unavailable"},
+            "historical_metrics": {"kubernetes_mcp", "datadog", "unavailable"},
+            "incidents_monitors": {"kubernetes_mcp", "datadog", "unavailable"},
+            "manifest_config": {
+                "kubernetes_mcp",
+                "git",
+                "user_provided",
+                "unavailable",
+            },
+            "cost": {"datadog", "unavailable"},
+        }
+        if not isinstance(sources, dict):
+            errors.append("INV-14: metadata.source_profile.sources must be a mapping")
+        else:
+            for source_name in ("kubernetes_mcp", "datadog"):
+                source = sources.get(source_name)
+                if not isinstance(source, dict):
+                    errors.append(f"INV-14: source_profile.sources.{source_name} missing")
+                    continue
+                if source.get("status") not in valid_statuses:
+                    errors.append(
+                        f"INV-14: source_profile.sources.{source_name}.status must be one of "
+                        f"{sorted(valid_statuses)}"
+                    )
+                if not isinstance(source.get("capabilities"), list):
+                    errors.append(
+                        f"INV-14: source_profile.sources.{source_name}.capabilities must be a list"
+                    )
+                if not isinstance(source.get("failures"), list):
+                    errors.append(
+                        f"INV-14: source_profile.sources.{source_name}.failures must be a list"
+                    )
+        if not isinstance(routes, dict):
+            errors.append("INV-14: metadata.source_profile.routes must be a mapping")
+        else:
+            for capability in required_routes:
+                if not routes.get(capability):
+                    errors.append(f"INV-14: source_profile.routes.{capability} missing")
+
+            for capability in required_routes:
+                route = routes.get(capability)
+                if route is not None and route not in allowed_routes[capability]:
+                    errors.append(
+                        f"INV-14: source_profile.routes.{capability} has invalid route {route}"
+                    )
+                    continue
+                if route in {None, "unavailable", "git", "user_provided"}:
+                    continue
+                if not isinstance(sources, dict) or route not in sources:
+                    errors.append(
+                        f"INV-14: source_profile.routes.{capability} references unknown source {route}"
+                    )
+                    continue
+                source = sources.get(route)
+                if not isinstance(source, dict):
+                    continue
+                if source.get("status") != "connected":
+                    errors.append(
+                        f"INV-14: source_profile.routes.{capability} selects non-connected source {route}"
+                    )
+                capabilities = source.get("capabilities")
+                if isinstance(capabilities, list) and capability not in capabilities:
+                    errors.append(
+                        f"INV-14: source_profile.routes.{capability} selects {route} without "
+                        f"the {capability} capability"
+                    )
+
     return errors
 
 
@@ -282,7 +373,7 @@ def main(argv: list[str] | None = None) -> int:
             for err in errors:
                 print(f"  - {err}", file=sys.stderr)
         else:
-            print(f"{path}: ok (INV-01–INV-13)")
+            print(f"{path}: ok (INV-01–INV-14)")
     return exit_code
 
 

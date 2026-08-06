@@ -1,0 +1,34 @@
+scenarios:
+  - id: kubernetes_complete
+    expected:
+      routes: {live_state: kubernetes_mcp, historical_metrics: kubernetes_mcp, incidents_monitors: datadog}
+      assessment: continue
+  - id: kubernetes_partial
+    expected:
+      routes: {live_state: kubernetes_mcp, historical_metrics: datadog}
+      assessment: continue
+  - id: kubernetes_absent
+    expected:
+      routes: {live_state: unavailable, current_metrics: datadog, historical_metrics: datadog}
+      assessment: continue_with_live_state_gap
+  - id: datadog_absent_kubernetes_history
+    expected:
+      routes: {live_state: kubernetes_mcp, historical_metrics: kubernetes_mcp}
+      assessment: continue_with_operational_gaps
+  - id: live_only_no_datadog
+    expected:
+      routes: {live_state: kubernetes_mcp, historical_metrics: unavailable}
+      assessment: blocked
+      stop_reason: insufficient_metrics
+      recommendations: []
+  - id: conflicting_sources
+    expected:
+      routes: {live_state: kubernetes_mcp, historical_metrics: datadog}
+      assessment: no_cut
+      stop_reason: conflicting_signals
+  - id: neither_sufficient
+    expected:
+      routes: {live_state: unavailable, historical_metrics: unavailable}
+      assessment: blocked
+      stop_reason: insufficient_metrics
+      recommendations: []

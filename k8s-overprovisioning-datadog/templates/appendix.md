@@ -85,4 +85,4 @@ CPU, memory, replicas, stability — reference `OBS_*` IDs; values in Observatio
 
 ### Validation
 
-`INV-01`–`INV-13` results, contradiction gate, cost gate. Templates: [contradictions.md](contradictions.md); spec: [validate-invariants.md](../workflow/validate-invariants.md).
+`INV-01`–`INV-14` results, contradiction gate, cost gate. Templates: [contradictions.md](contradictions.md); spec: [validate-invariants.md](../workflow/validate-invariants.md).

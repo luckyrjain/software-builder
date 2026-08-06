@@ -47,7 +47,7 @@ Working directly in this repo? `.cursor/rules/release-readiness-checker.mdc` and
 | Requirement | Notes |
 |-------------|-------|
 | pr-review installed and configured | GitLab MCP with `list_merge_requests` support — see [pr-review/SETUP.md](../pr-review/SETUP.md) |
-| k8s-overprovisioning-datadog installed and configured | Datadog MCP — see [k8s-overprovisioning-datadog/SETUP.md](../k8s-overprovisioning-datadog/SETUP.md) |
+| k8s-overprovisioning-datadog installed and configured | At least one sufficient rightsizing evidence source: Kubernetes MCP or Datadog — see [k8s-overprovisioning-datadog/SETUP.md](../k8s-overprovisioning-datadog/SETUP.md) |
 | incident-rca installed and configured | ≥1 observability MCP (Datadog or KubeSense) — see [incident-rca/SETUP.md](../incident-rca/SETUP.md) |
 
 No MCP of its own — every MCP requirement is inherited from the three wrapped skills.
@@ -77,7 +77,8 @@ one page holds must not silently return only the first page.
 ## Smoke test
 
 After install, run the invocation in [reference/smoke-test.md](reference/smoke-test.md) against a
-`release_manifest` with at least one repo with a merged MR and one service with recent Datadog signal.
+`release_manifest` with at least one repo with a merged MR and one service with a recent observability
+signal available through the configured incident-rca source.
 
 ## Troubleshooting
 

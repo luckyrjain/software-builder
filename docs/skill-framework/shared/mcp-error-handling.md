@@ -23,7 +23,7 @@ Every skill's Phase 0 MUST probe available MCP servers and announce a profile li
 
 | Category | Symptom | Retry? | Action |
 |----------|---------|--------|--------|
-| **auth_failure** | 401, 403, "unauthorized" | No | Route to **ddsetup** / **ddconfig**; do not retry same credentials |
+| **auth_failure** | 401, 403, "unauthorized" | No | Record the failure against that source, use its setup/remediation path, and continue through another sufficient source when the consuming skill supports fallback |
 | **not_configured** | Tool name not found in MCP registry | No | Announce ❌; fall back to degraded path or ask user to configure |
 | **timeout** | No response within tool timeout | Yes (1×) | Retry once; on second failure, treat as `unavailable` |
 | **rate_limited** | 429, "rate limit exceeded" | Yes (backoff) | Wait 30s, retry once; on failure, narrow query scope or defer |
@@ -52,7 +52,9 @@ When an MCP server is unavailable, each skill follows a defined fallback:
 | **incident-rca** | Datadog ❌ | `oss-obs` path; user-supplied PromQL; cap confidence MEDIUM |
 | **incident-rca** | KubeSense ❌ | Datadog-only (if available); skip log body analysis; note in Gaps |
 | **incident-rca** | Both ❌ | Blocked — require at least one observability source |
-| **k8s** | Datadog ❌ | Blocked (`STOP_REASON: auth_failure`); route to **ddsetup** |
+| **k8s** | Datadog ❌ | Continue with Kubernetes MCP when it supplies sufficient historical evidence; otherwise defer history-dependent sizing or emit `insufficient_metrics` |
+| **k8s** | Kubernetes MCP ❌ | Continue with Datadog telemetry; record the live-state verification gap |
+| **k8s** | All viable sources unauthorized | Blocked (`STOP_REASON: auth_failure`); report attempted sources and configure one usable source |
 | **k8s** | Git MCP ❌ | Skip manifest drift check; ask user to paste resource values |
 | **pr-review** | GitLab ❌ | Blocked — cannot fetch MR diffs without GitLab MCP |
 | **pr-review** | Jira ❌ | Skip AC check; note "no linked ticket" |

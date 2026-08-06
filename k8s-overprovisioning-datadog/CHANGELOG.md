@@ -1,5 +1,14 @@
 # k8s-overprovisioning-datadog — Changelog
 
+## v3.4 — Kubernetes MCP-first capability routing (2026-08-06)
+
+- Prefer Kubernetes MCP for live workload/configuration state and equivalent metrics.
+- Fall back to Datadog per missing capability; keep Datadog for unique history, monitors, incidents,
+  APM, change events, and optional cost.
+- Continue when either source is absent but the other supplies sufficient evidence; block with
+  `insufficient_metrics` only when combined evidence cannot support sizing.
+- Preserve dual-source observations and trigger `conflicting_signals` on material disagreement.
+
 Prompt and workflow changes are versioned here. Per-file `workflow_version` in workflow frontmatter
 should match the latest entry when that file is edited.
 

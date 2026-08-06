@@ -61,8 +61,8 @@ JSON block. Those plugins don't exist in Claude Code; use the documented non-GUI
 | Cursor GUI plugin | Skill / section with the alternative | Claude Code path |
 |--------------------|----------------------------------------|-------------------|
 | GitLab plugin / official Duo MCP | [pr-review/SETUP.md § GitLab — full inline posting](../../../pr-review/SETUP.md#3-configure-mcp-servers-cursormcpjson) (`@zereight/mcp-gitlab`) | `claude mcp add-json gitlab '<json>' -s project` using that same server |
-| GitHub MCP plugin | [k8s-overprovisioning-datadog/SETUP.md § Git provider MCP](../../../k8s-overprovisioning-datadog/SETUP.md#5-git-provider-mcp-gitlab-or-github-optional) | Configure the official GitHub MCP server (`command`/`args` per its docs) via `claude mcp add-json github '<json>'` instead of the Cursor plugin installer |
-| Datadog plugin | [k8s-overprovisioning-datadog/SETUP.md § Enable Datadog MCP](../../../k8s-overprovisioning-datadog/SETUP.md#2-enable-datadog-mcp) | Install the `datadog` Claude Code plugin (marketplace) and run its `ddsetup` skill — same `ddsetup`/`ddconfig`/`ddtoolsets` skill names this repo's docs already reference work unchanged in Claude Code |
+| GitHub MCP plugin | [k8s-overprovisioning-datadog/SETUP.md § Git provider MCP](../../../k8s-overprovisioning-datadog/SETUP.md#6-git-provider-mcp-gitlab-or-github-optional) | Configure the official GitHub MCP server (`command`/`args` per its docs) via `claude mcp add-json github '<json>'` instead of the Cursor plugin installer |
+| Datadog plugin | [k8s-overprovisioning-datadog/SETUP.md § Enable Datadog MCP](../../../k8s-overprovisioning-datadog/SETUP.md#3-enable-datadog-mcp-fallback-and-historical-telemetry) | Install the `datadog` Claude Code plugin (marketplace) and run its `ddsetup` skill — same `ddsetup`/`ddconfig`/`ddtoolsets` skill names this repo's docs already reference work unchanged in Claude Code |
 
 ## 4. User input gates (`ask-question` equivalent)
 

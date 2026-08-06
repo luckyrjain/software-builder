@@ -2,6 +2,8 @@
 
 Conventions: [examples-conventions](../docs/skill-framework/shared/examples-conventions.md)
 
+Every assessment starts **DISCOVER_SOURCES → RESOLVE → COLLECT** before graph construction. Scenario
+steps may begin at COLLECT when source discovery and service resolution are not the behavior under test.
 Build graph → validate invariants → render. Schema: [decision-graph-schema.md](reference/decision-graph-schema.md).
 Examples: [decision-graph.example.yaml](reference/decision-graph.example.yaml) (KEEP),
 [decision-graph.trim.example.yaml](reference/decision-graph.trim.example.yaml) (TRIM_RESOURCES),
@@ -11,24 +13,24 @@ Examples: [decision-graph.example.yaml](reference/decision-graph.example.yaml) (
 
 | # | User says | Resolves to | Notes |
 |---|-----------|-------------|-------|
-| 1 | "Is `payment-consumer` overprovisioned in prod?" | COLLECT→RENDER full path | Happy path; 7d window default |
-| 2 | "Right-size `api-gateway` deployment" | COLLECT→RENDER; may emit TRIM_RESOURCES | Stateless HTTP trim candidate |
+| 1 | "Is `payment-consumer` overprovisioned in prod?" | DISCOVER_SOURCES→RENDER full path | Happy path; 7d window default |
+| 2 | "Right-size `api-gateway` deployment" | DISCOVER_SOURCES→RENDER; may emit TRIM_RESOURCES | Stateless HTTP trim candidate |
 | 3 | "Namespace waste ranking for `payments`" | orchestrator namespace_ranking intent | Skips per-svc memory deep-dive |
 | 4 | "Replicas too high on `kafka-consumer`?" | replica-analysis + workload path | Kafka lag gates replica cuts |
-| 5 | "Assess checkout-api prod — RCA found OOM" | COLLECT with handoff window | Cross-skill from incident-rca |
+| 5 | "Assess checkout-api prod — RCA found OOM" | DISCOVER_SOURCES→COLLECT with handoff window | Cross-skill from incident-rca |
 | 6 | "`checkout-worker` CPU throttling — need more headroom?" | SCALE_UP path | throttle_high stop reason |
 | 7 | "Rightsize `unknown-svc`" (ambiguous tag) | resolve-service disambiguation | Service not found / multiple matches |
 | 8 | "RCA for checkout-api outage" | **Wrong skill** → incident-rca | Not a sizing request |
-| 9 | "Rightsize payment-consumer — open canvas for namespace ranking" | COLLECT→RENDER full DORA → offer canvas for REC/cost table after report | [post-action-templates §6](../docs/skill-framework/shared/post-action-templates.md#6-canvas-hints) |
+| 9 | "Rightsize payment-consumer — open canvas for namespace ranking" | DISCOVER_SOURCES→RENDER full DORA → offer canvas for REC/cost table after report | [post-action-templates §6](../docs/skill-framework/shared/post-action-templates.md#6-canvas-hints) |
 
 ## Pre-flight announcement (first output)
 
 **User:** "Is payment-consumer overprovisioned in prod?"
 
-**Agent (COLLECT start):**
+**Agent (DISCOVER_SOURCES start):**
 
 ```
-**k8s MCP profile:** Datadog ✅ | CCM ❌ | GitLab ✅ | Jira ❌
+**k8s source profile:** Kubernetes MCP ✅ live / ❌ history | Datadog ✅ history | Git provider ✅ manifests
 
 **Scope:** deployment `payment-consumer` · env `production` · window `7d` utilization (cost `30d` if gated)
 ```
@@ -398,20 +400,42 @@ Basis:
 
 ---
 
-### Scenario: Datadog MCP absent
+### Scenario: Datadog fallback when Kubernetes history is unavailable
 
-**User:** "Is api-gateway overprovisioned?" (Datadog tools missing)
-
-**Agent:**
-1. Prerequisites — run **ddsetup**; if still missing, stop with blocked report
+**User:** "Is api-gateway overprovisioned?" (Kubernetes MCP has live state; Datadog has 7d metrics)
 
 **Expected fragments:**
 
-```
-**k8s MCP profile:** Datadog ❌ | git MCP ✅
+```text
+**k8s source profile:** Kubernetes MCP ✅ live / ❌ history | Datadog ✅ history + monitors
 
-Cannot assess utilization without Datadog metrics. Run ddsetup, then re-run this skill.
-STOP_REASON: auth_failure
+Live requests, limits, replicas, and HPA come from Kubernetes MCP. Seven-day fleet p95 and memory
+peak use Datadog fallback because the cluster source exposes only point-in-time metrics.
+```
+
+### Scenario: Datadog absent but Kubernetes history is sufficient
+
+**User:** "Right-size api-gateway" (Kubernetes MCP has live state + equivalent 7d history)
+
+**Expected fragments:**
+
+```text
+**k8s source profile:** Kubernetes MCP ✅ live + history | Datadog ❌
+
+Assessment continues. Incident, monitor, APM, change-history, and cost signals are marked unavailable;
+their existing confidence/safety gates still apply.
+```
+
+### Scenario: neither source can support sizing
+
+**User:** "Right-size api-gateway" (Kubernetes MCP has live state only; Datadog unavailable)
+
+**Expected fragments:**
+
+```text
+Live state collected; seven-day CPU p95 and memory peak are missing.
+STOP_REASON: insufficient_metrics
+Blocked assessment — no sizing recommendation. Attempted sources and missing capabilities are listed.
 ```
 
 ---

@@ -2,7 +2,7 @@
 # Canonical shape: reference/decision-graph-schema.md
 
 schema_version: 3
-skill_version: v3.0
+skill_version: v3.4
 
 metadata:
   generated: "2026-06-29T12:00:00Z"
@@ -13,6 +13,23 @@ metadata:
   metrics_queried: 34
   missing_metrics: [OBS_PDB_STATUS]
   datadog_org: app.datadoghq.com
+  source_profile:
+    sources:
+      kubernetes_mcp:
+        status: connected
+        capabilities: [live_state, current_metrics, manifest_config]
+        failures: []
+      datadog:
+        status: connected
+        capabilities: [current_metrics, historical_metrics, incidents_monitors, change_history, cost]
+        failures: []
+    routes:
+      live_state: kubernetes_mcp
+      current_metrics: kubernetes_mcp
+      historical_metrics: datadog
+      incidents_monitors: datadog
+      manifest_config: kubernetes_mcp
+      cost: datadog
   analysis_duration_seconds: 22
   fingerprint:
     service: example-payment-consumer
@@ -22,7 +39,7 @@ metadata:
     manifest_hash: sha256:placeholder
     metric_query_hash: sha256:placeholder
     schema_version: 3
-    skill_version: v3.0
+    skill_version: v3.4
 
 decision_history:
   previous_final_decision: KEEP_CONFIGURATION
@@ -36,14 +53,14 @@ assessment:
   severity_reason: replica_optimization_blocked
   review_after: 14d
   assessment_confidence:
-    value: 0.9
-    band: Very High
+    value: 0.6
+    band: Moderate
     factors:
-      evidence_completeness: 0.9
-      evidence_quality: 0.9
-      contradiction_resolution: 1.0
-      telemetry_availability: 0.9
-    arithmetic: "0.35×0.9 + 0.35×0.9 + 0.15×1.0 + 0.15×0.9 = 0.915 → 0.9"
+      evidence_completeness: 0.7
+      evidence_quality: 0.7
+      contradiction_resolution: 0.0
+      telemetry_availability: 0.5
+    arithmetic: "0.35×0.7 + 0.35×0.7 + 0.15×0.0 + 0.15×0.5 = 0.565 → 0.6"
 
 observations:
   - id: OBS_CPU_USAGE_AVG
@@ -53,10 +70,16 @@ observations:
     window: 7d
     quality: measured
   - id: OBS_CPU_REQUEST
-    value: 1.05
+    value: 1.0
     unit: cores
     scope: deployment
     window: null
+    quality: measured
+  - id: OBS_CPU_REQUEST_ALT_DATADOG
+    value: 1.4
+    unit: cores
+    scope: deployment
+    window: current
     quality: measured
   - id: OBS_CPU_P95_FLEET
     value: 86
@@ -121,10 +144,19 @@ evidence:
     weight: critical
   - id: EVID_CPU_REQUEST
     observation_id: OBS_CPU_REQUEST
+    source: kubernetes-mcp
+    metric: deployment.spec.template.resources.requests.cpu
+    aggregation: current
+    window: null
+    scope: deployment
+    quality: measured
+    weight: medium
+  - id: EVID_CPU_REQUEST_ALT_DATADOG
+    observation_id: OBS_CPU_REQUEST_ALT_DATADOG
     source: datadog
     metric: kubernetes.cpu.requests
-    aggregation: avg
-    window: null
+    aggregation: latest
+    window: current
     scope: deployment
     quality: measured
     weight: medium
@@ -224,6 +256,9 @@ decisions:
     explanation: Lag coverage incomplete.
 
 contradictions:
+  - ids: [OBS_CPU_REQUEST, OBS_CPU_REQUEST_ALT_DATADOG]
+    status: Unresolved
+    resolution: null
   - ids: [OBS_DERIVED_CPU_UTIL_AVG, OBS_DERIVED_CPU_UTIL_P95]
     status: Resolved
     resolution: Sizing follows OBS_CPU_P95_FLEET
@@ -279,7 +314,7 @@ recommendations:
       arithmetic: "0.40×0.25 + 0.30×0.5 + 0.15×1.0 + 0.15×0.85 = 0.528 → capped 0.3"
     risk: { likelihood: Medium, impact: Critical, score: High, residual: Medium }
 
-stop_reasons: []
+stop_reasons: [conflicting_signals]
 
 why_this_matters:
   - decision_id: DEC_CPU_REQUEST

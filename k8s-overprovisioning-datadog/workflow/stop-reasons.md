@@ -1,5 +1,5 @@
 ---
-workflow_version: 3.0
+workflow_version: 3.4
 phase: stop-reasons
 produces:
   - stop_reason_registry
@@ -16,7 +16,7 @@ Canonical halt/block registry. **Priority 0** — check before recommendations o
 
 | Level | Examples | Report placement |
 |-------|----------|------------------|
-| **Critical** | `auth_failure`, `manifest_drift` | Executive summary + Finding #1 |
+| **Critical** | `auth_failure` (all viable sources), `insufficient_metrics`, `manifest_drift` | Executive summary + Finding #1 |
 | **High** | `oom_kills`, `throttle_high`, `firing_required_monitor`, `active_incident`, `metrics_stale_redeploy`, `projection_failed` | Blockers (P0) |
 | **Medium** | `missing_fleet_p95`, `missing_kafka_lag`, `conflicting_signals` | Decision objects |
 | **Low** | `missing_dashboard`, `pdb_unverified` | Observations; cap confidence |
@@ -25,8 +25,8 @@ Canonical halt/block registry. **Priority 0** — check before recommendations o
 
 | STOP_REASON | Severity | Effect | Next action |
 |-------------|----------|--------|-------------|
-| `auth_failure` | Critical | **Halt** — no metrics | Run **ddsetup** / **ddconfig** |
-| `insufficient_metrics` | Critical | **Halt** — no verdict | Report attempted scopes; label **Unknown** |
+| `auth_failure` | Critical | **Halt** only when every viable source for required evidence is unauthorized | Report attempted sources and auth failures; configure one usable source |
+| `insufficient_metrics` | Critical | **Halt** — combined sources cannot support a sizing verdict | Report attempted sources, scopes, and missing capabilities; label **Unknown** |
 | `manifest_drift` | Critical | **Block optimization** (P0) | Finding #1; cap rec confidence ≤ 0.50 |
 | `vpa_active_unconfirmed` | High | Drift may be expected | Confirm VPA bounds before flagging drift |
 | `deployment_total_mismatch` | High | Block waste/cost | Reconcile per-pod × replicas |
@@ -52,6 +52,11 @@ during sync. Confirm GitOps sync state (healthy, in-sync) before treating drift 
 block optimization on a reconciling or out-of-sync controller lag alone.
 
 ## When to stop vs continue
+
+An authentication or capability failure from **one source** never halts collection from the **other source**.
+Record it in the source profile and continue. Emit `auth_failure` only when authorization
+prevents every viable source from supplying required evidence. Emit `insufficient_metrics` when all
+attempted sources together still leave required historical or configuration capabilities missing.
 
 ```
 IF STOP_REASON in {auth_failure, insufficient_metrics}

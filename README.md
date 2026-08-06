@@ -197,7 +197,7 @@ routes to skills in another category.
 
 | Skill | Invoke | What it does | Docs |
 |-------|--------|--------------|------|
-| [k8s-overprovisioning-datadog](k8s-overprovisioning-datadog/) | “Is `<service>` overprovisioned?” | Kubernetes CPU, memory, replica, waste, and cost analysis | [README](k8s-overprovisioning-datadog/README.md) · [SETUP](k8s-overprovisioning-datadog/SETUP.md) |
+| [k8s-overprovisioning-datadog](k8s-overprovisioning-datadog/) | “Is `<service>` overprovisioned?” | Kubernetes MCP-first analysis with per-capability Datadog fallback for CPU, memory, replicas, waste, and optional cost | [README](k8s-overprovisioning-datadog/README.md) · [SETUP](k8s-overprovisioning-datadog/SETUP.md) |
 | [cost-optimization-sprint-planner](cost-optimization-sprint-planner/) | “Plan a cost-optimization sprint” | Sweeps deployments for waste and ranks monthly savings by squad | [README](cost-optimization-sprint-planner/README.md) · [SETUP](cost-optimization-sprint-planner/SETUP.md) |
 
 ### Migrations and program reporting
@@ -220,7 +220,8 @@ MCP is **skill-specific**, not a prerequisite for installing or browsing the rep
 | `migration-program-manager`, `weekly-squad-digest` | No MCP; aggregate files produced by upstream workflows |
 | `pr-review` | GitLab read access; GitLab write access only for posting |
 | `incident-rca` | At least one observability source: Datadog or KubeSense |
-| `k8s-overprovisioning-datadog`, `cost-optimization-sprint-planner` | Datadog |
+| `k8s-overprovisioning-datadog` | At least one sufficient evidence source: read-only Kubernetes MCP or Datadog |
+| `cost-optimization-sprint-planner` | Datadog for its namespace pre-filter; then inherits the Kubernetes skill's per-deployment routing |
 | `backlog-runner` | Jira or GitHub Issues access |
 | Composed skills | Inherit the capabilities of the skills they call |
 

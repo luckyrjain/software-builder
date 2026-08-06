@@ -4,7 +4,8 @@ Read reference files **one at a time** when the active workflow phase says to.
 
 | When | Also load |
 |------|-----------|
-| Prerequisites | [mcp-capabilities.md](mcp-capabilities.md) |
+| DISCOVER_SOURCES | [mcp-capabilities.md](mcp-capabilities.md) |
+| RESOLVE | [mcp-capabilities.md](mcp-capabilities.md) only when a fallback route changes |
 | COLLECT | [observation-ids.md](observation-ids.md), analysis modules as triggered |
 | NORMALIZE | [observation-ids.md](observation-ids.md), [evidence-schema.md](evidence-schema.md) |
 | REASON | [confidence-formula.md](confidence-formula.md), [precedence.md](precedence.md), [invariants.md](invariants.md) |

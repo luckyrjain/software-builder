@@ -20,7 +20,7 @@
 |---|-----------|-------------|-------|
 | 1 | "Review MR !123 in group/project" | pr-review Phase 0→5 | Happy path |
 | 2 | "RCA for `service` 14:00–16:00 UTC" | incident-rca Phase 0→5 | Window from user |
-| 3 | "Assess rightsizing for `deployment` in prod" | k8s COLLECT→RENDER | Single deployment |
+| 3 | "Assess rightsizing for `deployment` in prod" | k8s DISCOVER_SOURCES→RENDER | Single deployment |
 | 4 | "RCA for INC-4521" | incident-rca Phase 0b → 1→5 | Jira anchor |
 | 5 | "Review and post MR !482" | pr-review; Phase 3 gate applies | Posting mode |
 | 6 | "RCA payment-api — logs unavailable" | incident-rca slo_breach fallback | Degraded path |
@@ -67,7 +67,7 @@ Reference phases by canonical name from [phase-glossary.md](phase-glossary.md), 
 Examples:
 
 - "Phase 0 (Detect) — MCP profile"
-- "COLLECT phase — fetch 7d metrics"
+- "DISCOVER_SOURCES → RESOLVE — select Kubernetes MCP/Datadog routes before COLLECT"
 - "Phase 2–3 gate — minimum evidence before posting"
 
 ## 5. Anti-patterns

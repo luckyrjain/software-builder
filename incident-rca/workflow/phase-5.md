@@ -116,7 +116,9 @@ Populate evidence bundle fields from Phase 3 observability signals.
 | Confirmed hypothesis | e.g. `infra_capacity` — helps the skill focus on Throttle/OOM intent |
 | Evidence summary | Top OOM/throttle signals from `infra_signals[]` — cite magnitudes for context |
 
-The k8s skill runs its own graph-first analysis (COLLECT → BUILD_GRAPH → RENDER). RCA evidence is *context*, not authoritative input — the skill re-queries Datadog independently.
+The k8s skill runs its own graph-first analysis (DISCOVER_SOURCES → RESOLVE → COLLECT → BUILD_GRAPH →
+RENDER). RCA evidence is *context*, not authoritative input — the skill independently discovers
+Kubernetes MCP and Datadog capabilities, then re-queries the selected sources.
 
 ## Confluence export (optional)
 

@@ -41,15 +41,18 @@ Per [reference/sweep-policy.md § 3–4](../reference/sweep-policy.md#3-invoking
    `AUTH_FAILURE` — no file to move).
 2. Answer every live gate that invocation hits per [reference/gate-policy.md](../reference/gate-policy.md)
    — the cost-rate gate is **never** re-asked here, it was already resolved once before this loop started
-   (§ 0 below); a `STOP_REASON: auth_failure` is **not** answered per-deployment — it stops the whole
-   sweep, see [reference/gate-policy.md § Sweep-wide stop](../reference/gate-policy.md#sweep-wide-stop-not-per-deployment-isolation-the-auth-failure-gate).
+   (§ 0 below). Source-scoped Kubernetes MCP or Datadog failures continue through another sufficient
+   source; `STOP_REASON: auth_failure` stops the whole sweep only when all viable sources are unauthorized.
+   Direct Datadog authentication failure in namespace pre-filter mode also stops before the loop. See
+   [reference/gate-policy.md § Sweep-wide auth stops](../reference/gate-policy.md#sweep-wide-auth-stops-direct-namespace-pre-filter-or-all-viable-sources).
 3. Record the outcome (`ASSESSED` / `INSUFFICIENT_METRICS` / `AMBIGUOUS_UNRESOLVED` / `AUTH_FAILURE`) and,
    when `ASSESSED`, the `decision-graph-<deployment>.json` path as `decision_graph_ref`, in
    `sweep_run.deployments` per the state shape in
    [reference/sweep-policy.md § 1](../reference/sweep-policy.md#1-session-level-state-new-layered-outside-k8s-overprovisioning-datadog-which-has-none).
 4. Check [reference/sweep-policy.md § 5](../reference/sweep-policy.md#5-session-level-stop-conditions-circuit-breakers)'s
    stop conditions **between** deployments, never mid-assessment — an in-flight assessment always
-   finishes. `AUTH_FAILURE` stops immediately, before starting the next candidate.
+   finishes. `AUTH_FAILURE` stops immediately before starting the next candidate; source-scoped failures
+   retained in an assessed graph do not.
 
 ### 0. Cost-rate resolution (runs once, before step 1's loop starts)
 

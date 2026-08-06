@@ -11,7 +11,7 @@ consumes:
 
 **v3.0:** Graph is built in [build-graph.md](build-graph.md), validated in [validate-invariants.md](validate-invariants.md), transformed in [render.md](render.md). This file defines **how the rendered DORA reads to humans** — not graph construction.
 
-Pipeline: COLLECT → … → VALIDATE_INVARIANTS → **RENDER** ([render.md](render.md))
+Pipeline: DISCOVER_SOURCES → RESOLVE → COLLECT → … → VALIDATE_INVARIANTS → **RENDER** ([render.md](render.md))
 
 ## Two layers
 
@@ -30,7 +30,7 @@ Apply to the Human Report only. The graph and appendix keep full IDs.
 2. **Recommendation lead** — open with emoji recommendation block ([human-report.md](../templates/human-report.md#executivesummary)): heading `## Recommendation`; 🟢 keep/trim · 🟡 investigate/defer · 🔴 blocked · ⬆️ scale up. **Lead with changes, then holds** — first sentence states what will change (concrete values/range when known); second sentence states what stays unchanged and brief why (max two sentences before Severity). Pure KEEP: lead with the hold. Canonical: *"Increase memory requests to approximately 1.5–1.75 GiB. Keep CPU requests and replica count unchanged until Kafka lag telemetry is available."*
 3. **Confidence** — show band + numeric + **Basis** bullets in Human Report (e.g. `Assessment confidence: Very High (0.9)` then factor bullets). Formulas (`0.35 × …`) → [reference/confidence-formula.md](../reference/confidence-formula.md) / [reason.md](reason.md) — **never** default render.
 4. **Metadata** — `schema_version`, `threshold_version`, hashes, `AssessmentFingerprint` → Assessment Metadata appendix only.
-5. **Validation** — `INV-01`–`INV-13`, contradiction/cost gate tables → Validation appendix only.
+5. **Validation** — `INV-01`–`INV-14`, contradiction/cost gate tables → Validation appendix only.
 6. **Evidence registry** — full ID tables → Evidence Registry appendix only. Human Report Evidence uses label + value prose/table, **sorted by importance** (fleet p95 → Kafka lag → memory peak → HPA → CPU avg → HTTP → restarts → manifest).
 7. **Decision graph** — `DEC_*` Reasons lines with `✓ OBS_*` → Decision Graph appendix only. Human Report Optimization Decision uses plain language.
 8. **Recommendations** — sort **concrete work before holds**; when observability and sizing both apply, list observability first (Instrument Kafka lag → Raise memory → Keep CPU → Keep replicas). Tier spec: [render/markdown.md](../render/markdown.md#recommendationssummary-sort-order). **Decision** (`Keep` / `Ready` / `Defer` / `Blocked`) and **Decision confidence** on separate lines — not `(Blocked, High confidence)`. `REC_*_KEEP` + graph `BLOCKED` → **Decision: Keep**, not Blocked. `REJECTED` recs → **Changes evaluated but not recommended** section only. Appendix LifecycleSummary **State** uses display labels (`KEEP` / `DEFER` / `CHANGE` / `NOT RECOMMENDED`) — [render/markdown.md](../render/markdown.md#appendix-recommendation-status); graph JSON keeps raw enum.

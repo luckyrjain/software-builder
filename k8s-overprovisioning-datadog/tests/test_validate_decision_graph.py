@@ -15,6 +15,7 @@ from validate_decision_graph import validate_invariants  # noqa: E402
 EXAMPLE = ROOT / "reference" / "decision-graph.example.yaml"
 TRIM = ROOT / "reference" / "decision-graph.trim.example.yaml"
 SCALE_UP = ROOT / "reference" / "decision-graph.scale-up.example.yaml"
+BLOCKED = ROOT / "reference" / "decision-graph.insufficient-metrics.example.yaml"
 
 
 def _load(path: Path) -> dict:
@@ -36,7 +37,7 @@ def _assert_inv(inv: str, mutator, base: Path = EXAMPLE):
     assert any(inv in e for e in errors), f"expected {inv} in {errors}"
 
 
-@pytest.mark.parametrize("path", [EXAMPLE, TRIM, SCALE_UP])
+@pytest.mark.parametrize("path", [EXAMPLE, TRIM, SCALE_UP, BLOCKED])
 def test_example_graphs_pass_invariants(path: Path):
     graph = _load(path)
     assert validate_invariants(graph) == []
@@ -151,6 +152,15 @@ def test_inv12_ready_actionable_rec_missing_delivery_pointer():
     _assert_inv("INV-12", mutate, base=SCALE_UP)
 
 
+def test_inv12_ready_actionable_rec_requires_verified_pointer():
+    def mutate(graph):
+        for rec in graph["recommendations"]:
+            if rec.get("id") == "REC_CPU_INCREASE":
+                rec["delivery_pointer"]["verified"] = False
+
+    _assert_inv("INV-12", mutate, base=SCALE_UP)
+
+
 def test_inv13_dangling_assume_reference():
     def mutate(graph):
         graph["recommendations"][0]["depends_on"]["assumptions"] = ["ASSUME_MISSING"]
@@ -158,3 +168,33 @@ def test_inv13_dangling_assume_reference():
     _assert_inv("INV-13", mutate)
     errors = _errors_for(mutate)
     assert not any("INV-10" in e and "ASSUME_MISSING" in e for e in errors)
+
+
+def test_inv14_missing_source_profile():
+    def mutate(graph):
+        graph["metadata"].pop("source_profile", None)
+
+    _assert_inv("INV-14", mutate)
+
+
+def test_inv14_missing_required_route():
+    def mutate(graph):
+        graph["metadata"]["source_profile"]["routes"].pop("historical_metrics", None)
+
+    _assert_inv("INV-14", mutate)
+
+
+@pytest.mark.parametrize(
+    "mutator",
+    [
+        lambda graph: graph["metadata"]["source_profile"]["sources"]["datadog"].__setitem__("status", "nonsense"),
+        lambda graph: graph["metadata"]["source_profile"]["sources"]["datadog"].pop("failures", None),
+        lambda graph: graph["metadata"]["source_profile"]["routes"].__setitem__("live_state", "datadog"),
+        lambda graph: graph["metadata"]["source_profile"]["routes"].__setitem__("historical_metrics", "nonsense"),
+        lambda graph: graph["metadata"]["source_profile"]["routes"].__setitem__("current_metrics", "git"),
+        lambda graph: graph["metadata"]["source_profile"]["sources"]["datadog"].__setitem__("status", "absent"),
+        lambda graph: graph["metadata"]["source_profile"]["sources"]["datadog"]["capabilities"].remove("historical_metrics"),
+    ],
+)
+def test_inv14_rejects_invalid_source_profile_values(mutator):
+    _assert_inv("INV-14", mutator)

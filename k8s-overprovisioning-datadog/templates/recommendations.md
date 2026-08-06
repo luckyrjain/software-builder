@@ -61,4 +61,5 @@ Each graph-`READY` change recommendation must include `delivery_pointer` in the 
 | Terraform | `modules/<svc>/main.tf` — `kubernetes_deployment` resource |
 | GitOps | ArgoCD Application / Flux Kustomization path referencing the chart or overlay |
 
-When git MCP is unavailable, use user-provided path or *path not verified*.
+When Git MCP is unavailable, use an explicitly user-confirmed path with `verified: true`. Otherwise
+keep the recommendation `DEFERRED`; an unconfirmed candidate path may use `verified: false` only there.

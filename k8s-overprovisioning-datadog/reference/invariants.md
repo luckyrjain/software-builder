@@ -17,8 +17,9 @@ Run after [build-graph.md](../workflow/build-graph.md), before [render.md](../wo
 | **INV-09** | Unresolved `contradictions[]` → no cut `REC_*` (`REC_CPU_REDUCE`, `REC_REPLICA_REDUCE`, `REC_MEMORY_REDUCE`) in `READY` | critical |
 | **INV-10** | Every ID in `supports`, `blocking`, `missing`, `depends_on` references an existing graph node | critical |
 | **INV-11** | Each `RECOMMENDATION_CONFIDENCE.value` matches its `factors` arithmetic (±0.1 after caps) | critical |
-| **INV-12** | Every `REC_*` with `status: READY` and actionable change id (`*_REDUCE`, `*_INCREASE`, `*_ADJUST`, `REC_MANIFEST_RECONCILE`) has non-empty `delivery_pointer.path` | critical |
+| **INV-12** | Every `REC_*` with `status: READY` and actionable change id (`*_REDUCE`, `*_INCREASE`, `*_ADJUST`, `REC_MANIFEST_RECONCILE`) has non-empty `delivery_pointer.path` and `delivery_pointer.verified: true` | critical |
 | **INV-13** | Every `ASSUME_*` ID in any `depends_on.assumptions` array references an existing entry in `assumptions[]` | critical |
+| **INV-14** | `metadata.source_profile` contains valid Kubernetes/Datadog states, failures, capability coverage, and compatible routes for all required capabilities; Datadog cannot route `live_state` | critical |
 
 ## Validation output
 

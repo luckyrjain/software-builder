@@ -1,0 +1,80 @@
+# Decision graph — Kubernetes live state only, no historical telemetry
+# Expected outcome: block sizing advice instead of guessing.
+
+schema_version: 3
+skill_version: v3.4
+
+metadata:
+  generated: "2026-08-06T12:00:00Z"
+  service: inventory-worker
+  scope: "kube_deployment:inventory-worker,env:production"
+  window_utilization: 7d
+  metrics_queried: 0
+  missing_metrics: [OBS_CPU_P95_FLEET]
+  source_profile:
+    sources:
+      kubernetes_mcp:
+        status: connected
+        capabilities: [live_state, current_metrics, manifest_config]
+        failures: []
+      datadog:
+        status: absent
+        capabilities: []
+        failures: [not_connected]
+    routes:
+      live_state: kubernetes_mcp
+      current_metrics: kubernetes_mcp
+      historical_metrics: unavailable
+      incidents_monitors: unavailable
+      manifest_config: kubernetes_mcp
+      cost: unavailable
+
+assessment:
+  final_decision: UNKNOWN
+  severity: BLOCKED
+  severity_reason: insufficient_metrics
+  review_after: null
+  assessment_confidence:
+    value: 0.0
+    band: Very Low
+    factors:
+      evidence_completeness: 0.0
+      evidence_quality: 0.0
+      contradiction_resolution: 0.0
+      telemetry_availability: 0.0
+    arithmetic: "0.35×0.0 + 0.35×0.0 + 0.15×0.0 + 0.15×0.0 = 0.0"
+
+observations:
+  - id: OBS_CPU_P95_FLEET
+    value: null
+    unit: cores
+    scope: app_container
+    window: 7d
+    quality: missing
+
+evidence:
+  - id: EVID_CPU_P95_FLEET
+    observation_id: OBS_CPU_P95_FLEET
+    source: null
+    query_or_api: null
+    coverage: 0.0
+    quality: missing
+    notes: No source exposed historical utilization.
+
+decisions:
+  - id: DEC_CPU_REQUEST
+    status: DEFER
+    supports: [OBS_CPU_P95_FLEET]
+    blocking: []
+    missing: [OBS_CPU_P95_FLEET]
+    reason: insufficient_metrics
+    explanation: Historical utilization is required before changing CPU requests.
+
+recommendations: []
+telemetry:
+  queried: 0
+  returned: 0
+  coverage: 0.0
+assumptions: []
+contradictions: []
+stop_reasons: [insufficient_metrics]

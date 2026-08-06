@@ -66,7 +66,7 @@ Maintainer pressure scenarios: [pressure-tests.md](pressure-tests.md).
 | pr-gatekeeper | Webhook: `project`, `merge_request_iid`, `head_sha`, `auto_post_authorized: true` | pr-review's own Phase 0 posting-mode announcement — no pr-gatekeeper-specific preamble |
 | incident-rca | `RCA for <service> between <from> and <to> UTC — <symptom>` | MCP profile: `Datadog ✅ \| KubeSense … \| GitLab …` |
 | incident-triage-agent | Webhook: `event_type: page_triggered`, `service`, `triggered_at`, `alert_title`, `severity` | 30-minute window announced, UTC-suffixed, symmetric around `triggered_at` |
-| k8s-overprovisioning-datadog | Assess single deployment with ≥7d Datadog metrics, <5 containers | Prerequisites: Datadog ✅; scope: deployment + env + window |
+| k8s-overprovisioning-datadog | Assess single deployment with ≥7d history from Kubernetes MCP or Datadog, <5 containers | DISCOVER_SOURCES profile first; scope: deployment + env + window |
 | domain-comprehension | `Map bounded contexts in <domain> workspace` | Session 0 MCP profile + census scope |
 | squad-map | `Map squads for repos in <workspace>` | Phase 0: `GitLab ✅ \| Datadog …` |
 | who-owns-x-bot | `query: <repo-name>`, `workspace_root: <workspace>` | One Slack-formatted reply — no intermediate chatter, no file written |

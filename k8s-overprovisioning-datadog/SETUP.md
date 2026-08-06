@@ -1,7 +1,8 @@
 # Setup — k8s-overprovisioning-datadog
 
-This skill queries Kubernetes utilization metrics through the Datadog MCP server. A git provider MCP
-(GitLab or GitHub) is optional and only needed for the manifest-vs-running drift check.
+This skill discovers Kubernetes and observability MCP tools by capability. It prefers Kubernetes MCP
+for live cluster truth and uses Datadog as a per-capability fallback and for unique historical and
+operational telemetry. A git provider MCP is an optional configuration fallback.
 
 **Ambient discovery is intended** — this skill deliberately does **not** set `disable-model-invocation`
 in its frontmatter, so the agent can auto-apply it when you ask "is `<service>` overprovisioned?" in
@@ -26,7 +27,7 @@ Workflow modules live under `workflow/` — the top-level [SKILL.md](SKILL.md) i
 `make install` above already installs this skill for Claude Code too (default installs to both
 editors). For Claude Code **only**: `make install-claude-k8s-overprovisioning`. Datadog MCP: install
 the `datadog` Claude Code plugin and run its `ddsetup` skill instead of the Cursor Datadog plugin
-(§ 2). GitLab/GitHub MCP (§ 5): same JSON entries, via `claude mcp add-json` instead of
+(§ 3). GitLab/GitHub MCP (§ 6): same JSON entries, via `claude mcp add-json` instead of
 `~/.cursor/mcp.json`. Full mapping:
 [claude-code-setup.md](../docs/skill-framework/shared/claude-code-setup.md).
 
@@ -37,14 +38,31 @@ Working directly in this repo (not via an installed copy)?
 `.kiro/steering/k8s-overprovisioning-datadog.md` point Cursor/Kiro at
 `k8s-overprovisioning-datadog/SKILL.md` without an install step.
 
-## 2. Enable Datadog MCP
+## 2. Enable a Kubernetes MCP (preferred)
+
+Configure a Kubernetes MCP with read-only access to the target clusters. The skill matches
+capabilities rather than a server name, so any MCP may be used when it can read:
+
+- Deployments/StatefulSets and container requests/limits
+- Pods, restarts, OOM state, events, and current usage
+- HPA, VPA, KEDA ScaledObject, PDB, and ResourceQuota resources
+- Historical metrics only when it exposes the required window and aggregation
+
+Do not grant write permissions for this workflow. The skill never calls `apply`, `patch`, `delete`,
+`scale`, or rollout mutations even if a connected server exposes them.
+
+At runtime the skill announces detected coverage. A point-in-time Metrics API sample is useful for
+current health but does not replace seven-day historical evidence. If Kubernetes MCP is absent,
+unreachable, unauthorized, or lacks a capability, Datadog fallback is attempted for that capability.
+
+## 3. Enable Datadog MCP (fallback and historical telemetry)
 
 1. Install the **Datadog** Cursor plugin (provides `plugin-datadog-datadog`).
 2. On first use, run the **ddsetup** skill if Datadog MCP tools are missing.
 3. Ensure these toolsets are enabled (via **ddtoolsets** if needed):
    - Metrics
    - Dashboards and notebooks
-   - Monitors (required — `search_datadog_monitors` for active-alerts check in workload analysis)
+   - Monitors (recommended — `search_datadog_monitors` for active-alerts checks)
    - Cloud Cost Management (optional — for $/mo savings; `aws.cost.*` queries need `use_cloud_cost: true`)
    - Traces (optional — for HTTP/Kafka workload context)
 
@@ -53,7 +71,10 @@ Working directly in this repo (not via an installed copy)?
 skill supplies it automatically — no setup needed — but a server that rejects calls missing
 `telemetry` is expected behavior, not a misconfiguration.
 
-## 3. Datadog access
+Datadog is not globally required. When a history-capable Kubernetes MCP supplies sufficient evidence,
+the assessment continues without Datadog and marks Datadog-only signals unavailable.
+
+## 4. Datadog access
 
 You need read access to:
 
@@ -62,7 +83,7 @@ You need read access to:
 
 Default analysis scope is `env:production` when the tag exists. Ask your platform team if you need a different org or site (`ddconfig` skill).
 
-## 4. Shared dashboards
+## 5. Shared dashboards
 
 The skill resolves dashboards via `search_datadog_dashboards` by **exact title** (see
 [workflow/orchestrator.md](workflow/orchestrator.md)). Bookmark these for manual checks. The Datadog **site** varies
@@ -96,9 +117,9 @@ Template for your org (fill in after calibration):
 
 Many services also have a `UHD - <service-name>` dashboard for deep dives.
 
-## 5. Git provider MCP (GitLab or GitHub, optional)
+## 6. Git provider MCP (GitLab or GitHub, optional)
 
-Needed only for the **manifest vs running** drift check and for finding `VerticalPodAutoscaler`,
+Used as fallback for the **manifest vs running** drift check and for finding `VerticalPodAutoscaler`,
 `PodDisruptionBudget`, and namespace `ResourceQuota` resources — reads Deployment YAML / Helm
 `values.yaml` / Terraform directly from the repo. **Without it, nothing is blocked**: the skill falls
 back to asking you to paste the relevant CPU/memory/replica values.
@@ -148,13 +169,15 @@ values manually — only the automated drift / VPA / PDB / ResourceQuota lookups
 
 | Problem | Fix |
 |---------|-----|
-| Datadog 403 / missing tools | Run **ddsetup** / **ddconfig**; verify site + API key; skill retries ≤2× then blocks the report with `STOP_REASON: auth_failure` — see [reference/mcp-capabilities.md](reference/mcp-capabilities.md) |
-| `npm ERR! enoent … /usr/share/cursor/resources/app/resources/lib` (Linux, GitLab/GitHub MCP via `npx`) | Cursor's bundled npm can't find its own lib path — set `"command"` to your system `npx` (`which npx`) or install the server globally; restart Cursor (§5 above) |
+| Kubernetes MCP missing / unauthorized | Continue with Datadog fallback; record missing Kubernetes capabilities in the source profile |
+| Datadog 403 / missing tools | Continue with sufficient Kubernetes evidence; otherwise run **ddsetup** / **ddconfig**. A source-scoped failure blocks only when no alternative can supply required evidence |
+| `npm ERR! enoent … /usr/share/cursor/resources/app/resources/lib` (Linux, GitLab/GitHub MCP via `npx`) | Cursor's bundled npm can't find its own lib path — set `"command"` to your system `npx` (`which npx`) or install the server globally; restart Cursor (§6 above) |
 | Git provider MCP configured but manifest lookup fails / hangs (dangling) | Skill falls back to asking you to paste `resources.requests/limits` and replica counts — manifest drift, VPA, PDB, and ResourceQuota checks are skipped, not blocked |
 | `get_repository_tree` returns >500 entries | Skill stops traversal and asks for the exact Deployment/Helm values path rather than enumerating the whole repo |
 | Rate limit (429) from Datadog | Narrow the time window; skill notes the gap and does not tight-loop retry |
 | CCM / cost toolset unavailable | Cost appendix skipped (`cost_skipped`); assessment continues on utilization only |
-| KubeSense-only (no Datadog) | Not supported as primary — enable Datadog or paste metric snapshots |
+| Kubernetes MCP live state only and no Datadog | Report live observations; defer sizing dimensions requiring history; use `STOP_REASON: insufficient_metrics` when no sizing verdict is supportable |
+| Neither source has sufficient evidence | Return a blocked assessment listing attempted sources and missing capabilities; never guess a recommendation |
 
 ## Framework conventions
 
@@ -165,4 +188,3 @@ values manually — only the automated drift / VPA / PDB / ResourceQuota lookups
 - Examples: [examples-conventions](../docs/skill-framework/shared/examples-conventions.md)
 - Phases: [phase-glossary](../docs/skill-framework/shared/phase-glossary.md)
 - Post-actions: [post-action-templates](../docs/skill-framework/shared/post-action-templates.md)
-

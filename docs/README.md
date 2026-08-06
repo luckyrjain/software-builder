@@ -274,10 +274,11 @@ These are planning artifacts; the live behavior is defined in each skill's own `
 | Path | What it does |
 |------|--------------|
 | `workflow/orchestrator.md` | Pipeline routing, intent shortcuts, decision tree |
+| `workflow/discover-sources.md` | Kubernetes MCP-first capability discovery and `source_profile` routing before workload queries |
 | `workflow/stop-reasons.md` | P0 safety gates (auth failure, manifest drift, insufficient metrics) |
 | `workflow/build-graph.md` … `render.md` | BUILD_GRAPH → VALIDATE_INVARIANTS → RENDER |
 | `reference/decision-graph-schema.md` | Primary typed artifact (`schema_version: 3`) |
-| `reference/invariants.md` | INV-01–INV-12 self-validation |
+| `reference/invariants.md` | INV-01–INV-14 self-validation |
 | `render/markdown.md`, `render/json.md` | Renderers — Human Report + Technical Appendix (markdown) or JSON export |
 | `templates/human-report.md` | Human Report layout (prose-first; no registry IDs) |
 | `workflow/report.md` | Presentation rules — label translation, summary-only mode, smoke tests |

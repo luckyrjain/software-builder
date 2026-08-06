@@ -1,12 +1,11 @@
 ---
-workflow_version: 3.0
+workflow_version: 3.4
 phase: orchestrator
 produces:
   - intent_route
   - modules_to_load
 consumes:
   - user_intent
-  - service_identity
 ---
 
 # Orchestrator — decision tree and routing
@@ -23,12 +22,14 @@ consumes:
 ## Pipeline
 
 ```
-COLLECT → NORMALIZE → REASON → VALIDATE → [COST] → BUILD_GRAPH → VALIDATE_INVARIANTS → RENDER
+DISCOVER_SOURCES → RESOLVE → COLLECT → NORMALIZE → REASON → VALIDATE → [COST] → BUILD_GRAPH → VALIDATE_INVARIANTS → RENDER
 ```
 
 | Phase | Module | Output |
 |-------|--------|--------|
-| COLLECT | [collect-metrics.md](collect-metrics.md) | raw metrics |
+| DISCOVER_SOURCES | [discover-sources.md](discover-sources.md) | `source_profile` before any workload query |
+| RESOLVE | [resolve-service.md](resolve-service.md) | `service_identity` using selected routes |
+| COLLECT | [collect-metrics.md](collect-metrics.md) | raw observations + updated source failures |
 | NORMALIZE | [evidence.md](evidence.md) | `OBS_*`, `EVID_*` |
 | REASON | [reason.md](reason.md) + dimensions | inferences, `DEC_*` candidates |
 | VALIDATE | [validate.md](validate.md) | gates, contradictions |
@@ -43,7 +44,7 @@ COLLECT → NORMALIZE → REASON → VALIDATE → [COST] → BUILD_GRAPH → VAL
 
 | User intent | Through BUILD_GRAPH | Skip |
 |-------------|---------------------|------|
-| Full / overprovisioned | resolve → collect → cpu → memory → replica → workload → reason → validate → cost → graph → render | — |
+| Full / overprovisioned | discover → resolve → collect → cpu → memory → replica → workload → reason → validate → cost → graph → render | — |
 | Cost savings | … → reason → validate → cost → graph → render | replica deep-dive |
 | Replicas too high? | … → replica → workload → reason → validate → graph → render | cost |
 | Throttle / OOM | … → cpu → memory → workload → reason → validate → graph → render | replica cuts, cost |
@@ -57,14 +58,16 @@ run when Jira, user calendar, or GitLab merge-freeze MCP is available; skip othe
 ## Decision tree
 
 ```
-START → resolve-service.md
+START → discover-sources.md (capability inventory; no workload query)
+  ↓
+resolve-service.md (consume source_profile)
   ↓
 Workload kind = StatefulSet (per resolve-service.md `kube_statefulset`)? YES → load
   [workload-analysis.md § StatefulSets](workload-analysis.md#statefulsets) before REASON
   ↓
 Pre-flight: active incident + redeploy staleness + VPA read ([collect-metrics.md](collect-metrics.md#pre-flight-before-metric-queries))
   ↓
-Metrics? NO → insufficient_metrics → minimal blocked graph → render
+Combined evidence sufficient for a requested sizing dimension? NO → insufficient_metrics → minimal blocked graph → render
   ↓
 REASON + VALIDATE
   ↓

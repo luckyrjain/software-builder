@@ -10,9 +10,10 @@
 | Window | utilization `7d`; cost `30d` |
 | Metrics queried | N |
 | Missing metrics | N — `<OBS_* list>` |
-| Datadog org | `<site>` |
-| Skill version | v3.0 |
-| Schema version | 2 |
+| Source profile | Kubernetes MCP `<capabilities>`; Datadog `<capabilities>`; fallbacks `<list>` |
+| Datadog org | `<site or not connected>` |
+| Skill version | v3.4 |
+| Schema version | 3 |
 | Threshold version | 2026-06 |
 | Analysis duration | `<seconds>` |
 
@@ -26,7 +27,7 @@ threshold_hash: sha256:<hex of thresholds.md>
 manifest_hash: sha256:<hex>
 metric_query_hash: sha256:<hex>
     schema_version: 3
-    skill_version: v3.0
+    skill_version: v3.4
 ```
 
 Compute `threshold_hash` from [thresholds.md](../thresholds.md) file bytes during COLLECT.

@@ -31,26 +31,26 @@ provider/region/node type.
 | VPA active, recommendation empty | [collect-metrics.md](../../k8s-overprovisioning-datadog/workflow/collect-metrics.md): *"`STOP_REASON: vpa_active_unconfirmed` — defer cuts until recommendation stabilizes"* | Accept k8s's own deferred-decision graph as-is — a deployment that hits this still produces a real `decision_graph` (with `recommendations[].status: DEFERRED` on that dimension), not a sweep gap; `value.monthly_savings_total` reflects only the dimensions that weren't deferred |
 | CCM empty | [cost-analysis.md](../../k8s-overprovisioning-datadog/workflow/cost-analysis.md): *"CCM empty → resource-only; no fallback $ without user confirmation"* | This skill's pre-resolved `cost_rate` **is** that confirmation, supplied up front — CCM-empty deployments fall through to `cost_rate` per the § Cost-rate gate above, never re-prompted |
 | Non-AWS CCM metric path | [queries.md](../../k8s-overprovisioning-datadog/queries.md): *"`aws.cost.*` is AWS-specific — for GCP/Azure ask the user for their CCM metric paths"* | Never asked per deployment, and never inferred by parsing `cost_rate.cost_basis`'s free text — driven by the **structured** `cost_rate.provider` field (see [workflow/inputs.md](../workflow/inputs.md)) instead. When `provider != aws`, skip CCM entirely for the whole sweep and use the pre-resolved `cost_rate` fallback for every deployment, unless the caller separately supplies GCP/Azure CCM metric paths as part of `cost_rate` up front |
-| Manifest lookup (drift / VPA / PDB / ResourceQuota) not found | [SETUP.md](../../k8s-overprovisioning-datadog/SETUP.md): *"stop and ask the user for the Deployment/Helm values path... Never block the analysis — if git MCP is unavailable or lookup fails, ask the user to paste `resources.requests`/`resources.limits`/`replicas` and continue"* | Skip manifest verification for that one deployment rather than pausing the sweep to ask for a path or pasted values — the resulting graph proceeds with `delivery_pointer` unverified (k8s's own "never block the analysis" fallback), noted in that deployment's rollup item, never a sweep-wide stop |
+| Manifest lookup (drift / VPA / PDB / ResourceQuota) not found | [build-graph.md](../../k8s-overprovisioning-datadog/workflow/build-graph.md): an actionable recommendation without a verified delivery path must be `DEFERRED`; INV-12 forbids `READY` | Continue the assessment without pausing the sweep, but preserve the wrapped skill's downgrade: any actionable recommendation stays `DEFERRED` until `delivery_pointer.verified: true`; KEEP/OBSERVE results remain valid and this is never a sweep-wide stop |
 
 A deployment that resolves to `insufficient_metrics` this way is recorded in
 `COST_OPTIMIZATION_SPRINT_REPORT.md` **as a sweep gap, honestly** — not silently upgraded to a real
 waste finding (which would fabricate a recommendation k8s never made) and not treated as `$0` savings
 (which would hide a real gap). See [reference/report-format.md](report-format.md).
 
-## Sweep-wide stop, not per-deployment isolation — the auth failure gate
+## Sweep-wide auth stops — direct namespace pre-filter or all viable sources
 
 **k8s's own text** ([stop-reasons.md](../../k8s-overprovisioning-datadog/workflow/stop-reasons.md)):
-`auth_failure` is **Critical** severity, effect **"Halt — no metrics,"** next action **"Run ddsetup /
-ddconfig"** — grouped with `insufficient_metrics` in k8s's own "return blocked report, do not collect
-further" branch.
+`auth_failure` is **Critical** only when **all viable sources** for required evidence are unauthorized.
+An authentication failure from one source is source-scoped and collection continues through another
+sufficient source.
 
-**This skill's scripted answer:** unlike every gate above, `auth_failure` is **not** isolated to one
-deployment and continued past — a Datadog MCP auth failure on one deployment means every remaining
-candidate in the sweep will hit the identical failure, since it's an environment-level problem (expired
-credentials, misconfigured MCP), not a per-deployment data-quality issue. The first `auth_failure`
-outcome **stops the sweep immediately** (`stopped_reason: AUTH_FAILURE`, per
-[reference/sweep-policy.md § 5](sweep-policy.md#5-session-level-stop-conditions-circuit-breakers)) rather
-than being recorded as a per-deployment gap and continuing — running the rest of the candidate list
-against a broken credential would only burn the session's time/token budget producing nothing. Report
-k8s's own remediation pointer ("run ddsetup/ddconfig") in the sweep report's Notes section.
+| Failure scope | Sweep behavior | Remediation |
+|---|---|---|
+| Datadog fails during an explicit-deployment assessment; Kubernetes MCP supplies sufficient evidence | Continue. The wrapped result remains `ASSESSED` (or its normal degraded verdict) with the source-scoped Datadog failure in `source_profile` | Restore Datadog only for its missing unique capabilities; do not stop the sweep |
+| Kubernetes MCP fails; Datadog supplies sufficient evidence | Continue with the live-state verification gap surfaced by the wrapped skill | Restore Kubernetes MCP for live cluster truth; do not stop the sweep |
+| Datadog authentication fails during direct namespace pre-filter candidate discovery | Stop with `stopped_reason: AUTH_FAILURE`; candidate discovery itself depends on Datadog | Run `ddsetup` / `ddconfig`, or rerun with an explicit deployments list |
+| All viable sources for required per-deployment evidence are unauthorized | Stop with `stopped_reason: AUTH_FAILURE`; remaining candidates would hit the same environment-level failure | Configure at least one usable Kubernetes MCP or Datadog evidence source |
+
+The last two rows are the only sweep-wide authentication stops. Report the failed scope in Notes; never
+collapse a source-scoped failure into `AUTH_FAILURE`.

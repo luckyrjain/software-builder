@@ -12,9 +12,10 @@ Conventions: [examples-conventions](../docs/skill-framework/shared/examples-conv
 | 4 | A deployment has no `SQUAD_MAP.md`/`ownership.datadog.service_aliases` match | Joins as `squad: UNKNOWN` — squad-map is never invoked to fill the gap |
 | 5 | A deployment's graph has no `appendix.cost` block | Falls back to `cost-estimation.md`'s formulas applied against the graph's own `observations`/`recommendations`, using the once-resolved `cost_rate` |
 | 6 | `sweep_scope` missing `env`, missing both `deployments` and `namespace_prefilter`, or `namespace_prefilter` set (and `deployments` absent) but missing `top_n_namespaces`/`top_n_deployments_per_namespace`; or `cost_rate` absent/incomplete (missing `provider`, `dollars_per_core_month`, or `dollars_per_gib_month`) | Inputs HARD STOP — ask, no Run sweep |
-| 7 | A deployment hits `STOP_REASON: auth_failure` (broken Datadog MCP credentials) | Sweep stops immediately (`stopped_reason: AUTH_FAILURE`) — not isolated like the other gates, since every remaining candidate would hit the same failure |
-| 8 | "Is checkout-api overprovisioned?" | **Wrong skill** → k8s-overprovisioning-datadog directly |
-| 9 | "Who owns checkout-api?" | **Wrong skill** → squad-map directly |
+| 7 | Datadog auth fails during an explicit-deployment assessment, but Kubernetes MCP supplies sufficient evidence | Source-scoped failure is retained in the wrapped result; assessment and sweep continue |
+| 8 | Datadog auth fails during direct namespace pre-filter discovery, or all viable sources for required assessment evidence are unauthorized | Sweep stops immediately with `stopped_reason: AUTH_FAILURE`; report identifies which scope failed |
+| 9 | "Is checkout-api overprovisioned?" | **Wrong skill** → k8s-overprovisioning-datadog directly |
+| 10 | "Who owns checkout-api?" | **Wrong skill** → squad-map directly |
 
 ---
 

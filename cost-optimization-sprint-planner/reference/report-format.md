@@ -35,7 +35,7 @@ merged into a named squad's section.>
 
 | Deployment | Outcome | Notes |
 |------------|---------|-------|
-| <deployment> | `INSUFFICIENT_METRICS` \| `AMBIGUOUS_UNRESOLVED` \| `AUTH_FAILURE` | <tag strategies attempted, per gate-policy.md's "proceed with unknown" resolution, or — for `AUTH_FAILURE` — k8s's own remediation pointer ("run ddsetup/ddconfig") and a note that the sweep stopped here, never attempting the remaining candidates> |
+| <deployment> | `INSUFFICIENT_METRICS` \| `AMBIGUOUS_UNRESOLVED` \| `AUTH_FAILURE` | <tag strategies attempted, per gate-policy.md's "proceed with unknown" resolution, or — for `AUTH_FAILURE` — whether direct namespace pre-filter authentication failed or all viable sources were unauthorized, the matching remediation, and a note that the sweep stopped here> |
 
 ## Notes
 
