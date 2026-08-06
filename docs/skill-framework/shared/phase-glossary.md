@@ -29,6 +29,17 @@
 
 Posting phases (3–4) are sub-steps of Report; Phase 5 executive summary is the primary deliverable.
 
+### pr-gatekeeper mapping
+
+| Phase | File | Canonical |
+|-------|------|-----------|
+| Inputs | `workflow/inputs.md` | Detect (partial — webhook event filtering) |
+| Gatekeep | `workflow/gatekeep.md` | Gather + Report (delegated entirely to pr-review's own phases) |
+
+No Analyze/Correlate/Rank of its own — pr-gatekeeper's only original logic is the auto-post decision
+(`reference/auto-post-policy.md`), which reconciles with pr-review's own Validate/Report phases rather
+than replacing them.
+
 ## 3. incident-rca mapping
 
 | Phase | File | Canonical |
@@ -43,6 +54,19 @@ Posting phases (3–4) are sub-steps of Report; Phase 5 executive summary is the
 | 5 | `workflow/phase-5.md` | Report |
 
 Phase 0b is conditional — runs when user anchors on Jira ticket instead of explicit window.
+
+### incident-triage-agent mapping
+
+| Phase | File | Canonical |
+|-------|------|-----------|
+| Inputs | `workflow/inputs.md` | Detect (partial — paging webhook event filtering, mode selection) |
+| Triage | `workflow/triage.md` | Gather + Report (delegated to incident-rca + squad-map) |
+| Postmortem | `workflow/postmortem.md` | Gather + Report (delegated to incident-rca + squad-map) |
+
+No Analyze/Correlate/Rank of its own — all investigation and ownership analysis is incident-rca's and
+squad-map's. The only original logic is the unattended-gate answering
+(`reference/unattended-gate-policy.md`), which reconciles with both wrapped skills' own phases rather
+than replacing them.
 
 ## 4. k8s mapping
 
@@ -70,6 +94,39 @@ Pipeline shorthand: **COLLECT → REASON → BUILD_GRAPH → VALIDATE_INVARIANTS
 Phase 0 is pure MCP capability detection. Phase 1 combines Gather (MCP queries / CODEOWNERS), Analyze
 (reconciliation + confidence scoring), and Report (write `SQUAD_MAP.md`). No separate Correlate or
 Validate — the skill is lightweight compared to multi-phase skills.
+
+### who-owns-x-bot mapping
+
+| Phase | File | Canonical |
+|-------|------|-----------|
+| Inputs | `workflow/inputs.md` | Detect (partial) |
+| Lookup | `workflow/lookup.md` | Gather (delegated to squad-map) + Report (Slack reply) |
+
+Thinnest skill in the repo — no Analyze, Correlate, or Validate step of its own; all ownership analysis
+is squad-map's. Report here means "format one Slack message," not "write a markdown deliverable."
+
+### new-hire-guide mapping
+
+| Phase | File | Canonical |
+|-------|------|-----------|
+| Inputs | `workflow/inputs.md` | Detect (partial) |
+| Run tour | `workflow/run-tour.md` | Gather (delegated to squad-map + domain-comprehension) + Analyze (squad-column matching, zero-match handling) + Report (`ONBOARDING_TOUR.md`) |
+
+Like who-owns-x-bot, no Analyze/Correlate/Validate of its own beyond the squad-column-matching and
+zero-match logic in Run tour — squad-to-repo resolution is squad-map's, comprehension is
+domain-comprehension's. Report here means "curate and link `ONBOARDING_TOUR.md`," not re-run either
+wrapped skill's own analysis.
+
+### release-readiness-checker mapping
+
+| Phase | File | Canonical |
+|-------|------|-----------|
+| Inputs | `workflow/inputs.md` | Detect (partial) |
+| Run check | `workflow/run-check.md` | Gather (MR-range resolution, delegated pr-review/k8s/incident-rca invocations) + Analyze (verdict aggregation, overall Ready/Not-ready derivation) + Report (`RELEASE_READINESS_REPORT.md`) |
+
+The MR-range resolver (§ Run check step 1) is this skill's one genuinely new Gather-equivalent logic —
+every other Gather step is fully delegated. Analyze here is aggregation only (deriving one verdict from
+three already-computed verdicts), never re-scoring any wrapped skill's own findings.
 
 ### domain-comprehension mapping
 
@@ -108,6 +165,44 @@ User approval gate between P0.25 and P0.5 (mechanical scope checkpoint).
 Single-workflow skill — no numbered phases. Optional domain pack load for org file paths; fleet rollup via
 `templates/MIGRATION_STATUS.yaml`.
 
+### migration-program-manager mapping
+
+| Phase | File | Canonical |
+|-------|------|-----------|
+| Inputs | `workflow/inputs.md` | Detect (`program_manifest`, `staleness_threshold_days`, `state_path`) |
+| Run rollup | `workflow/run-rollup.md` | Gather (read `MIGRATION_STATUS.yaml` + `SQUAD_MAP.md` per workspace, never invoked live) + Analyze (squad join, staleness computation, rank/group) + Report (`MIGRATION_PROGRAM_REPORT.md` + `migration_program_rollup.json`) |
+
+Not exempt from Analyze the way a pure scheduling wrapper is — this skill has real Analyze logic of its
+own: the squad join (path/name match against `SQUAD_MAP.md`), the staleness computation against its own
+persisted state, and the rank/group by squad. Same reasoning as release-readiness-checker's mapping above:
+aggregation over already-computed inputs is still Analyze, not a pass-through.
+
+### cost-optimization-sprint-planner mapping
+
+| Phase | File | Canonical |
+|-------|------|-----------|
+| Inputs | `workflow/inputs.md` | Detect (`sweep_scope`, `cost_rate`, `max_deployments_per_run`, `deadline`, `session_token_budget`) |
+| Run sweep | `workflow/run-sweep.md` | Gather (optional namespace/deployment waste-ranking pre-filter query pass, then N delegated k8s-overprovisioning-datadog invocations) + Analyze (squad join, rank by `monthly_savings_total`) + Report (`COST_OPTIMIZATION_SPRINT_REPORT.md` + `cost_optimization_sprint_rollup.json`) |
+
+Same reasoning as migration-program-manager's and release-readiness-checker's mappings above — not
+exempt, since the pre-filter ranking query pass and the squad join/rank are this skill's own Analyze
+logic, not a pass-through of k8s-overprovisioning-datadog's own analysis (which stays entirely its own,
+unmodified, inside each delegated invocation).
+
+### weekly-squad-digest mapping
+
+| Phase | File | Canonical |
+|-------|------|-----------|
+| Inputs | `workflow/inputs.md` | Detect (`rollup_manifest`, `staleness_warning_days`) |
+| Run digest | `workflow/run-digest.md` | Gather (read two already-computed rollup JSON files, never invoked live) + Analyze (group by squad then `metric_type`, compute per-item staleness) + Report (`WEEKLY_SQUAD_DIGEST.md`) |
+
+Not exempt from Analyze — the squad/metric_type grouping and the staleness computation are this skill's
+own logic, even though `squad`/`squad_confidence`/`status`/`priority` themselves are never re-derived
+(they're read as-is from each producing skill's own already-computed rollup item). Same distinction
+migration-program-manager's mapping draws between "aggregation over already-computed inputs is still
+Analyze" and "re-deriving a value another skill already computed," which this skill deliberately never
+does.
+
 ## 5. Cross-skill analogies
 
 | Concept | pr-review | incident-rca | k8s | domain-comprehension | squad-map | mysql-to-postgres-sql |
@@ -120,6 +215,21 @@ Single-workflow skill — no numbered phases. Optional domain pack load for org 
 | Report equivalent | Phase 5 executive summary + metadata | Phase 5 RCA report + evidence JSON | RENDER — Human Report + decision graph | P5 — `EXEC_SUMMARY.md` + all deliverables | Phase 1 Step 1 — `SQUAD_MAP.md` | `SERVICE_PG_MIGRATION.md` + `assessment_metadata` |
 
 When writing cross-skill examples, use analogies above: "pr-review Phase 1 ≈ k8s COLLECT ≈ rca Phase 1 ≈ domain-comprehension Session 0 + P0 ≈ squad-map Phase 1 Steps 2–4 ≈ mysql Scan step".
+
+The four "own-Analyze-logic" composition skills built on top of the six above (each genuinely aggregates or
+gates, rather than just relaying — unlike the thin `disable-model-invocation: true` wrappers pr-gatekeeper/
+incident-triage-agent/who-owns-x-bot, which each get their own mapping in §§2–4 above via the skill they
+wrap, or loop-task-implementer/backlog-runner, the two skills this file's phase vocabulary genuinely does
+not apply to per the framework README):
+
+| Concept | release-readiness-checker | migration-program-manager | cost-optimization-sprint-planner | weekly-squad-digest |
+|---------|---------------------------|----------------------------|-----------------------------------|----------------------|
+| MCP profile | None of its own — inherits pr-review's, k8s's, and incident-rca's | None — pure file aggregation, no MCP calls at all | Datadog (namespace pre-filter only) — otherwise inherits k8s's | None — pure file aggregation, no MCP calls at all |
+| Boundary / scope | `release_manifest` — repos/services + `since` tag | `program_manifest` — workspace roots | `sweep_scope` — explicit deployments or `namespace_prefilter` | `rollup_manifest` — one or both rollup paths |
+| Minimum evidence gate | `reference/gate-policy.md` — scripted answers to every wrapped-skill gate, never a live interruption | None — nothing invoked live, so nothing to gate | `reference/gate-policy.md` — same pattern, cost-rate resolved once sweep-wide | None — nothing invoked live |
+| Gather equivalent | Run check — resolve MR ranges, invoke pr-review/k8s/incident-rca per manifest entry | Run rollup — read every workspace's `MIGRATION_STATUS.yaml` + `SQUAD_MAP.md` | Run sweep — loop k8s-overprovisioning-datadog once per deployment | Run digest § 1 — read both already-computed rollup files |
+| Analyze equivalent | Aggregate wrapped skills' own verdicts into one release verdict | Join + compute staleness against persisted state | Join to `SQUAD_MAP.md`, rank by `monthly_savings_total` | Group by squad, split by `metric_type`, compute staleness |
+| Report equivalent | `RELEASE_READINESS_REPORT.md` | `MIGRATION_PROGRAM_REPORT.md` + `migration_program_rollup.json` | `COST_OPTIMIZATION_SPRINT_REPORT.md` + `cost_optimization_sprint_rollup.json` | `WEEKLY_SQUAD_DIGEST.md` |
 
 ## 6. Artifact glossary
 
@@ -147,3 +257,12 @@ When writing cross-skill examples, use analogies above: "pr-review Phase 1 ≈ k
 | `SERVICE_PG_MIGRATION.md` | mysql-to-postgres-sql | migrate workflow closeout |
 | `MIGRATION_STATUS.yaml` | mysql-to-postgres-sql | fleet workspace root (from template) |
 | `assessment_metadata` | domain-comprehension, squad-map, mysql-to-postgres-sql | P5 / Phase 1 / migrate closeout |
+| `org_rollup_item` | migration-program-manager and cost-optimization-sprint-planner (both implemented) | see [org-rollup-schema.md](org-rollup-schema.md); normalizes `MIGRATION_STATUS.yaml` (`pg_migration_gate` adapter) and `decision_graph` (`k8s_waste` adapter) |
+| `MIGRATION_PROGRAM_REPORT.md` | migration-program-manager | Run rollup |
+| `migration_program_rollup.json` | migration-program-manager | Run rollup |
+| `migration_program_state.json` | migration-program-manager | Run rollup (persisted across runs, owned exclusively by this skill) |
+| `COST_OPTIMIZATION_SPRINT_REPORT.md` | cost-optimization-sprint-planner | Run sweep |
+| `cost_optimization_sprint_rollup.json` | cost-optimization-sprint-planner | Run sweep |
+| `WEEKLY_SQUAD_DIGEST.md` | weekly-squad-digest | Run digest |
+| `ONBOARDING_TOUR.md` | new-hire-guide | Run tour |
+| `RELEASE_READINESS_REPORT.md` | release-readiness-checker | Run check |

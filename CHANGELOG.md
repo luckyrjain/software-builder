@@ -26,6 +26,251 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
   "When NOT to use" table; fixed `report-template.md`'s completion-state vocabulary to match
   `state-schema.yaml`'s actual enum.
 
+## pr-gatekeeper
+
+### Initial release (2026-08-05)
+
+- New skill — item #2 of the [team-facing agents roadmap](docs/superpowers/plans/2026-08-05-team-facing-agents-roadmap.md):
+  a thin push-webhook-triggered wrapper that auto-runs **pr-review** on every push to an open MR and
+  posts inline when pr-review's own rules allow unattended posting.
+- `reference/auto-post-policy.md` — a deterministic two-message protocol (opening phrase depends on
+  `auto_post_authorized`; a single "Hold — don't post" reply whenever pr-review's Phase 3 stops and
+  waits) that never bypasses pr-review's `general-only`/draft-MR confirmation gates — those still always
+  hold, by pr-review's own non-negotiable rules.
+- `disable-model-invocation: true` — does not compete with pr-review's ambient chat invocation.
+- Design spec: [docs/superpowers/specs/2026-08-05-pr-gatekeeper-design.md](docs/superpowers/specs/2026-08-05-pr-gatekeeper-design.md).
+- Wired into `make install-pr-gatekeeper` / `make lint-pr-gatekeeper`, root README, docs/README,
+  docs/REPOSITORY, skill-routing.md, phase-glossary.md, cross-skill-escalation.md, prompt-injection.md —
+  and added to `lint-framework`'s 4 hardcoded per-skill loops from the start (a gap found and fixed
+  after-the-fact on who-owns-x-bot).
+
+## incident-triage-agent
+
+### Initial release (2026-08-05)
+
+- New skill — items #3+#4 of the [team-facing agents roadmap](docs/superpowers/plans/2026-08-05-team-facing-agents-roadmap.md):
+  a paging-webhook-triggered composition of **incident-rca** (root cause) and **squad-map** (owning
+  team), two modes in one agent — Triage on page-fire, Postmortem on incident-resolved.
+- `reference/unattended-gate-policy.md` — exhaustive enumeration of every blocking gate in both wrapped
+  skills with a deterministic answer, written exhaustive from the start using the lesson from
+  pr-gatekeeper's `auto-post-policy.md` (which needed three review rounds to reach full coverage for a
+  single wrapped skill — this file covers two).
+- Postmortem mode reuses incident-rca's own Corrective/Preventive/Post-RCA-actions tables verbatim — its
+  only original contribution is squad-map owner-column substitution, no new action-item schema.
+- `disable-model-invocation: true` — does not compete with incident-rca's or squad-map's ambient chat
+  invocation.
+- Design spec: [docs/superpowers/specs/2026-08-05-incident-triage-agent-design.md](docs/superpowers/specs/2026-08-05-incident-triage-agent-design.md).
+- Wired into `make install-incident-triage-agent` / `make lint-incident-triage-agent`, root README,
+  docs/README, docs/REPOSITORY, skill-routing.md, phase-glossary.md, cross-skill-escalation.md,
+  prompt-injection.md — and added to `lint-framework`'s 4 hardcoded per-skill loops from the start.
+
+## backlog-runner
+
+### Initial release (2026-08-05)
+
+- New skill — item #7 of the [team-facing agents roadmap](docs/superpowers/plans/2026-08-05-team-facing-agents-roadmap.md):
+  a scheduled queue-management wrapper around **loop-task-implementer** — pulls N tickets from a
+  Jira/GitHub Issues query, works through them overnight in dependency order, opens a PR per task, never
+  merges.
+- Confirmed (not assumed) that loop-task-implementer, unlike pr-review/incident-rca, already has no live
+  synchronous "ask and wait" chat gates — every stop resolves to a terminal per-task report state
+  (`HUMAN_ACTION_REQUIRED`/`ESCALATED`). This skill needed no `pr-gatekeeper`-style "answer every gate"
+  policy, only new session-level queue bookkeeping loop-task-implementer's own per-task
+  `state-schema.yaml` doesn't cover.
+- `reference/queue-policy.md` resolves one real ambiguity in loop-task-implementer's own documented
+  workflow explicitly: `HUMAN_ACTION_REQUIRED` (PR opened, not merged) continues the run — the expected
+  outcome every night — while a new session-level circuit breaker (task cap, deadline, token budget, or
+  3 consecutive escalations) is what actually stops it early.
+- `autonomous_merge_authorized` has no input path in this skill at all — hardcoded never-`true`.
+- `disable-model-invocation: true` — does not compete with loop-task-implementer's ambient invocation.
+- Design spec: [docs/superpowers/specs/2026-08-05-backlog-runner-design.md](docs/superpowers/specs/2026-08-05-backlog-runner-design.md).
+- Wired into `make install-backlog-runner` / `make lint-backlog-runner`, root README, docs/README,
+  docs/REPOSITORY, skill-routing.md, cross-skill-escalation.md, prompt-injection.md — and added to
+  `lint-framework`'s 4 hardcoded per-skill loops from the start. `phase-glossary.md` doesn't apply,
+  inheriting loop-task-implementer's own exemption.
+
+## new-hire-guide
+
+### Initial release (2026-08-05)
+
+- New skill — item #5 of the [team-facing agents roadmap](docs/superpowers/plans/2026-08-05-team-facing-agents-roadmap.md):
+  a thin composition wrapper around **domain-comprehension** + **squad-map** that resolves a new hire's
+  squad to its repos, runs domain-comprehension **unscoped**, and curates `ONBOARDING_TOUR.md` down to
+  just those repos afterward.
+- No `disable-model-invocation` — ambiently invocable, unlike who-owns-x-bot/pr-gatekeeper/
+  incident-triage-agent/backlog-runner, since a human is always present for this flow. Both wrapped
+  skills' own live gates (domain-comprehension's Session 0 checkpoint, squad-map's `squad_path_segment`
+  HARD STOP) surface unscripted — no gate-policy override file.
+- Zero-match squad-name handling: never produces a silent empty tour — asks for confirmation, listing the
+  squad names that actually exist in `SQUAD_MAP.md`.
+- **Round-1 review fix (same day):** the initial design scoped domain-comprehension via
+  `scope.seed_repos`, which cascaded through its mandatory Session 0b squad-map delegation and silently
+  archived every other squad's rows out of the shared `SQUAD_MAP.md` on every run (squad-map's own
+  scope-shrink rule, triggered as an unintended side effect). Fixed by always running domain-comprehension
+  unscoped and curating downstream instead. Also corrected a false claim about no ambient-routing
+  collision with domain-comprehension (its "subsystem onboarding" trigger phrase does overlap — resolved
+  via an explicit person-named disambiguation rule in `skill-routing.md`).
+- Design spec: [docs/superpowers/specs/2026-08-05-new-hire-guide-design.md](docs/superpowers/specs/2026-08-05-new-hire-guide-design.md).
+- Wired into `make install-new-hire-guide` / `make lint-new-hire-guide`, root README, docs/README,
+  docs/REPOSITORY, skill-routing.md, cross-skill-escalation.md, prompt-injection.md, phase-glossary.md.
+
+## release-readiness-checker
+
+### Initial release (2026-08-05)
+
+- New skill — item #9 of the [team-facing agents roadmap](docs/superpowers/plans/2026-08-05-team-facing-agents-roadmap.md):
+  a release go/no-go report composing **pr-review** (MRs merged since each repo's last release marker,
+  never posts to GitLab), **k8s-overprovisioning-datadog** (per-service rightsizing verdict, surfaced
+  as-is), and **incident-rca** (per-service open-incident signal, Phase 1 evidence only — never a full
+  RCA).
+- Genuinely new logic: the MR-range resolver (pr-review's own docs only ever enumerate open MRs, never a
+  merged-in-a-date-range query, paginated exhaustively) and the three-way aggregation into
+  `RELEASE_READINESS_REPORT.md`.
+- No `disable-model-invocation` — ambiently invocable, like `new-hire-guide`. Unlike `new-hire-guide`,
+  this skill **does** need a gate-policy file (`reference/gate-policy.md`) covering all three wrapped
+  skills' own real gates — pr-review's posting confirmation (reuses pr-gatekeeper's own real policy,
+  always "Hold — don't post"; pr-review has no caller-settable quiet mode), k8s's ambiguous-service-name
+  ask ("proceed with unknown," k8s's own documented fallback), and incident-rca's Phase 1 checkpoint
+  (always "stop here," overriding its own default-to-proceed on a strong signal) — every other
+  incident-rca gate is avoided by construction (explicit UTC times, `service` anchor always supplied,
+  1-hour minimum lookback), not scripted. A round-1 review caught and fixed a fabricated assumption that
+  pr-review had a settable gate-free posting mode; see `release-readiness-checker/CHANGELOG.md`.
+- Design spec: [docs/superpowers/specs/2026-08-05-release-readiness-checker-design.md](docs/superpowers/specs/2026-08-05-release-readiness-checker-design.md).
+- Wired into `make install-release-readiness-checker` / `make lint-release-readiness-checker`, root
+  README, docs/README, docs/REPOSITORY, skill-routing.md, cross-skill-escalation.md, prompt-injection.md,
+  phase-glossary.md.
+
+## migration-program-manager
+
+### Initial release (2026-08-05)
+
+- New skill — item #8 of the [team-facing agents roadmap](docs/superpowers/plans/2026-08-05-team-facing-agents-roadmap.md):
+  an org-wide rollup over **mysql-to-postgres-sql**'s per-workspace `MIGRATION_STATUS.yaml`, joined to
+  squad ownership via **squad-map**'s `SQUAD_MAP.md`, implementing
+  [org-rollup-schema.md](docs/skill-framework/shared/org-rollup-schema.md)'s `pg_migration_gate` adapter
+  designed in Phase 4.
+- A **pure read-only aggregator**: never invokes mysql-to-postgres-sql or squad-map live, only reads their
+  already-produced files — a deliberate design choice to eliminate the entire class of risk that caused
+  new-hire-guide's round-1 bug (a narrowed live wrapped-skill invocation cascading into an unintended
+  side effect on shared state). No gate-policy file, because nothing is ever invoked live to have gates.
+- Genuinely new logic, none of it borrowed from an existing skill: the first "many workspaces at once"
+  input (`program_manifest`) in the repo; the first programmatic `SQUAD_MAP.md` table parser
+  (`scripts/aggregate_migration_status.py`, tolerant of the Conflicts/Unmapped/Archived sections that
+  follow the join table in the same file); and the first persisted cross-run state
+  (`migration_program_state.json`, `{gate_signature, first_observed_at}` per `(workspace_root,
+  service_name)`) to compute per-gate staleness that `MIGRATION_STATUS.yaml` itself has no timestamp for
+  — owned exclusively by this skill, never read or written by mysql-to-postgres-sql.
+- `scripts/aggregate_migration_status.py` — stdlib + PyYAML only, `main(argv) -> int` CLI entrypoint,
+  50 pytest cases under `tests/test_aggregate_migration_status.py` covering the squad-map parser, the
+  path/name join, status derivation, and staleness reset-vs-accrue behavior.
+- No `disable-model-invocation` — ambiently invocable, like new-hire-guide/release-readiness-checker; no
+  wrapped-skill gate to police since nothing is invoked live.
+- Design spec: [docs/superpowers/specs/2026-08-05-migration-program-manager-design.md](docs/superpowers/specs/2026-08-05-migration-program-manager-design.md).
+- Wired into `make install-migration-program-manager` / `make lint-migration-program-manager` (the first
+  lint target in this phase's build to also run a real pytest suite), root README, docs/README,
+  docs/REPOSITORY, skill-routing.md, cross-skill-escalation.md, prompt-injection.md, phase-glossary.md.
+
+## cost-optimization-sprint-planner
+
+### Initial release (2026-08-05)
+
+- New skill — item #10 of the [team-facing agents roadmap](docs/superpowers/plans/2026-08-05-team-facing-agents-roadmap.md):
+  an org-wide cost/waste sweep that loops **k8s-overprovisioning-datadog** once per deployment in a
+  `sweep_scope`, joined to squad ownership via **squad-map**'s `SQUAD_MAP.md`, implementing
+  [org-rollup-schema.md](docs/skill-framework/shared/org-rollup-schema.md)'s `k8s_waste` adapter designed
+  in Phase 4.
+- Design research corrected two claims in the roadmap item's own wording before building against them:
+  (1) "modeled on loop-task-implementer's per-task loop pattern" is inaccurate — loop-task-implementer's
+  own orchestrator works exactly one task at a time; the real precedent for looping a single-item,
+  gate-heavy skill over many items is **backlog-runner**'s `queue-policy.md`, reused here as
+  `reference/sweep-policy.md`; (2) k8s-overprovisioning-datadog's Phase 0b "Namespace ranking" is not
+  documented as a standalone, report-only mode — its own text ties it to "drill into worst deployment,
+  then continue resolve" — so this skill reuses Phase 0b's *query pattern* directly via Datadog MCP as its
+  own pre-filter step, rather than delegating to an unsupported standalone-ranking invocation.
+- `reference/gate-policy.md` — every live k8s-overprovisioning-datadog gate (ambiguous service/tag
+  confirmation, insufficient-metrics/name-mismatch, VPA-active-unconfirmed, cost-rate confirmation,
+  CCM-empty fallback, manifest-lookup-not-found) answered with k8s's own documented, non-guessing
+  fallback. The cost-rate gate is the one genuinely new resolution: k8s's own text says to ask the user
+  for their $/core rate before citing dollar figures on every run — this skill resolves it **once, before
+  the sweep loop starts**, never per deployment, since re-deriving it per deployment would otherwise be
+  the single biggest threat to running this skill unattended over many deployments.
+- `reference/sweep-policy.md` — session-level state layered outside k8s-overprovisioning-datadog's own
+  (which has no cross-run state at all — this is the first skill in the repo to ever run it more than
+  once in a session), per-deployment failure isolation (`insufficient_metrics`/ambiguous-name never
+  aborts the sweep), and batch-level stop conditions (`max_deployments_per_run`/`deadline`/
+  `session_token_budget`) — no consecutive-failure circuit breaker, unlike backlog-runner's, since every
+  k8s-overprovisioning-datadog gate resolves to a documented non-blocking fallback rather than a genuine
+  escalation.
+- No `disable-model-invocation` — ambiently invocable, like release-readiness-checker; a human is present
+  for this flow but a gate-policy file is still needed because the fan-out over potentially many
+  deployments would otherwise interrupt once per deployment, same reasoning release-readiness-checker's
+  own gate-policy.md documents.
+- No scripts of its own — k8s-overprovisioning-datadog has no CLI to wrap (unlike mysql-to-postgres-sql,
+  which migration-program-manager wraps via a real Python script); this skill is pure markdown-workflow,
+  like release-readiness-checker.
+- Design spec: [docs/superpowers/specs/2026-08-05-cost-optimization-sprint-planner-design.md](docs/superpowers/specs/2026-08-05-cost-optimization-sprint-planner-design.md).
+- Wired into `make install-cost-optimization-sprint-planner` / `make lint-cost-optimization-sprint-planner`,
+  root README, docs/README, docs/REPOSITORY, skill-routing.md, cross-skill-escalation.md,
+  prompt-injection.md, phase-glossary.md — and `org-rollup-schema.md`'s `k8s_waste` adapter section
+  updated from "pending item #10" to "implemented by cost-optimization-sprint-planner."
+
+## weekly-squad-digest
+
+### Initial release (2026-08-05)
+
+- New skill — item #11 of the [team-facing agents roadmap](docs/superpowers/plans/2026-08-05-team-facing-agents-roadmap.md),
+  the last item on that list: a scheduled digest combining **migration-program-manager**'s
+  `migration_program_rollup.json` and **cost-optimization-sprint-planner**'s
+  `cost_optimization_sprint_rollup.json` — both already-computed `org_rollup_item` files — into one
+  squad-grouped view. Neither producing skill is invoked live; `squad`/`squad_confidence`/`status`/
+  `priority` are surfaced exactly as each already computed them. Confirmed the first skill in this repo to
+  read and combine two already-computed rollup files rather than producing one of its own — both
+  producing skills already documented "written so a future Weekly Squad Digest can reuse this," which
+  this skill's design research confirmed rather than assumed.
+- **Corrects a claim made in two other places before designing against it**: the roadmap item's own
+  wording ("squad-map — routing to the right channel") and
+  [org-rollup-aggregation-layer-design.md](docs/superpowers/specs/2026-08-05-org-rollup-aggregation-layer-design.md)
+  (which stated as settled fact that this skill would reuse "squad-map's own routing convention") both
+  imply a squad→channel delivery mechanism that doesn't exist anywhere in squad-map's actual schema —
+  confirmed by reading `SQUAD_MAP.md`'s real columns (two ownership *name* fields, no channel/contact/
+  webhook column) and both cited precedents (who-owns-x-bot/incident-triage-agent each have one
+  hardcoded/configured delivery target, not a per-squad table). This skill produces one combined markdown
+  digest instead, with per-squad-channel delivery left to an external handler documented in its own
+  `SETUP.md` — the same pattern backlog-runner's morning summary and incident-triage-agent's triage doc
+  already use.
+- `workflow/inputs.md` — `rollup_manifest` (both rollup paths individually optional, HARD STOP only if
+  neither is set) + `staleness_warning_days` (default 14, display-only — never changes a computed
+  `status`, unlike migration-program-manager's own staleness threshold, since this skill has no basis to
+  recompute a status another skill already owns)
+- `workflow/run-digest.md` — reads both rollups (a missing one is a gap, not a HARD STOP for the other),
+  groups by squad then splits by `metric_type` into Migration status / Cost optimization sub-sections
+  (never merged into one cross-metric ranking — a migration gate status and a dollar figure aren't
+  comparable, and inventing a blended score would be new analysis logic the roadmap item's own text says
+  this skill should not add)
+- **No gate policy** — same reasoning as migration-program-manager: nothing is ever invoked live (neither
+  producing skill, nor squad-map), so there's nothing to gate or confirm
+- `disable-model-invocation: true` — same scheduled-trigger pattern as backlog-runner; a human asking a
+  single-source status question still routes to migration-program-manager or
+  cost-optimization-sprint-planner directly
+- No scripts of its own — pure markdown-workflow, like cost-optimization-sprint-planner
+- Design spec: [docs/superpowers/specs/2026-08-05-weekly-squad-digest-design.md](docs/superpowers/specs/2026-08-05-weekly-squad-digest-design.md).
+- Wired into `make install-weekly-squad-digest` / `make lint-weekly-squad-digest`, root README,
+  docs/README, docs/REPOSITORY, skill-routing.md, cross-skill-escalation.md, prompt-injection.md,
+  phase-glossary.md — the last skill of the 11-item team-facing agents roadmap.
+
+## who-owns-x-bot
+
+### Initial release (2026-08-05)
+
+- New skill — item #1 of the [team-facing agents roadmap](docs/superpowers/plans/2026-08-05-team-facing-agents-roadmap.md):
+  a thin Slack-bot-facing wrapper that delegates ownership computation entirely to **squad-map** and
+  returns a single formatted Slack reply (Resolved / Ambiguous / Unknown — never a fabricated squad).
+- `disable-model-invocation: true` — does not compete with squad-map's ambient chat invocation; meant to
+  be called explicitly by a `/who-owns` Slack slash-command handler with a structured `query`.
+- Design spec: [docs/superpowers/specs/2026-08-05-who-owns-x-bot-design.md](docs/superpowers/specs/2026-08-05-who-owns-x-bot-design.md).
+- Wired into `make install-who-owns-x-bot` / `make lint-who-owns-x-bot`, root README, docs/README,
+  docs/REPOSITORY, skill-routing.md, phase-glossary.md.
+
 ## Repository
 
 ### Cross-agent discovery for all skills (2026-08-05)
@@ -80,6 +325,16 @@ _Pre-merge WIP on `feat/squad-map-skill` (internal v1.0–v1.5) is consolidated 
 - Install: `make install-squad-map`; lint: `make lint-squad-map`.
 
 ## domain-comprehension
+
+### PROPOSAL_CHECK delivery mode (2026-08-05)
+
+- New `PROPOSAL_CHECK` delivery mode (Architecture Decision Assistant, roadmap item #6): compare a
+  proposed feature/service against the existing engagement's `BOUNDED_CONTEXTS.md` / `DATA_OWNERSHIP.md`
+  / `API_CATALOG.md` / `EVENT_CATALOG.md`, reusing `ADD_REPO`'s merge-gate overlap taxonomy read-only.
+- Writes only `PROPOSAL_CHECK_REPORT.md` — never merges into shared deliverables or `manifest.yaml`.
+- HARD STOP if `manifest.yaml` is absent, `engagement.status` isn't `IN_PROGRESS`/`FIRST_PASS_COMPLETE`,
+  or a touched repo's `inventory`/`deep_dive` isn't complete-or-skipped — no automatic fallback to `FULL`,
+  no partial check against incomplete deliverables.
 
 ### ADD_REPO delivery mode (2026-07-30)
 

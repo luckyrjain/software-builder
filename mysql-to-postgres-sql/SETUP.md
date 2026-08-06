@@ -10,7 +10,7 @@ invocation to require an explicit ask.
 ## Install
 
 ```bash
-cd ai-skills
+cd software-builder
 make install-mysql-to-postgres-sql
 ```
 
@@ -22,7 +22,7 @@ Restart Cursor so the skill reloads.
 installs to both editors). For Claude Code **only**:
 
 ```bash
-cd ai-skills
+cd software-builder
 make install-claude-mysql-to-postgres-sql
 ```
 

@@ -1,6 +1,6 @@
 # Cross-skill escalation (shared)
 
-**Normative.** Symmetric escalation matrix for pr-review, incident-rca, k8s-overprovisioning-datadog, domain-comprehension, squad-map, mysql-to-postgres-sql, and loop-task-implementer.
+**Normative.** Symmetric escalation matrix for pr-review, pr-gatekeeper, incident-rca, incident-triage-agent, k8s-overprovisioning-datadog, domain-comprehension, squad-map, who-owns-x-bot, new-hire-guide, release-readiness-checker, mysql-to-postgres-sql, loop-task-implementer, backlog-runner, migration-program-manager, cost-optimization-sprint-planner, and weekly-squad-digest.
 
 **Consumers:** `SKILL.md` in each skill (link here; keep ≤10 skill-specific rows max).
 
@@ -28,6 +28,18 @@ know about — don't treat it as a "you may want to" row the way every other row
 | **Session 0b (subroutine, not optional)** — every domain-comprehension run | domain-comprehension → squad-map | Workspace root + repo census | Not user-facing — Session 0b invokes squad-map directly per [session-0b.md](../../../domain-comprehension/workflow/session-0b.md) |
 | Full domain map after squad map | squad-map → domain-comprehension | `SQUAD_MAP.md` + workspace root | "Map bounded contexts and data ownership for `{domain}` — full domain comprehension" |
 | Incident + unclear service owner | incident-rca → squad-map | Service name + window | "Who owns `{service}`? — need squad for RCA follow-up" |
+| Caller wants the full mapping table, not one Slack answer | who-owns-x-bot → squad-map | `workspace_root` | "Map squads for repos in `{workspace}` — org prefix `{org}`, segment `{n}`" |
+| Caller wants bounded contexts / domain map, not just ownership | who-owns-x-bot → domain-comprehension | `query` (repo/service name) | "Map bounded contexts and data ownership for `{domain}` — full domain comprehension" |
+| `query` names a service mid-incident (surfaced as a suggestion in the reply only — a single-shot Slack reply cannot itself switch skills) | who-owns-x-bot → incident-rca | Service name from `query` | "RCA for `{service}` — is there an active incident?" |
+| Caller wants a one-off ownership lookup, not a tour | new-hire-guide → squad-map | `workspace_root` | "Who owns `{repo}`?" |
+| Caller wants the full org-wide domain map, not scoped to one person | new-hire-guide → domain-comprehension | `workspace_root` | "Map bounded contexts and data ownership for `{domain}` — full domain comprehension" |
+| Caller wants one MR reviewed, not a release-wide sweep | release-readiness-checker → pr-review | MR !IID + project | "Review MR !{iid} for `{project}`" |
+| Caller wants one service's rightsizing question, not a release sweep | release-readiness-checker → k8s-overprovisioning-datadog | Service + env | "Assess rightsizing for `{deployment}` in `{env}`" |
+| A flagged service needs the full incident investigation | release-readiness-checker → incident-rca | Service + window (same used for the Phase 1 check) | "RCA for `{service}` `{window}`" |
+| Caller wants an interactive, on-demand review instead of the webhook-triggered auto-run | pr-gatekeeper → pr-review | MR !IID + project | "Review MR !{iid} for `{project}`" |
+| Caller wants an interactive, on-demand RCA instead of the paging-webhook-triggered triage/postmortem | incident-triage-agent → incident-rca | Service + window | "RCA for `{service}` `{window}`" |
+| Caller wants an interactive, on-demand ownership lookup instead of the paging-webhook-triggered flow | incident-triage-agent → squad-map | Service name | "Who owns `{service}`?" |
+| Caller wants a single, interactive, on-demand task instead of the scheduled overnight queue sweep | backlog-runner → loop-task-implementer | Task/ticket ID | "Implement `{task_id}`" |
 | Security finding in domain analysis (P3b) | domain-comprehension → pr-review | Repo + file path + finding type | "Review MR !{iid} for credential exposure in `{service}`" |
 | Architecture smell needs RCA context | domain-comprehension → incident-rca | Service + smell + time window | "RCA for `{service}` {window} — recurring {smell} identified in domain analysis" |
 | Domain map reveals overprovisioned service | domain-comprehension → k8s | Service + env from runtime validation | "Assess rightsizing for `{service}` in `{env}` — domain analysis found low utilization" |
@@ -40,6 +52,12 @@ know about — don't treat it as a "you may want to" row the way every other row
 | Task implementation causes or needs incident investigation | loop-task-implementer → incident-rca | Service + window + task ref | "RCA for `{service}` {window} — regression from task `{task_id}`" |
 | Task requires understanding an unfamiliar domain/codebase first | loop-task-implementer → domain-comprehension | Repo/workspace + task ref | "Map domain for `{workspace}` before implementing task `{task_id}`" |
 | Task touches MySQL-dialect SQL during a PG migration | loop-task-implementer → mysql-to-postgres-sql | Service + repo | "Scan/rewrite MySQL dialect in `{service}` for task `{task_id}`" |
+| Caller wants one workspace's own migration status, not an org-wide rollup | migration-program-manager → mysql-to-postgres-sql | `workspace_root` | "What's the migration status for `{workspace}`?" |
+| A workspace in the rollup has no `SQUAD_MAP.md` (services join as `squad: UNKNOWN`) | migration-program-manager → squad-map | `workspace_root` | "Map squads for repos in `{workspace}` — org prefix `{org}`, segment `{n}`" |
+| Caller wants one deployment's own rightsizing question, not a sweep | cost-optimization-sprint-planner → k8s-overprovisioning-datadog | Deployment + env | "Assess rightsizing for `{deployment}` in `{env}`" |
+| A deployment in the rollup has no `SQUAD_MAP.md`/`ownership.datadog.service_aliases` match | cost-optimization-sprint-planner → squad-map | `workspace_root` | "Map squads for repos in `{workspace}` — org prefix `{org}`, segment `{n}`" |
+| Caller wants a fresh single-source migration rollup, not the combined digest | weekly-squad-digest → migration-program-manager | `program_manifest` | "Migration status across all repos" |
+| Caller wants a fresh single-source cost/waste sweep, not the combined digest | weekly-squad-digest → cost-optimization-sprint-planner | `sweep_scope` | "Where's the money?" |
 
 Skill-specific rows in each `SKILL.md` MUST be a subset of this table plus local deltas only.
 
@@ -100,12 +118,21 @@ When `MYSQL_TO_PG_SQL_REWRITES.md` exists in the workspace deliverable directory
 | User request | Correct skill |
 |--------------|---------------|
 | Size K8s deployment / rightsizing | k8s-overprovisioning-datadog |
-| Review GitLab MR | pr-review |
-| Post-incident RCA / root cause | incident-rca |
-| Squad / repo ownership mapping | squad-map |
+| Review GitLab MR (interactive, conversational) | pr-review |
+| Automated, unattended review on every push (webhook-triggered) | pr-gatekeeper |
+| Post-incident RCA / root cause (interactive, conversational) | incident-rca |
+| PagerDuty/Opsgenie page-fire or incident-resolved webhook (unattended) | incident-triage-agent |
+| Squad / repo ownership mapping (interactive, conversational) | squad-map |
+| Single-shot automated ownership lookup (Slack `/who-owns` slash command) | who-owns-x-bot |
+| New-hire onboarding tour scoped to one person's repos | new-hire-guide |
+| Release go/no-go report across MRs/services since last release | release-readiness-checker |
 | Domain / subsystem map, bounded contexts, data ownership | domain-comprehension |
 | MySQL scrub / native SQL PG migration / jdbc:postgresql cutover | mysql-to-postgres-sql |
-| Autonomous multi-task implement → review → remediate → PR loop | loop-task-implementer |
+| Org-wide migration status rollup across many workspaces/squads | migration-program-manager |
+| Org-wide cost/waste ranking sweep across many deployments/squads | cost-optimization-sprint-planner |
+| Combined weekly squad digest across both migration and cost rollups | weekly-squad-digest |
+| Autonomous multi-task implement → review → remediate → PR loop (interactive, human-driven) | loop-task-implementer |
+| Scheduled overnight ticket-queue sweep (unattended) | backlog-runner |
 | Live rollback / kubectl apply | Out of scope — human operator |
 | Security-only deep review | pr-review with security persona |
 | Cost/billing investigation across services | Canvas + appropriate skill; not auto-routed |

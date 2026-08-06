@@ -25,6 +25,8 @@ Primary artifact: [decision-graph-schema.md](reference/decision-graph-schema.md)
 | Review a merge request / deploy regression in code | **pr-review** |
 | Datadog MCP missing / 403 | **ddsetup** / **ddconfig**, then return |
 | Live apply of manifest changes | Out of scope — recommendations only; user applies |
+| Org-wide cost/waste ranking across many deployments, not one | **cost-optimization-sprint-planner** — composes this skill per deployment |
+| Pre-release go/no-go across several repos/services, not one deployment | **release-readiness-checker** — composes this skill per touched service |
 | **VPA + HPA on same dimension** | Do not propose VPA-based cuts — see [reason.md](workflow/reason.md#vpa-hpa-coexistence-conflict); resolve controller conflict first |
 | **KEDA ScaledObject workload** | Do not use CPU % HPA targets for replica verdict — follow [replica-analysis.md](workflow/replica-analysis.md#keda) external-metric path |
 | **Per-container sizing within a multi-container pod** | Out of scope — this skill sizes at pod level (and fleet level); a right-sized pod total can still hide one oversized sidecar against one right-sized main container |

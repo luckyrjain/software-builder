@@ -2,7 +2,9 @@
 
 **Normative.** Each skill extends these conventions with a dedicated `reference/smoke-test.md` (or anchored section in k8s `workflow/render.md` until Phase 3 extracts it).
 
-**Reference implementations:** `pr-review/reference/smoke-test.md`, `incident-rca/reference/smoke-test.md`, `k8s-overprovisioning-datadog/reference/smoke-test.md`, `domain-comprehension/reference/smoke-test.md`, `squad-map/reference/smoke-test.md`, `mysql-to-postgres-sql/reference/smoke-test.md`.
+**Reference implementations:** every skill in this repo has a `reference/smoke-test.md` (or, for k8s, an
+anchored section in `workflow/render.md`) — see § 3 for the per-skill invocation strings and § 6 for the
+matching `make lint-<skill>` targets.
 
 ## 1. When to run
 
@@ -61,11 +63,21 @@ Maintainer pressure scenarios: [pressure-tests.md](pressure-tests.md).
 | Skill | Invocation string | Expected first output |
 |-------|-------------------|------------------------|
 | pr-review | `/pr-review` on open MR <10 files in test project | Phase 0: posting mode (`full`/`summary-only`/…) + GitLab server name |
+| pr-gatekeeper | Webhook: `project`, `merge_request_iid`, `head_sha`, `auto_post_authorized: true` | pr-review's own Phase 0 posting-mode announcement — no pr-gatekeeper-specific preamble |
 | incident-rca | `RCA for <service> between <from> and <to> UTC — <symptom>` | MCP profile: `Datadog ✅ \| KubeSense … \| GitLab …` |
-| k8s | Assess single deployment with ≥7d Datadog metrics, <5 containers | Prerequisites: Datadog ✅; scope: deployment + env + window |
+| incident-triage-agent | Webhook: `event_type: page_triggered`, `service`, `triggered_at`, `alert_title`, `severity` | 30-minute window announced, UTC-suffixed, symmetric around `triggered_at` |
+| k8s-overprovisioning-datadog | Assess single deployment with ≥7d Datadog metrics, <5 containers | Prerequisites: Datadog ✅; scope: deployment + env + window |
 | domain-comprehension | `Map bounded contexts in <domain> workspace` | Session 0 MCP profile + census scope |
 | squad-map | `Map squads for repos in <workspace>` | Phase 0: `GitLab ✅ \| Datadog …` |
+| who-owns-x-bot | `query: <repo-name>`, `workspace_root: <workspace>` | One Slack-formatted reply — no intermediate chatter, no file written |
+| new-hire-guide | `new_hire: {name: <name>, squad: <squad>}`, `workspace_root: <workspace>` | squad-map's own Phase 0/1 output, then domain-comprehension's own Session 0 output, unscoped |
+| release-readiness-checker | `release_manifest: [{repo, service, since}, ...]` | MR-range resolution announced per repo, before any pr-review invocation starts |
+| migration-program-manager | `program_manifest: [{workspace_root}, ...]`, `staleness_threshold_days` | Per-workspace read announced, before the aggregator writes any output file |
+| cost-optimization-sprint-planner | `sweep_scope: {env, deployments}`, `cost_rate: {provider, dollars_per_core_month, dollars_per_gib_month}` | Resolved sweep config announced, before the first k8s-overprovisioning-datadog invocation starts |
 | mysql-to-postgres-sql | `Scan tests/fixtures/mysql-dialect/hits for MySQL-only SQL` | Scan command + hit file:line list or OK |
+| loop-task-implementer | `Use loop-task-implementer to implement <task> and open a PR.` | Discovers repo policy, selects one eligible task, dispatches a fresh Builder |
+| backlog-runner | `tracker_query`, `max_tasks_per_run`, `repo_context` | Queue pull announced (tickets found, capped, skipped), then dependency order, before the first loop-task-implementer invocation |
+| weekly-squad-digest | `rollup_manifest: {migration_rollup_path, cost_rollup_path}` | Resolved rollup paths announced (supplied vs. found on disk), before the digest is rendered |
 
 ## 4. Output checklist template
 
@@ -97,11 +109,21 @@ A correct minimal output should contain:
 | Skill | Lint target |
 |-------|-------------|
 | pr-review | `make lint-pr-review` (includes pytest) |
-| k8s | `make lint-k8s-skill` |
+| pr-gatekeeper | `make lint-pr-gatekeeper` |
 | incident-rca | `make lint-incident-rca` |
-| domain-comprehension | `make lint-domain-comprehension` |
-| squad-map | `make lint-squad-map` |
+| incident-triage-agent | `make lint-incident-triage-agent` |
+| k8s-overprovisioning-datadog | `make lint-k8s-skill` |
+| domain-comprehension | `make lint-domain-comprehension` (includes pytest) |
+| squad-map | `make lint-squad-map` (includes pytest) |
+| who-owns-x-bot | `make lint-who-owns-x-bot` |
+| new-hire-guide | `make lint-new-hire-guide` |
+| release-readiness-checker | `make lint-release-readiness-checker` |
+| migration-program-manager | `make lint-migration-program-manager` (includes aggregator pytest) |
+| cost-optimization-sprint-planner | `make lint-cost-optimization-sprint-planner` |
 | mysql-to-postgres-sql | `make lint-mysql-to-postgres-sql` |
+| loop-task-implementer | `make lint-loop-task-implementer` |
+| backlog-runner | `make lint-backlog-runner` |
+| weekly-squad-digest | `make lint-weekly-squad-digest` |
 | Framework | `make lint-framework` |
 | All | `make lint` |
 

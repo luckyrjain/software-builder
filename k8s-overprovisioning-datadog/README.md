@@ -30,6 +30,8 @@ wasting cluster cost.
 | "Right-size CPU/memory for X" | MR that caused a bad deploy → **pr-review** |
 | "Which namespace wastes the most CPU?" | Non-optimization-only with no K8s context → narrow scope first |
 | ArgoCD/Flux GitOps deployments | Confirm sync state before treating manifest drift as Finding #1 |
+| — | Org-wide cost/waste ranking across many deployments → **cost-optimization-sprint-planner** |
+| — | Pre-release go/no-go across several repos/services → **release-readiness-checker** |
 
 ## Invocation examples
 

@@ -1,0 +1,14 @@
+---
+description: Invoke the who-owns-x-bot skill for single-shot, automation-facing "who owns X" ownership lookups (e.g. a Slack slash command).
+alwaysApply: false
+---
+
+Do not auto-apply this from ambient human chat — this skill sets `disable-model-invocation: true`.
+When an automated caller passes a structured `query` (a `/who-owns` Slack slash-command payload or
+equivalent single-shot lookup), read `who-owns-x-bot/SKILL.md` and follow it. A human asking "who owns
+X" conversationally should route to `squad-map/SKILL.md` instead.
+
+Phase index: `who-owns-x-bot/reference/phase-index.md`. Reference loads:
+`who-owns-x-bot/reference/lazy-load-index.md`.
+Read-only — no GitLab writes, Datadog mutations, Slack messages beyond the single reply, deploys, or
+application source changes.

@@ -38,7 +38,7 @@ MCP `body` attempt and SPL CLI (when `KUBESENSE_API_KEY` is set) have been tried
    python3 scripts/kubesense_logs.py <workload> --list-clusters
    ```
 
-   From the ai-skills repo root, prefix `incident-rca/`.
+   From the software-builder repo root, prefix `incident-rca/`.
 
 5. **Fetch error logs with body** — use the **incident window** (`from_time` / `to_time` from inputs):
 

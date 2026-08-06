@@ -103,3 +103,22 @@ This skill follows the same shared-framework conventions as the other skills in 
 [examples-conventions](../docs/skill-framework/shared/examples-conventions.md) ·
 [post-action-templates](../docs/skill-framework/shared/post-action-templates.md) ·
 [claude-code-setup](../docs/skill-framework/shared/claude-code-setup.md).
+
+## Smoke test
+
+After install, run the invocation in [reference/smoke-test.md](reference/smoke-test.md) against a small
+repo with at least one open, well-scoped task and repository write access. A correct minimal run states
+the policy-discovery result, dispatches a fresh Builder, runs two isolated Reviewer lenses, and stops at
+verified readiness rather than merging without explicit authorization. Deeper edge cases:
+[reference/pressure-tests.md](reference/pressure-tests.md).
+
+## Troubleshooting
+
+| Symptom | Fix |
+|---------|-----|
+| Reviewer lens sees the Builder's PR description or commit messages | Orchestrator failed to withhold them when building the neutral review package — see `workflow/orchestrator.md` §6 |
+| Same finding keeps getting "fixed" without resolving | Two failed Builder fix attempts on the same accepted finding should escalate, not trigger a third silent remediation attempt (pressure test #3) |
+| Run merges without you explicitly authorizing it | Should never happen — `autonomous_merge_authorized` defaults to `false` and is never inferred from silence (pressure test #8); treat as a bug in the invocation |
+| Both Reviewer lenses report `CLEAN` from a stale run after a manual rebase | Both lens approvals must be invalidated and rerun after a base-branch conflict-resolution rebase, not reused (pressure test #6) |
+| No subagent/worktree/fresh-session primitive available | Falls back to sequential role simulation with explicit context resets — see [reference/platform-adapters.md](reference/platform-adapters.md) § Sequential role simulation; the smoke test still requires evidence the reset actually happened, not just narration |
+| CI never resolves and the run seems stuck | Orchestrator should stop polling once the configured active-polling budget is hit and report the pending state, not poll indefinitely (pressure test #12) |

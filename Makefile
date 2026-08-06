@@ -1,10 +1,13 @@
-.PHONY: install install-pr-review install-k8s-overprovisioning install-incident-rca install-incident-rca-deps install-domain-comprehension install-squad-map install-mysql-to-postgres-sql install-loop-task-implementer install-claude install-claude-pr-review install-claude-k8s-overprovisioning install-claude-incident-rca install-claude-domain-comprehension install-claude-squad-map install-claude-mysql-to-postgres-sql install-claude-loop-task-implementer lint lint-framework lint-pr-review lint-k8s-skill lint-k8s lint-incident-rca lint-domain-comprehension lint-squad-map lint-mysql-to-postgres-sql lint-loop-task-implementer setup-hooks setup kubesense-errors
+.PHONY: install install-pr-review install-pr-gatekeeper install-k8s-overprovisioning install-incident-rca install-incident-rca-deps install-incident-triage-agent install-domain-comprehension install-squad-map install-who-owns-x-bot install-new-hire-guide install-release-readiness-checker install-migration-program-manager install-cost-optimization-sprint-planner install-mysql-to-postgres-sql install-loop-task-implementer install-backlog-runner install-weekly-squad-digest install-claude install-claude-pr-review install-claude-pr-gatekeeper install-claude-k8s-overprovisioning install-claude-incident-rca install-claude-incident-triage-agent install-claude-domain-comprehension install-claude-squad-map install-claude-who-owns-x-bot install-claude-new-hire-guide install-claude-release-readiness-checker install-claude-migration-program-manager install-claude-cost-optimization-sprint-planner install-claude-mysql-to-postgres-sql install-claude-loop-task-implementer install-claude-backlog-runner install-claude-weekly-squad-digest lint lint-framework lint-pr-review lint-pr-gatekeeper lint-k8s-skill lint-k8s lint-incident-rca lint-incident-triage-agent lint-domain-comprehension lint-squad-map lint-who-owns-x-bot lint-new-hire-guide lint-release-readiness-checker lint-migration-program-manager lint-cost-optimization-sprint-planner lint-mysql-to-postgres-sql lint-loop-task-implementer lint-backlog-runner lint-weekly-squad-digest setup-hooks setup kubesense-errors
 
 install:
 	bash scripts/install.sh
 
 install-pr-review:
 	bash scripts/install.sh pr-review
+
+install-pr-gatekeeper: install-pr-review
+	bash scripts/install.sh pr-gatekeeper
 
 install-k8s-overprovisioning:
 	bash scripts/install.sh k8s-overprovisioning-datadog
@@ -15,11 +18,29 @@ install-incident-rca-deps:
 install-incident-rca: install-incident-rca-deps
 	bash scripts/install.sh incident-rca
 
+install-incident-triage-agent: install-incident-rca install-squad-map
+	bash scripts/install.sh incident-triage-agent
+
 install-domain-comprehension: install-squad-map
 	bash scripts/install.sh domain-comprehension
 
 install-squad-map:
 	bash scripts/install.sh squad-map
+
+install-who-owns-x-bot: install-squad-map
+	bash scripts/install.sh who-owns-x-bot
+
+install-new-hire-guide: install-domain-comprehension install-squad-map
+	bash scripts/install.sh new-hire-guide
+
+install-release-readiness-checker: install-pr-review install-k8s-overprovisioning install-incident-rca
+	bash scripts/install.sh release-readiness-checker
+
+install-migration-program-manager: install-mysql-to-postgres-sql install-squad-map
+	bash scripts/install.sh migration-program-manager
+
+install-cost-optimization-sprint-planner: install-k8s-overprovisioning install-squad-map
+	bash scripts/install.sh cost-optimization-sprint-planner
 
 install-mysql-to-postgres-sql:
 	bash scripts/install.sh mysql-to-postgres-sql
@@ -27,11 +48,20 @@ install-mysql-to-postgres-sql:
 install-loop-task-implementer:
 	bash scripts/install.sh loop-task-implementer
 
+install-backlog-runner: install-loop-task-implementer
+	bash scripts/install.sh backlog-runner
+
+install-weekly-squad-digest: install-migration-program-manager install-cost-optimization-sprint-planner
+	bash scripts/install.sh weekly-squad-digest
+
 install-claude:
 	bash scripts/install.sh --agent claude-user
 
 install-claude-pr-review:
 	bash scripts/install.sh --agent claude-user pr-review
+
+install-claude-pr-gatekeeper: install-claude-pr-review
+	bash scripts/install.sh --agent claude-user pr-gatekeeper
 
 install-claude-k8s-overprovisioning:
 	bash scripts/install.sh --agent claude-user k8s-overprovisioning-datadog
@@ -39,11 +69,29 @@ install-claude-k8s-overprovisioning:
 install-claude-incident-rca: install-incident-rca-deps
 	bash scripts/install.sh --agent claude-user incident-rca
 
+install-claude-incident-triage-agent: install-claude-incident-rca install-claude-squad-map
+	bash scripts/install.sh --agent claude-user incident-triage-agent
+
 install-claude-domain-comprehension: install-claude-squad-map
 	bash scripts/install.sh --agent claude-user domain-comprehension
 
 install-claude-squad-map:
 	bash scripts/install.sh --agent claude-user squad-map
+
+install-claude-who-owns-x-bot: install-claude-squad-map
+	bash scripts/install.sh --agent claude-user who-owns-x-bot
+
+install-claude-new-hire-guide: install-claude-domain-comprehension install-claude-squad-map
+	bash scripts/install.sh --agent claude-user new-hire-guide
+
+install-claude-release-readiness-checker: install-claude-pr-review install-claude-k8s-overprovisioning install-claude-incident-rca
+	bash scripts/install.sh --agent claude-user release-readiness-checker
+
+install-claude-migration-program-manager: install-claude-mysql-to-postgres-sql install-claude-squad-map
+	bash scripts/install.sh --agent claude-user migration-program-manager
+
+install-claude-cost-optimization-sprint-planner: install-claude-k8s-overprovisioning install-claude-squad-map
+	bash scripts/install.sh --agent claude-user cost-optimization-sprint-planner
 
 install-claude-mysql-to-postgres-sql:
 	bash scripts/install.sh --agent claude-user mysql-to-postgres-sql
@@ -51,13 +99,19 @@ install-claude-mysql-to-postgres-sql:
 install-claude-loop-task-implementer:
 	bash scripts/install.sh --agent claude-user loop-task-implementer
 
+install-claude-backlog-runner: install-claude-loop-task-implementer
+	bash scripts/install.sh --agent claude-user backlog-runner
+
+install-claude-weekly-squad-digest: install-claude-migration-program-manager install-claude-cost-optimization-sprint-planner
+	bash scripts/install.sh --agent claude-user weekly-squad-digest
+
 setup:
 	@echo "setup: installing Python dev dependencies (requirements.txt)"
 	@python3 -m pip install -r requirements.txt 2>/dev/null || \
 		python3 -m pip install --user --break-system-packages -r requirements.txt
 	@$(MAKE) setup-hooks
 
-lint: lint-framework lint-pr-review lint-k8s-skill lint-incident-rca lint-domain-comprehension lint-squad-map lint-mysql-to-postgres-sql lint-loop-task-implementer
+lint: lint-framework lint-pr-review lint-pr-gatekeeper lint-k8s-skill lint-incident-rca lint-incident-triage-agent lint-domain-comprehension lint-squad-map lint-who-owns-x-bot lint-new-hire-guide lint-release-readiness-checker lint-migration-program-manager lint-cost-optimization-sprint-planner lint-mysql-to-postgres-sql lint-loop-task-implementer lint-backlog-runner lint-weekly-squad-digest
 	@for f in scripts/*.sh; do \
 		echo "shellcheck $$f"; \
 		if command -v shellcheck >/dev/null 2>&1; then \
@@ -124,6 +178,46 @@ lint-pr-review-skill:
 		{ echo "error: missing phase5 review_metadata golden fixture" >&2; exit 1; }
 	@grep -q 'Snyk MCP' pr-review/reference/finding-gates.md || \
 		{ echo "error: finding-gates.md must document Snyk MCP CVE scan order" >&2; exit 1; }
+	@echo "  ok (framework refs)"
+
+lint-pr-gatekeeper:
+	@echo "lint-pr-gatekeeper: SKILL.md line count (<= 180)"
+	@test -f pr-gatekeeper/SKILL.md || \
+		{ echo "error: missing pr-gatekeeper/SKILL.md" >&2; exit 1; }
+	@lines=$$(wc -l < pr-gatekeeper/SKILL.md | tr -d ' '); \
+	if [ -z "$$lines" ] || [ "$$lines" -eq 0 ]; then \
+		echo "error: pr-gatekeeper/SKILL.md is empty" >&2; exit 1; \
+	elif [ "$$lines" -gt 180 ]; then \
+		echo "error: pr-gatekeeper SKILL.md $$lines lines (> 180) — keep orchestrator thin; detail in workflow/" >&2; \
+		exit 1; \
+	fi; \
+	echo "  ok ($$lines lines)"
+	@echo "lint-pr-gatekeeper: disable-model-invocation set (automation entry point, must not compete with pr-review's ambient invocation)"
+	@grep -q '^disable-model-invocation: true' pr-gatekeeper/SKILL.md || \
+		{ echo "error: pr-gatekeeper/SKILL.md must set disable-model-invocation: true" >&2; exit 1; }
+	@echo "  ok"
+	@echo "lint-pr-gatekeeper: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
+	@fail=0; \
+	for f in pr-gatekeeper/workflow/*.md; do \
+		fm=$$(awk '/^---$$/{c++; next} c==1' "$$f"); \
+		for key in workflow_version phase produces consumes; do \
+			if ! printf '%s\n' "$$fm" | grep -q "^$$key:"; then \
+				echo "  missing $$key frontmatter: $$f" >&2; fail=1; \
+			fi; \
+		done; \
+	done; \
+	if [ "$$fail" -ne 0 ]; then echo "error: pr-gatekeeper workflow/*.md must declare workflow_version, phase, produces, consumes" >&2; exit 1; fi; \
+	echo "  ok"
+	@echo "lint-pr-gatekeeper: dangling markdown links"
+	@bash scripts/lint-dangling-md-links.sh pr-gatekeeper/*.md pr-gatekeeper/reference/*.md pr-gatekeeper/workflow/*.md && echo "  ok" || \
+		{ echo "error: dangling reference link(s) found" >&2; exit 1; }
+	@echo "lint-pr-gatekeeper: required reference files"
+	@for f in phase-index lazy-load-index auto-post-policy smoke-test; do \
+		test -f pr-gatekeeper/reference/$$f.md || \
+			{ echo "error: missing pr-gatekeeper/reference/$$f.md" >&2; exit 1; }; \
+	done
+	@grep -q 'skill-framework' pr-gatekeeper/SETUP.md || \
+		{ echo "error: pr-gatekeeper/SETUP.md must link to docs/skill-framework" >&2; exit 1; }
 	@echo "  ok (framework refs)"
 
 lint-k8s-skill:
@@ -302,6 +396,46 @@ lint-incident-rca:
 	fi; \
 	echo "  ok"
 
+lint-incident-triage-agent:
+	@echo "lint-incident-triage-agent: SKILL.md line count (<= 180)"
+	@test -f incident-triage-agent/SKILL.md || \
+		{ echo "error: missing incident-triage-agent/SKILL.md" >&2; exit 1; }
+	@lines=$$(wc -l < incident-triage-agent/SKILL.md | tr -d ' '); \
+	if [ -z "$$lines" ] || [ "$$lines" -eq 0 ]; then \
+		echo "error: incident-triage-agent/SKILL.md is empty" >&2; exit 1; \
+	elif [ "$$lines" -gt 180 ]; then \
+		echo "error: incident-triage-agent SKILL.md $$lines lines (> 180) — keep orchestrator thin; detail in workflow/" >&2; \
+		exit 1; \
+	fi; \
+	echo "  ok ($$lines lines)"
+	@echo "lint-incident-triage-agent: disable-model-invocation set (automation entry point, must not compete with incident-rca/squad-map's ambient invocation)"
+	@grep -q '^disable-model-invocation: true' incident-triage-agent/SKILL.md || \
+		{ echo "error: incident-triage-agent/SKILL.md must set disable-model-invocation: true" >&2; exit 1; }
+	@echo "  ok"
+	@echo "lint-incident-triage-agent: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
+	@fail=0; \
+	for f in incident-triage-agent/workflow/*.md; do \
+		fm=$$(awk '/^---$$/{c++; next} c==1' "$$f"); \
+		for key in workflow_version phase produces consumes; do \
+			if ! printf '%s\n' "$$fm" | grep -q "^$$key:"; then \
+				echo "  missing $$key frontmatter: $$f" >&2; fail=1; \
+			fi; \
+		done; \
+	done; \
+	if [ "$$fail" -ne 0 ]; then echo "error: incident-triage-agent workflow/*.md must declare workflow_version, phase, produces, consumes" >&2; exit 1; fi; \
+	echo "  ok"
+	@echo "lint-incident-triage-agent: dangling markdown links"
+	@bash scripts/lint-dangling-md-links.sh incident-triage-agent/*.md incident-triage-agent/reference/*.md incident-triage-agent/workflow/*.md && echo "  ok" || \
+		{ echo "error: dangling reference link(s) found" >&2; exit 1; }
+	@echo "lint-incident-triage-agent: required reference files"
+	@for f in phase-index lazy-load-index unattended-gate-policy triage-doc-format postmortem-format smoke-test; do \
+		test -f incident-triage-agent/reference/$$f.md || \
+			{ echo "error: missing incident-triage-agent/reference/$$f.md" >&2; exit 1; }; \
+	done
+	@grep -q 'skill-framework' incident-triage-agent/SETUP.md || \
+		{ echo "error: incident-triage-agent/SETUP.md must link to docs/skill-framework" >&2; exit 1; }
+	@echo "  ok (framework refs)"
+
 lint-domain-comprehension: lint-domain-comprehension-skill lint-domain-comprehension-scripts
 
 lint-domain-comprehension-scripts:
@@ -455,6 +589,214 @@ lint-squad-map:
 	fi; \
 	echo "  ok (framework refs + squad_mapping tests)"
 
+lint-who-owns-x-bot:
+	@echo "lint-who-owns-x-bot: SKILL.md line count (<= 180)"
+	@test -f who-owns-x-bot/SKILL.md || \
+		{ echo "error: missing who-owns-x-bot/SKILL.md" >&2; exit 1; }
+	@lines=$$(wc -l < who-owns-x-bot/SKILL.md | tr -d ' '); \
+	if [ -z "$$lines" ] || [ "$$lines" -eq 0 ]; then \
+		echo "error: who-owns-x-bot/SKILL.md is empty" >&2; exit 1; \
+	elif [ "$$lines" -gt 180 ]; then \
+		echo "error: who-owns-x-bot SKILL.md $$lines lines (> 180) — keep orchestrator thin; detail in workflow/" >&2; \
+		exit 1; \
+	fi; \
+	echo "  ok ($$lines lines)"
+	@echo "lint-who-owns-x-bot: disable-model-invocation set (automation entry point, must not compete with squad-map's ambient invocation)"
+	@grep -q '^disable-model-invocation: true' who-owns-x-bot/SKILL.md || \
+		{ echo "error: who-owns-x-bot/SKILL.md must set disable-model-invocation: true" >&2; exit 1; }
+	@echo "  ok"
+	@echo "lint-who-owns-x-bot: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
+	@fail=0; \
+	for f in who-owns-x-bot/workflow/*.md; do \
+		fm=$$(awk '/^---$$/{c++; next} c==1' "$$f"); \
+		for key in workflow_version phase produces consumes; do \
+			if ! printf '%s\n' "$$fm" | grep -q "^$$key:"; then \
+				echo "  missing $$key frontmatter: $$f" >&2; fail=1; \
+			fi; \
+		done; \
+	done; \
+	if [ "$$fail" -ne 0 ]; then echo "error: who-owns-x-bot workflow/*.md must declare workflow_version, phase, produces, consumes" >&2; exit 1; fi; \
+	echo "  ok"
+	@echo "lint-who-owns-x-bot: dangling markdown links"
+	@bash scripts/lint-dangling-md-links.sh who-owns-x-bot/*.md who-owns-x-bot/reference/*.md who-owns-x-bot/workflow/*.md && echo "  ok" || \
+		{ echo "error: dangling reference link(s) found" >&2; exit 1; }
+	@echo "lint-who-owns-x-bot: required reference files"
+	@for f in phase-index lazy-load-index slack-format smoke-test; do \
+		test -f who-owns-x-bot/reference/$$f.md || \
+			{ echo "error: missing who-owns-x-bot/reference/$$f.md" >&2; exit 1; }; \
+	done
+	@grep -q 'skill-framework' who-owns-x-bot/SETUP.md || \
+		{ echo "error: who-owns-x-bot/SETUP.md must link to docs/skill-framework" >&2; exit 1; }
+	@echo "  ok (framework refs)"
+
+lint-new-hire-guide:
+	@echo "lint-new-hire-guide: SKILL.md line count (<= 180)"
+	@test -f new-hire-guide/SKILL.md || \
+		{ echo "error: missing new-hire-guide/SKILL.md" >&2; exit 1; }
+	@lines=$$(wc -l < new-hire-guide/SKILL.md | tr -d ' '); \
+	if [ -z "$$lines" ] || [ "$$lines" -eq 0 ]; then \
+		echo "error: new-hire-guide/SKILL.md is empty" >&2; exit 1; \
+	elif [ "$$lines" -gt 180 ]; then \
+		echo "error: new-hire-guide SKILL.md $$lines lines (> 180) — keep orchestrator thin; detail in workflow/" >&2; \
+		exit 1; \
+	fi; \
+	echo "  ok ($$lines lines)"
+	@echo "lint-new-hire-guide: disable-model-invocation NOT set (ambiently invocable, unlike the webhook/schedule wrappers)"
+	@grep -q '^disable-model-invocation:' new-hire-guide/SKILL.md && \
+		{ echo "error: new-hire-guide/SKILL.md must NOT set disable-model-invocation — a human is always present for this flow" >&2; exit 1; } || true
+	@echo "  ok"
+	@echo "lint-new-hire-guide: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
+	@fail=0; \
+	for f in new-hire-guide/workflow/*.md; do \
+		fm=$$(awk '/^---$$/{c++; next} c==1' "$$f"); \
+		for key in workflow_version phase produces consumes; do \
+			if ! printf '%s\n' "$$fm" | grep -q "^$$key:"; then \
+				echo "  missing $$key frontmatter: $$f" >&2; fail=1; \
+			fi; \
+		done; \
+	done; \
+	if [ "$$fail" -ne 0 ]; then echo "error: new-hire-guide workflow/*.md must declare workflow_version, phase, produces, consumes" >&2; exit 1; fi; \
+	echo "  ok"
+	@echo "lint-new-hire-guide: dangling markdown links"
+	@bash scripts/lint-dangling-md-links.sh new-hire-guide/*.md new-hire-guide/reference/*.md new-hire-guide/workflow/*.md && echo "  ok" || \
+		{ echo "error: dangling reference link(s) found" >&2; exit 1; }
+	@echo "lint-new-hire-guide: required reference files"
+	@for f in phase-index lazy-load-index tour-format smoke-test; do \
+		test -f new-hire-guide/reference/$$f.md || \
+			{ echo "error: missing new-hire-guide/reference/$$f.md" >&2; exit 1; }; \
+	done
+	@grep -q 'skill-framework' new-hire-guide/SETUP.md || \
+		{ echo "error: new-hire-guide/SETUP.md must link to docs/skill-framework" >&2; exit 1; }
+	@echo "  ok (framework refs)"
+
+lint-release-readiness-checker:
+	@echo "lint-release-readiness-checker: SKILL.md line count (<= 180)"
+	@test -f release-readiness-checker/SKILL.md || \
+		{ echo "error: missing release-readiness-checker/SKILL.md" >&2; exit 1; }
+	@lines=$$(wc -l < release-readiness-checker/SKILL.md | tr -d ' '); \
+	if [ -z "$$lines" ] || [ "$$lines" -eq 0 ]; then \
+		echo "error: release-readiness-checker/SKILL.md is empty" >&2; exit 1; \
+	elif [ "$$lines" -gt 180 ]; then \
+		echo "error: release-readiness-checker SKILL.md $$lines lines (> 180) — keep orchestrator thin; detail in workflow/" >&2; \
+		exit 1; \
+	fi; \
+	echo "  ok ($$lines lines)"
+	@echo "lint-release-readiness-checker: disable-model-invocation NOT set (ambiently invocable, unlike the webhook/schedule wrappers)"
+	@grep -q '^disable-model-invocation:' release-readiness-checker/SKILL.md && \
+		{ echo "error: release-readiness-checker/SKILL.md must NOT set disable-model-invocation — a human is always present for this flow" >&2; exit 1; } || true
+	@echo "  ok"
+	@echo "lint-release-readiness-checker: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
+	@fail=0; \
+	for f in release-readiness-checker/workflow/*.md; do \
+		fm=$$(awk '/^---$$/{c++; next} c==1' "$$f"); \
+		for key in workflow_version phase produces consumes; do \
+			if ! printf '%s\n' "$$fm" | grep -q "^$$key:"; then \
+				echo "  missing $$key frontmatter: $$f" >&2; fail=1; \
+			fi; \
+		done; \
+	done; \
+	if [ "$$fail" -ne 0 ]; then echo "error: release-readiness-checker workflow/*.md must declare workflow_version, phase, produces, consumes" >&2; exit 1; fi; \
+	echo "  ok"
+	@echo "lint-release-readiness-checker: dangling markdown links"
+	@bash scripts/lint-dangling-md-links.sh release-readiness-checker/*.md release-readiness-checker/reference/*.md release-readiness-checker/workflow/*.md && echo "  ok" || \
+		{ echo "error: dangling reference link(s) found" >&2; exit 1; }
+	@echo "lint-release-readiness-checker: required reference files"
+	@for f in phase-index lazy-load-index gate-policy report-format smoke-test; do \
+		test -f release-readiness-checker/reference/$$f.md || \
+			{ echo "error: missing release-readiness-checker/reference/$$f.md" >&2; exit 1; }; \
+	done
+	@grep -q 'skill-framework' release-readiness-checker/SETUP.md || \
+		{ echo "error: release-readiness-checker/SETUP.md must link to docs/skill-framework" >&2; exit 1; }
+	@echo "  ok (framework refs)"
+
+lint-migration-program-manager:
+	@echo "lint-migration-program-manager: SKILL.md line count (<= 180)"
+	@test -f migration-program-manager/SKILL.md || \
+		{ echo "error: missing migration-program-manager/SKILL.md" >&2; exit 1; }
+	@lines=$$(wc -l < migration-program-manager/SKILL.md | tr -d ' '); \
+	if [ -z "$$lines" ] || [ "$$lines" -eq 0 ]; then \
+		echo "error: migration-program-manager/SKILL.md is empty" >&2; exit 1; \
+	elif [ "$$lines" -gt 180 ]; then \
+		echo "error: migration-program-manager SKILL.md $$lines lines (> 180) — keep orchestrator thin; detail in workflow/" >&2; \
+		exit 1; \
+	fi; \
+	echo "  ok ($$lines lines)"
+	@echo "lint-migration-program-manager: disable-model-invocation NOT set (ambiently invocable, no live wrapped-skill invocation to gate)"
+	@grep -q '^disable-model-invocation:' migration-program-manager/SKILL.md && \
+		{ echo "error: migration-program-manager/SKILL.md must NOT set disable-model-invocation" >&2; exit 1; } || true
+	@echo "  ok"
+	@echo "lint-migration-program-manager: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
+	@fail=0; \
+	for f in migration-program-manager/workflow/*.md; do \
+		fm=$$(awk '/^---$$/{c++; next} c==1' "$$f"); \
+		for key in workflow_version phase produces consumes; do \
+			if ! printf '%s\n' "$$fm" | grep -q "^$$key:"; then \
+				echo "  missing $$key frontmatter: $$f" >&2; fail=1; \
+			fi; \
+		done; \
+	done; \
+	if [ "$$fail" -ne 0 ]; then echo "error: migration-program-manager workflow/*.md must declare workflow_version, phase, produces, consumes" >&2; exit 1; fi; \
+	echo "  ok"
+	@echo "lint-migration-program-manager: dangling markdown links"
+	@bash scripts/lint-dangling-md-links.sh migration-program-manager/*.md migration-program-manager/reference/*.md migration-program-manager/workflow/*.md && echo "  ok" || \
+		{ echo "error: dangling reference link(s) found" >&2; exit 1; }
+	@echo "lint-migration-program-manager: required reference files"
+	@for f in phase-index lazy-load-index report-format smoke-test; do \
+		test -f migration-program-manager/reference/$$f.md || \
+			{ echo "error: missing migration-program-manager/reference/$$f.md" >&2; exit 1; }; \
+	done
+	@test -f migration-program-manager/scripts/aggregate_migration_status.py || \
+		{ echo "error: missing migration-program-manager/scripts/aggregate_migration_status.py" >&2; exit 1; }
+	@grep -q 'skill-framework' migration-program-manager/SETUP.md || \
+		{ echo "error: migration-program-manager/SETUP.md must link to docs/skill-framework" >&2; exit 1; }
+	@echo "lint-migration-program-manager: aggregator pytest"
+	@if python3 -c "import pytest" >/dev/null 2>&1; then \
+		python3 -m pytest -p no:cacheprovider migration-program-manager/tests/ -q || exit 1; \
+	else \
+		echo "pytest not installed — install with 'python3 -m pip install pytest' to run migration-program-manager tests" >&2; \
+	fi
+	@echo "  ok (framework refs + aggregator tests)"
+
+lint-cost-optimization-sprint-planner:
+	@echo "lint-cost-optimization-sprint-planner: SKILL.md line count (<= 180)"
+	@test -f cost-optimization-sprint-planner/SKILL.md || \
+		{ echo "error: missing cost-optimization-sprint-planner/SKILL.md" >&2; exit 1; }
+	@lines=$$(wc -l < cost-optimization-sprint-planner/SKILL.md | tr -d ' '); \
+	if [ -z "$$lines" ] || [ "$$lines" -eq 0 ]; then \
+		echo "error: cost-optimization-sprint-planner/SKILL.md is empty" >&2; exit 1; \
+	elif [ "$$lines" -gt 180 ]; then \
+		echo "error: cost-optimization-sprint-planner SKILL.md $$lines lines (> 180) — keep orchestrator thin; detail in workflow/" >&2; \
+		exit 1; \
+	fi; \
+	echo "  ok ($$lines lines)"
+	@echo "lint-cost-optimization-sprint-planner: disable-model-invocation NOT set (ambiently invocable, unlike the webhook/schedule wrappers)"
+	@grep -q '^disable-model-invocation:' cost-optimization-sprint-planner/SKILL.md && \
+		{ echo "error: cost-optimization-sprint-planner/SKILL.md must NOT set disable-model-invocation — a human is always present for this flow" >&2; exit 1; } || true
+	@echo "  ok"
+	@echo "lint-cost-optimization-sprint-planner: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
+	@fail=0; \
+	for f in cost-optimization-sprint-planner/workflow/*.md; do \
+		fm=$$(awk '/^---$$/{c++; next} c==1' "$$f"); \
+		for key in workflow_version phase produces consumes; do \
+			if ! printf '%s\n' "$$fm" | grep -q "^$$key:"; then \
+				echo "  missing $$key frontmatter: $$f" >&2; fail=1; \
+			fi; \
+		done; \
+	done; \
+	if [ "$$fail" -ne 0 ]; then echo "error: cost-optimization-sprint-planner workflow/*.md must declare workflow_version, phase, produces, consumes" >&2; exit 1; fi; \
+	echo "  ok"
+	@echo "lint-cost-optimization-sprint-planner: dangling markdown links"
+	@bash scripts/lint-dangling-md-links.sh cost-optimization-sprint-planner/*.md cost-optimization-sprint-planner/reference/*.md cost-optimization-sprint-planner/workflow/*.md && echo "  ok" || \
+		{ echo "error: dangling reference link(s) found" >&2; exit 1; }
+	@echo "lint-cost-optimization-sprint-planner: required reference files"
+	@for f in phase-index lazy-load-index gate-policy sweep-policy report-format smoke-test; do \
+		test -f cost-optimization-sprint-planner/reference/$$f.md || \
+			{ echo "error: missing cost-optimization-sprint-planner/reference/$$f.md" >&2; exit 1; }; \
+	done
+	@grep -q 'skill-framework' cost-optimization-sprint-planner/SETUP.md || \
+		{ echo "error: cost-optimization-sprint-planner/SETUP.md must link to docs/skill-framework" >&2; exit 1; }
+	@echo "  ok (framework refs)"
+
 lint-mysql-to-postgres-sql:
 	@echo "lint-mysql-to-postgres-sql: SKILL.md line count (<= 180)"
 	@test -f mysql-to-postgres-sql/SKILL.md || \
@@ -586,12 +928,92 @@ lint-loop-task-implementer:
 		{ echo "error: loop-task-implementer SKILL.md must link to shared cross-skill-escalation" >&2; exit 1; }
 	@echo "  ok"
 
+lint-backlog-runner:
+	@echo "lint-backlog-runner: SKILL.md line count (<= 180)"
+	@test -f backlog-runner/SKILL.md || \
+		{ echo "error: missing backlog-runner/SKILL.md" >&2; exit 1; }
+	@lines=$$(wc -l < backlog-runner/SKILL.md | tr -d ' '); \
+	if [ -z "$$lines" ] || [ "$$lines" -eq 0 ]; then \
+		echo "error: backlog-runner/SKILL.md is empty" >&2; exit 1; \
+	elif [ "$$lines" -gt 180 ]; then \
+		echo "error: backlog-runner SKILL.md $$lines lines (> 180) — keep orchestrator thin; detail in workflow/" >&2; \
+		exit 1; \
+	fi; \
+	echo "  ok ($$lines lines)"
+	@echo "lint-backlog-runner: disable-model-invocation set (automation entry point, must not compete with loop-task-implementer's ambient invocation)"
+	@grep -q '^disable-model-invocation: true' backlog-runner/SKILL.md || \
+		{ echo "error: backlog-runner/SKILL.md must set disable-model-invocation: true" >&2; exit 1; }
+	@echo "  ok"
+	@echo "lint-backlog-runner: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
+	@fail=0; \
+	for f in backlog-runner/workflow/*.md; do \
+		fm=$$(awk '/^---$$/{c++; next} c==1' "$$f"); \
+		for key in workflow_version phase produces consumes; do \
+			if ! printf '%s\n' "$$fm" | grep -q "^$$key:"; then \
+				echo "  missing $$key frontmatter: $$f" >&2; fail=1; \
+			fi; \
+		done; \
+	done; \
+	if [ "$$fail" -ne 0 ]; then echo "error: backlog-runner workflow/*.md must declare workflow_version, phase, produces, consumes" >&2; exit 1; fi; \
+	echo "  ok"
+	@echo "lint-backlog-runner: dangling markdown links"
+	@bash scripts/lint-dangling-md-links.sh backlog-runner/*.md backlog-runner/reference/*.md backlog-runner/workflow/*.md && echo "  ok" || \
+		{ echo "error: dangling reference link(s) found" >&2; exit 1; }
+	@echo "lint-backlog-runner: required reference files"
+	@for f in phase-index lazy-load-index queue-policy morning-summary-format smoke-test; do \
+		test -f backlog-runner/reference/$$f.md || \
+			{ echo "error: missing backlog-runner/reference/$$f.md" >&2; exit 1; }; \
+	done
+	@grep -q 'skill-framework' backlog-runner/SETUP.md || \
+		{ echo "error: backlog-runner/SETUP.md must link to docs/skill-framework" >&2; exit 1; }
+	@echo "  ok (framework refs)"
+
+lint-weekly-squad-digest:
+	@echo "lint-weekly-squad-digest: SKILL.md line count (<= 180)"
+	@test -f weekly-squad-digest/SKILL.md || \
+		{ echo "error: missing weekly-squad-digest/SKILL.md" >&2; exit 1; }
+	@lines=$$(wc -l < weekly-squad-digest/SKILL.md | tr -d ' '); \
+	if [ -z "$$lines" ] || [ "$$lines" -eq 0 ]; then \
+		echo "error: weekly-squad-digest/SKILL.md is empty" >&2; exit 1; \
+	elif [ "$$lines" -gt 180 ]; then \
+		echo "error: weekly-squad-digest SKILL.md $$lines lines (> 180) — keep orchestrator thin; detail in workflow/" >&2; \
+		exit 1; \
+	fi; \
+	echo "  ok ($$lines lines)"
+	@echo "lint-weekly-squad-digest: disable-model-invocation set (automation entry point, must not compete with migration-program-manager's/cost-optimization-sprint-planner's ambient invocation)"
+	@grep -q '^disable-model-invocation: true' weekly-squad-digest/SKILL.md || \
+		{ echo "error: weekly-squad-digest/SKILL.md must set disable-model-invocation: true" >&2; exit 1; }
+	@echo "  ok"
+	@echo "lint-weekly-squad-digest: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
+	@fail=0; \
+	for f in weekly-squad-digest/workflow/*.md; do \
+		fm=$$(awk '/^---$$/{c++; next} c==1' "$$f"); \
+		for key in workflow_version phase produces consumes; do \
+			if ! printf '%s\n' "$$fm" | grep -q "^$$key:"; then \
+				echo "  missing $$key frontmatter: $$f" >&2; fail=1; \
+			fi; \
+		done; \
+	done; \
+	if [ "$$fail" -ne 0 ]; then echo "error: weekly-squad-digest workflow/*.md must declare workflow_version, phase, produces, consumes" >&2; exit 1; fi; \
+	echo "  ok"
+	@echo "lint-weekly-squad-digest: dangling markdown links"
+	@bash scripts/lint-dangling-md-links.sh weekly-squad-digest/*.md weekly-squad-digest/reference/*.md weekly-squad-digest/workflow/*.md && echo "  ok" || \
+		{ echo "error: dangling reference link(s) found" >&2; exit 1; }
+	@echo "lint-weekly-squad-digest: required reference files"
+	@for f in phase-index lazy-load-index report-format smoke-test; do \
+		test -f weekly-squad-digest/reference/$$f.md || \
+			{ echo "error: missing weekly-squad-digest/reference/$$f.md" >&2; exit 1; }; \
+	done
+	@grep -q 'skill-framework' weekly-squad-digest/SETUP.md || \
+		{ echo "error: weekly-squad-digest/SETUP.md must link to docs/skill-framework" >&2; exit 1; }
+	@echo "  ok (framework refs)"
+
 lint-framework:
 	@echo "lint-framework: shared docs present"
 	@test -f docs/skill-framework/README.md
 	@for f in confidence-bands cross-skill-escalation post-action-templates \
 		smoke-test-conventions examples-conventions phase-glossary review-metadata-schema \
-		skill-routing prompt-injection claude-code-setup; do \
+		skill-routing prompt-injection claude-code-setup org-rollup-schema; do \
 		test -f docs/skill-framework/shared/$$f.md || exit 1; \
 		test -s docs/skill-framework/shared/$$f.md || \
 			{ echo "error: docs/skill-framework/shared/$$f.md is empty" >&2; exit 1; }; \
@@ -610,7 +1032,7 @@ lint-framework:
 	@grep -q '^## 1\. Required sections' docs/skill-framework/shared/examples-conventions.md
 	@grep -q '^## 2\. Scenario format' docs/skill-framework/shared/examples-conventions.md
 	@grep -q '^## 5\. Anti-patterns' docs/skill-framework/shared/examples-conventions.md
-	@for skill in pr-review incident-rca k8s-overprovisioning-datadog domain-comprehension squad-map mysql-to-postgres-sql loop-task-implementer; do \
+	@for skill in pr-review pr-gatekeeper incident-rca incident-triage-agent k8s-overprovisioning-datadog domain-comprehension squad-map who-owns-x-bot new-hire-guide release-readiness-checker migration-program-manager mysql-to-postgres-sql loop-task-implementer backlog-runner cost-optimization-sprint-planner weekly-squad-digest; do \
 		test -f $$skill/examples.md || \
 			{ echo "error: missing $$skill/examples.md (examples-conventions)" >&2; exit 1; }; \
 		grep -q '## Invocation' $$skill/examples.md || \
@@ -656,7 +1078,7 @@ lint-framework:
 	done; \
 	if [ "$$fail" -ne 0 ]; then exit 1; fi
 	@grep -q '| Complete |' docs/skill-framework/README.md
-	@for skill in pr-review incident-rca k8s-overprovisioning-datadog domain-comprehension squad-map mysql-to-postgres-sql loop-task-implementer; do \
+	@for skill in pr-review pr-gatekeeper incident-rca incident-triage-agent k8s-overprovisioning-datadog domain-comprehension squad-map who-owns-x-bot new-hire-guide release-readiness-checker migration-program-manager mysql-to-postgres-sql loop-task-implementer backlog-runner cost-optimization-sprint-planner weekly-squad-digest; do \
 		grep -q 'skill-framework' $$skill/SETUP.md || \
 			{ echo "error: $$skill/SETUP.md must link to docs/skill-framework" >&2; exit 1; }; \
 		grep -q 'docs/skill-framework/shared/skill-routing.md' $$skill/SKILL.md || \
@@ -668,12 +1090,21 @@ lint-framework:
 	@fail=0; \
 	for pair in \
 		"pr-review:workflow/inputs.md" \
+		"pr-gatekeeper:workflow/inputs.md" \
 		"incident-rca:workflow/inputs.md" \
+		"incident-triage-agent:workflow/inputs.md" \
 		"k8s-overprovisioning-datadog:workflow/collect-metrics.md" \
 		"domain-comprehension:workflow/session-0.md" \
 		"squad-map:workflow/inputs.md" \
+		"who-owns-x-bot:workflow/inputs.md" \
+		"new-hire-guide:workflow/inputs.md" \
+		"release-readiness-checker:workflow/inputs.md" \
+		"migration-program-manager:workflow/inputs.md" \
+		"cost-optimization-sprint-planner:workflow/inputs.md" \
 		"mysql-to-postgres-sql:workflow/migrate-service.md" \
-		"loop-task-implementer:workflow/orchestrator.md"; do \
+		"loop-task-implementer:workflow/orchestrator.md" \
+		"backlog-runner:workflow/inputs.md" \
+		"weekly-squad-digest:workflow/inputs.md"; do \
 		skill=$${pair%%:*}; file=$${pair#*:}; \
 		if ! grep -qiE 'untrusted|prompt-injection' $$skill/$$file; then \
 			echo "error: $$skill/$$file must declare untrusted-content guard" >&2; fail=1; \
@@ -683,7 +1114,7 @@ lint-framework:
 	@echo "lint-framework: all SETUP.md links ok"
 	@echo "lint-framework: cross-agent discovery files (.cursor/rules + .kiro/steering)"
 	@fail=0; \
-	for skill in pr-review incident-rca k8s-overprovisioning-datadog domain-comprehension squad-map mysql-to-postgres-sql loop-task-implementer; do \
+	for skill in pr-review pr-gatekeeper incident-rca incident-triage-agent k8s-overprovisioning-datadog domain-comprehension squad-map who-owns-x-bot new-hire-guide release-readiness-checker migration-program-manager mysql-to-postgres-sql loop-task-implementer backlog-runner cost-optimization-sprint-planner weekly-squad-digest; do \
 		test -f .cursor/rules/$$skill.mdc || \
 			{ echo "  missing .cursor/rules/$$skill.mdc" >&2; fail=1; }; \
 		test -f .kiro/steering/$$skill.md || \

@@ -1,5 +1,5 @@
 ---
-workflow_version: 1.14
+workflow_version: 1.16
 phase: inputs
 produces:
   - workspace_root
@@ -25,6 +25,7 @@ consumes: []
 | `memory_bank.export_mode` | No | From `domain-config.yaml`; override in user message (`never` \| `optional` \| `p5`) |
 | `api_tooling.export_mode` | No | From `domain-config.yaml`; override in user message (`never` \| `optional` \| `p5`) |
 | `new_repo_path` | Only for `ADD_REPO` | Ask if ambiguous |
+| `proposal` | Only for `PROPOSAL_CHECK` | Ask if absent — free-text description: proposed name/domain area, claimed data entities, claimed API paths/producers |
 
 ## Workspace layout detection
 
@@ -65,6 +66,7 @@ opt into `FULL` explicitly.
 | `DELTA` | Re-run phases for repos whose HEAD SHA changed since last manifest |
 | `ADD_REPO` | Onboard one repo not currently in `manifest.repos[]` into an existing engagement; full-rigor P0–P1 for that repo, then re-run downstream phases per the DELTA affected-phases rules, gated by a merge-conflict check |
 | `COMPLIANCE_RETROFIT` | Normalize split deliverables + `manifest.yaml` from an existing first pass **without** re-analyzing code |
+| `PROPOSAL_CHECK` | Compare a proposal against the existing engagement's deliverables; read-only, no merge |
 
 ### COMPLIANCE_RETROFIT — procedure
 
@@ -166,6 +168,54 @@ changed); regenerate other repos' `/understand` graphs, only merge the new one i
 | New repo entry | `manifest.repos[]` | name, branch, sha, tier, classification |
 | Merge conflicts (if any) | `RISK_MAP.md` § Merge Conflicts | Both claims, evidence, confidence, status |
 | Re-synthesized exec summary | `EXEC_SUMMARY.md` | Five questions + overall confidence recomputed including new repo |
+
+### PROPOSAL_CHECK mode — procedure
+
+Requires `manifest.yaml` at `workspace_root` with `schema_version: 2` and `engagement.status` of
+`IN_PROGRESS` or `FIRST_PASS_COMPLETE` (same engagement-wide bar `ADD_REPO` requires — see its own
+precondition above), **and**, for every repo plausibly touched by the proposal's claims (if the proposal
+names specific repos, check those; if it doesn't, check every repo in `manifest.repos[]`), that repo's own
+`repos[].inventory: complete` **and** `repos[].deep_dive` is `complete` **or** `skipped`. `skipped` counts
+as satisfied here — per [large-scale-execution.md](../reference/large-scale-execution.md) ("P1 | Deep dive
+tier 0/1 only unless flow-critical"), a Tier 2/3 repo with `deep_dive: skipped` is a legitimate, correctly
+terminal state on a finished engagement, not an incomplete one; requiring literal `complete` would HARD
+STOP on every large multi-repo engagement the framework itself considers done. If any touched repo's
+`inventory` is still `pending`, or its `deep_dive` is `pending` (not yet reached, unlike a deliberate
+`skipped`): **Stop.** Tell the user to run `FULL` or `QUICK` comprehension for this workspace first — do
+not fall back automatically, do not check against incomplete deliverables.
+
+1. Load `manifest.yaml`, `BOUNDED_CONTEXTS.md`, `DATA_OWNERSHIP.md`, `API_CATALOG.md`, `EVENT_CATALOG.md`.
+2. Parse the proposal's claims into the same three categories the merge gate checks: bounded-context
+   membership/definition, data-entity ownership, API-path production. A proposal that doesn't state a
+   claim in one category (e.g. no API paths mentioned) simply has nothing to check in that category —
+   don't invent claims it didn't make.
+3. **Reuses the ADD_REPO merge gate's overlap taxonomy** (step 4 of the ADD_REPO mode procedure above),
+   substituting "the proposal" for "the new repo," against the *existing* rows only — nothing is ever
+   appended or merged:
+   - **No overlap** → record as clear for that claim.
+   - **Overlap** (the proposal claims authoritative ownership of a table another repo already owns; the
+     proposal's bounded context contradicts an existing bounded context's recorded definition; the
+     proposal's API path already has a different producer on record) → record as a conflict, citing the
+     existing deliverable's row (repo, evidence, confidence) it collides with.
+4. **The proposal's own claims are not evidence** — a proposal that asserts "no conflict here" doesn't
+   make it so; every verdict must cite the *existing* deliverable's evidence, never just restate the
+   proposal's own text back as if verified.
+5. Write `PROPOSAL_CHECK_REPORT.md` (template: [templates/PROPOSAL_CHECK_REPORT.md](../templates/PROPOSAL_CHECK_REPORT.md)) —
+   one row per checked claim (Claim, Category, Verdict, Colliding existing entry + evidence + confidence
+   if any), plus an overall verdict (Clear / N conflict(s) found).
+6. **No writes to `manifest.yaml`, `RISK_MAP.md`, `BOUNDED_CONTEXTS.md`, `DATA_OWNERSHIP.md`,
+   `API_CATALOG.md`, or `EVENT_CATALOG.md`** — this mode only ever writes `PROPOSAL_CHECK_REPORT.md`. If
+   the proposal is later actually built, `ADD_REPO` (once real code exists) is the mode that merges it in.
+
+**Do not:** treat a clear `PROPOSAL_CHECK_REPORT.md` verdict as installing the proposal into the
+engagement — a second `PROPOSAL_CHECK` run against a revised proposal, or the eventual real `ADD_REPO`
+run, starts from the same unmodified existing deliverables every time.
+
+**Required outputs:**
+
+| Output | Location | Required fields |
+|--------|----------|-----------------|
+| Proposal check report | `PROPOSAL_CHECK_REPORT.md` | Claim, category, verdict, colliding entry (repo/evidence/confidence) if conflict |
 
 ## Required outputs
 

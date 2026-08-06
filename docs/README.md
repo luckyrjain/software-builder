@@ -1,6 +1,6 @@
 # Documentation index
 
-Human-readable guide to everything in the **ai-skills** repository. Agent instructions live in each skill's
+Human-readable guide to everything in the **software-builder** repository. Agent instructions live in each skill's
 `SKILL.md`; this index explains what each piece is for and where to look.
 
 ## Start here
@@ -9,6 +9,7 @@ Human-readable guide to everything in the **ai-skills** repository. Agent instru
 |----------|------------|
 | [../README.md](../README.md) | Install, invoke, and quick usage for all skills |
 | [REPOSITORY.md](REPOSITORY.md) | Repo layout, `Makefile`, `scripts/`, lint targets, git hooks |
+| [skill-framework/README.md](skill-framework/README.md) | Shared normative conventions every skill follows (confidence bands, escalation, routing, phase glossary, …) |
 | [../scripts/README.md](../scripts/README.md) | What `scripts/install.sh` does |
 | [../CHANGELOG.md](../CHANGELOG.md) | Per-skill change history (replaces stale inline "Recent changes" in SKILL files) |
 
@@ -20,24 +21,24 @@ Each skill is a self-contained directory copied to `~/.cursor/skills/<name>/` on
 | Skill | Human overview | Agent entry | Setup |
 |-------|----------------|-------------|-------|
 | **pr-review** | [pr-review/README.md](../pr-review/README.md) | [pr-review/SKILL.md](../pr-review/SKILL.md) | [pr-review/SETUP.md](../pr-review/SETUP.md) |
+| **pr-gatekeeper** | [pr-gatekeeper/README.md](../pr-gatekeeper/README.md) | [pr-gatekeeper/SKILL.md](../pr-gatekeeper/SKILL.md) | [pr-gatekeeper/SETUP.md](../pr-gatekeeper/SETUP.md) |
 | **incident-rca** | [incident-rca/README.md](../incident-rca/README.md) | [incident-rca/SKILL.md](../incident-rca/SKILL.md) | [incident-rca/SETUP.md](../incident-rca/SETUP.md) |
+| **incident-triage-agent** | [incident-triage-agent/README.md](../incident-triage-agent/README.md) | [incident-triage-agent/SKILL.md](../incident-triage-agent/SKILL.md) | [incident-triage-agent/SETUP.md](../incident-triage-agent/SETUP.md) |
 | **k8s-overprovisioning-datadog** | [k8s-overprovisioning-datadog/README.md](../k8s-overprovisioning-datadog/README.md) | [k8s-overprovisioning-datadog/SKILL.md](../k8s-overprovisioning-datadog/SKILL.md) | [k8s-overprovisioning-datadog/SETUP.md](../k8s-overprovisioning-datadog/SETUP.md) |
 | **domain-comprehension** | [domain-comprehension/README.md](../domain-comprehension/README.md) | [domain-comprehension/SKILL.md](../domain-comprehension/SKILL.md) | [domain-comprehension/SETUP.md](../domain-comprehension/SETUP.md) |
 | **squad-map** | [squad-map/README.md](../squad-map/README.md) | [squad-map/SKILL.md](../squad-map/SKILL.md) | [squad-map/SETUP.md](../squad-map/SETUP.md) |
+| **who-owns-x-bot** | [who-owns-x-bot/README.md](../who-owns-x-bot/README.md) | [who-owns-x-bot/SKILL.md](../who-owns-x-bot/SKILL.md) | [who-owns-x-bot/SETUP.md](../who-owns-x-bot/SETUP.md) |
+| **new-hire-guide** | [new-hire-guide/README.md](../new-hire-guide/README.md) | [new-hire-guide/SKILL.md](../new-hire-guide/SKILL.md) | [new-hire-guide/SETUP.md](../new-hire-guide/SETUP.md) |
+| **release-readiness-checker** | [release-readiness-checker/README.md](../release-readiness-checker/README.md) | [release-readiness-checker/SKILL.md](../release-readiness-checker/SKILL.md) | [release-readiness-checker/SETUP.md](../release-readiness-checker/SETUP.md) |
+| **migration-program-manager** | [migration-program-manager/README.md](../migration-program-manager/README.md) | [migration-program-manager/SKILL.md](../migration-program-manager/SKILL.md) | [migration-program-manager/SETUP.md](../migration-program-manager/SETUP.md) |
+| **cost-optimization-sprint-planner** | [cost-optimization-sprint-planner/README.md](../cost-optimization-sprint-planner/README.md) | [cost-optimization-sprint-planner/SKILL.md](../cost-optimization-sprint-planner/SKILL.md) | [cost-optimization-sprint-planner/SETUP.md](../cost-optimization-sprint-planner/SETUP.md) |
 | **mysql-to-postgres-sql** | [mysql-to-postgres-sql/README.md](../mysql-to-postgres-sql/README.md) | [mysql-to-postgres-sql/SKILL.md](../mysql-to-postgres-sql/SKILL.md) | [mysql-to-postgres-sql/SETUP.md](../mysql-to-postgres-sql/SETUP.md) |
 | **loop-task-implementer** | [loop-task-implementer/README.md](../loop-task-implementer/README.md) | [loop-task-implementer/SKILL.md](../loop-task-implementer/SKILL.md) | [loop-task-implementer/SETUP.md](../loop-task-implementer/SETUP.md) |
+| **backlog-runner** | [backlog-runner/README.md](../backlog-runner/README.md) | [backlog-runner/SKILL.md](../backlog-runner/SKILL.md) | [backlog-runner/SETUP.md](../backlog-runner/SETUP.md) |
+| **weekly-squad-digest** | [weekly-squad-digest/README.md](../weekly-squad-digest/README.md) | [weekly-squad-digest/SKILL.md](../weekly-squad-digest/SKILL.md) | [weekly-squad-digest/SETUP.md](../weekly-squad-digest/SETUP.md) |
 
-### One-line summary
-
-| Skill | Invoke | Does |
-|-------|--------|------|
-| **pr-review** | `/pr-review` or "review this MR/PR …" | Reviews GitLab merge requests: loads diff + Jira context, emits severity-tagged findings, optionally posts inline threads and a summary note via GitLab MCP |
-| **incident-rca** | Natural language ("RCA for …") | Multi-source post-incident investigation (Datadog, KubeSense, GitLab, Jenkins, Jira) → manager-ready RCA report with hypotheses and evidence |
-| **k8s-overprovisioning-datadog** | Natural language ("is X overprovisioned?") | Datadog-driven K8s deployment optimization assessment: CPU/memory/replica verdicts, waste estimate, cost, rollback guidance |
-| **domain-comprehension** | Natural language ("map the domain …") | Evidence-backed domain comprehension across repos: bounded contexts, data ownership, dependency graphs, business flows, exec summary with confidence |
-| **squad-map** | Natural language ("map squads …", "who owns …") | Repo-to-squad mapping via GitLab group hierarchy + Datadog team tags → `SQUAD_MAP.md` with confidence and conflict flags |
-| **mysql-to-postgres-sql** | Natural language ("MySQL scrub …", "jdbc:postgresql …") | MySQL-dialect scan gate + PostgreSQL rewrite for a `jdbc:mysql`→`jdbc:postgresql` migration |
-| **loop-task-implementer** | Natural language ("implement issue 42 …") | Autonomous multi-task loop: isolated Builder → two-lens independent Reviewer → adjudicated remediation → PR; platform-neutral, no MCP dependency |
+A one-line "invoke / does" summary of every skill is in root [README.md § Skills](../README.md#skills) —
+not repeated here to avoid two independently-maintained copies drifting apart.
 
 ## Cross-skill routing
 
@@ -57,13 +58,28 @@ Skills reference each other when a finding belongs in another workflow:
 | domain-comprehension | Squad / repo ownership only | squad-map |
 | squad-map | Full domain map / bounded contexts | domain-comprehension |
 | incident-rca | Unclear service owner during RCA | squad-map |
+| incident-triage-agent | Caller wants an interactive, on-demand RCA or ownership lookup | incident-rca / squad-map |
+| who-owns-x-bot | Caller wants the full mapping table, not one answer | squad-map |
+| who-owns-x-bot | Caller wants bounded contexts / domain map | domain-comprehension |
+| new-hire-guide | Caller wants a one-off ownership lookup, not a tour | squad-map |
+| new-hire-guide | Caller wants the full org-wide domain map, not scoped to one person | domain-comprehension |
+| release-readiness-checker | Caller wants one MR reviewed, not a release-wide sweep | pr-review |
+| release-readiness-checker | Caller wants one service's rightsizing question, not a release sweep | k8s-overprovisioning-datadog |
+| release-readiness-checker | A flagged service needs the full incident investigation | incident-rca |
+| migration-program-manager | Caller wants one workspace's own migration status, not the org-wide rollup | mysql-to-postgres-sql |
+| migration-program-manager | A workspace has no SQUAD_MAP.md — services join as UNKNOWN | squad-map |
+| cost-optimization-sprint-planner | Caller wants one deployment's own rightsizing question, not a sweep | k8s-overprovisioning-datadog |
+| cost-optimization-sprint-planner | A deployment has no SQUAD_MAP.md/service-alias match — joins as UNKNOWN | squad-map |
 | domain-comprehension | Produced `MYSQL_TO_PG_SQL_REWRITES.md` | mysql-to-postgres-sql |
 | mysql-to-postgres-sql | Migration MR needs review | pr-review |
 | mysql-to-postgres-sql | Cutover regression / wrong query results | incident-rca |
 | loop-task-implementer | Task's MR needs review beyond its own lenses | pr-review |
+| pr-gatekeeper | Caller wants an interactive, on-demand review | pr-review |
 | loop-task-implementer | Task implementation causes/needs incident investigation | incident-rca |
 | loop-task-implementer | Task needs unfamiliar-codebase context first | domain-comprehension |
 | loop-task-implementer | Task touches MySQL-dialect SQL during a PG migration | mysql-to-postgres-sql |
+| backlog-runner | Caller wants a single, interactive, on-demand task | loop-task-implementer |
+| weekly-squad-digest | Caller wants a fresh single-source rollup, not the combined digest | migration-program-manager / cost-optimization-sprint-planner |
 
 Full symmetric matrix (forward + reverse escalations):
 [docs/skill-framework/shared/cross-skill-escalation.md](skill-framework/shared/cross-skill-escalation.md).
@@ -76,8 +92,20 @@ Full symmetric matrix (forward + reverse escalations):
 | [superpowers/specs/2026-06-29-pr-review-architecture-lens-design.md](superpowers/specs/2026-06-29-pr-review-architecture-lens-design.md) | Architecture lens (§16) triggers and heuristics for MR reviews |
 | [superpowers/specs/2026-07-02-skills-roadmap-design.md](superpowers/specs/2026-07-02-skills-roadmap-design.md) | Repo hygiene + incident-rca causal-graph determinism roadmap |
 | [superpowers/specs/2026-07-02-platform-evolution-strategy-design.md](superpowers/specs/2026-07-02-platform-evolution-strategy-design.md) | 12–24 month platform evolution strategy: maturity assessment, eval harness, distribution, roadmap |
+| [superpowers/plans/2026-08-05-team-facing-agents-roadmap.md](superpowers/plans/2026-08-05-team-facing-agents-roadmap.md) | Team-facing agents brainstorm: 11 candidate bots/jobs composing the 7 skills for real team workflows |
+| [superpowers/specs/2026-08-05-who-owns-x-bot-design.md](superpowers/specs/2026-08-05-who-owns-x-bot-design.md) | who-owns-x-bot design — item #1 of the team-facing agents roadmap |
+| [superpowers/specs/2026-08-05-pr-gatekeeper-design.md](superpowers/specs/2026-08-05-pr-gatekeeper-design.md) | pr-gatekeeper design — item #2 of the team-facing agents roadmap |
+| [superpowers/specs/2026-08-05-incident-triage-agent-design.md](superpowers/specs/2026-08-05-incident-triage-agent-design.md) | incident-triage-agent design — items #3+#4 of the team-facing agents roadmap |
+| [superpowers/specs/2026-08-05-org-rollup-aggregation-layer-design.md](superpowers/specs/2026-08-05-org-rollup-aggregation-layer-design.md) | Shared cross-repo aggregation layer design — implemented by items #8, #10, and #11 |
+| [superpowers/specs/2026-08-05-backlog-runner-design.md](superpowers/specs/2026-08-05-backlog-runner-design.md) | backlog-runner design — item #7 of the team-facing agents roadmap |
+| [superpowers/specs/2026-08-05-domain-comprehension-proposal-check-mode-design.md](superpowers/specs/2026-08-05-domain-comprehension-proposal-check-mode-design.md) | domain-comprehension `PROPOSAL_CHECK` mode design — item #6 of the team-facing agents roadmap (a mode addition, not a new skill) |
+| [superpowers/specs/2026-08-05-new-hire-guide-design.md](superpowers/specs/2026-08-05-new-hire-guide-design.md) | new-hire-guide design — item #5 of the team-facing agents roadmap |
+| [superpowers/specs/2026-08-05-release-readiness-checker-design.md](superpowers/specs/2026-08-05-release-readiness-checker-design.md) | release-readiness-checker design — item #9 of the team-facing agents roadmap |
+| [superpowers/specs/2026-08-05-migration-program-manager-design.md](superpowers/specs/2026-08-05-migration-program-manager-design.md) | migration-program-manager design — item #8 of the team-facing agents roadmap |
+| [superpowers/specs/2026-08-05-cost-optimization-sprint-planner-design.md](superpowers/specs/2026-08-05-cost-optimization-sprint-planner-design.md) | cost-optimization-sprint-planner design — item #10 of the team-facing agents roadmap |
+| [superpowers/specs/2026-08-05-weekly-squad-digest-design.md](superpowers/specs/2026-08-05-weekly-squad-digest-design.md) | weekly-squad-digest design — item #11 of the team-facing agents roadmap (the last item) |
 
-These are planning artifacts; the live behavior is defined in `pr-review/SKILL.md` and `pr-review/reference/`.
+These are planning artifacts; the live behavior is defined in each skill's own `SKILL.md` and `reference/`.
 
 ## pr-review file map
 
@@ -98,6 +126,15 @@ These are planning artifacts; the live behavior is defined in `pr-review/SKILL.m
 | `tests/test_diff_to_positions.py` | Pytest suite for the position helper |
 | `examples/review-rules.yaml` | Starter template for per-repo review overrides |
 
+## pr-gatekeeper file map
+
+| Path | What it does |
+|------|--------------|
+| `workflow/inputs.md` | Webhook event filtering, `head_sha` dedupe short-circuit |
+| `workflow/gatekeep.md` | Invoke pr-review, apply auto-post-policy, route notification |
+| `reference/auto-post-policy.md` | The two-message protocol reconciling unattended runs with pr-review's Phase 3 gate |
+| `reference/smoke-test.md` | Post-install validation steps |
+
 ## incident-rca file map
 
 | Path | What it does |
@@ -109,6 +146,16 @@ These are planning artifacts; the live behavior is defined in `pr-review/SKILL.m
 | `report-template.md` | Output sections and quality checklist |
 | `reference/smoke-test.md` | Post-install validation steps |
 
+## incident-triage-agent file map
+
+| Path | What it does |
+|------|--------------|
+| `workflow/inputs.md` | Parse paging webhook payload, select Triage/Postmortem mode |
+| `workflow/triage.md` | Fast 30-min-window incident-rca + squad-map → triage doc |
+| `workflow/postmortem.md` | Full-window incident-rca + squad-map → postmortem draft |
+| `reference/unattended-gate-policy.md` | Exhaustive incident-rca + squad-map blocking-gate answers |
+| `reference/triage-doc-format.md`, `reference/postmortem-format.md` | Output shape for each mode |
+
 ## squad-map file map
 
 | Path | What it does |
@@ -119,6 +166,64 @@ These are planning artifacts; the live behavior is defined in `pr-review/SKILL.m
 | `reference/squad-mapping.md` | Reconciliation rules, GitLab/Datadog mapping |
 | `reference/config-schema.md` | `squad-map-config.yaml` / `domain-config.yaml` ownership block |
 | `templates/SQUAD_MAP.md` | Deliverable template |
+| `reference/smoke-test.md` | Post-install validation steps |
+
+## who-owns-x-bot file map
+
+| Path | What it does |
+|------|--------------|
+| `workflow/inputs.md` | Parse `query` + optional `workspace_root`; HARD STOP on empty query |
+| `workflow/lookup.md` | Delegate to squad-map, classify Resolved/Ambiguous/Unknown |
+| `reference/slack-format.md` | Normative three-shape Slack reply spec |
+| `reference/smoke-test.md` | Post-install validation steps |
+
+## new-hire-guide file map
+
+| Path | What it does |
+|------|--------------|
+| `workflow/inputs.md` | Parse `new_hire` (name, squad) + `workspace_root` + `delivery_mode`; HARD STOP on missing required fields |
+| `workflow/run-tour.md` | Resolve squad → repos via squad-map, invoke domain-comprehension **unscoped**, curate `ONBOARDING_TOUR.md` |
+| `reference/tour-format.md` | Normative `ONBOARDING_TOUR.md` structure |
+| `reference/smoke-test.md` | Post-install validation steps |
+
+## release-readiness-checker file map
+
+| Path | What it does |
+|------|--------------|
+| `workflow/inputs.md` | Parse `release_manifest` + `incident_lookback_hours` + `target_branch`; HARD STOP on empty manifest |
+| `workflow/run-check.md` | Resolve MR ranges (paginated), invoke pr-review / k8s / incident-rca per manifest entry per gate-policy.md, aggregate |
+| `reference/gate-policy.md` | Normative gate answers for all three wrapped skills: pr-review (reuses pr-gatekeeper's policy), k8s (ambiguous-service ask), incident-rca (Phase 1 checkpoint, "stop here" every signal density) |
+| `reference/report-format.md` | Normative `RELEASE_READINESS_REPORT.md` structure + verdict derivation |
+| `reference/smoke-test.md` | Post-install validation steps |
+
+## migration-program-manager file map
+
+| Path | What it does |
+|------|--------------|
+| `workflow/inputs.md` | Parse `program_manifest` + `staleness_threshold_days` + `state_path`; HARD STOP on missing required fields |
+| `workflow/run-rollup.md` | Invoke the aggregator script, rank/group by squad, build the report + rollup JSON |
+| `scripts/aggregate_migration_status.py` | Parse `MIGRATION_STATUS.yaml` × N + `SQUAD_MAP.md`, join, compute staleness against persisted state |
+| `reference/report-format.md` | Normative `MIGRATION_PROGRAM_REPORT.md` + `migration_program_rollup.json` structure |
+| `reference/smoke-test.md` | Post-install validation steps |
+
+## cost-optimization-sprint-planner file map
+
+| Path | What it does |
+|------|--------------|
+| `workflow/inputs.md` | Parse `sweep_scope` + `cost_rate` + `max_deployments_per_run`/`deadline`/`session_token_budget`; HARD STOP on missing required fields |
+| `workflow/run-sweep.md` | Optional namespace pre-filter, loop k8s-overprovisioning-datadog per deployment, join, rank, render |
+| `reference/gate-policy.md` | Every live k8s-overprovisioning-datadog gate and its scripted, reused answer; cost-rate resolved once, sweep-wide |
+| `reference/sweep-policy.md` | The sweep loop's own session-level state, candidate-list construction, failure isolation, stop conditions |
+| `reference/report-format.md` | Normative `COST_OPTIMIZATION_SPRINT_REPORT.md` + `cost_optimization_sprint_rollup.json` structure |
+| `reference/smoke-test.md` | Post-install validation steps |
+
+## weekly-squad-digest file map
+
+| Path | What it does |
+|------|--------------|
+| `workflow/inputs.md` | Parse `rollup_manifest` + `staleness_warning_days`; HARD STOP if neither rollup path is set |
+| `workflow/run-digest.md` | Read both rollups, group by squad then `metric_type`, compute staleness, render |
+| `reference/report-format.md` | Normative `WEEKLY_SQUAD_DIGEST.md` structure |
 | `reference/smoke-test.md` | Post-install validation steps |
 
 ## mysql-to-postgres-sql file map
@@ -182,4 +287,4 @@ These are planning artifacts; the live behavior is defined in `pr-review/SKILL.m
 
 ## Install and quality gates
 
-See [REPOSITORY.md](REPOSITORY.md) for `make install`, `make lint`, GitLab CI (`.gitlab-ci.yml`), and pre-commit hooks.
+See [REPOSITORY.md](REPOSITORY.md) for `make install`, `make lint`, GitHub Actions CI (`.github/workflows/lint.yml`), and pre-commit hooks.

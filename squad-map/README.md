@@ -57,7 +57,7 @@ Full excerpt: [reference/gold-squad-map-excerpt.md](reference/gold-squad-map-exc
 ## Install
 
 ```bash
-cd ai-skills
+cd software-builder
 make install-squad-map
 ```
 
@@ -68,5 +68,7 @@ Restart Cursor. MCP setup: [SETUP.md](SETUP.md).
 - **domain-comprehension** — Session 0b delegates to squad-map; consumes `SQUAD_MAP.md` in later phases
 - **incident-rca** — time-window investigation; squad-map for ownership context
 - **pr-review** — MR review with optional ownership context from `SQUAD_MAP.md`
+- **migration-program-manager** — org-wide migration status rollup; joins per-workspace status to squad via `SQUAD_MAP.md`
+- **cost-optimization-sprint-planner** — org-wide cost/waste ranking; joins deployments to squad via `SQUAD_MAP.md`/`service_aliases`
 
 Agent instructions: [SKILL.md](SKILL.md).

@@ -30,6 +30,7 @@ Reference loads: [lazy-load-index.md](lazy-load-index.md).
 | Resume multi-session | Inputs → read `PROGRESS.md` → continue from Next action |
 | Mechanical graphs only | Session 0 → P0.5 (requires prior inventory or seed list) |
 | Onboard one new repo into existing map | Inputs (`ADD_REPO`) → P0/P0.25/P0.5/P1 for new repo → merge gate → affected downstream phases per DELTA table |
+| Check a proposal against the existing map | Inputs (`PROPOSAL_CHECK`) → precondition check → compare proposal to `BOUNDED_CONTEXTS.md`/`DATA_OWNERSHIP.md`/`API_CATALOG.md`/`EVENT_CATALOG.md` → `PROPOSAL_CHECK_REPORT.md` (read-only, no merge) |
 
 ## Phase execution order
 

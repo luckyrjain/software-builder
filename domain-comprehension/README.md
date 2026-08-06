@@ -69,11 +69,11 @@ More patterns: [examples.md](examples.md)
 
 ## Install
 
-**Canonical source:** edit this directory in the [ai-skills](https://gitlab.example.com/lucky.jain/ai-skills) repo at
+**Canonical source:** edit this directory in the [software-builder](https://github.com/luckyrjain/software-builder) repo at
 `domain-comprehension/`, then install to `~/.cursor/skills/domain-comprehension`:
 
 ```bash
-cd ai-skills
+cd software-builder
 make install-domain-comprehension
 ```
 

@@ -1,16 +1,20 @@
 # Team-facing agents roadmap
 
 **Date:** 2026-08-05
-**Status:** Proposed — brainstormed roadmap, not yet scoped into implementation plans
+**Status:** Implemented — all 11 items shipped, each with its own design spec
+(`docs/superpowers/specs/`) and a deep adversarial review loop before completion. See each skill's own
+`CHANGELOG.md` for its build history.
 **Scope:** Agents that *consume* the 7 skills in this repo (pr-review, incident-rca,
 k8s-overprovisioning-datadog, domain-comprehension, squad-map, mysql-to-postgres-sql,
 loop-task-implementer) for real team workflows. Distinct from repo-maintenance tooling — nothing here
 changes skill internals; each item composes existing skills into a team-facing agent, bot, or
 scheduled job.
 
-Each item below is a candidate roadmap entry, not a committed plan. Before implementing any item,
-write a design spec (`docs/superpowers/specs/`) and implementation plan (`docs/superpowers/plans/`)
-per this repo's usual pattern — this doc is the brainstorm those should draw from.
+Each item below was a candidate roadmap entry at brainstorm time, not a committed plan — the original
+process this doc specified was: before implementing any item, write a design spec
+(`docs/superpowers/specs/`) per this repo's usual pattern, drawing from this doc's brainstorm. All 11
+items have since followed that process and shipped; this section is kept as a record of the process that
+was followed, not a standing instruction for further items.
 
 ## Priority tiers
 

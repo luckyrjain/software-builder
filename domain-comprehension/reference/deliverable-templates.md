@@ -27,6 +27,7 @@ Normative phase requirements: [phase-outputs.md](phase-outputs.md).
 | `domain-config.yaml` | Session 0 |
 | `manifest.yaml` | Every phase ([manifest-schema.md](manifest-schema.md), schema v2) |
 | `E2E_FLOW.md` | Optional P2 supplement — E2E/runtime detail when map § Runtime validation is stub+link |
+| `PROPOSAL_CHECK_REPORT.md` | Optional — only written when `delivery_mode: PROPOSAL_CHECK` runs; never merged into any other deliverable |
 | `<repo>/memory-bank/*.md` | Optional P5 — per-repo Memory Bank export ([memory-bank-integration.md](memory-bank-integration.md)) |
 | `postman/*` | Optional P5 — Postman/curl export ([api-tooling-integration.md](api-tooling-integration.md)) |
 
