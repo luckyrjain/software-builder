@@ -42,17 +42,22 @@ renders using whichever rollup is actually readable, per
 
 | Field | Default |
 |-------|---------|
-| `staleness_warning_days` | 14 — an item whose `last_updated` is older than this is flagged in the digest, never silently presented as fresh. Display-only: unlike migration-program-manager's `staleness_threshold_days`, this never changes a computed `status` — so a sensible default is safe here rather than an operational decision this skill can't guess |
+| `staleness_warning_days` | 14 — an item whose staleness value (see Normalization below) exceeds this is flagged in the digest, never silently presented as fresh. Display-only: unlike migration-program-manager's `staleness_threshold_days`, this never changes a computed `status` — so a sensible default is safe here rather than an operational decision this skill can't guess |
 
 ## Normalization
 
 - Render every timestamp this skill computes (report generation time, staleness cutoffs) in **explicit
   UTC** (`Z` suffix) — never a bare, timezone-less timestamp.
-- `last_updated` on each rollup item is read as-is from that item — never recomputed, never assumed to
-  share identical freshness semantics between the two rollups (migration-program-manager's is a
-  documented per-item run timestamp with a companion `staleness_days` field; cost-optimization-sprint-planner's
-  is inherited from the shared base schema with no documented companion field — this skill computes its
-  own age from `last_updated` for both rather than relying on `staleness_days`, which only one rollup has).
+- `last_updated` on each rollup item is read as-is from that item — never recomputed. The two rollups do
+  **not** share identical freshness semantics: migration-program-manager's `last_updated` is stamped at
+  aggregation-run time (the same instant for every item that run — it tells you "how long since the
+  aggregator last ran," not a per-service signal), while its own `staleness_days` field (persisted
+  `gate_signature` comparison against prior runs) genuinely does vary per service. Cost items have no
+  `staleness_days` equivalent. **Staleness precedence, per item**: migration items prefer `staleness_days`
+  when present, falling back to a `last_updated`-derived age only if it's absent; cost items always use a
+  `last_updated`-derived age (see [workflow/run-digest.md § 3](run-digest.md#3-compute-staleness-display-only)).
+  Never uniformly use `last_updated` for both just for implementation convenience — that would silently
+  degrade the migration side's staleness signal to a rollup-run-level flag instead of a per-service one.
 
 ## Embedded invocation
 

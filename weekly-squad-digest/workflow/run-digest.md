@@ -43,14 +43,32 @@ This skill's decision:
    blocked → stalled → in_progress → done (migration-program-manager's own convention); cost:
    `value.monthly_savings_total` descending (cost-optimization-sprint-planner's own convention). Never
    re-sort by a rule this skill invents.
+4. **Cross-reference a `service` that appears in both rollups under different squads.** After both
+   rollups are grouped, check for any `service` value present in both — if its `squad` differs between
+   the two, add a Notes pointer on each side ("also in Cost optimization under `<squad>`" / "also in
+   Migration status under `<squad>`"), per
+   [reference/report-format.md](../reference/report-format.md)'s rule. This is a real, expected case since
+   the two rollups resolve `squad` via different join mechanisms
+   ([org-rollup-schema.md § 3](../../docs/skill-framework/shared/org-rollup-schema.md#3-join-key-squad-map-is-the-only-authoritative-source))
+   — never reconciled into one "correct" squad, never silently left uncross-referenced.
 
 ## 3. Compute staleness (display-only)
 
-For every item, compute age = now − `last_updated`. An item whose age exceeds
-`staleness_warning_days` gets a flagged note ("stale — last updated `<N>` days ago, re-run
-`<source_skill>`") in the digest. **This never changes the item's own `status`** — unlike
-migration-program-manager's staleness computation (which escalates `status` to `stalled`), this skill
-only ever annotates, since it has no basis to recompute a status a different skill already owns.
+For every item, compute age = now − `last_updated`, **except for migration items when `staleness_days`
+is present — prefer it instead.** `migration_program_rollup.json`'s own `last_updated` is stamped at
+aggregation-run time (the same instant for every item that run), not per-service — so an age computed
+from it tells you "how long since migration-program-manager last ran," not "this specific service's data
+is stale." Its `staleness_days` field genuinely does vary per service (persisted `gate_signature`
+comparison against prior runs), so use it whenever present for migration items. Cost items have no
+`staleness_days` equivalent (see [workflow/inputs.md](inputs.md)) — their age is always
+`last_updated`-derived, which cost-optimization-sprint-planner's own workflow does set per invocation.
+
+An item whose staleness value (whichever source was used) exceeds `staleness_warning_days` gets a flagged
+note ("stale — last updated `<N>` days ago, re-run `<source_skill>`") in the digest, joined with the
+cross-rollup pointer from § 2 step 4 when both apply. **This never changes the item's own `status`** —
+unlike migration-program-manager's own staleness computation (which escalates `status` to `stalled`),
+this skill only ever annotates, since it has no basis to recompute a status a different skill already
+owns.
 
 ## 4. Render `WEEKLY_SQUAD_DIGEST.md`
 

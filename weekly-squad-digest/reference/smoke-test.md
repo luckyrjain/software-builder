@@ -25,14 +25,18 @@ rendered.
    in this rollup for this squad."
 3. **`WEEKLY_SQUAD_DIGEST.md` produced**, per [reference/report-format.md](report-format.md).
 4. **An item older than `staleness_warning_days`** (default 14) is flagged with its age, its own
-   `status` unchanged.
+   `status` unchanged. A migration item with a `staleness_days` value uses that field directly; a cost
+   item always uses a `last_updated`-derived age.
+5. **Every row shows a Confidence column value** (`squad_confidence`), not just LOW/UNKNOWN ones.
+6. **A service present in both rollups under different squads** gets a Notes cross-reference on both
+   rows.
 
 ## Pass criteria
 
 - Neither migration-program-manager nor cost-optimization-sprint-planner is invoked — this skill only
   reads their existing output files.
-- `squad`/`status`/`priority` in the digest match the source rollup JSON exactly, byte for byte on the
-  values (only formatting/grouping differs).
+- `squad`/`squad_confidence`/`status`/`priority` in the digest match the source rollup JSON exactly, byte
+  for byte on the values (only formatting/grouping differs).
 - Migration status and Cost optimization are always separate sub-sections, never merged into one table.
 
 ## Degraded paths

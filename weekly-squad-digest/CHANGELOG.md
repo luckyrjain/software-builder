@@ -39,3 +39,32 @@ frontmatter should match the version of the latest entry below that names that f
   phase-glossary)
 - Design spec: [docs/superpowers/specs/2026-08-05-weekly-squad-digest-design.md](../docs/superpowers/specs/2026-08-05-weekly-squad-digest-design.md)
   — this is the last item (#11) of the [team-facing agents roadmap](../docs/superpowers/plans/2026-08-05-team-facing-agents-roadmap.md)
+
+### Fixed (round-1 review, same day)
+- **`squad_confidence`'s "Notes callout" rule contradicted the report's own normative Structure
+  template** — the template's Notes column was defined single-purpose (staleness only), with no room
+  shown for a confidence callout, and the cited "same convention as cost-optimization-sprint-planner"
+  precedent didn't actually match (that skill uses a dedicated Confidence column, not a Notes callout).
+  Fixed: both tables now have a real Confidence column showing every item's `squad_confidence`, not just
+  LOW/UNKNOWN ones — genuine parity with cost-optimization-sprint-planner's own report structure.
+- **Migration items' staleness flag was effectively meaningless per-item.** migration-program-manager's
+  `last_updated` is stamped at aggregation-run time (the same instant for every item that run), not a
+  per-service signal — so a `last_updated`-derived age for migration items would tell you "how long since
+  the aggregator last ran," not "which service's data is actually stale," despite this skill's own
+  framing implying genuine per-item granularity. Fixed: migration items now prefer `staleness_days`
+  (which genuinely does vary per service via persisted `gate_signature` comparison) when present, falling
+  back to `last_updated`-derived age only if absent; cost items (no `staleness_days` equivalent) always
+  use `last_updated`-derived age.
+- **The same `service` appearing in both rollups under different squads** (a real, expected case — the
+  two rollups resolve `squad` via different join mechanisms) **was acknowledged only in `SETUP.md`'s
+  operator-facing troubleshooting table, never in the normative render spec.** A reader of
+  `WEEKLY_SQUAD_DIGEST.md` could see the same service under two squad headings with no indication they're
+  the same service. Fixed: added an explicit cross-referencing rule to `reference/report-format.md` and a
+  detection step to `workflow/run-digest.md` § 2 — each side's Notes column now points at the other
+  section/squad, never silently presented as two unrelated rows.
+
+Found by an adversarial review agent that verified every field name, quote, and precedent claim against
+the real source files (migration-program-manager's, cost-optimization-sprint-planner's, squad-map's own)
+rather than trusting this skill's own docs — the central "squad-map has no routing convention" design
+claim held up under scrutiny, but three implementation-level gaps in how the digest actually renders
+staleness, confidence, and cross-rollup conflicts did not.
