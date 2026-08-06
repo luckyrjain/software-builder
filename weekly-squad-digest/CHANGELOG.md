@@ -137,3 +137,22 @@ Found by a third adversarial review pass that cross-checked every claim this ski
 rollup producers' own conventions against those producers' actual source files, rather than trusting this
 skill's own prose — a pattern that had already caught the squad-map routing fabrication during design and
 recurred here at the implementation-detail level.
+
+### Fixed (round-4 review, same day)
+- **Root `README.md`'s Examples table still described the pre-round-1 (buggy) staleness mechanism** —
+  "An item's `last_updated` is older than `staleness_warning_days`" as the universal trigger, with no
+  mention of `staleness_days` precedence for migration items. Every one of this skill's own eight files
+  was fixed in round 1 and stayed consistent through rounds 2-3, but the root README (added once in the
+  initial commit, never touched by any fix commit) kept the original wrong claim — the exact
+  "uniformly use `last_updated` for both" bug `workflow/inputs.md` explicitly warns against. Fixed to
+  match the current mechanism.
+- **`workflow/run-digest.md` § 3 — the normative step that actually builds the joined Notes string — never
+  stated which of the staleness note / cross-rollup pointer comes first** when both apply, even though
+  `reference/smoke-test.md`, `reference/report-format.md`'s template, and `examples.md`'s worked example
+  all already agreed on "staleness note first" without that rule ever being stated in the one file that
+  performs the join. Fixed: § 3 now states the order explicitly.
+
+Found by a fourth adversarial review pass that re-verified rounds 1-3's fixes were consistent across all
+eight in-skill files (found no new issues there — genuine convergence at that layer) and then widened scope
+to the skill's own wiring into root-level shared docs, finding one propagation gap one level outside the
+files rounds 1-3 had touched.

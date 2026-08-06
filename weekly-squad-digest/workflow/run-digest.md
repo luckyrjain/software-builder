@@ -77,8 +77,9 @@ cost-optimization-sprint-planner's own docs don't specify how or when it's popul
 skill treats it only as "the best signal the rollup carries," not a guaranteed per-service one.
 
 An item whose staleness value (whichever source was used) exceeds `staleness_warning_days` gets a flagged
-note in the digest, joined with the cross-rollup pointer from § 2 step 4 when both apply — **worded
-differently depending on which source computed it**, since the two mean different things:
+note in the digest, joined with `; ` to the cross-rollup pointer from § 2 step 4 when both apply —
+**staleness note first, cross-rollup pointer second** — and **worded differently depending on which
+source computed it**, since the two mean different things:
 
 - Migration item, `staleness_days` used: `"stale — gate unchanged for <N> days, re-run migration-program-manager"`
 - Any item, `last_updated`-derived age used (cost items always; migration items only when `staleness_days`

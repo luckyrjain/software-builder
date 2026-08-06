@@ -539,7 +539,7 @@ including squad-map, has a real squad→channel routing mechanism — see the
 |----------------|----------------|
 | Scheduled trigger fires with `rollup_manifest` (both paths) | Both rollups read, grouped by squad then `metric_type`, writes `WEEKLY_SQUAD_DIGEST.md` |
 | Only one rollup path supplied | The other rollup is a Rollup gaps row; the digest still renders from the readable one |
-| An item's `last_updated` is older than `staleness_warning_days` | Flagged with its age — the item's own `status` is never changed |
+| An item's staleness value exceeds `staleness_warning_days` | Flagged (migration items prefer `staleness_days` when present, never a rollup-run-level `last_updated`; cost items use `last_updated`-derived age, the only signal they carry) — the item's own `status` is never changed |
 | "What's our migration status?" | **Wrong skill** → migration-program-manager directly |
 
 ### What you get (weekly-squad-digest)
