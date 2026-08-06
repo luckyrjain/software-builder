@@ -11,7 +11,7 @@ patterns interactively.
 ## Install
 
 ```bash
-cd ai-skills
+cd software-builder
 make install-backlog-runner
 ```
 
@@ -22,7 +22,7 @@ skills reload.
 ### Claude Code
 
 ```bash
-cd ai-skills
+cd software-builder
 make install-claude-backlog-runner
 ```
 

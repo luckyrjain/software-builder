@@ -10,7 +10,7 @@ unless you want invocation to require an explicit ask.
 ## Install
 
 ```bash
-cd ai-skills
+cd software-builder
 make install-squad-map
 ```
 
@@ -22,7 +22,7 @@ Restart Cursor so the skill reloads.
 both editors). For Claude Code **only**:
 
 ```bash
-cd ai-skills
+cd software-builder
 make install-claude-squad-map
 ```
 

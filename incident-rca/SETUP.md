@@ -48,7 +48,7 @@ notes the gap. Do not attempt to build a correlator from scratch to satisfy the 
 ## Cursor skill install
 
 ```bash
-cd ai-skills
+cd software-builder
 make install-incident-rca
 # Restart Cursor
 ```
@@ -59,7 +59,7 @@ make install-incident-rca
 to both editors). For Claude Code **only**:
 
 ```bash
-cd ai-skills
+cd software-builder
 make install-claude-incident-rca
 ```
 

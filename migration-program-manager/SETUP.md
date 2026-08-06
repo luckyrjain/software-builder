@@ -10,7 +10,7 @@ all": this skill never invokes mysql-to-postgres-sql or squad-map live, only rea
 ## Install
 
 ```bash
-cd ai-skills
+cd software-builder
 make install-migration-program-manager
 ```
 
@@ -24,7 +24,7 @@ run both. Restart Cursor so all three skills reload.
 installs to both editors). For Claude Code **only**:
 
 ```bash
-cd ai-skills
+cd software-builder
 make install-claude-migration-program-manager
 ```
 

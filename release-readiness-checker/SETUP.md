@@ -15,7 +15,7 @@ it doesn't; see that file's own correction note).
 ## Install
 
 ```bash
-cd ai-skills
+cd software-builder
 make install-release-readiness-checker
 ```
 
@@ -29,7 +29,7 @@ installed alongside it. Restart Cursor so all four skills reload.
 installs to both editors). For Claude Code **only**:
 
 ```bash
-cd ai-skills
+cd software-builder
 make install-claude-release-readiness-checker
 ```
 

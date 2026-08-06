@@ -10,7 +10,7 @@ logic this skill adds on top of k8s-overprovisioning-datadog's own analysis.
 ## Install
 
 ```bash
-cd ai-skills
+cd software-builder
 make install-cost-optimization-sprint-planner
 ```
 
@@ -24,7 +24,7 @@ configured. Restart Cursor so all three skills reload.
 (default installs to both editors). For Claude Code **only**:
 
 ```bash
-cd ai-skills
+cd software-builder
 make install-claude-cost-optimization-sprint-planner
 ```
 

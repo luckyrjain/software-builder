@@ -49,7 +49,7 @@ Full format spec: [reference/slack-format.md](reference/slack-format.md).
 ## Install
 
 ```bash
-cd ai-skills
+cd software-builder
 make install-who-owns-x-bot
 ```
 

@@ -11,7 +11,7 @@ handle the single-source, on-demand case; this skill exists only for the combine
 ## Install
 
 ```bash
-cd ai-skills
+cd software-builder
 make install-weekly-squad-digest
 ```
 
@@ -22,7 +22,7 @@ two rollup files already existing. Restart Cursor so all three skills reload.
 ### Claude Code
 
 ```bash
-cd ai-skills
+cd software-builder
 make install-claude-weekly-squad-digest
 ```
 

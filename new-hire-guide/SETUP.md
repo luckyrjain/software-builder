@@ -12,7 +12,7 @@ is always present for this flow.
 ## Install
 
 ```bash
-cd ai-skills
+cd software-builder
 make install-new-hire-guide
 ```
 
@@ -26,7 +26,7 @@ Cursor so all three skills reload.
 both editors). For Claude Code **only**:
 
 ```bash
-cd ai-skills
+cd software-builder
 make install-claude-new-hire-guide
 ```
 

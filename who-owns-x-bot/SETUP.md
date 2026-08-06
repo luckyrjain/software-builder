@@ -10,7 +10,7 @@ should keep routing to **squad-map** directly.
 ## Install
 
 ```bash
-cd ai-skills
+cd software-builder
 make install-who-owns-x-bot
 ```
 
@@ -23,7 +23,7 @@ useless without squad-map installed alongside it. Restart Cursor so both skills 
 both editors). For Claude Code **only**:
 
 ```bash
-cd ai-skills
+cd software-builder
 make install-claude-who-owns-x-bot
 ```
 

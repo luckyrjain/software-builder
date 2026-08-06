@@ -55,7 +55,7 @@ Python SQLAlchemy cutover — postgresql+psycopg2 and pool_recycle
 ## Install
 
 ```bash
-cd ai-skills
+cd software-builder
 make install-mysql-to-postgres-sql
 ```
 

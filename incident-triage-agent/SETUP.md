@@ -10,7 +10,7 @@ ownership lookup interactively should keep routing to **incident-rca** / **squad
 ## Install
 
 ```bash
-cd ai-skills
+cd software-builder
 make install-incident-triage-agent
 ```
 
@@ -21,7 +21,7 @@ Cursor so all three skills reload.
 ### Claude Code
 
 ```bash
-cd ai-skills
+cd software-builder
 make install-claude-incident-triage-agent
 ```
 

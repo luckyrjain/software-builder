@@ -55,8 +55,10 @@ table" (`squad-mapping.md` § Reconciliation) — never invent a different tiebr
 squad-map's existing rule rather than layering a second one on top.
 
 **The name doesn't always match verbatim — this is a real, not hypothetical, mismatch.** Confirmed
-directly against squad-map's own canonical k8s example: `decision-graph.example.yaml`'s `metadata.service`
-(`example-payment-consumer`) differs from its own `scope`'s `kube_deployment:` tag (`payment-consumer`).
+directly against k8s-overprovisioning-datadog's own canonical example:
+[decision-graph.example.yaml](../../../k8s-overprovisioning-datadog/reference/decision-graph.example.yaml)'s
+`metadata.service` (`example-payment-consumer`) differs from its own `scope`'s `kube_deployment:` tag
+(`payment-consumer`).
 Per adapter:
 - **k8s items:** match against `SQUAD_MAP.md`'s `Datadog service` column (both Datadog-side identifiers);
   when it still doesn't match verbatim, use squad-map's own `ownership.datadog.service_aliases` config
@@ -99,7 +101,7 @@ which loops k8s-overprovisioning-datadog once per deployment in scope, collectin
 adapter runs, optionally pre-filtered by k8s-overprovisioning-datadog's own Phase 0b "Namespace ranking"
 query pattern (top 5 per namespace, reused directly rather than through a standalone-ranking mode
 k8s-overprovisioning-datadog doesn't document — see
-[cost-optimization-sprint-planner's design spec](../../../docs/superpowers/specs/2026-08-05-cost-optimization-sprint-planner-design.md)).
+[cost-optimization-sprint-planner's design spec](../../superpowers/specs/2026-08-05-cost-optimization-sprint-planner-design.md)).
 `appendix.cost`'s exact field shape (assumed by the `value` row below) is not formally defined in
 `decision-graph-schema.md` and appears in no real example graph — treat it as assumed, not guaranteed,
 same as that design spec's own § Non-goals.

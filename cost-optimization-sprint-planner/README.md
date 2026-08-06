@@ -46,7 +46,7 @@ cost_rate: {provider: aws, dollars_per_core_month: 24.00, dollars_per_gib_month:
 ## Install
 
 ```bash
-cd ai-skills
+cd software-builder
 make install-cost-optimization-sprint-planner
 ```
 

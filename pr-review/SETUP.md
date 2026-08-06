@@ -9,7 +9,7 @@ context.
 
 Already have a GitLab PAT and Cursor 2.4+? This is the whole path — details for each step are below.
 
-1. `git clone` the `ai-skills` repo (see root [README.md § Install](../README.md#install)), then `make install-pr-review`. Restart Cursor.
+1. `git clone` the `software-builder` repo (see root [README.md § Install](../README.md#install)), then `make install-pr-review`. Restart Cursor.
 2. Create a GitLab PAT with `api` scope ([§1](#create-a-gitlab-personal-access-token-pat)) and export it as `GITLAB_PERSONAL_ACCESS_TOKEN`.
 3. Paste the `@zereight/mcp-gitlab` block from [§3](#gitlab--full-inline-posting-zereightmcp-gitlab) into `~/.cursor/mcp.json`, swap in your token and `GITLAB_API_URL`, restart Cursor.
 4. Skip Jira for now — add it later from [§3 Jira / Atlassian](#jira--atlassian) if you need AC checks.
@@ -128,7 +128,7 @@ The `mcp.json` snippet in § 3 already uses `"${GITLAB_PERSONAL_ACCESS_TOKEN}"` 
 
 ## 2. Install the skill
 
-Already cloned `ai-skills`? Run `make install-pr-review` (or `bash scripts/install.sh pr-review`) from
+Already cloned `software-builder`? Run `make install-pr-review` (or `bash scripts/install.sh pr-review`) from
 the repo root — see the root [README.md § Install](../README.md#install) for the full clone/install
 steps and single-skill install targets, which apply the same way here.
 

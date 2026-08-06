@@ -60,7 +60,7 @@ pointer).
 ## Install
 
 ```bash
-cd ai-skills
+cd software-builder
 make install-release-readiness-checker
 ```
 

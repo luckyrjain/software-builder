@@ -38,7 +38,7 @@ rollup_manifest: {migration_rollup_path: ./migration_program_rollup.json, cost_r
 ## Install
 
 ```bash
-cd ai-skills
+cd software-builder
 make install-weekly-squad-digest
 ```
 

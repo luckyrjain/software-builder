@@ -6,7 +6,7 @@
 
 ## 1. Purpose
 
-One vocabulary across pr-review, incident-rca, k8s-overprovisioning-datadog, and squad-map so agents do not mix alternate labels ("High", "0.9", "Very High", "Confident", "Likely") inconsistently. When comparing findings across skills, translate to these four bands first.
+One vocabulary across pr-review, incident-rca, k8s-overprovisioning-datadog, squad-map, domain-comprehension, and mysql-to-postgres-sql (see Consumers above) so agents do not mix alternate labels ("High", "0.9", "Very High", "Confident", "Likely") inconsistently. When comparing findings across skills, translate to these four bands first.
 
 ## 2. Categorical definitions
 

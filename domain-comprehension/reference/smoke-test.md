@@ -10,7 +10,7 @@ Comprehend the <domain> subsystem in <workspace_root> — Session 0 only (quick 
 
 ## Preconditions
 
-- Agent workspace is **ai-skills** clone (skill installed) OR `domain-comprehension/SKILL.md` readable
+- Agent workspace is **software-builder** clone (skill installed) OR `domain-comprehension/SKILL.md` readable
 - Target workspace has at least one git repo with README
 - understand-anything plugin optional for Session 0 smoke
 

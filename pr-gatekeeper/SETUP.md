@@ -10,7 +10,7 @@ routing to **pr-review** directly.
 ## Install
 
 ```bash
-cd ai-skills
+cd software-builder
 make install-pr-gatekeeper
 ```
 
@@ -20,7 +20,7 @@ without pr-review installed alongside it. Restart Cursor so both skills reload.
 ### Claude Code
 
 ```bash
-cd ai-skills
+cd software-builder
 make install-claude-pr-gatekeeper
 ```
 

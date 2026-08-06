@@ -44,7 +44,7 @@ whatever [SETUP.md](SETUP.md) § Config points at) so a human still sees it.
 ## Install
 
 ```bash
-cd ai-skills
+cd software-builder
 make install-pr-gatekeeper
 ```
 

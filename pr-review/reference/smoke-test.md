@@ -36,7 +36,7 @@ python3 -m pytest tests/                       # from inside pr-review/
 python3 -m py_compile scripts/diff-to-positions.py
 ```
 
-From the **repo root** (ai-skills clone), the same checks run via: `make lint-pr-review`.
+From the **repo root** (software-builder clone), the same checks run via: `make lint-pr-review`.
 
 All tests should pass and `py_compile` should print nothing (exit 0).
 

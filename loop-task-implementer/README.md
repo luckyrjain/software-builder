@@ -65,7 +65,7 @@ A completion report per task — see [report-template.md](report-template.md):
 ## Install
 
 ```bash
-cd ai-skills
+cd software-builder
 make install-loop-task-implementer
 ```
 

@@ -57,7 +57,7 @@ duplicated by this skill.
 ## Install
 
 ```bash
-cd ai-skills
+cd software-builder
 make install-new-hire-guide
 ```
 

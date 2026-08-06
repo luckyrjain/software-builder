@@ -45,7 +45,7 @@ substitution in its own Corrective/Preventive/Post-RCA-actions tables.
 ## Install
 
 ```bash
-cd ai-skills
+cd software-builder
 make install-incident-triage-agent
 ```
 

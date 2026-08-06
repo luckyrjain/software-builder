@@ -1,6 +1,6 @@
 # Documentation index
 
-Human-readable guide to everything in the **ai-skills** repository. Agent instructions live in each skill's
+Human-readable guide to everything in the **software-builder** repository. Agent instructions live in each skill's
 `SKILL.md`; this index explains what each piece is for and where to look.
 
 ## Start here
@@ -9,6 +9,7 @@ Human-readable guide to everything in the **ai-skills** repository. Agent instru
 |----------|------------|
 | [../README.md](../README.md) | Install, invoke, and quick usage for all skills |
 | [REPOSITORY.md](REPOSITORY.md) | Repo layout, `Makefile`, `scripts/`, lint targets, git hooks |
+| [skill-framework/README.md](skill-framework/README.md) | Shared normative conventions every skill follows (confidence bands, escalation, routing, phase glossary, …) |
 | [../scripts/README.md](../scripts/README.md) | What `scripts/install.sh` does |
 | [../CHANGELOG.md](../CHANGELOG.md) | Per-skill change history (replaces stale inline "Recent changes" in SKILL files) |
 
@@ -36,26 +37,8 @@ Each skill is a self-contained directory copied to `~/.cursor/skills/<name>/` on
 | **backlog-runner** | [backlog-runner/README.md](../backlog-runner/README.md) | [backlog-runner/SKILL.md](../backlog-runner/SKILL.md) | [backlog-runner/SETUP.md](../backlog-runner/SETUP.md) |
 | **weekly-squad-digest** | [weekly-squad-digest/README.md](../weekly-squad-digest/README.md) | [weekly-squad-digest/SKILL.md](../weekly-squad-digest/SKILL.md) | [weekly-squad-digest/SETUP.md](../weekly-squad-digest/SETUP.md) |
 
-### One-line summary
-
-| Skill | Invoke | Does |
-|-------|--------|------|
-| **pr-review** | `/pr-review` or "review this MR/PR …" | Reviews GitLab merge requests: loads diff + Jira context, emits severity-tagged findings, optionally posts inline threads and a summary note via GitLab MCP |
-| **pr-gatekeeper** | Push webhook, not ambient chat | Auto-runs pr-review on every push to an open MR; posts when pr-review's own confirmation rules allow it unattended, otherwise routes to notification |
-| **incident-rca** | Natural language ("RCA for …") | Multi-source post-incident investigation (Datadog, KubeSense, GitLab, Jenkins, Jira) → manager-ready RCA report with hypotheses and evidence |
-| **incident-triage-agent** | Paging webhook, not ambient chat | Page-fire triage doc + incident-resolved postmortem draft, composing incident-rca (root cause) + squad-map (owner) |
-| **k8s-overprovisioning-datadog** | Natural language ("is X overprovisioned?") | Datadog-driven K8s deployment optimization assessment: CPU/memory/replica verdicts, waste estimate, cost, rollback guidance |
-| **domain-comprehension** | Natural language ("map the domain …") | Evidence-backed domain comprehension across repos: bounded contexts, data ownership, dependency graphs, business flows, exec summary with confidence |
-| **squad-map** | Natural language ("map squads …", "who owns …") | Repo-to-squad mapping via GitLab group hierarchy + Datadog team tags → `SQUAD_MAP.md` with confidence and conflict flags |
-| **who-owns-x-bot** | Structured `query`, not ambient chat (`/who-owns <name>` Slack slash command) | Single-shot "who owns X" Slack reply — thin wrapper delegating the lookup entirely to squad-map |
-| **new-hire-guide** | Natural language ("onboard `<name>`, joining `<squad>`") | Personalized onboarding tour: squad-map resolves the new hire's repos, domain-comprehension runs unscoped, `ONBOARDING_TOUR.md` curates down to those repos |
-| **release-readiness-checker** | Natural language ("is this release ready?" + `release_manifest`) | Release go/no-go report: pr-review (MRs since last release, never posts) + k8s-overprovisioning-datadog (per-service verdict) + incident-rca (per-service incident signal, Phase 1 only) |
-| **migration-program-manager** | Natural language ("migration status across all repos" + `program_manifest`) | Org-wide rollup of `MIGRATION_STATUS.yaml` joined to `SQUAD_MAP.md`, ranked by staleness/blocked count per squad — pure read-only aggregator, no live wrapped-skill invocation |
-| **cost-optimization-sprint-planner** | Natural language ("where's the money" + `sweep_scope`) | Org-wide cost/waste sweep: loops k8s-overprovisioning-datadog once per deployment, joins to `SQUAD_MAP.md`, ranked by `monthly_savings_total` per squad |
-| **mysql-to-postgres-sql** | Natural language ("MySQL scrub …", "jdbc:postgresql …") | MySQL-dialect scan gate + PostgreSQL rewrite for a `jdbc:mysql`→`jdbc:postgresql` migration |
-| **loop-task-implementer** | Natural language ("implement issue 42 …") | Autonomous multi-task loop: isolated Builder → two-lens independent Reviewer → adjudicated remediation → PR; platform-neutral, no MCP dependency |
-| **backlog-runner** | Scheduled trigger, not ambient chat | Queue-management wrapper: pulls N tickets from a tracker query, runs loop-task-implementer per ticket overnight in dependency order, never merges |
-| **weekly-squad-digest** | Scheduled trigger, not ambient chat | Combines migration-program-manager's and cost-optimization-sprint-planner's own rollup JSON outputs into one squad-grouped digest — never re-runs either aggregator |
+A one-line "invoke / does" summary of every skill is in root [README.md § Skills](../README.md#skills) —
+not repeated here to avoid two independently-maintained copies drifting apart.
 
 ## Cross-skill routing
 
@@ -122,7 +105,7 @@ Full symmetric matrix (forward + reverse escalations):
 | [superpowers/specs/2026-08-05-cost-optimization-sprint-planner-design.md](superpowers/specs/2026-08-05-cost-optimization-sprint-planner-design.md) | cost-optimization-sprint-planner design — item #10 of the team-facing agents roadmap |
 | [superpowers/specs/2026-08-05-weekly-squad-digest-design.md](superpowers/specs/2026-08-05-weekly-squad-digest-design.md) | weekly-squad-digest design — item #11 of the team-facing agents roadmap (the last item) |
 
-These are planning artifacts; the live behavior is defined in `pr-review/SKILL.md` and `pr-review/reference/`.
+These are planning artifacts; the live behavior is defined in each skill's own `SKILL.md` and `reference/`.
 
 ## pr-review file map
 
@@ -304,4 +287,4 @@ These are planning artifacts; the live behavior is defined in `pr-review/SKILL.m
 
 ## Install and quality gates
 
-See [REPOSITORY.md](REPOSITORY.md) for `make install`, `make lint`, GitLab CI (`.gitlab-ci.yml`), and pre-commit hooks.
+See [REPOSITORY.md](REPOSITORY.md) for `make install`, `make lint`, GitHub Actions CI (`.github/workflows/lint.yml`), and pre-commit hooks.

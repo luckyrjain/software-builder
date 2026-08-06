@@ -26,14 +26,14 @@ Skills reference these files by relative link from `SETUP.md` or `SKILL.md`. Do 
 | File | Purpose |
 |------|---------|
 | [shared/confidence-bands.md](shared/confidence-bands.md) | HIGH / MEDIUM / LOW / UNKNOWN ↔ 0–1 numeric ↔ pr-review per-finding confidence |
-| [shared/cross-skill-escalation.md](shared/cross-skill-escalation.md) | Symmetric 5-skill escalation matrix + reverse handoffs |
+| [shared/cross-skill-escalation.md](shared/cross-skill-escalation.md) | Symmetric escalation matrix (all 16 skills) + reverse handoffs |
 | [shared/skill-routing.md](shared/skill-routing.md) | Unified routing table — single source of truth for user intent → skill mapping |
 | [shared/prompt-injection.md](shared/prompt-injection.md) | Untrusted external text guard — data for analysis, not instructions |
 | [shared/mcp-error-handling.md](shared/mcp-error-handling.md) | MCP failure categories, retry policy, degraded mode patterns, confidence impact |
 | [shared/post-action-templates.md](shared/post-action-templates.md) | Jira, Slack, and canvas output patterns after a skill completes |
 | [shared/smoke-test-conventions.md](shared/smoke-test-conventions.md) | Post-install/post-edit verification structure |
 | [shared/examples-conventions.md](shared/examples-conventions.md) | Required depth and format for each skill's `examples.md` |
-| [shared/phase-glossary.md](shared/phase-glossary.md) | Phase name mapping across pr-review, rca, k8s, domain-comprehension, and squad-map pipelines |
+| [shared/phase-glossary.md](shared/phase-glossary.md) | Phase name mapping across all 16 skills' pipelines |
 | [shared/review-metadata-schema.md](shared/review-metadata-schema.md) | Normative metadata YAML — `review_metadata` (pr-review), `assessment_metadata` (rca, k8s); v2 analytics blocks |
 | [shared/claude-code-setup.md](shared/claude-code-setup.md) | Claude Code install paths + MCP config location, mapped from the Cursor equivalents used throughout each skill's `SETUP.md` |
 | [shared/org-rollup-schema.md](shared/org-rollup-schema.md) | Normalized cross-repo rollup item shape — implemented by migration-program-manager (#8), cost-optimization-sprint-planner (#10), and weekly-squad-digest (#11) |
@@ -47,7 +47,7 @@ Framework: [skill-framework README](../docs/skill-framework/README.md)
 Confidence: [confidence-bands](../docs/skill-framework/shared/confidence-bands.md)
 ```
 
-Installed skills symlink to the repo; paths resolve when the agent workspace is the **ai-skills** clone.
+Installed skills symlink to the repo; paths resolve when the agent workspace is the **software-builder** clone.
 
 ## Compliance
 

@@ -216,6 +216,20 @@ does.
 
 When writing cross-skill examples, use analogies above: "pr-review Phase 1 ≈ k8s COLLECT ≈ rca Phase 1 ≈ domain-comprehension Session 0 + P0 ≈ squad-map Phase 1 Steps 2–4 ≈ mysql Scan step".
 
+The four "own-Analyze-logic" composition skills built on top of the six above (each genuinely aggregates or
+gates, rather than just relaying — unlike the thin `disable-model-invocation: true` wrappers pr-gatekeeper/
+incident-triage-agent/who-owns-x-bot/backlog-runner, or the platform-neutral loop-task-implementer, none of
+which this file's phase vocabulary applies to per the framework README):
+
+| Concept | release-readiness-checker | migration-program-manager | cost-optimization-sprint-planner | weekly-squad-digest |
+|---------|---------------------------|----------------------------|-----------------------------------|----------------------|
+| MCP profile | None of its own — inherits pr-review's, k8s's, and incident-rca's | None — pure file aggregation, no MCP calls at all | Datadog (namespace pre-filter only) — otherwise inherits k8s's | None — pure file aggregation, no MCP calls at all |
+| Boundary / scope | `release_manifest` — repos/services + `since` tag | `program_manifest` — workspace roots | `sweep_scope` — explicit deployments or `namespace_prefilter` | `rollup_manifest` — one or both rollup paths |
+| Minimum evidence gate | `reference/gate-policy.md` — scripted answers to every wrapped-skill gate, never a live interruption | None — nothing invoked live, so nothing to gate | `reference/gate-policy.md` — same pattern, cost-rate resolved once sweep-wide | None — nothing invoked live |
+| Gather equivalent | Run check — resolve MR ranges, invoke pr-review/k8s/incident-rca per manifest entry | Run rollup — read every workspace's `MIGRATION_STATUS.yaml` + `SQUAD_MAP.md` | Run sweep — loop k8s-overprovisioning-datadog once per deployment | Run digest § 1 — read both already-computed rollup files |
+| Analyze equivalent | Aggregate wrapped skills' own verdicts into one release verdict | Join + compute staleness against persisted state | Join to `SQUAD_MAP.md`, rank by `monthly_savings_total` | Group by squad, split by `metric_type`, compute staleness |
+| Report equivalent | `RELEASE_READINESS_REPORT.md` | `MIGRATION_PROGRAM_REPORT.md` + `migration_program_rollup.json` | `COST_OPTIMIZATION_SPRINT_REPORT.md` + `cost_optimization_sprint_rollup.json` | `WEEKLY_SQUAD_DIGEST.md` |
+
 ## 6. Artifact glossary
 
 | Artifact | Skill | Produced in |
@@ -249,3 +263,5 @@ When writing cross-skill examples, use analogies above: "pr-review Phase 1 ≈ k
 | `COST_OPTIMIZATION_SPRINT_REPORT.md` | cost-optimization-sprint-planner | Run sweep |
 | `cost_optimization_sprint_rollup.json` | cost-optimization-sprint-planner | Run sweep |
 | `WEEKLY_SQUAD_DIGEST.md` | weekly-squad-digest | Run digest |
+| `ONBOARDING_TOUR.md` | new-hire-guide | Run tour |
+| `RELEASE_READINESS_REPORT.md` | release-readiness-checker | Run check |

@@ -47,7 +47,7 @@ merged automatically.
 ## Install
 
 ```bash
-cd ai-skills
+cd software-builder
 make install-backlog-runner
 ```
 

@@ -42,7 +42,7 @@ staleness_threshold_days: 14
 ## Install
 
 ```bash
-cd ai-skills
+cd software-builder
 make install-migration-program-manager
 ```
 

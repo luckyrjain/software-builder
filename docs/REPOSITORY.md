@@ -1,11 +1,11 @@
 # Repository guide
 
-What the **ai-skills** repo contains, how to install skills, and how quality checks work.
+What the **software-builder** repo contains, how to install skills, and how quality checks work.
 
 ## Layout
 
 ```
-ai-skills/
+software-builder/
 ├── README.md                 # Top-level install + usage (start here)
 ├── CHANGELOG.md              # Per-skill change history
 ├── Makefile                  # install + lint targets
@@ -53,8 +53,8 @@ detail in reference files). Use each skill's `README.md` for a plain-language ov
 ## Install
 
 ```bash
-git clone https://gitlab.example.com/lucky.jain/ai-skills.git
-cd ai-skills
+git clone https://github.com/luckyrjain/software-builder.git
+cd software-builder
 make install          # all skills with a SKILL.md at repo root level
 make install-pr-review
 make install-pr-gatekeeper
@@ -100,7 +100,7 @@ bash scripts/install.sh weekly-squad-digest
 ```
 
 With no arguments, `install.sh` discovers every `*/SKILL.md` under the repo root and installs each —
-adding an 8th skill directory needs no script change to be picked up.
+adding a new skill directory needs no script change to be picked up.
 
 To install for only one editor, pass `--agent cursor` (Cursor only) or `--agent claude-user` (Claude
 Code only, installs to `~/.claude/skills/`) — or use the `install-claude*` Makefile targets below for
@@ -261,47 +261,30 @@ Uses local `shellcheck` or falls back to Docker (`koalaman/shellcheck-alpine:sta
 
 ## CI/CD
 
-[`.gitlab-ci.yml`](../.gitlab-ci.yml) runs `make lint` on merge requests and pushes to the default branch.
+[`.github/workflows/lint.yml`](../.github/workflows/lint.yml) runs `make lint` on every push and pull
+request against `main` (or `master`), on GitHub's own `ubuntu-latest` runner — **no self-hosted runner to
+provision or keep online.** The job installs everything `make lint` needs itself (`python3`, `pytest`,
+`shellcheck`, `ripgrep`) before running it; see the workflow file for the exact steps.
 
 | Requirement | Notes |
 |-------------|--------|
-| **Runner** | Project runner required (shared runners may be unavailable on self-hosted instances) |
-| **Shell executor** | Host must have `make`, `python3`, `pytest`, `shellcheck`, `ripgrep` (`rg`) |
-| **Docker executor** | Uses `python:3.12-slim`; `before_script` installs deps via `apt-get` (includes `ripgrep`) |
-| **Untagged jobs** | Runner must accept untagged jobs unless you add matching `tags:` to the lint job |
+| **Runner** | GitHub-hosted `ubuntu-latest` — always available, nothing to register |
+| **Dependencies** | Installed fresh each run via `apt-get` (`shellcheck`, `ripgrep`) and `pip` (`requirements.txt`) |
+| **Trigger** | `push` to `main`/`master`, and any `pull_request` targeting either |
 
-### Shared runners (team recommendation)
+Run the exact same checks locally before pushing: `make setup` once (installs Python deps + the
+shellcheck pre-commit hook), then `make lint`.
 
-Many self-hosted GitLab instances do not expose shared runners for personal projects. **For team repos,
-prefer a group or instance runner** so MR pipelines are not tied to one developer's laptop.
+### Merge gate (optional — enable with branch protection)
 
-| Option | When to use |
-|--------|-------------|
-| **Group runner** | **Recommended for teams** — ask platform/DevOps to attach a runner to the `lucky.jain` (or org) namespace; all projects in the group inherit it |
-| **Instance runners** | Org-wide — admin enables under **Admin → CI/CD → Runners**; per-project **Enable shared runners** under **Settings → CI/CD → Runners** |
-| **Project runner** | Solo or bootstrap — register on a team VM or workstation ([GitLab runner docs](https://docs.gitlab.com/runner/register/)); use a `glrt-` authentication token from **New project runner** (not the legacy `GR…` registration token) |
+By default, a failing or pending check does **not** block merging a PR. To require the `Lint` check to
+pass before merge:
 
-Keep the runner online for MR pipelines to run; an offline runner leaves jobs pending.
+1. **Settings → Branches → Branch protection rules** → add/edit a rule for `main`.
+2. Enable **Require status checks to pass before merging**, then select the **Lint** check (from
+   `.github/workflows/lint.yml`) once it has run at least once on the repo.
 
-### Merge gate (optional — enable with reliable CI)
-
-By default, merge is **not** blocked when CI fails or is pending (`only_allow_merge_if_pipeline_succeeds: false`).
-Pipelines are informational until you enable the merge gate below.
-
-**Enable only when a reliable shared or group runner is available** — a personal Mac runner going offline
-would block the whole team.
-
-1. **Settings → Merge requests → Merge checks** → enable **Pipelines must succeed**.
-2. Or via API / project settings: set `only_allow_merge_if_pipeline_succeeds` to `true` on the project.
-
-```bash
-# Example (requires Maintainer + API token) — do not run until a group runner is online
-curl --request PUT --header "PRIVATE-TOKEN: <token>" \
-  "https://gitlab.example.com/api/v4/projects/<project_id>" \
-  --data "only_allow_merge_if_pipeline_succeeds=true"
-```
-
-To disable the gate later, set the same field to `false`.
+To relax the gate later, remove the required check or disable the rule.
 
 ## Contributing
 
