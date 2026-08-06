@@ -55,6 +55,8 @@ Parse per [workflow/inputs.md](workflow/inputs.md).
 | `new_hire.name` | Yes | HARD STOP if absent — welcome section only, not used in any lookup |
 | `new_hire.squad` | Yes | HARD STOP if absent — matched case-insensitively against `SQUAD_MAP.md` |
 | `workspace_root` | Yes | Ask if ambiguous — same resolution as domain-comprehension/squad-map's own |
+| `new_hire.start_date` | No | None — welcome section only, never affects lookup or scope |
+| `new_hire.role` | No | None — welcome section only, never affects lookup or scope |
 | `delivery_mode` | No | Default `QUICK`; passed through to domain-comprehension unchanged |
 
 ## Prerequisites

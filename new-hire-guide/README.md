@@ -13,7 +13,8 @@ payments") since a human is always present for this flow, unlike those four unat
 ## What it does
 
 1. **Takes a `new_hire`** — name + squad (the "org-chart/team-assignment input" neither underlying skill
-   has).
+   has), plus optional `start_date` and `role` rendered into the welcome section when given (never used in
+   any lookup or scope decision).
 2. **Resolves the squad's repos** — reads squad-map's own `SQUAD_MAP.md` (auto-discovering it fresh if
    none exists), filtering for rows where the given squad matches the GitLab-squad or Datadog-team column.
 3. **Runs domain-comprehension unscoped** — `QUICK` mode by default, exactly as a direct invocation would

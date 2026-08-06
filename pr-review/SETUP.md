@@ -46,35 +46,19 @@ be slash-command-only.
 │   └── pr_review_policy_guards.py   # recommendation matrix + finding gates (pytest)
 ├── tests/
 │   ├── test_diff_to_positions.py
-│   └── test_pr_review_policy_guards.py
-└── reference/
+│   ├── test_phase5_metadata_footer.py
+│   ├── test_pr_review_policy_guards.py
+│   └── fixtures/
+│       └── phase5-review-metadata.yaml
+└── reference/                  # lazy-loaded modules — full "when to load what" index: reference/lazy-load-index.md
     ├── mcp-capabilities.md     # tool matrix per GitLab/Jira server
-    ├── phase-1-gather.md       # CI / coverage / security-scan / merge-train + MR metadata sub-checks
     ├── severity-rubric.md
     ├── review-checklist.md
-    ├── fast-path.md            # cost optimization decision tree
-    ├── session-context-cache.md  # reuse immutable repo context across re-reviews
-    ├── finding-pipeline.md       # authoritative detect → judge emit order
-    ├── detection-vs-judgment.md  # detector vs judge separation
-    ├── finding-gates.md          # don't-guess + execution path + non-negotiable (Phase 2 single load)
-    ├── gold-review-excerpt.md    # format few-shot for Phase 5 executive summary
-    ├── pressure-tests.md         # happy/edge/adversarial scenarios + scripted eval map
-    ├── dont-guess-gate.md        # stub → finding-gates.md
-    ├── non-negotiable-checks.md  # stub → finding-gates.md
-    ├── false-positive-suppression.md  # stub → finding-gates.md
-    ├── precedence.md             # conflict resolution across modules
-    ├── capability-discovery.md   # stack inference from manifests/paths
-    ├── review-metrics.md         # optional framework self-metrics
-    ├── review-personas.md      # Principal Engineer, SRE, Security, Architect, …
-    ├── contextual-severity.md  # adaptive severity by path context
+    ├── finding-pipeline.md     # authoritative detect → judge emit order
+    ├── finding-gates.md        # don't-guess + execution path + non-negotiable (Phase 2 single load)
     ├── review-rules.md         # repo review-rules.yaml schema
-    ├── domain-overrides.md     # fallback when no review-rules.yaml
-    ├── comment-templates.md
-    ├── gitlab-inline-comments.md
-    ├── incremental-rerun.md    # re-review dedupe rules (snippet hash, resolved threads, squash caveat)
-    ├── review-feedback-learning.md  # adapt confidence/frequency from prior bot reviews on this MR
     ├── smoke-test.md           # post-install verification + script self-test
-    └── workspace-scope.md      # single-repo vs project-level scope detection
+    └── … (remaining reference/*.md — see lazy-load-index.md for the complete, authoritative list)
 ```
 
 ## 1. Requirements

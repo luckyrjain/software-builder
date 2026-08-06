@@ -45,6 +45,8 @@ re-review, or list open MRs. `/pr-review` is equivalent.
 | Local uncommitted diff only | `/review-bugbot` |
 | Post-incident RCA / outage window | **incident-rca** |
 | K8s rightsizing / overprovisioning | **k8s-overprovisioning-datadog** |
+| Automated, unattended review on every push (webhook-triggered) | **pr-gatekeeper** |
+| Release go/no-go report across MRs/services since last release | **release-readiness-checker** |
 | Live rollback or merge approval | Not supported — this skill never approves or merges, at any phase; use the GitLab UI directly |
 
 ## Workflow

@@ -97,6 +97,8 @@ Full matrix: [cross-skill-escalation.md](../docs/skill-framework/shared/cross-sk
 | User wants bounded contexts, data ownership, flows | **domain-comprehension** |
 | Ownership unclear + active incident | **incident-rca** (then return here if needed) |
 | MR touches squad with conflict flag | **pr-review** with ownership context from `SQUAD_MAP.md` |
+| Caller wants an org-wide migration status rollup by squad, not one repo's ownership | **migration-program-manager** — consumes `SQUAD_MAP.md` across workspaces |
+| Caller wants an org-wide cost/waste ranking by squad, not one repo's ownership | **cost-optimization-sprint-planner** — consumes `SQUAD_MAP.md`/`ownership.datadog.service_aliases` across deployments |
 
 ## Post-actions
 
