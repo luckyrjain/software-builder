@@ -97,7 +97,7 @@ One line.
 Shared status vocabulary — used identically everywhere the concept applies, never renamed per skill:
 `WRITTEN_PASSING`, `UNVERIFIED`, `NEEDS_HUMAN`, `SKIPPED_ALREADY_COVERED`, `SKIPPED_MAX_FILES`. Each
 skill's own `reference/report-format.md` may add level-specific statuses on top (e.g.
-`NEEDS_INTEGRATION_ENV`, `NEEDS_PACT_ROLE`, `NEEDS_BROWSER_ENV`) — never a differently-named status for a
+`NEEDS_INTEGRATION_ENV`, `NEEDS_OBSERVED_INTERACTION`, `NEEDS_BROWSER_ENV`) — never a differently-named status for a
 concept this section already names.
 
 ## 5. Escalation on a surfaced production bug
@@ -140,22 +140,30 @@ pending_backlog:                   # targets discovered but not yet attempted �
 
 ### Read at Select targets
 
-When the state file exists: a target whose `content_hash` still matches the source is skipped —
-`SKIPPED_ALREADY_COVERED`, noted as "per state file" (distinct from the diff-mode already-covered check,
-same status). A target whose hash has **changed** since `last_attempted` is treated as new — the state
-entry is stale, not authoritative; re-attempt it. `pending_backlog` entries are prioritized ahead of
-newly discovered targets when building this run's ordering (after any
-[domain-comprehension prioritization](domain-comprehension-integration.md), before the
-`max_files_per_run` cap) — a caller running backfill repeatedly on the same large scope works through the
-backlog in bounded chunks instead of restarting at the same front of the list every time.
+When the state file exists: a target is skipped — `SKIPPED_ALREADY_COVERED`, noted as "per state file"
+(distinct from the diff-mode already-covered check, same status) — **only when both** its recorded
+`status` is `WRITTEN_PASSING` **and** its `content_hash` still matches the current source. Every other
+recorded status (`NEEDS_HUMAN`, `WRITTEN_FAILING_PROD_BUG`, any level-specific `NEEDS_*` gate,
+`UNVERIFIED`) means the target was never actually resolved to a real passing test — it was **not**
+covered, whatever the state file says about it, so it is never skipped on hash-match alone. Treat it
+exactly like a `pending_backlog` entry (see below) regardless of whether it happens to already be listed
+there. A target whose hash has **changed** since `last_attempted` is treated as new outright — the state
+entry is stale, not authoritative; re-attempt it. `pending_backlog` entries (and any non-`WRITTEN_PASSING`
+entries per the rule above) are prioritized ahead of newly discovered targets when building this run's
+ordering (after any [domain-comprehension prioritization](domain-comprehension-integration.md), before
+the `max_files_per_run` cap) — a caller running backfill repeatedly on the same large scope works through
+the backlog in bounded chunks instead of restarting at the same front of the list every time, and a target
+stuck on `NEEDS_HUMAN` keeps resurfacing instead of silently vanishing from view.
 
 ### Write after Verify & iterate
 
 Upsert an entry for every target this run actually attempted (any terminal status from §4, including
-`UNVERIFIED`). Add every target newly tagged `SKIPPED_MAX_FILES` this run to `pending_backlog` (dedup
-against existing entries); remove a target from `pending_backlog` once it gets an attempt. Report §Next
-step states the backlog size when non-empty: "N targets remain in `pending_backlog` — re-run to
-continue."
+`UNVERIFIED`). Add to `pending_backlog` (dedup against existing entries): every target newly tagged
+`SKIPPED_MAX_FILES` this run, **and** every attempted target whose final status is anything other than
+`WRITTEN_PASSING` — per the read-side rule above, an unresolved target must stay visible to the next run,
+not just recorded and forgotten. Remove a target from `pending_backlog` once it reaches `WRITTEN_PASSING`
+with a matching hash. Report §Next step states the backlog size when non-empty: "N targets remain in
+`pending_backlog` — re-run to continue."
 
 ### Rules
 

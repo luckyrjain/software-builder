@@ -45,9 +45,12 @@ silently into a generic "needs human" bucket, since the fix here is infrastructu
 
 For a backfill run, upsert `INTEGRATION_TEST_COVERAGE_STATE.yaml` at `output_dir` per
 [test-creation-principles.md §6](../../docs/skill-framework/shared/test-creation-principles.md#6-incremental-backfill-state-optional):
-one entry per target this run actually attempted, and every newly `SKIPPED_MAX_FILES` target added to
-`pending_backlog`. Skip this step for a diff-mode run. Never let a write failure here block the report
-from being produced.
+one entry per target this run actually attempted. Add to `pending_backlog`: every newly
+`SKIPPED_MAX_FILES` target, and every attempted target whose final status is anything other than
+`WRITTEN_PASSING` — an unresolved target (`NEEDS_HUMAN`, `WRITTEN_FAILING_PROD_BUG`,
+`NEEDS_INTEGRATION_ENV`, `UNVERIFIED`) must stay visible to the next run, never silently recorded and
+forgotten. Skip this step for a diff-mode run. Never let a write failure here block the report from being
+produced.
 
 ## 6. Close the loop
 

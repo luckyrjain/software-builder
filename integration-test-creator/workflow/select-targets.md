@@ -37,10 +37,13 @@ diff's own test-file changes, config, or generated/vendored paths (see §3).
 
 ## 2. Backfill mode
 
-Expand `target.scope` literally: a file entry is one target; a directory entry expands to every source
-file under it, recursively, **that has an observable seam to a real adjacent dependency**. A file with no
-such seam is not a target for this skill — flag it for **unit-test-creator** instead rather than silently
-dropping it or fabricating an integration angle it doesn't have.
+Expand `target.scope` literally: a directory entry expands to every source file under it, recursively; a
+file entry expands to every function/method it defines **that has an observable seam to a real adjacent
+dependency** — the same function/method granularity `target_list` uses everywhere else in this skill (the
+`report-format.md` target identifier and the incremental-state schema both key on
+`path.py::function_name`, never a bare file path). A function/method with no such seam is not a target
+for this skill — flag it for **unit-test-creator** instead rather than silently dropping it or
+fabricating an integration angle it doesn't have.
 
 ## 3. Exclusions (both modes)
 
@@ -62,11 +65,14 @@ shows the seam actually is. Absent either file, skip this step. Full artifact ta
 ## 5. Apply incremental backfill state (optional)
 
 If `INTEGRATION_TEST_COVERAGE_STATE.yaml` exists at `output_dir` (a prior backfill run on this repo),
-drop any `NEW` target whose recorded `content_hash` still matches its current source — tag it
-`SKIPPED_ALREADY_COVERED` ("per state file"). A target whose hash has changed since `last_attempted` is
-treated as new, not stale-skipped. Move any `pending_backlog` entries that still resolve to a real seam
-to the front of the list, ahead of anything newly discovered this run. Absent the state file, skip this
-step entirely — no filtering, no reordering, no note in the report. Full schema and precedence rules:
+drop any `NEW` target whose recorded `status` is `WRITTEN_PASSING` **and** whose `content_hash` still
+matches its current source — tag it `SKIPPED_ALREADY_COVERED` ("per state file"). Any other recorded
+status (`NEEDS_HUMAN`, `WRITTEN_FAILING_PROD_BUG`, `NEEDS_INTEGRATION_ENV`, `UNVERIFIED`) means the
+target was never actually resolved — never skip it on a hash match alone. A target whose hash has changed
+since `last_attempted` is treated as new outright, regardless of its recorded status. Move
+`pending_backlog` entries and every non-`WRITTEN_PASSING` recorded target to the front of the list, ahead
+of anything newly discovered this run. Absent the state file, skip this step entirely — no filtering, no
+reordering, no note in the report. Full schema and precedence rules:
 [test-creation-principles.md §6](../../docs/skill-framework/shared/test-creation-principles.md#6-incremental-backfill-state-optional).
 
 ## 6. Cap and report overflow

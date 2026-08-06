@@ -51,7 +51,7 @@ assertion, and never `.skip`/`.only`-around it to hide the failure. Tag `WRITTEN
 the test exactly as written, and surface it in the report per
 [report.md §3](../workflow/report.md#3-surface-production-bug-findings-plainly) for a human or
 **loop-task-implementer**/**pr-review** to act on. A caller asking "just make the suite green" after this
-gate has fired does not change the answer — see [pressure-tests.md](pressure-tests.md) row 6.
+gate has fired does not change the answer — see [pressure-tests.md](pressure-tests.md) row 7.
 
 ## 7. `max_files_per_run` reached
 

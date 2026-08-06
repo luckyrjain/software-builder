@@ -34,9 +34,10 @@ For either role:
 
 ## 2. Backfill mode
 
-Expand `target.scope` literally: a file entry is one target (one client call site for `consumer`, one
-route/handler for `provider`); a directory entry expands to every candidate interaction under it,
-recursively, scoped by the file types relevant to `target.role`.
+Expand `target.scope` literally: a file or directory entry expands to every candidate interaction it
+contains — one client call site per interaction for `consumer`, one route/handler per interaction for
+`provider` (a single file commonly defines several) — recursing into a directory, scoped by the file
+types relevant to `target.role`.
 
 ## 3. Exclusions (both modes)
 
@@ -61,11 +62,14 @@ precedence rules:
 ## 5. Apply incremental backfill state (optional)
 
 If `CONTRACT_TEST_COVERAGE_STATE.yaml` exists at `output_dir` (a prior backfill run for this `role` on
-this repo), drop any `NEW` target whose recorded `content_hash` still matches its current source — tag
-it `SKIPPED_ALREADY_COVERED` ("per state file"). A target whose hash has changed since `last_attempted`
-is treated as new, not stale-skipped. Move any `pending_backlog` entries that still resolve to a real
-interaction to the front of the list. Absent the state file, skip this step entirely — no filtering, no
-reordering, no note in the report. Full schema and precedence rules:
+this repo), drop any `NEW` target whose recorded `status` is `WRITTEN_PASSING` **and** whose
+`content_hash` still matches its current source — tag it `SKIPPED_ALREADY_COVERED` ("per state file").
+Any other recorded status (`NEEDS_HUMAN`, `WRITTEN_FAILING_PROD_BUG`, `NEEDS_OBSERVED_INTERACTION`,
+`UNVERIFIED`) means the target was never actually resolved — never skip it on a hash match alone. A
+target whose hash has changed since `last_attempted` is treated as new outright, regardless of its
+recorded status. Move `pending_backlog` entries and every non-`WRITTEN_PASSING` recorded target to the
+front of the list. Absent the state file, skip this step entirely — no filtering, no reordering, no note
+in the report. Full schema and precedence rules:
 [test-creation-principles.md §6](../../docs/skill-framework/shared/test-creation-principles.md#6-incremental-backfill-state-optional).
 
 ## 6. Cap and report overflow

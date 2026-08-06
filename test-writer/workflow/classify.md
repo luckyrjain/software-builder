@@ -16,7 +16,7 @@ uses to route callers directly to each `*-test-creator` skill.
 
 ## 1. `level_hint` resolves without asking
 
-If `level_hint` is set to `unit`, `integration`, `contract`, or `e2e`, use it directly — the caller
+If `level_hint` is set to `unit`, `integration`, `contract`, `e2e`, or `api`, use it directly — the caller
 already resolved the ambiguity. Skip §2.
 
 ## 2. Unambiguous match — proceed without asking

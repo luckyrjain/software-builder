@@ -31,8 +31,12 @@ generated/vendored paths (see §3).
 
 ## 2. Backfill mode
 
-Expand `target.scope` literally: a file entry is one target; a directory entry expands to every source
-file under it, recursively.
+Expand `target.scope` literally: a directory entry expands to every source file under it, recursively; a
+file entry expands to every function/method it defines — the same function/method granularity `target_list`
+uses everywhere else in this skill (diff mode, the `report-format.md` target identifier, and the
+incremental-state schema all key on `path.py::function_name`, never a bare file path). A file with no
+functions/methods worth testing (a pure constants/config module) contributes no targets, not one
+whole-file target.
 
 ## 3. Exclusions (both modes)
 
@@ -53,12 +57,15 @@ and precedence rules: [domain-comprehension-integration.md](../../docs/skill-fra
 ## 5. Apply incremental backfill state (optional)
 
 If `UNIT_TEST_COVERAGE_STATE.yaml` exists at `output_dir` (a prior backfill run on this repo), drop any
-`NEW` target whose recorded `content_hash` still matches its current source — tag it
-`SKIPPED_ALREADY_COVERED` ("per state file"). A target whose hash has changed since `last_attempted` is
-treated as new, not stale-skipped. Move any `pending_backlog` entries that still resolve to a real target
-to the front of the list, ahead of anything newly discovered this run, so a repeated backfill works
-through the backlog before starting fresh ground. Absent the state file, skip this step entirely — no
-filtering, no reordering, no note in the report. Full schema and precedence rules:
+`NEW` target whose recorded `status` is `WRITTEN_PASSING` **and** whose `content_hash` still matches its
+current source — tag it `SKIPPED_ALREADY_COVERED` ("per state file"). Any other recorded status
+(`NEEDS_HUMAN`, `WRITTEN_FAILING_PROD_BUG`, `UNTESTABLE_WITHOUT_FIXTURE`, `UNVERIFIED`) means the target
+was never actually resolved — never skip it on a hash match alone. A target whose hash has changed since
+`last_attempted` is treated as new outright, regardless of its recorded status. Move `pending_backlog`
+entries and every non-`WRITTEN_PASSING` recorded target to the front of the list, ahead of anything newly
+discovered this run, so a repeated backfill works through unresolved targets before starting fresh
+ground. Absent the state file, skip this step entirely — no filtering, no reordering, no note in the
+report. Full schema and precedence rules:
 [test-creation-principles.md §6](../../docs/skill-framework/shared/test-creation-principles.md#6-incremental-backfill-state-optional).
 
 ## 6. Cap and report overflow

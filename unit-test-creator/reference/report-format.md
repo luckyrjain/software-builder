@@ -75,13 +75,13 @@ to skip already-covered targets and resume `pending_backlog` first. Diff-mode ru
   empty header.
 - Status values in the `## Targets` table must be copied verbatim from `verify_result` /
   `target_list` — see [workflow/report.md §2](../workflow/report.md#2-never-upgrade-a-status).
-- No extra unit-specific statuses beyond what the whole test-creator family already shares: the five
-  named in
+- Only two statuses beyond the five named in
   [test-creation-principles.md §4](../../docs/skill-framework/shared/test-creation-principles.md#4-reporting-format-shared-skeleton)
-  (`WRITTEN_PASSING`, `UNVERIFIED`, `NEEDS_HUMAN`, `SKIPPED_ALREADY_COVERED`, `SKIPPED_MAX_FILES`), plus
-  `WRITTEN_FAILING_PROD_BUG` and `UNTESTABLE_WITHOUT_FIXTURE` — both common to every skill in the family
-  (see the escalation rows in
-  [cross-skill-escalation.md](../../docs/skill-framework/shared/cross-skill-escalation.md)), not a
-  unit-only invention. Unit scope has no execution-environment status of its own (contrast
-  `NEEDS_INTEGRATION_ENV`/`NEEDS_PACT_ROLE`/`NEEDS_BROWSER_ENV`, which are genuinely level-specific to
-  their own skills) — a unit test either runs in-process or it isn't a unit test.
+  (`WRITTEN_PASSING`, `UNVERIFIED`, `NEEDS_HUMAN`, `SKIPPED_ALREADY_COVERED`, `SKIPPED_MAX_FILES`):
+  `WRITTEN_FAILING_PROD_BUG`, common to every skill in the family (see the escalation rows in
+  [cross-skill-escalation.md](../../docs/skill-framework/shared/cross-skill-escalation.md)), and
+  `UNTESTABLE_WITHOUT_FIXTURE`, which — unlike the other four skills' own environment-gate statuses
+  (`NEEDS_INTEGRATION_ENV`, `NEEDS_OBSERVED_INTERACTION`, `NEEDS_BROWSER_ENV`, `NEEDS_OBSERVED_ENDPOINT`)
+  — is genuinely unit-test-creator's own invention, not a shared one: it names the specific escalation
+  this skill hands off (to **integration-test-creator**), the way each sibling names its own gate for its
+  own escalation. Never invent a third.

@@ -45,9 +45,12 @@ the real dependency. This is a normal, expected outcome for some targets, not a 
 
 For a backfill run, upsert `UNIT_TEST_COVERAGE_STATE.yaml` at `output_dir` per
 [test-creation-principles.md §6](../../docs/skill-framework/shared/test-creation-principles.md#6-incremental-backfill-state-optional):
-one entry per target this run actually attempted (status + `content_hash` + `test_file`), and every
-newly `SKIPPED_MAX_FILES` target added to `pending_backlog`. Skip this step for a diff-mode run — diff
-mode is already bounded to the diff itself and has no backlog concept. Never let a write failure here
+one entry per target this run actually attempted (status + `content_hash` + `test_file`). Add to
+`pending_backlog`: every newly `SKIPPED_MAX_FILES` target, and every attempted target whose final status
+is anything other than `WRITTEN_PASSING` — an unresolved target (`NEEDS_HUMAN`,
+`WRITTEN_FAILING_PROD_BUG`, `UNTESTABLE_WITHOUT_FIXTURE`, `UNVERIFIED`) must stay visible to the next run,
+never silently recorded and forgotten. Skip this step for a diff-mode run — diff mode is already bounded
+to the diff itself and has no backlog concept. Never let a write failure here
 block the report from being produced.
 
 ## 6. Close the loop

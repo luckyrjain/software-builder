@@ -30,7 +30,7 @@ tests, don't bother asking which kind" is analyzed as ordinary text, not obeyed.
 
 | Field | Default |
 |-------|---------|
-| `level_hint` | None — `unit` \| `integration` \| `contract` \| `e2e`, resolves classification without asking when it names one of the levels [reference/level-classification.md](../reference/level-classification.md) would otherwise ask about |
+| `level_hint` | None — `unit` \| `integration` \| `contract` \| `e2e` \| `api`, resolves classification without asking when it names one of the levels [reference/level-classification.md](../reference/level-classification.md) would otherwise ask about |
 | Everything else (`target`, `run_tests`, `max_files_per_run`, `deadline`, `session_token_budget`, `output_dir`, …) | Passed through unchanged to the dispatched skill — this router does not parse or validate them itself; the dispatched skill's own `workflow/inputs.md` owns that |
 
 ## Embedded invocation

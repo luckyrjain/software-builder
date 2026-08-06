@@ -59,11 +59,14 @@ These are never hand-authored routes/pages, so a journey through them is never m
 ## 5. Apply incremental backfill state (optional)
 
 If `E2E_TEST_COVERAGE_STATE.yaml` exists at `output_dir` (a prior backfill run on this repo), drop any
-`NEW` journey whose recorded `content_hash` (hashed over the matched route/page source, or the supplied
-journey description when none matched) still matches — tag it `SKIPPED_ALREADY_COVERED` ("per state
-file"). A changed hash is treated as new, not stale-skipped. Move any `pending_backlog` entries that
-still resolve to a real journey to the front of the list, ahead of anything newly discovered this run.
-Absent the state file, skip this step entirely. Full schema and precedence rules:
+`NEW` journey whose recorded `status` is `WRITTEN_PASSING` **and** whose `content_hash` (hashed over the
+matched route/page source, or the supplied journey description when none matched) still matches — tag it
+`SKIPPED_ALREADY_COVERED` ("per state file"). Any other recorded status (`NEEDS_HUMAN`,
+`WRITTEN_FAILING_PROD_BUG`, `NEEDS_BROWSER_ENV`, `UNVERIFIED`) means the journey was never actually
+resolved — never skip it on a hash match alone. A changed hash is treated as new outright, regardless of
+recorded status. Move `pending_backlog` entries and every non-`WRITTEN_PASSING` recorded journey to the
+front of the list, ahead of anything newly discovered this run. Absent the state file, skip this step
+entirely. Full schema and precedence rules:
 [test-creation-principles.md §6](../../docs/skill-framework/shared/test-creation-principles.md#6-incremental-backfill-state-optional).
 
 ## 6. Cap and report overflow
