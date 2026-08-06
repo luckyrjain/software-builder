@@ -1,0 +1,19 @@
+# CODEOWNERS
+#
+# This repository currently has one maintainer. This file exists so platform-sensitive paths are
+# explicitly flagged for review as the contributor base grows — update the owners below as additional
+# maintainers are added; do not leave this file stale once ownership is more distributed than "one
+# person owns everything."
+
+# Default owner for anything not matched below.
+*                                       @luckyrjain
+
+# Platform-level paths affecting every skill — changes here get the most scrutiny.
+/.github/                              @luckyrjain
+/Makefile                              @luckyrjain
+/scripts/                              @luckyrjain
+/requirements.txt                      @luckyrjain
+/docs/skill-framework/                 @luckyrjain
+/CODEOWNERS                            @luckyrjain
+/SECURITY.md                           @luckyrjain
+/LICENSE                               @luckyrjain

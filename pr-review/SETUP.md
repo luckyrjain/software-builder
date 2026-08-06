@@ -156,11 +156,15 @@ the Cursor plugin instead only if you can't run `npx` locally or your org alread
 ### GitLab — full inline posting (`@zereight/mcp-gitlab`) — recommended
 
 [`@zereight/mcp-gitlab`](https://github.com/zereight/gitlab-mcp) exposes MR threads, notes, and drafts.
+The version below is pinned (not `-y @zereight/mcp-gitlab` alone, which resolves to whatever is newest
+at `npx` run time) — a server receiving a GitLab token with API scope should not be silently upgraded
+without a deliberate version bump. Check [the package's releases](https://github.com/zereight/gitlab-mcp/releases)
+before bumping the pinned version here.
 
 ```json
 "gitlab": {
   "command": "npx",
-  "args": ["-y", "@zereight/mcp-gitlab"],
+  "args": ["-y", "@zereight/mcp-gitlab@2.1.46"],
   "env": {
     "GITLAB_PERSONAL_ACCESS_TOKEN": "${GITLAB_PERSONAL_ACCESS_TOKEN}",
     "GITLAB_API_URL": "https://gitlab.example.com/api/v4",
@@ -230,7 +234,7 @@ export GITLAB_SECONDARY_TOKEN="glpat-..."
   "mcpServers": {
     "gitlab-skillzi": {
       "command": "npx",
-      "args": ["-y", "@zereight/mcp-gitlab"],
+      "args": ["-y", "@zereight/mcp-gitlab@2.1.46"],
       "env": {
         "GITLAB_PERSONAL_ACCESS_TOKEN": "${GITLAB_SKILLZI_TOKEN}",
         "GITLAB_API_URL": "https://gitlab.skillzi.org/api/v4",
@@ -239,7 +243,7 @@ export GITLAB_SECONDARY_TOKEN="glpat-..."
     },
     "gitlab-secondary": {
       "command": "npx",
-      "args": ["-y", "@zereight/mcp-gitlab"],
+      "args": ["-y", "@zereight/mcp-gitlab@2.1.46"],
       "env": {
         "GITLAB_PERSONAL_ACCESS_TOKEN": "${GITLAB_SECONDARY_TOKEN}",
         "GITLAB_API_URL": "https://gitlab.yourco.com/api/v4",

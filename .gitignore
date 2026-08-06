@@ -3,3 +3,27 @@
 *.pyc
 builds/
 *.pytest_cache*/*
+
+# Secrets and local environment
+.env
+.env.*
+!.env.example
+*.local.json
+
+# MCP configs that may carry tokens (per pr-review/SETUP.md guidance) — safe to commit only if you
+# intentionally strip credentials first.
+.cursor/mcp.json
+.mcp.json
+
+# Python virtualenvs / caches
+.venv/
+venv/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Build/dist artifacts
+dist/
+build/

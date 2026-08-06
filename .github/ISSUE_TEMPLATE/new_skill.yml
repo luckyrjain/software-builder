@@ -1,0 +1,51 @@
+name: New skill proposal
+description: Propose a new skill for the library.
+labels: ["new-skill"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please open this **before** writing the full skill — shared framework conventions
+        (`docs/skill-framework/README.md`), naming, and routing against existing skills
+        (`docs/skill-framework/shared/skill-routing.md`) are easier to get right up front than to
+        retrofit after the fact.
+  - type: input
+    id: name
+    attributes:
+      label: Proposed skill name
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve
+      description: What can a user/agent not do today that this skill would enable?
+    validations:
+      required: true
+  - type: textarea
+    id: overlap
+    attributes:
+      label: Overlap with existing skills
+      description: Which existing skills are closest to this, and why isn't extending one of them the right fix instead of a new skill? Check docs/skill-framework/shared/skill-routing.md.
+    validations:
+      required: true
+  - type: textarea
+    id: capabilities
+    attributes:
+      label: Required/optional MCP capabilities or tool access
+      description: What does this skill need to read or write, and what's the minimum read-only mode?
+    validations:
+      required: true
+  - type: dropdown
+    id: risk
+    attributes:
+      label: Write authority
+      description: Does this skill need to write/post/merge anything, or is it read-only/analysis-only?
+      options:
+        - Read-only / analysis only
+        - Comments/posts, no merge/deploy authority
+        - Repository write (commit/push/PR)
+        - Unattended automation (webhook/schedule-triggered)
+        - Not sure yet
+    validations:
+      required: true

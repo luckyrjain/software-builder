@@ -1,0 +1,59 @@
+name: Bug report
+description: Something in an existing skill or the shared framework behaves incorrectly.
+labels: ["bug"]
+body:
+  - type: dropdown
+    id: skill
+    attributes:
+      label: Affected skill
+      description: Which skill (or shared framework file) does this concern?
+      options:
+        - backlog-runner
+        - cost-optimization-sprint-planner
+        - domain-comprehension
+        - incident-rca
+        - incident-triage-agent
+        - k8s-overprovisioning-datadog
+        - loop-task-implementer
+        - migration-program-manager
+        - mysql-to-postgres-sql
+        - new-hire-guide
+        - pr-gatekeeper
+        - pr-review
+        - release-readiness-checker
+        - squad-map
+        - weekly-squad-digest
+        - who-owns-x-bot
+        - docs/skill-framework (shared framework)
+        - Makefile / scripts / installer
+        - Other / not sure
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What should have happened, per the skill's own documented workflow/reference files?
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What actually happened? Paste the relevant agent output if you have it.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction
+      description: The exact invocation/input that triggers this, and your host (Cursor, Claude Code, Codex, Kiro, other).
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I confirmed this isn't a security issue (if it is, use "Report a security vulnerability" instead)
+          required: true
