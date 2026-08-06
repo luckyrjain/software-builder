@@ -260,10 +260,9 @@ uses `make lint-k8s-skill`. See [Makefile targets](docs/REPOSITORY.md#makefile-t
 4. Record user-visible changes in `CHANGELOG.md`.
 5. Open a pull request with the evidence used to verify the change.
 
-More detail: [docs/REPOSITORY.md § Contributing](docs/REPOSITORY.md#contributing).
+Full guide, including security reporting and code ownership: [CONTRIBUTING.md](CONTRIBUTING.md) ·
+[SECURITY.md](SECURITY.md). More detail: [docs/REPOSITORY.md § Contributing](docs/REPOSITORY.md#contributing).
 
 ## License
 
-This repository does not currently include a license file. Until one is added, the source is publicly
-visible but no open-source reuse license is granted. Add an explicit license before distributing or
-reusing the skills outside the repository owner's permitted use.
+MIT — see [LICENSE](LICENSE).

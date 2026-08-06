@@ -1,0 +1,62 @@
+name: Prompt / behavior regression
+description: A skill's instructions produce wrong agent behavior — a missed guardrail, a bad routing decision, an incorrect verdict — even though the structural lint passes.
+labels: ["prompt-regression"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this instead of "Bug report" when the problem is in how the *agent* behaved given a skill's
+        instructions — not a script/tooling defect. These are the hardest regressions to catch with
+        `make lint` alone, so a precise transcript matters a lot here.
+  - type: dropdown
+    id: skill
+    attributes:
+      label: Affected skill
+      options:
+        - backlog-runner
+        - cost-optimization-sprint-planner
+        - domain-comprehension
+        - incident-rca
+        - incident-triage-agent
+        - k8s-overprovisioning-datadog
+        - loop-task-implementer
+        - migration-program-manager
+        - mysql-to-postgres-sql
+        - new-hire-guide
+        - pr-gatekeeper
+        - pr-review
+        - release-readiness-checker
+        - squad-map
+        - weekly-squad-digest
+        - who-owns-x-bot
+        - Other / not sure
+    validations:
+      required: true
+  - type: textarea
+    id: instruction
+    attributes:
+      label: Which instruction was violated
+      description: Cite the specific file/section the agent should have followed (e.g. "phase-2.md § Stop searching").
+    validations:
+      required: true
+  - type: textarea
+    id: transcript
+    attributes:
+      label: Transcript excerpt
+      description: The relevant portion of the agent's actual output/reasoning that shows the deviation.
+    validations:
+      required: true
+  - type: input
+    id: host
+    attributes:
+      label: Host and model
+      description: e.g. "Claude Code, Sonnet 4.5" or "Cursor, GPT-5"
+    validations:
+      required: true
+  - type: textarea
+    id: severity
+    attributes:
+      label: Why this matters
+      description: Did this bypass a guardrail, cause an unauthorized write/post, produce a wrong verdict, or misroute to the wrong skill?
+    validations:
+      required: true

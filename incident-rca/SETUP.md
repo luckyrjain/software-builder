@@ -165,7 +165,7 @@ server is connected, probe each and use the one that owns the incident project. 
 ```json
 "gitlab": {
   "command": "npx",
-  "args": ["-y", "@zereight/mcp-gitlab"],
+  "args": ["-y", "@zereight/mcp-gitlab@2.1.46"],
   "env": {
     "GITLAB_PERSONAL_ACCESS_TOKEN": "${GITLAB_PERSONAL_ACCESS_TOKEN}",
     "GITLAB_API_URL": "https://gitlab.example.com/api/v4",
@@ -184,10 +184,13 @@ Jenkins, and merged MRs.)
 
 ### Jenkins
 
+Version pinned below rather than `-y @mister-good-deal/host-mcp-jenkins` alone, for the same reason as
+pr-review's GitLab MCP pin — see [pr-review/SETUP.md](../pr-review/SETUP.md#gitlab-full-inline-posting-zereightmcp-gitlab-recommended).
+
 ```json
 "jenkins": {
   "command": "npx",
-  "args": ["-y", "@mister-good-deal/host-mcp-jenkins"],
+  "args": ["-y", "@mister-good-deal/host-mcp-jenkins@0.2.3"],
   "env": {
     "JENKINS_URL": "https://jenkins.example.com",
     "JENKINS_USER": "your-username",
