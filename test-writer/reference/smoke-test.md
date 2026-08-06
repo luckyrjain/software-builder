@@ -15,7 +15,7 @@ Conventions: [smoke-test-conventions](../../docs/skill-framework/shared/smoke-te
 2. **A classification decision announced first** — either the resolved `level` (unambiguous match or
    `level_hint`), or a live question listing the real candidate levels when ambiguous.
 3. **Exactly one dispatch** — one of unit-test-creator / integration-test-creator /
-   contract-test-creator / e2e-test-creator invoked, never more than one per request.
+   contract-test-creator / e2e-test-creator / api-test-creator invoked, never more than one per request.
 4. **The dispatched skill's own report relayed verbatim** — `UNIT_TEST_REPORT.md` /
    `INTEGRATION_TEST_REPORT.md` / `CONTRACT_TEST_REPORT.md` / `E2E_TEST_REPORT.md`, unmodified.
 5. **No re-summarization** — test-writer's own chat output does not restate or paraphrase the dispatched

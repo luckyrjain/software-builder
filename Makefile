@@ -1,4 +1,4 @@
-.PHONY: install install-pr-review install-pr-gatekeeper install-k8s-overprovisioning install-incident-rca install-incident-rca-deps install-incident-triage-agent install-domain-comprehension install-squad-map install-who-owns-x-bot install-new-hire-guide install-release-readiness-checker install-migration-program-manager install-cost-optimization-sprint-planner install-mysql-to-postgres-sql install-loop-task-implementer install-backlog-runner install-weekly-squad-digest install-unit-test-creator install-integration-test-creator install-contract-test-creator install-e2e-test-creator install-test-writer install-claude install-claude-pr-review install-claude-pr-gatekeeper install-claude-k8s-overprovisioning install-claude-incident-rca install-claude-incident-triage-agent install-claude-domain-comprehension install-claude-squad-map install-claude-who-owns-x-bot install-claude-new-hire-guide install-claude-release-readiness-checker install-claude-migration-program-manager install-claude-cost-optimization-sprint-planner install-claude-mysql-to-postgres-sql install-claude-loop-task-implementer install-claude-backlog-runner install-claude-weekly-squad-digest install-claude-unit-test-creator install-claude-integration-test-creator install-claude-contract-test-creator install-claude-e2e-test-creator install-claude-test-writer lint lint-framework lint-pr-review lint-pr-gatekeeper lint-k8s-skill lint-k8s lint-incident-rca lint-incident-triage-agent lint-domain-comprehension lint-squad-map lint-who-owns-x-bot lint-new-hire-guide lint-release-readiness-checker lint-migration-program-manager lint-cost-optimization-sprint-planner lint-mysql-to-postgres-sql lint-loop-task-implementer lint-backlog-runner lint-weekly-squad-digest lint-unit-test-creator lint-integration-test-creator lint-contract-test-creator lint-e2e-test-creator lint-test-writer setup-hooks setup kubesense-errors
+.PHONY: install install-pr-review install-pr-gatekeeper install-k8s-overprovisioning install-incident-rca install-incident-rca-deps install-incident-triage-agent install-domain-comprehension install-squad-map install-who-owns-x-bot install-new-hire-guide install-release-readiness-checker install-migration-program-manager install-cost-optimization-sprint-planner install-mysql-to-postgres-sql install-loop-task-implementer install-backlog-runner install-weekly-squad-digest install-unit-test-creator install-integration-test-creator install-contract-test-creator install-e2e-test-creator install-api-test-creator install-test-writer install-claude install-claude-pr-review install-claude-pr-gatekeeper install-claude-k8s-overprovisioning install-claude-incident-rca install-claude-incident-triage-agent install-claude-domain-comprehension install-claude-squad-map install-claude-who-owns-x-bot install-claude-new-hire-guide install-claude-release-readiness-checker install-claude-migration-program-manager install-claude-cost-optimization-sprint-planner install-claude-mysql-to-postgres-sql install-claude-loop-task-implementer install-claude-backlog-runner install-claude-weekly-squad-digest install-claude-unit-test-creator install-claude-integration-test-creator install-claude-contract-test-creator install-claude-e2e-test-creator install-claude-api-test-creator install-claude-test-writer lint lint-framework lint-pr-review lint-pr-gatekeeper lint-k8s-skill lint-k8s lint-incident-rca lint-incident-triage-agent lint-domain-comprehension lint-squad-map lint-who-owns-x-bot lint-new-hire-guide lint-release-readiness-checker lint-migration-program-manager lint-cost-optimization-sprint-planner lint-mysql-to-postgres-sql lint-loop-task-implementer lint-backlog-runner lint-weekly-squad-digest lint-unit-test-creator lint-integration-test-creator lint-contract-test-creator lint-e2e-test-creator lint-api-test-creator lint-test-writer setup-hooks setup kubesense-errors
 
 install:
 	bash scripts/install.sh
@@ -66,7 +66,10 @@ install-contract-test-creator:
 install-e2e-test-creator:
 	bash scripts/install.sh e2e-test-creator
 
-install-test-writer: install-unit-test-creator install-integration-test-creator install-contract-test-creator install-e2e-test-creator
+install-api-test-creator:
+	bash scripts/install.sh api-test-creator
+
+install-test-writer: install-unit-test-creator install-integration-test-creator install-contract-test-creator install-e2e-test-creator install-api-test-creator
 	bash scripts/install.sh test-writer
 
 install-claude:
@@ -132,7 +135,10 @@ install-claude-contract-test-creator:
 install-claude-e2e-test-creator:
 	bash scripts/install.sh --agent claude-user e2e-test-creator
 
-install-claude-test-writer: install-claude-unit-test-creator install-claude-integration-test-creator install-claude-contract-test-creator install-claude-e2e-test-creator
+install-claude-api-test-creator:
+	bash scripts/install.sh --agent claude-user api-test-creator
+
+install-claude-test-writer: install-claude-unit-test-creator install-claude-integration-test-creator install-claude-contract-test-creator install-claude-e2e-test-creator install-claude-api-test-creator
 	bash scripts/install.sh --agent claude-user test-writer
 
 setup:
@@ -141,7 +147,7 @@ setup:
 		python3 -m pip install --user --break-system-packages -r requirements.txt
 	@$(MAKE) setup-hooks
 
-lint: lint-framework lint-pr-review lint-pr-gatekeeper lint-k8s-skill lint-incident-rca lint-incident-triage-agent lint-domain-comprehension lint-squad-map lint-who-owns-x-bot lint-new-hire-guide lint-release-readiness-checker lint-migration-program-manager lint-cost-optimization-sprint-planner lint-mysql-to-postgres-sql lint-loop-task-implementer lint-backlog-runner lint-weekly-squad-digest lint-unit-test-creator lint-integration-test-creator lint-contract-test-creator lint-e2e-test-creator lint-test-writer
+lint: lint-framework lint-pr-review lint-pr-gatekeeper lint-k8s-skill lint-incident-rca lint-incident-triage-agent lint-domain-comprehension lint-squad-map lint-who-owns-x-bot lint-new-hire-guide lint-release-readiness-checker lint-migration-program-manager lint-cost-optimization-sprint-planner lint-mysql-to-postgres-sql lint-loop-task-implementer lint-backlog-runner lint-weekly-squad-digest lint-unit-test-creator lint-integration-test-creator lint-contract-test-creator lint-e2e-test-creator lint-api-test-creator lint-test-writer
 	@for f in scripts/*.sh; do \
 		echo "shellcheck $$f"; \
 		if command -v shellcheck >/dev/null 2>&1; then \
@@ -1116,6 +1122,7 @@ $(eval $(call LINT_TEST_CREATOR_TARGET,unit-test-creator,detect-test-framework.s
 $(eval $(call LINT_TEST_CREATOR_TARGET,integration-test-creator,detect-integration-setup.sh integration-markers.sh,test_detect_integration_setup.py))
 $(eval $(call LINT_TEST_CREATOR_TARGET,contract-test-creator,detect-pact-tooling.sh pact-markers.sh,test_detect_pact_tooling.py))
 $(eval $(call LINT_TEST_CREATOR_TARGET,e2e-test-creator,detect-e2e-tooling.sh e2e-markers.sh,test_detect_e2e_tooling.py))
+$(eval $(call LINT_TEST_CREATOR_TARGET,api-test-creator,detect-postman-tooling.sh postman-markers.sh,test_detect_postman_tooling.py))
 
 lint-test-writer:
 	@echo "lint-test-writer: SKILL.md line count (<= 180)"
@@ -1164,8 +1171,8 @@ lint-test-writer:
 	@echo "  ok (framework refs)"
 	@echo "lint-test-writer: dangling markdown links"
 	@bash scripts/lint-dangling-md-links.sh test-writer/*.md test-writer/reference/*.md test-writer/workflow/*.md \
-		unit-test-creator/SKILL.md integration-test-creator/SKILL.md contract-test-creator/SKILL.md e2e-test-creator/SKILL.md \
-		unit-test-creator/workflow/*.md integration-test-creator/workflow/*.md contract-test-creator/workflow/*.md e2e-test-creator/workflow/*.md \
+		unit-test-creator/SKILL.md integration-test-creator/SKILL.md contract-test-creator/SKILL.md e2e-test-creator/SKILL.md api-test-creator/SKILL.md \
+		unit-test-creator/workflow/*.md integration-test-creator/workflow/*.md contract-test-creator/workflow/*.md e2e-test-creator/workflow/*.md api-test-creator/workflow/*.md \
 		&& echo "  ok" || \
 		{ echo "error: dangling reference link(s) found" >&2; exit 1; }
 
@@ -1275,7 +1282,7 @@ lint-framework:
 	@echo "lint-framework: all SETUP.md links ok"
 	@echo "lint-framework: cross-agent discovery files (.cursor/rules + .kiro/steering)"
 	@fail=0; \
-	for skill in pr-review pr-gatekeeper incident-rca incident-triage-agent k8s-overprovisioning-datadog domain-comprehension squad-map who-owns-x-bot new-hire-guide release-readiness-checker migration-program-manager mysql-to-postgres-sql loop-task-implementer backlog-runner cost-optimization-sprint-planner weekly-squad-digest test-writer unit-test-creator integration-test-creator contract-test-creator e2e-test-creator; do \
+	for skill in pr-review pr-gatekeeper incident-rca incident-triage-agent k8s-overprovisioning-datadog domain-comprehension squad-map who-owns-x-bot new-hire-guide release-readiness-checker migration-program-manager mysql-to-postgres-sql loop-task-implementer backlog-runner cost-optimization-sprint-planner weekly-squad-digest test-writer unit-test-creator integration-test-creator contract-test-creator e2e-test-creator api-test-creator; do \
 		test -f .cursor/rules/$$skill.mdc || \
 			{ echo "  missing .cursor/rules/$$skill.mdc" >&2; fail=1; }; \
 		test -f .kiro/steering/$$skill.md || \

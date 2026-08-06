@@ -39,7 +39,8 @@ software-builder/
 ├── unit-test-creator/         # Isolated, mocked, function/class-level test generation
 ├── integration-test-creator/  # Tests the real seam to one real adjacent dependency (never mocked)
 ├── contract-test-creator/     # Consumer-driven contract tests (Pact-style)
-└── e2e-test-creator/          # Full user-journey browser tests (Playwright/Cypress/Selenium)
+├── e2e-test-creator/          # Full user-journey browser tests (Playwright/Cypress/Selenium)
+└── api-test-creator/          # Black-box Postman/Newman request/response tests against a real API
 ```
 
 Each skill directory follows the same pattern:
@@ -81,7 +82,8 @@ make install-unit-test-creator
 make install-integration-test-creator
 make install-contract-test-creator
 make install-e2e-test-creator
-make install-test-writer   # chains all four above
+make install-api-test-creator
+make install-test-writer   # chains all five above
 ```
 
 `scripts/install.sh` copies the entire skill directory to **both** `~/.cursor/skills/<skill-name>/`
@@ -111,6 +113,7 @@ bash scripts/install.sh unit-test-creator
 bash scripts/install.sh integration-test-creator
 bash scripts/install.sh contract-test-creator
 bash scripts/install.sh e2e-test-creator
+bash scripts/install.sh api-test-creator
 bash scripts/install.sh test-writer
 ```
 
@@ -149,9 +152,10 @@ and [docs/skill-framework/shared/claude-code-setup.md](skill-framework/shared/cl
 | `make install-integration-test-creator` | Install only `integration-test-creator/` |
 | `make install-contract-test-creator` | Install only `contract-test-creator/` |
 | `make install-e2e-test-creator` | Install only `e2e-test-creator/` |
-| `make install-test-writer` | Install only `test-writer/` (also runs all four `install-*-test-creator` targets above — the router is useless without them) |
+| `make install-api-test-creator` | Install only `api-test-creator/` |
+| `make install-test-writer` | Install only `test-writer/` (also runs all five `install-*-test-creator` targets above — the router is useless without them) |
 | `make install-claude` | Run `scripts/install.sh --agent claude-user` for all skills |
-| `make install-claude-<skill>` | Install only `<skill>/` for Claude Code (`pr-review`, `pr-gatekeeper`, `k8s-overprovisioning`, `incident-rca`, `incident-triage-agent`, `domain-comprehension`, `squad-map`, `who-owns-x-bot`, `new-hire-guide`, `release-readiness-checker`, `migration-program-manager`, `cost-optimization-sprint-planner`, `mysql-to-postgres-sql`, `loop-task-implementer`, `backlog-runner`, `weekly-squad-digest`, `unit-test-creator`, `integration-test-creator`, `contract-test-creator`, `e2e-test-creator`, `test-writer`) |
+| `make install-claude-<skill>` | Install only `<skill>/` for Claude Code (`pr-review`, `pr-gatekeeper`, `k8s-overprovisioning`, `incident-rca`, `incident-triage-agent`, `domain-comprehension`, `squad-map`, `who-owns-x-bot`, `new-hire-guide`, `release-readiness-checker`, `migration-program-manager`, `cost-optimization-sprint-planner`, `mysql-to-postgres-sql`, `loop-task-implementer`, `backlog-runner`, `weekly-squad-digest`, `unit-test-creator`, `integration-test-creator`, `contract-test-creator`, `e2e-test-creator`, `api-test-creator`, `test-writer`) |
 | `make lint` | Run all lint targets below + shellcheck on `scripts/*.sh` |
 | `make lint-pr-review` | pr-review `SKILL.md` ≤ 180 lines; each `workflow/*.md` has `workflow_version`/`phase`/`produces`/`consumes` frontmatter; dangling markdown anchors; script pytest |
 | `make lint-pr-gatekeeper` | pr-gatekeeper `SKILL.md` ≤ 180 lines; `disable-model-invocation: true` set; workflow frontmatter; dangling anchors; required reference files |
@@ -173,6 +177,7 @@ and [docs/skill-framework/shared/claude-code-setup.md](skill-framework/shared/cl
 | `make lint-integration-test-creator` | integration-test-creator, same shape as above |
 | `make lint-contract-test-creator` | contract-test-creator, same shape as above |
 | `make lint-e2e-test-creator` | e2e-test-creator, same shape as above |
+| `make lint-api-test-creator` | api-test-creator, same shape as above |
 | `make lint-test-writer` | test-writer `SKILL.md` ≤ 180 lines; workflow frontmatter; required references; confirms no `scripts/`/`tests/` exist (router only); dangling anchors across test-writer and all four dispatch targets' SKILL.md/workflow files |
 | `make lint-framework` | shared `docs/skill-framework/` files present; required sections; SETUP.md links; metadata footer examples parse; every skill has a `.cursor/rules/*.mdc` + `.kiro/steering/*.md` discovery file |
 | `make setup-hooks` | Set `git config core.hooksPath .githooks` (shellcheck pre-commit) |
@@ -279,9 +284,9 @@ beyond the pre-filter query pass, the sweep loop, and the aggregation.
 
 Requires **ripgrep** (`rg`) with PCRE2 on the host running lint. `mysql-to-postgres-sql/SKILL.md` must stay at or under **180 lines**. Each file under `workflow/` must declare `workflow_version` frontmatter. Runs scan gate fixtures (`tests/fixtures/mysql-dialect/`), the pressure-test harness (`tests/run_pressure_tests.sh`), dangling anchor checks, and shellcheck on `scripts/scan-mysql-dialect.sh` and `scripts/scan-report.sh`.
 
-### lint-unit-test-creator / lint-integration-test-creator / lint-contract-test-creator / lint-e2e-test-creator
+### lint-unit-test-creator / lint-integration-test-creator / lint-contract-test-creator / lint-e2e-test-creator / lint-api-test-creator
 
-All four share one Makefile template (`LINT_TEST_CREATOR_TARGET`, parameterized by skill name, script
+All five share one Makefile template (`LINT_TEST_CREATOR_TARGET`, parameterized by skill name, script
 filenames, and pytest file). Each skill's `SKILL.md` must stay at or under **180 lines**. Each file under
 `workflow/` must declare `workflow_version`/`phase`/`produces`/`consumes` frontmatter. Checks all required
 `reference/` files exist (`skill-contract`, `phase-index`, `lazy-load-index`, `gate-policy`,
@@ -299,7 +304,7 @@ exist (`skill-contract`, `phase-index`, `lazy-load-index`, `level-classification
 `pressure-tests`), confirms **no** `scripts/` or `tests/` directory exists (this skill is a router with
 no detection/generation logic of its own), `examples.md` has an `## Invocation` section, and `SKILL.md`
 links both `skill-routing.md` and `prompt-injection.md`. Runs dangling-anchor checks across test-writer's
-own files **and** all four dispatch targets' `SKILL.md`/`workflow/*.md` (test-writer's `workflow/delegate.md`
+own files **and** all five dispatch targets' `SKILL.md`/`workflow/*.md` (test-writer's `workflow/delegate.md`
 links directly into each dispatch target's own files).
 
 ## Git hooks
@@ -365,6 +370,6 @@ To relax the gate later, remove the required check or disable the rule.
 | backlog-runner | Issue-tracker MCP (Jira or GitHub Issues) — required here, optional for loop-task-implementer itself | Requires loop-task-implementer installed and configured |
 | weekly-squad-digest | None — no MCP calls at all, pure file aggregation | Requires migration-program-manager and cost-optimization-sprint-planner each already run at least once |
 | test-writer | None — router only, dispatches to the skills below | Requires at least one of the four dispatch targets installed and configured |
-| unit-test-creator, integration-test-creator, contract-test-creator, e2e-test-creator | None — use the host agent's own repo read/write access | Host's test-runner/browser access (set `run_tests: false` to draft without executing) |
+| unit-test-creator, integration-test-creator, contract-test-creator, e2e-test-creator, api-test-creator | None — use the host agent's own repo read/write access | Host's test-runner/browser/API access (set `run_tests: false` to draft without executing) |
 
 Per-skill setup: see each skill's `SETUP.md`.

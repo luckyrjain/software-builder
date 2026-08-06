@@ -3,6 +3,20 @@
 All notable changes to the test-writer skill. Per-file `workflow_version` in `workflow/*.md` frontmatter
 should match the version of the latest entry below that names that file.
 
+## [2.1.0] — 2026-08-06
+
+### Added
+
+- **api-test-creator** joins the dispatch family as a fifth level — black-box Postman/Newman
+  request/response test suites against a real running API (no browser, no in-process mocking, no Pact
+  consumer/provider agreement; see its own `README.md` for how it differs from the other four).
+- `workflow/delegate.md`, `reference/level-classification.md`, and `SKILL.md`'s dispatch table updated
+  with the `api` level and its keywords ("API test", "Postman", "Newman", "black-box API test").
+- The "test the API" ambiguous-request example in `reference/level-classification.md` now lists `api` as
+  a fourth candidate alongside unit/integration/contract, rather than defaulting to one of the original
+  three.
+- `make install-test-writer` now chains all five dispatch targets, not four.
+
 ## [2.0.0] — 2026-08-06
 
 ### Changed (breaking)

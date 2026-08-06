@@ -8,6 +8,21 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 
 ## test-writer
 
+### api-test-creator added as a fifth dispatch target (2026-08-06)
+
+- **unit-test-creator/integration-test-creator/contract-test-creator/e2e-test-creator** gained an
+  optional, read-only, best-effort integration with **domain-comprehension**: a new shared doc,
+  `docs/skill-framework/shared/domain-comprehension-integration.md`, documents which artifacts
+  (`RISK_MAP.md`, `BUSINESS_FLOWS.md`, `DATA_OWNERSHIP.md`, `BOUNDED_CONTEXTS.md`, `API_CATALOG.md`)
+  each skill may read — if they already exist at `workspace_root` — to prioritize backfill targets by
+  business criticality and infer/enrich journeys from documented business flows, without ever becoming a
+  hard dependency, a gate, or a live domain-comprehension invocation. Code evidence always wins over an
+  artifact's claim.
+- **api-test-creator** joins as a fifth dispatch target — black-box Postman/Newman request/response test
+  suites against a real running API (no browser, no in-process mocking, no Pact consumer/provider
+  agreement). See its own `CHANGELOG.md` for detail. `test-writer`'s dispatch table, level-classification
+  keywords, and `make install-test-writer` chain all updated to include it.
+
 ### Rewritten into a thin router (2026-08-06)
 
 - **Breaking**: split into five focused skills. All framework detection, target selection, generation,
@@ -120,6 +135,32 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
   details; never a hard-coded sleep, always the framework's own auto-waiting. Requires a reachable running
   app instance — gates `NEEDS_BROWSER_ENV` rather than fabricating what the UI would show.
 - `tests/test_detect_e2e_tooling.py` pytest suite over fixtures under `tests/fixtures/e2e-detect/`.
+
+## api-test-creator
+
+### Initial release (2026-08-06)
+
+- New skill — black-box API test suites (Postman collections, run via Newman) against a real, reachable
+  running API instance. Targets are **endpoints**, not files: diff mode infers changed endpoints from
+  route/handler diffs; backfill mode accepts an explicit endpoint list or file/directory paths that expand
+  to the endpoints they define. Detects the repo's Postman/Newman tooling and canonical collection file
+  via `scripts/detect-postman-tooling.sh` + `scripts/postman-markers.sh` — the live ambiguity gate here is
+  "which collection file is canonical" (2+ collection files, no obvious naming convention) rather than
+  "which tool," since Postman/Newman is this skill's only supported tool family.
+- Writes request/assertion pairs (status code, response schema/fields, headers), chained via Postman
+  variables/environment when a flow requires it (e.g. create-then-fetch). Every request/response shape
+  traces to real observed usage (route-handler code, an OpenAPI spec, or domain-comprehension's
+  `API_CATALOG.md`) — a target with none of these gates `NEEDS_OBSERVED_ENDPOINT` rather than fabricating
+  a payload. Requires a reachable running API instance — gates `NEEDS_API_ENV` rather than fabricating a
+  response.
+- `reference/skill-contract.md` and `reference/test-quality-deltas.md` link
+  `docs/skill-framework/shared/test-creation-principles.md` for shared rules and state only API-specific
+  deltas (assert on status AND schema, not just "200 OK"; chain via variables, never hard-coded IDs from a
+  prior manual run).
+- `tests/test_detect_postman_tooling.py` pytest suite over fixtures under `tests/fixtures/postman-detect/`.
+- New cross-skill escalation rows: api-test-creator ↔ integration-test-creator (in-process/testcontainers
+  vs. black-box HTTP), api-test-creator ↔ contract-test-creator (standalone suite vs. consumer/provider
+  agreement), api-test-creator ↔ e2e-test-creator (no browser involved).
 
 ## loop-task-implementer
 

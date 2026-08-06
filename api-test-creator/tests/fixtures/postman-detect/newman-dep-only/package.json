@@ -1,0 +1,7 @@
+{
+  "name": "orders-api",
+  "version": "1.0.0",
+  "devDependencies": {
+    "newman": "^6.1.0"
+  }
+}

@@ -6,7 +6,7 @@ Load **one reference file at a time** when the active workflow phase points to i
 |------|------|
 | Any phase — non-negotiable rules | [skill-contract.md](skill-contract.md) |
 | Classify — keyword heuristics per level | [level-classification.md](level-classification.md) |
-| Any phase — the shared rules the four dispatch targets honor | [test-creation-principles.md](../../docs/skill-framework/shared/test-creation-principles.md) |
+| Any phase — the shared rules the five dispatch targets honor | [test-creation-principles.md](../../docs/skill-framework/shared/test-creation-principles.md) |
 | Post-install check | [smoke-test.md](smoke-test.md) |
 | Editing this skill — regression scenarios | [pressure-tests.md](pressure-tests.md) |
 

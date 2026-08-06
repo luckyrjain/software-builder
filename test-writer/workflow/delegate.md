@@ -19,6 +19,7 @@ consumes:
 | `integration` | **integration-test-creator** |
 | `contract` | **contract-test-creator** |
 | `e2e` | **e2e-test-creator** |
+| `api` | **api-test-creator** |
 
 Pass `repo_root` and every other field the caller supplied (`target`, `run_tests`,
 `max_files_per_run`, `deadline`, `session_token_budget`, `output_dir`, and — for `contract` — `role`;
@@ -30,7 +31,7 @@ absent — that gate belongs to it, not to this router).
 ## 2. Relay the report verbatim
 
 The dispatched skill produces its own report (`UNIT_TEST_REPORT.md`, `INTEGRATION_TEST_REPORT.md`,
-`CONTRACT_TEST_REPORT.md`, or `E2E_TEST_REPORT.md`) per
+`CONTRACT_TEST_REPORT.md`, `E2E_TEST_REPORT.md`, or `API_TEST_REPORT.md`) per
 [test-creation-principles.md §4](../../docs/skill-framework/shared/test-creation-principles.md#4-reporting-format-shared-skeleton).
 This router does not reformat, summarize, or re-derive a status from it — relay it as-is. If the
 dispatched skill's own report contains a production-bug finding, its own suggested next skill

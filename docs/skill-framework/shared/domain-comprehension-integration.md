@@ -1,16 +1,16 @@
 # domain-comprehension integration (shared)
 
 **Optional, best-effort enrichment** for **unit-test-creator**, **integration-test-creator**,
-**contract-test-creator**, and **e2e-test-creator**. If **domain-comprehension** has already run against
-the target workspace, its deliverables sharpen target prioritization (which files matter most) and
-journey inference (what a user flow actually looks like) beyond what a diff or a bare file scope alone
-can tell. If it hasn't run, this is a complete no-op — never a gate, never a reason to degrade, and never
-a reason to invoke domain-comprehension live.
+**contract-test-creator**, **e2e-test-creator**, and **api-test-creator**. If **domain-comprehension** has
+already run against the target workspace, its deliverables sharpen target prioritization (which files
+matter most) and journey/endpoint inference (what a user flow or API surface actually looks like) beyond
+what a diff or a bare file scope alone can tell. If it hasn't run, this is a complete no-op — never a
+gate, never a reason to degrade, and never a reason to invoke domain-comprehension live.
 
 ## 1. Never a dependency, never a live call
 
 domain-comprehension is a heavy, multi-phase investigation (Session 0 → P0…P5) — not something to run
-synchronously before a single "write a unit test for this function" request. None of the four skills:
+synchronously before a single "write a unit test for this function" request. None of the five skills:
 
 - require domain-comprehension to be installed (no Makefile install-target chaining, no `SETUP.md`
   prerequisite),
@@ -30,6 +30,7 @@ happens to be there.
 | `BUSINESS_FLOWS.md` | `<workspace_root>/BUSINESS_FLOWS.md` | Named journeys with ordered services, failure points, and a sequence diagram — **e2e-test-creator** matches a diff-inferred journey against these by name/route instead of inventing one from scratch, and enriches a backfill journey's step sequence from the matched journey's own Services/Failure points tables |
 | `DATA_OWNERSHIP.md` | `<workspace_root>/DATA_OWNERSHIP.md` | Per-entity authoritative source vs. replicas/caches — **integration-test-creator** uses this to confirm which dependency in a seam is the one that must stay real; **contract-test-creator** uses it as corroborating (not sole) evidence for which service is the real provider of an entity |
 | `BOUNDED_CONTEXTS.md` | `<workspace_root>/BOUNDED_CONTEXTS.md` | Context boundaries — corroborates whether a target's dependency is a genuine cross-context seam (integration/contract territory) or an internal call (unit territory), sharpening the escalation calls each skill's own `select-targets.md` already makes |
+| `API_CATALOG.md` | `<workspace_root>/API_CATALOG.md` | Per-endpoint method, path, producer, consumers, implementation, and exercise status (P0.25 output) — **api-test-creator** uses this to find documented-but-unexercised endpoints for backfill, and to corroborate a request/response shape's real fields before writing an assertion, on top of what route-handler code inspection already shows |
 
 Every one of these is optional individually — a workspace with only `RISK_MAP.md` still gets
 prioritization even with no `BUSINESS_FLOWS.md` for journey inference, and vice versa.
@@ -65,6 +66,6 @@ phase ([prompt-injection.md](prompt-injection.md)). A `RISK_MAP.md` row whose `M
 
 ## 6. Per-skill wiring
 
-Each of the four skills applies this at a numbered step in its own `workflow/select-targets.md` — see
+Each of the five skills applies this at a numbered step in its own `workflow/select-targets.md` — see
 that skill's own file for the exact section. This shared file is the single source of truth for the
 artifact table above; per-skill sections link here rather than restating it.

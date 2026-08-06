@@ -11,9 +11,10 @@ Conventions: [examples-conventions.md](../docs/skill-framework/shared/examples-c
 | 3 | "Write an integration test against the real payments DB" | **integration-test-creator** directly | Level named |
 | 4 | "Write a Pact contract test for the billing consumer" | **contract-test-creator** directly | Level named |
 | 5 | "Write an e2e test for the checkout journey" | **e2e-test-creator** directly | Level named |
-| 6 | "Test the payment flow" (no level stated) | test-writer, Classify asks | Ambiguous — integration vs. e2e |
-| 7 | "Review the tests on MR !482 for quality" | **pr-review**, not test-writer | Reviewing existing tests, not writing new ones |
-| 8 | "Implement the refund feature" | **loop-task-implementer**, not test-writer | Production feature, not tests |
+| 6 | "Write a Postman/API test for `POST /api/orders`" | **api-test-creator** directly | Level named |
+| 7 | "Test the payment flow" (no level stated) | test-writer, Classify asks | Ambiguous — integration vs. e2e |
+| 8 | "Review the tests on MR !482 for quality" | **pr-review**, not test-writer | Reviewing existing tests, not writing new ones |
+| 9 | "Implement the refund feature" | **loop-task-implementer**, not test-writer | Production feature, not tests |
 
 ## Scenario: unambiguous classification, straight dispatch
 
@@ -80,7 +81,8 @@ contract-test-creator: is this the consumer side or the provider side of the int
 
 ```
 Which kind of test do you want — unit (isolated, mocked), integration (a real dependency), contract
-(Pact-style consumer/provider agreement), or e2e (browser user journey)?
+(Pact-style consumer/provider agreement), e2e (browser user journey), or api (black-box Postman/Newman
+request/response suite)?
 ```
 
 No dispatch happens until the caller answers.

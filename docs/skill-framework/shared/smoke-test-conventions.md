@@ -83,6 +83,7 @@ Maintainer pressure scenarios: [pressure-tests.md](pressure-tests.md).
 | integration-test-creator | `target: {mode: diff/backfill, ...}`, `repo_root: <path>` | Detected base framework + real-dependency orchestration mechanism announced |
 | contract-test-creator | `target: {mode: diff/backfill, role: consumer/provider, ...}`, `repo_root: <path>` | Detected Pact tooling + role announced, before any interaction is selected |
 | e2e-test-creator | `target: {mode: diff/backfill, journeys: [...] }`, `repo_root: <path>` | Detected browser tooling announced, before any journey is selected |
+| api-test-creator | `target: {mode: diff/backfill, ...}`, `repo_root: <path>` | Detected Postman/Newman tooling + collection announced, before any endpoint is selected |
 
 ## 4. Output checklist template
 
@@ -134,6 +135,7 @@ A correct minimal output should contain:
 | integration-test-creator | `make lint-integration-test-creator` (includes pytest + shellcheck) |
 | contract-test-creator | `make lint-contract-test-creator` (includes pytest + shellcheck) |
 | e2e-test-creator | `make lint-e2e-test-creator` (includes pytest + shellcheck) |
+| api-test-creator | `make lint-api-test-creator` (includes pytest + shellcheck) |
 | Framework | `make lint-framework` |
 | All | `make lint` |
 

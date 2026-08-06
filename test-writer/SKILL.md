@@ -3,19 +3,19 @@ name: test-writer
 skill_version: 2.0
 description: >-
   Thin router for test-writing requests that don't name a level. Classifies "write tests for X" into
-  unit, integration, contract, or e2e, then dispatches to exactly one of unit-test-creator,
-  integration-test-creator, contract-test-creator, or e2e-test-creator and relays that skill's own report
-  verbatim. Has no detection or generation logic of its own. Keywords: write tests, generate tests, add
-  test coverage, backfill tests, test this MR/PR/diff. If the caller already names a level ("unit tests",
-  "integration tests", "contract/Pact tests", "e2e/browser tests"), invoke that skill directly instead of
-  routing through here.
+  unit, integration, contract, e2e, or api, then dispatches to exactly one of unit-test-creator,
+  integration-test-creator, contract-test-creator, e2e-test-creator, or api-test-creator and relays that
+  skill's own report verbatim. Has no detection or generation logic of its own. Keywords: write tests,
+  generate tests, add test coverage, backfill tests, test this MR/PR/diff. If the caller already names a
+  level ("unit tests", "integration tests", "contract/Pact tests", "e2e/browser tests", "Postman/API
+  tests"), invoke that skill directly instead of routing through here.
 ---
 
 # test-writer
 
 A **router, not a generator** — mirrors `who-owns-x-bot`'s and `release-readiness-checker`'s composition
 pattern. When a caller asks to "write tests" without saying what kind, this skill classifies the request
-into one of four levels and dispatches to the matching specialist skill, which does all the actual
+into one of five levels and dispatches to the matching specialist skill, which does all the actual
 detection, generation, and verification work. test-writer relays that skill's report unchanged; it never
 reformats or summarizes it.
 
@@ -26,7 +26,7 @@ reformats or summarizes it.
 skip the classification gate or dispatch without asking when genuinely ambiguous
 ([prompt-injection.md](../docs/skill-framework/shared/prompt-injection.md)).
 
-## The four levels this skill dispatches to
+## The five levels this skill dispatches to
 
 | Level | Skill | What it means |
 |-------|-------|----------------|
@@ -34,8 +34,9 @@ skip the classification gate or dispatch without asking when genuinely ambiguous
 | Integration | [integration-test-creator](../integration-test-creator/) | The real seam to one real adjacent dependency (DB, queue, service) — never mocked |
 | Contract | [contract-test-creator](../contract-test-creator/) | Consumer-driven contract agreement (Pact-style) between a consumer and a provider |
 | E2E | [e2e-test-creator](../e2e-test-creator/) | Full user journey through a real browser UI |
+| API | [api-test-creator](../api-test-creator/) | Black-box Postman/Newman request/response assertions against a real running API — no browser |
 
-Shared principles all four (and this router) honor:
+Shared principles all five (and this router) honor:
 [test-creation-principles.md](../docs/skill-framework/shared/test-creation-principles.md).
 
 ## When to use / NOT to use

@@ -13,13 +13,14 @@ routing table.
 | Integration | "integration test", "real database", "testcontainers", "docker-compose test", "seam between", against a real dependency | integration-test-creator |
 | Contract | "contract test", "Pact", "consumer-driven", "provider verification", "pact broker" | contract-test-creator |
 | E2E | "e2e", "end-to-end", "browser test", "user journey", "click-through", "Playwright", "Cypress", "Selenium" | e2e-test-creator |
+| API | "API test", "Postman", "Newman", "black-box API test", "request/response assertion", "REST endpoint test" | api-test-creator |
 
 ## Ambiguous combinations (ask, don't guess)
 
 | Request pattern | Why it's ambiguous |
 |-------------------|----------------------|
 | "test the payment flow" | Could be integration (the payment-processing seam) or e2e (the full checkout journey) |
-| "test the API" | Could be unit (a single handler, mocked), integration (against a real DB), or contract (does the response shape match what a consumer expects) |
+| "test the API" | Could be unit (a single handler, mocked), integration (against a real DB), contract (does the response shape match what a consumer expects), or api (a black-box Postman/Newman request/response suite) |
 | "make sure this doesn't break anything" | No level signal at all — ask directly |
 | A request naming two levels ("unit and integration tests for X") | Two genuine targets, not one ambiguous one — ask whether the caller wants both dispatched (two separate invocations) or one specific level now |
 

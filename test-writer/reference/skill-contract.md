@@ -18,5 +18,5 @@ Load immediately after [SKILL.md](../SKILL.md). These rules override convenience
    that `*-test-creator` skill directly; this skill's classification step is for when it isn't stated.
 
 Routing: [skill-routing.md](../../docs/skill-framework/shared/skill-routing.md). Shared principles all
-four dispatch targets honor:
+five dispatch targets honor:
 [test-creation-principles.md](../../docs/skill-framework/shared/test-creation-principles.md).

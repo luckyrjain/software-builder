@@ -41,6 +41,7 @@ Each skill is a self-contained directory copied to `~/.cursor/skills/<name>/` on
 | **integration-test-creator** | [integration-test-creator/README.md](../integration-test-creator/README.md) | [integration-test-creator/SKILL.md](../integration-test-creator/SKILL.md) | [integration-test-creator/SETUP.md](../integration-test-creator/SETUP.md) |
 | **contract-test-creator** | [contract-test-creator/README.md](../contract-test-creator/README.md) | [contract-test-creator/SKILL.md](../contract-test-creator/SKILL.md) | [contract-test-creator/SETUP.md](../contract-test-creator/SETUP.md) |
 | **e2e-test-creator** | [e2e-test-creator/README.md](../e2e-test-creator/README.md) | [e2e-test-creator/SKILL.md](../e2e-test-creator/SKILL.md) | [e2e-test-creator/SETUP.md](../e2e-test-creator/SETUP.md) |
+| **api-test-creator** | [api-test-creator/README.md](../api-test-creator/README.md) | [api-test-creator/SKILL.md](../api-test-creator/SKILL.md) | [api-test-creator/SETUP.md](../api-test-creator/SETUP.md) |
 
 A one-line "invoke / does" summary of every skill is in root [README.md § Skills](../README.md#skills) —
 not repeated here to avoid two independently-maintained copies drifting apart.
@@ -85,13 +86,15 @@ Skills reference each other when a finding belongs in another workflow:
 | loop-task-implementer | Task touches MySQL-dialect SQL during a PG migration | mysql-to-postgres-sql |
 | backlog-runner | Caller wants a single, interactive, on-demand task | loop-task-implementer |
 | weekly-squad-digest | Caller wants a fresh single-source rollup, not the combined digest | migration-program-manager / cost-optimization-sprint-planner |
-| unit-test-creator / integration-test-creator / contract-test-creator / e2e-test-creator | A generated test surfaces a probable production bug | loop-task-implementer (fix) / pr-review (flag on the MR) |
+| unit-test-creator / integration-test-creator / contract-test-creator / e2e-test-creator / api-test-creator | A generated test surfaces a probable production bug | loop-task-implementer (fix) / pr-review (flag on the MR) |
 | pr-review | Missing/weak test coverage on the reviewed MR | test-writer |
 | loop-task-implementer | Task's changes need generated tests | test-writer |
-| test-writer | Request classified into a level | unit-test-creator / integration-test-creator / contract-test-creator / e2e-test-creator (exactly one) |
+| test-writer | Request classified into a level | unit-test-creator / integration-test-creator / contract-test-creator / e2e-test-creator / api-test-creator (exactly one) |
 | unit-test-creator | Target needs a real adjacent dependency, not a mock | integration-test-creator |
 | integration-test-creator | Caller wants the full UI journey, not just the seam | e2e-test-creator |
 | integration-test-creator | Caller wants a consumer/provider agreement, not a live integration test | contract-test-creator |
+| integration-test-creator / contract-test-creator | Caller wants a standalone black-box HTTP suite | api-test-creator |
+| api-test-creator | Caller wants a consumer/provider interaction agreement, not a standalone suite | contract-test-creator |
 
 Full symmetric matrix (forward + reverse escalations):
 [docs/skill-framework/shared/cross-skill-escalation.md](skill-framework/shared/cross-skill-escalation.md).
@@ -396,6 +399,27 @@ map below for where the real work happens.
 | `examples.md` | Invocation table + golden scenarios |
 | `tests/fixtures/e2e-detect/` | Playwright/Cypress/ambiguous/none fixtures |
 | `tests/test_detect_e2e_tooling.py` | Pytest suite for the detection script |
+
+## api-test-creator file map
+
+| Path | What it does |
+|------|--------------|
+| `workflow/inputs.md` | Parse `target` (endpoint list or file/dir scope) + `repo_root` + `run_tests`; HARD STOP on missing required fields |
+| `workflow/detect-conventions.md` | Detect Postman/Newman tooling + canonical collection file; ask-which-collection / ask-before-creating gates |
+| `workflow/select-targets.md` | Diff-mode changed-endpoint selection / backfill endpoint-descriptor or file/dir expansion, including the domain-comprehension `API_CATALOG.md` step |
+| `workflow/generate-tests.md` | Write request/assertion pairs (status, schema, headers); request chaining via Postman variables; `NEEDS_OBSERVED_ENDPOINT` gate |
+| `workflow/verify-and-iterate.md` | Run via Newman against a reachable API instance, fix test bugs, never patch production code; `NEEDS_API_ENV` gate |
+| `workflow/report.md` | `API_TEST_REPORT.md` rendering rules, including `NEEDS_OBSERVED_ENDPOINT` and `NEEDS_API_ENV` |
+| `scripts/detect-postman-tooling.sh`, `scripts/postman-markers.sh` | Postman/Newman + canonical-collection detection |
+| `reference/skill-contract.md` | Non-negotiable agent contract; links shared `test-creation-principles.md` |
+| `reference/gate-policy.md` | Every live gate, including ambiguous-collection, `NEEDS_OBSERVED_ENDPOINT`, and `NEEDS_API_ENV` |
+| `reference/test-quality-deltas.md` | API-specific delta: assert status AND schema, chain via variables not hard-coded IDs |
+| `reference/framework-detection.md` | Postman/Newman marker table + canonical-collection ambiguity rule |
+| `reference/report-format.md` | Normative `API_TEST_REPORT.md` structure |
+| `reference/pressure-tests.md` | Maintainer regression scenarios |
+| `examples.md` | Invocation table + golden scenarios |
+| `tests/fixtures/postman-detect/` | Single-collection/newman-only/ambiguous/none fixtures |
+| `tests/test_detect_postman_tooling.py` | Pytest suite for the detection script |
 
 ## Install and quality gates
 
