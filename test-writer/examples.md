@@ -6,113 +6,89 @@ Conventions: [examples-conventions.md](../docs/skill-framework/shared/examples-c
 
 | # | User says | Resolves to | Notes |
 |---|-----------|-------------|-------|
-| 1 | "Write tests for MR !123" | test-writer, diff mode | `target: {mode: diff, source: "MR !123"}` |
-| 2 | "Backfill tests for `src/payments/charge.py`" | test-writer, backfill mode | Single-file scope |
-| 3 | "Add test coverage for the whole `src/payments/` module" | test-writer, backfill mode | Directory expands to every source file |
-| 4 | "Write tests for my working-tree changes" | test-writer, diff mode | `source: "working-tree"` |
-| 5 | "Test this branch against main" | test-writer, diff mode | `source: "branch:feature-x..main"` |
-| 6 | "Use Jest for this, we're mid-migration off Mocha" | test-writer, Detect conventions | `test_framework_hint: jest` resolves the ambiguity gate without asking |
+| 1 | "Write tests for MR !123" | test-writer classifies → dispatches | Level not stated |
+| 2 | "Add unit tests for `src/utils/slugify.py`" | **unit-test-creator** directly | Level named — skip the router |
+| 3 | "Write an integration test against the real payments DB" | **integration-test-creator** directly | Level named |
+| 4 | "Write a Pact contract test for the billing consumer" | **contract-test-creator** directly | Level named |
+| 5 | "Write an e2e test for the checkout journey" | **e2e-test-creator** directly | Level named |
+| 6 | "Test the payment flow" (no level stated) | test-writer, Classify asks | Ambiguous — integration vs. e2e |
 | 7 | "Review the tests on MR !482 for quality" | **pr-review**, not test-writer | Reviewing existing tests, not writing new ones |
-| 8 | "Implement the refund feature" | **loop-task-implementer**, not test-writer | Production feature implementation, not test generation |
+| 8 | "Implement the refund feature" | **loop-task-implementer**, not test-writer | Production feature, not tests |
 
-## Scenario: diff mode, clean happy path
+## Scenario: unambiguous classification, straight dispatch
 
-**User:** "Write tests for MR !123 in the payments service"
-
-**Agent:**
-1. Inputs — `target: {mode: diff, source: "MR !123"}`, `repo_root` resolved
-2. Detect conventions — scans the repo
-
-**Expected fragments:**
-
-```
-STATUS: DETECTED
-FRAMEWORK: pytest
-CONFIDENCE: HIGH
-MARKER: pyproject.toml [tool.pytest.ini_options]
-```
-
-3. Select targets — `apply_discount` and `process_refund` changed with no test changes in the diff
-4. Generate tests — writes `tests/test_charge.py`, `tests/test_refund.py`
-5. Verify & iterate — runs pytest on both new files
-
-```
-apply_discount: WRITTEN_PASSING
-process_refund: WRITTEN_PASSING
-```
-
-6. Report — `TEST_WRITER_REPORT.md` written, next step: "Ready to open as an MR"
-
-## Scenario: backfill mode with a coverage-gap prod bug found
-
-**User:** "Backfill tests for `src/payments/refund.py`"
+**User:** "Write unit tests for the new `apply_discount` function" (level not explicitly named, but the
+keyword "unit" is present)
 
 **Agent:**
-1. Inputs → Detect conventions (pytest, HIGH) → Select targets (`process_refund`, `NEW`)
-2. Generate tests — happy path + edge case + error case
-3. Verify & iterate — the happy-path test fails
+1. Inputs — `request`, `repo_root` resolved
+2. Classify — "unit" keyword match, unambiguous
 
 **Expected fragments:**
 
 ```
-process_refund: WRITTEN_FAILING_PROD_BUG
-  Assertion: refund.status == "completed"
-  Actual:    "pending"
+level: unit → dispatching to unit-test-creator
 ```
 
-4. Report — `## Findings` section names the exact assertion and expected/actual values, suggests
-   **loop-task-implementer** to fix it or **pr-review** to flag it on the MR under review. The failing
-   test is kept exactly as written — it is not weakened or skipped.
+3. Delegate — invokes **unit-test-creator** with `repo_root` unchanged; relays its
+   `UNIT_TEST_REPORT.md` verbatim, including its own `apply_discount: WRITTEN_PASSING` status line.
 
-## Scenario: ambiguous framework, resolved by asking
+## Scenario: ambiguous request, ask once
 
-**User:** "Add tests for `frontend/src/utils/format.ts`"
+**User:** "Test the payment flow end to end... well, make sure the pieces talk to each other correctly"
 
 **Agent:**
-1. Inputs → Detect conventions — both `jest.config.js` and `.mocharc.json` present at comparable
-   confidence
+1. Inputs → Classify — matches both "integration" (pieces talk to each other) and "e2e" (end to end)
+   language
 
 **Expected fragments:**
 
 ```
-STATUS: AMBIGUOUS
-CANDIDATES: jest (HIGH, jest.config.js), mocha (HIGH, .mocharc.json)
+This could mean an integration test (the payment-processing seam against a real dependency) or an e2e
+test (the full checkout journey through the UI) — which do you want?
 ```
 
-2. Agent asks: "This repo has both Jest and Mocha configured — which one should I use?"
-3. Caller answers "Jest" → Detect conventions resumes with `test_framework_hint: jest`, no further asking
+2. Caller answers "integration" → Delegate dispatches to **integration-test-creator**, no further asking
 
-## Scenario: degraded path — no execution capability
+## Scenario: level_hint resolves without asking
 
-**User:** "Draft tests for `src/utils/slugify.py`, but I can't run anything in this session — just write
-them" (`run_tests: false`)
+**User:** "Add test coverage for the billing API", `level_hint: contract`
 
 **Agent:**
-1. Inputs → Detect conventions → Select targets → Generate tests, same as the happy path
-2. Verify & iterate — skipped, per [gate-policy.md](reference/gate-policy.md) §1 of
-   [verify-and-iterate.md](workflow/verify-and-iterate.md)
+1. Inputs → Classify — `level_hint: contract` resolves directly, no question asked
+2. Delegate — dispatches to **contract-test-creator**, which then asks its own required question
+   (`role: consumer | provider`) since that wasn't supplied — relayed as-is, test-writer doesn't
+   pre-answer it.
 
 **Expected fragments:**
 
 ```
-slugify: UNVERIFIED — not executed this session
+level: contract (from level_hint) → dispatching to contract-test-creator
 ```
 
-3. Report — every target explicitly `UNVERIFIED`, never described as passing; next step: "Run
-   `pytest tests/test_slugify.py` before opening an MR."
+```
+contract-test-creator: is this the consumer side or the provider side of the interaction?
+```
 
-## Scenario: cross-skill handoff
+## Scenario: degraded path — no clear level at all
 
-**User (after test-writer's report):** "Fix the refund bug you found"
+**User:** "Just make sure this doesn't break"
 
-**Agent:** Hands off to **loop-task-implementer** with the finding from `## Findings` (assertion,
-expected/actual, file:line) as the task description — test-writer itself never edits production code.
+**Agent:** Classify finds zero keyword matches.
 
 **Expected fragments:**
 
 ```
-**Handoff → loop-task-implementer**
-- Finding: process_refund leaves refund.status "pending" after a successful gateway call
-- Test: tests/test_refund.py::test_process_refund_marks_completed (currently failing, by design)
-- Ask: "Fix process_refund so tests/test_refund.py passes"
+Which kind of test do you want — unit (isolated, mocked), integration (a real dependency), contract
+(Pact-style consumer/provider agreement), or e2e (browser user journey)?
 ```
+
+No dispatch happens until the caller answers.
+
+## Scenario: cross-skill handoff (relayed from the dispatched skill)
+
+**User (after test-writer's relayed report shows a production-bug finding):** "Fix the bug it found"
+
+**Agent:** The finding and its suggested next skill came from the dispatched skill's own report
+unchanged — test-writer hands off exactly as that skill's report already said (typically
+**loop-task-implementer**), adding nothing of its own.

@@ -37,6 +37,10 @@ Each skill is a self-contained directory copied to `~/.cursor/skills/<name>/` on
 | **backlog-runner** | [backlog-runner/README.md](../backlog-runner/README.md) | [backlog-runner/SKILL.md](../backlog-runner/SKILL.md) | [backlog-runner/SETUP.md](../backlog-runner/SETUP.md) |
 | **weekly-squad-digest** | [weekly-squad-digest/README.md](../weekly-squad-digest/README.md) | [weekly-squad-digest/SKILL.md](../weekly-squad-digest/SKILL.md) | [weekly-squad-digest/SETUP.md](../weekly-squad-digest/SETUP.md) |
 | **test-writer** | [test-writer/README.md](../test-writer/README.md) | [test-writer/SKILL.md](../test-writer/SKILL.md) | [test-writer/SETUP.md](../test-writer/SETUP.md) |
+| **unit-test-creator** | [unit-test-creator/README.md](../unit-test-creator/README.md) | [unit-test-creator/SKILL.md](../unit-test-creator/SKILL.md) | [unit-test-creator/SETUP.md](../unit-test-creator/SETUP.md) |
+| **integration-test-creator** | [integration-test-creator/README.md](../integration-test-creator/README.md) | [integration-test-creator/SKILL.md](../integration-test-creator/SKILL.md) | [integration-test-creator/SETUP.md](../integration-test-creator/SETUP.md) |
+| **contract-test-creator** | [contract-test-creator/README.md](../contract-test-creator/README.md) | [contract-test-creator/SKILL.md](../contract-test-creator/SKILL.md) | [contract-test-creator/SETUP.md](../contract-test-creator/SETUP.md) |
+| **e2e-test-creator** | [e2e-test-creator/README.md](../e2e-test-creator/README.md) | [e2e-test-creator/SKILL.md](../e2e-test-creator/SKILL.md) | [e2e-test-creator/SETUP.md](../e2e-test-creator/SETUP.md) |
 
 A one-line "invoke / does" summary of every skill is in root [README.md § Skills](../README.md#skills) —
 not repeated here to avoid two independently-maintained copies drifting apart.
@@ -81,9 +85,13 @@ Skills reference each other when a finding belongs in another workflow:
 | loop-task-implementer | Task touches MySQL-dialect SQL during a PG migration | mysql-to-postgres-sql |
 | backlog-runner | Caller wants a single, interactive, on-demand task | loop-task-implementer |
 | weekly-squad-digest | Caller wants a fresh single-source rollup, not the combined digest | migration-program-manager / cost-optimization-sprint-planner |
-| test-writer | A generated test surfaces a probable production bug | loop-task-implementer (fix) / pr-review (flag on the MR) |
+| unit-test-creator / integration-test-creator / contract-test-creator / e2e-test-creator | A generated test surfaces a probable production bug | loop-task-implementer (fix) / pr-review (flag on the MR) |
 | pr-review | Missing/weak test coverage on the reviewed MR | test-writer |
 | loop-task-implementer | Task's changes need generated tests | test-writer |
+| test-writer | Request classified into a level | unit-test-creator / integration-test-creator / contract-test-creator / e2e-test-creator (exactly one) |
+| unit-test-creator | Target needs a real adjacent dependency, not a mock | integration-test-creator |
+| integration-test-creator | Caller wants the full UI journey, not just the seam | e2e-test-creator |
+| integration-test-creator | Caller wants a consumer/provider agreement, not a live integration test | contract-test-creator |
 
 Full symmetric matrix (forward + reverse escalations):
 [docs/skill-framework/shared/cross-skill-escalation.md](skill-framework/shared/cross-skill-escalation.md).
@@ -292,24 +300,102 @@ These are planning artifacts; the live behavior is defined in each skill's own `
 
 ## test-writer file map
 
+A thin router — no scripts, no tests, no detection/generation logic. See each dispatch target's own file
+map below for where the real work happens.
+
+| Path | What it does |
+|------|--------------|
+| `workflow/inputs.md` | Parse `request` + `repo_root` + optional `level_hint`; HARD STOP on missing required fields |
+| `workflow/classify.md` | Resolve to exactly one level; ask once if genuinely ambiguous, never guess |
+| `workflow/delegate.md` | Dispatch to the matching skill with inputs unchanged; relay its report verbatim |
+| `reference/skill-contract.md` | Non-negotiable agent contract (load with SKILL.md) |
+| `reference/level-classification.md` | Keyword heuristics per level, mirroring `skill-routing.md` |
+| `reference/pressure-tests.md` | Maintainer regression scenarios |
+| `examples.md` | Invocation table + golden scenarios |
+
+## unit-test-creator file map
+
 | Path | What it does |
 |------|--------------|
 | `workflow/inputs.md` | Parse `target` (`diff`/`backfill`) + `repo_root` + `run_tests`; HARD STOP on missing required fields |
 | `workflow/detect-conventions.md` | Run the detection script; ask-once on ambiguous framework, ask-before-writing on none detected |
 | `workflow/select-targets.md` | Diff-mode changed-code selection / backfill scope expansion, exclusions, `max_files_per_run` cap |
-| `workflow/generate-tests.md` | Write real, convention-matched tests; untestable-without-fixture gate |
+| `workflow/generate-tests.md` | Write real, convention-matched tests with every external mocked; untestable-without-fixture gate |
 | `workflow/verify-and-iterate.md` | Run, fix test bugs, never patch production code to force green |
-| `workflow/report.md` | `TEST_WRITER_REPORT.md` rendering rules |
+| `workflow/report.md` | `UNIT_TEST_REPORT.md` rendering rules |
 | `scripts/detect-test-framework.sh`, `scripts/test-framework-markers.sh` | Marker-file framework detection across 11 ecosystems |
-| `reference/skill-contract.md` | Non-negotiable agent contract (load with SKILL.md) |
+| `reference/skill-contract.md` | Non-negotiable agent contract; links shared `test-creation-principles.md` |
 | `reference/gate-policy.md` | Every live gate and its required, non-guessing answer |
-| `reference/test-quality-checklist.md` | What makes a generated test acceptable |
+| `reference/test-quality-deltas.md` | Unit-specific delta on the shared quality checklist: mock every external dependency |
 | `reference/framework-detection.md` | Marker-file table + confidence rules the detection script implements |
-| `reference/report-format.md` | Normative `TEST_WRITER_REPORT.md` structure |
+| `reference/report-format.md` | Normative `UNIT_TEST_REPORT.md` structure |
 | `reference/pressure-tests.md` | Maintainer regression scenarios |
 | `examples.md` | Invocation table + golden scenarios |
 | `tests/fixtures/test-framework-detect/` | Marker-file fixtures per ecosystem + ambiguous/none cases |
 | `tests/test_detect_test_framework.py` | Pytest suite for the detection script |
+
+## integration-test-creator file map
+
+| Path | What it does |
+|------|--------------|
+| `workflow/inputs.md` | Parse `target` + `repo_root` + `run_tests`; HARD STOP on missing required fields |
+| `workflow/detect-conventions.md` | Detect base runner + real-dependency orchestration mechanism; ask-once/ask-before-writing gates |
+| `workflow/select-targets.md` | Diff/backfill target resolution, exclusions, `max_files_per_run` cap |
+| `workflow/generate-tests.md` | Write tests against the real dependency — never mock the seam under test |
+| `workflow/verify-and-iterate.md` | Run against the real dependency, fix test bugs, never patch production code |
+| `workflow/report.md` | `INTEGRATION_TEST_REPORT.md` rendering rules, including `NEEDS_INTEGRATION_ENV` |
+| `scripts/detect-integration-setup.sh`, `scripts/integration-markers.sh` | testcontainers/docker-compose/embedded-DB + integration-tag detection |
+| `reference/skill-contract.md` | Non-negotiable agent contract; links shared `test-creation-principles.md` |
+| `reference/gate-policy.md` | Every live gate, including `NEEDS_INTEGRATION_ENV` when no orchestration mechanism exists |
+| `reference/test-quality-deltas.md` | Integration-specific delta: never mock the dependency under test |
+| `reference/framework-detection.md` | Base-runner + orchestration-mechanism marker tables |
+| `reference/report-format.md` | Normative `INTEGRATION_TEST_REPORT.md` structure |
+| `reference/pressure-tests.md` | Maintainer regression scenarios |
+| `examples.md` | Invocation table + golden scenarios |
+| `tests/fixtures/integration-detect/` | testcontainers/docker-compose/tag-only/none fixtures |
+| `tests/test_detect_integration_setup.py` | Pytest suite for the detection script |
+
+## contract-test-creator file map
+
+| Path | What it does |
+|------|--------------|
+| `workflow/inputs.md` | Parse `target` (with required `role: consumer\|provider`) + `repo_root`; HARD STOP if `role` absent |
+| `workflow/detect-conventions.md` | Detect Pact tooling per ecosystem + broker vs. local-only usage |
+| `workflow/select-targets.md` | Diff/backfill target resolution scoped to the given role |
+| `workflow/generate-tests.md` | Consumer vs. provider generation logic; interaction shape must trace to real observed usage |
+| `workflow/verify-and-iterate.md` | Run/verify against pact file(s) or broker; never loosen a contract to pass |
+| `workflow/report.md` | `CONTRACT_TEST_REPORT.md` rendering rules, including `NEEDS_OBSERVED_INTERACTION` |
+| `scripts/detect-pact-tooling.sh`, `scripts/pact-markers.sh` | Pact library + broker detection per ecosystem |
+| `reference/skill-contract.md` | Non-negotiable agent contract; links shared `test-creation-principles.md` |
+| `reference/gate-policy.md` | Every live gate, including required `role` and `NEEDS_OBSERVED_INTERACTION` |
+| `reference/test-quality-deltas.md` | Contract-specific delta: interaction shape must trace to real usage |
+| `reference/framework-detection.md` | Pact-tooling marker table per ecosystem + broker detection |
+| `reference/report-format.md` | Normative `CONTRACT_TEST_REPORT.md` structure |
+| `reference/pressure-tests.md` | Maintainer regression scenarios |
+| `examples.md` | Invocation table + golden scenarios |
+| `tests/fixtures/pact-detect/` | Consumer/provider/broker/none fixtures |
+| `tests/test_detect_pact_tooling.py` | Pytest suite for the detection script |
+
+## e2e-test-creator file map
+
+| Path | What it does |
+|------|--------------|
+| `workflow/inputs.md` | Parse `target` (`journeys` required for backfill mode) + `repo_root`; HARD STOP if empty |
+| `workflow/detect-conventions.md` | Detect Playwright/Cypress/Selenium tooling + layout convention |
+| `workflow/select-targets.md` | Diff-mode journey inference from changed routes/pages / backfill explicit journeys |
+| `workflow/generate-tests.md` | Journey → steps → user-visible assertions only; no hard sleeps |
+| `workflow/verify-and-iterate.md` | Run against a reachable app instance, fix test bugs, never patch production code |
+| `workflow/report.md` | `E2E_TEST_REPORT.md` rendering rules, including `NEEDS_BROWSER_ENV` |
+| `scripts/detect-e2e-tooling.sh`, `scripts/e2e-markers.sh` | Playwright/Cypress/Selenium + layout detection |
+| `reference/skill-contract.md` | Non-negotiable agent contract; links shared `test-creation-principles.md` |
+| `reference/gate-policy.md` | Every live gate, including `NEEDS_BROWSER_ENV` when no app instance is reachable |
+| `reference/test-quality-deltas.md` | E2E-specific delta: user-visible assertions only, no hard sleeps |
+| `reference/framework-detection.md` | Browser-tooling marker table + layout conventions |
+| `reference/report-format.md` | Normative `E2E_TEST_REPORT.md` structure |
+| `reference/pressure-tests.md` | Maintainer regression scenarios |
+| `examples.md` | Invocation table + golden scenarios |
+| `tests/fixtures/e2e-detect/` | Playwright/Cypress/ambiguous/none fixtures |
+| `tests/test_detect_e2e_tooling.py` | Pytest suite for the detection script |
 
 ## Install and quality gates
 

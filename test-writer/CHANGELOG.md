@@ -3,6 +3,28 @@
 All notable changes to the test-writer skill. Per-file `workflow_version` in `workflow/*.md` frontmatter
 should match the version of the latest entry below that names that file.
 
+## [2.0.0] — 2026-08-06
+
+### Changed (breaking)
+
+- **Rewritten from a generator into a thin router.** All framework detection, target selection, test
+  generation, and verification logic moved out to four new focused skills: `unit-test-creator`,
+  `integration-test-creator`, `contract-test-creator`, and `e2e-test-creator`. test-writer now only
+  classifies a level-unspecified "write tests" request and dispatches to exactly one of them, relaying
+  its report verbatim — mirrors the `who-owns-x-bot`/`release-readiness-checker` composition pattern.
+- Removed: `scripts/`, `tests/` (framework-detection logic and its pytest suite — re-homed as
+  `unit-test-creator`'s own artifact), `workflow/{detect-conventions,select-targets,generate-tests,
+  verify-and-iterate,report}.md`, `reference/{gate-policy,test-quality-checklist,framework-detection,
+  report-format}.md` (generation-specific content — shared parts now live in
+  `docs/skill-framework/shared/test-creation-principles.md`, level-specific parts now live in each of the
+  four skills' own `reference/`).
+- Added: `workflow/classify.md` (ask-once level gate), `workflow/delegate.md` (dispatch + verbatim
+  relay), `reference/level-classification.md` (keyword heuristics mirroring `skill-routing.md`).
+- `SKILL.md`/`README.md`/`SETUP.md`/`examples.md`/`reference/{skill-contract,phase-index,
+  lazy-load-index,smoke-test,pressure-tests}.md` rewritten for the router's much narrower scope.
+- Callers who already know the level should invoke the matching `*-test-creator` skill directly and skip
+  this router entirely — see `SKILL.md § When to use / NOT to use`.
+
 ## [1.0.0] — 2026-08-06
 
 ### Added

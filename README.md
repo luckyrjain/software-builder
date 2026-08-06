@@ -1,7 +1,7 @@
 # software-builder
 
 [![Lint](https://github.com/luckyrjain/software-builder/actions/workflows/lint.yml/badge.svg)](https://github.com/luckyrjain/software-builder/actions/workflows/lint.yml)
-![Skills](https://img.shields.io/badge/skills-17-blue)
+![Skills](https://img.shields.io/badge/skills-21-blue)
 
 Portable, evidence-driven agent skills for software delivery: code review, incident response,
 architecture discovery, Kubernetes optimization, migrations, release readiness, and autonomous
@@ -176,7 +176,11 @@ routes to skills in another category.
 | [pr-review](pr-review/) | `/pr-review` or “review this MR/PR” | GitLab MR review with evidence-backed findings and optional inline posts | [README](pr-review/README.md) · [SETUP](pr-review/SETUP.md) |
 | [pr-gatekeeper](pr-gatekeeper/) | Push webhook | Runs `pr-review` on every push to an open MR and applies unattended posting policy | [README](pr-gatekeeper/README.md) · [SETUP](pr-gatekeeper/SETUP.md) |
 | [release-readiness-checker](release-readiness-checker/) | “Is this release ready?” | Aggregates review, Kubernetes, and incident signals into a release go/no-go report | [README](release-readiness-checker/README.md) · [SETUP](release-readiness-checker/SETUP.md) |
-| [test-writer](test-writer/) | “Write tests for MR !123” or “backfill tests for `<file/module>`” | Detects the repo's test framework/conventions, writes and runs real tests, never patches production code to force green | [README](test-writer/README.md) · [SETUP](test-writer/SETUP.md) |
+| [test-writer](test-writer/) | “Write tests for MR !123” — level unspecified | Router: classifies the request and dispatches to exactly one of the four skills below | [README](test-writer/README.md) · [SETUP](test-writer/SETUP.md) |
+| [unit-test-creator](unit-test-creator/) | “Write unit tests for `<file/module>`” | Isolated, fast, every external dependency mocked; detects the repo's test framework and never patches production code to force green | [README](unit-test-creator/README.md) · [SETUP](unit-test-creator/SETUP.md) |
+| [integration-test-creator](integration-test-creator/) | “Write an integration test against the real DB” | Tests the real seam to one real adjacent dependency (testcontainers/docker-compose) — never mocks it | [README](integration-test-creator/README.md) · [SETUP](integration-test-creator/SETUP.md) |
+| [contract-test-creator](contract-test-creator/) | “Write a Pact contract test for `<consumer>`” | Consumer-driven contract tests (Pact-style); every interaction shape traces to real observed usage | [README](contract-test-creator/README.md) · [SETUP](contract-test-creator/SETUP.md) |
+| [e2e-test-creator](e2e-test-creator/) | “Write an e2e test for the checkout journey” | Full user-journey browser tests (Playwright/Cypress/Selenium); asserts on user-visible outcomes only | [README](e2e-test-creator/README.md) · [SETUP](e2e-test-creator/SETUP.md) |
 
 ### Incidents and reliability
 
@@ -217,7 +221,8 @@ MCP is **skill-specific**, not a prerequisite for installing or browsing the rep
 |----------|-----------------------------|
 | `loop-task-implementer` | No MCP; uses the host's repository/Git access and CI visibility |
 | `mysql-to-postgres-sql` | No MCP |
-| `test-writer` | No MCP; uses the host's repository read/write access and (optionally) its test-runner access |
+| `test-writer` | No MCP; router only, dispatches to the skills below |
+| `unit-test-creator`, `integration-test-creator`, `contract-test-creator`, `e2e-test-creator` | No MCP; use the host's repository read/write access and (optionally) its test-runner/browser access |
 | `domain-comprehension`, `squad-map` | No MCP for repository/CODEOWNERS mode; GitLab and Datadog improve coverage |
 | `migration-program-manager`, `weekly-squad-digest` | No MCP; aggregate files produced by upstream workflows |
 | `pr-review` | GitLab read access; GitLab write access only for posting |

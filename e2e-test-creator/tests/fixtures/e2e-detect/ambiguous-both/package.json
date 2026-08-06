@@ -1,0 +1,8 @@
+{
+  "name": "ambiguous-fixture",
+  "version": "1.0.0",
+  "devDependencies": {
+    "@playwright/test": "^1.40.0",
+    "cypress": "^13.0.0"
+  }
+}

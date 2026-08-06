@@ -7,8 +7,9 @@ cd software-builder
 make install-test-writer
 ```
 
-Installs to `~/.cursor/skills/test-writer` and `~/.claude/skills/test-writer` by default. Restart Cursor;
-a new Claude Code session picks it up automatically.
+Chains `make install-unit-test-creator install-integration-test-creator install-contract-test-creator
+install-e2e-test-creator` first — test-writer has no detection or generation logic of its own and is
+useless without all four dispatch targets installed alongside it. Restart Cursor so every skill reloads.
 
 ### Claude Code only
 
@@ -29,18 +30,16 @@ Cursor/Kiro at `test-writer/SKILL.md` without an install step.
 
 | Requirement | Notes |
 |-------------|-------|
-| Read/write access to the target repository | Same repo-capable-agent access every skill in this library needs |
-| The target repo's test command reachable in this session | Only if `run_tests` is left at its default `true` — set `run_tests: false` to draft tests without executing them (see [reference/gate-policy.md](reference/gate-policy.md)) |
-| `ripgrep`/`grep`, standard POSIX tools | Used by `scripts/detect-test-framework.sh`; no extra install beyond what a normal dev shell already has |
+| unit-test-creator, integration-test-creator, contract-test-creator, and e2e-test-creator all installed | `make install-test-writer` chains all four automatically; see each skill's own `SETUP.md` for its own prerequisites |
 
-No MCP of its own, and no other skill is required to install alongside it — it composes with
-**pr-review** and **loop-task-implementer** only via the cross-skill handoffs in
-[SKILL.md](SKILL.md#cross-skill-escalation), never as a hard install dependency.
+No MCP, no repository access, and no execution capability of its own — every real prerequisite belongs
+to whichever skill this router dispatches to.
 
 ## Config
 
-No config file. Every input (`target`, `repo_root`, `run_tests`, …) is passed at invocation time — see
-[workflow/inputs.md](workflow/inputs.md).
+No config file. `request`, `repo_root`, and an optional `level_hint` are passed at invocation time — see
+[workflow/inputs.md](workflow/inputs.md). Every other field is passed through unchanged to the dispatched
+skill.
 
 ## Framework links
 
@@ -48,22 +47,18 @@ No config file. Every input (`target`, `repo_root`, `run_tests`, …) is passed 
 - [prompt-injection](../docs/skill-framework/shared/prompt-injection.md)
 - [skill-routing](../docs/skill-framework/shared/skill-routing.md)
 - [cross-skill-escalation](../docs/skill-framework/shared/cross-skill-escalation.md)
+- [test-creation-principles](../docs/skill-framework/shared/test-creation-principles.md) — shared rules
+  the four dispatch targets honor
 
 ## Smoke test
 
 After install, run the invocation in [reference/smoke-test.md](reference/smoke-test.md).
 
-```bash
-bash test-writer/scripts/detect-test-framework.sh test-writer/tests/fixtures/test-framework-detect/python-pytest
-python3 -m pytest test-writer/tests/test_detect_test_framework.py -q
-```
-
 ## Troubleshooting
 
 | Symptom | Fix |
 |---------|-----|
-| Detection returns `NONE_DETECTED` on a repo you know has tests | Check the marker table in [reference/framework-detection.md](reference/framework-detection.md) — an unsupported ecosystem or a nonstandard config file location isn't detected yet; pass `test_framework_hint` and file a gap |
-| Skill keeps asking about framework choice on every run | `test_framework_hint` isn't being carried between turns, or names a candidate the scan doesn't actually find — check the exact printed `CANDIDATES` list |
-| Report shows a target as passing but you never saw it run | Should never happen — see [reference/skill-contract.md](reference/skill-contract.md) §5; file a bug |
-| Generated tests don't match the repo's existing style | Check `workflow/detect-conventions.md` §4 actually read 1–2 existing test files for layout/mock style, not just the framework name |
-| A production bug the tests found isn't in the report | Check `workflow/report.md` §3 — every `WRITTEN_FAILING_PROD_BUG` target must get a `## Findings` line |
+| test-writer prints its own framework-detection or target-selection output | Bug — this router has no detection/generation logic; check nothing in `workflow/delegate.md` re-implements a dispatched skill's own phase |
+| Classify never asks, even on a genuinely ambiguous request | Check [reference/level-classification.md](reference/level-classification.md)'s "unambiguous defaults" section wasn't extended past its two listed cases |
+| Report looks different from what the dispatched skill would produce standalone | Regression in relay behavior — check [workflow/delegate.md](workflow/delegate.md) §2 |
+| "Command not found" / skill has nothing to dispatch to | Re-run `make install-test-writer` — it should chain all four dispatch-target installs; see Prerequisites above |

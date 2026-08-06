@@ -1,6 +1,6 @@
 # Cross-skill escalation (shared)
 
-**Normative.** Symmetric escalation matrix for pr-review, pr-gatekeeper, incident-rca, incident-triage-agent, k8s-overprovisioning-datadog, domain-comprehension, squad-map, who-owns-x-bot, new-hire-guide, release-readiness-checker, mysql-to-postgres-sql, loop-task-implementer, backlog-runner, migration-program-manager, cost-optimization-sprint-planner, weekly-squad-digest, and test-writer.
+**Normative.** Symmetric escalation matrix for pr-review, pr-gatekeeper, incident-rca, incident-triage-agent, k8s-overprovisioning-datadog, domain-comprehension, squad-map, who-owns-x-bot, new-hire-guide, release-readiness-checker, mysql-to-postgres-sql, loop-task-implementer, backlog-runner, migration-program-manager, cost-optimization-sprint-planner, weekly-squad-digest, test-writer, unit-test-creator, integration-test-creator, contract-test-creator, and e2e-test-creator.
 
 **Consumers:** `SKILL.md` in each skill (link here; keep ≤10 skill-specific rows max).
 
@@ -58,10 +58,14 @@ know about — don't treat it as a "you may want to" row the way every other row
 | A deployment in the rollup has no `SQUAD_MAP.md`/`ownership.datadog.service_aliases` match | cost-optimization-sprint-planner → squad-map | `workspace_root` | "Map squads for repos in `{workspace}` — org prefix `{org}`, segment `{n}`" |
 | Caller wants a fresh single-source migration rollup, not the combined digest | weekly-squad-digest → migration-program-manager | `program_manifest` | "Migration status across all repos" |
 | Caller wants a fresh single-source cost/waste sweep, not the combined digest | weekly-squad-digest → cost-optimization-sprint-planner | `sweep_scope` | "Where's the money?" |
-| Generated/verified test surfaces a probable production bug | test-writer → loop-task-implementer | Failing assertion + expected/actual + test file:line | "Fix `{function}` so `{test_file}` passes — test-writer found: {finding}" |
-| Generated/verified test surfaces a probable production bug on an MR under review | test-writer → pr-review | Failing assertion + test file:line + MR !IID | "Flag `{finding}` on MR !{iid} — test-writer's generated test fails against current behavior" |
+| Generated/verified test surfaces a probable production bug (any of the four `*-test-creator` skills) | unit/integration/contract/e2e-test-creator → loop-task-implementer | Failing assertion + expected/actual + test file:line | "Fix `{function}` so `{test_file}` passes — {skill} found: {finding}" |
+| Generated/verified test surfaces a probable production bug on an MR under review | unit/integration/contract/e2e-test-creator → pr-review | Failing assertion + test file:line + MR !IID | "Flag `{finding}` on MR !{iid} — the generated test fails against current behavior" |
 | Caller wants the *existing* test suite reviewed for quality, not new tests written | pr-review → test-writer | MR !IID + flagged files with missing/weak coverage | "Write tests for MR !{iid} — missing coverage on `{files}`" |
 | Task implementation needs generated tests for a subsystem it just touched | loop-task-implementer → test-writer | Repo/task ref + changed files | "Write tests for task `{task_id}`'s changes in `{repo}`" |
+| test-writer classified the request's level (its own dispatch, not a suggestion) | test-writer → unit/integration/contract/e2e-test-creator | `target`, `repo_root`, and every other input, passed through unchanged | Not user-facing — an internal dispatch per [skill-routing.md](skill-routing.md); test-writer relays the dispatched skill's own report verbatim |
+| Caller wants a real adjacent dependency tested, not a mocked unit | unit-test-creator → integration-test-creator | Target + repo_root | "Write an integration test for `{target}` against a real `{dependency}`" |
+| Caller wants the full user journey through the UI, not just the API/service seam | integration-test-creator → e2e-test-creator | Journey description | "Write an e2e test for `{journey}`" |
+| Caller wants a consumer/provider interaction agreement, not a live integration test | integration-test-creator → contract-test-creator | Consumer/provider services + interaction | "Write a Pact contract test for `{consumer}` calling `{provider}`" |
 
 Skill-specific rows in each `SKILL.md` MUST be a subset of this table plus local deltas only.
 
@@ -137,7 +141,11 @@ When `MYSQL_TO_PG_SQL_REWRITES.md` exists in the workspace deliverable directory
 | Combined weekly squad digest across both migration and cost rollups | weekly-squad-digest |
 | Autonomous multi-task implement → review → remediate → PR loop (interactive, human-driven) | loop-task-implementer |
 | Scheduled overnight ticket-queue sweep (unattended) | backlog-runner |
-| Write / generate / backfill automated tests for a diff or coverage gap | test-writer |
+| Write / generate / backfill automated tests, level unspecified | test-writer (dispatches to one of the four below) |
+| Unit tests — isolated, mocked externals | unit-test-creator directly |
+| Integration tests — real adjacent dependency | integration-test-creator directly |
+| Consumer-driven contract / Pact tests | contract-test-creator directly |
+| E2E / browser user-journey tests | e2e-test-creator directly |
 | Live rollback / kubectl apply | Out of scope — human operator |
 | Security-only deep review | pr-review with security persona |
 | Cost/billing investigation across services | Canvas + appropriate skill; not auto-routed |

@@ -4,7 +4,14 @@ Normative conventions for **pr-review**, **pr-gatekeeper**, **incident-rca**, **
 **k8s-overprovisioning-datadog**, **domain-comprehension**, **squad-map**, **who-owns-x-bot**,
 **mysql-to-postgres-sql**, **loop-task-implementer**, **backlog-runner**, **new-hire-guide**,
 **release-readiness-checker**, **migration-program-manager**, **cost-optimization-sprint-planner**,
-**weekly-squad-digest**, and **test-writer**.
+**weekly-squad-digest**, **test-writer**, **unit-test-creator**, **integration-test-creator**,
+**contract-test-creator**, and **e2e-test-creator**.
+
+`test-writer` is a thin router (like `who-owns-x-bot`/`release-readiness-checker`) that classifies a
+test-writing request by level and dispatches to exactly one of `unit-test-creator`,
+`integration-test-creator`, `contract-test-creator`, or `e2e-test-creator` — it has no detection or
+generation logic of its own; see [shared/test-creation-principles.md](shared/test-creation-principles.md)
+for what the four dispatch targets share.
 Design spec: [2025-06-30-unified-skill-framework-design.md](../superpowers/specs/2025-06-30-unified-skill-framework-design.md).
 
 `who-owns-x-bot`, `pr-gatekeeper`, `incident-triage-agent`, and `backlog-runner` are each in
@@ -37,6 +44,7 @@ Skills reference these files by relative link from `SETUP.md` or `SKILL.md`. Do 
 | [shared/review-metadata-schema.md](shared/review-metadata-schema.md) | Normative metadata YAML — `review_metadata` (pr-review), `assessment_metadata` (rca, k8s); v2 analytics blocks |
 | [shared/claude-code-setup.md](shared/claude-code-setup.md) | Claude Code install paths + MCP config location, mapped from the Cursor equivalents used throughout each skill's `SETUP.md` |
 | [shared/org-rollup-schema.md](shared/org-rollup-schema.md) | Normalized cross-repo rollup item shape — implemented by migration-program-manager (#8), cost-optimization-sprint-planner (#10), and weekly-squad-digest (#11) |
+| [shared/test-creation-principles.md](shared/test-creation-principles.md) | Test-first evidence, test-quality rules, refactor limits, and the shared report skeleton for unit/integration/contract/e2e-test-creator |
 
 ## How skills link here
 
@@ -69,6 +77,7 @@ A skill is framework-compliant when it passes the checklist in the design spec �
 | review-metadata-schema.md | Complete — v2 pr-review + assessment_metadata (rca, k8s) + repository_health dimensions |
 | claude-code-setup.md | Complete |
 | org-rollup-schema.md | Complete — implemented by migration-program-manager (#8), cost-optimization-sprint-planner (#10), and weekly-squad-digest (#11), the last three items of the team-facing agents roadmap |
+| test-creation-principles.md | Complete — implemented by unit/integration/contract/e2e-test-creator, dispatched to by the test-writer router |
 
 ## Deferred (P3 roadmap)
 

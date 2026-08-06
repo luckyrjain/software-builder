@@ -8,6 +8,31 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 
 ## test-writer
 
+### Rewritten into a thin router (2026-08-06)
+
+- **Breaking**: split into five focused skills. All framework detection, target selection, generation,
+  and verification logic moved to four new skills — **unit-test-creator**, **integration-test-creator**,
+  **contract-test-creator**, **e2e-test-creator** — each with its own triggers, workflow, stack-specific
+  references, examples, smoke tests, discovery files, lint target, installer target, and documentation
+  entry (see their own sections below). test-writer now only classifies a level-unspecified "write tests"
+  request and dispatches to exactly one of the four, relaying its report verbatim — mirrors the
+  `who-owns-x-bot`/`release-readiness-checker` composition pattern.
+- Shared principles across all four dispatch targets — test-first evidence, test-quality rules, refactor
+  limits, and the report-format skeleton — moved into a new shared framework file:
+  `docs/skill-framework/shared/test-creation-principles.md`. Each skill's own `reference/skill-contract.md`
+  and `reference/test-quality-deltas.md` link there and state only their level-specific deltas.
+- Removed from test-writer: `scripts/`, `tests/` (re-homed as unit-test-creator's own artifact),
+  `workflow/{detect-conventions,select-targets,generate-tests,verify-and-iterate,report}.md`,
+  `reference/{gate-policy,test-quality-checklist,framework-detection,report-format}.md`.
+- Added to test-writer: `workflow/classify.md` (ask-once level gate, never guesses between levels),
+  `workflow/delegate.md` (dispatch + verbatim relay), `reference/level-classification.md` (keyword
+  heuristics mirroring `skill-routing.md`, so classification can't drift from the canonical routing
+  table).
+- `make install-test-writer` now chains installing all four dispatch targets — the router is useless
+  without them.
+- Callers who already know the level should invoke the matching `*-test-creator` skill directly and skip
+  the router — new "level already named" rows in `skill-routing.md` and `SKILL.md § When to use`.
+
 ### Initial release (2026-08-06)
 
 - New skill — generates and backfills automated tests for a target repository. Detects the repo's own
@@ -29,6 +54,72 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
   `reference/{skill-contract,phase-index,lazy-load-index,gate-policy,test-quality-checklist,
   framework-detection,report-format,smoke-test,pressure-tests}.md`; new rows in `skill-routing.md`,
   `cross-skill-escalation.md`, `prompt-injection.md`, and `smoke-test-conventions.md`.
+
+  Note: this initial-release entry describes test-writer's original design before the router rewrite
+  above; its detection/generation logic now lives in **unit-test-creator** (see below).
+
+## unit-test-creator
+
+### Initial release (2026-08-06)
+
+- New skill — split out of test-writer's original detection/generation logic. Isolated, fast,
+  function/class-level tests with every external dependency mocked or stubbed. Detects the repo's test
+  framework (pytest, unittest, Jest, Vitest, Mocha, Go `testing`, JUnit 4/5, RSpec, Minitest,
+  xUnit/NUnit/MSTest, `cargo test`) via `scripts/detect-test-framework.sh` +
+  `scripts/test-framework-markers.sh` (re-homed from test-writer, same 11-ecosystem coverage), writes
+  tests for changed code (diff mode) or an existing coverage gap (backfill mode), runs them, and iterates
+  on failures.
+- A target that can't be isolated without a real dependency, with no existing mocking convention, gates
+  `UNTESTABLE_WITHOUT_FIXTURE` and escalates to **integration-test-creator** rather than faking isolation.
+- Shared rules (test-first evidence, quality checklist, refactor limits, report skeleton) linked from
+  `docs/skill-framework/shared/test-creation-principles.md`; `reference/test-quality-deltas.md` states
+  only the unit-specific delta (mock everything).
+- `tests/test_detect_test_framework.py` pytest suite over fixtures under
+  `tests/fixtures/test-framework-detect/`.
+
+## integration-test-creator
+
+### Initial release (2026-08-06)
+
+- New skill — tests the real seam between a component and one real adjacent dependency (database, queue,
+  cache, internal service); never mocks the dependency under test, unlike unit-test-creator. Detects both
+  the base test runner and the real-dependency orchestration mechanism (testcontainers, docker-compose,
+  embedded DB) plus the repo's integration-test naming/tag convention via
+  `scripts/detect-integration-setup.sh` + `scripts/integration-markers.sh`.
+- A target with no detected orchestration mechanism and no way to stand one up in-session gates
+  `NEEDS_INTEGRATION_ENV` — a level-specific status on top of the shared vocabulary — rather than
+  fabricating a fake dependency or silently mocking it (which would secretly make it a unit test).
+- `tests/test_detect_integration_setup.py` pytest suite over fixtures under
+  `tests/fixtures/integration-detect/`.
+
+## contract-test-creator
+
+### Initial release (2026-08-06)
+
+- New skill — consumer-driven contract tests, Pact-style. Generates a **consumer** test (records
+  expectations, produces a pact file) or a **provider verification** test (replays existing pact files
+  against the real provider); `target.role` (`consumer`/`provider`) is required — HARD STOP if absent,
+  never inferred from file location. Detects Pact tooling per ecosystem (pact-js, pact-python, Pact JVM,
+  pact-go, Ruby pact) and whether a Pact Broker is configured, via `scripts/detect-pact-tooling.sh` +
+  `scripts/pact-markers.sh`.
+- Every interaction shape must trace to real, observed usage (an actual request-building call site, an
+  existing API client method, or an OpenAPI/schema spec) — a target with none of these gates
+  `NEEDS_OBSERVED_INTERACTION` rather than fabricating a plausible-looking payload.
+- `tests/test_detect_pact_tooling.py` pytest suite over fixtures under `tests/fixtures/pact-detect/`.
+
+## e2e-test-creator
+
+### Initial release (2026-08-06)
+
+- New skill — full user-journey tests through a real browser UI (Playwright, Cypress, or
+  Selenium/WebDriver — web browser flows only, not API/CLI black-box journeys). Targets are **journeys**,
+  not files: diff mode infers a journey from a new/changed route or page; backfill mode requires an
+  explicit, non-empty `target.journeys` list (HARD STOP if absent). Detects browser tooling and layout
+  convention via `scripts/detect-e2e-tooling.sh` + `scripts/e2e-markers.sh`.
+- Asserts only on user-visible outcomes (text, ARIA role, URL, visible state) — never internal DOM/state
+  details; never a hard-coded sleep, always the framework's own auto-waiting. Requires a reachable running
+  app instance — gates `NEEDS_BROWSER_ENV` rather than fabricating what the UI would show.
+- `tests/test_detect_e2e_tooling.py` pytest suite over fixtures under `tests/fixtures/e2e-detect/`.
 
 ## loop-task-implementer
 

@@ -1,15 +1,20 @@
 ---
-description: Invoke the test-writer skill to generate or backfill automated tests for a target repository.
+description: Invoke the test-writer skill to classify a level-unspecified "write tests" request and dispatch to the matching test-creation skill.
 alwaysApply: false
 ---
 
-When the user asks to write tests for an MR/branch/diff, or to backfill test coverage for a file/module,
-read `test-writer/SKILL.md` and follow it. Reviewing an existing MR's test quality routes to
+When the user asks to write tests for an MR/branch/diff/file and does NOT name a level, read
+`test-writer/SKILL.md` and follow it — it classifies the request (unit / integration / contract / e2e)
+and dispatches to the matching skill, relaying its report verbatim. It has no detection or generation
+logic of its own.
+
+If the user already names a level, skip this router and read the matching skill directly instead:
+`unit-test-creator/SKILL.md` (isolated, mocked), `integration-test-creator/SKILL.md` (real adjacent
+dependency), `contract-test-creator/SKILL.md` (Pact-style consumer/provider), or
+`e2e-test-creator/SKILL.md` (browser user journey). Reviewing an existing MR's test quality routes to
 `pr-review/SKILL.md` instead; implementing the production feature itself routes to
 `loop-task-implementer/SKILL.md` instead.
 
 Phase index: `test-writer/reference/phase-index.md`. Reference loads:
 `test-writer/reference/lazy-load-index.md`.
-Detects the target repo's own test framework/conventions before writing anything — never introduces a
-second framework or fabricates one for a repo with none, without asking. Never modifies production code
-to force a failing test green.
+Never guesses a level when genuinely ambiguous — asks once, listing the real candidates.

@@ -1,0 +1,4 @@
+{
+  "name": "fixture-consumer",
+  "devDependencies": { "@pact-foundation/pact": "^11.0.0" }
+}

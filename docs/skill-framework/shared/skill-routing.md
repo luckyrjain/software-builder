@@ -26,7 +26,11 @@ When adding a new skill, add it here first; then each existing skill only needs 
 | Implement task/issue autonomously, independent review + remediation loop, adjudicate findings, work through a task queue (interactive, human-driven) | **loop-task-implementer** | pr-review (reviewing someone else's existing MR only) |
 | Scheduled trigger pulling N tickets from a tracker query, overnight/unattended, no human turn available | **backlog-runner** | loop-task-implementer (that's what it delegates to internally — do not call loop-task-implementer directly for an unattended scheduled sweep; use it for a single-task or human-driven multi-task request) |
 | Scheduled combined squad digest reading both migration and cost rollup files, no human turn available | **weekly-squad-digest** | migration-program-manager / cost-optimization-sprint-planner (a fresh single-source rollup, not the combined digest) |
-| Write tests, generate unit tests, add test coverage, backfill tests, test this MR/PR/diff, TDD helper, missing test coverage | **test-writer** | pr-review (reviewing existing test quality, not writing new tests), loop-task-implementer (implementing the production feature itself) |
+| Write tests, generate tests, add test coverage, backfill tests, test this MR/PR/diff — level unspecified | **test-writer** (routes to exactly one of the four below) | pr-review (reviewing existing test quality, not writing new tests), loop-task-implementer (implementing the production feature itself) |
+| Unit tests, function/class-level tests, mock all externals, TDD helper, fast isolated tests | **unit-test-creator** | integration-test-creator (needs a real adjacent dependency, not a mock) |
+| Integration tests, test against a real DB/queue/service, testcontainers, docker-compose test env, seam between components | **integration-test-creator** | unit-test-creator (isolated, mocked), e2e-test-creator (full user journey through the UI) |
+| Contract tests, consumer-driven contract, Pact, provider verification, "does the API still match what the consumer expects" | **contract-test-creator** | integration-test-creator (a real dependency, not an interface agreement) |
+| E2E tests, end-to-end, browser test, user journey, Playwright/Cypress/Selenium, click-through test | **e2e-test-creator** | integration-test-creator (below the UI), unit-test-creator (function-level) |
 | GitHub pull request, local uncommitted diff, review unstaged | **review-bugbot** (external) | pr-review |
 | Datadog MCP missing / 403, configure Datadog | **ddsetup** / **ddconfig** | all others |
 | Live rollback, kubectl apply, deploy, restart pods | **Out of scope** — human operator | all skills |
@@ -68,8 +72,11 @@ When adding a new skill, add it here first; then each existing skill only needs 
 18. **Scheduled combined squad digest, no human turn available** → weekly-squad-digest; **a fresh
     single-source rollup, interactive** → migration-program-manager / cost-optimization-sprint-planner
     directly
-19. **"Write/generate/backfill tests"** → test-writer; **"review this test suite / MR's test quality"** →
-    pr-review directly; **"implement the feature"** (not just its tests) → loop-task-implementer directly
+19. **"Write/generate/backfill tests" with the level unspecified** → test-writer (asks which level if
+    genuinely ambiguous, per its own classify gate); **level named explicitly** ("unit tests", "integration
+    tests", "contract/Pact tests", "e2e/browser tests") → the matching `*-test-creator` skill directly, no
+    need to route through test-writer first; **"review this test suite / MR's test quality"** → pr-review
+    directly; **"implement the feature"** (not just its tests) → loop-task-implementer directly
 
 ## Ambiguous requests — ask
 

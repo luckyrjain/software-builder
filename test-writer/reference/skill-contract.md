@@ -4,26 +4,19 @@ Load immediately after [SKILL.md](../SKILL.md). These rules override convenience
 
 ## Contract
 
-1. **Scope** — write or modify test files only. Never modify production/application code to make a
-   failing test pass; a failure that traces to production code is a finding to report and hand off, not
-   something to silently patch (see [gate-policy.md §6](gate-policy.md#6-verification-surfaces-a-probable-production-bug)).
-2. **Detect before writing** — always run [workflow/detect-conventions.md](../workflow/detect-conventions.md)
-   first. Never introduce a second test framework alongside one the repo already uses, and never invent a
-   framework for a repo with none, without asking.
-3. **Real assertions only** — every test must satisfy
-   [reference/test-quality-checklist.md](test-quality-checklist.md); no tautological or always-pass tests.
-4. **Gate, don't guess** — HARD STOP / ask per [reference/gate-policy.md](gate-policy.md) rather than
-   guessing a framework, fabricating a mock for infra that isn't reachable, or inventing test data that
-   contradicts the code's real contract.
-5. **Verify before claiming** — never report a test as passing without having run it in this session.
-   When `run_tests: false` or no execution capability exists, mark every target `UNVERIFIED` explicitly.
-6. **No silent caps** — `max_files_per_run` or `deadline` overflow is always listed in the report by
-   name, never dropped quietly.
-7. **Never hide a failure** — no `.skip` / `xfail` / `@Disabled` / deleted assertion to force a suite
-   green without flagging it in `TEST_WRITER_REPORT.md`.
-8. **Deliverable** — emit [TEST_WRITER_REPORT.md](report-format.md) every run, even for a single-file
-   backfill with one target.
-9. **Lazy-load** — only the reference file(s) named for the current phase in
-   [lazy-load-index.md](lazy-load-index.md); do not bulk-read all of `reference/`.
+1. **Scope** — classify and dispatch only. Never detect frameworks, generate tests, run anything, or
+   write to the target repository directly — that is exclusively the dispatched skill's job.
+2. **No guessed level** — ask per [workflow/classify.md](../workflow/classify.md) §3 whenever the request
+   is genuinely ambiguous between two or more levels, or matches none. Never default to `unit` as a
+   "safe" fallback — a wrong-level dispatch produces the wrong *kind* of test.
+3. **Unchanged pass-through** — every field the caller supplied (`target`, `run_tests`,
+   `max_files_per_run`, `role`, `journeys`, …) reaches the dispatched skill exactly as given. This router
+   never translates, renames, defaults, or validates them itself.
+4. **Verbatim relay** — the dispatched skill's own report is relayed as-is, never reformatted,
+   summarized, or re-derived. Its own gates, findings, and next-step stay its own.
+5. **Level already named — skip the router.** If the calling context already knows the level, invoke
+   that `*-test-creator` skill directly; this skill's classification step is for when it isn't stated.
 
-Routing: [skill-routing.md](../../docs/skill-framework/shared/skill-routing.md).
+Routing: [skill-routing.md](../../docs/skill-framework/shared/skill-routing.md). Shared principles all
+four dispatch targets honor:
+[test-creation-principles.md](../../docs/skill-framework/shared/test-creation-principles.md).

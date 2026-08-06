@@ -1,0 +1,7 @@
+{
+  "name": "cypress-fixture",
+  "version": "1.0.0",
+  "devDependencies": {
+    "cypress": "^13.0.0"
+  }
+}

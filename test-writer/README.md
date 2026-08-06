@@ -1,50 +1,51 @@
 # test-writer
 
-**Writes real, running tests** for a target repository — detects the repo's own test framework and
-conventions first, then generates tests that match them, runs them, and iterates on failures. Two entry
-modes: **diff** (test what just changed in an MR/branch/working tree) and **backfill** (test an existing
-coverage gap you point it at).
+**A router, not a generator.** When a caller asks to "write tests" without saying what kind, test-writer
+classifies the request into one of four levels and dispatches to the matching specialist skill:
 
-No MCP, no other skill required to run standalone — pure repository read/write plus the ability to
-execute the target repo's own test command (optional; see `run_tests` below).
+| Level | Skill |
+|-------|-------|
+| Unit — isolated, fast, every external dependency mocked | [unit-test-creator](../unit-test-creator/) |
+| Integration — the real seam to one real adjacent dependency | [integration-test-creator](../integration-test-creator/) |
+| Contract — consumer-driven contract agreement (Pact-style) | [contract-test-creator](../contract-test-creator/) |
+| E2E — full user journey through a real browser UI | [e2e-test-creator](../e2e-test-creator/) |
+
+Mirrors the composition pattern of `who-owns-x-bot` and `release-readiness-checker`: test-writer has no
+detection or generation logic of its own — it classifies, dispatches, and relays the dispatched skill's
+own report verbatim.
+
+**If you already know the level**, invoke that `*-test-creator` skill directly ("write unit tests for
+X") — this router exists for the "just write tests" case where the level isn't stated yet.
 
 ## What it does
 
-1. **Detects conventions** — scans for a test framework (pytest, Jest/Vitest/Mocha, Go `testing`, JUnit
-   via Maven/Gradle, RSpec/Minitest, xUnit/NUnit/MSTest, `cargo test`), its layout, and existing fixture/
-   mock helpers. Asks once if detection is genuinely ambiguous; asks before writing anything if the repo
-   has no framework markers at all — it never invents one.
-2. **Selects targets** — diff mode: changed functions/files without matching test changes already in the
-   diff. Backfill mode: the files/directories you scope it to. Either way, capped by
-   `max_files_per_run` with every skipped target listed by name, never silently dropped.
-3. **Generates tests** — happy path, an edge case, and an error case per target, matching the repo's
-   existing naming/layout and reusing its existing fixtures/mocks. No tautological assertions.
-4. **Verifies and iterates** — runs the new tests, fixes genuine test bugs, and — critically — **never
-   patches production code to force a failing test green**. If the code is what's actually wrong, that's
-   reported as a finding, not silently resolved.
-5. **Reports** — `TEST_WRITER_REPORT.md`: per-target status, any production-bug findings with exact
-   assertion/expected/actual, and a one-line next step.
+1. **Classifies** the request against [reference/level-classification.md](reference/level-classification.md)
+   — the same trigger phrases [skill-routing.md](../docs/skill-framework/shared/skill-routing.md) uses to
+   route callers directly. Asks once, listing the real candidates, whenever the request is genuinely
+   ambiguous between levels or matches none — never guesses.
+2. **Dispatches** to exactly one of the four skills, passing every input field through unchanged.
+3. **Relays** that skill's report verbatim — no reformatting, no re-summarizing.
 
 ## When to use
 
-"Write tests for MR !123", "backfill tests for `src/payments/`", "add test coverage for this branch."
-Not for reviewing someone else's existing test quality (**pr-review**) or implementing the production
-feature itself (**loop-task-implementer**). Full routing table: [SKILL.md](SKILL.md#when-to-use-not-to-use).
+"Write tests for MR !123", "add test coverage for `<file>`" — level not stated. Not for reviewing
+existing test quality (**pr-review**) or implementing the production feature itself
+(**loop-task-implementer**). Full routing table: [SKILL.md](SKILL.md#when-to-use-not-to-use).
 
 ## Invocation examples
 
 ```
-target: {mode: diff, source: "MR !123"}, repo_root: ./services/payments
-target: {mode: backfill, scope: ["src/payments/charge.py"]}, repo_root: .
+request: "write tests for the payments module", repo_root: .
+request: "test the payment flow", repo_root: .    # ambiguous — asks integration vs. e2e
 ```
 
-More scenarios, including a production-bug finding and a degraded (`run_tests: false`) run:
-[examples.md](examples.md).
+More scenarios: [examples.md](examples.md).
 
 ## What you get
 
-New/modified test files matching the repo's own conventions, plus `TEST_WRITER_REPORT.md` — format spec:
-[reference/report-format.md](reference/report-format.md).
+Whatever the dispatched skill produces — `UNIT_TEST_REPORT.md`, `INTEGRATION_TEST_REPORT.md`,
+`CONTRACT_TEST_REPORT.md`, or `E2E_TEST_REPORT.md` — relayed unchanged. Shared report shape:
+[test-creation-principles.md §4](../docs/skill-framework/shared/test-creation-principles.md).
 
 ## Install
 
@@ -53,12 +54,16 @@ cd software-builder
 make install-test-writer
 ```
 
+Chains all four dispatch targets (`install-unit-test-creator`, `install-integration-test-creator`,
+`install-contract-test-creator`, `install-e2e-test-creator`) automatically — the router has no detection
+or generation logic of its own and is useless without them.
+
 ## Related skills
 
-- **pr-review** — reviews an existing MR, including its test coverage; test-writer only writes new tests
-- **loop-task-implementer** — implements production features/fixes; test-writer hands production-bug
-  findings to it rather than fixing them itself
-- **mysql-to-postgres-sql** — the closest structural sibling: a non-MCP, scan-then-write code skill with
-  its own detection script and pytest-backed self-test
+- **unit-test-creator**, **integration-test-creator**, **contract-test-creator**, **e2e-test-creator** —
+  the four dispatch targets; each is fully usable standalone without this router
+- **pr-review** — reviews existing test quality; test-writer only routes to *writing* new tests
+- **loop-task-implementer** — implements production features/fixes; dispatched skills hand production-bug
+  findings to it rather than fixing them themselves
 
 Agent instructions: [SKILL.md](SKILL.md).
