@@ -26,6 +26,7 @@ When adding a new skill, add it here first; then each existing skill only needs 
 | Implement task/issue autonomously, independent review + remediation loop, adjudicate findings, work through a task queue (interactive, human-driven) | **loop-task-implementer** | pr-review (reviewing someone else's existing MR only) |
 | Scheduled trigger pulling N tickets from a tracker query, overnight/unattended, no human turn available | **backlog-runner** | loop-task-implementer (that's what it delegates to internally — do not call loop-task-implementer directly for an unattended scheduled sweep; use it for a single-task or human-driven multi-task request) |
 | Scheduled combined squad digest reading both migration and cost rollup files, no human turn available | **weekly-squad-digest** | migration-program-manager / cost-optimization-sprint-planner (a fresh single-source rollup, not the combined digest) |
+| Write tests, generate unit tests, add test coverage, backfill tests, test this MR/PR/diff, TDD helper, missing test coverage | **test-writer** | pr-review (reviewing existing test quality, not writing new tests), loop-task-implementer (implementing the production feature itself) |
 | GitHub pull request, local uncommitted diff, review unstaged | **review-bugbot** (external) | pr-review |
 | Datadog MCP missing / 403, configure Datadog | **ddsetup** / **ddconfig** | all others |
 | Live rollback, kubectl apply, deploy, restart pods | **Out of scope** — human operator | all skills |
@@ -67,6 +68,8 @@ When adding a new skill, add it here first; then each existing skill only needs 
 18. **Scheduled combined squad digest, no human turn available** → weekly-squad-digest; **a fresh
     single-source rollup, interactive** → migration-program-manager / cost-optimization-sprint-planner
     directly
+19. **"Write/generate/backfill tests"** → test-writer; **"review this test suite / MR's test quality"** →
+    pr-review directly; **"implement the feature"** (not just its tests) → loop-task-implementer directly
 
 ## Ambiguous requests — ask
 

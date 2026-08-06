@@ -3,8 +3,8 @@
 Normative conventions for **pr-review**, **pr-gatekeeper**, **incident-rca**, **incident-triage-agent**,
 **k8s-overprovisioning-datadog**, **domain-comprehension**, **squad-map**, **who-owns-x-bot**,
 **mysql-to-postgres-sql**, **loop-task-implementer**, **backlog-runner**, **new-hire-guide**,
-**release-readiness-checker**, **migration-program-manager**, **cost-optimization-sprint-planner**, and
-**weekly-squad-digest**.
+**release-readiness-checker**, **migration-program-manager**, **cost-optimization-sprint-planner**,
+**weekly-squad-digest**, and **test-writer**.
 Design spec: [2025-06-30-unified-skill-framework-design.md](../superpowers/specs/2025-06-30-unified-skill-framework-design.md).
 
 `who-owns-x-bot`, `pr-gatekeeper`, `incident-triage-agent`, and `backlog-runner` are each in

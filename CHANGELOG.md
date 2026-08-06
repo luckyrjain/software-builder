@@ -6,6 +6,30 @@ the create-skill anti-pattern on time-sensitive info).
 
 Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/README.md).
 
+## test-writer
+
+### Initial release (2026-08-06)
+
+- New skill — generates and backfills automated tests for a target repository. Detects the repo's own
+  test framework/conventions (pytest, Jest/Vitest/Mocha, Go `testing`, JUnit via Maven/Gradle,
+  RSpec/Minitest, xUnit/NUnit/MSTest, `cargo test`) via `scripts/detect-test-framework.sh`, then writes
+  tests matching that convention for changed code (diff mode) or an existing coverage gap (backfill
+  mode), runs them, and iterates on failures.
+- Non-negotiable: never modifies production code to force a failing test green, and never `.skip`/
+  `xfail`/deletes an assertion to hide a failure without flagging it — a probable production bug found
+  while testing is reported as a finding and handed to **loop-task-implementer**/**pr-review**, not
+  silently resolved.
+- No MCP of its own; composes with **pr-review** (existing-test-quality review, production-bug flags on
+  an MR) and **loop-task-implementer** (production-bug fixes) via cross-skill handoffs only, never a hard
+  install dependency.
+- `scripts/detect-test-framework.sh` + `scripts/test-framework-markers.sh`, with a pytest suite
+  (`tests/test_detect_test_framework.py`) over marker-file fixtures under
+  `tests/fixtures/test-framework-detect/`.
+- Full shared-framework compliance: `SETUP.md`, `README.md`, `examples.md`,
+  `reference/{skill-contract,phase-index,lazy-load-index,gate-policy,test-quality-checklist,
+  framework-detection,report-format,smoke-test,pressure-tests}.md`; new rows in `skill-routing.md`,
+  `cross-skill-escalation.md`, `prompt-injection.md`, and `smoke-test-conventions.md`.
+
 ## loop-task-implementer
 
 ### Rename, framework compliance, and safety fixes (2026-08-05)

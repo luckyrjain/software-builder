@@ -36,6 +36,7 @@ Each skill is a self-contained directory copied to `~/.cursor/skills/<name>/` on
 | **loop-task-implementer** | [loop-task-implementer/README.md](../loop-task-implementer/README.md) | [loop-task-implementer/SKILL.md](../loop-task-implementer/SKILL.md) | [loop-task-implementer/SETUP.md](../loop-task-implementer/SETUP.md) |
 | **backlog-runner** | [backlog-runner/README.md](../backlog-runner/README.md) | [backlog-runner/SKILL.md](../backlog-runner/SKILL.md) | [backlog-runner/SETUP.md](../backlog-runner/SETUP.md) |
 | **weekly-squad-digest** | [weekly-squad-digest/README.md](../weekly-squad-digest/README.md) | [weekly-squad-digest/SKILL.md](../weekly-squad-digest/SKILL.md) | [weekly-squad-digest/SETUP.md](../weekly-squad-digest/SETUP.md) |
+| **test-writer** | [test-writer/README.md](../test-writer/README.md) | [test-writer/SKILL.md](../test-writer/SKILL.md) | [test-writer/SETUP.md](../test-writer/SETUP.md) |
 
 A one-line "invoke / does" summary of every skill is in root [README.md § Skills](../README.md#skills) —
 not repeated here to avoid two independently-maintained copies drifting apart.
@@ -80,6 +81,9 @@ Skills reference each other when a finding belongs in another workflow:
 | loop-task-implementer | Task touches MySQL-dialect SQL during a PG migration | mysql-to-postgres-sql |
 | backlog-runner | Caller wants a single, interactive, on-demand task | loop-task-implementer |
 | weekly-squad-digest | Caller wants a fresh single-source rollup, not the combined digest | migration-program-manager / cost-optimization-sprint-planner |
+| test-writer | A generated test surfaces a probable production bug | loop-task-implementer (fix) / pr-review (flag on the MR) |
+| pr-review | Missing/weak test coverage on the reviewed MR | test-writer |
+| loop-task-implementer | Task's changes need generated tests | test-writer |
 
 Full symmetric matrix (forward + reverse escalations):
 [docs/skill-framework/shared/cross-skill-escalation.md](skill-framework/shared/cross-skill-escalation.md).
@@ -285,6 +289,27 @@ These are planning artifacts; the live behavior is defined in each skill's own `
 | `queries.md` | Datadog query strings (do not invent inline) |
 | `thresholds.md` | Verdict bands, HPA table, cyclic detection, confidence rubric |
 | `report-template.md` | DORA section contract — Human Report (primary) + Technical Appendix |
+
+## test-writer file map
+
+| Path | What it does |
+|------|--------------|
+| `workflow/inputs.md` | Parse `target` (`diff`/`backfill`) + `repo_root` + `run_tests`; HARD STOP on missing required fields |
+| `workflow/detect-conventions.md` | Run the detection script; ask-once on ambiguous framework, ask-before-writing on none detected |
+| `workflow/select-targets.md` | Diff-mode changed-code selection / backfill scope expansion, exclusions, `max_files_per_run` cap |
+| `workflow/generate-tests.md` | Write real, convention-matched tests; untestable-without-fixture gate |
+| `workflow/verify-and-iterate.md` | Run, fix test bugs, never patch production code to force green |
+| `workflow/report.md` | `TEST_WRITER_REPORT.md` rendering rules |
+| `scripts/detect-test-framework.sh`, `scripts/test-framework-markers.sh` | Marker-file framework detection across 11 ecosystems |
+| `reference/skill-contract.md` | Non-negotiable agent contract (load with SKILL.md) |
+| `reference/gate-policy.md` | Every live gate and its required, non-guessing answer |
+| `reference/test-quality-checklist.md` | What makes a generated test acceptable |
+| `reference/framework-detection.md` | Marker-file table + confidence rules the detection script implements |
+| `reference/report-format.md` | Normative `TEST_WRITER_REPORT.md` structure |
+| `reference/pressure-tests.md` | Maintainer regression scenarios |
+| `examples.md` | Invocation table + golden scenarios |
+| `tests/fixtures/test-framework-detect/` | Marker-file fixtures per ecosystem + ambiguous/none cases |
+| `tests/test_detect_test_framework.py` | Pytest suite for the detection script |
 
 ## Install and quality gates
 

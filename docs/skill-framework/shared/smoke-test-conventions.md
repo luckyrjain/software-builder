@@ -78,6 +78,7 @@ Maintainer pressure scenarios: [pressure-tests.md](pressure-tests.md).
 | loop-task-implementer | `Use loop-task-implementer to implement <task> and open a PR.` | Discovers repo policy, selects one eligible task, dispatches a fresh Builder |
 | backlog-runner | `tracker_query`, `max_tasks_per_run`, `repo_context` | Queue pull announced (tickets found, capped, skipped), then dependency order, before the first loop-task-implementer invocation |
 | weekly-squad-digest | `rollup_manifest: {migration_rollup_path, cost_rollup_path}` | Resolved rollup paths announced (supplied vs. found on disk), before the digest is rendered |
+| test-writer | `target: {mode: diff/backfill, ...}`, `repo_root: <path>` | Detected framework + confidence announced, before any target is selected |
 
 ## 4. Output checklist template
 
@@ -124,6 +125,7 @@ A correct minimal output should contain:
 | loop-task-implementer | `make lint-loop-task-implementer` |
 | backlog-runner | `make lint-backlog-runner` |
 | weekly-squad-digest | `make lint-weekly-squad-digest` |
+| test-writer | `make lint-test-writer` (includes pytest + shellcheck) |
 | Framework | `make lint-framework` |
 | All | `make lint` |
 

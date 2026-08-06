@@ -1,4 +1,4 @@
-.PHONY: install install-pr-review install-pr-gatekeeper install-k8s-overprovisioning install-incident-rca install-incident-rca-deps install-incident-triage-agent install-domain-comprehension install-squad-map install-who-owns-x-bot install-new-hire-guide install-release-readiness-checker install-migration-program-manager install-cost-optimization-sprint-planner install-mysql-to-postgres-sql install-loop-task-implementer install-backlog-runner install-weekly-squad-digest install-claude install-claude-pr-review install-claude-pr-gatekeeper install-claude-k8s-overprovisioning install-claude-incident-rca install-claude-incident-triage-agent install-claude-domain-comprehension install-claude-squad-map install-claude-who-owns-x-bot install-claude-new-hire-guide install-claude-release-readiness-checker install-claude-migration-program-manager install-claude-cost-optimization-sprint-planner install-claude-mysql-to-postgres-sql install-claude-loop-task-implementer install-claude-backlog-runner install-claude-weekly-squad-digest lint lint-framework lint-pr-review lint-pr-gatekeeper lint-k8s-skill lint-k8s lint-incident-rca lint-incident-triage-agent lint-domain-comprehension lint-squad-map lint-who-owns-x-bot lint-new-hire-guide lint-release-readiness-checker lint-migration-program-manager lint-cost-optimization-sprint-planner lint-mysql-to-postgres-sql lint-loop-task-implementer lint-backlog-runner lint-weekly-squad-digest setup-hooks setup kubesense-errors
+.PHONY: install install-pr-review install-pr-gatekeeper install-k8s-overprovisioning install-incident-rca install-incident-rca-deps install-incident-triage-agent install-domain-comprehension install-squad-map install-who-owns-x-bot install-new-hire-guide install-release-readiness-checker install-migration-program-manager install-cost-optimization-sprint-planner install-mysql-to-postgres-sql install-loop-task-implementer install-backlog-runner install-weekly-squad-digest install-test-writer install-claude install-claude-pr-review install-claude-pr-gatekeeper install-claude-k8s-overprovisioning install-claude-incident-rca install-claude-incident-triage-agent install-claude-domain-comprehension install-claude-squad-map install-claude-who-owns-x-bot install-claude-new-hire-guide install-claude-release-readiness-checker install-claude-migration-program-manager install-claude-cost-optimization-sprint-planner install-claude-mysql-to-postgres-sql install-claude-loop-task-implementer install-claude-backlog-runner install-claude-weekly-squad-digest install-claude-test-writer lint lint-framework lint-pr-review lint-pr-gatekeeper lint-k8s-skill lint-k8s lint-incident-rca lint-incident-triage-agent lint-domain-comprehension lint-squad-map lint-who-owns-x-bot lint-new-hire-guide lint-release-readiness-checker lint-migration-program-manager lint-cost-optimization-sprint-planner lint-mysql-to-postgres-sql lint-loop-task-implementer lint-backlog-runner lint-weekly-squad-digest lint-test-writer setup-hooks setup kubesense-errors
 
 install:
 	bash scripts/install.sh
@@ -54,6 +54,9 @@ install-backlog-runner: install-loop-task-implementer
 install-weekly-squad-digest: install-migration-program-manager install-cost-optimization-sprint-planner
 	bash scripts/install.sh weekly-squad-digest
 
+install-test-writer:
+	bash scripts/install.sh test-writer
+
 install-claude:
 	bash scripts/install.sh --agent claude-user
 
@@ -105,13 +108,16 @@ install-claude-backlog-runner: install-claude-loop-task-implementer
 install-claude-weekly-squad-digest: install-claude-migration-program-manager install-claude-cost-optimization-sprint-planner
 	bash scripts/install.sh --agent claude-user weekly-squad-digest
 
+install-claude-test-writer:
+	bash scripts/install.sh --agent claude-user test-writer
+
 setup:
 	@echo "setup: installing Python dev dependencies (requirements.txt)"
 	@python3 -m pip install -r requirements.txt 2>/dev/null || \
 		python3 -m pip install --user --break-system-packages -r requirements.txt
 	@$(MAKE) setup-hooks
 
-lint: lint-framework lint-pr-review lint-pr-gatekeeper lint-k8s-skill lint-incident-rca lint-incident-triage-agent lint-domain-comprehension lint-squad-map lint-who-owns-x-bot lint-new-hire-guide lint-release-readiness-checker lint-migration-program-manager lint-cost-optimization-sprint-planner lint-mysql-to-postgres-sql lint-loop-task-implementer lint-backlog-runner lint-weekly-squad-digest
+lint: lint-framework lint-pr-review lint-pr-gatekeeper lint-k8s-skill lint-incident-rca lint-incident-triage-agent lint-domain-comprehension lint-squad-map lint-who-owns-x-bot lint-new-hire-guide lint-release-readiness-checker lint-migration-program-manager lint-cost-optimization-sprint-planner lint-mysql-to-postgres-sql lint-loop-task-implementer lint-backlog-runner lint-weekly-squad-digest lint-test-writer
 	@for f in scripts/*.sh; do \
 		echo "shellcheck $$f"; \
 		if command -v shellcheck >/dev/null 2>&1; then \
@@ -1009,6 +1015,75 @@ lint-weekly-squad-digest:
 		{ echo "error: weekly-squad-digest/SETUP.md must link to docs/skill-framework" >&2; exit 1; }
 	@echo "  ok (framework refs)"
 
+lint-test-writer:
+	@echo "lint-test-writer: SKILL.md line count (<= 180)"
+	@test -f test-writer/SKILL.md || \
+		{ echo "error: missing test-writer/SKILL.md" >&2; exit 1; }
+	@lines=$$(wc -l < test-writer/SKILL.md | tr -d ' '); \
+	if [ -z "$$lines" ] || [ "$$lines" -eq 0 ]; then \
+		echo "error: test-writer/SKILL.md is empty" >&2; exit 1; \
+	elif [ "$$lines" -gt 180 ]; then \
+		echo "error: test-writer SKILL.md $$lines lines (> 180)" >&2; \
+		exit 1; \
+	fi; \
+	echo "  ok ($$lines lines)"
+	@echo "lint-test-writer: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
+	@fail=0; \
+	for f in test-writer/workflow/*.md; do \
+		fm=$$(awk '/^---$$/{c++; next} c==1' "$$f"); \
+		for key in workflow_version phase produces consumes; do \
+			if ! printf '%s\n' "$$fm" | grep -q "^$$key:"; then \
+				echo "  missing $$key frontmatter: $$f" >&2; fail=1; \
+			fi; \
+		done; \
+	done; \
+	if [ "$$fail" -ne 0 ]; then echo "error: test-writer workflow/*.md must declare workflow_version, phase, produces, consumes" >&2; exit 1; fi; \
+	echo "  ok"
+	@echo "lint-test-writer: required reference files"
+	@for f in skill-contract phase-index lazy-load-index gate-policy test-quality-checklist framework-detection report-format smoke-test pressure-tests; do \
+		test -f test-writer/reference/$$f.md || \
+			{ echo "error: missing test-writer/reference/$$f.md" >&2; exit 1; }; \
+	done
+	@test -f test-writer/scripts/detect-test-framework.sh || \
+		{ echo "error: missing test-writer/scripts/detect-test-framework.sh" >&2; exit 1; }
+	@test -f test-writer/scripts/test-framework-markers.sh || \
+		{ echo "error: missing test-writer/scripts/test-framework-markers.sh" >&2; exit 1; }
+	@test -f test-writer/examples.md || \
+		{ echo "error: missing test-writer/examples.md" >&2; exit 1; }
+	@grep -q '## Invocation' test-writer/examples.md || \
+		{ echo "error: test-writer/examples.md must have Invocation section" >&2; exit 1; }
+	@grep -q 'skill-framework' test-writer/SETUP.md || \
+		{ echo "error: test-writer/SETUP.md must link to docs/skill-framework" >&2; exit 1; }
+	@grep -q 'docs/skill-framework/shared/skill-routing.md' test-writer/SKILL.md || \
+		{ echo "error: test-writer/SKILL.md must link to shared skill-routing" >&2; exit 1; }
+	@grep -q 'docs/skill-framework/shared/prompt-injection.md' test-writer/SKILL.md || \
+		{ echo "error: test-writer/SKILL.md must link to shared prompt-injection" >&2; exit 1; }
+	@echo "  ok (framework refs)"
+	@echo "lint-test-writer: dangling markdown links"
+	@bash scripts/lint-dangling-md-links.sh test-writer/*.md test-writer/reference/*.md test-writer/workflow/*.md && echo "  ok" || \
+		{ echo "error: dangling reference link(s) found" >&2; exit 1; }
+	@echo "lint-test-writer: shellcheck scan"
+	@if command -v shellcheck >/dev/null 2>&1; then \
+		shellcheck -x -P SCRIPTDIR test-writer/scripts/detect-test-framework.sh test-writer/scripts/test-framework-markers.sh; \
+	elif command -v docker >/dev/null 2>&1; then \
+		docker run --rm -v "$(CURDIR):/mnt" -w /mnt koalaman/shellcheck-alpine:stable \
+			shellcheck -x -P SCRIPTDIR test-writer/scripts/detect-test-framework.sh test-writer/scripts/test-framework-markers.sh; \
+	else \
+		echo "error: install shellcheck or docker" >&2; exit 1; \
+	fi
+	@echo "  ok (shellcheck)"
+	@echo "lint-test-writer: detection script pytest suite"
+	@cache="$(CURDIR)/.pycache-lint-test-writer"; \
+	export PYTHONDONTWRITEBYTECODE=1 PYTHONPYCACHEPREFIX="$$cache"; \
+	trap 'rm -rf "$$cache"' EXIT; \
+	if python3 -c "import pytest" >/dev/null 2>&1; then \
+		python3 -m pytest -p no:cacheprovider test-writer/tests/test_detect_test_framework.py -q || exit 1; \
+	else \
+		echo "pytest not installed — install with 'python3 -m pip install pytest' to run test-writer's own suite" >&2; \
+		exit 1; \
+	fi; \
+	echo "  ok (pytest)"
+
 lint-framework:
 	@echo "lint-framework: shared docs present"
 	@test -f docs/skill-framework/README.md
@@ -1115,7 +1190,7 @@ lint-framework:
 	@echo "lint-framework: all SETUP.md links ok"
 	@echo "lint-framework: cross-agent discovery files (.cursor/rules + .kiro/steering)"
 	@fail=0; \
-	for skill in pr-review pr-gatekeeper incident-rca incident-triage-agent k8s-overprovisioning-datadog domain-comprehension squad-map who-owns-x-bot new-hire-guide release-readiness-checker migration-program-manager mysql-to-postgres-sql loop-task-implementer backlog-runner cost-optimization-sprint-planner weekly-squad-digest; do \
+	for skill in pr-review pr-gatekeeper incident-rca incident-triage-agent k8s-overprovisioning-datadog domain-comprehension squad-map who-owns-x-bot new-hire-guide release-readiness-checker migration-program-manager mysql-to-postgres-sql loop-task-implementer backlog-runner cost-optimization-sprint-planner weekly-squad-digest test-writer; do \
 		test -f .cursor/rules/$$skill.mdc || \
 			{ echo "  missing .cursor/rules/$$skill.mdc" >&2; fail=1; }; \
 		test -f .kiro/steering/$$skill.md || \

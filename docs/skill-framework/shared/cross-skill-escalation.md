@@ -1,6 +1,6 @@
 # Cross-skill escalation (shared)
 
-**Normative.** Symmetric escalation matrix for pr-review, pr-gatekeeper, incident-rca, incident-triage-agent, k8s-overprovisioning-datadog, domain-comprehension, squad-map, who-owns-x-bot, new-hire-guide, release-readiness-checker, mysql-to-postgres-sql, loop-task-implementer, backlog-runner, migration-program-manager, cost-optimization-sprint-planner, and weekly-squad-digest.
+**Normative.** Symmetric escalation matrix for pr-review, pr-gatekeeper, incident-rca, incident-triage-agent, k8s-overprovisioning-datadog, domain-comprehension, squad-map, who-owns-x-bot, new-hire-guide, release-readiness-checker, mysql-to-postgres-sql, loop-task-implementer, backlog-runner, migration-program-manager, cost-optimization-sprint-planner, weekly-squad-digest, and test-writer.
 
 **Consumers:** `SKILL.md` in each skill (link here; keep ≤10 skill-specific rows max).
 
@@ -58,6 +58,10 @@ know about — don't treat it as a "you may want to" row the way every other row
 | A deployment in the rollup has no `SQUAD_MAP.md`/`ownership.datadog.service_aliases` match | cost-optimization-sprint-planner → squad-map | `workspace_root` | "Map squads for repos in `{workspace}` — org prefix `{org}`, segment `{n}`" |
 | Caller wants a fresh single-source migration rollup, not the combined digest | weekly-squad-digest → migration-program-manager | `program_manifest` | "Migration status across all repos" |
 | Caller wants a fresh single-source cost/waste sweep, not the combined digest | weekly-squad-digest → cost-optimization-sprint-planner | `sweep_scope` | "Where's the money?" |
+| Generated/verified test surfaces a probable production bug | test-writer → loop-task-implementer | Failing assertion + expected/actual + test file:line | "Fix `{function}` so `{test_file}` passes — test-writer found: {finding}" |
+| Generated/verified test surfaces a probable production bug on an MR under review | test-writer → pr-review | Failing assertion + test file:line + MR !IID | "Flag `{finding}` on MR !{iid} — test-writer's generated test fails against current behavior" |
+| Caller wants the *existing* test suite reviewed for quality, not new tests written | pr-review → test-writer | MR !IID + flagged files with missing/weak coverage | "Write tests for MR !{iid} — missing coverage on `{files}`" |
+| Task implementation needs generated tests for a subsystem it just touched | loop-task-implementer → test-writer | Repo/task ref + changed files | "Write tests for task `{task_id}`'s changes in `{repo}`" |
 
 Skill-specific rows in each `SKILL.md` MUST be a subset of this table plus local deltas only.
 
@@ -133,6 +137,7 @@ When `MYSQL_TO_PG_SQL_REWRITES.md` exists in the workspace deliverable directory
 | Combined weekly squad digest across both migration and cost rollups | weekly-squad-digest |
 | Autonomous multi-task implement → review → remediate → PR loop (interactive, human-driven) | loop-task-implementer |
 | Scheduled overnight ticket-queue sweep (unattended) | backlog-runner |
+| Write / generate / backfill automated tests for a diff or coverage gap | test-writer |
 | Live rollback / kubectl apply | Out of scope — human operator |
 | Security-only deep review | pr-review with security persona |
 | Cost/billing investigation across services | Canvas + appropriate skill; not auto-routed |

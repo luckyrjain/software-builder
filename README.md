@@ -1,7 +1,7 @@
 # software-builder
 
 [![Lint](https://github.com/luckyrjain/software-builder/actions/workflows/lint.yml/badge.svg)](https://github.com/luckyrjain/software-builder/actions/workflows/lint.yml)
-![Skills](https://img.shields.io/badge/skills-16-blue)
+![Skills](https://img.shields.io/badge/skills-17-blue)
 
 Portable, evidence-driven agent skills for software delivery: code review, incident response,
 architecture discovery, Kubernetes optimization, migrations, release readiness, and autonomous
@@ -176,6 +176,7 @@ routes to skills in another category.
 | [pr-review](pr-review/) | `/pr-review` or “review this MR/PR” | GitLab MR review with evidence-backed findings and optional inline posts | [README](pr-review/README.md) · [SETUP](pr-review/SETUP.md) |
 | [pr-gatekeeper](pr-gatekeeper/) | Push webhook | Runs `pr-review` on every push to an open MR and applies unattended posting policy | [README](pr-gatekeeper/README.md) · [SETUP](pr-gatekeeper/SETUP.md) |
 | [release-readiness-checker](release-readiness-checker/) | “Is this release ready?” | Aggregates review, Kubernetes, and incident signals into a release go/no-go report | [README](release-readiness-checker/README.md) · [SETUP](release-readiness-checker/SETUP.md) |
+| [test-writer](test-writer/) | “Write tests for MR !123” or “backfill tests for `<file/module>`” | Detects the repo's test framework/conventions, writes and runs real tests, never patches production code to force green | [README](test-writer/README.md) · [SETUP](test-writer/SETUP.md) |
 
 ### Incidents and reliability
 
@@ -216,6 +217,7 @@ MCP is **skill-specific**, not a prerequisite for installing or browsing the rep
 |----------|-----------------------------|
 | `loop-task-implementer` | No MCP; uses the host's repository/Git access and CI visibility |
 | `mysql-to-postgres-sql` | No MCP |
+| `test-writer` | No MCP; uses the host's repository read/write access and (optionally) its test-runner access |
 | `domain-comprehension`, `squad-map` | No MCP for repository/CODEOWNERS mode; GitLab and Datadog improve coverage |
 | `migration-program-manager`, `weekly-squad-digest` | No MCP; aggregate files produced by upstream workflows |
 | `pr-review` | GitLab read access; GitLab write access only for posting |
