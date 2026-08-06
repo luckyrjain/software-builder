@@ -8,8 +8,11 @@ description: >-
   Spring, legacy PHP, Python, and Node.js services. Use when migrating
   jdbc:mysql/mysql2/psycopg2 connections to PostgreSQL, scrubbing MySQL
   dialect, auditing native queries, or loading a domain pack for P0/P1
-  file-level rewrites (timestamps, types, case sensitivity). Not for a full
-  domain/bounded-context map (domain-comprehension) or MR review (pr-review).
+  file-level rewrites (timestamps, types, case sensitivity). Keywords: MySQL
+  to PostgreSQL, MySQL-only SQL, MySQL dialect scan, scan-mysql-dialect.sh,
+  mysql2 to pg, SQLAlchemy PG cutover, jdbc:postgresql, domain-pack P0/P1
+  cooling SQL. Not for a full domain/bounded-context map
+  (domain-comprehension) or MR review (pr-review).
 ---
 
 # MySQL → PostgreSQL SQL Migration

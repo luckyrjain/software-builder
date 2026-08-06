@@ -1,0 +1,57 @@
+name: Host compatibility issue
+description: A skill doesn't discover, install, or behave correctly on a specific host (Cursor, Claude Code, Codex, Kiro, or another repository-capable agent).
+labels: ["host-compatibility"]
+body:
+  - type: dropdown
+    id: host
+    attributes:
+      label: Host
+      options:
+        - Cursor
+        - Claude Code
+        - ChatGPT / Codex
+        - Kiro
+        - Other repository-capable agent
+    validations:
+      required: true
+  - type: input
+    id: host_version
+    attributes:
+      label: Host version (if known)
+  - type: dropdown
+    id: skill
+    attributes:
+      label: Affected skill
+      options:
+        - backlog-runner
+        - cost-optimization-sprint-planner
+        - domain-comprehension
+        - incident-rca
+        - incident-triage-agent
+        - k8s-overprovisioning-datadog
+        - loop-task-implementer
+        - migration-program-manager
+        - mysql-to-postgres-sql
+        - new-hire-guide
+        - pr-gatekeeper
+        - pr-review
+        - release-readiness-checker
+        - squad-map
+        - weekly-squad-digest
+        - who-owns-x-bot
+        - Installer / discovery generally (not one skill)
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What went wrong
+      description: Install failure, skill not discovered, wrong invocation behavior, host-specific instruction mismatch, etc.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+    validations:
+      required: true

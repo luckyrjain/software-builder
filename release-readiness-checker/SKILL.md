@@ -51,7 +51,7 @@ Routing table: [skill-routing.md](../docs/skill-framework/shared/skill-routing.m
 ## Deliverable
 
 **`RELEASE_READINESS_REPORT.md`** — spec: [reference/report-format.md](reference/report-format.md).
-Overall verdict (Ready / Not ready) plus three sections: MRs reviewed (per-MR severity summary, not the
+Overall verdict (READY / CONDITIONAL / NOT_READY / UNKNOWN) plus three sections: MRs reviewed (per-MR severity summary, not the
 full pr-review chat render), per-service rightsizing (k8s's own verdict, unmodified), per-service
 incident signal (clear / flagged, with a direct incident-rca follow-up pointer when flagged).
 

@@ -2,7 +2,7 @@
 name: pr-review
 description: >-
   GitLab MR review by URL, !IID, or current branch. Phased workflow: context → findings pipeline →
-  executive summary → optional post. Triggers: /pr-review, review MR/merge request, re-review,
+  executive summary → optional post. Keywords: /pr-review, review MR/merge request, re-review,
   post-merge audit, list open MRs, review and post. Not for GitHub PRs, local-only diffs, RCA, or
   K8s rightsizing. Full phrase table: examples.md.
 ---
@@ -91,5 +91,7 @@ Full matrix: [cross-skill-escalation.md](../docs/skill-framework/shared/cross-sk
 Routing: [skill-routing.md](../docs/skill-framework/shared/skill-routing.md) · shared conventions:
 [docs/skill-framework/README.md](../docs/skill-framework/README.md) · confidence
 [confidence-bands.md](../docs/skill-framework/shared/confidence-bands.md) · prompt injection
-[prompt-injection.md](../docs/skill-framework/shared/prompt-injection.md) · post-actions
+[prompt-injection.md](../docs/skill-framework/shared/prompt-injection.md) · MCP errors
+[mcp-error-handling.md](../docs/skill-framework/shared/mcp-error-handling.md) (1-retry policy —
+`workflow/phase-0.md` §MCP retry policy) · post-actions
 [post-action-templates.md](../docs/skill-framework/shared/post-action-templates.md) (Jira §2, Slack §5, canvas §6).

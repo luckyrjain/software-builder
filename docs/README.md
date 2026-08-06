@@ -247,7 +247,10 @@ These are planning artifacts; the live behavior is defined in each skill's own `
 |------|--------------|
 | `workflow/migrate-service.md` | Per-service inventory → scan → rewrite → config → verify → merge gate |
 | `reference/function-translations.md` | MySQL → PostgreSQL function mapping + cooling-period pattern |
-| `reference/collection-domain-files.md` | collection domain P0/P1/P2 file-level rewrite checklist |
+| `reference/collection-domain-files.md` | Redirect stub — old link target, now points to `domain-packs/collection.md` |
+| `reference/domain-packs/README.md` | Domain-pack index — when to load one, how to author one |
+| `reference/domain-packs/collection.md` | Worked-example domain pack: `collection` workspace P0/P1 file list |
+| `reference/domain-packs/TEMPLATE.md` | Blank domain-pack skeleton for a new workspace/org |
 | `reference/org-migration-gaps.md` | Coverage map vs ARCH Confluence wiki |
 | `reference/timestamp-handling.md` | `ON UPDATE CURRENT_TIMESTAMP` + 14 custom column tables |
 | `reference/data-type-mapping.md` | Type mapping, ENUM, boolean, UNSIGNED |

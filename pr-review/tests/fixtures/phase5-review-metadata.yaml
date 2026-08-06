@@ -58,12 +58,12 @@ review_metadata:
     false_positives_withdrawn: 0
     candidates: 8
     emitted: 1
-    finding_precision: 0.125
+    emission_rate: 0.125
   review_quality:
     coverage_pct: 100
     evidence_pct: 100
     confidence: high
-    finding_precision: 0.125
+    emission_rate: 0.125
   repository_health:
     schema_version: 2
     dimensions:

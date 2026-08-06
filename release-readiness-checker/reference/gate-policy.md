@@ -1,46 +1,42 @@
 # Gate policy — all three wrapped skills (normative)
 
-**Correction (round-1 review):** an earlier version of this file claimed pr-review's `chat-only` posting
-mode could be requested as an input (`posting_mode: chat-only`) and therefore had no gate to answer. This
-was wrong — `chat-only` is **derived by pr-review's own Phase 0** purely from which GitLab MCP write
-tools are connected ([phase-0.md](../../pr-review/workflow/phase-0.md): *"read-only [server profile] |
-none of the above [write tools] | `chat-only`"*); it is never a caller-supplied input, and pr-review's
-`workflow/inputs.md`/`phase-0.md` frontmatter has no field for it at all. In any realistic deployment
-where pr-review is also configured for normal write-capable use (which this skill's own
+`posting_mode` (`full`/`summary-only`/`general-only`/`chat-only`) is **derived by pr-review's own Phase 0**
+purely from which GitLab MCP write tools are connected
+([phase-0.md](../../pr-review/workflow/phase-0.md)) — never a caller-supplied input. In any realistic
+deployment where pr-review is also configured for normal write-capable use (which this skill's own
 [SETUP.md](../SETUP.md) assumes), pr-review's Phase 0 will detect write tools and enter `full`/
-`summary-only`/`general-only` — every one of which has a live Phase 3 posting-confirmation gate. This
-file is corrected below to give pr-review its own real gate policy instead of assuming one away.
+`summary-only`/`general-only` — every one of which has a live Phase 3 posting-confirmation gate. See
+[CHANGELOG.md](../CHANGELOG.md) for the history of what this file's gate answers correct and why.
 
-## pr-review — reuses pr-gatekeeper's own policy, unchanged
+## pr-review — retrospective audit mode (typed invocation, not conversational)
 
-pr-gatekeeper already solved exactly this problem — automating pr-review with no live human to answer
-its posting confirmation — and its policy is exactly what this skill needs too, with one input fixed
-permanently: **`auto_post_authorized` is always treated as `false`.** This skill invokes pr-review the
-same way pr-gatekeeper's own automation does when `auto_post_authorized: false`
-([pr-gatekeeper/reference/auto-post-policy.md](../../pr-gatekeeper/reference/auto-post-policy.md)):
+Every MR this skill resolves is merged by construction (step 1's `state: merged` query) — this skill
+invokes pr-review with **explicit typed fields**, not a conversational exchange:
 
-1. **Invocation phrase:** `"review !<merge_request_iid> in <project>"` — **never** "review and post,"
-   for every resolved MR. This is the exact example phrase pr-review's own
-   [SETUP.md](../../pr-review/SETUP.md) (`"/pr-review !482 in backend/payments — or review !482 in
-   backend/payments"`) and [README.md](../../pr-review/README.md) document — `workflow/inputs.md`'s own
-   Resolution branches section describes the resolution *logic* (IID + explicit project) but doesn't
-   itself contain a literal example phrase.
-2. Every other ask-point pr-review may hit follows
-   [pr-gatekeeper's own enumerated policy](../../pr-gatekeeper/reference/auto-post-policy.md) verbatim —
-   merged/closed-MR stop (decline the post-merge audit), early 200-file cap warning (`proceed`),
-   pagination cap hit (`review the partial boundary as-is`), baseline staleness offer (decline, continue
-   incrementally), **Phase 3 posting confirmation** (`"Hold — don't post"` — one of pr-review's own
-   offered options, in every mode, including `general-only`'s always-on prompt and any draft-MR warning),
-   and the post-Phase-5 Jira/Slack write-back offers (decline both).
-3. Whether pr-review's Phase 0 detects `chat-only` (no prompt, nothing to reply to) or a write-capable
-   mode (`full`/`summary-only`/`general-only`, Phase 3 always answered "Hold"), **nothing is ever posted
-   to GitLab** — the outcome is identical either way, per pr-gatekeeper's own Outcome table. This skill
-   takes pr-review's Phase 5 chat-rendered findings (severity-tagged), same as pr-gatekeeper does for its
-   own held-review notification path, for the MRs-reviewed section of `RELEASE_READINESS_REPORT.md`.
+- `review_mode: retrospective`, `audit_type: retrospective` — selects pr-review's retrospective audit
+  path directly (`phase-1.md` step 1's "If user confirms post-merge audit →" branch) so the merged-MR
+  stop and its confirmation ask are avoided by construction, never scripted as "decline."
+- `expected_head_sha` — the MR's `merge_commit_sha` captured in step 1. If pr-review's own
+  `get_merge_request` returns a different SHA, treat it as a genuine anomaly (§Escalation, not override),
+  not something to silently review past.
+- `posting_policy: forbidden` — a typed field pr-review honors identically to
+  `auto_post_authorized: false`, not the conversational "Hold — don't post" reply pr-gatekeeper's
+  automation types back to a live ask.
 
-No separate enumeration duplicated here — [pr-gatekeeper's own file](../../pr-gatekeeper/reference/auto-post-policy.md)
-is the single source of truth for pr-review's gates; if pr-review adds a new ask-point, fixing
-pr-gatekeeper's policy fixes this skill's too.
+Every ask-point pr-review may still hit **other than** the merged-MR stop follows
+[pr-gatekeeper's own enumerated policy](../../pr-gatekeeper/reference/auto-post-policy.md) verbatim —
+early 200-file cap warning (`proceed`), pagination cap hit (`review the partial boundary as-is`),
+baseline staleness offer (decline, continue incrementally), **Phase 3 posting confirmation**
+(`"Hold — don't post"` — redundant with but not replaced by `posting_policy: forbidden`, in case a future
+pr-review version still renders the prompt), and the post-Phase-5 Jira/Slack write-back offers (decline
+both). Whether pr-review's Phase 0 detects `chat-only` or a write-capable mode, **nothing is ever posted
+to GitLab** — `posting_policy: forbidden` guarantees this independent of which mode is detected.
+
+This skill takes pr-review's Phase 5 chat-rendered findings (severity-tagged, retrospective-observation
+labeled per `reference/review-modes.md`) — now from a **real, completed** review — for the MRs-reviewed
+section of `RELEASE_READINESS_REPORT.md`. Every ask-point *other than* the merged-MR stop remains
+[pr-gatekeeper's own file](../../pr-gatekeeper/reference/auto-post-policy.md) as single source of truth;
+if pr-review adds a new ask-point, fixing pr-gatekeeper's policy fixes this skill's too.
 
 ## k8s-overprovisioning-datadog
 
@@ -50,18 +46,17 @@ sufficient evidence, and Kubernetes MCP failure does not block a service when Da
 evidence. Preserve the wrapped verdict; only its `auth_failure` for **all viable sources** produces a
 blocked assessment for that service.
 
-**Correction (round-1 review):** an earlier version of this file claimed k8s-overprovisioning-datadog's
-single-service path has no live gate. It does —
-[resolve-service.md](../../k8s-overprovisioning-datadog/workflow/resolve-service.md) documents two:
+[resolve-service.md](../../k8s-overprovisioning-datadog/workflow/resolve-service.md) documents live
+gates on the single-service path:
 
 | Gate | k8s's own text | This skill's scripted answer |
 |---|---|---|
-| Ambiguous service→tag confirmation | *"Confirm with `get_datadog_metric_context`... If ambiguous, ask the user **or default `env:production` when present**"* | Rely on the documented default — always resolve with `env:production` when present; only if genuinely still ambiguous with no `env:production` scope available does this become the next row |
+| Ambiguous service→tag confirmation | [§ Ambiguous resolution](../../k8s-overprovisioning-datadog/workflow/resolve-service.md#ambiguous-resolution-no-silent-production-default): *"ask the user... if the ask-question tool is unavailable, emit `STOP_REASON: ambiguous_unresolved`"* — k8s no longer defaults to `env:production` when ambiguous | This skill runs unattended, so k8s's ask always resolves to `STOP_REASON: ambiguous_unresolved` for that service — record it in `RELEASE_READINESS_REPORT.md` as an unresolved k8s outcome (same honest-gap treatment as `insufficient_metrics` below), never a guessed `env:production` scope |
 | Service name mismatch (`insufficient_metrics` path) | *"Ask the user to confirm the correct deployment name... Only emit `insufficient_metrics` after ≥2 tag strategies and user confirmation (**or explicit "proceed with unknown"**)"* | **"Proceed with unknown."** This is k8s's own documented non-guessing alternative to a live ask — never invent a deployment/namespace name on this skill's own judgment |
 | One Kubernetes MCP or Datadog source is unavailable/unauthorized | Source-scoped failure; continue when the other source covers required capabilities | Record the wrapped skill's degraded assessment as-is; never convert it into a release-wide auth failure |
 
-A service that resolves to `insufficient_metrics` this way is recorded in
-`RELEASE_READINESS_REPORT.md` **as `insufficient_metrics`, honestly** — not silently upgraded to
+A service that resolves to `insufficient_metrics` or `ambiguous_unresolved` this way is recorded in
+`RELEASE_READINESS_REPORT.md` **honestly, as that outcome** — not silently upgraded to
 `READY` (which would hide a real gap) and not treated as `BLOCKED` (which would fabricate a finding k8s
 never made). See [reference/report-format.md](report-format.md).
 

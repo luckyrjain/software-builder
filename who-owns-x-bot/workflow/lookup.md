@@ -11,7 +11,8 @@ consumes:
 # Lookup — delegate to squad-map, format for Slack
 
 **Goal:** Get an ownership answer for `query` from squad-map and return exactly one Slack-formatted
-message. No new ownership logic here — see [SKILL.md](../SKILL.md) Non-goals.
+message. No new ownership logic here — see § Non-goals in the
+[design spec](../../docs/superpowers/specs/2026-08-05-who-owns-x-bot-design.md#non-goals-explicitly-out-of-scope-for-this-item).
 
 ## Steps
 
@@ -43,6 +44,15 @@ message. No new ownership logic here — see [SKILL.md](../SKILL.md) Non-goals.
    note that ownership config is missing, per [reference/slack-format.md](../reference/slack-format.md)
    § Unknown.
 
+   **Concurrency note:** a Slack workspace can fire two `/who-owns` invocations for different uncached
+   repos within seconds of each other (a realistic scenario — two engineers asking about ownership around
+   the same incident or the same rollout), and both can land in this step and both trigger squad-map's own
+   `SQUAD_MAP.md` write in its Step 1. who-owns-x-bot adds **no locking of its own** here — it has no
+   database or lock service to add one with, and this skill's own output is a Slack reply, not the file.
+   The write-time mitigation (atomic rename + accepted last-write-wins risk) is documented once, at the
+   layer that actually performs the write:
+   [squad-map/workflow/phase-1.md § Step 1](../../squad-map/workflow/phase-1.md#steps-16-mcp-mapping).
+
 4. **Classify the result** using squad-map's own confidence band and conflict flag — do not
    re-derive or override it. A "conflict flag" is any row squad-map placed in its own Conflicts table —
    per [squad-mapping.md § Reconciliation](../../squad-map/reference/squad-mapping.md#reconciliation) and
@@ -65,6 +75,12 @@ message. No new ownership logic here — see [SKILL.md](../SKILL.md) Non-goals.
 5. **Format** per [reference/slack-format.md](../reference/slack-format.md) and reply. Do not write any
    file — the reply text is the only output of this skill (squad-map may still have written or updated
    `SQUAD_MAP.md` as its own side effect in Step 2; that is squad-map's artifact, not this skill's).
+   - **Mid-incident escalation suffix:** before replying, check the raw `query` text against the
+     incident-signal keywords in
+     [reference/slack-format.md § Escalation suffix (mid-incident query)](../reference/slack-format.md#escalation-suffix-mid-incident-query).
+     If matched, append that suffix line to whichever shape Step 4 selected — still exactly one Slack
+     message (see [SKILL.md](../SKILL.md) § Cross-skill escalation; do not switch skills mid-response,
+     only suggest incident-rca as a next step).
 
 ## Read-only boundary
 

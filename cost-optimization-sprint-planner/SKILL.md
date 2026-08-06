@@ -32,8 +32,9 @@ two separate problems need resolving, not one:
    fallback) would otherwise interrupt the sweep once per deployment — every one is answered with
    k8s-overprovisioning-datadog's own documented, non-guessing fallback per
    [reference/gate-policy.md](reference/gate-policy.md), never an invented answer. The cost-rate gate is
-   the one genuinely new resolution: asked **once, sweep-wide**, before the loop starts, never re-derived
-   per deployment (see `reference/gate-policy.md` § Cost-rate gate).
+   the one genuinely new resolution — full rationale for why it's resolved once, sweep-wide, rather than
+   per deployment, in
+   [reference/gate-policy.md § Cost-rate gate](reference/gate-policy.md#cost-rate-gate-resolved-once-sweep-wide-before-the-loop-starts).
 2. **Looping a single-item, gate-heavy skill over many deployments with per-item failure isolation and a
    batch-level stop condition** is new logic of its own, modeled on
    [backlog-runner/reference/queue-policy.md](../backlog-runner/reference/queue-policy.md) (not

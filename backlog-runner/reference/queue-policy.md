@@ -18,12 +18,15 @@ backlog_run:
   max_tasks_per_run: <int>
   deadline: "<ISO-8601>" | null
   session_token_budget: <int> | null
+  allow_stacked_dependencies: false   # caller-supplied opt-in — see §2 rule 4; never inferred from ticket text
   consumed_tokens: 0
   tasks:
     - task_id: "<from tracker>"
       dependencies: []          # other task_ids in this same pulled batch, if declared
       outcome: PENDING | SKIPPED_EXISTING | DEFERRED | HUMAN_ACTION_REQUIRED | ESCALATED
       pull_request_url: null    # set when loop-task-implementer opens one
+      dependency_merged: false  # true only once the dependency's PR is confirmed merged into the effective base — §2 rule 4
+      stacked_on: null          # dependency task_id when dispatched as a stacked PR (allow_stacked_dependencies only) — §2 rule 4
       escalation_ref: null      # loop-task-implementer's own §19 escalation report, when ESCALATED
   stopped_reason: null          # MAX_TASKS_REACHED | DEADLINE_REACHED | TOKEN_BUDGET_EXHAUSTED | CONSECUTIVE_ESCALATION_BREAKER | QUEUE_EXHAUSTED
 ```
@@ -41,43 +44,71 @@ backlog_run:
    loop-task-implementer's own task-selection logic checks *one* task's dependencies at pick time, it
    never orders a whole pulled batch. If ticket B declares a dependency on ticket A and both are in this
    run's batch, attempt A first.
-4. **A ticket's dependency is satisfied — checked directly against the dependency's own current state,
-   never only "this run's batch," and never assumed from mere existence of a branch/PR/closed ticket
-   without checking it actually succeeded** — this skill runs nightly, and a dependency reaching
-   `HUMAN_ACTION_REQUIRED` on a *prior* night (or done by a human entirely outside this skill) must still
-   count as satisfied tonight, or a dependent ticket would stay `DEFERRED` forever the moment its
-   prerequisite's ticket ages out of `tracker_query` (once a PR exists, or once the ticket is closed, it
-   commonly no longer matches a "ready for dev"-style query — it can never again appear "in this run's
-   batch"). Look up the dependency ticket's own current state directly — **regardless of whether this
-   skill ever pulled it itself** — and treat it as satisfied when **any** of:
-   - It's in this run's batch and reached `HUMAN_ACTION_REQUIRED` this run, **or**
-   - It has an existing **open or merged** branch/PR (whether from a prior run of this skill or opened by
-     a human directly — the check is the same one rule 2 uses, per-ticket-ID, and doesn't care who opened
-     it; `SKIPPED_EXISTING` **is** satisfaction evidence, not a reason to keep deferring the dependent —
-     and a human merging a prior run's PR directly, without also separately closing the tracker ticket, is
-     satisfaction too, exactly as §4's outcome table's `MERGED` row already anticipates), **or**
-   - The dependency ticket itself is closed **as done/resolved/merged** in the tracker (the strongest
-     signal — query the tracker for the dependency ticket's own current state when it's not in this run's
-     batch at all, don't assume "not pulled" means "not done").
+4. **A ticket's dependency is satisfied only when its code has actually landed on the effective base
+   branch — checked directly against the dependency's own current state, never only "this run's batch,"
+   and never assumed from mere existence of an open PR or a `HUMAN_ACTION_REQUIRED` outcome.**
 
-   **None of these count when the outcome was unsuccessful** — a PR that was opened and later closed
-   *without* merging (abandoned/rejected), or a ticket closed as won't-fix/invalid/duplicate/cancelled,
-   is **not** satisfaction evidence; treat that dependency as unresolved (`DEFERRED`, same as no evidence
-   at all) rather than building on top of work that didn't land. Checking the tracker's own
-   resolution/closure reason, not just "is it closed," is required here — a bare "closed" boolean is not
-   enough to distinguish the two. Concretely: Jira exposes this as its native `resolution` field (`Done`/
-   `Fixed` vs. `Won't Fix`/`Duplicate`/`Invalid`); GitHub Issues has no native resolution field — use the
-   `state_reason` API field (`completed` vs. `not_planned`) or, if absent, a `wontfix`/`duplicate`/`invalid`
-   label convention. **If neither signal is present** (an older or loosely-maintained tracker with a closed
-   issue and no `state_reason`/label), this degrades to "closure reason unknown," same as
-   [SETUP.md](../SETUP.md)'s unrecognized-dependency-field precedent — treat the ticket's closure as *not*
-   satisfaction evidence and fall through to `DEFERRED` rather than guessing done vs. abandoned; an
-   existing open-or-merged PR (bullet 2) remains available as an independent, unambiguous satisfaction
-   path even when the ticket's own closure reason is unreadable.
+   **Correction (P0 fix):** an earlier version of this rule treated an **open** (not merged) branch/PR —
+   including the normal `HUMAN_ACTION_REQUIRED` outcome, "verified-ready, PR opened, not merged" — as
+   satisfaction evidence on its own. That is wrong: a dependent task started against the base branch while
+   its prerequisite's code exists only on an unmerged PR branch is building against code that is not
+   actually present in the branch it will itself be based on. The dependent's implementation, tests, and
+   review would all silently assume functions/schemas/config the base branch doesn't yet have. This
+   skill's own §3 note ("a human merging a prior run's PR directly...is satisfaction too, exactly as §4's
+   outcome table's `MERGED` row already anticipates") already pointed at the correct rule — merge, not PR
+   existence — this section now matches it.
 
-   A dependency satisfying none of the successful-outcome bullets is `DEFERRED` — do not attempt its
-   dependent this run, record why, and re-check next run (this is the one case that legitimately needs
-   another night).
+   This skill runs nightly, and a dependency that **merged** on a *prior* night (or was merged by a human
+   entirely outside this skill) must still count as satisfied tonight, or a dependent ticket would stay
+   `DEFERRED` forever the moment its prerequisite's ticket ages out of `tracker_query` (once a PR merges,
+   or once the ticket is closed, it commonly no longer matches a "ready for dev"-style query — it can
+   never again appear "in this run's batch"). Look up the dependency ticket's own current state directly
+   — **regardless of whether this skill ever pulled it itself** — and treat it as satisfied when **any**
+   of:
+   - It has an existing PR that is **merged into the effective base branch** (the same base branch the
+     dependent task will be dispatched against) — whether from a prior run of this skill or opened by a
+     human directly; check the PR's actual merge state and target branch, not just "a PR exists" (the
+     check in rule 2 is existence-only and is **not** sufficient here — re-check merge state even for a
+     ticket recorded `SKIPPED_EXISTING`), **or**
+   - The dependency ticket itself is closed **as done/resolved/merged** in the tracker **and** the tracker
+     or a linked PR confirms the merge landed on the effective base branch (the strongest signal — query
+     the tracker for the dependency ticket's own current state when it's not in this run's batch at all,
+     don't assume "not pulled" means "not done"; but a closed ticket with no confirmed merge to the base
+     branch, e.g. closed against a different long-lived branch, is not satisfaction).
+
+   **An open, unmerged PR — including this run's own `HUMAN_ACTION_REQUIRED` outcome — is never
+   satisfaction on its own.** The dependency stays unresolved until its PR merges. Two ways to proceed
+   with a genuinely ready dependent task before that merge happens:
+   - **Default: defer.** Treat as `DEFERRED` and re-check next run, same as any other unresolved
+     dependency (the common case — most nights, the prerequisite merges before the dependent is next
+     attempted).
+   - **Opt-in stacked PR:** only when the caller has explicitly set `allow_stacked_dependencies: true`
+     for this run (a caller-supplied config value, never inferred from ticket text), dispatch the
+     dependent task with its branch based on the dependency's **own open PR branch** instead of the
+     effective base branch — an explicit stacked-PR model, not an assumption that the dependency is
+     "done." Record `stacked_on: <dependency_task_id>` in this ticket's session-state entry, and carry
+     the note through to the morning summary so a human knows this PR must merge **after**, and rebase
+     onto, its prerequisite's PR — never as an independent merge candidate in the meantime.
+
+   **None of the merge-based bullets count when the outcome was unsuccessful** — a PR that was opened and
+   later closed *without* merging (abandoned/rejected), or a ticket closed as
+   won't-fix/invalid/duplicate/cancelled, is **not** satisfaction evidence; treat that dependency as
+   unresolved (`DEFERRED`, same as no evidence at all) rather than building on top of work that didn't
+   land. Checking the tracker's own resolution/closure reason, not just "is it closed," is required here —
+   a bare "closed" boolean is not enough to distinguish the two. Concretely: Jira exposes this as its
+   native `resolution` field (`Done`/`Fixed` vs. `Won't Fix`/`Duplicate`/`Invalid`); GitHub Issues has no
+   native resolution field — use the `state_reason` API field (`completed` vs. `not_planned`) or, if
+   absent, a `wontfix`/`duplicate`/`invalid` label convention. **If neither signal is present** (an older
+   or loosely-maintained tracker with a closed issue and no `state_reason`/label), this degrades to
+   "closure reason unknown," same as [SETUP.md](../SETUP.md)'s unrecognized-dependency-field precedent —
+   treat the ticket's closure as *not* satisfaction evidence and fall through to `DEFERRED` rather than
+   guessing done vs. abandoned; a confirmed merge into the effective base branch (first bullet) remains
+   available as an independent, unambiguous satisfaction path even when the ticket's own closure reason is
+   unreadable.
+
+   A dependency satisfying none of the bullets above is `DEFERRED` — do not attempt its dependent this
+   run (unless the stacked-PR opt-in applies), record why, and re-check next run (this is the one case
+   that legitimately needs another night).
 
 ## 3. Invoking loop-task-implementer — one task per invocation
 
@@ -102,11 +133,11 @@ dependencies are complete"* — but loop-task-implementer's own `state-schema.ya
 `COMPLETE` after an **authorized merge** (§18), which never happens under this skill. It's not
 documented whether that same-task eligibility check still applies when the caller (this skill) has
 already named one specific ticket to implement, rather than asking loop-task-implementer to pick from a
-pool. **Mitigation, not a guaranteed fix:** when a ticket's dependency was satisfied per rule 4 above via
-the `SKIPPED_EXISTING`/closed-ticket paths (not literally `COMPLETE` in loop-task-implementer's own
-sense), **prepend** one line to that ticket's *description* (the same field its acceptance criteria and
+pool. **Mitigation, not a guaranteed fix:** when a ticket's dependency was satisfied per rule 4 above —
+confirmed merged into the effective base branch, whether via a merged PR or a closed-as-done ticket
+with a confirmed merge — (not literally `COMPLETE` in loop-task-implementer's own sense), **prepend** one line to that ticket's *description* (the same field its acceptance criteria and
 body text already go in per §3 above — not a separate field) — e.g. *"Depends on
-`<dependency_task_id>`, already addressed: `<pull_request_url or 'ticket closed'>`."* This gives
+`<dependency_task_id>`, already merged: `<pull_request_url or 'ticket closed'>`."* This gives
 loop-task-implementer's own Orchestrator the evidence to proceed if it does re-check dependencies; if it
 doesn't, the note is harmless extra context. **If loop-task-implementer still escalates a dependent
 ticket on this ground**, treat the escalation as genuine (per §4 below) rather than silently

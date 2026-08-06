@@ -53,3 +53,5 @@ rendered.
 | A supplied path doesn't exist on disk | Recorded in Rollup gaps ("File not found... run `<skill>` first"); the other rollup, if readable, still renders |
 | `rollup_manifest` has neither path set | Inputs HARD STOP — no digest produced |
 | An item's `squad` is `UNKNOWN` in its source rollup | Rendered in the `UNKNOWN squad` group, always last — never guessed into a named squad |
+
+Maintainer pressure scenarios: [pressure-tests.md](pressure-tests.md).

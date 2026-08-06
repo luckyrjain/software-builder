@@ -45,8 +45,8 @@ and [reference/postmortem-format.md](reference/postmortem-format.md) (Mode 2).
 | Triage | `event_type: page_triggered` | Short on-call doc: incident-rca executive summary + top hypothesis + squad-map owning team |
 | Postmortem | `event_type: incident_resolved` | incident-rca's full report; Corrective/Preventive/Post-RCA-actions Owner columns filled from squad-map (exact placeholder per table — see [reference/postmortem-format.md](reference/postmortem-format.md)) |
 
-Neither incident-rca's nor squad-map's own logic is re-derived — see
-[SKILL.md](SKILL.md) Non-goals in the [design spec](../docs/superpowers/specs/2026-08-05-incident-triage-agent-design.md).
+Neither incident-rca's nor squad-map's own logic is re-derived — see § Non-goals in the
+[design spec](../docs/superpowers/specs/2026-08-05-incident-triage-agent-design.md#non-goals-explicitly-out-of-scope-for-this-item).
 
 ## Required inputs
 

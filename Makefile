@@ -248,13 +248,18 @@ lint-pr-gatekeeper:
 	@bash scripts/lint-dangling-md-links.sh pr-gatekeeper/*.md pr-gatekeeper/reference/*.md pr-gatekeeper/workflow/*.md && echo "  ok" || \
 		{ echo "error: dangling reference link(s) found" >&2; exit 1; }
 	@echo "lint-pr-gatekeeper: required reference files"
-	@for f in phase-index lazy-load-index auto-post-policy smoke-test; do \
+	@for f in phase-index lazy-load-index auto-post-policy smoke-test pressure-tests; do \
 		test -f pr-gatekeeper/reference/$$f.md || \
 			{ echo "error: missing pr-gatekeeper/reference/$$f.md" >&2; exit 1; }; \
 	done
+	@grep -q 'pressure-tests' pr-gatekeeper/reference/smoke-test.md || \
+		{ echo "error: smoke-test.md must link to pressure-tests.md" >&2; exit 1; }
 	@grep -q 'skill-framework' pr-gatekeeper/SETUP.md || \
 		{ echo "error: pr-gatekeeper/SETUP.md must link to docs/skill-framework" >&2; exit 1; }
 	@echo "  ok (framework refs)"
+	@echo "lint-pr-gatekeeper: ask-point drift check (pr-review workflow vs auto-post-policy.md)"
+	@python3 pr-gatekeeper/scripts/check-ask-point-drift.py || \
+		{ echo "error: pr-review ask-point drift detected — see pr-gatekeeper/reference/auto-post-policy.md" >&2; exit 1; }
 
 lint-k8s-skill:
 	@echo "lint-k8s-skill: SKILL.md line count (<= 150)"
@@ -465,10 +470,12 @@ lint-incident-triage-agent:
 	@bash scripts/lint-dangling-md-links.sh incident-triage-agent/*.md incident-triage-agent/reference/*.md incident-triage-agent/workflow/*.md && echo "  ok" || \
 		{ echo "error: dangling reference link(s) found" >&2; exit 1; }
 	@echo "lint-incident-triage-agent: required reference files"
-	@for f in phase-index lazy-load-index unattended-gate-policy triage-doc-format postmortem-format smoke-test; do \
+	@for f in phase-index lazy-load-index unattended-gate-policy triage-doc-format postmortem-format smoke-test pressure-tests; do \
 		test -f incident-triage-agent/reference/$$f.md || \
 			{ echo "error: missing incident-triage-agent/reference/$$f.md" >&2; exit 1; }; \
 	done
+	@grep -q 'pressure-tests' incident-triage-agent/reference/smoke-test.md || \
+		{ echo "error: smoke-test.md must link to pressure-tests.md" >&2; exit 1; }
 	@grep -q 'skill-framework' incident-triage-agent/SETUP.md || \
 		{ echo "error: incident-triage-agent/SETUP.md must link to docs/skill-framework" >&2; exit 1; }
 	@echo "  ok (framework refs)"
@@ -658,10 +665,12 @@ lint-who-owns-x-bot:
 	@bash scripts/lint-dangling-md-links.sh who-owns-x-bot/*.md who-owns-x-bot/reference/*.md who-owns-x-bot/workflow/*.md && echo "  ok" || \
 		{ echo "error: dangling reference link(s) found" >&2; exit 1; }
 	@echo "lint-who-owns-x-bot: required reference files"
-	@for f in phase-index lazy-load-index slack-format smoke-test; do \
+	@for f in phase-index lazy-load-index slack-format smoke-test pressure-tests; do \
 		test -f who-owns-x-bot/reference/$$f.md || \
 			{ echo "error: missing who-owns-x-bot/reference/$$f.md" >&2; exit 1; }; \
 	done
+	@grep -q 'pressure-tests' who-owns-x-bot/reference/smoke-test.md || \
+		{ echo "error: smoke-test.md must link to pressure-tests.md" >&2; exit 1; }
 	@grep -q 'skill-framework' who-owns-x-bot/SETUP.md || \
 		{ echo "error: who-owns-x-bot/SETUP.md must link to docs/skill-framework" >&2; exit 1; }
 	@echo "  ok (framework refs)"
@@ -698,10 +707,12 @@ lint-new-hire-guide:
 	@bash scripts/lint-dangling-md-links.sh new-hire-guide/*.md new-hire-guide/reference/*.md new-hire-guide/workflow/*.md && echo "  ok" || \
 		{ echo "error: dangling reference link(s) found" >&2; exit 1; }
 	@echo "lint-new-hire-guide: required reference files"
-	@for f in phase-index lazy-load-index tour-format smoke-test; do \
+	@for f in phase-index lazy-load-index tour-format smoke-test pressure-tests; do \
 		test -f new-hire-guide/reference/$$f.md || \
 			{ echo "error: missing new-hire-guide/reference/$$f.md" >&2; exit 1; }; \
 	done
+	@grep -q 'pressure-tests' new-hire-guide/reference/smoke-test.md || \
+		{ echo "error: smoke-test.md must link to pressure-tests.md" >&2; exit 1; }
 	@grep -q 'skill-framework' new-hire-guide/SETUP.md || \
 		{ echo "error: new-hire-guide/SETUP.md must link to docs/skill-framework" >&2; exit 1; }
 	@echo "  ok (framework refs)"
@@ -738,10 +749,12 @@ lint-release-readiness-checker:
 	@bash scripts/lint-dangling-md-links.sh release-readiness-checker/*.md release-readiness-checker/reference/*.md release-readiness-checker/workflow/*.md && echo "  ok" || \
 		{ echo "error: dangling reference link(s) found" >&2; exit 1; }
 	@echo "lint-release-readiness-checker: required reference files"
-	@for f in phase-index lazy-load-index gate-policy report-format smoke-test; do \
+	@for f in phase-index lazy-load-index gate-policy report-format smoke-test pressure-tests; do \
 		test -f release-readiness-checker/reference/$$f.md || \
 			{ echo "error: missing release-readiness-checker/reference/$$f.md" >&2; exit 1; }; \
 	done
+	@grep -q 'pressure-tests' release-readiness-checker/reference/smoke-test.md || \
+		{ echo "error: smoke-test.md must link to pressure-tests.md" >&2; exit 1; }
 	@grep -q 'skill-framework' release-readiness-checker/SETUP.md || \
 		{ echo "error: release-readiness-checker/SETUP.md must link to docs/skill-framework" >&2; exit 1; }
 	@echo "  ok (framework refs)"
@@ -778,10 +791,12 @@ lint-migration-program-manager:
 	@bash scripts/lint-dangling-md-links.sh migration-program-manager/*.md migration-program-manager/reference/*.md migration-program-manager/workflow/*.md && echo "  ok" || \
 		{ echo "error: dangling reference link(s) found" >&2; exit 1; }
 	@echo "lint-migration-program-manager: required reference files"
-	@for f in phase-index lazy-load-index report-format smoke-test; do \
+	@for f in phase-index lazy-load-index report-format smoke-test pressure-tests; do \
 		test -f migration-program-manager/reference/$$f.md || \
 			{ echo "error: missing migration-program-manager/reference/$$f.md" >&2; exit 1; }; \
 	done
+	@grep -q 'pressure-tests' migration-program-manager/reference/smoke-test.md || \
+		{ echo "error: smoke-test.md must link to pressure-tests.md" >&2; exit 1; }
 	@test -f migration-program-manager/scripts/aggregate_migration_status.py || \
 		{ echo "error: missing migration-program-manager/scripts/aggregate_migration_status.py" >&2; exit 1; }
 	@grep -q 'skill-framework' migration-program-manager/SETUP.md || \
@@ -826,10 +841,12 @@ lint-cost-optimization-sprint-planner:
 	@bash scripts/lint-dangling-md-links.sh cost-optimization-sprint-planner/*.md cost-optimization-sprint-planner/reference/*.md cost-optimization-sprint-planner/workflow/*.md && echo "  ok" || \
 		{ echo "error: dangling reference link(s) found" >&2; exit 1; }
 	@echo "lint-cost-optimization-sprint-planner: required reference files"
-	@for f in phase-index lazy-load-index gate-policy sweep-policy report-format smoke-test; do \
+	@for f in phase-index lazy-load-index gate-policy sweep-policy report-format smoke-test pressure-tests; do \
 		test -f cost-optimization-sprint-planner/reference/$$f.md || \
 			{ echo "error: missing cost-optimization-sprint-planner/reference/$$f.md" >&2; exit 1; }; \
 	done
+	@grep -q 'pressure-tests' cost-optimization-sprint-planner/reference/smoke-test.md || \
+		{ echo "error: smoke-test.md must link to pressure-tests.md" >&2; exit 1; }
 	@grep -q 'skill-framework' cost-optimization-sprint-planner/SETUP.md || \
 		{ echo "error: cost-optimization-sprint-planner/SETUP.md must link to docs/skill-framework" >&2; exit 1; }
 	@echo "  ok (framework refs)"
@@ -997,10 +1014,12 @@ lint-backlog-runner:
 	@bash scripts/lint-dangling-md-links.sh backlog-runner/*.md backlog-runner/reference/*.md backlog-runner/workflow/*.md && echo "  ok" || \
 		{ echo "error: dangling reference link(s) found" >&2; exit 1; }
 	@echo "lint-backlog-runner: required reference files"
-	@for f in phase-index lazy-load-index queue-policy morning-summary-format smoke-test; do \
+	@for f in phase-index lazy-load-index queue-policy morning-summary-format smoke-test pressure-tests; do \
 		test -f backlog-runner/reference/$$f.md || \
 			{ echo "error: missing backlog-runner/reference/$$f.md" >&2; exit 1; }; \
 	done
+	@grep -q 'pressure-tests' backlog-runner/reference/smoke-test.md || \
+		{ echo "error: smoke-test.md must link to pressure-tests.md" >&2; exit 1; }
 	@grep -q 'skill-framework' backlog-runner/SETUP.md || \
 		{ echo "error: backlog-runner/SETUP.md must link to docs/skill-framework" >&2; exit 1; }
 	@echo "  ok (framework refs)"
@@ -1037,10 +1056,12 @@ lint-weekly-squad-digest:
 	@bash scripts/lint-dangling-md-links.sh weekly-squad-digest/*.md weekly-squad-digest/reference/*.md weekly-squad-digest/workflow/*.md && echo "  ok" || \
 		{ echo "error: dangling reference link(s) found" >&2; exit 1; }
 	@echo "lint-weekly-squad-digest: required reference files"
-	@for f in phase-index lazy-load-index report-format smoke-test; do \
+	@for f in phase-index lazy-load-index report-format smoke-test pressure-tests; do \
 		test -f weekly-squad-digest/reference/$$f.md || \
 			{ echo "error: missing weekly-squad-digest/reference/$$f.md" >&2; exit 1; }; \
 	done
+	@grep -q 'pressure-tests' weekly-squad-digest/reference/smoke-test.md || \
+		{ echo "error: smoke-test.md must link to pressure-tests.md" >&2; exit 1; }
 	@grep -q 'skill-framework' weekly-squad-digest/SETUP.md || \
 		{ echo "error: weekly-squad-digest/SETUP.md must link to docs/skill-framework" >&2; exit 1; }
 	@echo "  ok (framework refs)"

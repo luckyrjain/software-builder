@@ -57,7 +57,7 @@ Without MCP, skill continues — CODEOWNERS fallback with confidence capped at L
 ```json
 "gitlab": {
   "command": "npx",
-  "args": ["-y", "@zereight/mcp-gitlab"],
+  "args": ["-y", "@zereight/mcp-gitlab@2.1.46"],
   "env": {
     "GITLAB_PERSONAL_ACCESS_TOKEN": "${GITLAB_PERSONAL_ACCESS_TOKEN}",
     "GITLAB_API_URL": "https://gitlab.example.com/api/v4",

@@ -3,7 +3,7 @@ name: incident-rca
 skill_version: 2
 description: >-
   RCA and post-incident investigation for outages, error spikes, deploy regressions, and latency
-  incidents in a time window. Triggers: RCA, root cause, postmortem, INC-, P1/P2, on-call. Datadog or
+  incidents in a time window. Keywords: RCA, root cause, postmortem, INC-, P1/P2, on-call. Datadog or
   KubeSense. Not for MR review, K8s rightsizing, or live remediation. Full phrases: examples.md.
 ---
 

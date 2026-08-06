@@ -78,8 +78,23 @@ as a **paste-ready block rendered into this skill's own doc** instead — mirror
 
 | Mode | `from_time` | `to_time` | Width guarantee |
 |------|-------------|-----------|-------------------|
-| Triage | `triggered_at − 20m` | `triggered_at + 10m` | 30 min, symmetric around the page — never depends on invocation latency (see [workflow/triage.md](../workflow/triage.md)) |
-| Postmortem | `triggered_at` | `resolved_at` | The actual incident duration; if `resolved_at − triggered_at < 30m`, extend `to_time` to `triggered_at + 30m` so gate #3 above never fires on a very short incident |
+| Triage | `triggered_at − 20m` | `triggered_at + 10m` | 30 min total, weighted toward before the page (20m pre / 10m post — not symmetric) — never depends on invocation latency (see [workflow/triage.md](../workflow/triage.md)) |
+| Postmortem | `triggered_at` | `resolved_at`, extended per below | The actual incident duration, padded only enough to clear incident-rca's short-window gate — see below |
+
+**Postmortem window extension (P1 fix — padding must not silently extend past `resolved_at` uncredited):**
+when `resolved_at − triggered_at < 30m`, incident-rca's own gate #3 (window < 10m asks, < 5m blocks) would
+fire on a genuinely short, already-resolved incident — undesirable, since this mode always wants Phase 4
+to run. The fix is padding, not a redefinition of the incident's duration:
+
+- `to_time` is extended to `triggered_at + 30m` **only to satisfy the gate** — this pads the *query*
+  window, it does not mean the incident itself lasted 30 minutes.
+- The padded portion (from the real `resolved_at` to the padded `to_time`) is **post-resolution
+  context**, not incident-causal time — a signal that happens to fall in that padded slice occurred after
+  the incident was already resolved and must not be attributed as part of the incident's own causal
+  chain. [workflow/postmortem.md](../workflow/postmortem.md) records `resolved_at` alongside the padded
+  `to_time` in the doc's window line specifically so a reader (or a later correlation pass) can tell real
+  incident duration from query padding — never render only the padded `from_time`–`to_time` pair as if it
+  were the incident's own duration.
 
 Both always UTC-suffixed ISO-8601, both always paired with an explicit `service` anchor — see
 [workflow/inputs.md](../workflow/inputs.md).

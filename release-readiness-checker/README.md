@@ -33,8 +33,9 @@ see [reference/gate-policy.md](reference/gate-policy.md).
    checkpoint per [reference/gate-policy.md](reference/gate-policy.md) (overriding incident-rca's own
    default-to-proceed on a strong signal).
 5. **Writes `RELEASE_READINESS_REPORT.md`** — overall verdict + three sections, every manifest entry
-   present, erring toward `Not ready` on anything unverified (an unresolved MR range, an
-   `insufficient_metrics` service) rather than silently assuming clean.
+   present, reporting `UNKNOWN` on anything unverified (an unresolved MR range, an
+   `insufficient_metrics` service) rather than silently assuming clean **or** conflating an evidence
+   gap with a proven `NOT_READY` blocker.
 
 ## When to use
 
@@ -53,7 +54,7 @@ release_manifest: [{repo: api-disbursement, service: disbursement-service, since
 ## What you get
 
 `RELEASE_READINESS_REPORT.md` — format spec: [reference/report-format.md](reference/report-format.md).
-Overall verdict (Ready / Not ready), MRs reviewed (severity summary), per-service rightsizing (k8s's own
+Overall verdict (READY / CONDITIONAL / NOT_READY / UNKNOWN), MRs reviewed (severity summary), per-service rightsizing (k8s's own
 verdict, unmodified), per-service incident signal (clear / flagged with a direct incident-rca follow-up
 pointer).
 

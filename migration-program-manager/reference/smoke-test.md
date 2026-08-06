@@ -42,3 +42,5 @@ writes any output file.
 | `state_path` doesn't exist yet (first run) | Treated as empty state — every service starts at staleness 0, not an error |
 | A gate signature changes between runs | Staleness resets to 0 for that service, not carried over |
 | `SQUAD_MAP.md` has rows only in its Conflicts/Unmapped/Out-of-scope sections | Parser returns zero main-table rows, not a crash — those sections are never read as join data |
+
+Maintainer pressure scenarios: [pressure-tests.md](pressure-tests.md).

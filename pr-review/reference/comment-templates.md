@@ -438,12 +438,12 @@ review_metadata:
     false_positives_withdrawn: 0
     candidates: 12
     emitted: 3
-    finding_precision: 0.25
+    emission_rate: 0.25
   review_quality:
     coverage_pct: 100
     evidence_pct: 100
     confidence: high
-    finding_precision: 0.25
+    emission_rate: 0.25
   repository_health:
     schema_version: 2
 ```
@@ -660,12 +660,12 @@ review_metadata:
     false_positives_withdrawn: 0
     candidates: 6
     emitted: 0
-    finding_precision: 0.0
+    emission_rate: 0.0
   review_quality:
     coverage_pct: 100
     evidence_pct: 100
     confidence: high
-    finding_precision: 0.0
+    emission_rate: 0.0
   repository_health:
     schema_version: 2
 ```

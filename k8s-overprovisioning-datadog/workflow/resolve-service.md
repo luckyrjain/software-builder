@@ -28,8 +28,28 @@ For capabilities routed to Datadog, map the resolved workload to tags (try in or
 
 Cross-check with `get_datadog_metric_context` on `kubernetes.cpu.requests` (`tag_filter:
 kube_deployment`) when Datadog is available. If live and historical identities disagree, emit
-`conflicting_signals`; do not silently remap. If ambiguous, ask the user or default `env:production`
-when present.
+`conflicting_signals`; do not silently remap.
+
+## Ambiguous resolution (no silent production default)
+
+If ambiguous (multiple candidate
+workloads/tags match, or more than one `env:` value is observed for the same workload), **ask the user**.
+Only skip the ask when the ambiguity is resolved by evidence actually observed, not by a fallback
+assumption:
+
+- **Single observed `env` value:** if exactly one `env:*` tag value appears across every candidate the
+  live/historical lookup returned — whatever that value is (`production`, `staging`, `env:eu-prod`,
+  etc.) — that is the resolved scope. This is evidence-based, not a default.
+- **Multiple `env` values observed, none distinguishing:** ask the user which environment; never pick
+  `env:production` (or any other value) merely because it is the most common convention. A wrong
+  environment resolved silently means every subsequent metric, rightsizing recommendation, and cost
+  figure in the report is scoped to the wrong workload — this is a correctness failure, not a
+  convenience shortcut worth the risk.
+- **If the ask-question tool is unavailable** (unattended caller): emit `STOP_REASON: ambiguous_unresolved`
+  ([workflow/stop-reasons.md](stop-reasons.md)) for this workload rather than guessing a scope — a blocked
+  assessment naming the observed candidates, never a silently-scoped one. A wrapping skill invoking this
+  one unattended (e.g. cost-optimization-sprint-planner) records its own per-deployment outcome from this
+  `STOP_REASON` per its own gate policy — this skill does not need to know whether it's being wrapped.
 
 **HPA name:** read the live HPA target through Kubernetes MCP first. Fall back to
 `get_datadog_metric_context` on `kubernetes_state.hpa.current_replicas` filtered by

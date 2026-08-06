@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/luckyrjain/software-builder/security/advisories/new
+    about: Do not file a public issue for security reports — use GitHub Security Advisories (see SECURITY.md).

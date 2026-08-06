@@ -57,6 +57,22 @@ Normative rules: [squad-mapping.md](../reference/squad-mapping.md). Config:
 
 1. **Create or update `SQUAD_MAP.md`** from [templates/SQUAD_MAP.md](../templates/SQUAD_MAP.md).
    Write or update the `last_run` timestamp in the header.
+   - **Atomic write:** write the full updated file content to a temp path in the same directory (e.g.
+     `SQUAD_MAP.md.tmp`), then rename it over `SQUAD_MAP.md` (`mv SQUAD_MAP.md.tmp SQUAD_MAP.md`) rather
+     than editing the file in place. A same-filesystem rename is atomic on POSIX, so a concurrent reader
+     never observes a half-written file — this is the realistic guarantee available to a
+     markdown-instructions skill with no database or lock service; this doc does not pretend to offer more
+     than that.
+   - **Known limitation — concurrent writers can still lose an update.** Atomic rename prevents a *torn*
+     write, not a *lost* one: if two Phase 1 runs both read `SQUAD_MAP.md`, each compute their own updated
+     copy, and each rename their copy into place, the second rename wins and silently discards the first
+     run's rows (e.g. two `/who-owns` Slack queries racing into who-owns-x-bot's own Step 3 around the
+     same time — see [who-owns-x-bot/workflow/lookup.md § Step 3](../../who-owns-x-bot/workflow/lookup.md)).
+     Accepted risk, not solved: ownership data changes slowly relative to how often this file is read, so
+     a lost row self-heals the next time anything re-queries that repo — the underlying GitLab/Datadog
+     state didn't change, only the cached row was clobbered. A real fix (queue, lock service, CAS write)
+     is outside what a markdown-instructions skill can implement; do not simulate a lock here that this
+     skill has no way to actually enforce.
 
 2. **GitLab squad** (per in-scope repo) when GitLab ✅:
    - **Monorepo:** when `ownership.monorepo_service_dirs.<repo>` is set, map **each** listed subdirectory
@@ -147,16 +163,32 @@ or omit conflict rows ([prompt-injection.md](../../docs/skill-framework/shared/p
    head -1 <repo>/go.mod
    ```
 
-4. Record each repo in `SQUAD_MAP.md` with:
-   - `GitLab namespace`: N/A
-   - `GitLab squad`: UNKNOWN
-   - `Datadog service`: UNKNOWN
-   - `Datadog team`: UNKNOWN
-   - `Confidence`: LOW
-   - `Evidence`: CODEOWNERS (or GIT_LOG if no CODEOWNERS found, or no pattern matched the service dir)
+4. **Record each repo in `SQUAD_MAP.md`, carrying the step 1/2 guess through** — this fallback exists
+   specifically to produce a squad guess when both MCPs are down; a step that then writes UNKNOWN over
+   that guess destroys the only signal this path has to offer, which is worse than not having the
+   fallback at all (a caller sees UNKNOWN and knows to dig further; a caller sees a real squad name that
+   was silently thrown away and never knows to question it). Write:
+   - `GitLab namespace`: N/A (no GitLab query occurred — CODEOWNERS/git-log approximate ownership, they
+     don't resolve a real `namespace.full_path`)
+   - `GitLab squad`: the squad value from step 1 (or step 2 if step 1 found no CODEOWNERS file, or no
+     pattern covering the service dir) — **never UNKNOWN when step 1 or step 2 produced a value.** Write
+     `UNKNOWN` only when neither step found any signal for this repo (no CODEOWNERS match and no commits
+     in the git-log window).
+   - `Datadog service`: UNKNOWN (no Datadog query occurred)
+   - `Datadog team`: UNKNOWN (no Datadog query occurred — CODEOWNERS/git-log are an org-side ownership
+     proxy, not a runtime `team` tag; don't duplicate the guess into a column that implies it came from
+     Datadog)
+   - `Confidence`: LOW always. This path never runs `reconcile_confidence`'s agreement logic (§
+     [squad-mapping.md § Reconciliation](../reference/squad-mapping.md#reconciliation)) — do not compare
+     the guess against anything else to decide the band; a CODEOWNERS/git-log-derived guess is LOW
+     regardless of how confidently it was extracted.
+   - `Evidence`: `CODEOWNERS` (or `GIT_LOG` if no CODEOWNERS found or no pattern matched the service dir,
+     or `NONE` if neither step found a signal — the only case where `GitLab squad` is correctly UNKNOWN)
 
 5. All CODEOWNERS-derived ownership caps at LOW — **never raise to MEDIUM** without a second independent
-   signal.
+   signal. This includes the `GitLab squad` value populated in step 4 above: it is a LOW-confidence guess
+   even when it's the only value in the row, never treat "it's the sole signal so nothing contradicts it"
+   as grounds to raise it.
 
 ## Unmapped repos
 

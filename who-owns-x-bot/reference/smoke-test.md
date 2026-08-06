@@ -37,3 +37,5 @@ One Slack-formatted reply — no intermediate chatter, no file written by this s
 When squad-map itself has no MCP available (CODEOWNERS fallback, confidence capped LOW): reply is
 **Unknown**, per [reference/slack-format.md](slack-format.md) — LOW confidence never surfaces as
 Resolved in a single-shot reply.
+
+Maintainer pressure scenarios: [pressure-tests.md](pressure-tests.md).

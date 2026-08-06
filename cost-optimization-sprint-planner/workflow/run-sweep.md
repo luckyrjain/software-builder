@@ -33,12 +33,24 @@ Per [reference/sweep-policy.md § 3–4](../reference/sweep-policy.md#3-invoking
    `decision-graph.json` if user requests a file artifact"). k8s-overprovisioning-datadog's own renderer
    only documents that one hardcoded filename — it has no parameter for a caller-specified path or name —
    so **this skill's own workflow, immediately after that invocation returns**, moves/renames the
-   resulting `decision-graph.json` to `<output_dir>/decision-graph-<deployment>.json` (from
-   [workflow/inputs.md](inputs.md)'s `output_dir`) before starting the next candidate. This is a plain
-   file-move step this skill performs itself, not a capability requested of
-   k8s-overprovisioning-datadog — it never needs to know a sweep is even running. Skip this step entirely
-   for an outcome that never reaches COST/RENDER (`INSUFFICIENT_METRICS`/`AMBIGUOUS_UNRESOLVED`/
-   `AUTH_FAILURE` — no file to move).
+   resulting `decision-graph.json` to `<output_dir>/decision-graph-<safe-deployment-slug>.json` before
+   starting the next candidate. This is a plain file-move step this skill performs itself, not a
+   capability requested of k8s-overprovisioning-datadog — it never needs to know a sweep is even running.
+   Skip this step entirely for an outcome that never reaches COST/RENDER
+   (`INSUFFICIENT_METRICS`/`AMBIGUOUS_UNRESOLVED`/`AUTH_FAILURE` — no file to move).
+
+   **Sanitize the deployment name before it becomes part of a path (P1 fix)** — `sweep_scope.deployments`
+   is untrusted content per [prompt-injection.md](../../docs/skill-framework/shared/prompt-injection.md)
+   (a caller- or tracker-supplied string, not something this skill authored). Apply
+   [safe-output.md § Rule 1](../../docs/skill-framework/shared/safe-output.md#rule-1-safe-slugs-untrusted-string-filename-component)
+   to produce `<safe-deployment-slug>`: keep only `[A-Za-z0-9._-]`, replace everything else with `_`, cap
+   at 128 characters. Then apply
+   [§ Rule 2](../../docs/skill-framework/shared/safe-output.md#rule-2-path-containment) — resolve the
+   final `<output_dir>/decision-graph-<safe-deployment-slug>.json` path and verify it is still inside
+   `output_dir` (from [workflow/inputs.md](inputs.md)) before writing; reject and record a sweep gap
+   instead of writing outside it. Perform the move via a direct file-rename operation, never a shell
+   command interpolating the raw deployment name (§ Rule 3) — a deployment name containing `../` or shell
+   metacharacters must never be able to write outside `output_dir` or execute as a command fragment.
 2. Answer every live gate that invocation hits per [reference/gate-policy.md](../reference/gate-policy.md)
    — the cost-rate gate is **never** re-asked here, it was already resolved once before this loop started
    (§ 0 below). Source-scoped Kubernetes MCP or Datadog failures continue through another sufficient
@@ -46,7 +58,7 @@ Per [reference/sweep-policy.md § 3–4](../reference/sweep-policy.md#3-invoking
    Direct Datadog authentication failure in namespace pre-filter mode also stops before the loop. See
    [reference/gate-policy.md § Sweep-wide auth stops](../reference/gate-policy.md#sweep-wide-auth-stops-direct-namespace-pre-filter-or-all-viable-sources).
 3. Record the outcome (`ASSESSED` / `INSUFFICIENT_METRICS` / `AMBIGUOUS_UNRESOLVED` / `AUTH_FAILURE`) and,
-   when `ASSESSED`, the `decision-graph-<deployment>.json` path as `decision_graph_ref`, in
+   when `ASSESSED`, the `decision-graph-<safe-deployment-slug>.json` path as `decision_graph_ref`, in
    `sweep_run.deployments` per the state shape in
    [reference/sweep-policy.md § 1](../reference/sweep-policy.md#1-session-level-state-new-layered-outside-k8s-overprovisioning-datadog-which-has-none).
 4. Check [reference/sweep-policy.md § 5](../reference/sweep-policy.md#5-session-level-stop-conditions-circuit-breakers)'s
