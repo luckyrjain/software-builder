@@ -21,8 +21,8 @@ deployment per conversational run.
    to `ownership.datadog.service_aliases` — squad-map's own existing alias mechanism, not a new one).
 5. **Ranks and groups by squad** — sorted by `monthly_savings_total` descending; `UNKNOWN` squad last.
 6. **Writes `COST_OPTIMIZATION_SPRINT_REPORT.md`** (human-readable) and
-   **`cost_optimization_sprint_rollup.json`** (machine-readable — a future Weekly Squad Digest reuses this
-   directly).
+   **`cost_optimization_sprint_rollup.json`** (machine-readable —
+   [weekly-squad-digest](../weekly-squad-digest/README.md) reuses this directly).
 
 ## When to use
 

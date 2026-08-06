@@ -18,7 +18,7 @@ files, so there's nothing to gate/confirm.
 4. **Ranks and groups by squad** — blocked first, then stalled (past `staleness_threshold_days`), then
    in-progress, then done.
 5. **Writes `MIGRATION_PROGRAM_REPORT.md`** (human-readable) and **`migration_program_rollup.json`**
-   (machine-readable — a future Weekly Squad Digest reuses this directly).
+   (machine-readable — [weekly-squad-digest](../weekly-squad-digest/README.md) reuses this directly).
 
 ## When to use
 

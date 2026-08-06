@@ -77,10 +77,16 @@ gate policy"):
    **Within a squad, splits by `metric_type`** (`pg_migration_gate` / `k8s_waste`) into two
    sub-sections — their `value` shapes are structurally different and not directly comparable (a gate
    status vs. a dollar figure), so this skill never invents a combined cross-metric ranking or score;
-   each sub-section keeps its own producing skill's own sort order (migration: blocked → stalled →
-   in_progress → done; cost: `monthly_savings_total` descending) rather than reinventing one.
-4. Computes each item's **age** from `last_updated` (present on both rollups' base shape) — flags an item
-   past `staleness_warning_days` (optional, default 14) with a note to re-run the producing skill. This is
+   each sub-section keeps its own producing skill's own sort order (migration: blocked → stalled, ranked
+   by `staleness_days` descending within that bucket → in_progress → done; cost:
+   `monthly_savings_total` descending) rather than reinventing one.
+4. Computes each item's **staleness**, preferring migration's own `staleness_days` field when present
+   (key exists, regardless of value — `staleness_days: 0` still counts) since it genuinely varies per
+   service, falling back to a `last_updated`-derived age only when that key is absent; cost items (no
+   `staleness_days` equivalent) always use a `last_updated`-derived age. An item past
+   `staleness_warning_days` (optional, default 14) is flagged with a note to re-run the producing
+   skill — worded differently depending on which source computed it, since `last_updated` is stamped at
+   aggregation-run time (not per-service) for migration items while `staleness_days` genuinely is. This is
    display-only, never a HARD STOP or a decision gate — unlike migration-program-manager's
    `staleness_threshold_days` (which changes a computed `status`), this skill never recomputes anyone's
    `status`, so a sensible default is safe here rather than an operational decision this skill can't

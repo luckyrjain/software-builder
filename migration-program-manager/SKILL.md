@@ -43,8 +43,9 @@ Routing table: [skill-routing.md](../docs/skill-framework/shared/skill-routing.m
 
 **`MIGRATION_PROGRAM_REPORT.md`** (human-readable) + **`migration_program_rollup.json`** (the computed
 `org_rollup_item` list, machine-readable — see [org-rollup-schema.md](../docs/skill-framework/shared/org-rollup-schema.md))
-— spec: [reference/report-format.md](reference/report-format.md). Written so a future Weekly Squad Digest
-can reuse the computed rollup without re-aggregating.
+— spec: [reference/report-format.md](reference/report-format.md). Written so
+[weekly-squad-digest](../weekly-squad-digest/SKILL.md) can reuse the computed rollup without
+re-aggregating.
 
 ## Required inputs
 

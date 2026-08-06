@@ -1,9 +1,11 @@
 # Org rollup schema (shared)
 
-**Normative — forward-looking.** No skill implements this yet. Written for items #8 (Migration Program
-Manager), #10 (Cost Optimization Sprint Planner), and #11 (Weekly Squad Digest) of the
-[team-facing agents roadmap](../../superpowers/plans/2026-08-05-team-facing-agents-roadmap.md), designed
-once per that roadmap's own suggested build order, before any of the three is implemented.
+**Normative.** Implemented by all three skills it was designed for: migration-program-manager (#8,
+produces `pg_migration_gate` items), cost-optimization-sprint-planner (#10, produces `k8s_waste` items),
+and weekly-squad-digest (#11, the sole consumer that reads and combines both). Written once, ahead of any
+of the three, per the
+[team-facing agents roadmap](../../superpowers/plans/2026-08-05-team-facing-agents-roadmap.md)'s own
+suggested build order.
 **Design spec:** [2026-08-05-org-rollup-aggregation-layer-design.md](../../superpowers/specs/2026-08-05-org-rollup-aggregation-layer-design.md).
 
 ## 1. Purpose
@@ -73,6 +75,10 @@ repos / Out of scope (archived) sections without treating rows there as part of 
 
 Source: `MIGRATION_STATUS.yaml` `services[]` rows
 ([mysql-to-postgres-sql/templates/MIGRATION_STATUS.yaml](../../../mysql-to-postgres-sql/templates/MIGRATION_STATUS.yaml)).
+**Implemented by [migration-program-manager](../../../migration-program-manager/SKILL.md)** (item #8),
+which reads every workspace's `MIGRATION_STATUS.yaml` directly (mysql-to-postgres-sql itself never
+aggregates across workspaces) and additionally persists a `staleness_days` value per service — the
+"consuming skill's own staleness threshold" the row below defers to.
 
 | `org_rollup_item` field | Derived from |
 |--------------------------|----------------|

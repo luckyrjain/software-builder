@@ -156,3 +156,33 @@ Found by a fourth adversarial review pass that re-verified rounds 1-3's fixes we
 eight in-skill files (found no new issues there — genuine convergence at that layer) and then widened scope
 to the skill's own wiring into root-level shared docs, finding one propagation gap one level outside the
 files rounds 1-3 had touched.
+
+### Fixed (round-5 review, same day)
+- **`docs/skill-framework/README.md` and `docs/skill-framework/shared/org-rollup-schema.md` both still
+  described `org-rollup-schema.md` as "forward-looking" / "unimplemented," and the framework README's
+  opening skill list omitted weekly-squad-digest (and several other already-shipped skills) entirely** —
+  stale since before any of the three org-rollup-schema consumers existed. Fixed: both files now say the
+  schema is implemented, name all three consumers, and the `pg_migration_gate` adapter got the same
+  "Implemented by migration-program-manager" note the `k8s_waste` adapter already had (an asymmetry the
+  review flagged directly).
+- **The roadmap doc's own `Status:` field** (`docs/superpowers/plans/2026-08-05-team-facing-agents-roadmap.md`)
+  still read "Proposed — brainstormed roadmap, not yet scoped into implementation plans," even though every
+  one of its 11 items — including this skill, which calls itself "the last item (#11)" in its own
+  CHANGELOG — has shipped with a design spec and a review loop. Fixed to reflect completion.
+- **The design spec's own Approach § step 4 described the pre-round-1 (buggy) staleness mechanism**
+  (uniform `last_updated`-derived age for both rollups, no mention of `staleness_days`) — inconsistent with
+  the spec's own research table three lines above it, and out of sync with the shipped mechanism every
+  in-skill file has correctly described since round 1. Fixed to match.
+- **Five docs in the two upstream producer skills still called this skill hypothetical** ("a future Weekly
+  Squad Digest," "the planned Weekly Squad Digest") in `migration-program-manager/SKILL.md`,
+  `migration-program-manager/README.md`, `cost-optimization-sprint-planner/README.md`, and
+  `cost-optimization-sprint-planner/reference/report-format.md` — written before this skill existed, never
+  revisited once it shipped. Fixed to link to the real skill directly (the one CHANGELOG.md mention of this
+  kind was left as-is, since changelog entries are dated historical records of what was true at the time,
+  not living documentation).
+
+Found by a fifth adversarial review pass that deliberately widened scope beyond the staleness/cross-reference
+mechanism rounds 1-4 had focused on — re-reading the roadmap, the design spec, and every shared/upstream doc
+this skill cites as authoritative, rather than re-checking the same eight in-skill files a third time. This
+is the same "nothing in this repo's process re-visits a 'not yet built' claim once the thing ships" gap
+class, caught here because weekly-squad-digest's own completion is what exposed it.

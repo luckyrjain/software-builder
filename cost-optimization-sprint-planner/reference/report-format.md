@@ -53,8 +53,9 @@ table's Confidence column.>
 
 A flat JSON array of `org_rollup_item` objects (per
 [org-rollup-schema.md](../../docs/skill-framework/shared/org-rollup-schema.md)'s `k8s_waste` adapter),
-`metric_type: "k8s_waste"` for every entry. Written so a future Weekly Squad Digest can read this file
-directly instead of re-running the sweep.
+`metric_type: "k8s_waste"` for every entry. Written so
+[weekly-squad-digest](../../weekly-squad-digest/SKILL.md) can read this file directly instead of
+re-running the sweep.
 
 ## Rules
 

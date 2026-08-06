@@ -2,7 +2,9 @@
 
 Normative conventions for **pr-review**, **pr-gatekeeper**, **incident-rca**, **incident-triage-agent**,
 **k8s-overprovisioning-datadog**, **domain-comprehension**, **squad-map**, **who-owns-x-bot**,
-**mysql-to-postgres-sql**, **loop-task-implementer**, and **backlog-runner**.
+**mysql-to-postgres-sql**, **loop-task-implementer**, **backlog-runner**, **new-hire-guide**,
+**release-readiness-checker**, **migration-program-manager**, **cost-optimization-sprint-planner**, and
+**weekly-squad-digest**.
 Design spec: [2025-06-30-unified-skill-framework-design.md](../superpowers/specs/2025-06-30-unified-skill-framework-design.md).
 
 `who-owns-x-bot`, `pr-gatekeeper`, `incident-triage-agent`, and `backlog-runner` are each in
@@ -34,7 +36,7 @@ Skills reference these files by relative link from `SETUP.md` or `SKILL.md`. Do 
 | [shared/phase-glossary.md](shared/phase-glossary.md) | Phase name mapping across pr-review, rca, k8s, domain-comprehension, and squad-map pipelines |
 | [shared/review-metadata-schema.md](shared/review-metadata-schema.md) | Normative metadata YAML — `review_metadata` (pr-review), `assessment_metadata` (rca, k8s); v2 analytics blocks |
 | [shared/claude-code-setup.md](shared/claude-code-setup.md) | Claude Code install paths + MCP config location, mapped from the Cursor equivalents used throughout each skill's `SETUP.md` |
-| [shared/org-rollup-schema.md](shared/org-rollup-schema.md) | Forward-looking — normalized cross-repo rollup item shape for future items #8/#10/#11 (no implementing skill yet) |
+| [shared/org-rollup-schema.md](shared/org-rollup-schema.md) | Normalized cross-repo rollup item shape — implemented by migration-program-manager (#8), cost-optimization-sprint-planner (#10), and weekly-squad-digest (#11) |
 
 ## How skills link here
 
@@ -66,7 +68,7 @@ A skill is framework-compliant when it passes the checklist in the design spec �
 | phase-glossary.md | Complete |
 | review-metadata-schema.md | Complete — v2 pr-review + assessment_metadata (rca, k8s) + repository_health dimensions |
 | claude-code-setup.md | Complete |
-| org-rollup-schema.md | Design complete, **unimplemented** — no skill consumes it yet; written ahead of items #8/#10/#11 per the team-facing agents roadmap's own build order |
+| org-rollup-schema.md | Complete — implemented by migration-program-manager (#8), cost-optimization-sprint-planner (#10), and weekly-squad-digest (#11), the last three items of the team-facing agents roadmap |
 
 ## Deferred (P3 roadmap)
 
