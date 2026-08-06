@@ -58,9 +58,11 @@ renders using whichever rollup is actually readable, per
   case right after a gate changes) still counts and must still be used, never treated as absent by a
   truthiness check — falling back to a `last_updated`-derived age only if the key is genuinely absent;
   cost items always use a `last_updated`-derived age (see
-  [workflow/run-digest.md § 3](run-digest.md#3-compute-staleness-display-only)). Never uniformly use
-  `last_updated` for both just for implementation convenience — that would silently degrade the migration
-  side's staleness signal to a rollup-run-level flag instead of a per-service one.
+  [workflow/run-digest.md § 3](run-digest.md#3-compute-staleness-display-only)) — it is the only staleness
+  signal cost-optimization-sprint-planner's rollup carries; neither that skill's own docs nor this one make
+  any claim about how precisely per-deployment that timestamp is. Never uniformly use `last_updated` for
+  both just for implementation convenience — that would silently degrade the migration side's staleness
+  signal (which does have a genuinely per-service field, `staleness_days`) to a coarser one instead.
 
 ## Embedded invocation
 

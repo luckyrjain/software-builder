@@ -15,9 +15,11 @@
 
 | Service | Status | Priority | Confidence | Notes |
 |---------|--------|----------|------------|-------|
-| <service> | <status> | <priority or —> | <squad_confidence> | <"stale — gate unchanged for N days, re-run migration-program-manager" if staleness_days is past staleness_warning_days; "also in Cost optimization under `<other squad>`" if the same service appears in the cost rollup under a different squad; both joined with `; ` if both apply; else —> |
+| <service> | <status> | <priority or —> | <squad_confidence> | <stale-flag branch: if `staleness_days` is present (key exists) and past `staleness_warning_days`, "stale — gate unchanged for N days, re-run migration-program-manager"; else if `staleness_days` is genuinely absent and a `last_updated`-derived age is past `staleness_warning_days`, "stale — last updated N days ago, re-run migration-program-manager"; else no stale flag> <cross-ref branch: "also in Cost optimization under `<other squad>`" if the same service appears in the cost rollup under a different squad> — both branches joined with `; ` if both apply; else —> |
 
-<In migration-program-manager's own order: blocked, then stalled, then in_progress, then done.>
+<In migration-program-manager's own order: blocked, then stalled (ranked by `staleness_days` descending,
+matching migration-program-manager's own [workflow/run-rollup.md § 2](../../migration-program-manager/workflow/run-rollup.md)
+convention — never re-sorted by any other rule), then in_progress, then done.>
 
 ### Cost optimization
 
@@ -82,8 +84,11 @@ status line for every run.>
   migration-side flag, since it genuinely does vary per service (persisted `gate_signature` comparison).
   **"Present" means the key exists, regardless of value** — `staleness_days: 0` (the normal case right
   after a gate changes) still counts and must still be used, never treated as absent by a truthiness
-  check. Cost items have no `staleness_days` equivalent, so their flag is `last_updated`-derived age,
-  which cost-optimization-sprint-planner's own workflow does set per invocation. **The note text differs
+  check. Cost items have no `staleness_days` equivalent, so their flag is always `last_updated`-derived
+  age — the only staleness signal that rollup carries; neither this skill nor
+  cost-optimization-sprint-planner's own docs claim that timestamp is genuinely per-deployment, so it's
+  used as the best available signal, not asserted to be as precise as migration's `staleness_days`. **The
+  note text differs
   by source** — "gate unchanged for N days" for `staleness_days`, "last updated N days ago" for
   `last_updated` — since the two measure different things and using the wrong wording for the wrong
   source would misrepresent what's actually stale. The re-run pointer always names the **aggregator**

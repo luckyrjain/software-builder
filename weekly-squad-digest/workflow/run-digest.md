@@ -40,9 +40,11 @@ This skill's decision:
    cross-metric score or a single merged ranking, per the
    [design spec § Non-goals](../../docs/superpowers/specs/2026-08-05-weekly-squad-digest-design.md#non-goals-explicitly-out-of-scope).
 3. **Within each sub-section, keep that producing skill's own sort order** — migration:
-   blocked → stalled → in_progress → done (migration-program-manager's own convention); cost:
-   `value.monthly_savings_total` descending (cost-optimization-sprint-planner's own convention). Never
-   re-sort by a rule this skill invents.
+   blocked → stalled (ranked by `staleness_days` descending — migration-program-manager's own secondary
+   sort within the stalled bucket, per its
+   [workflow/run-rollup.md § 2](../../migration-program-manager/workflow/run-rollup.md)) → in_progress →
+   done; cost: `value.monthly_savings_total` descending (cost-optimization-sprint-planner's own
+   convention). Never re-sort by a rule this skill invents.
 4. **Cross-reference a `service` that appears in both rollups under different squads.** After both
    rollups are grouped, check for any `service` value present in both — if its `squad` differs between
    the two, add a Notes pointer on each side ("also in Cost optimization under `<squad>`" / "also in
@@ -69,8 +71,10 @@ reverting to the rollup-run-level bug it was written to close. `migration_progra
 per-service — so an age computed from it tells you "how long since migration-program-manager last ran,"
 not "this specific service's data is stale." `staleness_days` genuinely does vary per service (persisted
 `gate_signature` comparison against prior runs). Cost items have no `staleness_days` equivalent (see
-[workflow/inputs.md](inputs.md)) — their age is always `last_updated`-derived, which
-cost-optimization-sprint-planner's own workflow does set per invocation.
+[workflow/inputs.md](inputs.md)) — their age is always `last_updated`-derived. Unlike migration's
+`staleness_days`, no claim is made here about how precisely per-deployment that timestamp is;
+cost-optimization-sprint-planner's own docs don't specify how or when it's populated for each item, so this
+skill treats it only as "the best signal the rollup carries," not a guaranteed per-service one.
 
 An item whose staleness value (whichever source was used) exceeds `staleness_warning_days` gets a flagged
 note in the digest, joined with the cross-rollup pointer from § 2 step 4 when both apply — **worded

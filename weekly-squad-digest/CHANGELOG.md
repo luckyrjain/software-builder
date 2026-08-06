@@ -105,3 +105,35 @@ re-read every consumer of the staleness/cross-reference mechanism looking specif
 "propagation failure" and "unenforced precision" patterns that recurred repeatedly in
 cost-optimization-sprint-planner's own review rounds — all four findings were precision gaps in a
 mechanism round 1 introduced correctly at the structural level but under-specified at the edge-case level.
+
+### Fixed (round-3 review, same day)
+- **`reference/report-format.md`'s own normative Notes-column template for the Migration status table was
+  missing a required branch.** The file's cell formula only showed the `staleness_days`-present stale-flag
+  case; `workflow/run-digest.md` § 3 (and this same file's own Rules prose) require a second, differently
+  worded branch for when `staleness_days` is genuinely absent and a `last_updated`-derived age is used
+  instead. An implementer following the literal template would never have flagged that case. Fixed: the
+  template now shows both branches explicitly.
+- **`examples.md` and `reference/phase-index.md` both said "ask" for the neither-rollup-path-set HARD
+  STOP**, contradicting `workflow/inputs.md`'s own explicit "no human turn available for a scheduled
+  run... do not guess" framing (mirrored correctly in `reference/smoke-test.md`). Fixed: both now say
+  "stop and log the error," matching the rest of the skill.
+- **The claimed sort order for the Migration status table only captured migration-program-manager's
+  top-level status-bucket order** (blocked → stalled → in_progress → done), silently dropping its
+  documented secondary sort — stalled items ranked by `staleness_days` descending, per
+  migration-program-manager's own `workflow/run-rollup.md` § 2. Since this skill explicitly claims to
+  reuse that ordering verbatim and forbids inventing its own, the gap meant a compliant implementer would
+  render stalled rows in arbitrary order. Fixed: `workflow/run-digest.md` § 2 and
+  `reference/report-format.md`'s template now state the secondary sort explicitly.
+- **An unsupported claim about cost items' `last_updated` field** — three files asserted
+  cost-optimization-sprint-planner's workflow "does set [it] per invocation" (implying genuine per-service
+  precision, by contrast with migration's rollup-run-level stamp). Checked against
+  cost-optimization-sprint-planner's own `SKILL.md`, `workflow/run-sweep.md`, `reference/report-format.md`,
+  and `CHANGELOG.md`: none of them mention `last_updated` at all, let alone document how or when it's
+  populated per item. Fixed: `workflow/inputs.md`, `workflow/run-digest.md` § 3, and
+  `reference/report-format.md` no longer assert per-deployment precision for cost items' staleness signal
+  — it's now described as "the only signal available," not a guaranteed per-service one.
+
+Found by a third adversarial review pass that cross-checked every claim this skill makes about upstream
+rollup producers' own conventions against those producers' actual source files, rather than trusting this
+skill's own prose — a pattern that had already caught the squad-map routing fabrication during design and
+recurred here at the implementation-detail level.

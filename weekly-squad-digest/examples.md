@@ -14,7 +14,7 @@ Conventions: [examples-conventions](../docs/skill-framework/shared/examples-conv
 | 6 | A cost item's `last_updated` is older than `staleness_warning_days` | Flagged "last updated `<N>` days ago, re-run cost-optimization-sprint-planner" — `status` itself unchanged |
 | 7 | The same squad has items in both rollups | Two sub-sections under one squad heading — Migration status and Cost optimization, never merged |
 | 8 | The same `service` appears in both rollups under different squads (exact-string match) | Each row's Notes cross-references the other section/squad — never silently presented as two unrelated services; a genuinely differing identifier string across rollups is not detected (known limitation) |
-| 9 | `rollup_manifest` has neither path set | Inputs HARD STOP — ask, no Run digest |
+| 9 | `rollup_manifest` has neither path set | Inputs HARD STOP — stop and log the error, no Run digest (no human turn to ask — scheduled-run rule, same as backlog-runner) |
 | 10 | "What's our migration status?" | **Wrong skill** → migration-program-manager directly |
 | 11 | "Where's the cost waste?" | **Wrong skill** → cost-optimization-sprint-planner directly |
 
