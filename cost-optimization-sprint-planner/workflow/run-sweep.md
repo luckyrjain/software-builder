@@ -1,5 +1,5 @@
 ---
-workflow_version: 1.0
+workflow_version: 1.1
 phase: run-sweep
 produces:
   - cost_optimization_sprint_report
@@ -26,15 +26,22 @@ Datadog MCP (never a delegated k8s-overprovisioning-datadog invocation asked to 
 Per [reference/sweep-policy.md § 3–4](../reference/sweep-policy.md#3-invoking-k8s-overprovisioning-datadog-one-deployment-per-invocation-sequential):
 
 1. Invoke k8s-overprovisioning-datadog with the deployment name + `sweep_scope.env` (+ namespace, when
-   known from the pre-filter).
+   known from the pre-filter), **explicitly requesting the JSON file artifact** per
+   [render/json.md](../../k8s-overprovisioning-datadog/render/json.md) ("optionally write to
+   `decision-graph.json` if user requests a file artifact") — write it to
+   `<output_dir>/decision-graph-<deployment>.json` (from [workflow/inputs.md](inputs.md)'s `output_dir`),
+   never k8s's own single default filename, which would collide across a multi-deployment sweep.
 2. Answer every live gate that invocation hits per [reference/gate-policy.md](../reference/gate-policy.md)
    — the cost-rate gate is **never** re-asked here, it was already resolved once before this loop started
-   (§ 0 below).
-3. Record the outcome (`ASSESSED` / `INSUFFICIENT_METRICS` / `AMBIGUOUS_UNRESOLVED`) in `sweep_run.deployments`
-   per the state shape in [reference/sweep-policy.md § 1](../reference/sweep-policy.md#1-session-level-state-new-layered-outside-k8s-overprovisioning-datadog-which-has-none).
+   (§ 0 below); a `STOP_REASON: auth_failure` is **not** answered per-deployment — it stops the whole
+   sweep, see [reference/gate-policy.md § Sweep-wide stop](../reference/gate-policy.md#sweep-wide-stop-not-per-deployment-isolation-the-auth-failure-gate).
+3. Record the outcome (`ASSESSED` / `INSUFFICIENT_METRICS` / `AMBIGUOUS_UNRESOLVED` / `AUTH_FAILURE`) and,
+   when `ASSESSED`, the `decision-graph-<deployment>.json` path as `decision_graph_ref`, in
+   `sweep_run.deployments` per the state shape in
+   [reference/sweep-policy.md § 1](../reference/sweep-policy.md#1-session-level-state-new-layered-outside-k8s-overprovisioning-datadog-which-has-none).
 4. Check [reference/sweep-policy.md § 5](../reference/sweep-policy.md#5-session-level-stop-conditions-circuit-breakers)'s
    stop conditions **between** deployments, never mid-assessment — an in-flight assessment always
-   finishes.
+   finishes. `AUTH_FAILURE` stops immediately, before starting the next candidate.
 
 ### 0. Cost-rate resolution (runs once, before step 1's loop starts)
 
@@ -49,10 +56,30 @@ Per [org-rollup-schema.md § 4](../../docs/skill-framework/shared/org-rollup-sch
 `recommendations[]`, `value` preferring `appendix.cost` when present (never guaranteed — see
 [design spec § Non-goals](../../docs/superpowers/specs/2026-08-05-cost-optimization-sprint-planner-design.md#non-goals-explicitly-out-of-scope)),
 falling back to `cost-estimation.md`'s formulas applied against `observations`/`recommendations` directly
-when `appendix.cost` is absent. Squad match against `SQUAD_MAP.md`'s `Datadog service` column first,
-falling back to `ownership.datadog.service_aliases` (squad-map's own existing config field) when the
-graph's `metadata.service` doesn't match verbatim — the real, documented `metadata.service` vs.
-`scope`'s `kube_deployment:` tag mismatch org-rollup-schema.md itself flags.
+when `appendix.cost` is absent.
+
+**Squad match, in order:**
+
+1. `SQUAD_MAP.md`'s `Datadog service` column, matched against the graph's `metadata.service` verbatim.
+   `squad_confidence` = that row's own `Confidence` column value, carried through unchanged (never
+   re-derived or dropped — per
+   [org-rollup-schema.md § 2](../../docs/skill-framework/shared/org-rollup-schema.md#2-the-orgrollupitem-shape),
+   this exists precisely so a consumer can decide whether to trust a LOW-confidence match).
+2. **Else**, when `squad_map_config_path` is supplied (see [workflow/inputs.md](inputs.md)): a **reverse**
+   lookup against that config's `ownership.datadog.service_aliases` map
+   ([squad-map/reference/config-schema.md](../../squad-map/reference/config-schema.md) —
+   `<repo-name>: <service-name>`) — search the map's **values** for one matching `metadata.service`, take
+   the corresponding **key** (the repo name), then re-join that repo name against `SQUAD_MAP.md`'s `Repo`
+   column. This is the real, documented `metadata.service` vs. `scope`'s `kube_deployment:` tag mismatch
+   org-rollup-schema.md itself flags — the alias map exists specifically to bridge it, but only in this
+   reverse direction, since `service_aliases` is authored as repo→service (squad-map's own resolution
+   direction when it first builds `SQUAD_MAP.md`), not service→repo. `squad_confidence` for a
+   reverse-lookup match is **MEDIUM**, never HIGH — it's an indirect match through a config file, not a
+   direct `SQUAD_MAP.md` row.
+3. **Else** `squad: UNKNOWN`, `squad_confidence: UNKNOWN` — never guessed, never silently dropped.
+
+A `squad_confidence` of `LOW` or `UNKNOWN` is surfaced in the report's Notes section (see
+[reference/report-format.md](../reference/report-format.md)), not just carried silently in the JSON.
 
 ## 4. Rank and group
 

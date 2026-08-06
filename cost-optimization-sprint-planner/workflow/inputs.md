@@ -1,5 +1,5 @@
 ---
-workflow_version: 1.0
+workflow_version: 1.1
 phase: inputs
 produces:
   - sweep_scope
@@ -7,6 +7,8 @@ produces:
   - max_deployments_per_run
   - deadline
   - session_token_budget
+  - output_dir
+  - squad_map_config_path
 consumes: []
 ---
 
@@ -66,6 +68,8 @@ CCM is empty for that one deployment, never a forced override.
 | `max_deployments_per_run` | All deployments the pre-filter/explicit list resolves to |
 | `deadline` | None — stop *starting new deployment assessments* at/after this wall-clock time; an in-flight assessment finishes |
 | `session_token_budget` | None — session-level token ceiling across the whole sweep |
+| `output_dir` | Current working directory — where each deployment's `decision-graph-<deployment>.json` file artifact (see [workflow/run-sweep.md § 2](run-sweep.md#2-loop-k8s-overprovisioning-datadog-once-per-candidate-sequentially)) and the sweep's own report/rollup files are written |
+| `squad_map_config_path` | None — when absent, the squad join (see [workflow/run-sweep.md § 3](run-sweep.md#3-join-each-decisiongraph-into-an-orgrollupitem)) only tries `SQUAD_MAP.md`'s `Datadog service` column directly; the `ownership.datadog.service_aliases` reverse-lookup fallback is skipped, and a non-matching deployment joins as `squad: UNKNOWN` one step sooner |
 
 ## Normalization
 

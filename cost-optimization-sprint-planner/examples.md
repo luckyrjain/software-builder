@@ -12,8 +12,9 @@ Conventions: [examples-conventions](../docs/skill-framework/shared/examples-conv
 | 4 | A deployment has no `SQUAD_MAP.md`/`ownership.datadog.service_aliases` match | Joins as `squad: UNKNOWN` — squad-map is never invoked to fill the gap |
 | 5 | A deployment's graph has no `appendix.cost` block | Falls back to `cost-estimation.md`'s formulas applied against the graph's own `observations`/`recommendations`, using the once-resolved `cost_rate` |
 | 6 | `sweep_scope` missing both `deployments` and `namespace_prefilter`, or `cost_rate` absent | Inputs HARD STOP — ask, no Run sweep |
-| 7 | "Is checkout-api overprovisioned?" | **Wrong skill** → k8s-overprovisioning-datadog directly |
-| 8 | "Who owns checkout-api?" | **Wrong skill** → squad-map directly |
+| 7 | A deployment hits `STOP_REASON: auth_failure` (broken Datadog MCP credentials) | Sweep stops immediately (`stopped_reason: AUTH_FAILURE`) — not isolated like the other gates, since every remaining candidate would hit the same failure |
+| 8 | "Is checkout-api overprovisioned?" | **Wrong skill** → k8s-overprovisioning-datadog directly |
+| 9 | "Who owns checkout-api?" | **Wrong skill** → squad-map directly |
 
 ---
 
@@ -37,19 +38,19 @@ on-demand"}`
 # Cost optimization sprint — 2026-08-05
 
 **Sweep config:** `api-disbursement, api-payouts` · **Cost basis:** `AWS us-east-1 m6i, on-demand` ·
-**Deployments assessed:** `2 of 2` · **Stopped reason:** `completed`
+**Deployments assessed:** `2 of 2` · **Stopped reason:** `COMPLETED`
 
 ## disbursement
 
-| Service | Monthly savings | Status | Priority | Notes |
-|---------|------------------|--------|----------|-------|
-| api-disbursement | $340.00 | READY | P1 | estimated (fallback rate) |
+| Service | Monthly savings | Status | Priority | Confidence | Notes |
+|---------|------------------|--------|----------|------------|-------|
+| api-disbursement | $340.00 | READY | P1 | HIGH | estimated (fallback rate) |
 
 ## payouts
 
-| Service | Monthly savings | Status | Priority | Notes |
-|---------|------------------|--------|----------|-------|
-| api-payouts | $0.00 | COMPLETED | — | — |
+| Service | Monthly savings | Status | Priority | Confidence | Notes |
+|---------|------------------|--------|----------|------------|-------|
+| api-payouts | $0.00 | COMPLETED | — | HIGH | — |
 ```
 
 ---

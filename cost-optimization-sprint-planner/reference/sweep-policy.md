@@ -20,9 +20,16 @@ sweep_run:
     - name: "<deployment>"
       namespace: "<namespace>"
       env: "<env>"
-      outcome: PENDING | ASSESSED | INSUFFICIENT_METRICS | AMBIGUOUS_UNRESOLVED
-      decision_graph_ref: null   # path to the produced decision_graph YAML, when ASSESSED
-  stopped_reason: null          # MAX_DEPLOYMENTS_REACHED | DEADLINE_REACHED | TOKEN_BUDGET_EXHAUSTED | SCOPE_EXHAUSTED
+      outcome: PENDING | ASSESSED | INSUFFICIENT_METRICS | AMBIGUOUS_UNRESOLVED | AUTH_FAILURE
+      decision_graph_ref: null   # path to the requested decision-graph.json file artifact, when ASSESSED
+                                 # -- k8s-overprovisioning-datadog's own JSON renderer will write this file
+                                 # only when explicitly asked (render/json.md: "optionally write to
+                                 # decision-graph.json if user requests a file artifact"); this skill's own
+                                 # invocation (workflow/run-sweep.md § 2) always requests it, one file per
+                                 # deployment under a caller-configured output directory, never the
+                                 # renderer's own single default filename (which would collide across a
+                                 # multi-deployment sweep)
+  stopped_reason: null          # MAX_DEPLOYMENTS_REACHED | DEADLINE_REACHED | TOKEN_BUDGET_EXHAUSTED | AUTH_FAILURE | SCOPE_EXHAUSTED | COMPLETED
 ```
 
 ## 2. Candidate deployment list
@@ -65,13 +72,18 @@ Every live gate that invocation might hit is answered per
 | Real `decision_graph` produced (any `assessment.final_decision`, including `KEEP_CONFIGURATION`) | `outcome: ASSESSED` — **expected, normal outcome, always joined into the rollup** (per org-rollup-schema.md's own "never omit a rollup item just because a deployment wasn't overprovisioned" rule) — continue to the next candidate |
 | `insufficient_metrics` after gate-policy's "proceed with unknown" still yields nothing | `outcome: INSUFFICIENT_METRICS` — recorded as a sweep gap (see [reference/report-format.md](report-format.md)), **continue to the next independent deployment**, never abort the sweep |
 | Ambiguous name/tag with no `sweep_scope.env` match and no resolvable default | `outcome: AMBIGUOUS_UNRESOLVED` — same as above, recorded as a gap, continue |
+| `STOP_REASON: auth_failure` (Datadog MCP auth broken — k8s's own Critical, "Halt — no metrics") | `outcome: AUTH_FAILURE` — **not isolated**, see below: stops the whole sweep, not just this deployment |
 
-There is no `ESCALATED`-equivalent outcome and therefore **no consecutive-failure circuit breaker** —
-unlike loop-task-implementer's gates (which can genuinely fail in a way that signals a systemic problem
-worth stopping for), every k8s-overprovisioning-datadog gate this skill can hit resolves to a documented,
-non-blocking fallback per `reference/gate-policy.md`. A run of `INSUFFICIENT_METRICS` outcomes signals
-noisy Datadog tagging for those specific deployments, not a reason to stop assessing the rest of the
-sweep.
+Almost every k8s-overprovisioning-datadog gate this skill can hit resolves to a documented, non-blocking,
+per-deployment fallback per `reference/gate-policy.md`, so most outcomes above are isolate-and-continue —
+there is no `ESCALATED`-equivalent outcome in loop-task-implementer's sense (a task-specific failure worth
+recording and moving past). **`auth_failure` is the one genuine exception**, per
+[reference/gate-policy.md § Sweep-wide stop](gate-policy.md#sweep-wide-stop-not-per-deployment-isolation-the-auth-failure-gate):
+it's an environment-level failure (broken/expired Datadog MCP credentials), not a per-deployment
+data-quality issue — every remaining candidate would hit the identical failure. Unlike backlog-runner's
+`CONSECUTIVE_ESCALATION_BREAKER` (which waits for a pattern across multiple items before concluding a
+systemic problem), a **single** `auth_failure` is trusted as systemic immediately and stops the sweep —
+there's no ambiguity to wait out the way there can be with three independent hard tasks.
 
 ## 5. Session-level stop conditions (circuit breakers)
 
@@ -83,12 +95,22 @@ mid-run — when any of:
 | `max_deployments_per_run` deployments attempted this run | `MAX_DEPLOYMENTS_REACHED` |
 | Wall-clock reaches `deadline` (if set) | `DEADLINE_REACHED` |
 | `consumed_tokens` reaches `session_token_budget` (if set) | `TOKEN_BUDGET_EXHAUSTED` |
-| Candidate list (after § 2's cap) is exhausted | `SCOPE_EXHAUSTED` |
+| A deployment hits `outcome: AUTH_FAILURE` (§ 4) | `AUTH_FAILURE` |
+| § 2's candidate-list construction produced **zero** candidates (nothing to assess at all — e.g. an empty `sweep_scope.deployments`, or a `namespace_prefilter` that matched no namespaces) | `SCOPE_EXHAUSTED` |
+| Every candidate in a **non-empty** list (§ 2) was attempted, none of the conditions above fired first | `COMPLETED` |
+
+`SCOPE_EXHAUSTED` and `COMPLETED` are not the same condition — `SCOPE_EXHAUSTED` means the sweep never
+had anything to run (a real gap worth investigating: is the scope genuinely empty, or is the pre-filter
+misconfigured?); `COMPLETED` means every in-scope deployment was actually assessed. Rendering both the
+same way in a report would hide the difference between "nothing happened" and "everything happened
+successfully."
 
 ## 6. Report, always produced
 
 Regardless of `stopped_reason`, always render
 [`COST_OPTIMIZATION_SPRINT_REPORT.md`](report-format.md) — a sweep that stops early on
-`MAX_DEPLOYMENTS_REACHED`/`DEADLINE_REACHED`/`TOKEN_BUDGET_EXHAUSTED` still reports every deployment it
-did assess, ranked, plus an explicit note of how many candidates were never reached and why (never a
-silent partial sweep presented as complete).
+`MAX_DEPLOYMENTS_REACHED`/`DEADLINE_REACHED`/`TOKEN_BUDGET_EXHAUSTED`/`AUTH_FAILURE` still reports every
+deployment it did assess, ranked, plus an explicit note of how many candidates were never reached and why
+(never a silent partial sweep presented as complete). On `AUTH_FAILURE` specifically, include k8s's own
+remediation pointer ("run ddsetup/ddconfig") in the Notes section per
+[reference/gate-policy.md § Sweep-wide stop](gate-policy.md#sweep-wide-stop-not-per-deployment-isolation-the-auth-failure-gate).
