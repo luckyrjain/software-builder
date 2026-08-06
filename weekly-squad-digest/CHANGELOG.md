@@ -68,3 +68,40 @@ the real source files (migration-program-manager's, cost-optimization-sprint-pla
 rather than trusting this skill's own docs — the central "squad-map has no routing convention" design
 claim held up under scrutiny, but three implementation-level gaps in how the digest actually renders
 staleness, confidence, and cross-rollup conflicts did not.
+
+### Fixed (round-2 review, same day)
+- **"Present" for `staleness_days` was undefined and readable as a truthiness check** — the round-1 fix
+  said "prefer `staleness_days` when present" without defining "present," and `staleness_days: 0` (the
+  normal value immediately after a gate signature changes, per migration-program-manager's own
+  `compute_staleness`) is falsy in most implementations, so a naive read would silently fall back to the
+  rollup-run-level `last_updated` age for exactly the items that had just made progress — reintroducing
+  the bug round 1 fixed. Fixed: `workflow/inputs.md`, `workflow/run-digest.md` § 3, and
+  `reference/report-format.md` now all say explicitly "present means the key exists, regardless of
+  value — `staleness_days: 0` still counts and must still be used."
+- **Cross-rollup `service` matching had no normalization rule**, despite the very precedent cited to
+  justify it — [org-rollup-schema.md § 3](../docs/skill-framework/shared/org-rollup-schema.md#3-join-key-squad-map-is-the-only-authoritative-source)
+  — explicitly documenting that service identifiers don't reliably match verbatim across systems. Fixed:
+  `workflow/run-digest.md` § 2 step 4 and `reference/report-format.md` now state the match is
+  exact-string only, best-effort, with a genuinely differing identifier string a known, accepted
+  limitation rather than a guarantee.
+- **The flagged staleness note's wording was inaccurate for migration items using `staleness_days`** — it
+  read "last updated N days ago" even when the value actually measured "days since the gate last changed"
+  (which is not the same as `last_updated`, always fresh for migration items). Fixed: the note text now
+  differs by source — `"stale — gate unchanged for N days, re-run migration-program-manager"` for the
+  `staleness_days` path, `"stale — last updated N days ago, re-run <aggregator skill>"` for the
+  `last_updated`-derived path.
+- **The re-run pointer in the stale note likely named the wrong skill.** The obvious reading pointed at
+  `org_rollup_item.source_skill` (e.g. `mysql-to-postgres-sql`, `k8s-overprovisioning-datadog`) — the
+  per-service/per-deployment tool, not the aggregator that actually regenerates the rollup file this skill
+  reads. Fixed: the note always names the aggregator (migration-program-manager or
+  cost-optimization-sprint-planner), never `source_skill`.
+- `reference/smoke-test.md` and `examples.md` updated to match — the invocation table's staleness row was
+  split into three (key-present-with-zero, migration stale, cost stale) and the same-service-different-squad
+  scenario now also demonstrates the `; `-joined staleness + cross-reference Notes cell, so the joined
+  format ships with at least one worked example instead of untested.
+
+Found by a second adversarial review pass that re-verified round 1's fixes were correct and complete, then
+re-read every consumer of the staleness/cross-reference mechanism looking specifically for the
+"propagation failure" and "unenforced precision" patterns that recurred repeatedly in
+cost-optimization-sprint-planner's own review rounds — all four findings were precision gaps in a
+mechanism round 1 introduced correctly at the structural level but under-specified at the edge-case level.

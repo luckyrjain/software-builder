@@ -24,12 +24,18 @@ rendered.
 2. **A squad present in only one rollup** still gets both sub-headings, the empty one noted as "No items
    in this rollup for this squad."
 3. **`WEEKLY_SQUAD_DIGEST.md` produced**, per [reference/report-format.md](report-format.md).
-4. **An item older than `staleness_warning_days`** (default 14) is flagged with its age, its own
-   `status` unchanged. A migration item with a `staleness_days` value uses that field directly; a cost
-   item always uses a `last_updated`-derived age.
+4. **An item whose staleness value exceeds `staleness_warning_days`** (default 14) is flagged, its own
+   `status` unchanged. A migration item **with the `staleness_days` key present — regardless of value,
+   including `staleness_days: 0`** — uses that field directly and reads
+   `"stale — gate unchanged for <N> days, re-run migration-program-manager"`; a migration item where the
+   key is genuinely absent, and every cost item, uses a `last_updated`-derived age and reads
+   `"stale — last updated <N> days ago, re-run <aggregator skill>"` (migration-program-manager or
+   cost-optimization-sprint-planner — never the item's own `source_skill` field).
 5. **Every row shows a Confidence column value** (`squad_confidence`), not just LOW/UNKNOWN ones.
 6. **A service present in both rollups under different squads** gets a Notes cross-reference on both
-   rows.
+   rows — exact-string `service` match only.
+7. **A row that is both stale and cross-referenced** joins both notes in one cell with `; `, staleness
+   note first.
 
 ## Pass criteria
 

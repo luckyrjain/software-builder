@@ -54,10 +54,13 @@ renders using whichever rollup is actually readable, per
   aggregator last ran," not a per-service signal), while its own `staleness_days` field (persisted
   `gate_signature` comparison against prior runs) genuinely does vary per service. Cost items have no
   `staleness_days` equivalent. **Staleness precedence, per item**: migration items prefer `staleness_days`
-  when present, falling back to a `last_updated`-derived age only if it's absent; cost items always use a
-  `last_updated`-derived age (see [workflow/run-digest.md § 3](run-digest.md#3-compute-staleness-display-only)).
-  Never uniformly use `last_updated` for both just for implementation convenience — that would silently
-  degrade the migration side's staleness signal to a rollup-run-level flag instead of a per-service one.
+  when present — **present means the key exists, regardless of value**; `staleness_days: 0` (the normal
+  case right after a gate changes) still counts and must still be used, never treated as absent by a
+  truthiness check — falling back to a `last_updated`-derived age only if the key is genuinely absent;
+  cost items always use a `last_updated`-derived age (see
+  [workflow/run-digest.md § 3](run-digest.md#3-compute-staleness-display-only)). Never uniformly use
+  `last_updated` for both just for implementation convenience — that would silently degrade the migration
+  side's staleness signal to a rollup-run-level flag instead of a per-service one.
 
 ## Embedded invocation
 

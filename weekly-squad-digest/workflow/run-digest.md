@@ -50,25 +50,43 @@ This skill's decision:
    [reference/report-format.md](../reference/report-format.md)'s rule. This is a real, expected case since
    the two rollups resolve `squad` via different join mechanisms
    ([org-rollup-schema.md § 3](../../docs/skill-framework/shared/org-rollup-schema.md#3-join-key-squad-map-is-the-only-authoritative-source))
-   — never reconciled into one "correct" squad, never silently left uncross-referenced.
+   — never reconciled into one "correct" squad, never silently left uncross-referenced. **The match is
+   exact-string `service` equality only, best-effort** — this skill has no alias/normalization step of
+   its own (unlike squad-map's own `service_aliases`, which exists precisely because service/deployment
+   identifiers don't reliably match verbatim even within one system, per org-rollup-schema.md § 3 itself).
+   A same-service pair whose two rollups happen to record genuinely different identifier strings for it
+   will not be detected — a known, accepted limitation, not a guarantee this skill makes.
 
 ## 3. Compute staleness (display-only)
 
 For every item, compute age = now − `last_updated`, **except for migration items when `staleness_days`
-is present — prefer it instead.** `migration_program_rollup.json`'s own `last_updated` is stamped at
-aggregation-run time (the same instant for every item that run), not per-service — so an age computed
-from it tells you "how long since migration-program-manager last ran," not "this specific service's data
-is stale." Its `staleness_days` field genuinely does vary per service (persisted `gate_signature`
-comparison against prior runs), so use it whenever present for migration items. Cost items have no
-`staleness_days` equivalent (see [workflow/inputs.md](inputs.md)) — their age is always
-`last_updated`-derived, which cost-optimization-sprint-planner's own workflow does set per invocation.
+is present — prefer it instead.** "Present" means **the key exists in the item at all**, regardless of
+its value — `staleness_days: 0` (the normal case immediately after a gate signature changes, per
+migration-program-manager's own `compute_staleness`) still counts as present and must still be used, never
+treated as falsy/absent. Checking key presence, not truthiness, is what keeps this fix from silently
+reverting to the rollup-run-level bug it was written to close. `migration_program_rollup.json`'s own
+`last_updated` is stamped at aggregation-run time (the same instant for every item that run), not
+per-service — so an age computed from it tells you "how long since migration-program-manager last ran,"
+not "this specific service's data is stale." `staleness_days` genuinely does vary per service (persisted
+`gate_signature` comparison against prior runs). Cost items have no `staleness_days` equivalent (see
+[workflow/inputs.md](inputs.md)) — their age is always `last_updated`-derived, which
+cost-optimization-sprint-planner's own workflow does set per invocation.
 
 An item whose staleness value (whichever source was used) exceeds `staleness_warning_days` gets a flagged
-note ("stale — last updated `<N>` days ago, re-run `<source_skill>`") in the digest, joined with the
-cross-rollup pointer from § 2 step 4 when both apply. **This never changes the item's own `status`** —
-unlike migration-program-manager's own staleness computation (which escalates `status` to `stalled`),
-this skill only ever annotates, since it has no basis to recompute a status a different skill already
-owns.
+note in the digest, joined with the cross-rollup pointer from § 2 step 4 when both apply — **worded
+differently depending on which source computed it**, since the two mean different things:
+
+- Migration item, `staleness_days` used: `"stale — gate unchanged for <N> days, re-run migration-program-manager"`
+- Any item, `last_updated`-derived age used (cost items always; migration items only when `staleness_days`
+  is genuinely absent): `"stale — last updated <N> days ago, re-run <aggregator skill>"`, where `<aggregator
+  skill>` is **migration-program-manager or cost-optimization-sprint-planner** (whichever produced this
+  rollup) — never `org_rollup_item.source_skill` (that field names the per-service/per-deployment tool,
+  `mysql-to-postgres-sql` or `k8s-overprovisioning-datadog`; re-running it alone does not regenerate the
+  rollup file this skill actually reads).
+
+**This never changes the item's own `status`** — unlike migration-program-manager's own staleness
+computation (which escalates `status` to `stalled`), this skill only ever annotates, since it has no
+basis to recompute a status a different skill already owns.
 
 ## 4. Render `WEEKLY_SQUAD_DIGEST.md`
 

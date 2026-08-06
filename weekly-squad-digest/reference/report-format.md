@@ -15,7 +15,7 @@
 
 | Service | Status | Priority | Confidence | Notes |
 |---------|--------|----------|------------|-------|
-| <service> | <status> | <priority or —> | <squad_confidence> | <staleness flag if past staleness_warning_days; "also in Cost optimization under `<other squad>`" if the same service appears in the cost rollup under a different squad; both joined with `; ` if both apply; else —> |
+| <service> | <status> | <priority or —> | <squad_confidence> | <"stale — gate unchanged for N days, re-run migration-program-manager" if staleness_days is past staleness_warning_days; "also in Cost optimization under `<other squad>`" if the same service appears in the cost rollup under a different squad; both joined with `; ` if both apply; else —> |
 
 <In migration-program-manager's own order: blocked, then stalled, then in_progress, then done.>
 
@@ -23,7 +23,7 @@
 
 | Service | Monthly savings | Status | Priority | Confidence | Notes |
 |---------|------------------|--------|----------|------------|-------|
-| <service> | `$<value.monthly_savings_total>` | <status> | <priority or —> | <squad_confidence> | <staleness flag if past staleness_warning_days; "also in Migration status under `<other squad>`" if the same service appears in the migration rollup under a different squad; both joined with `; ` if both apply; else —> |
+| <service> | `$<value.monthly_savings_total>` | <status> | <priority or —> | <squad_confidence> | <"stale — last updated N days ago, re-run cost-optimization-sprint-planner" if past staleness_warning_days; "also in Migration status under `<other squad>`" if the same service appears in the migration rollup under a different squad; both joined with `; ` if both apply; else —> |
 
 <In cost-optimization-sprint-planner's own order: monthly_savings_total descending.>
 
@@ -69,7 +69,9 @@ status line for every run.>
   [org-rollup-schema.md § 3](../../docs/skill-framework/shared/org-rollup-schema.md#3-join-key-squad-map-is-the-only-authoritative-source))
   and can legitimately disagree — a real case, not hypothetical. Each row's own sub-section table gets a
   Notes pointer to the other section/squad; this skill never reconciles which squad is "right," since
-  neither rollup's own join is this skill's to override.
+  neither rollup's own join is this skill's to override. **The match is exact-string `service` equality
+  only, best-effort** — a known, accepted limitation (this skill has no alias/normalization step of its
+  own, unlike squad-map's `service_aliases`), not a guarantee that every real same-service pair is caught.
 - **A rollup gap is never rendered as `$0` savings or a fabricated "done" migration status** — an absent
   rollup means "not checked this run," not "nothing to report." See Rollup gaps.
 - **Staleness is display-only, and its precision differs by rollup — never presented as uniformly
@@ -78,7 +80,15 @@ status line for every run.>
   item's staleness flag reflects "how long since migration-program-manager last ran," not "this specific
   service's own data is stale" — prefer that rollup's own `staleness_days` field when computing the
   migration-side flag, since it genuinely does vary per service (persisted `gate_signature` comparison).
-  Cost items have no `staleness_days` equivalent, so their flag is `last_updated`-derived age, which cost-
-  optimization-sprint-planner's own workflow does set per invocation. Either way, a flagged item's
-  `status` in the table is still exactly what the producing skill computed; the staleness note is
-  additive, never a status override.
+  **"Present" means the key exists, regardless of value** — `staleness_days: 0` (the normal case right
+  after a gate changes) still counts and must still be used, never treated as absent by a truthiness
+  check. Cost items have no `staleness_days` equivalent, so their flag is `last_updated`-derived age,
+  which cost-optimization-sprint-planner's own workflow does set per invocation. **The note text differs
+  by source** — "gate unchanged for N days" for `staleness_days`, "last updated N days ago" for
+  `last_updated` — since the two measure different things and using the wrong wording for the wrong
+  source would misrepresent what's actually stale. The re-run pointer always names the **aggregator**
+  skill (migration-program-manager / cost-optimization-sprint-planner), never `org_rollup_item`'s own
+  `source_skill` field (which names the per-service tool, e.g. `mysql-to-postgres-sql` — re-running that
+  alone doesn't regenerate the rollup file this skill reads). Either way, a flagged item's `status` in the
+  table is still exactly what the producing skill computed; the staleness note is additive, never a
+  status override.
