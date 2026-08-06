@@ -49,14 +49,24 @@ Never select a target under a generated/vendored/build path — `node_modules/`,
 repo's own `.gitignore` marks as generated. These are never hand-written source, so tests for them are
 never useful.
 
-## 4. Cap and report overflow
+## 4. Prioritize using domain-comprehension (optional)
 
-Apply `max_files_per_run` (default 20) to the resulting `NEW` list, in the order files were discovered.
-Anything past the cap is tagged `SKIPPED_MAX_FILES` — listed by name in `INTEGRATION_TEST_REPORT.md`,
-never dropped silently (see
+If `<workspace_root>/RISK_MAP.md` exists, reorder the `NEW` list so targets whose repo/context appears in
+its § Change risk table with a weak `Test signal` and high `Runtime critical?`/`Fan-out` come first —
+determines survival order under §5's cap, not inclusion. If `<workspace_root>/DATA_OWNERSHIP.md` also
+exists, use its authoritative-source-vs-replica/cache column as corroborating evidence for which side of
+a seam must stay real when Generate tests builds the test — never a substitute for what the code itself
+shows the seam actually is. Absent either file, skip this step. Full artifact table and precedence rules:
+[domain-comprehension-integration.md](../../docs/skill-framework/shared/domain-comprehension-integration.md).
+
+## 5. Cap and report overflow
+
+Apply `max_files_per_run` (default 20) to the resulting `NEW` list, in prioritized order (§4) or
+discovery order when §4 didn't apply. Anything past the cap is tagged `SKIPPED_MAX_FILES` — listed by
+name in `INTEGRATION_TEST_REPORT.md`, never dropped silently (see
 [gate-policy.md §7](../reference/gate-policy.md#7-maxfilesperrun-reached)).
 
-## 5. Zero targets
+## 6. Zero targets
 
 If every candidate resolves to `SKIPPED_ALREADY_COVERED` (diff mode) or `target.scope` is empty after
 expansion, or after excluding seam-less files (backfill mode), report that plainly instead of proceeding

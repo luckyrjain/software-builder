@@ -6,6 +6,7 @@ Load **one reference file at a time** when the active workflow phase points to i
 |------|------|
 | Any phase — non-negotiable rules | [skill-contract.md](skill-contract.md) |
 | Any phase — shared rules for the whole test-creator family (test-first evidence, refactor limits, escalation) | [test-creation-principles.md](../../docs/skill-framework/shared/test-creation-principles.md) |
+| Select targets §4 — prioritizing backfill targets when domain-comprehension artifacts exist (optional) | [domain-comprehension-integration.md](../../docs/skill-framework/shared/domain-comprehension-integration.md) |
 | Detect conventions — marker files, confidence levels, ambiguity/no-framework gates | [framework-detection.md](framework-detection.md) |
 | Any phase — HARD STOPs and live gates | [gate-policy.md](gate-policy.md) |
 | Generate tests — what makes a test acceptable, unit-specific deltas on the shared checklist | [test-quality-deltas.md](test-quality-deltas.md) |

@@ -39,19 +39,30 @@ non-empty** for backfill mode (enforced as a HARD STOP at [inputs.md](inputs.md)
 directory-expansion step the way a file-based backfill target would have, because a journey has no 1:1
 mapping to a source path.
 
-## 3. Exclusions (both modes)
+## 3. Enrich using domain-comprehension (optional)
+
+If `<workspace_root>/BUSINESS_FLOWS.md` exists, match each journey (diff-inferred or caller-supplied)
+against its Journey index by name or entry route. On a match: use that artifact's own journey name
+instead of the inferred one, and let Generate tests draw the step sequence from its § Services (ordered)
+and § Failure points tables rather than inferring steps from the route alone — a documented failure point
+becomes a candidate edge-case assertion, not just the happy path. On no match, or when
+`BUSINESS_FLOWS.md` doesn't exist, proceed with the journey exactly as inferred (§1) or supplied (§2) —
+this step never blocks or renames a journey it can't match. Full artifact table and precedence rules:
+[domain-comprehension-integration.md](../../docs/skill-framework/shared/domain-comprehension-integration.md).
+
+## 4. Exclusions (both modes)
 
 Never select a journey whose only surface is a generated/vendored/build path — `node_modules/`, `vendor/`,
 `dist/`, `build/`, `.next/`, `.git/`, or any directory the repo's own `.gitignore` marks as generated.
 These are never hand-authored routes/pages, so a journey through them is never meaningful.
 
-## 4. Cap and report overflow
+## 5. Cap and report overflow
 
 Apply `max_files_per_run` (default 20) to the resulting `NEW` list of journeys, in the order they were
 discovered. Anything past the cap is tagged `SKIPPED_MAX_FILES` — listed by name in `E2E_TEST_REPORT.md`,
 never dropped silently (see [gate-policy.md §7](../reference/gate-policy.md#7-maxfilesperrun-reached)).
 
-## 5. Zero targets
+## 6. Zero targets
 
 If every candidate resolves to `SKIPPED_ALREADY_COVERED` (diff mode), report that plainly instead of
 proceeding to Generate tests with nothing to do: "No untested journeys found." This is a normal outcome,

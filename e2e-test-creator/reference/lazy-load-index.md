@@ -5,6 +5,7 @@ Load **one reference file at a time** when the active workflow phase points to i
 | When | Read |
 |------|------|
 | Any phase — non-negotiable rules | [skill-contract.md](skill-contract.md), plus the shared [test-creation-principles.md](../../docs/skill-framework/shared/test-creation-principles.md) it links to |
+| Select targets §3 — matching/enriching journeys against `BUSINESS_FLOWS.md` when domain-comprehension artifacts exist (optional) | [domain-comprehension-integration.md](../../docs/skill-framework/shared/domain-comprehension-integration.md) |
 | Detect conventions — marker files, confidence levels, ambiguity/no-tooling gates | [framework-detection.md](framework-detection.md) |
 | Any phase — HARD STOPs and live gates | [gate-policy.md](gate-policy.md) |
 | Generate tests — what makes a test acceptable (e2e-specific deltas) | [test-quality-deltas.md](test-quality-deltas.md) |

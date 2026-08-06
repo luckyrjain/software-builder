@@ -41,13 +41,23 @@ Never select a target under a generated/vendored/build path — `node_modules/`,
 repo's own `.gitignore` marks as generated. These are never hand-written source, so tests for them are
 never useful.
 
-## 4. Cap and report overflow
+## 4. Prioritize using domain-comprehension (optional)
 
-Apply `max_files_per_run` (default 20) to the resulting `NEW` list, in the order files were discovered.
-Anything past the cap is tagged `SKIPPED_MAX_FILES` — listed by name in `UNIT_TEST_REPORT.md`, never
-dropped silently (see [gate-policy.md §7](../reference/gate-policy.md#7-maxfilesperrun-reached)).
+If `<workspace_root>/RISK_MAP.md` exists (domain-comprehension already ran), reorder the `NEW` list so
+targets whose repo/context appears in its § Change risk table with a weak `Test signal` and high
+`Runtime critical?`/`Fan-out` come first — this determines *which* targets survive the §5 cap when
+`target_list` is larger than `max_files_per_run`, not whether a target is included at all. Absent
+`RISK_MAP.md`, skip this step entirely — no prioritization, no note in the report. Full artifact table
+and precedence rules: [domain-comprehension-integration.md](../../docs/skill-framework/shared/domain-comprehension-integration.md).
 
-## 5. Zero targets
+## 5. Cap and report overflow
+
+Apply `max_files_per_run` (default 20) to the resulting `NEW` list, in prioritized order (§4) or
+discovery order when §4 didn't apply. Anything past the cap is tagged `SKIPPED_MAX_FILES` — listed by
+name in `UNIT_TEST_REPORT.md`, never dropped silently (see
+[gate-policy.md §7](../reference/gate-policy.md#7-maxfilesperrun-reached)).
+
+## 6. Zero targets
 
 If every candidate resolves to `SKIPPED_ALREADY_COVERED` (diff mode) or `target.scope` is empty after
 expansion (backfill mode — e.g. a directory with no source files), report that plainly instead of
