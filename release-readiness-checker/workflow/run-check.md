@@ -72,9 +72,10 @@ single-service path ([resolve-service.md](../../k8s-overprovisioning-datadog/wor
 Record its own verdict (READY/BLOCKED recommendations, or whatever its own Human Report states) **as-is**
 — this skill never re-labels or reinterprets it. If service-tag resolution is ambiguous, answer per
 [reference/gate-policy.md § k8s-overprovisioning-datadog](../reference/gate-policy.md#k8s-overprovisioning-datadog) —
-rely on the `env:production` default, or "proceed with unknown" rather than guessing a deployment name.
-An `insufficient_metrics` outcome is recorded honestly as such, never upgraded to READY or treated as
-BLOCKED.
+k8s itself asks or resolves from actually-observed evidence rather than defaulting; an unattended run like
+this one will see that surface as `STOP_REASON: ambiguous_unresolved`, recorded honestly rather than
+guessed. An `insufficient_metrics` or `ambiguous_unresolved` outcome is recorded honestly as such, never
+upgraded to READY or treated as BLOCKED.
 
 Kubernetes MCP and Datadog failures remain **source-scoped** inside the wrapped assessment. Continue and
 record the returned degraded verdict when Kubernetes MCP or Datadog still supplies sufficient evidence;
@@ -109,14 +110,14 @@ including overriding Phase 1's own default-to-proceed on a strong signal. Treat 
 Per [reference/report-format.md](../reference/report-format.md). **Four-state overall verdict (P1
 fix)** — an earlier two-state `Ready`/`Not ready` verdict forced every incident signal to `Not ready`,
 even one incident-rca's own Phase 1 scope admits may be chronic noise unrelated to this release (see §4
-above, "Known limitation, not a bug"), and every evidence gap (`insufficient_metrics`, an unresolved
+above, "Known limitation, not a bug"), and every evidence gap (`insufficient_metrics`, `ambiguous_unresolved`, an unresolved
 `since`) to the same `Not ready` bucket as an actual proven blocker — collapsing "we don't know" and "we
 know it's bad" into one false-blocker state that a human reading the report cannot tell apart:
 
 - **`NOT_READY`** — any MR has a `Critical`/`High` finding, **or** any service's k8s verdict is
   `BLOCKED`. These are proven blockers from a completed check, not an evidence gap.
 - **`UNKNOWN`** — no `NOT_READY` condition, **and** any manifest entry's `since` didn't resolve, **or**
-  any service's k8s verdict is `insufficient_metrics`. An unreviewed MR range or an unobservable service
+  any service's k8s verdict is `insufficient_metrics` or `ambiguous_unresolved`. An unreviewed MR range or an unobservable service
   is a genuine evidence gap, not a verified-clean release — but it is also not a *proven* problem, so it
   must not be silently folded into `NOT_READY` (which reads as "we found something wrong") or into
   `READY` (which reads as "we checked and it's fine"). `UNKNOWN` takes precedence over `CONDITIONAL`

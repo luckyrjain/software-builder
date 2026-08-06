@@ -75,7 +75,7 @@ order.
 
 ---
 
-### Scenario: Multi-night dependency — satisfied across runs, not just this run's batch
+### Scenario: Multi-night dependency — satisfied only once merged, not just by an open PR
 
 **Night 1 scheduler:** `tracker_query` pulls `BACKLOG-300` only (`BACKLOG-301`, which depends on it,
 isn't ready yet / not in scope this run).
@@ -86,12 +86,23 @@ isn't ready yet / not in scope this run).
 `BACKLOG-300` itself no longer matches the query (it already has an open PR, so it's no longer
 "ready for dev").
 
-**Night 2 agent:** `BACKLOG-300` is **not** in tonight's pulled batch — but per
-[queue-policy.md § 2 rule 4](reference/queue-policy.md#2-queue-pull-and-ordering),
-its dependency status is checked directly: it has an existing open PR from last night, which **counts as
-satisfaction evidence**. `BACKLOG-301` is attempted tonight, not deferred. (Before this rule existed,
-`BACKLOG-301` would have stayed `DEFERRED` forever — its prerequisite can never again appear "in a
-pulled batch" once it has an open PR, and never again after the ticket closes either.)
+**Night 2 agent (default — no human merged `BACKLOG-300`'s PR yet):** `BACKLOG-300` is **not** in
+tonight's pulled batch — per [queue-policy.md § 2 rule 4](reference/queue-policy.md#2-queue-pull-and-ordering),
+its dependency status is checked directly: it has an existing PR from last night, but that PR is still
+**open, not merged** — an open PR is never satisfaction on its own (P0 fix — building `BACKLOG-301`
+against a base branch that doesn't yet contain `BACKLOG-300`'s code would silently assume functions/
+schemas the base branch doesn't have). `BACKLOG-301` stays `DEFERRED` tonight, re-checked again tomorrow
+night. This is the expected, common case — most nights the prerequisite merges before the dependent is
+next attempted.
+
+**Night 2 agent (a human merged `BACKLOG-300`'s PR before tonight's run):** the same direct dependency
+check now finds `BACKLOG-300`'s PR merged into the effective base branch — genuine satisfaction evidence.
+`BACKLOG-301` is attempted tonight, not deferred.
+
+**Night 2 agent (`allow_stacked_dependencies: true`, `BACKLOG-300`'s PR still open):** instead of
+deferring, `BACKLOG-301` is dispatched with its branch based on `BACKLOG-300`'s own PR branch —
+`stacked_on: BACKLOG-300` recorded in session state and carried into the morning summary, so a human
+knows `BACKLOG-301`'s PR must merge after, and rebase onto, `BACKLOG-300`'s.
 
 ---
 

@@ -16,8 +16,9 @@ consumes:
 
 **Goal:** Once an incident resolves, produce a drafted postmortem using incident-rca's own full report,
 with follow-up owners pre-filled from squad-map. No new investigation, ownership, or action-item schema
-here — see [SKILL.md](../SKILL.md) Non-goals and
-[reference/unattended-gate-policy.md](../reference/unattended-gate-policy.md).
+here — see § Non-goals in the
+[design spec](../../docs/superpowers/specs/2026-08-05-incident-triage-agent-design.md#non-goals-explicitly-out-of-scope-for-this-item)
+and [reference/unattended-gate-policy.md](../reference/unattended-gate-policy.md).
 
 ## Steps
 

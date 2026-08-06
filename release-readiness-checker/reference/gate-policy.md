@@ -1,27 +1,17 @@
 # Gate policy — all three wrapped skills (normative)
 
-**Correction (round-1 review):** an earlier version of this file claimed pr-review's `chat-only` posting
-mode could be requested as an input (`posting_mode: chat-only`) and therefore had no gate to answer. This
-was wrong — `chat-only` is **derived by pr-review's own Phase 0** purely from which GitLab MCP write
-tools are connected ([phase-0.md](../../pr-review/workflow/phase-0.md): *"read-only [server profile] |
-none of the above [write tools] | `chat-only`"*); it is never a caller-supplied input, and pr-review's
-`workflow/inputs.md`/`phase-0.md` frontmatter has no field for it at all. In any realistic deployment
-where pr-review is also configured for normal write-capable use (which this skill's own
+`posting_mode` (`full`/`summary-only`/`general-only`/`chat-only`) is **derived by pr-review's own Phase 0**
+purely from which GitLab MCP write tools are connected
+([phase-0.md](../../pr-review/workflow/phase-0.md)) — never a caller-supplied input. In any realistic
+deployment where pr-review is also configured for normal write-capable use (which this skill's own
 [SETUP.md](../SETUP.md) assumes), pr-review's Phase 0 will detect write tools and enter `full`/
-`summary-only`/`general-only` — every one of which has a live Phase 3 posting-confirmation gate. This
-file is corrected below to give pr-review its own real gate policy instead of assuming one away.
+`summary-only`/`general-only` — every one of which has a live Phase 3 posting-confirmation gate. See
+[CHANGELOG.md](../CHANGELOG.md) for the history of what this file's gate answers correct and why.
 
 ## pr-review — retrospective audit mode (typed invocation, not conversational)
 
-**Correction (P0 fix):** an earlier version of this file reused pr-gatekeeper's policy verbatim,
-including its scripted "decline the post-merge audit" answer to pr-review's merged/closed-MR stop
-([phase-1.md](../../pr-review/workflow/phase-1.md) step 1). That answer is correct for pr-gatekeeper,
-where a merged MR is an unexpected race against a webhook that normally fires on open MRs. It is wrong
-here: every MR this skill resolves (step 1's `state: merged` query) is merged by construction, so
-"decline" fired on **100% of invocations** — pr-review immediately HARD STOPped and never actually
-reviewed anything, while the report still populated an MRs-reviewed row as if a review had happened.
-
-This skill invokes pr-review with **explicit typed fields**, not a conversational exchange:
+Every MR this skill resolves is merged by construction (step 1's `state: merged` query) — this skill
+invokes pr-review with **explicit typed fields**, not a conversational exchange:
 
 - `review_mode: retrospective`, `audit_type: retrospective` — selects pr-review's retrospective audit
   path directly (`phase-1.md` step 1's "If user confirms post-merge audit →" branch) so the merged-MR
@@ -56,18 +46,17 @@ sufficient evidence, and Kubernetes MCP failure does not block a service when Da
 evidence. Preserve the wrapped verdict; only its `auth_failure` for **all viable sources** produces a
 blocked assessment for that service.
 
-**Correction (round-1 review):** an earlier version of this file claimed k8s-overprovisioning-datadog's
-single-service path has no live gate. It does —
-[resolve-service.md](../../k8s-overprovisioning-datadog/workflow/resolve-service.md) documents two:
+[resolve-service.md](../../k8s-overprovisioning-datadog/workflow/resolve-service.md) documents live
+gates on the single-service path:
 
 | Gate | k8s's own text | This skill's scripted answer |
 |---|---|---|
-| Ambiguous service→tag confirmation | *"Confirm with `get_datadog_metric_context`... If ambiguous, ask the user **or default `env:production` when present**"* | Rely on the documented default — always resolve with `env:production` when present; only if genuinely still ambiguous with no `env:production` scope available does this become the next row |
+| Ambiguous service→tag confirmation | [§ Ambiguous resolution](../../k8s-overprovisioning-datadog/workflow/resolve-service.md#ambiguous-resolution-no-silent-production-default): *"ask the user... if the ask-question tool is unavailable, emit `STOP_REASON: ambiguous_unresolved`"* — k8s no longer defaults to `env:production` when ambiguous | This skill runs unattended, so k8s's ask always resolves to `STOP_REASON: ambiguous_unresolved` for that service — record it in `RELEASE_READINESS_REPORT.md` as an unresolved k8s outcome (same honest-gap treatment as `insufficient_metrics` below), never a guessed `env:production` scope |
 | Service name mismatch (`insufficient_metrics` path) | *"Ask the user to confirm the correct deployment name... Only emit `insufficient_metrics` after ≥2 tag strategies and user confirmation (**or explicit "proceed with unknown"**)"* | **"Proceed with unknown."** This is k8s's own documented non-guessing alternative to a live ask — never invent a deployment/namespace name on this skill's own judgment |
 | One Kubernetes MCP or Datadog source is unavailable/unauthorized | Source-scoped failure; continue when the other source covers required capabilities | Record the wrapped skill's degraded assessment as-is; never convert it into a release-wide auth failure |
 
-A service that resolves to `insufficient_metrics` this way is recorded in
-`RELEASE_READINESS_REPORT.md` **as `insufficient_metrics`, honestly** — not silently upgraded to
+A service that resolves to `insufficient_metrics` or `ambiguous_unresolved` this way is recorded in
+`RELEASE_READINESS_REPORT.md` **honestly, as that outcome** — not silently upgraded to
 `READY` (which would hide a real gap) and not treated as `BLOCKED` (which would fabricate a finding k8s
 never made). See [reference/report-format.md](report-format.md).
 

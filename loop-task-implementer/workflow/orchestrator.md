@@ -570,6 +570,11 @@ For an unrecognized content change:
 - Decide whether the change belongs to the task.
 - Escalate if ownership or intent is unclear.
 
+When this, a circuit breaker (§3, §9, §10, §11, §15), a base-update invalidation (§14), a
+`NOT_ISOLATED` lens (§7), or an unresolved security-sensitive `NEEDS_EVIDENCE` finding (§9) are true at
+the same time, resolution order is not "handle in section order" — see
+[reference/precedence.md](../reference/precedence.md).
+
 ---
 
 ## 17. Completion gates

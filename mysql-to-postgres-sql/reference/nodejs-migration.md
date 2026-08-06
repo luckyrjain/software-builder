@@ -157,6 +157,9 @@ Same as Java/Python — see [case-sensitivity.md](case-sensitivity.md). Normaliz
 - Datadog APM: `postgresql.query` spans, not `mysql.query`
 - `sequelize.authenticate()` / health check against PG before deploy
 
-## Collection domain
+## Domain-specific examples
 
-No active Node.js MySQL services in collection workspace (legacy UI packages are front-end only). This guide applies **org-wide** to Node services in other GitLab groups.
+This guide applies **org-wide** to Node services across GitLab groups. Some workspaces have no active
+Node.js MySQL services at all — see [domain-packs/collection.md](domain-packs/collection.md) for an
+example of a pack documenting that, or your own workspace's pack under
+[domain-packs/README.md](domain-packs/README.md).

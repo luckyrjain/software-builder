@@ -57,3 +57,5 @@ invocation starts.
 | k8s can't resolve a service after ≥2 tag strategies | Answered "proceed with unknown" — recorded as `insufficient_metrics`, counted toward `UNKNOWN`, never upgraded to `READY` |
 | Datadog is unavailable but Kubernetes MCP supplies sufficient rightsizing evidence | The source-scoped Datadog failure is preserved in the k8s source profile; the service assessment continues and its degraded verdict is recorded as-is |
 | Kubernetes MCP is unavailable but Datadog supplies sufficient rightsizing evidence | The source-scoped Kubernetes failure is preserved; the service assessment continues with the live-state verification gap stated explicitly |
+
+Maintainer pressure scenarios: [pressure-tests.md](pressure-tests.md).

@@ -15,11 +15,15 @@ Each service owning identity or compliance fields must document and implement on
 | **3. `CITEXT` extension** | Column always case-insensitive | `CREATE EXTENSION citext;` + `email CITEXT` |
 | **4. Functional index** | High-volume `LOWER()` lookups | `CREATE INDEX ON users (LOWER(email));` |
 
-## Fields to review in collection services
+## Fields to review
 
-- Email / mobile lookups (CAAS, EMS defaulter flows)
-- PAN, IFSC, bank codes
+- Email / mobile / username lookups
+- PAN, IFSC, bank codes, and other identity or compliance fields
 - Any `=` or `LIKE` on user-entered text in native SQL or JPQL
+
+For a worked example of which fields a real service had to review, see
+[domain-packs/collection.md](domain-packs/collection.md) or your own workspace's pack under
+[domain-packs/README.md](domain-packs/README.md).
 
 ## Audit commands
 

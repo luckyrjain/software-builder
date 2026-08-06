@@ -79,7 +79,7 @@ Full matrix: [cross-skill-escalation.md](../docs/skill-framework/shared/cross-sk
 |-----------------------|------------|
 | Caller wants the full mapping table, not one answer | **squad-map** directly |
 | Caller wants bounded contexts / domain map | **domain-comprehension** |
-| Query names a service mid-incident | **incident-rca** (surface as a suggestion in the reply, do not switch skills mid-response) |
+| Query names a service mid-incident | **incident-rca** (surfaced as a suffix line in the same reply, never a second message — exact trigger keywords and template: [reference/slack-format.md § Escalation suffix](reference/slack-format.md#escalation-suffix-mid-incident-query)) |
 
 ## Post-actions
 

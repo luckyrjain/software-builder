@@ -107,7 +107,9 @@ When **`infra_capacity`** is confirmed (primary or strong alternate), append the
 [report-template.md](../report-template.md#k8s-skill-handoff-infra-capacity-confirmed) in chat.
 Populate evidence bundle fields from Phase 3 observability signals.
 
-**k8s skill v3.1 expected context** — include these fields in the handoff block:
+**k8s-overprovisioning-datadog's expected handoff context** — include these fields in the handoff block
+(field list, not a version pin — verify against that skill's own `workflow/resolve-service.md` if this
+drifts):
 
 | Field | From RCA |
 |-------|---------|

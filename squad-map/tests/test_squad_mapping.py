@@ -7,6 +7,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
 from squad_mapping import (  # noqa: E402
+    codeowners_fallback_row,
     confidence_for_codeowners_fallback,
     extract_squad_from_namespace,
     reconcile_confidence,
@@ -90,6 +91,43 @@ class TestReconcile:
 class TestCodeownersFallback:
     def test_capped_at_low(self):
         assert confidence_for_codeowners_fallback() == "LOW"
+
+
+class TestCodeownersFallbackRow:
+    """Both GitLab and Datadog MCP unavailable — Step 7. The CODEOWNERS/git-log-derived squad guess
+    must reach the structured output columns, never get overwritten with UNKNOWN once it's been
+    computed (that would silently drop the only signal this fallback path exists to produce)."""
+
+    def test_codeowners_guess_populates_gitlab_squad_not_unknown(self):
+        squad, confidence, evidence = codeowners_fallback_row("payments-team")
+        assert squad == "payments-team"
+        assert squad != "UNKNOWN"
+        assert confidence == "LOW"
+        assert evidence == "CODEOWNERS"
+
+    def test_multi_handle_codeowners_guess_also_flows_through(self):
+        squad, confidence, evidence = codeowners_fallback_row("payments-team/platform-team")
+        assert squad == "payments-team/platform-team"
+        assert confidence == "LOW"
+        assert evidence == "CODEOWNERS"
+
+    def test_git_log_fallback_when_no_codeowners_pattern(self):
+        squad, confidence, evidence = codeowners_fallback_row(None, "payments")
+        assert squad == "payments"
+        assert squad != "UNKNOWN"
+        assert confidence == "LOW"
+        assert evidence == "GIT_LOG"
+
+    def test_codeowners_preferred_over_git_log_when_both_present(self):
+        squad, _, evidence = codeowners_fallback_row("payments-team", "collections")
+        assert squad == "payments-team"
+        assert evidence == "CODEOWNERS"
+
+    def test_neither_signal_is_genuinely_unknown(self):
+        squad, confidence, evidence = codeowners_fallback_row(None, None)
+        assert squad == "UNKNOWN"
+        assert confidence == "LOW"
+        assert evidence == "NONE"
 
 
 class TestHardStop:

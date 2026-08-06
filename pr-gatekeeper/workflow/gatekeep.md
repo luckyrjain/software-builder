@@ -42,8 +42,9 @@ the result correctly either way. No new review logic here — see
 3. **Answer every gate pr-review stops at, deterministically** — the full enumerated list is
    [reference/auto-post-policy.md § The protocol](../reference/auto-post-policy.md#the-protocol-every-pr-review-ask-point-gets-one-deterministic-answer-never-a-hang):
    merged/closed-MR stop → decline the post-merge audit; early 200-file cap warning → `proceed`;
-   pagination-cap hit → "review the partial boundary as-is"; baseline-staleness offer → "continue
-   incrementally"; Phase 3 (if it stops) → `"Hold — don't post"`. Never answer any gate with anything
+   pagination-cap hit → "review the partial boundary as-is"; merge-conflict stop → decline (never ask
+   to review the conflicted state); baseline-staleness offer → "continue incrementally"; Phase 3 (if it
+   stops) → `"Hold — don't post"`. Never answer any gate with anything
    else, and never treat pr-review's continued silence past that as license to guess — only these
    designated replies. If a gate doesn't fire for this push, there is nothing to reply to at that
    point — continue.

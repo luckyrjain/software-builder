@@ -27,7 +27,7 @@ just the bare state.>
 
 | Service | k8s verdict | Notes |
 |---------|-------------|-------|
-| <service> | <k8s-overprovisioning-datadog's own verdict, unmodified, including `insufficient_metrics` recorded honestly as such — never upgraded to READY or treated as BLOCKED> | <one-line pointer to the full k8s report if BLOCKED or insufficient_metrics> |
+| <service> | <k8s-overprovisioning-datadog's own verdict, unmodified, including `insufficient_metrics`/`ambiguous_unresolved` recorded honestly as such — never upgraded to READY or treated as BLOCKED> | <one-line pointer to the full k8s report if BLOCKED, insufficient_metrics, or ambiguous_unresolved> |
 
 ## Per-service incident signal
 
@@ -39,7 +39,7 @@ just the bare state.>
 
 <Any MR-range-resolver fallback used (e.g. GitLab MCP didn't support a merge-date filter, client-side
 filtering was used instead, pagination spanned N pages); any manifest entry whose `since` didn't resolve;
-any k8s `insufficient_metrics` outcome and what tag strategies were attempted; any incident-rca escalation
+any k8s `insufficient_metrics`/`ambiguous_unresolved` outcome and what tag strategies were attempted; any incident-rca escalation
 per gate-policy.md § Escalation, not override.>
 ```
 
@@ -47,7 +47,7 @@ per gate-policy.md § Escalation, not override.>
 
 - **Every `release_manifest` entry appears somewhere in the report** — a clear/uneventful entry still
   gets a row in each relevant section; never silently dropped for having nothing to report, and an
-  unresolved `since` or an `insufficient_metrics` k8s outcome is recorded honestly, not silently excluded.
+  unresolved `since` or an `insufficient_metrics`/`ambiguous_unresolved` k8s outcome is recorded honestly, not silently excluded.
 - **k8s and incident-rca verdicts are surfaced as-is** — this skill never re-labels a k8s READY/BLOCKED
   recommendation or invents its own "risky" threshold on top of it, and never re-scores an incident
   signal beyond Clear/Flagged with the raw counts from incident-rca's own partial report.
@@ -59,13 +59,13 @@ per gate-policy.md § Escalation, not override.>
   - `NOT_READY` — a **proven** blocker: any MR has a Critical/High finding, or any service's k8s verdict
     is `BLOCKED`.
   - `UNKNOWN` — an **evidence gap**, not a proven blocker and not verified-safe either: a manifest
-    entry's `since` didn't resolve, or a service's k8s verdict is `insufficient_metrics`. Never folded
+    entry's `since` didn't resolve, or a service's k8s verdict is `insufficient_metrics` or `ambiguous_unresolved`. Never folded
     into `NOT_READY` (that would fabricate a finding no check actually made) or into `READY` (that would
     hide a real gap).
   - `CONDITIONAL` — a flagged incident signal with no proven blocker or evidence gap otherwise present.
   - `READY` — none of the above.
-- **Evidence gaps and proven blockers are reported as different states, not merged.** `insufficient_metrics`
-  and an unresolved `since` were previously collapsed into the same `Not ready` bucket as a Critical
+- **Evidence gaps and proven blockers are reported as different states, not merged.** `insufficient_metrics`,
+  `ambiguous_unresolved`, and an unresolved `since` were previously collapsed into the same `Not ready` bucket as a Critical
   finding or a `BLOCKED` k8s verdict — a reader could not tell "we found a real problem" from "we
   couldn't check." `UNKNOWN` exists specifically so the report says which one happened.
 - **A flagged incident signal is a signal worth a human look, not a confirmed release-caused problem** —

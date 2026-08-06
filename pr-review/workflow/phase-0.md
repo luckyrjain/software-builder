@@ -31,6 +31,19 @@ Check MCP availability before proceeding. Tell the user what is missing and how 
 
 Do not attempt capability detection below until GitLab MCP is confirmed available. Jira absence is non-blocking.
 
+## MCP retry policy (all phases)
+
+**Normative — stated once here, applies to every MCP call in this skill** (this Phase 0 probe, Phase 1
+gather, and Phase 4 posting): follow the shared 1-retry policy —
+[mcp-error-handling.md](../../docs/skill-framework/shared/mcp-error-handling.md) §3. `timeout`,
+`rate_limited`, and `server_error` responses get **one retry** (5s delay for `timeout`/`server_error`,
+30s for `rate_limited`); if the retry also fails, mark that tool unavailable for this session and fall
+through to the degraded path — the Prerequisites messages above for GitLab/Jira, or the fallback column
+in `reference/mcp-capabilities.md` for the Phase 1/4 tools listed there. **Do not retry** `auth_failure`,
+`not_configured`, or `invalid_request` — these are deterministic; surface them immediately (see the
+Prerequisites messages above for the GitLab/Jira wording). Phase 1 and Phase 4 reference this section
+rather than restating it.
+
 ## Capability detection
 
 **Required:** inspect connected GitLab MCP tool descriptors (Cursor Settings → MCP, or each server's

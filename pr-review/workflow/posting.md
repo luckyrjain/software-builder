@@ -108,6 +108,12 @@ merge via API; recommend a human maintainer gate and link GitLab approval rules 
 
 ## Phase 4 — Post (when mode allows)
 
+**MCP retry policy:** posting calls (`create_merge_request_thread`, `create_note`,
+`create_workitem_note`, `create_draft_note`) follow the 1-retry policy stated once in
+[phase-0.md § MCP retry policy](phase-0.md#mcp-retry-policy-all-phases) — retry once on `timeout` /
+`rate_limited` / `server_error` before a thread is counted as a failure under **Partial-post recovery**
+below.
+
 Post **only** findings that survived Phase 2 finding dedupe — never re-post same location, root cause,
 stack, or API misuse already on the MR. **Cross-session dedupe:** before posting, re-fetch MR notes and
 confirm no open thread or prior summary already covers the same finding (match by `file:line` + snippet
