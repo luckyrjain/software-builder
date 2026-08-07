@@ -5,6 +5,11 @@ on:
     branches: [main, master]
   pull_request:
     branches: [main, master]
+  schedule:
+    # Catch drift (a newly-broken external link, a dependency CVE advisory, etc.) even when no PR
+    # is open against main.
+    - cron: "17 4 * * 1"
+  workflow_dispatch: {}
 
 jobs:
   lint:

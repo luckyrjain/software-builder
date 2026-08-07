@@ -8,6 +8,16 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 
 ## Platform
 
+### Scheduled lint run + documented branch-protection checklist (2026-08-07)
+
+- `.github/workflows/lint.yml` gained `schedule` (weekly, Monday 04:17 UTC) and `workflow_dispatch`
+  triggers so drift is caught even with no open PR against `main`.
+- `docs/REPOSITORY.md § CI/CD` now spells out the exact ruleset steps a repo admin needs to run once
+  from **Settings** to make the `Lint` check an actual required merge gate — a workflow file existing
+  was previously easy to mistake for "changes can't merge without it passing," which isn't true today.
+- This is partial: the ruleset itself must still be applied by someone with repo-admin access — no
+  tool in this environment can create GitHub rulesets/branch-protection rules. See #10.
+
 ### Hash-pinned CI dependencies (2026-08-07)
 
 - Added `requirements.lock` (generated via `uv pip compile requirements.txt --generate-hashes

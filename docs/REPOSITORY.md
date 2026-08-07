@@ -323,21 +323,40 @@ provision or keep online.** The job installs everything `make lint` needs itself
 |-------------|--------|
 | **Runner** | GitHub-hosted `ubuntu-latest` — always available, nothing to register |
 | **Dependencies** | Installed fresh each run via `apt-get` (`shellcheck`, `ripgrep`) and `pip` (`requirements.txt`) |
-| **Trigger** | `push` to `main`/`master`, and any `pull_request` targeting either |
+| **Trigger** | `push` to `main`/`master`, any `pull_request` targeting either, a weekly Monday-04:17 UTC `schedule`, and manual `workflow_dispatch` |
+
+The scheduled run and `workflow_dispatch` exist so drift (a dependency advisory, a newly-broken
+external link) surfaces even when no PR is open against `main` — see [#10](https://github.com/luckyrjain/software-builder/issues/10).
 
 Run the exact same checks locally before pushing: `make setup` once (installs Python deps + the
 shellcheck pre-commit hook), then `make lint`.
 
-### Merge gate (optional — enable with branch protection)
+### Merge gate — not yet enforced, requires repo-admin action
 
-By default, a failing or pending check does **not** block merging a PR. To require the `Lint` check to
-pass before merge:
+**A workflow file existing is not the same as a required merge gate.** As of this writing, a failing
+or pending `Lint` check does **not** block merging a PR — nothing in this repository can change that;
+it's a GitHub repo-settings permission this session (and any non-admin contributor) doesn't have. A
+repo admin needs to do the following once, from **Settings** (not a PR):
 
-1. **Settings → Branches → Branch protection rules** → add/edit a rule for `main`.
-2. Enable **Require status checks to pass before merging**, then select the **Lint** check (from
-   `.github/workflows/lint.yml`) once it has run at least once on the repo.
+1. **Settings → Rules → Rulesets** (preferred over the legacy Branch protection rules page) → **New
+   ruleset** → target `main`.
+2. **Require a pull request before merging**, with **Require conversation resolution before merging**
+   enabled.
+3. **Require status checks to pass** → add the `lint` check by its exact job name (from
+   [`.github/workflows/lint.yml`](../.github/workflows/lint.yml); it must have run at least once on the
+   repo before it's selectable) → also enable **Require branches to be up to date before merging**.
+4. **Restrict deletions** and **Block force pushes**.
+5. Under **Rules → Require pull request reviews**, require at least one approval — for a
+   single-maintainer repo this mostly matters once a second contributor shows up, but set it now so it's
+   not forgotten later.
+6. Pick one merge strategy in **Settings → General → Pull Requests** (squash-only is recommended for
+   this repo's single-commit-per-skill-change convention) and enable **Automatically delete head
+   branches**.
+7. Verify: open a throwaway PR with a deliberately failing check, confirm the merge button is blocked,
+   then close it without merging.
 
-To relax the gate later, remove the required check or disable the rule.
+Until this is done, treat the green `Lint` badge as "the workflow ran and passed on this commit," not
+as "nothing unreviewed reached `main`."
 
 ## Contributing
 
