@@ -6,6 +6,20 @@ the create-skill anti-pattern on time-sensitive info).
 
 Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/README.md).
 
+## Platform
+
+### Hash-pinned CI dependencies (2026-08-07)
+
+- Added `requirements.lock` (generated via `uv pip compile requirements.txt --generate-hashes
+  --python-version 3.12 -o requirements.lock`) and switched `.github/workflows/lint.yml` to
+  `pip install --require-hashes -r requirements.lock` so every CI run resolves identical dependency
+  versions instead of re-resolving `pytest`/`PyYAML`'s loose lower bounds. Bumping a dependency now
+  means editing `requirements.txt` and regenerating the lockfile in the same PR — a reviewable diff
+  instead of a silent resolution change.
+- Added `.github/dependabot.yml` for weekly, reviewable update PRs on both the `pip` (this lockfile)
+  and `github-actions` (SHA-pinned Action refs) ecosystems.
+- Fixes #11.
+
 ## test-writer
 
 ### Incremental backfill state across all five dispatch targets (2026-08-06)
