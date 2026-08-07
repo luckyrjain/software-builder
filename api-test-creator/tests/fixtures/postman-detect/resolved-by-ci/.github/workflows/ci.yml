@@ -1,0 +1,8 @@
+name: api-tests
+on: [push]
+jobs:
+  newman:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npx newman run postman/orders.postman_collection.json

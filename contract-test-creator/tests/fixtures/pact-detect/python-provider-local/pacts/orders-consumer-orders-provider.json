@@ -1,0 +1,5 @@
+{
+  "consumer": { "name": "orders-consumer" },
+  "provider": { "name": "orders-provider" },
+  "interactions": []
+}

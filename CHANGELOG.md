@@ -6,6 +6,181 @@ the create-skill anti-pattern on time-sensitive info).
 
 Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/README.md).
 
+## test-writer
+
+### Incremental backfill state across all five dispatch targets (2026-08-06)
+
+- Each of unit/integration/contract/e2e/api-test-creator now persists a small
+  `<LEVEL>_TEST_COVERAGE_STATE.yaml` file at `output_dir` after a backfill run (never diff mode) —
+  target/journey/endpoint identifier, final status, a content hash for staleness detection, and a
+  `pending_backlog` of targets discovered but cut off by `max_files_per_run`. A later backfill run on the
+  same repo reads it back: already-covered targets whose hash is unchanged are skipped, and
+  `pending_backlog` entries are worked through before newly discovered ones — so repeated runs on a large
+  repo make forward progress instead of re-scanning and re-ordering from scratch each time.
+- New shared doc section:
+  [test-creation-principles.md §6](docs/skill-framework/shared/test-creation-principles.md#6-incremental-backfill-state-optional)
+  — the file schema, the read/write contract, and the non-negotiables (optional and never a gate; hash
+  not mtime; a corrupt/unreadable state file is ignored, never a hard failure; the state file accelerates
+  ordering only, it's never authoritative over code evidence).
+- Each skill's `workflow/select-targets.md` gained a new "Apply incremental backfill state" step
+  (immediately before the `max_files_per_run` cap) and `workflow/report.md` gained a new "Write
+  incremental backfill state" step (immediately before "Close the loop"); each `reference/report-format.md`
+  documents the state file as a secondary artifact, distinct from the main report.
+
+### api-test-creator added as a fifth dispatch target (2026-08-06)
+
+- **unit-test-creator/integration-test-creator/contract-test-creator/e2e-test-creator** gained an
+  optional, read-only, best-effort integration with **domain-comprehension**: a new shared doc,
+  `docs/skill-framework/shared/domain-comprehension-integration.md`, documents which artifacts
+  (`RISK_MAP.md`, `BUSINESS_FLOWS.md`, `DATA_OWNERSHIP.md`, `BOUNDED_CONTEXTS.md`, `API_CATALOG.md`)
+  each skill may read — if they already exist at `workspace_root` — to prioritize backfill targets by
+  business criticality and infer/enrich journeys from documented business flows, without ever becoming a
+  hard dependency, a gate, or a live domain-comprehension invocation. Code evidence always wins over an
+  artifact's claim.
+- **api-test-creator** joins as a fifth dispatch target — black-box Postman/Newman request/response test
+  suites against a real running API (no browser, no in-process mocking, no Pact consumer/provider
+  agreement). See its own `CHANGELOG.md` for detail. `test-writer`'s dispatch table, level-classification
+  keywords, and `make install-test-writer` chain all updated to include it.
+
+### Rewritten into a thin router (2026-08-06)
+
+- **Breaking**: split into five focused skills. All framework detection, target selection, generation,
+  and verification logic moved to four new skills — **unit-test-creator**, **integration-test-creator**,
+  **contract-test-creator**, **e2e-test-creator** — each with its own triggers, workflow, stack-specific
+  references, examples, smoke tests, discovery files, lint target, installer target, and documentation
+  entry (see their own sections below). test-writer now only classifies a level-unspecified "write tests"
+  request and dispatches to exactly one of the four, relaying its report verbatim — mirrors the
+  `who-owns-x-bot`/`release-readiness-checker` composition pattern.
+- Shared principles across all four dispatch targets — test-first evidence, test-quality rules, refactor
+  limits, and the report-format skeleton — moved into a new shared framework file:
+  `docs/skill-framework/shared/test-creation-principles.md`. Each skill's own `reference/skill-contract.md`
+  and `reference/test-quality-deltas.md` link there and state only their level-specific deltas.
+- Removed from test-writer: `scripts/`, `tests/` (re-homed as unit-test-creator's own artifact),
+  `workflow/{detect-conventions,select-targets,generate-tests,verify-and-iterate,report}.md`,
+  `reference/{gate-policy,test-quality-checklist,framework-detection,report-format}.md`.
+- Added to test-writer: `workflow/classify.md` (ask-once level gate, never guesses between levels),
+  `workflow/delegate.md` (dispatch + verbatim relay), `reference/level-classification.md` (keyword
+  heuristics mirroring `skill-routing.md`, so classification can't drift from the canonical routing
+  table).
+- `make install-test-writer` now chains installing all four dispatch targets — the router is useless
+  without them.
+- Callers who already know the level should invoke the matching `*-test-creator` skill directly and skip
+  the router — new "level already named" rows in `skill-routing.md` and `SKILL.md § When to use`.
+
+### Initial release (2026-08-06)
+
+- New skill — generates and backfills automated tests for a target repository. Detects the repo's own
+  test framework/conventions (pytest, Jest/Vitest/Mocha, Go `testing`, JUnit via Maven/Gradle,
+  RSpec/Minitest, xUnit/NUnit/MSTest, `cargo test`) via `scripts/detect-test-framework.sh`, then writes
+  tests matching that convention for changed code (diff mode) or an existing coverage gap (backfill
+  mode), runs them, and iterates on failures.
+- Non-negotiable: never modifies production code to force a failing test green, and never `.skip`/
+  `xfail`/deletes an assertion to hide a failure without flagging it — a probable production bug found
+  while testing is reported as a finding and handed to **loop-task-implementer**/**pr-review**, not
+  silently resolved.
+- No MCP of its own; composes with **pr-review** (existing-test-quality review, production-bug flags on
+  an MR) and **loop-task-implementer** (production-bug fixes) via cross-skill handoffs only, never a hard
+  install dependency.
+- `scripts/detect-test-framework.sh` + `scripts/test-framework-markers.sh`, with a pytest suite
+  (`tests/test_detect_test_framework.py`) over marker-file fixtures under
+  `tests/fixtures/test-framework-detect/`.
+- Full shared-framework compliance: `SETUP.md`, `README.md`, `examples.md`,
+  `reference/{skill-contract,phase-index,lazy-load-index,gate-policy,test-quality-checklist,
+  framework-detection,report-format,smoke-test,pressure-tests}.md`; new rows in `skill-routing.md`,
+  `cross-skill-escalation.md`, `prompt-injection.md`, and `smoke-test-conventions.md`.
+
+  Note: this initial-release entry describes test-writer's original design before the router rewrite
+  above; its detection/generation logic now lives in **unit-test-creator** (see below).
+
+## unit-test-creator
+
+### Initial release (2026-08-06)
+
+- New skill — split out of test-writer's original detection/generation logic. Isolated, fast,
+  function/class-level tests with every external dependency mocked or stubbed. Detects the repo's test
+  framework (pytest, unittest, Jest, Vitest, Mocha, Go `testing`, JUnit 4/5, RSpec, Minitest,
+  xUnit/NUnit/MSTest, `cargo test`) via `scripts/detect-test-framework.sh` +
+  `scripts/test-framework-markers.sh` (re-homed from test-writer, same 11-ecosystem coverage), writes
+  tests for changed code (diff mode) or an existing coverage gap (backfill mode), runs them, and iterates
+  on failures.
+- A target that can't be isolated without a real dependency, with no existing mocking convention, gates
+  `UNTESTABLE_WITHOUT_FIXTURE` and escalates to **integration-test-creator** rather than faking isolation.
+- Shared rules (test-first evidence, quality checklist, refactor limits, report skeleton) linked from
+  `docs/skill-framework/shared/test-creation-principles.md`; `reference/test-quality-deltas.md` states
+  only the unit-specific delta (mock everything).
+- `tests/test_detect_test_framework.py` pytest suite over fixtures under
+  `tests/fixtures/test-framework-detect/`.
+
+## integration-test-creator
+
+### Initial release (2026-08-06)
+
+- New skill — tests the real seam between a component and one real adjacent dependency (database, queue,
+  cache, internal service); never mocks the dependency under test, unlike unit-test-creator. Detects both
+  the base test runner and the real-dependency orchestration mechanism (testcontainers, docker-compose,
+  embedded DB) plus the repo's integration-test naming/tag convention via
+  `scripts/detect-integration-setup.sh` + `scripts/integration-markers.sh`.
+- A target with no detected orchestration mechanism and no way to stand one up in-session gates
+  `NEEDS_INTEGRATION_ENV` — a level-specific status on top of the shared vocabulary — rather than
+  fabricating a fake dependency or silently mocking it (which would secretly make it a unit test).
+- `tests/test_detect_integration_setup.py` pytest suite over fixtures under
+  `tests/fixtures/integration-detect/`.
+
+## contract-test-creator
+
+### Initial release (2026-08-06)
+
+- New skill — consumer-driven contract tests, Pact-style. Generates a **consumer** test (records
+  expectations, produces a pact file) or a **provider verification** test (replays existing pact files
+  against the real provider); `target.role` (`consumer`/`provider`) is required — HARD STOP if absent,
+  never inferred from file location. Detects Pact tooling per ecosystem (pact-js, pact-python, Pact JVM,
+  pact-go, Ruby pact) and whether a Pact Broker is configured, via `scripts/detect-pact-tooling.sh` +
+  `scripts/pact-markers.sh`.
+- Every interaction shape must trace to real, observed usage (an actual request-building call site, an
+  existing API client method, or an OpenAPI/schema spec) — a target with none of these gates
+  `NEEDS_OBSERVED_INTERACTION` rather than fabricating a plausible-looking payload.
+- `tests/test_detect_pact_tooling.py` pytest suite over fixtures under `tests/fixtures/pact-detect/`.
+
+## e2e-test-creator
+
+### Initial release (2026-08-06)
+
+- New skill — full user-journey tests through a real browser UI (Playwright, Cypress, or
+  Selenium/WebDriver — web browser flows only, not API/CLI black-box journeys). Targets are **journeys**,
+  not files: diff mode infers a journey from a new/changed route or page; backfill mode requires an
+  explicit, non-empty `target.journeys` list (HARD STOP if absent). Detects browser tooling and layout
+  convention via `scripts/detect-e2e-tooling.sh` + `scripts/e2e-markers.sh`.
+- Asserts only on user-visible outcomes (text, ARIA role, URL, visible state) — never internal DOM/state
+  details; never a hard-coded sleep, always the framework's own auto-waiting. Requires a reachable running
+  app instance — gates `NEEDS_BROWSER_ENV` rather than fabricating what the UI would show.
+- `tests/test_detect_e2e_tooling.py` pytest suite over fixtures under `tests/fixtures/e2e-detect/`.
+
+## api-test-creator
+
+### Initial release (2026-08-06)
+
+- New skill — black-box API test suites (Postman collections, run via Newman) against a real, reachable
+  running API instance. Targets are **endpoints**, not files: diff mode infers changed endpoints from
+  route/handler diffs; backfill mode accepts an explicit endpoint list or file/directory paths that expand
+  to the endpoints they define. Detects the repo's Postman/Newman tooling and canonical collection file
+  via `scripts/detect-postman-tooling.sh` + `scripts/postman-markers.sh` — the live ambiguity gate here is
+  "which collection file is canonical" (2+ collection files, no obvious naming convention) rather than
+  "which tool," since Postman/Newman is this skill's only supported tool family.
+- Writes request/assertion pairs (status code, response schema/fields, headers), chained via Postman
+  variables/environment when a flow requires it (e.g. create-then-fetch). Every request/response shape
+  traces to real observed usage (route-handler code, an OpenAPI spec, or domain-comprehension's
+  `API_CATALOG.md`) — a target with none of these gates `NEEDS_OBSERVED_ENDPOINT` rather than fabricating
+  a payload. Requires a reachable running API instance — gates `NEEDS_API_ENV` rather than fabricating a
+  response.
+- `reference/skill-contract.md` and `reference/test-quality-deltas.md` link
+  `docs/skill-framework/shared/test-creation-principles.md` for shared rules and state only API-specific
+  deltas (assert on status AND schema, not just "200 OK"; chain via variables, never hard-coded IDs from a
+  prior manual run).
+- `tests/test_detect_postman_tooling.py` pytest suite over fixtures under `tests/fixtures/postman-detect/`.
+- New cross-skill escalation rows: api-test-creator ↔ integration-test-creator (in-process/testcontainers
+  vs. black-box HTTP), api-test-creator ↔ contract-test-creator (standalone suite vs. consumer/provider
+  agreement), api-test-creator ↔ e2e-test-creator (no browser involved).
+
 ## loop-task-implementer
 
 ### Rename, framework compliance, and safety fixes (2026-08-05)

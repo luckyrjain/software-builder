@@ -78,6 +78,12 @@ Maintainer pressure scenarios: [pressure-tests.md](pressure-tests.md).
 | loop-task-implementer | `Use loop-task-implementer to implement <task> and open a PR.` | Discovers repo policy, selects one eligible task, dispatches a fresh Builder |
 | backlog-runner | `tracker_query`, `max_tasks_per_run`, `repo_context` | Queue pull announced (tickets found, capped, skipped), then dependency order, before the first loop-task-implementer invocation |
 | weekly-squad-digest | `rollup_manifest: {migration_rollup_path, cost_rollup_path}` | Resolved rollup paths announced (supplied vs. found on disk), before the digest is rendered |
+| test-writer | A test-writing request with the level unspecified | Classified level announced (or the ask-once level gate), before dispatch |
+| unit-test-creator | `target: {mode: diff/backfill, ...}`, `repo_root: <path>` | Detected framework + confidence announced, before any target is selected |
+| integration-test-creator | `target: {mode: diff/backfill, ...}`, `repo_root: <path>` | Detected base framework + real-dependency orchestration mechanism announced |
+| contract-test-creator | `target: {mode: diff/backfill, role: consumer/provider, ...}`, `repo_root: <path>` | Detected Pact tooling + role announced, before any interaction is selected |
+| e2e-test-creator | `target: {mode: diff/backfill, journeys: [...] }`, `repo_root: <path>` | Detected browser tooling announced, before any journey is selected |
+| api-test-creator | `target: {mode: diff/backfill, ...}`, `repo_root: <path>` | Detected Postman/Newman tooling + collection announced, before any endpoint is selected |
 
 ## 4. Output checklist template
 
@@ -124,6 +130,12 @@ A correct minimal output should contain:
 | loop-task-implementer | `make lint-loop-task-implementer` |
 | backlog-runner | `make lint-backlog-runner` |
 | weekly-squad-digest | `make lint-weekly-squad-digest` |
+| test-writer | `make lint-test-writer` |
+| unit-test-creator | `make lint-unit-test-creator` (includes pytest + shellcheck) |
+| integration-test-creator | `make lint-integration-test-creator` (includes pytest + shellcheck) |
+| contract-test-creator | `make lint-contract-test-creator` (includes pytest + shellcheck) |
+| e2e-test-creator | `make lint-e2e-test-creator` (includes pytest + shellcheck) |
+| api-test-creator | `make lint-api-test-creator` (includes pytest + shellcheck) |
 | Framework | `make lint-framework` |
 | All | `make lint` |
 
