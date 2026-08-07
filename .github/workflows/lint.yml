@@ -20,7 +20,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y shellcheck ripgrep
-          python3 -m pip install -r requirements.txt
+          python3 -m pip install --require-hashes -r requirements.lock
 
       - name: make lint
         run: make lint
