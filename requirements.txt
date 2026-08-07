@@ -5,4 +5,4 @@
 # run resolves identical versions. Bump a version here, then regenerate requirements.lock
 # in the same PR.
 pytest>=7.0
-PyYAML>=6.0
+PyYAML>=6.0.3
