@@ -372,11 +372,18 @@ is documentation of who owns sensitive paths, not a merge gate.
 #### One-time setup checklist
 
 1. **Settings → Rules → Rulesets** → edit (or create) the ruleset targeting `main`.
-2. Apply the solo-maintainer settings above.
+2. Apply the solo-maintainer settings above — or match the canonical spec in
+   [`docs/github-ruleset-main.json`](../github-ruleset-main.json) (enforcement `active`, required
+   status check `lint`, squash-only merges, zero required approvals, no CODEOWNER review).
 3. **Settings → General → Pull Requests** → pick one merge strategy (squash recommended) and enable
    **Automatically delete head branches**.
-4. Verify: open a throwaway PR with a deliberately failing `make lint` change — merge should be
-   blocked by CI, not by missing approval. Close without merging.
+4. Verify: `make verify-github-ruleset` (requires `gh auth login` with repo read access) should print
+   `ok: GitHub ruleset matches docs/github-ruleset-main.json`.
+5. Smoke-test the gate: open a throwaway PR with a deliberately failing `make lint` change — merge
+   should be blocked by CI, not by missing approval. Close without merging.
+
+Repo admins without API access can apply the JSON fields manually in the ruleset UI; the `_documentation`
+block in the file explains each field but is stripped by the verifier.
 
 #### Unblock an existing PR right now
 
@@ -387,6 +394,17 @@ If a PR shows **Review required** / `mergeStateStatus: BLOCKED` but `lint` passe
 
 `CODEOWNERS` in this repo flags platform-sensitive paths for human review once multiple maintainers
 exist; it does not replace CI and should not block a solo maintainer from merging.
+
+### GitHub repository metadata (admin UI only)
+
+These improve discoverability but cannot be changed from a PR:
+
+1. **Settings → General → Description** — e.g. *Portable agent skills for code review, incident RCA,
+   K8s optimization, migrations, and autonomous implementation.*
+2. **Settings → General → Topics** — e.g. `agent-skills`, `cursor`, `claude-code`, `devops`,
+   `incident-response`, `kubernetes`, `software-engineering`.
+3. Link the [Code of Conduct](../CODE_OF_CONDUCT.md) under **Settings → General → Features** if
+   GitHub offers a community standards field (the file is also linked from CONTRIBUTING).
 
 ## Contributing
 

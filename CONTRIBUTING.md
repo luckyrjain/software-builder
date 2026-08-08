@@ -5,6 +5,8 @@ Markdown workflow/instruction definitions, not application code — so most cont
 skill's `SKILL.md`, `workflow/*.md`, or `reference/*.md`, plus the occasional helper script under
 `*/scripts/`.
 
+Please read and follow our [Code of Conduct](CODE_OF_CONDUCT.md).
+
 ## Before you start
 
 - **Security issues:** do not open a public issue — see [SECURITY.md](SECURITY.md).

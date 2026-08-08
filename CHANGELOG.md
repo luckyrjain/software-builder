@@ -8,6 +8,17 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 
 ## Platform
 
+### Merge gate spec + ruleset verifier (2026-08-08)
+
+- Added [`docs/github-ruleset-main.json`](docs/github-ruleset-main.json) as the canonical solo-maintainer
+  ruleset for `main`: enforcement active, required status check `lint`, squash-only merges, zero required
+  approvals, no CODEOWNER review, conversation resolution required.
+- Added `scripts/check_github_ruleset.py` and `make verify-github-ruleset` to compare the live GitHub
+  ruleset (via `gh api`) against the checked-in spec — run after applying settings in the GitHub UI.
+- Added [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) (Contributor Covenant 2.0).
+- `docs/REPOSITORY.md` documents the canonical ruleset file, verifier command, and one-time GitHub
+  metadata steps (description, topics, delete head branches).
+
 ### Self-contained skill installs + distribution integrity P0 (2026-08-08)
 
 - `scripts/install.sh` now packages skills via `scripts/package_skill.py`: vendored

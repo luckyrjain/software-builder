@@ -1,0 +1,46 @@
+{
+  "name": "main",
+  "target": "branch",
+  "enforcement": "active",
+  "conditions": {
+    "ref_name": {
+      "include": ["~DEFAULT_BRANCH"],
+      "exclude": []
+    }
+  },
+  "rules": [
+    { "type": "deletion" },
+    { "type": "non_fast_forward" },
+    {
+      "type": "pull_request",
+      "parameters": {
+        "required_approving_review_count": 0,
+        "dismiss_stale_reviews_on_push": false,
+        "require_code_owner_review": false,
+        "require_last_push_approval": false,
+        "required_review_thread_resolution": true,
+        "allowed_merge_methods": ["squash"]
+      }
+    },
+    {
+      "type": "required_status_checks",
+      "parameters": {
+        "strict_required_status_checks_policy": true,
+        "do_not_enforce_on_create": true,
+        "required_status_checks": [{ "context": "lint" }]
+      }
+    }
+  ],
+  "_documentation": {
+    "purpose": "Canonical solo-maintainer ruleset for luckyrjain/software-builder main.",
+    "required_check_context": "lint",
+    "required_check_source": ".github/workflows/lint.yml job id lint",
+    "solo_maintainer_notes": [
+      "Do not require PR approvals — authors cannot self-approve.",
+      "Do not require CODEOWNER review until a second reviewer exists.",
+      "Keep required status check lint so CI protects main without human review."
+    ],
+    "apply_via": "Settings → Rules → Rulesets → main, or gh api PUT (repo admin token).",
+    "verify_via": "make verify-github-ruleset (requires gh auth with repo read access)"
+  }
+}
