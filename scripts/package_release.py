@@ -6,15 +6,18 @@ from __future__ import annotations
 import argparse
 import hashlib
 import shutil
-import subprocess
 import sys
 import tarfile
 from pathlib import Path
 
-from scripts.release_info import git_source_sha, read_distribution_version
+_SCRIPTS_DIR = Path(__file__).resolve().parent
+if str(_SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPTS_DIR))
+
+from release_info import git_source_sha, read_distribution_version
 
 ROOT = Path(__file__).resolve().parents[1]
-EXCLUDE_DIRS = {".git", ".cursor", ".kiro", "__pycache__", ".pytest_cache", "node_modules"}
+EXCLUDE_DIRS = {".git", ".cursor", ".kiro", "__pycache__", ".pytest_cache", "node_modules", "dist"}
 
 
 def _sha256_file(path: Path) -> str:
@@ -59,6 +62,9 @@ def package_release(root: Path, output_dir: Path) -> tuple[Path, Path]:
         f"source_sha={sha}",
         "",
     ]
+
+    (staging / "RELEASE.txt").write_text("\n".join(manifest_lines), encoding="utf-8")
+
     checksum_lines: list[str] = []
     for path in sorted(staging.rglob("*")):
         if not path.is_file():
@@ -68,7 +74,6 @@ def package_release(root: Path, output_dir: Path) -> tuple[Path, Path]:
         checksum_lines.append(f"{digest}  {rel}")
     checksum_lines.sort()
 
-    (staging / "RELEASE.txt").write_text("\n".join(manifest_lines), encoding="utf-8")
     checksum_path = output_dir / f"{bundle_name}.sha256"
     archive_path = output_dir / f"{bundle_name}.tar.gz"
 

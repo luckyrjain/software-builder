@@ -29,8 +29,10 @@ def _installed_manifest(skill_dest: Path) -> dict[str, object] | None:
 def _capability_status(
     entry_required: list[str],
     entry_optional: list[str],
-    available: set[str],
+    available: set[str] | None,
 ) -> tuple[list[str], list[str], str]:
+    if available is None:
+        return [], [], "UNSPECIFIED"
     missing_required = [cap for cap in entry_required if cap not in available]
     missing_optional = [cap for cap in entry_optional if cap not in available]
     if missing_required:
@@ -46,7 +48,7 @@ def cmd_doctor(
     root: Path,
     *,
     skill_filter: str | None,
-    available: set[str],
+    available: set[str] | None,
     install_roots: list[Path],
 ) -> int:
     registry = parse_registry(root / "skills.yaml")
@@ -107,6 +109,8 @@ def cmd_doctor(
 
         if status in {"BLOCKED", "VERSION_MISMATCH"}:
             exit_code = 1
+        if status == "UNSPECIFIED" and (entry.capabilities.required or entry.capabilities.optional):
+            print("  capability check: pass --available to evaluate host capabilities")
 
     return exit_code
 
@@ -128,8 +132,8 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    available: set[str] = set()
-    if args.available:
+    available: set[str] | None = None
+    if args.available is not None:
         available = {item.strip() for item in args.available.split(",") if item.strip()}
 
     install_roots = list(args.install_root)
