@@ -9,6 +9,7 @@ from pathlib import Path
 
 REQUIREMENT_NAME_RE = re.compile(r"^([A-Za-z0-9][A-Za-z0-9._-]*)\s*>=")
 LOCK_NAME_RE = re.compile(r"^([A-Za-z0-9][A-Za-z0-9._-]*)==")
+DIRECT_LOCK_MARKER = "# via -r requirements.txt"
 
 
 def package_names_from_requirements(path: Path) -> set[str]:
@@ -24,12 +25,16 @@ def package_names_from_requirements(path: Path) -> set[str]:
     return names
 
 
-def package_names_from_lock(path: Path) -> set[str]:
+def direct_package_names_from_lock(path: Path) -> set[str]:
     names: set[str] = set()
+    current: str | None = None
     for line in path.read_text(encoding="utf-8").splitlines():
-        match = LOCK_NAME_RE.match(line.strip())
+        head = line.strip().rstrip("\\").strip()
+        match = LOCK_NAME_RE.match(head)
         if match:
-            names.add(match.group(1).lower())
+            current = match.group(1).lower()
+        if DIRECT_LOCK_MARKER in line and current is not None:
+            names.add(current)
     return names
 
 
@@ -39,11 +44,12 @@ def main() -> int:
     lockfile = repo_root / "requirements.lock"
 
     required = package_names_from_requirements(requirements)
-    locked = package_names_from_lock(lockfile)
-    missing = sorted(required - locked)
+    direct_locked = direct_package_names_from_lock(lockfile)
+
+    missing = sorted(required - direct_locked)
     if missing:
         print(
-            "error: requirements.lock is missing pinned entries for: "
+            "error: requirements.lock is missing direct pinned entries for: "
             + ", ".join(missing),
             file=sys.stderr,
         )
@@ -55,7 +61,16 @@ def main() -> int:
         )
         return 1
 
-    print("ok: requirements.txt packages are present in requirements.lock")
+    extra = sorted(direct_locked - required)
+    if extra:
+        print(
+            "error: requirements.lock has direct entries not declared in requirements.txt: "
+            + ", ".join(extra),
+            file=sys.stderr,
+        )
+        return 1
+
+    print("ok: requirements.txt and direct requirements.lock entries match")
     return 0
 
 

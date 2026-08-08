@@ -29,6 +29,40 @@ def heading_slugs(markdown_path: Path) -> set[str]:
     return slugs
 
 
+def is_within_package(path: Path, package_root: Path) -> bool:
+    try:
+        path.resolve().relative_to(package_root.resolve())
+    except ValueError:
+        return False
+    return True
+
+
+def is_skippable_installed_link(source_file: Path, target: Path, package_root: Path) -> bool:
+    if target.is_file():
+        return False
+
+    try:
+        source_rel = source_file.resolve().relative_to(package_root.resolve()).as_posix()
+    except ValueError:
+        return True
+
+    try:
+        target_rel = target.resolve().relative_to(package_root.resolve()).as_posix()
+    except ValueError:
+        return True
+
+    if not source_rel.startswith("docs/"):
+        return False
+
+    if source_rel.startswith("docs/superpowers/") or target_rel.startswith("docs/superpowers/"):
+        return True
+
+    if source_rel.startswith("docs/skill-framework/") and not target_rel.startswith("docs/skill-framework/"):
+        return True
+
+    return False
+
+
 def validate_markdown_file(
     source_file: Path,
     *,
@@ -44,17 +78,12 @@ def validate_markdown_file(
         path_part, anchor = split_link_target(link)
         target = resolve_local_link(source_file, path_part)
         if package_root is not None:
-            try:
-                rel_target = target.relative_to(package_root).as_posix()
-            except ValueError:
-                rel_target = None
-
-            if not target.is_file():
-                if rel_target is None or not rel_target.startswith("docs/skill-framework/"):
-                    continue
-                errors.append(f"{source_file}: dangling link {link!r} -> {target}")
+            if is_skippable_installed_link(source_file, target, package_root):
                 continue
-        elif not target.is_file():
+            if not is_within_package(target, package_root):
+                continue
+
+        if not target.is_file():
             errors.append(f"{source_file}: dangling link {link!r} -> {target}")
             continue
 
@@ -69,7 +98,7 @@ def validate_markdown_file(
 
 def validate_tree(root: Path, *, check_anchors: bool = True, installed_package: bool = False) -> list[str]:
     errors: list[str] = []
-    package_root = root if installed_package else None
+    package_root = root.resolve() if installed_package else None
     for md_file in sorted(root.rglob("*.md")):
         if not md_file.is_file():
             continue

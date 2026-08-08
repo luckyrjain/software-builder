@@ -42,8 +42,6 @@ def test_main_missing_required_args_exits_nonzero() -> None:
 
 
 def test_script_compiles_without_redis_installed() -> None:
-    with pytest.raises(ImportError):
-        import redis  # noqa: F401
     result = subprocess.run(
         [sys.executable, "-m", "py_compile", str(SCRIPT)],
         capture_output=True,

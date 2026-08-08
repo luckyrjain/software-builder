@@ -90,6 +90,10 @@ install_skill() {
 
   mkdir -p "${dest_root}"
   if [[ -d "${skill_dest}" ]]; then
+    if [[ -L "${skill_dest}" ]]; then
+      echo "error: refusing to replace symlink at ${skill_dest}" >&2
+      return 1
+    fi
     echo "warning: replacing existing install at ${skill_dest}" >&2
   fi
   rm -rf "${skill_dest}"

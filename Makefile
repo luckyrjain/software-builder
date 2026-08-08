@@ -145,13 +145,13 @@ setup:
 	@echo "setup: installing Python dev dependencies (requirements.lock)"
 	@python3 -m pip install --require-hashes -r requirements.lock 2>/dev/null || \
 		python3 -m pip install --user --break-system-packages --require-hashes -r requirements.lock
+	@$(MAKE) setup-hooks
 
 lint-requirements-lock:
 	@python3 scripts/check_requirements_lock.py
 
 verify-install:
 	@bash scripts/tests/test_install_integration.sh
-	@$(MAKE) setup-hooks
 
 lint: lint-framework lint-pr-review lint-pr-gatekeeper lint-k8s-skill lint-incident-rca lint-incident-triage-agent lint-domain-comprehension lint-squad-map lint-who-owns-x-bot lint-new-hire-guide lint-release-readiness-checker lint-migration-program-manager lint-cost-optimization-sprint-planner lint-mysql-to-postgres-sql lint-loop-task-implementer lint-backlog-runner lint-weekly-squad-digest lint-unit-test-creator lint-integration-test-creator lint-contract-test-creator lint-e2e-test-creator lint-api-test-creator lint-test-writer lint-requirements-lock verify-install
 	@for f in scripts/*.sh; do \

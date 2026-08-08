@@ -127,6 +127,9 @@ def package_skill(
     dest: Path,
     host: str,
 ) -> None:
+    validate_skill_name(skill)
+    validate_destination(dest)
+
     skill_src = repo_root / skill
     skill_md = skill_src / "SKILL.md"
     if not skill_md.is_file():
@@ -165,17 +168,33 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def validate_skill_name(skill: str) -> None:
+    if "/" in skill or skill in {".", ".."}:
+        raise ValueError(
+            f"invalid skill name {skill!r} (must be a single directory name, no path separators)",
+        )
+
+
+def validate_destination(dest: Path) -> None:
+    if dest.is_symlink():
+        raise ValueError(f"refusing to replace symlink destination: {dest}")
+
+
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     repo_root = args.repo_root.resolve()
     dest = args.dest.resolve()
 
-    package_skill(
-        skill=args.skill,
-        repo_root=repo_root,
-        dest=dest,
-        host=args.host,
-    )
+    try:
+        package_skill(
+            skill=args.skill,
+            repo_root=repo_root,
+            dest=dest,
+            host=args.host,
+        )
+    except (FileNotFoundError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
     return 0
 
 

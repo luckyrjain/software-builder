@@ -15,11 +15,14 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
   (source SHA + file hashes). Addresses the critical broken-copy install defect from the August 2026
   repository review.
 - Added `scripts/validate_references.py` (`--source-tree` / `--installed-package`) and CI-covered
-  install integration test (`make verify-install`).
+  install integration test (`make verify-install`) that installs from an isolated temp repo copy and
+  validates after the source tree is removed.
 - `make setup` now installs hash-pinned `requirements.lock` (matching CI); `make lint-requirements-lock`
-  fails when manifest and lock drift.
+  fails when direct manifest and lock entries drift in either direction.
 - `lint-framework` enforcement loops now cover all 22 skills (fixes 16-vs-22 drift); framework README
   documents actual packaging behavior instead of claiming installed skills symlink to the repo.
+- Post-review hardening: skill-name path traversal rejected in both installer and packager, symlink
+  destinations refused, and negative reference-validation tests added.
 
 ### Scheduled lint run + documented branch-protection checklist (2026-08-07)
 
