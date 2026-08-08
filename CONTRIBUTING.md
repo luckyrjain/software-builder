@@ -49,6 +49,12 @@ See [CODEOWNERS](CODEOWNERS) — platform-level paths (`Makefile`, `scripts/`, `
 `.github/`) affect every skill and are reviewed accordingly; a single skill's own directory is otherwise
 unrestricted.
 
+**Solo maintainer note:** GitHub does not allow PR authors to approve their own PRs. If branch
+protection requires approving reviews (or CODEOWNER review), you will be unable to merge your own PRs
+until you adjust the ruleset — see [docs/REPOSITORY.md § Merge gate](docs/REPOSITORY.md#merge-gate--repo-admin-settings-github-ui-only).
+Keep **required status checks** (`lint`); drop or bypass **approval** requirements until a second
+reviewer exists.
+
 ## License
 
 By contributing, you agree that your contributions are licensed under this repository's

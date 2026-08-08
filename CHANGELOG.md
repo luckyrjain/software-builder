@@ -33,7 +33,9 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
   from **Settings** to make the `Lint` check an actual required merge gate — a workflow file existing
   was previously easy to mistake for "changes can't merge without it passing," which isn't true today.
 - This is partial: the ruleset itself must still be applied by someone with repo-admin access — no
-  tool in this environment can create GitHub rulesets/branch-protection rules. See #10.
+  tool in this environment can create GitHub rulesets/branch-protection rules. See #10. For a solo
+  maintainer, do **not** require PR approvals (authors cannot self-approve); see
+  `docs/REPOSITORY.md § Merge gate`.
 
 ### Hash-pinned CI dependencies (2026-08-07)
 
