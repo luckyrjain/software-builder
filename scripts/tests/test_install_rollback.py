@@ -14,12 +14,34 @@ def test_install_restores_previous_package_when_validation_fails(tmp_path: Path)
     home = tmp_path / "home"
     repo = tmp_path / "repo"
     skill_dir = repo / "broken-skill"
+    shutil.copytree(ROOT / "scripts", repo / "scripts")
+    shutil.copy2(ROOT / "skills.yaml", repo / "skills.yaml")
+    # Append a registry entry so install.sh allowlist permits the skill.
+    skills_yaml = repo / "skills.yaml"
+    text = skills_yaml.read_text(encoding="utf-8")
+    text = text.rstrip() + """
+
+  broken-skill:
+    path: broken-skill
+    category: testing
+    invocation: ambient
+    hosts:
+      cursor: {discovery: rule}
+      claude: {install: true}
+      kiro: {discovery: manual}
+    install:
+      requires: []
+    lint:
+      skill_md_max_lines: 180
+      target: broken-skill
+"""
+    skills_yaml.write_text(text, encoding="utf-8")
     skill_dir.mkdir(parents=True)
     (skill_dir / "SKILL.md").write_text(
+        "---\nname: broken-skill\ndescription: Broken test skill.\n---\n\n"
         "See [missing](reference/missing.md)\n",
         encoding="utf-8",
     )
-    shutil.copytree(ROOT / "scripts", repo / "scripts")
 
     dest = home / ".cursor" / "skills" / "broken-skill"
     dest.parent.mkdir(parents=True)
@@ -30,7 +52,7 @@ def test_install_restores_previous_package_when_validation_fails(tmp_path: Path)
     result = subprocess.run(
         ["bash", str(repo / "scripts" / "install.sh"), "--agent", "cursor", "broken-skill"],
         cwd=repo,
-        env={"HOME": str(home), "PYTHONDONTWRITEBYTECODE": "1"},
+        env={"HOME": str(home), "PYTHONDONTWRITEBYTECODE": "1", "PYTHONPATH": str(repo)},
         capture_output=True,
         text=True,
         check=False,

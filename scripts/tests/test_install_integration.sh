@@ -10,6 +10,7 @@ export HOME="${TMP_HOME}"
 export PYTHONDONTWRITEBYTECODE=1
 
 cp -a "${REPO_ROOT}/scripts" "${TMP_REPO}/scripts"
+cp -a "${REPO_ROOT}/skills.yaml" "${TMP_REPO}/skills.yaml"
 cp -a "${REPO_ROOT}/unit-test-creator" "${TMP_REPO}/unit-test-creator"
 cp -a "${REPO_ROOT}/weekly-squad-digest" "${TMP_REPO}/weekly-squad-digest"
 mkdir -p "${TMP_REPO}/docs"
