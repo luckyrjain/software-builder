@@ -1,14 +1,9 @@
 ---
-description: Invoke the migration-program-manager skill for an org-wide rollup of mysql-to-postgres-sql migration status across many workspaces.
+description: Org-wide rollup of mysql-to-postgres-sql's MIGRATION_STATUS.yaml across many workspaces, joined to squad-map's SQUAD_MAP.md for ownership, ranked by staleness and blocked-gate count per squad. Keywords: migration program, migration status across repos, stalled migrations, migration rollup, org-wide migration tracking. Not for one workspace's own migration status (mysql-to-postgres-sql directly) or squad/repo ownership lookups (squad-map).
 alwaysApply: false
 ---
 
-When the user asks for migration status across multiple repos, an org-wide migration rollup, or wants to
-see stalled/blocked migrations grouped by squad, read `migration-program-manager/SKILL.md` and follow it.
-A single workspace's own migration status routes to `mysql-to-postgres-sql/SKILL.md` instead; a plain
-ownership lookup routes to `squad-map/SKILL.md` instead.
+<!-- GENERATED from skills.yaml + SKILL.md — do not edit; run make generate -->
 
-Phase index: `migration-program-manager/reference/phase-index.md`. Reference loads:
-`migration-program-manager/reference/lazy-load-index.md`.
-Read-only — never invokes mysql-to-postgres-sql or squad-map live, only reads their existing output
-files. Only writes its own report, rollup JSON, and state file.
+Invoke the migration-program-manager skill. Read `migration-program-manager/SKILL.md` and follow it.
+Phase index: `migration-program-manager/reference/phase-index.md` when present under the skill directory.

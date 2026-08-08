@@ -2,8 +2,6 @@
 inclusion: manual
 ---
 
-For evidence-backed business-domain and architecture mapping (subsystem onboarding, bounded
-contexts, data ownership, multi-repo ground truth), read `domain-comprehension/SKILL.md`.
+<!-- GENERATED from skills.yaml + SKILL.md — do not edit; run make generate -->
 
-Phase index: `domain-comprehension/reference/phase-index.md`. Reference loads:
-`domain-comprehension/reference/lazy-load-index.md`.
+For domain-comprehension, read `domain-comprehension/SKILL.md` and follow it.

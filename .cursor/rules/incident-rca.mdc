@@ -1,10 +1,9 @@
 ---
-description: Invoke the repository incident-rca skill for post-incident root-cause investigation in a time window.
+description: RCA and post-incident investigation for outages, error spikes, deploy regressions, and latency incidents in a time window. Keywords: RCA, root cause, postmortem, INC-, P1/P2, on-call. Datadog or KubeSense. Not for MR review, K8s rightsizing, or live remediation. Full phrases: examples.md.
 alwaysApply: false
 ---
 
-When the user asks for an RCA, root cause, postmortem, or references an incident/INC-/P1/P2 in a
-time window, read `incident-rca/SKILL.md` and follow it.
+<!-- GENERATED from skills.yaml + SKILL.md — do not edit; run make generate -->
 
-Phase index: `incident-rca/reference/phase-index.md`. Reference loads: `incident-rca/reference/lazy-load-index.md`.
-Read-only investigation — never applies fixes, rollbacks, or scales.
+Invoke the incident-rca skill. Read `incident-rca/SKILL.md` and follow it.
+Phase index: `incident-rca/reference/phase-index.md` when present under the skill directory.

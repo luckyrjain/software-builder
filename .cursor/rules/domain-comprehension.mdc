@@ -1,11 +1,9 @@
 ---
-description: Invoke the repository domain-comprehension skill for evidence-backed business-domain and architecture mapping.
+description: Build a verifiable, evidence-backed representation of the business domain. Executable source code is the primary source of truth; runtime telemetry validates behavior, not intent. Use for subsystem onboarding, multi-repo architecture ground truth, bounded-context mapping, and engineering-leader summaries. Keywords: domain comprehension, bounded context, data ownership, critical path, architecture smells, five questions. Not for squad/ownership lookup only (squad-map) or MR review (pr-review).
 alwaysApply: false
 ---
 
-When the user asks for subsystem onboarding, a multi-repo architecture ground-truth map, bounded
-contexts, data ownership, or an engineering-leader summary, read `domain-comprehension/SKILL.md`
-and follow it.
+<!-- GENERATED from skills.yaml + SKILL.md — do not edit; run make generate -->
 
-Phase index: `domain-comprehension/reference/phase-index.md`. Reference loads:
-`domain-comprehension/reference/lazy-load-index.md`.
+Invoke the domain-comprehension skill. Read `domain-comprehension/SKILL.md` and follow it.
+Phase index: `domain-comprehension/reference/phase-index.md` when present under the skill directory.

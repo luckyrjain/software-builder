@@ -1,13 +1,9 @@
 ---
-description: Invoke the pr-gatekeeper skill for webhook-triggered, unattended pr-review auto-runs on every push to an open GitLab MR.
+description: Auto-runs pr-review on every push to an open GitLab MR (webhook-triggered), posting inline exactly as pr-review already supports — when pr-review's own posting-confirmation rules allow it. Delegates all review logic to pr-review; only decides whether a given push may auto-post or must route to a human notification instead. Not for interactive, human-typed review requests — those route to pr-review directly. Keywords: push webhook, auto-review, gatekeeper, CI review bot, unattended pr-review.
 alwaysApply: false
 ---
 
-Do not auto-apply this from ambient human chat — this skill sets `disable-model-invocation: true`.
-When a push-webhook handler passes a structured payload (`project`, `merge_request_iid`, `head_sha`,
-`auto_post_authorized`), read `pr-gatekeeper/SKILL.md` and follow it. A human asking to review an MR
-conversationally should route to `pr-review/SKILL.md` instead.
+<!-- GENERATED from skills.yaml + SKILL.md — do not edit; run make generate -->
 
-Phase index: `pr-gatekeeper/reference/phase-index.md`. Reference loads:
-`pr-gatekeeper/reference/lazy-load-index.md`.
-Read + comment only — no GitLab approve/merge, no remediation, no application source changes.
+Invoke the pr-gatekeeper skill. Read `pr-gatekeeper/SKILL.md` and follow it.
+Phase index: `pr-gatekeeper/reference/phase-index.md` when present under the skill directory.

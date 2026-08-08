@@ -1,19 +1,9 @@
 ---
-description: Invoke the e2e-test-creator skill to generate or backfill full user-journey browser end-to-end tests for a target repository.
+description: Generates full user-journey end-to-end tests through a real browser UI using Playwright, Cypress, or Selenium/WebDriver. Detects the repo's browser test tooling and layout convention, infers journeys from changed routes/pages (diff mode) or takes explicit journey descriptions (backfill mode), writes tests asserting only on user-visible outcomes (never internal DOM/state), runs them against a reachable app instance, and iterates until green. Keywords: e2e tests, end-to-end, browser test, Playwright, Cypress, Selenium, user journey, click-through test. Not for below-the-UI service-seam tests (integration-test-creator), isolated mocked unit tests (unit-test-creator), or consumer/provider contract agreements (contract-test-creator). Web browser flows only — not API/CLI black-box journeys.
 alwaysApply: false
 ---
 
-When the user asks to write a browser end-to-end test for a user journey (login, checkout, a click-
-through flow), using Playwright, Cypress, or Selenium/WebDriver — either for what changed in an MR/
-branch/diff, or to backfill coverage for an explicit journey — read `e2e-test-creator/SKILL.md` and follow
-it. Tests target **journeys**, not files or functions. A below-the-UI service-seam test routes to
-`integration-test-creator/SKILL.md` instead; an isolated, mocked function-level test routes to
-`unit-test-creator/SKILL.md` instead.
+<!-- GENERATED from skills.yaml + SKILL.md — do not edit; run make generate -->
 
-Phase index: `e2e-test-creator/reference/phase-index.md`. Reference loads:
-`e2e-test-creator/reference/lazy-load-index.md`.
-Detects the target repo's own browser tooling/layout/selector conventions before writing anything — never
-introduces a second framework or fabricates one for a repo with none, without asking. Asserts only on
-user-visible outcomes (never internal DOM/state), never a hard-coded wait, and requires a reachable
-running instance of the app — gates as `NEEDS_BROWSER_ENV` rather than fabricating what the UI would show.
-Never modifies production code to force a failing test green.
+Invoke the e2e-test-creator skill. Read `e2e-test-creator/SKILL.md` and follow it.
+Phase index: `e2e-test-creator/reference/phase-index.md` when present under the skill directory.

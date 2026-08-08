@@ -9,6 +9,8 @@ software-builder/
 ├── README.md                 # Top-level install + usage (start here)
 ├── CHANGELOG.md              # Per-skill change history
 ├── Makefile                  # install + lint targets
+├── skills.yaml               # Platform skill registry (install deps, hosts, lint metadata)
+├── generated/catalogue/      # Generated install-dependency graph (Mermaid)
 ├── docs/
 │   ├── README.md             # Documentation index (this tree)
 │   ├── REPOSITORY.md         # This file
@@ -44,6 +46,33 @@ software-builder/
 ```
 
 Each skill directory follows the same pattern:
+
+<!-- registry-skills-table:start -->
+| Skill | Category | Invocation | Install requires | Lint target |
+|-------|----------|------------|------------------|-------------|
+| `api-test-creator` | testing | ambient | — | `make lint-api-test-creator` |
+| `backlog-runner` | automation | automation-only | loop-task-implementer | `make lint-backlog-runner` |
+| `contract-test-creator` | testing | ambient | — | `make lint-contract-test-creator` |
+| `cost-optimization-sprint-planner` | platform | ambient | k8s-overprovisioning-datadog, squad-map | `make lint-cost-optimization-sprint-planner` |
+| `domain-comprehension` | architecture | ambient | squad-map | `make lint-domain-comprehension` |
+| `e2e-test-creator` | testing | ambient | — | `make lint-e2e-test-creator` |
+| `incident-rca` | incident | ambient | — | `make lint-incident-rca` |
+| `incident-triage-agent` | incident | automation-only | incident-rca, squad-map | `make lint-incident-triage-agent` |
+| `integration-test-creator` | testing | ambient | — | `make lint-integration-test-creator` |
+| `k8s-overprovisioning-datadog` | platform | ambient | — | `make lint-k8s-skill` |
+| `loop-task-implementer` | automation | ambient | — | `make lint-loop-task-implementer` |
+| `migration-program-manager` | migration | ambient | mysql-to-postgres-sql, squad-map | `make lint-migration-program-manager` |
+| `mysql-to-postgres-sql` | migration | ambient | — | `make lint-mysql-to-postgres-sql` |
+| `new-hire-guide` | architecture | ambient | domain-comprehension, squad-map | `make lint-new-hire-guide` |
+| `pr-gatekeeper` | review | automation-only | pr-review | `make lint-pr-gatekeeper` |
+| `pr-review` | review | ambient | — | `make lint-pr-review` |
+| `release-readiness-checker` | release | ambient | pr-review, k8s-overprovisioning-datadog, incident-rca | `make lint-release-readiness-checker` |
+| `squad-map` | architecture | ambient | — | `make lint-squad-map` |
+| `test-writer` | testing | ambient | unit-test-creator, integration-test-creator, contract-test-creator, e2e-test-creator, api-test-creator | `make lint-test-writer` |
+| `unit-test-creator` | testing | ambient | — | `make lint-unit-test-creator` |
+| `weekly-squad-digest` | migration | automation-only | migration-program-manager, cost-optimization-sprint-planner | `make lint-weekly-squad-digest` |
+| `who-owns-x-bot` | architecture | automation-only | squad-map | `make lint-who-owns-x-bot` |
+<!-- registry-skills-table:end -->
 
 | File | Audience | Purpose |
 |------|----------|---------|

@@ -2,8 +2,6 @@
 inclusion: manual
 ---
 
-For repo-to-squad ownership mapping (who owns a repo/service, GitLab group ↔ Datadog team
-reconciliation), read `squad-map/SKILL.md`.
+<!-- GENERATED from skills.yaml + SKILL.md — do not edit; run make generate -->
 
-Phase index: `squad-map/reference/phase-index.md`. Reference loads: `squad-map/reference/lazy-load-index.md`.
-Read-only — no GitLab writes, Datadog mutations, deploys, or application source changes.
+For squad-map, read `squad-map/SKILL.md` and follow it.

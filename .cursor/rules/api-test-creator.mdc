@@ -1,19 +1,9 @@
 ---
-description: Invoke the api-test-creator skill to generate black-box API test suites (Postman collections, run via Newman) against a real, reachable running API instance.
+description: Generates black-box API test suites (Postman collections, run via Newman) against a real, reachable running API instance. Detects the repo's existing Postman/Newman tooling and collection file(s), writes request/assertion pairs (status code, response schema/fields, headers) for changed endpoints (diff mode) or an explicit endpoint list (backfill mode), chains requests via Postman variables/environment when a flow requires it, runs them, and iterates until green. Every request/response shape traces to real observed usage — never a fabricated payload. Keywords: API tests, Postman, Newman, request/response assertions, black-box API testing, REST endpoint test. Not for an in-process/mocked unit test (unit-test-creator), a real-dependency-seam test via testcontainers (integration-test-creator), a consumer-driven Pact contract (contract-test-creator), or a browser UI journey (e2e-test-creator).
 alwaysApply: false
 ---
 
-When the user asks to write or backfill black-box API tests (Postman/Newman, request/response assertions
-against a running instance), read `api-test-creator/SKILL.md` and follow it. A request for an in-process/
-mocked test routes to `unit-test-creator/SKILL.md` instead; a real-dependency-seam test via testcontainers
-routes to `integration-test-creator/SKILL.md`; a consumer-driven Pact contract routes to
-`contract-test-creator/SKILL.md`; a full browser UI journey routes to `e2e-test-creator/SKILL.md`.
+<!-- GENERATED from skills.yaml + SKILL.md — do not edit; run make generate -->
 
-Phase index: `api-test-creator/reference/phase-index.md`. Reference loads:
-`api-test-creator/reference/lazy-load-index.md`.
-Detects the target repo's own Postman/Newman tooling and canonical collection file before writing
-anything — never creates a second collection or fabricates one for a repo with none, without asking. Never
-fabricates a request/response shape from a guess — it must trace to real, observed usage (the route-handler
-code, an OpenAPI/Swagger spec, or `API_CATALOG.md` as corroborating evidence only). Requires a real,
-reachable running API instance to run the collection — gates `NEEDS_API_ENV` otherwise. Never modifies
-production code, or loosens a `pm.test()` assertion, to force a failing run green.
+Invoke the api-test-creator skill. Read `api-test-creator/SKILL.md` and follow it.
+Phase index: `api-test-creator/reference/phase-index.md` when present under the skill directory.
