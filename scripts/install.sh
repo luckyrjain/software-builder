@@ -177,6 +177,11 @@ install_skill() {
     return 1
   fi
 
+  if [[ -e "${skill_dest}" && -L "${skill_dest}" ]]; then
+    echo "error: refusing to replace symlink at ${skill_dest}" >&2
+    return 1
+  fi
+
   if [[ "${DRY_RUN}" == true ]]; then
     echo "dry-run: would install ${skill} → ${skill_dest} (host=${host_label})"
     return 0
@@ -244,7 +249,15 @@ if [[ "${MODE}" == "uninstall" ]]; then
 fi
 
 if [[ ${#SKILLS[@]} -eq 0 ]]; then
-  mapfile -t SKILLS < <(run_python "${REPO_ROOT}/scripts/install_support.py" list --repo-root "${REPO_ROOT}")
+  if ! LIST_OUTPUT="$(run_python "${REPO_ROOT}/scripts/install_support.py" list --repo-root "${REPO_ROOT}")"; then
+    echo "${LIST_OUTPUT}" >&2
+    exit 1
+  fi
+  if [[ -z "${LIST_OUTPUT}" ]]; then
+    echo "error: skills.yaml registry returned no skills" >&2
+    exit 1
+  fi
+  mapfile -t SKILLS <<< "${LIST_OUTPUT}"
 fi
 
 while IFS= read -r dest_root; do
