@@ -1,0 +1,5 @@
+{
+  "name": "software-builder",
+  "user": "ubuntu",
+  "install": "./.cursor/cloud-agent-install.sh"
+}
