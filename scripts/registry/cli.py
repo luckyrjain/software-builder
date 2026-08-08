@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import argparse
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
-from scripts.registry.crosscheck import validate_registry
+import yaml
+
+from scripts.registry.crosscheck import find_stale_generated_adapters, validate_registry
 from scripts.registry.generate_cursor import generate_cursor_rules
 from scripts.registry.generate_docs import (
     render_install_mermaid,
@@ -43,16 +46,36 @@ def _write_outputs(outputs: dict[Path, str]) -> None:
         path.write_text(content, encoding="utf-8")
 
 
-def _check_outputs(outputs: dict[Path, str]) -> list[str]:
+def _prune_stale_adapters(root: Path) -> int:
+    registry = load_registry(root)
+    stale = find_stale_generated_adapters(root, registry)
+    for path in stale:
+        path.unlink()
+    return len(stale)
+
+
+def _check_outputs(root: Path, outputs: dict[Path, str]) -> list[str]:
     errors: list[str] = []
     for path, expected in outputs.items():
+        rel = path.relative_to(root)
         if not path.exists():
-            errors.append(f"error: missing generated file: {path.relative_to(ROOT)}")
+            errors.append(f"error: missing generated file: {rel}")
             continue
         actual = path.read_text(encoding="utf-8")
         if actual != expected:
-            errors.append(f"error: generated file drift: {path.relative_to(ROOT)}")
+            errors.append(f"error: generated file drift: {rel}")
+    registry = load_registry(root)
+    for path in find_stale_generated_adapters(root, registry):
+        errors.append(f"error: stale generated adapter: {path.relative_to(root)}")
     return errors
+
+
+def _run_command(action: Callable[[], int]) -> int:
+    try:
+        return action()
+    except (ValueError, yaml.YAMLError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
 
 
 def cmd_validate(root: Path) -> int:
@@ -66,6 +89,9 @@ def cmd_validate(root: Path) -> int:
 
 
 def cmd_generate(root: Path, check_only: bool) -> int:
+    if not check_only:
+        _prune_stale_adapters(root)
+
     validation_errors = validate_registry(root)
     if validation_errors:
         for error in validation_errors:
@@ -74,7 +100,7 @@ def cmd_generate(root: Path, check_only: bool) -> int:
 
     outputs = _collect_outputs(root)
     if check_only:
-        drift_errors = _check_outputs(outputs)
+        drift_errors = _check_outputs(root, outputs)
         if drift_errors:
             for error in drift_errors:
                 print(error, file=sys.stderr)
@@ -84,7 +110,8 @@ def cmd_generate(root: Path, check_only: bool) -> int:
         return 0
 
     _write_outputs(outputs)
-    print(f"ok: generated {len(outputs)} files")
+    removed = _prune_stale_adapters(root)
+    print(f"ok: generated {len(outputs)} files; removed {removed} stale adapters")
     return 0
 
 
@@ -103,9 +130,9 @@ def main(argv: list[str] | None = None) -> int:
 
     args = parser.parse_args(argv)
     if args.command == "validate":
-        return cmd_validate(ROOT)
+        return _run_command(lambda: cmd_validate(ROOT))
     if args.command == "generate":
-        return cmd_generate(ROOT, check_only=args.check)
+        return _run_command(lambda: cmd_generate(ROOT, check_only=args.check))
 
     print(f"error: unknown command {args.command!r}", file=sys.stderr)
     return 2

@@ -1,9 +1,14 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from scripts.registry.frontmatter import load_skill_frontmatter
+from scripts.registry.models import Registry
 from scripts.registry.schema import parse_registry
+
+_SKILL_ID_RE = re.compile(r"^[a-z0-9-]+$")
+_GENERATED_MARKER = "GENERATED from skills.yaml"
 
 
 def _detect_cycles(skills: dict[str, list[str]]) -> list[str]:
@@ -38,6 +43,37 @@ def _skill_directories(root: Path) -> set[str]:
     }
 
 
+def _validate_skill_path(root: Path, skill_id: str, entry_path: str) -> list[str]:
+    errors: list[str] = []
+    if not _SKILL_ID_RE.match(skill_id):
+        errors.append(f"error: {skill_id}: skill id must match [a-z0-9-]+")
+    if entry_path != skill_id:
+        errors.append(
+            f"error: {skill_id}: path {entry_path!r} must match skill id (no aliases in v1)",
+        )
+    resolved_skill_md = (root / entry_path / "SKILL.md").resolve()
+    root_resolved = root.resolve()
+    if not str(resolved_skill_md).startswith(str(root_resolved)):
+        errors.append(f"error: {skill_id}: path escapes repository root")
+    return errors
+
+
+def find_stale_generated_adapters(root: Path, registry: Registry) -> list[Path]:
+    """Return generated adapter files whose skill id is no longer in the registry."""
+    active = set(registry.skills.keys())
+    stale: list[Path] = []
+    for pattern in (".cursor/rules/*.mdc", ".kiro/steering/*.md"):
+        for path in sorted(root.glob(pattern)):
+            if path.stem in active:
+                continue
+            try:
+                if _GENERATED_MARKER in path.read_text(encoding="utf-8"):
+                    stale.append(path)
+            except OSError:
+                continue
+    return stale
+
+
 def validate_registry(root: Path) -> list[str]:
     errors: list[str] = []
     registry_path = root / "skills.yaml"
@@ -53,6 +89,7 @@ def validate_registry(root: Path) -> list[str]:
 
     install_graph: dict[str, list[str]] = {}
     for skill_id, entry in registry.skills.items():
+        errors.extend(_validate_skill_path(root, skill_id, entry.path))
         install_graph[skill_id] = list(entry.install.requires)
         for dep in entry.install.requires:
             if dep not in registry.skills:
@@ -75,6 +112,10 @@ def validate_registry(root: Path) -> list[str]:
             )
         if "description" not in frontmatter:
             errors.append(f"error: {skill_id}: SKILL.md missing description")
+        else:
+            description = frontmatter.get("description", "")
+            if not isinstance(description, str) or not description.strip():
+                errors.append(f"error: {skill_id}: description must be a non-empty string")
 
         disable = frontmatter.get("disable-model-invocation") is True
         automation_only = entry.invocation == "automation-only"
@@ -83,5 +124,19 @@ def validate_registry(root: Path) -> list[str]:
                 f"error: {skill_id}: disable-model-invocation={disable} "
                 f"but invocation={entry.invocation!r}",
             )
+        if automation_only:
+            if entry.hosts.cursor.discovery == "always":
+                errors.append(
+                    f"error: {skill_id}: automation-only skills cannot use cursor discovery always",
+                )
+            if entry.hosts.kiro.discovery == "always":
+                errors.append(
+                    f"error: {skill_id}: automation-only skills cannot use kiro discovery always",
+                )
+
+    errors.extend(
+        f"error: stale generated adapter: {path.relative_to(root)}"
+        for path in find_stale_generated_adapters(root, registry)
+    )
 
     return errors

@@ -39,6 +39,132 @@ skills:
     assert registry.skills["squad-map"].install.requires == []
 
 
+def test_crosscheck_rejects_empty_description(tmp_path: Path) -> None:
+    skill_dir = tmp_path / "foo"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text(
+        "---\nname: foo\ndescription: '   '\n---\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "skills.yaml").write_text(
+        """
+schema_version: 1
+skills:
+  foo:
+    path: foo
+    category: testing
+    invocation: ambient
+    hosts:
+      cursor: {discovery: rule}
+      claude: {install: true}
+      kiro: {discovery: manual}
+    install:
+      requires: []
+    lint:
+      skill_md_max_lines: 180
+      target: foo
+""",
+        encoding="utf-8",
+    )
+    from scripts.registry.crosscheck import validate_registry
+
+    errors = validate_registry(tmp_path)
+    assert any("description must be a non-empty string" in error for error in errors)
+
+
+def test_crosscheck_rejects_automation_only_with_always_discovery(tmp_path: Path) -> None:
+    skill_dir = tmp_path / "bot"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text(
+        "---\nname: bot\ndescription: Bot skill.\ndisable-model-invocation: true\n---\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "skills.yaml").write_text(
+        """
+schema_version: 1
+skills:
+  bot:
+    path: bot
+    category: automation
+    invocation: automation-only
+    hosts:
+      cursor: {discovery: always}
+      claude: {install: true}
+      kiro: {discovery: manual}
+    install:
+      requires: []
+    lint:
+      skill_md_max_lines: 180
+      target: bot
+""",
+        encoding="utf-8",
+    )
+    from scripts.registry.crosscheck import validate_registry
+
+    errors = validate_registry(tmp_path)
+    assert any("automation-only" in error and "always" in error for error in errors)
+
+
+def test_generate_prunes_stale_generated_adapter(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    skill_dir = tmp_path / "solo"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text(
+        "---\nname: solo\ndescription: Solo skill.\n---\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "skills.yaml").write_text(
+        """
+schema_version: 1
+skills:
+  solo:
+    path: solo
+    category: testing
+    invocation: ambient
+    hosts:
+      cursor: {discovery: rule}
+      claude: {install: true}
+      kiro: {discovery: manual}
+    install: {requires: []}
+    lint: {skill_md_max_lines: 180, target: solo}
+""",
+        encoding="utf-8",
+    )
+    (tmp_path / "README.md").write_text(
+        "badge <!-- skills-count:start -->0<!-- skills-count:end -->\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs" / "REPOSITORY.md").write_text(
+        "table\n<!-- registry-skills-table:start -->\n<!-- registry-skills-table:end -->\n",
+        encoding="utf-8",
+    )
+    stale_rule = tmp_path / ".cursor" / "rules" / "removed-skill.mdc"
+    stale_rule.parent.mkdir(parents=True)
+    stale_rule.write_text(
+        "<!-- GENERATED from skills.yaml + SKILL.md -->\n",
+        encoding="utf-8",
+    )
+    (tmp_path / ".kiro" / "steering").mkdir(parents=True)
+
+    monkeypatch.setattr("scripts.registry.cli.ROOT", tmp_path)
+
+    from scripts.registry.cli import cmd_generate
+
+    assert cmd_generate(tmp_path, check_only=True) == 1
+    assert stale_rule.exists()
+    assert cmd_generate(tmp_path, check_only=False) == 0
+    assert not stale_rule.exists()
+
+
+def test_validate_returns_tooling_exit_code_for_bad_yaml(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    (tmp_path / "skills.yaml").write_text("schema_version: [", encoding="utf-8")
+    monkeypatch.setattr("scripts.registry.cli.ROOT", tmp_path)
+
+    from scripts.registry.cli import main
+
+    assert main(["validate"]) == 2
+
+
 def test_crosscheck_rejects_name_mismatch(tmp_path: Path) -> None:
     skill_dir = tmp_path / "foo"
     skill_dir.mkdir()
