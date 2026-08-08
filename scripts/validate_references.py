@@ -38,6 +38,12 @@ def is_within_package(path: Path, package_root: Path) -> bool:
 
 
 def is_skippable_installed_link(source_file: Path, target: Path, package_root: Path) -> bool:
+    """Return True when a missing link is optional in an installed skill bundle.
+
+    Normative runtime content lives under docs/skill-framework/ and skill-local
+    paths. Historical design docs (docs/superpowers/) and cross-skill corpus
+    references outside the bundle are tolerated when absent.
+    """
     if target.is_file():
         return False
 

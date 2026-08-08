@@ -22,7 +22,8 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 - `lint-framework` enforcement loops now cover all 22 skills (fixes 16-vs-22 drift); framework README
   documents actual packaging behavior instead of claiming installed skills symlink to the repo.
 - Post-review hardening: skill-name path traversal rejected in both installer and packager, symlink
-  destinations refused, and negative reference-validation tests added.
+  destinations refused, negative reference-validation tests added, install rollback on validation
+  failure, and verify-install now covers weekly-squad-digest (superpowers-linked workflow files).
 
 ### Scheduled lint run + documented branch-protection checklist (2026-08-07)
 
