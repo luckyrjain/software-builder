@@ -269,7 +269,8 @@ uses `make lint-k8s-skill`. See [Makefile targets](docs/REPOSITORY.md#makefile-t
 5. Open a pull request with the evidence used to verify the change.
 
 Full guide, including security reporting and code ownership: [CONTRIBUTING.md](CONTRIBUTING.md) ·
-[SECURITY.md](SECURITY.md). More detail: [docs/REPOSITORY.md § Contributing](docs/REPOSITORY.md#contributing).
+[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) · [SECURITY.md](SECURITY.md). More detail:
+[docs/REPOSITORY.md § Contributing](docs/REPOSITORY.md#contributing).
 
 ## License
 
