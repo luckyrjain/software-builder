@@ -8,10 +8,12 @@ import json
 import sys
 from pathlib import Path
 
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 from scripts.registry.schema import parse_registry
 from scripts.release_info import read_distribution_version
-
-ROOT = Path(__file__).resolve().parents[1]
 MANIFEST_NAME = ".software-builder-manifest.json"
 
 
