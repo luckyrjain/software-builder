@@ -73,10 +73,12 @@ done
 
 case "${MODE}" in
 list)
-  exec run_python "${REPO_ROOT}/scripts/install_support.py" list --repo-root "${REPO_ROOT}"
+  run_python "${REPO_ROOT}/scripts/install_support.py" list --repo-root "${REPO_ROOT}"
+  exit
   ;;
 verify)
-  exec run_python "${REPO_ROOT}/scripts/install_support.py" verify "${VERIFY_PATH}"
+  run_python "${REPO_ROOT}/scripts/install_support.py" verify "${VERIFY_PATH}"
+  exit
   ;;
 esac
 

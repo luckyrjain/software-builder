@@ -64,6 +64,29 @@ def test_install_restores_previous_package_when_validation_fails(tmp_path: Path)
     assert "dangling link" in result.stderr or "missing.md" in result.stderr
 
 
+def test_install_list_does_not_write_skills(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    repo = tmp_path / "repo"
+    shutil.copytree(ROOT / "scripts", repo / "scripts")
+    shutil.copy2(ROOT / "skills.yaml", repo / "skills.yaml")
+    shutil.copytree(ROOT / "unit-test-creator", repo / "unit-test-creator")
+    shutil.copytree(ROOT / "docs" / "skill-framework", repo / "docs" / "skill-framework")
+
+    result = subprocess.run(
+        ["bash", str(repo / "scripts" / "install.sh"), "--list"],
+        cwd=repo,
+        env={"HOME": str(home), "PYTHONDONTWRITEBYTECODE": "1", "PYTHONPATH": str(repo)},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0
+    assert "unit-test-creator" in result.stdout
+    assert not (home / ".cursor" / "skills").exists()
+    assert not (home / ".claude" / "skills").exists()
+
+
 def test_package_skill_writes_manifest(tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     shutil.copytree(ROOT / "unit-test-creator", repo / "unit-test-creator")
