@@ -50,6 +50,21 @@ dest_roots() {
   esac
 }
 
+host_label_for_dest() {
+  local dest_root="$1"
+  case "${dest_root}" in
+  "${HOME}/.cursor/skills")
+    echo "cursor"
+    ;;
+  "${HOME}/.claude/skills")
+    echo "claude-user"
+    ;;
+  *)
+    echo "claude-project"
+    ;;
+  esac
+}
+
 install_skill() {
   local skill="$1"
   local dest_root="$2"
@@ -65,6 +80,8 @@ install_skill() {
 
   local skill_src="${REPO_ROOT}/${skill}"
   local skill_dest="${dest_root}/${skill}"
+  local host_label
+  host_label="$(host_label_for_dest "${dest_root}")"
 
   if [[ ! -f "${skill_src}/SKILL.md" ]]; then
     echo "error: skill not found at ${skill_src}/SKILL.md" >&2
@@ -72,11 +89,42 @@ install_skill() {
   fi
 
   mkdir -p "${dest_root}"
-  if [[ -d "${skill_dest}" ]]; then
+  local backup_dir=""
+  if [[ -e "${skill_dest}" ]]; then
+    if [[ -L "${skill_dest}" ]]; then
+      echo "error: refusing to replace symlink at ${skill_dest}" >&2
+      return 1
+    fi
     echo "warning: replacing existing install at ${skill_dest}" >&2
+    backup_dir="$(mktemp -d)"
+    mv "${skill_dest}" "${backup_dir}/skill"
   fi
-  rm -rf "${skill_dest}"
-  cp -r "${skill_src}" "${skill_dest}"
+
+  cleanup_failed_install() {
+    rm -rf "${skill_dest}"
+    if [[ -n "${backup_dir}" && -d "${backup_dir}/skill" ]]; then
+      mv "${backup_dir}/skill" "${skill_dest}"
+    fi
+    rm -rf "${backup_dir}"
+  }
+
+  if ! PYTHONDONTWRITEBYTECODE=1 python3 "${REPO_ROOT}/scripts/package_skill.py" \
+    --skill "${skill}" \
+    --dest "${skill_dest}" \
+    --repo-root "${REPO_ROOT}" \
+    --host "${host_label}"; then
+    cleanup_failed_install
+    return 1
+  fi
+
+  if ! PYTHONDONTWRITEBYTECODE=1 python3 "${REPO_ROOT}/scripts/validate_references.py" \
+    --installed-package "${skill_dest}"; then
+    cleanup_failed_install
+    return 1
+  fi
+
+  rm -rf "${backup_dir}"
+
   echo "Installed ${skill} → ${skill_dest}"
 }
 

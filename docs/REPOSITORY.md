@@ -331,32 +331,62 @@ external link) surfaces even when no PR is open against `main` — see [#10](htt
 Run the exact same checks locally before pushing: `make setup` once (installs Python deps + the
 shellcheck pre-commit hook), then `make lint`.
 
-### Merge gate — not yet enforced, requires repo-admin action
+### Merge gate — repo-admin settings (GitHub UI only)
 
-**A workflow file existing is not the same as a required merge gate.** As of this writing, a failing
-or pending `Lint` check does **not** block merging a PR — nothing in this repository can change that;
-it's a GitHub repo-settings permission this session (and any non-admin contributor) doesn't have. A
-repo admin needs to do the following once, from **Settings** (not a PR):
+**A green `Lint` badge and a ruleset are not the same thing.** CI proves the commit passes
+`make lint`; the ruleset decides whether GitHub will let you merge. Nothing in this repository can
+change rulesets — only a repo admin can, from **Settings** (not a PR).
 
-1. **Settings → Rules → Rulesets** (preferred over the legacy Branch protection rules page) → **New
-   ruleset** → target `main`.
-2. **Require a pull request before merging**, with **Require conversation resolution before merging**
-   enabled.
-3. **Require status checks to pass** → add the `lint` check by its exact job name (from
-   [`.github/workflows/lint.yml`](../.github/workflows/lint.yml); it must have run at least once on the
-   repo before it's selectable) → also enable **Require branches to be up to date before merging**.
-4. **Restrict deletions** and **Block force pushes**.
-5. Under **Rules → Require pull request reviews**, require at least one approval — for a
-   single-maintainer repo this mostly matters once a second contributor shows up, but set it now so it's
-   not forgotten later.
-6. Pick one merge strategy in **Settings → General → Pull Requests** (squash-only is recommended for
-   this repo's single-commit-per-skill-change convention) and enable **Automatically delete head
-   branches**.
-7. Verify: open a throwaway PR with a deliberately failing check, confirm the merge button is blocked,
-   then close it without merging.
+#### Recommended ruleset for a solo maintainer (you are the only developer)
 
-Until this is done, treat the green `Lint` badge as "the workflow ran and passed on this commit," not
-as "nothing unreviewed reached `main`."
+GitHub does **not** let a PR author approve their own PR. If the ruleset requires one or more
+approving reviews (especially CODEOWNER review), a solo maintainer will see **Review required** /
+**Blocked** even when CI is green and you are the only person on the repo.
+
+**Keep these protections:**
+
+1. **Require a pull request before merging** — keeps an audit trail; you still open PRs from branches.
+2. **Require status checks to pass** → add the exact job name `lint` from
+   [`.github/workflows/lint.yml`](../.github/workflows/lint.yml) (it must have run at least once before
+   GitHub lists it).
+3. **Require branches to be up to date before merging** (optional but recommended).
+4. **Block force pushes** and **restrict branch deletion** on `main`.
+
+**Do not enable (until a second reviewer exists):**
+
+- **Require pull request approvals** (or set required approvals to **0**).
+- **Require review from CODEOWNERS** — with one maintainer who authors every PR, this is a
+  self-approval deadlock.
+
+**Optional bypass (if you want approvals later but need to merge your own work today):**
+
+- In the ruleset, under **Bypass list**, add **Repository admin** (your account). Admins can merge
+  without an approval while the rule stays in place for future contributors.
+
+#### When a second contributor joins
+
+Re-enable **Require pull request approvals** (≥1) and **Require review from CODEOWNERS** on
+platform paths (`Makefile`, `scripts/`, `docs/skill-framework/`, `.github/`). Until then, CODEOWNERS
+is documentation of who owns sensitive paths, not a merge gate.
+
+#### One-time setup checklist
+
+1. **Settings → Rules → Rulesets** → edit (or create) the ruleset targeting `main`.
+2. Apply the solo-maintainer settings above.
+3. **Settings → General → Pull Requests** → pick one merge strategy (squash recommended) and enable
+   **Automatically delete head branches**.
+4. Verify: open a throwaway PR with a deliberately failing `make lint` change — merge should be
+   blocked by CI, not by missing approval. Close without merging.
+
+#### Unblock an existing PR right now
+
+If a PR shows **Review required** / `mergeStateStatus: BLOCKED` but `lint` passed:
+
+1. Edit the `main` ruleset as above (remove approval requirement or add admin bypass).
+2. Refresh the PR page — the merge button should enable without a self-approval.
+
+`CODEOWNERS` in this repo flags platform-sensitive paths for human review once multiple maintainers
+exist; it does not replace CI and should not block a solo maintainer from merging.
 
 ## Contributing
 

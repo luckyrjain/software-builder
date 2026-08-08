@@ -13,6 +13,7 @@
 /Makefile                              @luckyrjain
 /scripts/                              @luckyrjain
 /requirements.txt                      @luckyrjain
+/requirements.lock                     @luckyrjain
 /docs/skill-framework/                 @luckyrjain
 /CODEOWNERS                            @luckyrjain
 /SECURITY.md                           @luckyrjain

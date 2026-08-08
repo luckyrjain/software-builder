@@ -8,6 +8,23 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 
 ## Platform
 
+### Self-contained skill installs + distribution integrity P0 (2026-08-08)
+
+- `scripts/install.sh` now packages skills via `scripts/package_skill.py`: vendored
+  `docs/skill-framework/` references, rewritten local links, and `.software-builder-manifest.json`
+  (source SHA + file hashes). Addresses the critical broken-copy install defect from the August 2026
+  repository review.
+- Added `scripts/validate_references.py` (`--source-tree` / `--installed-package`) and CI-covered
+  install integration test (`make verify-install`) that installs from an isolated temp repo copy and
+  validates after the source tree is removed.
+- `make setup` now installs hash-pinned `requirements.lock` (matching CI); `make lint-requirements-lock`
+  fails when direct manifest and lock entries drift in either direction.
+- `lint-framework` enforcement loops now cover all 22 skills (fixes 16-vs-22 drift); framework README
+  documents actual packaging behavior instead of claiming installed skills symlink to the repo.
+- Post-review hardening: skill-name path traversal rejected in both installer and packager, symlink
+  destinations refused, negative reference-validation tests added, install rollback on validation
+  failure, and verify-install now covers weekly-squad-digest (superpowers-linked workflow files).
+
 ### Scheduled lint run + documented branch-protection checklist (2026-08-07)
 
 - `.github/workflows/lint.yml` gained `schedule` (weekly, Monday 04:17 UTC) and `workflow_dispatch`
@@ -16,7 +33,9 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
   from **Settings** to make the `Lint` check an actual required merge gate — a workflow file existing
   was previously easy to mistake for "changes can't merge without it passing," which isn't true today.
 - This is partial: the ruleset itself must still be applied by someone with repo-admin access — no
-  tool in this environment can create GitHub rulesets/branch-protection rules. See #10.
+  tool in this environment can create GitHub rulesets/branch-protection rules. See #10. For a solo
+  maintainer, do **not** require PR approvals (authors cannot self-approve); see
+  `docs/REPOSITORY.md § Merge gate`.
 
 ### Hash-pinned CI dependencies (2026-08-07)
 

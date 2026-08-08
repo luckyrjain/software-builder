@@ -32,6 +32,7 @@ skill's `SKILL.md`, `workflow/*.md`, or `reference/*.md`, plus the occasional he
    If your skill writes output that embeds any of that content (a filename, a rendered report), see
    [docs/skill-framework/shared/safe-output.md](docs/skill-framework/shared/safe-output.md).
 5. **Run `make lint`** (or the specific `make lint-<skill>` target(s) you touched) before opening a PR.
+   Local setup uses the same hash-pinned lockfile as CI: `make setup` installs from `requirements.lock`.
    If you touched a skill with a `scripts/`/`tests/` directory, its lint target also runs `pytest` —
    make sure that passes too.
 6. **Re-run the skill's smoke test** after a substantive edit — see its `reference/smoke-test.md`.
@@ -47,6 +48,12 @@ skill's `SKILL.md`, `workflow/*.md`, or `reference/*.md`, plus the occasional he
 See [CODEOWNERS](CODEOWNERS) — platform-level paths (`Makefile`, `scripts/`, `docs/skill-framework/shared/`,
 `.github/`) affect every skill and are reviewed accordingly; a single skill's own directory is otherwise
 unrestricted.
+
+**Solo maintainer note:** GitHub does not allow PR authors to approve their own PRs. If branch
+protection requires approving reviews (or CODEOWNER review), you will be unable to merge your own PRs
+until you adjust the ruleset — see [docs/REPOSITORY.md § Merge gate](docs/REPOSITORY.md#merge-gate--repo-admin-settings-github-ui-only).
+Keep **required status checks** (`lint`); drop or bypass **approval** requirements until a second
+reviewer exists.
 
 ## License
 
