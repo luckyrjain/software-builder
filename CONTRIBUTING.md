@@ -32,6 +32,7 @@ skill's `SKILL.md`, `workflow/*.md`, or `reference/*.md`, plus the occasional he
    If your skill writes output that embeds any of that content (a filename, a rendered report), see
    [docs/skill-framework/shared/safe-output.md](docs/skill-framework/shared/safe-output.md).
 5. **Run `make lint`** (or the specific `make lint-<skill>` target(s) you touched) before opening a PR.
+   Local setup uses the same hash-pinned lockfile as CI: `make setup` installs from `requirements.lock`.
    If you touched a skill with a `scripts/`/`tests/` directory, its lint target also runs `pytest` —
    make sure that passes too.
 6. **Re-run the skill's smoke test** after a substantive edit — see its `reference/smoke-test.md`.

@@ -8,6 +8,19 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 
 ## Platform
 
+### Self-contained skill installs + distribution integrity P0 (2026-08-08)
+
+- `scripts/install.sh` now packages skills via `scripts/package_skill.py`: vendored
+  `docs/skill-framework/` references, rewritten local links, and `.software-builder-manifest.json`
+  (source SHA + file hashes). Addresses the critical broken-copy install defect from the August 2026
+  repository review.
+- Added `scripts/validate_references.py` (`--source-tree` / `--installed-package`) and CI-covered
+  install integration test (`make verify-install`).
+- `make setup` now installs hash-pinned `requirements.lock` (matching CI); `make lint-requirements-lock`
+  fails when manifest and lock drift.
+- `lint-framework` enforcement loops now cover all 22 skills (fixes 16-vs-22 drift); framework README
+  documents actual packaging behavior instead of claiming installed skills symlink to the repo.
+
 ### Scheduled lint run + documented branch-protection checklist (2026-08-07)
 
 - `.github/workflows/lint.yml` gained `schedule` (weekly, Monday 04:17 UTC) and `workflow_dispatch`

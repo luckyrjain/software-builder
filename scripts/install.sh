@@ -50,6 +50,21 @@ dest_roots() {
   esac
 }
 
+host_label_for_dest() {
+  local dest_root="$1"
+  case "${dest_root}" in
+  "${HOME}/.cursor/skills")
+    echo "cursor"
+    ;;
+  "${HOME}/.claude/skills")
+    echo "claude-user"
+    ;;
+  *)
+    echo "claude-project"
+    ;;
+  esac
+}
+
 install_skill() {
   local skill="$1"
   local dest_root="$2"
@@ -65,6 +80,8 @@ install_skill() {
 
   local skill_src="${REPO_ROOT}/${skill}"
   local skill_dest="${dest_root}/${skill}"
+  local host_label
+  host_label="$(host_label_for_dest "${dest_root}")"
 
   if [[ ! -f "${skill_src}/SKILL.md" ]]; then
     echo "error: skill not found at ${skill_src}/SKILL.md" >&2
@@ -76,7 +93,16 @@ install_skill() {
     echo "warning: replacing existing install at ${skill_dest}" >&2
   fi
   rm -rf "${skill_dest}"
-  cp -r "${skill_src}" "${skill_dest}"
+
+  PYTHONDONTWRITEBYTECODE=1 python3 "${REPO_ROOT}/scripts/package_skill.py" \
+    --skill "${skill}" \
+    --dest "${skill_dest}" \
+    --repo-root "${REPO_ROOT}" \
+    --host "${host_label}"
+
+  PYTHONDONTWRITEBYTECODE=1 python3 "${REPO_ROOT}/scripts/validate_references.py" \
+    --installed-package "${skill_dest}"
+
   echo "Installed ${skill} → ${skill_dest}"
 }
 
