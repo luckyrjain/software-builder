@@ -37,6 +37,26 @@ class LintSpec:
 
 
 @dataclass(frozen=True)
+class CompositionSpec:
+    invokes: list[str] = field(default_factory=list)
+    escalation_targets: list[str] = field(default_factory=list)
+    mode: str = "invoke"
+
+
+@dataclass(frozen=True)
+class CapabilityOptional:
+    name: str
+    enables: str = ""
+
+
+@dataclass(frozen=True)
+class CapabilitiesSpec:
+    required: list[str] = field(default_factory=list)
+    optional: list[CapabilityOptional] = field(default_factory=list)
+    degraded_modes: dict[str, str] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
 class SkillEntry:
     path: str
     category: str
@@ -44,6 +64,8 @@ class SkillEntry:
     hosts: Hosts
     install: InstallSpec
     lint: LintSpec
+    composition: CompositionSpec = field(default_factory=CompositionSpec)
+    capabilities: CapabilitiesSpec = field(default_factory=CapabilitiesSpec)
 
 
 @dataclass(frozen=True)

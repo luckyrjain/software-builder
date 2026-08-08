@@ -1,0 +1,11 @@
+schema_version: 1
+skill: pr-gatekeeper
+case_id: happy-automation-entry
+tier: 1
+description: pr-gatekeeper is automation-only with explicit model-invocation disable
+assertions:
+  - type: registry_invocation
+    expected: automation-only
+  - type: automation_only_guard
+  - type: file_exists
+    path: reference/auto-post-policy.md

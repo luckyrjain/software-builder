@@ -6,6 +6,9 @@ from typing import Any
 import yaml
 
 from scripts.registry.models import (
+    CapabilitiesSpec,
+    CapabilityOptional,
+    CompositionSpec,
     HostClaude,
     HostCursor,
     HostKiro,
@@ -19,6 +22,7 @@ from scripts.registry.models import (
 ALLOWED_INVOCATION = {"ambient", "automation-only"}
 ALLOWED_CURSOR_DISCOVERY = {"rule", "manual", "always"}
 ALLOWED_KIRO_DISCOVERY = {"manual", "always"}
+ALLOWED_COMPOSITION_MODE = {"invoke", "aggregate"}
 
 
 def _require_mapping(data: Any, label: str) -> dict[str, Any]:
@@ -61,6 +65,15 @@ def parse_registry(path: Path) -> Registry:
             raise ValueError(f"skills.{skill_id}.install.requires must be a list")
 
         lint_raw = _require_mapping(entry.get("lint"), f"skills.{skill_id}.lint")
+
+        composition_raw = entry.get("composition")
+        composition = _parse_composition(
+            composition_raw,
+            skill_id,
+            [str(item) for item in requires],
+        )
+        capabilities = _parse_capabilities(entry.get("capabilities"), skill_id)
+
         skills[skill_id] = SkillEntry(
             path=str(entry.get("path", skill_id)),
             category=str(entry.get("category", "")),
@@ -75,5 +88,85 @@ def parse_registry(path: Path) -> Registry:
                 skill_md_max_lines=int(lint_raw.get("skill_md_max_lines", 180)),
                 target=str(lint_raw.get("target", skill_id)),
             ),
+            composition=composition,
+            capabilities=capabilities,
         )
     return Registry(schema_version=schema_version, skills=skills)
+
+
+def _parse_composition(
+    raw: Any,
+    skill_id: str,
+    install_requires: list[str],
+) -> CompositionSpec:
+    if raw is None:
+        return CompositionSpec(invokes=list(install_requires), mode="invoke")
+    composition = _require_mapping(raw, f"skills.{skill_id}.composition")
+    mode = str(composition.get("mode", "invoke"))
+    if mode not in ALLOWED_COMPOSITION_MODE:
+        raise ValueError(f"skills.{skill_id}.composition.mode invalid: {mode!r}")
+
+    invokes_raw = composition.get("invokes")
+    if invokes_raw is None:
+        invokes = [] if mode == "aggregate" else list(install_requires)
+    else:
+        if not isinstance(invokes_raw, list):
+            raise ValueError(f"skills.{skill_id}.composition.invokes must be a list")
+        invokes = [str(item) for item in invokes_raw]
+
+    escalation_raw = composition.get("escalation_targets", [])
+    if not isinstance(escalation_raw, list):
+        raise ValueError(f"skills.{skill_id}.composition.escalation_targets must be a list")
+
+    return CompositionSpec(
+        invokes=invokes,
+        escalation_targets=[str(item) for item in escalation_raw],
+        mode=mode,
+    )
+
+
+def _parse_capabilities(raw: Any, skill_id: str) -> CapabilitiesSpec:
+    if raw is None:
+        return CapabilitiesSpec()
+    capabilities = _require_mapping(raw, f"skills.{skill_id}.capabilities")
+
+    required_raw = capabilities.get("required", [])
+    if not isinstance(required_raw, list):
+        raise ValueError(f"skills.{skill_id}.capabilities.required must be a list")
+
+    optional_raw = capabilities.get("optional", [])
+    if not isinstance(optional_raw, list):
+        raise ValueError(f"skills.{skill_id}.capabilities.optional must be a list")
+
+    optional: list[CapabilityOptional] = []
+    for index, item in enumerate(optional_raw):
+        if isinstance(item, str):
+            optional.append(CapabilityOptional(name=item))
+            continue
+        if isinstance(item, dict):
+            name = str(item.get("name", ""))
+            if not name:
+                raise ValueError(
+                    f"skills.{skill_id}.capabilities.optional[{index}].name is required",
+                )
+            optional.append(
+                CapabilityOptional(
+                    name=name,
+                    enables=str(item.get("enables", "")),
+                ),
+            )
+            continue
+        raise ValueError(
+            f"skills.{skill_id}.capabilities.optional[{index}] must be a string or mapping",
+        )
+
+    degraded_raw = capabilities.get("degraded_modes", {})
+    if not isinstance(degraded_raw, dict):
+        raise ValueError(f"skills.{skill_id}.capabilities.degraded_modes must be a mapping")
+    degraded_modes = {str(key): str(value) for key, value in degraded_raw.items()}
+
+    return CapabilitiesSpec(
+        required=[str(item) for item in required_raw],
+        optional=optional,
+        degraded_modes=degraded_modes,
+    )

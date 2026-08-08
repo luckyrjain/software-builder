@@ -1,0 +1,10 @@
+schema_version: 1
+skill: loop-task-implementer
+case_id: happy-merge-gate
+tier: 1
+description: loop-task-implementer documents CI-backed merge gating
+assertions:
+  - type: file_exists
+    path: reference/mcp-capabilities.md
+  - type: skill_md_contains
+    pattern: Reviewer-run checks

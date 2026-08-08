@@ -1,0 +1,8 @@
+schema_version: 1
+skill: pr-gatekeeper
+case_id: adversarial-no-ambient-discovery
+tier: 1
+description: automation wrapper must not compete with ambient pr-review
+assertions:
+  - type: skill_md_contains
+    pattern: disable-model-invocation

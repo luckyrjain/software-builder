@@ -6,10 +6,13 @@ from __future__ import annotations
 import argparse
 import json
 import shutil
-import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+
+_SCRIPTS_DIR = Path(__file__).resolve().parent
+if str(_SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPTS_DIR))
 
 from reference_utils import (
     extract_markdown_links,
@@ -21,17 +24,7 @@ from reference_utils import (
 )
 
 
-def git_source_sha(repo_root: Path) -> str:
-    try:
-        result = subprocess.run(
-            ["git", "-C", str(repo_root), "rev-parse", "HEAD"],
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-        return result.stdout.strip()
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        return "unknown"
+from release_info import git_source_sha, read_distribution_version
 
 
 def collect_markdown_files(root: Path) -> list[Path]:
@@ -109,6 +102,7 @@ def write_manifest(
 
     manifest = {
         "skill": skill,
+        "distribution_version": read_distribution_version(repo_root),
         "source_repo": repo_root.name,
         "source_sha": git_source_sha(repo_root),
         "installed_at": datetime.now(timezone.utc).isoformat(),

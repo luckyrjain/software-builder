@@ -1,0 +1,12 @@
+schema_version: 1
+skill: pr-review
+case_id: adversarial-no-approve-api
+tier: 1
+description: pr-review must not wire recommendation labels into approve/merge APIs
+assertions:
+  - type: forbid_pattern
+    path: SKILL.md
+    pattern: (approve|merge).{0,40}API
+  - type: path_contains
+    path: workflow/phase-5.md
+    pattern: auto-approve

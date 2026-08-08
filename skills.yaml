@@ -11,6 +11,18 @@ skills:
       kiro: {discovery: manual}
     install:
       requires: []
+    composition:
+      escalation_targets: [incident-rca, k8s-overprovisioning-datadog]
+    capabilities:
+      required: [gitlab.get_merge_request, gitlab.get_merge_request_diffs]
+      optional:
+        - name: gitlab.create_merge_request_thread
+          enables: inline diff posting
+        - name: gitlab.create_note
+          enables: summary-only MR posting
+      degraded_modes:
+        gitlab.create_merge_request_thread: summary-only or chat-only posting
+        gitlab.create_note: chat-only posting
     lint:
       skill_md_max_lines: 180
       target: pr-review
@@ -25,6 +37,14 @@ skills:
       kiro: {discovery: manual}
     install:
       requires: [pr-review]
+    composition:
+      invokes: [pr-review]
+      escalation_targets: [pr-review]
+    capabilities:
+      required: [gitlab.get_merge_request]
+      optional:
+        - name: gitlab.create_merge_request_thread
+          enables: unattended inline posting when policy allows
     lint:
       skill_md_max_lines: 180
       target: pr-gatekeeper
@@ -39,6 +59,13 @@ skills:
       kiro: {discovery: manual}
     install:
       requires: []
+    composition:
+      escalation_targets: [incident-rca, pr-review]
+    capabilities:
+      required: [datadog.query_metrics]
+      optional:
+        - name: datadog.list_monitors
+          enables: monitor cross-check sections
     lint:
       skill_md_max_lines: 150
       target: k8s-skill
@@ -53,6 +80,15 @@ skills:
       kiro: {discovery: manual}
     install:
       requires: []
+    composition:
+      escalation_targets: [pr-review, k8s-overprovisioning-datadog, squad-map]
+    capabilities:
+      required: [telemetry.logs.query]
+      optional:
+        - name: datadog.query_metrics
+          enables: metric corroboration paths
+        - name: gitlab.get_merge_request
+          enables: deploy-regression MR handoff
     lint:
       skill_md_max_lines: 180
       target: incident-rca
@@ -67,6 +103,11 @@ skills:
       kiro: {discovery: manual}
     install:
       requires: [incident-rca, squad-map]
+    composition:
+      invokes: [incident-rca, squad-map]
+      escalation_targets: [incident-rca, squad-map]
+    capabilities:
+      required: [pager.webhook.receive]
     lint:
       skill_md_max_lines: 180
       target: incident-triage-agent
@@ -137,6 +178,9 @@ skills:
       kiro: {discovery: manual}
     install:
       requires: [pr-review, k8s-overprovisioning-datadog, incident-rca]
+    composition:
+      invokes: [pr-review, k8s-overprovisioning-datadog, incident-rca]
+      escalation_targets: [pr-review, k8s-overprovisioning-datadog, incident-rca]
     lint:
       skill_md_max_lines: 180
       target: release-readiness-checker
@@ -151,6 +195,9 @@ skills:
       kiro: {discovery: manual}
     install:
       requires: [mysql-to-postgres-sql, squad-map]
+    composition:
+      mode: aggregate
+      escalation_targets: [mysql-to-postgres-sql, squad-map, pr-review]
     lint:
       skill_md_max_lines: 180
       target: migration-program-manager
@@ -221,6 +268,9 @@ skills:
       kiro: {discovery: manual}
     install:
       requires: [migration-program-manager, cost-optimization-sprint-planner]
+    composition:
+      mode: aggregate
+      escalation_targets: [migration-program-manager, cost-optimization-sprint-planner]
     lint:
       skill_md_max_lines: 180
       target: weekly-squad-digest

@@ -46,6 +46,12 @@ def render_install_mermaid(registry: Registry) -> str:
     return "\n".join(lines) + "\n"
 
 
+def render_composition_mermaid(registry: Registry) -> str:
+    from scripts.registry.composition import render_composition_mermaid as render
+
+    return render(registry)
+
+
 def update_repository_table(repository_md: str, registry: Registry) -> str:
     table = "\n" + render_skills_table(registry).rstrip() + "\n"
     return update_marker_block(

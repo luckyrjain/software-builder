@@ -1,0 +1,8 @@
+schema_version: 1
+skill: loop-task-implementer
+case_id: adversarial-no-builder-ci-merge
+tier: 1
+description: loop-task-implementer must not merge on builder-reported checks alone
+assertions:
+  - type: skill_md_contains
+    pattern: Builder-reported checks

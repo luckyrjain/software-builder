@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from scripts.registry.composition import validate_composition_graph
 from scripts.registry.frontmatter import load_skill_frontmatter
 from scripts.registry.models import Registry
 from scripts.registry.schema import parse_registry
@@ -96,6 +97,7 @@ def validate_registry(root: Path) -> list[str]:
                 errors.append(f"error: {skill_id}: install.requires unknown skill {dep!r}")
 
     errors.extend(_detect_cycles(install_graph))
+    errors.extend(validate_composition_graph(registry))
 
     for skill_id, entry in registry.skills.items():
         skill_md = root / entry.path / "SKILL.md"

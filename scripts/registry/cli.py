@@ -10,6 +10,7 @@ import yaml
 from scripts.registry.crosscheck import find_stale_generated_adapters, validate_registry
 from scripts.registry.generate_cursor import generate_cursor_rules
 from scripts.registry.generate_docs import (
+    render_composition_mermaid,
     render_install_mermaid,
     update_readme_badge,
     update_repository_table,
@@ -35,6 +36,9 @@ def _collect_outputs(root: Path) -> dict[Path, str]:
         registry,
     )
     outputs[root / "generated" / "catalogue" / "install-deps.mmd"] = render_install_mermaid(
+        registry,
+    )
+    outputs[root / "generated" / "catalogue" / "composition-deps.mmd"] = render_composition_mermaid(
         registry,
     )
     return outputs
