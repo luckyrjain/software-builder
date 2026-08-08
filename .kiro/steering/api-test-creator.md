@@ -2,17 +2,6 @@
 inclusion: manual
 ---
 
-For generating black-box API test suites (Postman collections, run via Newman) against a real, reachable
-running API instance, read `api-test-creator/SKILL.md`. A request for an in-process/mocked test routes to
-`unit-test-creator/SKILL.md` instead; a real-dependency-seam test via testcontainers routes to
-`integration-test-creator/SKILL.md`; a consumer-driven Pact contract routes to
-`contract-test-creator/SKILL.md`; a full browser UI journey routes to `e2e-test-creator/SKILL.md`.
+<!-- GENERATED from skills.yaml + SKILL.md — do not edit; run make generate -->
 
-Phase index: `api-test-creator/reference/phase-index.md`. Reference loads:
-`api-test-creator/reference/lazy-load-index.md`.
-Detects the target repo's own Postman/Newman tooling and canonical collection file before writing
-anything — never creates a second collection or fabricates one for a repo with none, without asking. Never
-fabricates a request/response shape from a guess — it must trace to real, observed usage (the route-handler
-code, an OpenAPI/Swagger spec, or `API_CATALOG.md` as corroborating evidence only). Requires a real,
-reachable running API instance to run the collection — gates `NEEDS_API_ENV` otherwise. Never modifies
-production code, or loosens a `pm.test()` assertion, to force a failing run green.
+For api-test-creator, read `api-test-creator/SKILL.md` and follow it.

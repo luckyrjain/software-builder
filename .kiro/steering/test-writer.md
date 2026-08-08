@@ -2,17 +2,6 @@
 inclusion: manual
 ---
 
-For a level-unspecified "write tests" request (an MR/branch/diff/file with no stated test level), read
-`test-writer/SKILL.md` — it classifies the request (unit / integration / contract / e2e) and dispatches
-to the matching skill, relaying its report verbatim. It has no detection or generation logic of its own.
+<!-- GENERATED from skills.yaml + SKILL.md — do not edit; run make generate -->
 
-If the level is already named, skip this router and read the matching skill directly instead:
-`unit-test-creator/SKILL.md` (isolated, mocked), `integration-test-creator/SKILL.md` (real adjacent
-dependency), `contract-test-creator/SKILL.md` (Pact-style consumer/provider), or
-`e2e-test-creator/SKILL.md` (browser user journey). Reviewing an existing MR's test quality routes to
-`pr-review/SKILL.md` instead; implementing the production feature itself routes to
-`loop-task-implementer/SKILL.md` instead.
-
-Phase index: `test-writer/reference/phase-index.md`. Reference loads:
-`test-writer/reference/lazy-load-index.md`.
-Never guesses a level when genuinely ambiguous — asks once, listing the real candidates.
+For test-writer, read `test-writer/SKILL.md` and follow it.

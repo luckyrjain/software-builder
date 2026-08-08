@@ -12,6 +12,7 @@
 /.github/                              @luckyrjain
 /Makefile                              @luckyrjain
 /scripts/                              @luckyrjain
+/skills.yaml                            @luckyrjain
 /requirements.txt                      @luckyrjain
 /requirements.lock                     @luckyrjain
 /docs/skill-framework/                 @luckyrjain

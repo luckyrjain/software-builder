@@ -1,14 +1,9 @@
 ---
-description: Invoke the backlog-runner skill for scheduled, unattended overnight sweeps of a ticket queue via loop-task-implementer.
+description: Scheduled queue-management wrapper around loop-task-implementer — pulls N tickets from a Jira/GitHub Issues query, works through them in dependency order overnight, opens a PR per task, never auto-merges. No new Builder/Reviewer/review logic — delegates entirely to loop-task-implementer per task. Not for interactive, human-typed single-task requests — those route to loop-task-implementer directly. Keywords: overnight run, ticket queue, backlog sweep, scheduled multi-task loop, nightly PRs.
 alwaysApply: false
 ---
 
-Do not auto-apply this from ambient human chat — this skill sets `disable-model-invocation: true`.
-When a scheduler passes a structured payload (`tracker_query`, `max_tasks_per_run`, optionally
-`deadline`/`session_token_budget`, `repo_context`), read `backlog-runner/SKILL.md` and follow it. A human
-asking to implement one or several tasks conversationally should route to
-`loop-task-implementer/SKILL.md` instead — it already handles both patterns interactively.
+<!-- GENERATED from skills.yaml + SKILL.md — do not edit; run make generate -->
 
-Phase index: `backlog-runner/reference/phase-index.md`. Reference loads:
-`backlog-runner/reference/lazy-load-index.md`.
-Never merges — `autonomous_merge_authorized` has no input path in this skill.
+Invoke the backlog-runner skill. Read `backlog-runner/SKILL.md` and follow it.
+Phase index: `backlog-runner/reference/phase-index.md` when present under the skill directory.

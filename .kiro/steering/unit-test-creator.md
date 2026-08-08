@@ -2,18 +2,6 @@
 inclusion: manual
 ---
 
-For generating or backfilling isolated, mocked-dependency unit tests for a target repository (write unit
-tests for an MR/branch/diff, or backfill unit coverage for a file/module), read
-`unit-test-creator/SKILL.md`. A target that needs a real adjacent dependency (a real DB/queue/service,
-not a mock) routes to `integration-test-creator/SKILL.md` instead; reviewing an existing MR's test
-quality routes to `pr-review/SKILL.md` instead; implementing the production feature itself routes to
-`loop-task-implementer/SKILL.md` instead.
+<!-- GENERATED from skills.yaml + SKILL.md — do not edit; run make generate -->
 
-Phase index: `unit-test-creator/reference/phase-index.md`. Reference loads:
-`unit-test-creator/reference/lazy-load-index.md`.
-Detects the target repo's own test framework/conventions before writing anything — never introduces a
-second framework or fabricates one for a repo with none, without asking. Every external dependency
-(network, real DB, filesystem I/O, wall-clock time, randomness) must be mocked or stubbed; a target that
-can't be isolated with an existing mocking convention is tagged `UNTESTABLE_WITHOUT_FIXTURE` and handed to
-`integration-test-creator`, never given a fabricated mock. Never modifies production code to force a
-failing test green.
+For unit-test-creator, read `unit-test-creator/SKILL.md` and follow it.

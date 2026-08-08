@@ -1,0 +1,115 @@
+from __future__ import annotations
+
+import argparse
+import sys
+from pathlib import Path
+
+from scripts.registry.crosscheck import validate_registry
+from scripts.registry.generate_cursor import generate_cursor_rules
+from scripts.registry.generate_docs import (
+    render_install_mermaid,
+    update_readme_badge,
+    update_repository_table,
+)
+from scripts.registry.generate_kiro import generate_kiro_steering
+from scripts.registry.load import load_descriptions, load_registry
+
+ROOT = Path(__file__).resolve().parents[2]
+
+
+def _collect_outputs(root: Path) -> dict[Path, str]:
+    registry = load_registry(root)
+    descriptions = load_descriptions(root, registry)
+    outputs: dict[Path, str] = {}
+    outputs.update(generate_cursor_rules(root, registry, descriptions))
+    outputs.update(generate_kiro_steering(root, registry))
+    outputs[root / "README.md"] = update_readme_badge(
+        (root / "README.md").read_text(encoding="utf-8"),
+        len(registry.skills),
+    )
+    outputs[root / "docs" / "REPOSITORY.md"] = update_repository_table(
+        (root / "docs" / "REPOSITORY.md").read_text(encoding="utf-8"),
+        registry,
+    )
+    outputs[root / "generated" / "catalogue" / "install-deps.mmd"] = render_install_mermaid(
+        registry,
+    )
+    return outputs
+
+
+def _write_outputs(outputs: dict[Path, str]) -> None:
+    for path, content in outputs.items():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+
+
+def _check_outputs(outputs: dict[Path, str]) -> list[str]:
+    errors: list[str] = []
+    for path, expected in outputs.items():
+        if not path.exists():
+            errors.append(f"error: missing generated file: {path.relative_to(ROOT)}")
+            continue
+        actual = path.read_text(encoding="utf-8")
+        if actual != expected:
+            errors.append(f"error: generated file drift: {path.relative_to(ROOT)}")
+    return errors
+
+
+def cmd_validate(root: Path) -> int:
+    errors = validate_registry(root)
+    if errors:
+        for error in errors:
+            print(error, file=sys.stderr)
+        return 1
+    print("ok: skills registry validates")
+    return 0
+
+
+def cmd_generate(root: Path, check_only: bool) -> int:
+    validation_errors = validate_registry(root)
+    if validation_errors:
+        for error in validation_errors:
+            print(error, file=sys.stderr)
+        return 1
+
+    outputs = _collect_outputs(root)
+    if check_only:
+        drift_errors = _check_outputs(outputs)
+        if drift_errors:
+            for error in drift_errors:
+                print(error, file=sys.stderr)
+            print("hint: run make generate to refresh generated files", file=sys.stderr)
+            return 1
+        print("ok: generated files are up to date")
+        return 0
+
+    _write_outputs(outputs)
+    print(f"ok: generated {len(outputs)} files")
+    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(prog="scripts.registry")
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    subparsers.add_parser("validate", help="validate skills.yaml and SKILL.md frontmatter")
+
+    generate_parser = subparsers.add_parser("generate", help="generate adapters and derived docs")
+    generate_parser.add_argument(
+        "--check",
+        action="store_true",
+        help="exit 1 if generated files would change",
+    )
+
+    args = parser.parse_args(argv)
+    if args.command == "validate":
+        return cmd_validate(ROOT)
+    if args.command == "generate":
+        return cmd_generate(ROOT, check_only=args.check)
+
+    print(f"error: unknown command {args.command!r}", file=sys.stderr)
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main())

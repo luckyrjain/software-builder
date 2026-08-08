@@ -1,19 +1,9 @@
 ---
-description: Invoke the integration-test-creator skill to generate or backfill integration tests that exercise a real adjacent dependency.
+description: Generates integration tests that exercise the real seam between a component and one real adjacent dependency (database, queue, cache, internal service) — never a mock of that dependency. Detects the repo's base test runner plus its real-dependency orchestration mechanism (testcontainers, docker-compose, embedded DB) and its integration-test naming/tag convention, writes tests for changed code (diff mode) or an existing coverage gap (backfill mode), runs them against the real dependency, and iterates until green. Keywords: integration tests, testcontainers, docker-compose test, real database test, service seam. Not for isolated mocked tests (unit-test-creator), consumer/provider contract agreements (contract-test-creator), or full browser user journeys (e2e-test-creator).
 alwaysApply: false
 ---
 
-When the user asks to write integration tests for an MR/branch/diff, or to backfill integration coverage
-for a file/module against a real adjacent dependency (database, queue, cache, or another internal
-service), read `integration-test-creator/SKILL.md` and follow it. A target fully testable by mocking
-everything routes to `unit-test-creator/SKILL.md` instead; a consumer/provider contract agreement routes
-to `contract-test-creator/SKILL.md` instead; a full browser user journey routes to
-`e2e-test-creator/SKILL.md` instead.
+<!-- GENERATED from skills.yaml + SKILL.md — do not edit; run make generate -->
 
-Phase index: `integration-test-creator/reference/phase-index.md`. Reference loads:
-`integration-test-creator/reference/lazy-load-index.md`.
-Detects the target repo's base test runner *and* its real-dependency orchestration mechanism
-(testcontainers, docker-compose, embedded DB) before writing anything — never introduces a second
-framework/mechanism or fabricates one for a repo with none, without asking. Never mocks the dependency
-under test — that is this skill's entire reason to exist, distinct from unit-test-creator. Never modifies
-production code to force a failing test green.
+Invoke the integration-test-creator skill. Read `integration-test-creator/SKILL.md` and follow it.
+Phase index: `integration-test-creator/reference/phase-index.md` when present under the skill directory.

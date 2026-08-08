@@ -1,16 +1,9 @@
 ---
-description: Invoke the release-readiness-checker skill for a release go/no-go report composing pr-review, k8s-overprovisioning-datadog, and incident-rca over a release manifest.
+description: Release go/no-go report composing pr-review (MRs merged since last release, never posts), k8s- overprovisioning-datadog (per-service rightsizing verdict), and incident-rca (per-service open-incident signal, Phase 1 only). Keywords: release readiness, is this release ready, ship checklist, release go/no-go, pre-release check. Not for reviewing one specific MR (pr-review), one service's rightsizing (k8s-overprovisioning-datadog), or a full root-cause investigation (incident-rca).
 alwaysApply: false
 ---
 
-When the user asks whether a release is ready to ship, wants a pre-release go/no-go report, or provides a
-`release_manifest` (the repos/services a release touches), read `release-readiness-checker/SKILL.md` and
-follow it. Reviewing one specific MR routes to `pr-review/SKILL.md` instead; one service's rightsizing
-question routes to `k8s-overprovisioning-datadog/SKILL.md` instead; a full root-cause investigation
-routes to `incident-rca/SKILL.md` instead.
+<!-- GENERATED from skills.yaml + SKILL.md — do not edit; run make generate -->
 
-Phase index: `release-readiness-checker/reference/phase-index.md`. Reference loads:
-`release-readiness-checker/reference/lazy-load-index.md`.
-Read-only throughout — pr-review is invoked per `reference/gate-policy.md`, which always answers "Hold —
-don't post" regardless of which posting mode pr-review's own Phase 0 detects (never posts to GitLab); k8s
-and incident-rca are already read-only. No manifest changes, no merges, no Jira/Slack write-back.
+Invoke the release-readiness-checker skill. Read `release-readiness-checker/SKILL.md` and follow it.
+Phase index: `release-readiness-checker/reference/phase-index.md` when present under the skill directory.

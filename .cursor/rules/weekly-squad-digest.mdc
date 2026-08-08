@@ -1,17 +1,9 @@
 ---
-description: Invoke the weekly-squad-digest skill for a combined squad-status digest reading migration-program-manager's and cost-optimization-sprint-planner's own rollup outputs.
+description: Scheduled digest combining migration-program-manager's and cost-optimization-sprint-planner's own rollup JSON outputs into one squad-grouped report — never re-runs either aggregator, never re-derives squad/status/priority. Keywords: weekly squad digest, combined rollup, org-wide status roundup. Not for a fresh migration or cost rollup (migration-program-manager / cost-optimization-sprint-planner directly) or a plain ownership lookup (squad-map).
 alwaysApply: false
 ---
 
-When the user asks for a combined weekly squad digest reading both migration-program-manager's and
-cost-optimization-sprint-planner's own rollup outputs, read `weekly-squad-digest/SKILL.md` and follow it.
-A single-source migration status or cost/waste question routes to `migration-program-manager/SKILL.md` or
-`cost-optimization-sprint-planner/SKILL.md` directly instead — this skill sets
-`disable-model-invocation: true`, so it is not the ambient-chat default for either single-source
-question; invoke it explicitly by name for the combined digest.
+<!-- GENERATED from skills.yaml + SKILL.md — do not edit; run make generate -->
 
-Phase index: `weekly-squad-digest/reference/phase-index.md`. Reference loads:
-`weekly-squad-digest/reference/lazy-load-index.md`.
-Read-only — never invokes migration-program-manager, cost-optimization-sprint-planner, or squad-map live,
-only reads the first two skills' already-produced rollup JSON files. Only writes its own
-`WEEKLY_SQUAD_DIGEST.md`.
+Invoke the weekly-squad-digest skill. Read `weekly-squad-digest/SKILL.md` and follow it.
+Phase index: `weekly-squad-digest/reference/phase-index.md` when present under the skill directory.

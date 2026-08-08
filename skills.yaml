@@ -1,0 +1,315 @@
+schema_version: 1
+
+skills:
+  pr-review:
+    path: pr-review
+    category: review
+    invocation: ambient
+    hosts:
+      cursor: {discovery: rule}
+      claude: {install: true}
+      kiro: {discovery: manual}
+    install:
+      requires: []
+    lint:
+      skill_md_max_lines: 180
+      target: pr-review
+
+  pr-gatekeeper:
+    path: pr-gatekeeper
+    category: review
+    invocation: automation-only
+    hosts:
+      cursor: {discovery: rule}
+      claude: {install: true}
+      kiro: {discovery: manual}
+    install:
+      requires: [pr-review]
+    lint:
+      skill_md_max_lines: 180
+      target: pr-gatekeeper
+
+  k8s-overprovisioning-datadog:
+    path: k8s-overprovisioning-datadog
+    category: platform
+    invocation: ambient
+    hosts:
+      cursor: {discovery: rule}
+      claude: {install: true}
+      kiro: {discovery: manual}
+    install:
+      requires: []
+    lint:
+      skill_md_max_lines: 150
+      target: k8s-skill
+
+  incident-rca:
+    path: incident-rca
+    category: incident
+    invocation: ambient
+    hosts:
+      cursor: {discovery: rule}
+      claude: {install: true}
+      kiro: {discovery: manual}
+    install:
+      requires: []
+    lint:
+      skill_md_max_lines: 180
+      target: incident-rca
+
+  incident-triage-agent:
+    path: incident-triage-agent
+    category: incident
+    invocation: automation-only
+    hosts:
+      cursor: {discovery: rule}
+      claude: {install: true}
+      kiro: {discovery: manual}
+    install:
+      requires: [incident-rca, squad-map]
+    lint:
+      skill_md_max_lines: 180
+      target: incident-triage-agent
+
+  domain-comprehension:
+    path: domain-comprehension
+    category: architecture
+    invocation: ambient
+    hosts:
+      cursor: {discovery: rule}
+      claude: {install: true}
+      kiro: {discovery: manual}
+    install:
+      requires: [squad-map]
+    lint:
+      skill_md_max_lines: 180
+      target: domain-comprehension
+
+  squad-map:
+    path: squad-map
+    category: architecture
+    invocation: ambient
+    hosts:
+      cursor: {discovery: rule}
+      claude: {install: true}
+      kiro: {discovery: manual}
+    install:
+      requires: []
+    lint:
+      skill_md_max_lines: 180
+      target: squad-map
+
+  who-owns-x-bot:
+    path: who-owns-x-bot
+    category: architecture
+    invocation: automation-only
+    hosts:
+      cursor: {discovery: rule}
+      claude: {install: true}
+      kiro: {discovery: manual}
+    install:
+      requires: [squad-map]
+    lint:
+      skill_md_max_lines: 180
+      target: who-owns-x-bot
+
+  new-hire-guide:
+    path: new-hire-guide
+    category: architecture
+    invocation: ambient
+    hosts:
+      cursor: {discovery: rule}
+      claude: {install: true}
+      kiro: {discovery: manual}
+    install:
+      requires: [domain-comprehension, squad-map]
+    lint:
+      skill_md_max_lines: 180
+      target: new-hire-guide
+
+  release-readiness-checker:
+    path: release-readiness-checker
+    category: release
+    invocation: ambient
+    hosts:
+      cursor: {discovery: rule}
+      claude: {install: true}
+      kiro: {discovery: manual}
+    install:
+      requires: [pr-review, k8s-overprovisioning-datadog, incident-rca]
+    lint:
+      skill_md_max_lines: 180
+      target: release-readiness-checker
+
+  migration-program-manager:
+    path: migration-program-manager
+    category: migration
+    invocation: ambient
+    hosts:
+      cursor: {discovery: rule}
+      claude: {install: true}
+      kiro: {discovery: manual}
+    install:
+      requires: [mysql-to-postgres-sql, squad-map]
+    lint:
+      skill_md_max_lines: 180
+      target: migration-program-manager
+
+  cost-optimization-sprint-planner:
+    path: cost-optimization-sprint-planner
+    category: platform
+    invocation: ambient
+    hosts:
+      cursor: {discovery: rule}
+      claude: {install: true}
+      kiro: {discovery: manual}
+    install:
+      requires: [k8s-overprovisioning-datadog, squad-map]
+    lint:
+      skill_md_max_lines: 180
+      target: cost-optimization-sprint-planner
+
+  mysql-to-postgres-sql:
+    path: mysql-to-postgres-sql
+    category: migration
+    invocation: ambient
+    hosts:
+      cursor: {discovery: rule}
+      claude: {install: true}
+      kiro: {discovery: manual}
+    install:
+      requires: []
+    lint:
+      skill_md_max_lines: 180
+      target: mysql-to-postgres-sql
+
+  loop-task-implementer:
+    path: loop-task-implementer
+    category: automation
+    invocation: ambient
+    hosts:
+      cursor: {discovery: rule}
+      claude: {install: true}
+      kiro: {discovery: manual}
+    install:
+      requires: []
+    lint:
+      skill_md_max_lines: 180
+      target: loop-task-implementer
+
+  backlog-runner:
+    path: backlog-runner
+    category: automation
+    invocation: automation-only
+    hosts:
+      cursor: {discovery: rule}
+      claude: {install: true}
+      kiro: {discovery: manual}
+    install:
+      requires: [loop-task-implementer]
+    lint:
+      skill_md_max_lines: 180
+      target: backlog-runner
+
+  weekly-squad-digest:
+    path: weekly-squad-digest
+    category: migration
+    invocation: automation-only
+    hosts:
+      cursor: {discovery: rule}
+      claude: {install: true}
+      kiro: {discovery: manual}
+    install:
+      requires: [migration-program-manager, cost-optimization-sprint-planner]
+    lint:
+      skill_md_max_lines: 180
+      target: weekly-squad-digest
+
+  unit-test-creator:
+    path: unit-test-creator
+    category: testing
+    invocation: ambient
+    hosts:
+      cursor: {discovery: rule}
+      claude: {install: true}
+      kiro: {discovery: manual}
+    install:
+      requires: []
+    lint:
+      skill_md_max_lines: 180
+      target: unit-test-creator
+
+  integration-test-creator:
+    path: integration-test-creator
+    category: testing
+    invocation: ambient
+    hosts:
+      cursor: {discovery: rule}
+      claude: {install: true}
+      kiro: {discovery: manual}
+    install:
+      requires: []
+    lint:
+      skill_md_max_lines: 180
+      target: integration-test-creator
+
+  contract-test-creator:
+    path: contract-test-creator
+    category: testing
+    invocation: ambient
+    hosts:
+      cursor: {discovery: rule}
+      claude: {install: true}
+      kiro: {discovery: manual}
+    install:
+      requires: []
+    lint:
+      skill_md_max_lines: 180
+      target: contract-test-creator
+
+  e2e-test-creator:
+    path: e2e-test-creator
+    category: testing
+    invocation: ambient
+    hosts:
+      cursor: {discovery: rule}
+      claude: {install: true}
+      kiro: {discovery: manual}
+    install:
+      requires: []
+    lint:
+      skill_md_max_lines: 180
+      target: e2e-test-creator
+
+  api-test-creator:
+    path: api-test-creator
+    category: testing
+    invocation: ambient
+    hosts:
+      cursor: {discovery: rule}
+      claude: {install: true}
+      kiro: {discovery: manual}
+    install:
+      requires: []
+    lint:
+      skill_md_max_lines: 180
+      target: api-test-creator
+
+  test-writer:
+    path: test-writer
+    category: testing
+    invocation: ambient
+    hosts:
+      cursor: {discovery: rule}
+      claude: {install: true}
+      kiro: {discovery: manual}
+    install:
+      requires:
+        - unit-test-creator
+        - integration-test-creator
+        - contract-test-creator
+        - e2e-test-creator
+        - api-test-creator
+    lint:
+      skill_md_max_lines: 180
+      target: test-writer

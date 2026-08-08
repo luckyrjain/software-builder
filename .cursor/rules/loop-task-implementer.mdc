@@ -1,15 +1,9 @@
 ---
-description: Invoke the repository loop-task-implementer skill for autonomous task implementation, independent review, remediation, and PR completion.
+description: Use when autonomously implementing one or more software tasks through isolated build, evidence-based review, remediation, validation, pull-request, and completion workflows across coding agents. Keywords: implement task/issue, autonomous build+review loop, work through a task queue, take this to PR, builder/reviewer/orchestrator roles. Not for reviewing someone else's already-open MR (pr-review), RCA (incident-rca), or K8s rightsizing (k8s-overprovisioning-datadog).
 alwaysApply: false
 ---
 
-When the user asks to implement a task through review, remediation, CI, or PR completion, read `loop-task-implementer/SKILL.md` and follow it.
+<!-- GENERATED from skills.yaml + SKILL.md — do not edit; run make generate -->
 
-Load only the active role prompt:
-- Orchestrator: `loop-task-implementer/workflow/orchestrator.md`
-- Builder: `loop-task-implementer/workflow/builder.md`
-- Reviewer: `loop-task-implementer/workflow/reviewer.md`
-
-State schema: `loop-task-implementer/reference/state-schema.yaml`.
-
-Keep Builder and Reviewer contexts isolated. Treat CI and exact-commit checks as authoritative.
+Invoke the loop-task-implementer skill. Read `loop-task-implementer/SKILL.md` and follow it.
+Phase index: `loop-task-implementer/reference/phase-index.md` when present under the skill directory.

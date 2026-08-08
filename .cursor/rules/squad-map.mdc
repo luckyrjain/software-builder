@@ -1,10 +1,9 @@
 ---
-description: Invoke the repository squad-map skill for repo-to-squad ownership mapping.
+description: Maps repos to org squads (GitLab group hierarchy) and runtime squads (Datadog service team tags). Produces SQUAD_MAP.md with confidence and conflict flags. Use when the user asks who owns a repo or service, squad mapping, team ownership, GitLab group to Datadog team reconciliation, or org structure for a multi-repo workspace. Keywords: squad map, ownership, CODEOWNERS, GitLab group, Datadog team, who owns. Not for a full bounded-context/domain map (domain-comprehension) or MR review (pr-review).
 alwaysApply: false
 ---
 
-When the user asks who owns a repo/service, wants squad mapping, or team reconciliation between
-GitLab groups and Datadog service tags, read `squad-map/SKILL.md` and follow it.
+<!-- GENERATED from skills.yaml + SKILL.md — do not edit; run make generate -->
 
-Phase index: `squad-map/reference/phase-index.md`. Reference loads: `squad-map/reference/lazy-load-index.md`.
-Read-only — no GitLab writes, Datadog mutations, deploys, or application source changes.
+Invoke the squad-map skill. Read `squad-map/SKILL.md` and follow it.
+Phase index: `squad-map/reference/phase-index.md` when present under the skill directory.

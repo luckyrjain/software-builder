@@ -1,10 +1,9 @@
 ---
-description: Invoke the repository pr-review skill for GitLab merge request review by URL, !IID, or current branch.
+description: GitLab MR review by URL, !IID, or current branch. Phased workflow: context → findings pipeline → executive summary → optional post. Keywords: /pr-review, review MR/merge request, re-review, post-merge audit, list open MRs, review and post. Not for GitHub PRs, local-only diffs, RCA, or K8s rightsizing. Full phrase table: examples.md.
 alwaysApply: false
 ---
 
-When the user asks to review a GitLab MR/merge request, re-review, post-merge audit, or list open
-MRs, read `pr-review/SKILL.md` and follow it.
+<!-- GENERATED from skills.yaml + SKILL.md — do not edit; run make generate -->
 
-Phase index: `pr-review/reference/phase-index.md`. Reference loads: `pr-review/reference/lazy-load-index.md`.
-This skill posts inline comments when GitLab MCP write access allows it — see `pr-review/SETUP.md`.
+Invoke the pr-review skill. Read `pr-review/SKILL.md` and follow it.
+Phase index: `pr-review/reference/phase-index.md` when present under the skill directory.

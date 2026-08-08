@@ -2,6 +2,6 @@
 inclusion: manual
 ---
 
-For GitLab merge request review by URL, !IID, or current branch, read `pr-review/SKILL.md`.
+<!-- GENERATED from skills.yaml + SKILL.md — do not edit; run make generate -->
 
-Phase index: `pr-review/reference/phase-index.md`. Reference loads: `pr-review/reference/lazy-load-index.md`.
+For pr-review, read `pr-review/SKILL.md` and follow it.

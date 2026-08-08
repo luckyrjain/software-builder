@@ -1,14 +1,9 @@
 ---
-description: Invoke the incident-triage-agent skill for paging-webhook-triggered incident triage (page fire) or postmortem drafting (incident resolved), composing incident-rca and squad-map.
+description: Paging-webhook-triggered composition of incident-rca and squad-map. Page fires → fast triage doc (root cause + owning team) for on-call. Incident resolves → drafted postmortem using incident-rca's own report with squad-map-filled owner columns. No new investigation or ownership logic — delegates entirely to incident-rca and squad-map. Not for interactive, human-typed RCA or ownership requests — those route to incident-rca / squad-map directly. Keywords: PagerDuty, Opsgenie, page fire, on-call triage, postmortem draft, incident-resolved webhook.
 alwaysApply: false
 ---
 
-Do not auto-apply this from ambient human chat — this skill sets `disable-model-invocation: true`.
-When a paging-webhook handler passes a structured payload (`event_type: page_triggered` or
-`incident_resolved`, `service`, `triggered_at`, optionally `resolved_at`), read
-`incident-triage-agent/SKILL.md` and follow it. A human asking for an RCA or an ownership lookup
-conversationally should route to `incident-rca/SKILL.md` or `squad-map/SKILL.md` instead.
+<!-- GENERATED from skills.yaml + SKILL.md — do not edit; run make generate -->
 
-Phase index: `incident-triage-agent/reference/phase-index.md`. Reference loads:
-`incident-triage-agent/reference/lazy-load-index.md`.
-Read-only — no remediation, no paging-system state changes, no live Jira/Slack/PagerDuty posts.
+Invoke the incident-triage-agent skill. Read `incident-triage-agent/SKILL.md` and follow it.
+Phase index: `incident-triage-agent/reference/phase-index.md` when present under the skill directory.

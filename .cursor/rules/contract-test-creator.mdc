@@ -1,18 +1,9 @@
 ---
-description: Invoke the contract-test-creator skill to generate consumer-driven contract (Pact-style) tests, either a consumer test or a provider verification test.
+description: Generates consumer-driven contract tests (Pact-style) verifying a consumer and provider agree on an interaction shape. Detects the repo's Pact tooling (pact-js, pact-python, Pact JVM, pact-go, Ruby pact) and whether a Pact Broker is configured, then writes either a consumer test (records expectations, produces a pact file) or a provider verification test (replays existing pact files against the real provider) for changed code (diff mode) or an existing coverage gap (backfill mode). Every interaction shape traces to real, observed usage — never a fabricated request/response. Keywords: contract tests, Pact, consumer-driven contract, provider verification, pact broker. Not for a real live integration test against a running dependency (integration-test-creator) or isolated mocked unit tests (unit-test-creator).
 alwaysApply: false
 ---
 
-When the user asks to write a Pact/consumer-driven contract test, or to verify a provider still satisfies
-its consumer pacts, read `contract-test-creator/SKILL.md` and follow it. `target.role` (`consumer` or
-`provider`) is required — always ask if it isn't stated, never infer it from file location or naming. A
-request for a real running integration test against a live dependency routes to
-`integration-test-creator/SKILL.md` instead; isolated mocked unit tests route to
-`unit-test-creator/SKILL.md` instead.
+<!-- GENERATED from skills.yaml + SKILL.md — do not edit; run make generate -->
 
-Phase index: `contract-test-creator/reference/phase-index.md`. Reference loads:
-`contract-test-creator/reference/lazy-load-index.md`.
-Detects the target repo's own Pact tooling and broker configuration before writing anything — never
-introduces a second Pact library or fabricates one for a repo with none, without asking. Never fabricates
-an interaction's request/response shape from a guess — it must trace to real, observed usage. Never
-modifies production code, or loosens a pact file, to force a failing test/verification green.
+Invoke the contract-test-creator skill. Read `contract-test-creator/SKILL.md` and follow it.
+Phase index: `contract-test-creator/reference/phase-index.md` when present under the skill directory.

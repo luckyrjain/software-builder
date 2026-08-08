@@ -8,6 +8,18 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 
 ## Platform
 
+### Skills registry + generated adapters (2026-08-08)
+
+- Added root `skills.yaml` as the canonical platform registry (install dependency edges, hosts,
+  invocation mode, lint metadata) with split ownership: agent facts stay in each `SKILL.md`.
+- Added `scripts/registry/` CLI: `make validate-registry`, `make generate`, `make generate-check`.
+- Regenerated all `.cursor/rules/*.mdc` and `.kiro/steering/*.md` as thin discovery wrappers (no
+  duplicated routing/policy prose).
+- README skill-count badge and `docs/REPOSITORY.md` skill inventory table are marker-generated;
+  `generated/catalogue/install-deps.mmd` documents install dependency graph.
+- `make lint` now runs registry validation and generate drift check before existing lint targets.
+- Closes the repo-side work for #12 milestone C; Makefile per-skill lint recipes unchanged in v1.
+
 ### Merge gate spec + ruleset verifier (2026-08-08)
 
 - Added [`docs/github-ruleset-main.json`](docs/github-ruleset-main.json) as the canonical solo-maintainer

@@ -2,8 +2,6 @@
 inclusion: manual
 ---
 
-For MySQL-dialect scanning and PostgreSQL rewrite during a jdbc:mysql → jdbc:postgresql migration,
-read `mysql-to-postgres-sql/SKILL.md`.
+<!-- GENERATED from skills.yaml + SKILL.md — do not edit; run make generate -->
 
-Skill contract: `mysql-to-postgres-sql/reference/skill-contract.md`. Reference loads:
-`mysql-to-postgres-sql/reference/lazy-load-index.md`.
+For mysql-to-postgres-sql, read `mysql-to-postgres-sql/SKILL.md` and follow it.
