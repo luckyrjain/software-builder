@@ -190,15 +190,31 @@ install_skill() {
   mkdir -p "${dest_root}"
   local backup_dir=""
   local stage_dir
+  local install_succeeded=false
   stage_dir="$(mktemp -d "${dest_root}/.${skill}.staging.XXXXXX")"
 
   cleanup_failed_install() {
     rm -rf "${stage_dir}"
     if [[ -n "${backup_dir}" && -d "${backup_dir}/skill" && ! -e "${skill_dest}" ]]; then
       mv "${backup_dir}/skill" "${skill_dest}"
+      echo "warning: restored previous install at ${skill_dest}" >&2
     fi
     rm -rf "${backup_dir}"
   }
+
+  clear_install_trap() {
+    trap - INT TERM
+  }
+
+  on_install_interrupt() {
+    if [[ "${install_succeeded}" != true ]]; then
+      cleanup_failed_install
+    fi
+    clear_install_trap
+    exit 130
+  }
+
+  trap on_install_interrupt INT TERM
 
   if ! run_python "${REPO_ROOT}/scripts/package_skill.py" \
     --skill "${skill}" \
@@ -206,18 +222,21 @@ install_skill() {
     --repo-root "${REPO_ROOT}" \
     --host "${host_label}"; then
     cleanup_failed_install
+    clear_install_trap
     return 1
   fi
 
   if ! run_python "${REPO_ROOT}/scripts/validate_references.py" \
     --installed-package "${stage_dir}"; then
     cleanup_failed_install
+    clear_install_trap
     return 1
   fi
 
   if [[ -e "${skill_dest}" ]]; then
     if [[ -L "${skill_dest}" ]]; then
       rm -rf "${stage_dir}"
+      clear_install_trap
       echo "error: refusing to replace symlink at ${skill_dest}" >&2
       return 1
     fi
@@ -228,9 +247,12 @@ install_skill() {
 
   if ! mv "${stage_dir}" "${skill_dest}"; then
     cleanup_failed_install
+    clear_install_trap
     return 1
   fi
 
+  install_succeeded=true
+  clear_install_trap
   rm -rf "${backup_dir}"
   echo "Installed ${skill} → ${skill_dest}"
 }
