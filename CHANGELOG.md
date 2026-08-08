@@ -8,6 +8,13 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 
 ## Platform
 
+### Transactional installer v1 (#14)
+
+- `scripts/install.sh` now stages packages in a temp directory, validates, then atomically
+  `mv`s into place — the previous install is only removed after the staged package passes validation.
+- Default install set comes from `skills.yaml` (registry allowlist), not implicit `*/SKILL.md` glob.
+- Added `--dry-run`, `--list`, `--verify <path>`, and `--uninstall <skill>` via `install_support.py`.
+
 ### Skills registry + generated adapters (2026-08-08)
 
 - Added root `skills.yaml` as the canonical platform registry (install dependency edges, hosts,
