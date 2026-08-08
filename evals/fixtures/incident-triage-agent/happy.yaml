@@ -1,0 +1,11 @@
+schema_version: 1
+skill: incident-triage-agent
+case_id: happy-automation-wrapper
+tier: 1
+description: incident-triage-agent is an automation-only composition wrapper
+assertions:
+  - type: registry_invocation
+    expected: automation-only
+  - type: automation_only_guard
+  - type: file_exists
+    path: reference/unattended-gate-policy.md

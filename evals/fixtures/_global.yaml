@@ -1,0 +1,13 @@
+schema_version: 1
+
+happy:
+  tier: 1
+  description: Baseline contract checks for every registered skill
+  assertions:
+    - type: workflow_frontmatter_all
+
+adversarial:
+  tier: 1
+  description: Automation and guardrail checks for every registered skill
+  assertions:
+    - type: automation_only_guard

@@ -8,6 +8,18 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 
 ## Platform
 
+### Behavioral evals, composition graph, doctor, and release model (#16, #17, #18, #19)
+
+- Added Tier-1 behavioral eval harness: `python3 -m scripts.evals` with global happy/adversarial
+  contract checks for all 22 skills plus high-risk skill fixtures under `evals/fixtures/`.
+- Extended `skills.yaml` with `composition` (invokes, escalation targets, aggregate mode) and
+  `capabilities` blocks; CI validates composition cycles and dangling edges.
+- Generated `generated/catalogue/composition-deps.mmd` composition graph alongside install-deps.
+- Added `python3 scripts/doctor.py` preflight command for capability and install status.
+- Added root `VERSION` (1.4.0), `docs/RELEASE.md`, and `scripts/package_release.py` for checksummed
+  release bundles; installed manifests now record `distribution_version`.
+- `make lint` runs `make validate-evals`; new targets: `make doctor`, `make package-release`.
+
 ### Transactional installer v1 (#14)
 
 - `scripts/install.sh` now stages packages in a temp directory, validates, then atomically

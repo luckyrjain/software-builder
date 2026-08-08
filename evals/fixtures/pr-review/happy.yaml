@@ -1,0 +1,12 @@
+schema_version: 1
+skill: pr-review
+case_id: happy-mcp-contract
+tier: 1
+description: pr-review exposes MCP capability matrix and posting-mode guardrails
+assertions:
+  - type: file_exists
+    path: reference/mcp-capabilities.md
+  - type: skill_md_contains
+    pattern: chat-only
+  - type: registry_invocation
+    expected: ambient
