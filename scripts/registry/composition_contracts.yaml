@@ -15,6 +15,33 @@ artifact_types:
   - digest_report
   - test_suite
 
+# Field-level contracts for producer/consumer schema matching (#19 v2 follow-up).
+artifact_schemas:
+  mr_context:
+    fields: [project, merge_request_iid, head_sha, posting_policy]
+  mr_review_report:
+    fields: [review_metadata, posted, head_sha, posting_mode]
+  rca_report:
+    fields: [assessment_metadata, root_cause, confidence]
+  k8s_rightsizing_report:
+    fields: [assessment_metadata, recommendations]
+  squad_map:
+    fields: [squads, generated_at]
+  ownership_lookup:
+    fields: [query, squad, confidence]
+  migration_status_rollup:
+    fields: [items, generated_at, source_revision]
+  cost_sweep_rollup:
+    fields: [items, generated_at, source_revision]
+  implementation_task:
+    fields: [task_id, scope, acceptance_criteria]
+  implementation_pr:
+    fields: [pr_url, head_sha, task_id]
+  digest_report:
+    fields: [sections, generated_at, source_revisions]
+  test_suite:
+    fields: [tests, framework, target_path]
+
 write_authority_levels:
   read-only: 0
   comment: 1
@@ -25,11 +52,19 @@ skills:
   pr-review:
     produces: [mr_review_report]
     consumes: [mr_context]
+    produce_fields:
+      mr_review_report: [review_metadata, posted, head_sha, posting_mode]
+    consume_fields:
+      mr_context: [project, merge_request_iid, head_sha]
     write_authority: comment
 
   pr-gatekeeper:
     produces: [mr_review_report]
     consumes: [mr_context]
+    produce_fields:
+      mr_review_report: [review_metadata, posted, head_sha]
+    consume_fields:
+      mr_context: [project, merge_request_iid, head_sha]
     write_authority: comment
 
   k8s-overprovisioning-datadog:
@@ -45,6 +80,11 @@ skills:
   incident-triage-agent:
     produces: [rca_report, ownership_lookup]
     consumes: [mr_context]
+    produce_fields:
+      rca_report: [assessment_metadata, root_cause, confidence]
+      ownership_lookup: [query, squad, confidence]
+    consume_fields:
+      mr_context: [project, head_sha]
     write_authority: read-only
 
   domain-comprehension:
@@ -69,17 +109,28 @@ skills:
 
   release-readiness-checker:
     produces: [digest_report]
-    consumes: [mr_context]
+    consumes: [mr_context, mr_review_report, k8s_rightsizing_report, rca_report]
+    produce_fields:
+      digest_report: [sections, generated_at, source_revisions]
+    consume_fields:
+      mr_context: [project, head_sha]
+      mr_review_report: [review_metadata, posted]
+      k8s_rightsizing_report: [assessment_metadata, recommendations]
+      rca_report: [assessment_metadata, root_cause, confidence]
     write_authority: read-only
 
   migration-program-manager:
     produces: [migration_status_rollup]
     consumes: []
+    produce_fields:
+      migration_status_rollup: [items, generated_at, source_revision]
     write_authority: read-only
 
   cost-optimization-sprint-planner:
     produces: [cost_sweep_rollup]
     consumes: []
+    produce_fields:
+      cost_sweep_rollup: [items, generated_at, source_revision]
     write_authority: read-only
 
   mysql-to-postgres-sql:
@@ -100,6 +151,11 @@ skills:
   weekly-squad-digest:
     produces: [digest_report]
     consumes: [migration_status_rollup, cost_sweep_rollup]
+    produce_fields:
+      digest_report: [sections, generated_at, source_revisions]
+    consume_fields:
+      migration_status_rollup: [items, generated_at, source_revision]
+      cost_sweep_rollup: [items, generated_at, source_revision]
     write_authority: read-only
 
   unit-test-creator:
