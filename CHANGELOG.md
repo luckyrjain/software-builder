@@ -8,6 +8,15 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 
 ## Platform
 
+### safe-output.md Rule 4: single-backtick escape gap (2026-08-09)
+
+- `docs/skill-framework/shared/safe-output.md` Rule 4 only documented unbalanced *triple*-backtick
+  fences; it never covered a literal single backtick inside untrusted text closing an inline code span
+  early and letting the remainder render as live Markdown. Found while extending backlog-runner's safe
+  rendered-output boundary (`<task_id>`/`<dependency_task_id>`/Reason all get wrapped in inline code
+  spans) — this gap applies equally to every existing adopter (prd-architect, pr-review). Rule 4 now
+  says to strip/escape backticks from the value first, or use a longer backtick-run delimiter.
+
 ### Invocation envelope / result envelope (2026-08-09)
 
 - New `docs/skill-framework/shared/invocation-envelope.md` names the shared field shape a wrapper
@@ -420,6 +429,40 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
   prompt-injection.md — and added to `lint-framework`'s 4 hardcoded per-skill loops from the start.
 
 ## backlog-runner
+
+### Safe-output wiring (2026-08-09)
+
+- `SKILL.md` links [safe-output.md](docs/skill-framework/shared/safe-output.md) alongside
+  `prompt-injection.md`; new "Safe rendered-output boundary" section in
+  `reference/morning-summary-format.md` names the untrusted fields — `<task_id>`,
+  `<dependency_task_id>`, the Blocked table's Reason column, and `<escalation_ref>` whenever it's pasted
+  report text rather than a link — that all get the same escape/fence + redact treatment before the
+  morning summary routes to its notification target; enforced by a new Makefile grep check. The
+  template in the same file, and the worked example in `examples.md`, now render every one of those
+  placeholders as an inline code span to match.
+- No `workflow-contract.yaml` — confirmed `inputs.md` → `run-queue.md` is a fixed 2-phase linear
+  pipeline with no cross-phase branch (every run visits the same two files in the same order), so the
+  route-aware contract validator (see `pr-review`'s adoption) adds no validation value here.
+- New golden eval `evals/golden/backlog-runner/injection-inert-summary.yaml` proving Markdown-injection
+  in a ticket title, a dependency ticket ID, a pasted secret in an escalation-report excerpt, and a
+  literal backtick in a ticket title (the exact case the safe-output.md Rule 4 fix below closes) all
+  render inert/redacted. Each raw/rendered pair is asserted on both sides — the raw field is required to
+  actually contain the dangerous pattern (proving the scenario is real) and the rendered field is
+  required not to, so a regression that silently drops escaping would fail the fixture instead of
+  passing it vacuously (the two existing `injection-*` golden fixtures for pr-review/prd-architect only
+  assert the negative side against a decorative "⤶" placeholder, which can never match a `(?m)^...$`
+  pattern regardless of content — tracked as #64, not touched here).
+- New `require_pattern` golden-assertion type (`scripts/evals/golden.py`) — the positive-match
+  counterpart to the existing `forbid_pattern`, needed for the raw-side assertions above. Both now share
+  a `_pattern_matches()` helper and turn an invalid-regex `pattern` into a clean per-case failure
+  (`re.error` → `ValueError`) instead of crashing the whole eval run. Fixed the same
+  `result.errors`/`result.messages` field-name bug this surfaced in `golden_refresh.py --verify`, which
+  would otherwise have crashed with `AttributeError` while trying to print exactly this kind of failure.
+  Covered by new direct unit tests in `test_evals_tier3.py`.
+- Kept `test_evals_tier3.py`'s golden-fixture-count assertion as an exact count (bumped 8→9) rather than
+  a floor or a self-referential file-count comparison — both alternatives turned out to be tautological
+  given how `load_golden_fixtures` already hard-errors on malformed fixtures, so exact equality is the
+  only one that actually catches an accidental duplicate or an unlisted fixture's deletion.
 
 ### Initial release (2026-08-05)
 

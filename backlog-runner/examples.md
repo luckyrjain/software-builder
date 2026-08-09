@@ -43,7 +43,7 @@ Conventions: [examples-conventions](../docs/skill-framework/shared/examples-conv
 
 | Ticket | PR | Notes |
 |--------|----|----|
-| BACKLOG-101 | https://github.com/acme/backend/pull/482 | HUMAN_ACTION_REQUIRED — awaiting review/merge |
+| `BACKLOG-101` | https://github.com/acme/backend/pull/482 | HUMAN_ACTION_REQUIRED — awaiting review/merge |
 ```
 
 ---
@@ -64,13 +64,13 @@ order.
 
 | Ticket | Reason | Escalation report |
 |--------|--------|----|
-| BACKLOG-200 | Missing access: production database credentials | see escalation_ref |
+| `BACKLOG-200` | `Missing access: production database credentials` | see escalation_ref |
 
 ## Deferred (1 — dependency unmet this run)
 
 | Ticket | Waiting on |
 |--------|------------|
-| BACKLOG-201 | BACKLOG-200 |
+| `BACKLOG-201` | `BACKLOG-200` |
 ```
 
 ---
