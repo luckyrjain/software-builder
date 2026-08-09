@@ -7,7 +7,7 @@ from pathlib import Path
 import yaml
 
 from scripts.evals.golden import load_golden_fixtures, run_golden_case
-from scripts.evals.golden_refresh import refresh_fixture
+from scripts.evals.golden_refresh import _golden_dir_for_fixture, refresh_fixture
 
 
 def test_refresh_fixture_updates_recorded_output_and_meta(tmp_path: Path) -> None:
@@ -50,3 +50,14 @@ def test_refresh_dry_run_does_not_write(tmp_path: Path) -> None:
     fixture.write_text(original, encoding="utf-8")
     refresh_fixture(fixture, {"review_metadata": {"posted": False}}, dry_run=True, note="dry")
     assert fixture.read_text(encoding="utf-8") == original
+
+
+def test_golden_dir_for_nested_and_flat_paths(tmp_path: Path) -> None:
+    nested = tmp_path / "evals" / "golden" / "pr-review" / "case.yaml"
+    nested.parent.mkdir(parents=True)
+    nested.write_text("x: 1\n", encoding="utf-8")
+    assert _golden_dir_for_fixture(nested) == tmp_path / "evals" / "golden"
+
+    flat = tmp_path / "evals" / "golden" / "case.yaml"
+    flat.write_text("x: 1\n", encoding="utf-8")
+    assert _golden_dir_for_fixture(flat) == tmp_path / "evals" / "golden"

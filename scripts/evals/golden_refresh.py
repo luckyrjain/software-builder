@@ -39,6 +39,13 @@ def _load_json(path: Path) -> dict[str, Any]:
     return data
 
 
+def _golden_dir_for_fixture(fixture_path: Path) -> Path:
+    for candidate in fixture_path.parents:
+        if candidate.name == "golden":
+            return candidate
+    raise ValueError(f"{fixture_path}: not under an evals/golden/ directory")
+
+
 def refresh_fixture(
     fixture_path: Path,
     recorded_output: dict[str, Any],
@@ -107,7 +114,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"updated {fixture_path}")
 
     if args.verify:
-        cases = load_golden_fixtures(fixture_path.parent.parent)
+        cases = load_golden_fixtures(_golden_dir_for_fixture(fixture_path))
         match = [c for c in cases if c.path.resolve() == fixture_path]
         if not match:
             print("error: could not reload fixture for verification", file=sys.stderr)

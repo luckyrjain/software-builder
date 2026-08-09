@@ -59,8 +59,29 @@ def _insert_after_title(text: str, block: str) -> str:
     return "".join(lines[:insert_at]) + "\n" + block + "".join(lines[insert_at:])
 
 
+def _load_registry_skill_ids(root: Path) -> set[str]:
+    registry_path = root / "skills.yaml"
+    raw = yaml.safe_load(registry_path.read_text(encoding="utf-8"))
+    skills = raw.get("skills") if isinstance(raw, dict) else None
+    if not isinstance(skills, dict):
+        raise ValueError("skills.yaml skills must be a mapping")
+    return set(skills.keys())
+
+
 def ensure_setup_freshness(root: Path, *, write: bool) -> list[str]:
     defaults, skills_cfg = _load_config(root)
+    registry_ids = _load_registry_skill_ids(root)
+    config_ids = set(skills_cfg.keys())
+    errors: list[str] = []
+    for skill_id in sorted(registry_ids - config_ids):
+        errors.append(
+            f"error: {skill_id}: missing from scripts/registry/setup_freshness.yaml",
+        )
+    for skill_id in sorted(config_ids - registry_ids):
+        errors.append(
+            f"error: setup_freshness.yaml lists unknown skill {skill_id!r}",
+        )
+
     owner = str(defaults.get("owner", "software-builder maintainers"))
     review_cadence = str(
         defaults.get("review_cadence", "Quarterly — or when pinned MCP package versions change"),
@@ -68,8 +89,8 @@ def ensure_setup_freshness(root: Path, *, write: bool) -> list[str]:
     last_reviewed = str(defaults.get("last_reviewed", date.today().isoformat()))
     max_age_days = int(defaults.get("max_age_days", 120))
 
-    errors: list[str] = []
-    for skill_id, cfg in sorted(skills_cfg.items()):
+    for skill_id in sorted(registry_ids & config_ids):
+        cfg = skills_cfg[skill_id]
         if not isinstance(cfg, dict):
             errors.append(f"error: setup_freshness skills.{skill_id} must be a mapping")
             continue
