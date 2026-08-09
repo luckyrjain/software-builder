@@ -153,6 +153,9 @@ lint-requirements-lock:
 verify-install:
 	@bash scripts/tests/test_install_integration.sh
 
+verify-install-all:
+	@bash scripts/tests/test_install_all_skills.sh
+
 verify-github-ruleset:
 	@python3 scripts/check_github_ruleset.py
 
@@ -181,7 +184,7 @@ generate:
 generate-check:
 	@python3 -m scripts.registry generate --check
 
-lint: validate-registry backfill-capabilities-check generate-check validate-evals lint-framework lint-pr-review lint-pr-gatekeeper lint-k8s-skill lint-incident-rca lint-incident-triage-agent lint-domain-comprehension lint-squad-map lint-who-owns-x-bot lint-new-hire-guide lint-release-readiness-checker lint-migration-program-manager lint-cost-optimization-sprint-planner lint-mysql-to-postgres-sql lint-loop-task-implementer lint-backlog-runner lint-weekly-squad-digest lint-unit-test-creator lint-integration-test-creator lint-contract-test-creator lint-e2e-test-creator lint-api-test-creator lint-test-writer lint-requirements-lock verify-install
+lint: validate-registry backfill-capabilities-check generate-check validate-evals lint-framework lint-pr-review lint-pr-gatekeeper lint-k8s-skill lint-incident-rca lint-incident-triage-agent lint-domain-comprehension lint-squad-map lint-who-owns-x-bot lint-new-hire-guide lint-release-readiness-checker lint-migration-program-manager lint-cost-optimization-sprint-planner lint-mysql-to-postgres-sql lint-loop-task-implementer lint-backlog-runner lint-weekly-squad-digest lint-unit-test-creator lint-integration-test-creator lint-contract-test-creator lint-e2e-test-creator lint-api-test-creator lint-test-writer lint-requirements-lock verify-install verify-install-all
 	@for f in scripts/*.sh; do \
 		echo "shellcheck $$f"; \
 		if command -v shellcheck >/dev/null 2>&1; then \

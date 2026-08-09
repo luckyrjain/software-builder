@@ -8,6 +8,12 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 
 ## Platform
 
+### P3 platform polish — ADRs, glossary, install-all CI
+
+- Added `docs/adr/` with ADRs for the skills registry, self-contained packages, and tiered behavioral evals.
+- Added `docs/skill-framework/shared/terminology-glossary.md` (risk classes, capabilities, eval tiers).
+- Added `scripts/tests/test_install_all_skills.sh` and `make verify-install-all` (all 22 skills, isolated temp repo).
+
 ### Behavioral evals Tier 2 — transcript policy fixtures (#16 follow-up)
 
 - Added `evals/transcripts/` fixture schema with replayable `events` (tool, gate, outcome) and policy
