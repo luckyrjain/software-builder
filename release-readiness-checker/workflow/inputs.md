@@ -36,10 +36,12 @@ handled by pr-review's own guard, not re-implemented here.
 
 - `since` accepted as either a tag/ref (resolved to its commit's merge date by the MR-range resolver) or
   an explicit timestamp — do not guess which form was given; if ambiguous, ask.
-- `release_ref` (optional per manifest entry): when present, treat it as the authoritative **expected
-  head pin** for every MR reviewed under that repo — a git commit SHA (40 hex chars) or container image
-  digest (`sha256:…`). Use it as `expected_head_sha` when invoking pr-review instead of each MR's
-  `merge_commit_sha`. Record in the report whether the pin was caller-supplied or derived from GitLab.
+- `release_ref` (optional per manifest entry): when present, record it as the **release candidate pin**
+  for that repo — a 40-character git commit SHA **or** a container image digest (`sha256:…`). This pin is
+  **not** passed as pr-review's `expected_head_sha` (each merged MR keeps its own `merge_commit_sha`).
+  After step 1, when `release_ref` is a git SHA, resolve `target_branch` HEAD and compare; on mismatch,
+  record in the report Notes as a release-pin anomaly (§Escalation). Image digests are recorded in the
+  report for human/deploy verification only — do not pass them to pr-review.
 - Render every timestamp this skill computes or passes downstream (to incident-rca, in the report) in
   **explicit UTC** (`Z` suffix) — never a bare, timezone-less timestamp. This is what lets incident-rca's
   own timezone-confirmation ask never fire (see [reference/gate-policy.md](../reference/gate-policy.md)).

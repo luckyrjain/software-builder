@@ -39,7 +39,8 @@ just the bare state.>
 
 <Any MR-range-resolver fallback used (e.g. GitLab MCP didn't support a merge-date filter, client-side
 filtering was used instead, pagination spanned N pages); any manifest entry whose `since` didn't resolve;
-any k8s `insufficient_metrics`/`ambiguous_unresolved` outcome and what tag strategies were attempted; any incident-rca escalation
+any `release_ref` pin recorded per repo (`caller-supplied` git SHA or image digest) and, for git SHAs,
+whether `target_branch` HEAD matched the pin; any k8s `insufficient_metrics`/`ambiguous_unresolved` outcome and what tag strategies were attempted; any incident-rca escalation
 per gate-policy.md § Escalation, not override.>
 ```
 
@@ -59,9 +60,10 @@ per gate-policy.md § Escalation, not override.>
   - `NOT_READY` — a **proven** blocker: any MR has a Critical/High finding, or any service's k8s verdict
     is `BLOCKED`.
   - `UNKNOWN` — an **evidence gap**, not a proven blocker and not verified-safe either: a manifest
-    entry's `since` didn't resolve, or a service's k8s verdict is `insufficient_metrics` or `ambiguous_unresolved`. Never folded
-    into `NOT_READY` (that would fabricate a finding no check actually made) or into `READY` (that would
-    hide a real gap).
+    entry's `since` didn't resolve, a service's k8s verdict is `insufficient_metrics` or
+    `ambiguous_unresolved`, or a manifest entry's `release_ref` git SHA does not match `target_branch`
+    HEAD. Never folded into `NOT_READY` (that would fabricate a finding no check actually made) or into
+    `READY` (that would hide a real gap).
   - `CONDITIONAL` — a flagged incident signal with no proven blocker or evidence gap otherwise present.
   - `READY` — none of the above.
 - **Evidence gaps and proven blockers are reported as different states, not merged.** `insufficient_metrics`,

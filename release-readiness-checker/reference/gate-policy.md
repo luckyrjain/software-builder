@@ -16,9 +16,12 @@ invokes pr-review with **explicit typed fields**, not a conversational exchange:
 - `review_mode: retrospective`, `audit_type: retrospective` — selects pr-review's retrospective audit
   path directly (`phase-1.md` step 1's "If user confirms post-merge audit →" branch) so the merged-MR
   stop and its confirmation ask are avoided by construction, never scripted as "decline."
-- `expected_head_sha` — the MR's `merge_commit_sha` captured in step 1. If pr-review's own
-  `get_merge_request` returns a different SHA, treat it as a genuine anomaly (§Escalation, not override),
-  not something to silently review past.
+- `expected_head_sha` — each MR's own `merge_commit_sha` captured in step 1 (never the manifest
+  `release_ref`). If pr-review's own `get_merge_request` returns a different SHA, treat it as a genuine
+  anomaly (§Escalation, not override), not something to silently review past.
+- `release_ref` (optional manifest pin) — when present, validate after step 1: git SHAs are compared to
+  `target_branch` HEAD; image digests are recorded in the report for deploy verification only. Neither
+  replaces per-MR `expected_head_sha`.
 - `posting_policy: forbidden` — a typed field pr-review honors identically to
   `auto_post_authorized: false`, not the conversational "Hold — don't post" reply pr-gatekeeper's
   automation types back to a live ask.
