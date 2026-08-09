@@ -9,7 +9,10 @@ assertions:
   - type: file_exists
     path: report-template.md
   - type: skill_md_contains
-    pattern: Classify → Validate → Specify → Break → Repair → Gate
+    pattern: Pipeline routing
+  - type: path_contains
+    path: reference/phase-index.md
+    pattern: Validate → Specify → Break → Repair → Gate
   - type: workflow_frontmatter_all
   - type: registry_invocation
     expected: ambient

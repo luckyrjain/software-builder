@@ -30,5 +30,8 @@ Conventions: [smoke-test-conventions](../../docs/skill-framework/shared/smoke-te
 | Full Rigorous PRD for a simple toggle | Depth misclassified | [depth.md](depth.md) Lite criteria |
 | Invented market stats or SLOs | Evidence discipline violated | [global-rules.md](global-rules.md) § Evidence |
 | Non-Goals expanded silently during repair | Scope preservation violated | [workflow/repair.md](../workflow/repair.md) § Scope rule |
+| Full PRD on "should we build?" question | Validation routing skipped | [phase-index.md](phase-index.md) § Pipeline routing |
+| `Depth:` header on Validation output | Wrong header for mode | [depth.md](depth.md) § Output headers |
+| Entire report-template copied | Template dump | [report-template.md](../report-template.md) — triggered sections only |
 
 Maintainer pressure scenarios: [pressure-tests.md](pressure-tests.md).

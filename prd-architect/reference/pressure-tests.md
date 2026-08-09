@@ -18,6 +18,9 @@ verify by walkthrough.
 | 11 | Research needed for regulated workflow (e.g., KYC) | Generalized external query; no confidential project names; label unverified regulatory claims |
 | 12 | ≥10 FRs across two teams | FR-## IDs + traceability + acceptance criteria per [requirements-format.md](requirements-format.md) |
 | 13 | Fundamentally flawed premise ("build a blockchain to fix slow CSV export") | Validation-style assessment; recommend simpler alternative |
-| 14 | Repair loop temptation after re-review finds new Critical | Exactly one re-review; remaining Critical → Blocking Before Build, not a second repair loop |
+| 14 | Repair loop temptation after re-review finds new Critical | Exactly one re-review; remaining Critical → Blocking Before Build |
+| 15 | Validation request after Validate | Must route Validate → Gate only — no Specify/Break/Repair |
+| 16 | `critique_only: true` on existing PRD | Break uses `source_material` as draft; Gate emits findings only — no repaired PRD |
+| 17 | Fundamentally flawed PRD mode request | Validate → Gate with Validation output unless user insists on full PRD |
 
 Smoke invocation: [smoke-test.md](smoke-test.md).

@@ -1,151 +1,106 @@
-# PRD Architect — report template
+# PRD Architect — report templates
 
-Canonical output skeleton. Generate **only triggered sections** — never empty or N/A blocks.
-Full rules: [reference/output-contract.md](reference/output-contract.md) · Section triggers:
-[reference/section-triggers.md](reference/section-triggers.md).
+Emit **only triggered sections** per [section-triggers.md](reference/section-triggers.md). **Never** copy
+an entire template wholesale — add a section only when its trigger fired.
+
+Full rules: [reference/output-contract.md](reference/output-contract.md).
 
 ---
 
-## PRD Mode / Review Mode (repaired PRD body)
+## PRD Mode (including repaired Review body)
+
+**Start with:** `Depth: <Lite|Standard|Rigorous> — <brief reason>`
+
+### Lite (typical shape)
 
 ```markdown
-Depth: <Lite|Standard|Rigorous> — <brief reason>
+Depth: Lite — <reason>
 
 # <Product / Feature Name>
 
 ## Overview
-<!-- Triggered: PRD/Review -->
-
 ## Problem Statement
-<!-- Triggered: PRD/Review -->
-
-## Product Thesis
-<!-- Standard/Rigorous unless premise Strong and uncontested -->
-
 ## Goals & Non-Goals
-<!-- Triggered: PRD/Review -->
-
-## Users & Actors
-<!-- Multiple actors or role-specific behavior -->
-
-## Use Cases
-<!-- Standard/Rigorous, or Lite with multiple workflows -->
-
 ## MVP Scope
-<!-- Triggered: PRD/Review — Smallest safe release -->
-
-### Should Have
-### Later
-### Non-Goals
-
 ## Functional Requirements
-<!-- FR-## when ≥8 material requirements or ≥2 teams -->
-
-## Business Rules
-<!-- BR-## when eligibility, limits, calculations, routing -->
-
-## Non-Functional Requirements
-<!-- NFR-## when reliability, security, scale matter -->
-
-## End-to-End Flow
-<!-- Multiple steps, systems, actors, branching -->
-
-## State Model
-<!-- Lifecycle, async, retries, cancellations -->
-
-## UX States
-<!-- Loading/pending/error/degraded materially affect users -->
-
-## Data Requirements
-## Data Invariants
-<!-- INV-## when correctness depends on uniqueness, balances, ordering -->
-
-## Roles & Permissions
-## Manual Controls
-
-## Failure Handling
-## Correctness & Reconciliation
-
-## Security / Privacy / Abuse
-
-## Operations / Observability
-
-## Performance / Scale
-## SLOs
-
-## Dependencies
-## Cost & Economics
-## Experimentation
-
-## Rollout / Migration
-## Rollback / Kill Criteria
-
-## Success Metrics
-
-## Assumptions
-<!-- Lite: short in-body subsection; Standard/Rigorous: table when consequential -->
-
-## Risks
-
-## Open Questions
-<!-- Only non-empty categories -->
-
+## Key Failure / Edge Cases
 ## Acceptance Criteria
-<!-- AC-FR##-## linked to requirements when traceability applies -->
-```
+## Risks
+## Assumptions
+<!-- short in-body list when needed -->
 
----
-
-## PRD Mode appendices (when triggered)
-
-### Build Readiness
-
-```markdown
 ## Build Readiness
-
 **Verdict:** Ready | Ready With Non-Blocking Questions | Not Ready
-
-<one-paragraph rationale tied to hard gates in workflow/gate.md>
+<rationale>
 ```
 
-### Decisions & Constraints
-<!-- Resolved user decisions and mandatory/verified constraints only — not assumptions -->
+Add sections from [section-triggers.md](reference/section-triggers.md) when material (e.g., Roles &
+Permissions, Failure Handling, Security / Privacy / Abuse).
 
-### Adversarial Review Summary
-<!-- Only when material findings add useful context -->
+### Standard / Rigorous
 
-| Severity | Perspective | Finding | Scenario | Resolution |
+Same header pattern. Add triggered sections only — e.g., State Model, Data Invariants, End-to-End Flow,
+Correctness & Reconciliation, Rollout / Migration. Use FR-/BR-/NFR-/INV-/AC- IDs when required per
+[requirements-format.md](reference/requirements-format.md).
 
-### Gap Analysis
-<!-- Only when material gaps add useful context -->
+### Appendices (when triggered)
 
-| Area | Gap | Scenario | Impact | Resolution |
+- **Decisions & Constraints** — resolved decisions and mandatory constraints only
+- **Assumptions** — table when ≥3 consequential or Risky assumptions (Standard/Rigorous)
+- **Unresolved Questions** — only non-empty categories
+- **Adversarial Review Summary** / **Gap Analysis** — only when material context beyond inline fixes
 
 ---
 
 ## Review Mode extras
 
-### Material Changes
+After the repaired PRD body:
+
+```markdown
+## Material Changes
 
 | Area | Before | After | Reason |
+```
 
-### Change Impact
-<!-- When Review Mode applies to an existing product/system -->
+Include **Change Impact** when reviewing an existing product/system.
+
+---
+
+## Review Mode — critique only (`critique_only`)
+
+**Do not** output a repaired PRD. Emit:
+
+```markdown
+Depth: <depth> — <reason>
+
+## Findings
+<!-- severity-tagged, by perspective -->
+
+## Gap Analysis
+
+| Area | Gap | Scenario | Impact | Resolution |
+
+## Build Readiness
+**Verdict:** ...
+```
 
 ---
 
 ## Validation Mode
 
+**Start with:** `Mode: Validation — <brief reason>` — **no Depth line.**
+
 ```markdown
-Mode: Validation — <brief reason>
+Mode: Validation — <reason>
 
 ## Problem Assessment
 ## Premise Verdict
-<!-- Strong | Reasonable but unvalidated | Weak | Fundamentally flawed -->
-
 ## Key Assumptions
 ## Alternatives
 ## Material Risks
 ## Recommendation
 ## Evidence Needed Next
 ```
+
+Do not include MVP, Functional Requirements, or Build Readiness unless the user explicitly requests a
+full PRD or readiness verdict.

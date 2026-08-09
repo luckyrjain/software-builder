@@ -13,7 +13,8 @@ def test_golden_fixtures_load() -> None:
     cases = load_golden_fixtures(ROOT / "evals" / "golden")
     case_ids = {(case.skill, case.case_id) for case in cases}
     assert ("pr-review", "golden-chat-only-not-posted") in case_ids
-    assert len(cases) == 4
+    assert ("prd-architect", "golden-validation-no-mvp") in case_ids
+    assert len(cases) == 7
 
 
 def test_golden_cases_pass_on_repository() -> None:

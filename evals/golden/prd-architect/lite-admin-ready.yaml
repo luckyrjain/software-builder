@@ -1,0 +1,37 @@
+schema_version: 1
+skill: prd-architect
+case_id: golden-lite-admin-ready
+tier: 3
+description: Lite PRD for admin toggle should reach Ready when requirements are complete
+recorded_output:
+  response_mode: prd
+  depth: lite
+  header: "Depth: Lite — isolated admin toggle with few actors and minimal integrations"
+  build_readiness:
+    verdict: Ready
+    rationale: Authorized admin, enable/disable, audit, and registration-state behavior defined with acceptance criteria.
+  body_excerpt: |
+    Depth: Lite — isolated admin toggle with few actors and minimal integrations
+
+    ## Functional Requirements
+    FR-01 — An authorized support administrator must be able to disable new user registrations.
+    FR-02 — An authorized support administrator must be able to re-enable new user registrations.
+
+    ## Build Readiness
+    **Verdict:** Ready
+assertions:
+  - type: field_equals
+    path: response_mode
+    value: prd
+  - type: field_equals
+    path: depth
+    value: lite
+  - type: field_equals
+    path: build_readiness.verdict
+    value: Ready
+  - type: field_in
+    path: build_readiness.verdict
+    values:
+      - Ready
+      - Ready With Non-Blocking Questions
+      - Not Ready

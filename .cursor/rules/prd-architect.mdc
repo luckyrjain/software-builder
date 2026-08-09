@@ -1,5 +1,5 @@
 ---
-description: Turn rough product ideas, feature proposals, workflows, platform concepts, internal tools, and existing PRDs into validated, implementation-ready Product Requirements Documents. Keywords: PRD, product requirements, feature spec, should we build this, challenge this idea, review PRD, build readiness, MVP scope, product spec, requirements document. Not for implementing code (loop-task-implementer), reviewing MRs (pr-review), domain mapping (domain-comprehension), or writing tests (test-writer).
+description: Use when rough product ideas, feature proposals, workflows, existing PRDs, or build/no-build questions need a validated PRD, gap review, or readiness assessment. Keywords: PRD, product requirements, should we build, challenge this idea, review PRD, MVP scope, build readiness, feature spec. Not for implementing code (loop-task-implementer), MR review (pr-review), domain mapping (domain-comprehension), or writing tests (test-writer).
 alwaysApply: false
 ---
 

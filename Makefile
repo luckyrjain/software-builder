@@ -1265,7 +1265,7 @@ lint-prd-architect:
 	if [ "$$fail" -ne 0 ]; then echo "error: prd-architect workflow/*.md must declare workflow_version, phase, produces, consumes" >&2; exit 1; fi; \
 	echo "  ok"
 	@echo "lint-prd-architect: required reference files"
-	@for f in skill-contract phase-index lazy-load-index global-rules depth response-modes section-triggers requirements-format correctness-rules adversarial-review output-contract smoke-test pressure-tests; do \
+	@for f in skill-contract rationalization-guards phase-index lazy-load-index global-rules depth response-modes section-triggers requirements-format correctness-rules adversarial-review output-contract smoke-test pressure-tests; do \
 		test -f prd-architect/reference/$$f.md || \
 			{ echo "error: missing prd-architect/reference/$$f.md" >&2; exit 1; }; \
 	done

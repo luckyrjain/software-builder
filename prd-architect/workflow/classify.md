@@ -1,5 +1,5 @@
 ---
-workflow_version: 1.0
+workflow_version: 1.1
 phase: classify
 produces:
   - response_mode
@@ -29,12 +29,18 @@ If the user supplies an existing PRD and asks what the gaps are, use **Review**,
 
 ## 2. Depth
 
-Select per [depth.md](../reference/depth.md). Default **Standard** when uncertain between Lite and
-Standard; default **Rigorous** when uncertain between Standard and Rigorous **and** plausible failure
-could cause financial loss, data corruption, security incident, regulatory exposure, irreversible user
-harm, or material operational disruption.
+Select per [depth.md](../reference/depth.md). Depth is used for Specify/Break/Repair scope and for the
+**output header in PRD and Review modes only**.
 
-Record: `depth` + one-line reason (required in output header).
+| `response_mode` | Depth in output |
+|-----------------|-----------------|
+| **PRD** | `Depth: <lite\|standard\|rigorous> — <reason>` required |
+| **Review** | Same as PRD |
+| **Validation** | **No Depth header** — use `Mode: Validation — <reason>` at Gate; keep depth internal |
+
+Default **Standard** when uncertain between Lite and Standard; default **Rigorous** when uncertain
+between Standard and Rigorous **and** plausible failure could cause financial loss, data corruption,
+security incident, regulatory exposure, irreversible user harm, or material operational disruption.
 
 ## 3. Material risk domains
 
@@ -46,4 +52,4 @@ Flag domains that trigger mandatory review perspectives in Break:
 - distributed / async multi-system workflows
 - irreversible actions, migration, high availability
 
-Pass `risk_domains` to Break and Gate.
+Pass `risk_domains` to Break and Gate (when Break runs).

@@ -4,8 +4,11 @@ case_id: adversarial-one-artifact
 tier: 1
 description: prd-architect forbids draft plus separate review output
 assertions:
-  - type: skill_md_contains
-    pattern: One final artifact
+  - type: file_exists
+    path: reference/rationalization-guards.md
+  - type: path_contains
+    path: reference/phase-index.md
+    pattern: Pipeline routing
   - type: path_contains
     path: reference/global-rules.md
     pattern: output both draft and repaired PRD

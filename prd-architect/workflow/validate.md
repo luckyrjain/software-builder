@@ -1,5 +1,5 @@
 ---
-workflow_version: 1.0
+workflow_version: 1.1
 phase: validate
 produces:
   - premise_verdict
@@ -12,12 +12,10 @@ consumes:
   - constraints
   - response_mode
   - depth
+  - critique_only
 ---
 
 # Validate — challenge the premise
-
-Skip detailed PRD work when the premise is **Fundamentally flawed** — emit a concise Validation-style
-assessment unless the user still wants a full PRD.
 
 ## Understand
 
@@ -63,12 +61,18 @@ why others were rejected or deferred.
 
 ## Research
 
-Research only when external evidence could **materially** change the result ([global-rules.md](../reference/global-rules.md) §Research). Stop when decisions have sufficient evidence or remaining uncertainty can safely be an assumption.
+Research only when external evidence could **materially** change the result
+([global-rules.md](../reference/global-rules.md) § Research). Generalize queries — do not expose
+confidential names, metrics, or unreleased details unless authorized.
 
-## Mode-specific exit
+## Route after Validate (mandatory)
 
-| Mode | If Fundamentally flawed |
-|------|-------------------------|
-| Validation | Full 7-section assessment; stop |
-| PRD | Concise Validation assessment by default; elaborate PRD only if user insists |
-| Review | Note flawed premise in Material Changes; do not paper over with requirements |
+Do **not** continue to Specify by default. Follow [phase-index.md](../reference/phase-index.md) §
+Pipeline routing:
+
+| Condition | Next |
+|-----------|------|
+| `response_mode` = **Validation** | → **Gate** — emit 7-section Validation output. **Stop.** Do not run Specify, Break, or Repair. |
+| `response_mode` = **PRD** and premise **Fundamentally flawed** | → **Gate** — emit Validation-style output unless user explicitly requested a full PRD. **Stop.** |
+| `response_mode` = **Review** and `critique_only` = true | → **Break** — use `source_material` as the draft under review. Skip Specify and Repair. |
+| `response_mode` = **PRD** or **Review** (default) | → **Specify** → Break → Repair → Gate |
