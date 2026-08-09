@@ -22,5 +22,6 @@ verify by walkthrough.
 | 15 | Validation request after Validate | Must route Validate → Gate only — no Specify/Break/Repair |
 | 16 | `critique_only: true` on existing PRD | Break uses `source_material` as draft; Gate emits findings only — no repaired PRD |
 | 17 | Fundamentally flawed PRD mode request | Validate → Gate with Validation output unless user insists on full PRD |
+| 18 | Fundamentally flawed Review with either `critique_only` value | Validate → Gate unless `user_insists_on_full_prd`; explicit override runs the full repair pipeline |
 
 Smoke invocation: [smoke-test.md](smoke-test.md).

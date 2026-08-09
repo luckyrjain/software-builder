@@ -57,6 +57,7 @@ prd-architect/
   report-template.md       # Output skeleton
   examples.md
   prd-architect.eval.md    # Regression eval suite (maintainers)
+  scripts/                 # Deterministic safe-output reference renderer
   workflow/                # Classify → Validate → Specify → Break → Repair → Gate
   reference/               # Rules, depth, triggers, output contract
 ```

@@ -1,0 +1,10 @@
+schema_version: 1
+entry_inputs:
+  request: {type: string, provenance: user, required: true, trust: untrusted}
+  mode: {type: string, provenance: user, required: false, trust: untrusted}
+selector_domains: {mode: [default]}
+route_selection: {after_phase: parse}
+routes:
+  default:
+    when: {mode: default}
+    phases: [parse, emit]

@@ -8,6 +8,11 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 
 ## Platform
 
+### Workflow contract validation
+
+- Phase `consumes` schemas now reject unknown keys and require explicit `required`, `optional`, and
+  `conditional` mappings; conditional route inputs likewise require exact `required`/`optional` keys.
+
 ### prd-architect skill (#23)
 
 - New **prd-architect** skill: Classify → Validate → Specify → Break → Repair → Gate pipeline for

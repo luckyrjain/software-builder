@@ -1,0 +1,40 @@
+schema_version: 1
+entry_inputs:
+  request: {type: string, provenance: user_invocation, required: true, trust: untrusted}
+  source_material: {type: content, provenance: user_or_attachment, required: false, trust: untrusted}
+  mode_hint: {type: string, provenance: user_invocation, required: false, trust: untrusted}
+  depth_hint: {type: string, provenance: user_invocation, required: false, trust: untrusted}
+  constraints: {type: list, provenance: user_or_source_material, required: false, trust: untrusted}
+  explicit_decisions: {type: list, provenance: user_or_source_material, required: false, trust: untrusted}
+  existing_system: {type: boolean, provenance: user_or_source_material, required: false, trust: untrusted}
+  critique_only: {type: boolean, provenance: user_invocation, required: false, trust: untrusted}
+  user_insists_on_full_prd: {type: boolean, provenance: user_invocation, required: false, trust: untrusted}
+selector_domains:
+  response_mode: [Validation, PRD, Review]
+  premise_verdict: [Strong, Reasonable but unvalidated, Weak, Fundamentally flawed]
+route_selection: {after_phase: validate}
+routes:
+  validation:
+    when: {response_mode: Validation}
+    phases: [inputs, classify, validate, gate]
+  flawed_prd:
+    when: {response_mode: PRD, premise_verdict: Fundamentally flawed, user_insists_on_full_prd: false}
+    phases: [inputs, classify, validate, gate]
+  full_prd:
+    when: {response_mode: PRD, premise_verdict: {not_equals: Fundamentally flawed}}
+    phases: [inputs, classify, validate, specify, break, repair, gate]
+  full_prd_override:
+    when: {response_mode: PRD, premise_verdict: Fundamentally flawed, user_insists_on_full_prd: true}
+    phases: [inputs, classify, validate, specify, break, repair, gate]
+  critique_review:
+    when: {response_mode: Review, premise_verdict: {not_equals: Fundamentally flawed}, critique_only: true}
+    phases: [inputs, classify, validate, break, gate]
+  full_review:
+    when: {response_mode: Review, premise_verdict: {not_equals: Fundamentally flawed}, critique_only: false}
+    phases: [inputs, classify, validate, specify, break, repair, gate]
+  flawed_review_stop:
+    when: {response_mode: Review, premise_verdict: Fundamentally flawed, user_insists_on_full_prd: false}
+    phases: [inputs, classify, validate, gate]
+  flawed_review_override:
+    when: {response_mode: Review, premise_verdict: Fundamentally flawed, user_insists_on_full_prd: true}
+    phases: [inputs, classify, validate, specify, break, repair, gate]

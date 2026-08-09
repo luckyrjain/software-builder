@@ -1,0 +1,7 @@
+schema_version: 1
+entry_inputs:
+  enabled: {type: boolean, provenance: user, required: true, trust: untrusted}
+route_selection: {after_phase: parse}
+routes:
+  enabled: {when: {enabled: true}, phases: [parse]}
+  disabled: {when: {enabled: false}, phases: [parse]}

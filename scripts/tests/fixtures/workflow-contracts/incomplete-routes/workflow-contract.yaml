@@ -1,0 +1,7 @@
+schema_version: 1
+entry_inputs:
+  mode: {type: string, provenance: user, required: true, trust: untrusted}
+selector_domains: {mode: [a, b]}
+route_selection: {after_phase: parse}
+routes:
+  only_a: {when: {mode: a}, phases: [parse]}

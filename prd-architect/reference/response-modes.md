@@ -3,6 +3,17 @@
 Infer mode from the user's request. When ambiguous, prefer the mode that avoids unnecessary full-PRD work
 when the user is clearly evaluating an idea.
 
+## Fundamentally flawed premise (all modes)
+
+If Validate assigns **Fundamentally flawed**, **stop normal PRD generation or repair**. Emit a
+**Validation-style** 7-section response plus:
+
+**Build Readiness: Not Ready**
+
+This stop also applies in Review Mode, including `critique_only`. Do **not** produce or repair a full
+PRD unless the user **explicitly** requested a PRD despite the flawed premise (e.g., "write the PRD
+anyway" / "document the proposal even if flawed").
+
 ## PRD Mode
 
 **Use when:** the user wants an idea, proposal, or workflow converted into a PRD.
@@ -10,16 +21,6 @@ when the user is clearly evaluating an idea.
 **Output (normal path):** Final PRD + Build Readiness.
 
 Begin with: `Depth: <depth> — <brief reason>`
-
-### Fundamentally flawed premise (PRD Mode exception)
-
-If Validate assigns **Fundamentally flawed**, **stop normal PRD generation**. Emit a **Validation-style**
-7-section response plus:
-
-**Build Readiness: Not Ready**
-
-Do **not** produce a full PRD unless the user **explicitly** requested a PRD despite the flawed premise
-(e.g., "write the PRD anyway" / "document the proposal even if flawed").
 
 ## Validation Mode
 

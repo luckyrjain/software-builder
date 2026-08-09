@@ -1,18 +1,11 @@
 ---
-workflow_version: 1.1
+workflow_version: 1.3
 phase: validate
-produces:
-  - premise_verdict
-  - problem_summary
-  - alternatives_considered
-  - validation_blockers
+produces: {premise_verdict: string, problem_summary: object, alternatives_considered: list, validation_blockers: list}
 consumes:
-  - request
-  - source_material
-  - constraints
-  - response_mode
-  - depth
-  - critique_only
+  required: {request: string, source_material: content, constraints: list, response_mode: string, depth: string, critique_only: boolean, user_insists_on_full_prd: boolean}
+  optional: {}
+  conditional: {}
 ---
 
 # Validate — challenge the premise
@@ -74,5 +67,7 @@ Pipeline routing:
 |-----------|------|
 | `response_mode` = **Validation** | → **Gate** — emit 7-section Validation output. **Stop.** Do not run Specify, Break, or Repair. |
 | `response_mode` = **PRD** and premise **Fundamentally flawed** | → **Gate** — emit Validation-style output unless user explicitly requested a full PRD. **Stop.** |
-| `response_mode` = **Review** and `critique_only` = true | → **Break** — use `source_material` as the draft under review. Skip Specify and Repair. |
-| `response_mode` = **PRD** or **Review** (default) | → **Specify** → Break → Repair → Gate |
+| `response_mode` = **Review** and premise **Fundamentally flawed** | → **Gate** — emit Validation-style output unless `user_insists_on_full_prd` is true. **Stop.** |
+| `response_mode` = **Review**, premise is not Fundamentally flawed, and `critique_only` = true | → **Break** — use `source_material` as the draft under review. Skip Specify and Repair. |
+| `user_insists_on_full_prd` = true after a Fundamentally flawed PRD or Review verdict | → **Specify** → Break → Repair → Gate; this explicit override takes precedence over `critique_only`. |
+| `response_mode` = **PRD** or non-flawed **Review** (default) | → **Specify** → Break → Repair → Gate |

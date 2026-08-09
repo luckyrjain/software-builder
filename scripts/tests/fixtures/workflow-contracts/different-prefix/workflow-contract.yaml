@@ -1,0 +1,8 @@
+schema_version: 1
+entry_inputs:
+  mode: {type: string, provenance: user, required: true, trust: untrusted}
+selector_domains: {mode: [full, short]}
+route_selection: {after_phase: select}
+routes:
+  full: {when: {mode: full}, phases: [parse, select, emit]}
+  short: {when: {mode: short}, phases: [select, emit]}

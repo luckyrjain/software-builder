@@ -105,6 +105,12 @@ def validate_markdown_file(
 def validate_tree(root: Path, *, check_anchors: bool = True, installed_package: bool = False) -> list[str]:
     errors: list[str] = []
     package_root = root.resolve() if installed_package else None
+    # The PRD safe-output contract names an executable rather than Markdown, so
+    # the normal Markdown-link pass cannot enforce this installed runtime asset.
+    if installed_package and (root / "reference" / "safe-output-contract.md").is_file():
+        renderer = root / "scripts" / "prd_safe_output.py"
+        if not renderer.is_file():
+            errors.append(f"{renderer}: required safe-output renderer is missing")
     for md_file in sorted(root.rglob("*.md")):
         if not md_file.is_file():
             continue

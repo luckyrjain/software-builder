@@ -1,18 +1,23 @@
 ---
-workflow_version: 1.1
+workflow_version: 1.4
 phase: break
-produces:
-  - scenarios
-  - adversarial_findings
+produces: {scenarios: list, adversarial_findings: list}
 consumes:
-  - requirements_draft
-  - source_material
-  - mvp_scope
-  - non_goals
-  - risk_domains
-  - depth
-  - response_mode
-  - critique_only
+  required: {source_material: content, risk_domains: list, depth: string, response_mode: string, critique_only: boolean}
+  optional: {}
+  conditional:
+    full_prd:
+      required: {requirements_draft: object, mvp_scope: object, non_goals: list}
+      optional: {}
+    full_prd_override:
+      required: {requirements_draft: object, mvp_scope: object, non_goals: list}
+      optional: {}
+    flawed_review_override:
+      required: {requirements_draft: object, mvp_scope: object, non_goals: list}
+      optional: {}
+    full_review:
+      required: {requirements_draft: object, mvp_scope: object, non_goals: list}
+      optional: {}
 ---
 
 # Break — scenarios and adversarial review
@@ -22,6 +27,7 @@ consumes:
 | Situation | Use as `requirements_draft` |
 |-----------|------------------------------|
 | After **Specify** | `requirements_draft` from Specify |
+| Fundamentally flawed Review + explicit full-PRD override | `requirements_draft` from Specify; the explicit override takes precedence over `critique_only` |
 | **Review** + `critique_only` (Specify skipped) | `source_material` (the supplied PRD/spec) |
 | **Review** after Specify | `requirements_draft` from Specify (may incorporate source PRD) |
 

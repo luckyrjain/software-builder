@@ -1,5 +1,17 @@
 # Changelog — prd-architect
 
+## Unreleased
+
+### Fixed
+
+- Gate now escapes/fences untrusted Markdown structure, redacts sensitive excerpts, and reserves the
+  skill-authored Build Readiness section so source material cannot forge a verdict.
+- Gate's safe-output rules now have an executable reference renderer covering adversarial Markdown
+  structure and sensitive-data redaction.
+- Phase input contracts now declare every required, optional, and conditional mapping explicitly.
+- Workflow lint now closes the field-type and phase-frontmatter vocabularies and reports malformed
+  YAML mapping keys deterministically.
+
 ## 1.1.0 — 2026-08-09
 
 ### Fixed (prompt-engineering review)
