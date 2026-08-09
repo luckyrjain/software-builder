@@ -1,0 +1,78 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to build (e.g. v1.4.0); checks out that tag before packaging"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve release tag
+        id: tag
+        env:
+          DISPATCH_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || '' }}
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            if ! printf '%s' "$DISPATCH_TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+              echo "error: invalid tag format: $DISPATCH_TAG" >&2
+              exit 1
+            fi
+            echo "name=$DISPATCH_TAG" >> "$GITHUB_OUTPUT"
+            echo "ref=refs/tags/$DISPATCH_TAG" >> "$GITHUB_OUTPUT"
+          else
+            echo "name=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+            echo "ref=${GITHUB_REF}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.tag.outputs.ref }}
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck ripgrep
+          python3 -m pip install --require-hashes -r requirements.lock
+
+      - name: Verify tag matches VERSION
+        env:
+          RELEASE_TAG: ${{ steps.tag.outputs.name }}
+        run: python3 scripts/verify_release_tag.py "$RELEASE_TAG"
+
+      - name: Lint and package release
+        run: |
+          make lint
+          make package-release
+
+      - name: Upload release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.tag.outputs.name }}
+        run: |
+          VERSION="${RELEASE_TAG#v}"
+          gh release upload "$RELEASE_TAG" \
+            "dist/software-builder-${VERSION}.tar.gz" \
+            "dist/software-builder-${VERSION}.sha256" \
+            "dist/software-builder-${VERSION}.files.sha256" \
+            --clobber 2>/dev/null || \
+          gh release create "$RELEASE_TAG" \
+            --title "software-builder ${VERSION}" \
+            --notes "See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/${RELEASE_TAG}/CHANGELOG.md)." \
+            "dist/software-builder-${VERSION}.tar.gz" \
+            "dist/software-builder-${VERSION}.sha256" \
+            "dist/software-builder-${VERSION}.files.sha256"

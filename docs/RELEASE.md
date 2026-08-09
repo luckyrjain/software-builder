@@ -33,3 +33,5 @@ python3 scripts/doctor.py --available gitlab.get_merge_request,gitlab.get_merge_
   workflow contract changes incompatibly.
 - Ship migration notes in `CHANGELOG.md` and the per-skill changelog when applicable.
 - Behavioral eval regressions (`make validate-evals`) gate releases once CI is wired to tagged builds.
+- Tagged releases: push `vMAJOR.MINOR.PATCH` matching `VERSION`; `.github/workflows/release.yml` runs `make lint`, packages checksummed bundles, and publishes GitHub Release assets.
+- Compatibility matrix: `generated/catalogue/compatibility-matrix.md` (regenerate with `make generate`).
