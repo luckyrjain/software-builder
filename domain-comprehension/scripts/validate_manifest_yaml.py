@@ -105,6 +105,29 @@ E2E_FLOW_RUNTIME_HEADING = "runtime validation"
 MERGE_CONFLICTS_HEADING = "## merge conflicts"
 
 
+def _resolve_effective_root(workspace_root: Path, engagement: Any) -> tuple[Path, list[str]]:
+    """Resolve where phase deliverables actually live.
+
+    manifest.yaml itself always stays at workspace_root (see reference/run-scoped-artifacts.md),
+    but when a run namespaces its deliverables under `engagement.artifact_root` (e.g. parallel
+    runs, large workspaces, QUICK-mode phase packets), every other file the validator checks —
+    EXEC_SUMMARY.md, the map file, E2E_FLOW.md, RISK_MAP.md, the Postman export — lives under that
+    subdirectory instead of directly at workspace_root.
+    """
+    if not isinstance(engagement, dict):
+        return workspace_root, []
+    artifact_root = engagement.get("artifact_root")
+    if not artifact_root:
+        return workspace_root, []
+    artifact_root_str = str(artifact_root)
+    candidate = Path(artifact_root_str)
+    if candidate.is_absolute() or ".." in candidate.parts:
+        return workspace_root, [
+            f"engagement.artifact_root must be a relative path with no '..' segments: {artifact_root_str}"
+        ]
+    return workspace_root / candidate, []
+
+
 def _load_yaml(path: Path) -> tuple[Any, list[str]]:
     if yaml is None:
         return None, ["PyYAML is required — pip install PyYAML"]
@@ -458,6 +481,9 @@ def validate_manifest(
         if not workspace_root.is_dir():
             errors.append(f"workspace_root not a directory: {workspace_root}")
         else:
+            effective_root, root_errors = _resolve_effective_root(workspace_root, engagement)
+            errors.extend(root_errors)
+
             for item in data.get("artifacts") or []:
                 if not isinstance(item, dict):
                     continue
@@ -466,7 +492,7 @@ def validate_manifest(
                     rel = map_file
                 status = item.get("status")
                 if status in ("ok", "stub") and rel:
-                    if not (workspace_root / rel).is_file():
+                    if not (effective_root / rel).is_file():
                         errors.append(f"artifact file missing on disk: {rel} (status={status})")
 
             if strict and isinstance(engagement, dict):
@@ -494,11 +520,11 @@ def validate_manifest(
 
             if check_content:
                 errors.extend(
-                    _validate_exec_summary_content(workspace_root / "EXEC_SUMMARY.md")
+                    _validate_exec_summary_content(effective_root / "EXEC_SUMMARY.md")
                 )
                 errors.extend(
                     _validate_p2b_runtime_gate(
-                        workspace_root,
+                        effective_root,
                         map_file=map_file,
                         phases=phases if isinstance(phases, dict) else None,
                         runtime_validation=runtime if isinstance(runtime, dict) else None,
@@ -506,13 +532,13 @@ def validate_manifest(
                 )
                 errors.extend(
                     _validate_merge_conflicts_gate(
-                        workspace_root,
+                        effective_root,
                         phases=phases if isinstance(phases, dict) else None,
                     )
                 )
                 errors.extend(
                     _validate_api_tooling_content(
-                        workspace_root,
+                        effective_root,
                         artifacts=data.get("artifacts") if isinstance(data.get("artifacts"), list) else None,
                     )
                 )

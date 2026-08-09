@@ -80,6 +80,17 @@ never an invented value.
 
 When `export_mode: never`, set manifest `api_tooling_export` → `n_a`.
 
+## Phase packet merge (when used)
+
+When earlier phases wrote [phase packets](../reference/run-scoped-artifacts.md#smaller-phase-packets)
+(`{artifact_root}/packets/P0-inventory.md`, etc. — QUICK delivery or `repos_in_scope` > 50) instead of
+editing `{map_file}` directly, merge every packet into the canonical deliverables under
+`artifact_root` now, before running the completion-gate checklist below: fold each packet's findings
+into `EXEC_SUMMARY.md` and `{map_file}` in the same section structure a non-packet run would have
+produced. Packets are working notes, not a second source of truth — once merged, the manifest's
+required-artifact checks (`EXEC_SUMMARY.md`, `{map_file}`) are what's authoritative, exactly as in a
+run that never used packets.
+
 ## Definition of Done
 
 [phase-completion-gate.md](../reference/phase-completion-gate.md)

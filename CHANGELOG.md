@@ -643,6 +643,22 @@ _Pre-merge WIP on `feat/squad-map-skill` (internal v1.0–v1.5) is consolidated 
 
 ## domain-comprehension
 
+### `engagement.artifact_root` enforcement (2026-08-09)
+
+- `scripts/validate_manifest_yaml.py` now resolves every deliverable it checks (`EXEC_SUMMARY.md`,
+  the map file, `E2E_FLOW.md`, `RISK_MAP.md`, the Postman export) relative to
+  `workspace_root/engagement.artifact_root` when that field is set, instead of always assuming
+  `workspace_root` directly — closes the gap where [run-scoped-artifacts.md](domain-comprehension/reference/run-scoped-artifacts.md)'s
+  design (documented in #50) had no actual validator enforcement. `manifest.yaml` itself is
+  unaffected and always stays at `workspace_root`. An absolute or `..`-containing `artifact_root`
+  is now a validation error.
+- `reference/manifest-schema.md` and `reference/domain-config-schema.md` document the field;
+  `workflow/session-0.md` now explicitly tells the agent to copy `scope.artifact_root` into
+  `engagement.artifact_root`; `workflow/phase-5.md` gained a phase-packet-merge step (previously
+  documented only in run-scoped-artifacts.md, with no corresponding instruction in the phase that's
+  supposed to run it).
+- Fixes #55.
+
 ### PROPOSAL_CHECK delivery mode (2026-08-05)
 
 - New `PROPOSAL_CHECK` delivery mode (Architecture Decision Assistant, roadmap item #6): compare a

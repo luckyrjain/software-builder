@@ -358,3 +358,66 @@ def test_check_content_api_tooling_n_a_skips_check(tmp_path: Path) -> None:
     )
     errors = validate_manifest(data, workspace_root=tmp_path, check_content=True)
     assert not any("api_tooling_export" in e or "postman_collection.json" in e for e in errors)
+
+
+# --- engagement.artifact_root (issue #55) -----------------------------------------------------
+
+
+def test_artifact_root_unset_resolves_directly_under_workspace_root(tmp_path: Path) -> None:
+    data = _minimal_manifest()
+    data["artifacts"][0]["status"] = "stub"
+    (tmp_path / "domain-config.yaml").write_text("domain: {}\n", encoding="utf-8")
+    errors = validate_manifest(data, workspace_root=tmp_path)
+    assert not any("domain-config.yaml" in e for e in errors)
+
+
+def test_artifact_root_set_resolves_artifacts_under_subdirectory(tmp_path: Path) -> None:
+    data = _minimal_manifest()
+    data["engagement"]["artifact_root"] = ".domain-comprehension/20260809T060000Z"
+    data["artifacts"][0]["status"] = "stub"
+
+    # Not at workspace_root directly — must be missing until placed under artifact_root.
+    errors_missing = validate_manifest(data, workspace_root=tmp_path)
+    assert any("domain-config.yaml" in e for e in errors_missing)
+
+    run_dir = tmp_path / ".domain-comprehension" / "20260809T060000Z"
+    run_dir.mkdir(parents=True)
+    (run_dir / "domain-config.yaml").write_text("domain: {}\n", encoding="utf-8")
+    errors_found = validate_manifest(data, workspace_root=tmp_path)
+    assert not any("domain-config.yaml" in e for e in errors_found)
+
+
+def test_artifact_root_absolute_path_rejected(tmp_path: Path) -> None:
+    data = _minimal_manifest()
+    data["engagement"]["artifact_root"] = "/etc/somewhere"
+    errors = validate_manifest(data, workspace_root=tmp_path)
+    assert any("artifact_root must be a relative path" in e for e in errors)
+
+
+def test_artifact_root_parent_traversal_rejected(tmp_path: Path) -> None:
+    data = _minimal_manifest()
+    data["engagement"]["artifact_root"] = "../escape"
+    errors = validate_manifest(data, workspace_root=tmp_path)
+    assert any("artifact_root must be a relative path" in e for e in errors)
+
+
+def test_check_content_exec_summary_resolves_under_artifact_root(tmp_path: Path) -> None:
+    data = _minimal_manifest()
+    data["engagement"]["artifact_root"] = "run-a"
+    run_dir = tmp_path / "run-a"
+    run_dir.mkdir()
+    (run_dir / "EXEC_SUMMARY.md").write_text(
+        "## Evidence summary\n## Engineering Leader Summary\n## Section confidences\n",
+        encoding="utf-8",
+    )
+    errors = validate_manifest(data, workspace_root=tmp_path, check_content=True)
+    assert not any("EXEC_SUMMARY.md" in e for e in errors)
+
+    # The same content at workspace_root (not under artifact_root) must NOT satisfy the check.
+    (tmp_path / "EXEC_SUMMARY.md").write_text(
+        "## Evidence summary\n## Engineering Leader Summary\n## Section confidences\n",
+        encoding="utf-8",
+    )
+    (run_dir / "EXEC_SUMMARY.md").unlink()
+    errors_wrong_location = validate_manifest(data, workspace_root=tmp_path, check_content=True)
+    assert any("EXEC_SUMMARY.md" in e for e in errors_wrong_location)
