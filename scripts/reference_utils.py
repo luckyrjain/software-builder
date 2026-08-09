@@ -12,15 +12,35 @@ MARKDOWN_LINK_RE = re.compile(r"\]\(([^)]+)\)")
 FRAMEWORK_MARKER = "docs/skill-framework/"
 
 
+# CommonMark allows a fence delimiter to be indented up to 3 spaces (e.g. one nested inside
+# a numbered-list item) before it stops being a fence and becomes an indented code block.
+_FENCE_OPEN_RE = re.compile(r"^ {0,3}(`{3,})")
+_FENCE_CLOSE_RE = re.compile(r"^ {0,3}(`+)$")
+
+
 def strip_fenced_code_blocks(text: str) -> str:
+    """Remove fenced code blocks, tracking each fence's own backtick-run length.
+
+    A boolean toggle on any ```-prefixed line is wrong once fences of different lengths
+    nest (e.g. a ```` block containing a literal ``` excerpt) — per CommonMark, only a
+    line consisting of nothing but backticks, with a run at least as long as the opening
+    fence, closes it. A shorter or unrelated backtick-prefixed line inside stays literal
+    content, not a new delimiter.
+    """
     lines: list[str] = []
-    in_fence = False
+    fence_len = 0
     for line in text.splitlines():
-        if line.startswith("```"):
-            in_fence = not in_fence
-            continue
-        if not in_fence:
+        if fence_len == 0:
+            match = _FENCE_OPEN_RE.match(line)
+            if match:
+                fence_len = len(match.group(1))
+                continue
             lines.append(line)
+            continue
+        stripped = line.rstrip()
+        close_match = _FENCE_CLOSE_RE.match(stripped)
+        if close_match and len(close_match.group(1)) >= fence_len:
+            fence_len = 0
     return "\n".join(lines)
 
 

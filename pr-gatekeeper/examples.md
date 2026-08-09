@@ -48,7 +48,15 @@ pr-gatekeeper routes the rendered review via the configured notification.
 **Expected fragment (routed notification — `Full review:` carries the pasted executive summary, since
 nothing posted to link to):**
 
-```
+Here the pasted executive summary itself contains a nested fenced code excerpt (a diff snippet
+pr-review rendered), so the outer template fence must open with a delimiter longer than that inner
+run — four backticks here, never hardcoded, always **recomputed from the actual longest run inside the
+pasted text** for that run; see
+[reference/auto-post-policy.md § When posting didn't happen](reference/auto-post-policy.md#when-posting-didnt-happen)
+for the rule:
+
+`````
+````text
 Subject: MR !482 review — Comment
 
 Reviewed 2026-08-05T14:02:00Z on head 9f1a2c3.
@@ -56,8 +64,22 @@ Recommendation: Comment
 Blocking: None
 Summary: Two medium findings, no criticals.
 MR: https://gitlab.example.com/acme/backend/-/merge_requests/482
-Full review: [pasted Phase 5 executive summary — findings table, root-cause groups, evidence]
+Full review: ## Executive Summary
+
+Findings: password compare not constant-time.
+
+```python
+if user_password == stored_password:
+    pass
 ```
+
+Recommendation: Request changes
+````
+`````
+
+A `Full review:` value with no backticks at all (the common case) still gets the same treatment —
+scanning it finds a longest run of zero, so the outer fence opens with the template's own baseline of
+three backticks, unchanged from before this rule existed.
 
 ---
 
