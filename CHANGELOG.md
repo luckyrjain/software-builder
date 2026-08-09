@@ -14,6 +14,13 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 - Added `scripts/evals/golden.py` and wired Tier-3 cases into `python3 -m scripts.evals` (`--tier 3`).
 - Four golden cases for pr-review, pr-gatekeeper, incident-rca, and loop-task-implementer high-risk outcomes.
 
+### P3 remaining — risk_class registry field and docs/history split
+
+- Added required `risk_class` list to every skill in `skills.yaml` (posting, merge, unattended, read-only,
+  repository-write).
+- Registry validation requires `risk_class` and enforces `unattended` on automation-only skills.
+- Added `docs/history/README.md` separating normative framework docs from dated `docs/superpowers/` specs.
+
 ### P3 platform polish — ADRs, glossary, install-all CI
 
 - Added `docs/adr/` with ADRs for the skills registry, self-contained packages, and tiered behavioral evals.

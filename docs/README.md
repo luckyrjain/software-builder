@@ -10,6 +10,8 @@ Human-readable guide to everything in the **software-builder** repository. Agent
 | [../README.md](../README.md) | Install, invoke, and quick usage for all skills |
 | [REPOSITORY.md](REPOSITORY.md) | Repo layout, `Makefile`, `scripts/`, lint targets, git hooks |
 | [skill-framework/README.md](skill-framework/README.md) | Shared normative conventions every skill follows (confidence bands, escalation, routing, phase glossary, …) |
+| [history/README.md](history/README.md) | Historical specs and plans (`docs/superpowers/`) vs. normative framework docs |
+| [adr/README.md](adr/README.md) | Platform architecture decision records |
 | [../scripts/README.md](../scripts/README.md) | What `scripts/install.sh` does |
 | [../CHANGELOG.md](../CHANGELOG.md) | Per-skill change history (replaces stale inline "Recent changes" in SKILL files) |
 

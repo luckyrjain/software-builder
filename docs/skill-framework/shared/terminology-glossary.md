@@ -17,7 +17,7 @@ Shared vocabulary for **software-builder** platform docs, `skills.yaml`, and beh
 | Term | Definition |
 |------|------------|
 | **Invocation mode** | `ambient` (model may load from chat), `automation-only` (explicit external trigger only; requires `disable-model-invocation: true` in `SKILL.md`). |
-| **Risk class** | Operational category for guardrail strictness: **posting** (GitLab writes), **merge** (branch/PR merge), **unattended** (webhook with no human), **read-only** (reports only). High-risk skills combine multiple classes. |
+| **Risk class** | Operational category for guardrail strictness: **posting** (GitLab writes), **merge** (branch/PR merge), **unattended** (webhook with no human), **read-only** (reports only), **repository-write** (commits/PRs in target repo). High-risk skills combine multiple classes. Declared per skill in `skills.yaml`. |
 | **Write authority** | Composition contract flag: only the skill that owns a write scope may perform that write; wrappers may gate but not escalate writes. |
 | **Degraded mode** | Documented fallback when an optional capability is absent (e.g. `chat-only` when inline posting unavailable). |
 
