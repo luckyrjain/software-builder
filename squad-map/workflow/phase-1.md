@@ -35,9 +35,25 @@ Normative rules: [squad-mapping.md](../reference/squad-mapping.md). Config:
 
 | Condition | Action |
 |-----------|--------|
-| `SQUAD_MAP.md` exists, census unchanged, `refresh` false | Skip MCP unless user requests refresh |
+| `SQUAD_MAP.md` exists, census unchanged, `refresh` false, **`last_run` within TTL** (default **7 days**) | Skip MCP unless user requests refresh |
+| `SQUAD_MAP.md` exists, census unchanged, `refresh` false, **`last_run` missing or older than TTL** | Re-query in-scope repos (treat as stale cache) |
 | GitLab ✅ or Datadog ✅ | Run Steps 1–6 |
 | Both ❌ | Run Step 7 — CODEOWNERS fallback |
+
+**Freshness TTL:** consumers (including who-owns-x-bot) treat `SQUAD_MAP.md` header `**Last run:**` as a
+staleness signal. Default TTL is **7 days** — override only when the caller passes an explicit
+`cache_ttl_days`. A stale map is still readable for hints, but must not satisfy a cache hit without
+re-query.
+
+## Single-repo scope guard
+
+When `repos` is exactly **one** entry (who-owns-x-bot delegation, or a user asking "who owns `<name>`"):
+
+- **Never** run scope-shrink archival — do not move unrelated rows to § Out of scope (archived).
+- **Append or update** only the in-scope repo row; leave every other existing row untouched.
+- Still update `last_run` on successful completion.
+
+This prevents a single-repo Slack lookup from archiving the rest of the workspace census.
 
 ## Idempotency & partial runs
 

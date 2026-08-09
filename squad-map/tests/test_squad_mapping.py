@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
@@ -10,6 +11,9 @@ from squad_mapping import (  # noqa: E402
     codeowners_fallback_row,
     confidence_for_codeowners_fallback,
     extract_squad_from_namespace,
+    is_squad_map_fresh,
+    normalize_repo_token,
+    parse_last_run_timestamp,
     reconcile_confidence,
     should_hard_stop_missing_segment,
 )
@@ -143,3 +147,26 @@ class TestHardStop:
         assert not should_hard_stop_missing_segment(
             gitlab_mcp_available=False, squad_path_segment=None
         )
+
+
+class TestRepoCacheHelpers:
+    def test_normalize_repo_token_ignores_case_and_separators(self):
+        assert normalize_repo_token("API-Disbursement") == normalize_repo_token("api_disbursement")
+
+    def test_normalize_repo_token_does_not_collapse_distinct_names(self):
+        assert normalize_repo_token("myapp") != normalize_repo_token("my-app")
+
+    def test_parse_last_run_timestamp(self):
+        header = "# Squad Map\n\n**Last run:** 2026-08-01T12:34:56Z\n"
+        parsed = parse_last_run_timestamp(header)
+        assert parsed == datetime(2026, 8, 1, 12, 34, 56, tzinfo=timezone.utc)
+
+    def test_is_squad_map_fresh_within_ttl(self):
+        now = datetime(2026, 8, 8, tzinfo=timezone.utc)
+        last_run = datetime(2026, 8, 2, tzinfo=timezone.utc)
+        assert is_squad_map_fresh(last_run, now=now, ttl_days=7)
+
+    def test_is_squad_map_stale_outside_ttl(self):
+        now = datetime(2026, 8, 8, tzinfo=timezone.utc)
+        last_run = datetime(2026, 7, 1, tzinfo=timezone.utc)
+        assert not is_squad_map_fresh(last_run, now=now, ttl_days=7)

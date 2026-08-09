@@ -37,9 +37,12 @@ treat the entire string as the literal name to search for.
 
 - Trim surrounding whitespace and a leading `/who-owns` token if the raw slash-command text is passed
   through unparsed by the caller.
-- Do not lowercase, strip punctuation, or otherwise rewrite `query` before handing it to squad-map —
-  squad-map's own repo/service matching handles case and alias resolution; rewriting here would just
-  create a second, inconsistent normalization path.
+- **Cache lookup only:** apply `normalize_repo_token()` from
+  [squad-map/scripts/squad_mapping.py](../../squad-map/scripts/squad_mapping.py) when matching against
+  existing `SQUAD_MAP.md` rows (Step 2). Preserve the original trimmed `query` when invoking squad-map
+  in Step 3 and in the Slack reply — do not lowercase or strip punctuation from the displayed name.
+- When multiple rows match (normalized-exact or substring), return the **Ambiguous** shape with every
+  candidate — never collapse to a single row.
 
 ## Embedded invocation
 
