@@ -872,6 +872,13 @@ lint-migration-program-manager:
 		{ echo "error: missing migration-program-manager/scripts/aggregate_migration_status.py" >&2; exit 1; }
 	@grep -q 'skill-framework' migration-program-manager/SETUP.md || \
 		{ echo "error: migration-program-manager/SETUP.md must link to docs/skill-framework" >&2; exit 1; }
+	@grep -q 'docs/skill-framework/shared/safe-output.md' migration-program-manager/SKILL.md || \
+		{ echo "error: migration-program-manager/SKILL.md must link to shared safe-output" >&2; exit 1; }
+	@grep -q 'docs/skill-framework/shared/prompt-injection.md' migration-program-manager/reference/report-format.md && \
+	 grep -q 'docs/skill-framework/shared/safe-output.md' migration-program-manager/reference/report-format.md && \
+	 grep -qiE 'escape|fence|backtick' migration-program-manager/reference/report-format.md && \
+	 grep -qi 'redact' migration-program-manager/reference/report-format.md || \
+		{ echo "error: report-format.md must sanitize untrusted rendered fields per prompt-injection and safe-output" >&2; exit 1; }
 	@echo "lint-migration-program-manager: aggregator pytest"
 	@if python3 -c "import pytest" >/dev/null 2>&1; then \
 		python3 -m pytest -p no:cacheprovider migration-program-manager/tests/ -q || exit 1; \
