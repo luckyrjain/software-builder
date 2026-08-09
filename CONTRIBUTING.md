@@ -38,6 +38,16 @@ Please read and follow our [Code of Conduct](CODE_OF_CONDUCT.md).
    If you touched a skill with a `scripts/`/`tests/` directory, its lint target also runs `pytest` —
    make sure that passes too.
 6. **Re-run the skill's smoke test** after a substantive edit — see its `reference/smoke-test.md`.
+
+## Repository hygiene
+
+- **SETUP.md freshness:** when you change pinned MCP versions or verify install steps, bump
+  `**Last reviewed**` in that skill's `SETUP.md` freshness table and keep `**External services**`
+  aligned with `scripts/registry/setup_freshness.yaml`. `make lint-framework` enforces this.
+- **GitHub topics/description:** maintainers with repo admin access run
+  `bash scripts/apply_repo_metadata.sh` (canonical values in `.github/repo-metadata.yaml`).
+- **Tier-3 golden fixtures:** refresh recorded outputs per
+  [docs/evals/GOLDEN-REFRESH.md](docs/evals/GOLDEN-REFRESH.md) — CI never calls a live LLM.
 7. **Record user-visible changes** in the skill's own `CHANGELOG.md` (or the root one for cross-cutting
    changes), newest entry first.
 8. **Open a pull request** describing what changed and why, and the validation you ran (which

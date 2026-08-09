@@ -1,5 +1,16 @@
 # loop-task-implementer — Setup
 
+
+## Freshness
+
+| Field | Value |
+|-------|-------|
+| **Owner** | software-builder maintainers |
+| **Last reviewed** | 2026-08-09 |
+| **Review cadence** | Quarterly — or when pinned MCP package versions change |
+| **External services** | GitLab MCP, CI provider (repo-specific) |
+
+See [setup-freshness.md](../docs/skill-framework/shared/setup-freshness.md) for the shared contract.
 Platform-neutral autonomous task-implementation skill: isolated build → evidence-based review →
 remediation → validation → pull-request → completion. No Datadog/GitLab/Jira MCP required — see
 [reference/mcp-capabilities.md](reference/mcp-capabilities.md) for what it does need from the host

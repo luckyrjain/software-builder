@@ -1,5 +1,16 @@
 # Setup — k8s-overprovisioning-datadog
 
+
+## Freshness
+
+| Field | Value |
+|-------|-------|
+| **Owner** | software-builder maintainers |
+| **Last reviewed** | 2026-08-09 |
+| **Review cadence** | Quarterly — or when pinned MCP package versions change |
+| **External services** | Kubernetes MCP, Datadog MCP |
+
+See [setup-freshness.md](../docs/skill-framework/shared/setup-freshness.md) for the shared contract.
 This skill discovers Kubernetes and observability MCP tools by capability. It prefers Kubernetes MCP
 for live cluster truth and uses Datadog as a per-capability fallback and for unique historical and
 operational telemetry. A git provider MCP is an optional configuration fallback.

@@ -1,0 +1,52 @@
+# Per-skill SETUP.md freshness metadata (normative external-services column text).
+defaults:
+  owner: software-builder maintainers
+  review_cadence: Quarterly — or when pinned MCP package versions change
+  last_reviewed: "2026-08-09"
+  max_age_days: 120
+
+skills:
+  pr-review:
+    external_services: GitLab MCP, Jira MCP (optional)
+  pr-gatekeeper:
+    external_services: GitLab MCP (via pr-review), webhook receiver (host infra)
+  k8s-overprovisioning-datadog:
+    external_services: Kubernetes MCP, Datadog MCP
+  incident-rca:
+    external_services: Datadog MCP, Jira MCP, KubeSense CLI (optional)
+  incident-triage-agent:
+    external_services: PagerDuty/Opsgenie webhook (host infra), incident-rca MCPs, squad-map
+  domain-comprehension:
+    external_services: GitLab MCP (optional), Datadog MCP (optional)
+  squad-map:
+    external_services: GitLab MCP, Datadog MCP
+  who-owns-x-bot:
+    external_services: squad-map (Slack handler is host infra)
+  new-hire-guide:
+    external_services: squad-map, domain-comprehension
+  release-readiness-checker:
+    external_services: GitLab MCP, Kubernetes MCP, Datadog MCP (via composed skills)
+  migration-program-manager:
+    external_services: None (reads MIGRATION_STATUS.yaml + SQUAD_MAP.md on disk)
+  cost-optimization-sprint-planner:
+    external_services: Kubernetes MCP, Datadog MCP (via k8s-overprovisioning-datadog)
+  mysql-to-postgres-sql:
+    external_services: None (local scan scripts and domain packs)
+  loop-task-implementer:
+    external_services: GitLab MCP, CI provider (repo-specific)
+  backlog-runner:
+    external_services: Jira or GitHub Issues API, loop-task-implementer
+  weekly-squad-digest:
+    external_services: None (reads rollup JSON artifacts)
+  test-writer:
+    external_services: None (router only — dispatches to test-creation skills)
+  unit-test-creator:
+    external_services: None (local test runners)
+  integration-test-creator:
+    external_services: Docker / testcontainers (local)
+  contract-test-creator:
+    external_services: Pact Broker (optional, repo-specific)
+  e2e-test-creator:
+    external_services: Browser driver + reachable app URL (local/CI)
+  api-test-creator:
+    external_services: Newman CLI + reachable API base URL

@@ -1,5 +1,16 @@
 # who-owns-x-bot — Setup
 
+
+## Freshness
+
+| Field | Value |
+|-------|-------|
+| **Owner** | software-builder maintainers |
+| **Last reviewed** | 2026-08-09 |
+| **Review cadence** | Quarterly — or when pinned MCP package versions change |
+| **External services** | squad-map (Slack handler is host infra) |
+
+See [setup-freshness.md](../docs/skill-framework/shared/setup-freshness.md) for the shared contract.
 ## Ambient discovery is deliberately disabled
 
 Unlike squad-map, this skill sets `disable-model-invocation: true` — it does not auto-apply from a

@@ -1,5 +1,16 @@
 # contract-test-creator — Setup
 
+
+## Freshness
+
+| Field | Value |
+|-------|-------|
+| **Owner** | software-builder maintainers |
+| **Last reviewed** | 2026-08-09 |
+| **Review cadence** | Quarterly — or when pinned MCP package versions change |
+| **External services** | Pact Broker (optional, repo-specific) |
+
+See [setup-freshness.md](../docs/skill-framework/shared/setup-freshness.md) for the shared contract.
 ## Install
 
 ```bash

@@ -1,5 +1,16 @@
 # incident-triage-agent — Setup
 
+
+## Freshness
+
+| Field | Value |
+|-------|-------|
+| **Owner** | software-builder maintainers |
+| **Last reviewed** | 2026-08-09 |
+| **Review cadence** | Quarterly — or when pinned MCP package versions change |
+| **External services** | PagerDuty/Opsgenie webhook (host infra), incident-rca MCPs, squad-map |
+
+See [setup-freshness.md](../docs/skill-framework/shared/setup-freshness.md) for the shared contract.
 ## Ambient discovery is deliberately disabled
 
 Unlike incident-rca and squad-map, this skill sets `disable-model-invocation: true` — it does not

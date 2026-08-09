@@ -8,6 +8,7 @@ from scripts.registry.composition import validate_composition_graph
 from scripts.registry.frontmatter import load_skill_frontmatter
 from scripts.registry.models import Registry
 from scripts.registry.schema import parse_registry
+from scripts.registry.skill_frontmatter_schema import validate_skill_frontmatter_fields
 
 _SKILL_ID_RE = re.compile(r"^[a-z0-9-]+$")
 _GENERATED_MARKER = "GENERATED from skills.yaml"
@@ -120,6 +121,8 @@ def validate_registry(root: Path) -> list[str]:
             description = frontmatter.get("description", "")
             if not isinstance(description, str) or not description.strip():
                 errors.append(f"error: {skill_id}: description must be a non-empty string")
+
+        errors.extend(validate_skill_frontmatter_fields(skill_id, frontmatter))
 
         disable = frontmatter.get("disable-model-invocation") is True
         automation_only = entry.invocation == "automation-only"

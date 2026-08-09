@@ -46,6 +46,7 @@ Skills reference these files by relative link from `SETUP.md` or `SKILL.md`. Do 
 | [shared/org-rollup-schema.md](shared/org-rollup-schema.md) | Normalized cross-repo rollup item shape — implemented by migration-program-manager (#8), cost-optimization-sprint-planner (#10), and weekly-squad-digest (#11) |
 | [shared/test-creation-principles.md](shared/test-creation-principles.md) | Test-first evidence, test-quality rules, refactor limits, and the shared report skeleton for unit/integration/contract/e2e/api-test-creator |
 | [shared/terminology-glossary.md](shared/terminology-glossary.md) | Platform vocabulary — skill, registry, capability, risk class, eval tiers, gates |
+| [shared/setup-freshness.md](shared/setup-freshness.md) | SETUP.md review ownership, last-reviewed dates, external-service inventory |
 
 Platform ADRs: [docs/adr/README.md](../adr/README.md).
 
