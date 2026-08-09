@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -263,8 +264,22 @@ def load_state(state_path: str) -> dict[str, dict[str, str]]:
     return loaded
 
 
+def _atomic_write_text(path: Path, payload: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = path.with_name(f".{path.name}.tmp.{os.getpid()}")
+    try:
+        tmp_path.write_text(payload, encoding="utf-8")
+        os.replace(tmp_path, path)
+    finally:
+        if tmp_path.exists():
+            tmp_path.unlink(missing_ok=True)
+
+
 def save_state(state_path: str, state: dict[str, dict[str, str]]) -> None:
-    Path(state_path).write_text(json.dumps(state, indent=2, sort_keys=True), encoding="utf-8")
+    _atomic_write_text(
+        Path(state_path),
+        json.dumps(state, indent=2, sort_keys=True),
+    )
 
 
 def compute_staleness(
@@ -387,8 +402,9 @@ def main(argv: list[str] | None = None) -> int:
     items, gaps, new_state = build_rollup(manifest, state, now, args.staleness_threshold_days)
     save_state(args.state_path, new_state)
 
-    Path(args.out_rollup).write_text(
-        json.dumps([i.to_dict() for i in items], indent=2, sort_keys=True), encoding="utf-8"
+    _atomic_write_text(
+        Path(args.out_rollup),
+        json.dumps([i.to_dict() for i in items], indent=2, sort_keys=True),
     )
 
     for gap in gaps:

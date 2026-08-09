@@ -21,7 +21,8 @@ For each path set in `rollup_manifest`:
 - File present → parse as a flat JSON array of `org_rollup_item` objects per
   [org-rollup-schema.md](../../docs/skill-framework/shared/org-rollup-schema.md). **Never re-derive
   `squad`, `squad_confidence`, `status`, or `priority`** — read them exactly as the producing skill wrote
-  them.
+  them. Record a **source revision** fingerprint for the file (SHA-256 of raw bytes, first 12 hex chars)
+  for the digest header per [reference/report-format.md](../reference/report-format.md).
 
 If both paths were unset, Inputs already HARD STOPped before this phase runs — this step never sees that
 case.
@@ -103,4 +104,4 @@ Rollup gaps. Never silently dropped.
 
 | Output | Location | Required fields |
 |--------|----------|-----------------|
-| Weekly squad digest | `WEEKLY_SQUAD_DIGEST.md` | Per-squad sections (Migration status + Cost optimization sub-sections), UNKNOWN-squad group, Rollup gaps, staleness flags |
+| Weekly squad digest | `WEEKLY_SQUAD_DIGEST.md` | Per-squad sections (Migration status + Cost optimization sub-sections), UNKNOWN-squad group, Rollup gaps, staleness flags, source revision fingerprints |

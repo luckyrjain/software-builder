@@ -8,6 +8,12 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 
 ## Platform
 
+### Skills-audit backlog (#20) — atomic writes, provenance, idempotency
+
+- **migration-program-manager:** atomic state and rollup writes via temp file + `os.replace`.
+- **weekly-squad-digest:** digest header now requires SHA-256 source revision fingerprints per rollup file.
+- **pr-gatekeeper:** added `reference/idempotency.md` documenting caller-side per-MR locking beyond head_sha dedupe.
+
 ### Behavioral evals Tier 3 — golden recorded outputs (#16 follow-up)
 
 - Added `evals/golden/` fixtures with `recorded_output` blobs and structured assertions.

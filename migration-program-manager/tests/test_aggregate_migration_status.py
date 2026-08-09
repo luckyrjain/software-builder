@@ -13,6 +13,7 @@ import json  # noqa: E402
 from datetime import date  # noqa: E402
 
 from aggregate_migration_status import (  # noqa: E402
+    _atomic_write_text,
     build_rollup,
     coerce_str,
     compute_staleness,
@@ -541,3 +542,11 @@ class TestMainCli:
         )
         assert rc == 1
         assert "must be >= 0" in capsys.readouterr().err
+
+
+def test_atomic_write_text_replaces_target(tmp_path: Path) -> None:
+    target = tmp_path / "state.json"
+    target.write_text('{"old": true}\n', encoding="utf-8")
+    _atomic_write_text(target, '{"new": true}\n')
+    assert json.loads(target.read_text(encoding="utf-8")) == {"new": True}
+    assert not list(tmp_path.glob(".*.tmp.*"))

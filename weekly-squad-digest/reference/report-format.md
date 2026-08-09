@@ -8,6 +8,11 @@
 # Weekly squad digest — <date>
 
 **Rollups read:** `<migration_rollup_path or "not supplied">` · `<cost_rollup_path or "not supplied">`
+**Source revisions:** migration `<sha256 prefix or "not supplied">` · cost `<sha256 prefix or "not supplied">`
+
+Compute each revision as the first 12 hex chars of the SHA-256 of the rollup file bytes read in Run digest
+§ 1 (or `not supplied` when that rollup path was unset or unreadable). This gives downstream readers a
+stable fingerprint without re-deriving squad/status fields.
 
 ## <squad name>
 
