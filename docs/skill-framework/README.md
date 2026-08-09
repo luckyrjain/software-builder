@@ -45,6 +45,9 @@ Skills reference these files by relative link from `SETUP.md` or `SKILL.md`. Do 
 | [shared/claude-code-setup.md](shared/claude-code-setup.md) | Claude Code install paths + MCP config location, mapped from the Cursor equivalents used throughout each skill's `SETUP.md` |
 | [shared/org-rollup-schema.md](shared/org-rollup-schema.md) | Normalized cross-repo rollup item shape — implemented by migration-program-manager (#8), cost-optimization-sprint-planner (#10), and weekly-squad-digest (#11) |
 | [shared/test-creation-principles.md](shared/test-creation-principles.md) | Test-first evidence, test-quality rules, refactor limits, and the shared report skeleton for unit/integration/contract/e2e/api-test-creator |
+| [shared/terminology-glossary.md](shared/terminology-glossary.md) | Platform vocabulary — skill, registry, capability, risk class, eval tiers, gates |
+
+Platform ADRs: [docs/adr/README.md](../adr/README.md).
 
 ## How skills link here
 
@@ -84,6 +87,7 @@ A skill is framework-compliant when it passes the checklist in the design spec �
 | claude-code-setup.md | Complete |
 | org-rollup-schema.md | Complete — implemented by migration-program-manager (#8), cost-optimization-sprint-planner (#10), and weekly-squad-digest (#11), the last three items of the team-facing agents roadmap |
 | test-creation-principles.md | Complete — implemented by unit/integration/contract/e2e/api-test-creator, dispatched to by the test-writer router |
+| terminology-glossary.md | Complete — platform vocabulary for registry, capabilities, risk classes, and eval tiers |
 
 ## Deferred (P3 roadmap)
 
