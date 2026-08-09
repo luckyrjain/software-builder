@@ -2,6 +2,16 @@
 
 What the **software-builder** repo contains, how to install skills, and how quality checks work.
 
+## Platform review status (Aug 2026)
+
+The [August 2026 repository review](https://github.com/luckyrjain/software-builder/issues/9) backlog
+(P0–P2 + substantive P3) is **complete** on `main` as of PRs #29–#42: registry, transactional install,
+behavioral evals (Tiers 1–3), release workflow, composition schema matching, ADRs, `risk_class`, and
+`make verify-install-all`. Deferred polish (repo topics, SETUP freshness metadata) is documented in
+[`.github/issue-bodies/9-platform-backlog-closed.md`](../.github/issue-bodies/9-platform-backlog-closed.md).
+To close GitHub issue #9 with the updated checklist, run `bash scripts/github/update_issue_9.sh` (requires
+`gh` with issues write access). Skill-behavior backlog: issue #20.
+
 ## Layout
 
 ```
