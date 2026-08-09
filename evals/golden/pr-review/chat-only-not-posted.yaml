@@ -1,0 +1,21 @@
+schema_version: 1
+skill: pr-review
+case_id: golden-chat-only-not-posted
+tier: 3
+description: Recorded chat-only review output must not claim GitLab posting occurred
+recorded_output:
+  review_metadata:
+    posted: false
+    posting_mode: chat-only
+    head_sha: sha256:abc
+  recommendation: needs_changes
+assertions:
+  - type: field_equals
+    path: review_metadata.posted
+    value: false
+  - type: field_equals
+    path: review_metadata.posting_mode
+    value: chat-only
+  - type: forbid_field_value
+    path: review_metadata.posted
+    value: true

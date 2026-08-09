@@ -15,7 +15,7 @@ Adopt a **tiered eval model** run via `python3 -m scripts.evals` (`make validate
 |------|------------------|----------------|
 | **1** | `evals/fixtures/` + `evals/fixtures/_global.yaml` | Static contracts: required files, workflow frontmatter, invocation guards, forbidden patterns |
 | **2** | `evals/transcripts/` | Replayable `tool` / `gate` / `outcome` event sequences with policy assertions (`tool_not_called`, `forbid_tool_before_gate`, etc.) |
-| **3** | (future) | Live or recorded LLM replays against golden cases |
+| **3** | `evals/golden/` | Recorded model output validation (`field_equals`, `forbid_field_value`, `field_in`, etc.) — static replay without LLM calls in CI |
 
 Tier 2 is intentionally **static replay** — no model call — so CI can enforce policy ordering cheaply. High-risk skills (pr-review, pr-gatekeeper, loop-task-implementer) ship transcript fixtures first.
 

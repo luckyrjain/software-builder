@@ -1,0 +1,21 @@
+schema_version: 1
+skill: pr-gatekeeper
+case_id: golden-hold-dont-post-outcome
+tier: 3
+description: Recorded unattended gatekeeper outcome must reflect Hold and no GitLab post
+recorded_output:
+  review_outcome:
+    posted: false
+    phase_3_reply: Hold — don't post
+    notification_sent: true
+    includes_executive_summary: true
+assertions:
+  - type: field_equals
+    path: review_outcome.posted
+    value: false
+  - type: field_equals
+    path: review_outcome.phase_3_reply
+    value: "Hold — don't post"
+  - type: field_equals
+    path: review_outcome.includes_executive_summary
+    value: true
