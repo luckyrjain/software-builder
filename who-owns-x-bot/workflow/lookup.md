@@ -24,12 +24,22 @@ message. No new ownership logic here — see § Non-goals in the
    only happen from a broken manual install.)
 
 2. **Check for a fresh existing `SQUAD_MAP.md`** at `workspace_root` (if provided).
-   - **Exact match:** exactly one row's `Repo` column equals `query` → use that row, skip to Step 4.
-   - **Substring/prefix match:** no exact match, but `query` is a substring or prefix of one or more
-     `Repo` values (e.g. `query: ledger` against rows `legacy-ledger`, `ledger-service`) → if exactly one
-     row matches, use it and skip to Step 4; if more than one row matches, that **is** the "matches more
-     than one repo" Ambiguous case — go straight to Step 4 with those candidate rows, do not run Step 3.
-   - **No match at all** → go to Step 3.
+   - **Freshness:** parse header `**Last run:**` (ISO-8601 UTC). When `last_run` is within **7 days**
+     (default TTL — see [squad_mapping.py](../../squad-map/scripts/squad_mapping.py)
+     `DEFAULT_SQUAD_MAP_TTL_DAYS`), the cache may satisfy this step. When `last_run` is missing or
+     older than TTL, treat the file as stale and go to Step 3.
+   - **Exact match:** exactly one row's `Repo` column equals `query` (case-sensitive) → use that row,
+     skip to Step 4.
+   - **Normalized exact match:** no case-sensitive exact match, but exactly one row's `Repo` equals
+     `query` under `normalize_repo_token()` (case- and separator-insensitive — e.g. `API-Disbursement`
+     vs `api_disbursement`) → use that row, skip to Step 4. When **more than one** row normalizes to the
+     same token, that is **Ambiguous** — list **all** matching rows in Step 4; never pick one silently.
+   - **Substring/prefix match:** no exact/normalized-exact match, but `query` is a substring or prefix of
+     one or more `Repo` values (e.g. `query: ledger` against rows `legacy-ledger`, `ledger-service`) →
+     if exactly one row matches, use it and skip to Step 4; if more than one row matches, that **is** the
+     "matches more than one repo" Ambiguous case — go straight to Step 4 with **every** candidate row, do
+     not run Step 3.
+   - **No match at all** (or stale cache per freshness rule) → go to Step 3.
 
 3. **Otherwise, invoke squad-map** scoped to a single, exact repo name (`query`) — equivalent to a user
    asking squad-map "who owns `<query>`?" (squad-map's own single-repo Inputs path,

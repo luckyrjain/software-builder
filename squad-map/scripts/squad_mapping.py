@@ -6,9 +6,12 @@ Mirrors normative rules in reference/squad-mapping.md — used by squad-map/test
 from __future__ import annotations
 
 import re
+from datetime import datetime, timedelta, timezone
 from typing import Literal
 
 Confidence = Literal["HIGH", "MEDIUM", "LOW", "UNKNOWN"]
+
+DEFAULT_SQUAD_MAP_TTL_DAYS = 7
 
 
 def extract_squad_from_namespace(namespace_path: str, squad_path_segment: int) -> str:
@@ -19,6 +22,38 @@ def extract_squad_from_namespace(namespace_path: str, squad_path_segment: int) -
     if len(parts) < squad_path_segment:
         return "UNKNOWN"
     return parts[squad_path_segment - 1]
+
+
+def normalize_repo_token(value: str) -> str:
+    """Case- and separator-insensitive repo token for cache lookup only.
+
+    Used by who-owns-x-bot and squad-map cache hits — never rewrite the caller's original query
+    string for squad-map invocation or Slack output.
+    """
+    return "".join(ch for ch in value.lower() if ch.isalnum())
+
+
+def parse_last_run_timestamp(header_text: str) -> datetime | None:
+    """Parse SQUAD_MAP.md header **Last run:** ISO-8601 UTC value."""
+    match = re.search(r"\*\*Last run:\*\*\s*([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:]{8}Z)", header_text)
+    if not match:
+        return None
+    try:
+        return datetime.strptime(match.group(1), "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+    except ValueError:
+        return None
+
+
+def is_squad_map_fresh(
+    last_run: datetime | None,
+    *,
+    now: datetime,
+    ttl_days: int = DEFAULT_SQUAD_MAP_TTL_DAYS,
+) -> bool:
+    """True when last_run is within ttl_days of now (inclusive)."""
+    if last_run is None or ttl_days < 0:
+        return False
+    return now - last_run <= timedelta(days=ttl_days)
 
 
 def _normalize(value: str) -> frozenset[str]:
