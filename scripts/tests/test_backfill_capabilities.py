@@ -61,6 +61,7 @@ skills:
     lint:
       skill_md_max_lines: 180
       target: demo
+    risk_class: [read-only]
 """,
         encoding="utf-8",
     )

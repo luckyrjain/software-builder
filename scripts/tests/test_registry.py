@@ -52,6 +52,7 @@ skills:
     lint:
       skill_md_max_lines: 180
       target: squad-map
+    risk_class: [read-only]
 """,
         encoding="utf-8",
     )
@@ -87,6 +88,7 @@ skills:
     lint:
       skill_md_max_lines: 180
       target: foo
+    risk_class: [read-only]
 """,
         encoding="utf-8",
     )
@@ -122,6 +124,7 @@ skills:
     lint:
       skill_md_max_lines: 180
       target: bot
+    risk_class: [unattended]
 """,
         encoding="utf-8",
     )
@@ -154,6 +157,7 @@ skills:
     capabilities:
       required: [host.repository.read]
     lint: {skill_md_max_lines: 180, target: solo}
+    risk_class: [read-only]
 """,
         encoding="utf-8",
     )
@@ -221,6 +225,7 @@ skills:
     lint:
       skill_md_max_lines: 180
       target: foo
+    risk_class: [read-only]
 """,
         encoding="utf-8",
     )
@@ -254,6 +259,7 @@ skills:
     capabilities:
       required: [host.repository.read]
     lint: {skill_md_max_lines: 180, target: a}
+    risk_class: [read-only]
   b:
     path: b
     category: testing
@@ -266,6 +272,7 @@ skills:
     capabilities:
       required: [host.repository.read]
     lint: {skill_md_max_lines: 180, target: b}
+    risk_class: [read-only]
 """,
         encoding="utf-8",
     )
@@ -299,6 +306,7 @@ skills:
     lint:
       skill_md_max_lines: 180
       target: foo
+    risk_class: [read-only]
 """,
         encoding="utf-8",
     )
@@ -404,6 +412,7 @@ skills:
     capabilities:
       required: [host.repository.read]
     lint: {skill_md_max_lines: 180, target: solo}
+    risk_class: [read-only]
 """,
         encoding="utf-8",
     )
