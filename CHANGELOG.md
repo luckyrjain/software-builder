@@ -623,6 +623,25 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 
 ## mysql-to-postgres-sql
 
+### AST-backed secondary checker for standalone `.sql` files (2026-08-09)
+
+- New `scripts/ast_check_mysql_dialect.py` — parses `.sql` files with
+  [sqlglot](https://github.com/tobymao/sqlglot)'s MySQL dialect and flags MySQL-only constructs
+  (`TIMESTAMPDIFF()`, `SUBSTRING_INDEX()`, `CONVERT_TZ()`, `DATEDIFF()`, `STR_TO_DATE()`,
+  `JSON_EXTRACT()`/`JSON_OBJECTAGG()`/`JSON_SET()`/`JSON_REMOVE()`, `ADDTIME()`, `FIND_IN_SET()`,
+  `UNIX_TIMESTAMP()`, `LAST_INSERT_ID()`, `JSON_UNQUOTE()`, `JSON_ARRAYAGG()`, `JSON_CONTAINS()`,
+  `JSON_MERGE()`, `ON DUPLICATE KEY UPDATE`) with comment/string-literal awareness the regex scan
+  structurally lacks. New dependency: `sqlglot>=30.15.0` (`requirements.txt`/`requirements.lock`).
+- Complements, does not replace, `scripts/scan-mysql-dialect.sh` — the regex scan stays the merge
+  gate since it's the only thing that can look inside SQL embedded in Java/PHP/JS/Python source,
+  which an AST parser can't parse as standalone SQL. New
+  [reference/ast-vs-regex-scan.md](mysql-to-postgres-sql/reference/ast-vs-regex-scan.md) documents
+  the split, including five MySQL-only functions (`GROUP_CONCAT`, `DATE_FORMAT`, `INSTR`,
+  `REGEXP`/`RLIKE`, `MATCH()...AGAINST()`) deliberately left to the regex scan — verified that
+  sqlglot normalizes each to the *same* AST node type as its portable Postgres-native spelling, so
+  an AST-only check would false-positive on already-migrated code using that spelling.
+- Fixes #54.
+
 ### v1.6 — framework compliance & prompt review (2026-07-07)
 
 - Initial merge to `master`: scan gate, references, collection P0/P1, Node/Python paths, framework wiring.

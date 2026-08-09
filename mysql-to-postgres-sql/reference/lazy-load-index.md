@@ -7,6 +7,7 @@ Load reference files on demand — do not read all up front.
 | Trigger | Read |
 |---------|------|
 | Scan hits / SQL rewrite | [calibration-snippets.md](calibration-snippets.md), [function-translations.md](function-translations.md) |
+| Service has standalone `.sql` files / regex-vs-AST scan choice | [ast-vs-regex-scan.md](ast-vs-regex-scan.md) |
 | JDBC / Spring config | [spring-datasource-example.yaml](spring-datasource-example.yaml), [workflow/migrate-service.md](../workflow/migrate-service.md) |
 | Python service | [python-migration.md](python-migration.md) |
 | Node service | [nodejs-migration.md](nodejs-migration.md) |
