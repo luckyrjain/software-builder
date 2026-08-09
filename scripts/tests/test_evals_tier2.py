@@ -84,6 +84,9 @@ def test_transcript_tool_call_count_requires_bound(tmp_path: Path) -> None:
     )
     result = run_transcript_case(case)
     assert not result.passed
+
+
+def test_tier_filter_excludes_opposite_tier() -> None:
     from scripts.evals.__main__ import run_all
 
     tier1 = run_all(ROOT, tier_filter=1)
