@@ -651,6 +651,23 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 
 ## cost-optimization-sprint-planner
 
+### Safe-output wiring (2026-08-09)
+
+- Third stop in the workflow-contract.yaml/safe-output/eval-fixture rollout (after `pr-review`,
+  `backlog-runner`). This skill's `run-sweep.md` § 2 was already the shared
+  [safe-output.md](docs/skill-framework/shared/safe-output.md)'s own worked example for Rules 1–3 (safe
+  slugs, path containment, no shell interpolation), and `reference/report-format.md` already wrapped
+  untrusted identifiers in inline code spans per Rule 4 — so this pass only had to close the remaining
+  gaps: `SKILL.md` now links `safe-output.md` (it previously only linked `prompt-injection.md`), and a
+  new Makefile grep check enforces `report-format.md`'s existing sanitization language.
+- No `workflow-contract.yaml` — confirmed `inputs.md` → `run-sweep.md` is a fixed 2-phase linear
+  pipeline; the two selection modes (`deployments` vs `namespace_prefilter`) are resolved as content
+  within `run-sweep.md` itself, not as a fork to a different phase file.
+- New golden eval `evals/golden/cost-optimization-sprint-planner/injection-inert-report.yaml` proving a
+  deployment name containing Markdown-structural characters and a literal backtick renders inert in
+  `COST_OPTIMIZATION_SPRINT_REPORT.md`, and separately can't write its `decision-graph-*.json` artifact
+  outside `output_dir` — exercising the Rule 1–4 machinery this skill already had in place.
+
 ### Initial release (2026-08-05)
 
 - New skill — item #10 of the [team-facing agents roadmap](docs/superpowers/plans/2026-08-05-team-facing-agents-roadmap.md):

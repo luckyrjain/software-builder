@@ -933,6 +933,12 @@ lint-cost-optimization-sprint-planner:
 		{ echo "error: smoke-test.md must link to pressure-tests.md" >&2; exit 1; }
 	@grep -q 'skill-framework' cost-optimization-sprint-planner/SETUP.md || \
 		{ echo "error: cost-optimization-sprint-planner/SETUP.md must link to docs/skill-framework" >&2; exit 1; }
+	@grep -q 'docs/skill-framework/shared/safe-output.md' cost-optimization-sprint-planner/SKILL.md || \
+		{ echo "error: cost-optimization-sprint-planner/SKILL.md must link to shared safe-output" >&2; exit 1; }
+	@grep -q 'docs/skill-framework/shared/prompt-injection.md' cost-optimization-sprint-planner/reference/report-format.md && \
+	 grep -q 'docs/skill-framework/shared/safe-output.md' cost-optimization-sprint-planner/reference/report-format.md && \
+	 grep -qiE 'escape|fence|backtick' cost-optimization-sprint-planner/reference/report-format.md || \
+		{ echo "error: report-format.md must sanitize untrusted rendered fields per prompt-injection and safe-output" >&2; exit 1; }
 	@echo "  ok (framework refs)"
 
 lint-mysql-to-postgres-sql:
