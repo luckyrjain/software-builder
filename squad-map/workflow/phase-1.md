@@ -1,5 +1,5 @@
 ---
-workflow_version: 1.2.3
+workflow_version: 1.2.5
 phase: phase-1
 produces:
   - squad_map
@@ -66,7 +66,11 @@ This prevents a single-repo Slack lookup from archiving the rest of the workspac
   the current scope (they may belong to a prior broader run).
 - **Scope shrink:** when the in-scope repo census is **smaller** than the prior run and `refresh: false`,
   move rows for repos no longer in scope to `SQUAD_MAP.md` § **Out of scope (archived)** with
-  `archived_at` ISO-8601 in the header note — do not leave stale rows in the main mapping table.
+  `archived_at` ISO-8601 in the header note — do not leave stale rows in the main mapping table. The
+  moved `Repo`/prior-squad/prior-team values are the same already-escaped identifiers from the main
+  table (see [squad-mapping.md § Safe rendered-output boundary](../reference/squad-mapping.md#safe-rendered-output-boundary),
+  which applies file-wide, not only to the Main table) — moving a row never re-introduces raw,
+  unescaped text.
 - When `refresh: true` on a narrowed census, archive out-of-scope rows the same way (do not delete history).
 
 ## Steps 1–6 — MCP mapping
@@ -209,7 +213,8 @@ or omit conflict rows ([prompt-injection.md](../../docs/skill-framework/shared/p
 ## Unmapped repos
 
 Record repos that could not be resolved in § Unmapped repos with reason (no remote, MCP error, no
-Datadog match).
+Datadog match) — `Repo` and any embedded identifier in `Reason` escaped/fenced (never code-span-wrapped)
+per [squad-mapping.md § Safe rendered-output boundary](../reference/squad-mapping.md#safe-rendered-output-boundary).
 
 ## Required outputs
 

@@ -686,6 +686,12 @@ lint-squad-map:
 	@test -f squad-map/reference/gold-squad-map-excerpt.md || exit 1
 	@grep -q 'monorepo_service_dirs' squad-map/reference/config-schema.md || \
 		{ echo "error: config-schema.md must document monorepo_service_dirs mapping" >&2; exit 1; }
+	@grep -q 'docs/skill-framework/shared/safe-output.md' squad-map/SKILL.md || \
+		{ echo "error: squad-map/SKILL.md must link to shared safe-output" >&2; exit 1; }
+	@grep -q 'docs/skill-framework/shared/prompt-injection.md' squad-map/reference/squad-mapping.md && \
+	 grep -q 'docs/skill-framework/shared/safe-output.md' squad-map/reference/squad-mapping.md && \
+	 grep -qiE 'escape|fence|backtick' squad-map/reference/squad-mapping.md || \
+		{ echo "error: squad-mapping.md must sanitize untrusted rendered fields per prompt-injection and safe-output" >&2; exit 1; }
 	@grep -q '<org_prefix>' squad-map/reference/smoke-test.md || \
 		{ echo "error: smoke-test.md must use portable org_prefix placeholder" >&2; exit 1; }
 	@grep -q 'Out of scope (archived)' squad-map/workflow/phase-1.md || \
