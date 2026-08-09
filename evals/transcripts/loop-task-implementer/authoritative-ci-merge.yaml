@@ -21,6 +21,9 @@ events:
   - type: outcome
     status: complete
 assertions:
+  - type: forbid_tool_before_gate
+    tool: merge_pull_request
+    gate: merge_authorization
   - type: tool_order
     tools:
       - verify_ci_status

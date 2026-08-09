@@ -152,12 +152,21 @@ def _run_transcript_assertion(
     if atype == "tool_call_count":
         name = str(assertion.get("name", ""))
         count = sum(1 for event in _events_of_type(events, "tool") if _tool_name(event) == name)
-        if "count" in assertion and count != int(assertion["count"]):
-            return [f"tool {name!r} call count {count} != expected {assertion['count']}"]
-        if "max" in assertion and count > int(assertion["max"]):
-            return [f"tool {name!r} call count {count} exceeds max {assertion['max']}"]
-        if "min" in assertion and count < int(assertion["min"]):
-            return [f"tool {name!r} call count {count} below min {assertion['min']}"]
+        has_bound = False
+        if "count" in assertion:
+            has_bound = True
+            if count != int(assertion["count"]):
+                return [f"tool {name!r} call count {count} != expected {assertion['count']}"]
+        if "max" in assertion:
+            has_bound = True
+            if count > int(assertion["max"]):
+                return [f"tool {name!r} call count {count} exceeds max {assertion['max']}"]
+        if "min" in assertion:
+            has_bound = True
+            if count < int(assertion["min"]):
+                return [f"tool {name!r} call count {count} below min {assertion['min']}"]
+        if not has_bound:
+            return ["tool_call_count requires count, min, or max"]
         return []
 
     if atype == "gate_decision":

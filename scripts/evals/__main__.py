@@ -170,7 +170,7 @@ def run_all(
 
     registry = parse_registry(root / "skills.yaml")
     cases = load_fixtures(FIXTURES_DIR)
-    transcript_cases = load_transcript_fixtures(root / "evals" / "transcripts")
+    transcript_cases = load_transcript_fixtures(TRANSCRIPTS_DIR)
     if GLOBAL_FIXTURE.is_file():
         global_raw = yaml.safe_load(GLOBAL_FIXTURE.read_text(encoding="utf-8"))
         if isinstance(global_raw, dict):
@@ -204,6 +204,14 @@ def run_all(
             continue
         key = (case.skill, case.case_id)
         if key in seen:
+            results.append(
+                EvalResult(
+                    case.skill,
+                    case.case_id,
+                    False,
+                    [f"duplicate eval case id for skill {case.skill!r}"],
+                ),
+            )
             continue
         seen.add(key)
         if case.skill not in registry.skills:
@@ -220,6 +228,14 @@ def run_all(
             continue
         key = (case.skill, case.case_id)
         if key in seen:
+            results.append(
+                EvalResult(
+                    case.skill,
+                    case.case_id,
+                    False,
+                    [f"duplicate eval case id for skill {case.skill!r}"],
+                ),
+            )
             continue
         seen.add(key)
         if case.skill not in registry.skills:

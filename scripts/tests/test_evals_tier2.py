@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -72,7 +70,20 @@ def test_transcript_forbid_tool_before_gate(tmp_path: Path) -> None:
     assert not result.passed
 
 
-def test_tier_filter_excludes_opposite_tier() -> None:
+def test_transcript_tool_call_count_requires_bound(tmp_path: Path) -> None:
+    from scripts.evals.transcript import TranscriptCase, TranscriptEvent, run_transcript_case
+
+    case = TranscriptCase(
+        skill="demo",
+        case_id="unbounded-count",
+        tier=2,
+        description="",
+        events=[TranscriptEvent("tool", {"name": "merge_pull_request"})],
+        assertions=[{"type": "tool_call_count", "name": "merge_pull_request"}],
+        path=tmp_path / "unbounded.yaml",
+    )
+    result = run_transcript_case(case)
+    assert not result.passed
     from scripts.evals.__main__ import run_all
 
     tier1 = run_all(ROOT, tier_filter=1)
