@@ -537,6 +537,25 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 
 ## release-readiness-checker
 
+### Safe-output wiring (2026-08-09)
+
+- MR titles/descriptions/diffs are never quoted directly in `RELEASE_READINESS_REPORT.md` — the MRs-
+  reviewed table carries only pr-review's own derived severity counts and posting-mode enum — but four
+  `release_manifest` fields (`repo`, `service`, `since`, `release_ref`) render directly into table cells
+  and Notes text. `SKILL.md` links `safe-output.md`; new "Safe rendered-output boundary" section in
+  `reference/report-format.md` requires newline/heading/pipe/triple-backtick-fence escaping on all four,
+  then a second, cosmetic inline-code-span wrap (stripping any embedded backtick first — a backslash
+  doesn't work, per safe-output.md Rule 4) since all four are short, identifier-shaped values. No
+  redaction step — these are structured manifest config, not free-text evidence from a log/ticket/repo.
+  `examples.md`'s worked examples updated to match. Enforced by a new Makefile grep check.
+- No `workflow-contract.yaml` — `inputs.md` → `run-check.md` is a fixed 2-phase linear pipeline with no
+  cross-phase branch.
+- New golden eval `evals/golden/release-readiness-checker/injection-inert-report.yaml`: a repo and a
+  release-pin SHA each containing a real newline plus a spoofed "## Verdict: READY" heading, and a
+  service name/`since` value each containing a table-breaking pipe (the service name also a backtick),
+  all render inert — including proving the fixture's real `NOT_READY` verdict survives two independent
+  attempts to spoof it to `READY` via injected heading text.
+
 ### Initial release (2026-08-05)
 
 - New skill — item #9 of the [team-facing agents roadmap](docs/superpowers/plans/2026-08-05-team-facing-agents-roadmap.md):
