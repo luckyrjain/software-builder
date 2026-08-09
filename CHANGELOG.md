@@ -540,6 +540,33 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 
 ## migration-program-manager
 
+### Safe-output wiring (2026-08-09)
+
+- Fourth stop in the workflow-contract.yaml/safe-output/eval-fixture rollout (after `pr-review`,
+  `backlog-runner`, `cost-optimization-sprint-planner`). `SKILL.md` links `safe-output.md` alongside
+  `prompt-injection.md`; new "Safe rendered-output boundary" section in `reference/report-format.md`
+  requires newline/heading/pipe/triple-backtick-fence escaping on **all six** untrusted fields —
+  `<service>`, `<workspace_root>`, `<squad name>` (from `SQUAD_MAP.md`'s own `GitLab squad`/`Datadog
+  team` columns — external org-configured metadata, not skill-authored), `<mr_url>`, `<notes>`, and the
+  Workspace-gaps table's Reason column (which can itself embed an untrusted `squad_map_path`) — since a
+  Markdown table splits rows at the line level before any inline formatting (including a code span)
+  runs, so backtick-wrapping alone never stops an embedded raw newline from breaking a cell or a
+  heading. Only the three short, identifier-shaped fields (`<service>`, `<workspace_root>`, `<squad
+  name>` — the last rendered as an actual `## <squad name>` heading, not a table cell) get a second,
+  cosmetic inline-code-span wrapper on top; `<mr_url>` and the Reason column render as plain escaped
+  text instead. Stripping the backtick, not backslash-escaping it, is what actually works — verified
+  against a real CommonMark parser that `` `foo\`bar` `` still closes the code span at the backtick
+  regardless of the backslash; fixed the same misconception in the shared `safe-output.md` Rule 4
+  wording, and filed #67 for the same bug in `backlog-runner`'s already-merged fixture. Enforced by a
+  new Makefile grep check. `examples.md`'s worked examples updated to match.
+- No `workflow-contract.yaml` — confirmed `inputs.md` → `run-rollup.md` is a fixed 2-phase linear
+  pipeline with no cross-phase branch.
+- New golden eval `evals/golden/migration-program-manager/injection-inert-report.yaml` proving a service
+  name with an embedded backtick, a squad name with a real newline plus a spoofed heading, a migration
+  note with Markdown-injection plus a pasted secret, a second note with an unbalanced triple-backtick
+  fence, an `mr_url` with a table-breaking pipe, and a gap Reason embedding an untrusted
+  `squad_map_path` all render inert/redacted.
+
 ### Initial release (2026-08-05)
 
 - New skill — item #8 of the [team-facing agents roadmap](docs/superpowers/plans/2026-08-05-team-facing-agents-roadmap.md):
