@@ -153,6 +153,9 @@ class TestRepoCacheHelpers:
     def test_normalize_repo_token_ignores_case_and_separators(self):
         assert normalize_repo_token("API-Disbursement") == normalize_repo_token("api_disbursement")
 
+    def test_normalize_repo_token_does_not_collapse_distinct_names(self):
+        assert normalize_repo_token("myapp") != normalize_repo_token("my-app")
+
     def test_parse_last_run_timestamp(self):
         header = "# Squad Map\n\n**Last run:** 2026-08-01T12:34:56Z\n"
         parsed = parse_last_run_timestamp(header)

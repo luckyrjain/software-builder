@@ -27,10 +27,12 @@ def extract_squad_from_namespace(namespace_path: str, squad_path_segment: int) -
 def normalize_repo_token(value: str) -> str:
     """Case- and separator-insensitive repo token for cache lookup only.
 
-    Used by who-owns-x-bot and squad-map cache hits — never rewrite the caller's original query
-    string for squad-map invocation or Slack output.
+    Splits on non-alphanumeric boundaries and rejoins with hyphens so `api_disbursement`
+    matches `API-Disbursement`, but `myapp` does not match `my-app` (distinct token shapes).
+    Never rewrite the caller's original query string for squad-map invocation or Slack output.
     """
-    return "".join(ch for ch in value.lower() if ch.isalnum())
+    tokens = [t for t in re.split(r"[^a-z0-9]+", value.lower()) if t]
+    return "-".join(tokens)
 
 
 def parse_last_run_timestamp(header_text: str) -> datetime | None:
