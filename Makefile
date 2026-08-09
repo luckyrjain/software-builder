@@ -779,6 +779,13 @@ lint-new-hire-guide:
 		{ echo "error: smoke-test.md must link to pressure-tests.md" >&2; exit 1; }
 	@grep -q 'skill-framework' new-hire-guide/SETUP.md || \
 		{ echo "error: new-hire-guide/SETUP.md must link to docs/skill-framework" >&2; exit 1; }
+	@grep -q 'docs/skill-framework/shared/safe-output.md' new-hire-guide/SKILL.md || \
+		{ echo "error: new-hire-guide/SKILL.md must link to shared safe-output" >&2; exit 1; }
+	@grep -q 'docs/skill-framework/shared/prompt-injection.md' new-hire-guide/reference/tour-format.md && \
+	 grep -q 'docs/skill-framework/shared/safe-output.md' new-hire-guide/reference/tour-format.md && \
+	 grep -qiE 'escape|fence|backtick' new-hire-guide/reference/tour-format.md && \
+	 grep -qi 'redact' new-hire-guide/reference/tour-format.md || \
+		{ echo "error: tour-format.md must sanitize untrusted rendered fields per prompt-injection and safe-output" >&2; exit 1; }
 	@echo "  ok (framework refs)"
 
 lint-release-readiness-checker:

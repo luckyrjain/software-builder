@@ -41,21 +41,21 @@ Conventions: [examples-conventions](../docs/skill-framework/shared/examples-conv
 **Expected fragment:**
 
 ```
-# Onboarding tour — Jane
+# Onboarding tour — `Jane`
 
-**Squad:** payments
+**Squad:** `payments`
 
 ## Your repos
 
 | Repo | Purpose | Confidence |
 |------|---------|------------|
-| api-payments | Public payment-initiation API, validates + queues payout requests | MEDIUM |
-| payments-worker | Consumes payout queue, calls payout rail, updates status | MEDIUM |
-| payments-ledger | Authoritative ledger of payment state transitions | MEDIUM |
+| `api-payments` | Public payment-initiation API, validates + queues payout requests | MEDIUM |
+| `payments-worker` | Consumes payout queue, calls payout rail, updates status | MEDIUM |
+| `payments-ledger` | Authoritative ledger of payment state transitions | MEDIUM |
 
 ## Squad contacts
 
-GitLab squad: payments (acme/payments/*) · Datadog team: payments-platform
+GitLab squad: `payments` (`acme/payments/*`) · Datadog team: `payments-platform`
 
 ## Go deeper
 
@@ -93,21 +93,21 @@ Jane's tour above; `SQUAD_MAP.md` already covers it in full, unscoped, from that
 **Expected fragment:**
 
 ```
-# Onboarding tour — Priya
+# Onboarding tour — `Priya`
 
-**Squad:** fraud-review
+**Squad:** `fraud-review`
 
 ## Your repos
 
 | Repo | Purpose | Confidence |
 |------|---------|------------|
-| fraud-review-service | Case-management API for the manual fraud-review queue — assigns and tracks reviewer decisions | MEDIUM |
-| legacy-fraud-triage | Pre-filters flagged transactions before they reach the manual review queue | LOW |
+| `fraud-review-service` | Case-management API for the manual fraud-review queue — assigns and tracks reviewer decisions | MEDIUM |
+| `legacy-fraud-triage` | Pre-filters flagged transactions before they reach the manual review queue | LOW |
 
 ## Squad contacts
 
-GitLab squad: fraud-review (fraud-review-service) / legacy-ops (legacy-fraud-triage) · Datadog team:
-fraud-review (both repos)
+GitLab squad: `fraud-review` (`fraud-review-service`) / `legacy-ops` (`legacy-fraud-triage`) · Datadog
+team: `fraud-review` (both repos)
 
 ## Go deeper
 
@@ -155,20 +155,20 @@ Comprehension Phase: DELTA — 0/44 repos changed since last manifest | Next: re
 ```
 
 ```
-# Onboarding tour — Marcus
+# Onboarding tour — `Marcus`
 
-**Squad:** collections
+**Squad:** `collections`
 
 ## Your repos
 
 | Repo | Purpose | Confidence |
 |------|---------|------------|
-| collections-service | Orchestrates overdue-balance collection workflows and payment-plan offers | MEDIUM |
-| dunning-scheduler | Schedules and rate-limits dunning notices per collections-service's workflow state | MEDIUM |
+| `collections-service` | Orchestrates overdue-balance collection workflows and payment-plan offers | MEDIUM |
+| `dunning-scheduler` | Schedules and rate-limits dunning notices per collections-service's workflow state | MEDIUM |
 
 ## Squad contacts
 
-GitLab squad: collections · Datadog team: collections
+GitLab squad: `collections` · Datadog team: `collections`
 
 ## Go deeper
 

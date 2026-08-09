@@ -489,6 +489,29 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 
 ## new-hire-guide
 
+### Safe-output wiring (2026-08-09)
+
+- Fifth stop in the workflow-contract.yaml/safe-output/eval-fixture rollout (after `pr-review`,
+  `backlog-runner`, `cost-optimization-sprint-planner`, `migration-program-manager`). `SKILL.md` links
+  `safe-output.md` alongside `prompt-injection.md`; new "Safe rendered-output boundary" section in
+  `reference/tour-format.md` covers `new_hire.name`/`squad`/`role`/`start_date`, matched repo names, and
+  `SQUAD_MAP.md`'s own contact fields — `new_hire.name` is the single most sensitive case, since it's
+  rendered directly into `ONBOARDING_TOUR.md`'s own **H1 title** (`# Onboarding tour — <new_hire.name>`).
+  Short identifier fields get escape-then-strip-then-code-span treatment (never backslash-escape a
+  backtick in place — verified against a real CommonMark parser that it doesn't work); the per-repo
+  purpose line (cited from domain-comprehension's own census, itself built by reading repository
+  content) gets escape/fence + redact, same class as `notes` in the other rollup skills. `examples.md`'s
+  worked examples — including the Squad contacts lines — updated to match. Enforced by a new Makefile
+  grep check.
+- No `workflow-contract.yaml` — confirmed `inputs.md` → `run-tour.md` is a fixed 2-phase linear pipeline
+  with no cross-phase branch.
+- New golden eval `evals/golden/new-hire-guide/injection-inert-tour.yaml` proving a `new_hire.name`
+  containing a real newline plus a spoofed H1 title, and a repo purpose line containing Markdown-
+  injection plus a pasted secret, both render inert/redacted — including an end-to-end check (verified
+  with a real CommonMark parser)
+  that the final rendered title is one clean, unbroken heading with the untrusted value safely inside a
+  single inline code span.
+
 ### Initial release (2026-08-05)
 
 - New skill — item #5 of the [team-facing agents roadmap](docs/superpowers/plans/2026-08-05-team-facing-agents-roadmap.md):

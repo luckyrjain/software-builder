@@ -5,24 +5,52 @@ Written to `tour_output_dir` (default `{workspace_root}/../onboarding-tours/<slu
 individual source repos — alongside links into domain-comprehension's workspace-level deliverables at
 `workspace_root`, not instead of them.
 
+## Safe rendered-output boundary
+
+`<new_hire.name>`, `<new_hire.squad>`, `<new_hire.role>`, and `<new_hire.start_date>` are caller-supplied
+data ([prompt-injection.md](../../docs/skill-framework/shared/prompt-injection.md)); `<repo>` and the
+Squad contacts fields (GitLab namespace, Datadog team, Conflicts entries) come from `SQUAD_MAP.md`; the
+per-repo purpose line is cited from domain-comprehension's own census, itself built by reading repository
+content (READMEs, source) — none of these are skill-authored text. `<new_hire.name>` in particular is
+rendered into the document's own **H1 title** — the single most sensitive position in the file. Before
+rendering `ONBOARDING_TOUR.md`, for every one of these fields:
+
+1. **Structurally escape or fence newlines, leading `#`/`>`/`-`, table `|` delimiters, and unbalanced
+   triple-backtick fences, always** — a raw newline in `<new_hire.name>` simply ends the H1 title line
+   early and lets the rest of the value render as separate document content, including a spoofed heading
+   of its own; the same applies to `<new_hire.squad>`/`<new_hire.role>`/`<new_hire.start_date>` in the
+   metadata line and to the purpose line in the table.
+2. **Then**, for the short, identifier-shaped fields — `<new_hire.name>`, `<new_hire.squad>`,
+   `<new_hire.role>`, `<new_hire.start_date>`, `<repo>`, and the Squad contacts identifiers — also wrap
+   the (already-escaped) value in an inline code span, first **removing** any backtick already in it
+   ([safe-output.md](../../docs/skill-framework/shared/safe-output.md) Rule 4). A backslash before the
+   backtick does **not** work — CommonMark code-span delimiters are matched before backslash escapes are
+   resolved. Strip the character entirely. The per-repo purpose line is not a short identifier — render
+   it as a plain escaped/fenced excerpt instead of a code span.
+3. **Redact** plausible secrets, tokens, and PII from the per-repo purpose line before including it —
+   it's cited from domain-comprehension's own census, itself built by reading repository content
+   (READMEs, source), the same class of evidence backlog-runner's escalation-report excerpt and
+   pr-review's finding descriptions already redact — noting when redaction was applied.
+
 ## Structure (order fixed)
 
 ```markdown
-# Onboarding tour — <new_hire.name>
+# Onboarding tour — `<new_hire.name>`
 
-**Squad:** <new_hire.squad> · **Role:** <new_hire.role, or omit line if not given> · **Start:**
-<new_hire.start_date, or omit line if not given>
+**Squad:** `<new_hire.squad>` · **Role:** `<new_hire.role>` (omit this line entirely if not given) ·
+**Start:** `<new_hire.start_date>` (omit this line entirely if not given)
 
 ## Your repos
 
 | Repo | Purpose | Confidence |
 |------|---------|------------|
-| <repo> | <one-line purpose, cited from domain-comprehension's P0 census / EXEC_SUMMARY.md — not invented here> | <HIGH \| MEDIUM \| LOW \| UNKNOWN> |
+| `<repo>` | <one-line purpose, escaped/fenced per above, cited from domain-comprehension's P0 census / EXEC_SUMMARY.md — not invented here> | <HIGH \| MEDIUM \| LOW \| UNKNOWN> |
 
 ## Squad contacts
 
 <Pulled from SQUAD_MAP.md's row(s) for this squad — GitLab namespace, Datadog team, any Conflicts-table
-entry for these repos surfaced as-is, not resolved or hidden.>
+entry for these repos, each escaped/fenced and code-span-wrapped per above, surfaced as-is, not resolved
+or hidden.>
 
 ## Go deeper
 
