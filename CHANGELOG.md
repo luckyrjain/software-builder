@@ -392,6 +392,37 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 
 ## pr-gatekeeper
 
+### Safe-output wiring (2026-08-09)
+
+- This skill delegates all rendering to `pr-review`, whose own Phase 5 already escapes/fences untrusted
+  MR/diff content before rendering its executive summary — so the only genuinely new render surface here
+  is `workflow/gatekeep.md`'s held-review notification path (`reference/auto-post-policy.md § When
+  posting didn't happen`), which pastes that already-escaped executive summary into a **second,
+  pr-gatekeeper-authored code fence** (the manual-notify template). That's a boundary pr-review's own
+  escaping was never written to protect: a legitimately nested fenced code excerpt inside the executive
+  summary (a real diff snippet) contains a literal triple-backtick line, and CommonMark closes a fence at
+  the first line matching the opening delimiter's backtick run regardless of "balance" within the
+  content — so the inner fence prematurely closes the outer template fence and spills the remainder as
+  live, unfenced text (reproduced against a real CommonMark parser). Fixed by generalizing
+  `safe-output.md` Rule 4's delimiter-length technique (documented there for code spans) to code fences:
+  scan the executive summary for its longest backtick run and open the outer template fence with
+  `max(3, longest_run + 1)` backticks — three is CommonMark's own floor for a fence to be a fence at
+  all, one longer than the longest embedded run whenever that run is 3 or more — never strip the
+  summary's internal fences, since that would destroy the nested excerpts it exists to preserve. New
+  rule documented in `reference/auto-post-policy.md` and referenced from `workflow/gatekeep.md` step 5
+  (`workflow_version` bumped 1.0 → 1.1) and `SKILL.md`.
+- Also fixed a stale claim in `reference/auto-post-policy.md`: the ask-point drift-check script
+  (`scripts/check-ask-point-drift.py`) said it was "not yet wired into `make lint-pr-gatekeeper`", but
+  the Makefile target already runs it — doc corrected to match.
+- No `workflow-contract.yaml` — `inputs.md` → `gatekeep.md` is a fixed 2-phase linear pipeline; the
+  posted/not-posted/stale branching happens within `gatekeep.md` itself, not across which phase file
+  runs next.
+- New golden eval `evals/golden/pr-gatekeeper/injection-inert-notification.yaml`: a raw executive summary
+  genuinely containing a nested 3-backtick fenced code excerpt is asserted (via `require_pattern`) to be
+  real, and the rendered notification is asserted to open/close with a 4-backtick delimiter, never a
+  vulnerable 3-backtick one, with the summary's tail content intact past the nested fence. Enforced by a
+  new Makefile grep check on `SKILL.md` + `reference/auto-post-policy.md`.
+
 ### Initial release (2026-08-05)
 
 - New skill — item #2 of the [team-facing agents roadmap](docs/superpowers/plans/2026-08-05-team-facing-agents-roadmap.md):
@@ -1072,6 +1103,18 @@ _Pre-merge WIP on `feat/squad-map-skill` (internal v1.0–v1.5) is consolidated 
   is unset. Added the `make lint-incident-rca` target (line check + JSON parse + anchor check).
 
 ## pr-review
+
+### Manual-notify template fence-nesting fix (2026-08-09)
+
+- `workflow/posting.md`'s own "Manual notify template" — offered directly whenever `chat-only`/no-write-
+  tools mode is detected, and separately reused by pr-gatekeeper's held-review notification path — pastes
+  the Phase 5 executive summary into the template's own outer code fence. That's a boundary Phase 5's own
+  escaping (below) doesn't cover: a legitimately nested fenced excerpt in the summary (a real diff
+  snippet) contains a literal triple-backtick line that can prematurely close the template's own fence,
+  found while extending this exact scenario's golden fixture to pr-gatekeeper
+  (`evals/golden/pr-gatekeeper/injection-inert-notification.yaml`). Fixed by documenting the same
+  `max(3, longest_run + 1)`-backtick rule directly on the template in `posting.md`, and cross-linking it
+  from pr-gatekeeper's own copy of the rule (`workflow_version` bumped 1.6 → 1.7).
 
 ### Route-aware workflow contract + safe-output wiring (2026-08-09)
 

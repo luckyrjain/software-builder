@@ -5,9 +5,30 @@
 set -euo pipefail
 
 strip_fences() {
-	awk 'BEGIN { in_fence = 0 }
-		/^```/ { in_fence = !in_fence; next }
-		!in_fence { print }' "$1"
+	# A boolean toggle on any ```-prefixed line is wrong once fences of different lengths nest
+	# (e.g. a ```` block containing a literal ``` excerpt) — per CommonMark, only a line consisting
+	# of nothing but backticks, with a run at least as long as the opening fence, closes it. A
+	# shorter or unrelated backtick-prefixed line inside stays literal content. Track the opening
+	# fence's length and only close on a matching-or-longer bare backtick run. Also allow up to
+	# 3 leading spaces on either delimiter (CommonMark's own fence-indentation allowance — used by
+	# fences nested inside numbered-list steps throughout this repo).
+	awk 'BEGIN { fence_len = 0 }
+		{
+			if (fence_len == 0) {
+				rest = $0
+				n = 0
+				while (n < 3 && substr(rest, 1, 1) == " ") { rest = substr(rest, 2); n++ }
+				if (match(rest, /^```+/)) { fence_len = RLENGTH; next }
+				print
+				next
+			}
+			line = $0
+			sub(/[ \t\r]+$/, "", line)
+			n = 0
+			while (n < 3 && substr(line, 1, 1) == " ") { line = substr(line, 2); n++ }
+			if (line ~ /^`+$/ && length(line) >= fence_len) { fence_len = 0 }
+			next
+		}' "$1"
 }
 
 resolve_path() {

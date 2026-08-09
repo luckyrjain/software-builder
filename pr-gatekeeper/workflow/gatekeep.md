@@ -1,5 +1,5 @@
 ---
-workflow_version: 1.0
+workflow_version: 1.1
 phase: gatekeep
 produces:
   - review_outcome
@@ -65,9 +65,13 @@ the result correctly either way. No new review logic here — see
      **populate its `Full review:` line with the pasted executive summary** (there is no GitLab link to
      use instead, since nothing posted — see
      [reference/auto-post-policy.md § When posting didn't happen](../reference/auto-post-policy.md#when-posting-didnt-happen)).
-     See [SETUP.md](../SETUP.md) § Config for where the notification target is configured. **Never**
-     silently drop a completed review, or send a notification stub without the executive summary, just
-     because it didn't post — a human still needs to see the actual review.
+     Before pasting, **open the template's own code fence with `max(3, longest_run + 1)` backticks**,
+     where `longest_run` is the longest run of consecutive backticks inside the executive summary — a
+     nested code excerpt in the summary can otherwise prematurely close the template's own fence; see
+     [reference/auto-post-policy.md § When posting didn't happen](../reference/auto-post-policy.md#when-posting-didnt-happen)
+     for why. See [SETUP.md](../SETUP.md) § Config for where the notification target is configured.
+     **Never** silently drop a completed review, or send a notification stub without the executive
+     summary, just because it didn't post — a human still needs to see the actual review.
    - **Stale (`expected_head_sha` mismatch)** — per step 2 above.
 
 ## Read-only boundary

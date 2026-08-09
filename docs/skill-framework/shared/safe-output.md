@@ -60,6 +60,21 @@ Before embedding untrusted text inside rendered Markdown, a chat message, or a S
   backticks already in it and use a delimiter one backtick longer (CommonMark's own rule for nesting
   code spans) — stripping is simpler to apply correctly when the wrapping is done by an LLM-driven
   workflow rather than code, since it doesn't require counting a run length.
+- **The same delimiter-length rule applies to triple-backtick code fences, not just inline code spans**
+  — this matters whenever a skill embeds a block of already-rendered/already-escaped text (another
+  skill's own executive summary, a full report excerpt) inside a *second*, skill-authored code fence
+  (e.g. wrapping a pasted review in a chat/notification template). CommonMark closes a fence at the
+  first line matching the opening delimiter's backtick-run-or-longer, regardless of whether the content
+  in between is itself a "balanced" nested fence — a legitimately fenced code excerpt inside the pasted
+  text still contains a literal triple-backtick line that will prematurely close an outer fence of the
+  same or shorter length, spilling the remainder as live, unfenced text (verified against a real
+  parser). Before wrapping, scan the text being embedded for its longest run of consecutive backticks
+  and open the outer fence with a delimiter `max(3, longest_run + 1)` backticks long — three is
+  CommonMark's own floor for a fence to be a fence at all (two backticks form an inline code span, not
+  a block), so a value with no embedded backticks still gets a normal 3-backtick fence; a value whose
+  longest embedded run is 3 or more needs the outer fence stretched past it. Never strip
+  the embedded text's own internal fences to work around this — that destroys legitimate nested content
+  the embedding exists to preserve; lengthen the outer delimiter instead.
 
 ## Rule 5 — PII / secret redaction in rendered output
 

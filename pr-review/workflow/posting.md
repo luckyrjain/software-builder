@@ -1,5 +1,5 @@
 ---
-workflow_version: 1.6
+workflow_version: 1.7
 phase: 3-4
 produces: {posted_threads: list, summary_note: object}
 consumes:
@@ -214,3 +214,18 @@ Full review: <link to GitLab summary note or paste executive summary>
 For **Critical** findings, add: *Human merge gate recommended — do not merge until Critical items resolved.*
 
 Teams: same body works in a channel post or adaptive-card text field.
+
+**When `Full review:` pastes the executive summary rather than linking a GitLab note**, that text —
+already escaped/fenced for its own chat-Markdown rendering per
+[phase-5.md § Safe rendered-output boundary](phase-5.md#safe-rendered-output-boundary) — lands inside
+this template's own outer code fence, a boundary that escaping was never written to protect. A
+legitimately nested fenced excerpt inside the summary (a real diff snippet) contains a literal
+triple-backtick line; CommonMark closes a fence at the first line matching the opening delimiter's
+backtick-run-or-longer regardless of "balance" within the content, so that inner line would prematurely
+close this template's fence and spill the remainder as live, unfenced text. Before pasting, open this
+fence with `max(3, longest_run + 1)` backticks, where `longest_run` is the longest run of consecutive
+backticks found in the executive summary text — see
+[safe-output.md § Rule 4](../../docs/skill-framework/shared/safe-output.md#rule-4-markdown-chat-escaping)
+for the general rule. This applies whether the template is used directly (`chat-only`/no-write-tools
+mode offering it here) or reused by a caller — e.g. pr-gatekeeper's own held-review notification path
+([pr-gatekeeper/reference/auto-post-policy.md § When posting didn't happen](../../pr-gatekeeper/reference/auto-post-policy.md#when-posting-didnt-happen)).
