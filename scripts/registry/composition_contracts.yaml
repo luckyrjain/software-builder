@@ -1,0 +1,133 @@
+# Composition contracts for cross-skill graph validation (#19 v2).
+# Artifact types are shared handoff envelopes; write_authority is the maximum external write surface.
+
+artifact_types:
+  - mr_context
+  - mr_review_report
+  - rca_report
+  - k8s_rightsizing_report
+  - squad_map
+  - ownership_lookup
+  - migration_status_rollup
+  - cost_sweep_rollup
+  - implementation_task
+  - implementation_pr
+  - digest_report
+  - test_suite
+
+write_authority_levels:
+  read-only: 0
+  comment: 1
+  repository-write: 2
+  automation-unattended: 3
+
+skills:
+  pr-review:
+    produces: [mr_review_report]
+    consumes: [mr_context]
+    write_authority: comment
+
+  pr-gatekeeper:
+    produces: [mr_review_report]
+    consumes: [mr_context]
+    write_authority: comment
+
+  k8s-overprovisioning-datadog:
+    produces: [k8s_rightsizing_report]
+    consumes: [mr_context]
+    write_authority: read-only
+
+  incident-rca:
+    produces: [rca_report]
+    consumes: [mr_context]
+    write_authority: read-only
+
+  incident-triage-agent:
+    produces: [rca_report, ownership_lookup]
+    consumes: [mr_context]
+    write_authority: read-only
+
+  domain-comprehension:
+    produces: [squad_map]
+    consumes: [mr_context]
+    write_authority: read-only
+
+  squad-map:
+    produces: [squad_map, ownership_lookup]
+    consumes: [mr_context]
+    write_authority: read-only
+
+  who-owns-x-bot:
+    produces: [ownership_lookup]
+    consumes: [mr_context]
+    write_authority: read-only
+
+  new-hire-guide:
+    produces: [digest_report]
+    consumes: [mr_context]
+    write_authority: read-only
+
+  release-readiness-checker:
+    produces: [digest_report]
+    consumes: [mr_context]
+    write_authority: read-only
+
+  migration-program-manager:
+    produces: [migration_status_rollup]
+    consumes: []
+    write_authority: read-only
+
+  cost-optimization-sprint-planner:
+    produces: [cost_sweep_rollup]
+    consumes: []
+    write_authority: read-only
+
+  mysql-to-postgres-sql:
+    produces: [implementation_pr]
+    consumes: [implementation_task]
+    write_authority: repository-write
+
+  loop-task-implementer:
+    produces: [implementation_pr]
+    consumes: [implementation_task]
+    write_authority: repository-write
+
+  backlog-runner:
+    produces: [implementation_pr]
+    consumes: [implementation_task]
+    write_authority: read-only
+
+  weekly-squad-digest:
+    produces: [digest_report]
+    consumes: [migration_status_rollup, cost_sweep_rollup]
+    write_authority: read-only
+
+  unit-test-creator:
+    produces: [test_suite]
+    consumes: [implementation_task]
+    write_authority: repository-write
+
+  integration-test-creator:
+    produces: [test_suite]
+    consumes: [implementation_task]
+    write_authority: repository-write
+
+  contract-test-creator:
+    produces: [test_suite]
+    consumes: [implementation_task]
+    write_authority: repository-write
+
+  e2e-test-creator:
+    produces: [test_suite]
+    consumes: [implementation_task]
+    write_authority: repository-write
+
+  api-test-creator:
+    produces: [test_suite]
+    consumes: [implementation_task]
+    write_authority: repository-write
+
+  test-writer:
+    produces: [test_suite]
+    consumes: [implementation_task]
+    write_authority: read-only

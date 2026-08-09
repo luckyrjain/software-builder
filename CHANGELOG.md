@@ -8,6 +8,11 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 
 ## Platform
 
+### Composition graph v2 — contracts and write-authority validation (#19 follow-up)
+
+- Added `scripts/registry/composition_contracts.yaml` with per-skill `produces`/`consumes`/`write_authority`.
+- Registry validation now checks aggregate rollup inputs and blocks write-authority escalation through invoke wrappers.
+
 ### Capabilities catalog + backfill for all 22 skills (#18 follow-up)
 
 - Added `scripts/registry/capability_catalog.yaml` as the canonical capability contract per skill.

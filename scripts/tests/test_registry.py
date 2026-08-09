@@ -8,6 +8,26 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 
+MINIMAL_COMPOSITION_CONTRACTS = """
+artifact_types: []
+write_authority_levels:
+  read-only: 0
+  comment: 1
+  repository-write: 2
+  automation-unattended: 3
+skills:
+  solo:
+    produces: []
+    consumes: []
+    write_authority: read-only
+"""
+
+
+def _write_minimal_composition_contracts(tmp_path: Path) -> Path:
+    path = tmp_path / "composition_contracts.yaml"
+    path.write_text(MINIMAL_COMPOSITION_CONTRACTS, encoding="utf-8")
+    return path
+
 
 def test_parse_minimal_registry(tmp_path: Path) -> None:
     from scripts.registry.schema import parse_registry
@@ -154,6 +174,8 @@ skills:
     )
     (tmp_path / ".kiro" / "steering").mkdir(parents=True)
 
+    contracts_path = _write_minimal_composition_contracts(tmp_path)
+    monkeypatch.setattr("scripts.registry.composition_contracts.CONTRACTS_PATH", contracts_path)
     monkeypatch.setattr("scripts.registry.cli.ROOT", tmp_path)
 
     from scripts.registry.cli import cmd_generate
@@ -399,6 +421,8 @@ skills:
     (tmp_path / ".cursor" / "rules" / "solo.mdc").write_text("stale\n", encoding="utf-8")
     (tmp_path / ".kiro" / "steering" / "solo.md").write_text("stale\n", encoding="utf-8")
 
+    contracts_path = _write_minimal_composition_contracts(tmp_path)
+    monkeypatch.setattr("scripts.registry.composition_contracts.CONTRACTS_PATH", contracts_path)
     monkeypatch.setattr("scripts.registry.cli.ROOT", tmp_path)
 
     from scripts.registry.cli import cmd_generate
