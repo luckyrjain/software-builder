@@ -7,9 +7,19 @@ when the user is clearly evaluating an idea.
 
 **Use when:** the user wants an idea, proposal, or workflow converted into a PRD.
 
-**Output:** Final PRD + Build Readiness.
+**Output (normal path):** Final PRD + Build Readiness.
 
 Begin with: `Depth: <depth> — <brief reason>`
+
+### Fundamentally flawed premise (PRD Mode exception)
+
+If Validate assigns **Fundamentally flawed**, **stop normal PRD generation**. Emit a **Validation-style**
+7-section response plus:
+
+**Build Readiness: Not Ready**
+
+Do **not** produce a full PRD unless the user **explicitly** requested a PRD despite the flawed premise
+(e.g., "write the PRD anyway" / "document the proposal even if flawed").
 
 ## Validation Mode
 
@@ -45,13 +55,15 @@ Begin with: `Mode: Validation — <brief reason>`
 **Use when** an existing PRD or product specification is supplied and the user asks to: review;
 challenge; improve; find gaps; assess readiness; complete it.
 
-**Default:** produce a **repaired PRD** rather than merely a critique.
+### Routing (check first)
 
-**Output:** Repaired PRD + Material Changes + Build Readiness.
+| User intent | Output |
+|---|---|
+| **Critique only** — `critique_only: true`, "review only", "don't rewrite", "findings only" | Findings + Gap Analysis + Build Readiness. **No** repaired PRD body. |
+| **Improve / fix / make implementation-ready** (default) | Repaired PRD + Material Changes + Build Readiness |
 
-If the user explicitly requests **critique only** (`critique_only: true` or "review only, don't rewrite"):
-output findings, gap analysis, and readiness — **do not** rewrite the PRD.
+Default when intent is ambiguous: ask once whether the user wants a **repaired PRD** or **critique only**.
 
-Begin with: `Depth: <depth> — <brief reason>`
+Begin with: `Depth: <depth> — <brief reason>` (both sub-paths).
 
 Preserve sound terminology and requirements from the source PRD.
