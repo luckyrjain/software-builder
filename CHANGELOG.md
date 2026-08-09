@@ -873,6 +873,31 @@ _Pre-merge WIP on `feat/squad-map-skill` (internal v1.0–v1.5) is consolidated 
 
 ## squad-map
 
+### Safe-output wiring (2026-08-09)
+
+- This skill is the **source** of `Repo`/`GitLab squad`/`Datadog team` for every other skill that later
+  reads `SQUAD_MAP.md` (migration-program-manager, cost-optimization-sprint-planner, weekly-squad-digest,
+  who-owns-x-bot, new-hire-guide, domain-comprehension's Session 0b) — a regression here propagates to
+  all of them. `GitLab squad` in particular isn't always clean GitLab-namespace metadata: Phase 1 Step
+  7's CODEOWNERS fallback extracts it directly from a CODEOWNERS pattern's team handle, a string any
+  contributor with CODEOWNERS-file write access controls. `SKILL.md` links `safe-output.md`; new "Safe
+  rendered-output boundary" section in `reference/squad-mapping.md` requires newline/heading/pipe/
+  triple-backtick-fence/lone-backtick escaping on `Repo`/`GitLab namespace`/`GitLab squad`/`Datadog
+  service`/`Datadog team` — **deliberately not** the inline-code-span wrap used everywhere else in this
+  repo, since `SQUAD_MAP.md` is also a machine-parsed interchange format: who-owns-x-bot's exact `Repo`
+  match, cost-optimization-sprint-planner's verbatim `Datadog service` join, and migration-program-
+  manager's raw `split("|")` table parser all depend on these columns' literal text, and wrapping would
+  break every ordinary row's match, not just malicious ones — caught by a round-1 review before this
+  merged. `workflow/phase-1.md`'s Unmapped-repos and Out-of-scope-archived sections cross-reference the
+  same boundary (`workflow_version` bumped 1.2.3 → 1.2.5, avoiding a collision with an already-used
+  1.2.4). No redaction step — these are structured ownership identifiers, not free-text log/ticket
+  evidence. Enforced by a new Makefile grep check.
+- New golden eval `evals/golden/squad-map/injection-inert-map.yaml`: a CODEOWNERS-derived `GitLab squad`
+  value containing a backtick plus a table-breaking pipe, and a `Repo` name containing a real newline
+  plus a spoofed heading, both render inert — and, uniquely among this rollout's fixtures, also asserts
+  the opposite property: an ordinary value renders byte-for-byte unchanged, never wrapped, protecting
+  the downstream exact-match consumers named above.
+
 ### v1.0 — standalone extraction (2026-07-06)
 
 - New **squad-map** skill extracted from domain-comprehension Session 0b.

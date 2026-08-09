@@ -3,6 +3,19 @@
 All notable changes to the squad-map skill. Per-file `workflow_version` in `workflow/*.md` frontmatter
 should match the version of the latest entry below that names that file.
 
+## [1.2.5] — 2026-08-09
+
+### Added
+- **reference/squad-mapping.md** — "Safe rendered-output boundary" section: `Repo`/`GitLab namespace`/
+  `GitLab squad`/`Datadog service`/`Datadog team` all get structural newline/heading/pipe/fence/
+  lone-backtick escaping (deliberately **not** code-span wrapping — several already-shipped downstream
+  skills read these columns with an exact/verbatim string match, and wrapping would break every ordinary
+  row's match, not just malicious ones)
+- **workflow/phase-1.md** — Unmapped repos section, and the Scope-shrink bullet under Idempotency &
+  partial runs (covering the Out of scope (archived) table), both cross-reference the same boundary
+- **SKILL.md** — links `safe-output.md` and the new boundary section in its own "Untrusted content"
+  paragraph
+
 ## [1.2.4] — 2026-07-31
 
 ### Added
