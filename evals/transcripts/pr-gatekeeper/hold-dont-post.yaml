@@ -1,0 +1,40 @@
+schema_version: 1
+skill: pr-gatekeeper
+case_id: hold-dont-post-automation
+tier: 2
+description: Unattended run with auto_post_authorized false must never post before Phase 3 gate resolves
+events:
+  - type: tool
+    name: parse_webhook_inputs
+    args:
+      auto_post_authorized: false
+      project: group/repo
+      merge_request_iid: 99
+  - type: tool
+    name: invoke_pr_review
+    args:
+      project: group/repo
+      merge_request_iid: 99
+  - type: gate
+    name: phase_3_confirmation
+    decision: hold_dont_post
+  - type: tool
+    name: send_notification
+    args:
+      includes_executive_summary: true
+  - type: outcome
+    status: complete
+assertions:
+  - type: tool_not_called
+    name: post_merge_request_comment
+  - type: gate_decision
+    name: phase_3_confirmation
+    decision: hold_dont_post
+  - type: tool_order
+    tools:
+      - invoke_pr_review
+      - send_notification
+  - type: tool_args_match
+    name: send_notification
+    args:
+      includes_executive_summary: true

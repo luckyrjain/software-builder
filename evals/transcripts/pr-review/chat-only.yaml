@@ -1,0 +1,33 @@
+schema_version: 1
+skill: pr-review
+case_id: chat-only-no-gitlab-write
+tier: 2
+description: chat-only posting mode must skip Phase 3/4 and never write to GitLab
+events:
+  - type: tool
+    name: detect_posting_mode
+    args:
+      mode: chat-only
+  - type: tool
+    name: run_review_phases
+    args:
+      through_phase: 2
+  - type: gate
+    name: phase_3_confirmation
+    decision: skipped
+  - type: tool
+    name: render_chat_summary
+  - type: outcome
+    status: complete
+assertions:
+  - type: tool_not_called
+    name: post_merge_request_comment
+  - type: gate_decision
+    name: phase_3_confirmation
+    decision: skipped
+  - type: tool_order
+    tools:
+      - detect_posting_mode
+      - render_chat_summary
+  - type: outcome_status
+    status: complete

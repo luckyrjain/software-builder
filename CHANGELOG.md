@@ -8,6 +8,14 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 
 ## Platform
 
+### Behavioral evals Tier 2 — transcript policy fixtures (#16 follow-up)
+
+- Added `evals/transcripts/` fixture schema with replayable `events` (tool, gate, outcome) and policy
+  assertions (`tool_not_called`, `tool_order`, `gate_decision`, `forbid_tool_before_gate`, etc.).
+- Added `scripts/evals/transcript.py` and wired Tier-2 cases into `python3 -m scripts.evals` with
+  optional `--tier` filter.
+- Six high-risk transcript fixtures for pr-review, pr-gatekeeper, and loop-task-implementer.
+
 ### Composition graph v2 — contracts and write-authority validation (#19 follow-up)
 
 - Added `scripts/registry/composition_contracts.yaml` with per-skill `produces`/`consumes`/`write_authority`.

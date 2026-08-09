@@ -1,0 +1,27 @@
+schema_version: 1
+skill: pr-gatekeeper
+case_id: duplicate-webhook-short-circuit
+tier: 2
+description: Duplicate webhook delivery with the same head_sha must short-circuit before pr-review runs
+events:
+  - type: tool
+    name: parse_webhook_inputs
+    args:
+      head_sha: sha256:abc123
+      last_processed_head_sha: sha256:abc123
+      project: group/repo
+      merge_request_iid: 42
+  - type: gate
+    name: event_filter
+    decision: short_circuit
+  - type: outcome
+    status: complete
+    detail: duplicate webhook — no review invoked
+assertions:
+  - type: tool_not_called
+    name: invoke_pr_review
+  - type: gate_decision
+    name: event_filter
+    decision: short_circuit
+  - type: outcome_status
+    status: complete

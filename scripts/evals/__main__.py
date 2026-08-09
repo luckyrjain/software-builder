@@ -15,6 +15,7 @@ from scripts.registry.schema import parse_registry
 
 ROOT = Path(__file__).resolve().parents[2]
 FIXTURES_DIR = ROOT / "evals" / "fixtures"
+TRANSCRIPTS_DIR = ROOT / "evals" / "transcripts"
 GLOBAL_FIXTURE = FIXTURES_DIR / "_global.yaml"
 
 WORKFLOW_REQUIRED_KEYS = ("workflow_version", "phase", "produces", "consumes")
@@ -159,9 +160,17 @@ def run_case(root: Path, case: EvalCase) -> EvalResult:
     return EvalResult(case.skill, case.case_id, not messages, messages)
 
 
-def run_all(root: Path, *, skill_filter: str | None = None) -> list[EvalResult]:
+def run_all(
+    root: Path,
+    *,
+    skill_filter: str | None = None,
+    tier_filter: int | None = None,
+) -> list[EvalResult]:
+    from scripts.evals.transcript import load_transcript_fixtures, run_transcript_case
+
     registry = parse_registry(root / "skills.yaml")
     cases = load_fixtures(FIXTURES_DIR)
+    transcript_cases = load_transcript_fixtures(TRANSCRIPTS_DIR)
     if GLOBAL_FIXTURE.is_file():
         global_raw = yaml.safe_load(GLOBAL_FIXTURE.read_text(encoding="utf-8"))
         if isinstance(global_raw, dict):
@@ -191,8 +200,18 @@ def run_all(root: Path, *, skill_filter: str | None = None) -> list[EvalResult]:
     for case in cases:
         if skill_filter and case.skill != skill_filter:
             continue
+        if tier_filter is not None and case.tier != tier_filter:
+            continue
         key = (case.skill, case.case_id)
         if key in seen:
+            results.append(
+                EvalResult(
+                    case.skill,
+                    case.case_id,
+                    False,
+                    [f"duplicate eval case id for skill {case.skill!r}"],
+                ),
+            )
             continue
         seen.add(key)
         if case.skill not in registry.skills:
@@ -201,6 +220,30 @@ def run_all(root: Path, *, skill_filter: str | None = None) -> list[EvalResult]:
             )
             continue
         results.append(run_case(root, case))
+
+    for case in transcript_cases:
+        if skill_filter and case.skill != skill_filter:
+            continue
+        if tier_filter is not None and case.tier != tier_filter:
+            continue
+        key = (case.skill, case.case_id)
+        if key in seen:
+            results.append(
+                EvalResult(
+                    case.skill,
+                    case.case_id,
+                    False,
+                    [f"duplicate eval case id for skill {case.skill!r}"],
+                ),
+            )
+            continue
+        seen.add(key)
+        if case.skill not in registry.skills:
+            results.append(
+                EvalResult(case.skill, case.case_id, False, ["skill not in skills.yaml"]),
+            )
+            continue
+        results.append(run_transcript_case(case))
     return results
 
 
@@ -226,11 +269,12 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="scripts.evals")
     parser.add_argument("--repo-root", type=Path, default=ROOT)
     parser.add_argument("--skill", help="run evals for one skill id")
+    parser.add_argument("--tier", type=int, help="run evals for one tier only (1=contract, 2=transcript)")
     parser.add_argument("--report", type=Path, help="write JSON report to path")
     args = parser.parse_args(argv)
 
     try:
-        results = run_all(args.repo_root, skill_filter=args.skill)
+        results = run_all(args.repo_root, skill_filter=args.skill, tier_filter=args.tier)
     except (ValueError, yaml.YAMLError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2

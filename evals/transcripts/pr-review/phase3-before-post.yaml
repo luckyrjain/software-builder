@@ -1,0 +1,34 @@
+schema_version: 1
+skill: pr-review
+case_id: phase3-before-phase4-post
+tier: 2
+description: Full posting mode must resolve Phase 3 confirmation before any GitLab write
+events:
+  - type: tool
+    name: detect_posting_mode
+    args:
+      mode: full
+  - type: tool
+    name: run_review_phases
+    args:
+      through_phase: 3
+  - type: gate
+    name: phase_3_confirmation
+    decision: post_all
+  - type: tool
+    name: post_merge_request_comment
+    args:
+      posting_mode: full
+  - type: outcome
+    status: complete
+assertions:
+  - type: forbid_tool_before_gate
+    tool: post_merge_request_comment
+    gate: phase_3_confirmation
+  - type: tool_order
+    tools:
+      - run_review_phases
+      - post_merge_request_comment
+  - type: tool_call_count
+    name: post_merge_request_comment
+    count: 1
