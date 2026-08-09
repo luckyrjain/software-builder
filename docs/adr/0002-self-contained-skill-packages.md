@@ -19,4 +19,4 @@ Earlier installs copied skill directories with relative links into `docs/skill-f
 - **Positive:** Skills are portable across machines without a live repo checkout.
 - **Positive:** Validation failures roll back; partial installs do not leave corrupt packages.
 - **Negative:** Larger on-disk packages (framework files duplicated per skill).
-- **Follow-ups:** `make verify-install` (two-skill smoke), `make verify-install-all` (all 22 skills), release bundles via `make package-release`.
+- **Follow-ups:** Release automation (`make package-release`, tagged GitHub Releases) and expanded install verification in CI.

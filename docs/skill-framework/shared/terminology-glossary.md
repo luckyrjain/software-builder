@@ -10,7 +10,7 @@ Shared vocabulary for **software-builder** platform docs, `skills.yaml`, and beh
 | **Registry** | Root `skills.yaml` — canonical list of skills plus install edges, hosts, invocation mode, composition, and capabilities. |
 | **Framework** | `docs/skill-framework/` shared normative reference library vendored into installed packages. |
 | **Capability** | A named external tool or API contract a skill may call (required vs optional + degraded modes), declared under `capabilities` in `skills.yaml`. |
-| **Composition** | How skills invoke or escalate to each other (`invokes`, `escalation_targets`, aggregate rollups) with `produces` / `consumes` / `write_authority` contracts. |
+| **Composition** | How skills invoke or escalate to each other. `skills.yaml` holds `invokes` and `escalation_targets`; `scripts/registry/composition_contracts.yaml` holds per-skill `produces` / `consumes` / `write_authority` contracts validated at registry lint time. |
 
 ## Invocation and risk
 
