@@ -24,14 +24,78 @@ def load_catalog(path: Path = CATALOG_PATH) -> dict[str, dict[str, Any]]:
     return {str(skill_id): dict(entry) for skill_id, entry in skills.items()}
 
 
+def _capabilities_valid(entry: dict[str, Any]) -> bool:
+    caps = entry.get("capabilities")
+    if not isinstance(caps, dict):
+        return False
+    required = caps.get("required")
+    optional = caps.get("optional")
+    if not isinstance(required, list) or not isinstance(optional, list):
+        return False
+    return bool(required or optional)
+
+
 def _format_capabilities_block(capabilities: dict[str, Any]) -> list[str]:
     dumped = yaml.safe_dump(
-        capabilities,
+        {"capabilities": capabilities},
         default_flow_style=False,
         sort_keys=False,
         allow_unicode=True,
     ).rstrip().splitlines()
-    return ["    capabilities:"] + [f"    {line}" if line.strip() else line for line in dumped]
+    return ["    " + line if line.strip() else "" for line in dumped]
+
+
+def _block_has_stray_capability_keys(block_lines: list[str]) -> bool:
+    in_capabilities = False
+    for line in block_lines:
+        if line.startswith("    capabilities:"):
+            in_capabilities = True
+            continue
+        if in_capabilities:
+            if line.startswith("    ") and not line.startswith("      "):
+                in_capabilities = False
+            else:
+                continue
+        if (
+            line.startswith("    required:")
+            or line.startswith("    optional:")
+            or line.startswith("    degraded_modes:")
+        ):
+            return True
+    return False
+
+
+def _strip_capabilities_block(block_lines: list[str]) -> list[str]:
+    cleaned: list[str] = []
+    index = 0
+    while index < len(block_lines):
+        line = block_lines[index]
+        if line.startswith("    capabilities:"):
+            index += 1
+            while index < len(block_lines) and (
+                block_lines[index].startswith("      ") or block_lines[index].strip() == ""
+            ):
+                index += 1
+            continue
+        if line.startswith("    required:") or line.startswith("    optional:"):
+            index += 1
+            while index < len(block_lines) and (
+                block_lines[index].startswith("    -")
+                or block_lines[index].startswith("      ")
+                or block_lines[index].strip() == ""
+            ):
+                index += 1
+            continue
+        if line.startswith("    degraded_modes:"):
+            index += 1
+            while index < len(block_lines) and (
+                block_lines[index].startswith("      ") or block_lines[index].strip() == ""
+            ):
+                index += 1
+            continue
+        cleaned.append(line)
+        index += 1
+    return cleaned
 
 
 def _skill_block_bounds(lines: list[str], skill_id: str) -> tuple[int, int]:
@@ -93,11 +157,12 @@ def backfill_skills_yaml_text(
         entry = skills[skill_id]
         if not isinstance(entry, dict):
             raise ValueError(f"skills.{skill_id} must be a mapping")
-        if "capabilities" in entry and not overwrite:
-            continue
-
         start, end = _skill_block_bounds(lines, skill_id)
         block = lines[start:end]
+        if _capabilities_valid(entry) and not _block_has_stray_capability_keys(block):
+            continue
+
+        block = _strip_capabilities_block(block)
         cap_lines = _format_capabilities_block(catalog[skill_id])
         new_block = _insert_before_lint(block, cap_lines)
         lines = lines[:start] + new_block + lines[end:]
@@ -107,16 +172,41 @@ def backfill_skills_yaml_text(
 
 
 def validate_capabilities_present(skills_path: Path = SKILLS_PATH) -> list[str]:
+    from scripts.registry.schema import parse_registry
+
     raw = yaml.safe_load(skills_path.read_text(encoding="utf-8"))
     if not isinstance(raw, dict):
         return ["error: skills.yaml root must be a mapping"]
     skills = raw.get("skills")
     if not isinstance(skills, dict):
         return ["error: skills.yaml skills must be a mapping"]
+
     errors: list[str] = []
     for skill_id, entry in skills.items():
-        if not isinstance(entry, dict) or "capabilities" not in entry:
+        if not isinstance(entry, dict):
+            errors.append(f"error: {skill_id}: skill entry must be a mapping")
+            continue
+        for orphan_key in ("required", "optional", "degraded_modes"):
+            if orphan_key in entry:
+                errors.append(
+                    f"error: {skill_id}: stray top-level {orphan_key!r} key (belongs under capabilities)",
+                )
+        capabilities = entry.get("capabilities")
+        if not isinstance(capabilities, dict):
             errors.append(f"error: {skill_id}: missing capabilities block")
+            continue
+        required = capabilities.get("required", [])
+        optional = capabilities.get("optional", [])
+        if not isinstance(required, list):
+            errors.append(f"error: {skill_id}: capabilities.required must be a list")
+        if not isinstance(optional, list):
+            errors.append(f"error: {skill_id}: capabilities.optional must be a list")
+
+    registry = parse_registry(skills_path)
+    for skill_id, entry in registry.skills.items():
+        caps = entry.capabilities
+        if not caps.required and not caps.optional:
+            errors.append(f"error: {skill_id}: capabilities block is empty after parse")
     return errors
 
 

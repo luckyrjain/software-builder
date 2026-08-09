@@ -8,6 +8,12 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 
 ## Platform
 
+### Capabilities catalog + backfill for all 22 skills (#18 follow-up)
+
+- Added `scripts/registry/capability_catalog.yaml` as the canonical capability contract per skill.
+- Added `python3 -m scripts.registry backfill-capabilities` to insert missing `capabilities` blocks into `skills.yaml`.
+- Registry validation now requires every skill to declare a `capabilities` block; `make lint` runs `backfill-capabilities-check`.
+
 ### Behavioral evals, composition graph, doctor, and release model (#16, #17, #18, #19)
 
 - Added Tier-1 behavioral eval harness: `python3 -m scripts.evals` with global happy/adversarial
