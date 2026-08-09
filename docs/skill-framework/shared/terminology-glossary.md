@@ -11,6 +11,8 @@ Shared vocabulary for **software-builder** platform docs, `skills.yaml`, and beh
 | **Framework** | `docs/skill-framework/` shared normative reference library vendored into installed packages. |
 | **Capability** | A named external tool or API contract a skill may call (required vs optional + degraded modes), declared under `capabilities` in `skills.yaml`. |
 | **Composition** | How skills invoke or escalate to each other. `skills.yaml` holds `invokes` and `escalation_targets`; `scripts/registry/composition_contracts.yaml` holds per-skill `produces` / `consumes` / `write_authority` contracts validated at registry lint time. |
+| **Invocation envelope** | The typed field shape a wrapper skill hands to a child skill (exact scope, interaction policy, allowed actions, expected SHA, source revisions) — see [invocation-envelope.md](invocation-envelope.md) (#52). `mr_context` in `composition_contracts.yaml` is the reference implementation. |
+| **Result envelope** | The typed field shape a skill returns (`review_metadata` / `assessment_metadata`) — see [review-metadata-schema.md](review-metadata-schema.md) §8. |
 
 ## Invocation and risk
 

@@ -17,9 +17,16 @@ artifact_types:
   - prd_report
 
 # Field-level contracts for producer/consumer schema matching (#19 v2 follow-up).
+#
+# mr_context is this repo's reference InvocationEnvelope (#52) — see
+# docs/skill-framework/shared/invocation-envelope.md. Its field set was extended here to match
+# what release-readiness-checker's workflow/run-check.md already documents passing to pr-review
+# (review_mode/audit_type/expected_head_sha were real, in-use fields the schema hadn't caught up
+# to yet); this is a data-only change enforced by the existing _validate_declared_fields /
+# _validate_invoke_schema_matching machinery in composition_contracts.py, not new validator code.
 artifact_schemas:
   mr_context:
-    fields: [project, merge_request_iid, head_sha, posting_policy]
+    fields: [project, merge_request_iid, head_sha, posting_policy, review_mode, audit_type, expected_head_sha]
   mr_review_report:
     fields: [review_metadata, posted, head_sha, posting_mode]
   rca_report:
@@ -116,7 +123,7 @@ skills:
     produce_fields:
       digest_report: [sections, generated_at, source_revisions]
     consume_fields:
-      mr_context: [project, head_sha]
+      mr_context: [project, merge_request_iid, head_sha, posting_policy, review_mode, audit_type, expected_head_sha]
       mr_review_report: [review_metadata, posted]
       k8s_rightsizing_report: [assessment_metadata, recommendations]
       rca_report: [assessment_metadata, root_cause, confidence]
