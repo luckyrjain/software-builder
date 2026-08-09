@@ -61,7 +61,7 @@ Parse per [workflow/inputs.md](workflow/inputs.md).
 
 | Input | Required | Default |
 |-------|----------|---------|
-| `release_manifest` | Yes | **HARD STOP if empty** — list of `{repo, service, since}` |
+| `release_manifest` | Yes | **HARD STOP if empty** — list of `{repo, service, since, release_ref?}` |
 | `incident_lookback_hours` | No | 48 |
 | `target_branch` | No | Repo's configured release branch — see [SETUP.md](SETUP.md) |
 

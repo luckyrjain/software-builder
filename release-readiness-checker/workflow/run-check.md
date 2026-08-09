@@ -35,6 +35,8 @@ For each `release_manifest` entry:
    first page and never guess a smaller set.
 3. Record the resolved MR list per repo. A repo with zero MRs since `since` is not an error — record it
    as "no changes this release" in the report, not a HARD STOP.
+4. When the manifest entry includes `release_ref`, record it as the repo's **release candidate pin** for
+   step 2 — do not substitute each MR's `merge_commit_sha` when the caller supplied an explicit pin.
 
 ## 2. Review each resolved MR — pr-review, retrospective mode, per gate-policy.md
 
@@ -43,8 +45,10 @@ Every MR resolved in step 1 is **already merged** — that is the query conditio
 
 - `merge_request_iid`, `project`
 - `review_mode: retrospective`, `audit_type: retrospective`
-- `expected_head_sha`: the MR's `merge_commit_sha` (or `diff_refs.head_sha` recorded at merge time from
-  step 1's `list_merge_requests` result)
+- `expected_head_sha`: when the manifest entry's `release_ref` is set, use that pin for every MR in the
+  repo; otherwise use the MR's `merge_commit_sha` (or `diff_refs.head_sha` recorded at merge time from
+  step 1's `list_merge_requests` result). If pr-review's `get_merge_request` returns a different SHA,
+  treat it as a genuine anomaly (§Escalation) — especially when `release_ref` was caller-supplied.
 - `posting_policy: forbidden`
 
 Do **not** invoke with the bare phrase `"review !<iid> in <project>"` and rely on pr-review's own
