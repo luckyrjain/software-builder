@@ -35,6 +35,11 @@ For each `release_manifest` entry:
    first page and never guess a smaller set.
 3. Record the resolved MR list per repo. A repo with zero MRs since `since` is not an error — record it
    as "no changes this release" in the report, not a HARD STOP.
+4. When the manifest entry includes `release_ref`, record it as the repo's **release candidate pin** for
+   report validation (step 5 Notes). When `release_ref` is a 40-character git SHA, resolve
+   `target_branch` HEAD after step 1 and compare — on mismatch, record a release-pin anomaly per
+   [reference/gate-policy.md § Escalation](../reference/gate-policy.md#escalation-not-override). Image
+   digests are recorded for deploy verification only; do not compare them to git SHAs.
 
 ## 2. Review each resolved MR — pr-review, retrospective mode, per gate-policy.md
 
@@ -44,7 +49,7 @@ Every MR resolved in step 1 is **already merged** — that is the query conditio
 - `merge_request_iid`, `project`
 - `review_mode: retrospective`, `audit_type: retrospective`
 - `expected_head_sha`: the MR's `merge_commit_sha` (or `diff_refs.head_sha` recorded at merge time from
-  step 1's `list_merge_requests` result)
+  step 1's `list_merge_requests` result) — **always per-MR**, never the manifest `release_ref`
 - `posting_policy: forbidden`
 
 Do **not** invoke with the bare phrase `"review !<iid> in <project>"` and rely on pr-review's own
@@ -117,17 +122,20 @@ know it's bad" into one false-blocker state that a human reading the report cann
 - **`NOT_READY`** — any MR has a `Critical`/`High` finding, **or** any service's k8s verdict is
   `BLOCKED`. These are proven blockers from a completed check, not an evidence gap.
 - **`UNKNOWN`** — no `NOT_READY` condition, **and** any manifest entry's `since` didn't resolve, **or**
-  any service's k8s verdict is `insufficient_metrics` or `ambiguous_unresolved`. An unreviewed MR range or an unobservable service
-  is a genuine evidence gap, not a verified-clean release — but it is also not a *proven* problem, so it
-  must not be silently folded into `NOT_READY` (which reads as "we found something wrong") or into
-  `READY` (which reads as "we checked and it's fine"). `UNKNOWN` takes precedence over `CONDITIONAL`
-  below when both apply — an evidence gap is reported as itself, not softened into "flagged but proceed."
+  any service's k8s verdict is `insufficient_metrics` or `ambiguous_unresolved`, **or** any manifest
+  entry's `release_ref` git SHA does not match `target_branch` HEAD. An unreviewed MR range, an
+  unobservable service, or a release-pin mismatch is a genuine evidence gap, not a verified-clean release
+  — but it is also not a *proven* problem, so it must not be silently folded into `NOT_READY` (which
+  reads as "we found something wrong") or into `READY` (which reads as "we checked and it's fine").
+  `UNKNOWN` takes precedence over `CONDITIONAL` below when both apply — an evidence gap is reported as
+  itself, not softened into "flagged but proceed."
 - **`CONDITIONAL`** — no `NOT_READY` or `UNKNOWN` condition, **and** any service is flagged with an
   incident signal. Per §4's disclosed limitation, a flagged signal is "a release readiness signal worth a
   human look, not a confirmed release-caused problem" — `CONDITIONAL` says exactly that: nothing proven
   blocking, but a human should look before calling this `READY`.
 - **`READY`** — none of the above: every MR clean, every k8s verdict `READY`/non-`BLOCKED` with
-  sufficient metrics, every manifest entry resolved, every service's incident signal `Clear`.
+  sufficient metrics, every manifest entry resolved, every `release_ref` git SHA matches `target_branch`
+  HEAD (or no git `release_ref` was supplied), every service's incident signal `Clear`.
 
 Precedence when multiple conditions apply: `NOT_READY` > `UNKNOWN` > `CONDITIONAL` > `READY` — report the
 single highest-precedence state, never downgrade a `NOT_READY` condition because an `UNKNOWN` one is also

@@ -4,6 +4,7 @@ phase: resolve
 produces:
   - service_identity
   - namespace_ranking
+  - cluster_identity
 consumes:
   - user_intent
   - source_profile
@@ -12,7 +13,23 @@ consumes:
 # Resolve service identity
 
 Use the routes already selected in `source_profile`; discovery must have completed before this file is
-loaded. Resolve through Kubernetes MCP first when it can list/read workloads in the named cluster/namespace.
+loaded.
+
+## Cluster identity (required before workload match)
+
+Record explicit cluster scope from Kubernetes MCP **before** listing workloads or emitting metrics:
+
+| Field | Source | Required |
+|-------|--------|----------|
+| `cluster_name` | MCP connection metadata, `kubectl config current-context`, or user-provided scope | Yes |
+| `cluster_context` | Same as above when distinct from friendly name | When available |
+
+Include `cluster_name` (and `cluster_context` when set) in `service_identity` and every blocked-report
+scope line (`insufficient_metrics`, `ambiguous_unresolved`). When multiple clusters/contexts are
+reachable and none is distinguished by user intent or live evidence, **ask the user** — never default to
+a production cluster by convention alone (same rule as `env:` ambiguity below).
+
+Resolve through Kubernetes MCP first when it can list/read workloads in the named cluster/namespace.
 Match Deployment, StatefulSet, or DaemonSet by exact name; ask before fuzzy matches. Record UID,
 namespace, workload kind, container names, and autoscaler names from live state.
 
