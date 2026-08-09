@@ -137,6 +137,10 @@ def validate_registry(root: Path) -> list[str]:
                 errors.append(
                     f"error: {skill_id}: automation-only skills cannot use kiro discovery always",
                 )
+            if "unattended" not in entry.risk_class:
+                errors.append(
+                    f"error: {skill_id}: automation-only skills must declare risk_class unattended",
+                )
 
     errors.extend(
         f"error: stale generated adapter: {path.relative_to(root)}"

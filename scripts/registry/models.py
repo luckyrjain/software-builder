@@ -66,6 +66,7 @@ class SkillEntry:
     lint: LintSpec
     composition: CompositionSpec = field(default_factory=CompositionSpec)
     capabilities: CapabilitiesSpec = field(default_factory=CapabilitiesSpec)
+    risk_class: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)

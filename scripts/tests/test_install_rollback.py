@@ -34,6 +34,7 @@ def test_install_restores_previous_package_when_validation_fails(tmp_path: Path)
     lint:
       skill_md_max_lines: 180
       target: broken-skill
+    risk_class: [read-only]
 """
     skills_yaml.write_text(text, encoding="utf-8")
     skill_dir.mkdir(parents=True)
