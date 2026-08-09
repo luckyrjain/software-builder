@@ -25,6 +25,12 @@ Integrators should wrap each gatekeeper invocation with a **per-MR lock** (or le
 
 Without step 1–2, two overlapping runs can both pass the pre-lock dedupe check and invoke pr-review twice.
 
+## Reference implementation
+
+[scripts/idempotency_store.py](../scripts/idempotency_store.py) — file-based per-MR lock +
+`last_processed_head_sha` store for webhook handlers (`check` / `mark` CLI). Tests:
+`tests/test_idempotency_store.py`.
+
 ## Out of scope for this skill
 
 - Cross-process locking inside pr-gatekeeper (no shared state store in the skill package).

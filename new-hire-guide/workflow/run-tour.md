@@ -3,6 +3,7 @@ workflow_version: 1.0
 phase: run-tour
 produces:
   - onboarding_tour
+  - tour_output_dir
 consumes:
   - new_hire
   - workspace_root
@@ -10,6 +11,11 @@ consumes:
 ---
 
 # Run tour — resolve repos, invoke both skills, build the tour
+
+Resolve `tour_output_dir` from inputs (default `{workspace_root}/../onboarding-tours/<slug>/` per
+[inputs.md](inputs.md)). Create the directory if missing. **Write `ONBOARDING_TOUR.md` only under
+`tour_output_dir`** — never inside an individual application repo. domain-comprehension and squad-map
+deliverables remain at `workspace_root` unchanged.
 
 ## 1. Resolve the squad's repos via squad-map
 
@@ -97,4 +103,4 @@ Per [reference/tour-format.md](../reference/tour-format.md), using:
 
 | Output | Location | Required fields |
 |--------|----------|-----------------|
-| Onboarding tour | `ONBOARDING_TOUR.md` | Welcome section, repo list w/ purpose, squad contacts, links |
+| Onboarding tour | `<tour_output_dir>/ONBOARDING_TOUR.md` | Welcome section, repo list w/ purpose, squad contacts, links |

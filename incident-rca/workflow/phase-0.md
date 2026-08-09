@@ -77,7 +77,10 @@ Some organisations run **multiple Datadog instances** (US1 `datadoghq.com`, EU `
 
 **Steps:**
 1. Ask the user which Datadog site(s) the affected service reports to.
-2. For each site: set the appropriate `datadog_site` in ddconfig before querying.
+2. For each site: issue Datadog MCP queries with an **explicit per-call site scope** when the tool
+   supports it. When the MCP only exposes one active site, ask the user to select/switch the Datadog MCP
+   session for that site — **do not** run **ddconfig** to mutate shared configuration from this skill
+   ([reference/datadog-site-policy.md](../reference/datadog-site-policy.md)).
 3. Collect `error_signals` and `infra_signals` from each site independently.
 4. Label evidence by site: `"source": "datadog_eu"`, `"source": "datadog_us1"`, etc.
 5. Record which site each query ran against in `query_references[]`.

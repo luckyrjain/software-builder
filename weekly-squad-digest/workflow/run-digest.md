@@ -47,18 +47,18 @@ This skill's decision:
    done; cost: `value.monthly_savings_total` descending (cost-optimization-sprint-planner's own
    convention). Never re-sort by a rule this skill invents.
 4. **Cross-reference a `service` that appears in both rollups under different squads.** After both
-   rollups are grouped, check for any `service` value present in both — if its `squad` differs between
-   the two, add a Notes pointer on each side ("also in Cost optimization under `<squad>`" / "also in
-   Migration status under `<squad>`"), per
+   rollups are grouped, use `scripts/digest_grouping.py` (`find_cross_rollup_service_pairs`) with
+   **normalized service tokens** (case- and separator-insensitive — same rules as
+   `squad-map/scripts/squad_mapping.py::normalize_repo_token`) to detect pairs that exact-string
+   equality would miss. For each pair with differing `squad`, add a Notes pointer on each side ("also in
+   Cost optimization under `<squad>`" / "also in Migration status under `<squad>`"), per
    [reference/report-format.md](../reference/report-format.md)'s rule. This is a real, expected case since
    the two rollups resolve `squad` via different join mechanisms
    ([org-rollup-schema.md § 3](../../docs/skill-framework/shared/org-rollup-schema.md#3-join-key-squad-map-is-the-only-authoritative-source))
-   — never reconciled into one "correct" squad, never silently left uncross-referenced. **The match is
-   exact-string `service` equality only, best-effort** — this skill has no alias/normalization step of
-   its own (unlike squad-map's own `service_aliases`, which exists precisely because service/deployment
-   identifiers don't reliably match verbatim even within one system, per org-rollup-schema.md § 3 itself).
-   A same-service pair whose two rollups happen to record genuinely different identifier strings for it
-   will not be detected — a known, accepted limitation, not a guarantee this skill makes.
+   — never reconciled into one "correct" squad, never silently left uncross-referenced. **Also run exact-
+   string equality** as a fallback when the script is unavailable. A same-service pair whose identifiers
+   differ beyond normalization will not be detected — record that limitation honestly in Notes when
+   suspected.
 
 ## 3. Compute staleness (display-only)
 

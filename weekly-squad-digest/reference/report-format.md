@@ -77,8 +77,8 @@ status line for every run.>
   and can legitimately disagree — a real case, not hypothetical. Each row's own sub-section table gets a
   Notes pointer to the other section/squad; this skill never reconciles which squad is "right," since
   neither rollup's own join is this skill's to override. **The match is exact-string `service` equality
-  only, best-effort** — a known, accepted limitation (this skill has no alias/normalization step of its
-  own, unlike squad-map's `service_aliases`), not a guarantee that every real same-service pair is caught.
+  only, best-effort** — normalization via `scripts/digest_grouping.py` catches case/separator
+  differences; genuinely different identifier strings may still be missed (see Notes).
 - **A rollup gap is never rendered as `$0` savings or a fabricated "done" migration status** — an absent
   rollup means "not checked this run," not "nothing to report." See Rollup gaps.
 - **Staleness is display-only, and its precision differs by rollup — never presented as uniformly

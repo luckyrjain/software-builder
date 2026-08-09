@@ -611,3 +611,11 @@ def test_atomic_write_text_replaces_target(tmp_path: Path) -> None:
     _atomic_write_text(target, '{"new": true}\n')
     assert json.loads(target.read_text(encoding="utf-8")) == {"new": True}
     assert not list(tmp_path.glob(".*.tmp.*"))
+
+
+def test_state_file_lock_creates_lock_file(tmp_path: Path) -> None:
+    from aggregate_migration_status import _state_file_lock
+
+    state_path = tmp_path / "state.json"
+    with _state_file_lock(str(state_path)):
+        assert (tmp_path / "state.json.lock").exists()
