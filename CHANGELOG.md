@@ -8,6 +8,25 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 
 ## Platform
 
+### Five-concept separation audit (2026-08-09)
+
+- New `docs/skill-framework/shared/five-concept-separation-audit.md` — a repo-wide pass confirming
+  evidence completeness, review verdict, repository readiness, external-action authorization, and
+  final repository action are never conflated into one field/code path, across all 23 skills.
+  Verified (not assumed) against each skill's actual metadata schema, gate policy, or Post-actions
+  section — most already had a clean split (`review_metadata.review_complete` vs `recommendation`
+  vs `posted` in pr-review; `auto_post_authorized` vs "Posted?" in pr-gatekeeper;
+  `autonomous_merge_authorized` never `true` in backlog-runner; explicit "does not post anywhere
+  itself" in weekly-squad-digest/new-hire-guide/cost-optimization-sprint-planner).
+- One real gap found and fixed: the five `*-test-creator` skills state "write test files only" as
+  their scope but never explicitly said they don't commit/push/open a PR themselves. Added one
+  sentence to the shared `docs/skill-framework/shared/test-creation-principles.md` (fixes it once
+  for all five, not five times) — also corrected that file's skill list, which was missing
+  api-test-creator.
+- `docs/skill-framework/shared/terminology-glossary.md` gained the five terms with a cross-reference
+  to the audit doc.
+- Fixes #53.
+
 ### Workflow contract validation
 
 - Phase `consumes` schemas now reject unknown keys and require explicit `required`, `optional`, and

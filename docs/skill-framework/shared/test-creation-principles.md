@@ -1,9 +1,9 @@
 # Test creation principles (shared)
 
 **Normative.** Shared principles for **unit-test-creator**, **integration-test-creator**,
-**contract-test-creator**, and **e2e-test-creator**, plus the **test-writer** router that dispatches to
-them. Each skill's own `reference/skill-contract.md` links here and states only its level-specific
-deltas — do not duplicate these rules inline per skill.
+**contract-test-creator**, **e2e-test-creator**, and **api-test-creator**, plus the **test-writer**
+router that dispatches to them. Each skill's own `reference/skill-contract.md` links here and states
+only its level-specific deltas — do not duplicate these rules inline per skill.
 
 **Reference bar:** `unit-test-creator/reference/skill-contract.md` (shortest, cleanest delta example).
 
@@ -99,6 +99,12 @@ Shared status vocabulary — used identically everywhere the concept applies, ne
 skill's own `reference/report-format.md` may add level-specific statuses on top (e.g.
 `NEEDS_INTEGRATION_ENV`, `NEEDS_OBSERVED_INTERACTION`, `NEEDS_BROWSER_ENV`) — never a differently-named status for a
 concept this section already names.
+
+**Write authority boundary:** every skill in this family writes or modifies test files (and, for
+api-test-creator, the Postman collection/environment file) in the working tree — nothing more.
+None of them commits, pushes, or opens a pull/merge request itself. The report's `## Next step`
+line may say "Ready to open as an MR" — that is a suggestion for the caller (human or host agent)
+to act on, never something this skill does on its own.
 
 ## 5. Escalation on a surfaced production bug
 
