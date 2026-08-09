@@ -42,7 +42,18 @@ slug (Rule 1) makes shell interpolation *safer*, not safe — prefer direct file
 
 ## Rule 4 — Markdown / chat escaping
 
-Before embedding untrusted text inside rendered Markdown, a chat message, or a Slack/Teams payload:
+**This rule assumes a GitHub-flavored-Markdown/CommonMark target** (tables, `#` headings, triple-backtick
+fences). If the skill's actual output is a **Slack message** rather than a Markdown file or
+CommonMark-rendered chat, these techniques don't transfer as-is — see
+[Rule 6](#rule-6-slackchat-mrkdwn-escaping-a-different-target-than-rules-14) instead, which documents
+where Slack mrkdwn's structural characters and escape mechanism genuinely differ (no backslash escape at
+all, single-asterisk bold, `<...>`/`&` needing HTML-entity escaping for mention/link forgery, no tables
+or `#`-headings to worry about). **Teams is not covered by either rule** — its own markdown dialect
+(Adaptive Cards / webhook text) hasn't been researched for this doc; don't assume Rule 6's Slack-specific
+claims (verified against Slack's own formatting docs) apply to it without checking Teams' own rules
+first.
+
+Before embedding untrusted text inside rendered Markdown or a CommonMark-rendered chat message:
 
 - Escape or fence characters that change table/heading/code-block structure: a literal `|` inside a
   Markdown table cell, unbalanced triple-backtick fences, leading `#`/`>`/`-` that could be read as a new
@@ -86,6 +97,36 @@ words like `key`/`token`/`secret`/`password`), and free-text email/phone pattern
 user-facing content rather than infrastructure identifiers. Redact conservatively (over-redaction is a
 readability cost; under-redaction is a leak) and note in the output that redaction was applied, so a
 reader doesn't mistake a redacted placeholder for missing evidence.
+
+## Rule 6 — Slack/chat mrkdwn escaping (a different target than Rules 1–4)
+
+Rules 1–4 above assume a GitHub-flavored-Markdown target (tables, `#` headings, triple-backtick code
+fences, CommonMark code-span nesting). A skill whose primary rendered output is a **Slack message**
+(mrkdwn, not CommonMark) needs a different, Slack-specific set of defenses — the character classes that
+matter are not the same, and treating mrkdwn as if it were CommonMark misses the actual risk:
+
+- **Slack has no backslash-escape mechanism at all** — `\*` renders as the two literal characters
+  backslash-asterisk, not an escaped asterisk (verified against Slack's own formatting docs). Never rely
+  on a backslash to neutralize a Slack-mrkdwn special character; strip or replace it instead.
+- **Slack's message parser treats `<`, `>`, and `&` specially** — `<...>` denotes a link
+  (`<https://x|text>`) or a mention (`<@U123>`, `<#C123>`, `<!channel>`, `<!here>`). An untrusted string
+  containing an unescaped `<@...>`/`<!channel>` sequence can forge a real mention or `@here`/`@channel`
+  broadcast when the message is actually posted — not a cosmetic formatting glitch, an executable
+  side effect. Escape these three characters to their HTML entities, **in this order** (ampersand first,
+  to avoid double-escaping the entities themselves): `&` → `&amp;`, then `<` → `&lt;`, `>` → `&gt;`. This
+  is the Slack-mrkdwn equivalent of Rule 4's table-pipe/heading escaping.
+- **Slack bold uses a single `*...*` delimiter**, not CommonMark's `**...**`. An untrusted value wrapped
+  in bold that itself contains a `*` closes the span early — the same class of bug Rule 4 documents for
+  backtick code spans. Rule 4's code-fence case has a delimiter-length escape hatch (use more backticks);
+  Slack's bold has no such mechanism — single `*` is the only delimiter — and there is no backslash
+  escape to fall back on either, so **stripping** any embedded `*` from the value before wrapping it in
+  bold is not one option among several here, it is the only one.
+- **Slack does not interpret a leading `#` as a heading**, and a Slack message has no tables — Rule 4's
+  `#`/table-pipe concerns don't carry over to this target; don't add escaping for characters that have
+  no structural meaning in mrkdwn, only neutralize what actually does.
+- **A raw newline still visually fakes a second line** of the message (and, combined with a leading `>`,
+  a fake blockquote) — neutralize it the same way Rule 4 handles newlines elsewhere in this doc:
+  render the control character as inert visible text rather than a real line break.
 
 ## Provenance and partial-result markers
 

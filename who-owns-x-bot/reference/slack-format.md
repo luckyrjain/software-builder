@@ -5,6 +5,38 @@ suffix (§ Escalation suffix) that can be appended to any of them. Plain text wi
 `mrkdwn` (`*bold*`, `` `code` ``) — no Block Kit JSON required, though a caller may wrap these strings in
 a `section` block if it prefers rich formatting.
 
+## Safe rendered-output boundary
+
+`<query>` is caller-supplied Slack input per
+[prompt-injection.md](../../docs/skill-framework/shared/prompt-injection.md); `<squad>` and the evidence
+line are squad-map-derived external metadata (GitLab namespace, Datadog team/service tags), not this
+skill's own prose. **`<service>`** in the Escalation suffix (§ below) is the *same* untrusted content
+under a different name, not a fourth field to treat differently — it is literally `<query>` for
+Ambiguous/Unknown, or the matched repo identifier (still an external, not-skill-authored value) for
+Resolved. This is the repo's first **Slack mrkdwn** render target, not CommonMark — a different set of
+defenses than the table/heading escaping used elsewhere applies here; see
+[safe-output.md § Rule 6](../../docs/skill-framework/shared/safe-output.md#rule-6-slackchat-mrkdwn-escaping-a-different-target-than-rules-14).
+Before embedding any of `<query>`, `<squad>`, `<service>`, or the evidence line **anywhere they render —
+including the Escalation suffix line, not only the primary reply shape**:
+
+1. **Escape `&`, `<`, `>` to `&amp;`, `&lt;`, `&gt;`, in that order (ampersand first)** — Slack's message
+   parser reads unescaped `<@...>`/`<!channel>`/`<!here>` as a real mention or broadcast, not literal
+   text; an unescaped `<query>` containing one of these would forge a real Slack notification when this
+   reply is actually posted.
+2. **Neutralize a raw newline** (render it as inert visible text, not a real line break) — otherwise
+   `<query>` can fake a second line of the reply, including a blockquote if the injected line starts
+   with `>`.
+3. **Then**, since `<query>`, `<squad>`, and `<service>` are all wrapped in Slack bold (`*...*`, single
+   asterisk — not CommonMark's `**...**`), strip any embedded `*` from the value first. This is not
+   optional cosmetic hygiene the way it can be for a CommonMark code fence (which has a delimiter-length
+   escape hatch — use more backticks) — Slack's bold has no such mechanism, a single `*` is the only
+   delimiter, so stripping is the only way to keep the span intact, and Slack has no backslash escape to
+   fall back on either.
+
+No table-pipe or `#`-heading escaping — Slack mrkdwn has neither construct, so Rule 4's CommonMark-
+specific concerns don't apply to this target. No redaction step — `<query>`/`<service>` are short lookup
+identifiers, not free-text log/ticket evidence.
+
 ## Resolved
 
 ```
