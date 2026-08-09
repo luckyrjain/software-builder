@@ -8,6 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
 from incident_rca_policy_guards import (  # noqa: E402
     apply_confidence_cap,
+    cap_partial_report_confidence,
     should_block_phase4_ranking,
     should_conclude_no_defensible_root_cause,
 )
@@ -31,6 +32,15 @@ class TestConfidenceCaps:
 
     def test_unresolved_contradiction_caps_high(self):
         assert apply_confidence_cap("HIGH", unresolved_contradiction=True) == "MEDIUM"
+
+    def test_partial_report_caps_high(self):
+        assert apply_confidence_cap("HIGH", partial_report=True) == "MEDIUM"
+
+    def test_partial_report_preserves_medium(self):
+        assert cap_partial_report_confidence("MEDIUM") == "MEDIUM"
+
+    def test_partial_report_caps_via_helper(self):
+        assert cap_partial_report_confidence("HIGH") == "MEDIUM"
 
 
 class TestPhase4Gate:

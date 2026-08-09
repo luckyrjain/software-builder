@@ -15,8 +15,9 @@ consumes:
 **Read this file** at the start of Phase 5, after Phase 4. Also load
 [reference/gold-rca-excerpt.md](../reference/gold-rca-excerpt.md) (format few-shot),
 [reference/root-cause-depth.md](../reference/root-cause-depth.md),
-[reference/evidence-quality.md](../reference/evidence-quality.md), and
-[reference/evidence-coverage.md](../reference/evidence-coverage.md) before rendering.
+[reference/evidence-quality.md](../reference/evidence-quality.md),
+[reference/evidence-coverage.md](../reference/evidence-coverage.md), and
+[reference/log-redaction.md](../reference/log-redaction.md) before rendering.
 
 **Exit:** [phase-exit-criteria.md](../reference/phase-exit-criteria.md) §Phase 5.
 
@@ -134,7 +135,10 @@ When the user requests *"stop here"*, *"give me what you have"*, or a phase chec
 
 1. Render using [report-template.md](../report-template.md) but mark header: **Partial RCA — investigation stopped early**.
 2. Include completed phases only — label skipped phases in **Gaps**.
-3. Primary hypothesis: best available with confidence capped at **MEDIUM** if Phase 4 did not complete.
+3. Primary hypothesis: best available with confidence capped at **MEDIUM** if Phase 4 did not complete
+   — apply `cap_partial_report_confidence()` from
+   [scripts/incident_rca_policy_guards.py](../scripts/incident_rca_policy_guards.py) (see
+   [reference/log-redaction.md](../reference/log-redaction.md) §Partial RCA confidence).
 4. Required sections: Incident scope, Evidence collected (what exists), Hypothesis (if ranked), Gaps,
    Next steps (what Phase N would have done).
 5. Do **not** present partial output as a complete RCA — state explicitly what was not investigated.
