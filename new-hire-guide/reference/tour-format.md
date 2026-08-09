@@ -1,8 +1,9 @@
 # ONBOARDING_TOUR.md format
 
 **Normative.** The exact structure [workflow/run-tour.md](../workflow/run-tour.md) § 4 must produce.
-Written to `workspace_root`, alongside (not instead of) domain-comprehension's and squad-map's own
-deliverables.
+Written to `tour_output_dir` (default `{workspace_root}/../onboarding-tours/<slug>/`), **outside**
+individual source repos — alongside links into domain-comprehension's workspace-level deliverables at
+`workspace_root`, not instead of them.
 
 ## Structure (order fixed)
 

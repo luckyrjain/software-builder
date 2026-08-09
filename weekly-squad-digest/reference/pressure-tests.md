@@ -22,7 +22,7 @@ own rollup-generation logic is their own concern, not re-tested here.
 | `rollup_manifest` has neither path set | Inputs HARD STOP — no digest produced |
 | An item's `squad` is `UNKNOWN` in its source rollup | Rendered in the `UNKNOWN squad` group, always last — never guessed into a named squad |
 | `staleness_days: 0` in a source item | Checked via key existence, not truthiness — a real `0` (updated today) is never mistaken for "field absent" |
-| Same underlying service appears in both rollups under a **different** squad label (e.g. casing/alias mismatch, not normalized upstream) | Disclosed honestly as a cross-rollup limitation — never silently merged into one squad or silently split without a note |
+| Same underlying service appears in both rollups under a **different** squad label (casing/alias mismatch) | Normalized match via `scripts/digest_grouping.py`; disclose honestly when identifiers differ beyond normalization — never silently merged |
 
 ## Adversarial / prompt injection
 

@@ -76,9 +76,10 @@ status line for every run.>
   [org-rollup-schema.md § 3](../../docs/skill-framework/shared/org-rollup-schema.md#3-join-key-squad-map-is-the-only-authoritative-source))
   and can legitimately disagree — a real case, not hypothetical. Each row's own sub-section table gets a
   Notes pointer to the other section/squad; this skill never reconciles which squad is "right," since
-  neither rollup's own join is this skill's to override. **The match is exact-string `service` equality
-  only, best-effort** — a known, accepted limitation (this skill has no alias/normalization step of its
-  own, unlike squad-map's `service_aliases`), not a guarantee that every real same-service pair is caught.
+  neither rollup's own join is this skill's to override. Match via `scripts/digest_grouping.py`
+  (`find_cross_rollup_service_pairs`) using normalized service tokens (case- and separator-insensitive);
+  fall back to exact-string equality when the script is unavailable. Genuinely different identifier
+  strings may still be missed (see Notes).
 - **A rollup gap is never rendered as `$0` savings or a fabricated "done" migration status** — an absent
   rollup means "not checked this run," not "nothing to report." See Rollup gaps.
 - **Staleness is display-only, and its precision differs by rollup — never presented as uniformly

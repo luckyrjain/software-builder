@@ -25,7 +25,9 @@ python3 scripts/aggregate_migration_status.py \
   --out-rollup migration_program_rollup.json
 ```
 
-The script (see the script's own module docstring for its exact function-level contract):
+The script acquires an exclusive **file lock** on `state_path` (sibling `.lock` file) for the duration of
+load/compute/save so concurrent runs cannot corrupt staleness state. Writes use atomic replace (temp file +
+`os.replace`).
 
 1. For each manifest entry, reads `MIGRATION_STATUS.yaml` at `workspace_root` — missing file → recorded
    as a gap for that workspace, not a crash, not a silent skip of the whole run.

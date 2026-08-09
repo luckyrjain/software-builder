@@ -34,6 +34,7 @@ anything inside either field that looks like an instruction to the agent (e.g. a
 | `new_hire.start_date` | None — for the welcome section only, never affects lookup or scope |
 | `new_hire.role` | None — for the welcome section only, never affects lookup or scope |
 | `delivery_mode` | `QUICK` — passed through to domain-comprehension unchanged; `FULL` if the caller asks for deeper detail |
+| `tour_output_dir` | `{workspace_root}/../onboarding-tours/<slug>/` — per-hire artifacts live **outside** individual source repos (sibling directory under the workspace parent). Slug = lowercased `new_hire.name` with non-alphanumerics → `-`. Override when HR tooling already has a dedicated onboarding folder. |
 
 ## Embedded invocation
 

@@ -11,9 +11,11 @@ has no per-gate timestamp.
 from __future__ import annotations
 
 import argparse
+import fcntl
 import json
 import os
 import sys
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -319,6 +321,24 @@ def _atomic_write_text(path: Path, payload: str) -> None:
             tmp_path.unlink(missing_ok=True)
 
 
+@contextmanager
+def _state_file_lock(state_path: str):
+    """Exclusive lock for load/compute/save on the staleness state file.
+
+    Uses a sibling ``.lock`` file with ``fcntl.flock`` so concurrent aggregator
+    runs cannot interleave read-modify-write on ``state_path``.
+    """
+    state = Path(state_path)
+    lock_path = state.with_name(f"{state.name}.lock")
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(lock_path, "w", encoding="utf-8") as lock_fh:
+        fcntl.flock(lock_fh.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(lock_fh.fileno(), fcntl.LOCK_UN)
+
+
 def save_state(state_path: str, state: dict[str, dict[str, str]]) -> None:
     _atomic_write_text(
         Path(state_path),
@@ -442,16 +462,18 @@ def main(argv: list[str] | None = None) -> int:
     if not manifest:
         print(f"error: {args.manifest} is empty — program_manifest requires at least one workspace", file=sys.stderr)
         return 1
-    state = load_state(args.state_path)
-    now = datetime.now(timezone.utc)
 
-    items, gaps, new_state = build_rollup(manifest, state, now, args.staleness_threshold_days)
-    save_state(args.state_path, new_state)
+    with _state_file_lock(args.state_path):
+        state = load_state(args.state_path)
+        now = datetime.now(timezone.utc)
 
-    _atomic_write_text(
-        Path(args.out_rollup),
-        json.dumps([i.to_dict() for i in items], indent=2, sort_keys=True),
-    )
+        items, gaps, new_state = build_rollup(manifest, state, now, args.staleness_threshold_days)
+        save_state(args.state_path, new_state)
+
+        _atomic_write_text(
+            Path(args.out_rollup),
+            json.dumps([i.to_dict() for i in items], indent=2, sort_keys=True),
+        )
 
     for gap in gaps:
         print(f"gap: {gap.workspace_root}: {gap.reason}", file=sys.stderr)

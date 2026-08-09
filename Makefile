@@ -293,7 +293,13 @@ lint-pr-gatekeeper:
 		{ echo "error: smoke-test.md must link to pressure-tests.md" >&2; exit 1; }
 	@grep -q 'skill-framework' pr-gatekeeper/SETUP.md || \
 		{ echo "error: pr-gatekeeper/SETUP.md must link to docs/skill-framework" >&2; exit 1; }
-	@echo "  ok (framework refs)"
+	@echo "lint-pr-gatekeeper: idempotency store pytest"
+	@if python3 -c "import pytest" >/dev/null 2>&1; then \
+		python3 -m pytest -p no:cacheprovider pr-gatekeeper/tests/test_idempotency_store.py -q || exit 1; \
+	else \
+		echo "pytest not installed — install with 'python3 -m pip install pytest' to run pr-gatekeeper tests" >&2; \
+	fi
+	@echo "  ok (framework refs + idempotency tests)"
 	@echo "lint-pr-gatekeeper: ask-point drift check (pr-review workflow vs auto-post-policy.md)"
 	@python3 pr-gatekeeper/scripts/check-ask-point-drift.py || \
 		{ echo "error: pr-review ask-point drift detected — see pr-gatekeeper/reference/auto-post-policy.md" >&2; exit 1; }
@@ -1101,7 +1107,15 @@ lint-weekly-squad-digest:
 		{ echo "error: smoke-test.md must link to pressure-tests.md" >&2; exit 1; }
 	@grep -q 'skill-framework' weekly-squad-digest/SETUP.md || \
 		{ echo "error: weekly-squad-digest/SETUP.md must link to docs/skill-framework" >&2; exit 1; }
-	@echo "  ok (framework refs)"
+	@test -f weekly-squad-digest/scripts/digest_grouping.py || \
+		{ echo "error: missing weekly-squad-digest/scripts/digest_grouping.py" >&2; exit 1; }
+	@echo "lint-weekly-squad-digest: digest_grouping pytest"
+	@if python3 -c "import pytest" >/dev/null 2>&1; then \
+		python3 -m pytest -p no:cacheprovider weekly-squad-digest/tests/ -q || exit 1; \
+	else \
+		echo "pytest not installed — install with 'python3 -m pip install pytest' to run weekly-squad-digest tests" >&2; \
+	fi
+	@echo "  ok (framework refs + digest_grouping tests)"
 
 define LINT_TEST_CREATOR_TARGET
 lint-$(1):

@@ -30,6 +30,9 @@ Large workspace (100+ repos): read [large-scale-execution.md](../reference/large
 1. **Create or load `domain-config.yaml`** at `workspace_root` per
    [domain-config-schema.md](../reference/domain-config-schema.md). Copy from
    [templates/domain-config.yaml](../templates/domain-config.yaml) when absent. Merge domain pack if specified.
+   Set `scope.artifact_root` per [run-scoped-artifacts.md](../reference/run-scoped-artifacts.md) when
+   parallel runs or large workspaces need isolated deliverables (default:
+   `{workspace_root}/.domain-comprehension/{run_id}/`). **`manifest.yaml` remains at `workspace_root`.**
 
 2. **Repo/module census** — every in-scope unit (sort **ascending by name**):
    - `sibling-repos`: each `.git` directory
