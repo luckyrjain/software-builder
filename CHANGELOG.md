@@ -8,6 +8,12 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 
 ## Platform
 
+### Behavioral evals Tier 3 — golden recorded outputs (#16 follow-up)
+
+- Added `evals/golden/` fixtures with `recorded_output` blobs and structured assertions.
+- Added `scripts/evals/golden.py` and wired Tier-3 cases into `python3 -m scripts.evals` (`--tier 3`).
+- Four golden cases for pr-review, pr-gatekeeper, incident-rca, and loop-task-implementer high-risk outcomes.
+
 ### P3 remaining — risk_class registry field and docs/history split
 
 - Added required `risk_class` list to every skill in `skills.yaml` (posting, merge, unattended, read-only,
