@@ -28,8 +28,15 @@ Without step 1–2, two overlapping runs can both pass the pre-lock dedupe check
 ## Reference implementation
 
 [scripts/idempotency_store.py](../scripts/idempotency_store.py) — file-based per-MR lock +
-`last_processed_head_sha` store for webhook handlers (`check` / `mark` CLI). Tests:
-`tests/test_idempotency_store.py`.
+`last_processed_head_sha` store for webhook handlers.
+
+| Integration style | Pattern |
+|-------------------|---------|
+| **Shell webhook** | `run-if-new` holds the lock for the full gatekeeper subprocess: `idempotency_store.py ... run-if-new -- <gatekeeper-cmd>` |
+| **Python handler** | `with mr_lock(...):` → `should_process` → invoke gatekeeper → `mark_processed` on success |
+| **Testing only** | Separate `check` / `mark` CLI actions (lock not held between them) |
+
+Tests: `tests/test_idempotency_store.py`.
 
 ## Out of scope for this skill
 

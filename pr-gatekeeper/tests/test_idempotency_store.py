@@ -35,3 +35,23 @@ def test_check_then_mark(tmp_path: Path) -> None:
 
     base[-1] = "def456"
     assert run(*base, "check").returncode == 0
+
+
+def test_run_if_new_skips_duplicate(tmp_path: Path) -> None:
+    base = [
+        "--store-root",
+        str(tmp_path),
+        "--project",
+        "group/repo",
+        "--merge-request-iid",
+        "42",
+        "--head-sha",
+        "abc123",
+        "run-if-new",
+        "--",
+        sys.executable,
+        "-c",
+        "print('ok')",
+    ]
+    assert run(*base).returncode == 0
+    assert run(*base).returncode == 1

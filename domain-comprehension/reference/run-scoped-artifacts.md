@@ -11,8 +11,12 @@ When `domain-config.yaml` `scope.artifact_root` is unset, use:
 ```
 
 - `run_id` — ISO-8601 UTC timestamp at Session 0 start (`20260809T060000Z`) or caller-supplied slug.
-- All phase deliverables for **this run** live under `artifact_root` — `manifest.yaml`, `EXEC_SUMMARY.md`,
-  `{map_file}`, diagrams, and exports.
+- **Phase deliverables** for this run (`EXEC_SUMMARY.md`, `{map_file}`, diagrams, exports) live under
+  `artifact_root`.
+
+**`manifest.yaml` stays at `workspace_root`** — it is the machine completion gate and
+`validate_manifest_yaml.py` resolves artifact paths relative to `workspace_root`. Record
+`engagement.artifact_root` in the manifest when deliverables are namespaced under a run directory.
 
 ## Smaller phase packets
 
@@ -26,7 +30,7 @@ completed phase instead of one monolithic `{map_file}` edit:
 ```
 
 Phase 5 merges packets into the canonical deliverables under `artifact_root`. Packets are working notes;
-`manifest.yaml` remains the completion gate.
+`manifest.yaml` at `workspace_root` remains the completion gate.
 
 ## Shared workspace files
 
@@ -36,5 +40,5 @@ Never write comprehension deliverables into individual application repos unless 
 
 ## Resume / DELTA
 
-`RESUME` mode reads `manifest.yaml` from the prior `artifact_root` path recorded in
-`engagement.prior_artifact_root` — do not assume deliverables always live at `workspace_root`.
+`RESUME` mode reads `manifest.yaml` from `workspace_root` and uses `engagement.artifact_root` (when set)
+to locate prior deliverables — do not assume every artifact path is always directly under `workspace_root`.

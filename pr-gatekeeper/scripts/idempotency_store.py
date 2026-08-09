@@ -11,6 +11,7 @@ import argparse
 import fcntl
 import json
 import os
+import subprocess
 import sys
 from contextlib import contextmanager
 from pathlib import Path
@@ -71,6 +72,23 @@ def mark_processed(root: Path, project: str, merge_request_iid: int, head_sha: s
     )
 
 
+def run_if_new(
+    root: Path,
+    project: str,
+    merge_request_iid: int,
+    head_sha: str,
+    command: list[str],
+) -> int:
+    """Acquire lock, skip when head_sha is duplicate, else run command and mark on success."""
+    with mr_lock(root, project, merge_request_iid):
+        if not should_process(root, project, merge_request_iid, head_sha):
+            return 1
+        result = subprocess.run(command, check=False)
+        if result.returncode == 0:
+            mark_processed(root, project, merge_request_iid, head_sha)
+        return result.returncode
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--store-root", required=True, type=Path)
@@ -79,10 +97,30 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--head-sha", required=True)
     parser.add_argument(
         "action",
-        choices=("check", "mark"),
-        help="check: exit 0 when new head, 1 when duplicate; mark: persist head after successful run",
+        choices=("check", "mark", "run-if-new"),
+        help=(
+            "check: exit 0 when new head, 1 when duplicate (lock held only for the check — "
+            "use run-if-new for the full gatekeeper invocation); "
+            "mark: persist head after successful run (under lock); "
+            "run-if-new: hold lock, skip duplicate heads, run trailing command, mark on exit 0"
+        ),
+    )
+    parser.add_argument(
+        "command",
+        nargs=argparse.REMAINDER,
+        help="Command for run-if-new (prefix with -- before the command)",
     )
     args = parser.parse_args(argv)
+
+    if args.action == "run-if-new":
+        if not args.command or args.command[0] == "":
+            print("error: run-if-new requires a command after --", file=sys.stderr)
+            return 2
+        cmd = args.command[1:] if args.command[0] == "--" else args.command
+        if not cmd:
+            print("error: run-if-new requires a command after --", file=sys.stderr)
+            return 2
+        return run_if_new(args.store_root, args.project, args.merge_request_iid, args.head_sha, cmd)
 
     with mr_lock(args.store_root, args.project, args.merge_request_iid):
         if args.action == "check":
