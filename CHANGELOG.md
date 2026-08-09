@@ -885,6 +885,24 @@ _Pre-merge WIP on `feat/squad-map-skill` (internal v1.0–v1.5) is consolidated 
 
 ## incident-rca
 
+### Redaction gap fix + automated Phase 5 enforcement (2026-08-09)
+
+- `redact_secrets()` (`scripts/kubesense_logs.py`) now actually redacts `api_key`/`x-api-key`,
+  `password`/`passwd`/`pwd`, and PEM private-key/certificate blocks — `reference/log-redaction.md`'s
+  Phase 5 checklist named these from the start, but the function only ever covered
+  `Authorization`/`Bearer`/`Basic` auth headers. Verified empirically: all three leaked through
+  unredacted before this fix.
+- New `scripts/verify_redaction.py` — the automated half of the Phase 5 pre-render checklist.
+  Datadog log aggregation, Jira ticket bodies, Slack/PagerDuty snippets, and manual paste have no
+  Python ingestion path to instrument (they arrive as MCP results or human input directly into the
+  agent's context) — this scans whatever got written to disk instead, covering all five documented
+  log sources uniformly by reusing `redact_secrets()` directly rather than a second copy of the
+  pattern list. Never echoes the secret value in its own output.
+- Wired into `make lint-incident-rca` against the checked-in evidence examples; `reference/pressure-tests.md`
+  gained a row for it.
+- Fixes #61 (item 3). Item 4 (new-hire-guide scoping) remains open in that issue pending a design
+  decision.
+
 ### Causal-graph invariant validator (2026-07-02)
 
 - `causal_graph` YAML artifact + `validate_causal_graph.py` (CG-01–CG-08) — machine-checks acyclicity,

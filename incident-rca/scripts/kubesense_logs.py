@@ -28,6 +28,21 @@ REDACT_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r'(Authorization=\[REDACTED\])\s+\S+', re.IGNORECASE), r'\1'),
     (re.compile(r'(Authorization=)[^,\]} ]+', re.IGNORECASE), r'\1[REDACTED]'),
     (re.compile(r'(Basic\s+)[A-Za-z0-9+/=]{8,}', re.IGNORECASE), r'\1[REDACTED]'),
+    # api_key / x-api-key / apikey — JSON-quoted and key=value forms. reference/log-redaction.md's
+    # Phase 5 checklist has named this pattern from the start; the function just didn't cover it.
+    (re.compile(r'("(?:x-)?api[_-]?key"\s*:\s*")[^"]*(")', re.IGNORECASE), r'\1[REDACTED]\2'),
+    (re.compile(r'((?:x-)?api[_-]?key\s*=\s*)\S+', re.IGNORECASE), r'\1[REDACTED]'),
+    # password / passwd / pwd — same two forms.
+    (re.compile(r'("(?:password|passwd|pwd)"\s*:\s*")[^"]*(")', re.IGNORECASE), r'\1[REDACTED]\2'),
+    (re.compile(r'((?:password|passwd|pwd)\s*=\s*)\S+', re.IGNORECASE), r'\1[REDACTED]'),
+    # PEM blocks (private keys, certificates) — collapse the whole block, not just the header.
+    (
+        re.compile(
+            r'(-----BEGIN [A-Z ]*(?:PRIVATE KEY|CERTIFICATE)-----)[\s\S]*?'
+            r'(-----END [A-Z ]*(?:PRIVATE KEY|CERTIFICATE)-----)'
+        ),
+        r'\1\n[REDACTED]\n\2',
+    ),
 )
 
 

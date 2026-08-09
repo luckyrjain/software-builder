@@ -479,6 +479,10 @@ lint-incident-rca:
 	python3 incident-rca/scripts/validate_causal_graph.py \
 		incident-rca/reference/causal-graph.example.yaml \
 		incident-rca/reference/evidence.example.json || exit 1; \
+	python3 -m py_compile incident-rca/scripts/verify_redaction.py || exit 1; \
+	python3 incident-rca/scripts/verify_redaction.py \
+		incident-rca/reference/evidence.example.json \
+		incident-rca/reference/evidence.example.opensearch-query-governance.json || exit 1; \
 	if python3 -c "import pytest" >/dev/null 2>&1; then \
 		python3 -m pytest -p no:cacheprovider incident-rca/tests/ -q || exit 1; \
 	else \
