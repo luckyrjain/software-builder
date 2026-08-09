@@ -7,7 +7,7 @@ Load in Phase 2 with `reference/detection-vs-judgment.md` and `reference/finding
 
 ```text
 1. Detect          → hypothesis from checklist / diff scan
-2. Evidence        → diff anchor (+/- line in review boundary)?
+2. Evidence        → diff anchor (+/- line in review boundary; one-hop reads cite path only)?
 3. Don't-guess     → sufficient evidence to claim defect? (`finding-gates.md` §Don't-guess)
 4. Execution path  → realistic path where defect occurs? (`finding-gates.md` §Execution path)
 5. Dedupe          → not already raised on MR / within this review?
@@ -40,13 +40,17 @@ Run checklist dimensions and persona-weighted scans. Emit **candidates only** �
 - Build an **`evidence`** list: one or more `path:line` refs (primary anchor first; add secondary refs
   when the defect spans multiple hunks). **Required before emit** — step 12 rejects findings with an
   empty evidence list.
-- No invented code, no line numbers outside the boundary.
+- No invented code, no line numbers outside the boundary (one-hop files may support reachability claims but
+  are not diff anchors — cite the boundary hunk as primary evidence).
+- Recorded `review_boundary.one_hop_reads[]` entries may support steps 3–4 when the defect depends on a
+  direct caller/callee (`workflow/phase-1.md` §One-hop contextual reads).
 - Out-of-diff suspicion → *"Out-of-diff: worth checking…"* in chat/Notes only — **not** a finding.
 
 ### 3. Don't-guess gate
 
 **Distinct from execution path.** Ask: *Do I have enough evidence from the diff (+ optional full-file
-context from Phase 1) to assert this defect — without inferring unseen implementation?*
+context + recorded one-hop reads from Phase 1) to assert this defect — without inferring unseen
+implementation or transitive callers?*
 
 | Answer | Action |
 |--------|--------|

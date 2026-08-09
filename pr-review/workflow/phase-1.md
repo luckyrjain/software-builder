@@ -103,15 +103,9 @@ tools) follows the 1-retry policy stated once in
    returned. If a file's diff was truncated by the API or a page came back early, mark it
    *"diff truncated — partial"* in the inventory. This boundary is the only source of truth for
    Phase 2 — no file outside it may be reviewed and no line number outside it may be cited.
-   **One-hop contextual reads (strict exception):** when a changed hunk modifies a **public export**
-   (function, class, constant, route, event schema) and a finding depends on how **direct** callers or
-   callees behave, you may read **at most one hop** outside the boundary:
-   - **Callee hop:** the file that defines the symbol being called from the changed hunk (import target).
-   - **Caller hop:** a file that imports the changed module and invokes the changed symbol — only when
-     the diff alone cannot establish whether the defect is reachable.
-   Record every one-hop file in `context_cache.one_hop_reads[]` with `{path, reason, hop}` before Phase 2.
-   **Forbidden:** transitive hops (caller-of-caller), repo-wide search, or reading unrelated modules "for
-   context." More than one hop requires explicit user approval (`full review` / named path).
+   **One-hop contextual reads:** when a finding depends on direct caller/callee behavior outside the
+   boundary, follow [§One-hop contextual reads (strict exception)](#one-hop-contextual-reads-strict-exception)
+   after step 7 changed-file reads; record paths in `review_boundary.one_hop_reads[]` before Phase 2.
    **Per-file size guard:** for each changed file, estimate size from diff hunks or API metadata. When
    any **single file** exceeds **2,000 changed lines** (or bulk generated output > 500 KB), mark
    *"oversized — summary-only review"* — do not line-by-line review; sample header hunks only. Note in
@@ -210,6 +204,9 @@ tools) follows the 1-retry policy stated once in
    **Changed-file reads (never cached):** if the source branch is checked out, read full changed files
    from the workspace; otherwise `git show <head_sha>:path` when useful — **skip `git show` for fork MRs**
    (step 1). Note diff-only vs diff+full-file.
+   **One-hop reads (never cached):** after boundary full-file reads, when a finding depends on direct
+   caller/callee behavior outside the boundary, apply [§One-hop contextual reads](#one-hop-contextual-reads-strict-exception)
+   and append to `review_boundary.one_hop_reads[]` before Phase 2.
    **Binary files:** skip inline review of binary blobs; list as *"not reviewable inline"* in the summary.
 
 ## Special cases
@@ -218,6 +215,26 @@ tools) follows the 1-retry policy stated once in
 
 **Large MRs:** prioritise auth, payments, migrations, config, security paths; skip or skim
 `*.lock`, `vendor/`, `dist/`, generated fixtures — list what was deprioritised.
+
+## One-hop contextual reads (strict exception)
+
+When a changed hunk modifies a **public export** (function, class, constant, route, event schema) and a
+finding depends on how **direct** callers or callees behave, you may read **at most one hop** outside
+the review boundary:
+
+- **Callee hop:** the file that defines the symbol being called from the changed hunk (follow the import
+  or qualified name visible in the hunk — no search).
+- **Caller hop:** only when a **concrete caller path** is already visible in the changed hunk without
+  repo-wide search — e.g. a path literal, router/DI registration, or re-export string. Do **not** search
+  the repo to discover callers. (Callers already in the boundary are in-scope via full-file reads — not
+  one-hop reads.)
+
+Record every one-hop file in `review_boundary.one_hop_reads[]` with `{path, reason, hop}` (`callee` or
+`caller`). One-hop reads are **per-run** boundary evidence — not part of the session `context_cache`
+(see `reference/session-context-cache.md`).
+
+**Forbidden:** transitive hops (caller-of-caller), repo-wide search, or reading unrelated modules "for
+context." More than one hop requires explicit user approval (`full review` / named path).
 
 ## Re-runs (incremental scope)
 

@@ -11,8 +11,8 @@ Distinct from the execution path gate (step 4).
 
 Before asserting a defect, ask:
 
-> **Do I have sufficient evidence from the diff (+ Phase 1 full-file context) — without inferring
-> unseen implementation, callers, or runtime state?**
+> **Do I have sufficient evidence from the diff (+ Phase 1 full-file context + recorded one-hop reads) —
+> without inferring unseen implementation, transitive callers, or runtime state?**
 
 | Answer | Action |
 |--------|--------|
@@ -23,8 +23,8 @@ Before asserting a defect, ask:
 
 - The changed line **is** the defect (wrong operator, removed check, secret literal, SQL concat with user input).
 - Full-file context from Phase 1 shows the call pattern **in the same file** supporting the claim.
-- **One-hop contextual read** recorded in `context_cache.one_hop_reads[]` shows the direct caller/callee
-  pattern supporting the claim (see [phase-1.md](../workflow/phase-1.md) §One-hop contextual reads).
+- **One-hop contextual read** recorded in `review_boundary.one_hop_reads[]` shows the direct caller/callee
+  pattern supporting the claim (see [phase-1.md §One-hop contextual reads](../workflow/phase-1.md#one-hop-contextual-reads-strict-exception)).
 - Acceptance criterion gap with **explicit** AC text and no implementing line in boundary.
 - Test assertion contradicts stated behavior **in the diff**.
 
