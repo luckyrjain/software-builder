@@ -44,13 +44,15 @@ For each `release_manifest` entry:
 ## 2. Review each resolved MR — pr-review, retrospective mode, per gate-policy.md
 
 Every MR resolved in step 1 is **already merged** — that is the query condition (`state: merged`). Invoke
-**pr-review** per resolved MR with **explicit typed fields**, never a conversational exchange:
+**pr-review** per resolved MR with **explicit typed fields**, never a conversational exchange — this is
+this skill's `mr_context` InvocationEnvelope
+([invocation-envelope.md](../../docs/skill-framework/shared/invocation-envelope.md)):
 
-- `merge_request_iid`, `project`
-- `review_mode: retrospective`, `audit_type: retrospective`
+- `merge_request_iid`, `project` — exact scope
+- `review_mode: retrospective`, `audit_type: retrospective` — interaction policy
 - `expected_head_sha`: the MR's `merge_commit_sha` (or `diff_refs.head_sha` recorded at merge time from
   step 1's `list_merge_requests` result) — **always per-MR**, never the manifest `release_ref`
-- `posting_policy: forbidden`
+- `posting_policy: forbidden` — allowed actions
 
 Do **not** invoke with the bare phrase `"review !<iid> in <project>"` and rely on pr-review's own
 merged-MR HARD STOP + a scripted "decline the post-merge audit" reply — declining is correct for

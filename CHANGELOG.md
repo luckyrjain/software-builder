@@ -8,6 +8,25 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 
 ## Platform
 
+### Invocation envelope / result envelope (2026-08-09)
+
+- New `docs/skill-framework/shared/invocation-envelope.md` names the shared field shape a wrapper
+  skill (release-readiness-checker, incident-triage-agent, backlog-runner, weekly-squad-digest,
+  cost-optimization-sprint-planner) hands to a child skill — exact scope, interaction policy,
+  allowed actions, expected SHA, source revisions — and points at the existing `review_metadata`/
+  `assessment_metadata` schema ([review-metadata-schema.md](review-metadata-schema.md) §8) as the
+  already-formalized result-side counterpart. No new validation mechanism: the registry's existing
+  `composition_contracts.py` (`_validate_declared_fields`, `_validate_invoke_schema_matching`)
+  already enforces field-level producer/consumer matching — this makes it aware of the envelope by
+  adding the envelope's fields as data, not new code.
+- `mr_context` (in `scripts/registry/composition_contracts.yaml`, consumed by 10 skills) is the
+  reference implementation: extended its schema with `review_mode`, `audit_type`, and
+  `expected_head_sha` — fields release-readiness-checker's `workflow/run-check.md` already
+  documented passing to pr-review, which the schema hadn't caught up to. `run-check.md` now names
+  its typed-invocation fields explicitly as this skill's InvocationEnvelope.
+- `terminology-glossary.md` gained "Invocation envelope" and "Result envelope" entries.
+- Fixes #52.
+
 ### Five-concept separation audit (2026-08-09)
 
 - New `docs/skill-framework/shared/five-concept-separation-audit.md` — a repo-wide pass confirming
