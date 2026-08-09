@@ -2,6 +2,41 @@
 
 **Normative.** The exact structure [workflow/run-digest.md](../workflow/run-digest.md) § 4 must produce.
 
+## Safe rendered-output boundary
+
+`<service>` and `<squad name>` (including inside a Notes cross-reference, "also in Cost optimization
+under `<other squad>`") come from a raw `org_rollup_item` inside one of the two rollup JSON files — each
+producing skill (migration-program-manager, cost-optimization-sprint-planner) escapes these same values
+for *its own* Markdown report, but
+[org-rollup-schema.md](../../docs/skill-framework/shared/org-rollup-schema.md) itself defines no
+escaping — the JSON rollup file carries the raw value, so this skill's own render of that value into
+`WEEKLY_SQUAD_DIGEST.md` is its own responsibility, not inherited from either producer. Separately, both
+rollup file paths (`<migration_rollup_path>`, `<cost_rollup_path>`) come from the caller-supplied
+`rollup_manifest` input itself, not from any `org_rollup_item` — a distinct untrusted-input vector per
+[prompt-injection.md](../../docs/skill-framework/shared/prompt-injection.md) (see
+[SKILL.md](../SKILL.md)'s own "Untrusted content" note). Both groups need the identical treatment below,
+for different reasons — an escaping fix to `org-rollup-schema.md` would only ever cover `service`/
+`squad`, never the rollup paths.
+
+1. **Structurally escape or fence newlines, leading `#`/`>`/`-`, table `|` delimiters, and unbalanced
+   triple-backtick fences in every one of them, always** — a Markdown table splits rows at the line level
+   before any inline formatting (including a code span) runs, so a `service` value containing a literal
+   `\n## Verdict` must render as inert table-cell text, never a real heading; `<squad name>` is rendered
+   as an actual `## <squad name>` heading, not a table cell — the same newline risk applies there too, a
+   real newline simply ends that heading line early and lets the rest render as separate content,
+   including a spoofed heading of its own. This applies **everywhere** a rollup path renders, not only
+   the "Rollups read:" header line — the Rollup gaps table's "File not found at `<path>`" cell embeds the
+   exact same caller-supplied value.
+2. **Then**, since all four are short, identifier-shaped values (a service name, a squad name, a file
+   path), wrap the (already-escaped) value in an inline code span, first **removing** any backtick
+   already in it
+   ([safe-output.md § Rule 4](../../docs/skill-framework/shared/safe-output.md#rule-4-markdown-chat-escaping)) —
+   a backslash before the backtick does not work, since CommonMark code-span delimiters are matched
+   before backslash escapes are resolved.
+
+No redaction step: `service`/`squad`/both rollup paths are structured identifiers, not free-text
+evidence pulled from a log, ticket, or repo content.
+
 ## Structure (order fixed)
 
 ```markdown
@@ -14,13 +49,13 @@ Compute each revision as the first 12 hex chars of the SHA-256 of the rollup fil
 § 1 (or `not supplied` when that rollup path was unset or unreadable). This gives downstream readers a
 stable fingerprint without re-deriving squad/status fields.
 
-## <squad name>
+## `<squad name>`
 
 ### Migration status
 
 | Service | Status | Priority | Confidence | Notes |
 |---------|--------|----------|------------|-------|
-| <service> | <status> | <priority or —> | <squad_confidence> | <stale-flag branch: if `staleness_days` is present (key exists) and past `staleness_warning_days`, "stale — gate unchanged for N days, re-run migration-program-manager"; else if `staleness_days` is genuinely absent and a `last_updated`-derived age is past `staleness_warning_days`, "stale — last updated N days ago, re-run migration-program-manager"; else no stale flag> <cross-ref branch: "also in Cost optimization under `<other squad>`" if the same service appears in the cost rollup under a different squad> — both branches joined with `; ` if both apply; else —> |
+| `<service>` | <status> | <priority or —> | <squad_confidence> | <stale-flag branch: if `staleness_days` is present (key exists) and past `staleness_warning_days`, "stale — gate unchanged for N days, re-run migration-program-manager"; else if `staleness_days` is genuinely absent and a `last_updated`-derived age is past `staleness_warning_days`, "stale — last updated N days ago, re-run migration-program-manager"; else no stale flag> <cross-ref branch: "also in Cost optimization under `<other squad>`" if the same service appears in the cost rollup under a different squad> — both branches joined with `; ` if both apply; else —> |
 
 <In migration-program-manager's own order: blocked, then stalled (ranked by `staleness_days` descending,
 matching migration-program-manager's own [workflow/run-rollup.md § 2](../../migration-program-manager/workflow/run-rollup.md)
@@ -30,7 +65,7 @@ convention — never re-sorted by any other rule), then in_progress, then done.>
 
 | Service | Monthly savings | Status | Priority | Confidence | Notes |
 |---------|------------------|--------|----------|------------|-------|
-| <service> | `$<value.monthly_savings_total>` | <status> | <priority or —> | <squad_confidence> | <"stale — last updated N days ago, re-run cost-optimization-sprint-planner" if past staleness_warning_days; "also in Migration status under `<other squad>`" if the same service appears in the migration rollup under a different squad; both joined with `; ` if both apply; else —> |
+| `<service>` | `$<value.monthly_savings_total>` | <status> | <priority or —> | <squad_confidence> | <"stale — last updated N days ago, re-run cost-optimization-sprint-planner" if past staleness_warning_days; "also in Migration status under `<other squad>`" if the same service appears in the migration rollup under a different squad; both joined with `; ` if both apply; else —> |
 
 <In cost-optimization-sprint-planner's own order: monthly_savings_total descending.>
 
@@ -48,8 +83,8 @@ always rendered last, never silently merged into a named squad's section.>
 
 | Rollup | Reason |
 |--------|--------|
-| migration_program_rollup.json | <"Not supplied in rollup_manifest" or "File not found at <path> — run migration-program-manager first"> |
-| cost_optimization_sprint_rollup.json | <"Not supplied in rollup_manifest" or "File not found at <path> — run cost-optimization-sprint-planner first"> |
+| migration_program_rollup.json | <"Not supplied in rollup_manifest" or "File not found at `<path>` — run migration-program-manager first" — `<path>` escaped/fenced and code-span-wrapped per the boundary above, same as every other rollup-path render> |
+| cost_optimization_sprint_rollup.json | <"Not supplied in rollup_manifest" or "File not found at `<path>` — run cost-optimization-sprint-planner first" — `<path>` escaped/fenced and code-span-wrapped per the boundary above> |
 
 <Omit a rollup's row here if it was actually read successfully — this section is for gaps only, not a
 status line for every run.>

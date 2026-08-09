@@ -712,6 +712,28 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 
 ## weekly-squad-digest
 
+### Safe-output wiring (2026-08-09)
+
+- `org-rollup-schema.md` itself defines no escaping — each producing skill (migration-program-manager,
+  cost-optimization-sprint-planner) escapes `service`/`squad` only for *its own* Markdown report; the raw
+  JSON rollup file this skill reads carries the unescaped value, so rendering it into
+  `WEEKLY_SQUAD_DIGEST.md` is this skill's own responsibility, not inherited from either producer.
+  `SKILL.md` links `safe-output.md`; new "Safe rendered-output boundary" section in
+  `reference/report-format.md` requires newline/heading/pipe/triple-backtick-fence escaping on
+  `service`, `squad` (including inside a cross-rollup Notes pointer, "also in Cost optimization under
+  `<other squad>`"), and both caller-supplied rollup file paths — the latter at **both** the places they
+  render, the "Rollups read:" header line and the Rollup gaps table's "File not found at `<path>`"
+  reason, since a round-2 review caught the second site left unescaped in the first pass — then a
+  second, cosmetic inline-code-span wrap (stripping any embedded backtick first) since all four are
+  short identifiers. No redaction step. `examples.md`'s worked examples updated to match. Enforced by a
+  new Makefile grep check.
+- No `workflow-contract.yaml` — `inputs.md` → `run-digest.md` is a fixed 2-phase linear pipeline with no
+  cross-phase branch.
+- New golden eval `evals/golden/weekly-squad-digest/injection-inert-digest.yaml`: a service name
+  containing a backtick plus a table-breaking pipe, a squad containing a real newline plus a spoofed
+  heading, and rollup paths (at both render sites) each containing a real newline plus a spoofed heading
+  all render inert.
+
 ### Initial release (2026-08-05)
 
 - New skill — item #11 of the [team-facing agents roadmap](docs/superpowers/plans/2026-08-05-team-facing-agents-roadmap.md),
