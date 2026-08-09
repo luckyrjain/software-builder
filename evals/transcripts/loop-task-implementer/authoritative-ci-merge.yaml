@@ -1,0 +1,33 @@
+schema_version: 1
+skill: loop-task-implementer
+case_id: authoritative-ci-merge-path
+tier: 2
+description: Merge may proceed only after authoritative CI and reviewer checks pass
+events:
+  - type: tool
+    name: verify_ci_status
+    args:
+      source: required_ci
+      passed: true
+  - type: tool
+    name: run_reviewer_checks
+    args:
+      passed: true
+  - type: gate
+    name: merge_authorization
+    decision: allowed
+  - type: tool
+    name: merge_pull_request
+  - type: outcome
+    status: complete
+assertions:
+  - type: tool_order
+    tools:
+      - verify_ci_status
+      - run_reviewer_checks
+      - merge_pull_request
+  - type: tool_call_count
+    name: merge_pull_request
+    max: 1
+  - type: outcome_status
+    status: complete
