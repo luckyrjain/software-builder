@@ -310,6 +310,12 @@ lint-pr-gatekeeper:
 		{ echo "error: smoke-test.md must link to pressure-tests.md" >&2; exit 1; }
 	@grep -q 'skill-framework' pr-gatekeeper/SETUP.md || \
 		{ echo "error: pr-gatekeeper/SETUP.md must link to docs/skill-framework" >&2; exit 1; }
+	@grep -q 'docs/skill-framework/shared/safe-output.md' pr-gatekeeper/SKILL.md || \
+		{ echo "error: pr-gatekeeper/SKILL.md must link to shared safe-output" >&2; exit 1; }
+	@grep -q 'docs/skill-framework/shared/prompt-injection.md' pr-gatekeeper/reference/auto-post-policy.md && \
+	 grep -q 'docs/skill-framework/shared/safe-output.md' pr-gatekeeper/reference/auto-post-policy.md && \
+	 grep -qiE 'escape|fence|backtick' pr-gatekeeper/reference/auto-post-policy.md || \
+		{ echo "error: auto-post-policy.md must sanitize untrusted rendered fields per prompt-injection and safe-output" >&2; exit 1; }
 	@echo "lint-pr-gatekeeper: idempotency store pytest"
 	@if python3 -c "import pytest" >/dev/null 2>&1; then \
 		python3 -m pytest -p no:cacheprovider pr-gatekeeper/tests/test_idempotency_store.py -q || exit 1; \
