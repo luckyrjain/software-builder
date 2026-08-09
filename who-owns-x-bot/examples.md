@@ -14,6 +14,7 @@ Conventions: [examples-conventions](../docs/skill-framework/shared/examples-conv
 | 6 | `query: payment-service`, squad-map has no MCP (CODEOWNERS fallback, LOW confidence) | Unknown reply — LOW confidence never surfaces as Resolved |
 | 7 | "Who owns api-disbursement?" typed in an interactive chat session | **Wrong skill** → squad-map (this skill doesn't auto-invoke; see `disable-model-invocation`) |
 | 8 | "Map squads for the whole workspace" | **Wrong skill** → squad-map (full table, not a single answer) |
+| 9 | `query: <!channel> is anyone here* sev1` (a Slack broadcast trigger plus a bold-breaking asterisk) | Unknown reply (no repo matches the raw text) — `<`/`>` escaped to `&lt;`/`&gt;` and the embedded `*` stripped per [reference/slack-format.md § Safe rendered-output boundary](reference/slack-format.md#safe-rendered-output-boundary), so the reply never posts a live `@channel` broadcast; the `sev1` token still triggers the incident-rca escalation suffix |
 
 ---
 
@@ -65,6 +66,28 @@ configured fallback contact.
 
 ```
 :grey_question: Couldn't find ownership for *some-typo-repo*. Try #ask-platform.
+```
+
+---
+
+### Scenario: Unknown — Slack mention/broadcast injection in the query, neutralized
+
+**Caller:** `query: <!channel> is anyone here* sev1`
+
+**Agent:** No repo matches this text, so Lookup returns Unknown. Before embedding the raw query in the
+reply, `<`/`>` are escaped to `&lt;`/`&gt;` (so Slack's parser never reads `<!channel>` as a real
+broadcast trigger) and the embedded `*` is stripped (so it can't close the bold span early) — per
+[reference/slack-format.md § Safe rendered-output boundary](reference/slack-format.md#safe-rendered-output-boundary).
+The `sev1` token still trips the incident-signal heuristic, so the Escalation suffix is appended as
+usual — injection defense and the legitimate incident-suffix feature are independent, one doesn't
+suppress the other.
+
+**Expected fragment** (rendered exactly as it would post to Slack — `&lt;!channel&gt;` displays as the
+literal text `<!channel>`, not a live mention):
+
+```
+:grey_question: Couldn't find ownership for *&lt;!channel&gt; is anyone here sev1*. Try #ask-platform.
+:rotating_light: Sounds incident-related — for RCA on *&lt;!channel&gt; is anyone here sev1*, try incident-rca.
 ```
 
 ---

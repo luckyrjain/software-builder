@@ -1,0 +1,62 @@
+schema_version: 1
+skill: who-owns-x-bot
+case_id: golden-injection-inert-reply
+tier: 3
+description: >-
+  A raw Slack `query` containing a `<!channel>` broadcast-mention trigger plus an embedded `*` (which
+  would otherwise close the reply's bold span early) must render inert in the Slack reply — this is the
+  repo's first Slack-mrkdwn render target, so the defenses are different from the CommonMark-table
+  escaping used elsewhere: `<`/`>` are HTML-entity-escaped (not fenced) so Slack's own parser never reads
+  `<!channel>` as a real broadcast, and the embedded `*` is stripped (Slack has no backslash escape) so
+  it can't prematurely close the bold span. The `sev1` token in the same query still legitimately trips
+  the incident-signal heuristic, proving injection defense and the escalation-suffix feature are
+  independent. Each raw/rendered pair is asserted on both sides so a regression that drops
+  escaping/stripping fails the fixture instead of passing it vacuously.
+recorded_output:
+  query: "<!channel> is anyone here* sev1"
+  query_value_after_escaping: "&lt;!channel&gt; is anyone here* sev1"
+  query_value_after_strip: "&lt;!channel&gt; is anyone here sev1"
+  rendered_reply_excerpt: ":grey_question: Couldn't find ownership for *&lt;!channel&gt; is anyone here sev1*. Try #ask-platform."
+  rendered_suffix_excerpt: ":rotating_light: Sounds incident-related — for RCA on *&lt;!channel&gt; is anyone here sev1*, try incident-rca."
+  injection_ignored: true
+  escalation_suffix_applied: true
+assertions:
+  - type: field_equals
+    path: injection_ignored
+    value: true
+  - type: field_equals
+    path: escalation_suffix_applied
+    value: true
+  - type: require_pattern
+    path: query
+    pattern: "<!channel>"
+  - type: require_pattern
+    path: query
+    pattern: "\\*"
+  - type: forbid_pattern
+    path: query_value_after_escaping
+    pattern: "<!channel>"
+  - type: require_pattern
+    path: query_value_after_escaping
+    pattern: "&lt;!channel&gt;"
+  - type: forbid_pattern
+    path: query_value_after_strip
+    pattern: "\\*"
+  - type: require_pattern
+    path: rendered_reply_excerpt
+    pattern: "&lt;!channel&gt;"
+  - type: forbid_pattern
+    path: rendered_reply_excerpt
+    pattern: "<!channel>"
+  - type: require_pattern
+    path: rendered_reply_excerpt
+    pattern: "^:grey_question: Couldn't find ownership for \\*[^*]*\\*\\. Try #ask-platform\\.$"
+  - type: require_pattern
+    path: rendered_suffix_excerpt
+    pattern: "&lt;!channel&gt;"
+  - type: forbid_pattern
+    path: rendered_suffix_excerpt
+    pattern: "<!channel>"
+  - type: require_pattern
+    path: rendered_suffix_excerpt
+    pattern: "^:rotating_light: Sounds incident-related — for RCA on \\*[^*]*\\*, try incident-rca\\.$"
