@@ -1,17 +1,17 @@
 ---
-workflow_version: 1.6
-phase: 2
-produces:
-  - findings
-  - root_cause_groups
-  - review_metrics
+workflow_version: 1.7
+phase: "2"
+produces: {findings: list, root_cause_groups: list, review_metrics: object}
 consumes:
-  - review_boundary
-  - fast_path
-  - context_cache
-  - capability_profile
-  - feedback_signals
-  - jira_ac_table
+  required:
+    review_boundary: object
+    fast_path: object
+    context_cache: object
+    capability_profile: object
+    feedback_signals: object
+    jira_ac_table: list
+  optional: {}
+  conditional: {}
 ---
 
 # Phase 2 — Review

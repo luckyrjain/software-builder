@@ -240,6 +240,8 @@ lint-pr-review-skill:
 	done; \
 	if [ "$$fail" -ne 0 ]; then echo "error: pr-review workflow/*.md must declare workflow_version, phase, produces, consumes" >&2; exit 1; fi; \
 	echo "  ok"
+	@echo "lint-pr-review-skill: route-aware workflow contract"
+	@python3 -m scripts.validate_workflow_contracts pr-review
 	@echo "lint-pr-review-skill: dangling markdown links"
 	@bash scripts/lint-dangling-md-links.sh pr-review/*.md pr-review/reference/*.md pr-review/workflow/*.md && echo "  ok" || \
 		{ echo "error: dangling reference link(s) found" >&2; exit 1; }
@@ -247,6 +249,15 @@ lint-pr-review-skill:
 		{ echo "error: pr-review SKILL.md must link to shared cross-skill-escalation" >&2; exit 1; }
 	@grep -q 'smoke-test' pr-review/SKILL.md || \
 		{ echo "error: pr-review SKILL.md must link to reference/smoke-test.md" >&2; exit 1; }
+	@grep -q 'docs/skill-framework/shared/safe-output.md' pr-review/SKILL.md || \
+		{ echo "error: pr-review SKILL.md must link to shared safe-output" >&2; exit 1; }
+	@for f in pr-review/workflow/posting.md pr-review/workflow/phase-5.md; do \
+		grep -q 'docs/skill-framework/shared/prompt-injection.md' "$$f" && \
+		grep -q 'docs/skill-framework/shared/safe-output.md' "$$f" && \
+		grep -qiE 'escape|fence' "$$f" && \
+		grep -qi 'redact' "$$f" || \
+			{ echo "error: $$f must sanitize untrusted rendered fields per prompt-injection and safe-output" >&2; exit 1; }; \
+	done
 	@grep -q 'Merge gate' pr-review/workflow/phase-5.md || \
 		{ echo "error: phase-5.md must document merge gate checklist" >&2; exit 1; }
 	@test -f pr-review/reference/repository-health.md || \

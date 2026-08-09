@@ -1,15 +1,16 @@
 ---
-workflow_version: 1.11
+workflow_version: 1.12
 phase: inputs
-produces:
-  - project_id
-  - merge_request_iid
+produces: {project_id: string, merge_request_iid: string}
 consumes:
-  - user_message
-  - git_remote_url
-  - review_mode
-  - posting_policy
-  - expected_head_sha
+  required: {}
+  optional:
+    user_message: string
+    git_remote_url: string
+    review_mode: string
+    posting_policy: string
+    expected_head_sha: string
+  conditional: {}
 ---
 
 # Inputs — resolve the target first

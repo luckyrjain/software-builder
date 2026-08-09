@@ -1,14 +1,16 @@
 ---
-workflow_version: 1.4
+workflow_version: 1.5
 phase: 2-3-gate
-produces:
-  - posting_decision
+produces: {posting_decision: string}
 consumes:
-  - findings
-  - review_metrics
-  - incremental_baseline
-  - head_sha
-  - posting_mode
+  required:
+    findings: list
+    review_metrics: object
+    incremental_baseline: object
+    head_sha: string
+    posting_mode: string
+  optional: {}
+  conditional: {}
 ---
 
 # Phase 2 → 3 gate (re-run decision)
@@ -36,6 +38,10 @@ Compare current `diff_refs.head_sha` to the baseline `head_sha` from Phase 1 ste
 When incremental, load `reference/incremental-rerun.md` for dedupe rules (snippet hash, resolved
 threads, squash caveat). Use the re-review template from `reference/comment-templates.md` when posting.
 
-If the gate allows posting, **read `workflow/posting.md`** for Phase 3 and Phase 4.
+Record `posting_decision`:
 
-If the gate skips posting but review is complete, **read `workflow/phase-5.md`**.
+- `posting_decision: post` — the gate allows proceeding to Phase 3/4. Read **`workflow/posting.md`**
+  next. (Phase 3 may still end without anything posted — e.g. the user chooses Hold — but that's
+  `posting.md`'s own internal confirmation logic, not a second gate here.)
+- `posting_decision: skip` — the "Stop posting path" / `chat-only` / Hold-Cancel-earlier / draft rows
+  above. Read **`workflow/phase-5.md`** directly; Phase 3 and Phase 4 never run this pass.
