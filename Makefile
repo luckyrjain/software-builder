@@ -1180,6 +1180,12 @@ lint-weekly-squad-digest:
 		{ echo "error: smoke-test.md must link to pressure-tests.md" >&2; exit 1; }
 	@grep -q 'skill-framework' weekly-squad-digest/SETUP.md || \
 		{ echo "error: weekly-squad-digest/SETUP.md must link to docs/skill-framework" >&2; exit 1; }
+	@grep -q 'docs/skill-framework/shared/safe-output.md' weekly-squad-digest/SKILL.md || \
+		{ echo "error: weekly-squad-digest/SKILL.md must link to shared safe-output" >&2; exit 1; }
+	@grep -q 'docs/skill-framework/shared/prompt-injection.md' weekly-squad-digest/reference/report-format.md && \
+	 grep -q 'docs/skill-framework/shared/safe-output.md' weekly-squad-digest/reference/report-format.md && \
+	 grep -qiE 'escape|fence|backtick' weekly-squad-digest/reference/report-format.md || \
+		{ echo "error: report-format.md must sanitize untrusted rendered fields per prompt-injection and safe-output" >&2; exit 1; }
 	@test -f weekly-squad-digest/scripts/digest_grouping.py || \
 		{ echo "error: missing weekly-squad-digest/scripts/digest_grouping.py" >&2; exit 1; }
 	@echo "lint-weekly-squad-digest: digest_grouping pytest"

@@ -40,19 +40,19 @@ cost_rollup_path: ./cost_optimization_sprint_rollup.json}`
 
 **Rollups read:** `./migration_program_rollup.json` · `./cost_optimization_sprint_rollup.json`
 
-## disbursement
+## `disbursement`
 
 ### Migration status
 
 | Service | Status | Priority | Confidence | Notes |
 |---------|--------|----------|------------|-------|
-| api-disbursement | blocked | P0 | HIGH | — |
+| `api-disbursement` | blocked | P0 | HIGH | — |
 
 ### Cost optimization
 
 | Service | Monthly savings | Status | Priority | Confidence | Notes |
 |---------|------------------|--------|----------|------------|-------|
-| api-disbursement | $340.00 | READY | P1 | HIGH | — |
+| `api-disbursement` | $340.00 | READY | P1 | HIGH | — |
 ```
 
 ---
@@ -94,21 +94,21 @@ value. Both notes land in the same cell, `; `-joined, per
 **Expected fragment:**
 
 ```
-## payments
+## `payments`
 
 ### Migration status
 
 | Service | Status | Priority | Confidence | Notes |
 |---------|--------|----------|------------|-------|
-| api-legacy-ledger | stalled | — | MEDIUM | stale — gate unchanged for 21 days, re-run migration-program-manager; also in Cost optimization under `collections` |
+| `api-legacy-ledger` | stalled | — | MEDIUM | stale — gate unchanged for 21 days, re-run migration-program-manager; also in Cost optimization under `collections` |
 
-## collections
+## `collections`
 
 ### Cost optimization
 
 | Service | Monthly savings | Status | Priority | Confidence | Notes |
 |---------|------------------|--------|----------|------------|-------|
-| api-legacy-ledger | $120.00 | READY | P2 | MEDIUM | also in Migration status under `payments` |
+| `api-legacy-ledger` | $120.00 | READY | P2 | MEDIUM | also in Migration status under `payments` |
 ```
 
 ---

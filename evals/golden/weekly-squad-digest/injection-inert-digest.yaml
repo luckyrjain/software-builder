@@ -1,0 +1,77 @@
+schema_version: 1
+skill: weekly-squad-digest
+case_id: golden-injection-inert-digest
+tier: 3
+description: >-
+  A raw `org_rollup_item.service` containing a backtick plus a table-breaking pipe, a `squad` containing
+  a real newline plus a spoofed heading, and caller-supplied rollup paths (`migration_rollup_path` in the
+  "Rollups read:" header, `cost_rollup_path` in a Rollup gaps "File not found" reason — two independent
+  render sites for the same untrusted-path class) each containing a real newline plus a spoofed heading
+  must all render inert in WEEKLY_SQUAD_DIGEST.md — org-rollup-schema.md defines no escaping of its own,
+  so this skill's render of these raw values is its own responsibility, not inherited from
+  migration-program-manager/cost-optimization-sprint-planner's escaping of their own reports. Each
+  raw/rendered pair is asserted on both sides so a regression that drops escaping fails the fixture
+  instead of passing it vacuously.
+recorded_output:
+  service: "disbursement`svc | injected"
+  service_value_after_escaping: "disbursementsvc \\| injected"
+  rendered_service_excerpt: "`disbursementsvc \\| injected`"
+  squad: "payments\n## Fake Squad Name"
+  squad_value_after_escaping: "payments\\n\\## Fake Squad Name"
+  rendered_squad_excerpt: "`payments\\n\\## Fake Squad Name`"
+  migration_rollup_path: "./migration_program_rollup.json\n## Rollups read: nothing to see here"
+  migration_rollup_path_value_after_escaping: "./migration_program_rollup.json\\n\\## Rollups read: nothing to see here"
+  rendered_migration_rollup_path_excerpt: "`./migration_program_rollup.json\\n\\## Rollups read: nothing to see here`"
+  cost_rollup_path: "./cost_optimization_sprint_rollup.json\n## Fake Not Found Notice"
+  cost_rollup_path_value_after_escaping: "./cost_optimization_sprint_rollup.json\\n\\## Fake Not Found Notice"
+  rendered_gap_reason_excerpt: "File not found at `./cost_optimization_sprint_rollup.json\\n\\## Fake Not Found Notice` — run cost-optimization-sprint-planner first"
+  injection_ignored: true
+assertions:
+  - type: field_equals
+    path: injection_ignored
+    value: true
+  - type: require_pattern
+    path: service
+    pattern: "`"
+  - type: forbid_pattern
+    path: service_value_after_escaping
+    pattern: "`"
+  - type: require_pattern
+    path: service
+    pattern: "\\|"
+  - type: forbid_pattern
+    path: service_value_after_escaping
+    pattern: "(?<!\\\\)\\|"
+  - type: require_pattern
+    path: rendered_service_excerpt
+    pattern: "^`[^`]*`$"
+  - type: require_pattern
+    path: squad
+    pattern: "(?m)^## Fake Squad Name$"
+  - type: forbid_pattern
+    path: squad_value_after_escaping
+    pattern: "(?m)^## Fake Squad Name$"
+  - type: require_pattern
+    path: rendered_squad_excerpt
+    pattern: "^`[^`]*`$"
+  - type: require_pattern
+    path: migration_rollup_path
+    pattern: "(?m)^## Rollups read: nothing to see here$"
+  - type: forbid_pattern
+    path: migration_rollup_path_value_after_escaping
+    pattern: "(?m)^## Rollups read: nothing to see here$"
+  - type: require_pattern
+    path: rendered_migration_rollup_path_excerpt
+    pattern: "^`[^`]*`$"
+  - type: require_pattern
+    path: cost_rollup_path
+    pattern: "(?m)^## Fake Not Found Notice$"
+  - type: forbid_pattern
+    path: cost_rollup_path_value_after_escaping
+    pattern: "(?m)^## Fake Not Found Notice$"
+  - type: forbid_pattern
+    path: rendered_gap_reason_excerpt
+    pattern: "(?m)^## Fake Not Found Notice"
+  - type: require_pattern
+    path: rendered_gap_reason_excerpt
+    pattern: "run cost-optimization-sprint-planner first$"
