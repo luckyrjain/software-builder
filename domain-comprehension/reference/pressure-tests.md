@@ -30,6 +30,7 @@ Manual checks after prompt or workflow edits. Scripted: `tests/test_validate_man
 | 22 | `RISK_MAP.md` § Merge Conflicts has `open` row | `--check-content` blocks `phases.p0`/`phases.p1` from `complete` | `test_validate_manifest.py` |
 | 23 | `delivery_mode: PROPOSAL_CHECK`, no `manifest.yaml` yet | HARD STOP — told to run `FULL`/`QUICK` first, no fallback | manual |
 | 24 | `delivery_mode: PROPOSAL_CHECK`, `manifest.yaml` complete with a Tier 2/3 repo at `deep_dive: skipped` | Precondition satisfied (skipped counts) — proceeds to compare, never HARD STOPs on a legitimately-finished large-scale engagement; produces `PROPOSAL_CHECK_REPORT.md` only, no write to `BOUNDED_CONTEXTS.md`/`DATA_OWNERSHIP.md`/`API_CATALOG.md`/`EVENT_CATALOG.md`/`RISK_MAP.md`/`manifest.yaml` | manual |
+| 25 | `engagement.artifact_root` set (run-scoped deliverables) | Artifacts/`EXEC_SUMMARY.md`/map file resolved under `workspace_root/artifact_root`, not `workspace_root` directly; absolute or `..`-containing `artifact_root` rejected | `test_validate_manifest.py` |
 
 ## Render attestation (P5)
 
@@ -40,5 +41,5 @@ Before final `EXEC_SUMMARY.md`, confirm checklist in [workflow/phase-5.md](../wo
 | Test module | Covers |
 |-------------|--------|
 | `test_validate_manifest.py` | manifest schema v2, `--check-content`, `--strict`, workspace paths |
-| `tests/run_pressure_tests.sh` | Makefile `--check-content` wiring, doc guards, row-count gate |
+| `tests/run_pressure_tests.sh` | Lint-hook `--check-content` wiring (`scripts/lint-checks.sh`), doc guards, row-count gate |
 | `tests/fixtures/check-content/` | Lint fixture for `EXEC_SUMMARY.md` section gate |

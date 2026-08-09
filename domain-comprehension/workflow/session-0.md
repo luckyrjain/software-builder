@@ -66,7 +66,10 @@ Large workspace (100+ repos): read [large-scale-execution.md](../reference/large
 10. **Create deliverables** — copy **all** files from [templates/](../templates/) to workspace root including
     `manifest.yaml` (schema v2), `KNOWN_OMISSIONS.md`, `BUSINESS_FLOWS.md`.
 
-    Set `manifest.yaml` `engagement.*`; all artifacts `stub`; `evidence_summary` counters at 0.
+    Set `manifest.yaml` `engagement.*`; all artifacts `stub`; `evidence_summary` counters at 0. When
+    step 1 set `scope.artifact_root`, copy the same resolved value into `engagement.artifact_root` —
+    the validator resolves every deliverable path (other than `manifest.yaml` itself) relative to
+    it from here on.
 
 11. **Scope & budget checkpoint (required before P0.5).** Report repo count by tier and classification.
     **Ask user to approve mechanical-analysis scope** (which tiers get full graphs).

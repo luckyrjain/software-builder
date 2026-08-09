@@ -47,6 +47,7 @@ phase. Humans and CI validate with `scripts/validate_manifest_yaml.py`.
 | `last_phase_completed` | phase key e.g. `p2`, `session_0b` |
 | `next_action` | one-line string |
 | `model_used` | string \| null — optional; model name if the agent can introspect it, else `null` |
+| `artifact_root` | relative path, no `..` segments — optional; set when this run's deliverables are namespaced under a subdirectory of `workspace_root` instead of living directly at `workspace_root`. See [run-scoped-artifacts.md](run-scoped-artifacts.md). `manifest.yaml` itself always stays at `workspace_root` regardless. |
 
 ## `phases` keys
 
@@ -129,3 +130,9 @@ See [evidence-summary.md](evidence-summary.md). All integer fields ≥ 0.
 python3 domain-comprehension/scripts/validate_manifest_yaml.py manifest.yaml
 python3 domain-comprehension/scripts/validate_manifest_yaml.py manifest.yaml --workspace-root /path/to/workspace --strict
 ```
+
+When `engagement.artifact_root` is set, `--workspace-root` still points at the directory holding
+`manifest.yaml` — the validator resolves every other deliverable (`EXEC_SUMMARY.md`, the map file,
+`E2E_FLOW.md`, `RISK_MAP.md`, the Postman export) under `<workspace_root>/<artifact_root>/` instead of
+directly under `<workspace_root>/`. An absolute `artifact_root` or one containing `..` segments is a
+validation error.

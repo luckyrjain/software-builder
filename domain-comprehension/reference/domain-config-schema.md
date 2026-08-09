@@ -22,6 +22,13 @@ scope:
     - tooling
   conditional_repos:              # include only if grep finds domain refs
     - <repo-name>
+  artifact_root: <relative path>  # optional — see run-scoped-artifacts.md. Set for parallel runs
+                                   # or large workspaces so this run's deliverables don't clobber
+                                   # another run's. Default when unset:
+                                   # .domain-comprehension/{run_id}/ (run_id = ISO-8601 UTC
+                                   # timestamp at Session 0 start, or a caller-supplied slug).
+                                   # manifest.yaml always stays directly at workspace_root — record
+                                   # the resolved value as engagement.artifact_root there.
 
 context:
   regulatory_notes: <optional free text>
