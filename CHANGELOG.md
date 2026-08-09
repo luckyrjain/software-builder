@@ -8,6 +8,12 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 
 ## Platform
 
+### Skills-audit backlog (#20) — atomic writes, provenance, idempotency
+
+- **migration-program-manager:** atomic state and rollup writes via temp file + `os.replace`.
+- **weekly-squad-digest:** digest header now requires SHA-256 source revision fingerprints per rollup file.
+- **pr-gatekeeper:** added `reference/idempotency.md` documenting caller-side per-MR locking beyond head_sha dedupe.
+
 ### P3 platform polish — ADRs, glossary, install-all CI
 
 - Added `docs/adr/` with ADRs for the skills registry, self-contained packages, and tiered behavioral evals.

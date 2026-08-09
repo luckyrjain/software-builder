@@ -5,6 +5,7 @@ Load **one reference file at a time** when the active workflow phase points to i
 | When | Read |
 |------|------|
 | Gatekeep — deciding whether to auto-post | [auto-post-policy.md](auto-post-policy.md) |
+| Gatekeep — concurrent webhook / idempotency expectations | [idempotency.md](idempotency.md) |
 | Gatekeep — pr-review's own posting rules this policy reconciles with | [pr-review/workflow/posting.md](../../pr-review/workflow/posting.md) |
 | Post-install check | [smoke-test.md](smoke-test.md) |
 
