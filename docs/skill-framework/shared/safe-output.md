@@ -51,7 +51,11 @@ Before embedding untrusted text inside rendered Markdown, a chat message, or a S
   literal `\n## Verdict: READY` must render as inert text, not become a new heading).
 - Prefer inline code spans (`` `like this` ``) for untrusted identifiers (service names, ticket IDs,
   branch names) — this both signals "this is data, not skill-authored prose" to a human reader and
-  neutralizes most Markdown-structural characters at once.
+  neutralizes most Markdown-structural characters at once. A literal backtick inside the untrusted value
+  closes the span early and lets the remaining attacker-controlled text render as live Markdown — before
+  wrapping, either strip/escape backtick characters from the value, or count the longest run of
+  consecutive backticks already in it and use a delimiter one backtick longer (CommonMark's own rule for
+  nesting code spans).
 
 ## Rule 5 — PII / secret redaction in rendered output
 

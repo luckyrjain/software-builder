@@ -126,12 +126,29 @@ def _run_golden_assertion(output: dict[str, Any], assertion: dict[str, Any]) -> 
             actual = _resolve_path(output, path)
         except KeyError:
             return []
-        text = str(actual)
-        if re.search(pattern, text, flags=re.IGNORECASE | re.MULTILINE):
+        if _pattern_matches(pattern, str(actual)):
             return [f"{path} matched forbidden pattern: {pattern!r}"]
         return []
 
+    if atype == "require_pattern":
+        path = str(assertion.get("path", ""))
+        pattern = str(assertion.get("pattern", ""))
+        try:
+            actual = _resolve_path(output, path)
+        except KeyError:
+            return [f"missing field path: {path!r}"]
+        if not _pattern_matches(pattern, str(actual)):
+            return [f"{path} did not match required pattern: {pattern!r}"]
+        return []
+
     raise ValueError(f"unknown golden assertion type: {atype!r}")
+
+
+def _pattern_matches(pattern: str, text: str) -> bool:
+    try:
+        return re.search(pattern, text, flags=re.IGNORECASE | re.MULTILINE) is not None
+    except re.error as exc:
+        raise ValueError(f"invalid regex {pattern!r}: {exc}") from exc
 
 
 def run_golden_case(case: GoldenCase) -> EvalResult:

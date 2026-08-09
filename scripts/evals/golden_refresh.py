@@ -121,7 +121,7 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         result = run_golden_case(match[0])
         if not result.passed:
-            for err in result.errors:
+            for err in result.messages:
                 print(err, file=sys.stderr)
             return 1
         print("verify: assertions passed")

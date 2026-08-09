@@ -1091,6 +1091,13 @@ lint-backlog-runner:
 	done
 	@grep -q 'pressure-tests' backlog-runner/reference/smoke-test.md || \
 		{ echo "error: smoke-test.md must link to pressure-tests.md" >&2; exit 1; }
+	@grep -q 'docs/skill-framework/shared/safe-output.md' backlog-runner/SKILL.md || \
+		{ echo "error: backlog-runner/SKILL.md must link to shared safe-output" >&2; exit 1; }
+	@grep -q 'docs/skill-framework/shared/prompt-injection.md' backlog-runner/reference/morning-summary-format.md && \
+	 grep -q 'docs/skill-framework/shared/safe-output.md' backlog-runner/reference/morning-summary-format.md && \
+	 grep -qiE 'escape|fence' backlog-runner/reference/morning-summary-format.md && \
+	 grep -qi 'redact' backlog-runner/reference/morning-summary-format.md || \
+		{ echo "error: morning-summary-format.md must sanitize untrusted rendered fields per prompt-injection and safe-output" >&2; exit 1; }
 	@grep -q 'skill-framework' backlog-runner/SETUP.md || \
 		{ echo "error: backlog-runner/SETUP.md must link to docs/skill-framework" >&2; exit 1; }
 	@echo "  ok (framework refs)"
