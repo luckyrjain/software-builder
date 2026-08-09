@@ -18,10 +18,24 @@ def apply_confidence_cap(
     single_source: bool = False,
     unresolved_contradiction: bool = False,
     assumed_only: bool = False,
+    partial_report: bool = False,
 ) -> Confidence:
-    if assumed_only and BAND_ORDER[proposed] > BAND_ORDER["LOW"]:
-        return "LOW"
-    if proposed == "HIGH" and (single_source or unresolved_contradiction):
+    capped: Confidence = proposed
+    if assumed_only and BAND_ORDER[capped] > BAND_ORDER["LOW"]:
+        capped = "LOW"
+    if capped == "HIGH" and (single_source or unresolved_contradiction):
+        capped = "MEDIUM"
+    if partial_report:
+        capped = cap_partial_report_confidence(capped)
+    return capped
+
+
+def cap_partial_report_confidence(proposed: Confidence) -> Confidence:
+    """Cap confidence when Phase 4 did not complete (partial/stopped report).
+
+    Mirrors evidence-quality.md: Phase 4 incomplete / partial report → MEDIUM maximum.
+    """
+    if BAND_ORDER[proposed] > BAND_ORDER["MEDIUM"]:
         return "MEDIUM"
     return proposed
 
