@@ -103,6 +103,15 @@ tools) follows the 1-retry policy stated once in
    returned. If a file's diff was truncated by the API or a page came back early, mark it
    *"diff truncated — partial"* in the inventory. This boundary is the only source of truth for
    Phase 2 — no file outside it may be reviewed and no line number outside it may be cited.
+   **One-hop contextual reads (strict exception):** when a changed hunk modifies a **public export**
+   (function, class, constant, route, event schema) and a finding depends on how **direct** callers or
+   callees behave, you may read **at most one hop** outside the boundary:
+   - **Callee hop:** the file that defines the symbol being called from the changed hunk (import target).
+   - **Caller hop:** a file that imports the changed module and invokes the changed symbol — only when
+     the diff alone cannot establish whether the defect is reachable.
+   Record every one-hop file in `context_cache.one_hop_reads[]` with `{path, reason, hop}` before Phase 2.
+   **Forbidden:** transitive hops (caller-of-caller), repo-wide search, or reading unrelated modules "for
+   context." More than one hop requires explicit user approval (`full review` / named path).
    **Per-file size guard:** for each changed file, estimate size from diff hunks or API metadata. When
    any **single file** exceeds **2,000 changed lines** (or bulk generated output > 500 KB), mark
    *"oversized — summary-only review"* — do not line-by-line review; sample header hunks only. Note in
