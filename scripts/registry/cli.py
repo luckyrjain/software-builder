@@ -9,6 +9,7 @@ import yaml
 
 from scripts.registry.backfill_capabilities import cmd_backfill
 from scripts.registry.crosscheck import find_stale_generated_adapters, validate_registry
+from scripts.registry.generate_compatibility import render_compatibility_matrix
 from scripts.registry.generate_cursor import generate_cursor_rules
 from scripts.registry.generate_docs import (
     render_composition_mermaid,
@@ -42,6 +43,12 @@ def _collect_outputs(root: Path) -> dict[Path, str]:
     outputs[root / "generated" / "catalogue" / "composition-deps.mmd"] = render_composition_mermaid(
         registry,
     )
+    compatibility_catalog = root / "scripts" / "registry" / "capability_catalog.yaml"
+    composition_contracts = root / "scripts" / "registry" / "composition_contracts.yaml"
+    if compatibility_catalog.is_file() and composition_contracts.is_file():
+        outputs[root / "generated" / "catalogue" / "compatibility-matrix.md"] = (
+            render_compatibility_matrix(root)
+        )
     return outputs
 
 

@@ -171,6 +171,10 @@ doctor:
 package-release:
 	@python3 scripts/package_release.py --output-dir dist
 
+verify-release-tag:
+	@test -n "$(TAG)" || (echo "error: set TAG=vX.Y.Z" >&2; exit 1)
+	@python3 scripts/verify_release_tag.py "$(TAG)"
+
 generate:
 	@python3 -m scripts.registry generate
 

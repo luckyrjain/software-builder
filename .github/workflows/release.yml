@@ -1,0 +1,66 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to build (e.g. v1.4.0); workflow_dispatch only validates VERSION match"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck ripgrep
+          python3 -m pip install --require-hashes -r requirements.lock
+
+      - name: Resolve release tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "name=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "name=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Verify tag matches VERSION
+        run: python3 scripts/verify_release_tag.py "${{ steps.tag.outputs.name }}"
+
+      - name: Lint and package release
+        run: |
+          make lint
+          make package-release
+
+      - name: Upload release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${{ steps.tag.outputs.name }}"
+          VERSION="${TAG#v}"
+          gh release upload "$TAG" \
+            "dist/software-builder-${VERSION}.tar.gz" \
+            "dist/software-builder-${VERSION}.sha256" \
+            "dist/software-builder-${VERSION}.files.sha256" \
+            --clobber 2>/dev/null || \
+          gh release create "$TAG" \
+            --title "software-builder ${VERSION}" \
+            --notes "See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/${TAG}/CHANGELOG.md)." \
+            "dist/software-builder-${VERSION}.tar.gz" \
+            "dist/software-builder-${VERSION}.sha256" \
+            "dist/software-builder-${VERSION}.files.sha256"
