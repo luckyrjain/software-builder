@@ -40,4 +40,17 @@ Shared vocabulary for **software-builder** platform docs, `skills.yaml`, and beh
 | **Pressure test** | Manual scenario matrix in `reference/pressure-tests.md`; Tier-2 transcripts automate subsets of these for CI. |
 | **Escalation** | Handoff from one skill to another via documented typed inputs (`docs/skill-framework/shared/cross-skill-escalation.md`). |
 
+## Five separated concepts
+
+Repo-wide audit in [five-concept-separation-audit.md](five-concept-separation-audit.md) (#53) —
+these five must never share a single field/code path in any skill:
+
+| Term | Definition |
+|------|------------|
+| **Evidence completeness (EC)** | Has enough evidence been gathered to speak with confidence — e.g. `review_metadata.review_complete`, `evidence_summary` counters. |
+| **Review verdict (RV)** | The judgment given the evidence — e.g. `recommendation`, a confidence-banded conclusion. Distinct from EC: a verdict can be UNKNOWN precisely because EC is low, but the two are separate fields, not one collapsing into the other. |
+| **Repository readiness (RR)** | Is the *target* itself (repo, release, service) ready — distinct from "is my review done" (EC) and "what do I think" (RV). Only meaningful for skills that evaluate a target's own readiness, e.g. release-readiness-checker's `Verdict: READY|CONDITIONAL|NOT_READY|UNKNOWN`. |
+| **External-action authorization (EA)** | Is external posting/writing/merging permitted right now — e.g. `auto_post_authorized`, `autonomous_merge_authorized`. A positive RV never implies EA on its own. |
+| **Final repository action (FA)** | Did the write/post/merge actually happen — e.g. `posted`, "Posted?" — a fact recorded separately from the authorization that permitted it. |
+
 See also: [phase-glossary.md](phase-glossary.md) for per-skill phase name mapping.
