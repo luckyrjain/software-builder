@@ -743,6 +743,12 @@ lint-who-owns-x-bot:
 		{ echo "error: smoke-test.md must link to pressure-tests.md" >&2; exit 1; }
 	@grep -q 'skill-framework' who-owns-x-bot/SETUP.md || \
 		{ echo "error: who-owns-x-bot/SETUP.md must link to docs/skill-framework" >&2; exit 1; }
+	@grep -q 'docs/skill-framework/shared/safe-output.md' who-owns-x-bot/SKILL.md || \
+		{ echo "error: who-owns-x-bot/SKILL.md must link to shared safe-output" >&2; exit 1; }
+	@grep -q 'docs/skill-framework/shared/prompt-injection.md' who-owns-x-bot/reference/slack-format.md && \
+	 grep -q 'docs/skill-framework/shared/safe-output.md' who-owns-x-bot/reference/slack-format.md && \
+	 grep -qiE 'escape|strip' who-owns-x-bot/reference/slack-format.md || \
+		{ echo "error: slack-format.md must sanitize untrusted rendered fields per prompt-injection and safe-output" >&2; exit 1; }
 	@echo "  ok (framework refs)"
 
 lint-new-hire-guide:
