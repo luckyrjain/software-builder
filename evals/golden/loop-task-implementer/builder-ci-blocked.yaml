@@ -1,0 +1,18 @@
+schema_version: 1
+skill: loop-task-implementer
+case_id: golden-builder-ci-blocked
+tier: 3
+description: Recorded completion state when only builder-reported CI is available
+recorded_output:
+  completion:
+    state: HUMAN_ACTION_REQUIRED
+    reason: builder_reported_ci_not_authoritative
+  merge:
+    attempted: false
+assertions:
+  - type: field_equals
+    path: completion.state
+    value: HUMAN_ACTION_REQUIRED
+  - type: field_equals
+    path: merge.attempted
+    value: false

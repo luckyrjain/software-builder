@@ -1,0 +1,22 @@
+schema_version: 1
+skill: incident-rca
+case_id: golden-partial-inconclusive
+tier: 3
+description: Partial evidence collection must not present a definitive root cause
+recorded_output:
+  assessment_metadata:
+    completeness: partial
+    confidence: UNKNOWN
+  root_cause:
+    verdict: inconclusive
+    summary: Insufficient telemetry to confirm deploy regression hypothesis
+assertions:
+  - type: field_in
+    path: assessment_metadata.confidence
+    values: [UNKNOWN, LOW]
+  - type: field_equals
+    path: root_cause.verdict
+    value: inconclusive
+  - type: forbid_pattern
+    path: root_cause.summary
+    pattern: "\\bconfirmed\\b"
