@@ -1,15 +1,11 @@
 ---
-workflow_version: 1.0
+workflow_version: 1.1
 phase: repair
-produces:
-  - repaired_requirements
-  - remaining_blockers
-  - adversarial_summary
+produces: {repaired_requirements: object, remaining_blockers: list, adversarial_summary: object}
 consumes:
-  - adversarial_findings
-  - scenarios
-  - requirements_draft
-  - non_goals
+  required: {adversarial_findings: list, scenarios: list, requirements_draft: object, non_goals: list}
+  optional: {}
+  conditional: {}
 ---
 
 # Repair — incorporate validated findings

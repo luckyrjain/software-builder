@@ -1,0 +1,20 @@
+schema_version: 1
+entry_inputs:
+  mode: {type: string, provenance: host, required: true, trust: trusted}
+  premise: {type: string, provenance: phase, required: true, trust: trusted}
+  critique_only: {type: boolean, provenance: user, required: true, trust: untrusted}
+  user_insists: {type: boolean, provenance: user, required: true, trust: untrusted}
+selector_domains:
+  mode: [Review]
+  premise: [Strong, Flawed]
+route_selection: {after_phase: validate}
+routes:
+  normal_review:
+    when: {mode: Review, premise: {not_equals: Flawed}}
+    phases: [validate, full]
+  flawed_stop:
+    when: {mode: Review, premise: Flawed, user_insists: false}
+    phases: [validate, gate]
+  flawed_override_noncritique:
+    when: {mode: Review, premise: Flawed, user_insists: true, critique_only: false}
+    phases: [validate, full]

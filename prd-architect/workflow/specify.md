@@ -1,17 +1,11 @@
 ---
-workflow_version: 1.0
+workflow_version: 1.1
 phase: specify
-produces:
-  - mvp_scope
-  - non_goals
-  - triggered_sections
-  - requirements_draft
+produces: {mvp_scope: object, non_goals: list, triggered_sections: list, requirements_draft: object}
 consumes:
-  - premise_verdict
-  - problem_summary
-  - response_mode
-  - depth
-  - risk_domains
+  required: {request: string, source_material: content, constraints: list, explicit_decisions: list, existing_system: boolean, premise_verdict: string, problem_summary: object, response_mode: string, depth: string, risk_domains: list}
+  optional: {}
+  conditional: {}
 ---
 
 # Specify — scope and triggered PRD sections

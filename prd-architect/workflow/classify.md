@@ -1,15 +1,11 @@
 ---
-workflow_version: 1.1
+workflow_version: 1.2
 phase: classify
-produces:
-  - response_mode
-  - depth
-  - risk_domains
+produces: {response_mode: string, depth: string, risk_domains: list}
 consumes:
-  - request
-  - source_material
-  - mode_hint
-  - depth_hint
+  required: {request: string, source_material: content, mode_hint: string, depth_hint: string}
+  optional: {}
+  conditional: {}
 ---
 
 # Classify — mode, depth, risk

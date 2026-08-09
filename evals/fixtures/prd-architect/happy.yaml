@@ -8,11 +8,16 @@ assertions:
     path: reference/output-contract.md
   - type: file_exists
     path: report-template.md
+  - type: file_exists
+    path: workflow-contract.yaml
   - type: skill_md_contains
     pattern: Pipeline routing
   - type: path_contains
     path: reference/phase-index.md
     pattern: Validate → Specify → Break → Repair → Gate
+  - type: path_contains
+    path: workflow-contract.yaml
+    pattern: full_prd_override
   - type: workflow_frontmatter_all
   - type: registry_invocation
     expected: ambient

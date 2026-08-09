@@ -1278,6 +1278,8 @@ lint-prd-architect:
 	done; \
 	if [ "$$fail" -ne 0 ]; then echo "error: prd-architect workflow/*.md must declare workflow_version, phase, produces, consumes" >&2; exit 1; fi; \
 	echo "  ok"
+	@echo "lint-prd-architect: route-aware workflow contract"
+	@python3 -m scripts.validate_workflow_contracts prd-architect
 	@echo "lint-prd-architect: required reference files"
 	@for f in skill-contract rationalization-guards phase-index lazy-load-index global-rules depth response-modes section-triggers requirements-format correctness-rules adversarial-review output-contract smoke-test pressure-tests; do \
 		test -f prd-architect/reference/$$f.md || \
@@ -1287,6 +1289,8 @@ lint-prd-architect:
 		{ echo "error: missing prd-architect/report-template.md" >&2; exit 1; }
 	@test -f prd-architect/prd-architect.eval.md || \
 		{ echo "error: missing prd-architect/prd-architect.eval.md" >&2; exit 1; }
+	@test -f prd-architect/scripts/prd_safe_output.py || \
+		{ echo "error: missing prd-architect safe-output renderer" >&2; exit 1; }
 	@test -f prd-architect/examples.md || \
 		{ echo "error: missing prd-architect/examples.md" >&2; exit 1; }
 	@grep -q '## Invocation' prd-architect/examples.md || \
@@ -1301,6 +1305,14 @@ lint-prd-architect:
 		{ echo "error: prd-architect/SKILL.md must link to shared skill-routing" >&2; exit 1; }
 	@grep -q 'docs/skill-framework/shared/prompt-injection.md' prd-architect/SKILL.md || \
 		{ echo "error: prd-architect/SKILL.md must link to shared prompt-injection" >&2; exit 1; }
+	@grep -q 'docs/skill-framework/shared/safe-output.md' prd-architect/SKILL.md || \
+		{ echo "error: prd-architect/SKILL.md must link to shared safe-output" >&2; exit 1; }
+	@grep -q 'docs/skill-framework/shared/prompt-injection.md' prd-architect/workflow/gate.md && \
+	 grep -q 'docs/skill-framework/shared/safe-output.md' prd-architect/workflow/gate.md && \
+	 grep -qi 'source_material' prd-architect/workflow/gate.md && \
+	 grep -qiE 'escape|fence' prd-architect/workflow/gate.md && \
+	 grep -qi 'redact' prd-architect/workflow/gate.md || \
+		{ echo "error: prd-architect Gate must sanitize untrusted rendered fields per prompt-injection and safe-output" >&2; exit 1; }
 	@echo "  ok (framework refs)"
 	@echo "lint-prd-architect: dangling markdown links"
 	@bash scripts/lint-dangling-md-links.sh prd-architect/*.md prd-architect/reference/*.md prd-architect/workflow/*.md \
@@ -1420,6 +1432,13 @@ lint-framework:
 		fi; \
 	done; \
 	if [ "$$fail" -ne 0 ]; then exit 1; fi
+	@echo "lint-framework: PRD rendered-output safety wiring"
+	@grep -q 'docs/skill-framework/shared/prompt-injection.md' prd-architect/workflow/gate.md && \
+	 grep -q 'docs/skill-framework/shared/safe-output.md' prd-architect/workflow/gate.md && \
+	 grep -qi 'source_material' prd-architect/workflow/gate.md && \
+	 grep -qiE 'escape|fence' prd-architect/workflow/gate.md && \
+	 grep -qi 'redact' prd-architect/workflow/gate.md || \
+		{ echo "error: prd-architect Gate must sanitize untrusted rendered fields per prompt-injection and safe-output" >&2; exit 1; }
 	@echo "lint-framework: all SETUP.md links ok"
 	@echo "lint-framework: cross-agent discovery files (.cursor/rules + .kiro/steering)"
 	@fail=0; \

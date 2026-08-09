@@ -1,0 +1,8 @@
+schema_version: 1
+entry_inputs:
+  request: {type: string, provenance: user, required: true, trust: untrusted}
+route_selection: {after_phase: parse}
+routes:
+  default:
+    when: {missing: value}
+    phases: [parse]

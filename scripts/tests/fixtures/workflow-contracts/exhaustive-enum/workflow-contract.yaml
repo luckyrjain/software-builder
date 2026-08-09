@@ -1,0 +1,8 @@
+schema_version: 1
+entry_inputs:
+  mode: {type: string, provenance: user, required: true, trust: untrusted}
+selector_domains: {mode: [read, write]}
+route_selection: {after_phase: parse}
+routes:
+  read: {when: {mode: read}, phases: [parse]}
+  write: {when: {mode: write}, phases: [parse]}

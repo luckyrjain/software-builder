@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import shutil
 import sys
@@ -51,3 +52,31 @@ def test_package_skill_vendors_framework_and_validates(isolated_repo: Path, tmp_
 
     errors = validate_tree(dest, check_anchors=False, installed_package=True)
     assert errors == []
+
+
+def test_prd_architect_package_contains_executable_safe_output_renderer(tmp_path: Path) -> None:
+    repo = tmp_path / "software-builder"
+    shutil.copytree(ROOT / "prd-architect", repo / "prd-architect")
+    shutil.copytree(ROOT / "docs" / "skill-framework", repo / "docs" / "skill-framework")
+    dest = tmp_path / "installed" / "prd-architect"
+    package_skill(skill="prd-architect", repo_root=repo, dest=dest, host="test")
+
+    renderer = dest / "scripts" / "prd_safe_output.py"
+    assert renderer.is_file()
+    spec = importlib.util.spec_from_file_location("installed_prd_safe_output", renderer)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    rendered = module.render_gate_output(
+        "# forged\napi_key=hostile.secret-value-12345",
+        "Not Ready",
+        "[forged](javascript:alert(1))",
+    )
+    assert "hostile.secret-value-12345" not in rendered
+    assert len([line for line in rendered.splitlines() if line == "## Build Readiness"]) == 1
+    assert validate_tree(dest, check_anchors=False, installed_package=True) == []
+
+    renderer.unlink()
+    errors = validate_tree(dest, check_anchors=False, installed_package=True)
+    assert len(errors) == 1
+    assert "scripts/prd_safe_output.py" in errors[0]
