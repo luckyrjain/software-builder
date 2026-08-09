@@ -41,21 +41,21 @@ Conventions: [examples-conventions](../docs/skill-framework/shared/examples-conv
 
 **Workspaces:** 2 scanned, 0 with gaps · **Services:** 2 · **Blocked:** 1 · **Stalled:** 0
 
-## disbursement
+## `disbursement`
 
 ### Blocked
 
 | Service | Workspace | Failing gate | MR | Notes |
 |---------|-----------|--------------|-----|-------|
-| api-disbursement | ./api-disbursement | scan_gate | — | — |
+| `api-disbursement` | `./api-disbursement` | scan_gate | — | — |
 
-## payouts
+## `payouts`
 
 ### In progress
 
 | Service | Workspace | Gates | MR |
 |---------|-----------|-------|-----|
-| api-payouts | ./api-payouts | pass/pending/pending | — |
+| `api-payouts` | `./api-payouts` | pass/pending/pending | — |
 ```
 
 ---
@@ -85,13 +85,13 @@ pending`/`shadow_compare: pending`/`config_cutover: pending` gate signature has 
 **Expected fragment:**
 
 ```
-## refunds
+## `refunds`
 
 ### Stalled (unchanged ≥ 14 days)
 
 | Service | Workspace | Staleness | Current gates | MR |
 |---------|-----------|-----------|-----------------|-----|
-| api-refunds | ./api-refunds | 14 days | pending/pending/pending | — |
+| `api-refunds` | `./api-refunds` | 14 days | pending/pending/pending | — |
 ```
 
 ---
@@ -123,25 +123,25 @@ pending`/`shadow_compare: pending`/`config_cutover: pending` gate signature has 
 **Expected fragment:**
 
 ```
-## disbursement
+## `disbursement`
 
 ### Blocked
 
 | Service | Workspace | Failing gate | MR | Notes |
 |---------|-----------|--------------|-----|-------|
-| api-gateway | ./api-disbursement | scan_gate | — | — |
+| `api-gateway` | `./api-disbursement` | scan_gate | — | — |
 
 ### Stalled (unchanged ≥ 14 days)
 
 | Service | Workspace | Staleness | Current gates | MR |
 |---------|-----------|-----------|-----------------|-----|
-| api-ledger | ./api-disbursement | 20 days | pass/pending/pending | — |
+| `api-ledger` | `./api-disbursement` | 20 days | pass/pending/pending | — |
 
 ### Done
 
 | Service | Workspace |
 |---------|-----------|
-| api-refunds | ./api-disbursement |
+| `api-refunds` | `./api-disbursement` |
 ```
 
 `api-gateway` does not appear a second time under Stalled, despite its own `staleness_days` also being 20
@@ -166,13 +166,13 @@ triggers a fresh squad-map run to fill it (see [SKILL.md](SKILL.md) § Why no ga
 
 | Service | Workspace | Gates | MR |
 |---------|-----------|-------|-----|
-| api-payouts | ./api-payouts | pass/pending/pending | — |
+| `api-payouts` | `./api-payouts` | pass/pending/pending | — |
 
 ## Workspace gaps
 
 | Workspace | Reason |
 |-----------|--------|
-| ./api-payouts | No SQUAD_MAP.md at ./api-payouts/SQUAD_MAP.md — run squad-map directly |
+| `./api-payouts` | No SQUAD_MAP.md at ./api-payouts/SQUAD_MAP.md — run squad-map directly |
 ```
 
 ---
@@ -198,13 +198,13 @@ triggers a fresh squad-map run to fill it (see [SKILL.md](SKILL.md) § Why no ga
 **Expected fragments:**
 
 ```
-## disbursement
+## `disbursement`
 
 ### Blocked
 
 | Service | Workspace | Failing gate | MR | Notes |
 |---------|-----------|--------------|-----|-------|
-| api-disbursement | ./api-disbursement | scan_gate | https://gitlab.example.com/acme/disbursement/api-disbursement/-/merge_requests/482 | — |
+| `api-disbursement` | `./api-disbursement` | scan_gate | https://gitlab.example.com/acme/disbursement/api-disbursement/-/merge_requests/482 | — |
 ```
 
 ```
