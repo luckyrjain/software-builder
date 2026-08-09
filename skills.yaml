@@ -107,7 +107,12 @@ skills:
       invokes: [incident-rca, squad-map]
       escalation_targets: [incident-rca, squad-map]
     capabilities:
-      required: [pager.webhook.receive]
+      required:
+      - pager.webhook.receive
+      optional:
+      - name: slack.post.message
+        enables: paging summary delivery when configured
+
     lint:
       skill_md_max_lines: 180
       target: incident-triage-agent
@@ -122,6 +127,17 @@ skills:
       kiro: {discovery: manual}
     install:
       requires: [squad-map]
+    capabilities:
+      required:
+      - host.repository.read
+      optional:
+      - name: gitlab.search_code
+        enables: repository census without local checkout
+      - name: datadog.query_metrics
+        enables: runtime validation passes
+      - name: telemetry.logs.query
+        enables: KubeSense/log corroboration
+
     lint:
       skill_md_max_lines: 180
       target: domain-comprehension
@@ -136,6 +152,15 @@ skills:
       kiro: {discovery: manual}
     install:
       requires: []
+    capabilities:
+      required:
+      - gitlab.list_projects
+      optional:
+      - name: gitlab.get_repository_file
+        enables: CODEOWNERS and ownership file reads
+      - name: datadog.list_service_definitions
+        enables: service alias crosswalk
+
     lint:
       skill_md_max_lines: 180
       target: squad-map
@@ -150,6 +175,13 @@ skills:
       kiro: {discovery: manual}
     install:
       requires: [squad-map]
+    capabilities:
+      required:
+      - slack.slash_command.receive
+      optional:
+      - name: squad-map.invoke
+        enables: full mapping table instead of one-shot lookup
+
     lint:
       skill_md_max_lines: 180
       target: who-owns-x-bot
@@ -164,6 +196,15 @@ skills:
       kiro: {discovery: manual}
     install:
       requires: [domain-comprehension, squad-map]
+    capabilities:
+      required:
+      - host.repository.read
+      optional:
+      - name: domain-comprehension.invoke
+        enables: full domain map tour
+      - name: squad-map.invoke
+        enables: ownership lookups during tour
+
     lint:
       skill_md_max_lines: 180
       target: new-hire-guide
@@ -181,6 +222,17 @@ skills:
     composition:
       invokes: [pr-review, k8s-overprovisioning-datadog, incident-rca]
       escalation_targets: [pr-review, k8s-overprovisioning-datadog, incident-rca]
+    capabilities:
+      required:
+      - host.report.write
+      optional:
+      - name: gitlab.list_merge_requests
+        enables: release-candidate MR enumeration
+      - name: datadog.query_metrics
+        enables: per-service health slice
+      - name: telemetry.logs.query
+        enables: incident window cross-check
+
     lint:
       skill_md_max_lines: 180
       target: release-readiness-checker
@@ -198,6 +250,13 @@ skills:
     composition:
       mode: aggregate
       escalation_targets: [mysql-to-postgres-sql, squad-map, pr-review]
+    capabilities:
+      required:
+      - host.filesystem.read
+      optional:
+      - name: mysql-to-postgres-sql.invoke
+        enables: single-workspace migration status refresh
+
     lint:
       skill_md_max_lines: 180
       target: migration-program-manager
@@ -212,6 +271,13 @@ skills:
       kiro: {discovery: manual}
     install:
       requires: [k8s-overprovisioning-datadog, squad-map]
+    capabilities:
+      required:
+      - host.filesystem.read
+      optional:
+      - name: k8s-overprovisioning-datadog.invoke
+        enables: single-deployment rightsizing refresh
+
     lint:
       skill_md_max_lines: 180
       target: cost-optimization-sprint-planner
@@ -226,6 +292,13 @@ skills:
       kiro: {discovery: manual}
     install:
       requires: []
+    capabilities:
+      required:
+      - host.repository.read_write
+      optional:
+      - name: gitlab.get_merge_request
+        enables: migration MR review handoff
+
     lint:
       skill_md_max_lines: 180
       target: mysql-to-postgres-sql
@@ -240,6 +313,16 @@ skills:
       kiro: {discovery: manual}
     install:
       requires: []
+    capabilities:
+      required:
+      - host.repository.read_write
+      - host.role.isolation
+      - host.ci.status
+      - host.pull_request.write
+      optional:
+      - name: host.issue_tracker.read
+        enables: task sourced from tracker instead of user text
+
     lint:
       skill_md_max_lines: 180
       target: loop-task-implementer
@@ -254,6 +337,14 @@ skills:
       kiro: {discovery: manual}
     install:
       requires: [loop-task-implementer]
+    capabilities:
+      required:
+      - scheduler.cron.trigger
+      - host.issue_tracker.read
+      optional:
+      - name: loop-task-implementer.invoke
+        enables: interactive single-task mode
+
     lint:
       skill_md_max_lines: 180
       target: backlog-runner
@@ -271,6 +362,13 @@ skills:
     composition:
       mode: aggregate
       escalation_targets: [migration-program-manager, cost-optimization-sprint-planner]
+    capabilities:
+      required:
+      - scheduler.cron.trigger
+      optional:
+      - name: slack.post.message
+        enables: scheduled digest delivery
+
     lint:
       skill_md_max_lines: 180
       target: weekly-squad-digest
@@ -285,6 +383,13 @@ skills:
       kiro: {discovery: manual}
     install:
       requires: []
+    capabilities:
+      required:
+      - host.repository.read_write
+      optional:
+      - name: host.test_runner.execute
+        enables: generated test verification loop
+
     lint:
       skill_md_max_lines: 180
       target: unit-test-creator
@@ -299,6 +404,15 @@ skills:
       kiro: {discovery: manual}
     install:
       requires: []
+    capabilities:
+      required:
+      - host.repository.read_write
+      optional:
+      - name: host.test_runner.execute
+        enables: generated test verification loop
+      - name: host.dependency.reachable
+        enables: real adjacent dependency under test
+
     lint:
       skill_md_max_lines: 180
       target: integration-test-creator
@@ -313,6 +427,13 @@ skills:
       kiro: {discovery: manual}
     install:
       requires: []
+    capabilities:
+      required:
+      - host.repository.read_write
+      optional:
+      - name: host.test_runner.execute
+        enables: generated contract test verification
+
     lint:
       skill_md_max_lines: 180
       target: contract-test-creator
@@ -327,6 +448,15 @@ skills:
       kiro: {discovery: manual}
     install:
       requires: []
+    capabilities:
+      required:
+      - host.repository.read_write
+      optional:
+      - name: host.browser.automation
+        enables: UI journey execution
+      - name: host.test_runner.execute
+        enables: generated e2e verification
+
     lint:
       skill_md_max_lines: 180
       target: e2e-test-creator
@@ -341,6 +471,15 @@ skills:
       kiro: {discovery: manual}
     install:
       requires: []
+    capabilities:
+      required:
+      - host.repository.read_write
+      optional:
+      - name: host.api.reachable
+        enables: black-box HTTP suite against running API
+      - name: host.test_runner.execute
+        enables: Newman or equivalent runner
+
     lint:
       skill_md_max_lines: 180
       target: api-test-creator
@@ -360,6 +499,21 @@ skills:
         - contract-test-creator
         - e2e-test-creator
         - api-test-creator
+    capabilities:
+      required:
+      - host.repository.read
+      optional:
+      - name: unit-test-creator.invoke
+        enables: routed unit-test generation
+      - name: integration-test-creator.invoke
+        enables: routed integration-test generation
+      - name: contract-test-creator.invoke
+        enables: routed contract-test generation
+      - name: e2e-test-creator.invoke
+        enables: routed e2e generation
+      - name: api-test-creator.invoke
+        enables: routed API-test generation
+
     lint:
       skill_md_max_lines: 180
       target: test-writer

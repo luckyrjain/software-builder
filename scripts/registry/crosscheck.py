@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from scripts.registry.backfill_capabilities import validate_capabilities_present
 from scripts.registry.composition import validate_composition_graph
 from scripts.registry.frontmatter import load_skill_frontmatter
 from scripts.registry.models import Registry
@@ -98,6 +99,7 @@ def validate_registry(root: Path) -> list[str]:
 
     errors.extend(_detect_cycles(install_graph))
     errors.extend(validate_composition_graph(registry))
+    errors.extend(validate_capabilities_present(registry_path))
 
     for skill_id, entry in registry.skills.items():
         skill_md = root / entry.path / "SKILL.md"
