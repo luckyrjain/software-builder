@@ -54,23 +54,23 @@ Conventions: [examples-conventions](../docs/skill-framework/shared/examples-conv
 
 | Repo | MR | Severity summary | pr-review posting mode |
 |------|----|--------------------|--------------------------|
-| api-disbursement | !210 | 0 Critical, 0 High, 1 Medium, 0 Low | chat-only |
-| api-disbursement | !212 | 0 Critical, 0 High, 0 Medium, 0 Low | chat-only |
-| api-payouts | — | No MRs since v1.8.0 | — |
+| `api-disbursement` | !210 | 0 Critical, 0 High, 1 Medium, 0 Low | chat-only |
+| `api-disbursement` | !212 | 0 Critical, 0 High, 0 Medium, 0 Low | chat-only |
+| `api-payouts` | — | No MRs since `v1.8.0` | — |
 
 ## Per-service rightsizing
 
 | Service | k8s verdict | Notes |
 |---------|-------------|-------|
-| disbursement-service | READY (no cuts needed) | — |
-| payouts-worker | READY (no cuts needed) | — |
+| `disbursement-service` | READY (no cuts needed) | — |
+| `payouts-worker` | READY (no cuts needed) | — |
 
 ## Per-service incident signal
 
 | Service | Signal | Window | Notes |
 |---------|--------|--------|-------|
-| disbursement-service | Clear | 2026-08-03T00:00Z–2026-08-05T00:00Z | — |
-| payouts-worker | Clear | 2026-08-03T00:00Z–2026-08-05T00:00Z | — |
+| `disbursement-service` | Clear | 2026-08-03T00:00Z–2026-08-05T00:00Z | — |
+| `payouts-worker` | Clear | 2026-08-03T00:00Z–2026-08-05T00:00Z | — |
 ```
 
 ---
@@ -90,7 +90,7 @@ takes the Phase 1 evidence as the signal, and never continues to Phase 2.
 
 | Service | Signal | Window | Notes |
 |---------|--------|--------|-------|
-| disbursement-service | Flagged | 2026-08-03T00:00Z–2026-08-05T00:00Z | 3 error signals, 1 infra signal — run incident-rca directly on disbursement-service 2026-08-03T00:00Z–2026-08-05T00:00Z for full investigation |
+| `disbursement-service` | Flagged | 2026-08-03T00:00Z–2026-08-05T00:00Z | 3 error signals, 1 infra signal — run incident-rca directly on `disbursement-service` 2026-08-03T00:00Z–2026-08-05T00:00Z for full investigation |
 ```
 
 **Verdict: CONDITIONAL** (a flagged service alone sets `CONDITIONAL`, not `NOT_READY` — incident-rca's
@@ -126,7 +126,7 @@ shows `full` in the posting-mode column instead of `chat-only`, but the report i
 
 | Service | k8s verdict | Notes |
 |---------|-------------|-------|
-| legacy-ledger-svc | insufficient_metrics | Tags tried: kube_deployment, service — no match; see full k8s report |
+| `legacy-ledger-svc` | insufficient_metrics | Tags tried: kube_deployment, service — no match; see full k8s report |
 ```
 
 **Verdict: UNKNOWN** — an unverified service is not the same as a verified-safe one, but it is also not

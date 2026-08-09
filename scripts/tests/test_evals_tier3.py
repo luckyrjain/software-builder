@@ -18,6 +18,7 @@ def test_golden_fixtures_load() -> None:
     assert ("cost-optimization-sprint-planner", "golden-injection-inert-report") in case_ids
     assert ("new-hire-guide", "golden-injection-inert-tour") in case_ids
     assert ("migration-program-manager", "golden-injection-inert-report") in case_ids
+    assert ("release-readiness-checker", "golden-injection-inert-report") in case_ids
     assert ("pr-gatekeeper", "golden-injection-inert-notification") in case_ids
     assert ("weekly-squad-digest", "golden-injection-inert-digest") in case_ids
     assert ("prd-architect", "golden-validation-no-mvp") in case_ids
@@ -26,7 +27,7 @@ def test_golden_fixtures_load() -> None:
     # tripping load_golden_fixtures' own malformed-fixture error. It won't catch a delete+add that
     # happens to net to the same count, but it catches the much more common single accidental
     # deletion or duplication. Bump this number when you intentionally add or remove a fixture.
-    assert len(cases) == 14
+    assert len(cases) == 15
 
 
 def test_golden_cases_pass_on_repository() -> None:
