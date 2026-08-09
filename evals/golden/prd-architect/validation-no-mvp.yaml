@@ -1,0 +1,42 @@
+schema_version: 1
+skill: prd-architect
+case_id: golden-validation-no-mvp
+tier: 3
+description: Validation mode output must not include PRD sections like MVP Scope
+recorded_output:
+  response_mode: validation
+  header: "Mode: Validation — build/no-build evaluation without an authoritative PRD"
+  sections:
+    - problem_assessment
+    - premise_verdict
+    - key_assumptions
+    - alternatives
+    - material_risks
+    - recommendation
+    - evidence_needed_next
+  body_excerpt: |
+    Mode: Validation — build/no-build evaluation without an authoritative PRD
+
+    ## Problem Assessment
+    Support ticket volume is high; root causes unverified.
+
+    ## Premise Verdict
+    Reasonable but unvalidated
+
+    ## Recommendation
+    Run a limited pilot before committing to a full chatbot build.
+assertions:
+  - type: field_equals
+    path: response_mode
+    value: validation
+  - type: field_present
+    path: sections
+  - type: forbid_pattern
+    path: body_excerpt
+    pattern: "## MVP Scope"
+  - type: forbid_pattern
+    path: body_excerpt
+    pattern: "^Depth:"
+  - type: forbid_pattern
+    path: header
+    pattern: "^Depth:"

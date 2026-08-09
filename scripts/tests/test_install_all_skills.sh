@@ -24,8 +24,8 @@ mapfile -t SKILLS < <(
   PYTHONPATH="${REPO_ROOT}" python3 "${REPO_ROOT}/scripts/install_support.py" list
 )
 
-if ((${#SKILLS[@]} != 22)); then
-  echo "error: expected 22 registry skills, got ${#SKILLS[@]}" >&2
+if ((${#SKILLS[@]} != 23)); then
+  echo "error: expected 23 registry skills, got ${#SKILLS[@]}" >&2
   exit 1
 fi
 

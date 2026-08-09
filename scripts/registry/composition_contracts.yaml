@@ -14,6 +14,7 @@ artifact_types:
   - implementation_pr
   - digest_report
   - test_suite
+  - prd_report
 
 # Field-level contracts for producer/consumer schema matching (#19 v2 follow-up).
 artifact_schemas:
@@ -41,6 +42,8 @@ artifact_schemas:
     fields: [sections, generated_at, source_revisions]
   test_suite:
     fields: [tests, framework, target_path]
+  prd_report:
+    fields: [title, build_readiness, depth, response_mode]
 
 write_authority_levels:
   read-only: 0
@@ -140,7 +143,7 @@ skills:
 
   loop-task-implementer:
     produces: [implementation_pr]
-    consumes: [implementation_task]
+    consumes: [implementation_task, prd_report]
     write_authority: repository-write
 
   backlog-runner:
@@ -186,4 +189,13 @@ skills:
   test-writer:
     produces: [test_suite]
     consumes: [implementation_task]
+    write_authority: read-only
+
+  prd-architect:
+    produces: [prd_report]
+    consumes: [implementation_task]
+    produce_fields:
+      prd_report: [title, build_readiness, depth, response_mode]
+    consume_fields:
+      implementation_task: [task_id, scope, acceptance_criteria]
     write_authority: read-only

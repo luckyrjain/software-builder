@@ -66,9 +66,10 @@ Each skill directory follows the same pattern:
 | `new-hire-guide` | architecture | ambient | domain-comprehension, squad-map | `make lint-new-hire-guide` |
 | `pr-gatekeeper` | review | automation-only | pr-review | `make lint-pr-gatekeeper` |
 | `pr-review` | review | ambient | — | `make lint-pr-review` |
+| `prd-architect` | product | ambient | — | `make lint-prd-architect` |
 | `release-readiness-checker` | release | ambient | pr-review, k8s-overprovisioning-datadog, incident-rca | `make lint-release-readiness-checker` |
 | `squad-map` | architecture | ambient | — | `make lint-squad-map` |
-| `test-writer` | testing | ambient | unit-test-creator, integration-test-creator, contract-test-creator, e2e-test-creator, api-test-creator | `make lint-test-writer` |
+| `test-writer` | product | ambient | unit-test-creator, integration-test-creator, contract-test-creator, e2e-test-creator, api-test-creator | `make lint-test-writer` |
 | `unit-test-creator` | testing | ambient | — | `make lint-unit-test-creator` |
 | `weekly-squad-digest` | migration | automation-only | migration-program-manager, cost-optimization-sprint-planner | `make lint-weekly-squad-digest` |
 | `who-owns-x-bot` | architecture | automation-only | squad-map | `make lint-who-owns-x-bot` |

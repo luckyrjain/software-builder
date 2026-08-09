@@ -50,3 +50,5 @@ skills:
     external_services: Browser driver + reachable app URL (local/CI)
   api-test-creator:
     external_services: Newman CLI + reachable API base URL
+  prd-architect:
+    external_services: Optional web search for material unknowns (generalized queries only)

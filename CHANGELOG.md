@@ -8,6 +8,14 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 
 ## Platform
 
+### prd-architect skill (#23)
+
+- New **prd-architect** skill: Classify → Validate → Specify → Break → Repair → Gate pipeline for
+  implementation-ready PRDs, Validation assessments, and Review/repair of existing specs.
+- Response modes (PRD / Validation / Review), depth tiers (Lite / Standard / Rigorous), section triggers,
+  adversarial review, and Build Readiness gate.
+- Registry, routing, cross-skill escalation, composition contracts, eval fixtures, and `make lint-prd-architect`.
+
 ### Skills-audit backlog (#20) — atomic writes, provenance, idempotency
 
 - **migration-program-manager:** atomic state and rollup writes via temp file + `os.replace`.

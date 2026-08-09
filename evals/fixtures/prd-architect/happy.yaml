@@ -1,0 +1,18 @@
+schema_version: 1
+skill: prd-architect
+case_id: happy-contract
+tier: 1
+description: prd-architect exposes pipeline workflow and output contract
+assertions:
+  - type: file_exists
+    path: reference/output-contract.md
+  - type: file_exists
+    path: report-template.md
+  - type: skill_md_contains
+    pattern: Pipeline routing
+  - type: path_contains
+    path: reference/phase-index.md
+    pattern: Validate → Specify → Break → Repair → Gate
+  - type: workflow_frontmatter_all
+  - type: registry_invocation
+    expected: ambient

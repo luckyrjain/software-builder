@@ -1,0 +1,9 @@
+---
+description: Use when rough product ideas, feature proposals, workflows, existing PRDs, or build/no-build questions need a validated PRD, gap review, or readiness assessment. Keywords: PRD, product requirements, should we build, challenge this idea, review PRD, MVP scope, build readiness, feature spec. Not for implementing code (loop-task-implementer), MR review (pr-review), domain mapping (domain-comprehension), or writing tests (test-writer).
+alwaysApply: false
+---
+
+<!-- GENERATED from skills.yaml + SKILL.md — do not edit; run make generate -->
+
+Invoke the prd-architect skill. Read `prd-architect/SKILL.md` and follow it.
+Phase index: `prd-architect/reference/phase-index.md` when present under the skill directory.

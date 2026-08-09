@@ -1,6 +1,6 @@
 # Cross-skill escalation (shared)
 
-**Normative.** Symmetric escalation matrix for pr-review, pr-gatekeeper, incident-rca, incident-triage-agent, k8s-overprovisioning-datadog, domain-comprehension, squad-map, who-owns-x-bot, new-hire-guide, release-readiness-checker, mysql-to-postgres-sql, loop-task-implementer, backlog-runner, migration-program-manager, cost-optimization-sprint-planner, weekly-squad-digest, test-writer, unit-test-creator, integration-test-creator, contract-test-creator, e2e-test-creator, and api-test-creator.
+**Normative.** Symmetric escalation matrix for pr-review, pr-gatekeeper, incident-rca, incident-triage-agent, k8s-overprovisioning-datadog, domain-comprehension, squad-map, who-owns-x-bot, new-hire-guide, release-readiness-checker, mysql-to-postgres-sql, loop-task-implementer, backlog-runner, migration-program-manager, cost-optimization-sprint-planner, weekly-squad-digest, prd-architect, test-writer, unit-test-creator, integration-test-creator, contract-test-creator, e2e-test-creator, and api-test-creator.
 
 **Consumers:** `SKILL.md` in each skill (link here; keep ≤10 skill-specific rows max).
 
@@ -72,6 +72,12 @@ know about — don't treat it as a "you may want to" row the way every other row
 | Caller wants a standalone black-box HTTP suite, not an in-process/testcontainers-backed test | integration-test-creator → api-test-creator | Endpoint + repo_root | "Write an API test for `{method} {path}`" |
 | Caller wants a black-box request/response suite, not a consumer/provider interaction agreement | contract-test-creator → api-test-creator | Endpoint + repo_root | "Write an API test for `{method} {path}`" |
 | Caller wants a consumer/provider interaction agreement, not a standalone black-box suite | api-test-creator → contract-test-creator | Consumer/provider services + interaction | "Write a Pact contract test for `{consumer}` calling `{provider}`" |
+| PRD Ready; caller wants implementation | prd-architect → loop-task-implementer | Final PRD + Build Readiness verdict | "Implement `{feature}` per the PRD — task `{prd_title}`" |
+| PRD depends on unfamiliar existing system behavior | prd-architect → domain-comprehension | Feature area + workspace root | "Map domain for `{subsystem}` before finalizing PRD for `{feature}`" |
+| PRD defines critical paths needing test coverage | prd-architect → test-writer | PRD acceptance criteria + target scope | "Write tests for `{feature}` per PRD section `{section}`" |
+| PRD security finding needs review of existing code on an MR | prd-architect → pr-review | MR !IID + finding | "Review MR !{iid} for `{finding}` flagged during PRD review" |
+| Task needs a PRD before implementation | loop-task-implementer → prd-architect | Task description + constraints | "Write an implementation-ready PRD for task `{task_id}`" |
+| Domain map suggests a new product initiative | domain-comprehension → prd-architect | Bounded context + problem statement | "Write a PRD for `{initiative}` based on domain-comprehension findings" |
 
 Skill-specific rows in each `SKILL.md` MUST be a subset of this table plus local deltas only.
 

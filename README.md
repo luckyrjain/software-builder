@@ -1,7 +1,7 @@
 # software-builder
 
 [![Lint](https://github.com/luckyrjain/software-builder/actions/workflows/lint.yml/badge.svg)](https://github.com/luckyrjain/software-builder/actions/workflows/lint.yml)
-![Skills](https://img.shields.io/badge/skills-<!-- skills-count:start -->22<!-- skills-count:end -->-blue)
+![Skills](https://img.shields.io/badge/skills-<!-- skills-count:start -->23<!-- skills-count:end -->-blue)
 
 Portable, evidence-driven agent skills for software delivery: code review, incident response,
 architecture discovery, Kubernetes optimization, migrations, release readiness, and autonomous
@@ -176,6 +176,7 @@ routes to skills in another category.
 | [pr-review](pr-review/) | `/pr-review` or “review this MR/PR” | GitLab MR review with evidence-backed findings and optional inline posts | [README](pr-review/README.md) · [SETUP](pr-review/SETUP.md) |
 | [pr-gatekeeper](pr-gatekeeper/) | Push webhook | Runs `pr-review` on every push to an open MR and applies unattended posting policy | [README](pr-gatekeeper/README.md) · [SETUP](pr-gatekeeper/SETUP.md) |
 | [release-readiness-checker](release-readiness-checker/) | “Is this release ready?” | Aggregates review, Kubernetes, and incident signals into a release go/no-go report | [README](release-readiness-checker/README.md) · [SETUP](release-readiness-checker/SETUP.md) |
+| [prd-architect](prd-architect/) | “Write a PRD for …” / “Should we build this?” | Validates ideas and turns specs into implementation-ready PRDs with Build Readiness gating | [README](prd-architect/README.md) · [SETUP](prd-architect/SETUP.md) |
 | [test-writer](test-writer/) | “Write tests for MR !123” — level unspecified | Router: classifies the request and dispatches to exactly one of the five skills below | [README](test-writer/README.md) · [SETUP](test-writer/SETUP.md) |
 | [unit-test-creator](unit-test-creator/) | “Write unit tests for `<file/module>`” | Isolated, fast, every external dependency mocked; detects the repo's test framework and never patches production code to force green | [README](unit-test-creator/README.md) · [SETUP](unit-test-creator/SETUP.md) |
 | [integration-test-creator](integration-test-creator/) | “Write an integration test against the real DB” | Tests the real seam to one real adjacent dependency (testcontainers/docker-compose) — never mocks it | [README](integration-test-creator/README.md) · [SETUP](integration-test-creator/SETUP.md) |
