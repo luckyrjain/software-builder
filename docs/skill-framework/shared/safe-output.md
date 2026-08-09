@@ -52,10 +52,14 @@ Before embedding untrusted text inside rendered Markdown, a chat message, or a S
 - Prefer inline code spans (`` `like this` ``) for untrusted identifiers (service names, ticket IDs,
   branch names) — this both signals "this is data, not skill-authored prose" to a human reader and
   neutralizes most Markdown-structural characters at once. A literal backtick inside the untrusted value
-  closes the span early and lets the remaining attacker-controlled text render as live Markdown — before
-  wrapping, either strip/escape backtick characters from the value, or count the longest run of
-  consecutive backticks already in it and use a delimiter one backtick longer (CommonMark's own rule for
-  nesting code spans).
+  closes the span early and lets the remaining attacker-controlled text render as live Markdown.
+  **A backslash before the backtick does not prevent this** — CommonMark code-span delimiters are
+  matched before backslash escapes are resolved, so `` `foo\`bar` `` still closes the span at the
+  backtick, backslash and all (verified against a real parser, not assumed). Before wrapping, either
+  strip the backtick character(s) from the value entirely, or count the longest run of consecutive
+  backticks already in it and use a delimiter one backtick longer (CommonMark's own rule for nesting
+  code spans) — stripping is simpler to apply correctly when the wrapping is done by an LLM-driven
+  workflow rather than code, since it doesn't require counting a run length.
 
 ## Rule 5 — PII / secret redaction in rendered output
 
