@@ -27,6 +27,8 @@ skills:
       kiro: {discovery: manual}
     install:
       requires: []
+    capabilities:
+      required: [host.repository.read]
     lint:
       skill_md_max_lines: 180
       target: squad-map
@@ -60,6 +62,8 @@ skills:
       kiro: {discovery: manual}
     install:
       requires: []
+    capabilities:
+      required: [host.repository.read]
     lint:
       skill_md_max_lines: 180
       target: foo
@@ -93,6 +97,8 @@ skills:
       kiro: {discovery: manual}
     install:
       requires: []
+    capabilities:
+      required: [host.repository.read]
     lint:
       skill_md_max_lines: 180
       target: bot
@@ -125,6 +131,8 @@ skills:
       claude: {install: true}
       kiro: {discovery: manual}
     install: {requires: []}
+    capabilities:
+      required: [host.repository.read]
     lint: {skill_md_max_lines: 180, target: solo}
 """,
         encoding="utf-8",
@@ -186,6 +194,8 @@ skills:
       kiro: {discovery: manual}
     install:
       requires: []
+    capabilities:
+      required: [host.repository.read]
     lint:
       skill_md_max_lines: 180
       target: foo
@@ -219,6 +229,8 @@ skills:
       claude: {install: true}
       kiro: {discovery: manual}
     install: {requires: [b]}
+    capabilities:
+      required: [host.repository.read]
     lint: {skill_md_max_lines: 180, target: a}
   b:
     path: b
@@ -229,6 +241,8 @@ skills:
       claude: {install: true}
       kiro: {discovery: manual}
     install: {requires: [a]}
+    capabilities:
+      required: [host.repository.read]
     lint: {skill_md_max_lines: 180, target: b}
 """,
         encoding="utf-8",
@@ -237,6 +251,39 @@ skills:
 
     errors = validate_registry(tmp_path)
     assert any("cycle" in error for error in errors)
+
+
+def test_crosscheck_rejects_missing_capabilities(tmp_path: Path) -> None:
+    skill_dir = tmp_path / "foo"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text(
+        "---\nname: foo\ndescription: test\n---\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "skills.yaml").write_text(
+        """
+schema_version: 1
+skills:
+  foo:
+    path: foo
+    category: testing
+    invocation: ambient
+    hosts:
+      cursor: {discovery: rule}
+      claude: {install: true}
+      kiro: {discovery: manual}
+    install:
+      requires: []
+    lint:
+      skill_md_max_lines: 180
+      target: foo
+""",
+        encoding="utf-8",
+    )
+    from scripts.registry.crosscheck import validate_registry
+
+    errors = validate_registry(tmp_path)
+    assert any("missing capabilities block" in error for error in errors)
 
 
 def test_bootstrap_registry_validates_on_real_repo() -> None:
@@ -332,6 +379,8 @@ skills:
       claude: {install: true}
       kiro: {discovery: manual}
     install: {requires: []}
+    capabilities:
+      required: [host.repository.read]
     lint: {skill_md_max_lines: 180, target: solo}
 """,
         encoding="utf-8",

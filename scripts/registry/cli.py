@@ -7,6 +7,7 @@ from pathlib import Path
 
 import yaml
 
+from scripts.registry.backfill_capabilities import cmd_backfill
 from scripts.registry.crosscheck import find_stale_generated_adapters, validate_registry
 from scripts.registry.generate_cursor import generate_cursor_rules
 from scripts.registry.generate_docs import (
@@ -132,11 +133,27 @@ def main(argv: list[str] | None = None) -> int:
         help="exit 1 if generated files would change",
     )
 
+    backfill_parser = subparsers.add_parser(
+        "backfill-capabilities",
+        help="insert capabilities blocks from capability_catalog.yaml",
+    )
+    backfill_parser.add_argument(
+        "--check",
+        action="store_true",
+        help="exit 1 if any skill is missing a capabilities block",
+    )
+
     args = parser.parse_args(argv)
     if args.command == "validate":
         return _run_command(lambda: cmd_validate(ROOT))
     if args.command == "generate":
         return _run_command(lambda: cmd_generate(ROOT, check_only=args.check))
+    if args.command == "backfill-capabilities":
+        return cmd_backfill(
+            check_only=args.check,
+            overwrite=False,
+            skills_path=ROOT / "skills.yaml",
+        )
 
     print(f"error: unknown command {args.command!r}", file=sys.stderr)
     return 2

@@ -1,0 +1,173 @@
+# Canonical capability contracts for skills.yaml (machine-readable doctor input).
+# Source: each skill's reference/mcp-capabilities.md, SETUP.md, or SKILL.md where no MCP doc exists.
+# Run: python3 -m scripts.registry backfill-capabilities [--check]
+
+skills:
+  pr-review:
+    required: [gitlab.get_merge_request, gitlab.get_merge_request_diffs]
+    optional:
+      - name: gitlab.create_merge_request_thread
+        enables: inline diff posting
+      - name: gitlab.create_note
+        enables: summary-only MR posting
+    degraded_modes:
+      gitlab.create_merge_request_thread: summary-only or chat-only posting
+      gitlab.create_note: chat-only posting
+
+  pr-gatekeeper:
+    required: [gitlab.get_merge_request]
+    optional:
+      - name: gitlab.create_merge_request_thread
+        enables: unattended inline posting when policy allows
+
+  k8s-overprovisioning-datadog:
+    required: [datadog.query_metrics]
+    optional:
+      - name: datadog.list_monitors
+        enables: monitor cross-check sections
+
+  incident-rca:
+    required: [telemetry.logs.query]
+    optional:
+      - name: datadog.query_metrics
+        enables: metric corroboration paths
+      - name: gitlab.get_merge_request
+        enables: deploy-regression MR handoff
+
+  incident-triage-agent:
+    required: [pager.webhook.receive]
+    optional:
+      - name: slack.post.message
+        enables: paging summary delivery when configured
+
+  domain-comprehension:
+    required: [host.repository.read]
+    optional:
+      - name: gitlab.search_code
+        enables: repository census without local checkout
+      - name: datadog.query_metrics
+        enables: runtime validation passes
+      - name: telemetry.logs.query
+        enables: KubeSense/log corroboration
+
+  squad-map:
+    required: [gitlab.list_projects]
+    optional:
+      - name: gitlab.get_repository_file
+        enables: CODEOWNERS and ownership file reads
+      - name: datadog.list_service_definitions
+        enables: service alias crosswalk
+
+  who-owns-x-bot:
+    required: [slack.slash_command.receive]
+    optional:
+      - name: squad-map.invoke
+        enables: full mapping table instead of one-shot lookup
+
+  new-hire-guide:
+    required: [host.repository.read]
+    optional:
+      - name: domain-comprehension.invoke
+        enables: full domain map tour
+      - name: squad-map.invoke
+        enables: ownership lookups during tour
+
+  release-readiness-checker:
+    required: [host.report.write]
+    optional:
+      - name: gitlab.list_merge_requests
+        enables: release-candidate MR enumeration
+      - name: datadog.query_metrics
+        enables: per-service health slice
+      - name: telemetry.logs.query
+        enables: incident window cross-check
+
+  migration-program-manager:
+    required: [host.filesystem.read]
+    optional:
+      - name: mysql-to-postgres-sql.invoke
+        enables: single-workspace migration status refresh
+
+  cost-optimization-sprint-planner:
+    required: [host.filesystem.read]
+    optional:
+      - name: k8s-overprovisioning-datadog.invoke
+        enables: single-deployment rightsizing refresh
+
+  mysql-to-postgres-sql:
+    required: [host.repository.read_write]
+    optional:
+      - name: gitlab.get_merge_request
+        enables: migration MR review handoff
+
+  loop-task-implementer:
+    required:
+      - host.repository.read_write
+      - host.role.isolation
+      - host.ci.status
+      - host.pull_request.write
+    optional:
+      - name: host.issue_tracker.read
+        enables: task sourced from tracker instead of user text
+
+  backlog-runner:
+    required: [scheduler.cron.trigger, host.issue_tracker.read]
+    optional:
+      - name: loop-task-implementer.invoke
+        enables: interactive single-task mode
+
+  weekly-squad-digest:
+    required: [scheduler.cron.trigger]
+    optional:
+      - name: slack.post.message
+        enables: scheduled digest delivery
+
+  unit-test-creator:
+    required: [host.repository.read_write]
+    optional:
+      - name: host.test_runner.execute
+        enables: generated test verification loop
+
+  integration-test-creator:
+    required: [host.repository.read_write]
+    optional:
+      - name: host.test_runner.execute
+        enables: generated test verification loop
+      - name: host.dependency.reachable
+        enables: real adjacent dependency under test
+
+  contract-test-creator:
+    required: [host.repository.read_write]
+    optional:
+      - name: host.test_runner.execute
+        enables: generated contract test verification
+
+  e2e-test-creator:
+    required: [host.repository.read_write]
+    optional:
+      - name: host.browser.automation
+        enables: UI journey execution
+      - name: host.test_runner.execute
+        enables: generated e2e verification
+
+  api-test-creator:
+    required: [host.repository.read_write]
+    optional:
+      - name: host.api.reachable
+        enables: black-box HTTP suite against running API
+      - name: host.test_runner.execute
+        enables: Newman or equivalent runner
+
+  test-writer:
+    required: [host.repository.read]
+    optional:
+      - name: unit-test-creator.invoke
+        enables: routed unit-test generation
+      - name: integration-test-creator.invoke
+        enables: routed integration-test generation
+      - name: contract-test-creator.invoke
+        enables: routed contract-test generation
+      - name: e2e-test-creator.invoke
+        enables: routed e2e generation
+      - name: api-test-creator.invoke
+        enables: routed API-test generation
