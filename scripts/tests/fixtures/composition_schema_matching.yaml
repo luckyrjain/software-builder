@@ -1,0 +1,28 @@
+artifact_types:
+  - mr_context
+  - mr_review_report
+
+artifact_schemas:
+  mr_context:
+    fields: [project, merge_request_iid, head_sha]
+  mr_review_report:
+    fields: [review_metadata, posted, head_sha, posting_mode]
+
+write_authority_levels:
+  read-only: 0
+  comment: 1
+
+skills:
+  child:
+    produces: [mr_review_report]
+    consumes: []
+    produce_fields:
+      mr_review_report: [review_metadata]
+    write_authority: read-only
+
+  parent:
+    produces: []
+    consumes: [mr_review_report]
+    consume_fields:
+      mr_review_report: [review_metadata, posted]
+    write_authority: read-only
