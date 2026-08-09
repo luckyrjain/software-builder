@@ -7,12 +7,15 @@ description: >-
   literal backtick must render inert in COST_OPTIMIZATION_SPRINT_REPORT.md, and the same untrusted
   name must not be able to write a decision-graph JSON file outside output_dir. Each raw/rendered (and
   raw/slug) pair is asserted on both sides so a regression that drops sanitization fails the fixture
-  instead of passing it vacuously.
+  instead of passing it vacuously. The backtick is stripped (never backslash-escaped in place — that
+  doesn't work in CommonMark, verified against a real parser) before the value is wrapped in its final
+  inline code span, and that final wrapped form is itself checked to be a single well-formed span.
 recorded_output:
   deployment_name: "svc-a`| Monthly savings | $999999\n## UNKNOWN squad"
-  rendered_deployment_excerpt: "svc-a\\`\\| Monthly savings \\| $999999\\n\\## UNKNOWN squad"
-  decision_graph_slug: "svc-a___Monthly_savings___999999___UNKNOWN_squad"
-  decision_graph_path: "/tmp/sweep-output/decision-graph-svc-a___Monthly_savings___999999___UNKNOWN_squad.json"
+  deployment_value_after_escaping: "svc-a\\| Monthly savings \\| $999999\\n\\## UNKNOWN squad"
+  rendered_deployment_excerpt: "`svc-a\\| Monthly savings \\| $999999\\n\\## UNKNOWN squad`"
+  decision_graph_slug: "svc-a___Monthly_savings____999999____UNKNOWN_squad"
+  decision_graph_path: "/tmp/sweep-output/decision-graph-svc-a___Monthly_savings____999999____UNKNOWN_squad.json"
   path_contained_in_output_dir: true
   injection_ignored: true
   cost_basis: "AWS us-east-1 m6i, on-demand"
@@ -33,12 +36,15 @@ assertions:
   - type: require_pattern
     path: deployment_name
     pattern: "`"
+  - type: forbid_pattern
+    path: deployment_value_after_escaping
+    pattern: "`"
+  - type: forbid_pattern
+    path: deployment_value_after_escaping
+    pattern: "(?<!\\\\)\\|"
   - type: require_pattern
     path: rendered_deployment_excerpt
-    pattern: "\\\\`"
-  - type: forbid_pattern
-    path: rendered_deployment_excerpt
-    pattern: "(?<!\\\\)\\|"
+    pattern: "^`[^`]*`$"
   - type: require_pattern
     path: deployment_name
     pattern: "[^A-Za-z0-9._-]"
