@@ -63,6 +63,49 @@ def test_redact_secrets_masks_token_after_redacted_marker():
     assert "Authorization=[REDACTED]" in redacted
 
 
+def test_redact_secrets_masks_api_key_key_value_form():
+    redacted = redact_secrets("api_key=sk_live_abcdef1234567890")
+    assert "sk_live_abcdef1234567890" not in redacted
+    assert "[REDACTED]" in redacted
+
+
+def test_redact_secrets_masks_x_api_key_case_insensitive():
+    redacted = redact_secrets("X-API-KEY=sk_live_abcdef1234567890")
+    assert "sk_live_abcdef1234567890" not in redacted
+
+
+def test_redact_secrets_masks_api_key_json_form():
+    redacted = redact_secrets('{"api_key": "sk_live_abcdef1234567890"}')
+    assert "sk_live_abcdef1234567890" not in redacted
+    assert '"api_key": "[REDACTED]"' in redacted
+
+
+def test_redact_secrets_masks_password_key_value_and_json_form():
+    assert "hunter2superSecret" not in redact_secrets("password=hunter2superSecret")
+    assert "hunter2superSecret" not in redact_secrets('{"password": "hunter2superSecret"}')
+    assert "hunter2superSecret" not in redact_secrets("pwd=hunter2superSecret")
+
+
+def test_redact_secrets_masks_pem_private_key_block():
+    raw = (
+        "-----BEGIN RSA PRIVATE KEY-----\n"
+        "MIIEpAIBAAKCAQEA1234567890abcdef\n"
+        "-----END RSA PRIVATE KEY-----"
+    )
+    redacted = redact_secrets(raw)
+    assert "MIIEpAIBAAKCAQEA1234567890abcdef" not in redacted
+    assert "-----BEGIN RSA PRIVATE KEY-----" in redacted
+    assert "-----END RSA PRIVATE KEY-----" in redacted
+
+
+def test_redact_secrets_does_not_false_positive_on_ordinary_identifiers():
+    # A variable/field named similarly to a secret but not actually a key=value secret assignment
+    # must survive untouched — matches the discipline #54's mysql scan tests apply.
+    raw = "passwordResetRequired=true and apiKeyRotationEnabled=false in the feature flags"
+    redacted = redact_secrets(raw)
+    assert redacted == raw
+
+
 def test_extract_message_from_json_body():
     body = json.dumps({"level": "ERROR", "message": "payment gateway timeout"})
     assert extract_message(body) == "payment gateway timeout"
