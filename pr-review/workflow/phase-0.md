@@ -1,13 +1,11 @@
 ---
-workflow_version: 1.4
-phase: 0
-produces:
-  - posting_mode
-  - jira_write_available
-  - mcp_tool_map
+workflow_version: 1.5
+phase: "0"
+produces: {posting_mode: string, jira_write_available: boolean, mcp_tool_map: object}
 consumes:
-  - project_id
-  - merge_request_iid
+  required: {project_id: string, merge_request_iid: string}
+  optional: {}
+  conditional: {}
 ---
 
 # Phase 0 — Detect capabilities (before gather)

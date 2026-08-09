@@ -1,18 +1,19 @@
 ---
-workflow_version: 1.4
-phase: 1
+workflow_version: 1.5
+phase: "1"
 produces:
-  - review_boundary
-  - fast_path
-  - context_cache
-  - capability_profile
-  - incremental_baseline
-  - jira_ac_table
-  - feedback_signals
+  review_boundary: object
+  fast_path: object
+  context_cache: object
+  capability_profile: object
+  incremental_baseline: object
+  jira_ac_table: list
+  feedback_signals: object
+  head_sha: string
 consumes:
-  - project_id
-  - merge_request_iid
-  - posting_mode
+  required: {project_id: string, merge_request_iid: string, posting_mode: string}
+  optional: {}
+  conditional: {}
 ---
 
 # Phase 1 — Gather (read-only)
@@ -39,6 +40,8 @@ tools) follows the 1-retry policy stated once in
 ## Steps
 
 1. `get_merge_request` → `diff_refs` SHAs, draft/WIP flag, target branch, labels, `web_url`, `merged_at`, `state`.
+   Record `diff_refs.head_sha` as `head_sha` — the Phase 2→3 gate and Phase 4's staleness re-check both
+   consume this exact value; do not re-derive it later from a fresh API call.
    **Typed `expected_head_sha` check (before the state check, when the caller supplied it —
    [inputs.md § Typed invocation](inputs.md#typed-invocation-skill-to-skill-callers)):** compare
    `expected_head_sha` to `merge_commit_sha` (when `state: merged`) or `diff_refs.head_sha` (otherwise).

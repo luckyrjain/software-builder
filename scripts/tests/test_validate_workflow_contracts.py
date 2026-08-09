@@ -334,15 +334,23 @@ def test_rejects_unknown_type_at_every_typed_location(
     [
         (lambda data: data.pop("workflow_version"), "missing frontmatter keys: workflow_version"),
         (lambda data: data.update(workflow_version="1.4"), "workflow_version must be a number"),
-        (lambda data: data.update(workflow_version=9.9), "unsupported workflow_version 9.9"),
+        (lambda data: data.update(workflow_version=9.9), None),
+        (lambda data: data.update(workflow_version=0), "workflow_version must be a positive number"),
+        (lambda data: data.update(workflow_version=-1.0), "workflow_version must be a positive number"),
         (lambda data: data.update(extra_root=True), "unknown frontmatter keys: extra_root"),
     ],
 )
-def test_enforces_strict_phase_root_schema(tmp_path: Path, mutate, expected: str) -> None:
+def test_enforces_strict_phase_root_schema(tmp_path: Path, mutate, expected: str | None) -> None:
     skill = _copy_valid_contract(tmp_path)
     _rewrite_phase(skill / "workflow" / "parse.md", mutate)
 
-    assert any(expected in error for error in validate_skill_contract(skill))
+    errors = validate_skill_contract(skill)
+    if expected is None:
+        # workflow_version has no fixed upper bound (see validate_workflow_contracts.py) — 9.9 is a
+        # valid, if unusually large, per-file edit counter and must not be rejected.
+        assert not any("workflow_version" in error for error in errors)
+    else:
+        assert any(expected in error for error in errors)
 
 
 @pytest.mark.parametrize("field", ["source", "rationale"])

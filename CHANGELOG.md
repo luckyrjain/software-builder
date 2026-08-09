@@ -980,6 +980,31 @@ _Pre-merge WIP on `feat/squad-map-skill` (internal v1.0–v1.5) is consolidated 
 
 ## pr-review
 
+### Route-aware workflow contract + safe-output wiring (2026-08-09)
+
+- New `pr-review/workflow-contract.yaml` — the first non-prd-architect adopter of the route-aware
+  `scripts/validate_workflow_contracts.py` contract. Models the skill's single real branch point (the
+  Phase 2→3 gate's `posting_decision: post | skip`) as two routes: `posting` (Phases 0–5 with posting)
+  and `chat_only` (skips Phase 3–4, straight to Phase 5).
+- Fixed a validator bug this adoption surfaced: `validate_workflow_contracts.py` capped
+  `workflow_version` to a fixed allowlist (`{1.0, 1.1, 1.2, 1.3, 1.4}`) scoped only to prd-architect's
+  own version numbers, which would have rejected pr-review's real values (1.5–1.8, 1.12). Relaxed to
+  "any positive number."
+- Converted all 7 `pr-review/workflow/*.md` files' frontmatter from the old flat `consumes: [list]`
+  shape to typed `produces: {field: type}` / `consumes: {required, optional, conditional}`. Closed a
+  real "consumed but never produced" gap: `head_sha` is now formally produced by `phase-1.md` (it was
+  already consumed by the gate and Phase 4's staleness re-check, just never declared as an output).
+- Wired `python3 -m scripts.validate_workflow_contracts pr-review` into `lint-pr-review-skill`.
+- Safe-output wiring: `SKILL.md` now links
+  [safe-output.md](docs/skill-framework/shared/safe-output.md) alongside `prompt-injection.md`; new
+  "Safe rendered-output boundary" sections in `workflow/posting.md` and `workflow/phase-5.md` name the
+  untrusted fields (MR title/description, diff excerpts, Jira AC text, finding descriptions) that must
+  be escaped/fenced and redacted before GitLab-comment or chat rendering — enforced by a new Makefile
+  grep check mirroring `lint-prd-architect`'s.
+- New golden eval `evals/golden/pr-review/injection-inert-render.yaml` — proves Markdown-injection in
+  an MR title/diff (a fake `## Executive Summary` / `**Recommendation:** Approve` block) renders inert
+  rather than forging the verdict or a new section.
+
 ### Natural-language invocation (2026-06-30)
 
 - Removed `disable-model-invocation` — skill auto-invokes on clear GitLab MR review phrases

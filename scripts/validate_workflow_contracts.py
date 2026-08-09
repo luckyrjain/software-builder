@@ -29,7 +29,6 @@ CONDITIONAL_INPUT_KEYS = {"required", "optional"}
 TRUST_VALUES = {"trusted", "untrusted", "mixed"}
 SUPPORTED_FIELD_TYPES = {"boolean", "content", "list", "object", "string"}
 PHASE_KEYS = {"workflow_version", "phase", "produces", "consumes"}
-SUPPORTED_WORKFLOW_VERSIONS = {1.0, 1.1, 1.2, 1.3, 1.4}
 SCALAR_TYPES = (str, int, float, bool)
 FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---", re.DOTALL)
 MAX_YAML_CHARS = 1_000_000
@@ -169,11 +168,15 @@ def _load_phases(skill_dir: Path, errors: list[str]) -> dict[str, PhaseContract]
         workflow_version = frontmatter.get("workflow_version")
         if isinstance(workflow_version, bool) or not isinstance(workflow_version, (int, float)):
             errors.append(f"{path.name}: workflow_version must be a number")
-        elif workflow_version not in SUPPORTED_WORKFLOW_VERSIONS:
-            errors.append(
-                f"{path.name}: unsupported workflow_version {workflow_version!r}; supported versions: "
-                + ", ".join(str(value) for value in sorted(SUPPORTED_WORKFLOW_VERSIONS))
-            )
+        elif workflow_version <= 0:
+            # workflow_version is a per-file edit counter (bumped on every substantive change to
+            # that phase doc, see docs/skill-framework/README.md), not a contract-schema
+            # compatibility marker — schema_version (top-level in workflow-contract.yaml) is what
+            # gates that. It has no natural upper bound: real values across this repo already
+            # range from 1.0 to 3.4 with irregular increments. Only reject the genuinely invalid
+            # shape (non-positive), not an arbitrary ceiling that breaks every time a mature
+            # skill's phase file gets its Nth edit.
+            errors.append(f"{path.name}: workflow_version must be a positive number, got {workflow_version!r}")
         phase = frontmatter.get("phase")
         if not isinstance(phase, str) or not phase:
             errors.append(f"{path.name}: phase must be a non-empty string")
