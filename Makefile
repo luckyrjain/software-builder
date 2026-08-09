@@ -1,4 +1,4 @@
-.PHONY: install install-pr-review install-pr-gatekeeper install-k8s-overprovisioning install-incident-rca install-incident-rca-deps install-incident-triage-agent install-domain-comprehension install-squad-map install-who-owns-x-bot install-new-hire-guide install-release-readiness-checker install-migration-program-manager install-cost-optimization-sprint-planner install-mysql-to-postgres-sql install-loop-task-implementer install-backlog-runner install-weekly-squad-digest install-unit-test-creator install-integration-test-creator install-contract-test-creator install-e2e-test-creator install-api-test-creator install-test-writer install-claude install-claude-pr-review install-claude-pr-gatekeeper install-claude-k8s-overprovisioning install-claude-incident-rca install-claude-incident-triage-agent install-claude-domain-comprehension install-claude-squad-map install-claude-who-owns-x-bot install-claude-new-hire-guide install-claude-release-readiness-checker install-claude-migration-program-manager install-claude-cost-optimization-sprint-planner install-claude-mysql-to-postgres-sql install-claude-loop-task-implementer install-claude-backlog-runner install-claude-weekly-squad-digest install-claude-unit-test-creator install-claude-integration-test-creator install-claude-contract-test-creator install-claude-e2e-test-creator install-claude-api-test-creator install-claude-test-writer lint lint-framework lint-pr-review lint-pr-gatekeeper lint-k8s-skill lint-k8s lint-incident-rca lint-incident-triage-agent lint-domain-comprehension lint-squad-map lint-who-owns-x-bot lint-new-hire-guide lint-release-readiness-checker lint-migration-program-manager lint-cost-optimization-sprint-planner lint-mysql-to-postgres-sql lint-loop-task-implementer lint-backlog-runner lint-weekly-squad-digest lint-unit-test-creator lint-integration-test-creator lint-contract-test-creator lint-e2e-test-creator lint-api-test-creator lint-test-writer setup-hooks setup validate-registry generate generate-check verify-github-ruleset kubesense-errors
+.PHONY: install install-pr-review install-pr-gatekeeper install-k8s-overprovisioning install-incident-rca install-incident-rca-deps install-incident-triage-agent install-domain-comprehension install-squad-map install-who-owns-x-bot install-new-hire-guide install-release-readiness-checker install-migration-program-manager install-cost-optimization-sprint-planner install-mysql-to-postgres-sql install-loop-task-implementer install-backlog-runner install-weekly-squad-digest install-unit-test-creator install-integration-test-creator install-contract-test-creator install-e2e-test-creator install-api-test-creator install-test-writer install-prd-architect install-claude install-claude-pr-review install-claude-pr-gatekeeper install-claude-k8s-overprovisioning install-claude-incident-rca install-claude-incident-triage-agent install-claude-domain-comprehension install-claude-squad-map install-claude-who-owns-x-bot install-claude-new-hire-guide install-claude-release-readiness-checker install-claude-migration-program-manager install-claude-cost-optimization-sprint-planner install-claude-mysql-to-postgres-sql install-claude-loop-task-implementer install-claude-backlog-runner install-claude-weekly-squad-digest install-claude-unit-test-creator install-claude-integration-test-creator install-claude-contract-test-creator install-claude-e2e-test-creator install-claude-api-test-creator install-claude-prd-architect install-claude-test-writer lint lint-framework lint-pr-review lint-pr-gatekeeper lint-k8s-skill lint-k8s lint-incident-rca lint-incident-triage-agent lint-domain-comprehension lint-squad-map lint-who-owns-x-bot lint-new-hire-guide lint-release-readiness-checker lint-migration-program-manager lint-cost-optimization-sprint-planner lint-mysql-to-postgres-sql lint-loop-task-implementer lint-backlog-runner lint-weekly-squad-digest lint-unit-test-creator lint-integration-test-creator lint-contract-test-creator lint-e2e-test-creator lint-api-test-creator lint-test-writer setup-hooks setup validate-registry generate generate-check verify-github-ruleset kubesense-errors
 
 install:
 	bash scripts/install.sh
@@ -69,6 +69,9 @@ install-e2e-test-creator:
 install-api-test-creator:
 	bash scripts/install.sh api-test-creator
 
+install-prd-architect:
+	bash scripts/install.sh prd-architect
+
 install-test-writer: install-unit-test-creator install-integration-test-creator install-contract-test-creator install-e2e-test-creator install-api-test-creator
 	bash scripts/install.sh test-writer
 
@@ -138,6 +141,9 @@ install-claude-e2e-test-creator:
 install-claude-api-test-creator:
 	bash scripts/install.sh --agent claude-user api-test-creator
 
+install-claude-prd-architect:
+	bash scripts/install.sh --agent claude-user prd-architect
+
 install-claude-test-writer: install-claude-unit-test-creator install-claude-integration-test-creator install-claude-contract-test-creator install-claude-e2e-test-creator install-claude-api-test-creator
 	bash scripts/install.sh --agent claude-user test-writer
 
@@ -184,7 +190,7 @@ generate:
 generate-check:
 	@python3 -m scripts.registry generate --check
 
-lint: validate-registry backfill-capabilities-check generate-check validate-evals lint-framework lint-pr-review lint-pr-gatekeeper lint-k8s-skill lint-incident-rca lint-incident-triage-agent lint-domain-comprehension lint-squad-map lint-who-owns-x-bot lint-new-hire-guide lint-release-readiness-checker lint-migration-program-manager lint-cost-optimization-sprint-planner lint-mysql-to-postgres-sql lint-loop-task-implementer lint-backlog-runner lint-weekly-squad-digest lint-unit-test-creator lint-integration-test-creator lint-contract-test-creator lint-e2e-test-creator lint-api-test-creator lint-test-writer lint-requirements-lock verify-install verify-install-all
+lint: validate-registry backfill-capabilities-check generate-check validate-evals lint-framework lint-pr-review lint-pr-gatekeeper lint-k8s-skill lint-incident-rca lint-incident-triage-agent lint-domain-comprehension lint-squad-map lint-who-owns-x-bot lint-new-hire-guide lint-release-readiness-checker lint-migration-program-manager lint-cost-optimization-sprint-planner lint-mysql-to-postgres-sql lint-loop-task-implementer lint-backlog-runner lint-weekly-squad-digest lint-unit-test-creator lint-integration-test-creator lint-contract-test-creator lint-e2e-test-creator lint-api-test-creator lint-test-writer lint-prd-architect lint-requirements-lock verify-install verify-install-all
 	@for f in scripts/*.sh; do \
 		echo "shellcheck $$f"; \
 		if command -v shellcheck >/dev/null 2>&1; then \
@@ -1234,6 +1240,59 @@ lint-test-writer:
 		&& echo "  ok" || \
 		{ echo "error: dangling reference link(s) found" >&2; exit 1; }
 
+lint-prd-architect:
+	@echo "lint-prd-architect: SKILL.md line count (<= 180)"
+	@test -f prd-architect/SKILL.md || \
+		{ echo "error: missing prd-architect/SKILL.md" >&2; exit 1; }
+	@lines=$$(wc -l < prd-architect/SKILL.md | tr -d ' '); \
+	if [ -z "$$lines" ] || [ "$$lines" -eq 0 ]; then \
+		echo "error: prd-architect/SKILL.md is empty" >&2; exit 1; \
+	elif [ "$$lines" -gt 180 ]; then \
+		echo "error: prd-architect SKILL.md $$lines lines (> 180)" >&2; \
+		exit 1; \
+	fi; \
+	echo "  ok ($$lines lines)"
+	@echo "lint-prd-architect: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
+	@fail=0; \
+	for f in prd-architect/workflow/*.md; do \
+		fm=$$(awk '/^---$$/{c++; next} c==1' "$$f"); \
+		for key in workflow_version phase produces consumes; do \
+			if ! printf '%s\n' "$$fm" | grep -q "^$$key:"; then \
+				echo "  missing $$key frontmatter: $$f" >&2; fail=1; \
+			fi; \
+		done; \
+	done; \
+	if [ "$$fail" -ne 0 ]; then echo "error: prd-architect workflow/*.md must declare workflow_version, phase, produces, consumes" >&2; exit 1; fi; \
+	echo "  ok"
+	@echo "lint-prd-architect: required reference files"
+	@for f in skill-contract phase-index lazy-load-index global-rules depth response-modes section-triggers requirements-format correctness-rules adversarial-review output-contract smoke-test pressure-tests; do \
+		test -f prd-architect/reference/$$f.md || \
+			{ echo "error: missing prd-architect/reference/$$f.md" >&2; exit 1; }; \
+	done
+	@test -f prd-architect/report-template.md || \
+		{ echo "error: missing prd-architect/report-template.md" >&2; exit 1; }
+	@test -f prd-architect/prd-architect.eval.md || \
+		{ echo "error: missing prd-architect/prd-architect.eval.md" >&2; exit 1; }
+	@test -f prd-architect/examples.md || \
+		{ echo "error: missing prd-architect/examples.md" >&2; exit 1; }
+	@grep -q '## Invocation' prd-architect/examples.md || \
+		{ echo "error: prd-architect/examples.md must have Invocation section" >&2; exit 1; }
+	@grep -q 'cross-skill-escalation' prd-architect/SKILL.md || \
+		{ echo "error: prd-architect/SKILL.md must link to shared cross-skill-escalation" >&2; exit 1; }
+	@grep -q 'smoke-test' prd-architect/SKILL.md || \
+		{ echo "error: prd-architect/SKILL.md must link to reference/smoke-test.md" >&2; exit 1; }
+	@grep -q 'skill-framework' prd-architect/SETUP.md || \
+		{ echo "error: prd-architect/SETUP.md must link to docs/skill-framework" >&2; exit 1; }
+	@grep -q 'docs/skill-framework/shared/skill-routing.md' prd-architect/SKILL.md || \
+		{ echo "error: prd-architect/SKILL.md must link to shared skill-routing" >&2; exit 1; }
+	@grep -q 'docs/skill-framework/shared/prompt-injection.md' prd-architect/SKILL.md || \
+		{ echo "error: prd-architect/SKILL.md must link to shared prompt-injection" >&2; exit 1; }
+	@echo "  ok (framework refs)"
+	@echo "lint-prd-architect: dangling markdown links"
+	@bash scripts/lint-dangling-md-links.sh prd-architect/*.md prd-architect/reference/*.md prd-architect/workflow/*.md \
+		&& echo "  ok" || \
+		{ echo "error: dangling reference link(s) found" >&2; exit 1; }
+
 lint-framework:
 	@echo "lint-framework: shared docs present"
 	@test -f docs/skill-framework/README.md
@@ -1259,7 +1318,7 @@ lint-framework:
 	@grep -q '^## 1\. Required sections' docs/skill-framework/shared/examples-conventions.md
 	@grep -q '^## 2\. Scenario format' docs/skill-framework/shared/examples-conventions.md
 	@grep -q '^## 5\. Anti-patterns' docs/skill-framework/shared/examples-conventions.md
-	@for skill in pr-review pr-gatekeeper incident-rca incident-triage-agent k8s-overprovisioning-datadog domain-comprehension squad-map who-owns-x-bot new-hire-guide release-readiness-checker migration-program-manager mysql-to-postgres-sql loop-task-implementer backlog-runner cost-optimization-sprint-planner weekly-squad-digest test-writer unit-test-creator integration-test-creator contract-test-creator e2e-test-creator api-test-creator; do \
+	@for skill in pr-review pr-gatekeeper incident-rca incident-triage-agent k8s-overprovisioning-datadog domain-comprehension squad-map who-owns-x-bot new-hire-guide release-readiness-checker migration-program-manager mysql-to-postgres-sql loop-task-implementer backlog-runner cost-optimization-sprint-planner weekly-squad-digest prd-architect test-writer unit-test-creator integration-test-creator contract-test-creator e2e-test-creator api-test-creator; do \
 		test -f $$skill/examples.md || \
 			{ echo "error: missing $$skill/examples.md (examples-conventions)" >&2; exit 1; }; \
 		grep -q '## Invocation' $$skill/examples.md || \
@@ -1308,7 +1367,7 @@ lint-framework:
 	done; \
 	if [ "$$fail" -ne 0 ]; then exit 1; fi
 	@grep -q '| Complete |' docs/skill-framework/README.md
-	@for skill in pr-review pr-gatekeeper incident-rca incident-triage-agent k8s-overprovisioning-datadog domain-comprehension squad-map who-owns-x-bot new-hire-guide release-readiness-checker migration-program-manager mysql-to-postgres-sql loop-task-implementer backlog-runner cost-optimization-sprint-planner weekly-squad-digest test-writer unit-test-creator integration-test-creator contract-test-creator e2e-test-creator api-test-creator; do \
+	@for skill in pr-review pr-gatekeeper incident-rca incident-triage-agent k8s-overprovisioning-datadog domain-comprehension squad-map who-owns-x-bot new-hire-guide release-readiness-checker migration-program-manager mysql-to-postgres-sql loop-task-implementer backlog-runner cost-optimization-sprint-planner weekly-squad-digest prd-architect test-writer unit-test-creator integration-test-creator contract-test-creator e2e-test-creator api-test-creator; do \
 		grep -q 'skill-framework' $$skill/SETUP.md || \
 			{ echo "error: $$skill/SETUP.md must link to docs/skill-framework" >&2; exit 1; }; \
 		grep -q 'docs/skill-framework/shared/skill-routing.md' $$skill/SKILL.md || \
@@ -1350,7 +1409,7 @@ lint-framework:
 	@echo "lint-framework: all SETUP.md links ok"
 	@echo "lint-framework: cross-agent discovery files (.cursor/rules + .kiro/steering)"
 	@fail=0; \
-	for skill in pr-review pr-gatekeeper incident-rca incident-triage-agent k8s-overprovisioning-datadog domain-comprehension squad-map who-owns-x-bot new-hire-guide release-readiness-checker migration-program-manager mysql-to-postgres-sql loop-task-implementer backlog-runner cost-optimization-sprint-planner weekly-squad-digest test-writer unit-test-creator integration-test-creator contract-test-creator e2e-test-creator api-test-creator; do \
+	for skill in pr-review pr-gatekeeper incident-rca incident-triage-agent k8s-overprovisioning-datadog domain-comprehension squad-map who-owns-x-bot new-hire-guide release-readiness-checker migration-program-manager mysql-to-postgres-sql loop-task-implementer backlog-runner cost-optimization-sprint-planner weekly-squad-digest prd-architect test-writer unit-test-creator integration-test-creator contract-test-creator e2e-test-creator api-test-creator; do \
 		test -f .cursor/rules/$$skill.mdc || \
 			{ echo "  missing .cursor/rules/$$skill.mdc" >&2; fail=1; }; \
 		test -f .kiro/steering/$$skill.md || \

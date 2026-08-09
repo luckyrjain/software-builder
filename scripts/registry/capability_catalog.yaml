@@ -171,3 +171,7 @@ skills:
         enables: routed e2e generation
       - name: api-test-creator.invoke
         enables: routed API-test generation
+
+  prd-architect:
+    required: [host.report.write]
+    optional: []

@@ -505,9 +505,30 @@ skills:
       target: api-test-creator
     risk_class: [repository-write]
 
+  prd-architect:
+    path: prd-architect
+    category: product
+    invocation: ambient
+    hosts:
+      cursor: {discovery: rule}
+      claude: {install: true}
+      kiro: {discovery: manual}
+    install:
+      requires: []
+    composition:
+      escalation_targets: [loop-task-implementer, domain-comprehension, test-writer, pr-review]
+    capabilities:
+      required:
+      - host.report.write
+      optional: []
+    lint:
+      skill_md_max_lines: 180
+      target: prd-architect
+    risk_class: [read-only]
+
   test-writer:
     path: test-writer
-    category: testing
+    category: product
     invocation: ambient
     hosts:
       cursor: {discovery: rule}

@@ -1,0 +1,17 @@
+schema_version: 1
+skill: prd-architect
+case_id: adversarial-one-artifact
+tier: 1
+description: prd-architect forbids draft plus separate review output
+assertions:
+  - type: skill_md_contains
+    pattern: One final artifact
+  - type: path_contains
+    path: reference/global-rules.md
+    pattern: output both draft and repaired PRD
+  - type: path_contains
+    path: reference/skill-contract.md
+    pattern: One coherent final artifact
+  - type: forbid_pattern
+    path: SKILL.md
+    pattern: output both draft and review

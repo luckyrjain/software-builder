@@ -21,6 +21,10 @@ graph TD
   pr-gatekeeper -.->|escalates| pr-review
   pr-review -.->|escalates| incident-rca
   pr-review -.->|escalates| k8s-overprovisioning-datadog
+  prd-architect -.->|escalates| loop-task-implementer
+  prd-architect -.->|escalates| domain-comprehension
+  prd-architect -.->|escalates| test-writer
+  prd-architect -.->|escalates| pr-review
   release-readiness-checker -->|invokes| pr-review
   release-readiness-checker -->|invokes| k8s-overprovisioning-datadog
   release-readiness-checker -->|invokes| incident-rca

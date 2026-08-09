@@ -26,6 +26,9 @@ When adding a new skill, add it here first; then each existing skill only needs 
 | Implement task/issue autonomously, independent review + remediation loop, adjudicate findings, work through a task queue (interactive, human-driven) | **loop-task-implementer** | pr-review (reviewing someone else's existing MR only) |
 | Scheduled trigger pulling N tickets from a tracker query, overnight/unattended, no human turn available | **backlog-runner** | loop-task-implementer (that's what it delegates to internally — do not call loop-task-implementer directly for an unattended scheduled sweep; use it for a single-task or human-driven multi-task request) |
 | Scheduled combined squad digest reading both migration and cost rollup files, no human turn available | **weekly-squad-digest** | migration-program-manager / cost-optimization-sprint-planner (a fresh single-source rollup, not the combined digest) |
+| PRD, product requirements, feature spec, product spec, requirements document, turn idea into PRD, implementation-ready spec | **prd-architect** | loop-task-implementer (implement the feature), domain-comprehension (map existing codebase), pr-review (review MR) |
+| Should we build this, is this worth building, challenge this idea, build vs buy, what alternatives exist (no authoritative PRD) | **prd-architect** Validation Mode | loop-task-implementer (implement before validating), domain-comprehension (architecture map only) |
+| Review PRD, PRD gaps, PRD readiness, improve product spec, critique requirements doc (existing PRD supplied) | **prd-architect** Review Mode | pr-review (code/MR review), domain-comprehension (bounded-context map) |
 | Write tests, generate tests, add test coverage, backfill tests, test this MR/PR/diff — level unspecified | **test-writer** (routes to exactly one of the five below) | pr-review (reviewing existing test quality, not writing new tests), loop-task-implementer (implementing the production feature itself) |
 | Unit tests, function/class-level tests, mock all externals, TDD helper, fast isolated tests | **unit-test-creator** | integration-test-creator (needs a real adjacent dependency, not a mock) |
 | Integration tests, test against a real DB/queue/service, testcontainers, docker-compose test env, seam between components | **integration-test-creator** | unit-test-creator (isolated, mocked), e2e-test-creator (full user journey through the UI) |
@@ -79,6 +82,10 @@ When adding a new skill, add it here first; then each existing skill only needs 
     `*-test-creator` skill directly, no need to route through test-writer first; **"review this test suite
     / MR's test quality"** → pr-review directly; **"implement the feature"** (not just its tests) →
     loop-task-implementer directly
+20. **Product spec / PRD / requirements doc** → prd-architect; **"should we build X?" without an
+    authoritative PRD** → prd-architect Validation Mode; **existing PRD + gaps/readiness** → prd-architect
+    Review Mode; **"implement the PRD"** → loop-task-implementer directly; **"map the domain / bounded
+    contexts"** → domain-comprehension directly
 
 ## Ambiguous requests — ask
 
