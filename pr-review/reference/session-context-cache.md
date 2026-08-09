@@ -22,7 +22,9 @@ Load rules in **Phase 1 step 7** (`workflow/phase-1.md`). Apply on **every re-re
 
 **Do not cache** (always fresh each run):
 
-- MR diff / review boundary (`get_merge_request_diffs`)
+- MR diff / review boundary (`get_merge_request_diffs`) — including per-run `review_boundary.one_hop_reads[]`
+  (direct caller/callee files read under the one-hop policy in Phase 1 step 7 after boundary full-file reads;
+  not reused across pushes)
 - `diff_refs.head_sha`, pipelines, approvals, discussions, Jira ticket body
 - Changed source files under review
 - Prior `<!-- cursor-pr-review -->` summary content (re-fetch for baseline SHA)

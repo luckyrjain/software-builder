@@ -11,8 +11,8 @@ Distinct from the execution path gate (step 4).
 
 Before asserting a defect, ask:
 
-> **Do I have sufficient evidence from the diff (+ Phase 1 full-file context) — without inferring
-> unseen implementation, callers, or runtime state?**
+> **Do I have sufficient evidence from the diff (+ Phase 1 full-file context + recorded one-hop reads) —
+> without inferring unseen implementation, transitive callers, or runtime state?**
 
 | Answer | Action |
 |--------|--------|
@@ -23,16 +23,19 @@ Before asserting a defect, ask:
 
 - The changed line **is** the defect (wrong operator, removed check, secret literal, SQL concat with user input).
 - Full-file context from Phase 1 shows the call pattern **in the same file** supporting the claim.
+- **One-hop contextual read** recorded in `review_boundary.one_hop_reads[]` shows the direct caller/callee
+  pattern supporting the claim (see [phase-1.md §One-hop contextual reads](../workflow/phase-1.md#one-hop-contextual-reads-strict-exception)).
 - Acceptance criterion gap with **explicit** AC text and no implementing line in boundary.
 - Test assertion contradicts stated behavior **in the diff**.
 
 ### NO — insufficient evidence (suppress or unverifiable)
 
 - *"This probably doesn't handle edge case X"* with no changed line demonstrating the gap.
-- *"Callers might pass nil"* when callers are not in boundary and not in Phase 1 full-file read.
+- *"Callers might pass nil"* when callers are not in boundary, not in Phase 1 full-file read, and not in a
+  recorded one-hop caller read.
 - *"Missing index"* with no query/SQL change and no perf evidence in diff.
 - *"Race condition"* with no shared mutable state in changed hunk or visible file context.
-- Behavior claims about **unchanged** files not read in Phase 1.
+- Behavior claims about **unchanged** files not read in Phase 1 and not covered by a one-hop read.
 
 **Unverifiable (chat / Notes only):**
 
@@ -56,8 +59,8 @@ Before adding a row to the findings table or posting a comment, ask:
 | **NO** | **Suppress** — do not emit, do not post. Optional one-line chat note only. |
 
 **Realistic** means: a normal caller/user input, feature flag state, or deploy path that would actually
-reach this code in production — supported by the **diff + Phase 1 full-file context**, not invented
-callers or impossible state.
+reach this code in production — supported by the **diff + Phase 1 full-file context + recorded one-hop
+reads**, not invented callers or impossible state.
 
 ### YES — emit (examples)
 
