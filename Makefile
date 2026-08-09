@@ -966,13 +966,20 @@ lint-mysql-to-postgres-sql:
 	@cache="$(CURDIR)/.pycache-lint-mysql"; \
 	export PYTHONDONTWRITEBYTECODE=1 PYTHONPYCACHEPREFIX="$$cache"; \
 	trap 'rm -rf "$$cache"' EXIT; \
+	python3 -m py_compile mysql-to-postgres-sql/scripts/ast_check_mysql_dialect.py || exit 1; \
 	if python3 -c "import pytest" >/dev/null 2>&1; then \
 		python3 -m pytest -p no:cacheprovider mysql-to-postgres-sql/tests/test_pressure_policy.py -q || exit 1; \
+		if python3 -c "import sqlglot" >/dev/null 2>&1; then \
+			python3 -m pytest -p no:cacheprovider mysql-to-postgres-sql/tests/test_ast_check_mysql_dialect.py -q || exit 1; \
+		else \
+			echo "sqlglot not installed — install with 'python3 -m pip install sqlglot' to run the AST secondary-checker tests" >&2; \
+			exit 1; \
+		fi; \
 	else \
 		echo "pytest not installed — install with 'python3 -m pip install pytest' to run mysql policy tests" >&2; \
 		exit 1; \
 	fi; \
-	echo "  ok (pressure + pytest)"
+	echo "  ok (pressure + pytest + AST checker)"
 	@echo "lint-mysql-to-postgres-sql: dangling markdown links"
 	@bash scripts/lint-dangling-md-links.sh mysql-to-postgres-sql/*.md mysql-to-postgres-sql/reference/*.md mysql-to-postgres-sql/reference/domain-packs/*.md mysql-to-postgres-sql/workflow/*.md && echo "  ok" || \
 		{ echo "error: dangling reference link(s) found" >&2; exit 1; }
