@@ -23,7 +23,7 @@ def test_composition_contracts_validate_on_real_repo() -> None:
 
 
 def test_write_authority_escalation_detected() -> None:
-    from scripts.registry.composition_contracts import CompositionContract, validate_composition_contracts
+    from scripts.registry.composition_contracts import CompositionContract
     from scripts.registry.models import (
         CompositionSpec,
         HostClaude,
@@ -65,8 +65,8 @@ def test_write_authority_escalation_detected() -> None:
     registry = Registry(schema_version=1, skills={"child": child, "parent": parent})
 
     contracts = {
-        "child": CompositionContract([], [], "read-only"),
-        "parent": CompositionContract([], [], "repository-write"),
+        "child": CompositionContract([], [], "read-only", {}, {}),
+        "parent": CompositionContract([], [], "repository-write", {}, {}),
     }
     authority_levels = {"read-only": 0, "comment": 1, "repository-write": 2, "automation-unattended": 3}
 
@@ -80,3 +80,51 @@ def test_write_authority_escalation_detected() -> None:
                 errors.append(skill_id)
 
     assert errors == ["parent"]
+
+
+def test_invoke_schema_matching_detects_missing_fields() -> None:
+    from scripts.registry.composition_contracts import CompositionContract, validate_composition_contracts
+    from scripts.registry.models import (
+        CompositionSpec,
+        HostClaude,
+        HostCursor,
+        HostKiro,
+        Hosts,
+        InstallSpec,
+        LintSpec,
+        Registry,
+        SkillEntry,
+    )
+
+    child = SkillEntry(
+        path="child",
+        category="testing",
+        invocation="ambient",
+        hosts=Hosts(cursor=HostCursor("rule"), claude=HostClaude(), kiro=HostKiro("manual")),
+        install=InstallSpec(requires=[]),
+        lint=LintSpec(180, "child"),
+        composition=CompositionSpec(invokes=[]),
+    )
+    parent = SkillEntry(
+        path="parent",
+        category="testing",
+        invocation="ambient",
+        hosts=Hosts(cursor=HostCursor("rule"), claude=HostClaude(), kiro=HostKiro("manual")),
+        install=InstallSpec(requires=[]),
+        lint=LintSpec(180, "parent"),
+        composition=CompositionSpec(invokes=["child"]),
+    )
+    registry = Registry(schema_version=1, skills={"child": child, "parent": parent})
+
+    contracts_yaml = ROOT / "scripts/tests/fixtures/composition_schema_matching.yaml"
+    errors = validate_composition_contracts(registry, contracts_path=contracts_yaml)
+    assert any("consume_fields.mr_review_report" in error for error in errors)
+
+
+def test_aggregate_schema_matching_passes_for_weekly_digest_contracts() -> None:
+    from scripts.registry.composition_contracts import validate_composition_contracts
+    from scripts.registry.schema import parse_registry
+
+    registry = parse_registry(ROOT / "skills.yaml")
+    errors = validate_composition_contracts(registry)
+    assert errors == [], "\n".join(errors)
