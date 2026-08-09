@@ -1,5 +1,16 @@
 # backlog-runner — Setup
 
+
+## Freshness
+
+| Field | Value |
+|-------|-------|
+| **Owner** | software-builder maintainers |
+| **Last reviewed** | 2026-08-09 |
+| **Review cadence** | Quarterly — or when pinned MCP package versions change |
+| **External services** | Jira or GitHub Issues API, loop-task-implementer |
+
+See [setup-freshness.md](../docs/skill-framework/shared/setup-freshness.md) for the shared contract.
 ## Ambient discovery is deliberately disabled
 
 Unlike loop-task-implementer, this skill sets `disable-model-invocation: true` — it does not auto-apply

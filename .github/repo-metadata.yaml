@@ -1,0 +1,19 @@
+# Canonical GitHub repository metadata for luckyrjain/software-builder.
+# Apply with: bash scripts/apply_repo_metadata.sh
+# (requires gh auth with repo admin scope)
+
+description: >-
+  Portable Cursor/Claude agent skills for GitLab MR review, incident RCA, Kubernetes rightsizing,
+  squad ownership, and org rollups — registry-driven install, behavioral evals, composition contracts.
+
+topics:
+  - cursor
+  - agent-skills
+  - gitlab
+  - devops
+  - mcp
+  - incident-response
+  - kubernetes
+  - datadog
+  - ai-agents
+  - prompt-engineering

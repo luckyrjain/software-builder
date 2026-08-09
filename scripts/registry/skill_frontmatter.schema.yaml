@@ -1,0 +1,24 @@
+# SKILL.md frontmatter schema (v1)
+#
+# Machine-readable platform facts belong in skills.yaml — not duplicated here.
+# This schema validates agent-discovery frontmatter only.
+
+schema_version: 1
+
+allowed_keys:
+  - name
+  - description
+  - skill_version
+  - disable-model-invocation
+
+required_keys:
+  - name
+  - description
+
+rules:
+  skill_version:
+    type: number
+    description: Optional per-skill prose version (incident-rca, test creators, etc.)
+  disable-model-invocation:
+    type: boolean
+    description: Must be true when skills.yaml invocation is automation-only

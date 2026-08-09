@@ -1,5 +1,16 @@
 # PR Review Skill for Cursor — Setup
 
+
+## Freshness
+
+| Field | Value |
+|-------|-------|
+| **Owner** | software-builder maintainers |
+| **Last reviewed** | 2026-08-09 |
+| **Review cadence** | Quarterly — or when pinned MCP package versions change |
+| **External services** | GitLab MCP, Jira MCP (optional) |
+
+See [setup-freshness.md](../docs/skill-framework/shared/setup-freshness.md) for the shared contract.
 A Cursor Agent Skill that reviews a GitLab merge request and posts severity-labelled comments back
 onto it when the connected GitLab MCP supports posting. Uses **GitLab MCP** for the code and
 **Atlassian/Jira MCP** (optional — skip if you don't need Jira acceptance-criteria checks) for ticket
