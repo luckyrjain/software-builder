@@ -24,6 +24,9 @@ try:
 except ImportError:  # pragma: no cover - exercised when PyYAML missing
     yaml = None  # type: ignore
 
+MIGRATION_STATUS_SCHEMA_VERSION = 1
+SERVICE_REQUIRED_FIELDS = ("name", "scan_gate", "shadow_compare", "config_cutover")
+
 
 def now_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -131,28 +134,69 @@ def load_manifest(path: str) -> list[ManifestEntry]:
     return entries
 
 
-def parse_migration_status(workspace_root: str) -> tuple[list[dict[str, Any]], Gap | None]:
-    """Return (services, gap). services is [] and gap is set when the file is missing/unparseable."""
+def service_identity(svc: dict[str, Any]) -> str:
+    """Stable per-workspace service key for duplicate detection."""
+    name = coerce_str(svc.get("name", ""))
+    path = coerce_str(svc.get("path", ""))
+    return f"{name}::{path}" if path else name
+
+
+def validate_services(raw_services: list[Any]) -> tuple[list[dict[str, Any]], list[str]]:
+    """Filter to schema-valid service rows; return warnings for skipped/duplicate entries."""
+    warnings: list[str] = []
+    valid: list[dict[str, Any]] = []
+    for index, svc in enumerate(raw_services):
+        if not isinstance(svc, dict):
+            warnings.append(f"services[{index}]: skipped non-mapping entry")
+            continue
+        missing = [field for field in SERVICE_REQUIRED_FIELDS if field not in svc]
+        if missing:
+            label = coerce_str(svc.get("name", f"index-{index}")) or f"index-{index}"
+            warnings.append(
+                f"services[{index}] ({label}): missing required fields: {', '.join(missing)}"
+            )
+            continue
+        if not coerce_str(svc.get("name", "")).strip():
+            warnings.append(f"services[{index}]: skipped entry with empty name")
+            continue
+        valid.append(svc)
+
+    counts: dict[str, int] = {}
+    for svc in valid:
+        counts[service_identity(svc)] = counts.get(service_identity(svc), 0) + 1
+    for identity, count in sorted(counts.items()):
+        if count > 1:
+            warnings.append(f"duplicate service id {identity!r} appears {count} times")
+    return valid, warnings
+
+
+def parse_migration_status(workspace_root: str) -> tuple[list[dict[str, Any]], Gap | None, list[str]]:
+    """Return (services, gap, warnings). services is [] and gap is set when the file is missing/unparseable."""
     status_path = Path(workspace_root) / "MIGRATION_STATUS.yaml"
     if not status_path.exists():
-        return [], Gap(workspace_root, "MIGRATION_STATUS.yaml not found — run mysql-to-postgres-sql first")
+        return [], Gap(workspace_root, "MIGRATION_STATUS.yaml not found — run mysql-to-postgres-sql first"), []
     if yaml is None:  # pragma: no cover - exercised only without PyYAML installed
-        return [], Gap(workspace_root, "PyYAML not installed — cannot parse MIGRATION_STATUS.yaml")
+        return [], Gap(workspace_root, "PyYAML not installed — cannot parse MIGRATION_STATUS.yaml"), []
     try:
         with open(status_path, encoding="utf-8") as fh:
             data = yaml.safe_load(fh) or {}
     except yaml.YAMLError as exc:
-        return [], Gap(workspace_root, f"MIGRATION_STATUS.yaml is not valid YAML: {exc}")
+        return [], Gap(workspace_root, f"MIGRATION_STATUS.yaml is not valid YAML: {exc}"), []
     if not isinstance(data, dict):
-        return [], Gap(workspace_root, "MIGRATION_STATUS.yaml top level must be a mapping")
+        return [], Gap(workspace_root, "MIGRATION_STATUS.yaml top level must be a mapping"), []
+    schema_version = data.get("schema_version")
+    if schema_version is None:
+        return [], Gap(workspace_root, "MIGRATION_STATUS.yaml missing required field 'schema_version'"), []
+    if schema_version != MIGRATION_STATUS_SCHEMA_VERSION:
+        return [], Gap(
+            workspace_root,
+            f"MIGRATION_STATUS.yaml schema_version must be {MIGRATION_STATUS_SCHEMA_VERSION}, got {schema_version!r}",
+        ), []
     services = data.get("services") or []
     if not isinstance(services, list):
-        return [], Gap(workspace_root, "MIGRATION_STATUS.yaml 'services' must be a list")
-    # Syntactically valid YAML can still smuggle a non-mapping entry into services (a stray
-    # string/number from a hand-edit) -- skip it rather than let it crash the whole run, same
-    # tolerance parse_squad_map applies to a malformed table row.
-    services = [svc for svc in services if isinstance(svc, dict)]
-    return services, None
+        return [], Gap(workspace_root, "MIGRATION_STATUS.yaml 'services' must be a list"), []
+    valid_services, warnings = validate_services(services)
+    return valid_services, None, warnings
 
 
 def parse_squad_map(squad_map_path: Path) -> list[dict[str, str]]:
@@ -327,10 +371,12 @@ def build_rollup(
     new_state: dict[str, dict[str, str]] = {}
 
     for entry in manifest:
-        services, gap = parse_migration_status(entry.workspace_root)
+        services, gap, service_warnings = parse_migration_status(entry.workspace_root)
         if gap:
             gaps.append(gap)
             continue
+        for warning in service_warnings:
+            print(f"warning: {entry.workspace_root}: {warning}", file=sys.stderr)
         squad_map_path = entry.resolved_squad_map_path()
         squad_rows = parse_squad_map(squad_map_path)
         if not squad_rows:

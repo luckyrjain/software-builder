@@ -26,6 +26,8 @@ from aggregate_migration_status import (  # noqa: E402
     normalize_confidence,
     parse_migration_status,
     parse_squad_map,
+    service_identity,
+    validate_services,
     ManifestEntry,
     ManifestError,
 )
@@ -370,29 +372,18 @@ class TestBuildRollup:
         assert items[0].squad == "UNKNOWN"  # no matching row, but no crash
         json.dumps([i.to_dict() for i in items])  # must not raise
 
-    def test_staleness_survives_a_real_two_run_round_trip_when_name_is_missing(self, tmp_path):
-        # A true round trip: feed build_rollup's OWN persisted new_state back in as the next
-        # run's state, the way main() actually does via load_state/save_state. Every other
-        # staleness test hand-constructs its `state` input with a key that happens to already
-        # match -- this is the only test that would catch a mismatch between the key
-        # compute_staleness reads and the key build_rollup writes.
+    def test_missing_name_skipped_with_warning_not_in_rollup(self, tmp_path):
+        # Schema validation requires name — a hand-edit omission is skipped, not rolled up.
         ws = tmp_path / "ws"
         ws.mkdir()
         (ws / "MIGRATION_STATUS.yaml").write_text(
-            # deliberately no 'name' field -- a hand-edit omission, not a crash-causing type
             "schema_version: 1\nservices:\n  - path: svc-a\n"
             "    tier_focus: P0\n    scan_gate: pass\n    shadow_compare: pending\n    config_cutover: pending\n",
             encoding="utf-8",
         )
         manifest = [ManifestEntry(workspace_root=str(ws))]
-        run1 = datetime.now(timezone.utc)
-        items1, _, state_after_run1 = build_rollup(manifest, {}, run1, staleness_threshold_days=5)
-        assert items1[0].staleness_days == 0
-
-        run2 = run1 + timedelta(days=10)  # same gate signature, 10 days later
-        items2, _, state_after_run2 = build_rollup(manifest, state_after_run1, run2, staleness_threshold_days=5)
-        assert items2[0].staleness_days == 10
-        assert items2[0].status == "stalled"
+        items, gaps, _ = build_rollup(manifest, {}, datetime.now(timezone.utc), staleness_threshold_days=5)
+        assert items == []
 
     def test_staleness_threshold_zero_flags_in_progress_immediately(self, tmp_path):
         # staleness_threshold_days: 0 is a real, if extreme, caller policy choice (workflow/inputs.md
@@ -434,16 +425,17 @@ class TestParseMigrationStatus:
         ws = tmp_path / "ws"
         ws.mkdir()
         (ws / "MIGRATION_STATUS.yaml").write_text("services: [unterminated", encoding="utf-8")
-        services, gap = parse_migration_status(str(ws))
+        services, gap, warnings = parse_migration_status(str(ws))
         assert services == []
         assert gap is not None
         assert "not valid YAML" in gap.reason
+        assert warnings == []
 
     def test_top_level_list_returns_gap_not_raises(self, tmp_path):
         ws = tmp_path / "ws"
         ws.mkdir()
         (ws / "MIGRATION_STATUS.yaml").write_text("- foo\n- bar\n", encoding="utf-8")
-        services, gap = parse_migration_status(str(ws))
+        services, gap, warnings = parse_migration_status(str(ws))
         assert services == []
         assert gap is not None
         assert "must be a mapping" in gap.reason
@@ -451,25 +443,94 @@ class TestParseMigrationStatus:
     def test_non_list_services_returns_gap_not_raises(self, tmp_path):
         ws = tmp_path / "ws"
         ws.mkdir()
-        (ws / "MIGRATION_STATUS.yaml").write_text("services: not-a-list\n", encoding="utf-8")
-        services, gap = parse_migration_status(str(ws))
+        (ws / "MIGRATION_STATUS.yaml").write_text(
+            "schema_version: 1\nservices: not-a-list\n", encoding="utf-8"
+        )
+        services, gap, warnings = parse_migration_status(str(ws))
         assert services == []
         assert gap is not None
         assert "must be a list" in gap.reason
 
-    def test_non_dict_service_entries_are_skipped_not_a_crash(self, tmp_path):
+    def test_missing_schema_version_returns_gap(self, tmp_path):
         ws = tmp_path / "ws"
         ws.mkdir()
         (ws / "MIGRATION_STATUS.yaml").write_text(
             "services:\n  - name: svc-a\n    path: svc-a\n"
+            "    tier_focus: P0\n    scan_gate: pass\n    shadow_compare: pass\n    config_cutover: done\n",
+            encoding="utf-8",
+        )
+        services, gap, warnings = parse_migration_status(str(ws))
+        assert services == []
+        assert gap is not None
+        assert "schema_version" in gap.reason
+
+    def test_wrong_schema_version_returns_gap(self, tmp_path):
+        ws = tmp_path / "ws"
+        ws.mkdir()
+        (ws / "MIGRATION_STATUS.yaml").write_text(
+            "schema_version: 2\nservices:\n  - name: svc-a\n    path: svc-a\n"
+            "    scan_gate: pass\n    shadow_compare: pass\n    config_cutover: done\n",
+            encoding="utf-8",
+        )
+        services, gap, warnings = parse_migration_status(str(ws))
+        assert services == []
+        assert gap is not None
+        assert "schema_version must be 1" in gap.reason
+
+    def test_non_dict_service_entries_are_skipped_with_warning(self, tmp_path):
+        ws = tmp_path / "ws"
+        ws.mkdir()
+        (ws / "MIGRATION_STATUS.yaml").write_text(
+            "schema_version: 1\nservices:\n  - name: svc-a\n    path: svc-a\n"
             "    tier_focus: P0\n    scan_gate: pass\n    shadow_compare: pass\n    config_cutover: done\n"
             "  - just-a-stray-string\n",
             encoding="utf-8",
         )
-        services, gap = parse_migration_status(str(ws))
+        services, gap, warnings = parse_migration_status(str(ws))
         assert gap is None
         assert len(services) == 1
         assert services[0]["name"] == "svc-a"
+        assert any("non-mapping" in w for w in warnings)
+
+    def test_missing_required_fields_skipped_with_warning(self, tmp_path):
+        ws = tmp_path / "ws"
+        ws.mkdir()
+        (ws / "MIGRATION_STATUS.yaml").write_text(
+            "schema_version: 1\nservices:\n  - name: svc-a\n    path: svc-a\n"
+            "    scan_gate: pass\n    shadow_compare: pass\n",
+            encoding="utf-8",
+        )
+        services, gap, warnings = parse_migration_status(str(ws))
+        assert gap is None
+        assert services == []
+        assert any("config_cutover" in w for w in warnings)
+
+
+class TestValidateServices:
+    def test_duplicate_service_ids_warn(self):
+        services = [
+            {
+                "name": "svc-a",
+                "path": "svc-a",
+                "scan_gate": "pass",
+                "shadow_compare": "pass",
+                "config_cutover": "done",
+            },
+            {
+                "name": "svc-a",
+                "path": "svc-a",
+                "scan_gate": "fail",
+                "shadow_compare": "pending",
+                "config_cutover": "pending",
+            },
+        ]
+        valid, warnings = validate_services(services)
+        assert len(valid) == 2
+        assert any("duplicate service id" in w for w in warnings)
+
+    def test_service_identity_includes_path(self):
+        svc = {"name": "svc-a", "path": "libs/svc-a"}
+        assert service_identity(svc) == "svc-a::libs/svc-a"
 
 
 class TestLoadState:
