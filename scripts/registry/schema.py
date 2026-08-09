@@ -19,6 +19,9 @@ from scripts.registry.models import (
     SkillEntry,
 )
 
+ALLOWED_RISK_CLASSES = frozenset(
+    {"posting", "merge", "unattended", "read-only", "repository-write"},
+)
 ALLOWED_INVOCATION = {"ambient", "automation-only"}
 ALLOWED_CURSOR_DISCOVERY = {"rule", "manual", "always"}
 ALLOWED_KIRO_DISCOVERY = {"manual", "always"}
@@ -73,6 +76,7 @@ def parse_registry(path: Path) -> Registry:
             [str(item) for item in requires],
         )
         capabilities = _parse_capabilities(entry.get("capabilities"), skill_id)
+        risk_class = _parse_risk_class(entry.get("risk_class"), skill_id)
 
         skills[skill_id] = SkillEntry(
             path=str(entry.get("path", skill_id)),
@@ -90,6 +94,7 @@ def parse_registry(path: Path) -> Registry:
             ),
             composition=composition,
             capabilities=capabilities,
+            risk_class=risk_class,
         )
     return Registry(schema_version=schema_version, skills=skills)
 
@@ -170,3 +175,15 @@ def _parse_capabilities(raw: Any, skill_id: str) -> CapabilitiesSpec:
         optional=optional,
         degraded_modes=degraded_modes,
     )
+
+
+def _parse_risk_class(raw: Any, skill_id: str) -> list[str]:
+    if raw is None:
+        raise ValueError(f"skills.{skill_id}.risk_class is required")
+    if not isinstance(raw, list) or not raw:
+        raise ValueError(f"skills.{skill_id}.risk_class must be a non-empty list")
+    parsed = [str(item) for item in raw]
+    unknown = sorted({item for item in parsed if item not in ALLOWED_RISK_CLASSES})
+    if unknown:
+        raise ValueError(f"skills.{skill_id}.risk_class invalid values: {', '.join(unknown)}")
+    return parsed

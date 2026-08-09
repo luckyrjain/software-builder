@@ -26,6 +26,7 @@ skills:
     lint:
       skill_md_max_lines: 180
       target: pr-review
+    risk_class: [posting]
 
   pr-gatekeeper:
     path: pr-gatekeeper
@@ -48,6 +49,7 @@ skills:
     lint:
       skill_md_max_lines: 180
       target: pr-gatekeeper
+    risk_class: [posting, unattended]
 
   k8s-overprovisioning-datadog:
     path: k8s-overprovisioning-datadog
@@ -69,6 +71,7 @@ skills:
     lint:
       skill_md_max_lines: 150
       target: k8s-skill
+    risk_class: [read-only]
 
   incident-rca:
     path: incident-rca
@@ -92,6 +95,7 @@ skills:
     lint:
       skill_md_max_lines: 180
       target: incident-rca
+    risk_class: [read-only]
 
   incident-triage-agent:
     path: incident-triage-agent
@@ -116,6 +120,7 @@ skills:
     lint:
       skill_md_max_lines: 180
       target: incident-triage-agent
+    risk_class: [unattended]
 
   domain-comprehension:
     path: domain-comprehension
@@ -141,6 +146,7 @@ skills:
     lint:
       skill_md_max_lines: 180
       target: domain-comprehension
+    risk_class: [read-only]
 
   squad-map:
     path: squad-map
@@ -164,6 +170,7 @@ skills:
     lint:
       skill_md_max_lines: 180
       target: squad-map
+    risk_class: [read-only]
 
   who-owns-x-bot:
     path: who-owns-x-bot
@@ -185,6 +192,7 @@ skills:
     lint:
       skill_md_max_lines: 180
       target: who-owns-x-bot
+    risk_class: [unattended]
 
   new-hire-guide:
     path: new-hire-guide
@@ -208,6 +216,7 @@ skills:
     lint:
       skill_md_max_lines: 180
       target: new-hire-guide
+    risk_class: [read-only]
 
   release-readiness-checker:
     path: release-readiness-checker
@@ -236,6 +245,7 @@ skills:
     lint:
       skill_md_max_lines: 180
       target: release-readiness-checker
+    risk_class: [read-only]
 
   migration-program-manager:
     path: migration-program-manager
@@ -260,6 +270,7 @@ skills:
     lint:
       skill_md_max_lines: 180
       target: migration-program-manager
+    risk_class: [read-only]
 
   cost-optimization-sprint-planner:
     path: cost-optimization-sprint-planner
@@ -281,6 +292,7 @@ skills:
     lint:
       skill_md_max_lines: 180
       target: cost-optimization-sprint-planner
+    risk_class: [read-only]
 
   mysql-to-postgres-sql:
     path: mysql-to-postgres-sql
@@ -302,6 +314,7 @@ skills:
     lint:
       skill_md_max_lines: 180
       target: mysql-to-postgres-sql
+    risk_class: [repository-write]
 
   loop-task-implementer:
     path: loop-task-implementer
@@ -326,6 +339,7 @@ skills:
     lint:
       skill_md_max_lines: 180
       target: loop-task-implementer
+    risk_class: [merge, repository-write]
 
   backlog-runner:
     path: backlog-runner
@@ -348,6 +362,7 @@ skills:
     lint:
       skill_md_max_lines: 180
       target: backlog-runner
+    risk_class: [unattended, merge]
 
   weekly-squad-digest:
     path: weekly-squad-digest
@@ -372,6 +387,7 @@ skills:
     lint:
       skill_md_max_lines: 180
       target: weekly-squad-digest
+    risk_class: [unattended]
 
   unit-test-creator:
     path: unit-test-creator
@@ -393,6 +409,7 @@ skills:
     lint:
       skill_md_max_lines: 180
       target: unit-test-creator
+    risk_class: [repository-write]
 
   integration-test-creator:
     path: integration-test-creator
@@ -416,6 +433,7 @@ skills:
     lint:
       skill_md_max_lines: 180
       target: integration-test-creator
+    risk_class: [repository-write]
 
   contract-test-creator:
     path: contract-test-creator
@@ -437,6 +455,7 @@ skills:
     lint:
       skill_md_max_lines: 180
       target: contract-test-creator
+    risk_class: [repository-write]
 
   e2e-test-creator:
     path: e2e-test-creator
@@ -460,6 +479,7 @@ skills:
     lint:
       skill_md_max_lines: 180
       target: e2e-test-creator
+    risk_class: [repository-write]
 
   api-test-creator:
     path: api-test-creator
@@ -483,6 +503,7 @@ skills:
     lint:
       skill_md_max_lines: 180
       target: api-test-creator
+    risk_class: [repository-write]
 
   test-writer:
     path: test-writer
@@ -517,3 +538,4 @@ skills:
     lint:
       skill_md_max_lines: 180
       target: test-writer
+    risk_class: [read-only]
