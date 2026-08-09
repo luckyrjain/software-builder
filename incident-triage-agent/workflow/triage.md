@@ -1,15 +1,11 @@
 ---
-workflow_version: 1.0
+workflow_version: 1.1
 phase: triage
-produces:
-  - triage_doc
+produces: {triage_doc: string}
 consumes:
-  - service
-  - triggered_at
-  - alert_title
-  - alert_id
-  - severity
-  - workspace_root
+  required: {service: string, triggered_at: string}
+  optional: {alert_title: string, alert_id: string, severity: string, workspace_root: string}
+  conditional: {}
 ---
 
 # Triage — fast root cause + owning team for on-call

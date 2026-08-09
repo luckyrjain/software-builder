@@ -3,6 +3,26 @@
 All notable changes to the incident-triage-agent skill. Per-file `workflow_version` in `workflow/*.md`
 frontmatter should match the version of the latest entry below that names that file.
 
+## [1.1.0] — 2026-08-09
+
+### Added
+- **workflow-contract.yaml** — route-aware contract modeling the `event_type` selector (`page_triggered`
+  → triage route, `incident_resolved` → postmortem route), converting `workflow/inputs.md`,
+  `workflow/triage.md`, `workflow/postmortem.md` frontmatter's `produces`/`consumes` from plain lists to
+  the typed-mapping shape `scripts/validate_workflow_contracts.py` requires; wired into
+  `make lint-incident-triage-agent`
+- **reference/triage-doc-format.md**, **reference/postmortem-format.md** — "Safe rendered-output
+  boundary" sections: `service`, `alert_title`/`symptom`, `alert_id`, `severity` (webhook payload) and
+  squad-map's resolved squad name are untrusted here regardless of squad-map's own no-escaping design at
+  its boundary (see squad-map's `[1.2.5]`) — short identifiers (`service`, `alert_id`, squad name) get
+  structural escaping plus code-span wrapping, since `triage_doc`/`postmortem_draft` are terminal
+  documents no downstream skill re-parses for exact matches; free text (`alert_title`, incident-rca's own
+  not-yet-escaped hypothesis/report text) gets structural escaping only
+- **SKILL.md** — links [safe-output.md](../docs/skill-framework/shared/safe-output.md)
+- `evals/golden/incident-triage-agent/injection-inert-triage-doc.yaml` — golden fixture proving a
+  spoofed "## Likely cause" heading injected via `alert_title` never becomes a second live section, and
+  that `service`/`alert_id`/squad-map's squad name all render backtick-stripped and code-span-wrapped
+
 ## [1.0.0] — 2026-08-05
 
 ### Added

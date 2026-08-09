@@ -1,0 +1,20 @@
+schema_version: 1
+entry_inputs:
+  event_type: {type: string, provenance: caller_or_user, required: true, trust: untrusted}
+  service: {type: string, provenance: caller_or_user, required: true, trust: untrusted}
+  triggered_at: {type: string, provenance: caller_or_user, required: true, trust: untrusted}
+  resolved_at: {type: string, provenance: caller_or_user, required: false, trust: untrusted}
+  alert_title: {type: string, provenance: caller_or_user, required: false, trust: untrusted}
+  alert_id: {type: string, provenance: caller_or_user, required: false, trust: untrusted}
+  severity: {type: string, provenance: caller_or_user, required: false, trust: untrusted}
+  workspace_root: {type: string, provenance: host_environment, required: false, trust: trusted}
+selector_domains:
+  event_type: [page_triggered, incident_resolved]
+route_selection: {after_phase: inputs}
+routes:
+  triage:
+    when: {event_type: page_triggered}
+    phases: [inputs, triage]
+  postmortem:
+    when: {event_type: incident_resolved}
+    phases: [inputs, postmortem]

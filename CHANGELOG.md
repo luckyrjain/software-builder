@@ -441,6 +441,28 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 
 ## incident-triage-agent
 
+### Workflow contract + safe-output wiring (2026-08-09)
+
+- New `workflow-contract.yaml` modeling the one genuine cross-phase branch — `event_type` selects the
+  triage route (`page_triggered`) or the postmortem route (`incident_resolved`) right after the shared
+  `inputs` phase. `workflow/inputs.md`, `workflow/triage.md`, `workflow/postmortem.md` frontmatter's
+  `produces`/`consumes` converted from plain lists (pre-dating the contract convention) to the typed
+  producer/consumer mapping `scripts/validate_workflow_contracts.py` requires; wired into
+  `make lint-incident-triage-agent`.
+- `reference/triage-doc-format.md` and `reference/postmortem-format.md` gain "Safe rendered-output
+  boundary" sections: `service`/`alert_id` (short identifiers) get structural escaping plus code-span
+  wrapping; `alert_title`/`symptom` and incident-rca's own hypothesis/report text (free-form prose) get
+  structural escaping only. squad-map's resolved squad name is untrusted here regardless of squad-map's
+  own no-escaping design at its boundary (squad-map's `SQUAD_MAP.md` is a machine-parsed interchange
+  format other skills exact-match against; `triage_doc`/`postmortem_draft` are terminal, human-facing
+  documents nothing re-parses, so code-span wrapping is always safe here). `SKILL.md` links
+  `safe-output.md`. Enforced by a new Makefile grep check on both format docs.
+- New golden eval `evals/golden/incident-triage-agent/injection-inert-triage-doc.yaml`: a webhook
+  `alert_title` containing a raw newline plus a spoofed "## Likely cause" heading is proven to never
+  become a second live section — the real incident-rca hypothesis still lands directly under the real
+  heading — alongside `service`/`alert_id`/squad-map's squad name rendering backtick-stripped and
+  code-span-wrapped.
+
 ### Initial release (2026-08-05)
 
 - New skill — items #3+#4 of the [team-facing agents roadmap](docs/superpowers/plans/2026-08-05-team-facing-agents-roadmap.md):
