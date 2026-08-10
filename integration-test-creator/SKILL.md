@@ -64,7 +64,9 @@ generated test acceptable, on top of the shared checklist:
 New/modified test files matching the repo's own conventions, plus **`INTEGRATION_TEST_REPORT.md`** — spec:
 [reference/report-format.md](reference/report-format.md). Per-target status (written & passing, written
 but flags a probable production bug, needs a real dependency env, needs a human, already covered, skipped
-by the file cap), verification summary, and any handoff findings.
+by the file cap), verification summary, and any handoff findings. Rendering that report follows
+[safe-output.md](../docs/skill-framework/shared/safe-output.md) — see [reference/report-format.md § Safe
+rendered-output boundary](reference/report-format.md#safe-rendered-output-boundary).
 
 ## Non-negotiables
 
