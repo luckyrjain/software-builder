@@ -1308,6 +1308,22 @@ $(eval $(call LINT_TEST_CREATOR_TARGET,contract-test-creator,detect-pact-tooling
 $(eval $(call LINT_TEST_CREATOR_TARGET,e2e-test-creator,detect-e2e-tooling.sh e2e-markers.sh,test_detect_e2e_tooling.py))
 $(eval $(call LINT_TEST_CREATOR_TARGET,api-test-creator,detect-postman-tooling.sh postman-markers.sh,test_detect_postman_tooling.py))
 
+# api-test-creator is the only one of the five test-creator skills with a safe-output boundary so far
+# (its own API_TEST_REPORT.md render surface) — this is an EXTRA prerequisite on top of the shared
+# LINT_TEST_CREATOR_TARGET macro above, not a change to the macro itself, so it does not impose these
+# checks on the other four skills before their own rollout turn.
+lint-api-test-creator: lint-api-test-creator-safe-output
+
+lint-api-test-creator-safe-output:
+	@echo "lint-api-test-creator: safe rendered-output boundary"
+	@grep -q 'docs/skill-framework/shared/safe-output.md' api-test-creator/SKILL.md || \
+		{ echo "error: api-test-creator/SKILL.md must link to shared safe-output" >&2; exit 1; }
+	@grep -q 'docs/skill-framework/shared/prompt-injection.md' api-test-creator/reference/report-format.md && \
+	 grep -q 'docs/skill-framework/shared/safe-output.md' api-test-creator/reference/report-format.md && \
+	 grep -qiE 'escape|backtick|code span' api-test-creator/reference/report-format.md || \
+		{ echo "error: reference/report-format.md must sanitize untrusted rendered fields per prompt-injection and safe-output" >&2; exit 1; }
+	@echo "  ok"
+
 lint-test-writer:
 	@echo "lint-test-writer: SKILL.md line count (<= 180)"
 	@test -f test-writer/SKILL.md || \
