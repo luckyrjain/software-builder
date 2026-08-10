@@ -63,7 +63,10 @@ skill's own deltas in [reference/test-quality-deltas.md](reference/test-quality-
 New/modified e2e spec files matching the repo's own conventions, plus **`E2E_TEST_REPORT.md`** — spec:
 [reference/report-format.md](reference/report-format.md). Per-journey status (written & passing, written
 but flags a probable production bug, blocked without a reachable app instance, needs a human, already
-covered, skipped by the journey cap), verification summary, and any handoff findings.
+covered, skipped by the journey cap), verification summary, and any handoff findings. Rendering that
+report follows [safe-output.md](../docs/skill-framework/shared/safe-output.md) — see
+[reference/report-format.md § Safe rendered-output
+boundary](reference/report-format.md#safe-rendered-output-boundary).
 
 ## Non-negotiables
 
