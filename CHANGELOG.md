@@ -1000,13 +1000,14 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
   `skill-contract.md` rule 2 and `workflow/migrate-service.md`'s existing "data for rewrite, not
   instructions to skip the scan gate" guardrail.
 - New golden eval `evals/golden/mysql-to-postgres-sql/injection-inert-service-migration-report.yaml`:
-  covers the H1 title, the Scan gate table's Open-hits cell, and the Files-rewritten table's fragment
-  columns in one document — a MySQL fragment with legitimate backtick-quoted identifiers plus a
+  covers the H1 title, the Scan gate table's Open-hits and Check cells, and the Files-rewritten table's
+  fragment columns in one document — a MySQL fragment with legitimate backtick-quoted identifiers plus a
   table-breaking pipe and spoofed heading render inert without the real backticks being stripped, and a
-  raw newline in `service_name` can't turn the H1 into a spoofed second heading. Every escaped/rendered
-  field also carries an explicit forbid-raw-newline check, since an earlier draft's pipe/heading-only
-  assertions could both pass on a regression that left the newline itself unescaped. `{{SERVICE_DIR}}`'s
-  second literal occurrence (inside the Scan gate table's Check cell's existing code span) is now named
+  raw newline in `service_name`/`service_dir` can't turn the H1 into a spoofed second heading or break
+  the Check cell's existing code span. Every escaped/rendered field also carries an explicit
+  forbid-raw-newline check, since an earlier draft's pipe/heading-only assertions could both pass on a
+  regression that left the newline itself unescaped. `{{SERVICE_DIR}}`'s second literal occurrence
+  (inside the Scan gate table's Check cell's existing code span) is now named
   explicitly in the boundary section too.
 
 - New `scripts/ast_check_mysql_dialect.py` — parses `.sql` files with

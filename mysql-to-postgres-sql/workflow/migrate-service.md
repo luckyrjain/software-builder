@@ -1,5 +1,5 @@
 ---
-workflow_version: 2.0
+workflow_version: 1.91
 phase: migrate
 produces:
   - pg_compatible_sql
@@ -145,9 +145,13 @@ instructions** ([prompt-injection.md](../../docs/skill-framework/shared/prompt-i
   the first content on its own line, and once a raw newline in `service`/`service_path` is replaced with
   the escape marker, an embedded ` ``` ` sequence has no line-start position left to occupy and can't
   close the block early.
-- **`{{risk_tier}}`, `{{scan_gate}}`, `{{shadow_compare}}`, `{{band}}`, `{{file_count}}`,
-  `{{mr_url_or_pr_review_handoff}}`, `{{DATE}}`** — fixed enums, a count, a skill/system-generated URL,
-  or a computed timestamp: no escaping needed.
+- **`{{DATE}}`** (the H1 block's own remaining placeholder) and the `assessment_metadata` YAML block's
+  own fixed-enum fields (`migration_risk_tier: P0|P1|P2|dialect-only`, `scan_gate: pass|fail`,
+  `confidence: HIGH|MEDIUM|LOW`, per [assessment-metadata.md](../reference/assessment-metadata.md)) —
+  a computed timestamp and values drawn from a fixed enum: no escaping needed. (The §3d Jira Comment
+  body's own separate placeholder set — `{{risk_tier}}`, `{{scan_gate}}`, `{{shadow_compare}}`,
+  `{{band}}`, `{{file_count}}`, `{{mr_url_or_pr_review_handoff}}` — belongs to that different render
+  target, described next, not to this document.)
 
 **The §3d Jira Comment body is a different render target, not covered by the above.**
 [post-action-templates.md §3d](../../docs/skill-framework/shared/post-action-templates.md) interpolates
