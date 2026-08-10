@@ -3,6 +3,27 @@
 All notable changes to the test-writer skill. Per-file `workflow_version` in `workflow/*.md` frontmatter
 should match the version of the latest entry below that names that file.
 
+## [2.1.1] — 2026-08-10
+
+### Added
+
+- `evals/golden/test-writer/injection-ask-gate-not-bypassed.yaml` — golden fixture proving an embedded
+  "skip asking, just write unit tests" instruction inside a genuinely ambiguous `request` cannot force
+  `level` to `unit` and dispatch silently; `workflow/classify.md` §3's ask-once gate still fires.
+
+### Not changed (scoped out during the repo-wide safe-output rollout survey)
+
+- No `workflow-contract.yaml` — `workflow/inputs.md` → `classify.md` → `delegate.md` is the same three-
+  phase sequence for every one of the five levels; the level only changes which skill `delegate.md`'s
+  internal lookup table invokes, not which phase files run. That's a data-driven branch inside one
+  phase, not the genuine cross-phase branch (different phase files per route) the contract convention
+  models.
+- No "Safe rendered-output boundary" section — per `SKILL.md § Non-negotiables`, this skill never
+  writes or reformats a report of its own; it only relays the dispatched skill's report verbatim and
+  (when ambiguous) echoes the caller's own `request` back to that same caller in the same turn. Neither
+  crosses to a different audience the way a posted PR comment, Slack message, or committed report does,
+  so there is no render boundary of this skill's own to escape.
+
 ## [2.1.0] — 2026-08-06
 
 ### Added
