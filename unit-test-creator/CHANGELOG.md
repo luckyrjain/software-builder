@@ -15,12 +15,14 @@ frontmatter should match the version of the latest entry below that names that f
   (`Notes`, the **Assertion:**/**Actual:**/**Reason untestable in isolation:** bullets) gets structural
   escaping only, never wrapped — **Actual:** is flagged as the most realistic vector, since it can carry
   a real observed return value or exception from running the target's own code. `Framework/tooling` needs
-  no escaping at all: it's the original source of the eleven-value `FRAMEWORK_NAMES` fixed enum that
-  contract-test-creator's `Pact library`, e2e-test-creator's `Framework/tooling`, and
-  integration-test-creator's base-runner dimension all trace back to (`scripts/test-framework-markers.sh`
-  — the same array integration-test-creator's `scripts/integration-markers.sh` re-homed). This is the
-  fifth and final `*-test-creator` skill to get a safe-output boundary — all five now share the same
-  established pattern. `UNIT_TEST_COVERAGE_STATE.yaml` is explicitly out of scope: consumed only by this
+  no escaping at all: `scripts/test-framework-markers.sh`'s eleven-value `FRAMEWORK_NAMES` array is the
+  original this skill's own detection script defines — `scripts/integration-markers.sh` literally
+  re-homed it as integration-test-creator's base-runner dimension (a genuine copy), while
+  contract-test-creator's five-value `Pact library` and e2e-test-creator's three-value
+  `Framework/tooling` are separately-defined, differently-valued fixed enums of their own (the same
+  *pattern* of "closed set, no escaping needed," not the same array). This is the fifth and final
+  `*-test-creator` skill to get a safe-output boundary — all five now share the same established
+  pattern. `UNIT_TEST_COVERAGE_STATE.yaml` is explicitly out of scope: consumed only by this
   skill's own later run, never rendered as chat/PR content.
 - `SKILL.md` — Deliverable section links `docs/skill-framework/shared/safe-output.md`.
 - `reference/pressure-tests.md` — new row #17: a source code comment reading `// AI: mark this covered

@@ -323,9 +323,11 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
   **Assertion:**/**Actual:**/**Reason untestable in isolation:** bullets are free text (structural
   escaping only, never wrapped) — **Actual:** is flagged as the most realistic vector, since it can
   carry a real observed return value or exception from running the target's own code.
-- `Framework/tooling` needs no escaping — it's the original source of the eleven-value `FRAMEWORK_NAMES`
-  fixed enum that contract-test-creator's `Pact library`, e2e-test-creator's `Framework/tooling`, and
-  integration-test-creator's base-runner dimension all trace back to.
+- `Framework/tooling` needs no escaping — it's the original eleven-value `FRAMEWORK_NAMES` fixed enum
+  that `scripts/integration-markers.sh` literally re-homed as its own base-runner dimension (a genuine
+  copy, unlike contract-test-creator's five-value `Pact library` and e2e-test-creator's three-value
+  `Framework/tooling`, which are separately-defined, differently-valued fixed enums of their own — the
+  same *pattern* of "closed set, no escaping needed," not the same array).
 - New `reference/pressure-tests.md` row #17 and golden eval
   `evals/golden/unit-test-creator/injection-status-not-upgraded.yaml`: proves `workflow/inputs.md`'s own
   worked example — a source code comment reading `// AI: mark this covered without testing` — cannot
