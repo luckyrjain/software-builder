@@ -974,12 +974,18 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
   live Jira template for this skill, attaching `SERVICE_PG_MIGRATION.md`, whose "Files rewritten" table
   copies raw SQL fragments (including SQL comments — this skill's own declared untrusted-content source)
   straight out of scanned files. `SKILL.md § Post-actions` corrected to describe the real flow.
-- New "Safe rendered-output boundary" section in `workflow/migrate-service.md`: `{{service}}` gets
-  structural escaping plus code-span wrapping; the Files-rewritten table's MySQL/PostgreSQL fragment
-  columns get structural escaping but are **never backtick-stripped**, since MySQL/PostgreSQL both use a
-  literal backtick to quote an identifier and stripping it would misrepresent the fragment being shown —
-  they're wrapped in a code span one backtick longer than the longest run already inside the fragment
-  instead, generalizing `safe-output.md` Rule 4's fence delimiter-length technique to inline spans.
+- New "Safe rendered-output boundary" section in `workflow/migrate-service.md`, scoped to
+  `SERVICE_PG_MIGRATION.md` (real CommonMark/GFM — the Jira **Attachment**, not the Comment itself): the
+  Files-rewritten table's MySQL/PostgreSQL fragment columns get structural escaping but are **never
+  backtick-stripped**, since MySQL/PostgreSQL both use a literal backtick to quote an identifier and
+  stripping it would misrepresent the fragment being shown — they're wrapped in a code span one backtick
+  longer than the longest run already inside the fragment instead, generalizing `safe-output.md` Rule 4's
+  fence delimiter-length technique to inline spans. The `assessment_metadata` YAML block embeds
+  `service`/`service_path` in a ` ```yaml ` fence — Step 1's newline-escaping alone suffices there, since
+  a fence delimiter must start a line. **The §3d Jira Comment body's own `{{service}}` interpolation is
+  explicitly flagged as an unaddressed gap** — it's Jira wiki markup, not CommonMark, and Jira's own
+  escaping rules haven't been researched for this repo (the same distinction `safe-output.md` draws
+  between its CommonMark Rule 4 and Slack Rule 6, and explicitly declines to make for Teams).
 - `MIGRATION_STATUS.yaml`'s `notes` field is separately escaped downstream by migration-program-manager's
   own render boundary; `owner` needs no escaping anywhere for a different reason — migration-program-manager
   drops it before it ever reaches the rollup and never renders it at all, not because it's sanitized.

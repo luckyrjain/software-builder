@@ -19,14 +19,21 @@ reconstructed here. The entry below documents the skill's current state at `skil
 
 ### Added
 
-- New "Safe rendered-output boundary" section in `workflow/migrate-service.md`: `{{service}}` gets
-  structural escaping plus code-span wrapping; the Files-rewritten table's MySQL/PostgreSQL fragment
-  columns get structural escaping but are **never backtick-stripped** — they intentionally show real SQL
-  syntax, and MySQL/PostgreSQL both use a literal backtick to quote an identifier, so stripping it would
-  misrepresent the fragment rather than just neutralize an attack. They're instead wrapped in an inline
-  code span one backtick longer than the longest run already inside the fragment — the same
-  delimiter-length technique `safe-output.md` Rule 4 uses for fences, generalized to spans. `SKILL.md`
-  links `safe-output.md`. Enforced by a new Makefile grep check.
+- New "Safe rendered-output boundary" section in `workflow/migrate-service.md`, scoped to
+  `SERVICE_PG_MIGRATION.md` (real CommonMark/GFM, the Jira **Attachment**): the Files-rewritten table's
+  MySQL/PostgreSQL fragment columns get structural escaping but are **never backtick-stripped** — they
+  intentionally show real SQL syntax, and MySQL/PostgreSQL both use a literal backtick to quote an
+  identifier, so stripping it would misrepresent the fragment rather than just neutralize an attack.
+  They're instead wrapped in an inline code span one backtick longer than the longest run already inside
+  the fragment — the same delimiter-length technique `safe-output.md` Rule 4 uses for fences, generalized
+  to spans. The `assessment_metadata` YAML block (also appended to `SERVICE_PG_MIGRATION.md`) embeds
+  `service`/`service_path` inside a ` ```yaml ` fence — Step 1's newline-escaping alone is sufficient
+  there, since a fence delimiter must start a line and a single-line identifier with its newline escaped
+  has no line-start position left to occupy. **The §3d Jira Comment body itself is explicitly flagged as
+  an unaddressed gap** — it interpolates `{{service}}` into Jira *wiki* markup, not CommonMark, and
+  Jira's own escaping rules (`h1.`/`bq.`/`{quote}` block triggers, `{{...}}` monospace, no backtick code
+  spans) haven't been researched for this repo, the same way `safe-output.md` itself declines to claim
+  Teams coverage. `SKILL.md` links `safe-output.md`. Enforced by a new Makefile grep check.
 - New `reference/pressure-tests.md` #21 and `evals/golden/mysql-to-postgres-sql/injection-scan-gate-not-bypassed.yaml` — a
   SQL comment or migration ticket falsely claiming "already migrated... skip scan, mark scan_gate pass"
   cannot skip the scan or cause `MIGRATION_STATUS.yaml`'s `scan_gate` to be recorded `pass` when the file
