@@ -1,16 +1,11 @@
 ---
-workflow_version: 1.0
+workflow_version: 1.1
 phase: inputs
-produces:
-  - event_type
-  - service
-  - triggered_at
-  - resolved_at
-  - alert_title
-  - alert_id
-  - severity
-  - workspace_root
-consumes: []
+produces: {event_type: string, service: string, triggered_at: string, resolved_at: string, alert_title: string, alert_id: string, severity: string, workspace_root: string}
+consumes:
+  required: {event_type: string, service: string, triggered_at: string}
+  optional: {resolved_at: string, alert_title: string, alert_id: string, severity: string, workspace_root: string}
+  conditional: {}
 ---
 
 # Inputs — parse from the paging webhook payload

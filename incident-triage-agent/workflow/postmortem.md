@@ -1,15 +1,11 @@
 ---
-workflow_version: 1.0
+workflow_version: 1.1
 phase: postmortem
-produces:
-  - postmortem_draft
+produces: {postmortem_draft: string}
 consumes:
-  - service
-  - triggered_at
-  - resolved_at
-  - alert_title
-  - alert_id
-  - workspace_root
+  required: {service: string, triggered_at: string, resolved_at: string}
+  optional: {alert_title: string, alert_id: string, workspace_root: string}
+  conditional: {}
 ---
 
 # Postmortem — full investigation + pre-assigned follow-ups

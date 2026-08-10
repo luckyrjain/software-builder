@@ -536,6 +536,8 @@ lint-incident-triage-agent:
 	done; \
 	if [ "$$fail" -ne 0 ]; then echo "error: incident-triage-agent workflow/*.md must declare workflow_version, phase, produces, consumes" >&2; exit 1; fi; \
 	echo "  ok"
+	@echo "lint-incident-triage-agent: route-aware workflow contract"
+	@python3 -m scripts.validate_workflow_contracts incident-triage-agent
 	@echo "lint-incident-triage-agent: dangling markdown links"
 	@bash scripts/lint-dangling-md-links.sh incident-triage-agent/*.md incident-triage-agent/reference/*.md incident-triage-agent/workflow/*.md && echo "  ok" || \
 		{ echo "error: dangling reference link(s) found" >&2; exit 1; }
@@ -548,6 +550,14 @@ lint-incident-triage-agent:
 		{ echo "error: smoke-test.md must link to pressure-tests.md" >&2; exit 1; }
 	@grep -q 'skill-framework' incident-triage-agent/SETUP.md || \
 		{ echo "error: incident-triage-agent/SETUP.md must link to docs/skill-framework" >&2; exit 1; }
+	@grep -q 'docs/skill-framework/shared/safe-output.md' incident-triage-agent/SKILL.md || \
+		{ echo "error: incident-triage-agent/SKILL.md must link to shared safe-output" >&2; exit 1; }
+	@for f in triage-doc-format postmortem-format; do \
+		grep -q 'docs/skill-framework/shared/prompt-injection.md' incident-triage-agent/reference/$$f.md && \
+		 grep -q 'docs/skill-framework/shared/safe-output.md' incident-triage-agent/reference/$$f.md && \
+		 grep -qiE 'escape|fence|backtick' incident-triage-agent/reference/$$f.md || \
+			{ echo "error: reference/$$f.md must sanitize untrusted rendered fields per prompt-injection and safe-output" >&2; exit 1; }; \
+	done
 	@echo "  ok (framework refs)"
 
 lint-domain-comprehension: lint-domain-comprehension-skill lint-domain-comprehension-scripts
