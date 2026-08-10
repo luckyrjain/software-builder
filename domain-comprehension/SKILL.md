@@ -169,7 +169,7 @@ write-backs. Optional Memory Bank / Postman exports are covered in [phase-5.md](
 
 ## Framework
 
-[docs/skill-framework/README.md](../docs/skill-framework/README.md) · [prompt-injection.md](../docs/skill-framework/shared/prompt-injection.md)
+[docs/skill-framework/README.md](../docs/skill-framework/README.md) · [prompt-injection.md](../docs/skill-framework/shared/prompt-injection.md) · rendered deliverables follow [safe-output.md](../docs/skill-framework/shared/safe-output.md) — see [deliverable-templates.md § Safe rendered-output boundary](reference/deliverable-templates.md#safe-rendered-output-boundary)
 
 ## Begin
 

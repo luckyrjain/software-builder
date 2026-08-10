@@ -664,6 +664,13 @@ lint-domain-comprehension-skill:
 	@echo "lint-domain-comprehension: pressure harness"
 	@bash domain-comprehension/tests/run_pressure_tests.sh
 	@echo "  ok (framework refs)"
+	@echo "lint-domain-comprehension: safe rendered-output boundary"
+	@grep -q 'docs/skill-framework/shared/safe-output.md' domain-comprehension/SKILL.md || \
+		{ echo "error: domain-comprehension/SKILL.md must link to shared safe-output" >&2; exit 1; }
+	@grep -q 'docs/skill-framework/shared/safe-output.md' domain-comprehension/reference/deliverable-templates.md && \
+	 grep -qiE 'escape|backtick|code span' domain-comprehension/reference/deliverable-templates.md || \
+		{ echo "error: deliverable-templates.md must sanitize untrusted rendered fields per safe-output" >&2; exit 1; }
+	@echo "  ok"
 
 lint-squad-map:
 	@echo "lint-squad-map: SKILL.md line count (<= 180)"
