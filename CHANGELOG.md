@@ -309,6 +309,16 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 
 ## unit-test-creator
 
+### Fix `## Skipped` gap in the safe rendered-output boundary (2026-08-10)
+
+- Same gap as integration-test-creator's own follow-up fix: the "Safe rendered-output boundary"
+  section's enumeration never mentioned the `## Skipped` section, which renders the same untrusted
+  `file::function` target descriptor as the `## Targets` table and `## Findings` subheadings (both of
+  which are covered) — found during a repo-wide re-review while working the domain-comprehension
+  rollout PR. Sibling skills api-test-creator, contract-test-creator, and e2e-test-creator already fold
+  their equivalent Skipped-name list into this same bullet; this brings unit-test-creator in line, with
+  no functional change to the escaping logic itself.
+
 ### Safe rendered-output boundary + injection-resistance golden evals (2026-08-10)
 
 - Surveyed for the repo-wide workflow-contract/safe-output rollout: no `workflow-contract.yaml` — the
