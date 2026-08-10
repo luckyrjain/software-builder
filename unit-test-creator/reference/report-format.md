@@ -115,11 +115,11 @@ those values reaches this document is enumerated below:
   `dotnet-test`, `cargo test`), never a raw string lifted from manifest content, and `<confidence>` is
   always one of [framework-detection.md § Confidence rules](framework-detection.md#confidence-rules)'s
   four fixed tiers.
-- **The `## Targets` table's `Target` column, and the `## Findings` subheadings** (e.g.
-  `` ### `src/payments/refund.py::process_refund` ``) — a `file::function` descriptor built from real
-  source paths and symbol names, the same untrusted content as `Target` above (diff hunks and source
-  code are both named in `workflow/inputs.md`'s list). Same treatment: structurally escape, strip any
-  embedded backtick, wrap in an inline code span.
+- **The `## Targets` table's `Target` column, the `## Findings` subheadings** (e.g.
+  `` ### `src/payments/refund.py::process_refund` ``), **and every name listed under `## Skipped`** — a
+  `file::function` descriptor built from real source paths and symbol names, the same untrusted content
+  as `Target` above (diff hunks and source code are both named in `workflow/inputs.md`'s list). Same
+  treatment: structurally escape, strip any embedded backtick, wrap in an inline code span.
 - **`Test file`** — the `## Targets` table's third column (the written test file path, e.g.
   `` `tests/test_charge.py` ``, or the literal `—` placeholder for an `UNTESTABLE_WITHOUT_FIXTURE`
   target) — a POSIX path resolved against the repo's own layout convention, the same reasoning as `Repo`
