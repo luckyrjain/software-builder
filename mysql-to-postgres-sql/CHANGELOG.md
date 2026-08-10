@@ -8,8 +8,25 @@ reconstructed here. The entry below documents the skill's current state at `skil
 
 ## [1.6.1] — 2026-08-10
 
+### Fixed
+
+- **SKILL.md § Post-actions** previously said "None — this skill produces no ticket/chat output," which
+  was inaccurate: `docs/skill-framework/shared/post-action-templates.md` §3d defines a real Jira comment
+  template for this skill (Labels `pg-migration`, Attachment `SERVICE_PG_MIGRATION.md`), and that
+  attachment's own "Files rewritten" table copies raw MySQL/PostgreSQL SQL fragments — including SQL
+  comments, this skill's own declared untrusted-content source — straight out of scanned files. Corrected
+  to describe the real Jira/attachment flow and link the new safe-output boundary below.
+
 ### Added
 
+- New "Safe rendered-output boundary" section in `workflow/migrate-service.md`: `{{service}}` gets
+  structural escaping plus code-span wrapping; the Files-rewritten table's MySQL/PostgreSQL fragment
+  columns get structural escaping but are **never backtick-stripped** — they intentionally show real SQL
+  syntax, and MySQL/PostgreSQL both use a literal backtick to quote an identifier, so stripping it would
+  misrepresent the fragment rather than just neutralize an attack. They're instead wrapped in an inline
+  code span one backtick longer than the longest run already inside the fragment — the same
+  delimiter-length technique `safe-output.md` Rule 4 uses for fences, generalized to spans. `SKILL.md`
+  links `safe-output.md`. Enforced by a new Makefile grep check.
 - New `reference/pressure-tests.md` #21 and `evals/golden/mysql-to-postgres-sql/injection-scan-gate-not-bypassed.yaml` — a
   SQL comment or migration ticket falsely claiming "already migrated... skip scan, mark scan_gate pass"
   cannot skip the scan or cause `MIGRATION_STATUS.yaml`'s `scan_gate` to be recorded `pass` when the file
@@ -22,12 +39,12 @@ reconstructed here. The entry below documents the skill's current state at `skil
 - No `workflow-contract.yaml` — this is a single-workflow checklist skill by design (SKILL.md already
   states "No `reference/phase-index.md`, by design... not a multi-phase investigation"); there is no
   cross-phase branch to model.
-- No "Safe rendered-output boundary" section — this skill produces no ticket/chat output of its own (per
-  SKILL.md § Post-actions). Its only structured artifact, `MIGRATION_STATUS.yaml`, is a machine-parsed
-  status file whose free-text fields (`notes`, `owner`) are already treated as untrusted at
-  migration-program-manager's own render boundary
-  ([migration-program-manager/reference/report-format.md § Safe rendered-output boundary](../migration-program-manager/reference/report-format.md#safe-rendered-output-boundary)),
-  not this skill's responsibility to escape.
+- `MIGRATION_STATUS.yaml`'s free-text fields: `notes` is read downstream by migration-program-manager,
+  which already escapes it at its own render boundary
+  ([migration-program-manager/reference/report-format.md § Safe rendered-output boundary](../migration-program-manager/reference/report-format.md#safe-rendered-output-boundary)).
+  `owner` needs no escaping anywhere for a different reason — migration-program-manager's own `SKILL.md`
+  states it is dropped before ever reaching `org_rollup_item` and is **never rendered at all**, not that
+  it receives render-boundary sanitization.
 
 ## [1.6] — 2026-08-06
 

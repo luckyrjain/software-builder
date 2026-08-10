@@ -149,8 +149,14 @@ Translation caveats (TZ, OAuth `expires`, scan limits): [reference/migration-edg
 
 ## Post-actions
 
-None — this skill produces no ticket/chat output. Migration status lives in `MIGRATION_STATUS.yaml`; see
-[post-action-templates.md](../docs/skill-framework/shared/post-action-templates.md).
+Optional Jira comment (§3d) on scan-gate completion, attaching `SERVICE_PG_MIGRATION.md`; see
+[post-action-templates.md](../docs/skill-framework/shared/post-action-templates.md). Rendering that
+template and `SERVICE_PG_MIGRATION.md`'s own "Files rewritten" table (which copies raw scanned
+MySQL/PostgreSQL SQL fragments — the same content [workflow/migrate-service.md § Untrusted
+content](workflow/migrate-service.md) already calls out) follows
+[safe-output.md](../docs/skill-framework/shared/safe-output.md) — see
+[workflow/migrate-service.md § Safe rendered-output boundary](workflow/migrate-service.md#safe-rendered-output-boundary).
+Fleet migration status lives separately in `MIGRATION_STATUS.yaml`.
 
 ## Framework
 
