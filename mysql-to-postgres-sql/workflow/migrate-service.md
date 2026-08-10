@@ -1,5 +1,5 @@
 ---
-workflow_version: 1.91
+workflow_version: 1.92
 phase: migrate
 produces:
   - pg_compatible_sql
@@ -147,11 +147,16 @@ instructions** ([prompt-injection.md](../../docs/skill-framework/shared/prompt-i
   close the block early.
 - **`{{DATE}}`** (the H1 block's own remaining placeholder) and the `assessment_metadata` YAML block's
   own fixed-enum fields (`migration_risk_tier: P0|P1|P2|dialect-only`, `scan_gate: pass|fail`,
-  `confidence: HIGH|MEDIUM|LOW`, per [assessment-metadata.md](../reference/assessment-metadata.md)) —
-  a computed timestamp and values drawn from a fixed enum: no escaping needed. (The §3d Jira Comment
-  body's own separate placeholder set — `{{risk_tier}}`, `{{scan_gate}}`, `{{shadow_compare}}`,
-  `{{band}}`, `{{file_count}}`, `{{mr_url_or_pr_review_handoff}}` — belongs to that different render
-  target, described next, not to this document.)
+  `confidence: HIGH|MEDIUM|LOW|UNKNOWN` — the fourth value per
+  [confidence-bands.md §2.2](../../docs/skill-framework/shared/confidence-bands.md), which this skill's
+  own handoff-block usage is explicitly bound to — per
+  [assessment-metadata.md](../reference/assessment-metadata.md)) — a computed timestamp and values drawn
+  from a fixed enum: no escaping needed. (The §3d Jira Comment body's own separate literal tokens —
+  `{{service}}`, `{{P0|P1|P2|dialect-only}}`, `{{pass|fail}}`, `{{pass|pending|n/a}}`, `{{band}}`,
+  `{{file_count}}`, `{{mr_url_or_pr_review_handoff}}` — belong to that different render target, described
+  next, not to this document; that template spells its own risk-tier/scan-gate/shadow-compare choices
+  out as inline enum placeholders rather than naming a variable, so don't confuse those inline literals
+  with the `assessment_metadata` field names above.)
 
 **The §3d Jira Comment body is a different render target, not covered by the above.**
 [post-action-templates.md §3d](../../docs/skill-framework/shared/post-action-templates.md) interpolates

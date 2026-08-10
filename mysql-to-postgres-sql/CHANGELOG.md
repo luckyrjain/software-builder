@@ -41,8 +41,14 @@ reconstructed here. The entry below documents the skill's current state at `skil
   block's own fixed-enum fields (`migration_risk_tier`, `scan_gate`, `confidence`) need no escaping — an
   earlier draft of this section wrongly listed the §3d Jira Comment template's own separate placeholder
   names (`{{risk_tier}}`, `{{band}}`, `{{file_count}}`, …) here as if they appeared in
-  `SERVICE_PG_MIGRATION.md` itself; corrected. `SKILL.md` links `safe-output.md`. Enforced by a new
-  Makefile grep check. `workflow/migrate-service.md`'s `workflow_version` bumped 1.6 → 1.91 across this
+  `SERVICE_PG_MIGRATION.md` itself; corrected, and corrected a second time when the replacement text
+  itself named `{{risk_tier}}`/`{{scan_gate}}`/`{{shadow_compare}}` as the §3d template's literal
+  tokens — the template actually spells those choices out as inline enum placeholders
+  (`{{P0|P1|P2|dialect-only}}`, `{{pass|fail}}`, `{{pass|pending|n/a}}`), never a variable with those
+  names. `confidence`'s enum also corrected from `HIGH|MEDIUM|LOW` to `HIGH|MEDIUM|LOW|UNKNOWN` — the
+  fourth value this skill's own handoff-block usage is bound to per `confidence-bands.md` §2.2.
+  `SKILL.md` links `safe-output.md`. Enforced by a new
+  Makefile grep check. `workflow/migrate-service.md`'s `workflow_version` bumped 1.6 → 1.92 across this
   round's edits — a per-file edit counter incremented on every substantive change to that file, not a
   value expected to equal this changelog's own `[1.6.1]` heading number.
 - New `reference/pressure-tests.md` #21 and `evals/golden/mysql-to-postgres-sql/injection-scan-gate-not-bypassed.yaml` — a
