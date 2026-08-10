@@ -1,15 +1,11 @@
 ---
-workflow_version: 1.0
-phase: 0b
-produces:
-  - from_time
-  - analysis_from_time
-  - to_time
-  - service
-  - symptom
+workflow_version: 1.1
+phase: "0b"
+produces: {from_time: string, analysis_from_time: string, to_time: string, service: string, symptom: string}
 consumes:
-  - jira_key
-  - mcp_profile
+  required: {jira_key: string, mcp_profile: string}
+  optional: {}
+  conditional: {}
 ---
 
 # Phase 0b — Anchor the window from Jira

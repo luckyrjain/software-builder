@@ -1,18 +1,11 @@
 ---
-workflow_version: 1.0
-phase: 3
-produces:
-  - jira_issues
-  - known_issue_matches
-  - recurrence_history
-  - query_signals
+workflow_version: 1.1
+phase: "3"
+produces: {jira_issues: list, known_issue_matches: list, recurrence_history: list, query_signals: list}
 consumes:
-  - from_time
-  - to_time
-  - service
-  - symptom
-  - jira_key
-  - mcp_profile
+  required: {mcp_profile: string}
+  optional: {from_time: string, to_time: string, service: string, symptom: string, jira_key: string}
+  conditional: {}
 ---
 
 # Phase 3 — Ticket / human context (Jira)

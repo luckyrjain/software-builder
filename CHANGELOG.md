@@ -1421,6 +1421,42 @@ _Pre-merge WIP on `feat/squad-map-skill` (internal v1.0–v1.5) is consolidated 
 
 ## incident-rca
 
+### workflow-contract.yaml + safe rendered-output boundary (2026-08-10)
+
+- Surveyed for the repo-wide workflow-contract/safe-output rollout: this skill DOES need a
+  `workflow-contract.yaml` — `reference/phase-index.md`'s own "Quick paths" table documents a genuine,
+  caller-input-driven cross-phase branch: an `INC-xxxx` (Jira-anchored) request inserts
+  `workflow/phase-0b.md` between Phase 0 and Phase 1, while every other anchor runs the standard
+  `Inputs → 0 → 1 → 2 → 3 → 4 → 5` sequence. Route selection uses a new derived boolean
+  `jira_anchored` (produced by `workflow/inputs.md`, `true` when `jira_key` was resolved) — the same
+  derived-selector-field pattern already used for prd-architect's `premise_verdict` and pr-review's
+  `posting_decision`.
+- Deliberately did **not** model the "was it the deploy?" phase-2-before-phase-1 reordering or the
+  Phase-2-checkpoint "skip Phase 3" offer as contract routes — both are mid-conversation, user-choice
+  checkpoints, not deterministic entry-input-driven routing, the same distinction that already excludes
+  interactive "ask once" gates from every other skill's contract in this rollout.
+- All 8 `workflow/*.md` files converted from flat `produces`/`consumes` lists to the typed
+  `{field: type}` / `{required, optional, conditional}` shape the validator requires, including quoting
+  numeric phase names (`"0"`…`"5"`) that would otherwise parse as YAML integers. `workflow/phase-1.md`
+  uses `consumes.conditional.jira_anchored` for `analysis_from_time` — the one genuinely route-specific
+  field (Phase 0b's backstroke-adjusted window start).
+- New "Safe rendered-output boundary" section in `report-template.md`: the `## Unified timeline` table's
+  `Event` column, the `## Evidence matrix` table's `Signal` column, and the `## Ranked hypotheses`
+  section's evidence bullets all quote untrusted content (log `sample_messages`, Jira issue titles,
+  deploy commit/MR messages) directly into report prose as one-line free-text summaries — structural
+  escaping only, never wrapped in a code span. `reference/log-redaction.md` already covers Rule 5
+  (secrets); this section is the separate Rule 4 (Markdown-structure injection) concern it doesn't
+  address.
+- New `reference/pressure-tests.md` row and golden evals
+  `evals/golden/incident-rca/injection-confidence-cap-not-bypassed.yaml` (a Jira ticket telling the
+  agent to skip investigation and report HIGH confidence is inert — the minimum evidence gate and
+  single-source confidence cap apply unchanged) and
+  `evals/golden/incident-rca/injection-inert-rca-report.yaml` (render-boundary inertness, including an
+  explicit no-raw-newline-survives check on each escaped field).
+- `make lint-incident-rca` gained a `route-aware workflow contract` step and a `safe rendered-output
+  boundary` step, mirroring the pattern already established for incident-triage-agent, pr-review, and
+  prd-architect.
+
 ### Redaction gap fix + automated Phase 5 enforcement (2026-08-09)
 
 - `redact_secrets()` (`scripts/kubesense_logs.py`) now actually redacts `api_key`/`x-api-key`,

@@ -1,13 +1,11 @@
 ---
-workflow_version: 1.0
-phase: 0
-produces:
-  - mcp_profile
-  - cli_available
+workflow_version: 1.1
+phase: "0"
+produces: {mcp_profile: string, cli_available: boolean}
 consumes:
-  - from_time
-  - to_time
-  - service
+  required: {}
+  optional: {from_time: string, to_time: string, service: string}
+  conditional: {}
 ---
 
 # Phase 0 — MCP capability check

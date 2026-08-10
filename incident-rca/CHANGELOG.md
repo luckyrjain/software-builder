@@ -1,5 +1,48 @@
 # Changelog — incident-rca
 
+## 2026-08-10 — workflow-contract.yaml + safe rendered-output boundary
+
+- **`workflow-contract.yaml`** (new) — formalizes the genuine caller-input-driven cross-phase branch
+  `reference/phase-index.md`'s own "Quick paths" table already documented: an `INC-xxxx` (Jira-anchored)
+  request inserts `workflow/phase-0b.md` between Phase 0 and Phase 1 to refine the incident window from
+  the ticket; every other anchor type runs the standard `Inputs → 0 → 1 → 2 → 3 → 4 → 5` sequence. Route
+  selection happens right after Phase 0, on a new derived boolean field `jira_anchored` (`workflow/
+  inputs.md`'s own logic: `true` when `jira_key` was resolved, `false` otherwise) — the same
+  derived-selector-field pattern already used for prd-architect's `premise_verdict`/`response_mode` and
+  pr-review's `posting_decision`. The "was it the deploy?" phase-2-before-phase-1 reordering and the
+  Phase-2-checkpoint "skip Phase 3" offer in `reference/phase-index.md`'s table are deliberately **not**
+  modeled as contract routes — both are mid-conversation, user-choice checkpoints (`"user says skip
+  Jira"`), not deterministic entry-input-driven routing, the same distinction that already excluded
+  interactive "ask once" gates from every other skill's contract in this rollout.
+- All 8 `workflow/*.md` files' frontmatter converted from the old flat `produces: [field, ...]` /
+  `consumes: [field, ...]` lists to the typed `produces: {field: type}` / `consumes: {required, optional,
+  conditional}` shape `scripts/validate_workflow_contracts.py` requires — including quoting numeric phase
+  names (`phase: "0"`, `"1"`…`"5"`) that would otherwise parse as YAML integers and fail the phase-name
+  string check. `workflow/phase-1.md` uses `consumes.conditional.jira_anchored` for `analysis_from_time`
+  (Phase 0b's backstroke-adjusted window start) — the one field genuinely route-specific, since it's
+  produced only when Phase 0b runs. No other phase needed a route-conditional consume: every other field
+  is either always produced regardless of route, or an optional caller anchor that's simply absent when
+  not supplied.
+- **`report-template.md`** — new "Safe rendered-output boundary" section (linked from `workflow/
+  phase-5.md` and `SKILL.md`): the `## Unified timeline` table's `Event` column, the `## Evidence
+  matrix` table's `Signal` column, and the `## Ranked hypotheses` section's Supporting/Contradicting/
+  Remaining-uncertainty bullets all quote untrusted content (log `sample_messages`, Jira issue titles,
+  deploy commit/MR messages — `SKILL.md` § Guardrails) directly into report prose. These are one-line
+  free-text summaries, not templated identifiers, so they get structural escaping only (raw newline,
+  leading `#`/`>`/`-`, table `|`) — never wrapped in a code span, since that would misrepresent a
+  summary sentence as a literal token. `[reference/log-redaction.md](reference/log-redaction.md)`
+  already covers Rule 5 (secrets); this section is the separate Rule 4 (Markdown-structure injection)
+  concern log-redaction.md doesn't address.
+- New `reference/pressure-tests.md` row: a Jira ticket telling the agent to skip investigation and
+  report HIGH confidence is analyzed as ordinary ticket text, never obeyed — the minimum evidence gate
+  and single-source confidence cap apply unchanged.
+- New golden evals `evals/golden/incident-rca/injection-confidence-cap-not-bypassed.yaml` (decision-
+  hijack resistance) and `evals/golden/incident-rca/injection-inert-rca-report.yaml` (render-boundary
+  inertness, including an explicit no-raw-newline-survives check on each escaped field).
+- `make lint-incident-rca` gained a `route-aware workflow contract` step
+  (`python3 -m scripts.validate_workflow_contracts incident-rca`) and a `safe rendered-output boundary`
+  step, mirroring the pattern already established for incident-triage-agent, pr-review, and prd-architect.
+
 ## 2026-07-31 — team adoption readiness
 
 - **SETUP.md** — added copy-pasteable MCP JSON for GitLab, Jenkins, and Jira (previously prose-only for
