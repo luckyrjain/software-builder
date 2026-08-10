@@ -31,10 +31,16 @@
   prose and frontmatter, just never actually produced by anyone until now. `confidence.md` also gained
   an explicit route-phase slot (after `validate`/`cost`, before `build-graph`) in the four routes that
   need it — it wasn't previously a top-level phase in any route despite `build-graph.md` requiring its
-  output. `reason.md` and `build-graph.md` get `namespace_ranking`-specific `consumes.conditional`
-  overrides, since that route's abbreviated `resolve → reason → graph → render` chain never produces
-  `observation_registry`/`evidence_registry`/`validated_decisions`/etc. — the same conditional-input
-  pattern incident-rca established for `jira_anchored`.
+  output. `reason.md` gets a `namespace_ranking`-specific `consumes.conditional` override (requiring
+  `namespace_ranking` instead of `observation_registry`/`evidence_registry`), since that route's
+  abbreviated `resolve → reason → graph → render` chain never produces the latter two — the same
+  conditional-input pattern incident-rca established for `jira_anchored`. `build-graph.md` needed the
+  opposite shape: its `observation_registry`/`evidence_registry`/`validated_decisions`/
+  `computed_confidence`/`assessment_fingerprint`/`cost_gate` fields are only ever produced by the
+  *other* four routes, so those six fields moved out of its base `required`/`optional` entirely and
+  into `consumes.conditional.<route>.required` for each of `full`/`cost_savings`/`replicas_too_high`/
+  `throttle_oom` — `namespace_ranking` needs no conditional entry at all, since its base
+  `required: {inferences, source_profile}` is satisfied by every route unconditionally.
 - New "Safe rendered-output boundary" section in `render/markdown.md` (linked from `SKILL.md`'s
   Framework line, within the 150-line `SKILL.md` budget — tighter than the rollout's usual 180):
   `delivery_pointer.path` (a Git-manifest-derived path already rendered in a code span — needs
