@@ -63,9 +63,9 @@ than a per-file enumeration, since the same two render shapes recur across all 2
   ` ``` ` block, which already isolates it from surrounding Markdown structure (no `#`/`>`/`|`
   interpretation inside a fence), so the only residual risk is an embedded raw ` ``` ` sequence closing
   the block early — structurally escape any triple-backtick run inside the `Conclusion:` text before
-  writing it, the same fence-escaping technique already applied to a fenced narrative block elsewhere in
-  this skill family (incident-rca's Causal chain/graph node labels, `safe-output.md` Rule 4's own
-  worked example).
+  writing it, the same fence-escaping technique [safe-output.md](../../docs/skill-framework/shared/safe-output.md)
+  Rule 4 documents and incident-rca already applies to a fenced narrative block elsewhere in this skill
+  family (its Causal chain/graph node labels).
 - **Every Q&A-style "Answer" column and narrative prose section** — `EXEC_SUMMARY.md`'s Five questions
   table, the Engineering Leader Summary paragraph, and the equivalent free-text cells/paragraphs in
   `{map_file}`, `RISK_MAP.md`, `UNKNOWNS.md`, `KNOWN_OMISSIONS.md`, and per-repo deep-dive notes — all

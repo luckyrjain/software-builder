@@ -1245,13 +1245,17 @@ _Pre-merge WIP on `feat/squad-map-skill` (internal v1.0–v1.5) is consolidated 
   a-priori-unknown "Next action" — its phase list isn't determined at invocation time. `DELTA` re-runs
   phases per a per-repo/per-tier changed-set evaluation (`workflow/inputs.md` § DELTA mode procedure) —
   again not fixed independent of runtime manifest state. `ADD_REPO` always runs P0/P0.25/P0.5/P1 for the
-  new repo, but its own downstream tail explicitly reuses "the DELTA mode affected-phases rules," and its
-  P2/P2b/P3/P3b reruns depend on a tier classification only known *after* P0 runs within the same
-  invocation — not knowable from entry inputs alone. `COMPLIANCE_RETROFIT` and `PROPOSAL_CHECK` are
-  self-contained procedures described entirely inline in `workflow/inputs.md` that never touch the
-  P0–P5 phase-file pipeline at all. A `workflow-contract.yaml` route must declare one fixed,
-  exhaustively-checkable phase-file list, and its selector domain must exhaustively cover every declared
-  value — five of `delivery_mode`'s seven values cannot honestly be expressed that way, so this skill
+  new repo, but its own downstream tail explicitly reuses "the DELTA mode affected-phases rules" — it's
+  not that a tier-classification selector is inherently unroutable (`route_selection.after_phase` can
+  key off a field a phase produces mid-run, exactly how incident-rca's own `jira_anchored` works), but
+  that its downstream branching bottoms out in the same DELTA-mode state-dependence already established
+  as unmodelable above. `COMPLIANCE_RETROFIT` and `PROPOSAL_CHECK` are self-contained procedures
+  described entirely inline in `workflow/inputs.md` that never touch the P0–P5 phase-file pipeline at
+  all. A `workflow-contract.yaml`'s selector domain must exhaustively cover every value of whatever field
+  its routes key on — regardless of whether ADD_REPO's own static portion could theoretically be
+  modeled, `RESUME`/`DELTA`/`COMPLIANCE_RETROFIT`/`PROPOSAL_CHECK` alone leave four of `delivery_mode`'s
+  seven values with no fixed phase-file list to declare, so no contract can satisfy that exhaustiveness
+  requirement and this skill
   gets the "skip contract, keep safe-output + evals" fallback this rollout established from the start
   for skills whose workflow shape doesn't fit the contract model.
 - New "Safe rendered-output boundary" section in `reference/deliverable-templates.md` (linked from
