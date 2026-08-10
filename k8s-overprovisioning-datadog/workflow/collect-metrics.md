@@ -1,16 +1,16 @@
 ---
-workflow_version: 3.4
+workflow_version: 3.5
 phase: collect
 produces:
-  - raw_metrics
-  - metrics_queried_count
-  - query_references
-  - manifest_bytes
-  - threshold_hash
+  raw_metrics: object
+  metrics_queried_count: string
+  query_references: list
+  manifest_bytes: content
+  threshold_hash: string
 consumes:
-  - intent_route
-  - service_identity
-  - source_profile
+  required: {intent_route: string, service_identity: object, source_profile: object}
+  optional: {}
+  conditional: {}
 ---
 
 # Collect metrics

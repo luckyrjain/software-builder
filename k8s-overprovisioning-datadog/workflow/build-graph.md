@@ -1,17 +1,23 @@
 ---
-workflow_version: 3.4
+workflow_version: 3.5
 phase: build-graph
-produces:
-  - decision_graph
+produces: {decision_graph: object}
 consumes:
-  - observation_registry
-  - evidence_registry
-  - inferences
-  - validated_decisions
-  - computed_confidence
-  - assessment_fingerprint
-  - cost_gate
-  - source_profile
+  required: {inferences: list, source_profile: object}
+  optional: {}
+  conditional:
+    full:
+      required: {observation_registry: object, evidence_registry: object, validated_decisions: list, computed_confidence: object, assessment_fingerprint: string, cost_gate: boolean}
+      optional: {}
+    cost_savings:
+      required: {observation_registry: object, evidence_registry: object, validated_decisions: list, computed_confidence: object, assessment_fingerprint: string, cost_gate: boolean}
+      optional: {}
+    replicas_too_high:
+      required: {observation_registry: object, evidence_registry: object, validated_decisions: list, computed_confidence: object, assessment_fingerprint: string, cost_gate: boolean}
+      optional: {}
+    throttle_oom:
+      required: {observation_registry: object, evidence_registry: object, validated_decisions: list, computed_confidence: object, assessment_fingerprint: string, cost_gate: boolean}
+      optional: {}
 ---
 
 # Build decision graph

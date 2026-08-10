@@ -1,11 +1,11 @@
 ---
-workflow_version: 3.4
+workflow_version: 3.5
 phase: orchestrator
-produces:
-  - intent_route
-  - modules_to_load
+produces: {intent_route: string, modules_to_load: list}
 consumes:
-  - user_intent
+  required: {user_intent: string}
+  optional: {}
+  conditional: {}
 ---
 
 # Orchestrator — decision tree and routing
@@ -42,13 +42,24 @@ DISCOVER_SOURCES → RESOLVE → COLLECT → NORMALIZE → REASON → VALIDATE �
 
 ## Intent routing
 
-| User intent | Through BUILD_GRAPH | Skip |
-|-------------|---------------------|------|
-| Full / overprovisioned | discover → resolve → collect → cpu → memory → replica → workload → reason → validate → cost → graph → render | — |
-| Cost savings | … → reason → validate → cost → graph → render | replica deep-dive |
-| Replicas too high? | … → replica → workload → reason → validate → graph → render | cost |
-| Throttle / OOM | … → cpu → memory → workload → reason → validate → graph → render | replica cuts, cost |
-| Namespace waste / cost ranking | resolve (namespace_ranking) → reason → graph → render | replica deep-dive, per-svc memory |
+`intent_route` (this phase's own output) takes exactly one of the five values below — the ID column is
+canonical and referenced by [workflow-contract.yaml](../workflow-contract.yaml).
+
+| ID | User intent | Through BUILD_GRAPH | Skip |
+|----|-------------|---------------------|------|
+| `full` | Full / overprovisioned | discover → resolve → collect → cpu → memory → replica → workload → reason → validate → cost → graph → render | — |
+| `cost_savings` | Cost savings | … → cpu → memory → workload → reason → validate → cost → graph → render | replica deep-dive |
+| `replicas_too_high` | Replicas too high? | … → replica → workload → reason → validate → graph → render | cost |
+| `throttle_oom` | Throttle / OOM | … → cpu → memory → workload → reason → validate → graph → render | replica cuts, cost |
+| `namespace_ranking` | Namespace waste / cost ranking | resolve (namespace_ranking) → reason → graph → render | replica deep-dive, per-svc memory |
+
+Workload always loads alongside any of cpu/memory/replica — its `OBS_KAFKA_LAG_*`/SLO-correlation
+output feeds every dimension module's own gating (`reason.md`'s `DEC_CPU_REQUEST` example cites
+`OBS_KAFKA_LAG_MAX`), not just replica sizing. Cost savings needs `DEC_CPU_REQUEST`/`DEC_MEMORY_REQUEST`
+ALLOW/DEFER decisions to evaluate its own skip condition ("No ALLOW/DEFER dimension with savings
+potential", [cost-analysis.md](cost-analysis.md#when-to-skip)) and `cost-estimation.md`'s savings
+formulas consume cpu-analysis.md's/memory-analysis.md's percentile and peak-proxy output directly — so
+cpu and memory always run for a cost-savings ask; only the replica deep-dive is skipped.
 
 Before BUILD_GRAPH: [confidence.md](confidence.md). Graph schema: [decision-graph-schema.md](../reference/decision-graph-schema.md).
 

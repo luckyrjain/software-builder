@@ -1,5 +1,62 @@
 # k8s-overprovisioning-datadog — Changelog
 
+## v3.5 — Route-aware workflow contract + safe rendered-output boundary (2026-08-10)
+
+- New `workflow-contract.yaml`: `intent_route` (this skill's own `orchestrator.md`-produced routing
+  field, five values — `full`, `cost_savings`, `replicas_too_high`, `throttle_oom`,
+  `namespace_ranking`) selects a fixed, exhaustively-checkable phase-file list per route, the same
+  route-aware contract pattern already applied to incident-rca/pr-review/prd-architect. Selection
+  happens at `route_selection.after_phase: orchestrator` — before any evidence collection starts,
+  cleaner than every prior mid-run-produced selector field in this rollout since it needs no phase
+  execution beyond the routing table itself to resolve.
+- Formalized `intent_route`'s five canonical string values directly in `workflow/orchestrator.md`'s
+  own Intent routing table (previously only `namespace_ranking` had a literal identifier; the other
+  four were prose-only column labels) — the contract references these IDs, so they needed to exist
+  as real identifiers, not just table row descriptions.
+- Fixed a genuine ambiguity in that same table found while authoring the contract: the "Cost savings"
+  row's `…` ellipsis didn't state which dimension modules (cpu/memory/replica/workload) actually run,
+  unlike the "Replicas too high?" and "Throttle / OOM" rows, which name theirs explicitly. Resolved
+  in favor of cpu + memory + workload (no replica) — `cost-analysis.md`'s own skip condition ("No
+  ALLOW/DEFER dimension with savings potential") and `cost-estimation.md`'s savings formulas both
+  require `DEC_CPU_REQUEST`/`DEC_MEMORY_REQUEST` decisions and cpu-analysis.md's/memory-analysis.md's
+  percentile/peak-proxy output to even be computable, and every dimension module's own gating already
+  cites workload's `OBS_KAFKA_LAG_*` output (`reason.md`'s own `DEC_CPU_REQUEST` example), so workload
+  always loads alongside any of cpu/memory/replica.
+- Converted all 21 `workflow/*.md` files' `produces`/`consumes` frontmatter from flat lists to the
+  typed `{field: type}` / `{required, optional, conditional}` shape the contract validator requires
+  — including two previously-implicit fields made explicit: `evidence.md` now formally produces
+  `evidence_ids` (the `EVID_*`-only id list every dimension module already consumed by that name) and
+  `confidence.md` now formally produces `computed_confidence` (the combined output `build-graph.md`
+  already consumed by that name) — both field names were already load-bearing across multiple files'
+  prose and frontmatter, just never actually produced by anyone until now. `confidence.md` also gained
+  an explicit route-phase slot (after `validate`/`cost`, before `build-graph`) in the four routes that
+  need it — it wasn't previously a top-level phase in any route despite `build-graph.md` requiring its
+  output. `reason.md` and `build-graph.md` get `namespace_ranking`-specific `consumes.conditional`
+  overrides, since that route's abbreviated `resolve → reason → graph → render` chain never produces
+  `observation_registry`/`evidence_registry`/`validated_decisions`/etc. — the same conditional-input
+  pattern incident-rca established for `jira_anchored`.
+- New "Safe rendered-output boundary" section in `render/markdown.md` (linked from `SKILL.md`'s
+  Framework line, within the 150-line `SKILL.md` budget — tighter than the rollout's usual 180):
+  `delivery_pointer.path` (a Git-manifest-derived path already rendered in a code span — needs
+  explicit backtick-strip before wrap) and string-valued `OBS_*`/`EVID_*` observations (Kafka
+  consumer-group names, KEDA scaler types, HPA names) get the short-identifier treatment; Human Report
+  narrative prose (`WhyThisMatters`, `Explanation`, RisksSummary/RecommendationsSummary/Conclusion) gets
+  structural escaping only, never wrapped; fixed enums (`final_decision`, confidence bands,
+  `STOP_REASON` IDs, `DEC_*`/`REC_*`/`OBS_*`/`EVID_*` ID strings) need no escaping.
+- `reference/pressure-tests.md` gained a new row: a Jira ticket instructing the agent to skip the
+  throttle gate — distinct from the pre-existing "User says 'recommend aggressive CPU cuts regardless
+  of p95'" row, which covers the *caller* directly asking for a bypass; this covers the untrusted
+  *third-party content* class (Jira/monitor notes/dashboard text) SKILL.md's own guardrail names.
+- Two new golden evals: `injection-throttle-gate-not-bypassed.yaml` (Jira-sourced instruction can't
+  bypass the throttle gate or INV-12's delivery-pointer requirement) and
+  `injection-inert-delivery-pointer.yaml` (a backtick-embedding manifest path and a
+  pipe/newline/spoofed-heading-embedding consumer-group name both render inert).
+- `make lint-k8s-skill` gained `route-aware workflow contract` and `safe rendered-output boundary`
+  steps.
+- Bumped every touched `workflow/*.md` file's `workflow_version` to 3.5 (per this skill's own
+  convention that per-file `workflow_version` matches the latest CHANGELOG entry) and `SKILL.md`'s own
+  version line to v3.5.
+
 ## v3.4 — Kubernetes MCP-first capability routing (2026-08-06)
 
 - Prefer Kubernetes MCP for live workload/configuration state and equivalent metrics.

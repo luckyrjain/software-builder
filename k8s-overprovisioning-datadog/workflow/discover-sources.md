@@ -1,10 +1,11 @@
 ---
-workflow_version: 3.4
+workflow_version: 3.5
 phase: collect-source-discovery
-produces:
-  - source_profile
+produces: {source_profile: object}
 consumes:
-  - user_intent
+  required: {user_intent: string}
+  optional: {}
+  conditional: {}
 ---
 
 # Discover evidence sources

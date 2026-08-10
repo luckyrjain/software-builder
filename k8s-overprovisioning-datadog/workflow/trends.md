@@ -1,11 +1,11 @@
 ---
-workflow_version: 3.3
+workflow_version: 3.5
 phase: normalize-trends
-produces:
-  - trend_classification
+produces: {trend_classification: object}
 consumes:
-  - raw_metrics
-  - evidence_ids
+  required: {raw_metrics: object, evidence_ids: list}
+  optional: {}
+  conditional: {}
 ---
 
 # Trend detection

@@ -1,11 +1,11 @@
 ---
-workflow_version: 3.3
+workflow_version: 3.5
 phase: cost
-produces:
-  - cost_estimate
+produces: {cost_estimate: object}
 consumes:
-  - validated_decisions
-  - cost_gate
+  required: {validated_decisions: list, cost_gate: boolean}
+  optional: {}
+  conditional: {}
 ---
 
 # Cost analysis

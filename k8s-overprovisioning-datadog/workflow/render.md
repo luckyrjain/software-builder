@@ -1,11 +1,11 @@
 ---
-workflow_version: 3.1
+workflow_version: 3.5
 phase: render
-produces:
-  - dora_report
-  - decision_graph_json
+produces: {dora_report: content, decision_graph_json: object}
 consumes:
-  - validated_graph
+  required: {validated_graph: object}
+  optional: {}
+  conditional: {}
 ---
 
 # Render

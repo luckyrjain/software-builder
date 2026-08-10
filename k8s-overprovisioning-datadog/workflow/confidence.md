@@ -1,14 +1,15 @@
 ---
-workflow_version: 3.0
+workflow_version: 3.5
 phase: confidence
 produces:
-  - telemetry_quality
-  - assessment_confidence
-  - recommendation_confidences
+  telemetry_quality: object
+  assessment_confidence: object
+  recommendation_confidences: object
+  computed_confidence: object
 consumes:
-  - observation_registry
-  - evidence_registry
-  - contradiction_gate
+  required: {observation_registry: object, evidence_registry: object, contradiction_gate: object}
+  optional: {}
+  conditional: {}
 ---
 
 # Confidence (deterministic)

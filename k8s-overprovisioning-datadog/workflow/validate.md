@@ -1,14 +1,11 @@
 ---
-workflow_version: 3.0
+workflow_version: 3.5
 phase: validate
-produces:
-  - validated_decisions
-  - cost_gate
-  - contradiction_gate
+produces: {validated_decisions: list, cost_gate: boolean, contradiction_gate: object}
 consumes:
-  - inferences
-  - decision_objects
-  - assumptions
+  required: {inferences: list, decision_objects: list, assumptions: list}
+  optional: {}
+  conditional: {}
 ---
 
 # Validation

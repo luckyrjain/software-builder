@@ -1,10 +1,11 @@
 ---
-workflow_version: 3.0
+workflow_version: 3.5
 phase: validate-invariants
-produces:
-  - validated_graph
+produces: {validated_graph: object}
 consumes:
-  - decision_graph
+  required: {decision_graph: object}
+  optional: {}
+  conditional: {}
 ---
 
 # Validate invariants

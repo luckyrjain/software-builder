@@ -1,13 +1,11 @@
 ---
-workflow_version: 3.3
+workflow_version: 3.5
 phase: workload-analysis
-produces:
-  - workload_signals
-  - slo_correlation
+produces: {workload_signals: object, slo_correlation: object}
 consumes:
-  - raw_metrics
-  - evidence_ids
-  - service_identity
+  required: {raw_metrics: object, evidence_ids: list, service_identity: object}
+  optional: {}
+  conditional: {}
 ---
 
 # Workload analysis

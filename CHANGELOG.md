@@ -1368,6 +1368,27 @@ _Pre-merge WIP on `feat/squad-map-skill` (internal v1.0–v1.5) is consolidated 
 
 ## k8s-overprovisioning-datadog
 
+### Route-aware workflow contract + safe rendered-output boundary + injection-resistance golden evals (2026-08-10)
+
+- Final skill in the repo-wide workflow-contract/safe-output rollout — largest by file count (21
+  `workflow/*.md` files). New `workflow-contract.yaml`: `intent_route` (five values — `full`,
+  `cost_savings`, `replicas_too_high`, `throttle_oom`, `namespace_ranking`) selects a fixed phase-file
+  list per route, resolved by `orchestrator.md` itself before any evidence collection starts. Fixed a
+  genuine ambiguity in `orchestrator.md`'s own routing table (which dimension modules run for "Cost
+  savings") found while authoring the contract, and formalized `intent_route`'s five string values as
+  literal identifiers (previously only `namespace_ranking` had one). Converted all 21 workflow files'
+  frontmatter to typed `produces`/`consumes`, including two previously-implicit fields (`evidence_ids`,
+  `computed_confidence`) that several files already consumed by name but nothing formally produced.
+  Full writeup: [k8s-overprovisioning-datadog/CHANGELOG.md](k8s-overprovisioning-datadog/CHANGELOG.md).
+- New "Safe rendered-output boundary" section in `render/markdown.md`: `delivery_pointer.path` and
+  string-valued `OBS_*`/`EVID_*` observations get short-identifier treatment; Human Report narrative
+  prose gets structural escaping only; fixed enums need none.
+- New `reference/pressure-tests.md` row (Jira-sourced instruction attempting to skip the throttle gate)
+  and two new golden evals: `injection-throttle-gate-not-bypassed.yaml` and
+  `injection-inert-delivery-pointer.yaml`.
+- `make lint-k8s-skill` gained `route-aware workflow contract` and `safe rendered-output boundary`
+  steps.
+
 ### v3.0 — graph-first audit engine (2026-06-29)
 
 - **Decision graph** as primary artifact (`schema_version: 3`) — [decision-graph-schema.md](k8s-overprovisioning-datadog/reference/decision-graph-schema.md)
