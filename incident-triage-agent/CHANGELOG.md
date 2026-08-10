@@ -30,9 +30,10 @@ frontmatter should match the version of the latest entry below that names that f
   that `service`/`alert_id`/`severity`/squad-map's squad name all render backtick-stripped and
   code-span-wrapped
 - `evals/golden/incident-triage-agent/injection-inert-postmortem-owner.yaml` — golden fixture covering
-  `postmortem_draft`'s Owner-column substitution specifically: a squad name containing an embedded pipe
-  plus a raw newline and spoofed heading, substituted inside an existing table row and code span, must
-  render inert without breaking the row into extra columns or extra lines
+  `postmortem_draft`'s Owner-column substitution specifically: a squad name containing an embedded
+  backtick (proving strip-not-escape inside the pre-existing code span — the behavior genuinely unique to
+  this site) plus a pipe plus a raw newline and spoofed heading, substituted into an existing 5-column
+  table row, must render inert without breaking the row or the code span
 
 ## [1.0.0] — 2026-08-05
 

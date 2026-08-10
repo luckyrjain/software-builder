@@ -467,8 +467,9 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
   heading — alongside `service`/`alert_id`/`severity`/squad-map's squad name rendering backtick-stripped
   and code-span-wrapped.
 - New golden eval `evals/golden/incident-triage-agent/injection-inert-postmortem-owner.yaml`: covers
-  `postmortem_draft`'s Owner-column substitution specifically — a squad name with an embedded pipe plus a
-  raw newline and spoofed heading must render inert without breaking the table row it's substituted into.
+  `postmortem_draft`'s Owner-column substitution specifically — a squad name with an embedded backtick
+  (proving strip-not-escape inside the pre-existing code span) plus a pipe plus a raw newline and spoofed
+  heading must render inert without breaking the table row or the code span it's substituted into.
 
 ### Initial release (2026-08-05)
 
