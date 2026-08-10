@@ -1106,6 +1106,14 @@ lint-loop-task-implementer:
 	@grep -q 'cross-skill-escalation' loop-task-implementer/SKILL.md || \
 		{ echo "error: loop-task-implementer SKILL.md must link to shared cross-skill-escalation" >&2; exit 1; }
 	@echo "  ok"
+	@echo "lint-loop-task-implementer: safe rendered-output boundary"
+	@grep -q 'docs/skill-framework/shared/safe-output.md' loop-task-implementer/SKILL.md || \
+		{ echo "error: loop-task-implementer/SKILL.md must link to shared safe-output" >&2; exit 1; }
+	@grep -q 'docs/skill-framework/shared/prompt-injection.md' loop-task-implementer/report-template.md && \
+	 grep -q 'docs/skill-framework/shared/safe-output.md' loop-task-implementer/report-template.md && \
+	 grep -qiE 'escape|fence|backtick' loop-task-implementer/report-template.md || \
+		{ echo "error: report-template.md must sanitize untrusted rendered fields per prompt-injection and safe-output" >&2; exit 1; }
+	@echo "  ok"
 
 lint-backlog-runner:
 	@echo "lint-backlog-runner: SKILL.md line count (<= 180)"
