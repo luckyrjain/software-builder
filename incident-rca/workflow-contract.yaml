@@ -1,0 +1,21 @@
+schema_version: 1
+entry_inputs:
+  user_message: {type: content, provenance: user_invocation, required: false, trust: untrusted}
+  from_time: {type: string, provenance: caller_or_user, required: false, trust: untrusted}
+  to_time: {type: string, provenance: caller_or_user, required: false, trust: untrusted}
+  service: {type: string, provenance: caller_or_user, required: false, trust: untrusted}
+  symptom: {type: string, provenance: caller_or_user, required: false, trust: untrusted}
+  environment: {type: string, provenance: caller_or_user, required: false, trust: untrusted}
+  jira_key: {type: string, provenance: caller_or_user, required: false, trust: untrusted}
+  namespace: {type: string, provenance: caller_or_user, required: false, trust: untrusted}
+  deployment_sha: {type: string, provenance: caller_or_user, required: false, trust: untrusted}
+  consumer_group: {type: string, provenance: caller_or_user, required: false, trust: untrusted}
+  error_signature: {type: string, provenance: caller_or_user, required: false, trust: untrusted}
+route_selection: {after_phase: "0"}
+routes:
+  standard:
+    when: {jira_anchored: false}
+    phases: [inputs, "0", "1", "2", "3", "4", "5"]
+  jira_anchored:
+    when: {jira_anchored: true}
+    phases: [inputs, "0", "0b", "1", "2", "3", "4", "5"]

@@ -1,14 +1,11 @@
 ---
-workflow_version: 1.0
-phase: 2
-produces:
-  - deploy_events
+workflow_version: 1.1
+phase: "2"
+produces: {deploy_events: list}
 consumes:
-  - from_time
-  - to_time
-  - service
-  - environment
-  - mcp_profile
+  required: {mcp_profile: string}
+  optional: {from_time: string, to_time: string, service: string, environment: string}
+  conditional: {}
 ---
 
 # Phase 2 — Change correlation (deploys)

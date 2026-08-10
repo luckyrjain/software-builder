@@ -1,20 +1,11 @@
 ---
-workflow_version: 1.2
-phase: 4
-produces:
-  - evidence_json
-  - ranked_hypotheses
-  - incident_class
-  - evidence_coverage
-  - causal_graph
+workflow_version: 1.3
+phase: "4"
+produces: {evidence_json: object, ranked_hypotheses: list, incident_class: string, evidence_coverage: object, causal_graph: object}
 consumes:
-  - error_signals
-  - infra_signals
-  - deploy_events
-  - jira_issues
-  - known_issue_matches
-  - recurrence_history
-  - cli_available
+  required: {error_signals: list, infra_signals: list, deploy_events: list, jira_issues: list, known_issue_matches: list, recurrence_history: list, cli_available: boolean}
+  optional: {}
+  conditional: {}
 ---
 
 # Phase 4 — Correlate & rank hypotheses

@@ -447,6 +447,8 @@ lint-incident-rca:
 	done; \
 	if [ "$$fail" -ne 0 ]; then echo "error: incident-rca workflow/*.md must declare workflow_version, phase, produces, consumes" >&2; exit 1; fi; \
 	echo "  ok"
+	@echo "lint-incident-rca: route-aware workflow contract"
+	@python3 -m scripts.validate_workflow_contracts incident-rca
 	@echo "lint-incident-rca: evidence.example.json parses as JSON"
 	@cache="$(CURDIR)/.pycache-lint-rca"; \
 	export PYTHONDONTWRITEBYTECODE=1 PYTHONPYCACHEPREFIX="$$cache"; \
@@ -507,6 +509,13 @@ lint-incident-rca:
 		exit 1; \
 	fi; \
 	echo "  ok"
+	@echo "lint-incident-rca: safe rendered-output boundary"
+	@grep -q 'docs/skill-framework/shared/safe-output.md' incident-rca/SKILL.md || \
+		{ echo "error: incident-rca/SKILL.md must link to shared safe-output" >&2; exit 1; }
+	@grep -q 'docs/skill-framework/shared/safe-output.md' incident-rca/report-template.md && \
+	 grep -qiE 'escape|backtick|code span' incident-rca/report-template.md || \
+		{ echo "error: report-template.md must sanitize untrusted rendered fields per safe-output" >&2; exit 1; }
+	@echo "  ok"
 
 lint-incident-triage-agent:
 	@echo "lint-incident-triage-agent: SKILL.md line count (<= 180)"

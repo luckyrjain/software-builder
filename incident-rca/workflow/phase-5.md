@@ -1,13 +1,11 @@
 ---
-workflow_version: 1.2
-phase: 5
-produces:
-  - rca_report
+workflow_version: 1.4
+phase: "5"
+produces: {rca_report: content}
 consumes:
-  - ranked_hypotheses
-  - evidence_json
-  - cli_available
-  - causal_graph
+  required: {ranked_hypotheses: list, evidence_json: object, cli_available: boolean, causal_graph: object}
+  optional: {}
+  conditional: {}
 ---
 
 # Phase 5 — Render the final report
@@ -56,6 +54,15 @@ Merge logic (no duplicate sections):
    - Optional **2-min read** (executive summary + conclusion)
    - Link to full report file
    Full template: [report-template.md](../report-template.md) §Executive Summary.
+
+## Safe rendered-output boundary
+
+The rendered report quotes untrusted content (log `sample_messages`, Jira issue titles, deploy commit/MR
+messages) directly into timeline rows, the evidence matrix, and ranked-hypotheses evidence bullets —
+structurally escape it per [report-template.md § Safe rendered-output
+boundary](../report-template.md#safe-rendered-output-boundary) before writing each field; do not rely on
+[log-redaction.md](../reference/log-redaction.md) alone, since that covers secrets (Rule 5), not
+Markdown-structure injection (Rule 4).
 
 ## Report body hygiene
 

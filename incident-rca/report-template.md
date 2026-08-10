@@ -683,4 +683,53 @@ Evidence coverage: [reference/evidence-coverage.md](reference/evidence-coverage.
 6. **Lessons learned** — leadership table distinct from P0/P1/P2 tasks.
 7. **Conclusion** — last narrative section before appendix.
 8. **No agent instructions in report body** — post-actions in chat per [post-action-templates.md](../docs/skill-framework/shared/post-action-templates.md).
+
+## Safe rendered-output boundary
+
+The rendered RCA report is real CommonMark/GFM Markdown, and
+[safe-output.md](../docs/skill-framework/shared/safe-output.md)'s Rule 4 techniques apply to it directly.
+[Log redaction](reference/log-redaction.md) already covers Rule 5 (secrets) for every quoted log line,
+ticket body, and pasted snippet — this section covers the separate concern of Markdown-structure
+injection from that same untrusted content (Jira body, pasted logs, Slack threads, ticket narratives —
+[SKILL.md § Guardrails](SKILL.md#guardrails-p0), [workflow/inputs.md](workflow/inputs.md),
+[workflow/phase-1.md](workflow/phase-1.md)). Every place that content is quoted into report prose is
+enumerated below:
+
+- **The `## Unified timeline` table's `Event` column and the `## Evidence matrix` table's `Signal`
+  column** — one-line summaries that quote or paraphrase a log `sample_messages` entry, a Jira issue
+  title, or a deploy commit/MR message. These are free text, not identifiers (`"5xx spike on
+  transfer-money"`, `"Production deploy MR !482"` — not templated the way `` `<from>` `` /
+  `` `<service>` `` placeholders elsewhere in this template are): structurally escape a raw newline, a
+  leading `#`/`>`/`-`, and the table `|` delimiter before writing the cell — a GFM table row can't
+  contain a real newline anyway, so this also protects the row from being split by one. Never wrap the
+  whole cell in a code span; that would misrepresent a summary sentence as a literal token.
+- **The `## Ranked hypotheses` section's Supporting evidence / Contradicting evidence / Remaining
+  uncertainty bullets** — the single most realistic injection vector in this report: these bullets
+  routinely quote raw evidence text directly (a log line, a ticket comment, an error message) as the
+  hypothesis's own supporting citation. Same treatment as the table cells above: structurally escape a
+  raw newline and a leading `#`/`>`/`-` before writing the bullet; never wrap the whole bullet in a code
+  span. A short literal already shown in backticks elsewhere in this template (`` `INC-4521` ``, an MR
+  reference) may still appear as its own small code span within the sentence — the rule against wrapping
+  applies to the bullet as a whole, not to an embedded token already rendered that way.
+- **The `## Incident scope` table's `Symptom` row** (`` `<symptom or —>` `` in the template) — `symptom`
+  is a caller-supplied entry input ([workflow/inputs.md](workflow/inputs.md)), the same untrusted content
+  class as the fields above. It is a short phrase, not free-form prose: structurally escape, then strip
+  any embedded backtick and wrap in an inline code span, matching how the template already backtick-wraps
+  every other Incident scope field.
+- **The `## Causal chain` and `## Causal graph` node labels** (the fenced `text` blocks showing
+  propagation with `↓`) — node text can quote the same short evidence summaries as the timeline `Event`
+  column. A fenced code block already isolates its content from surrounding Markdown structure (no `#`/
+  `>`/`|` interpretation inside a fence), so the only residual risk is an embedded ` ``` ` sequence
+  closing the fence early — structurally escape any raw triple-backtick run inside a node label before
+  writing it, per [safe-output.md](../docs/skill-framework/shared/safe-output.md) Rule 4's own
+  fence-escaping guidance.
+- **Everything else in this template** — status enums (`Observed`/`Correlated`/`Inferred`/`Assumed`,
+  confidence bands, hypothesis IDs), computed values (scores, percentages, timestamps, durations), and
+  the fixed prose of every checklist/label — is either a closed enum or a value this skill itself
+  computes, never sourced from analyzed content: no escaping needed.
+
+`assessment_metadata` (the Appendix YAML footer) embeds `service` and other short identifiers inside a
+` ```yaml ` fence — these are single-line values with no legitimate reason to contain a real newline, so
+escaping the newline alone is sufficient there; see
+[assessment-metadata.md](reference/assessment-metadata.md) for the field list.
 9. **Machine metadata** — `assessment_metadata` in Appendix only for human exports.

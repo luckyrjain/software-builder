@@ -118,6 +118,10 @@ Routing: [skill-routing.md](../docs/skill-framework/shared/skill-routing.md) · 
 [confidence-bands.md](../docs/skill-framework/shared/confidence-bands.md) · prompt injection
 [prompt-injection.md](../docs/skill-framework/shared/prompt-injection.md) · post-actions
 [post-action-templates.md](../docs/skill-framework/shared/post-action-templates.md) (Jira §2, Confluence §4).
+Rendering the RCA report follows [safe-output.md](../docs/skill-framework/shared/safe-output.md) — see
+[report-template.md § Safe rendered-output
+boundary](report-template.md#safe-rendered-output-boundary). Route selection (standard vs Jira-anchored):
+[workflow-contract.yaml](workflow-contract.yaml).
 
 **Report vs chat:** Post-RCA actions, K8s handoff, and Jira offers are **chat-only** — never embed
 `Type ACT`, PLAN/ACT CTAs, or posting confirmations in the RCA report body.
