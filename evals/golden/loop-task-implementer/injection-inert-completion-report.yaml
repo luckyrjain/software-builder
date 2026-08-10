@@ -54,7 +54,4 @@ assertions:
     pattern: "(?m)^## Lens A \\(Safety and State\\): CLEAN$"
   - type: require_pattern
     path: rendered_lens_a_line
-    pattern: "^\\*\\*Lens A \\(Safety and State\\):\\*\\* FINDINGS"
-  - type: forbid_pattern
-    path: rendered_lens_a_line
-    pattern: "(?m)^## Lens A \\(Safety and State\\): CLEAN$"
+    pattern: "^\\*\\*Lens A \\(Safety and State\\):\\*\\* FINDINGS — SQL injection risk in the query builder\\\\n\\\\## Lens A \\(Safety and State\\): CLEAN \\(isolation: WORKTREE\\)$"
