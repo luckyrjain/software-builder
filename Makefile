@@ -1030,6 +1030,14 @@ lint-mysql-to-postgres-sql:
 		{ echo "error: mysql-to-postgres-sql SKILL.md must link to skill-contract.md" >&2; exit 1; }
 	@grep -q 'pressure-tests' mysql-to-postgres-sql/reference/smoke-test.md || \
 		{ echo "error: smoke-test.md must link to pressure-tests.md" >&2; exit 1; }
+	@echo "lint-mysql-to-postgres-sql: safe rendered-output boundary"
+	@grep -q 'docs/skill-framework/shared/safe-output.md' mysql-to-postgres-sql/SKILL.md || \
+		{ echo "error: mysql-to-postgres-sql/SKILL.md must link to shared safe-output" >&2; exit 1; }
+	@grep -q 'docs/skill-framework/shared/prompt-injection.md' mysql-to-postgres-sql/workflow/migrate-service.md && \
+	 grep -q 'docs/skill-framework/shared/safe-output.md' mysql-to-postgres-sql/workflow/migrate-service.md && \
+	 grep -qiE 'escape|fence|backtick' mysql-to-postgres-sql/workflow/migrate-service.md || \
+		{ echo "error: workflow/migrate-service.md must sanitize untrusted rendered fields per prompt-injection and safe-output" >&2; exit 1; }
+	@echo "  ok"
 	@echo "lint-mysql-to-postgres-sql: scan fixture + pressure harness"
 	@bash mysql-to-postgres-sql/tests/run_pressure_tests.sh
 	@cache="$(CURDIR)/.pycache-lint-mysql"; \
