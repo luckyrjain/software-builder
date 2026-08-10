@@ -42,7 +42,7 @@ Only present when at least one `WRITTEN_FAILING_PROD_BUG` target exists.
 ### `GET /api/orders/:id`
 
 - **Expected:** `200` with a body containing `total_cents` (integer)
-- **Actual:** `500 Internal Server Error` — the assertion and request were **not** loosened to match
+- **Actual:** 500 Internal Server Error — the assertion and request were **not** loosened to match
 - **Suggested next step:** hand to **loop-task-implementer** to fix, or **pr-review** to flag on the MR
 
 ## Skipped
@@ -96,7 +96,7 @@ those values reaches this document is enumerated below:
   `target.scope` (endpoint descriptors / file paths) is untrusted input by
   [workflow/inputs.md](../workflow/inputs.md)'s own definition. Each is a short identifier, never a
   full diff body (the shape examples there are `"MR !123"`, `"branch:feature-x..main"`,
-  `"POST /api/orders"` — not multi-line text), so: structurally escape (Rules 1–4 — neutralize a raw
+  `"POST /api/orders"` — not multi-line text), so: structurally escape (Rule 4 — neutralize a raw
   newline before it can start a spoofed heading), then strip any embedded backtick and wrap in an inline
   code span — a branch name or endpoint descriptor has no legitimate reason to contain one. A `backfill`
   scope list renders as multiple wrapped identifiers (`` `POST /api/orders`, `GET /api/orders/:id` ``),
