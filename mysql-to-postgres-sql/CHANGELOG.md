@@ -49,7 +49,14 @@ reconstructed here. The entry below documents the skill's current state at `skil
   H1 title, the Scan gate table's Open-hits cell, and the Files-rewritten table's fragment columns in
   one document: a MySQL fragment with legitimate backtick-quoted identifiers plus a table-breaking pipe
   and spoofed heading render inert without the real backticks being stripped; a raw newline in
-  `service_name` can't turn the H1 into a spoofed second heading.
+  `service_name` can't turn the H1 into a spoofed second heading. Every escaped/rendered field also
+  gets its own explicit `forbid_pattern` check for a literal raw newline character, not just checks on
+  the pipe/heading text — an earlier draft's `require_pattern`/`forbid_pattern` pair on the rendered
+  fields could both pass even when the newline itself was left unescaped, because the injected heading
+  line's own trailing characters (a closing backtick with no space before it) prevented the `^...$`
+  anchors from matching either way; the fixture would have silently accepted that regression.
+  `{{SERVICE_DIR}}`'s second literal occurrence — inside the Scan gate table's Check cell's existing code
+  span, alongside static text — is now also explicitly named in the boundary section, not left implicit.
 
 ### Not changed (scoped out during the repo-wide safe-output rollout survey)
 

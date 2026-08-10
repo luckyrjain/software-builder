@@ -1003,9 +1003,11 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
   covers the H1 title, the Scan gate table's Open-hits cell, and the Files-rewritten table's fragment
   columns in one document — a MySQL fragment with legitimate backtick-quoted identifiers plus a
   table-breaking pipe and spoofed heading render inert without the real backticks being stripped, and a
-  raw newline in `service_name` can't turn the H1 into a spoofed second heading.
-
-### AST-backed secondary checker for standalone `.sql` files (2026-08-09)
+  raw newline in `service_name` can't turn the H1 into a spoofed second heading. Every escaped/rendered
+  field also carries an explicit forbid-raw-newline check, since an earlier draft's pipe/heading-only
+  assertions could both pass on a regression that left the newline itself unescaped. `{{SERVICE_DIR}}`'s
+  second literal occurrence (inside the Scan gate table's Check cell's existing code span) is now named
+  explicitly in the boundary section too.
 
 - New `scripts/ast_check_mysql_dialect.py` — parses `.sql` files with
   [sqlglot](https://github.com/tobymao/sqlglot)'s MySQL dialect and flags MySQL-only constructs

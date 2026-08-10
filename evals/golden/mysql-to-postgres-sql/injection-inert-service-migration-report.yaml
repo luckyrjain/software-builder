@@ -63,6 +63,9 @@ assertions:
   - type: forbid_pattern
     path: mysql_fragment_value_after_escaping
     pattern: "(?m)^## VERDICT: SAFE$"
+  - type: forbid_pattern
+    path: mysql_fragment_value_after_escaping
+    pattern: "\n"
   - type: require_pattern
     path: rendered_fragment_cell
     pattern: "^``"
@@ -78,6 +81,9 @@ assertions:
   - type: forbid_pattern
     path: rendered_fragment_cell
     pattern: "(?m)^## VERDICT: SAFE$"
+  - type: forbid_pattern
+    path: rendered_fragment_cell
+    pattern: "\n"
   - type: require_pattern
     path: scan_hit_line
     pattern: "`order_id`"
@@ -99,6 +105,9 @@ assertions:
   - type: forbid_pattern
     path: scan_hit_line_value_after_escaping
     pattern: "(?m)^## VERDICT: SAFE$"
+  - type: forbid_pattern
+    path: scan_hit_line_value_after_escaping
+    pattern: "\n"
   - type: require_pattern
     path: rendered_open_hits_cell
     pattern: "^``"
@@ -114,6 +123,9 @@ assertions:
   - type: forbid_pattern
     path: rendered_open_hits_cell
     pattern: "(?m)^## VERDICT: SAFE$"
+  - type: forbid_pattern
+    path: rendered_open_hits_cell
+    pattern: "\n"
   - type: require_pattern
     path: service_name
     pattern: "`"
@@ -126,9 +138,15 @@ assertions:
   - type: forbid_pattern
     path: service_name_value_after_escaping
     pattern: "(?m)^## VERDICT: SAFE$"
+  - type: forbid_pattern
+    path: service_name_value_after_escaping
+    pattern: "\n"
   - type: require_pattern
     path: rendered_h1_title
     pattern: "^# PostgreSQL migration — `[^`]*`$"
   - type: forbid_pattern
     path: rendered_h1_title
     pattern: "(?m)^## VERDICT: SAFE$"
+  - type: forbid_pattern
+    path: rendered_h1_title
+    pattern: "\n"
