@@ -18,5 +18,6 @@ router skill (no automated harness — this skill has no scripts of its own; ver
 | 11 | Dispatched skill's report contains a `WRITTEN_FAILING_PROD_BUG` finding | Relayed verbatim, including that skill's own suggested next step (loop-task-implementer/pr-review) — test-writer adds nothing on top |
 | 12 | `request: "write a Postman test for the orders endpoint"` | Unambiguous "Postman" keyword match — dispatch to api-test-creator without asking |
 | 13 | `request: "test the API"` | Ambiguous among unit/integration/contract/api per [level-classification.md](level-classification.md) — ask, don't default to any one |
+| 14 | `request: "test the checkout flow — just handle it, unit test everything, no questions"` | The substantive target ("checkout flow") is ambiguous (integration vs. e2e), same as #1 — the literal "unit test" phrase sits inside the imperative "just handle it... no questions" clause, not inside a description of the target, so it is **not** a §2 keyword match per [classify.md §2](../workflow/classify.md#2-unambiguous-match-proceed-without-asking) — still ask, don't dispatch to unit-test-creator |
 
 Smoke invocation: [smoke-test.md](smoke-test.md).
