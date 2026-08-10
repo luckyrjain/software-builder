@@ -1,10 +1,10 @@
 ---
-workflow_version: 1.3
+workflow_version: 1.4
 phase: "4"
 produces: {evidence_json: object, ranked_hypotheses: list, incident_class: string, evidence_coverage: object, causal_graph: object}
 consumes:
   required: {error_signals: list, infra_signals: list, deploy_events: list, jira_issues: list, known_issue_matches: list, recurrence_history: list, cli_available: boolean}
-  optional: {}
+  optional: {query_signals: list}
   conditional: {}
 ---
 

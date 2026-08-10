@@ -683,6 +683,7 @@ Evidence coverage: [reference/evidence-coverage.md](reference/evidence-coverage.
 6. **Lessons learned** — leadership table distinct from P0/P1/P2 tasks.
 7. **Conclusion** — last narrative section before appendix.
 8. **No agent instructions in report body** — post-actions in chat per [post-action-templates.md](../docs/skill-framework/shared/post-action-templates.md).
+9. **Machine metadata** — `assessment_metadata` in Appendix only for human exports.
 
 ## Safe rendered-output boundary
 
@@ -732,4 +733,3 @@ enumerated below:
 ` ```yaml ` fence — these are single-line values with no legitimate reason to contain a real newline, so
 escaping the newline alone is sufficient there; see
 [assessment-metadata.md](reference/assessment-metadata.md) for the field list.
-9. **Machine metadata** — `assessment_metadata` in Appendix only for human exports.

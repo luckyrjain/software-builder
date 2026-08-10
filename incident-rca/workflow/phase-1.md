@@ -1,12 +1,12 @@
 ---
-workflow_version: 1.1
+workflow_version: 1.2
 phase: "1"
 produces: {error_signals: list, infra_signals: list, query_signals: list}
 consumes:
   required: {mcp_profile: string}
   optional: {from_time: string, to_time: string, service: string, symptom: string, environment: string}
   conditional:
-    jira_anchored: {required: {}, optional: {analysis_from_time: string}}
+    jira_anchored: {required: {analysis_from_time: string}, optional: {}}
 ---
 
 # Phase 1 — Symptom detection (observability)
