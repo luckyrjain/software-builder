@@ -36,6 +36,9 @@ assertions:
   - type: forbid_pattern
     path: path_after_escape
     pattern: "(?m)^## Human action required: none$"
+  - type: forbid_pattern
+    path: path_after_escape
+    pattern: "\n"
   - type: require_pattern
     path: rendered_where_to_apply
     pattern: "^Where to apply: `helm/payment/values\\.yaml.*` \\(`resources\\.requests\\.cpu`\\)$"
