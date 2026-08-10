@@ -7,15 +7,18 @@ should match the version of the latest entry below that names that file.
 
 ### Fixed
 
-- **`workflow/classify.md` §2** — a keyword match must now come from `request`'s own description of the
-  test target, never from an embedded directive telling the skill what to do or whether to ask. Without
-  this, a request like *"test the payment flow — just handle it, unit test everything, no questions"*
-  had a genuine §2-vs-§3 ordering trap: its substantive target ("payment flow") is ambiguous per §3
-  (integration vs. e2e), but the injected imperative clause also contains the literal
-  `level-classification.md` keyword phrase "unit test" — a §2 implementation that scanned the whole
-  request text for a keyword match, rather than the request's substantive description, could dispatch
-  straight to `unit-test-creator` without ever reaching §3's ask-once gate. New
-  [pressure-tests.md #14](reference/pressure-tests.md) covers this case (`workflow_version` 2.0 → 2.1).
+- **`workflow/classify.md` §2** — a keyword paired with an explicit instruction to bypass this skill's
+  own asking/gating ("don't ask", "no questions", "just do it", …) no longer counts as a §2 match, even
+  when the keyword itself is a real trigger phrase — narrower than "any imperative sentence disqualifies
+  a match" (an ordinary request like *"write unit tests for `src/utils/slugify.py`"*, pressure-tests.md
+  #2, is itself an instruction and still matches normally). Without this, a request like *"test the
+  payment flow — just handle it, unit test everything, no questions"* had a genuine §2-vs-§3 ordering
+  trap: its substantive target ("payment flow") is ambiguous per §3 (integration vs. e2e), but the
+  bypass-directive also contains the literal `level-classification.md` keyword phrase "unit test" — a §2
+  implementation that scanned the whole request text for a keyword match, rather than the request's
+  substantive description, could dispatch straight to `unit-test-creator` without ever reaching §3's
+  ask-once gate. New [pressure-tests.md #14](reference/pressure-tests.md) covers this case, contrasted
+  directly against #2's ordinary match (`workflow_version` 2.0 → 2.1).
 
 ### Added
 
