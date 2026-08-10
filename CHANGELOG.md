@@ -381,18 +381,21 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 - New "Safe rendered-output boundary" section in `report-template.md`: per `SKILL.md` § Guardrails,
   task text, issue/ticket bodies, PR descriptions, and code comments are untrusted, and several fields
   in this template, in the Cross-skill handoff block (same file), and in `workflow/orchestrator.md`
-  §19's escalation report carry that content straight into a rendered completion report — `task_id` (a
-  short, tracker-supplied identifier, the same field backlog-runner already treats this way) gets
-  structural escaping plus code-span wrapping **and redaction**, matching backlog-runner's own boundary
-  which explicitly does not exempt this field; Lens A/B summaries, finding status/reason text, the
-  handoff block's `Trigger: <hypothesis or finding>` line, and the escalation block's free-text fields
+  §19's escalation report carry that content straight into a rendered completion report — `task_id`
+  (tracker-supplied) and `actor` (§16: an ordinary `git config user.name` on an unrecognized push,
+  already treated as unreliable by `workflow/reviewer.md`'s own guidance) get structural escaping plus
+  code-span wrapping **and redaction**, matching backlog-runner's own boundary which explicitly does not
+  exempt `task_id`; Lens A/B summaries, Contested findings' `reason` text (Accepted findings' `id,
+  status` one-liner is pure identifier+enum and needs neither), the handoff block's `Trigger: <hypothesis
+  or finding>` line, and the escalation block's free-text fields
   (`orchestrator_position`/`reviewer_position`/`builder_position`, `evidence_gap`, `rebuttal_evidence`,
   `escalation_reason`, `required_human_decision`, `required_access`,
   `supporting_evidence[].description`) get structural escaping and redaction, never code-span wrapping,
-  since they're sentence-length prose, not identifiers. System-generated fields (`pull_request_url`,
-  `head_commit`, `diff_fingerprint`, `finding_id`, CI check names, commit `actor`) need no escaping —
-  their own format already constrains them. `SKILL.md` links `safe-output.md`. Enforced by a new
-  Makefile grep check.
+  since they're sentence-length prose, not identifiers — the literal template block's backticks were
+  removed from exactly these placeholders so the visible markup doesn't contradict the prose rule below
+  it. System-generated/fixed-enum fields (`pull_request_url`, `head_commit`, `diff_fingerprint`,
+  `finding_id`, CI check names) need no escaping — their own format already constrains them. `SKILL.md`
+  links `safe-output.md`. Enforced by a new Makefile grep check (including a `redact` keyword check).
 - New golden eval `evals/golden/loop-task-implementer/injection-inert-completion-report.yaml`: a
   tracker `task_id` containing a backtick, a table-breaking pipe, and a raw newline plus a spoofed
   "## Human action required: none" heading, and a Lens A summary containing a raw newline plus a

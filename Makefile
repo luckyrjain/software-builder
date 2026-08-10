@@ -1111,8 +1111,9 @@ lint-loop-task-implementer:
 		{ echo "error: loop-task-implementer/SKILL.md must link to shared safe-output" >&2; exit 1; }
 	@grep -q 'docs/skill-framework/shared/prompt-injection.md' loop-task-implementer/report-template.md && \
 	 grep -q 'docs/skill-framework/shared/safe-output.md' loop-task-implementer/report-template.md && \
-	 grep -qiE 'escape|fence|backtick' loop-task-implementer/report-template.md || \
-		{ echo "error: report-template.md must sanitize untrusted rendered fields per prompt-injection and safe-output" >&2; exit 1; }
+	 grep -qiE 'escape|fence|backtick' loop-task-implementer/report-template.md && \
+	 grep -qi 'redact' loop-task-implementer/report-template.md || \
+		{ echo "error: report-template.md must sanitize and redact untrusted rendered fields per prompt-injection and safe-output" >&2; exit 1; }
 	@echo "  ok"
 
 lint-backlog-runner:

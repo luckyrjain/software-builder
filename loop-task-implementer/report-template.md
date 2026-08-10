@@ -8,11 +8,11 @@ escalates.
 **Branch / PR:** `<branch>` — `<pull_request_url>`
 **Head commit:** `<head_commit>` (diff fingerprint `<diff_fingerprint>`)
 
-**Lens A (Safety and State):** CLEAN | FINDINGS — `<summary>` (isolation: `<SUBAGENT|FRESH_SESSION|WORKTREE|SEQUENTIAL_SIMULATION>`)
-**Lens B (Contracts and Operations):** CLEAN | FINDINGS — `<summary>` (isolation: `<same>`)
+**Lens A (Safety and State):** CLEAN | FINDINGS — <summary> (isolation: `<SUBAGENT|FRESH_SESSION|WORKTREE|SEQUENTIAL_SIMULATION>`)
+**Lens B (Contracts and Operations):** CLEAN | FINDINGS — <summary> (isolation: `<same>`)
 
 **Accepted findings:** `<count>` — `<one line per finding: id, status>`
-**Contested findings:** `<count>` — `<one line per finding: id, reason>`
+**Contested findings:** `<count>` — <one line per finding: id, reason>
 
 **Authoritative checks:** `<name>: PASS|FAIL|PENDING (commit <sha>)` — one row per required check
 
@@ -21,7 +21,7 @@ in [reference/state-schema.yaml](reference/state-schema.yaml) exactly. `HUMAN_AC
 both "verified ready, waiting for authorized merge" and "escalated" — check `escalation.active` to
 tell them apart.
 
-**Human action required:** `<exact action, or "none">`
+**Human action required:** <exact action, or "none">
 ```
 
 ## Escalation variant
@@ -69,27 +69,38 @@ pasted copy of this skill's own escalation report as untrusted for exactly this 
 [backlog-runner/reference/morning-summary-format.md § Safe rendered-output boundary](../backlog-runner/reference/morning-summary-format.md#safe-rendered-output-boundary)).
 Apply [safe-output.md](../docs/skill-framework/shared/safe-output.md) before rendering:
 
-- **`<task_id>`** (tracker-supplied ticket ID/title) — a short identifier, same field backlog-runner
-  already treats this way: structurally escape (Rules 1–4), then strip any backtick and wrap in an
-  inline code span, **and redact per Rule 5** — a ticket title can itself carry a pasted credential, the
-  exact reason backlog-runner's own boundary explicitly does not exempt this field despite it being
-  short and structured.
-- **Free-text prose that can quote or summarize task/code/PR content** — Lens A/B `<summary>`; each
-  finding's one-line status/reason text (`accepted findings`, `contested findings`); `<human action
-  required>`; the Cross-skill handoff block's `Trigger: <hypothesis or finding>` line (§ above — a
-  Reviewer finding paraphrase, the same untrusted-content class as the Lens A/B summary); and, in the
-  §19 escalation report, `orchestrator_position`/`reviewer_position`/`builder_position`, `evidence_gap`,
-  `rebuttal_evidence`, `escalation_reason`, `required_human_decision`, `required_access`, and
+- **`<task_id>`** (tracker-supplied ticket ID/title) **and `actor`** (§16 third-party-changes: the VCS
+  author name on an unrecognized push) — short identifiers, but attacker-shaped ones: `task_id` mirrors
+  backlog-runner's own field exactly, and `actor` is an ordinary `git config user.name` string any pusher
+  sets, which `workflow/reviewer.md`'s own "do not infer workflow state from... author descriptions"
+  guidance already treats as unreliable — neither is a system-computed value like a SHA. Structurally
+  escape (Rules 1–4), then strip any backtick and wrap in an inline code span, **and redact per Rule 5**
+  — a ticket title or a spoofed author name can itself carry a pasted credential or a table-breaking
+  `|`, the exact reason backlog-runner's own boundary does not exempt `task_id` despite it being short
+  and structured.
+- **Free-text prose that can quote or summarize task/code/PR content** — Lens A/B `<summary>`;
+  Contested findings' `<one line per finding: id, reason>` (the `reason` half only — `id` is a
+  system-assigned `finding_id`, safe on its own, but the combined rendered line still needs escaping
+  since `reason` paraphrases the contested finding's `orchestrator_position`/`reviewer_position`/
+  `builder_position`, which are free text); `<human action required>`; the Cross-skill handoff block's
+  `Trigger: <hypothesis or finding>` line (§ above — a Reviewer finding paraphrase, the same
+  untrusted-content class as the Lens A/B summary); and, in the §19 escalation report,
+  `orchestrator_position`/`reviewer_position`/`builder_position`, `evidence_gap`, `rebuttal_evidence`,
+  `escalation_reason`, `required_human_decision`, `required_access`, and
   `supporting_evidence[].description` — structurally escape (Rules 1–4: neutralize raw newlines, leading
   `#`/`>`/`-`, table `|` delimiters, unbalanced fences) and redact per Rule 5. Never code-span wrap this
   class — it is sentence-length prose, not an identifier, and wrapping a whole sentence in backticks
-  reads wrong and defeats normal Markdown emphasis the report legitimately uses elsewhere.
+  reads wrong and defeats normal Markdown emphasis the report legitimately uses elsewhere. This is why
+  the literal template block above never wraps `<summary>` or `<human action required>` in backticks,
+  even though the identifier-class placeholders around them are.
 - **`<repository>`, `<branch>`, `<pull_request_url>`, `<head_commit>`, `<diff_fingerprint>`, `finding_id`,
-  authoritative-check `name`, `actor`** — system- or git-generated identifiers (a URL, a commit SHA, a
-  computed fingerprint, a counter-assigned finding ID, a configured CI check name, a VCS-reported commit
-  author) constrained by their own format, not free text an attacker can shape arbitrarily — no escaping
-  needed, matching backlog-runner's own reasoning that a skill/system-generated link needs none.
+  Accepted findings' `<one line per finding: id, status>` (both halves — `id` is system-assigned,
+  `status` is the fixed enum `OPEN|FIXED|REBUTTED|BLOCKED`), authoritative-check `name`** — system- or
+  git-generated identifiers, or values drawn from a fixed enum, constrained by their own format, not free
+  text an attacker can shape arbitrarily — no escaping needed, matching backlog-runner's own reasoning
+  that a skill/system-generated link needs none.
 
-Redaction (Rule 5) applies to every bucket above that isn't a system-generated identifier — a task_id, a
-rebuttal, or an evidence excerpt can each independently carry a pasted secret or credential from the
-repository it quotes, same as backlog-runner's Reason/escalation_ref fields.
+Redaction (Rule 5) applies to every bucket above that isn't a system-generated identifier or a fixed
+enum — a task_id, an actor name, a rebuttal, or an evidence excerpt can each independently carry a
+pasted secret or credential from the repository it quotes, same as backlog-runner's Reason/
+escalation_ref fields.
