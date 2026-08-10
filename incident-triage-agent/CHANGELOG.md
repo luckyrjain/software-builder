@@ -13,15 +13,26 @@ frontmatter should match the version of the latest entry below that names that f
   `make lint-incident-triage-agent`
 - **reference/triage-doc-format.md**, **reference/postmortem-format.md** — "Safe rendered-output
   boundary" sections: `service`, `alert_title`/`symptom`, `alert_id`, `severity` (webhook payload) and
-  squad-map's resolved squad name are untrusted here regardless of squad-map's own no-escaping design at
-  its boundary (see squad-map's `[1.2.5]`) — short identifiers (`service`, `alert_id`, squad name) get
-  structural escaping plus code-span wrapping, since `triage_doc`/`postmortem_draft` are terminal
-  documents no downstream skill re-parses for exact matches; free text (`alert_title`, incident-rca's own
+  squad-map's resolved squad name are untrusted here too — squad-map's own boundary (see squad-map's
+  `[1.2.5]`) already structurally escapes the squad name but deliberately skips code-span wrapping, so
+  this skill applies both steps locally rather than trusting squad-map's escaping blindly — short
+  identifiers (`service`, `alert_id`, squad name) get structural escaping plus code-span wrapping, since
+  `triage_doc`/`postmortem_draft` are terminal documents no downstream skill re-parses for exact
+  matches; free text (`alert_title`, incident-rca's own
   not-yet-escaped hypothesis/report text) gets structural escaping only
+- **reference/postmortem-format.md** — the Owner-column substitution bullet now also calls out that Step
+  1 structural escaping applies at that exact site (a raw newline/pipe in the substituted squad name
+  would break the table row it's substituted into), on top of the existing backtick-strip-not-escape
+  guidance for the pre-existing code span
 - **SKILL.md** — links [safe-output.md](../docs/skill-framework/shared/safe-output.md)
 - `evals/golden/incident-triage-agent/injection-inert-triage-doc.yaml` — golden fixture proving a
   spoofed "## Likely cause" heading injected via `alert_title` never becomes a second live section, and
-  that `service`/`alert_id`/squad-map's squad name all render backtick-stripped and code-span-wrapped
+  that `service`/`alert_id`/`severity`/squad-map's squad name all render backtick-stripped and
+  code-span-wrapped
+- `evals/golden/incident-triage-agent/injection-inert-postmortem-owner.yaml` — golden fixture covering
+  `postmortem_draft`'s Owner-column substitution specifically: a squad name containing an embedded pipe
+  plus a raw newline and spoofed heading, substituted inside an existing table row and code span, must
+  render inert without breaking the row into extra columns or extra lines
 
 ## [1.0.0] — 2026-08-05
 

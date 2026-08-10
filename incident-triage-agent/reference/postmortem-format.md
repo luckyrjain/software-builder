@@ -59,12 +59,16 @@ Same untrusted-value inventory and two-step escaping pattern as
 ([prompt-injection.md](../../docs/skill-framework/shared/prompt-injection.md)) and untrusted here too.
 Two things are specific to this format:
 
-- **Owner-column substitution happens inside an existing code span.** report-template.md's placeholder is
-  already backtick-delimited (`` `<team>` ``, `` `<team/person>` ``) — the substituted squad name goes
-  *between* those existing backticks, it does not add a new pair. Per
+- **Owner-column substitution happens inside an existing code span, inside an existing table cell.**
+  report-template.md's placeholder is already backtick-delimited (`` `<team>` ``, `` `<team/person>` ``)
+  — the substituted squad name goes *between* those existing backticks, it does not add a new pair. Per
   [safe-output.md](../../docs/skill-framework/shared/safe-output.md) Rule 4's strip-not-escape guidance:
   **strip** any backtick already present in squad-map's resolved name before substituting — a backslash
   before it does not work inside a code span — never re-wrap the cell in a second pair of backticks.
+  **Step 1 still applies at this exact site, on top of the backtick strip**: the substituted text also
+  sits inside a Markdown table row, so a raw newline or an unescaped `|` in the resolved name would
+  break the row (start a fake new line, or open a fake extra column) exactly as it would anywhere else
+  this boundary applies — escape/fence those the same way before the value ever reaches the cell.
 - **The header line and incident-rca's full report body** (§ above, "verbatim" per this file's opening)
   get Step 1 structural escaping applied to the entire embedded body, not just the header's own
   `<squad>`/`<confidence>`/`<triggered_at>`/`<resolved_at>` placeholders — a log excerpt or evidence

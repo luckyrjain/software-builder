@@ -452,16 +452,23 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 - `reference/triage-doc-format.md` and `reference/postmortem-format.md` gain "Safe rendered-output
   boundary" sections: `service`/`alert_id` (short identifiers) get structural escaping plus code-span
   wrapping; `alert_title`/`symptom` and incident-rca's own hypothesis/report text (free-form prose) get
-  structural escaping only. squad-map's resolved squad name is untrusted here regardless of squad-map's
-  own no-escaping design at its boundary (squad-map's `SQUAD_MAP.md` is a machine-parsed interchange
-  format other skills exact-match against; `triage_doc`/`postmortem_draft` are terminal, human-facing
-  documents nothing re-parses, so code-span wrapping is always safe here). `SKILL.md` links
-  `safe-output.md`. Enforced by a new Makefile grep check on both format docs.
+  structural escaping only. squad-map's resolved squad name is untrusted here too — squad-map's own
+  boundary already structurally escapes it before returning it, but deliberately skips code-span
+  wrapping (squad-map's `SQUAD_MAP.md` is a machine-parsed interchange format other skills exact-match
+  against), so this skill re-applies structural escaping (idempotent, not trusted blindly) and adds the
+  code-span wrap squad-map skips — `triage_doc`/`postmortem_draft` are terminal, human-facing documents
+  nothing re-parses, so wrapping is always safe here. `SKILL.md` links `safe-output.md`. Enforced by a
+  new Makefile grep check on both format docs. The postmortem Owner-column substitution site — squad-map's
+  resolved name goes inside an *existing* table cell and code span, not a free-standing line — also
+  gets Step 1 structural escaping restated on top of the pre-existing backtick-strip guidance.
 - New golden eval `evals/golden/incident-triage-agent/injection-inert-triage-doc.yaml`: a webhook
   `alert_title` containing a raw newline plus a spoofed "## Likely cause" heading is proven to never
   become a second live section — the real incident-rca hypothesis still lands directly under the real
-  heading — alongside `service`/`alert_id`/squad-map's squad name rendering backtick-stripped and
-  code-span-wrapped.
+  heading — alongside `service`/`alert_id`/`severity`/squad-map's squad name rendering backtick-stripped
+  and code-span-wrapped.
+- New golden eval `evals/golden/incident-triage-agent/injection-inert-postmortem-owner.yaml`: covers
+  `postmortem_draft`'s Owner-column substitution specifically — a squad name with an embedded pipe plus a
+  raw newline and spoofed heading must render inert without breaking the table row it's substituted into.
 
 ### Initial release (2026-08-05)
 
