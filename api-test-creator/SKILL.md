@@ -68,6 +68,9 @@ repo's own conventions, plus **`API_TEST_REPORT.md`** — spec:
 [reference/report-format.md](reference/report-format.md). Per-target status (written & passing, written
 but flags a probable production bug, needs an observed endpoint, blocked without a reachable API instance,
 needs a human, already covered, skipped by the file cap), verification summary, and any handoff findings.
+Rendering that report follows [safe-output.md](../docs/skill-framework/shared/safe-output.md) — see
+[reference/report-format.md § Safe rendered-output
+boundary](reference/report-format.md#safe-rendered-output-boundary).
 
 ## Non-negotiables
 
