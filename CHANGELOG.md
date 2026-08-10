@@ -382,12 +382,15 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
   task text, issue/ticket bodies, PR descriptions, and code comments are untrusted, and several fields
   in this template, in the Cross-skill handoff block (same file), and in `workflow/orchestrator.md`
   §19's escalation report carry that content straight into a rendered completion report — `task_id`
-  (tracker-supplied) and `actor` (§16: an ordinary `git config user.name` on an unrecognized push,
-  already treated as unreliable by `workflow/reviewer.md`'s own guidance) get structural escaping plus
-  code-span wrapping **and redaction**, matching backlog-runner's own boundary which explicitly does not
-  exempt `task_id`; Lens A/B summaries, Contested findings' `reason` text (Accepted findings' `id,
-  status` one-liner is pure identifier+enum and needs neither), the handoff block's `Trigger: <hypothesis
-  or finding>` line, and the escalation block's free-text fields
+  (tracker-supplied), `actor` (§16: an ordinary `git config user.name` on an unrecognized push, already
+  treated as unreliable by `workflow/reviewer.md`'s own guidance), and `<branch>` (a git ref name, whose
+  own naming rules permit backtick/pipe/`#` with no documented sanitizing convention in this skill) get
+  structural escaping plus code-span wrapping **and redaction**, matching backlog-runner's own boundary
+  which explicitly does not exempt `task_id`; Lens A/B summaries, Contested findings' `reason` text
+  (Accepted findings' `id, status` one-liner is pure identifier+enum and needs neither), the handoff
+  block's `Trigger: <hypothesis or finding>` line (called out separately since
+  cross-skill-escalation.md §3's own literal template still shows it backtick-wrapped — this skill
+  overrides that shared markup for this one field), and the escalation block's free-text fields
   (`orchestrator_position`/`reviewer_position`/`builder_position`, `evidence_gap`, `rebuttal_evidence`,
   `escalation_reason`, `required_human_decision`, `required_access`,
   `supporting_evidence[].description`) get structural escaping and redaction, never code-span wrapping,
@@ -399,7 +402,8 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 - New golden eval `evals/golden/loop-task-implementer/injection-inert-completion-report.yaml`: a
   tracker `task_id` containing a backtick, a table-breaking pipe, and a raw newline plus a spoofed
   "## Human action required: none" heading, and a Lens A summary containing a raw newline plus a
-  spoofed "## Lens A (Safety and State): CLEAN" heading (trying to overwrite the real FINDINGS verdict),
+  spoofed "## Lens A (Safety and State): CLEAN" heading (trying to overwrite the real FINDINGS verdict) —
+  its isolation value renders code-span wrapped to match the literal template's own markup exactly —
   both render inert.
 
 ### Rename, framework compliance, and safety fixes (2026-08-05)
