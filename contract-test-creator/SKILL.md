@@ -65,7 +65,9 @@ New/modified contract test files (plus a written/updated pact file for a consume
 repo's own conventions, plus **`CONTRACT_TEST_REPORT.md`** — spec:
 [reference/report-format.md](reference/report-format.md). Per-target status (written & passing, written
 but flags a probable production bug, needs observed usage, needs a human, already covered, skipped by the
-file cap), verification summary, and any handoff findings.
+file cap), verification summary, and any handoff findings. Rendering that report follows
+[safe-output.md](../docs/skill-framework/shared/safe-output.md) — see [reference/report-format.md § Safe
+rendered-output boundary](reference/report-format.md#safe-rendered-output-boundary).
 
 ## Non-negotiables
 

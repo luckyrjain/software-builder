@@ -32,12 +32,14 @@ def test_golden_fixtures_load() -> None:
     assert ("mysql-to-postgres-sql", "golden-injection-inert-service-migration-report") in case_ids
     assert ("api-test-creator", "golden-injection-status-not-upgraded") in case_ids
     assert ("api-test-creator", "golden-injection-inert-api-test-report") in case_ids
+    assert ("contract-test-creator", "golden-injection-status-not-upgraded") in case_ids
+    assert ("contract-test-creator", "golden-injection-inert-contract-test-report") in case_ids
     # Deliberately an exact count, not >=: a well-formed-but-unintended duplicate fixture, or a
     # deletion whose case_id isn't one of the ones asserted above, changes this total without
     # tripping load_golden_fixtures' own malformed-fixture error. It won't catch a delete+add that
     # happens to net to the same count, but it catches the much more common single accidental
     # deletion or duplication. Bump this number when you intentionally add or remove a fixture.
-    assert len(cases) == 25
+    assert len(cases) == 27
 
 
 def test_golden_cases_pass_on_repository() -> None:
