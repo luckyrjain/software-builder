@@ -113,13 +113,13 @@ those values reaches this document is enumerated below:
   `testcontainers`, `docker-compose`, `embedded`, `none`) — never a raw string lifted from manifest or
   config content. Both confidence values are likewise fixed tiers
   ([framework-detection.md § Confidence rules](framework-detection.md#confidence-rules)).
-- **The `## Targets` table's `Target` column, and the `## Findings` subheadings' target-descriptor
-  portion** (e.g. `` `src/payments/refund.py::process_refund` `` in `` ### `src/payments/refund.py::process_refund` — production bug ``) — a `file::function↔dependency` seam descriptor built from real
-  source paths and symbol names, the same untrusted content as `Target` above (diff hunks and source
-  code are both named in `workflow/inputs.md`'s list). Same treatment: structurally escape, strip any
-  embedded backtick, wrap in an inline code span — the fixed `" — production bug"` / `" — needs
-  integration env"` suffix stays as plain text outside the span, since it is never sourced from analyzed
-  content.
+- **The `## Targets` table's `Target` column, the `## Findings` subheadings' target-descriptor
+  portion** (e.g. `` `src/payments/refund.py::process_refund` `` in `` ### `src/payments/refund.py::process_refund` — production bug ``), **and every name listed under `## Skipped`** — a
+  `file::function↔dependency` seam descriptor built from real source paths and symbol names, the same
+  untrusted content as `Target` above (diff hunks and source code are both named in
+  `workflow/inputs.md`'s list). Same treatment: structurally escape, strip any embedded backtick, wrap
+  in an inline code span — the fixed `" — production bug"` / `" — needs integration env"` suffix stays
+  as plain text outside the span, since it is never sourced from analyzed content.
 - **`Test file`** — the `## Targets` table's third column (the matched or written test file path, e.g.
   `` `tests/integration/test_charge.py` ``) — a POSIX path resolved against the repo's own layout
   convention, the same reasoning as `Repo` above. Same treatment: structurally escape, strip any
