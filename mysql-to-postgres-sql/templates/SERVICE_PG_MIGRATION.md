@@ -1,4 +1,4 @@
-# PostgreSQL migration — {{SERVICE_NAME}}
+# PostgreSQL migration — `{{SERVICE_NAME}}`
 
 **Workspace path:** `{{SERVICE_DIR}}`  
 **Tier focus:** P0 / P1 / P2 / dialect-only  

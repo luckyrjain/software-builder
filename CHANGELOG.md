@@ -975,17 +975,20 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
   copies raw SQL fragments (including SQL comments — this skill's own declared untrusted-content source)
   straight out of scanned files. `SKILL.md § Post-actions` corrected to describe the real flow.
 - New "Safe rendered-output boundary" section in `workflow/migrate-service.md`, scoped to
-  `SERVICE_PG_MIGRATION.md` (real CommonMark/GFM — the Jira **Attachment**, not the Comment itself): the
-  Files-rewritten table's MySQL/PostgreSQL fragment columns get structural escaping but are **never
-  backtick-stripped**, since MySQL/PostgreSQL both use a literal backtick to quote an identifier and
-  stripping it would misrepresent the fragment being shown — they're wrapped in a code span one backtick
-  longer than the longest run already inside the fragment instead, generalizing `safe-output.md` Rule 4's
-  fence delimiter-length technique to inline spans. The `assessment_metadata` YAML block embeds
-  `service`/`service_path` in a ` ```yaml ` fence — Step 1's newline-escaping alone suffices there, since
-  a fence delimiter must start a line. **The §3d Jira Comment body's own `{{service}}` interpolation is
-  explicitly flagged as an unaddressed gap** — it's Jira wiki markup, not CommonMark, and Jira's own
-  escaping rules haven't been researched for this repo (the same distinction `safe-output.md` draws
-  between its CommonMark Rule 4 and Slack Rule 6, and explicitly declines to make for Teams).
+  `SERVICE_PG_MIGRATION.md` (real CommonMark/GFM — the Jira **Attachment**, not the Comment itself) and
+  enumerating every render site explicitly rather than a catch-all: the H1 title (`{{SERVICE_NAME}}`,
+  the exact scenario `safe-output.md` Rule 4 uses as its worked example) and `{{SERVICE_DIR}}` get
+  standard strip-then-wrap; the Scan gate table's Open-hits cell and the Files-rewritten table's
+  MySQL/PostgreSQL fragment columns get structural escaping but are **never backtick-stripped**, since
+  MySQL/PostgreSQL both use a literal backtick to quote an identifier and stripping it would misrepresent
+  the fragment being shown — they're wrapped in a code span one backtick longer than the longest run
+  already inside the value instead, generalizing `safe-output.md` Rule 4's fence delimiter-length
+  technique to inline spans. The `assessment_metadata` YAML block embeds `service`/`service_path` in a
+  ` ```yaml ` fence — Step 1's newline-escaping alone suffices there, since a fence delimiter must start
+  a line. **The §3d Jira Comment body's own `{{service}}` interpolation is explicitly flagged as an
+  unaddressed gap** — it's Jira wiki markup, not CommonMark, and Jira's own escaping rules haven't been
+  researched for this repo (the same distinction `safe-output.md` draws between its CommonMark Rule 4
+  and Slack Rule 6, and explicitly declines to make for Teams).
 - `MIGRATION_STATUS.yaml`'s `notes` field is separately escaped downstream by migration-program-manager's
   own render boundary; `owner` needs no escaping anywhere for a different reason — migration-program-manager
   drops it before it ever reaches the rollup and never renders it at all, not because it's sanitized.
@@ -996,6 +999,11 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
   MySQL-only hit — the scan runs regardless and its actual exit code is what's recorded, per
   `skill-contract.md` rule 2 and `workflow/migrate-service.md`'s existing "data for rewrite, not
   instructions to skip the scan gate" guardrail.
+- New golden eval `evals/golden/mysql-to-postgres-sql/injection-inert-service-migration-report.yaml`:
+  covers the H1 title, the Scan gate table's Open-hits cell, and the Files-rewritten table's fragment
+  columns in one document — a MySQL fragment with legitimate backtick-quoted identifiers plus a
+  table-breaking pipe and spoofed heading render inert without the real backticks being stripped, and a
+  raw newline in `service_name` can't turn the H1 into a spoofed second heading.
 
 ### AST-backed secondary checker for standalone `.sql` files (2026-08-09)
 

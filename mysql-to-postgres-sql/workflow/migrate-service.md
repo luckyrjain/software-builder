@@ -1,5 +1,5 @@
 ---
-workflow_version: 1.8
+workflow_version: 1.9
 phase: migrate
 produces:
   - pg_compatible_sql
@@ -102,11 +102,22 @@ Also: K8s/Consul env vars for PG host, schema, credentials; remove `mysql-connec
 ## Safe rendered-output boundary
 
 `SERVICE_PG_MIGRATION.md` is real CommonMark/GFM Markdown, and [safe-output.md](../../docs/skill-framework/shared/safe-output.md)'s
-techniques below apply to it directly. It carries two untrusted render sites, both fed by the same
-`service`/`service_path` and by content [workflow/migrate-service.md § Untrusted
-content](migrate-service.md) already names as **data, not instructions**
-([prompt-injection.md](../../docs/skill-framework/shared/prompt-injection.md)):
+techniques below apply to it directly. Every place `service`/`service_path` or scanned-source content
+appears in it is enumerated below — content
+[workflow/migrate-service.md § Untrusted content](migrate-service.md) already names as **data, not
+instructions** ([prompt-injection.md](../../docs/skill-framework/shared/prompt-injection.md)):
 
+- **`` # PostgreSQL migration — {{SERVICE_NAME}} `` (the document's own H1 title) and
+  `` **Workspace path:** `{{SERVICE_DIR}}` `` — short identifiers: structurally escape (Rules 1–4:
+  neutralize a raw newline before it can start a spoofed heading of its own, since this is the very
+  scenario `safe-output.md` Rule 4 uses as its worked example), then strip any embedded backtick and wrap
+  in an inline code span — `templates/SERVICE_PG_MIGRATION.md`'s own H1 line now wraps `{{SERVICE_NAME}}`
+  the same way `{{SERVICE_DIR}}` already was.
+- **The Scan gate table's "Open hits (if fail)" cell** — this echoes raw `rg -n` matched lines from
+  `scripts/scan-mysql-dialect.sh` verbatim, the same scanned-source content (including SQL comments) as
+  the Files-rewritten table below, and needs the identical treatment: structurally escape, then wrap in
+  an inline code span using a backtick-run one longer than the longest run already present, **never
+  stripping** an embedded backtick (a matched line can itself contain a backtick-quoted identifier).
 - **The Files-rewritten table's MySQL/PostgreSQL fragment columns — do not strip backticks.** They copy
   scanned source verbatim, including any SQL comment, and intentionally show *real SQL syntax* — MySQL
   and PostgreSQL both use a literal backtick or double-quote to quote an identifier (`` `user_id` ``), so
@@ -119,7 +130,8 @@ content](migrate-service.md) already names as **data, not instructions**
   [safe-output.md § Rule 4](../../docs/skill-framework/shared/safe-output.md#rule-4-markdown-chat-escaping)
   already uses for fences, generalized to inline spans: CommonMark closes a code span at the first run of
   *exactly* that many backticks, so a longer opening run makes every embedded backtick literal instead of
-  a span delimiter, with no stripping needed.
+  a span delimiter, with no stripping needed. The Scan gate cell above uses this same delimiter-length
+  technique for the same reason.
 - **The `assessment_metadata` YAML block** (merge-gate step 5, appended to the same
   `SERVICE_PG_MIGRATION.md` per [assessment-metadata.md](../reference/assessment-metadata.md)) embeds
   `service`/`service_path` as YAML values inside a ` ```yaml ` fence. Both are single-line identifiers
@@ -128,12 +140,10 @@ content](migrate-service.md) already names as **data, not instructions**
   to the fence's own backtick count is needed: a Markdown fence delimiter (opening or closing) must be
   the first content on its own line, and once a raw newline in `service`/`service_path` is replaced with
   the escape marker, an embedded ` ``` ` sequence has no line-start position left to occupy and can't
-  close the block early. `service`/`service_path` are otherwise short identifiers: structurally escape,
-  strip any embedded backtick, wrap in an inline code span wherever they're shown as a plain value
-  rather than inside that YAML fence.
+  close the block early.
 - **`{{risk_tier}}`, `{{scan_gate}}`, `{{shadow_compare}}`, `{{band}}`, `{{file_count}}`,
-  `{{mr_url_or_pr_review_handoff}}`** — fixed enums, a count, or a skill/system-generated URL: no
-  escaping needed.
+  `{{mr_url_or_pr_review_handoff}}`, `{{DATE}}`** — fixed enums, a count, a skill/system-generated URL,
+  or a computed timestamp: no escaping needed.
 
 **The §3d Jira Comment body is a different render target, not covered by the above.**
 [post-action-templates.md §3d](../../docs/skill-framework/shared/post-action-templates.md) interpolates
