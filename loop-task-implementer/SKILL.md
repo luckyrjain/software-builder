@@ -144,7 +144,9 @@ Do not give the Reviewer the Orchestrator prompt, Builder scratchpad, prior verd
 
 ## Completion response
 
-Report using [report-template.md](report-template.md).
+Report using [report-template.md](report-template.md). Rendering task/finding/escalation text into
+that report follows [safe-output.md](../docs/skill-framework/shared/safe-output.md) — see
+[report-template.md § Safe rendered-output boundary](report-template.md#safe-rendered-output-boundary).
 
 ## Framework
 
