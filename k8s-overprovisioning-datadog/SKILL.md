@@ -11,7 +11,7 @@ description: >-
 
 # K8s resource optimization (Kubernetes MCP-first)
 
-**Graph-first audit engine.** Skill **v3.4** · `schema_version: 3`. The legacy directory name is
+**Graph-first audit engine.** Skill **v3.5** · `schema_version: 3`. The legacy directory name is
 retained for compatibility; runtime source routing is Kubernetes MCP-first.
 
 **Read-only.** Never apply manifest changes — only read connected evidence sources and produce
@@ -88,4 +88,6 @@ Full matrix: [cross-skill-escalation.md](../docs/skill-framework/shared/cross-sk
 Routing: [skill-routing.md](../docs/skill-framework/shared/skill-routing.md) · shared conventions:
 [docs/skill-framework/README.md](../docs/skill-framework/README.md) · confidence
 [confidence-bands.md](../docs/skill-framework/shared/confidence-bands.md) · prompt injection
-[prompt-injection.md](../docs/skill-framework/shared/prompt-injection.md)
+[prompt-injection.md](../docs/skill-framework/shared/prompt-injection.md) · rendered deliverables follow
+[safe-output.md](../docs/skill-framework/shared/safe-output.md) — see
+[render/markdown.md § Safe rendered-output boundary](render/markdown.md#safe-rendered-output-boundary)

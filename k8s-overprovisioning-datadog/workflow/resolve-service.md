@@ -1,13 +1,11 @@
 ---
-workflow_version: 3.4
+workflow_version: 3.5
 phase: resolve
-produces:
-  - service_identity
-  - namespace_ranking
-  - cluster_identity
+produces: {service_identity: object, namespace_ranking: object, cluster_identity: object}
 consumes:
-  - user_intent
-  - source_profile
+  required: {user_intent: string, source_profile: object}
+  optional: {}
+  conditional: {}
 ---
 
 # Resolve service identity

@@ -1,17 +1,21 @@
 ---
-workflow_version: 3.4
+workflow_version: 3.5
 phase: normalize-evidence
 produces:
-  - observation_registry
-  - evidence_registry
-  - assessment_fingerprint
+  observation_registry: object
+  evidence_registry: object
+  evidence_ids: list
+  assessment_fingerprint: string
 consumes:
-  - raw_metrics
-  - source_profile
-  - metrics_queried_count
-  - query_references
-  - manifest_bytes
-  - threshold_hash
+  required:
+    raw_metrics: object
+    source_profile: object
+    metrics_queried_count: string
+    query_references: list
+    manifest_bytes: content
+    threshold_hash: string
+  optional: {}
+  conditional: {}
 ---
 
 # Evidence model

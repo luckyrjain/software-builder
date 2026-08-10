@@ -1,0 +1,92 @@
+schema_version: 1
+entry_inputs:
+  user_intent: {type: string, provenance: user_invocation, required: true, trust: untrusted}
+selector_domains:
+  intent_route: [full, cost_savings, replicas_too_high, throttle_oom, namespace_ranking]
+route_selection: {after_phase: orchestrator}
+routes:
+  full:
+    when: {intent_route: full}
+    phases:
+      - orchestrator
+      - collect-source-discovery
+      - resolve
+      - collect
+      - normalize-evidence
+      - cpu-analysis
+      - memory-analysis
+      - replica-analysis
+      - workload-analysis
+      - reason
+      - validate
+      - cost
+      - confidence
+      - build-graph
+      - validate-invariants
+      - render
+      - report
+  cost_savings:
+    when: {intent_route: cost_savings}
+    phases:
+      - orchestrator
+      - collect-source-discovery
+      - resolve
+      - collect
+      - normalize-evidence
+      - cpu-analysis
+      - memory-analysis
+      - workload-analysis
+      - reason
+      - validate
+      - cost
+      - confidence
+      - build-graph
+      - validate-invariants
+      - render
+      - report
+  replicas_too_high:
+    when: {intent_route: replicas_too_high}
+    phases:
+      - orchestrator
+      - collect-source-discovery
+      - resolve
+      - collect
+      - normalize-evidence
+      - replica-analysis
+      - workload-analysis
+      - reason
+      - validate
+      - confidence
+      - build-graph
+      - validate-invariants
+      - render
+      - report
+  throttle_oom:
+    when: {intent_route: throttle_oom}
+    phases:
+      - orchestrator
+      - collect-source-discovery
+      - resolve
+      - collect
+      - normalize-evidence
+      - cpu-analysis
+      - memory-analysis
+      - workload-analysis
+      - reason
+      - validate
+      - confidence
+      - build-graph
+      - validate-invariants
+      - render
+      - report
+  namespace_ranking:
+    when: {intent_route: namespace_ranking}
+    phases:
+      - orchestrator
+      - collect-source-discovery
+      - resolve
+      - reason
+      - build-graph
+      - validate-invariants
+      - render
+      - report

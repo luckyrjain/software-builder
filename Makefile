@@ -347,6 +347,8 @@ lint-k8s-skill:
 	done; \
 	if [ "$$fail" -ne 0 ]; then echo "error: k8s workflow/*.md must declare workflow_version, phase, produces, consumes" >&2; exit 1; fi; \
 	echo "  ok"
+	@echo "lint-k8s-skill: route-aware workflow contract"
+	@python3 -m scripts.validate_workflow_contracts k8s-overprovisioning-datadog
 	@echo "lint-k8s-skill: dangling markdown links"
 	@bash scripts/lint-dangling-md-links.sh k8s-overprovisioning-datadog/*.md k8s-overprovisioning-datadog/workflow/*.md k8s-overprovisioning-datadog/reference/*.md k8s-overprovisioning-datadog/render/*.md k8s-overprovisioning-datadog/templates/*.md && echo "  ok" || \
 		{ echo "error: dangling reference link(s) found" >&2; exit 1; }
@@ -401,6 +403,13 @@ lint-k8s-skill:
 	@test -f k8s-overprovisioning-datadog/dependencies.md || exit 1
 	@grep -q 'next_assessment_due' k8s-overprovisioning-datadog/workflow/report.md || \
 		{ echo "error: report.md must document next_assessment_due in history" >&2; exit 1; }
+	@echo "  ok"
+	@echo "lint-k8s-skill: safe rendered-output boundary"
+	@grep -q 'docs/skill-framework/shared/safe-output.md' k8s-overprovisioning-datadog/SKILL.md || \
+		{ echo "error: k8s-overprovisioning-datadog/SKILL.md must link to shared safe-output" >&2; exit 1; }
+	@grep -q 'docs/skill-framework/shared/safe-output.md' k8s-overprovisioning-datadog/render/markdown.md && \
+	 grep -qiE 'escape|backtick|code span' k8s-overprovisioning-datadog/render/markdown.md || \
+		{ echo "error: render/markdown.md must sanitize untrusted rendered fields per safe-output" >&2; exit 1; }
 	@echo "  ok"
 	@echo "lint-k8s-skill: decision graph invariant validator"
 	@cache="$(CURDIR)/.pycache-lint-k8s"; \

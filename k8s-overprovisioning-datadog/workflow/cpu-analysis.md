@@ -1,13 +1,11 @@
 ---
-workflow_version: 3.3
+workflow_version: 3.5
 phase: cpu-analysis
-produces:
-  - cpu_verdict
-  - cpu_inferences
+produces: {cpu_verdict: object, cpu_inferences: list}
 consumes:
-  - raw_metrics
-  - evidence_ids
-  - service_identity
+  required: {raw_metrics: object, evidence_ids: list, service_identity: object}
+  optional: {}
+  conditional: {}
 ---
 
 # CPU analysis

@@ -99,10 +99,19 @@ def test_source_discovery_precedes_resolution_and_threads_profile_to_graph():
     graph_frontmatter = load_yaml_frontmatter(read("workflow/build-graph.md"))
 
     assert orchestrator.index("discover-sources.md") < orchestrator.index("resolve-service.md")
-    assert "source_profile" in resolve_frontmatter["consumes"]
-    assert "source_profile" in collect_frontmatter["consumes"]
-    assert "source_profile" in evidence_frontmatter["consumes"]
-    assert "source_profile" in graph_frontmatter["consumes"]
+    assert "source_profile" in _consumed_field_names(resolve_frontmatter)
+    assert "source_profile" in _consumed_field_names(collect_frontmatter)
+    assert "source_profile" in _consumed_field_names(evidence_frontmatter)
+    assert "source_profile" in _consumed_field_names(graph_frontmatter)
+
+
+def _consumed_field_names(frontmatter: dict) -> set[str]:
+    """Flatten a typed consumes block (required/optional/conditional) to its field names."""
+    consumes = frontmatter["consumes"]
+    names = set(consumes.get("required", {})) | set(consumes.get("optional", {}))
+    for route_inputs in consumes.get("conditional", {}).values():
+        names |= set(route_inputs.get("required", {})) | set(route_inputs.get("optional", {}))
+    return names
 
 
 def load_yaml_frontmatter(markdown: str):

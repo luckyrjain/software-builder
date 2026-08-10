@@ -1,10 +1,11 @@
 ---
-workflow_version: 3.4
+workflow_version: 3.5
 phase: checklists
-produces:
-  - checklist_status
+produces: {checklist_status: object}
 consumes:
-  - dimension_context
+  required: {dimension_context: object}
+  optional: {}
+  conditional: {}
 ---
 
 # Checklists

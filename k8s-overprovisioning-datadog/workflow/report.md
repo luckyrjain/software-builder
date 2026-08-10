@@ -1,10 +1,11 @@
 ---
-workflow_version: 3.0
+workflow_version: 3.5
 phase: report
-produces:
-  - dora_report
+produces: {dora_report: content}
 consumes:
-  - validated_graph
+  required: {validated_graph: object}
+  optional: {}
+  conditional: {}
 ---
 
 # Report presentation

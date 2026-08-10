@@ -1,11 +1,11 @@
 ---
-workflow_version: 3.4
+workflow_version: 3.5
 phase: stop-reasons
-produces:
-  - stop_reason_registry
+produces: {stop_reason_registry: object}
 consumes:
-  - auth_status
-  - validated_signals
+  required: {auth_status: string, validated_signals: object}
+  optional: {}
+  conditional: {}
 ---
 
 # Stop reasons

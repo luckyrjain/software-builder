@@ -1,11 +1,11 @@
 ---
-workflow_version: 3.3
+workflow_version: 3.5
 phase: normalize-anomalies
-produces:
-  - anomaly_flags
+produces: {anomaly_flags: list}
 consumes:
-  - raw_metrics
-  - evidence_ids
+  required: {raw_metrics: object, evidence_ids: list}
+  optional: {}
+  conditional: {}
 ---
 
 # Anomaly detection

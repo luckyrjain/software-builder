@@ -1,13 +1,26 @@
 ---
-workflow_version: 3.0
+workflow_version: 3.5
 phase: reason
-produces:
-  - inferences
-  - decision_objects
-  - assumptions
+produces: {inferences: list, decision_objects: list, assumptions: list}
 consumes:
-  - observation_registry
-  - evidence_registry
+  required: {}
+  optional: {namespace_ranking: object}
+  conditional:
+    full:
+      required: {observation_registry: object, evidence_registry: object}
+      optional: {}
+    cost_savings:
+      required: {observation_registry: object, evidence_registry: object}
+      optional: {}
+    replicas_too_high:
+      required: {observation_registry: object, evidence_registry: object}
+      optional: {}
+    throttle_oom:
+      required: {observation_registry: object, evidence_registry: object}
+      optional: {}
+    namespace_ranking:
+      required: {namespace_ranking: object}
+      optional: {}
 ---
 
 # Reasoning pipeline

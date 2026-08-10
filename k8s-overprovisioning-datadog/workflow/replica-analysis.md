@@ -1,12 +1,11 @@
 ---
-workflow_version: 3.3
+workflow_version: 3.5
 phase: replica-analysis
-produces:
-  - replica_verdict
-  - hpa_analysis
+produces: {replica_verdict: object, hpa_analysis: object}
 consumes:
-  - raw_metrics
-  - evidence_ids
+  required: {raw_metrics: object, evidence_ids: list}
+  optional: {}
+  conditional: {}
 ---
 
 # Replica and HPA analysis

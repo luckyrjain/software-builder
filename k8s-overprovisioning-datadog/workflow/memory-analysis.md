@@ -1,12 +1,11 @@
 ---
-workflow_version: 3.3
+workflow_version: 3.5
 phase: memory-analysis
-produces:
-  - memory_verdict
-  - memory_inferences
+produces: {memory_verdict: object, memory_inferences: list}
 consumes:
-  - raw_metrics
-  - evidence_ids
+  required: {raw_metrics: object, evidence_ids: list}
+  optional: {}
+  conditional: {}
 ---
 
 # Memory analysis
