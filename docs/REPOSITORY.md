@@ -421,6 +421,17 @@ deliberately. Two reasons: it avoids permanently storing a secret-shaped string 
 and it sidesteps an unknown risk noted below — whether a committed one would trip this repo's own
 push protection.
 
+**`GITLEAKS_LICENSE` — a no-op today, load-bearing on a fork/transfer.** `gitleaks-action` v3 checks
+the repository owner's GitHub account type before scanning: for an **organization**-owned repo it
+hard-exits (`process.exit(1)`, before any scan runs) unless a `GITLEAKS_LICENSE` secret is set;
+for an **individual**-owned repo (this repo, today — verified via the GitHub API) it skips that check
+entirely, so the `gitleaks` job's `env: GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}` line
+resolves to an empty, harmless no-op right now. Wired in anyway so a future fork or transfer into an
+organization account (this repo's own description — "portable agent skills," "registry-driven
+install" — makes that a real, not hypothetical, path) doesn't silently hard-fail the entire
+secret-scanning job on every run with no relationship to actual repo content. Get a (free for open
+source) license at [gitleaks.io](https://gitleaks.io) and store it as a repo secret if that happens.
+
 **Native GitHub secret scanning / push protection: unverified, and likely off.** No tool available to
 this effort could read the repository's Code Security settings directly. One indirect signal: a
 request to run GitHub's secret-scanning check against this repository returned *"Repository does not
