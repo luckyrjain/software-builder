@@ -13,6 +13,7 @@ from reference_utils import (
     is_local_markdown_link,
     resolve_local_link,
     split_link_target,
+    strip_fenced_code_blocks,
 )
 
 _SLUG_SPACE_RUN_RE = re.compile(r" +")
@@ -50,7 +51,8 @@ def github_style_slug(heading: str) -> str:
 
 def heading_slugs(markdown_path: Path) -> set[str]:
     slugs: set[str] = set()
-    for line in markdown_path.read_text(encoding="utf-8").splitlines():
+    text = strip_fenced_code_blocks(markdown_path.read_text(encoding="utf-8"))
+    for line in text.splitlines():
         if line.startswith("#"):
             slugs.add(github_style_slug(line))
     return slugs
@@ -181,8 +183,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         metavar="RELATIVE_DIR",
         help=(
             "Directory (relative to the validated root) whose Markdown files are skipped as "
-            "link sources. Repeatable. Intended for historical/superseded doc trees "
-            "(see docs/history/README.md) that are exempt from active reference upkeep."
+            "link sources. Repeatable. Two independent reasons to exclude a directory: (1) "
+            "historical/superseded doc trees exempt from active reference upkeep (see "
+            "docs/history/README.md), or (2) actively-maintained trees already covered by "
+            "another checker whose anchor algorithm may disagree with this one (e.g. an "
+            "ASCII-only sed script) — excluding avoids contradictory results, not upkeep."
         ),
     )
     return parser.parse_args(argv)

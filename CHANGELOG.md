@@ -71,6 +71,17 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
   risk this whole exclude mechanism defends against is not live today either way; the difference is
   that leaving skill directories unexcluded costs nothing right now and gains real coverage, while
   excluding them cost real coverage for a risk that isn't materializing.
+- A later review round, taking a fresh holistic pass rather than re-checking prior rounds' specific
+  concerns, found a real bug newly consequential because this diff is what first wires anchor checking
+  into `make lint`: `heading_slugs()` scanned every `#`-prefixed line in a file for headings without
+  first stripping fenced code blocks, unlike its sibling `extract_markdown_links()` (which does). A
+  heading-shaped line inside a fenced ` ```markdown ` example — not a real heading GitHub would ever
+  render as a navigable anchor — was counted as one, which could silently validate a link to an anchor
+  that doesn't actually exist. Fixed by running `strip_fenced_code_blocks()` before scanning for
+  headings, with a regression test. The same round also found the new `--exclude` flag's `--help` text
+  described only one of its two now-real use cases (historical/exempt doc trees); reworded to also
+  cover excluding actively-maintained trees to avoid disagreeing with a different checker's anchor
+  algorithm, which is why `docs/skill-framework` is excluded.
 
 ### safe-output.md Rule 4: single-backtick escape gap (2026-08-09)
 

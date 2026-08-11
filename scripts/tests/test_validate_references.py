@@ -10,7 +10,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from validate_references import github_style_slug, validate_tree  # noqa: E402
+from validate_references import github_style_slug, heading_slugs, validate_tree  # noqa: E402
 
 
 def test_slug_preserves_hyphens_within_heading_text() -> None:
@@ -37,6 +37,28 @@ def test_slug_preserves_non_ascii_letters() -> None:
     # slugify to "café-menu", not "caf-menu". Verified this diverges from the prior
     # (differently buggy) isalnum()-based implementation, which did preserve them.
     assert github_style_slug("## Café Menu") == "café-menu"
+
+
+def test_heading_slugs_ignores_headings_inside_fenced_code_blocks(tmp_path: Path) -> None:
+    # Regression: heading_slugs() scanned every "#"-prefixed line without stripping fenced
+    # code blocks first, unlike its sibling extract_markdown_links() (which does). A
+    # "## Example Section" line inside a ```markdown example block isn't a real heading —
+    # GitHub never renders it as a navigable anchor — but the unstripped scan treated it as
+    # one, letting a link to a genuinely-missing "#example-section" anchor pass unnoticed.
+    # Newly consequential now that --source-tree wires anchor checking into make lint.
+    md_file = tmp_path / "doc.md"
+    md_file.write_text(
+        "# Actual Real Heading\n"
+        "\n"
+        "Some text.\n"
+        "\n"
+        "```markdown\n"
+        "## Example Section\n"
+        "This is inside a fenced code block and must not count as a real heading.\n"
+        "```\n",
+        encoding="utf-8",
+    )
+    assert heading_slugs(md_file) == {"actual-real-heading"}
 
 
 def test_source_tree_exclude_skips_historical_doc_tree(tmp_path: Path) -> None:
