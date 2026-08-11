@@ -13,7 +13,7 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 - Beyond Dependabot (pip + github-actions ecosystems) and pinned Actions, this repo had no dedicated
   CI gates for a PR introducing a known-vulnerable dependency, static-analysis findings in `scripts/`
   Python helpers, a committed credential, or risky Actions-YAML patterns (script injection via
-  untrusted `${{ }}` expansion, missing `permissions:`, credential persistence). Added five checks,
+  untrusted `${{ }}` expansion, missing `permissions:`, credential persistence). Added six checks,
   scoped to what this repo actually executes — shell/Python helpers, an installer writing outside the
   repo, skill docs describing MCP write-authority workflows — not a blanket "add everything" pass:
   - `.github/workflows/dependency-review.yml` — fails a PR on a new high-severity dependency advisory.
@@ -43,7 +43,7 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
     tool available to this effort could read the repo's Code Security settings — but an indirect signal
     (a secret-scanning request against the repo returned "Repository does not have GitHub Advanced
     Security enabled") suggests it's likely off; flagged for a repo admin to confirm and toggle on at
-    Settings → Code security. None of the five new checks are added to the `main` ruleset's required
+    Settings → Code security. None of the six new checks are added to the `main` ruleset's required
     status checks yet — deliberately watching a few real runs first, since CodeQL/Scorecard can be
     noisy on their first baseline.
 - A review round found the `negative-test` job's original fixture — the hardcoded, well-known AWS

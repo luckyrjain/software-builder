@@ -367,7 +367,7 @@ shellcheck pre-commit hook), then `make lint`.
 
 Proportionate to what this repo actually executes — shell/Python helpers (`scripts/`, `*/scripts/`),
 an installer that writes outside the repo tree, and skill docs that describe MCP write-authority
-workflows — five additional, independent checks run alongside `lint.yml`:
+workflows — six additional, independent checks run alongside `lint.yml`:
 
 | Workflow | What it catches | Trigger |
 |----------|------------------|---------|
