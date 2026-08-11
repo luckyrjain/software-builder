@@ -343,6 +343,31 @@ def test_render_kiro_steering_thin_wrapper() -> None:
     assert "inclusion: manual" in text
 
 
+def test_update_readme_badge_keeps_markers_outside_the_image_url() -> None:
+    # Regression test: the generated count previously sat *inside* the badge's image destination
+    # (`...skills-<!-- skills-count:start -->23<!-- skills-count:end -->-blue)`). CommonMark's
+    # grammar for a bare link/image destination forbids literal whitespace, and the marker
+    # comments' own spaces broke it outright, corrupting the whole `![alt](url)` into broken
+    # literal text plus a stray auto-link on the real rendered page. The image markdown must come
+    # out fully intact, with the markers only ever adjacent to it on their own lines, never
+    # interleaved into the URL itself.
+    from scripts.registry.generate_docs import (
+        README_COUNT_END,
+        README_COUNT_START,
+        update_readme_badge,
+    )
+
+    readme = f"# repo\n\n{README_COUNT_START}old{README_COUNT_END}\n\nmore text\n"
+    updated = update_readme_badge(readme, 23)
+
+    assert "![Skills](https://img.shields.io/badge/skills-23-blue)" in updated
+    # the count must not be reachable from inside the parenthesized URL segment
+    url_segment = updated.split("(", 1)[1].split(")", 1)[0]
+    assert README_COUNT_START not in url_segment
+    assert README_COUNT_END not in url_segment
+    assert "more text" in updated  # content outside the marker block is untouched
+
+
 def test_render_install_mermaid_includes_edge() -> None:
     from scripts.registry.generate_docs import render_install_mermaid
     from scripts.registry.models import (

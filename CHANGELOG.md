@@ -8,6 +8,26 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 
 ## Platform
 
+### Fix broken README Skills badge (2026-08-11)
+
+- The `Skills` badge in `README.md` rendered as broken literal text with a stray auto-link on the
+  real GitHub page instead of an image, reported by a user viewing the repo. Root cause, confirmed
+  by fetching the actual rendered page: `scripts/registry/generate_docs.py`'s `update_readme_badge`
+  regenerated the skill count *inside* the badge's image destination —
+  `![Skills](https://img.shields.io/badge/skills-<!-- skills-count:start -->23<!-- skills-count:end
+  -->-blue)`. A second review round, independently re-verifying the fix with a different CommonMark
+  parser, traced the actual mechanism more precisely: it's not GitHub-specific HTML-comment-stripping
+  timing — CommonMark's grammar for a bare (non-`<...>`-bracketed) link/image destination simply
+  forbids literal whitespace, and the marker comments' own spaces (`<!-- skills-count:start -->`)
+  broke the destination outright, independent of what sat between them; confirmed directly, since the
+  identical tags *without* spaces parse into a working (if oddly percent-encoded) image. Fixed by
+  moving the whole image markdown (not just the digit) between the `skills-count` markers, with the
+  markers themselves on their own lines, so the comments are unambiguously outside any inline
+  link/image destination — mirrors the existing `registry-skills-table` marker convention in
+  `docs/REPOSITORY.md`, which was never affected because its content was never embedded inside a URL
+  to begin with. Added a regression test (`test_update_readme_badge_keeps_markers_outside_the_image_url`),
+  confirmed to actually fail against the pre-fix implementation and pass against the fix.
+
 ### Add Dependency Review, CodeQL, secret scanning, and Actions-YAML security lint (2026-08-11)
 
 - Beyond Dependabot (pip + github-actions ecosystems) and pinned Actions, this repo had no dedicated
