@@ -168,7 +168,7 @@ lint-actions-security:
 			zizmor --no-online-audits .github/workflows; \
 		fi; \
 	else \
-		echo "zizmor not installed — install with 'python3 -m pip install zizmor' to run Actions-YAML security lint" >&2; \
+		echo "SKIPPED: zizmor not installed — Actions-YAML security lint did NOT run. Install with 'python3 -m pip install zizmor' (or 'make setup', which installs it from requirements.lock) and re-run. CI always has it installed via requirements.lock, so this gap is local-only." >&2; \
 	fi
 
 verify-install:

@@ -19,12 +19,12 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
   - `.github/workflows/dependency-review.yml` — fails a PR on a new high-severity dependency advisory.
   - `.github/workflows/codeql.yml` — Python static analysis (push, PR, weekly).
   - `.github/workflows/secret-scan.yml` — Gitleaks (push, PR, weekly), plus a `negative-test` job that
-    generates AWS's own canonical placeholder access key ID (`AKIAIOSFODNN7EXAMPLE`) at CI-run-time and
-    asserts the scanner detects it — proving the detector itself still fires, independent of whether
-    the actual repo content is clean that run. Deliberately **not** a committed fixture: doing so would
-    permanently store a secret-shaped string in git history for no added coverage, and this repo's
-    native GitHub push-protection state couldn't be confirmed (see below), so a committed fixture risked
-    either an unexpected blocked push or a false-positive alert.
+    generates a random AWS-access-key-ID-shaped string at CI-run-time and asserts the scanner detects
+    it — proving the detector itself still fires, independent of whether the actual repo content is
+    clean that run. Deliberately **not** a committed fixture: doing so would permanently store a
+    secret-shaped string in git history for no added coverage, and this repo's native GitHub
+    push-protection state couldn't be confirmed (see below), so a committed fixture risked either an
+    unexpected blocked push or a false-positive alert.
   - `.github/workflows/scorecard.yml` — OpenSSF Scorecard supply-chain posture (push to main, weekly).
   - `scripts/check_pinned_actions.py`, wired into `make lint` as `lint-actions-pinning` — fails on any
     `uses:` reference not pinned to a full 40-char commit SHA (a mutable tag can be repointed by the
@@ -46,6 +46,31 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
     Settings → Code security. None of the five new checks are added to the `main` ruleset's required
     status checks yet — deliberately watching a few real runs first, since CodeQL/Scorecard can be
     noisy on their first baseline.
+- A review round found the `negative-test` job's original fixture — the hardcoded, well-known AWS
+  placeholder access key `AKIAIOSFODNN7EXAMPLE` — undermined the very thing it was meant to prove:
+  verified directly that gitleaks' current default config now allowlists that exact string
+  (`.+EXAMPLE$` on the `aws-access-token` rule, added precisely because it's such a widely-recognized
+  non-functional example), and that the job only "passed" because it was pinned to an old gitleaks
+  image (`v8.9.0`) that predates the allowlist entry — an accidental consequence of an earlier
+  `git ls-remote --tags` lookup that wasn't sorted by version and returned a stale tag as if it were
+  latest (`v8.30.1` is the actual latest). Against the real current gitleaks, the old fixture silently
+  produces "no leaks found" — the negative test would have passed for the wrong reason, and the
+  scanning job it's meant to validate could develop the identical blind spot with no warning. Fixed by
+  generating a random AWS-access-key-ID-shaped string each run instead (`AKIA` + 16 characters from
+  gitleaks' own regex's character class) — verified detected on the real latest gitleaks (`v8.30.1`,
+  now also the pinned image tag) while the old placeholder is not. A random, never-published string
+  can't be pre-allowlisted the way a famous placeholder can.
+- The same round found `lint-actions-security`'s "zizmor not installed" fallback silently let
+  `make lint` exit 0 without ever running the new security lint, with no comparable visibility to the
+  already-documented no-token fallback. Reworded the skip message to say plainly that the check did
+  not run (`SKIPPED:` prefix) and documented in `docs/REPOSITORY.md` that this mirrors
+  `lint-framework`'s existing `pytest`-missing fallback and is local-only — CI always has `zizmor`
+  installed via `requirements.lock`.
+- Also fixed: `docs/REPOSITORY.md`'s table said CodeQL was scoped to `scripts/`/`*/scripts/`, but
+  `codeql.yml` sets no `paths:` filter and genuinely scans every tracked Python file repo-wide
+  (confirmed: skill-local test files and two `domain-comprehension/templates/postman/*.py` runtime
+  templates live outside those directories too) — reworded to match actual, intentionally broader,
+  behavior rather than narrowing the workflow to match the doc.
 
 ### safe-output.md Rule 4: single-backtick escape gap (2026-08-09)
 

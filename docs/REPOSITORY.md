@@ -372,25 +372,33 @@ workflows — five additional, independent checks run alongside `lint.yml`:
 | Workflow | What it catches | Trigger |
 |----------|------------------|---------|
 | [`dependency-review.yml`](../.github/workflows/dependency-review.yml) | A PR introducing a dependency with a known high-severity advisory | `pull_request` |
-| [`codeql.yml`](../.github/workflows/codeql.yml) | Python static-analysis findings (injection, path traversal, etc.) in `scripts/`, `*/scripts/` | push, PR, weekly |
+| [`codeql.yml`](../.github/workflows/codeql.yml) | Python static-analysis findings (injection, path traversal, etc.) — every tracked `.py` file repo-wide, not just `scripts/`/`*/scripts/` (the motivating case, but not the only Python this repo carries — skill-local test files and a couple of runtime templates live outside those dirs too) | push, PR, weekly |
 | [`secret-scan.yml`](../.github/workflows/secret-scan.yml) | A committed credential/token (Gitleaks), plus a self-test proving the scanner still fires | push, PR, weekly |
 | [`scorecard.yml`](../.github/workflows/scorecard.yml) | OpenSSF Scorecard supply-chain posture (branch protection, pinned deps, etc.) | push to `main`, weekly |
 | `make lint`'s `lint-actions-security` step | Actions-YAML risks (script injection via untrusted `${{ }}` expansion, missing `permissions:`, credential persistence) via [zizmor](https://docs.zizmor.sh/) | every `make lint` run |
 | `make lint`'s `lint-actions-pinning` step | Any `uses:` reference not pinned to a full commit SHA (a mutable tag can be repointed after review) | every `make lint` run |
 
-The last two run locally too — `make lint` installs `zizmor` from `requirements.lock` and
-`scripts/check_pinned_actions.py` needs no extra dependency. Without a `GH_TOKEN`/`GITHUB_TOKEN` in
-your shell, `lint-actions-security` falls back to `zizmor --no-online-audits` (skips checks that need
-live GitHub API access, e.g. verifying an action ref against its upstream tag history) — CI always
-runs the full set via the workflow's own token.
+The last two run locally too — `scripts/check_pinned_actions.py` needs no extra dependency.
+`lint-actions-security` needs `zizmor`, installed from `requirements.lock` by `make setup`; if it
+isn't on `PATH` (e.g. you skipped `make setup`), the target prints a `SKIPPED:` line to stderr and
+`make lint` still exits 0 — the Actions-YAML security lint silently did not run. This mirrors how
+`lint-framework`'s `pytest` step already behaves when `pytest` isn't installed locally; CI always has
+both installed via `requirements.lock`, so this gap is local-only. Separately, without a
+`GH_TOKEN`/`GITHUB_TOKEN` in your shell, `lint-actions-security` falls back to
+`zizmor --no-online-audits` (skips checks that need live GitHub API access, e.g. verifying an action
+ref against its upstream tag history) — CI always runs the full set via the workflow's own token.
 
 **Secret-scan negative test.** `secret-scan.yml`'s `negative-test` job proves the scanner still
 detects a known-bad pattern, independent of whether this run's actual repo content is clean. The
-fixture — AWS's own canonical placeholder access key ID (`AKIAIOSFODNN7EXAMPLE`, used throughout
-AWS's own documentation as a non-functional example) — is generated at CI-run-time and scanned in
-isolation; it is **not** committed to git history, deliberately. Two reasons: it avoids permanently
-storing a secret-shaped string in the repository, and it sidesteps an unknown risk noted below —
-whether a committed one would trip this repo's own push protection.
+fixture is a random AWS-access-key-ID-shaped string (`AKIA` + 16 characters from gitleaks' own
+`aws-access-token` regex's character class), generated fresh every run — **not** AWS's well-known
+`AKIAIOSFODNN7EXAMPLE` placeholder, which gitleaks' own default config now allowlists (a
+`.+EXAMPLE$` rule, added precisely because that string is so widely recognized as a non-functional
+example) — using it would make this negative test pass even if real-leak detection were broken. The
+fixture is generated at CI-run-time and scanned in isolation; it is **not** committed to git history,
+deliberately. Two reasons: it avoids permanently storing a secret-shaped string in the repository,
+and it sidesteps an unknown risk noted below — whether a committed one would trip this repo's own
+push protection.
 
 **Native GitHub secret scanning / push protection: unverified, and likely off.** No tool available to
 this effort could read the repository's Code Security settings directly. One indirect signal: a
