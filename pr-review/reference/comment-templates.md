@@ -671,7 +671,6 @@ review_metadata:
 ```
 
 _Re-reviewed by Cursor `/pr-review`._
-```
 
 **Empty incremental diff:** when head changed but no new findings and no file changes in boundary, still
 emit statistics, regression check, coverage, Evidence + Inference inside Executive Summary, and closing loop — *"No new
