@@ -1665,8 +1665,13 @@ lint-framework:
 		echo "pytest not installed — install with 'python3 -m pip install pytest' to run metadata footer tests" >&2; \
 	fi
 	@echo "lint-framework: source-tree reference validation (anchors + local links, cross-cutting docs)"
-	@skill_excludes=$$(python3 scripts/list_registered_skill_paths.py | sed 's/^/--exclude /' | tr '\n' ' '); \
-	python3 scripts/validate_references.py --source-tree . --exclude docs/superpowers $$skill_excludes || exit 1
+	@tmp_skills="$$(mktemp)"; \
+	python3 scripts/list_registered_skill_paths.py > "$$tmp_skills" || \
+		{ echo "error: failed to list registered skills for lint-framework exclude" >&2; rm -f "$$tmp_skills"; exit 1; }; \
+	set -- --exclude docs/superpowers --exclude docs/skill-framework; \
+	while IFS= read -r skill; do set -- "$$@" --exclude "$$skill"; done < "$$tmp_skills"; \
+	rm -f "$$tmp_skills"; \
+	python3 scripts/validate_references.py --source-tree . "$$@" || exit 1
 	@echo "lint-framework: ok"
 
 # Fetch KubeSense error logs with full body via SPL REST API.
