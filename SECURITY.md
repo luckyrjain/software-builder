@@ -2,9 +2,12 @@
 
 ## Supported versions
 
-This repository does not yet publish tagged releases — `main` is the only supported line. Security
-fixes land as regular commits/PRs against `main`; there is no backport policy until a release process
-exists (tracked in the repository backlog).
+`main` is the actively-maintained line and the only one covered by this policy. A tagged-release
+pipeline exists (`vMAJOR.MINOR.PATCH`, see [docs/RELEASE.md](docs/RELEASE.md)) — as of a given tag,
+that snapshot is what `git checkout vX.Y.Z` or the corresponding GitHub Release bundle installs. This
+is a single-maintainer project with no backport policy: security fixes land as regular commits/PRs
+against `main`, and a fix is only guaranteed to reach you by pulling `main` or the next tagged release
+— older tags are not patched retroactively.
 
 ## Reporting a vulnerability
 
