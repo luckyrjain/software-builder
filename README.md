@@ -1,7 +1,9 @@
 # software-builder
 
 [![Lint](https://github.com/luckyrjain/software-builder/actions/workflows/lint.yml/badge.svg)](https://github.com/luckyrjain/software-builder/actions/workflows/lint.yml)
-![Skills](https://img.shields.io/badge/skills-<!-- skills-count:start -->23<!-- skills-count:end -->-blue)
+<!-- skills-count:start -->
+![Skills](https://img.shields.io/badge/skills-23-blue)
+<!-- skills-count:end -->
 
 Portable, evidence-driven agent skills for software delivery: code review, incident response,
 architecture discovery, Kubernetes optimization, migrations, release readiness, and autonomous

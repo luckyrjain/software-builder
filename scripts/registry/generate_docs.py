@@ -19,7 +19,15 @@ def update_marker_block(text: str, start: str, end: str, content: str) -> str:
 
 
 def update_readme_badge(readme: str, count: int) -> str:
-    return update_marker_block(readme, README_COUNT_START, README_COUNT_END, str(count))
+    # The generated value must never sit *inside* the badge's image destination — GitHub's HTML
+    # comment stripping runs on the raw comment tags before the surrounding `![alt](url)` is
+    # parsed, and previously left `<!-- skills-count:start -->23<!-- skills-count:end -->` fused
+    # into the URL itself, corrupting the image syntax so it rendered as broken literal text with
+    # a stray auto-link instead of a badge (reproduced against the real rendered GitHub page).
+    # Keeping the whole image on its own line, bracketed by the markers on their own lines too,
+    # keeps the comments unambiguously block-level and the image intact.
+    badge_block = f"\n![Skills](https://img.shields.io/badge/skills-{count}-blue)\n"
+    return update_marker_block(readme, README_COUNT_START, README_COUNT_END, badge_block)
 
 
 def render_skills_table(registry: Registry) -> str:
