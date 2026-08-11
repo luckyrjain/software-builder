@@ -174,6 +174,22 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
   zizmor-not-installed `SKIPPED:` case, so it's the always-live backstop, not redundant dead weight —
   and that a future divergence between the two checks' definitions of "pinned" would surface as one
   passing while the other fails on the same workflow, not as a bug in either script.
+- After this branch was opened as a PR, `main` had independently advanced (a separate, already-merged
+  reference-validator fix), making the PR unmergeable. Resolved with `git merge origin/main`; the only
+  real conflict was two independently-added `CHANGELOG.md` entries at the top of the same section,
+  resolved by keeping both, this change's entry first. A fresh review round taking a genuinely
+  different angle on the merged branch (workflow trigger overlap, `requirements.lock` transitive
+  reproducibility, script CWD-robustness) found one real, source-verified gap: `gitleaks-action` v3
+  (cloned and read `src/index.js` directly) hard-exits before scanning — no scan runs at all — when the
+  repo owner's GitHub account type is `"Organization"` and no `GITLEAKS_LICENSE` secret is set;
+  confirmed this repo's owner is currently type `"User"` (via the GitHub API), so the `gitleaks` job
+  isn't affected today, but this repo's own stated purpose (portable, forkable agent skills) makes an
+  eventual org-owned fork or transfer a real path, not a hypothetical one, and none of the prior 9
+  review rounds or `docs/REPOSITORY.md` mentioned this dependency at all. Fixed by wiring
+  `GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}` into the `gitleaks-action` step (a no-op today,
+  since an unset secret resolves to an empty string and individual-account repos skip the check
+  entirely) and documenting the mechanism and the free-for-open-source license path in
+  `docs/REPOSITORY.md`.
 
 ### Fix reference-validator anchor slugifier; wire repo-wide check into lint (2026-08-11)
 
