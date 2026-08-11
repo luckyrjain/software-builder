@@ -138,6 +138,21 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
   `echo "$$output"` call sites with `printf '%s\n' "$$output"`, whose `%s` substitution never
   reinterprets escapes in the argument — verified the exact failure reproduces with `echo` and is fixed
   with `printf`, and re-verified both the bad-token and no-token fallback paths still exit 0 end to end.
+- Fixed a doc/table miscount: "five additional, independent checks" in `docs/REPOSITORY.md` and
+  `CHANGELOG.md`'s own entry for this change, when the table/list beneath it actually enumerates six
+  (`dependency-review.yml`, `codeql.yml`, `secret-scan.yml`, `scorecard.yml`, `lint-actions-security`,
+  `lint-actions-pinning`). Both corrected to say six.
+- A second-round review re-scrutinized (rather than rubber-stamped) an earlier round's non-blocking
+  observation about `secret-scan.yml`'s `negative-test` job and found a real, source-verified issue:
+  gitleaks' own `findingSummaryAndExit` (`cmd/root.go`) calls `os.Exit(1)` on a non-nil scan error
+  *before* it ever reaches the findings-count exit branch — confirmed directly in gitleaks v8.30.1's
+  source. That means exit code 1 alone doesn't distinguish "a leak was actually detected" from "the
+  scan itself hit an error" (e.g. a partial-scan failure); the negative test could report success on
+  the latter without any leak ever having been recorded, since it only checked the exit code. Fixed by
+  writing the scan report to a file (`--report-path`, mounted to a second read-write volume alongside
+  the read-only fixture mount) and requiring an actual `"RuleID"` entry in it, not just exit code 1 —
+  verified via the real gitleaks CLI that a genuine detection produces a report containing a `RuleID`
+  finding, giving an unambiguous signal independent of gitleaks' exit-code overloading.
 
 ### safe-output.md Rule 4: single-backtick escape gap (2026-08-09)
 
