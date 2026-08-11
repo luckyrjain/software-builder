@@ -345,10 +345,12 @@ def test_render_kiro_steering_thin_wrapper() -> None:
 
 def test_update_readme_badge_keeps_markers_outside_the_image_url() -> None:
     # Regression test: the generated count previously sat *inside* the badge's image destination
-    # (`...skills-<!-- skills-count:start -->23<!-- skills-count:end -->-blue)`), which GitHub's
-    # HTML comment stripping corrupted into broken literal text plus a stray auto-link on the real
-    # rendered page. The image markdown must come out fully intact, with the markers only ever
-    # adjacent to it on their own lines, never interleaved into the URL itself.
+    # (`...skills-<!-- skills-count:start -->23<!-- skills-count:end -->-blue)`). CommonMark's
+    # grammar for a bare link/image destination forbids literal whitespace, and the marker
+    # comments' own spaces broke it outright, corrupting the whole `![alt](url)` into broken
+    # literal text plus a stray auto-link on the real rendered page. The image markdown must come
+    # out fully intact, with the markers only ever adjacent to it on their own lines, never
+    # interleaved into the URL itself.
     from scripts.registry.generate_docs import (
         README_COUNT_END,
         README_COUNT_START,
