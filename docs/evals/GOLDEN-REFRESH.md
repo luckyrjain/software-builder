@@ -47,11 +47,14 @@ CI ignores `refresh_meta` — it is provenance for maintainers only.
 
 ## Live LLM automation (optional, out of CI)
 
-This repository does not run live model calls in GitHub Actions. Teams may wire their own scheduled job
-that:
+This repository does not run live model calls in `make lint`/CI. `scripts/evals/live_run.py` (see
+[LIVE-HARNESS.md](LIVE-HARNESS.md), [ADR 0004](../adr/0004-live-eval-harness.md)) does the three steps
+this section used to only describe in prose:
 
-1. Invokes a skill with a pinned prompt/fixture input
-2. Captures structured output to JSON
-3. Calls `golden_refresh.py --verify` in a human-reviewed PR
+1. Invokes a skill with a pinned prompt/fixture input (`--live-case`), tools mocked from that fixture
+2. Captures structured output to JSON (`--recorded-output-out`)
+3. Feeds that JSON to `golden_refresh.py --verify` (or scores it in place with `--score-golden`,
+   without writing anything back to disk)
 
-Keep that pipeline outside `make lint` so CI stays deterministic.
+`.github/workflows/live-eval.yml` wires an optional, `workflow_dispatch`-only trigger for it. Keep
+that pipeline outside `make lint` so CI stays deterministic.

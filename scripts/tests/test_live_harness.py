@@ -1,0 +1,270 @@
+"""Tests for the mock-tool execution harness's control flow — no network, no real model."""
+
+from __future__ import annotations
+
+import socket
+import threading
+
+import pytest
+
+import scripts.evals.live_harness as live_harness
+from scripts.evals.live_harness import (
+    AnthropicModelClient,
+    LiveHarnessError,
+    load_mock_tools,
+    run_live_case,
+)
+from scripts.tests.live_test_helpers import ScriptedModelClient, ScriptedTurn
+
+TOOL_DEFS = [
+    {
+        "name": "list_files",
+        "description": "list files",
+        "input_schema": {"type": "object", "properties": {}},
+    },
+]
+
+
+def test_tool_call_routed_to_mock_response_and_recorded() -> None:
+    client = ScriptedModelClient(
+        [
+            ScriptedTurn(tool_calls=[("list_files", {"dir": "."})]),
+            ScriptedTurn(tool_calls=[("record_outcome", {"status": "completed", "output": {"count": 3}})]),
+        ],
+    )
+    mock_tools = load_mock_tools({"list_files": {"files": ["a.py", "b.py"]}})
+
+    result = run_live_case(
+        system_prompt="be a good skill",
+        scenario_prompt="do the thing",
+        tool_defs=TOOL_DEFS,
+        mock_tools=mock_tools,
+        client=client,
+    )
+
+    assert result.events == [
+        {"type": "tool", "name": "list_files", "args": {"dir": "."}},
+        {"type": "outcome", "status": "completed"},
+    ]
+    assert result.recorded_output == {"count": 3, "status": "completed"}
+    assert result.turns_used == 2
+
+    # the mocked tool result actually reached the model as the next turn's tool_result message
+    second_call_messages = client.sent[1]["messages"]
+    tool_result_message = second_call_messages[-1]
+    assert tool_result_message["role"] == "user"
+    assert tool_result_message["content"][0]["tool_use_id"] == "call_1_0"
+    assert "a.py" in tool_result_message["content"][0]["content"]
+
+
+def test_gate_decision_recorded_as_event() -> None:
+    client = ScriptedModelClient(
+        [
+            ScriptedTurn(
+                tool_calls=[
+                    ("record_gate_decision", {"name": "posting_gate", "decision": "blocked", "reason": "no_evidence"}),
+                ],
+            ),
+            ScriptedTurn(tool_calls=[("record_outcome", {"status": "human_action_required", "output": {}})]),
+        ],
+    )
+    mock_tools = load_mock_tools({})
+
+    result = run_live_case(
+        system_prompt="be a good skill",
+        scenario_prompt="do the thing",
+        tool_defs=[],
+        mock_tools=mock_tools,
+        client=client,
+    )
+
+    assert result.events[0] == {
+        "type": "gate",
+        "name": "posting_gate",
+        "decision": "blocked",
+        "reason": "no_evidence",
+    }
+    assert result.events[1] == {"type": "outcome", "status": "human_action_required"}
+
+
+def test_multiple_tool_calls_in_one_turn_mixing_real_tool_gate_and_outcome() -> None:
+    # A single turn can bundle a real (mocked) tool call, a gate decision, and the final outcome
+    # together — the model is allowed to call several tools before its next response. All three
+    # must be recorded as separate events in the order the model emitted them, the real tool call
+    # must still be routed to its mock response, and the run must terminate on this one turn since
+    # record_outcome is among the calls (no second client.send() should occur).
+    client = ScriptedModelClient(
+        [
+            ScriptedTurn(
+                tool_calls=[
+                    ("list_files", {"dir": "."}),
+                    ("record_gate_decision", {"name": "posting_gate", "decision": "allowed", "reason": "clean"}),
+                    ("record_outcome", {"status": "completed", "output": {"squad": "payments"}}),
+                ],
+            ),
+        ],
+    )
+    mock_tools = load_mock_tools({"list_files": {"files": ["a.py"]}})
+
+    result = run_live_case(
+        system_prompt="be a good skill",
+        scenario_prompt="do the thing",
+        tool_defs=TOOL_DEFS,
+        mock_tools=mock_tools,
+        client=client,
+    )
+
+    assert result.events == [
+        {"type": "tool", "name": "list_files", "args": {"dir": "."}},
+        {"type": "gate", "name": "posting_gate", "decision": "allowed", "reason": "clean"},
+        {"type": "outcome", "status": "completed"},
+    ]
+    assert result.recorded_output == {"squad": "payments", "status": "completed"}
+    assert result.turns_used == 1
+    assert len(client.sent) == 1  # the run terminated on the first turn, no follow-up call made
+
+    # the mocked tool response was genuinely consumed, not skipped because outcome was also present
+    with pytest.raises(LiveHarnessError, match="called more times"):
+        mock_tools.respond("list_files")
+
+
+def test_unknown_tool_gets_error_result_but_run_continues() -> None:
+    client = ScriptedModelClient(
+        [
+            ScriptedTurn(tool_calls=[("unconfigured_tool", {})]),
+            ScriptedTurn(tool_calls=[("record_outcome", {"status": "recovered", "output": {}})]),
+        ],
+    )
+    mock_tools = load_mock_tools({})  # no response configured for unconfigured_tool
+
+    result = run_live_case(
+        system_prompt="s",
+        scenario_prompt="p",
+        tool_defs=[{"name": "unconfigured_tool", "description": "d", "input_schema": {"type": "object"}}],
+        mock_tools=mock_tools,
+        client=client,
+    )
+
+    # the call itself is still recorded as an event even though it had no mock response
+    assert result.events[0] == {"type": "tool", "name": "unconfigured_tool", "args": {}}
+    assert result.recorded_output["status"] == "recovered"
+
+    first_call_response_message = client.sent[1]["messages"][-1]
+    assert first_call_response_message["content"][0]["is_error"] is True
+
+
+def test_mock_tool_fixture_serves_queued_responses_in_order_then_raises() -> None:
+    mock_tools = load_mock_tools({"get_page": ["page1", "page2"]})
+    assert mock_tools.respond("get_page") == "page1"
+    assert mock_tools.respond("get_page") == "page2"
+    with pytest.raises(LiveHarnessError, match="called more times"):
+        mock_tools.respond("get_page")
+
+
+def test_mock_tool_fixture_wraps_scalar_into_single_item_queue() -> None:
+    mock_tools = load_mock_tools({"get_page": "only-page"})
+    assert mock_tools.respond("get_page") == "only-page"
+    with pytest.raises(LiveHarnessError, match="called more times"):
+        mock_tools.respond("get_page")
+
+
+def test_exhausted_turns_raises() -> None:
+    client = ScriptedModelClient(
+        [
+            ScriptedTurn(tool_calls=[("list_files", {})]),
+            ScriptedTurn(tool_calls=[("list_files", {})]),
+        ],
+    )
+    mock_tools = load_mock_tools({"list_files": ["a", "b"]})
+
+    with pytest.raises(LiveHarnessError, match="exhausted 2 turns"):
+        run_live_case(
+            system_prompt="s",
+            scenario_prompt="p",
+            tool_defs=TOOL_DEFS,
+            mock_tools=mock_tools,
+            client=client,
+            max_turns=2,
+        )
+
+
+def test_model_stopping_without_any_tool_call_raises() -> None:
+    client = ScriptedModelClient([ScriptedTurn(text="I'm done!", stop_reason="end_turn", tool_calls=[])])
+    mock_tools = load_mock_tools({})
+
+    with pytest.raises(LiveHarnessError, match="without calling record_outcome"):
+        run_live_case(
+            system_prompt="s",
+            scenario_prompt="p",
+            tool_defs=[],
+            mock_tools=mock_tools,
+            client=client,
+        )
+
+
+def test_reserved_tool_name_collision_rejected() -> None:
+    client = ScriptedModelClient([ScriptedTurn(tool_calls=[("record_outcome", {"status": "x"})])])
+    mock_tools = load_mock_tools({})
+
+    with pytest.raises(LiveHarnessError, match="reserved harness tool name"):
+        run_live_case(
+            system_prompt="s",
+            scenario_prompt="p",
+            tool_defs=[{"name": "record_outcome", "description": "d", "input_schema": {}}],
+            mock_tools=mock_tools,
+            client=client,
+        )
+
+
+def test_anthropic_client_requires_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    with pytest.raises(LiveHarnessError, match="ANTHROPIC_API_KEY is not set"):
+        AnthropicModelClient(model="claude-sonnet-5")
+
+
+def test_anthropic_client_accepts_explicit_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    client = AnthropicModelClient(model="claude-sonnet-5", api_key="explicit-key")
+    assert client._api_key == "explicit-key"  # noqa: SLF001 - verifying the fallback precedence itself
+
+
+def test_anthropic_client_reads_env_var(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "env-key")
+    client = AnthropicModelClient(model="claude-sonnet-5")
+    assert client._api_key == "env-key"  # noqa: SLF001
+
+
+def test_anthropic_client_wraps_a_stalled_response_as_live_harness_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A stall during response.read() — after urlopen() has already connected — surfaces as a
+    # bare TimeoutError, not a urllib.error.URLError subclass; regression test for that gap. A
+    # local loopback server that accepts the connection but never responds reproduces this
+    # deterministically, no real network access involved.
+    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server_socket.bind(("127.0.0.1", 0))
+    server_socket.listen(1)
+    port = server_socket.getsockname()[1]
+
+    def accept_and_stall() -> None:
+        try:
+            conn, _ = server_socket.accept()
+        except OSError:
+            return
+        try:
+            conn.recv(65536)  # drain the request so the client isn't blocked writing it
+        except OSError:
+            pass
+        threading.Event().wait(2)  # hold the connection open past the client's short timeout
+        conn.close()
+
+    server_thread = threading.Thread(target=accept_and_stall, daemon=True)
+    server_thread.start()
+    try:
+        monkeypatch.setattr(live_harness, "ANTHROPIC_API_URL", f"http://127.0.0.1:{port}/v1/messages")
+        client = AnthropicModelClient(model="claude-sonnet-5", api_key="test-key", timeout=0.2)
+
+        with pytest.raises(LiveHarnessError, match="Anthropic API request failed"):
+            client.send(system="s", messages=[], tools=[])
+    finally:
+        server_socket.close()

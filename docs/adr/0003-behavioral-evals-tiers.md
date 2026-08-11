@@ -24,4 +24,4 @@ Tier 2 is intentionally **static replay** — no model call — so CI can enforc
 - **Positive:** Merge gate blocks behavioral regressions on every `make lint`.
 - **Positive:** Transcript schema gives a path toward Tier 3 without rewriting Tier 1/2.
 - **Negative:** Tier 2 does not prove an LLM will follow policy; it documents and tests expected sequences.
-- **Follow-ups:** Expand transcript coverage; Tier 3 golden refresh workflow — [docs/evals/GOLDEN-REFRESH.md](../evals/GOLDEN-REFRESH.md) (`scripts/evals/golden_refresh.py`).
+- **Follow-ups:** Expand transcript coverage; Tier 3 golden refresh workflow — [docs/evals/GOLDEN-REFRESH.md](../evals/GOLDEN-REFRESH.md) (`scripts/evals/golden_refresh.py`). Actually executing a skill against a real model, tools mocked from a fixture — [ADR 0004](0004-live-eval-harness.md) (`scripts/evals/live_harness.py`), deliberately kept out of `make lint`/CI for the same reason Tier 2 stays static replay.
