@@ -8,6 +8,33 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 
 ## Platform
 
+### Fix reference-validator anchor slugifier; wire repo-wide check into lint (2026-08-11)
+
+- `scripts/validate_references.py`'s `github_style_slug()` had two bugs, both found while re-auditing
+  a prior repository review's "stronger reference/link validator" finding and independently confirmed
+  by direct execution before fixing: (1) its keep-set dropped hyphens *within* heading text (e.g.
+  `## 1. Test-first evidence` slugified to `1-testfirst-evidence` instead of the real
+  `1-test-first-evidence`), and (2) its `strip()`+`split()`+`join()` approach silently discarded a
+  leading/trailing single space left behind when a trailing non-ASCII character (e.g. an emoji) was
+  removed by the character filter, instead of converting it to a leading/trailing hyphen the way
+  GitHub's real renderer — and this repo's own `scripts/lint-dangling-md-links.sh` sed pipeline — does
+  (`## 5. Slack — PR review 🔴` must slugify to `5-slack-pr-review-`, trailing hyphen, matching the
+  already-correct link in `pr-review/examples.md`). Rewrote the function to port
+  `lint-dangling-md-links.sh`'s sed pipeline step-for-step instead of re-deriving the algorithm, since
+  the whole repo's existing anchor corpus is already written against that proven algorithm. Added
+  regression tests for both bugs (`scripts/tests/test_validate_references.py`) — neither bug had any
+  prior test coverage.
+- Running `--source-tree` mode with the fixed slugifier surfaced 3 real, previously-undetected dangling
+  references in normative docs — `CHANGELOG.md`, `CONTRIBUTING.md`, `docs/adr/README.md` — none of
+  which any existing skill-scoped `lint-dangling-md-links.sh` Makefile target ever covers, since none
+  of those three files live inside a skill directory. Fixed all three.
+- Added a repeatable `--exclude RELATIVE_DIR` flag so historical doc trees
+  (`docs/superpowers/`, exempt from active reference upkeep per `docs/history/README.md`) can be
+  skipped as link sources without masking genuine issues elsewhere. `make lint` (`lint-framework`)
+  now runs `validate_references.py --source-tree . --exclude docs/superpowers` repo-wide, verified
+  clean. `scripts/lint-dangling-md-links.sh` is intentionally NOT retired by this change — it still
+  backs ~20 per-skill lint targets; consolidating the two link checkers is a separate decision.
+
 ### safe-output.md Rule 4: single-backtick escape gap (2026-08-09)
 
 - `docs/skill-framework/shared/safe-output.md` Rule 4 only documented unbalanced *triple*-backtick
@@ -23,7 +50,7 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
   skill (release-readiness-checker, incident-triage-agent, backlog-runner, weekly-squad-digest,
   cost-optimization-sprint-planner) hands to a child skill — exact scope, interaction policy,
   allowed actions, expected SHA, source revisions — and points at the existing `review_metadata`/
-  `assessment_metadata` schema ([review-metadata-schema.md](review-metadata-schema.md) §8) as the
+  `assessment_metadata` schema ([review-metadata-schema.md](docs/skill-framework/shared/review-metadata-schema.md) §8) as the
   already-formalized result-side counterpart. No new validation mechanism: the registry's existing
   `composition_contracts.py` (`_validate_declared_fields`, `_validate_invoke_schema_matching`)
   already enforces field-level producer/consumer matching — this makes it aware of the envelope by

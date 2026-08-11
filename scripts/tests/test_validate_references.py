@@ -10,7 +10,40 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from validate_references import validate_tree  # noqa: E402
+from validate_references import github_style_slug, validate_tree  # noqa: E402
+
+
+def test_slug_preserves_hyphens_within_heading_text() -> None:
+    # Regression: an earlier keep-set (alnum-or-space only) dropped the hyphen from
+    # "Test-first", producing "1-testfirst-evidence" instead of GitHub's real
+    # "1-test-first-evidence" for this exact heading in
+    # docs/skill-framework/shared/test-creation-principles.md.
+    assert github_style_slug("## 1. Test-first evidence") == "1-test-first-evidence"
+
+
+def test_slug_preserves_trailing_hyphen_from_stripped_trailing_character() -> None:
+    # Regression: strip()+split()+join() silently discards the internal space left
+    # behind when a trailing non-ASCII character (e.g. an emoji) is removed by the
+    # character filter, producing "5-slack-pr-review" instead of the real GitHub
+    # anchor "5-slack-pr-review-" (trailing hyphen) already used by the verified
+    # link in pr-review/examples.md for this exact heading in
+    # docs/skill-framework/shared/post-action-templates.md.
+    assert github_style_slug("## 5. Slack — PR review \U0001f534") == "5-slack-pr-review-"
+
+
+def test_source_tree_exclude_skips_historical_doc_tree(tmp_path: Path) -> None:
+    (tmp_path / "docs" / "superpowers").mkdir(parents=True)
+    (tmp_path / "docs" / "superpowers" / "old-plan.md").write_text(
+        "Broken: [missing](./missing.md)\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "README.md").write_text("Fine: no links here.\n", encoding="utf-8")
+
+    errors_without_exclude = validate_tree(tmp_path, check_anchors=True)
+    assert any("missing.md" in error for error in errors_without_exclude)
+
+    errors_with_exclude = validate_tree(tmp_path, check_anchors=True, exclude=["docs/superpowers"])
+    assert errors_with_exclude == []
 
 
 def test_installed_package_flags_missing_skill_local_link(tmp_path: Path) -> None:
