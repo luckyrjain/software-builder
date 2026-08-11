@@ -611,7 +611,6 @@ from markdown. Strip internal-only debug lines and **`assessment_metadata`**.
 - `kubesense-mcp: search-logs body field workload=<workload>` *(primary log text path)*
 - `kubesense-spl: scripts/kubesense_logs.py <workload> --evidence` *(fallback when MCP body fails)*
 - `jira: project=INC AND created >= …`
-```
 
 ---
 

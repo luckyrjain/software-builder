@@ -63,7 +63,7 @@ unrestricted.
 
 **Solo maintainer note:** GitHub does not allow PR authors to approve their own PRs. If branch
 protection requires approving reviews (or CODEOWNER review), you will be unable to merge your own PRs
-until you adjust the ruleset — see [docs/REPOSITORY.md § Merge gate](docs/REPOSITORY.md#merge-gate--repo-admin-settings-github-ui-only).
+until you adjust the ruleset — see [docs/REPOSITORY.md § Merge gate](docs/REPOSITORY.md#merge-gate-repo-admin-settings-github-ui-only).
 Keep **required status checks** (`lint`); drop or bypass **approval** requirements until a second
 reviewer exists.
 

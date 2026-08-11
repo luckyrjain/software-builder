@@ -415,7 +415,6 @@ When mixed: add nuance line — *No dependency vulnerabilities; one application-
 Security score **Critical issues** when Critical SEC finding open — not **Clear**.
 
 **Pipeline:** ✅ success on head · **Approvals:** 1/2 · **Merge train:** idle
-```
 
 ## Conclusion
 

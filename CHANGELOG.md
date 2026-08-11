@@ -175,6 +175,117 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
   and that a future divergence between the two checks' definitions of "pinned" would surface as one
   passing while the other fails on the same workflow, not as a bug in either script.
 
+### Fix reference-validator anchor slugifier; wire repo-wide check into lint (2026-08-11)
+
+- `scripts/validate_references.py`'s `github_style_slug()` had two bugs, both found while re-auditing
+  a prior repository review's "stronger reference/link validator" finding and independently confirmed
+  by direct execution before fixing: (1) its keep-set dropped hyphens *within* heading text (e.g.
+  `## 1. Test-first evidence` slugified to `1-testfirst-evidence` instead of the real
+  `1-test-first-evidence`), and (2) its `strip()`+`split()`+`join()` approach silently discarded a
+  leading/trailing single space left behind when a trailing non-ASCII character (e.g. an emoji) was
+  removed by the character filter, instead of converting it to a leading/trailing hyphen the way
+  GitHub's real renderer — and this repo's own `scripts/lint-dangling-md-links.sh` sed pipeline — does
+  (`## 5. Slack — PR review 🔴` must slugify to `5-slack-pr-review-`, trailing hyphen, matching the
+  already-correct link in `pr-review/examples.md`). First round of review caught a third, self-inflicted
+  bug in the fix itself: porting the keep-step as an ASCII-only `[^a-z0-9 -]` regex (mirroring
+  `lint-dangling-md-links.sh`'s sed byte-class literally) silently strips non-ASCII letters that
+  GitHub's real renderer preserves — e.g. `## Café Menu` slugified to `caf-menu` instead of
+  `café-menu`, a regression versus even the original buggy implementation, which used Unicode-aware
+  `str.isalnum()` and did keep accented letters. Fixed by keeping the Unicode-aware `isalnum()` check
+  for the character-keep step (matching GitHub's actual behavior for non-ASCII letters) while still
+  fixing both original bugs via the corrected collapse-and-join logic. Added regression tests for all
+  three bugs (`scripts/tests/test_validate_references.py`) — none had any prior test coverage.
+- Running `--source-tree` mode with the fixed slugifier surfaced 3 real, previously-undetected dangling
+  references in normative docs — `CHANGELOG.md`, `CONTRIBUTING.md`, `docs/adr/README.md` — none of
+  which any existing skill-scoped `lint-dangling-md-links.sh` Makefile target ever covers, since none
+  of those three files live inside a skill directory. Fixed all three.
+- Added a repeatable `--exclude RELATIVE_DIR` flag so historical doc trees
+  (`docs/superpowers/`, exempt from active reference upkeep per `docs/history/README.md`) can be
+  skipped as link sources without masking genuine issues elsewhere. `scripts/lint-dangling-md-links.sh`
+  is intentionally NOT retired by this change — it still backs ~20 per-skill lint targets;
+  consolidating the two link checkers is a separate decision.
+- Second review round caught a follow-on risk from wiring the new checker into `make lint` with only
+  `docs/superpowers` excluded: it then also ran over every skill directory, which the legacy
+  `lint-dangling-md-links.sh` sed pipeline (ASCII-only) already checks — and since the two anchor
+  algorithms disagree on any future non-ASCII-letter heading, that overlap could in principle produce
+  contradictory `make lint` failures depending on which checker's convention a contributor followed.
+  The first attempt at closing this scoped the repo-wide check to also exclude every registered skill
+  directory (generated from `skills.yaml` via a new `scripts/list_registered_skill_paths.py`, per this
+  repo's registry-derived-not-hand-duplicated convention) — but a subsequent review round found this
+  traded a *latent, hypothetical* problem (no heading anywhere in the repo currently contains a
+  non-ASCII letter, so the disagreement never actually fires) for a *real, verified* one: each
+  per-skill `lint-dangling-md-links.sh` invocation only covers a hand-picked subset of that skill's
+  Markdown files (typically `*.md`, `reference/*.md`, `workflow/*.md`), not the whole directory tree,
+  so blanket-excluding an entire skill directory from the new checker silently dropped coverage for
+  everything outside those globs. Audited every skill's actual glob coverage against its full file
+  tree and confirmed this was live, not theoretical: `squad-map/templates/SQUAD_MAP.md` and
+  `mysql-to-postgres-sql/templates/SERVICE_PG_MIGRATION.md` (both containing real, uncensored relative
+  links to `reference/`/`workflow/`) and 41 files under `domain-comprehension/templates/` and
+  `domain-comprehension/tests/fixtures/` were being checked by the new source-tree pass before the
+  blanket skill-directory exclude was added, and were checked by *neither* checker after — `make lint`
+  would have reported "ok" on a genuinely broken link in any of them.
+- Reverted the skill-directory-exclusion approach entirely rather than trying to hand-maintain a
+  precise per-skill glob mirror (which would only re-create the "second, driftable list" problem this
+  change exists to avoid): `scripts/list_registered_skill_paths.py` and its test are removed, and the
+  Makefile's dynamic `--exclude`-per-skill plumbing (including the temp-file-based fail-closed fix from
+  the immediately preceding review round) is gone with it. `make lint` (`lint-framework`) now runs the
+  minimal `validate_references.py --source-tree . --exclude docs/superpowers --exclude
+  docs/skill-framework` — both excludes verified to have zero coverage loss (`docs/skill-framework`'s
+  entire Markdown surface, `README.md` + `shared/*.md`, is exactly and fully covered by the dedicated
+  `lint-dangling-md-links.sh` step earlier in the same target; `docs/superpowers` is
+  historical/exempt per `docs/history/README.md`). Verified clean with skill directories back in
+  scope — the repo currently has zero non-ASCII-letter headings anywhere, so the anchor-disagreement
+  risk this whole exclude mechanism defends against is not live today either way; the difference is
+  that leaving skill directories unexcluded costs nothing right now and gains real coverage, while
+  excluding them cost real coverage for a risk that isn't materializing.
+- A later review round, taking a fresh holistic pass rather than re-checking prior rounds' specific
+  concerns, found a real bug newly consequential because this diff is what first wires anchor checking
+  into `make lint`: `heading_slugs()` scanned every `#`-prefixed line in a file for headings without
+  first stripping fenced code blocks, unlike its sibling `extract_markdown_links()` (which does). A
+  heading-shaped line inside a fenced ` ```markdown ` example — not a real heading GitHub would ever
+  render as a navigable anchor — was counted as one, which could silently validate a link to an anchor
+  that doesn't actually exist. Fixed by running `strip_fenced_code_blocks()` before scanning for
+  headings, with a regression test. The same round also found the new `--exclude` flag's `--help` text
+  described only one of its two now-real use cases (historical/exempt doc trees); reworded to also
+  cover excluding actively-maintained trees to avoid disagreeing with a different checker's anchor
+  algorithm, which is why `docs/skill-framework` is excluded.
+- The `heading_slugs()` fence fix above then correctly exposed two pre-existing, previously-invisible
+  content bugs — invisible because `--source-tree` anchor checking wasn't wired into `make lint` until
+  this branch, and even after that landed, the run verifying it clean piped `make lint`'s output through
+  `tail`, which silently discarded its real (non-zero) exit code. Both are stray, unmatched Markdown
+  fence markers with no corresponding opener, which — via the same `strip_fenced_code_blocks()` state
+  machine this fix now also drives `heading_slugs()` through — swallowed everything after them up to
+  the next real closing fence (or EOF) as if it were code-block content, hiding real headings:
+  `incident-rca/report-template.md:614` (an orphaned ` ``` ` after the "Appendix: query references"
+  list, hiding `## Safe rendered-output boundary` and breaking two links to it) and
+  `pr-review/reference/executive-summary.md:418` (an orphaned ` ``` ` after unfenced prose, hiding the
+  real `## Conclusion` section heading and breaking `pr-review/report-template.md`'s link to it — a
+  fenced, non-navigable example `## Conclusion` a few lines later was never the actual link target).
+  Removed both stray fence lines; `make lint` now genuinely passes (verified via its real exit code,
+  not through a `tail` pipe).
+- Since the reference validator only ever surfaced this stray-fence bug pattern as a downstream
+  symptom (a dangling-anchor error, and only when something happens to link into the now-hidden
+  heading), a broader sweep — independently replicating `strip_fenced_code_blocks()`'s state machine
+  over every `.md` file in the repo — found a third instance with no incoming link, so it was passing
+  silently: `pr-review/reference/comment-templates.md:674`, an orphaned ` ``` ` that hid the real
+  `## Optional Jira write-back → addCommentToJiraIssue` heading (and swallowed real prose and a
+  genuinely-fenced template example between it and the next close). Fixed the same way. Also added a
+  permanent, always-on structural check — `reference_utils.has_unclosed_fenced_code_block()`, wired
+  into `validate_markdown_file()` — so a fence that opens and is never closed before EOF is now a
+  direct validator error instead of a silent, symptom-dependent one.
+- Writing that new check's own test surfaced a fourth, different bug it immediately caught for real:
+  `mysql-to-postgres-sql/workflow/migrate-service.md:133` contains legitimate prose demonstrating the
+  delimiter-length inline-code-span escaping technique (`` ``` `` becomes ```` ```` ````, …) that
+  starts with a 3-backtick run — CommonMark's actual rule is that a backtick fence's info string
+  (anything after the opening run on the same line) must contain no backticks itself, or the line
+  isn't a fence opener at all, but `_FENCE_OPEN_RE` never enforced that. Both
+  `strip_fenced_code_blocks()` and the new check treated this ordinary sentence as opening a fence
+  that's never closed, silently swallowing a real link and all trailing content as far as EOF —
+  pre-dating this branch entirely and previously invisible for the same reason (no incoming link to
+  what followed). Fixed by adding a shared `_fence_open_length()` helper both functions now call,
+  which rejects a candidate opener whose info string contains a backtick. Regression tests added for
+  the false positive, the still-correct true-positive case, and the validator wiring.
+
 ### safe-output.md Rule 4: single-backtick escape gap (2026-08-09)
 
 - `docs/skill-framework/shared/safe-output.md` Rule 4 only documented unbalanced *triple*-backtick
@@ -190,7 +301,7 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
   skill (release-readiness-checker, incident-triage-agent, backlog-runner, weekly-squad-digest,
   cost-optimization-sprint-planner) hands to a child skill — exact scope, interaction policy,
   allowed actions, expected SHA, source revisions — and points at the existing `review_metadata`/
-  `assessment_metadata` schema ([review-metadata-schema.md](review-metadata-schema.md) §8) as the
+  `assessment_metadata` schema ([review-metadata-schema.md](docs/skill-framework/shared/review-metadata-schema.md) §8) as the
   already-formalized result-side counterpart. No new validation mechanism: the registry's existing
   `composition_contracts.py` (`_validate_declared_fields`, `_validate_invoke_schema_matching`)
   already enforces field-level producer/consumer matching — this makes it aware of the envelope by
