@@ -108,6 +108,24 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
   `docs/REPOSITORY.md`'s description of what `lint-actions-security`'s default zizmor persona actually
   catches (a workflow missing `permissions:` entirely, not permissions that are merely broader than
   necessary while still present) — a real accuracy gap, not merely restating a known limitation.
+- A further round independently re-verified the annotated-tag fix (correct) and, taking a fresh
+  holistic pass rather than only re-checking it, found two more real, previously-unflagged issues:
+  1. `lint-actions-security`'s online-audit path treated ANY zizmor failure as fatal, including a pure
+     GitHub-API infrastructure hiccup unrelated to any real code finding — reproduced directly with an
+     invalid token: zizmor aborts entirely with `fatal: no audit was performed` (exit 1) the moment a
+     single online audit (e.g. `artipacked`, which needs to list an action's upstream tags) can't reach
+     the API, rather than just skipping that one check. Newly consequential because this same branch
+     added `GH_TOKEN` to `release.yml`'s lint step specifically to enable the online path there — a
+     release could now be blocked by a transient GitHub-side issue with nothing wrong in the diff.
+     Fixed by detecting zizmor's own `fatal: no audit was performed` message specifically (distinct
+     from a normal findings-summary exit) and falling back to `--no-online-audits` only in that case,
+     verified to still fail loudly (no fallback) on a real finding.
+  2. `scripts/check_pinned_actions.py`'s SHA regex was lowercase-only (`[0-9a-f]{40}`), so a perfectly
+     valid, immutable uppercase-hex pin — e.g. `actions/checkout@3D3C42E5AAC5BA805825DA76410C181273BA90B1`,
+     the identical commit as this repo's actual lowercase pin — was flagged as a "mutable ref." No
+     current pin in this repo uses uppercase, so this caused no live breakage, but it's a real
+     correctness bug in a newly-added enforcement script. Fixed to accept both cases; regression test
+     added.
 
 ### safe-output.md Rule 4: single-backtick escape gap (2026-08-09)
 

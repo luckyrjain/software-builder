@@ -386,7 +386,12 @@ isn't on `PATH` (e.g. you skipped `make setup`), the target prints a `SKIPPED:` 
 both installed via `requirements.lock`, so this gap is local-only. Separately, without a
 `GH_TOKEN`/`GITHUB_TOKEN` in your shell, `lint-actions-security` falls back to
 `zizmor --no-online-audits` (skips checks that need live GitHub API access, e.g. verifying an action
-ref against its upstream tag history) — CI always runs the full set via the workflow's own token.
+ref against its upstream tag history) — CI always runs the full set via the workflow's own token. A
+token that's present but the online audit still can't reach the GitHub API (a transient network blip
+or rate limit, distinguished from a real finding by zizmor's own `fatal: no audit was performed`
+error) triggers the same offline fallback rather than failing the whole `make lint` run — this keeps a
+GitHub-side hiccup from blocking a release (`release.yml`'s lint step now runs online-audit-capable)
+on something unrelated to the actual code.
 
 zizmor's default persona flags a workflow with no `permissions:` block at all, but does **not** flag
 permissions that are merely broader than necessary while still present (e.g. workflow-level

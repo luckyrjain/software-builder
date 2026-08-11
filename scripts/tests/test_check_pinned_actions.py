@@ -36,6 +36,22 @@ def test_sha_pinned_action_passes(tmp_path: Path) -> None:
     assert find_unpinned_actions(workflow) == []
 
 
+def test_uppercase_sha_passes(tmp_path: Path) -> None:
+    # Regression: git/GitHub both accept upper- and lower-case hex SHAs interchangeably (they
+    # refer to the identical commit), but an earlier lowercase-only regex rejected an uppercase
+    # pin as a "mutable ref" — a false positive on a perfectly valid, immutable pin.
+    workflow = tmp_path / "ok-upper.yml"
+    workflow.write_text(
+        "jobs:\n"
+        "  build:\n"
+        "    runs-on: ubuntu-latest\n"
+        "    steps:\n"
+        "      - uses: actions/checkout@3D3C42E5AAC5BA805825DA76410C181273BA90B1 # v7.0.1\n",
+        encoding="utf-8",
+    )
+    assert find_unpinned_actions(workflow) == []
+
+
 def test_mutable_tag_fails(tmp_path: Path) -> None:
     workflow = tmp_path / "bad.yml"
     workflow.write_text(

@@ -17,7 +17,7 @@ from pathlib import Path
 
 import yaml
 
-_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
+_SHA_RE = re.compile(r"^[0-9a-fA-F]{40}$")
 _ACTION_REF_RE = re.compile(r"^([^@]+)@([^\s@]+)$")
 
 
