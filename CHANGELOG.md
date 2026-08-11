@@ -153,6 +153,17 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
   the read-only fixture mount) and requiring an actual `"RuleID"` entry in it, not just exit code 1 —
   verified via the real gitleaks CLI that a genuine detection produces a report containing a `RuleID`
   finding, giving an unambiguous signal independent of gitleaks' exit-code overloading.
+- A further round found two more minor, non-blocking items, both fixed: `dependency-review.yml`
+  granted `pull-requests: write` at the workflow level rather than scoping it to the one job that
+  actually needs it (inconsistent with `secret-scan.yml`/`scorecard.yml`'s job-level scoping
+  elsewhere in this same change, and flagged by zizmor's stricter `--persona=auditor`, though not by
+  the `regular` persona `make lint` actually runs) — moved to job level. And `lint-actions-security`'s
+  ~20-line fallback logic (the exact code that had two real bugs earlier in this branch's history —
+  the fatal-vs-transient handling and the dash-`echo` truncation) had no regression test, unlike its
+  sibling `lint-actions-pinning`. Added `scripts/tests/test_lint_actions_security_makefile.py`, which
+  stubs `zizmor` on `PATH` to exercise all five branches (online success, fatal-failure fallback, a
+  real finding still failing without fallback, no-token offline path, zizmor genuinely absent) without
+  needing network access or a real token.
 
 ### safe-output.md Rule 4: single-backtick escape gap (2026-08-09)
 
