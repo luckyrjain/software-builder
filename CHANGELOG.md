@@ -82,6 +82,20 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
   described only one of its two now-real use cases (historical/exempt doc trees); reworded to also
   cover excluding actively-maintained trees to avoid disagreeing with a different checker's anchor
   algorithm, which is why `docs/skill-framework` is excluded.
+- The `heading_slugs()` fence fix above then correctly exposed two pre-existing, previously-invisible
+  content bugs — invisible because `--source-tree` anchor checking wasn't wired into `make lint` until
+  this branch, and even after that landed, the run verifying it clean piped `make lint`'s output through
+  `tail`, which silently discarded its real (non-zero) exit code. Both are stray, unmatched Markdown
+  fence markers with no corresponding opener, which — via the same `strip_fenced_code_blocks()` state
+  machine this fix now also drives `heading_slugs()` through — swallowed everything after them up to
+  the next real closing fence (or EOF) as if it were code-block content, hiding real headings:
+  `incident-rca/report-template.md:614` (an orphaned ` ``` ` after the "Appendix: query references"
+  list, hiding `## Safe rendered-output boundary` and breaking two links to it) and
+  `pr-review/reference/executive-summary.md:418` (an orphaned ` ``` ` after unfenced prose, hiding the
+  real `## Conclusion` section heading and breaking `pr-review/report-template.md`'s link to it — a
+  fenced, non-navigable example `## Conclusion` a few lines later was never the actual link target).
+  Removed both stray fence lines; `make lint` now genuinely passes (verified via its real exit code,
+  not through a `tail` pipe).
 
 ### safe-output.md Rule 4: single-backtick escape gap (2026-08-09)
 
