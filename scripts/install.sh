@@ -83,27 +83,48 @@ verify)
 esac
 
 case "${AGENT}" in
-cursor | claude-user | claude-project | all) ;;
+cursor | cursor-project | claude-user | claude-project | all) ;;
 *)
-  echo "error: unknown --agent '${AGENT}' (expected cursor|claude-user|claude-project|all)" >&2
+  echo "error: unknown --agent '${AGENT}' (expected cursor|cursor-project|claude-user|claude-project|all)" >&2
   exit 1
   ;;
 esac
 
+# --target-dir <repo> → project-local skills dir(s).
+# No --target-dir → global user install (~/.cursor/skills and/or ~/.claude/skills).
 dest_roots() {
   case "${AGENT}" in
   cursor)
-    echo "${HOME}/.cursor/skills"
+    if [[ -n "${TARGET_DIR}" ]]; then
+      echo "${TARGET_DIR}/.cursor/skills"
+    else
+      echo "${HOME}/.cursor/skills"
+    fi
+    ;;
+  cursor-project)
+    # Project-local Cursor discovery. Without --target-dir, same as global cursor.
+    if [[ -n "${TARGET_DIR}" ]]; then
+      echo "${TARGET_DIR}/.cursor/skills"
+    else
+      echo "${HOME}/.cursor/skills"
+    fi
     ;;
   claude-user)
     echo "${HOME}/.claude/skills"
     ;;
   claude-project)
-    local base="${TARGET_DIR:-$(pwd)}"
-    echo "${base}/.claude/skills"
+    if [[ -n "${TARGET_DIR}" ]]; then
+      echo "${TARGET_DIR}/.claude/skills"
+    else
+      echo "${HOME}/.claude/skills"
+    fi
     ;;
   all)
-    printf '%s\n%s\n' "${HOME}/.cursor/skills" "${HOME}/.claude/skills"
+    if [[ -n "${TARGET_DIR}" ]]; then
+      printf '%s\n%s\n' "${TARGET_DIR}/.cursor/skills" "${TARGET_DIR}/.claude/skills"
+    else
+      printf '%s\n%s\n' "${HOME}/.cursor/skills" "${HOME}/.claude/skills"
+    fi
     ;;
   esac
 }
@@ -116,6 +137,9 @@ host_label_for_dest() {
     ;;
   "${HOME}/.claude/skills")
     echo "claude-user"
+    ;;
+  */.cursor/skills)
+    echo "cursor-project"
     ;;
   *)
     echo "claude-project"
@@ -295,13 +319,21 @@ if [[ "${DRY_RUN}" == true ]]; then
 fi
 
 case "${AGENT}" in
-cursor)
-  echo "Restart Cursor to load the skill(s)."
+cursor | cursor-project)
+  if [[ -n "${TARGET_DIR}" ]]; then
+    echo "Restart Cursor in ${TARGET_DIR} to load the project skill(s)."
+  else
+    echo "Restart Cursor to load the skill(s)."
+  fi
   ;;
 claude-user | claude-project)
   echo "Skill(s) available in your next Claude Code session."
   ;;
 all)
-  echo "Restart Cursor and start a new Claude Code session to load the skill(s)."
+  if [[ -n "${TARGET_DIR}" ]]; then
+    echo "Restart Cursor in ${TARGET_DIR} and start a new Claude Code session to load the project skill(s)."
+  else
+    echo "Restart Cursor and start a new Claude Code session to load the skill(s)."
+  fi
   ;;
 esac
