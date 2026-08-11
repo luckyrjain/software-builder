@@ -96,6 +96,28 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
   fenced, non-navigable example `## Conclusion` a few lines later was never the actual link target).
   Removed both stray fence lines; `make lint` now genuinely passes (verified via its real exit code,
   not through a `tail` pipe).
+- Since the reference validator only ever surfaced this stray-fence bug pattern as a downstream
+  symptom (a dangling-anchor error, and only when something happens to link into the now-hidden
+  heading), a broader sweep — independently replicating `strip_fenced_code_blocks()`'s state machine
+  over every `.md` file in the repo — found a third instance with no incoming link, so it was passing
+  silently: `pr-review/reference/comment-templates.md:674`, an orphaned ` ``` ` that hid the real
+  `## Optional Jira write-back → addCommentToJiraIssue` heading (and swallowed real prose and a
+  genuinely-fenced template example between it and the next close). Fixed the same way. Also added a
+  permanent, always-on structural check — `reference_utils.has_unclosed_fenced_code_block()`, wired
+  into `validate_markdown_file()` — so a fence that opens and is never closed before EOF is now a
+  direct validator error instead of a silent, symptom-dependent one.
+- Writing that new check's own test surfaced a fourth, different bug it immediately caught for real:
+  `mysql-to-postgres-sql/workflow/migrate-service.md:133` contains legitimate prose demonstrating the
+  delimiter-length inline-code-span escaping technique (`` ``` `` becomes ```` ```` ````, …) that
+  starts with a 3-backtick run — CommonMark's actual rule is that a backtick fence's info string
+  (anything after the opening run on the same line) must contain no backticks itself, or the line
+  isn't a fence opener at all, but `_FENCE_OPEN_RE` never enforced that. Both
+  `strip_fenced_code_blocks()` and the new check treated this ordinary sentence as opening a fence
+  that's never closed, silently swallowing a real link and all trailing content as far as EOF —
+  pre-dating this branch entirely and previously invisible for the same reason (no incoming link to
+  what followed). Fixed by adding a shared `_fence_open_length()` helper both functions now call,
+  which rejects a candidate opener whose info string contains a backtick. Regression tests added for
+  the false positive, the still-correct true-positive case, and the validator wiring.
 
 ### safe-output.md Rule 4: single-backtick escape gap (2026-08-09)
 

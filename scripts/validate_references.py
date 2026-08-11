@@ -10,6 +10,7 @@ from pathlib import Path
 
 from reference_utils import (
     extract_markdown_links,
+    has_unclosed_fenced_code_block,
     is_local_markdown_link,
     resolve_local_link,
     split_link_target,
@@ -106,6 +107,12 @@ def validate_markdown_file(
 ) -> list[str]:
     errors: list[str] = []
     text = source_file.read_text(encoding="utf-8")
+    if has_unclosed_fenced_code_block(text):
+        errors.append(
+            f"{source_file}: unclosed fenced code block (a ``` marker opens a fence "
+            "that's never closed before EOF — check for a stray or unmatched ``` "
+            "elsewhere in the file)",
+        )
     for link in extract_markdown_links(text):
         if not is_local_markdown_link(link):
             continue

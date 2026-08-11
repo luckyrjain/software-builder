@@ -194,3 +194,43 @@ def test_strip_fenced_code_blocks_handles_indented_list_fence() -> None:
     assert "[fake]" not in stripped
     assert "[real]" in stripped
     assert "still list prose" in stripped
+
+
+def test_fence_open_ignores_line_with_backtick_in_info_string() -> None:
+    from reference_utils import has_unclosed_fenced_code_block, strip_fenced_code_blocks
+
+    # Regression: prose demonstrating the delimiter-length inline-code-span technique
+    # (e.g. "``` becomes ````, …") starts with a 3-backtick run, but CommonMark requires a
+    # backtick fence's info string to contain NO backticks — so this line is not a fence
+    # opener at all. Treating it as one silently swallowed everything after it (including a
+    # real link and a real heading) as code-block content until EOF.
+    text = (
+        "Escalate the run: `` ` `` becomes `` `` ``, ``` ``` ```, and so on.\n"
+        "\n"
+        "[real link](./real.md).\n"
+        "\n"
+        "# Real Heading\n"
+    )
+    assert has_unclosed_fenced_code_block(text) is False
+    stripped = strip_fenced_code_blocks(text)
+    assert "[real link]" in stripped
+    assert "# Real Heading" in stripped
+
+
+def test_has_unclosed_fenced_code_block_detects_stray_opener() -> None:
+    from reference_utils import has_unclosed_fenced_code_block
+
+    # A genuine, real fence opener with no closer before EOF must still be caught — the
+    # info-string check above must not make this detection blind to actual stray markers.
+    text = "# Real Heading\n\n- item\n```\n\n## Hidden Heading\n"
+    assert has_unclosed_fenced_code_block(text) is True
+
+
+def test_validate_markdown_file_flags_unclosed_fenced_code_block(tmp_path: Path) -> None:
+    md_file = tmp_path / "doc.md"
+    md_file.write_text(
+        "# Real Heading\n\n- item\n```\n\n## Hidden Heading\n",
+        encoding="utf-8",
+    )
+    errors = validate_tree(tmp_path, check_anchors=True)
+    assert any("unclosed fenced code block" in error for error in errors)
