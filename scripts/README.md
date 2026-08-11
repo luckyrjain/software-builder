@@ -9,9 +9,12 @@ Copies skill directories from this repository into the coding agent's skills ins
 1. Resolves the repo root (parent of `scripts/`).
 2. For each skill name passed as an argument — or for every directory containing `SKILL.md` when no
    arguments are given — copies the full skill folder to the resolved destination root(s).
-3. Destination depends on `--agent` (default `all`): `cursor` → `~/.cursor/skills/`; `claude-user` →
-   `~/.claude/skills/`; `claude-project` → `<--target-dir or cwd>/.claude/skills/`; `all` (default) →
-   both `~/.cursor/skills/` and `~/.claude/skills/`.
+3. Destination depends on `--agent` (default `all`) and whether `--target-dir` is set:
+   - **No `--target-dir` (global):** `cursor` / `cursor-project` → `~/.cursor/skills/`;
+     `claude-user` / `claude-project` → `~/.claude/skills/`; `all` → both.
+   - **With `--target-dir <repo>` (project):** `cursor` / `cursor-project` →
+     `<repo>/.cursor/skills/`; `claude-project` → `<repo>/.claude/skills/`; `all` → both project
+     dirs. (`claude-user` stays global.)
 4. Replaces any existing install at each destination (`rm -rf` then `cp -r`).
 5. Prints a restart/session reminder appropriate to the chosen `--agent`.
 
@@ -23,11 +26,11 @@ manually (`cp -R <skill> ~/.agents/skills/<skill>`). See root
 ## Usage
 
 ```bash
-# From repo root — all skills, both Cursor and Claude Code
+# From repo root — all skills, both Cursor and Claude Code (global)
 bash scripts/install.sh
 make install
 
-# One skill
+# One skill (global)
 bash scripts/install.sh pr-review
 bash scripts/install.sh k8s-overprovisioning-datadog
 bash scripts/install.sh incident-rca
@@ -36,10 +39,14 @@ bash scripts/install.sh squad-map
 bash scripts/install.sh mysql-to-postgres-sql
 bash scripts/install.sh loop-task-implementer
 
-# One agent only
+# One agent only (global)
 bash scripts/install.sh --agent cursor
 bash scripts/install.sh --agent claude-user
-bash scripts/install.sh --agent claude-project --target-dir /path/to/some/repo
+
+# Project-local (into another repo's .cursor/skills / .claude/skills)
+bash scripts/install.sh --target-dir /path/to/some/repo domain-comprehension squad-map
+bash scripts/install.sh --agent cursor --target-dir /path/to/some/repo domain-comprehension
+bash scripts/install.sh --agent claude-project --target-dir /path/to/some/repo domain-comprehension
 ```
 
 Makefile wrappers: `make install`, `make install-<skill>` (per skill), `make install-claude`,
@@ -49,7 +56,7 @@ Makefile wrappers: `make install`, `make install-<skill>` (per skill), `make ins
 
 - Bash with `set -euo pipefail`
 - Write access to the resolved destination root(s) (`~/.cursor/skills/`, `~/.claude/skills/`, or a
-  project's `.claude/skills/`)
+  project's `.cursor/skills/` / `.claude/skills/` when `--target-dir` is set)
 - Each skill source must contain `SKILL.md` or the script exits with an error
 
 ## Quality gate

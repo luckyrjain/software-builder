@@ -152,8 +152,10 @@ adding a new skill directory needs no script change to be picked up.
 
 To install for only one editor, pass `--agent cursor` (Cursor only) or `--agent claude-user` (Claude
 Code only, installs to `~/.claude/skills/`) — or use the `install-claude*` Makefile targets below for
-the Claude-Code-only form. Kiro and ChatGPT/Codex aren't wired into this script (Kiro needs no install
-step — see `.kiro/steering/`; Codex's skills directory isn't uniform, copy manually). See root
+the Claude-Code-only form. Pass `--target-dir <repo>` to install into that project's
+`.cursor/skills/` / `.claude/skills/` instead; omit it for the default **global** user install. Kiro
+and ChatGPT/Codex aren't wired into this script (Kiro needs no install step — see `.kiro/steering/`;
+Codex's skills directory isn't uniform, copy manually). See root
 [README.md § Install for your specific coding agent](../README.md#install-for-your-specific-coding-agent)
 and [docs/skill-framework/shared/claude-code-setup.md](skill-framework/shared/claude-code-setup.md).
 

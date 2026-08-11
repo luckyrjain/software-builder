@@ -100,6 +100,9 @@ test -f ~/.claude/skills/loop-task-implementer/SKILL.md
 # Claude Code — one project only
 bash scripts/install.sh --agent claude-project --target-dir /path/to/project loop-task-implementer
 
+# Cursor — one project only (omit --target-dir for global ~/.cursor/skills)
+bash scripts/install.sh --agent cursor --target-dir /path/to/project loop-task-implementer
+
 # ChatGPT / Codex — common manual location; adjust if your runtime uses another path
 mkdir -p ~/.agents/skills
 cp -R loop-task-implementer ~/.agents/skills/loop-task-implementer
@@ -134,7 +137,7 @@ Each skill directory has three entry points:
 
 | Host | Install or discovery | Multi-agent isolation | Notes |
 |------|----------------------|-----------------------|-------|
-| **Cursor** | `bash scripts/install.sh --agent cursor` or in-repo `.cursor/rules/` | Background agents, separate chats, or worktrees | Restart Cursor after installation. |
+| **Cursor** | `bash scripts/install.sh --agent cursor` (global) or `--target-dir <repo>` for `<repo>/.cursor/skills/`; in-repo `.cursor/rules/` also works | Background agents, separate chats, or worktrees | Restart Cursor after installation. |
 | **Claude Code** | `--agent claude-user`, `--agent claude-project`, or `make install-claude` | Subagents, fresh sessions, or worktrees | Start a new session after installation. |
 | **ChatGPT / Codex** | Copy selected skills to the runtime's supported directory, commonly `~/.agents/skills/` | Separate tasks or fresh agent sessions; worktrees where available | Use repository connectors for remote state and local Git for implementation when available. |
 | **Kiro** | Open this repository and use `.kiro/steering/<skill>.md` | Kiro specs plus separate role contexts | No installer copy is required for in-repo use. |

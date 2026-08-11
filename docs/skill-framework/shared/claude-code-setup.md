@@ -21,8 +21,14 @@ Install with `scripts/install.sh --agent <agent>`:
 | `bash scripts/install.sh` | both `~/.cursor/skills/` and `~/.claude/skills/` (default) |
 | `bash scripts/install.sh --agent all` | both, explicitly (same as default) |
 | `bash scripts/install.sh --agent cursor` | `~/.cursor/skills/` only |
+| `bash scripts/install.sh --agent cursor --target-dir <repo>` | `<repo>/.cursor/skills/` only |
+| `bash scripts/install.sh --agent cursor-project --target-dir <repo>` | same as cursor + `--target-dir` |
 | `bash scripts/install.sh --agent claude-user` | `~/.claude/skills/` only |
 | `bash scripts/install.sh --agent claude-project --target-dir <repo>` | `<repo>/.claude/skills/` only |
+| `bash scripts/install.sh --agent all --target-dir <repo>` | `<repo>/.cursor/skills/` + `<repo>/.claude/skills/` |
+
+Without `--target-dir`, project agents (`cursor-project`, `claude-project`) fall back to the matching
+**global** user install path (not `cwd`).
 
 `make install` and `make install-<skill>` already install for both editors by default — no separate
 step is needed to also get Claude Code. `make install-claude` and `make install-claude-<skill>` wrap
