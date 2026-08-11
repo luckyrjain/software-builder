@@ -363,6 +363,49 @@ external link) surfaces even when no PR is open against `main` — see [#10](htt
 Run the exact same checks locally before pushing: `make setup` once (installs Python deps + the
 shellcheck pre-commit hook), then `make lint`.
 
+### Security workflows
+
+Proportionate to what this repo actually executes — shell/Python helpers (`scripts/`, `*/scripts/`),
+an installer that writes outside the repo tree, and skill docs that describe MCP write-authority
+workflows — five additional, independent checks run alongside `lint.yml`:
+
+| Workflow | What it catches | Trigger |
+|----------|------------------|---------|
+| [`dependency-review.yml`](../.github/workflows/dependency-review.yml) | A PR introducing a dependency with a known high-severity advisory | `pull_request` |
+| [`codeql.yml`](../.github/workflows/codeql.yml) | Python static-analysis findings (injection, path traversal, etc.) in `scripts/`, `*/scripts/` | push, PR, weekly |
+| [`secret-scan.yml`](../.github/workflows/secret-scan.yml) | A committed credential/token (Gitleaks), plus a self-test proving the scanner still fires | push, PR, weekly |
+| [`scorecard.yml`](../.github/workflows/scorecard.yml) | OpenSSF Scorecard supply-chain posture (branch protection, pinned deps, etc.) | push to `main`, weekly |
+| `make lint`'s `lint-actions-security` step | Actions-YAML risks (script injection via untrusted `${{ }}` expansion, missing `permissions:`, credential persistence) via [zizmor](https://docs.zizmor.sh/) | every `make lint` run |
+| `make lint`'s `lint-actions-pinning` step | Any `uses:` reference not pinned to a full commit SHA (a mutable tag can be repointed after review) | every `make lint` run |
+
+The last two run locally too — `make lint` installs `zizmor` from `requirements.lock` and
+`scripts/check_pinned_actions.py` needs no extra dependency. Without a `GH_TOKEN`/`GITHUB_TOKEN` in
+your shell, `lint-actions-security` falls back to `zizmor --no-online-audits` (skips checks that need
+live GitHub API access, e.g. verifying an action ref against its upstream tag history) — CI always
+runs the full set via the workflow's own token.
+
+**Secret-scan negative test.** `secret-scan.yml`'s `negative-test` job proves the scanner still
+detects a known-bad pattern, independent of whether this run's actual repo content is clean. The
+fixture — AWS's own canonical placeholder access key ID (`AKIAIOSFODNN7EXAMPLE`, used throughout
+AWS's own documentation as a non-functional example) — is generated at CI-run-time and scanned in
+isolation; it is **not** committed to git history, deliberately. Two reasons: it avoids permanently
+storing a secret-shaped string in the repository, and it sidesteps an unknown risk noted below —
+whether a committed one would trip this repo's own push protection.
+
+**Native GitHub secret scanning / push protection: unverified, and likely off.** No tool available to
+this effort could read the repository's Code Security settings directly. One indirect signal: a
+request to run GitHub's secret-scanning check against this repository returned *"Repository does not
+have GitHub Advanced Security enabled"* — which suggests native secret scanning / push protection are
+not active (GHAS covers those on private repos; a public repo can still have push protection toggled
+on separately, so this isn't conclusive). **A repo admin should confirm and toggle these on** at
+**Settings → Code security → Secret scanning** — the dedicated `secret-scan.yml` workflow above exists
+specifically because this native coverage couldn't be confirmed.
+
+**Not added as required merge-gate checks (yet).** These are new, and CodeQL/Scorecard in particular
+can be noisy on a first baseline run. Watch a few real runs before deciding whether to add any of
+their job names to the `main` ruleset's required-status-checks list (see the Merge gate section below)
+— `lint` is deliberately the only check documented there as required today.
+
 ### Merge gate — repo-admin settings (GitHub UI only)
 
 **A green `Lint` badge and a ruleset are not the same thing.** CI proves the commit passes

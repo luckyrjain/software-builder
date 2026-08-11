@@ -8,6 +8,45 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 
 ## Platform
 
+### Add Dependency Review, CodeQL, secret scanning, and Actions-YAML security lint (2026-08-11)
+
+- Beyond Dependabot (pip + github-actions ecosystems) and pinned Actions, this repo had no dedicated
+  CI gates for a PR introducing a known-vulnerable dependency, static-analysis findings in `scripts/`
+  Python helpers, a committed credential, or risky Actions-YAML patterns (script injection via
+  untrusted `${{ }}` expansion, missing `permissions:`, credential persistence). Added five checks,
+  scoped to what this repo actually executes — shell/Python helpers, an installer writing outside the
+  repo, skill docs describing MCP write-authority workflows — not a blanket "add everything" pass:
+  - `.github/workflows/dependency-review.yml` — fails a PR on a new high-severity dependency advisory.
+  - `.github/workflows/codeql.yml` — Python static analysis (push, PR, weekly).
+  - `.github/workflows/secret-scan.yml` — Gitleaks (push, PR, weekly), plus a `negative-test` job that
+    generates AWS's own canonical placeholder access key ID (`AKIAIOSFODNN7EXAMPLE`) at CI-run-time and
+    asserts the scanner detects it — proving the detector itself still fires, independent of whether
+    the actual repo content is clean that run. Deliberately **not** a committed fixture: doing so would
+    permanently store a secret-shaped string in git history for no added coverage, and this repo's
+    native GitHub push-protection state couldn't be confirmed (see below), so a committed fixture risked
+    either an unexpected blocked push or a false-positive alert.
+  - `.github/workflows/scorecard.yml` — OpenSSF Scorecard supply-chain posture (push to main, weekly).
+  - `scripts/check_pinned_actions.py`, wired into `make lint` as `lint-actions-pinning` — fails on any
+    `uses:` reference not pinned to a full 40-char commit SHA (a mutable tag can be repointed by the
+    action's maintainer after review; this repo's existing convention already pins every action, this
+    just makes a regression a lint failure instead of something only manual review would catch).
+  - `zizmor` (new `requirements.txt`/`requirements.lock` entry), wired into `make lint` as
+    `lint-actions-security` — Actions-YAML security lint. Falls back to `zizmor --no-online-audits`
+    locally when no `GH_TOKEN`/`GITHUB_TOKEN` is set (skips checks needing live GitHub API access); CI
+    always runs the full set via the workflow's own token. Running it against the two pre-existing
+    workflows surfaced two real gaps this PR also fixes: `lint.yml` had no explicit `permissions:`
+    block (defaulted to the broad token scope) and neither `lint.yml` nor `release.yml` set
+    `persist-credentials: false` on `actions/checkout` (leaves a checked-out git credential live for
+    the rest of the job for no reason once done). Both fixed.
+  - `docs/REPOSITORY.md`'s new "Security workflows" section documents all of the above, and records
+    that **native GitHub secret-scanning/push-protection status could not be verified directly** — no
+    tool available to this effort could read the repo's Code Security settings — but an indirect signal
+    (a secret-scanning request against the repo returned "Repository does not have GitHub Advanced
+    Security enabled") suggests it's likely off; flagged for a repo admin to confirm and toggle on at
+    Settings → Code security. None of the five new checks are added to the `main` ruleset's required
+    status checks yet — deliberately watching a few real runs first, since CodeQL/Scorecard can be
+    noisy on their first baseline.
+
 ### safe-output.md Rule 4: single-backtick escape gap (2026-08-09)
 
 - `docs/skill-framework/shared/safe-output.md` Rule 4 only documented unbalanced *triple*-backtick
