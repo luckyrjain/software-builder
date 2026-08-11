@@ -15,28 +15,35 @@ from reference_utils import (
     split_link_target,
 )
 
-_SLUG_KEEP_RE = re.compile(r"[^a-z0-9 -]")
 _SLUG_SPACE_RUN_RE = re.compile(r" +")
 
 
 def github_style_slug(heading: str) -> str:
-    # Ports scripts/lint-dangling-md-links.sh's slugifier step-for-step (the
-    # repo's whole existing anchor corpus is already written against that
-    # algorithm): keep letters/digits/space/hyphen, collapse runs of
-    # whitespace to one space, THEN replace every remaining space with a
-    # hyphen. Doing this as strip+split+join (as this function previously did)
-    # differs in two ways: (1) it drops hyphen from the keep-set, mangling
-    # compound-word headings like "Test-first evidence" into
-    # "testfirst-evidence" instead of "test-first-evidence"; (2) split()/join()
-    # silently discards a leading/trailing single space, whereas the sed
-    # pipeline converts it to a leading/trailing hyphen — real headings that
-    # end in a stripped character (e.g. an emoji) leave a real trailing space
-    # behind after the strip step, e.g. "5. Slack — PR review 🔴" must slugify
-    # to "5-slack-pr-review-" (trailing hyphen), matching the already-verified
-    # link in pr-review/examples.md and confirmed by directly running
-    # lint-dangling-md-links.sh's sed pipeline on that exact heading.
+    # Keep letters/digits/space/hyphen, collapse runs of whitespace to one
+    # space, THEN replace every remaining space with a hyphen — matching both
+    # GitHub's real anchor algorithm and scripts/lint-dangling-md-links.sh's
+    # sed pipeline (`s/[^a-z0-9 -]//g; s/ +/ /g; s/ /-/g`), which the repo's
+    # whole existing anchor corpus is already written against.
+    #
+    # The keep step uses Unicode-aware `str.isalnum()` rather than an
+    # ASCII-only `[a-z0-9 -]` regex class: GitHub's renderer preserves
+    # non-ASCII letters in anchors (e.g. "Café Menu" -> "café-menu"), and an
+    # ASCII-only class would silently strip them (verified: it produced
+    # "caf-menu", dropping the accented "é" that even the prior, differently
+    # buggy implementation preserved).
+    #
+    # The collapse-and-join step is NOT the prior implementation's
+    # strip()+split()+join(), which silently discards a leading/trailing
+    # single space — real headings that end in a stripped character (e.g. an
+    # emoji) leave a real trailing space behind after the keep step, e.g.
+    # "5. Slack — PR review 🔴" must slugify to "5-slack-pr-review-" (trailing
+    # hyphen), matching the already-verified link in pr-review/examples.md and
+    # confirmed by directly running lint-dangling-md-links.sh's sed pipeline
+    # on that exact heading. The prior implementation also dropped hyphen from
+    # its keep-set entirely, mangling compound-word headings like "Test-first
+    # evidence" into "testfirst-evidence" instead of "test-first-evidence".
     slug = heading.lstrip("#").strip().lower()
-    cleaned = _SLUG_KEEP_RE.sub("", slug)
+    cleaned = "".join(ch for ch in slug if ch.isalnum() or ch in " -")
     cleaned = _SLUG_SPACE_RUN_RE.sub(" ", cleaned)
     return cleaned.replace(" ", "-")
 
@@ -141,7 +148,8 @@ def validate_tree(
     for md_file in sorted(root.rglob("*.md")):
         if not md_file.is_file():
             continue
-        if any(md_file.resolve().is_relative_to(excluded) for excluded in exclude_roots):
+        resolved_md_file = md_file.resolve()
+        if any(resolved_md_file.is_relative_to(excluded) for excluded in exclude_roots):
             continue
         errors.extend(
             validate_markdown_file(

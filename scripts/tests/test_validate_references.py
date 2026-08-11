@@ -31,6 +31,14 @@ def test_slug_preserves_trailing_hyphen_from_stripped_trailing_character() -> No
     assert github_style_slug("## 5. Slack — PR review \U0001f534") == "5-slack-pr-review-"
 
 
+def test_slug_preserves_non_ascii_letters() -> None:
+    # Regression: an ASCII-only keep-set regex ([^a-z0-9 -]) strips accented Latin
+    # letters that GitHub's real anchor algorithm preserves — e.g. "Café Menu" must
+    # slugify to "café-menu", not "caf-menu". Verified this diverges from the prior
+    # (differently buggy) isalnum()-based implementation, which did preserve them.
+    assert github_style_slug("## Café Menu") == "café-menu"
+
+
 def test_source_tree_exclude_skips_historical_doc_tree(tmp_path: Path) -> None:
     (tmp_path / "docs" / "superpowers").mkdir(parents=True)
     (tmp_path / "docs" / "superpowers" / "old-plan.md").write_text(

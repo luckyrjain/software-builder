@@ -19,11 +19,15 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
   removed by the character filter, instead of converting it to a leading/trailing hyphen the way
   GitHub's real renderer — and this repo's own `scripts/lint-dangling-md-links.sh` sed pipeline — does
   (`## 5. Slack — PR review 🔴` must slugify to `5-slack-pr-review-`, trailing hyphen, matching the
-  already-correct link in `pr-review/examples.md`). Rewrote the function to port
-  `lint-dangling-md-links.sh`'s sed pipeline step-for-step instead of re-deriving the algorithm, since
-  the whole repo's existing anchor corpus is already written against that proven algorithm. Added
-  regression tests for both bugs (`scripts/tests/test_validate_references.py`) — neither bug had any
-  prior test coverage.
+  already-correct link in `pr-review/examples.md`). First round of review caught a third, self-inflicted
+  bug in the fix itself: porting the keep-step as an ASCII-only `[^a-z0-9 -]` regex (mirroring
+  `lint-dangling-md-links.sh`'s sed byte-class literally) silently strips non-ASCII letters that
+  GitHub's real renderer preserves — e.g. `## Café Menu` slugified to `caf-menu` instead of
+  `café-menu`, a regression versus even the original buggy implementation, which used Unicode-aware
+  `str.isalnum()` and did keep accented letters. Fixed by keeping the Unicode-aware `isalnum()` check
+  for the character-keep step (matching GitHub's actual behavior for non-ASCII letters) while still
+  fixing both original bugs via the corrected collapse-and-join logic. Added regression tests for all
+  three bugs (`scripts/tests/test_validate_references.py`) — none had any prior test coverage.
 - Running `--source-tree` mode with the fixed slugifier surfaced 3 real, previously-undetected dangling
   references in normative docs — `CHANGELOG.md`, `CONTRIBUTING.md`, `docs/adr/README.md` — none of
   which any existing skill-scoped `lint-dangling-md-links.sh` Makefile target ever covers, since none
