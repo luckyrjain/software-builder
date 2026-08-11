@@ -375,7 +375,7 @@ workflows — five additional, independent checks run alongside `lint.yml`:
 | [`codeql.yml`](../.github/workflows/codeql.yml) | Python static-analysis findings (injection, path traversal, etc.) — every tracked `.py` file repo-wide, not just `scripts/`/`*/scripts/` (the motivating case, but not the only Python this repo carries — skill-local test files and a couple of runtime templates live outside those dirs too) | push, PR, weekly |
 | [`secret-scan.yml`](../.github/workflows/secret-scan.yml) | A committed credential/token (Gitleaks), plus a self-test proving the scanner still fires | push, PR, weekly |
 | [`scorecard.yml`](../.github/workflows/scorecard.yml) | OpenSSF Scorecard supply-chain posture (branch protection, pinned deps, etc.) | push to `main`, weekly |
-| `make lint`'s `lint-actions-security` step | Actions-YAML risks (script injection via untrusted `${{ }}` expansion, missing `permissions:`, credential persistence) via [zizmor](https://docs.zizmor.sh/) | every `make lint` run |
+| `make lint`'s `lint-actions-security` step | Actions-YAML risks (script injection via untrusted `${{ }}` expansion, a workflow with **no** `permissions:` block at all, credential persistence) via [zizmor](https://docs.zizmor.sh/), default (`regular`) persona | every `make lint` run |
 | `make lint`'s `lint-actions-pinning` step | Any `uses:` reference not pinned to a full commit SHA (a mutable tag can be repointed after review) | every `make lint` run |
 
 The last two run locally too — `scripts/check_pinned_actions.py` needs no extra dependency.
@@ -387,6 +387,12 @@ both installed via `requirements.lock`, so this gap is local-only. Separately, w
 `GH_TOKEN`/`GITHUB_TOKEN` in your shell, `lint-actions-security` falls back to
 `zizmor --no-online-audits` (skips checks that need live GitHub API access, e.g. verifying an action
 ref against its upstream tag history) — CI always runs the full set via the workflow's own token.
+
+zizmor's default persona flags a workflow with no `permissions:` block at all, but does **not** flag
+permissions that are merely broader than necessary while still present (e.g. workflow-level
+`contents: write` on a single-job workflow, which zizmor's stricter `--persona=auditor` would flag as
+better expressed at the job level) — `make lint` doesn't pass that flag today. Not a gap unique to
+this repo's setup; a deliberate default/strict split zizmor itself ships with.
 
 **Secret-scan negative test.** `secret-scan.yml`'s `negative-test` job proves the scanner still
 detects a known-bad pattern, independent of whether this run's actual repo content is clean. The

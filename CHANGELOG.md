@@ -91,6 +91,23 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
      `uses:` reference (`lint-actions-pinning` doesn't cover this, since a `docker run` image argument
      isn't a `uses:` field). Resolved the image's immutable manifest digest directly from the registry
      and pinned to `zricethezav/gitleaks@sha256:c00b6bd0...` instead.
+- A second-round review, taking a genuinely fresh pass rather than only re-checking the prior round's
+  three specific fixes, found a real bug that had been present unchanged since this branch's very
+  first commit and untouched by any of the three intervening fix-rounds (all concentrated on
+  `secret-scan.yml`): `codeql.yml` and `scorecard.yml` pinned `github/codeql-action` and
+  `ossf/scorecard-action` to their **annotated tag object's own SHA**, not the commit it points to.
+  `git ls-remote --tags` returns the tag object's SHA by default; the underlying commit only appears
+  on the separate, peeled `refs/tags/vX.Y.Z^{}` line — a distinction that matters only for *annotated*
+  tags (the five other actions pinned across these workflows all use lightweight tags, where the two
+  are identical, which is why this went unnoticed). Verified directly: fetching
+  `raw.githubusercontent.com/github/codeql-action/<tag-object-sha>/README.md` 404s, while the peeled
+  commit SHA 200s — `scripts/check_pinned_actions.py` couldn't catch this class of error, since a tag
+  object's SHA is still a syntactically valid 40-char commit-shaped hex string. Left uncaught, CodeQL's
+  `init`/`analyze` steps and Scorecard's SARIF-upload step would all fail to resolve on their first
+  real run. Fixed both references to the correct peeled commit SHAs. The same round also tightened
+  `docs/REPOSITORY.md`'s description of what `lint-actions-security`'s default zizmor persona actually
+  catches (a workflow missing `permissions:` entirely, not permissions that are merely broader than
+  necessary while still present) — a real accuracy gap, not merely restating a known limitation.
 
 ### safe-output.md Rule 4: single-backtick escape gap (2026-08-09)
 
