@@ -1,0 +1,84 @@
+name: Live eval harness (manual)
+
+# Deliberately workflow_dispatch-only — never on push/PR/schedule, and never added to the `main`
+# ruleset's required status checks. This runs the mock-tool execution harness
+# (scripts/evals/live_harness.py) against real Anthropic API calls, which are neither free nor
+# turn-for-turn reproducible — the opposite of what a required merge-gate check needs. See
+# docs/evals/LIVE-HARNESS.md and docs/adr/0004-live-eval-harness.md for the full rationale.
+
+on:
+  workflow_dispatch:
+    inputs:
+      live_case:
+        description: >-
+          One evals/live/**/*.yaml path to run, or leave blank to run every live case fixture in the repo.
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  live-eval:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: python3 -m pip install --require-hashes -r requirements.lock
+
+      - name: Run live case(s)
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          LIVE_CASE_INPUT: ${{ inputs.live_case }}
+        run: |
+          set -eu
+          if [ -z "${ANTHROPIC_API_KEY:-}" ]; then
+            echo "error: ANTHROPIC_API_KEY secret is not configured for this repository — set it at" >&2
+            echo "Settings -> Secrets and variables -> Actions before running this workflow" >&2
+            exit 1
+          fi
+
+          mkdir -p /tmp/live-eval-out
+          status=0
+
+          if [ -n "$LIVE_CASE_INPUT" ]; then
+            cases="$LIVE_CASE_INPUT"
+          else
+            cases=$(find evals/live -type f -name '*.yaml' | sort)
+          fi
+
+          if [ -z "$cases" ]; then
+            echo "error: no live case fixtures found under evals/live/" >&2
+            exit 1
+          fi
+
+          # A `... | while read` pipeline runs the loop in a subshell, so a `status=1` set inside it
+          # would be silently lost once the pipeline exits — a here-string keeps the loop (and its
+          # variable assignments) in this shell instead.
+          while IFS= read -r case_path; do
+            [ -n "$case_path" ] || continue
+            out="/tmp/live-eval-out/$(printf '%s' "$case_path" | tr '/' '_').json"
+            echo "== $case_path =="
+            if ! python3 -m scripts.evals.live_run --live-case "$case_path" --recorded-output-out "$out"; then
+              status=1
+            fi
+          done <<< "$cases"
+
+          exit "$status"
+
+      - name: Upload captured outputs
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: live-eval-recorded-output
+          path: /tmp/live-eval-out
+          if-no-files-found: warn

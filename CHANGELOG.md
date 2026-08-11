@@ -8,6 +8,46 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 
 ## Platform
 
+### Mock-tool execution harness + live model scoring for behavioral evals (2026-08-11)
+
+- ADR 0003's Tier 2/3 evals are entirely static — Tier 2 replays a hand-authored `tool`/`gate`/
+  `outcome` event list, Tier 3 replays a hand-captured output dict; neither ever executes a skill.
+  Closes that gap with a maintainer-invoked (never `make lint`/CI) harness that actually runs a
+  skill: `scripts/evals/live_harness.py` drives a real agentic tool-use loop against the live
+  Anthropic API (a skill's own `SKILL.md` as system prompt), answering every tool call from a
+  fixture (`evals/live/<skill>/<case>.yaml`'s `mock_tools`) instead of a live MCP server — this is
+  the "mock-tool execution" half. Two harness-provided pseudo-tools, `record_gate_decision` and
+  `record_outcome`, make the model's gate decisions and final result explicit and structured, so the
+  captured event list is directly loadable by the *existing* Tier-2 engine (`transcript.py`) with
+  zero format changes.
+- `scripts/evals/live_run.py` is the CLI over the harness: `--score-golden` runs a live-captured
+  output through the *existing* Tier-3 assertion engine (`golden.py`'s `GoldenCase`/
+  `run_golden_case`, reused rather than reimplemented) and reports pass/fail — the "live model
+  scoring" half. `--write-transcript` refreshes (or, given `transcript_assertions` in the live case,
+  bootstraps) a Tier-2 fixture's `events` in place, matching `golden_refresh.py`'s existing
+  refresh-in-place pattern. `--recorded-output-out` feeds the existing `golden_refresh.py --verify`
+  flow directly.
+- Deliberately kept out of `make lint`/`validate-evals`/CI entirely (ADR 0004): a live run needs a
+  real `ANTHROPIC_API_KEY`, costs real tokens, and isn't turn-for-turn reproducible, all of which
+  conflict with the deterministic CI `docs/evals/GOLDEN-REFRESH.md` already commits to. Uses stdlib
+  `urllib` for the one JSON HTTP call rather than adding an SDK dependency — no new entries in
+  `requirements.txt`/`requirements.lock`. `.github/workflows/live-eval.yml` is `workflow_dispatch`-only
+  and not added to the `main` ruleset's required checks — a maintainer triggers it by hand.
+  `docs/evals/GOLDEN-REFRESH.md`'s "Live LLM automation (optional, out of CI)" section, which
+  previously only described this idea in prose, now points at the real implementation.
+- The harness's own control-flow (tool routing, event capture, turn-limit handling, reserved-name
+  collisions) is covered by `scripts/tests/test_live_harness.py` and `scripts/tests/test_live_run.py`
+  via a scripted `ModelClient` stub (`scripts/tests/live_test_helpers.py`) — no network call, so this
+  stays true to Tier 1-3's own deterministic-testing discipline even though the feature itself never
+  runs live in CI. One caught bug during development: the test stub originally stored a live
+  reference to the harness's mutable `messages` list rather than a snapshot, so assertions on an
+  earlier turn's message state were silently seeing later turns' mutations — fixed by snapshotting
+  the list per call.
+- `evals/live/squad-map/single-repo-clean-map.yaml` is an illustrative example fixture proving the
+  format end-to-end (not run live in CI, not claimed to match squad-map's real MCP tool surface —
+  explicitly labeled as a draft to confirm before treating as a certified case, per
+  `docs/evals/LIVE-HARNESS.md`'s own stated limitation on this point).
+
 ### Fix broken README Skills badge (2026-08-11)
 
 - The `Skills` badge in `README.md` rendered as broken literal text with a stray auto-link on the

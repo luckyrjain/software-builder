@@ -1,0 +1,53 @@
+schema_version: 1
+skill: squad-map
+case_id: single-repo-clean-map
+description: >-
+  Illustrative example for the mock-tool execution harness (docs/evals/LIVE-HARNESS.md) — one repo,
+  an unambiguous GitLab-group-derived squad, and a matching Datadog service team tag, so there is no
+  conflict to reconcile and no missing data to flag UNKNOWN. Not a certified fixture: the tool names
+  below are illustrative, not necessarily this skill's real MCP tool surface — copy this file's shape
+  when authoring a live case for a skill whose actual tool names you have confirmed.
+scenario_prompt: >-
+  Map squad ownership for the single repo "payments-api" in workspace_root "/workspace/demo". Use the
+  tools available to you; there is exactly one repo in scope.
+tool_defs:
+  - name: gitlab_get_project
+    description: Fetch a GitLab project's namespace/group path by repo name.
+    input_schema:
+      type: object
+      properties:
+        repo: {type: string}
+      required: [repo]
+  - name: gitlab_get_codeowners
+    description: Fetch the CODEOWNERS file content for a GitLab project.
+    input_schema:
+      type: object
+      properties:
+        repo: {type: string}
+      required: [repo]
+  - name: datadog_get_service
+    description: Fetch a Datadog service catalog entry, including its `team` tag.
+    input_schema:
+      type: object
+      properties:
+        service: {type: string}
+      required: [service]
+mock_tools:
+  gitlab_get_project:
+    repo: payments-api
+    namespace: acme-org/payments/payments-api
+    group_squad: payments
+  gitlab_get_codeowners: |
+    * @acme-org/payments
+  datadog_get_service:
+    service: payments-api
+    team: payments
+    exists: true
+max_turns: 8
+transcript_assertions:
+  - type: tool_called
+    name: gitlab_get_project
+  - type: tool_called
+    name: datadog_get_service
+  - type: outcome_status
+    status: completed
