@@ -7,7 +7,16 @@ from pathlib import Path
 import pytest
 import yaml
 
-from scripts.evals.live_run import ROOT, build_system_prompt, load_live_case, run_from_case, score_against_golden, write_transcript
+import scripts.evals.live_run as live_run
+from scripts.evals.live_run import (
+    ROOT,
+    build_system_prompt,
+    load_live_case,
+    main,
+    run_from_case,
+    score_against_golden,
+    write_transcript,
+)
 from scripts.tests.live_test_helpers import ScriptedModelClient, ScriptedTurn
 
 EXAMPLE_LIVE_CASE = ROOT / "evals" / "live" / "squad-map" / "single-repo-clean-map.yaml"
@@ -244,12 +253,73 @@ def test_write_transcript_without_assertions_and_no_existing_file_raises(tmp_pat
 def test_main_reports_malformed_live_case_yaml_instead_of_crashing(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     # yaml.YAMLError is not a ValueError/OSError, so main()'s original except tuple let it escape
     # as an unhandled traceback instead of this CLI's own "error: ..." message path.
-    from scripts.evals.live_run import main
-
     bad_case = tmp_path / "bad.yaml"
     bad_case.write_text("skill: [unterminated\n", encoding="utf-8")
 
     exit_code = main(["--live-case", str(bad_case)])
+
+    assert exit_code == 1
+    assert "error:" in capsys.readouterr().err
+
+
+def _stub_anthropic_client(monkeypatch: pytest.MonkeyPatch, client: ScriptedModelClient) -> None:
+    monkeypatch.setattr(live_run, "AnthropicModelClient", lambda **kwargs: client)
+
+
+def _completing_scripted_client() -> ScriptedModelClient:
+    return ScriptedModelClient(
+        [
+            ScriptedTurn(tool_calls=[("lookup", {})]),
+            ScriptedTurn(tool_calls=[("record_outcome", {"status": "completed", "output": {}})]),
+        ],
+    )
+
+
+def test_main_reports_oserror_for_directory_write_transcript_target(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # Regression test for main()'s --write-transcript except tuple specifically (not
+    # write_transcript()'s own OSError-raising behavior, which is already covered by
+    # test_write_transcript_raises_oserror_for_a_directory_target but only calls write_transcript()
+    # directly, bypassing main() entirely). Drives the real CLI end to end with a stubbed model
+    # client so this proves main() itself routes the failure through its clean error path.
+    # transcript_assertions is required: without it, write_transcript() raises its own
+    # ValueError (the target doesn't exist yet, so it takes the bootstrap path) before ever
+    # reaching the write_text() call that actually raises OSError against a directory target —
+    # that ValueError is already caught either way, so it wouldn't exercise the OSError branch.
+    case_path = _write_live_case(
+        tmp_path / "case.yaml",
+        skill="squad-map",
+        case_id="demo-case",
+        transcript_assertions=[{"type": "outcome_status", "status": "completed"}],
+    )
+    _stub_anthropic_client(monkeypatch, _completing_scripted_client())
+
+    directory_target = tmp_path / "not-a-file"
+    directory_target.mkdir()
+
+    exit_code = main(["--live-case", str(case_path), "--write-transcript", str(directory_target)])
+
+    assert exit_code == 1
+    assert "error:" in capsys.readouterr().err
+
+
+def test_main_reports_oserror_for_directory_recorded_output_target(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # Regression test for the --recorded-output-out write, which previously had no try/except at
+    # all around it in main() — same "drive main() end to end" rationale as the sibling test above.
+    case_path = _write_live_case(tmp_path / "case.yaml", skill="squad-map", case_id="demo-case")
+    _stub_anthropic_client(monkeypatch, _completing_scripted_client())
+
+    directory_target = tmp_path / "not-a-file-either"
+    directory_target.mkdir()
+
+    exit_code = main(["--live-case", str(case_path), "--recorded-output-out", str(directory_target)])
 
     assert exit_code == 1
     assert "error:" in capsys.readouterr().err

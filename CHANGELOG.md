@@ -86,6 +86,23 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
   commit) and had survived every prior round untouched. Fixed by adding `OSError` to that except
   tuple, and — same class of gap, same fix — wrapped the previously entirely-unguarded
   `--recorded-output-out` write in the same `try`/`except OSError` pattern.
+- A further round, trying to break that `OSError` fix the same way the prior round validated its
+  predecessors, found the two fixes shipped with no test that would actually catch a regression of
+  `main()`'s own `except` tuples specifically — the existing `write_transcript()`-level test
+  (`test_write_transcript_raises_oserror_for_a_directory_target`) calls the function directly,
+  bypassing `main()` entirely, and the `--recorded-output-out` write had no test at all. Confirmed
+  by reverting each `except` clause in `main()` independently and rerunning the full suite: it
+  stayed green both times. Added two `main()`-level tests
+  (`test_main_reports_oserror_for_directory_write_transcript_target`,
+  `test_main_reports_oserror_for_directory_recorded_output_target`) that drive the real CLI end to
+  end (via a stubbed `AnthropicModelClient`) with a directory as the output target — each confirmed,
+  the same way, to actually fail when its corresponding `except` clause is reverted. One
+  self-caught mistake while writing the first test: its live case initially omitted
+  `transcript_assertions`, which made `write_transcript()` raise its own (already-caught)
+  `ValueError` before ever reaching the `write_text()` call the test meant to exercise, so
+  reverting `main()`'s `except` tuple didn't actually fail the test — silently vacuous. Fixed by
+  adding `transcript_assertions` to the test's live case so it reaches the real `OSError` path;
+  re-verified the corrected test does fail against the reverted code.
 - `evals/live/squad-map/single-repo-clean-map.yaml` is an illustrative example fixture proving the
   format end-to-end (not run live in CI, not claimed to match squad-map's real MCP tool surface —
   explicitly labeled as a draft to confirm before treating as a certified case, per
