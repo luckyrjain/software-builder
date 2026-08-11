@@ -54,6 +54,40 @@ def test_source_tree_exclude_skips_historical_doc_tree(tmp_path: Path) -> None:
     assert errors_with_exclude == []
 
 
+def test_source_tree_exclude_handles_multiple_roots(tmp_path: Path) -> None:
+    # The real invocation (make lint's lint-framework target) passes one --exclude per
+    # registered skill directory plus docs/superpowers — verify several excludes combine
+    # correctly (each skips only its own subtree) rather than only ever being tested with
+    # a single exclude root.
+    (tmp_path / "docs" / "superpowers").mkdir(parents=True)
+    (tmp_path / "docs" / "superpowers" / "old-plan.md").write_text(
+        "Broken: [missing](./missing.md)\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "some-skill").mkdir()
+    (tmp_path / "some-skill" / "SKILL.md").write_text(
+        "Broken: [missing](./missing.md)\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "another-skill").mkdir()
+    (tmp_path / "another-skill" / "SKILL.md").write_text(
+        "Broken: [missing](./missing.md)\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "README.md").write_text(
+        "Still checked: [missing](./missing.md)\n",
+        encoding="utf-8",
+    )
+
+    errors = validate_tree(
+        tmp_path,
+        check_anchors=True,
+        exclude=["docs/superpowers", "some-skill", "another-skill"],
+    )
+    assert len(errors) == 1
+    assert "README.md" in errors[0]
+
+
 def test_installed_package_flags_missing_skill_local_link(tmp_path: Path) -> None:
     package = tmp_path / "skill"
     package.mkdir()
