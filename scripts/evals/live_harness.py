@@ -208,7 +208,7 @@ def run_live_case(
 class AnthropicModelClient:
     """Talks to the real Messages API over stdlib `urllib` — no SDK dependency for one JSON call."""
 
-    def __init__(self, *, model: str, api_key: str | None = None) -> None:
+    def __init__(self, *, model: str, api_key: str | None = None, timeout: float = 120) -> None:
         key = api_key or os.environ.get("ANTHROPIC_API_KEY")
         if not key:
             raise LiveHarnessError(
@@ -217,6 +217,7 @@ class AnthropicModelClient:
             )
         self._model = model
         self._api_key = key
+        self._timeout = timeout
 
     def send(
         self,
@@ -245,13 +246,19 @@ class AnthropicModelClient:
             method="POST",
         )
         try:
-            with urllib.request.urlopen(request, timeout=120) as response:  # noqa: S310 - fixed https host
+            with urllib.request.urlopen(request, timeout=self._timeout) as response:  # noqa: S310 - fixed https host
                 payload = json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode("utf-8", "replace")
             raise LiveHarnessError(f"Anthropic API error {exc.code}: {detail}") from exc
-        except urllib.error.URLError as exc:
-            raise LiveHarnessError(f"Anthropic API request failed: {exc.reason}") from exc
+        except (urllib.error.URLError, TimeoutError) as exc:
+            # A stall during urlopen()'s own connect phase surfaces as URLError (wrapping the
+            # underlying OSError in .reason); a stall during response.read() — after a successful
+            # connection — surfaces as a bare TimeoutError instead, which is not a URLError
+            # subclass, so both need to be caught here to keep every network failure mapped to
+            # LiveHarnessError rather than an unhandled traceback.
+            reason = getattr(exc, "reason", exc)
+            raise LiveHarnessError(f"Anthropic API request failed: {reason}") from exc
 
         content = payload.get("content", [])
         text = "".join(block.get("text", "") for block in content if block.get("type") == "text")

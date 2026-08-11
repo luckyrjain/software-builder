@@ -154,6 +154,50 @@ def test_write_transcript_refreshes_existing_fixture_events_only(tmp_path: Path)
     assert raw["assertions"] == [{"type": "outcome_status", "status": "completed"}]
 
 
+def test_write_transcript_refuses_when_skill_or_case_id_mismatch(tmp_path: Path) -> None:
+    transcript_path = tmp_path / "existing.yaml"
+    transcript_path.write_text(
+        yaml.safe_dump(
+            {
+                "schema_version": 1,
+                "skill": "incident-rca",
+                "case_id": "unrelated-case",
+                "tier": 2,
+                "description": "d",
+                "events": [{"type": "outcome", "status": "stale"}],
+                "assertions": [{"type": "outcome_status", "status": "completed"}],
+            },
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="belongs to skill='incident-rca'/case_id='unrelated-case'"):
+        write_transcript(
+            transcript_path,
+            {"skill": "squad-map", "case_id": "demo-case"},
+            [{"type": "outcome", "status": "completed"}],
+            note="pytest",
+        )
+
+    # the mismatched fixture must be left untouched, not partially overwritten
+    raw = yaml.safe_load(transcript_path.read_text(encoding="utf-8"))
+    assert raw["skill"] == "incident-rca"
+    assert raw["events"] == [{"type": "outcome", "status": "stale"}]
+
+
+def test_write_transcript_refuses_existing_file_without_assertions(tmp_path: Path) -> None:
+    transcript_path = tmp_path / "not-a-fixture.yaml"
+    transcript_path.write_text(yaml.safe_dump({"skill": "squad-map", "case_id": "demo-case"}), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="not a valid Tier-2 fixture"):
+        write_transcript(
+            transcript_path,
+            {"skill": "squad-map", "case_id": "demo-case"},
+            [{"type": "outcome", "status": "completed"}],
+            note="pytest",
+        )
+
+
 def test_example_live_case_fixture_loads_and_builds_a_real_system_prompt() -> None:
     case = load_live_case(EXAMPLE_LIVE_CASE)
     assert case["skill"] == "squad-map"
@@ -173,3 +217,17 @@ def test_write_transcript_without_assertions_and_no_existing_file_raises(tmp_pat
             [{"type": "outcome", "status": "completed"}],
             note="pytest",
         )
+
+
+def test_main_reports_malformed_live_case_yaml_instead_of_crashing(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    # yaml.YAMLError is not a ValueError/OSError, so main()'s original except tuple let it escape
+    # as an unhandled traceback instead of this CLI's own "error: ..." message path.
+    from scripts.evals.live_run import main
+
+    bad_case = tmp_path / "bad.yaml"
+    bad_case.write_text("skill: [unterminated\n", encoding="utf-8")
+
+    exit_code = main(["--live-case", str(bad_case)])
+
+    assert exit_code == 1
+    assert "error:" in capsys.readouterr().err

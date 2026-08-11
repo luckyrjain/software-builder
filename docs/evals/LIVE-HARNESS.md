@@ -70,8 +70,12 @@ python3 -m scripts.evals.golden_refresh \
 
 `--write-transcript` only ever replaces the `events` key on an existing fixture (description and
 assertions are left as the maintainer wrote them, same refresh-in-place pattern as
-`golden_refresh.py`); it only writes `description`/`assertions` from scratch when the target file
-doesn't exist yet, and then only from the live case's own `transcript_assertions`.
+`golden_refresh.py`) — it also stamps a `refresh_meta.last_refreshed_at`/`refresh_note` block, the
+same provenance convention `golden_refresh.py` uses, which CI ignores. It only writes
+`description`/`assertions` from scratch when the target file doesn't exist yet, and then only from
+the live case's own `transcript_assertions`. It refuses to overwrite an existing target that isn't
+a real Tier-2 fixture (no `assertions` list) or that belongs to a different `skill`/`case_id` than
+the live case just run, rather than silently corrupting or overwriting the wrong file.
 
 ## What this does not do
 

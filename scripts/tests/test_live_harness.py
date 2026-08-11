@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import socket
+import threading
+
 import pytest
 
+import scripts.evals.live_harness as live_harness
 from scripts.evals.live_harness import (
     AnthropicModelClient,
     LiveHarnessError,
@@ -228,3 +232,39 @@ def test_anthropic_client_reads_env_var(monkeypatch: pytest.MonkeyPatch) -> None
     monkeypatch.setenv("ANTHROPIC_API_KEY", "env-key")
     client = AnthropicModelClient(model="claude-sonnet-5")
     assert client._api_key == "env-key"  # noqa: SLF001
+
+
+def test_anthropic_client_wraps_a_stalled_response_as_live_harness_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A stall during response.read() — after urlopen() has already connected — surfaces as a
+    # bare TimeoutError, not a urllib.error.URLError subclass; regression test for that gap. A
+    # local loopback server that accepts the connection but never responds reproduces this
+    # deterministically, no real network access involved.
+    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server_socket.bind(("127.0.0.1", 0))
+    server_socket.listen(1)
+    port = server_socket.getsockname()[1]
+
+    def accept_and_stall() -> None:
+        try:
+            conn, _ = server_socket.accept()
+        except OSError:
+            return
+        try:
+            conn.recv(65536)  # drain the request so the client isn't blocked writing it
+        except OSError:
+            pass
+        threading.Event().wait(2)  # hold the connection open past the client's short timeout
+        conn.close()
+
+    server_thread = threading.Thread(target=accept_and_stall, daemon=True)
+    server_thread.start()
+    try:
+        monkeypatch.setattr(live_harness, "ANTHROPIC_API_URL", f"http://127.0.0.1:{port}/v1/messages")
+        client = AnthropicModelClient(model="claude-sonnet-5", api_key="test-key", timeout=0.2)
+
+        with pytest.raises(LiveHarnessError, match="Anthropic API request failed"):
+            client.send(system="s", messages=[], tools=[])
+    finally:
+        server_socket.close()

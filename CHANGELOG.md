@@ -51,6 +51,29 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
   response, the run terminating on that one turn without a follow-up `client.send()`), but nothing
   proved it automatically. Added
   `test_multiple_tool_calls_in_one_turn_mixing_real_tool_gate_and_outcome`.
+- A further review round, empirically reproducing failure modes rather than only reading code,
+  found three more real gaps:
+  1. `live_run.py`'s `write_transcript()` had no cross-check between the file it was refreshing
+     and the case it was writing — pointed at a valid Tier-2 fixture belonging to a *different*
+     skill/case_id, it silently overwrote that unrelated fixture's `events` while it kept the old
+     `skill`/`case_id` label, and pointed at any mapping missing `assertions`, it silently produced
+     an invalid fixture that `transcript.py`'s own loader (which *is* wired into `make lint`)
+     would reject on the next run. Both reproduced directly. Fixed by refusing to overwrite an
+     existing target unless it's already a real Tier-2 fixture (a non-empty `assertions` list)
+     belonging to the exact `skill`/`case_id` just run.
+  2. `AnthropicModelClient.send()` only caught `urllib.error.HTTPError`/`URLError` around the
+     request; a stall during `response.read()` — after `urlopen()` had already connected —
+     surfaces as a bare `TimeoutError`, not a `URLError` subclass, so it escaped uncaught as a raw
+     traceback instead of a `LiveHarnessError` pointing at the docs. Reproduced with a local
+     loopback socket server that accepts the connection but never responds. Fixed by also
+     catching `TimeoutError`; the constructor's new `timeout` parameter (defaulting to the
+     previous hardcoded 120s) makes this reproducible in a fast, deterministic test.
+  3. `live_run.py`'s `main()` never caught `yaml.YAMLError`, so malformed YAML in `--live-case`,
+     `--score-golden`, or an existing `--write-transcript` target all crashed with an unhandled
+     traceback instead of this CLI's own `error: ...` message path. Reproduced directly; fixed by
+     adding `yaml.YAMLError` to the relevant `except` clauses.
+  Also corrected a doc inaccuracy `LIVE-HARNESS.md` picked up along the way: `--write-transcript`
+  does stamp a `refresh_meta` block (the prose previously implied it only ever touched `events`).
 - `evals/live/squad-map/single-repo-clean-map.yaml` is an illustrative example fixture proving the
   format end-to-end (not run live in CI, not claimed to match squad-map's real MCP tool surface —
   explicitly labeled as a draft to confirm before treating as a certified case, per

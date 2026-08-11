@@ -137,6 +137,25 @@ def write_transcript(
         raw = yaml.safe_load(transcript_path.read_text(encoding="utf-8"))
         if not isinstance(raw, dict):
             raise ValueError(f"{transcript_path}: root must be a mapping")
+        # Refuse to refresh a file that isn't actually the Tier-2 fixture for this case: neither
+        # a mapping missing the fields Tier-2's own loader requires, nor — the more dangerous
+        # case — a real, valid fixture that just belongs to a different skill/case_id (a
+        # copy-paste or typo'd --write-transcript path). Either would silently either produce an
+        # invalid fixture or overwrite an unrelated one's events while it keeps the old
+        # skill/case_id label and assertions never written for the new events.
+        assertions = raw.get("assertions")
+        if not isinstance(assertions, list) or not assertions:
+            raise ValueError(
+                f"{transcript_path}: not a valid Tier-2 fixture (missing a non-empty 'assertions' "
+                "list) — refusing to overwrite; point --write-transcript at a real existing fixture "
+                "or a path that doesn't exist yet",
+            )
+        if raw.get("skill") != case["skill"] or raw.get("case_id") != case["case_id"]:
+            raise ValueError(
+                f"{transcript_path}: belongs to skill={raw.get('skill')!r}/case_id={raw.get('case_id')!r}, "
+                f"but this live run is skill={case['skill']!r}/case_id={case['case_id']!r} — refusing to "
+                "overwrite a fixture that doesn't match this case",
+            )
     else:
         bootstrap_assertions = case.get("transcript_assertions")
         if not bootstrap_assertions:
@@ -190,7 +209,7 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         case, result = run_from_case(args.live_case.resolve(), model=args.model, api_key=args.api_key)
-    except (LiveHarnessError, ValueError, OSError) as exc:
+    except (LiveHarnessError, ValueError, OSError, yaml.YAMLError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
 
@@ -203,7 +222,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.write_transcript:
         try:
             write_transcript(args.write_transcript.resolve(), case, result.events, args.note)
-        except ValueError as exc:
+        except (ValueError, yaml.YAMLError) as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 1
         print(f"wrote {args.write_transcript}")
@@ -217,7 +236,7 @@ def main(argv: list[str] | None = None) -> int:
                 case_id=str(case["case_id"]),
                 recorded_output=result.recorded_output,
             )
-        except (ValueError, OSError) as exc:
+        except (ValueError, OSError, yaml.YAMLError) as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 1
         if not eval_result.passed:
