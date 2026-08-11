@@ -198,6 +198,28 @@ def test_write_transcript_refuses_existing_file_without_assertions(tmp_path: Pat
         )
 
 
+def test_write_transcript_raises_oserror_for_a_directory_target(tmp_path: Path) -> None:
+    # Regression test: main()'s --write-transcript except clause originally only caught
+    # (ValueError, yaml.YAMLError), so a plausible real mistake -- pointing --write-transcript at
+    # a directory instead of a file inside it -- crashed with an unhandled traceback instead of
+    # main()'s own "error: ..." path. write_transcript() itself must surface a plain OSError
+    # (main() now catches it alongside its two sibling call sites) rather than something else.
+    directory_target = tmp_path / "not-a-file"
+    directory_target.mkdir()
+
+    with pytest.raises(OSError):
+        write_transcript(
+            directory_target,
+            {
+                "skill": "demo-skill",
+                "case_id": "demo-case",
+                "transcript_assertions": [{"type": "outcome_status", "status": "completed"}],
+            },
+            [{"type": "outcome", "status": "completed"}],
+            note="pytest",
+        )
+
+
 def test_example_live_case_fixture_loads_and_builds_a_real_system_prompt() -> None:
     case = load_live_case(EXAMPLE_LIVE_CASE)
     assert case["skill"] == "squad-map"

@@ -74,6 +74,18 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
      adding `yaml.YAMLError` to the relevant `except` clauses.
   Also corrected a doc inaccuracy `LIVE-HARNESS.md` picked up along the way: `--write-transcript`
   does stamp a `refresh_meta` block (the prose previously implied it only ever touched `events`).
+- The following round confirmed all three fixes above by breaking each one locally (removing the
+  `write_transcript` guard, reverting just the `TimeoutError` except clause, calling the
+  YAML-error paths directly with malformed input) and re-running the corresponding tests to watch
+  them fail — then found one more real, reproducible gap of the same shape: `main()`'s three
+  `except` tuples were inconsistent — `--write-transcript`'s call site caught
+  `(ValueError, yaml.YAMLError)` but not `OSError`, unlike its two sibling call sites, despite
+  `write_transcript()` doing real filesystem I/O that can raise `OSError` for an ordinary mistake
+  (e.g. pointing `--write-transcript` at a directory instead of a file — reproduced directly,
+  `IsADirectoryError`). This predates this branch's other fixes (present since the very first
+  commit) and had survived every prior round untouched. Fixed by adding `OSError` to that except
+  tuple, and — same class of gap, same fix — wrapped the previously entirely-unguarded
+  `--recorded-output-out` write in the same `try`/`except OSError` pattern.
 - `evals/live/squad-map/single-repo-clean-map.yaml` is an illustrative example fixture proving the
   format end-to-end (not run live in CI, not claimed to match squad-map's real MCP tool surface —
   explicitly labeled as a draft to confirm before treating as a certified case, per

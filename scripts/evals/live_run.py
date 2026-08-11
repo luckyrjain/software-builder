@@ -216,13 +216,20 @@ def main(argv: list[str] | None = None) -> int:
     print(f"ok: {case['skill']}/{case['case_id']} — {result.turns_used} turn(s), {len(result.events)} event(s)")
 
     if args.recorded_output_out:
-        args.recorded_output_out.write_text(json.dumps(result.recorded_output, indent=2) + "\n", encoding="utf-8")
+        try:
+            args.recorded_output_out.write_text(
+                json.dumps(result.recorded_output, indent=2) + "\n",
+                encoding="utf-8",
+            )
+        except OSError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
         print(f"wrote {args.recorded_output_out}")
 
     if args.write_transcript:
         try:
             write_transcript(args.write_transcript.resolve(), case, result.events, args.note)
-        except (ValueError, yaml.YAMLError) as exc:
+        except (ValueError, OSError, yaml.YAMLError) as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 1
         print(f"wrote {args.write_transcript}")
