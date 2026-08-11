@@ -156,6 +156,32 @@ setup:
 lint-requirements-lock:
 	@python3 scripts/check_requirements_lock.py
 
+lint-actions-pinning:
+	@python3 scripts/check_pinned_actions.py
+
+lint-actions-security:
+	@if command -v zizmor >/dev/null 2>&1; then \
+		if [ -n "$$GH_TOKEN" ] || [ -n "$$GITHUB_TOKEN" ]; then \
+			if ! output=$$(zizmor .github/workflows 2>&1); then \
+				if printf '%s\n' "$$output" | grep -q "fatal: no audit was performed"; then \
+					printf '%s\n' "$$output" >&2; \
+					echo "note: zizmor's online audit failed to reach the GitHub API (transient network/rate-limit issue, not a code finding) — falling back to --no-online-audits so this doesn't block on infrastructure flakiness" >&2; \
+					zizmor --no-online-audits .github/workflows; \
+				else \
+					printf '%s\n' "$$output" >&2; \
+					exit 1; \
+				fi; \
+			else \
+				printf '%s\n' "$$output"; \
+			fi; \
+		else \
+			echo "note: no GH_TOKEN/GITHUB_TOKEN set — running zizmor --no-online-audits (some checks skipped locally; CI runs the full set)" >&2; \
+			zizmor --no-online-audits .github/workflows; \
+		fi; \
+	else \
+		echo "SKIPPED: zizmor not installed — Actions-YAML security lint did NOT run. Install with 'python3 -m pip install zizmor' (or 'make setup', which installs it from requirements.lock) and re-run. CI always has it installed via requirements.lock, so this gap is local-only." >&2; \
+	fi
+
 verify-install:
 	@bash scripts/tests/test_install_integration.sh
 
@@ -190,7 +216,7 @@ generate:
 generate-check:
 	@python3 -m scripts.registry generate --check
 
-lint: validate-registry backfill-capabilities-check generate-check validate-evals lint-framework lint-pr-review lint-pr-gatekeeper lint-k8s-skill lint-incident-rca lint-incident-triage-agent lint-domain-comprehension lint-squad-map lint-who-owns-x-bot lint-new-hire-guide lint-release-readiness-checker lint-migration-program-manager lint-cost-optimization-sprint-planner lint-mysql-to-postgres-sql lint-loop-task-implementer lint-backlog-runner lint-weekly-squad-digest lint-unit-test-creator lint-integration-test-creator lint-contract-test-creator lint-e2e-test-creator lint-api-test-creator lint-test-writer lint-prd-architect lint-requirements-lock verify-install verify-install-all
+lint: validate-registry backfill-capabilities-check generate-check validate-evals lint-framework lint-pr-review lint-pr-gatekeeper lint-k8s-skill lint-incident-rca lint-incident-triage-agent lint-domain-comprehension lint-squad-map lint-who-owns-x-bot lint-new-hire-guide lint-release-readiness-checker lint-migration-program-manager lint-cost-optimization-sprint-planner lint-mysql-to-postgres-sql lint-loop-task-implementer lint-backlog-runner lint-weekly-squad-digest lint-unit-test-creator lint-integration-test-creator lint-contract-test-creator lint-e2e-test-creator lint-api-test-creator lint-test-writer lint-prd-architect lint-requirements-lock lint-actions-pinning lint-actions-security verify-install verify-install-all
 	@for f in scripts/*.sh; do \
 		echo "shellcheck $$f"; \
 		if command -v shellcheck >/dev/null 2>&1; then \

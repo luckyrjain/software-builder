@@ -7,3 +7,4 @@
 pytest>=9.1.1
 PyYAML>=6.0.3
 sqlglot>=30.15.0
+zizmor>=1.29.0

@@ -8,6 +8,173 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 
 ## Platform
 
+### Add Dependency Review, CodeQL, secret scanning, and Actions-YAML security lint (2026-08-11)
+
+- Beyond Dependabot (pip + github-actions ecosystems) and pinned Actions, this repo had no dedicated
+  CI gates for a PR introducing a known-vulnerable dependency, static-analysis findings in `scripts/`
+  Python helpers, a committed credential, or risky Actions-YAML patterns (script injection via
+  untrusted `${{ }}` expansion, missing `permissions:`, credential persistence). Added six checks,
+  scoped to what this repo actually executes — shell/Python helpers, an installer writing outside the
+  repo, skill docs describing MCP write-authority workflows — not a blanket "add everything" pass:
+  - `.github/workflows/dependency-review.yml` — fails a PR on a new high-severity dependency advisory.
+  - `.github/workflows/codeql.yml` — Python static analysis (push, PR, weekly).
+  - `.github/workflows/secret-scan.yml` — Gitleaks (push, PR, weekly), plus a `negative-test` job that
+    generates a random AWS-access-key-ID-shaped string at CI-run-time and asserts the scanner detects
+    it — proving the detector itself still fires, independent of whether the actual repo content is
+    clean that run. Deliberately **not** a committed fixture: doing so would permanently store a
+    secret-shaped string in git history for no added coverage, and this repo's native GitHub
+    push-protection state couldn't be confirmed (see below), so a committed fixture risked either an
+    unexpected blocked push or a false-positive alert.
+  - `.github/workflows/scorecard.yml` — OpenSSF Scorecard supply-chain posture (push to main, weekly).
+  - `scripts/check_pinned_actions.py`, wired into `make lint` as `lint-actions-pinning` — fails on any
+    `uses:` reference not pinned to a full 40-char commit SHA (a mutable tag can be repointed by the
+    action's maintainer after review; this repo's existing convention already pins every action, this
+    just makes a regression a lint failure instead of something only manual review would catch).
+  - `zizmor` (new `requirements.txt`/`requirements.lock` entry), wired into `make lint` as
+    `lint-actions-security` — Actions-YAML security lint. Falls back to `zizmor --no-online-audits`
+    locally when no `GH_TOKEN`/`GITHUB_TOKEN` is set (skips checks needing live GitHub API access); CI
+    always runs the full set via the workflow's own token. Running it against the two pre-existing
+    workflows surfaced two real gaps this PR also fixes: `lint.yml` had no explicit `permissions:`
+    block (defaulted to the broad token scope) and neither `lint.yml` nor `release.yml` set
+    `persist-credentials: false` on `actions/checkout` (leaves a checked-out git credential live for
+    the rest of the job for no reason once done). Both fixed.
+  - `docs/REPOSITORY.md`'s new "Security workflows" section documents all of the above, and records
+    that **native GitHub secret-scanning/push-protection status could not be verified directly** — no
+    tool available to this effort could read the repo's Code Security settings — but an indirect signal
+    (a secret-scanning request against the repo returned "Repository does not have GitHub Advanced
+    Security enabled") suggests it's likely off; flagged for a repo admin to confirm and toggle on at
+    Settings → Code security. None of the six new checks are added to the `main` ruleset's required
+    status checks yet — deliberately watching a few real runs first, since CodeQL/Scorecard can be
+    noisy on their first baseline.
+- A review round found the `negative-test` job's original fixture — the hardcoded, well-known AWS
+  placeholder access key `AKIAIOSFODNN7EXAMPLE` — undermined the very thing it was meant to prove:
+  verified directly that gitleaks' current default config now allowlists that exact string
+  (`.+EXAMPLE$` on the `aws-access-token` rule, added precisely because it's such a widely-recognized
+  non-functional example), and that the job only "passed" because it was pinned to an old gitleaks
+  image (`v8.9.0`) that predates the allowlist entry — an accidental consequence of an earlier
+  `git ls-remote --tags` lookup that wasn't sorted by version and returned a stale tag as if it were
+  latest (`v8.30.1` is the actual latest). Against the real current gitleaks, the old fixture silently
+  produces "no leaks found" — the negative test would have passed for the wrong reason, and the
+  scanning job it's meant to validate could develop the identical blind spot with no warning. Fixed by
+  generating a random AWS-access-key-ID-shaped string each run instead (`AKIA` + 16 characters from
+  gitleaks' own regex's character class) — verified detected on the real latest gitleaks (`v8.30.1`,
+  now also the pinned image tag) while the old placeholder is not. A random, never-published string
+  can't be pre-allowlisted the way a famous placeholder can.
+- The same round found `lint-actions-security`'s "zizmor not installed" fallback silently let
+  `make lint` exit 0 without ever running the new security lint, with no comparable visibility to the
+  already-documented no-token fallback. Reworded the skip message to say plainly that the check did
+  not run (`SKIPPED:` prefix) and documented in `docs/REPOSITORY.md` that this mirrors
+  `lint-framework`'s existing `pytest`-missing fallback and is local-only — CI always has `zizmor`
+  installed via `requirements.lock`.
+- Also fixed: `docs/REPOSITORY.md`'s table said CodeQL was scoped to `scripts/`/`*/scripts/`, but
+  `codeql.yml` sets no `paths:` filter and genuinely scans every tracked Python file repo-wide
+  (confirmed: skill-local test files and two `domain-comprehension/templates/postman/*.py` runtime
+  templates live outside those directories too) — reworded to match actual, intentionally broader,
+  behavior rather than narrowing the workflow to match the doc.
+- A further review round, independently re-deriving each of the above rather than just re-checking
+  them, found three more issues:
+  1. The `negative-test` job's random-canary generator, `tr -dc 'A-Z2-7' < /dev/urandom | head -c 16`,
+     dies with SIGPIPE under GitHub Actions' default `bash -eo pipefail` — `head` closing the pipe once
+     it has 16 bytes sends `tr` SIGPIPE, and `pipefail` surfaces that non-zero exit as the pipeline's
+     status even though `head` itself succeeded, so `set -e` aborted the step on every single run,
+     before the fixture was even written. Reproduced 5/5 with a matching shell invocation. Fixed by
+     reading in a loop from bounded `head -c 64 /dev/urandom` calls (a fixed-size device-file read,
+     not a piped generator process, so no signal is ever involved) until 16 valid characters
+     accumulate, then slicing with bash's own `${suffix:0:16}` — verified clean across 10 runs.
+  2. `release.yml`'s `make lint` step ran before `GH_TOKEN` was exported (that only happened in the
+     later "Upload release assets" step), so `lint-actions-security` silently fell back to
+     `--no-online-audits` there — contradicting the "CI always runs the full set" claim, which was
+     only actually true for `lint.yml`. Fixed by exporting `GH_TOKEN: ${{ github.token }}` on
+     `release.yml`'s lint step too.
+  3. `zricethezav/gitleaks:v8.30.1` in the `negative-test` job's `docker run` was a mutable tag, not
+     pinned by digest — inconsistent with this same change's own rationale for full-SHA-pinning every
+     `uses:` reference (`lint-actions-pinning` doesn't cover this, since a `docker run` image argument
+     isn't a `uses:` field). Resolved the image's immutable manifest digest directly from the registry
+     and pinned to `zricethezav/gitleaks@sha256:c00b6bd0...` instead.
+- A second-round review, taking a genuinely fresh pass rather than only re-checking the prior round's
+  three specific fixes, found a real bug that had been present unchanged since this branch's very
+  first commit and untouched by any of the three intervening fix-rounds (all concentrated on
+  `secret-scan.yml`): `codeql.yml` and `scorecard.yml` pinned `github/codeql-action` and
+  `ossf/scorecard-action` to their **annotated tag object's own SHA**, not the commit it points to.
+  `git ls-remote --tags` returns the tag object's SHA by default; the underlying commit only appears
+  on the separate, peeled `refs/tags/vX.Y.Z^{}` line — a distinction that matters only for *annotated*
+  tags (the five other actions pinned across these workflows all use lightweight tags, where the two
+  are identical, which is why this went unnoticed). Verified directly: fetching
+  `raw.githubusercontent.com/github/codeql-action/<tag-object-sha>/README.md` 404s, while the peeled
+  commit SHA 200s — `scripts/check_pinned_actions.py` couldn't catch this class of error, since a tag
+  object's SHA is still a syntactically valid 40-char commit-shaped hex string. Left uncaught, CodeQL's
+  `init`/`analyze` steps and Scorecard's SARIF-upload step would all fail to resolve on their first
+  real run. Fixed both references to the correct peeled commit SHAs. The same round also tightened
+  `docs/REPOSITORY.md`'s description of what `lint-actions-security`'s default zizmor persona actually
+  catches (a workflow missing `permissions:` entirely, not permissions that are merely broader than
+  necessary while still present) — a real accuracy gap, not merely restating a known limitation.
+- A further round independently re-verified the annotated-tag fix (correct) and, taking a fresh
+  holistic pass rather than only re-checking it, found two more real, previously-unflagged issues:
+  1. `lint-actions-security`'s online-audit path treated ANY zizmor failure as fatal, including a pure
+     GitHub-API infrastructure hiccup unrelated to any real code finding — reproduced directly with an
+     invalid token: zizmor aborts entirely with `fatal: no audit was performed` (exit 1) the moment a
+     single online audit (e.g. `artipacked`, which needs to list an action's upstream tags) can't reach
+     the API, rather than just skipping that one check. Newly consequential because this same branch
+     added `GH_TOKEN` to `release.yml`'s lint step specifically to enable the online path there — a
+     release could now be blocked by a transient GitHub-side issue with nothing wrong in the diff.
+     Fixed by detecting zizmor's own `fatal: no audit was performed` message specifically (distinct
+     from a normal findings-summary exit) and falling back to `--no-online-audits` only in that case,
+     verified to still fail loudly (no fallback) on a real finding.
+  2. `scripts/check_pinned_actions.py`'s SHA regex was lowercase-only (`[0-9a-f]{40}`), so a perfectly
+     valid, immutable uppercase-hex pin — e.g. `actions/checkout@3D3C42E5AAC5BA805825DA76410C181273BA90B1`,
+     the identical commit as this repo's actual lowercase pin — was flagged as a "mutable ref." No
+     current pin in this repo uses uppercase, so this caused no live breakage, but it's a real
+     correctness bug in a newly-added enforcement script. Fixed to accept both cases; regression test
+     added.
+- A fresh review of that fix itself found it had a real bug undermining what it was meant to do:
+  `lint-actions-security`'s new `echo "$$output" | grep -q "fatal: no audit was performed"` runs under
+  Make's default `/bin/sh`, which on this system is `dash` — and dash's builtin `echo` interprets XSI
+  backslash escapes (a `\c` sequence in particular truncates everything after it). Reproduced directly:
+  `output="before\cafter"; echo "$output"` prints only `before` under `dash -c`. Any future zizmor
+  diagnostic containing a backslash sequence (a Windows-style path, a regex snippet) occurring before
+  the fatal-marker text in its own output could silently truncate it out of the captured string before
+  the `grep` ever sees it — defeating the transient-API-hiccup fallback the immediately preceding fix
+  added, and turning a benign network blip back into a hard failure. Fixed by replacing all four
+  `echo "$$output"` call sites with `printf '%s\n' "$$output"`, whose `%s` substitution never
+  reinterprets escapes in the argument — verified the exact failure reproduces with `echo` and is fixed
+  with `printf`, and re-verified both the bad-token and no-token fallback paths still exit 0 end to end.
+- Fixed a doc/table miscount: "five additional, independent checks" in `docs/REPOSITORY.md` and
+  `CHANGELOG.md`'s own entry for this change, when the table/list beneath it actually enumerates six
+  (`dependency-review.yml`, `codeql.yml`, `secret-scan.yml`, `scorecard.yml`, `lint-actions-security`,
+  `lint-actions-pinning`). Both corrected to say six.
+- A second-round review re-scrutinized (rather than rubber-stamped) an earlier round's non-blocking
+  observation about `secret-scan.yml`'s `negative-test` job and found a real, source-verified issue:
+  gitleaks' own `findingSummaryAndExit` (`cmd/root.go`) calls `os.Exit(1)` on a non-nil scan error
+  *before* it ever reaches the findings-count exit branch — confirmed directly in gitleaks v8.30.1's
+  source. That means exit code 1 alone doesn't distinguish "a leak was actually detected" from "the
+  scan itself hit an error" (e.g. a partial-scan failure); the negative test could report success on
+  the latter without any leak ever having been recorded, since it only checked the exit code. Fixed by
+  writing the scan report to a file (`--report-path`, mounted to a second read-write volume alongside
+  the read-only fixture mount) and requiring an actual `"RuleID"` entry in it, not just exit code 1 —
+  verified via the real gitleaks CLI that a genuine detection produces a report containing a `RuleID`
+  finding, giving an unambiguous signal independent of gitleaks' exit-code overloading.
+- A further round found two more minor, non-blocking items, both fixed: `dependency-review.yml`
+  granted `pull-requests: write` at the workflow level rather than scoping it to the one job that
+  actually needs it (inconsistent with `secret-scan.yml`/`scorecard.yml`'s job-level scoping
+  elsewhere in this same change, and flagged by zizmor's stricter `--persona=auditor`, though not by
+  the `regular` persona `make lint` actually runs) — moved to job level. And `lint-actions-security`'s
+  ~20-line fallback logic (the exact code that had two real bugs earlier in this branch's history —
+  the fatal-vs-transient handling and the dash-`echo` truncation) had no regression test, unlike its
+  sibling `lint-actions-pinning`. Added `scripts/tests/test_lint_actions_security_makefile.py`, which
+  stubs `zizmor` on `PATH` to exercise all five branches (online success, fatal-failure fallback, a
+  real finding still failing without fallback, no-token offline path, zizmor genuinely absent) without
+  needing network access or a real token.
+- A fresh, thorough round found no further correctness or security issue, and said so directly rather
+  than manufacturing one — but did flag a genuine (non-blocking) documentation gap: verified directly
+  that `scripts/check_pinned_actions.py`'s policy overlaps with zizmor's own `unpinned-uses` audit
+  (`zizmor --no-online-audits` flags an unpinned `actions/checkout@v4` at High confidence, offline, no
+  token needed — the identical case the script exists to catch), and `docs/REPOSITORY.md` didn't
+  explain why both checks exist. Added a note: the overlap is intentional — `lint-actions-pinning` has
+  no dependency and is the one that keeps running (and hard-failing) even in the documented
+  zizmor-not-installed `SKIPPED:` case, so it's the always-live backstop, not redundant dead weight —
+  and that a future divergence between the two checks' definitions of "pinned" would surface as one
+  passing while the other fails on the same workflow, not as a bug in either script.
+
 ### Fix reference-validator anchor slugifier; wire repo-wide check into lint (2026-08-11)
 
 - `scripts/validate_references.py`'s `github_style_slug()` had two bugs, both found while re-auditing

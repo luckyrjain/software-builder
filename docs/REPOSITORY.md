@@ -363,6 +363,78 @@ external link) surfaces even when no PR is open against `main` — see [#10](htt
 Run the exact same checks locally before pushing: `make setup` once (installs Python deps + the
 shellcheck pre-commit hook), then `make lint`.
 
+### Security workflows
+
+Proportionate to what this repo actually executes — shell/Python helpers (`scripts/`, `*/scripts/`),
+an installer that writes outside the repo tree, and skill docs that describe MCP write-authority
+workflows — six additional, independent checks run alongside `lint.yml`:
+
+| Workflow | What it catches | Trigger |
+|----------|------------------|---------|
+| [`dependency-review.yml`](../.github/workflows/dependency-review.yml) | A PR introducing a dependency with a known high-severity advisory | `pull_request` |
+| [`codeql.yml`](../.github/workflows/codeql.yml) | Python static-analysis findings (injection, path traversal, etc.) — every tracked `.py` file repo-wide, not just `scripts/`/`*/scripts/` (the motivating case, but not the only Python this repo carries — skill-local test files and a couple of runtime templates live outside those dirs too) | push, PR, weekly |
+| [`secret-scan.yml`](../.github/workflows/secret-scan.yml) | A committed credential/token (Gitleaks), plus a self-test proving the scanner still fires | push, PR, weekly |
+| [`scorecard.yml`](../.github/workflows/scorecard.yml) | OpenSSF Scorecard supply-chain posture (branch protection, pinned deps, etc.) | push to `main`, weekly |
+| `make lint`'s `lint-actions-security` step | Actions-YAML risks (script injection via untrusted `${{ }}` expansion, a workflow with **no** `permissions:` block at all, credential persistence) via [zizmor](https://docs.zizmor.sh/), default (`regular`) persona | every `make lint` run |
+| `make lint`'s `lint-actions-pinning` step | Any `uses:` reference not pinned to a full commit SHA (a mutable tag can be repointed after review) | every `make lint` run |
+
+The last two run locally too — `scripts/check_pinned_actions.py` needs no extra dependency.
+`lint-actions-security` needs `zizmor`, installed from `requirements.lock` by `make setup`; if it
+isn't on `PATH` (e.g. you skipped `make setup`), the target prints a `SKIPPED:` line to stderr and
+`make lint` still exits 0 — the Actions-YAML security lint silently did not run. This mirrors how
+`lint-framework`'s `pytest` step already behaves when `pytest` isn't installed locally; CI always has
+both installed via `requirements.lock`, so this gap is local-only. Separately, without a
+`GH_TOKEN`/`GITHUB_TOKEN` in your shell, `lint-actions-security` falls back to
+`zizmor --no-online-audits` (skips checks that need live GitHub API access, e.g. verifying an action
+ref against its upstream tag history) — CI always runs the full set via the workflow's own token. A
+token that's present but the online audit still can't reach the GitHub API (a transient network blip
+or rate limit, distinguished from a real finding by zizmor's own `fatal: no audit was performed`
+error) triggers the same offline fallback rather than failing the whole `make lint` run — this keeps a
+GitHub-side hiccup from blocking a release (`release.yml`'s lint step now runs online-audit-capable)
+on something unrelated to the actual code.
+
+`lint-actions-pinning`'s "pin every `uses:` to a full commit SHA" policy overlaps with zizmor's own
+`unpinned-uses` audit — confirmed directly: `zizmor --no-online-audits` flags an unpinned
+`actions/checkout@v4` at High confidence with no token needed, the same case
+`scripts/check_pinned_actions.py` catches. The overlap is intentional, not an oversight:
+`lint-actions-pinning` has no dependency and still runs (and still hard-fails `make lint`) in the
+`SKIPPED:` case above where zizmor isn't installed locally, so it's the backstop that's always live.
+Because both checks separately encode the same policy, a future change to either one's definition of
+"pinned" could make them disagree on the same workflow — that would show up as one check failing and
+the other passing, not as a bug in either script.
+
+zizmor's default persona flags a workflow with no `permissions:` block at all, but does **not** flag
+permissions that are merely broader than necessary while still present (e.g. workflow-level
+`contents: write` on a single-job workflow, which zizmor's stricter `--persona=auditor` would flag as
+better expressed at the job level) — `make lint` doesn't pass that flag today. Not a gap unique to
+this repo's setup; a deliberate default/strict split zizmor itself ships with.
+
+**Secret-scan negative test.** `secret-scan.yml`'s `negative-test` job proves the scanner still
+detects a known-bad pattern, independent of whether this run's actual repo content is clean. The
+fixture is a random AWS-access-key-ID-shaped string (`AKIA` + 16 characters from gitleaks' own
+`aws-access-token` regex's character class), generated fresh every run — **not** AWS's well-known
+`AKIAIOSFODNN7EXAMPLE` placeholder, which gitleaks' own default config now allowlists (a
+`.+EXAMPLE$` rule, added precisely because that string is so widely recognized as a non-functional
+example) — using it would make this negative test pass even if real-leak detection were broken. The
+fixture is generated at CI-run-time and scanned in isolation; it is **not** committed to git history,
+deliberately. Two reasons: it avoids permanently storing a secret-shaped string in the repository,
+and it sidesteps an unknown risk noted below — whether a committed one would trip this repo's own
+push protection.
+
+**Native GitHub secret scanning / push protection: unverified, and likely off.** No tool available to
+this effort could read the repository's Code Security settings directly. One indirect signal: a
+request to run GitHub's secret-scanning check against this repository returned *"Repository does not
+have GitHub Advanced Security enabled"* — which suggests native secret scanning / push protection are
+not active (GHAS covers those on private repos; a public repo can still have push protection toggled
+on separately, so this isn't conclusive). **A repo admin should confirm and toggle these on** at
+**Settings → Code security → Secret scanning** — the dedicated `secret-scan.yml` workflow above exists
+specifically because this native coverage couldn't be confirmed.
+
+**Not added as required merge-gate checks (yet).** These are new, and CodeQL/Scorecard in particular
+can be noisy on a first baseline run. Watch a few real runs before deciding whether to add any of
+their job names to the `main` ruleset's required-status-checks list (see the Merge gate section below)
+— `lint` is deliberately the only check documented there as required today.
+
 ### Merge gate — repo-admin settings (GitHub UI only)
 
 **A green `Lint` badge and a ruleset are not the same thing.** CI proves the commit passes
