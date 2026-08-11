@@ -29,7 +29,8 @@ them ever execute a skill. This harness is the first thing in this repo that doe
 
   | Field | Required | Meaning |
   |-------|----------|---------|
-  | `skill`, `case_id`, `description` | yes | same meaning as every other eval tier |
+  | `skill`, `case_id` | yes | same meaning as every other eval tier |
+  | `description` | no | same meaning as every other eval tier — not enforced (defaults to empty), but every real case should have one |
   | `scenario_prompt` | yes | the opening user turn |
   | `tool_defs` | no | Anthropic tool-schema list (`name`, `description`, `input_schema`) the model may call |
   | `mock_tools` | yes | mapping of tool name → canned response, or a list of responses consumed in call order (call N+1 past the list's length is a harness error, not a silent repeat) |

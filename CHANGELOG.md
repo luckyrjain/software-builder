@@ -103,6 +103,15 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
   reverting `main()`'s `except` tuple didn't actually fail the test — silently vacuous. Fixed by
   adding `transcript_assertions` to the test's live case so it reaches the real `OSError` path;
   re-verified the corrected test does fail against the reverted code.
+- A final confirming round found the two new `main()`-level tests genuinely non-flaky (ran the
+  file 5x back to back and in reversed order — every test uses `tmp_path`, no shared state
+  survives between tests), confirmed `evals/live/squad-map/single-repo-clean-map.yaml`'s caveats
+  are still accurate after all five commits' fixes, and — while rereading `LIVE-HARNESS.md`
+  end to end against the current code — found one last, purely cosmetic doc/code mismatch present
+  since the very first commit: the live-case field table listed `description` as `Required: yes`
+  alongside `skill`/`case_id`, but `_REQUIRED_LIVE_CASE_KEYS` never included it (same optional,
+  defaults-to-empty treatment as every other eval tier's `description` field). Split the table row
+  to say so accurately.
 - `evals/live/squad-map/single-repo-clean-map.yaml` is an illustrative example fixture proving the
   format end-to-end (not run live in CI, not claimed to match squad-map's real MCP tool surface —
   explicitly labeled as a draft to confirm before treating as a certified case, per
