@@ -83,6 +83,47 @@ def test_gate_decision_recorded_as_event() -> None:
     assert result.events[1] == {"type": "outcome", "status": "human_action_required"}
 
 
+def test_multiple_tool_calls_in_one_turn_mixing_real_tool_gate_and_outcome() -> None:
+    # A single turn can bundle a real (mocked) tool call, a gate decision, and the final outcome
+    # together — the model is allowed to call several tools before its next response. All three
+    # must be recorded as separate events in the order the model emitted them, the real tool call
+    # must still be routed to its mock response, and the run must terminate on this one turn since
+    # record_outcome is among the calls (no second client.send() should occur).
+    client = ScriptedModelClient(
+        [
+            ScriptedTurn(
+                tool_calls=[
+                    ("list_files", {"dir": "."}),
+                    ("record_gate_decision", {"name": "posting_gate", "decision": "allowed", "reason": "clean"}),
+                    ("record_outcome", {"status": "completed", "output": {"squad": "payments"}}),
+                ],
+            ),
+        ],
+    )
+    mock_tools = load_mock_tools({"list_files": {"files": ["a.py"]}})
+
+    result = run_live_case(
+        system_prompt="be a good skill",
+        scenario_prompt="do the thing",
+        tool_defs=TOOL_DEFS,
+        mock_tools=mock_tools,
+        client=client,
+    )
+
+    assert result.events == [
+        {"type": "tool", "name": "list_files", "args": {"dir": "."}},
+        {"type": "gate", "name": "posting_gate", "decision": "allowed", "reason": "clean"},
+        {"type": "outcome", "status": "completed"},
+    ]
+    assert result.recorded_output == {"squad": "payments", "status": "completed"}
+    assert result.turns_used == 1
+    assert len(client.sent) == 1  # the run terminated on the first turn, no follow-up call made
+
+    # the mocked tool response was genuinely consumed, not skipped because outcome was also present
+    with pytest.raises(LiveHarnessError, match="called more times"):
+        mock_tools.respond("list_files")
+
+
 def test_unknown_tool_gets_error_result_but_run_continues() -> None:
     client = ScriptedModelClient(
         [

@@ -43,6 +43,14 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
   reference to the harness's mutable `messages` list rather than a snapshot, so assertions on an
   earlier turn's message state were silently seeing later turns' mutations — fixed by snapshotting
   the list per call.
+- A review round found a real test-coverage gap despite that discipline: no test exercised a single
+  turn where the model calls multiple tools at once — the exact scenario a real skill hits when it
+  bundles a mocked tool call, `record_gate_decision`, and `record_outcome` together. The reviewer
+  confirmed by hand-tracing and executing the harness that the shipped code already handles this
+  correctly (all events recorded in emitted order, the real tool call still routed to its mock
+  response, the run terminating on that one turn without a follow-up `client.send()`), but nothing
+  proved it automatically. Added
+  `test_multiple_tool_calls_in_one_turn_mixing_real_tool_gate_and_outcome`.
 - `evals/live/squad-map/single-repo-clean-map.yaml` is an illustrative example fixture proving the
   format end-to-end (not run live in CI, not claimed to match squad-map's real MCP tool surface —
   explicitly labeled as a draft to confirm before treating as a certified case, per
