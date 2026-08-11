@@ -55,10 +55,12 @@ def test_source_tree_exclude_skips_historical_doc_tree(tmp_path: Path) -> None:
 
 
 def test_source_tree_exclude_handles_multiple_roots(tmp_path: Path) -> None:
-    # The real invocation (make lint's lint-framework target) passes one --exclude per
-    # registered skill directory plus docs/superpowers — verify several excludes combine
-    # correctly (each skips only its own subtree) rather than only ever being tested with
-    # a single exclude root.
+    # Exercises the generic multi-root --exclude mechanism (an earlier approach passed one
+    # --exclude per registered skill directory here, before that was reverted for dropping
+    # coverage of files outside each skill's legacy lint globs — see CHANGELOG.md). The real
+    # lint-framework invocation only passes --exclude docs/superpowers --exclude
+    # docs/skill-framework today, but several simultaneous excludes (each skipping only its
+    # own subtree) is still worth covering generically rather than only ever with one root.
     (tmp_path / "docs" / "superpowers").mkdir(parents=True)
     (tmp_path / "docs" / "superpowers" / "old-plan.md").write_text(
         "Broken: [missing](./missing.md)\n",

@@ -65,7 +65,7 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
   minimal `validate_references.py --source-tree . --exclude docs/superpowers --exclude
   docs/skill-framework` — both excludes verified to have zero coverage loss (`docs/skill-framework`'s
   entire Markdown surface, `README.md` + `shared/*.md`, is exactly and fully covered by the dedicated
-  `lint-dangling-md-links.sh` step immediately before it in the same target; `docs/superpowers` is
+  `lint-dangling-md-links.sh` step earlier in the same target; `docs/superpowers` is
   historical/exempt per `docs/history/README.md`). Verified clean with skill directories back in
   scope — the repo currently has zero non-ASCII-letter headings anywhere, so the anchor-disagreement
   risk this whole exclude mechanism defends against is not live today either way; the difference is
