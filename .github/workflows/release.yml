@@ -56,6 +56,11 @@ jobs:
         run: python3 scripts/verify_release_tag.py "$RELEASE_TAG"
 
       - name: Lint and package release
+        env:
+          # Without this, lint-actions-security's zizmor step silently falls back to
+          # --no-online-audits here (unlike lint.yml, which already sets this) — a release run
+          # is exactly the one place this check should run at full strength.
+          GH_TOKEN: ${{ github.token }}
         run: |
           make lint
           make package-release

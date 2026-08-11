@@ -71,6 +71,26 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
   (confirmed: skill-local test files and two `domain-comprehension/templates/postman/*.py` runtime
   templates live outside those directories too) — reworded to match actual, intentionally broader,
   behavior rather than narrowing the workflow to match the doc.
+- A further review round, independently re-deriving each of the above rather than just re-checking
+  them, found three more issues:
+  1. The `negative-test` job's random-canary generator, `tr -dc 'A-Z2-7' < /dev/urandom | head -c 16`,
+     dies with SIGPIPE under GitHub Actions' default `bash -eo pipefail` — `head` closing the pipe once
+     it has 16 bytes sends `tr` SIGPIPE, and `pipefail` surfaces that non-zero exit as the pipeline's
+     status even though `head` itself succeeded, so `set -e` aborted the step on every single run,
+     before the fixture was even written. Reproduced 5/5 with a matching shell invocation. Fixed by
+     reading in a loop from bounded `head -c 64 /dev/urandom` calls (a fixed-size device-file read,
+     not a piped generator process, so no signal is ever involved) until 16 valid characters
+     accumulate, then slicing with bash's own `${suffix:0:16}` — verified clean across 10 runs.
+  2. `release.yml`'s `make lint` step ran before `GH_TOKEN` was exported (that only happened in the
+     later "Upload release assets" step), so `lint-actions-security` silently fell back to
+     `--no-online-audits` there — contradicting the "CI always runs the full set" claim, which was
+     only actually true for `lint.yml`. Fixed by exporting `GH_TOKEN: ${{ github.token }}` on
+     `release.yml`'s lint step too.
+  3. `zricethezav/gitleaks:v8.30.1` in the `negative-test` job's `docker run` was a mutable tag, not
+     pinned by digest — inconsistent with this same change's own rationale for full-SHA-pinning every
+     `uses:` reference (`lint-actions-pinning` doesn't cover this, since a `docker run` image argument
+     isn't a `uses:` field). Resolved the image's immutable manifest digest directly from the registry
+     and pinned to `zricethezav/gitleaks@sha256:c00b6bd0...` instead.
 
 ### safe-output.md Rule 4: single-backtick escape gap (2026-08-09)
 
