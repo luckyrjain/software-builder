@@ -19,11 +19,13 @@ def update_marker_block(text: str, start: str, end: str, content: str) -> str:
 
 
 def update_readme_badge(readme: str, count: int) -> str:
-    # The generated value must never sit *inside* the badge's image destination — GitHub's HTML
-    # comment stripping runs on the raw comment tags before the surrounding `![alt](url)` is
-    # parsed, and previously left `<!-- skills-count:start -->23<!-- skills-count:end -->` fused
-    # into the URL itself, corrupting the image syntax so it rendered as broken literal text with
-    # a stray auto-link instead of a badge (reproduced against the real rendered GitHub page).
+    # The generated value must never sit *inside* the badge's image destination. CommonMark's
+    # grammar for a bare (non-`<...>`-bracketed) link/image destination forbids literal whitespace;
+    # `<!-- skills-count:start -->23<!-- skills-count:end -->` fused into the URL contains spaces
+    # inside the comment tags themselves, which broke the destination outright and made the whole
+    # `![alt](url)` fall back to literal text plus a stray auto-link on the real rendered GitHub
+    # page — independent of comment-stripping timing (confirmed: the identical tags *without*
+    # spaces parse into a working, if oddly percent-encoded, image; the spaces are what break it).
     # Keeping the whole image on its own line, bracketed by the markers on their own lines too,
     # keeps the comments unambiguously block-level and the image intact.
     badge_block = f"\n![Skills](https://img.shields.io/badge/skills-{count}-blue)\n"
