@@ -126,6 +126,18 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
      current pin in this repo uses uppercase, so this caused no live breakage, but it's a real
      correctness bug in a newly-added enforcement script. Fixed to accept both cases; regression test
      added.
+- A fresh review of that fix itself found it had a real bug undermining what it was meant to do:
+  `lint-actions-security`'s new `echo "$$output" | grep -q "fatal: no audit was performed"` runs under
+  Make's default `/bin/sh`, which on this system is `dash` — and dash's builtin `echo` interprets XSI
+  backslash escapes (a `\c` sequence in particular truncates everything after it). Reproduced directly:
+  `output="before\cafter"; echo "$output"` prints only `before` under `dash -c`. Any future zizmor
+  diagnostic containing a backslash sequence (a Windows-style path, a regex snippet) occurring before
+  the fatal-marker text in its own output could silently truncate it out of the captured string before
+  the `grep` ever sees it — defeating the transient-API-hiccup fallback the immediately preceding fix
+  added, and turning a benign network blip back into a hard failure. Fixed by replacing all four
+  `echo "$$output"` call sites with `printf '%s\n' "$$output"`, whose `%s` substitution never
+  reinterprets escapes in the argument — verified the exact failure reproduces with `echo` and is fixed
+  with `printf`, and re-verified both the bad-token and no-token fallback paths still exit 0 end to end.
 
 ### safe-output.md Rule 4: single-backtick escape gap (2026-08-09)
 
