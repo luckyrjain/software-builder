@@ -393,6 +393,16 @@ error) triggers the same offline fallback rather than failing the whole `make li
 GitHub-side hiccup from blocking a release (`release.yml`'s lint step now runs online-audit-capable)
 on something unrelated to the actual code.
 
+`lint-actions-pinning`'s "pin every `uses:` to a full commit SHA" policy overlaps with zizmor's own
+`unpinned-uses` audit — confirmed directly: `zizmor --no-online-audits` flags an unpinned
+`actions/checkout@v4` at High confidence with no token needed, the same case
+`scripts/check_pinned_actions.py` catches. The overlap is intentional, not an oversight:
+`lint-actions-pinning` has no dependency and still runs (and still hard-fails `make lint`) in the
+`SKIPPED:` case above where zizmor isn't installed locally, so it's the backstop that's always live.
+Because both checks separately encode the same policy, a future change to either one's definition of
+"pinned" could make them disagree on the same workflow — that would show up as one check failing and
+the other passing, not as a bug in either script.
+
 zizmor's default persona flags a workflow with no `permissions:` block at all, but does **not** flag
 permissions that are merely broader than necessary while still present (e.g. workflow-level
 `contents: write` on a single-job workflow, which zizmor's stricter `--persona=auditor` would flag as

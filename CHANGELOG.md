@@ -164,6 +164,16 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
   stubs `zizmor` on `PATH` to exercise all five branches (online success, fatal-failure fallback, a
   real finding still failing without fallback, no-token offline path, zizmor genuinely absent) without
   needing network access or a real token.
+- A fresh, thorough round found no further correctness or security issue, and said so directly rather
+  than manufacturing one — but did flag a genuine (non-blocking) documentation gap: verified directly
+  that `scripts/check_pinned_actions.py`'s policy overlaps with zizmor's own `unpinned-uses` audit
+  (`zizmor --no-online-audits` flags an unpinned `actions/checkout@v4` at High confidence, offline, no
+  token needed — the identical case the script exists to catch), and `docs/REPOSITORY.md` didn't
+  explain why both checks exist. Added a note: the overlap is intentional — `lint-actions-pinning` has
+  no dependency and is the one that keeps running (and hard-failing) even in the documented
+  zizmor-not-installed `SKIPPED:` case, so it's the always-live backstop, not redundant dead weight —
+  and that a future divergence between the two checks' definitions of "pinned" would surface as one
+  passing while the other fails on the same workflow, not as a bug in either script.
 
 ### safe-output.md Rule 4: single-backtick escape gap (2026-08-09)
 
