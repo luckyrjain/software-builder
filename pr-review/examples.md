@@ -367,7 +367,7 @@ After Phase 2, print **Review findings** sorted by **rank score (L × I)** desce
 | PRR-DATA-001 | 6 | 🟠 High | H | M | High | `payments/refund.py:88` | `payments/refund.py:88` | Refund amount uses `float` instead of `Decimal` |
 | PRR-API-001 | 3 | 🟡 Medium | L | H | Medium | `payments/config.py:12` | `payments/config.py:12` | Rare admin path missing validation — low traffic |
 
-### Engineering improvements *(not MR defects)*
+### Engineering improvements *(not <review_target_noun> defects)*
 - Add `.gitlab-ci.yml` — CI not configured in repo (non-blocking).
 
 Repository maturity (informational)

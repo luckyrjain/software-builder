@@ -6,8 +6,8 @@ Three modes — different recommendation strategy, same finding pipeline.
 | Mode | Trigger | `review_metadata.review_mode` |
 |------|---------|-------------------------------|
 | **Pre-merge** | Open MR (`state: opened`) | `pre_merge` |
-| **Incremental** | Open MR + prior bot review on same MR | `incremental` |
-| **Post-merge (retrospective)** | `state: merged` + user confirms audit | `retrospective` |
+| **Incremental** | Open PR/MR + prior bot review on the same target | `incremental` |
+| **Post-merge (retrospective)** | Merged PR/MR + user confirms audit | `retrospective` |
 
 Also set `audit_type: retrospective` when `review_mode: retrospective` (dashboard alias).
 
@@ -80,7 +80,7 @@ review_context:
 
 Prose after Decision gates:
 
-> **Post-merge audit** — no action required unless a follow-up MR is planned.
+> **Post-merge audit** — no action required unless a follow-up PR/MR is planned.
 
 Do **not** label retrospective audits as generic 💬 Comment — use **Retrospective observation** in the
 Decision gates **Recommendation** row and narrative.
@@ -90,7 +90,7 @@ Decision gates **Recommendation** row and narrative.
 | Rule | Behavior |
 |------|----------|
 | Inflate High? | **No** — reserve High/Critical for genuine incident / rollback material |
-| Process findings | Medium/Low — merge-before-CI, missing Jira, MR template gaps |
+| Process findings | Medium/Low — merge-before-CI, missing Jira, review-target template gaps |
 | Code quality | Medium/Low when implementation appears correct but tests/docs/process gap |
 | Code blockers table | May show *Code blockers: None* with process-only findings elsewhere |
 
@@ -209,7 +209,8 @@ recommendation: retrospective_observation
 
 ## Posting (Phase 3–4)
 
-Retrospective audits may post summary notes; inline threads optional. Warn: *"MR is merged — comments
-are for follow-up tracking, not merge gate."*
+Retrospective audits may post summary comments; inline threads are optional. Providerize the warning:
+GitHub uses *"PR is merged — comments are for follow-up tracking, not a merge gate."*; GitLab uses
+*"MR is merged — comments are for follow-up tracking, not a merge gate."*
 
 Cross-ref: `reference/executive-summary.md`, `reference/review-metrics.md`, `reference/incremental-rerun.md`.

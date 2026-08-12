@@ -11,14 +11,16 @@ Inputs produces this immutable object before Phase 0:
 review_target:
   provider: github | gitlab
   host: github.com | github.example.com | gitlab.com | gitlab.example.com
+  authority: github.com:443 | github.example.com:8443 | gitlab.com:443 | gitlab.example.com:9443
   repository_path: owner/repo | group/project
   review_number: 482
   web_url: https://host/...
 ```
 
 Use **PR #N** for GitHub and **MR !N** for GitLab in rendered output. An explicit review URL wins over
-`origin`; if that supplied URL is unsupported or unconfirmed, stop without consulting `origin`. The host
-never changes after Inputs. A bare number is valid only when the provider and repository are unambiguous.
+`origin`; if that supplied URL is unsupported or unconfirmed, stop without consulting `origin`. The
+hostname and normalized authority (lowercase hostname plus explicit/effective port) never change after
+Inputs. A bare number is valid only when the provider, authority, and repository are unambiguous.
 
 For a custom enterprise hostname that cannot be inferred from its name, use the connected provider MCP/App
 descriptor or exact-host `gh auth status` to classify the host before accepting a current-branch or bare-
@@ -50,6 +52,8 @@ request to GitHub.com.
 
 - Every finding remains anchored to a changed diff line.
 - Re-fetch the target immediately before the first provider write and compare its head SHA with Phase 1.
-- On a mismatch, return `REVISION_MISMATCH` and post nothing.
+- On a mismatch, return `REVISION_MISMATCH` and perform zero provider writes in `full`, `summary-only`,
+  `general-only`, and draft modes. Never remap positions, degrade to a summary, or continue a partial
+  batch against the new revision; restart the review from Phase 1.
 - The skill may write comments only. It never approves, requests changes, submits a review verdict,
   merges, closes, or reopens a GitHub PR or GitLab MR.

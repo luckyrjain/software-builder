@@ -137,11 +137,11 @@ merge via API; recommend a human maintainer gate and link GitLab approval rules 
 
 ## Phase 4 — Post (when mode allows)
 
-**GitLab-only retry policy:** GitLab posting calls (`create_merge_request_thread`, `create_note`,
-`create_workitem_note`, `create_draft_note`) follow the 1-retry policy stated once in
-[phase-0.md § MCP retry policy](phase-0.md#mcp-retry-policy-all-phases) — retry once on `timeout` /
-`rate_limited` / `server_error` before a thread is counted as a failure under **Partial-post recovery**
-below.
+**Write retry policy:** provider comment calls are non-idempotent and do not use the global read retry.
+After an ambiguous `timeout` or `server_error`, read back the relevant comments/notes and match the
+deterministic marker plus body hash. Treat a matching comment as success; retry at most once only when
+absence is proven. Never issue a duplicate POST. A deterministic rejection is handled by the provider
+fallback below without blind retries.
 
 Post **only** findings that survived Phase 2 finding dedupe — never re-post same location, root cause,
 stack, or API misuse already on the MR. **Cross-session dedupe:** before posting, re-fetch MR notes and
@@ -192,8 +192,9 @@ Summary template: `reference/comment-templates.md`. First line: `<!-- cursor-pr-
 the **actual** posting mode from Phase 0 for future re-reviews.
 
 **Always** re-fetch `get_merge_request` immediately before the first Phase 4 post and compare
-`diff_refs.head_sha` to the SHA captured in Phase 1 step 1. If it changed, follow
-`reference/gitlab-inline-comments.md` §SHA staleness (rebuild positions or summary-only).
+`diff_refs.head_sha` to the SHA captured in Phase 1 step 1. On any mismatch, return
+`REVISION_MISMATCH` and perform zero provider writes in `full`, `summary-only`, `general-only`, and
+draft modes. Do not remap positions, degrade to a summary, or continue; restart at Phase 1.
 
 **Draft batch mode:** only when `create_draft_note` exists (`full` mode).
 

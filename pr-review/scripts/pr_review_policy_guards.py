@@ -53,16 +53,80 @@ def apply_confidence_cap(
     return proposed
 
 
-def _remote_host(url: str) -> str | None:
-    """Return a normalized host for HTTPS, SSH, and SCP-style git remotes."""
+_DEFAULT_PORTS = {"http": 80, "https": 443, "ssh": 22, "git": 9418}
+
+
+def _format_authority(host: str, port: int) -> str:
+    rendered_host = f"[{host}]" if ":" in host and not host.startswith("[") else host
+    return f"{rendered_host}:{port}"
+
+
+def _parsed_url_authority(url: str) -> tuple[str, int, str] | None:
+    parsed = urlparse(url)
+    scheme = parsed.scheme.lower()
+    default_port = _DEFAULT_PORTS.get(scheme)
+    host = (parsed.hostname or "").lower()
+    if not host or default_port is None:
+        return None
+    try:
+        port = parsed.port or default_port
+    except ValueError:
+        return None
+    return host, port, _format_authority(host, port)
+
+
+def _remote_authority(url: str) -> tuple[str, int, str] | None:
+    """Return normalized hostname, effective port, and authority for a git remote."""
     if "://" in url:
-        return (urlparse(url).hostname or "").lower() or None
-    match = re.match(r"(?:[^@]+@)?([^:]+):.+$", url)
-    return match.group(1).lower() if match else None
+        return _parsed_url_authority(url)
+    match = re.fullmatch(r"(?:[^@/:]+@)?([^/:]+):.+", url)
+    if not match:
+        return None
+    host = match.group(1).lower()
+    return host, 22, _format_authority(host, 22)
 
 
-def _normalized_hosts(hosts: set[str] | None) -> set[str]:
-    return {host.lower() for host in (hosts or set())}
+def _configured_authorities(values: set[str] | None, *, default_port: int) -> set[str]:
+    authorities: set[str] = set()
+    for raw_value in values or set():
+        value = raw_value.strip()
+        if not value:
+            continue
+        if "://" in value:
+            parsed = _parsed_url_authority(value)
+            if parsed:
+                authorities.add(parsed[2])
+            continue
+        parsed = urlparse(f"//{value}")
+        host = (parsed.hostname or "").lower()
+        if not host:
+            continue
+        try:
+            port = parsed.port or default_port
+        except ValueError:
+            continue
+        authorities.add(_format_authority(host, port))
+    return authorities
+
+
+def _provider_for_authority(
+    authority: str,
+    *,
+    default_port: int,
+    github_hosts: set[str] | None,
+    gitlab_hosts: set[str] | None,
+) -> Literal["github", "gitlab"] | None:
+    github_authorities = _configured_authorities(github_hosts, default_port=default_port)
+    gitlab_authorities = _configured_authorities(gitlab_hosts, default_port=default_port)
+    github_match = authority == _format_authority("github.com", default_port) or (
+        authority in github_authorities
+    )
+    gitlab_match = authority == _format_authority("gitlab.com", default_port) or (
+        authority in gitlab_authorities
+    )
+    if github_match == gitlab_match:
+        return None
+    return "github" if github_match else "gitlab"
 
 
 def provider_from_remote(
@@ -71,15 +135,24 @@ def provider_from_remote(
     github_hosts: set[str] | None = None,
     gitlab_hosts: set[str] | None = None,
 ) -> tuple[Literal["github", "gitlab"], str] | None:
-    """Classify provider hosts, including configured non-conventional enterprise hosts."""
-    host = _remote_host(url)
-    if not host:
+    """Classify an exact remote authority, including configured enterprise authorities."""
+    parsed = _remote_authority(url)
+    if not parsed:
         return None
-    if host == "github.com" or host in _normalized_hosts(github_hosts):
-        return "github", host
-    if host == "gitlab.com" or host in _normalized_hosts(gitlab_hosts):
-        return "gitlab", host
-    return None
+    host, _port, authority = parsed
+    if "://" in url:
+        default_port = _DEFAULT_PORTS.get(urlparse(url).scheme.lower())
+        if default_port is None:
+            return None
+    else:
+        default_port = 22
+    provider = _provider_for_authority(
+        authority,
+        default_port=default_port,
+        github_hosts=github_hosts,
+        gitlab_hosts=gitlab_hosts,
+    )
+    return (provider, authority) if provider else None
 
 
 def parse_review_url(
@@ -90,29 +163,38 @@ def parse_review_url(
 ) -> dict[str, str | int] | None:
     """Parse a GitHub PR or GitLab MR URL into a provider-neutral target."""
     parsed = urlparse(url)
-    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+    scheme = parsed.scheme.lower()
+    parsed_authority = _parsed_url_authority(url)
+    if scheme not in {"http", "https"} or not parsed_authority:
         return None
+    host, port, authority = parsed_authority
     path = parsed.path.rstrip("/")
     github_match = re.fullmatch(r"/([^/]+)/([^/]+)/pull/(\d+)", path)
-    host = parsed.hostname.lower()
-    is_github_host = host == "github.com" or host in _normalized_hosts(github_hosts)
-    if github_match and is_github_host and int(github_match.group(3)) > 0:
+    provider = _provider_for_authority(
+        authority,
+        default_port=_DEFAULT_PORTS[scheme],
+        github_hosts=github_hosts,
+        gitlab_hosts=gitlab_hosts,
+    )
+    canonical_host = _format_authority(host, port) if port != _DEFAULT_PORTS[scheme] else host
+    if github_match and provider == "github" and int(github_match.group(3)) > 0:
         return {
             "provider": "github",
             "host": host,
+            "authority": authority,
             "repository_path": f"{github_match.group(1)}/{github_match.group(2)}",
             "review_number": int(github_match.group(3)),
-            "web_url": f"{parsed.scheme.lower()}://{host}{path}",
+            "web_url": f"{scheme}://{canonical_host}{path}",
         }
     gitlab_match = re.fullmatch(r"/(.+)/-/merge_requests/(\d+)", path)
-    is_gitlab_host = host == "gitlab.com" or host in _normalized_hosts(gitlab_hosts)
-    if gitlab_match and is_gitlab_host and int(gitlab_match.group(2)) > 0:
+    if gitlab_match and provider == "gitlab" and int(gitlab_match.group(2)) > 0:
         return {
             "provider": "gitlab",
             "host": host,
+            "authority": authority,
             "repository_path": gitlab_match.group(1),
             "review_number": int(gitlab_match.group(2)),
-            "web_url": f"{parsed.scheme.lower()}://{host}{path}",
+            "web_url": f"{scheme}://{canonical_host}{path}",
         }
     return None
 

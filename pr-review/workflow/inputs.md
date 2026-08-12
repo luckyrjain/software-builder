@@ -31,14 +31,16 @@ Server only after a connected GitHub descriptor or exact-host `gh auth status` c
 by substring matching, call GitLab tools for a GitHub target, or default a GHES target to GitHub.com.
 Standard hosts are exactly `github.com` and `gitlab.com`; names such as `github.acme.internal` and
 `gitlab.acme.internal` are not evidence by themselves. Confirm custom GitLab hosts against a connected
-server's exact `GITLAB_API_URL`.
+server's parsed `GITLAB_API_URL`, comparing lowercase hostname plus explicit/effective port by exact
+authority equality.
 
 If the user supplied a URL but its exact host/path is unsupported or unconfirmed, stop as
 unsupported/ambiguous and ask for a supported URL or an explicit provider descriptor. **Never inspect or
 fall back to `origin` after an explicit URL was supplied**; an unrelated checkout must not reclassify it.
 
-Resolve to immutable `review_target = {provider, host, repository_path, review_number, web_url}`.
-Populate all five fields before Phase 0; when starting from a number/branch/list result, fetch metadata
+Resolve to immutable
+`review_target = {provider, host, authority, repository_path, review_number, web_url}`. Populate all six
+fields before Phase 0; when starting from a number/branch/list result, fetch metadata
 and use its canonical URL for `web_url`. Keep `{project_id, merge_request_iid}` for GitLab compatibility.
 A bare number is valid only when its provider and repository are unambiguous.
 

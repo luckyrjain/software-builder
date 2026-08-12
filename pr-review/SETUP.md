@@ -322,9 +322,15 @@ export GITLAB_SECONDARY_TOKEN="glpat-..."
 }
 ```
 
-**How the skill picks the right server:** when you pass a full MR URL (e.g. `https://gitlab.skillzi.org/group/repo/-/merge_requests/42`), the skill matches the host to the server whose `GITLAB_API_URL` starts with that host. If you pass only an IID (`!42`), the skill derives the project from `git remote get-url origin` and matches by host — make sure your local `origin` points to the correct instance.
+**How the skill picks the right server:** when you pass a full MR URL (e.g.
+`https://gitlab.skillzi.org/group/repo/-/merge_requests/42`), the skill parses each `GITLAB_API_URL`
+and compares its normalized authority (lowercase hostname plus explicit/effective port) for exact
+equality. It never uses a substring, prefix, or hostname-only match. If you pass only an IID (`!42`),
+the skill derives the project and authority from `git remote get-url origin` — make sure your local
+`origin` points to the correct instance and port.
 
-**Phase 0 warning:** the skill warns if the MR URL host doesn't match any configured `GITLAB_API_URL`. If you see this, check that the right server entry exists in `mcp.json`.
+**Phase 0 warning:** the skill warns if the MR URL authority doesn't uniquely match a configured
+`GITLAB_API_URL`. If you see this, check that the right server entry and port exist in `mcp.json`.
 
 ### Jira / Atlassian
 

@@ -67,7 +67,10 @@ class TestConfidenceCaps:
 
 class TestProviderRouting:
     def test_detects_github_dot_com_remote(self):
-        assert provider_from_remote("git@github.com:acme/repo.git") == ("github", "github.com")
+        assert provider_from_remote("git@github.com:acme/repo.git") == (
+            "github",
+            "github.com:22",
+        )
 
     def test_rejects_unconfirmed_github_prefixed_enterprise_remote(self):
         assert provider_from_remote("ssh://git@github.acme.internal/platform/payments.git") is None
@@ -76,7 +79,7 @@ class TestProviderRouting:
         assert provider_from_remote(
             "git@git.company.internal:platform/payments.git",
             github_hosts={"git.company.internal"},
-        ) == ("github", "git.company.internal")
+        ) == ("github", "git.company.internal:22")
 
     def test_detects_confirmed_custom_gitlab_remote(self):
         assert provider_from_remote(
@@ -84,11 +87,52 @@ class TestProviderRouting:
             gitlab_hosts={"gitlab.acme.internal"},
         ) == (
             "gitlab",
-            "gitlab.acme.internal",
+            "gitlab.acme.internal:443",
         )
 
     def test_rejects_unconfirmed_gitlab_prefixed_enterprise_remote(self):
         assert provider_from_remote("https://gitlab.acme.internal/platform/payments.git") is None
+
+    def test_rejects_evil_suffix_that_only_contains_a_provider_hostname(self):
+        assert provider_from_remote("https://github.com.evil.example/acme/repo.git") is None
+        assert parse_review_url("https://gitlab.com.evil.example/acme/repo/-/merge_requests/1") is None
+
+    def test_remote_authority_is_case_normalized_and_preserves_non_default_port(self):
+        assert provider_from_remote(
+            "ssh://git@Forge.Company.Internal:2222/platform/payments.git",
+            github_hosts={"forge.company.internal:2222"},
+        ) == ("github", "forge.company.internal:2222")
+
+    def test_same_hostname_with_distinct_ports_routes_to_distinct_providers(self):
+        assert provider_from_remote(
+            "https://forge.company.internal:8443/platform/payments.git",
+            github_hosts={"forge.company.internal:8443"},
+            gitlab_hosts={"forge.company.internal:9443"},
+        ) == ("github", "forge.company.internal:8443")
+        assert provider_from_remote(
+            "https://forge.company.internal:9443/platform/payments.git",
+            github_hosts={"forge.company.internal:8443"},
+            gitlab_hosts={"forge.company.internal:9443"},
+        ) == ("gitlab", "forge.company.internal:9443")
+
+    def test_wrong_port_never_falls_back_to_hostname_only_match(self):
+        assert (
+            provider_from_remote(
+                "https://forge.company.internal:9443/platform/payments.git",
+                github_hosts={"forge.company.internal:8443"},
+            )
+            is None
+        )
+
+    def test_overlapping_provider_authority_is_ambiguous(self):
+        assert (
+            provider_from_remote(
+                "https://forge.company.internal:8443/platform/payments.git",
+                github_hosts={"forge.company.internal:8443"},
+                gitlab_hosts={"forge.company.internal:8443"},
+            )
+            is None
+        )
 
     def test_explicit_url_provider_wins_over_origin(self):
         assert provider_from_target(
@@ -115,6 +159,7 @@ class TestProviderRouting:
         ) == {
             "provider": "github",
             "host": "github.acme.internal",
+            "authority": "github.acme.internal:443",
             "repository_path": "platform/payments",
             "review_number": 91,
             "web_url": "https://github.acme.internal/platform/payments/pull/91",
@@ -124,10 +169,43 @@ class TestProviderRouting:
         assert parse_review_url("https://gitlab.com/platform/payments/-/merge_requests/17") == {
             "provider": "gitlab",
             "host": "gitlab.com",
+            "authority": "gitlab.com:443",
             "repository_path": "platform/payments",
             "review_number": 17,
             "web_url": "https://gitlab.com/platform/payments/-/merge_requests/17",
         }
+
+    def test_canonical_web_url_preserves_confirmed_non_default_port(self):
+        assert parse_review_url(
+            "HTTPS://Forge.Company.Internal:8443/platform/payments/pull/91/",
+            github_hosts={"https://forge.company.internal:8443"},
+        ) == {
+            "provider": "github",
+            "host": "forge.company.internal",
+            "authority": "forge.company.internal:8443",
+            "repository_path": "platform/payments",
+            "review_number": 91,
+            "web_url": "https://forge.company.internal:8443/platform/payments/pull/91",
+        }
+
+    def test_review_url_rejects_confirmed_hostname_on_wrong_port(self):
+        assert (
+            parse_review_url(
+                "https://forge.company.internal:9443/platform/payments/pull/91",
+                github_hosts={"forge.company.internal:8443"},
+            )
+            is None
+        )
+
+    def test_review_url_overlapping_provider_authority_is_ambiguous(self):
+        assert (
+            parse_review_url(
+                "https://forge.company.internal:8443/platform/payments/pull/91",
+                github_hosts={"forge.company.internal:8443"},
+                gitlab_hosts={"forge.company.internal:8443"},
+            )
+            is None
+        )
 
     def test_rejects_unconfigured_custom_pull_host(self):
         assert parse_review_url("https://forge.company.internal/platform/payments/pull/91") is None
@@ -157,6 +235,71 @@ class TestFindingGates:
 
 
 class TestProviderDocumentationContracts:
+    def test_phase_zero_matches_gitlab_servers_by_parsed_exact_authority(self):
+        phase_zero = (ROOT / "pr-review/workflow/phase-0.md").read_text(encoding="utf-8")
+        assert "parse each\n   configured `gitlab_api_url`" in phase_zero.lower()
+        assert "exact normalized authority equality" in phase_zero
+        assert "substring" in phase_zero
+        assert "ambiguous" in phase_zero
+        inputs = (ROOT / "pr-review/workflow/inputs.md").read_text(encoding="utf-8")
+        adapters = (ROOT / "pr-review/reference/provider-adapters.md").read_text(encoding="utf-8")
+        assert "provider, host, authority, repository_path" in inputs
+        assert "authority: github.com:443" in adapters
+
+    def test_phase_zero_requires_a_complete_provider_read_pair_before_degrading_posting(self):
+        phase_zero = (ROOT / "pr-review/workflow/phase-0.md").read_text(encoding="utf-8")
+        capabilities = (ROOT / "pr-review/reference/mcp-capabilities.md").read_text(encoding="utf-8")
+        combined = phase_zero + capabilities
+        assert "metadata-only" in combined
+        assert "diff-only" in combined
+        assert "complete read pair" in combined
+        assert "read-only" in combined
+        assert "chat-only" in combined
+        assert "writes never compensate for a missing read" in combined
+
+    def test_provider_head_mismatch_is_zero_write_for_every_mode(self):
+        posting = (ROOT / "pr-review/workflow/posting.md").read_text(encoding="utf-8")
+        gitlab_inline = (ROOT / "pr-review/reference/gitlab-inline-comments.md").read_text(
+            encoding="utf-8",
+        )
+        adapters = (ROOT / "pr-review/reference/provider-adapters.md").read_text(encoding="utf-8")
+        combined = posting + gitlab_inline + adapters
+        assert "`REVISION_MISMATCH`" in combined
+        assert "`full`, `summary-only`, `general-only`, and draft" in combined
+        assert "zero provider writes" in combined
+        stale_section = gitlab_inline.split("## SHA staleness", 1)[1]
+        assert "Rebuild inline positions" not in stale_section
+        assert "summary-only posting" not in stale_section
+
+    def test_github_ambiguous_write_failure_uses_readback_not_blind_retry(self):
+        phase_zero = (ROOT / "pr-review/workflow/phase-0.md").read_text(encoding="utf-8")
+        github_inline = (ROOT / "pr-review/reference/github-inline-comments.md").read_text(
+            encoding="utf-8",
+        )
+        combined = phase_zero + github_inline
+        assert "non-idempotent provider writes" in combined.lower()
+        assert "do not blindly retry" in combined
+        assert "deterministic marker and body hash" in combined
+        assert "absence is proven" in combined
+        assert "no duplicate POST" in " ".join(combined.split())
+
+    def test_summary_vocabulary_is_providerized_in_all_review_modes(self):
+        templates = (ROOT / "pr-review/reference/comment-templates.md").read_text(encoding="utf-8")
+        incremental = (ROOT / "pr-review/reference/incremental-rerun.md").read_text(encoding="utf-8")
+        modes = (ROOT / "pr-review/reference/review-modes.md").read_text(encoding="utf-8")
+        examples = (ROOT / "pr-review/examples.md").read_text(encoding="utf-8")
+        metrics = (ROOT / "pr-review/reference/review-metrics.md").read_text(encoding="utf-8")
+        not_raised = (ROOT / "pr-review/reference/not-raised.md").read_text(encoding="utf-8")
+        combined = templates + incremental + modes + examples + metrics + not_raised
+        assert "not MR defects" not in combined
+        assert "not PR defects" not in combined
+        assert "not <review_target_noun> defects" in templates
+        assert "initial, incremental, and" in templates
+        assert "GitHub issue/review" in incremental
+        assert "comments; GitLab MR notes/discussion threads" in incremental
+        assert 'GitHub uses *"PR is merged' in modes
+        assert 'GitLab uses\n*"MR is merged' in modes
+
     def test_github_cli_discovery_has_bound_and_truncation_stop(self):
         inputs = (ROOT / "pr-review/workflow/inputs.md").read_text(encoding="utf-8")
         assert "--limit 1000" in inputs

@@ -37,3 +37,13 @@ remain authoritative.
 - Re-fetch PR metadata before the first write. If `headRefOid` differs from the captured SHA, do not post.
 - Continue independent inline posts after one failure. Record failures and mark the review incomplete.
 - Never call GitHub submit-review, approve, request-changes, merge, close, or reopen operations.
+
+### Ambiguous write recovery
+
+GitHub inline-comment and issue-comment POSTs are non-idempotent and are exempt from the global MCP
+read retry. Before each call, hash the final sanitized body (SHA-256) and include a deterministic marker
+containing the target head, finding/summary identity, and body hash. If the call returns `timeout` or
+`server_error`, do not blindly retry: read back the relevant PR review comments or issue comments and
+match that deterministic marker and body hash. A match proves success. Retry at most once only when
+absence is proven by a complete readback; otherwise report the ambiguous result and make no duplicate
+POST. Rate-limit responses that prove no request was accepted may be retried after the advertised delay.

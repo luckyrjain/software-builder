@@ -200,8 +200,10 @@ The agent reads whichever override applies in Phase 4 instead of the default **1
 or summary note). Compare `diff_refs.head_sha` to the SHA captured in Phase 1 step 1 (when gathering
 began). If the author pushed during review:
 
-1. Rebuild inline positions from the fresh `diff_refs` and updated diff, or
-2. Fall back to summary-only posting with `file:line` references.
+1. Return `REVISION_MISMATCH` immediately.
+2. Perform zero provider writes in `full`, `summary-only`, `general-only`, and draft modes.
+3. Restart from Phase 1 against the new head before offering posting again.
 
-Never post inline threads anchored to a stale `head_sha` — GitLab will reject them or attach to the
-wrong revision.
+Never rebuild positions, degrade to a summary, or continue any partial batch after this mismatch. The
+provider invariant wins over posting convenience: no comment body prepared for the stale review may be
+posted against the new revision.

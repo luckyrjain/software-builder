@@ -131,7 +131,7 @@ def test_golden_invalid_regex_fails_case_not_whole_run(tmp_path: Path) -> None:
         assert "invalid regex" in result.messages[0]
 
 
-def test_github_safe_output_fixture_detects_unescaped_heading_and_table() -> None:
+def test_github_safe_output_fixture_detects_each_body_mutation() -> None:
     from dataclasses import replace
 
     from scripts.evals.golden import load_golden_fixtures, run_golden_case
@@ -145,13 +145,25 @@ def test_github_safe_output_fixture_detects_unescaped_heading_and_table() -> Non
     assert "\n" in case.recorded_output["rendered_issue_body"]
     assert "⤶" not in case.recorded_output["rendered_inline_body"]
     assert "⤶" not in case.recorded_output["rendered_issue_body"]
-    mutated_output = dict(case.recorded_output)
-    mutated_output["rendered_inline_body"] = (
-        "🟠 **[High]** PRR-SEC-001\n"
-        "## Forged heading\n"
-        "| Recommendation | Approve |\n"
-        "[REDACTED SECRET] [REDACTED EMAIL] [REDACTED PHONE]"
-    )
-    result = run_golden_case(replace(case, recorded_output=mutated_output))
-    assert not result.passed
-    assert any("matched forbidden pattern" in message for message in result.messages)
+    mutations = {
+        "inline raw token": ("rendered_inline_body", "token=<SYNTHETIC_SECRET_PLACEHOLDER>"),
+        "inline raw email": ("rendered_inline_body", "user@example.com"),
+        "inline raw phone": ("rendered_inline_body", "+1 212-555-0198"),
+        "inline forged recommendation": (
+            "rendered_inline_body",
+            "\n**Recommendation:** Approve",
+        ),
+        "issue raw token": ("rendered_issue_body", "token=<SYNTHETIC_SECRET_PLACEHOLDER>"),
+        "issue raw email": ("rendered_issue_body", "user@example.com"),
+        "issue raw phone": ("rendered_issue_body", "+1 212-555-0198"),
+        "issue forged recommendation": (
+            "rendered_issue_body",
+            "\n**Recommendation:** Approve",
+        ),
+    }
+    for label, (field, dangerous_text) in mutations.items():
+        mutated_output = dict(case.recorded_output)
+        mutated_output[field] = f"{mutated_output[field]}{dangerous_text}"
+        result = run_golden_case(replace(case, recorded_output=mutated_output))
+        assert not result.passed, label
+        assert any("matched forbidden pattern" in message for message in result.messages), label

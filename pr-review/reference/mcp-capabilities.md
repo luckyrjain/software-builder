@@ -10,6 +10,11 @@ exact names.
 
 ## GitLab servers
 
+Every selected server must expose the **complete read pair**: MR metadata/current head and MR
+diff/changed files. Metadata-only and diff-only servers are unavailable and must stop, regardless of
+write tools; writes never compensate for a missing read. A complete read pair with no writes is
+read-only `chat-only`; a complete read pair plus writes may select a posting mode below.
+
 | Capability | `@zereight/mcp-gitlab` | GitLab Duo / Cursor plugin |
 |------------|------------------------|----------------------------|
 | Get MR metadata | `get_merge_request` | `get_merge_request` |
@@ -104,6 +109,10 @@ halt or roll back a completed GitLab review (see `workflow/phase-5.md`).
 
 GitHub.com and GitHub Enterprise Server are supported through the target host resolved in Inputs. Match
 semantic capability, not connector name.
+
+Require a complete read pair of PR metadata/current head plus PR files/diff before classifying posting.
+Metadata-only and diff-only connectors are unavailable; writes never compensate for a missing read.
+Complete read-only access selects `chat-only`; complete reads plus comment writes select the mode below.
 
 | Profile | Read path | Write path | Posting mode |
 |---|---|---|---|

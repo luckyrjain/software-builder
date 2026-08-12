@@ -4,18 +4,20 @@ Load this when Phase 1 step 3 recorded an incremental baseline (a prior summary 
 with `<!-- cursor-pr-review -->` plus a recorded `head_sha`). The re-run **decision table** is in
 `workflow/phase-2-3-gate.md` — evaluate there once before Phase 3; dedupe rules live here.
 
-**Cross-session detection:** Phase 1 step 3 scans **all** MR notes and discussion threads — not only
-the current agent session — for prior review markers (`<!-- cursor-pr-review -->`, `review_metadata`
-YAML footer, `**Reviewed:**` timestamp lines, `review_hash`). When any marker is found on the MR,
+**Cross-session detection:** Phase 1 step 3 scans **all** provider comments (GitHub issue/review
+comments; GitLab MR notes/discussion threads) — not only the current agent session — for prior review
+markers (`<!-- cursor-pr-review -->`, `review_metadata` YAML footer, `**Reviewed:**` timestamp lines,
+`review_hash`). When any marker is found on the review target,
 enter incremental mode and dedupe against prior findings even if this is a fresh Claude Code / Cursor
 session.
 
-Review only commits/files **after** the baseline SHA (`get_merge_request_commits`).
+Review only commits/files **after** the baseline SHA (the selected provider's commits read operation;
+for GitLab, `get_merge_request_commits`).
 
 **Context cache:** reuse immutable repo context from the first Phase 1 on this `project_id` —
 see `reference/session-context-cache.md`. Invalidate only when a cached file is in the incremental diff.
 
-**Baseline staleness:** if `get_merge_request_commits` shows **> 30 commits** since the recorded
+**Baseline staleness:** if the provider commits read shows **> 30 commits** since the recorded
 `head_sha` baseline, warn before proceeding incrementally — *"Prior review is significantly outdated (N
 commits). Consider a full re-review instead of incremental."* — and offer the full re-review.
 
@@ -137,7 +139,8 @@ When incremental baseline is recorded, the chat summary and posted note **must**
 6. **Coverage** — `changed_files_reviewed/total`, hunks, truncated, skipped
 7. **Review status** — completed normally vs stop-search triggered (with count/reason)
 8. **Review findings** — severity table with **ID**, **Conf**, **Evidence** columns (or **No actionable findings**)
-9. **Engineering improvements** — repo maturity items (omit when empty; not MR defects)
+9. **Engineering improvements** — repo maturity items (omit when empty; not
+   `<review_target_noun>` defects; GitHub `PR`, GitLab `MR`)
 10. **Resolved since last review** — explicit list (include metadata fixes when applied)
 11. **Still open / new** — or *"No new actionable findings in incremental diff"*
 12. **Executive Summary** — Evidence checklist, confidence line, Inference (re-review), gate matrix,
@@ -147,7 +150,8 @@ When incremental baseline is recorded, the chat summary and posted note **must**
     `findings[]`, and v2 platform analytics (`history`, `precision`, `review_quality`, stub
     `repository_health`) for dashboards and future re-reviews
 
-Do **not** re-review the full MR boundary unless baseline is invalid or user requested full re-review.
+Do **not** re-review the full PR/MR boundary unless baseline is invalid or the user requested a full
+re-review.
 An empty incremental findings pass is **correct** — output **No actionable findings** (or *No new
 actionable findings in incremental diff* in the re-review block); never invent feedback.
 
@@ -169,7 +173,8 @@ When Phase 1 step 3 finds a prior `review_metadata` YAML footer, extract fields 
 
 **Compute `history` for Phase 5 footer:**
 
-1. **`approval_iteration`** — count of MR notes whose body contains parseable `review_metadata` + 1.
+1. **`approval_iteration`** — count of provider summary comments whose body contains parseable
+   `review_metadata` + 1.
 2. **`first_review`** — snapshot from earliest such note: `head_sha`, `finished`, `findings_count`
    (length of `findings[]`), `highest_severity`, `recommendation`.
 3. **`prior_review`** — snapshot from the note immediately before current review (latest prior note).

@@ -6,7 +6,8 @@ into one finding. Documents reviewer discipline without recreating noise.
 ## Purpose
 
 Show what was **considered and intentionally not reported** — distinct from findings table and
-**Engineering improvements** (repo maturity, not MR defects).
+**Engineering improvements** (repo maturity, not `<review_target_noun>` defects; GitHub `PR`, GitLab
+`MR`).
 
 ## When to include
 

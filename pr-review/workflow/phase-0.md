@@ -24,7 +24,14 @@ tool. For GitHub, verify a GitHub App/MCP read tool or authenticated `gh` agains
 If unavailable, stop with provider-specific setup guidance; never cross-host fallback.
    > GitLab MCP is not installed. Install it by following **SETUP.md § 3** (Cursor plugin for `general-only` posting, or `@zereight/mcp-gitlab` for full inline comments). Without it this skill cannot run.
 
-   **Multiple GitLab instances:** more than one GitLab MCP server may be connected. When resolving an MR, match the MR URL host to the server whose `GITLAB_API_URL` contains that host — use that server's tools for all calls on that MR. If only a bare IID was given, derive the host from `git remote get-url origin`. Warn the user if no configured server matches the host.
+   **Multiple GitLab instances:** more than one GitLab MCP server may be connected. Parse each
+   configured `GITLAB_API_URL`; normalize its lowercase hostname plus explicit/effective port, and
+   compare it with the MR target by **exact normalized authority equality**. Never use substring,
+   prefix, or hostname-only matching (`gitlab.example:8443` and `gitlab.example:9443` are different
+   authorities, and `gitlab.example.evil` is unrelated). Use only the uniquely matching server's tools
+   for that MR. If zero servers match, warn and stop; if more than one provider/server claims the same
+   authority, treat selection as ambiguous and stop. If only a bare IID was given, derive the exact
+   authority from `git remote get-url origin` before selecting a server.
 
 2. **Jira / Atlassian MCP** (optional): verify by attempting `getAccessibleAtlassianResources`. If unavailable:
    > Jira MCP is not connected. The review will proceed without ticket context — acceptance criteria and linked ticket checks will be skipped. To enable, add the Atlassian MCP to your `mcp.json` (see **SETUP.md § 3 → Jira / Atlassian**).
@@ -34,18 +41,30 @@ requires a GitLab MCP and a GitLab target never requires GitHub access.
 
 ## MCP retry policy (all phases)
 
-**Normative — stated once here, applies to every MCP call in this skill** (this Phase 0 probe, Phase 1
-gather, and Phase 4 posting): follow the shared 1-retry policy —
+Provider writes participate through the readback rule below, not the automatic read retry.
+
+**Normative — stated once here:** Phase 0 probes and Phase 1 reads follow the shared 1-retry policy —
 [mcp-error-handling.md](../../docs/skill-framework/shared/mcp-error-handling.md) §3. `timeout`,
 `rate_limited`, and `server_error` responses get **one retry** (5s delay for `timeout`/`server_error`,
 30s for `rate_limited`); if the retry also fails, mark that tool unavailable for this session and fall
 through to the degraded path — the Prerequisites messages above for GitLab/Jira, or the fallback column
 in `reference/mcp-capabilities.md` for the Phase 1/4 tools listed there. **Do not retry** `auth_failure`,
 `not_configured`, or `invalid_request` — these are deterministic; surface them immediately (see the
-Prerequisites messages above for the GitLab/Jira wording). Phase 1 and Phase 4 reference this section
-rather than restating it.
+Prerequisites messages above for the GitLab/Jira wording).
+
+**Non-idempotent provider writes are exempt from that global retry rule.** A comment POST that returns
+`timeout` or `server_error` may already have succeeded, so do not blindly retry it. Use the selected
+provider's write-recovery procedure: read back the relevant comments/notes, match the deterministic
+marker and body hash, and retry at most once only when absence is proven. This guarantees no duplicate
+POST after an ambiguous response. Phase 4 applies that rule separately at each write boundary.
 
 ## Capability detection
+
+Before posting-mode degradation, require the selected provider's **complete read pair**: target
+metadata/current head plus changed files/diff hunks. A metadata-only or diff-only connector is
+`unavailable`, even if it exposes write tools; writes never compensate for a missing read. A complete
+read pair with no writes is valid read-only access and selects `chat-only`. A complete read pair plus
+the required write capability selects `full`, `summary-only`, or `general-only` as described below.
 
 **GitLab target:** inspect connected GitLab MCP tool descriptors (Cursor Settings → MCP, or each server's
 tool JSON under the agent MCP descriptor path — e.g. `mcps/<server-name>/tools/*.json`) and identify
@@ -61,7 +80,11 @@ which write tools exist. **Do not read `reference/*.md` files in bulk here.** Re
 | **gitlab-official** | `create_workitem_note` only (no `create_merge_request_thread`) | `general-only` |
 | **read-only** | none of the above | `chat-only` |
 
-For **each** connected GitLab MCP server, detect its profile and record `{ server_name, GITLAB_API_URL, posting_mode }`. When the resolved MR belongs to a specific instance, use that instance's server and apply its posting mode for all Phase 4 operations. If two servers have different posting modes, announce the active mode for this MR explicitly.
+For **each** connected GitLab MCP server, first verify `get_merge_request` plus a complete diff/files
+read operation, then detect its profile and record `{ server_name, GITLAB_API_URL, posting_mode }`.
+Metadata-only and diff-only servers are unavailable. When the resolved MR belongs to a specific
+instance, use that instance's server and apply its posting mode for all Phase 4 operations. If two
+servers have different posting modes, announce the active mode for this MR explicitly.
 
 **GitHub target:** inspect GitHub App/MCP descriptors for semantic read (`get_pull_request`, files/diff,
 comments, checks) and comment operations. Prefer the app/MCP. If equivalent read tools are absent, run
@@ -75,7 +98,9 @@ comments, checks) and comment operations. Prefer the app/MCP. If equivalent read
 | CLI read-only | exact-host authenticated `gh` read path | `chat-only` |
 | unavailable | no exact-host read capability | stop |
 
-For GitHub `full`, comments are standalone line comments plus one issue summary; do not use
+The GitHub metadata and files/diff operations are an inseparable read pair: metadata-only and diff-only
+profiles are unavailable; a complete read pair with no comment writes is read-only `chat-only`. For
+GitHub `full`, comments are standalone line comments plus one issue summary; do not use
 `add_review_to_pr`, `APPROVE`, `REQUEST_CHANGES`, or a review-submission endpoint. Record
 `{provider, host, source, read_target, read_diff, read_comments, read_ci, post_inline, post_summary}`
 as `provider_capabilities` and announce the provider, host, and active posting mode.

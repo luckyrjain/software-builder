@@ -9,6 +9,8 @@ Resolve `<review_target_label>` once from the frozen target and use it in every 
 confirmation: GitHub: `PR #<number>`; GitLab: `MR !<iid>`. Never render a GitHub target with an MR/`!IID`
 label or a GitLab target with a PR/`#N` label. Providerize adjacent state/check nouns too: GitHub uses
 PR, draft PR, checks, and merge queue; GitLab uses MR, draft/WIP MR, pipeline, and merge train.
+Set `<review_target_noun>` to `PR` for GitHub and `MR` for GitLab in initial, incremental, and
+retrospective summaries, including Engineering improvements captions.
 
 > **Never include a secret value in a comment body.** If a token, key, password, or other credential
 > appears in the diff, reference its **location only** (`file:line`), state that it must be **rotated**,
@@ -187,7 +189,7 @@ the severity count table (all zeros), use:
 
 No actionable findings.
 
-### Engineering improvements *(omit when empty — not MR defects)*
+### Engineering improvements *(omit when empty — not <review_target_noun> defects)*
 
 - Add the provider's CI workflow running `make lint` — repo has no CI configured (non-blocking).
 - Consider anchor-lint for `](reference/*.md#...)` links in skill docs.
@@ -371,7 +373,7 @@ security gap on a production money path. Request changes before merge.
 
 **<Checks|Pipeline>:** ✅ success on head · **Approvals:** 1/2 required
 
-### Engineering improvements *(not MR defects)*
+### Engineering improvements *(not <review_target_noun> defects)*
 - Add `.gitlab-ci.yml` with `make lint` — CI not configured in repo (non-blocking).
 
 Repository maturity (informational)
@@ -589,7 +591,7 @@ Previous Critical and High findings are resolved; incremental diff limited to do
 
 > **Incremental review complete.** All previously reported issues are resolved, no regressions were found, and the current change set is suitable for approval pending repository CI/policy requirements.
 
-### Engineering improvements *(not MR defects)*
+### Engineering improvements *(not <review_target_noun> defects)*
 - Add the provider's CI workflow running `make lint` — repo has no CI configured.
 
 Repository maturity (informational)
