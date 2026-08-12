@@ -329,9 +329,7 @@ lint-pr-review-scripts:
 lint-pr-review-skill:
 	@echo "lint-pr-review-skill: SKILL.md line count (<= 180)"
 	$(call check_skill_md_length,pr-review,180,keep orchestrator thin; detail in workflow/)
-	@echo "lint-pr-review-skill: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
-	$(call check_workflow_frontmatter,pr-review)
-	@echo "lint-pr-review-skill: route-aware workflow contract"
+	@echo "lint-pr-review-skill: route-aware workflow contract (workflow_version, phase, produces, consumes checked here too)"
 	@python3 -m scripts.validate_workflow_contracts pr-review
 	@echo "lint-pr-review-skill: dangling markdown links"
 	$(call check_dangling_links,pr-review/*.md pr-review/reference/*.md pr-review/workflow/*.md)
@@ -392,9 +390,7 @@ lint-pr-gatekeeper:
 lint-k8s-skill:
 	@echo "lint-k8s-skill: SKILL.md line count (<= 150)"
 	$(call check_skill_md_length,k8s-overprovisioning-datadog,150,keep orchestrator thin; detail in workflow/)
-	@echo "lint-k8s-skill: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
-	$(call check_workflow_frontmatter,k8s-overprovisioning-datadog)
-	@echo "lint-k8s-skill: route-aware workflow contract"
+	@echo "lint-k8s-skill: route-aware workflow contract (workflow_version, phase, produces, consumes checked here too)"
 	@python3 -m scripts.validate_workflow_contracts k8s-overprovisioning-datadog
 	@echo "lint-k8s-skill: dangling markdown links"
 	$(call check_dangling_links,k8s-overprovisioning-datadog/*.md k8s-overprovisioning-datadog/workflow/*.md k8s-overprovisioning-datadog/reference/*.md k8s-overprovisioning-datadog/render/*.md k8s-overprovisioning-datadog/templates/*.md)
@@ -482,9 +478,7 @@ lint-k8s: lint-k8s-skill
 lint-incident-rca:
 	@echo "lint-incident-rca: SKILL.md line count (<= 180)"
 	$(call check_skill_md_length,incident-rca,180,push detail into workflow/ and reference/)
-	@echo "lint-incident-rca: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
-	$(call check_workflow_frontmatter,incident-rca)
-	@echo "lint-incident-rca: route-aware workflow contract"
+	@echo "lint-incident-rca: route-aware workflow contract (workflow_version, phase, produces, consumes checked here too)"
 	@python3 -m scripts.validate_workflow_contracts incident-rca
 	@echo "lint-incident-rca: evidence.example.json parses as JSON"
 	@cache="$(CURDIR)/.pycache-lint-rca"; \
@@ -553,9 +547,7 @@ lint-incident-triage-agent:
 	@echo "lint-incident-triage-agent: disable-model-invocation set (automation entry point, must not compete with incident-rca/squad-map's ambient invocation)"
 	$(call require_disable_model_invocation,incident-triage-agent)
 	@echo "  ok"
-	@echo "lint-incident-triage-agent: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
-	$(call check_workflow_frontmatter,incident-triage-agent)
-	@echo "lint-incident-triage-agent: route-aware workflow contract"
+	@echo "lint-incident-triage-agent: route-aware workflow contract (workflow_version, phase, produces, consumes checked here too)"
 	@python3 -m scripts.validate_workflow_contracts incident-triage-agent
 	@echo "lint-incident-triage-agent: dangling markdown links"
 	$(call check_dangling_links,incident-triage-agent/*.md incident-triage-agent/reference/*.md incident-triage-agent/workflow/*.md)
@@ -1133,9 +1125,7 @@ lint-test-writer:
 lint-prd-architect:
 	@echo "lint-prd-architect: SKILL.md line count (<= 180)"
 	$(call check_skill_md_length,prd-architect,180,)
-	@echo "lint-prd-architect: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
-	$(call check_workflow_frontmatter,prd-architect)
-	@echo "lint-prd-architect: route-aware workflow contract"
+	@echo "lint-prd-architect: route-aware workflow contract (workflow_version, phase, produces, consumes checked here too)"
 	@python3 -m scripts.validate_workflow_contracts prd-architect
 	@echo "lint-prd-architect: required reference files"
 	$(call require_ref_files,prd-architect/reference,skill-contract rationalization-guards phase-index lazy-load-index global-rules depth response-modes section-triggers requirements-format correctness-rules adversarial-review output-contract smoke-test pressure-tests)
