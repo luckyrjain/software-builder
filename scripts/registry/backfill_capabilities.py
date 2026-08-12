@@ -20,7 +20,7 @@ SKILLS_PATH = ROOT / "skills.yaml"
 # skills.yaml's own convention: sequence dashes sit at the same indent as their
 # parent key (37 of 41 existing required/optional blocks use this; the minority
 # get normalized to it on first write — see backfill_skills_yaml_text).
-_STRAY_CAPABILITY_KEYS = ("required", "optional", "degraded_modes")
+_STRAY_CAPABILITY_KEYS = ("required", "optional", "any_of", "degraded_modes")
 
 
 def _make_yaml() -> YAML:
@@ -53,7 +53,12 @@ def _capabilities_valid(entry: dict[str, Any]) -> bool:
         return False
     required = caps.get("required")
     optional = caps.get("optional")
-    if not isinstance(required, list) or not isinstance(optional, list):
+    any_of = caps.get("any_of", [])
+    if not (
+        isinstance(required, list)
+        and isinstance(optional, list)
+        and isinstance(any_of, list)
+    ):
         return False
     return isinstance(caps.get("degraded_modes", {}), dict)
 
@@ -93,6 +98,27 @@ def _capabilities_equal(current: Any, catalog_value: dict[str, Any]) -> bool:
     if len(current_by_name) != len(current_optional) or len(catalog_by_name) != len(catalog_optional):
         return False
     if current_by_name != catalog_by_name:
+        return False
+
+    current_any_of = current.get("any_of", [])
+    catalog_any_of = catalog_value.get("any_of", [])
+    if not (isinstance(current_any_of, list) and isinstance(catalog_any_of, list)):
+        return False
+    if not all(
+        isinstance(item, dict) and isinstance(item.get("name"), str)
+        for item in (*current_any_of, *catalog_any_of)
+    ):
+        return False
+    current_paths = {item["name"]: item for item in current_any_of}
+    catalog_paths = {item["name"]: item for item in catalog_any_of}
+    if len(current_paths) != len(current_any_of) or len(catalog_paths) != len(catalog_any_of):
+        return False
+    if current_paths.keys() != catalog_paths.keys():
+        return False
+    if any(
+        not _capabilities_equal(current_paths[name], catalog_paths[name])
+        for name in current_paths
+    ):
         return False
 
     return (current.get("degraded_modes") or {}) == (catalog_value.get("degraded_modes") or {})
@@ -213,10 +239,13 @@ def validate_capabilities_present(skills_path: Path = SKILLS_PATH) -> list[str]:
             continue
         required = capabilities.get("required", [])
         optional = capabilities.get("optional", [])
+        any_of = capabilities.get("any_of", [])
         if not isinstance(required, list):
             errors.append(f"error: {skill_id}: capabilities.required must be a list")
         if not isinstance(optional, list):
             errors.append(f"error: {skill_id}: capabilities.optional must be a list")
+        if not isinstance(any_of, list):
+            errors.append(f"error: {skill_id}: capabilities.any_of must be a list")
         degraded_modes = capabilities.get("degraded_modes", {})
         if not isinstance(degraded_modes, dict):
             errors.append(f"error: {skill_id}: capabilities.degraded_modes must be a mapping")

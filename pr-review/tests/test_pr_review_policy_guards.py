@@ -13,6 +13,9 @@ from pr_review_policy_guards import (  # noqa: E402
     apply_confidence_cap,
     highest_severity,
     is_github_remote,
+    parse_review_url,
+    provider_from_remote,
+    provider_from_target,
     recommendation_from_highest,
     should_suppress_at_guess_gate,
     should_suppress_at_path_gate,
@@ -61,13 +64,75 @@ class TestConfidenceCaps:
         assert apply_confidence_cap("high", assumed_only=True) == "low"
 
 
-class TestGithubEarlyExit:
-    def test_github_remote_detected(self):
-        assert is_github_remote("git@github.com:acme/repo.git")
-        assert is_github_remote("https://github.com/acme/repo")
+class TestProviderRouting:
+    def test_detects_github_dot_com_remote(self):
+        assert provider_from_remote("git@github.com:acme/repo.git") == ("github", "github.com")
 
-    def test_gitlab_not_github(self):
-        assert not is_github_remote("https://gitlab.com/acme/repo.git")
+    def test_rejects_unconfirmed_github_prefixed_enterprise_remote(self):
+        assert provider_from_remote("ssh://git@github.acme.internal/platform/payments.git") is None
+
+    def test_detects_custom_ghes_remote_when_host_is_configured(self):
+        assert provider_from_remote(
+            "git@git.company.internal:platform/payments.git",
+            github_hosts={"git.company.internal"},
+        ) == ("github", "git.company.internal")
+
+    def test_detects_confirmed_custom_gitlab_remote(self):
+        assert provider_from_remote(
+            "https://gitlab.acme.internal/platform/payments.git",
+            gitlab_hosts={"gitlab.acme.internal"},
+        ) == (
+            "gitlab",
+            "gitlab.acme.internal",
+        )
+
+    def test_rejects_unconfirmed_gitlab_prefixed_enterprise_remote(self):
+        assert provider_from_remote("https://gitlab.acme.internal/platform/payments.git") is None
+
+    def test_explicit_url_provider_wins_over_origin(self):
+        assert provider_from_target(
+            "https://github.com/acme/repo/pull/42",
+            "https://gitlab.com/acme/repo.git",
+        ) == "github"
+
+    def test_explicit_unknown_pull_url_never_falls_back_to_gitlab_origin(self):
+        assert (
+            provider_from_target(
+                "https://forge.company.internal/platform/payments/pull/91",
+                "https://gitlab.com/acme/repo.git",
+            )
+            is None
+        )
+
+    def test_rejects_unconfirmed_github_prefixed_pull_request_url(self):
+        assert parse_review_url("https://github.acme.internal/platform/payments/pull/91") is None
+
+    def test_parses_confirmed_github_enterprise_pull_request_url(self):
+        assert parse_review_url(
+            "https://github.acme.internal/platform/payments/pull/91",
+            github_hosts={"github.acme.internal"},
+        ) == {
+            "provider": "github",
+            "host": "github.acme.internal",
+            "repository_path": "platform/payments",
+            "review_number": 91,
+            "web_url": "https://github.acme.internal/platform/payments/pull/91",
+        }
+
+    def test_parses_standard_gitlab_merge_request_url(self):
+        assert parse_review_url("https://gitlab.com/platform/payments/-/merge_requests/17") == {
+            "provider": "gitlab",
+            "host": "gitlab.com",
+            "repository_path": "platform/payments",
+            "review_number": 17,
+            "web_url": "https://gitlab.com/platform/payments/-/merge_requests/17",
+        }
+
+    def test_rejects_unconfigured_custom_pull_host(self):
+        assert parse_review_url("https://forge.company.internal/platform/payments/pull/91") is None
+
+    def test_rejects_non_review_url(self):
+        assert parse_review_url("https://github.com/acme/repo/issues/42") is None
 
 
 class TestFindingGates:

@@ -1,14 +1,16 @@
-# Comment Templates
+# Provider comment templates
 
-Use these so every review looks consistent and every comment is actionable. All bodies are GitLab
-Flavored Markdown.
+Use these so every review looks consistent and every comment is actionable. Bodies use the selected
+provider's GitLab Flavored Markdown or GitHub Flavored Markdown. Immediately before each provider write, interpolate only
+sanitized/redacted values under `workflow/posting.md`'s safe rendered-output boundary; template headings,
+tables, markers, and the Recommendation verdict remain skill-authored.
 
 > **Never include a secret value in a comment body.** If a token, key, password, or other credential
 > appears in the diff, reference its **location only** (`file:line`), state that it must be **rotated**,
 > and never echo or paraphrase the value. This applies to inline threads, summary notes, and Jira
 > write-back.
 
-## Inline comment (one per finding) → `create_merge_request_thread`
+## Inline comment (one per finding) → GitHub inline comment or GitLab `create_merge_request_thread`
 
 Format:
 
@@ -34,7 +36,7 @@ ID (optional for bundled nits). See `reference/severity-rubric.md` for definitio
 
 Example (added line, so `new_line` set, `old_line: null`):
 
-```
+````
 🟠 **[High]** PRR-API-001 — `fetch_user` has no timeout, so a slow upstream blocks the request thread indefinitely.
 Likelihood: High · Impact: Medium · Overall: High
 Confidence: High
@@ -45,7 +47,7 @@ Under upstream latency this exhausts the worker pool and cascades into a site-wi
 ```suggestion:-0+0
     resp = httpx.get(url, timeout=5.0)
 ```
-```
+````
 
 Architecture lens (§16 — prefix `arch · <concern>`):
 
@@ -167,7 +169,7 @@ Confidence: High
 **Reviewed:** <ISO-8601>
 ```
 
-## Summary comment (exactly one) → `create_note`
+## Summary comment (exactly one) → GitHub issue comment or GitLab `create_note`
 
 The **first line must be** the idempotency marker so re-runs can detect a prior review:
 
@@ -192,7 +194,7 @@ On incremental re-reviews with no new issues, use *No new actionable findings in
 **Output structure:** split **Review findings** (diff defects, severity-scored) from **Engineering
 improvements** (repo maturity). Only review findings count in the severity table and blocking gate.
 
-```
+````
 <!-- cursor-pr-review -->
 ## 🤖 Code Review — !<iid> · <source_branch> → <target_branch>
 
@@ -455,7 +457,7 @@ review_metadata:
 - N findings could not be anchored inline — see entries above.
 
 _Reviewed by Cursor `/pr-review`. Reply to any thread to discuss; resolve when addressed._
-```
+````
 
 Adapt sections to what you actually found — drop empty severities, drop the acceptance-criteria block
 if there's no linked ticket. Pipeline and approvals live in **Executive Summary**, not Notes. Within each
@@ -467,7 +469,7 @@ Render **in chat and in the posted summary** when Phase 1 recorded an incrementa
 `reference/incremental-rerun.md` for dedupe; populate counters from `review_metrics.incremental` and
 Phase 1 boundary.
 
-```
+````
 <!-- cursor-pr-review -->
 ## 🤖 Code Review (re-review) — !<iid> · <source_branch> → <target_branch>
 
@@ -671,6 +673,7 @@ review_metadata:
 ```
 
 _Re-reviewed by Cursor `/pr-review`._
+````
 
 **Empty incremental diff:** when head changed but no new findings and no file changes in boundary, still
 emit statistics, regression check, coverage, Evidence + Inference inside Executive Summary, and closing loop — *"No new

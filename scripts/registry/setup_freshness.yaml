@@ -7,7 +7,7 @@ defaults:
 
 skills:
   pr-review:
-    external_services: GitLab MCP, Jira MCP (optional)
+    external_services: GitLab MCP or GitHub App/MCP or gh, Jira MCP (optional)
   pr-gatekeeper:
     external_services: GitLab MCP (via pr-review), webhook receiver (host infra)
   k8s-overprovisioning-datadog:

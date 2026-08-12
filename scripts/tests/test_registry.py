@@ -62,6 +62,53 @@ skills:
     assert registry.skills["squad-map"].install.requires == []
 
 
+def test_parse_provider_any_of_capability_paths(tmp_path: Path) -> None:
+    from scripts.registry.schema import parse_registry
+
+    registry_file = tmp_path / "skills.yaml"
+    registry_file.write_text(
+        """
+schema_version: 1
+skills:
+  pr-review:
+    path: pr-review
+    category: review
+    invocation: ambient
+    hosts:
+      cursor: {discovery: rule}
+      claude: {install: true}
+      kiro: {discovery: manual}
+    install:
+      requires: []
+    capabilities:
+      required: []
+      optional: []
+      any_of:
+        - name: GitHub read
+          required: [github.get_pull_request, github.get_pull_request_files]
+          optional:
+            - name: github.create_issue_comment
+              enables: summary posting
+    lint:
+      skill_md_max_lines: 180
+      target: pr-review
+    risk_class: [posting]
+""",
+        encoding="utf-8",
+    )
+
+    registry = parse_registry(registry_file)
+    capabilities = registry.skills["pr-review"].capabilities
+    assert capabilities.required == []
+    assert len(capabilities.any_of) == 1
+    assert capabilities.any_of[0].name == "GitHub read"
+    assert capabilities.any_of[0].required == [
+        "github.get_pull_request",
+        "github.get_pull_request_files",
+    ]
+    assert capabilities.any_of[0].optional[0].name == "github.create_issue_comment"
+
+
 def test_crosscheck_rejects_empty_description(tmp_path: Path) -> None:
     skill_dir = tmp_path / "foo"
     skill_dir.mkdir()

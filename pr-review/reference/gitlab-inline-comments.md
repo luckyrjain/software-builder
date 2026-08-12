@@ -3,6 +3,10 @@
 Load this file only when posting inline comments (`create_merge_request_thread` or equivalent) in
 **full** posting mode.
 
+Immediately before every thread call, rebuild and sanitize/redact its body at the provider write
+boundary in `workflow/posting.md`. Apply the same final boundary independently to every GitLab summary
+note; a body being safe in chat or in a prior render does not make later embedding safe.
+
 ## Position object
 
 Build from `diff_refs` captured in Phase 1:

@@ -123,7 +123,8 @@ Kiro needs no copy step when this repository is open; its discovery files live u
 3. **Execute with boundaries** — read-only analysis stays read-only; multi-agent workflows isolate
    Orchestrator, Builder, and Reviewer roles and pass only a neutral evidence package between them.
 4. **Verify** — outputs cite repository data, external evidence, and exact-commit checks. Missing
-   capabilities are reported as degraded mode instead of silently guessed.
+   optional capabilities are reported as degraded mode; an unmet required or provider `any_of` path is
+   blocked instead of silently guessed.
 5. **Stop safely** — posting, writing, and merging follow the skill's explicit approval and
    authorization gates.
 
@@ -232,7 +233,7 @@ MCP is **skill-specific**, not a prerequisite for installing or browsing the rep
 | `unit-test-creator`, `integration-test-creator`, `contract-test-creator`, `e2e-test-creator`, `api-test-creator` | No MCP; use the host's repository read/write access and (optionally) its test-runner/browser/API access |
 | `domain-comprehension`, `squad-map` | No MCP for repository/CODEOWNERS mode; GitLab and Datadog improve coverage |
 | `migration-program-manager`, `weekly-squad-digest` | No MCP; aggregate files produced by upstream workflows |
-| `pr-review` | GitLab read access; GitLab write access only for posting |
+| `pr-review` | One complete GitLab or GitHub metadata+diff read path; provider write access only for posting |
 | `incident-rca` | At least one observability source: Datadog or KubeSense |
 | `k8s-overprovisioning-datadog` | At least one sufficient evidence source: read-only Kubernetes MCP or Datadog |
 | `cost-optimization-sprint-planner` | Datadog for its namespace pre-filter; then inherits the Kubernetes skill's per-deployment routing |

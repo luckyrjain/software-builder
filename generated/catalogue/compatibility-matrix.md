@@ -21,7 +21,7 @@ Distribution version: **1.4.0**
 | `mysql-to-postgres-sql` | ambient | rule | yes | manual | host.repository.read_write | repository-write |
 | `new-hire-guide` | ambient | rule | yes | manual | host.repository.read | read-only |
 | `pr-gatekeeper` | automation-only | rule | yes | manual | gitlab.get_merge_request | comment |
-| `pr-review` | ambient | rule | yes | manual | gitlab.get_merge_request, gitlab.get_merge_request_diffs | comment |
+| `pr-review` | ambient | rule | yes | manual | GitLab read: gitlab.get_merge_request + gitlab.get_merge_request_diffs OR GitHub read: github.get_pull_request + github.get_pull_request_files | comment |
 | `prd-architect` | ambient | rule | yes | manual | host.report.write | read-only |
 | `release-readiness-checker` | ambient | rule | yes | manual | host.report.write | read-only |
 | `squad-map` | ambient | rule | yes | manual | gitlab.list_projects | read-only |

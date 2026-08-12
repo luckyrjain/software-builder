@@ -4,15 +4,28 @@
 
 skills:
   pr-review:
-    required: [gitlab.get_merge_request, gitlab.get_merge_request_diffs]
-    optional:
-      - name: gitlab.create_merge_request_thread
-        enables: inline diff posting
-      - name: gitlab.create_note
-        enables: summary-only MR posting
+    required: []
+    optional: []
+    any_of:
+      - name: GitLab read
+        required: [gitlab.get_merge_request, gitlab.get_merge_request_diffs]
+        optional:
+          - name: gitlab.create_merge_request_thread
+            enables: inline diff posting
+          - name: gitlab.create_note
+            enables: summary-only MR posting
+      - name: GitHub read
+        required: [github.get_pull_request, github.get_pull_request_files]
+        optional:
+          - name: github.create_pull_request_comment
+            enables: GitHub inline PR comments
+          - name: github.create_issue_comment
+            enables: GitHub PR summary comments
     degraded_modes:
       gitlab.create_merge_request_thread: summary-only or chat-only posting
       gitlab.create_note: chat-only posting
+      github.create_pull_request_comment: summary-only or chat-only posting
+      github.create_issue_comment: chat-only posting
 
   pr-gatekeeper:
     required: [gitlab.get_merge_request]

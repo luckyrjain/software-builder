@@ -5,6 +5,8 @@ entry_inputs:
   review_mode: {type: string, provenance: caller_or_user, required: false, trust: untrusted}
   posting_policy: {type: string, provenance: caller_or_user, required: false, trust: untrusted}
   expected_head_sha: {type: string, provenance: caller_or_user, required: false, trust: untrusted}
+  review_target: {type: object, provenance: host_environment, required: false, trust: trusted}
+  provider_capabilities: {type: object, provenance: host_environment, required: false, trust: trusted}
 selector_domains:
   posting_decision: [post, skip]
 route_selection: {after_phase: 2-3-gate}

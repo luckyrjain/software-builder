@@ -1,18 +1,19 @@
 # pr-review
 
-GitLab **merge request (MR) review** skill for Cursor. Invoke with **`/pr-review`** or natural language
-(e.g. "review this MR …", "review !482") when the request clearly targets a GitLab MR.
+GitHub **pull request (PR)** and GitLab **merge request (MR)** review skill for Cursor. Invoke with
+**`/pr-review`** or natural language when the request clearly targets a GitHub.com, GitHub Enterprise
+Server, GitLab.com, or self-hosted GitLab review.
 
 ## What it does
 
-1. **Resolves the target MR** from a GitLab URL, `!IID`, `!IID in group/repo`, or the current branch's open MR.
-2. **Loads context** — MR metadata, paginated diff, CI pipeline status, linked Jira ticket and acceptance
+1. **Resolves the target PR/MR** from a URL, number plus repository, or the current branch's open review.
+2. **Loads context** — review metadata, paginated diff, CI/check status, linked Jira ticket and acceptance
    criteria when available.
 3. **Reviews changed files only** through a phased workflow: capability detection → boundary → checklist →
    finding pipeline (detect, evidence, severity, value filter).
 4. **Outputs a full review in chat** — severity table, executive summary, merge recommendation.
-5. **Optionally posts to GitLab** — inline threads on diff lines plus one summary note (when GitLab MCP
-   write tools are configured and you confirm posting).
+5. **Optionally posts comments** — GitLab threads/summary notes or GitHub RIGHT-side inline comments/issue
+   summaries when the provider write capability is configured and you confirm posting.
 
 Supports **incremental re-review** after new commits: dedupes prior findings, regression-checks resolved
 threads, and emits a structured re-review note with `review_metadata` YAML.
@@ -21,8 +22,8 @@ threads, and emits a structured re-review note with `review_metadata` YAML.
 
 | Use pr-review | Use something else |
 |---------------|-------------------|
-| Review a GitLab MR by URL or `!IID` | GitHub PR → `/review-bugbot` or `gh pr view` |
-| Re-review after fixes pushed | Local uncommitted diff → `/review-bugbot` |
+| Review a GitHub PR or GitLab MR by URL or number | Local uncommitted diff → `/review-bugbot` |
+| Re-review after fixes pushed | Security-only local diff → `/review-security` |
 | Post severity-tagged inline comments | Security-only local diff → `/review-security` |
 | Check Jira AC against the MR diff | Keep MR merge-ready as new commits land (webhook-triggered) → **pr-gatekeeper** |
 | — | Release-wide go/no-go sweep across many MRs/services → **release-readiness-checker** |
@@ -35,6 +36,8 @@ threads, and emits a structured re-review note with `review_metadata` YAML.
 /pr-review
 /pr-review !482 in backend/payments
 /pr-review https://gitlab.example.com/group/repo/-/merge_requests/123
+/pr-review https://github.com/acme/payments/pull/482
+/pr-review https://github.example.com/platform/payments/pull/91
 ```
 
 **Natural language** (same workflow):
@@ -42,6 +45,7 @@ threads, and emits a structured re-review note with `review_metadata` YAML.
 ```
 review this pr https://gitlab.example.com/group/repo/-/merge_requests/123
 review this MR !482
+review this PR #482
 review and post !482
 review !482, focus on migrations
 review as SRE
@@ -71,15 +75,15 @@ Full shape: [reference/gold-review-excerpt.md](reference/gold-review-excerpt.md)
 - Security score **Needs attention** when app-level auth gap (not Clear)
 - Architecture lens (§16) when structural change triggers
 - **Review modes** — Pre-merge · Incremental · Post-merge retrospective (`reference/review-modes.md`)
-- Optional GitLab posts: inline threads + `<!-- cursor-pr-review -->` summary note
+- Optional GitLab/GitHub comments + `<!-- cursor-pr-review -->` summary note
 
 ## Workflow (agent)
 
 | Phase | Purpose |
 |-------|---------|
-| Inputs | Resolve `project_id` + `merge_request_iid` |
-| 0 | Detect posting mode from GitLab MCP tools |
-| 1 | MR metadata, diff boundary, CI, Jira AC |
+| Inputs | Resolve provider-neutral target |
+| 0 | Detect posting mode from provider capabilities |
+| 1 | PR/MR metadata, diff boundary, CI/checks, Jira AC |
 | 2 | Review, finding pipeline, stop-search cap |
 | 2→3 gate | Skip posting if nits-only or zero findings |
 | 3–4 | User confirmation, post threads + summary |

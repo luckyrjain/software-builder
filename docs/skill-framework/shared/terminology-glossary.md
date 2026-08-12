@@ -9,7 +9,7 @@ Shared vocabulary for **software-builder** platform docs, `skills.yaml`, and beh
 | **Skill** | A portable agent workflow package: `SKILL.md`, `workflow/`, `reference/`, optional scripts. Identified by directory name and registry id (e.g. `pr-review`). |
 | **Registry** | Root `skills.yaml` — canonical list of skills plus install edges, hosts, invocation mode, composition, and capabilities. |
 | **Framework** | `docs/skill-framework/` shared normative reference library vendored into installed packages. |
-| **Capability** | A named external tool or API contract a skill may call (required vs optional + degraded modes), declared under `capabilities` in `skills.yaml`. |
+| **Capability** | A named external tool or API contract a skill may call, declared under `capabilities` in `skills.yaml` as globally required, optional/degraded, or a complete alternative `any_of` path. |
 | **Composition** | How skills invoke or escalate to each other. `skills.yaml` holds `invokes` and `escalation_targets`; `scripts/registry/composition_contracts.yaml` holds per-skill `produces` / `consumes` / `write_authority` contracts validated at registry lint time. |
 | **Invocation envelope** | The typed field shape a wrapper skill hands to a child skill (exact scope, interaction policy, allowed actions, expected SHA, source revisions) — see [invocation-envelope.md](invocation-envelope.md) (#52). `mr_context` in `composition_contracts.yaml` is the reference implementation. |
 | **Result envelope** | The typed field shape a skill returns (`review_metadata` / `assessment_metadata`) — see [review-metadata-schema.md](review-metadata-schema.md) §8. |
@@ -21,7 +21,7 @@ Shared vocabulary for **software-builder** platform docs, `skills.yaml`, and beh
 | **Invocation mode** | `ambient` (model may load from chat), `automation-only` (explicit external trigger only; requires `disable-model-invocation: true` in `SKILL.md`). |
 | **Risk class** | Operational category for guardrail strictness: **posting** (GitLab writes), **merge** (branch/PR merge), **unattended** (webhook with no human), **read-only** (reports only), **repository-write** (commits/PRs in target repo). High-risk skills combine multiple classes. Declared per skill in `skills.yaml`. |
 | **Write authority** | Composition contract flag: only the skill that owns a write scope may perform that write; wrappers may gate but not escalate writes. |
-| **Degraded mode** | Documented fallback when an optional capability is absent (e.g. `chat-only` when inline posting unavailable). |
+| **Degraded mode** | Documented fallback when an optional capability is absent (e.g. `chat-only` when inline posting unavailable). Missing every complete `any_of` readiness path is blocked, not degraded. |
 
 ## Distribution and quality
 

@@ -12,8 +12,10 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from scripts.registry.models import CapabilityPath
 from scripts.registry.schema import parse_registry
 from scripts.release_info import read_distribution_version
+
 MANIFEST_NAME = ".software-builder-manifest.json"
 
 
@@ -31,19 +33,39 @@ def _installed_manifest(skill_dest: Path) -> dict[str, object] | None:
 def _capability_status(
     entry_required: list[str],
     entry_optional: list[str],
+    entry_any_of: list[CapabilityPath],
     available: set[str] | None,
-) -> tuple[list[str], list[str], str]:
+) -> tuple[list[str], list[str], str, CapabilityPath | None]:
     if available is None:
-        return [], [], "UNSPECIFIED"
+        return [], [], "UNSPECIFIED", None
     missing_required = [cap for cap in entry_required if cap not in available]
-    missing_optional = [cap for cap in entry_optional if cap not in available]
     if missing_required:
-        return missing_required, missing_optional, "BLOCKED"
+        return missing_required, [], "BLOCKED", None
+
+    active_path: CapabilityPath | None = None
+    if entry_any_of:
+        complete_paths = [
+            path for path in entry_any_of if all(cap in available for cap in path.required)
+        ]
+        if not complete_paths:
+            closest_path = min(
+                entry_any_of,
+                key=lambda path: sum(cap not in available for cap in path.required),
+            )
+            missing_required = [cap for cap in closest_path.required if cap not in available]
+            return missing_required, [], "BLOCKED", None
+        active_path = min(
+            complete_paths,
+            key=lambda path: sum(item.name not in available for item in path.optional),
+        )
+
+    active_optional = list(entry_optional)
+    if active_path is not None:
+        active_optional.extend(item.name for item in active_path.optional)
+    missing_optional = [cap for cap in active_optional if cap not in available]
     if missing_optional:
-        return missing_required, missing_optional, "DEGRADED"
-    if entry_required or entry_optional:
-        return missing_required, missing_optional, "READY"
-    return missing_required, missing_optional, "READY"
+        return missing_required, missing_optional, "DEGRADED", active_path
+    return missing_required, missing_optional, "READY", active_path
 
 
 def cmd_doctor(
@@ -62,10 +84,11 @@ def cmd_doctor(
         if skill_filter and skill_id != skill_filter:
             continue
 
-        optional_names = [item.name for item in entry.capabilities.optional]
-        missing_required, missing_optional, status = _capability_status(
+        global_optional_names = [item.name for item in entry.capabilities.optional]
+        missing_required, missing_optional, status, active_path = _capability_status(
             entry.capabilities.required,
-            optional_names,
+            global_optional_names,
+            entry.capabilities.any_of,
             available,
         )
 
@@ -89,10 +112,25 @@ def cmd_doctor(
             print(f"  invokes: {', '.join(entry.composition.invokes)}")
         if entry.capabilities.required:
             print(f"  required capabilities: {', '.join(entry.capabilities.required)}")
-        if entry.capabilities.optional:
+        if entry.capabilities.any_of:
+            print("  any-of capability paths:")
+            for path in entry.capabilities.any_of:
+                if available is None:
+                    path_status = "not evaluated"
+                else:
+                    path_missing = [cap for cap in path.required if cap not in available]
+                    path_status = (
+                        "ready" if not path_missing else f"missing {', '.join(path_missing)}"
+                    )
+                print(f"    {path.name}: {', '.join(path.required)} ({path_status})")
+        active_optional = list(entry.capabilities.optional)
+        if active_path is not None:
+            print(f"  selected capability path: {active_path.name}")
+            active_optional.extend(active_path.optional)
+        if active_optional:
             labels = [
                 f"{item.name} ({item.enables})" if item.enables else item.name
-                for item in entry.capabilities.optional
+                for item in active_optional
             ]
             print(f"  optional capabilities: {', '.join(labels)}")
         if missing_required:
@@ -111,7 +149,11 @@ def cmd_doctor(
 
         if status in {"BLOCKED", "VERSION_MISMATCH"}:
             exit_code = 1
-        if status == "UNSPECIFIED" and (entry.capabilities.required or entry.capabilities.optional):
+        if status == "UNSPECIFIED" and (
+            entry.capabilities.required
+            or entry.capabilities.optional
+            or entry.capabilities.any_of
+        ):
             print("  capability check: pass --available to evaluate host capabilities")
 
     return exit_code

@@ -3,6 +3,16 @@
 Prompt and workflow changes are versioned here. Per-phase `workflow_version` in workflow frontmatter
 should match the latest entry when that file is edited.
 
+## v1.11 — 2026-08-12
+
+PR #111 review remediation:
+
+- exact-host provider routing with no prefix guesses or explicit-URL fallback to `origin`
+- provider-neutral URL/number/current-branch/list-open target normalization and valid exact-host `gh` syntax
+- per-write GitHub/GitLab safe-render boundary with structural escaping plus secret/PII redaction
+- added-line-only GitHub anchor validation with explicit source-kind and file-state integrity tests
+- provider `any_of` read readiness in the registry/doctor; write capabilities now control degradation
+
 ## v1.10 — 2026-07-07
 
 Second interrogate pass:
@@ -31,7 +41,7 @@ Portfolio hardening (shared framework alignment):
 Security, deduplication, and testability hardening:
 
 - **SKILL.md** — explicit §Review principle heading; untrusted MR/Jira/diff text guard
-- **workflow/inputs.md** — GitHub early-exit before Phase 0 (moved from phase-0)
+- **workflow/inputs.md** — provider detection before Phase 0; GitHub PRs and GitLab MRs route through the same review pipeline
 - **reference/review-metrics.md** — single normative recommendation matrix; pointers elsewhere
 - **reference/finding-gates.md** — merged guess + path + non-negotiable gates (one Phase 2 load)
 - **scripts/pr_review_policy_guards.py** + **tests/test_pr_review_policy_guards.py** — scripted pressure-test eval (required in `make lint-pr-review`)

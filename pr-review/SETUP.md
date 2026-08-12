@@ -8,17 +8,18 @@
 | **Owner** | software-builder maintainers |
 | **Last reviewed** | 2026-08-09 |
 | **Review cadence** | Quarterly — or when pinned MCP package versions change |
-| **External services** | GitLab MCP, Jira MCP (optional) |
+| **External services** | GitLab MCP or GitHub App/MCP or gh, Jira MCP (optional) |
 
 See [setup-freshness.md](../docs/skill-framework/shared/setup-freshness.md) for the shared contract.
-A Cursor Agent Skill that reviews a GitLab merge request and posts severity-labelled comments back
-onto it when the connected GitLab MCP supports posting. Uses **GitLab MCP** for the code and
+A Cursor Agent Skill that reviews a GitHub pull request or GitLab merge request and posts severity-labelled
+comments when the connected provider capability supports posting. Uses provider MCP/App tools (or `gh`
+read fallback for GitHub) for code and
 **Atlassian/Jira MCP** (optional — skip if you don't need Jira acceptance-criteria checks) for ticket
 context.
 
 ## Quickstart
 
-Already have a GitLab PAT and Cursor 2.4+? This is the whole path — details for each step are below.
+Already have GitHub/GitLab access and Cursor 2.4+? This is the whole path — details for each step are below.
 
 1. `git clone` the `software-builder` repo (see root [README.md § Install](../README.md#install)), then `make install-pr-review`. Restart Cursor.
 2. Create a GitLab PAT with `api` scope ([§1](#create-a-gitlab-personal-access-token-pat)) and export it as `GITLAB_PERSONAL_ACCESS_TOKEN`.
@@ -28,10 +29,28 @@ Already have a GitLab PAT and Cursor 2.4+? This is the whole path — details fo
 
 Stuck on any step? Jump to [§6 Troubleshooting](#6-troubleshooting).
 
+### GitHub.com and GitHub Enterprise Server
+
+Prefer a connected GitHub App/MCP that can read pull requests and create standalone inline and issue
+comments. For read-only fallback, authenticate the GitHub CLI for the exact host:
+
+```bash
+gh auth login --hostname github.com
+gh auth status --hostname github.com
+
+# GitHub Enterprise Server
+gh auth login --hostname github.example.com
+gh auth status --hostname github.example.com
+```
+
+Use `/pr-review https://github.com/owner/repo/pull/42` or the equivalent GHES URL. A `gh` fallback is
+chat-only; full or summary posting requires GitHub comment capabilities. The skill never approves,
+requests changes, merges, closes, or submits a GitHub review verdict.
+
 ## Ambient discovery is intended
 
 This skill deliberately does **not** set `disable-model-invocation` in its frontmatter, so the agent
-can auto-apply it when you ask to review a GitLab MR in natural language — e.g. "review this pr …",
+can auto-apply it when you ask to review a GitHub PR or GitLab MR in natural language — e.g. "review this pr …",
 "review !482", "re-review" — as well as `/pr-review`. Leave it unset unless you want invocation to
 be slash-command-only.
 
@@ -346,7 +365,8 @@ Phase 0 announces posting mode and workspace scope. Warnings when:
 - Never auto-approves the MR in GitLab.
 - Secrets flagged Critical; value never echoed.
 - Re-runs detect `<!-- cursor-pr-review -->` and review only new commits.
-- GitHub PRs: this skill is GitLab-only and does not support GitHub pull requests.
+- GitHub `chat-only` — run `gh auth status --hostname <host>`; a GitHub App/MCP with comment access is
+  required for posting. The skill never approves or merges.
 
 ## Framework conventions
 

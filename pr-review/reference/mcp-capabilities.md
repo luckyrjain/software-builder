@@ -102,4 +102,24 @@ halt or roll back a completed GitLab review (see `workflow/phase-5.md`).
 
 ## GitHub
 
-This skill is **GitLab MR-specific** and does not support GitHub pull requests.
+GitHub.com and GitHub Enterprise Server are supported through the target host resolved in Inputs. Match
+semantic capability, not connector name.
+
+| Profile | Read path | Write path | Posting mode |
+|---|---|---|---|
+| full | PR metadata, files/diff, comments, checks | inline comment + issue comment | `full` |
+| summary-only | PR metadata, files/diff, comments | issue comment | `summary-only` |
+| CLI read-only | authenticated `gh pr view` + `gh pr diff` on target host | none | `chat-only` |
+| unavailable | no MCP/App and no authenticated `gh` on target host | none | stop |
+
+Use a connected GitHub App/MCP first. `gh pr view`, `gh pr diff`, `gh pr list`, and `gh pr checks` do
+**not** accept `--hostname`; bind their exact host with repository syntax instead:
+
+```bash
+gh pr view <number> --repo <host>/<owner>/<repo> --json headRefOid,isDraft,url
+gh pr diff <number> --repo <host>/<owner>/<repo>
+```
+
+Command-scoped `GH_HOST=<host>` with `--repo <owner>/<repo>` is also valid. Keep `--hostname` only for
+commands that support it (for example `gh auth status --hostname <host>` and `gh api --hostname <host>`).
+Never send a GHES request to GitHub.com.
