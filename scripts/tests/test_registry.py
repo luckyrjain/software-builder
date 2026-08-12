@@ -316,6 +316,67 @@ skills:
     assert any("missing capabilities block" in error for error in errors)
 
 
+def _skill_entry(*, requires: list[str] | None = None) -> "SkillEntry":
+    from scripts.registry.models import CompositionSpec, HostClaude, HostCursor, HostKiro, Hosts, InstallSpec, LintSpec, SkillEntry
+
+    return SkillEntry(
+        path="demo",
+        category="testing",
+        invocation="ambient",
+        hosts=Hosts(cursor=HostCursor(discovery="rule"), claude=HostClaude(), kiro=HostKiro(discovery="manual")),
+        install=InstallSpec(requires=requires or []),
+        lint=LintSpec(skill_md_max_lines=180, target="demo"),
+        composition=CompositionSpec(),
+    )
+
+
+def test_validate_install_graph_detects_cycle() -> None:
+    from scripts.registry.crosscheck import _validate_install_graph
+    from scripts.registry.models import Registry
+
+    registry = Registry(
+        schema_version=1,
+        skills={"a": _skill_entry(requires=["b"]), "b": _skill_entry(requires=["a"])},
+    )
+    errors = _validate_install_graph(registry)
+    assert any("cycle" in error for error in errors)
+
+
+def test_validate_install_graph_rejects_unknown_dependency() -> None:
+    from scripts.registry.crosscheck import _validate_install_graph
+    from scripts.registry.models import Registry
+
+    registry = Registry(schema_version=1, skills={"a": _skill_entry(requires=["ghost"])})
+    errors = _validate_install_graph(registry)
+    assert errors == ["error: a: install.requires unknown skill 'ghost'"]
+
+
+def test_validate_install_graph_accepts_acyclic_graph() -> None:
+    from scripts.registry.crosscheck import _validate_install_graph
+    from scripts.registry.models import Registry
+
+    registry = Registry(
+        schema_version=1,
+        skills={"a": _skill_entry(requires=["b"]), "b": _skill_entry()},
+    )
+    assert _validate_install_graph(registry) == []
+
+
+def test_validate_skill_directory_sync_detects_orphan_and_missing(tmp_path: Path) -> None:
+    from scripts.registry.crosscheck import _validate_skill_directory_sync
+    from scripts.registry.models import Registry
+
+    orphan_dir = tmp_path / "orphan"
+    orphan_dir.mkdir()
+    (orphan_dir / "SKILL.md").write_text("---\nname: orphan\ndescription: test\n---\n", encoding="utf-8")
+
+    registry = Registry(schema_version=1, skills={"missing-dir": _skill_entry()})
+    errors = _validate_skill_directory_sync(tmp_path, registry)
+
+    assert "error: orphan: directory has SKILL.md but no registry entry" in errors
+    assert "error: missing-dir: registry entry has no SKILL.md directory" in errors
+
+
 def test_bootstrap_registry_validates_on_real_repo() -> None:
     from scripts.registry.crosscheck import validate_registry
 
