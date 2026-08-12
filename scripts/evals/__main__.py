@@ -14,8 +14,9 @@ import yaml
 from scripts.evals.golden import find_vacuous_anchored_patterns, load_golden_fixtures, run_golden_case
 from scripts.evals.transcript import load_transcript_fixtures, run_transcript_case
 from scripts.evals.types import EvalResult
-from scripts.registry.frontmatter import automation_only_guard_errors, load_skill_frontmatter
+from scripts.registry.frontmatter import load_skill_frontmatter
 from scripts.registry.schema import Registry, parse_registry
+from scripts.registry.skill_frontmatter_schema import automation_only_guard_errors
 
 ROOT = Path(__file__).resolve().parents[2]
 FIXTURES_DIR = ROOT / "evals" / "fixtures"

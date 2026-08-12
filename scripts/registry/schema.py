@@ -22,7 +22,8 @@ from scripts.registry.models import (
 ALLOWED_RISK_CLASSES = frozenset(
     {"posting", "merge", "unattended", "read-only", "repository-write"},
 )
-ALLOWED_INVOCATION = {"ambient", "automation-only"}
+AUTOMATION_ONLY_INVOCATION = "automation-only"
+ALLOWED_INVOCATION = {"ambient", AUTOMATION_ONLY_INVOCATION}
 ALLOWED_CURSOR_DISCOVERY = {"rule", "manual", "always"}
 ALLOWED_KIRO_DISCOVERY = {"manual", "always"}
 ALLOWED_COMPOSITION_MODE = {"invoke", "aggregate"}

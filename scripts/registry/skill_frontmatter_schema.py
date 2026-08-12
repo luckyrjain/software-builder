@@ -7,6 +7,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from scripts.registry.schema import AUTOMATION_ONLY_INVOCATION
+
 ALLOWED_FRONTMATTER_KEYS = frozenset(
     {
         "name",
@@ -40,3 +42,20 @@ def validate_skill_frontmatter_fields(skill_id: str, frontmatter: dict[str, Any]
             )
 
     return errors
+
+
+def automation_only_guard_errors(invocation: str, frontmatter: dict[str, Any]) -> list[str]:
+    """Check SKILL.md's disable-model-invocation agrees with skills.yaml's invocation.
+
+    Both directions: an automation-only skill must set disable-model-invocation,
+    and setting disable-model-invocation implies the skill must be automation-only.
+
+    Returns raw, unprefixed messages (unlike validate_skill_frontmatter_fields
+    above) -- crosscheck.py and evals/__main__.py format them into their own
+    house styles rather than sharing one "error: {skill_id}: ..." convention.
+    """
+    disable = frontmatter.get("disable-model-invocation") is True
+    automation_only = invocation == AUTOMATION_ONLY_INVOCATION
+    if disable == automation_only:
+        return []
+    return [f"disable-model-invocation={disable} but invocation={invocation!r}"]
