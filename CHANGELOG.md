@@ -8,6 +8,23 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 
 ## Platform
 
+### prd-architect: fix vacuous injection-render golden assertions (2026-08-12)
+
+- `evals/golden/prd-architect/injection-not-ready.yaml`'s `forbid_pattern` assertions on
+  `rendered_source_excerpt` used `(?m)^...$`-anchored patterns (e.g. `(?m)^## Build Readiness$`)
+  against a value with no real newline characters — `prd_safe_output.py`'s
+  `normalize_untrusted_markdown()` deliberately joins every line with the literal separator `⤶`, not
+  `\n`, so a multiline-anchored pattern can never match regardless of content. The assertion always
+  passed vacuously, even for a broken/unescaped rendering. Fixed by running the real
+  `normalize_untrusted_markdown()` directly against the fixture's `source_material` (not
+  hand-simulated) to get ground-truth rendered output, and replacing the anchored assertions with
+  non-anchored ones that check for the literal escaped substrings it actually produces
+  (backslash-escaped `#`/`|`, `` ` `` replaced with the lookalike `ˋ`). Also added `require_pattern`
+  on the raw `source_material` side, proving the injected heading/table/fence is genuinely present.
+  Confirmed the corrected fixture passes the real `golden.py` engine, and that reinstating the old
+  unescaped/broken rendering makes it fail — proving the fixture now actually discriminates. Part of
+  #64 (see also the `pr-review` entry below).
+
 ### Mock-tool execution harness + live model scoring for behavioral evals (2026-08-11)
 
 - ADR 0003's Tier 2/3 evals are entirely static — Tier 2 replays a hand-authored `tool`/`gate`/
@@ -2062,6 +2079,32 @@ _Pre-merge WIP on `feat/squad-map-skill` (internal v1.0–v1.5) is consolidated 
   is unset. Added the `make lint-incident-rca` target (line check + JSON parse + anchor check).
 
 ## pr-review
+
+### Fix vacuous injection-render golden assertions (2026-08-12)
+
+- `evals/golden/pr-review/injection-inert-render.yaml`'s `forbid_pattern` assertions on
+  `rendered_title_excerpt`/`rendered_diff_excerpt` were `(?m)^...$`-anchored (e.g.
+  `(?m)^## Executive Summary$`) against values built from the decorative `⤶` glyph with no real
+  newline characters — an anchored pattern can never match a string with no line breaks, so the
+  assertion always passed vacuously regardless of whether escaping actually worked. Unlike
+  prd-architect (`prd_safe_output.py`), pr-review has no executable safe-output script — the fixture
+  is derived from `workflow/phase-5.md`'s documented rule (wrap untrusted MR titles/excerpts in an
+  inline code span) and verified directly against a real CommonMark parser instead.
+- That verification surfaced a real gap in the *documented* approach itself, not just the fixture:
+  naively wrapping multi-line untrusted content (`diff_excerpt`) in a single backtick span does **not**
+  make it inert, because CommonMark resolves block structure — a leading `+`/`#`/`>` starting a
+  list/heading/blockquote — per line, before inline parsing (including code spans) ever runs. Confirmed
+  with the real parser: `diff_excerpt`'s leading `+` diff markers split it into an actual list/heading
+  instead of forming one code span. The corrected fixture collapses multi-line content to one line
+  (joined by `⤶`, mirroring prd-architect's own normalizer) before wrapping in a single backtick span,
+  and strips any backtick already present first (same choice made for backlog-runner, #67, over a
+  longer-delimiter escape).
+- Replaced the vacuous assertions with a single strong, non-anchored invariant on each rendered field —
+  `^`[^`\n]*`$` — proving it is exactly one well-formed code span with no embedded backtick or raw
+  newline, plus raw-side `require_pattern`s proving the injected heading/pipe/fence content is genuinely
+  present in `mr_title`/`diff_excerpt`. Confirmed the corrected fixture passes the real `golden.py`
+  engine, and that three distinct broken renderings (backtick left unstripped, real newlines preserved
+  inside the span, no escaping at all) each fail it — proving the fixture discriminates. Fixes #64.
 
 ### Manual-notify template fence-nesting fix (2026-08-09)
 
