@@ -1,6 +1,12 @@
 """SKILL.md YAML frontmatter schema (v1).
 
-Platform facts live in skills.yaml; SKILL.md frontmatter is agent-discovery prose only.
+Platform facts live in skills.yaml; SKILL.md frontmatter is agent-discovery prose
+only -- except automation_only_guard_errors below, which exists specifically to
+check one frontmatter field against its skills.yaml counterpart. That's the one
+sanctioned exception, not a precedent: a check that's purely about frontmatter
+shape belongs in validate_skill_frontmatter_fields; a check that needs a second
+platform fact from skills.yaml belongs here only if it's checking frontmatter
+against that fact, not deriving new facts from skills.yaml alone.
 """
 
 from __future__ import annotations
