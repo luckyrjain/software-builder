@@ -382,9 +382,9 @@ lint-pr-gatekeeper:
 	 grep -q 'docs/skill-framework/shared/safe-output.md' pr-gatekeeper/reference/auto-post-policy.md && \
 	 grep -qiE 'escape|fence|backtick' pr-gatekeeper/reference/auto-post-policy.md || \
 		{ echo "error: auto-post-policy.md must sanitize untrusted rendered fields per prompt-injection and safe-output" >&2; exit 1; }
-	@echo "lint-pr-gatekeeper: idempotency store pytest"
+	@echo "lint-pr-gatekeeper: script pytest suite"
 	@if python3 -c "import pytest" >/dev/null 2>&1; then \
-		python3 -m pytest -p no:cacheprovider pr-gatekeeper/tests/test_idempotency_store.py -q || exit 1; \
+		python3 -m pytest -p no:cacheprovider pr-gatekeeper/tests/ -q || exit 1; \
 	else \
 		echo "pytest not installed — install with 'python3 -m pip install pytest' to run pr-gatekeeper tests" >&2; \
 	fi

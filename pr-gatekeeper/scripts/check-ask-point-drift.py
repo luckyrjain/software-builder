@@ -128,6 +128,14 @@ def significant_words(text: str) -> set[str]:
 # capture the sentence(s) actually describing the gate.
 CONTEXT_CHARS = 280
 
+# Keep known gate sections from borrowing unrelated vocabulary from the immediately preceding
+# section. In posting.md the provider-write safety paragraph sits directly before the established
+# user-input gate; clamping at this heading preserves coverage of every marker inside the gate while
+# preventing safety-only wording changes from creating ask-point drift false positives.
+CONTEXT_START_HEADINGS = {
+    "posting.md": {"## User text input gates"},
+}
+
 
 def marker_matches(normalized_text: str) -> list[tuple[int, int]]:
     """Return (start, end) spans for every MARKER_PATTERNS hit, de-duplicated by overlap."""
@@ -143,6 +151,30 @@ def marker_matches(normalized_text: str) -> list[tuple[int, int]]:
         else:
             merged.append((start, end))
     return merged
+
+
+def context_start_boundary(
+    original_text: str, normalized_text: str, marker_start: int, file_name: str,
+) -> int:
+    """Return a narrowly configured section boundary for a marker, or the file start.
+
+    Markdown normalization preserves newlines, so line indexes remain aligned even though link
+    normalization can change character offsets within a line.
+    """
+    configured_headings = CONTEXT_START_HEADINGS.get(file_name)
+    if not configured_headings:
+        return 0
+
+    original_lines = original_text.splitlines(keepends=True)
+    normalized_lines = normalized_text.splitlines(keepends=True)
+    marker_line = normalized_text.count("\n", 0, marker_start)
+    for line_index in range(marker_line, -1, -1):
+        line = original_lines[line_index].strip()
+        if re.match(r"^#{1,6}\s", line):
+            if line in configured_headings:
+                return sum(len(part) for part in normalized_lines[:line_index])
+            break
+    return 0
 
 
 def main() -> int:
@@ -171,7 +203,11 @@ def main() -> int:
         for start, end in marker_matches(normalized):
             scanned_markers += 1
             line_no = normalized.count("\n", 0, start) + 1
-            ctx_start = max(0, start - CONTEXT_CHARS)
+            ctx_start = max(
+                0,
+                start - CONTEXT_CHARS,
+                context_start_boundary(original, normalized, start, wf.name),
+            )
             ctx_end = min(len(normalized), end + CONTEXT_CHARS)
             context = normalized[ctx_start:ctx_end]
             sig = significant_words(context)
