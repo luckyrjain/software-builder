@@ -485,6 +485,14 @@ def _check_route_prefix(
     return phase_names, valid_selection_prefix, common_prefix
 
 
+@dataclass(frozen=True)
+class RoutePredicateResult:
+    """One route's contribution to the cross-route selector-domain check."""
+
+    parsed: dict[str, tuple[str, object]]
+    field_types: dict[str, str]
+
+
 def _check_predicate_types(
     route_id: str,
     phase_names: list[Any],
@@ -494,16 +502,13 @@ def _check_predicate_types(
     entry_required: dict[str, str],
     entry_optional: dict[str, str],
     route_schema: dict[str, Any],
-    parsed_predicates: dict[str, dict[str, tuple[str, object]]],
-    predicate_types: dict[str, str],
     errors: list[str],
-) -> None:
+) -> RoutePredicateResult | None:
     """Walk one route's phases checking consumed-field type/availability, then parse
-    its `when` predicates at the route-selection phase. Mutates parsed_predicates and
-    predicate_types in place (same shared accumulators the original inline code
-    updated directly) — this function is not a pure computation of its route alone,
-    since a route's predicate fields feed the cross-route selector-domain check that
-    runs after every route has been walked.
+    its `when` predicates at the route-selection phase. Returns this route's
+    predicate/field-type contribution to the cross-route selector-domain check that
+    runs after every route has been walked, or None if there's nothing to contribute
+    (no valid selection prefix, or its predicates failed to parse).
     """
     available = dict(entry_required)
     possible = {**entry_optional, **entry_required}
@@ -544,8 +549,8 @@ def _check_predicate_types(
             errors=errors,
         )
         if parsed is not None:
-            parsed_predicates[route_id] = parsed
-            predicate_types.update(selection_available)
+            return RoutePredicateResult(parsed=parsed, field_types=dict(selection_available))
+    return None
 
 
 def _check_selector_coverage(
@@ -679,7 +684,7 @@ def validate_skill_contract(skill_dir: Path) -> list[str]:
         )
         if phase_names is None:
             continue
-        _check_predicate_types(
+        result = _check_predicate_types(
             route_id,
             phase_names,
             phases,
@@ -688,10 +693,11 @@ def validate_skill_contract(skill_dir: Path) -> list[str]:
             entry_required,
             entry_optional,
             route_schema,
-            parsed_predicates,
-            predicate_types,
             errors,
         )
+        if result is not None:
+            parsed_predicates[route_id] = result.parsed
+            predicate_types.update(result.field_types)
 
     _check_selector_coverage(routes, parsed_predicates, predicate_types, contract, errors)
     return errors
