@@ -216,6 +216,86 @@ generate:
 generate-check:
 	@python3 -m scripts.registry generate --check
 
+# ---------------------------------------------------------------------------
+# Shared lint helpers — used via $(call ...) inside per-skill lint targets
+# below. Each wraps a check that was previously duplicated verbatim (only
+# the skill dir / threshold / file list changed) across ~20 lint-<skill>
+# targets. Skill-specific content assertions stay inline at each call site.
+# ---------------------------------------------------------------------------
+
+# $(call check_skill_md_length,<skill-dir>,<max-lines>,<optional guidance suffix>)
+define check_skill_md_length
+	@test -f $(1)/SKILL.md || \
+		{ echo "error: missing $(1)/SKILL.md" >&2; exit 1; }
+	@lines=$$(wc -l < $(1)/SKILL.md | tr -d ' '); \
+	if [ -z "$$lines" ] || [ "$$lines" -eq 0 ]; then \
+		echo "error: $(1)/SKILL.md is empty" >&2; exit 1; \
+	elif [ "$$lines" -gt $(2) ]; then \
+		echo "error: $(1) SKILL.md $$lines lines (> $(2))$(if $(3), — $(3))" >&2; \
+		exit 1; \
+	fi; \
+	echo "  ok ($$lines lines)"
+endef
+
+# $(call check_workflow_frontmatter,<skill-dir>)
+define check_workflow_frontmatter
+	@fail=0; \
+	for f in $(1)/workflow/*.md; do \
+		fm=$$(awk '/^---$$/{c++; next} c==1' "$$f"); \
+		for key in workflow_version phase produces consumes; do \
+			if ! printf '%s\n' "$$fm" | grep -q "^$$key:"; then \
+				echo "  missing $$key frontmatter: $$f" >&2; fail=1; \
+			fi; \
+		done; \
+	done; \
+	if [ "$$fail" -ne 0 ]; then echo "error: $(1) workflow/*.md must declare workflow_version, phase, produces, consumes" >&2; exit 1; fi; \
+	echo "  ok"
+endef
+
+# $(call check_dangling_links,<space-separated glob(s)>)
+define check_dangling_links
+	@bash scripts/lint-dangling-md-links.sh $(1) && echo "  ok" || \
+		{ echo "error: dangling reference link(s) found" >&2; exit 1; }
+endef
+
+# $(call require_ref_files,<dir>,<space-separated basenames, no .md ext>)
+define require_ref_files
+	@for f in $(2); do \
+		test -f $(1)/$$f.md || \
+			{ echo "error: missing $(1)/$$f.md" >&2; exit 1; }; \
+	done
+endef
+
+# $(call require_disable_model_invocation,<skill-dir>)
+define require_disable_model_invocation
+	@grep -q '^disable-model-invocation: true' $(1)/SKILL.md || \
+		{ echo "error: $(1)/SKILL.md must set disable-model-invocation: true" >&2; exit 1; }
+endef
+
+# $(call forbid_disable_model_invocation,<skill-dir>)
+define forbid_disable_model_invocation
+	@grep -q '^disable-model-invocation:' $(1)/SKILL.md && \
+		{ echo "error: $(1)/SKILL.md must NOT set disable-model-invocation" >&2; exit 1; } || true
+endef
+
+# $(call require_setup_links_framework,<skill-dir>)
+define require_setup_links_framework
+	@grep -q 'skill-framework' $(1)/SETUP.md || \
+		{ echo "error: $(1)/SETUP.md must link to docs/skill-framework" >&2; exit 1; }
+endef
+
+# $(call require_cross_skill_escalation,<skill-dir>)
+define require_cross_skill_escalation
+	@grep -q 'cross-skill-escalation' $(1)/SKILL.md || \
+		{ echo "error: $(1) SKILL.md must link to shared cross-skill-escalation" >&2; exit 1; }
+endef
+
+# $(call require_safe_output_link,<skill-dir>)
+define require_safe_output_link
+	@grep -q 'docs/skill-framework/shared/safe-output.md' $(1)/SKILL.md || \
+		{ echo "error: $(1)/SKILL.md must link to shared safe-output" >&2; exit 1; }
+endef
+
 lint: validate-registry backfill-capabilities-check generate-check validate-evals lint-framework lint-pr-review lint-pr-gatekeeper lint-k8s-skill lint-incident-rca lint-incident-triage-agent lint-domain-comprehension lint-squad-map lint-who-owns-x-bot lint-new-hire-guide lint-release-readiness-checker lint-migration-program-manager lint-cost-optimization-sprint-planner lint-mysql-to-postgres-sql lint-loop-task-implementer lint-backlog-runner lint-weekly-squad-digest lint-unit-test-creator lint-integration-test-creator lint-contract-test-creator lint-e2e-test-creator lint-api-test-creator lint-test-writer lint-prd-architect lint-requirements-lock lint-actions-pinning lint-actions-security verify-install verify-install-all
 	@for f in scripts/*.sh; do \
 		echo "shellcheck $$f"; \
@@ -248,35 +328,17 @@ lint-pr-review-scripts:
 
 lint-pr-review-skill:
 	@echo "lint-pr-review-skill: SKILL.md line count (<= 180)"
-	@lines=$$(wc -l < pr-review/SKILL.md | tr -d ' '); \
-	if [ "$$lines" -gt 180 ]; then \
-		echo "error: pr-review SKILL.md $$lines lines (> 180) — keep orchestrator thin; detail in workflow/" >&2; \
-		exit 1; \
-	fi; \
-	echo "  ok ($$lines lines)"
+	$(call check_skill_md_length,pr-review,180,keep orchestrator thin; detail in workflow/)
 	@echo "lint-pr-review-skill: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
-	@fail=0; \
-	for f in pr-review/workflow/*.md; do \
-		fm=$$(awk '/^---$$/{c++; next} c==1' "$$f"); \
-		for key in workflow_version phase produces consumes; do \
-			if ! printf '%s\n' "$$fm" | grep -q "^$$key:"; then \
-				echo "  missing $$key frontmatter: $$f" >&2; fail=1; \
-			fi; \
-		done; \
-	done; \
-	if [ "$$fail" -ne 0 ]; then echo "error: pr-review workflow/*.md must declare workflow_version, phase, produces, consumes" >&2; exit 1; fi; \
-	echo "  ok"
+	$(call check_workflow_frontmatter,pr-review)
 	@echo "lint-pr-review-skill: route-aware workflow contract"
 	@python3 -m scripts.validate_workflow_contracts pr-review
 	@echo "lint-pr-review-skill: dangling markdown links"
-	@bash scripts/lint-dangling-md-links.sh pr-review/*.md pr-review/reference/*.md pr-review/workflow/*.md && echo "  ok" || \
-		{ echo "error: dangling reference link(s) found" >&2; exit 1; }
-	@grep -q 'cross-skill-escalation' pr-review/SKILL.md || \
-		{ echo "error: pr-review SKILL.md must link to shared cross-skill-escalation" >&2; exit 1; }
+	$(call check_dangling_links,pr-review/*.md pr-review/reference/*.md pr-review/workflow/*.md)
+	$(call require_cross_skill_escalation,pr-review)
 	@grep -q 'smoke-test' pr-review/SKILL.md || \
 		{ echo "error: pr-review SKILL.md must link to reference/smoke-test.md" >&2; exit 1; }
-	@grep -q 'docs/skill-framework/shared/safe-output.md' pr-review/SKILL.md || \
-		{ echo "error: pr-review SKILL.md must link to shared safe-output" >&2; exit 1; }
+	$(call require_safe_output_link,pr-review)
 	@for f in pr-review/workflow/posting.md pr-review/workflow/phase-5.md; do \
 		grep -q 'docs/skill-framework/shared/prompt-injection.md' "$$f" && \
 		grep -q 'docs/skill-framework/shared/safe-output.md' "$$f" && \
@@ -298,46 +360,20 @@ lint-pr-review-skill:
 
 lint-pr-gatekeeper:
 	@echo "lint-pr-gatekeeper: SKILL.md line count (<= 180)"
-	@test -f pr-gatekeeper/SKILL.md || \
-		{ echo "error: missing pr-gatekeeper/SKILL.md" >&2; exit 1; }
-	@lines=$$(wc -l < pr-gatekeeper/SKILL.md | tr -d ' '); \
-	if [ -z "$$lines" ] || [ "$$lines" -eq 0 ]; then \
-		echo "error: pr-gatekeeper/SKILL.md is empty" >&2; exit 1; \
-	elif [ "$$lines" -gt 180 ]; then \
-		echo "error: pr-gatekeeper SKILL.md $$lines lines (> 180) — keep orchestrator thin; detail in workflow/" >&2; \
-		exit 1; \
-	fi; \
-	echo "  ok ($$lines lines)"
+	$(call check_skill_md_length,pr-gatekeeper,180,keep orchestrator thin; detail in workflow/)
 	@echo "lint-pr-gatekeeper: disable-model-invocation set (automation entry point, must not compete with pr-review's ambient invocation)"
-	@grep -q '^disable-model-invocation: true' pr-gatekeeper/SKILL.md || \
-		{ echo "error: pr-gatekeeper/SKILL.md must set disable-model-invocation: true" >&2; exit 1; }
+	$(call require_disable_model_invocation,pr-gatekeeper)
 	@echo "  ok"
 	@echo "lint-pr-gatekeeper: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
-	@fail=0; \
-	for f in pr-gatekeeper/workflow/*.md; do \
-		fm=$$(awk '/^---$$/{c++; next} c==1' "$$f"); \
-		for key in workflow_version phase produces consumes; do \
-			if ! printf '%s\n' "$$fm" | grep -q "^$$key:"; then \
-				echo "  missing $$key frontmatter: $$f" >&2; fail=1; \
-			fi; \
-		done; \
-	done; \
-	if [ "$$fail" -ne 0 ]; then echo "error: pr-gatekeeper workflow/*.md must declare workflow_version, phase, produces, consumes" >&2; exit 1; fi; \
-	echo "  ok"
+	$(call check_workflow_frontmatter,pr-gatekeeper)
 	@echo "lint-pr-gatekeeper: dangling markdown links"
-	@bash scripts/lint-dangling-md-links.sh pr-gatekeeper/*.md pr-gatekeeper/reference/*.md pr-gatekeeper/workflow/*.md && echo "  ok" || \
-		{ echo "error: dangling reference link(s) found" >&2; exit 1; }
+	$(call check_dangling_links,pr-gatekeeper/*.md pr-gatekeeper/reference/*.md pr-gatekeeper/workflow/*.md)
 	@echo "lint-pr-gatekeeper: required reference files"
-	@for f in phase-index lazy-load-index auto-post-policy smoke-test pressure-tests; do \
-		test -f pr-gatekeeper/reference/$$f.md || \
-			{ echo "error: missing pr-gatekeeper/reference/$$f.md" >&2; exit 1; }; \
-	done
+	$(call require_ref_files,pr-gatekeeper/reference,phase-index lazy-load-index auto-post-policy smoke-test pressure-tests)
 	@grep -q 'pressure-tests' pr-gatekeeper/reference/smoke-test.md || \
 		{ echo "error: smoke-test.md must link to pressure-tests.md" >&2; exit 1; }
-	@grep -q 'skill-framework' pr-gatekeeper/SETUP.md || \
-		{ echo "error: pr-gatekeeper/SETUP.md must link to docs/skill-framework" >&2; exit 1; }
-	@grep -q 'docs/skill-framework/shared/safe-output.md' pr-gatekeeper/SKILL.md || \
-		{ echo "error: pr-gatekeeper/SKILL.md must link to shared safe-output" >&2; exit 1; }
+	$(call require_setup_links_framework,pr-gatekeeper)
+	$(call require_safe_output_link,pr-gatekeeper)
 	@grep -q 'docs/skill-framework/shared/prompt-injection.md' pr-gatekeeper/reference/auto-post-policy.md && \
 	 grep -q 'docs/skill-framework/shared/safe-output.md' pr-gatekeeper/reference/auto-post-policy.md && \
 	 grep -qiE 'escape|fence|backtick' pr-gatekeeper/reference/auto-post-policy.md || \
@@ -355,29 +391,13 @@ lint-pr-gatekeeper:
 
 lint-k8s-skill:
 	@echo "lint-k8s-skill: SKILL.md line count (<= 150)"
-	@lines=$$(wc -l < k8s-overprovisioning-datadog/SKILL.md | tr -d ' '); \
-	if [ "$$lines" -gt 150 ]; then \
-		echo "error: k8s SKILL.md $$lines lines (> 150) — keep orchestrator thin; detail in workflow/" >&2; \
-		exit 1; \
-	fi; \
-	echo "  ok ($$lines lines)"
+	$(call check_skill_md_length,k8s-overprovisioning-datadog,150,keep orchestrator thin; detail in workflow/)
 	@echo "lint-k8s-skill: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
-	@fail=0; \
-	for f in k8s-overprovisioning-datadog/workflow/*.md; do \
-		fm=$$(awk '/^---$$/{c++; next} c==1' "$$f"); \
-		for key in workflow_version phase produces consumes; do \
-			if ! printf '%s\n' "$$fm" | grep -q "^$$key:"; then \
-				echo "  missing $$key frontmatter: $$f" >&2; fail=1; \
-			fi; \
-		done; \
-	done; \
-	if [ "$$fail" -ne 0 ]; then echo "error: k8s workflow/*.md must declare workflow_version, phase, produces, consumes" >&2; exit 1; fi; \
-	echo "  ok"
+	$(call check_workflow_frontmatter,k8s-overprovisioning-datadog)
 	@echo "lint-k8s-skill: route-aware workflow contract"
 	@python3 -m scripts.validate_workflow_contracts k8s-overprovisioning-datadog
 	@echo "lint-k8s-skill: dangling markdown links"
-	@bash scripts/lint-dangling-md-links.sh k8s-overprovisioning-datadog/*.md k8s-overprovisioning-datadog/workflow/*.md k8s-overprovisioning-datadog/reference/*.md k8s-overprovisioning-datadog/render/*.md k8s-overprovisioning-datadog/templates/*.md && echo "  ok" || \
-		{ echo "error: dangling reference link(s) found" >&2; exit 1; }
+	$(call check_dangling_links,k8s-overprovisioning-datadog/*.md k8s-overprovisioning-datadog/workflow/*.md k8s-overprovisioning-datadog/reference/*.md k8s-overprovisioning-datadog/render/*.md k8s-overprovisioning-datadog/templates/*.md)
 	@echo "lint-k8s-skill: p95 not positively asserted in memory-sizing section"
 	@sec=$$(awk '/^## Memory request utilization/{f=1;next} /^## /{f=0} f' k8s-overprovisioning-datadog/thresholds.md); \
 	bad=$$(printf '%s\n' "$$sec" | grep -in 'p95' | grep -ivE 'not|never' || true); \
@@ -410,10 +430,8 @@ lint-k8s-skill:
 		test -f k8s-overprovisioning-datadog/reference/$$f.md || \
 			{ echo "error: missing k8s-overprovisioning-datadog/reference/$$f.md" >&2; exit 1; }; \
 	done
-	@grep -q 'skill-framework' k8s-overprovisioning-datadog/SETUP.md || \
-		{ echo "error: k8s-overprovisioning-datadog/SETUP.md must link to docs/skill-framework" >&2; exit 1; }
-	@grep -q 'cross-skill-escalation' k8s-overprovisioning-datadog/SKILL.md || \
-		{ echo "error: k8s SKILL.md must link to shared cross-skill-escalation" >&2; exit 1; }
+	$(call require_setup_links_framework,k8s-overprovisioning-datadog)
+	$(call require_cross_skill_escalation,k8s-overprovisioning-datadog)
 	@grep -q 'assessment_metadata' k8s-overprovisioning-datadog/workflow/report.md || \
 		{ echo "error: k8s workflow/report.md must document assessment_metadata footer" >&2; exit 1; }
 	@test -f k8s-overprovisioning-datadog/reference/gold-human-report-excerpt.md || exit 1
@@ -431,8 +449,7 @@ lint-k8s-skill:
 		{ echo "error: report.md must document next_assessment_due in history" >&2; exit 1; }
 	@echo "  ok"
 	@echo "lint-k8s-skill: safe rendered-output boundary"
-	@grep -q 'docs/skill-framework/shared/safe-output.md' k8s-overprovisioning-datadog/SKILL.md || \
-		{ echo "error: k8s-overprovisioning-datadog/SKILL.md must link to shared safe-output" >&2; exit 1; }
+	$(call require_safe_output_link,k8s-overprovisioning-datadog)
 	@grep -q 'docs/skill-framework/shared/safe-output.md' k8s-overprovisioning-datadog/render/markdown.md && \
 	 grep -qiE 'escape|backtick|code span' k8s-overprovisioning-datadog/render/markdown.md || \
 		{ echo "error: render/markdown.md must sanitize untrusted rendered fields per safe-output" >&2; exit 1; }
@@ -464,24 +481,9 @@ lint-k8s: lint-k8s-skill
 
 lint-incident-rca:
 	@echo "lint-incident-rca: SKILL.md line count (<= 180)"
-	@lines=$$(wc -l < incident-rca/SKILL.md | tr -d ' '); \
-	if [ "$$lines" -gt 180 ]; then \
-		echo "error: incident-rca SKILL.md $$lines lines (> 180) — push detail into workflow/ and reference/" >&2; \
-		exit 1; \
-	fi; \
-	echo "  ok ($$lines lines)"
+	$(call check_skill_md_length,incident-rca,180,push detail into workflow/ and reference/)
 	@echo "lint-incident-rca: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
-	@fail=0; \
-	for f in incident-rca/workflow/*.md; do \
-		fm=$$(awk '/^---$$/{c++; next} c==1' "$$f"); \
-		for key in workflow_version phase produces consumes; do \
-			if ! printf '%s\n' "$$fm" | grep -q "^$$key:"; then \
-				echo "  missing $$key frontmatter: $$f" >&2; fail=1; \
-			fi; \
-		done; \
-	done; \
-	if [ "$$fail" -ne 0 ]; then echo "error: incident-rca workflow/*.md must declare workflow_version, phase, produces, consumes" >&2; exit 1; fi; \
-	echo "  ok"
+	$(call check_workflow_frontmatter,incident-rca)
 	@echo "lint-incident-rca: route-aware workflow contract"
 	@python3 -m scripts.validate_workflow_contracts incident-rca
 	@echo "lint-incident-rca: evidence.example.json parses as JSON"
@@ -492,17 +494,11 @@ lint-incident-rca:
 		{ echo "error: incident-rca/reference/evidence.example.json is not valid JSON" >&2; exit 1; }; \
 	echo "  ok"
 	@echo "lint-incident-rca: dangling markdown links"
-	@bash scripts/lint-dangling-md-links.sh incident-rca/*.md incident-rca/reference/*.md incident-rca/workflow/*.md && echo "  ok" || \
-		{ echo "error: dangling reference link(s) found" >&2; exit 1; }
+	$(call check_dangling_links,incident-rca/*.md incident-rca/reference/*.md incident-rca/workflow/*.md)
 	@echo "lint-incident-rca: framework reference files"
-	@for f in phase-index lazy-load-index smoke-test mcp-capabilities; do \
-		test -f incident-rca/reference/$$f.md || \
-			{ echo "error: missing incident-rca/reference/$$f.md" >&2; exit 1; }; \
-	done
-	@grep -q 'skill-framework' incident-rca/SETUP.md || \
-		{ echo "error: incident-rca/SETUP.md must link to docs/skill-framework" >&2; exit 1; }
-	@grep -q 'cross-skill-escalation' incident-rca/SKILL.md || \
-		{ echo "error: incident-rca SKILL.md must link to shared cross-skill-escalation" >&2; exit 1; }
+	$(call require_ref_files,incident-rca/reference,phase-index lazy-load-index smoke-test mcp-capabilities)
+	$(call require_setup_links_framework,incident-rca)
+	$(call require_cross_skill_escalation,incident-rca)
 	@grep -q 'skill_version' incident-rca/SKILL.md || \
 		{ echo "error: incident-rca SKILL.md must use skill_version (not schema_version)" >&2; exit 1; }
 	@grep -q 'dependency_chain' incident-rca/reference/evidence-schema.md || \
@@ -545,8 +541,7 @@ lint-incident-rca:
 	fi; \
 	echo "  ok"
 	@echo "lint-incident-rca: safe rendered-output boundary"
-	@grep -q 'docs/skill-framework/shared/safe-output.md' incident-rca/SKILL.md || \
-		{ echo "error: incident-rca/SKILL.md must link to shared safe-output" >&2; exit 1; }
+	$(call require_safe_output_link,incident-rca)
 	@grep -q 'docs/skill-framework/shared/safe-output.md' incident-rca/report-template.md && \
 	 grep -qiE 'escape|backtick|code span' incident-rca/report-template.md || \
 		{ echo "error: report-template.md must sanitize untrusted rendered fields per safe-output" >&2; exit 1; }
@@ -554,48 +549,22 @@ lint-incident-rca:
 
 lint-incident-triage-agent:
 	@echo "lint-incident-triage-agent: SKILL.md line count (<= 180)"
-	@test -f incident-triage-agent/SKILL.md || \
-		{ echo "error: missing incident-triage-agent/SKILL.md" >&2; exit 1; }
-	@lines=$$(wc -l < incident-triage-agent/SKILL.md | tr -d ' '); \
-	if [ -z "$$lines" ] || [ "$$lines" -eq 0 ]; then \
-		echo "error: incident-triage-agent/SKILL.md is empty" >&2; exit 1; \
-	elif [ "$$lines" -gt 180 ]; then \
-		echo "error: incident-triage-agent SKILL.md $$lines lines (> 180) — keep orchestrator thin; detail in workflow/" >&2; \
-		exit 1; \
-	fi; \
-	echo "  ok ($$lines lines)"
+	$(call check_skill_md_length,incident-triage-agent,180,keep orchestrator thin; detail in workflow/)
 	@echo "lint-incident-triage-agent: disable-model-invocation set (automation entry point, must not compete with incident-rca/squad-map's ambient invocation)"
-	@grep -q '^disable-model-invocation: true' incident-triage-agent/SKILL.md || \
-		{ echo "error: incident-triage-agent/SKILL.md must set disable-model-invocation: true" >&2; exit 1; }
+	$(call require_disable_model_invocation,incident-triage-agent)
 	@echo "  ok"
 	@echo "lint-incident-triage-agent: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
-	@fail=0; \
-	for f in incident-triage-agent/workflow/*.md; do \
-		fm=$$(awk '/^---$$/{c++; next} c==1' "$$f"); \
-		for key in workflow_version phase produces consumes; do \
-			if ! printf '%s\n' "$$fm" | grep -q "^$$key:"; then \
-				echo "  missing $$key frontmatter: $$f" >&2; fail=1; \
-			fi; \
-		done; \
-	done; \
-	if [ "$$fail" -ne 0 ]; then echo "error: incident-triage-agent workflow/*.md must declare workflow_version, phase, produces, consumes" >&2; exit 1; fi; \
-	echo "  ok"
+	$(call check_workflow_frontmatter,incident-triage-agent)
 	@echo "lint-incident-triage-agent: route-aware workflow contract"
 	@python3 -m scripts.validate_workflow_contracts incident-triage-agent
 	@echo "lint-incident-triage-agent: dangling markdown links"
-	@bash scripts/lint-dangling-md-links.sh incident-triage-agent/*.md incident-triage-agent/reference/*.md incident-triage-agent/workflow/*.md && echo "  ok" || \
-		{ echo "error: dangling reference link(s) found" >&2; exit 1; }
+	$(call check_dangling_links,incident-triage-agent/*.md incident-triage-agent/reference/*.md incident-triage-agent/workflow/*.md)
 	@echo "lint-incident-triage-agent: required reference files"
-	@for f in phase-index lazy-load-index unattended-gate-policy triage-doc-format postmortem-format smoke-test pressure-tests; do \
-		test -f incident-triage-agent/reference/$$f.md || \
-			{ echo "error: missing incident-triage-agent/reference/$$f.md" >&2; exit 1; }; \
-	done
+	$(call require_ref_files,incident-triage-agent/reference,phase-index lazy-load-index unattended-gate-policy triage-doc-format postmortem-format smoke-test pressure-tests)
 	@grep -q 'pressure-tests' incident-triage-agent/reference/smoke-test.md || \
 		{ echo "error: smoke-test.md must link to pressure-tests.md" >&2; exit 1; }
-	@grep -q 'skill-framework' incident-triage-agent/SETUP.md || \
-		{ echo "error: incident-triage-agent/SETUP.md must link to docs/skill-framework" >&2; exit 1; }
-	@grep -q 'docs/skill-framework/shared/safe-output.md' incident-triage-agent/SKILL.md || \
-		{ echo "error: incident-triage-agent/SKILL.md must link to shared safe-output" >&2; exit 1; }
+	$(call require_setup_links_framework,incident-triage-agent)
+	$(call require_safe_output_link,incident-triage-agent)
 	@for f in triage-doc-format postmortem-format; do \
 		grep -q 'docs/skill-framework/shared/prompt-injection.md' incident-triage-agent/reference/$$f.md && \
 		 grep -q 'docs/skill-framework/shared/safe-output.md' incident-triage-agent/reference/$$f.md && \
@@ -646,45 +615,19 @@ lint-domain-comprehension-scripts:
 
 lint-domain-comprehension-skill:
 	@echo "lint-domain-comprehension: SKILL.md line count (<= 180)"
-	@test -f domain-comprehension/SKILL.md || \
-		{ echo "error: missing domain-comprehension/SKILL.md" >&2; exit 1; }
-	@lines=$$(wc -l < domain-comprehension/SKILL.md | tr -d ' '); \
-	if [ -z "$$lines" ] || [ "$$lines" -eq 0 ]; then \
-		echo "error: domain-comprehension/SKILL.md is empty" >&2; exit 1; \
-	elif [ "$$lines" -gt 180 ]; then \
-		echo "error: domain-comprehension SKILL.md $$lines lines (> 180) — keep orchestrator thin; detail in workflow/" >&2; \
-		exit 1; \
-	fi; \
-	echo "  ok ($$lines lines)"
+	$(call check_skill_md_length,domain-comprehension,180,keep orchestrator thin; detail in workflow/)
 	@echo "lint-domain-comprehension: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
-	@fail=0; \
-	for f in domain-comprehension/workflow/*.md; do \
-		fm=$$(awk '/^---$$/{c++; next} c==1' "$$f"); \
-		for key in workflow_version phase produces consumes; do \
-			if ! printf '%s\n' "$$fm" | grep -q "^$$key:"; then \
-				echo "  missing $$key frontmatter: $$f" >&2; fail=1; \
-			fi; \
-		done; \
-	done; \
-	if [ "$$fail" -ne 0 ]; then echo "error: domain-comprehension workflow/*.md must declare workflow_version, phase, produces, consumes" >&2; exit 1; fi; \
-	echo "  ok"
+	$(call check_workflow_frontmatter,domain-comprehension)
 	@echo "lint-domain-comprehension: dangling markdown links"
-	@bash scripts/lint-dangling-md-links.sh domain-comprehension/*.md domain-comprehension/reference/*.md domain-comprehension/workflow/*.md domain-comprehension/reference/domain-packs/*.md && echo "  ok" || \
-		{ echo "error: dangling reference link(s) found" >&2; exit 1; }
+	$(call check_dangling_links,domain-comprehension/*.md domain-comprehension/reference/*.md domain-comprehension/workflow/*.md domain-comprehension/reference/domain-packs/*.md)
 	@echo "lint-domain-comprehension: framework reference files"
-	@for f in phase-index lazy-load-index smoke-test mcp-capabilities phase-outputs manifest-schema \
-		repo-classification evidence-precedence evidence-summary business-flows large-scale-execution; do \
-		test -f domain-comprehension/reference/$$f.md || \
-			{ echo "error: missing domain-comprehension/reference/$$f.md" >&2; exit 1; }; \
-	done
+	$(call require_ref_files,domain-comprehension/reference,phase-index lazy-load-index smoke-test mcp-capabilities phase-outputs manifest-schema repo-classification evidence-precedence evidence-summary business-flows large-scale-execution)
 	@test -f domain-comprehension/templates/manifest.yaml || \
 		{ echo "error: missing domain-comprehension/templates/manifest.yaml" >&2; exit 1; }
 	@test -f domain-comprehension/templates/BUSINESS_FLOWS.md || exit 1
 	@test -f domain-comprehension/templates/KNOWN_OMISSIONS.md || exit 1
-	@grep -q 'skill-framework' domain-comprehension/SETUP.md || \
-		{ echo "error: domain-comprehension/SETUP.md must link to docs/skill-framework" >&2; exit 1; }
-	@grep -q 'cross-skill-escalation' domain-comprehension/SKILL.md || \
-		{ echo "error: domain-comprehension SKILL.md must link to shared cross-skill-escalation" >&2; exit 1; }
+	$(call require_setup_links_framework,domain-comprehension)
+	$(call require_cross_skill_escalation,domain-comprehension)
 	@grep -q 'manifest.yaml' domain-comprehension/SKILL.md || \
 		{ echo "error: domain-comprehension SKILL.md must document manifest.yaml" >&2; exit 1; }
 	@test -f domain-comprehension/reference/pressure-tests.md || exit 1
@@ -700,8 +643,7 @@ lint-domain-comprehension-skill:
 	@bash domain-comprehension/tests/run_pressure_tests.sh
 	@echo "  ok (framework refs)"
 	@echo "lint-domain-comprehension: safe rendered-output boundary"
-	@grep -q 'docs/skill-framework/shared/safe-output.md' domain-comprehension/SKILL.md || \
-		{ echo "error: domain-comprehension/SKILL.md must link to shared safe-output" >&2; exit 1; }
+	$(call require_safe_output_link,domain-comprehension)
 	@grep -q 'docs/skill-framework/shared/safe-output.md' domain-comprehension/reference/deliverable-templates.md && \
 	 grep -qiE 'escape|backtick|code span' domain-comprehension/reference/deliverable-templates.md || \
 		{ echo "error: deliverable-templates.md must sanitize untrusted rendered fields per safe-output" >&2; exit 1; }
@@ -709,46 +651,21 @@ lint-domain-comprehension-skill:
 
 lint-squad-map:
 	@echo "lint-squad-map: SKILL.md line count (<= 180)"
-	@test -f squad-map/SKILL.md || \
-		{ echo "error: missing squad-map/SKILL.md" >&2; exit 1; }
-	@lines=$$(wc -l < squad-map/SKILL.md | tr -d ' '); \
-	if [ -z "$$lines" ] || [ "$$lines" -eq 0 ]; then \
-		echo "error: squad-map/SKILL.md is empty" >&2; exit 1; \
-	elif [ "$$lines" -gt 180 ]; then \
-		echo "error: squad-map SKILL.md $$lines lines (> 180) — keep orchestrator thin; detail in workflow/" >&2; \
-		exit 1; \
-	fi; \
-	echo "  ok ($$lines lines)"
+	$(call check_skill_md_length,squad-map,180,keep orchestrator thin; detail in workflow/)
 	@echo "lint-squad-map: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
-	@fail=0; \
-	for f in squad-map/workflow/*.md; do \
-		fm=$$(awk '/^---$$/{c++; next} c==1' "$$f"); \
-		for key in workflow_version phase produces consumes; do \
-			if ! printf '%s\n' "$$fm" | grep -q "^$$key:"; then \
-				echo "  missing $$key frontmatter: $$f" >&2; fail=1; \
-			fi; \
-		done; \
-	done; \
-	if [ "$$fail" -ne 0 ]; then echo "error: squad-map workflow/*.md must declare workflow_version, phase, produces, consumes" >&2; exit 1; fi; \
-	echo "  ok"
+	$(call check_workflow_frontmatter,squad-map)
 	@echo "lint-squad-map: dangling markdown links"
-	@bash scripts/lint-dangling-md-links.sh squad-map/*.md squad-map/reference/*.md squad-map/workflow/*.md && echo "  ok" || \
-		{ echo "error: dangling reference link(s) found" >&2; exit 1; }
+	$(call check_dangling_links,squad-map/*.md squad-map/reference/*.md squad-map/workflow/*.md)
 	@echo "lint-squad-map: required reference files"
-	@for f in squad-mapping mcp-capabilities config-schema smoke-test lazy-load-index phase-index; do \
-		test -f squad-map/reference/$$f.md || \
-			{ echo "error: missing squad-map/reference/$$f.md" >&2; exit 1; }; \
-	done
+	$(call require_ref_files,squad-map/reference,squad-mapping mcp-capabilities config-schema smoke-test lazy-load-index phase-index)
 	@test -f squad-map/templates/SQUAD_MAP.md || \
 		{ echo "error: missing squad-map/templates/SQUAD_MAP.md" >&2; exit 1; }
-	@grep -q 'skill-framework' squad-map/SETUP.md || \
-		{ echo "error: squad-map/SETUP.md must link to docs/skill-framework" >&2; exit 1; }
+	$(call require_setup_links_framework,squad-map)
 	@test -f squad-map/reference/pressure-tests.md || exit 1
 	@test -f squad-map/reference/gold-squad-map-excerpt.md || exit 1
 	@grep -q 'monorepo_service_dirs' squad-map/reference/config-schema.md || \
 		{ echo "error: config-schema.md must document monorepo_service_dirs mapping" >&2; exit 1; }
-	@grep -q 'docs/skill-framework/shared/safe-output.md' squad-map/SKILL.md || \
-		{ echo "error: squad-map/SKILL.md must link to shared safe-output" >&2; exit 1; }
+	$(call require_safe_output_link,squad-map)
 	@grep -q 'docs/skill-framework/shared/prompt-injection.md' squad-map/reference/squad-mapping.md && \
 	 grep -q 'docs/skill-framework/shared/safe-output.md' squad-map/reference/squad-mapping.md && \
 	 grep -qiE 'escape|fence|backtick' squad-map/reference/squad-mapping.md || \
@@ -772,46 +689,20 @@ lint-squad-map:
 
 lint-who-owns-x-bot:
 	@echo "lint-who-owns-x-bot: SKILL.md line count (<= 180)"
-	@test -f who-owns-x-bot/SKILL.md || \
-		{ echo "error: missing who-owns-x-bot/SKILL.md" >&2; exit 1; }
-	@lines=$$(wc -l < who-owns-x-bot/SKILL.md | tr -d ' '); \
-	if [ -z "$$lines" ] || [ "$$lines" -eq 0 ]; then \
-		echo "error: who-owns-x-bot/SKILL.md is empty" >&2; exit 1; \
-	elif [ "$$lines" -gt 180 ]; then \
-		echo "error: who-owns-x-bot SKILL.md $$lines lines (> 180) — keep orchestrator thin; detail in workflow/" >&2; \
-		exit 1; \
-	fi; \
-	echo "  ok ($$lines lines)"
+	$(call check_skill_md_length,who-owns-x-bot,180,keep orchestrator thin; detail in workflow/)
 	@echo "lint-who-owns-x-bot: disable-model-invocation set (automation entry point, must not compete with squad-map's ambient invocation)"
-	@grep -q '^disable-model-invocation: true' who-owns-x-bot/SKILL.md || \
-		{ echo "error: who-owns-x-bot/SKILL.md must set disable-model-invocation: true" >&2; exit 1; }
+	$(call require_disable_model_invocation,who-owns-x-bot)
 	@echo "  ok"
 	@echo "lint-who-owns-x-bot: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
-	@fail=0; \
-	for f in who-owns-x-bot/workflow/*.md; do \
-		fm=$$(awk '/^---$$/{c++; next} c==1' "$$f"); \
-		for key in workflow_version phase produces consumes; do \
-			if ! printf '%s\n' "$$fm" | grep -q "^$$key:"; then \
-				echo "  missing $$key frontmatter: $$f" >&2; fail=1; \
-			fi; \
-		done; \
-	done; \
-	if [ "$$fail" -ne 0 ]; then echo "error: who-owns-x-bot workflow/*.md must declare workflow_version, phase, produces, consumes" >&2; exit 1; fi; \
-	echo "  ok"
+	$(call check_workflow_frontmatter,who-owns-x-bot)
 	@echo "lint-who-owns-x-bot: dangling markdown links"
-	@bash scripts/lint-dangling-md-links.sh who-owns-x-bot/*.md who-owns-x-bot/reference/*.md who-owns-x-bot/workflow/*.md && echo "  ok" || \
-		{ echo "error: dangling reference link(s) found" >&2; exit 1; }
+	$(call check_dangling_links,who-owns-x-bot/*.md who-owns-x-bot/reference/*.md who-owns-x-bot/workflow/*.md)
 	@echo "lint-who-owns-x-bot: required reference files"
-	@for f in phase-index lazy-load-index slack-format smoke-test pressure-tests; do \
-		test -f who-owns-x-bot/reference/$$f.md || \
-			{ echo "error: missing who-owns-x-bot/reference/$$f.md" >&2; exit 1; }; \
-	done
+	$(call require_ref_files,who-owns-x-bot/reference,phase-index lazy-load-index slack-format smoke-test pressure-tests)
 	@grep -q 'pressure-tests' who-owns-x-bot/reference/smoke-test.md || \
 		{ echo "error: smoke-test.md must link to pressure-tests.md" >&2; exit 1; }
-	@grep -q 'skill-framework' who-owns-x-bot/SETUP.md || \
-		{ echo "error: who-owns-x-bot/SETUP.md must link to docs/skill-framework" >&2; exit 1; }
-	@grep -q 'docs/skill-framework/shared/safe-output.md' who-owns-x-bot/SKILL.md || \
-		{ echo "error: who-owns-x-bot/SKILL.md must link to shared safe-output" >&2; exit 1; }
+	$(call require_setup_links_framework,who-owns-x-bot)
+	$(call require_safe_output_link,who-owns-x-bot)
 	@grep -q 'docs/skill-framework/shared/prompt-injection.md' who-owns-x-bot/reference/slack-format.md && \
 	 grep -q 'docs/skill-framework/shared/safe-output.md' who-owns-x-bot/reference/slack-format.md && \
 	 grep -qiE 'escape|strip' who-owns-x-bot/reference/slack-format.md || \
@@ -820,46 +711,20 @@ lint-who-owns-x-bot:
 
 lint-new-hire-guide:
 	@echo "lint-new-hire-guide: SKILL.md line count (<= 180)"
-	@test -f new-hire-guide/SKILL.md || \
-		{ echo "error: missing new-hire-guide/SKILL.md" >&2; exit 1; }
-	@lines=$$(wc -l < new-hire-guide/SKILL.md | tr -d ' '); \
-	if [ -z "$$lines" ] || [ "$$lines" -eq 0 ]; then \
-		echo "error: new-hire-guide/SKILL.md is empty" >&2; exit 1; \
-	elif [ "$$lines" -gt 180 ]; then \
-		echo "error: new-hire-guide SKILL.md $$lines lines (> 180) — keep orchestrator thin; detail in workflow/" >&2; \
-		exit 1; \
-	fi; \
-	echo "  ok ($$lines lines)"
+	$(call check_skill_md_length,new-hire-guide,180,keep orchestrator thin; detail in workflow/)
 	@echo "lint-new-hire-guide: disable-model-invocation NOT set (ambiently invocable, unlike the webhook/schedule wrappers)"
-	@grep -q '^disable-model-invocation:' new-hire-guide/SKILL.md && \
-		{ echo "error: new-hire-guide/SKILL.md must NOT set disable-model-invocation — a human is always present for this flow" >&2; exit 1; } || true
+	$(call forbid_disable_model_invocation,new-hire-guide)
 	@echo "  ok"
 	@echo "lint-new-hire-guide: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
-	@fail=0; \
-	for f in new-hire-guide/workflow/*.md; do \
-		fm=$$(awk '/^---$$/{c++; next} c==1' "$$f"); \
-		for key in workflow_version phase produces consumes; do \
-			if ! printf '%s\n' "$$fm" | grep -q "^$$key:"; then \
-				echo "  missing $$key frontmatter: $$f" >&2; fail=1; \
-			fi; \
-		done; \
-	done; \
-	if [ "$$fail" -ne 0 ]; then echo "error: new-hire-guide workflow/*.md must declare workflow_version, phase, produces, consumes" >&2; exit 1; fi; \
-	echo "  ok"
+	$(call check_workflow_frontmatter,new-hire-guide)
 	@echo "lint-new-hire-guide: dangling markdown links"
-	@bash scripts/lint-dangling-md-links.sh new-hire-guide/*.md new-hire-guide/reference/*.md new-hire-guide/workflow/*.md && echo "  ok" || \
-		{ echo "error: dangling reference link(s) found" >&2; exit 1; }
+	$(call check_dangling_links,new-hire-guide/*.md new-hire-guide/reference/*.md new-hire-guide/workflow/*.md)
 	@echo "lint-new-hire-guide: required reference files"
-	@for f in phase-index lazy-load-index tour-format smoke-test pressure-tests; do \
-		test -f new-hire-guide/reference/$$f.md || \
-			{ echo "error: missing new-hire-guide/reference/$$f.md" >&2; exit 1; }; \
-	done
+	$(call require_ref_files,new-hire-guide/reference,phase-index lazy-load-index tour-format smoke-test pressure-tests)
 	@grep -q 'pressure-tests' new-hire-guide/reference/smoke-test.md || \
 		{ echo "error: smoke-test.md must link to pressure-tests.md" >&2; exit 1; }
-	@grep -q 'skill-framework' new-hire-guide/SETUP.md || \
-		{ echo "error: new-hire-guide/SETUP.md must link to docs/skill-framework" >&2; exit 1; }
-	@grep -q 'docs/skill-framework/shared/safe-output.md' new-hire-guide/SKILL.md || \
-		{ echo "error: new-hire-guide/SKILL.md must link to shared safe-output" >&2; exit 1; }
+	$(call require_setup_links_framework,new-hire-guide)
+	$(call require_safe_output_link,new-hire-guide)
 	@grep -q 'docs/skill-framework/shared/prompt-injection.md' new-hire-guide/reference/tour-format.md && \
 	 grep -q 'docs/skill-framework/shared/safe-output.md' new-hire-guide/reference/tour-format.md && \
 	 grep -qiE 'escape|fence|backtick' new-hire-guide/reference/tour-format.md && \
@@ -869,46 +734,20 @@ lint-new-hire-guide:
 
 lint-release-readiness-checker:
 	@echo "lint-release-readiness-checker: SKILL.md line count (<= 180)"
-	@test -f release-readiness-checker/SKILL.md || \
-		{ echo "error: missing release-readiness-checker/SKILL.md" >&2; exit 1; }
-	@lines=$$(wc -l < release-readiness-checker/SKILL.md | tr -d ' '); \
-	if [ -z "$$lines" ] || [ "$$lines" -eq 0 ]; then \
-		echo "error: release-readiness-checker/SKILL.md is empty" >&2; exit 1; \
-	elif [ "$$lines" -gt 180 ]; then \
-		echo "error: release-readiness-checker SKILL.md $$lines lines (> 180) — keep orchestrator thin; detail in workflow/" >&2; \
-		exit 1; \
-	fi; \
-	echo "  ok ($$lines lines)"
+	$(call check_skill_md_length,release-readiness-checker,180,keep orchestrator thin; detail in workflow/)
 	@echo "lint-release-readiness-checker: disable-model-invocation NOT set (ambiently invocable, unlike the webhook/schedule wrappers)"
-	@grep -q '^disable-model-invocation:' release-readiness-checker/SKILL.md && \
-		{ echo "error: release-readiness-checker/SKILL.md must NOT set disable-model-invocation — a human is always present for this flow" >&2; exit 1; } || true
+	$(call forbid_disable_model_invocation,release-readiness-checker)
 	@echo "  ok"
 	@echo "lint-release-readiness-checker: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
-	@fail=0; \
-	for f in release-readiness-checker/workflow/*.md; do \
-		fm=$$(awk '/^---$$/{c++; next} c==1' "$$f"); \
-		for key in workflow_version phase produces consumes; do \
-			if ! printf '%s\n' "$$fm" | grep -q "^$$key:"; then \
-				echo "  missing $$key frontmatter: $$f" >&2; fail=1; \
-			fi; \
-		done; \
-	done; \
-	if [ "$$fail" -ne 0 ]; then echo "error: release-readiness-checker workflow/*.md must declare workflow_version, phase, produces, consumes" >&2; exit 1; fi; \
-	echo "  ok"
+	$(call check_workflow_frontmatter,release-readiness-checker)
 	@echo "lint-release-readiness-checker: dangling markdown links"
-	@bash scripts/lint-dangling-md-links.sh release-readiness-checker/*.md release-readiness-checker/reference/*.md release-readiness-checker/workflow/*.md && echo "  ok" || \
-		{ echo "error: dangling reference link(s) found" >&2; exit 1; }
+	$(call check_dangling_links,release-readiness-checker/*.md release-readiness-checker/reference/*.md release-readiness-checker/workflow/*.md)
 	@echo "lint-release-readiness-checker: required reference files"
-	@for f in phase-index lazy-load-index gate-policy report-format smoke-test pressure-tests; do \
-		test -f release-readiness-checker/reference/$$f.md || \
-			{ echo "error: missing release-readiness-checker/reference/$$f.md" >&2; exit 1; }; \
-	done
+	$(call require_ref_files,release-readiness-checker/reference,phase-index lazy-load-index gate-policy report-format smoke-test pressure-tests)
 	@grep -q 'pressure-tests' release-readiness-checker/reference/smoke-test.md || \
 		{ echo "error: smoke-test.md must link to pressure-tests.md" >&2; exit 1; }
-	@grep -q 'skill-framework' release-readiness-checker/SETUP.md || \
-		{ echo "error: release-readiness-checker/SETUP.md must link to docs/skill-framework" >&2; exit 1; }
-	@grep -q 'docs/skill-framework/shared/safe-output.md' release-readiness-checker/SKILL.md || \
-		{ echo "error: release-readiness-checker/SKILL.md must link to shared safe-output" >&2; exit 1; }
+	$(call require_setup_links_framework,release-readiness-checker)
+	$(call require_safe_output_link,release-readiness-checker)
 	@grep -q 'docs/skill-framework/shared/prompt-injection.md' release-readiness-checker/reference/report-format.md && \
 	 grep -q 'docs/skill-framework/shared/safe-output.md' release-readiness-checker/reference/report-format.md && \
 	 grep -qiE 'escape|fence|backtick' release-readiness-checker/reference/report-format.md || \
@@ -917,48 +756,22 @@ lint-release-readiness-checker:
 
 lint-migration-program-manager:
 	@echo "lint-migration-program-manager: SKILL.md line count (<= 180)"
-	@test -f migration-program-manager/SKILL.md || \
-		{ echo "error: missing migration-program-manager/SKILL.md" >&2; exit 1; }
-	@lines=$$(wc -l < migration-program-manager/SKILL.md | tr -d ' '); \
-	if [ -z "$$lines" ] || [ "$$lines" -eq 0 ]; then \
-		echo "error: migration-program-manager/SKILL.md is empty" >&2; exit 1; \
-	elif [ "$$lines" -gt 180 ]; then \
-		echo "error: migration-program-manager SKILL.md $$lines lines (> 180) — keep orchestrator thin; detail in workflow/" >&2; \
-		exit 1; \
-	fi; \
-	echo "  ok ($$lines lines)"
+	$(call check_skill_md_length,migration-program-manager,180,keep orchestrator thin; detail in workflow/)
 	@echo "lint-migration-program-manager: disable-model-invocation NOT set (ambiently invocable, no live wrapped-skill invocation to gate)"
-	@grep -q '^disable-model-invocation:' migration-program-manager/SKILL.md && \
-		{ echo "error: migration-program-manager/SKILL.md must NOT set disable-model-invocation" >&2; exit 1; } || true
+	$(call forbid_disable_model_invocation,migration-program-manager)
 	@echo "  ok"
 	@echo "lint-migration-program-manager: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
-	@fail=0; \
-	for f in migration-program-manager/workflow/*.md; do \
-		fm=$$(awk '/^---$$/{c++; next} c==1' "$$f"); \
-		for key in workflow_version phase produces consumes; do \
-			if ! printf '%s\n' "$$fm" | grep -q "^$$key:"; then \
-				echo "  missing $$key frontmatter: $$f" >&2; fail=1; \
-			fi; \
-		done; \
-	done; \
-	if [ "$$fail" -ne 0 ]; then echo "error: migration-program-manager workflow/*.md must declare workflow_version, phase, produces, consumes" >&2; exit 1; fi; \
-	echo "  ok"
+	$(call check_workflow_frontmatter,migration-program-manager)
 	@echo "lint-migration-program-manager: dangling markdown links"
-	@bash scripts/lint-dangling-md-links.sh migration-program-manager/*.md migration-program-manager/reference/*.md migration-program-manager/workflow/*.md && echo "  ok" || \
-		{ echo "error: dangling reference link(s) found" >&2; exit 1; }
+	$(call check_dangling_links,migration-program-manager/*.md migration-program-manager/reference/*.md migration-program-manager/workflow/*.md)
 	@echo "lint-migration-program-manager: required reference files"
-	@for f in phase-index lazy-load-index report-format smoke-test pressure-tests; do \
-		test -f migration-program-manager/reference/$$f.md || \
-			{ echo "error: missing migration-program-manager/reference/$$f.md" >&2; exit 1; }; \
-	done
+	$(call require_ref_files,migration-program-manager/reference,phase-index lazy-load-index report-format smoke-test pressure-tests)
 	@grep -q 'pressure-tests' migration-program-manager/reference/smoke-test.md || \
 		{ echo "error: smoke-test.md must link to pressure-tests.md" >&2; exit 1; }
 	@test -f migration-program-manager/scripts/aggregate_migration_status.py || \
 		{ echo "error: missing migration-program-manager/scripts/aggregate_migration_status.py" >&2; exit 1; }
-	@grep -q 'skill-framework' migration-program-manager/SETUP.md || \
-		{ echo "error: migration-program-manager/SETUP.md must link to docs/skill-framework" >&2; exit 1; }
-	@grep -q 'docs/skill-framework/shared/safe-output.md' migration-program-manager/SKILL.md || \
-		{ echo "error: migration-program-manager/SKILL.md must link to shared safe-output" >&2; exit 1; }
+	$(call require_setup_links_framework,migration-program-manager)
+	$(call require_safe_output_link,migration-program-manager)
 	@grep -q 'docs/skill-framework/shared/prompt-injection.md' migration-program-manager/reference/report-format.md && \
 	 grep -q 'docs/skill-framework/shared/safe-output.md' migration-program-manager/reference/report-format.md && \
 	 grep -qiE 'escape|fence|backtick' migration-program-manager/reference/report-format.md && \
@@ -974,46 +787,20 @@ lint-migration-program-manager:
 
 lint-cost-optimization-sprint-planner:
 	@echo "lint-cost-optimization-sprint-planner: SKILL.md line count (<= 180)"
-	@test -f cost-optimization-sprint-planner/SKILL.md || \
-		{ echo "error: missing cost-optimization-sprint-planner/SKILL.md" >&2; exit 1; }
-	@lines=$$(wc -l < cost-optimization-sprint-planner/SKILL.md | tr -d ' '); \
-	if [ -z "$$lines" ] || [ "$$lines" -eq 0 ]; then \
-		echo "error: cost-optimization-sprint-planner/SKILL.md is empty" >&2; exit 1; \
-	elif [ "$$lines" -gt 180 ]; then \
-		echo "error: cost-optimization-sprint-planner SKILL.md $$lines lines (> 180) — keep orchestrator thin; detail in workflow/" >&2; \
-		exit 1; \
-	fi; \
-	echo "  ok ($$lines lines)"
+	$(call check_skill_md_length,cost-optimization-sprint-planner,180,keep orchestrator thin; detail in workflow/)
 	@echo "lint-cost-optimization-sprint-planner: disable-model-invocation NOT set (ambiently invocable, unlike the webhook/schedule wrappers)"
-	@grep -q '^disable-model-invocation:' cost-optimization-sprint-planner/SKILL.md && \
-		{ echo "error: cost-optimization-sprint-planner/SKILL.md must NOT set disable-model-invocation — a human is always present for this flow" >&2; exit 1; } || true
+	$(call forbid_disable_model_invocation,cost-optimization-sprint-planner)
 	@echo "  ok"
 	@echo "lint-cost-optimization-sprint-planner: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
-	@fail=0; \
-	for f in cost-optimization-sprint-planner/workflow/*.md; do \
-		fm=$$(awk '/^---$$/{c++; next} c==1' "$$f"); \
-		for key in workflow_version phase produces consumes; do \
-			if ! printf '%s\n' "$$fm" | grep -q "^$$key:"; then \
-				echo "  missing $$key frontmatter: $$f" >&2; fail=1; \
-			fi; \
-		done; \
-	done; \
-	if [ "$$fail" -ne 0 ]; then echo "error: cost-optimization-sprint-planner workflow/*.md must declare workflow_version, phase, produces, consumes" >&2; exit 1; fi; \
-	echo "  ok"
+	$(call check_workflow_frontmatter,cost-optimization-sprint-planner)
 	@echo "lint-cost-optimization-sprint-planner: dangling markdown links"
-	@bash scripts/lint-dangling-md-links.sh cost-optimization-sprint-planner/*.md cost-optimization-sprint-planner/reference/*.md cost-optimization-sprint-planner/workflow/*.md && echo "  ok" || \
-		{ echo "error: dangling reference link(s) found" >&2; exit 1; }
+	$(call check_dangling_links,cost-optimization-sprint-planner/*.md cost-optimization-sprint-planner/reference/*.md cost-optimization-sprint-planner/workflow/*.md)
 	@echo "lint-cost-optimization-sprint-planner: required reference files"
-	@for f in phase-index lazy-load-index gate-policy sweep-policy report-format smoke-test pressure-tests; do \
-		test -f cost-optimization-sprint-planner/reference/$$f.md || \
-			{ echo "error: missing cost-optimization-sprint-planner/reference/$$f.md" >&2; exit 1; }; \
-	done
+	$(call require_ref_files,cost-optimization-sprint-planner/reference,phase-index lazy-load-index gate-policy sweep-policy report-format smoke-test pressure-tests)
 	@grep -q 'pressure-tests' cost-optimization-sprint-planner/reference/smoke-test.md || \
 		{ echo "error: smoke-test.md must link to pressure-tests.md" >&2; exit 1; }
-	@grep -q 'skill-framework' cost-optimization-sprint-planner/SETUP.md || \
-		{ echo "error: cost-optimization-sprint-planner/SETUP.md must link to docs/skill-framework" >&2; exit 1; }
-	@grep -q 'docs/skill-framework/shared/safe-output.md' cost-optimization-sprint-planner/SKILL.md || \
-		{ echo "error: cost-optimization-sprint-planner/SKILL.md must link to shared safe-output" >&2; exit 1; }
+	$(call require_setup_links_framework,cost-optimization-sprint-planner)
+	$(call require_safe_output_link,cost-optimization-sprint-planner)
 	@grep -q 'docs/skill-framework/shared/prompt-injection.md' cost-optimization-sprint-planner/reference/report-format.md && \
 	 grep -q 'docs/skill-framework/shared/safe-output.md' cost-optimization-sprint-planner/reference/report-format.md && \
 	 grep -qiE 'escape|fence|backtick' cost-optimization-sprint-planner/reference/report-format.md || \
@@ -1022,33 +809,11 @@ lint-cost-optimization-sprint-planner:
 
 lint-mysql-to-postgres-sql:
 	@echo "lint-mysql-to-postgres-sql: SKILL.md line count (<= 180)"
-	@test -f mysql-to-postgres-sql/SKILL.md || \
-		{ echo "error: missing mysql-to-postgres-sql/SKILL.md" >&2; exit 1; }
-	@lines=$$(wc -l < mysql-to-postgres-sql/SKILL.md | tr -d ' '); \
-	if [ -z "$$lines" ] || [ "$$lines" -eq 0 ]; then \
-		echo "error: mysql-to-postgres-sql/SKILL.md is empty" >&2; exit 1; \
-	elif [ "$$lines" -gt 180 ]; then \
-		echo "error: mysql-to-postgres-sql SKILL.md $$lines lines (> 180)" >&2; \
-		exit 1; \
-	fi; \
-	echo "  ok ($$lines lines)"
+	$(call check_skill_md_length,mysql-to-postgres-sql,180,)
 	@echo "lint-mysql-to-postgres-sql: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
-	@fail=0; \
-	for f in mysql-to-postgres-sql/workflow/*.md; do \
-		fm=$$(awk '/^---$$/{c++; next} c==1' "$$f"); \
-		for key in workflow_version phase produces consumes; do \
-			if ! printf '%s\n' "$$fm" | grep -q "^$$key:"; then \
-				echo "  missing $$key frontmatter: $$f" >&2; fail=1; \
-			fi; \
-		done; \
-	done; \
-	if [ "$$fail" -ne 0 ]; then echo "error: mysql-to-postgres-sql workflow/*.md must declare workflow_version, phase, produces, consumes" >&2; exit 1; fi; \
-	echo "  ok"
+	$(call check_workflow_frontmatter,mysql-to-postgres-sql)
 	@echo "lint-mysql-to-postgres-sql: required reference files"
-	@for f in function-translations collection-domain-files smoke-test org-migration-gaps timestamp-handling data-type-mapping case-sensitivity nodejs-migration python-migration migration-prompts shadow-migration lazy-load-index collection-checklist-refresh migration-edge-cases calibration-snippets; do \
-		test -f mysql-to-postgres-sql/reference/$$f.md || \
-			{ echo "error: missing mysql-to-postgres-sql/reference/$$f.md" >&2; exit 1; }; \
-	done
+	$(call require_ref_files,mysql-to-postgres-sql/reference,function-translations collection-domain-files smoke-test org-migration-gaps timestamp-handling data-type-mapping case-sensitivity nodejs-migration python-migration migration-prompts shadow-migration lazy-load-index collection-checklist-refresh migration-edge-cases calibration-snippets)
 	@test -f mysql-to-postgres-sql/scripts/scan-mysql-dialect.sh || \
 		{ echo "error: missing mysql-to-postgres-sql/scripts/scan-mysql-dialect.sh" >&2; exit 1; }
 	@test -f mysql-to-postgres-sql/scripts/scan-report.sh || \
@@ -1057,10 +822,8 @@ lint-mysql-to-postgres-sql:
 		{ echo "error: missing mysql-to-postgres-sql/scripts/mysql-dialect-patterns.sh" >&2; exit 1; }
 	@test -f mysql-to-postgres-sql/reference/spring-datasource-example.yaml || \
 		{ echo "error: missing mysql-to-postgres-sql/reference/spring-datasource-example.yaml" >&2; exit 1; }
-	@grep -q 'skill-framework' mysql-to-postgres-sql/SETUP.md || \
-		{ echo "error: mysql-to-postgres-sql/SETUP.md must link to docs/skill-framework" >&2; exit 1; }
-	@grep -q 'cross-skill-escalation' mysql-to-postgres-sql/SKILL.md || \
-		{ echo "error: mysql-to-postgres-sql SKILL.md must link to shared cross-skill-escalation" >&2; exit 1; }
+	$(call require_setup_links_framework,mysql-to-postgres-sql)
+	$(call require_cross_skill_escalation,mysql-to-postgres-sql)
 	@test -f mysql-to-postgres-sql/reference/skill-contract.md || \
 		{ echo "error: missing mysql-to-postgres-sql/reference/skill-contract.md" >&2; exit 1; }
 	@test -f mysql-to-postgres-sql/reference/pressure-tests.md || \
@@ -1082,8 +845,7 @@ lint-mysql-to-postgres-sql:
 	@grep -q 'pressure-tests' mysql-to-postgres-sql/reference/smoke-test.md || \
 		{ echo "error: smoke-test.md must link to pressure-tests.md" >&2; exit 1; }
 	@echo "lint-mysql-to-postgres-sql: safe rendered-output boundary"
-	@grep -q 'docs/skill-framework/shared/safe-output.md' mysql-to-postgres-sql/SKILL.md || \
-		{ echo "error: mysql-to-postgres-sql/SKILL.md must link to shared safe-output" >&2; exit 1; }
+	$(call require_safe_output_link,mysql-to-postgres-sql)
 	@grep -q 'docs/skill-framework/shared/prompt-injection.md' mysql-to-postgres-sql/workflow/migrate-service.md && \
 	 grep -q 'docs/skill-framework/shared/safe-output.md' mysql-to-postgres-sql/workflow/migrate-service.md && \
 	 grep -qiE 'escape|fence|backtick' mysql-to-postgres-sql/workflow/migrate-service.md || \
@@ -1109,8 +871,7 @@ lint-mysql-to-postgres-sql:
 	fi; \
 	echo "  ok (pressure + pytest + AST checker)"
 	@echo "lint-mysql-to-postgres-sql: dangling markdown links"
-	@bash scripts/lint-dangling-md-links.sh mysql-to-postgres-sql/*.md mysql-to-postgres-sql/reference/*.md mysql-to-postgres-sql/reference/domain-packs/*.md mysql-to-postgres-sql/workflow/*.md && echo "  ok" || \
-		{ echo "error: dangling reference link(s) found" >&2; exit 1; }
+	$(call check_dangling_links,mysql-to-postgres-sql/*.md mysql-to-postgres-sql/reference/*.md mysql-to-postgres-sql/reference/domain-packs/*.md mysql-to-postgres-sql/workflow/*.md)
 	@echo "lint-mysql-to-postgres-sql: shellcheck scan + test scripts"
 	@if command -v shellcheck >/dev/null 2>&1; then \
 		shellcheck -x -P SCRIPTDIR mysql-to-postgres-sql/scripts/scan-mysql-dialect.sh mysql-to-postgres-sql/scripts/scan-report.sh mysql-to-postgres-sql/scripts/mysql-dialect-patterns.sh mysql-to-postgres-sql/tests/run_pressure_tests.sh; \
@@ -1124,50 +885,24 @@ lint-mysql-to-postgres-sql:
 
 lint-loop-task-implementer:
 	@echo "lint-loop-task-implementer: SKILL.md line count (<= 180)"
-	@test -f loop-task-implementer/SKILL.md || \
-		{ echo "error: missing loop-task-implementer/SKILL.md" >&2; exit 1; }
-	@lines=$$(wc -l < loop-task-implementer/SKILL.md | tr -d ' '); \
-	if [ -z "$$lines" ] || [ "$$lines" -eq 0 ]; then \
-		echo "error: loop-task-implementer/SKILL.md is empty" >&2; exit 1; \
-	elif [ "$$lines" -gt 180 ]; then \
-		echo "error: loop-task-implementer SKILL.md $$lines lines (> 180)" >&2; \
-		exit 1; \
-	fi; \
-	echo "  ok ($$lines lines)"
+	$(call check_skill_md_length,loop-task-implementer,180,)
 	@echo "lint-loop-task-implementer: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
-	@fail=0; \
-	for f in loop-task-implementer/workflow/*.md; do \
-		fm=$$(awk '/^---$$/{c++; next} c==1' "$$f"); \
-		for key in workflow_version phase produces consumes; do \
-			if ! printf '%s\n' "$$fm" | grep -q "^$$key:"; then \
-				echo "  missing $$key frontmatter: $$f" >&2; fail=1; \
-			fi; \
-		done; \
-	done; \
-	if [ "$$fail" -ne 0 ]; then echo "error: loop-task-implementer workflow/*.md must declare workflow_version, phase, produces, consumes" >&2; exit 1; fi; \
-	echo "  ok"
+	$(call check_workflow_frontmatter,loop-task-implementer)
 	@echo "lint-loop-task-implementer: dangling markdown links"
-	@bash scripts/lint-dangling-md-links.sh loop-task-implementer/*.md loop-task-implementer/reference/*.md loop-task-implementer/workflow/*.md && echo "  ok" || \
-		{ echo "error: dangling reference link(s) found" >&2; exit 1; }
+	$(call check_dangling_links,loop-task-implementer/*.md loop-task-implementer/reference/*.md loop-task-implementer/workflow/*.md)
 	@echo "lint-loop-task-implementer: required files"
 	@for f in SETUP.md README.md examples.md report-template.md; do \
 		test -f loop-task-implementer/$$f || \
 			{ echo "error: missing loop-task-implementer/$$f" >&2; exit 1; }; \
 	done
-	@for f in phase-index lazy-load-index mcp-capabilities smoke-test pressure-tests platform-adapters; do \
-		test -f loop-task-implementer/reference/$$f.md || \
-			{ echo "error: missing loop-task-implementer/reference/$$f.md" >&2; exit 1; }; \
-	done
+	$(call require_ref_files,loop-task-implementer/reference,phase-index lazy-load-index mcp-capabilities smoke-test pressure-tests platform-adapters)
 	@test -f loop-task-implementer/reference/state-schema.yaml || \
 		{ echo "error: missing loop-task-implementer/reference/state-schema.yaml" >&2; exit 1; }
-	@grep -q 'skill-framework' loop-task-implementer/SETUP.md || \
-		{ echo "error: loop-task-implementer/SETUP.md must link to docs/skill-framework" >&2; exit 1; }
-	@grep -q 'cross-skill-escalation' loop-task-implementer/SKILL.md || \
-		{ echo "error: loop-task-implementer SKILL.md must link to shared cross-skill-escalation" >&2; exit 1; }
+	$(call require_setup_links_framework,loop-task-implementer)
+	$(call require_cross_skill_escalation,loop-task-implementer)
 	@echo "  ok"
 	@echo "lint-loop-task-implementer: safe rendered-output boundary"
-	@grep -q 'docs/skill-framework/shared/safe-output.md' loop-task-implementer/SKILL.md || \
-		{ echo "error: loop-task-implementer/SKILL.md must link to shared safe-output" >&2; exit 1; }
+	$(call require_safe_output_link,loop-task-implementer)
 	@grep -q 'docs/skill-framework/shared/prompt-injection.md' loop-task-implementer/report-template.md && \
 	 grep -q 'docs/skill-framework/shared/safe-output.md' loop-task-implementer/report-template.md && \
 	 grep -qiE 'escape|fence|backtick' loop-task-implementer/report-template.md && \
@@ -1177,95 +912,43 @@ lint-loop-task-implementer:
 
 lint-backlog-runner:
 	@echo "lint-backlog-runner: SKILL.md line count (<= 180)"
-	@test -f backlog-runner/SKILL.md || \
-		{ echo "error: missing backlog-runner/SKILL.md" >&2; exit 1; }
-	@lines=$$(wc -l < backlog-runner/SKILL.md | tr -d ' '); \
-	if [ -z "$$lines" ] || [ "$$lines" -eq 0 ]; then \
-		echo "error: backlog-runner/SKILL.md is empty" >&2; exit 1; \
-	elif [ "$$lines" -gt 180 ]; then \
-		echo "error: backlog-runner SKILL.md $$lines lines (> 180) — keep orchestrator thin; detail in workflow/" >&2; \
-		exit 1; \
-	fi; \
-	echo "  ok ($$lines lines)"
+	$(call check_skill_md_length,backlog-runner,180,keep orchestrator thin; detail in workflow/)
 	@echo "lint-backlog-runner: disable-model-invocation set (automation entry point, must not compete with loop-task-implementer's ambient invocation)"
-	@grep -q '^disable-model-invocation: true' backlog-runner/SKILL.md || \
-		{ echo "error: backlog-runner/SKILL.md must set disable-model-invocation: true" >&2; exit 1; }
+	$(call require_disable_model_invocation,backlog-runner)
 	@echo "  ok"
 	@echo "lint-backlog-runner: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
-	@fail=0; \
-	for f in backlog-runner/workflow/*.md; do \
-		fm=$$(awk '/^---$$/{c++; next} c==1' "$$f"); \
-		for key in workflow_version phase produces consumes; do \
-			if ! printf '%s\n' "$$fm" | grep -q "^$$key:"; then \
-				echo "  missing $$key frontmatter: $$f" >&2; fail=1; \
-			fi; \
-		done; \
-	done; \
-	if [ "$$fail" -ne 0 ]; then echo "error: backlog-runner workflow/*.md must declare workflow_version, phase, produces, consumes" >&2; exit 1; fi; \
-	echo "  ok"
+	$(call check_workflow_frontmatter,backlog-runner)
 	@echo "lint-backlog-runner: dangling markdown links"
-	@bash scripts/lint-dangling-md-links.sh backlog-runner/*.md backlog-runner/reference/*.md backlog-runner/workflow/*.md && echo "  ok" || \
-		{ echo "error: dangling reference link(s) found" >&2; exit 1; }
+	$(call check_dangling_links,backlog-runner/*.md backlog-runner/reference/*.md backlog-runner/workflow/*.md)
 	@echo "lint-backlog-runner: required reference files"
-	@for f in phase-index lazy-load-index queue-policy morning-summary-format smoke-test pressure-tests; do \
-		test -f backlog-runner/reference/$$f.md || \
-			{ echo "error: missing backlog-runner/reference/$$f.md" >&2; exit 1; }; \
-	done
+	$(call require_ref_files,backlog-runner/reference,phase-index lazy-load-index queue-policy morning-summary-format smoke-test pressure-tests)
 	@grep -q 'pressure-tests' backlog-runner/reference/smoke-test.md || \
 		{ echo "error: smoke-test.md must link to pressure-tests.md" >&2; exit 1; }
-	@grep -q 'docs/skill-framework/shared/safe-output.md' backlog-runner/SKILL.md || \
-		{ echo "error: backlog-runner/SKILL.md must link to shared safe-output" >&2; exit 1; }
+	$(call require_safe_output_link,backlog-runner)
 	@grep -q 'docs/skill-framework/shared/prompt-injection.md' backlog-runner/reference/morning-summary-format.md && \
 	 grep -q 'docs/skill-framework/shared/safe-output.md' backlog-runner/reference/morning-summary-format.md && \
 	 grep -qiE 'escape|fence' backlog-runner/reference/morning-summary-format.md && \
 	 grep -qi 'redact' backlog-runner/reference/morning-summary-format.md || \
 		{ echo "error: morning-summary-format.md must sanitize untrusted rendered fields per prompt-injection and safe-output" >&2; exit 1; }
-	@grep -q 'skill-framework' backlog-runner/SETUP.md || \
-		{ echo "error: backlog-runner/SETUP.md must link to docs/skill-framework" >&2; exit 1; }
+	$(call require_setup_links_framework,backlog-runner)
 	@echo "  ok (framework refs)"
 
 lint-weekly-squad-digest:
 	@echo "lint-weekly-squad-digest: SKILL.md line count (<= 180)"
-	@test -f weekly-squad-digest/SKILL.md || \
-		{ echo "error: missing weekly-squad-digest/SKILL.md" >&2; exit 1; }
-	@lines=$$(wc -l < weekly-squad-digest/SKILL.md | tr -d ' '); \
-	if [ -z "$$lines" ] || [ "$$lines" -eq 0 ]; then \
-		echo "error: weekly-squad-digest/SKILL.md is empty" >&2; exit 1; \
-	elif [ "$$lines" -gt 180 ]; then \
-		echo "error: weekly-squad-digest SKILL.md $$lines lines (> 180) — keep orchestrator thin; detail in workflow/" >&2; \
-		exit 1; \
-	fi; \
-	echo "  ok ($$lines lines)"
+	$(call check_skill_md_length,weekly-squad-digest,180,keep orchestrator thin; detail in workflow/)
 	@echo "lint-weekly-squad-digest: disable-model-invocation set (automation entry point, must not compete with migration-program-manager's/cost-optimization-sprint-planner's ambient invocation)"
-	@grep -q '^disable-model-invocation: true' weekly-squad-digest/SKILL.md || \
-		{ echo "error: weekly-squad-digest/SKILL.md must set disable-model-invocation: true" >&2; exit 1; }
+	$(call require_disable_model_invocation,weekly-squad-digest)
 	@echo "  ok"
 	@echo "lint-weekly-squad-digest: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
-	@fail=0; \
-	for f in weekly-squad-digest/workflow/*.md; do \
-		fm=$$(awk '/^---$$/{c++; next} c==1' "$$f"); \
-		for key in workflow_version phase produces consumes; do \
-			if ! printf '%s\n' "$$fm" | grep -q "^$$key:"; then \
-				echo "  missing $$key frontmatter: $$f" >&2; fail=1; \
-			fi; \
-		done; \
-	done; \
-	if [ "$$fail" -ne 0 ]; then echo "error: weekly-squad-digest workflow/*.md must declare workflow_version, phase, produces, consumes" >&2; exit 1; fi; \
-	echo "  ok"
+	$(call check_workflow_frontmatter,weekly-squad-digest)
 	@echo "lint-weekly-squad-digest: dangling markdown links"
-	@bash scripts/lint-dangling-md-links.sh weekly-squad-digest/*.md weekly-squad-digest/reference/*.md weekly-squad-digest/workflow/*.md && echo "  ok" || \
-		{ echo "error: dangling reference link(s) found" >&2; exit 1; }
+	$(call check_dangling_links,weekly-squad-digest/*.md weekly-squad-digest/reference/*.md weekly-squad-digest/workflow/*.md)
 	@echo "lint-weekly-squad-digest: required reference files"
-	@for f in phase-index lazy-load-index report-format smoke-test pressure-tests; do \
-		test -f weekly-squad-digest/reference/$$f.md || \
-			{ echo "error: missing weekly-squad-digest/reference/$$f.md" >&2; exit 1; }; \
-	done
+	$(call require_ref_files,weekly-squad-digest/reference,phase-index lazy-load-index report-format smoke-test pressure-tests)
 	@grep -q 'pressure-tests' weekly-squad-digest/reference/smoke-test.md || \
 		{ echo "error: smoke-test.md must link to pressure-tests.md" >&2; exit 1; }
-	@grep -q 'skill-framework' weekly-squad-digest/SETUP.md || \
-		{ echo "error: weekly-squad-digest/SETUP.md must link to docs/skill-framework" >&2; exit 1; }
-	@grep -q 'docs/skill-framework/shared/safe-output.md' weekly-squad-digest/SKILL.md || \
-		{ echo "error: weekly-squad-digest/SKILL.md must link to shared safe-output" >&2; exit 1; }
+	$(call require_setup_links_framework,weekly-squad-digest)
+	$(call require_safe_output_link,weekly-squad-digest)
 	@grep -q 'docs/skill-framework/shared/prompt-injection.md' weekly-squad-digest/reference/report-format.md && \
 	 grep -q 'docs/skill-framework/shared/safe-output.md' weekly-squad-digest/reference/report-format.md && \
 	 grep -qiE 'escape|fence|backtick' weekly-squad-digest/reference/report-format.md || \
@@ -1424,87 +1107,38 @@ lint-unit-test-creator-safe-output:
 
 lint-test-writer:
 	@echo "lint-test-writer: SKILL.md line count (<= 180)"
-	@test -f test-writer/SKILL.md || \
-		{ echo "error: missing test-writer/SKILL.md" >&2; exit 1; }
-	@lines=$$(wc -l < test-writer/SKILL.md | tr -d ' '); \
-	if [ -z "$$lines" ] || [ "$$lines" -eq 0 ]; then \
-		echo "error: test-writer/SKILL.md is empty" >&2; exit 1; \
-	elif [ "$$lines" -gt 180 ]; then \
-		echo "error: test-writer SKILL.md $$lines lines (> 180)" >&2; \
-		exit 1; \
-	fi; \
-	echo "  ok ($$lines lines)"
+	$(call check_skill_md_length,test-writer,180,)
 	@echo "lint-test-writer: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
-	@fail=0; \
-	for f in test-writer/workflow/*.md; do \
-		fm=$$(awk '/^---$$/{c++; next} c==1' "$$f"); \
-		for key in workflow_version phase produces consumes; do \
-			if ! printf '%s\n' "$$fm" | grep -q "^$$key:"; then \
-				echo "  missing $$key frontmatter: $$f" >&2; fail=1; \
-			fi; \
-		done; \
-	done; \
-	if [ "$$fail" -ne 0 ]; then echo "error: test-writer workflow/*.md must declare workflow_version, phase, produces, consumes" >&2; exit 1; fi; \
-	echo "  ok"
+	$(call check_workflow_frontmatter,test-writer)
 	@echo "lint-test-writer: no detection/generation scripts (router only)"
 	@if [ -d test-writer/scripts ] || [ -d test-writer/tests ]; then \
 		echo "error: test-writer must not have scripts/ or tests/ — it is a router with no detection/generation logic of its own" >&2; exit 1; \
 	fi
 	@echo "  ok"
 	@echo "lint-test-writer: required reference files"
-	@for f in skill-contract phase-index lazy-load-index level-classification smoke-test pressure-tests; do \
-		test -f test-writer/reference/$$f.md || \
-			{ echo "error: missing test-writer/reference/$$f.md" >&2; exit 1; }; \
-	done
+	$(call require_ref_files,test-writer/reference,skill-contract phase-index lazy-load-index level-classification smoke-test pressure-tests)
 	@test -f test-writer/examples.md || \
 		{ echo "error: missing test-writer/examples.md" >&2; exit 1; }
 	@grep -q '## Invocation' test-writer/examples.md || \
 		{ echo "error: test-writer/examples.md must have Invocation section" >&2; exit 1; }
-	@grep -q 'skill-framework' test-writer/SETUP.md || \
-		{ echo "error: test-writer/SETUP.md must link to docs/skill-framework" >&2; exit 1; }
+	$(call require_setup_links_framework,test-writer)
 	@grep -q 'docs/skill-framework/shared/skill-routing.md' test-writer/SKILL.md || \
 		{ echo "error: test-writer/SKILL.md must link to shared skill-routing" >&2; exit 1; }
 	@grep -q 'docs/skill-framework/shared/prompt-injection.md' test-writer/SKILL.md || \
 		{ echo "error: test-writer/SKILL.md must link to shared prompt-injection" >&2; exit 1; }
 	@echo "  ok (framework refs)"
 	@echo "lint-test-writer: dangling markdown links"
-	@bash scripts/lint-dangling-md-links.sh test-writer/*.md test-writer/reference/*.md test-writer/workflow/*.md \
-		unit-test-creator/SKILL.md integration-test-creator/SKILL.md contract-test-creator/SKILL.md e2e-test-creator/SKILL.md api-test-creator/SKILL.md \
-		unit-test-creator/workflow/*.md integration-test-creator/workflow/*.md contract-test-creator/workflow/*.md e2e-test-creator/workflow/*.md api-test-creator/workflow/*.md \
-		&& echo "  ok" || \
-		{ echo "error: dangling reference link(s) found" >&2; exit 1; }
+	$(call check_dangling_links,test-writer/*.md test-writer/reference/*.md test-writer/workflow/*.md unit-test-creator/SKILL.md integration-test-creator/SKILL.md contract-test-creator/SKILL.md e2e-test-creator/SKILL.md api-test-creator/SKILL.md unit-test-creator/workflow/*.md integration-test-creator/workflow/*.md contract-test-creator/workflow/*.md e2e-test-creator/workflow/*.md api-test-creator/workflow/*.md)
 
 lint-prd-architect:
 	@echo "lint-prd-architect: SKILL.md line count (<= 180)"
-	@test -f prd-architect/SKILL.md || \
-		{ echo "error: missing prd-architect/SKILL.md" >&2; exit 1; }
-	@lines=$$(wc -l < prd-architect/SKILL.md | tr -d ' '); \
-	if [ -z "$$lines" ] || [ "$$lines" -eq 0 ]; then \
-		echo "error: prd-architect/SKILL.md is empty" >&2; exit 1; \
-	elif [ "$$lines" -gt 180 ]; then \
-		echo "error: prd-architect SKILL.md $$lines lines (> 180)" >&2; \
-		exit 1; \
-	fi; \
-	echo "  ok ($$lines lines)"
+	$(call check_skill_md_length,prd-architect,180,)
 	@echo "lint-prd-architect: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
-	@fail=0; \
-	for f in prd-architect/workflow/*.md; do \
-		fm=$$(awk '/^---$$/{c++; next} c==1' "$$f"); \
-		for key in workflow_version phase produces consumes; do \
-			if ! printf '%s\n' "$$fm" | grep -q "^$$key:"; then \
-				echo "  missing $$key frontmatter: $$f" >&2; fail=1; \
-			fi; \
-		done; \
-	done; \
-	if [ "$$fail" -ne 0 ]; then echo "error: prd-architect workflow/*.md must declare workflow_version, phase, produces, consumes" >&2; exit 1; fi; \
-	echo "  ok"
+	$(call check_workflow_frontmatter,prd-architect)
 	@echo "lint-prd-architect: route-aware workflow contract"
 	@python3 -m scripts.validate_workflow_contracts prd-architect
 	@echo "lint-prd-architect: required reference files"
-	@for f in skill-contract rationalization-guards phase-index lazy-load-index global-rules depth response-modes section-triggers requirements-format correctness-rules adversarial-review output-contract smoke-test pressure-tests; do \
-		test -f prd-architect/reference/$$f.md || \
-			{ echo "error: missing prd-architect/reference/$$f.md" >&2; exit 1; }; \
-	done
+	$(call require_ref_files,prd-architect/reference,skill-contract rationalization-guards phase-index lazy-load-index global-rules depth response-modes section-triggers requirements-format correctness-rules adversarial-review output-contract smoke-test pressure-tests)
 	@test -f prd-architect/report-template.md || \
 		{ echo "error: missing prd-architect/report-template.md" >&2; exit 1; }
 	@test -f prd-architect/prd-architect.eval.md || \
@@ -1515,18 +1149,15 @@ lint-prd-architect:
 		{ echo "error: missing prd-architect/examples.md" >&2; exit 1; }
 	@grep -q '## Invocation' prd-architect/examples.md || \
 		{ echo "error: prd-architect/examples.md must have Invocation section" >&2; exit 1; }
-	@grep -q 'cross-skill-escalation' prd-architect/SKILL.md || \
-		{ echo "error: prd-architect/SKILL.md must link to shared cross-skill-escalation" >&2; exit 1; }
+	$(call require_cross_skill_escalation,prd-architect)
 	@grep -q 'smoke-test' prd-architect/SKILL.md || \
 		{ echo "error: prd-architect/SKILL.md must link to reference/smoke-test.md" >&2; exit 1; }
-	@grep -q 'skill-framework' prd-architect/SETUP.md || \
-		{ echo "error: prd-architect/SETUP.md must link to docs/skill-framework" >&2; exit 1; }
+	$(call require_setup_links_framework,prd-architect)
 	@grep -q 'docs/skill-framework/shared/skill-routing.md' prd-architect/SKILL.md || \
 		{ echo "error: prd-architect/SKILL.md must link to shared skill-routing" >&2; exit 1; }
 	@grep -q 'docs/skill-framework/shared/prompt-injection.md' prd-architect/SKILL.md || \
 		{ echo "error: prd-architect/SKILL.md must link to shared prompt-injection" >&2; exit 1; }
-	@grep -q 'docs/skill-framework/shared/safe-output.md' prd-architect/SKILL.md || \
-		{ echo "error: prd-architect/SKILL.md must link to shared safe-output" >&2; exit 1; }
+	$(call require_safe_output_link,prd-architect)
 	@grep -q 'docs/skill-framework/shared/prompt-injection.md' prd-architect/workflow/gate.md && \
 	 grep -q 'docs/skill-framework/shared/safe-output.md' prd-architect/workflow/gate.md && \
 	 grep -qi 'source_material' prd-architect/workflow/gate.md && \
@@ -1535,9 +1166,7 @@ lint-prd-architect:
 		{ echo "error: prd-architect Gate must sanitize untrusted rendered fields per prompt-injection and safe-output" >&2; exit 1; }
 	@echo "  ok (framework refs)"
 	@echo "lint-prd-architect: dangling markdown links"
-	@bash scripts/lint-dangling-md-links.sh prd-architect/*.md prd-architect/reference/*.md prd-architect/workflow/*.md \
-		&& echo "  ok" || \
-		{ echo "error: dangling reference link(s) found" >&2; exit 1; }
+	$(call check_dangling_links,prd-architect/*.md prd-architect/reference/*.md prd-architect/workflow/*.md)
 
 lint-framework:
 	@echo "lint-framework: shared docs present"
