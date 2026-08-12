@@ -9,7 +9,7 @@ from typing import Any
 
 import yaml
 
-from scripts.evals.__main__ import EvalResult
+from scripts.evals.types import EvalResult
 
 GOLDEN_DIR_NAME = "golden"
 

@@ -8,11 +8,11 @@ from pathlib import Path
 import yaml
 
 from scripts.registry.backfill_capabilities import cmd_backfill
+from scripts.registry.composition import render_composition_mermaid
 from scripts.registry.crosscheck import find_stale_generated_adapters, validate_registry
 from scripts.registry.generate_compatibility import render_compatibility_matrix
 from scripts.registry.generate_cursor import generate_cursor_rules
 from scripts.registry.generate_docs import (
-    render_composition_mermaid,
     render_install_mermaid,
     update_readme_badge,
     update_repository_table,

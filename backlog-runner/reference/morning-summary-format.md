@@ -18,9 +18,10 @@ a link — none is exempt because it looks shorter or more structured than the o
 
 - structurally escape or fence newlines, leading `#`/`>`/`-`, and table `|` delimiters, so none of them
   can create a new row, section, or break the table;
-- render as inline code spans, not free prose — first strip or escape any backtick already in the value
-  (a literal backtick closes the span early and lets the rest render as live Markdown —
-  [safe-output.md](../../docs/skill-framework/shared/safe-output.md) Rule 4);
+- render as inline code spans, not free prose — first **strip** any backtick already in the value (a
+  backslash before it does not neutralize it: CommonMark code-span delimiters are matched before
+  backslash escapes are resolved, so the backtick still closes the span early and lets the rest render
+  as live Markdown — [safe-output.md](../../docs/skill-framework/shared/safe-output.md) Rule 4);
 - redact plausible secrets, tokens, and PII (a ticket title or escalation reason can itself contain a
   pasted credential), noting when redaction was applied.
 
