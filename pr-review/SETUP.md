@@ -19,13 +19,31 @@ context.
 
 ## Quickstart
 
-Already have GitHub/GitLab access and Cursor 2.4+? This is the whole path — details for each step are below.
+Install the skill first for either provider: clone `software-builder` (root
+[README.md § Install](../README.md#install)), run `make install-pr-review`, and restart Cursor.
 
-1. `git clone` the `software-builder` repo (see root [README.md § Install](../README.md#install)), then `make install-pr-review`. Restart Cursor.
-2. Create a GitLab PAT with `api` scope ([§1](#create-a-gitlab-personal-access-token-pat)) and export it as `GITLAB_PERSONAL_ACCESS_TOKEN`.
-3. Paste the `@zereight/mcp-gitlab` block from [§3](#gitlab--full-inline-posting-zereightmcp-gitlab) into `~/.cursor/mcp.json`, swap in your token and `GITLAB_API_URL`, restart Cursor.
-4. Skip Jira for now — add it later from [§3 Jira / Atlassian](#jira--atlassian) if you need AC checks.
-5. Run `/pr-review !<some-open-MR-IID>` in a repo you have access to.
+### GitHub quickstart
+
+1. Connect a GitHub App/MCP with PR read/comment access, or install `gh` for a read-only fallback.
+2. For CLI fallback, run `gh auth login --hostname github.com` and verify with
+   `gh auth status --hostname github.com` (substitute the exact GHES host when applicable).
+3. Run `/pr-review https://github.com/owner/repo/pull/42` for an open PR.
+
+This path does not require a GitLab PAT, GitLab MCP, Node.js, or an MR. CLI fallback is chat-only;
+posting requires connected GitHub standalone inline-comment and issue-comment capabilities.
+
+### GitLab quickstart
+
+1. Create a GitLab PAT with `api` scope
+   ([§1](#create-a-gitlab-personal-access-token-pat)) and export it as
+   `GITLAB_PERSONAL_ACCESS_TOKEN`.
+2. Paste the `@zereight/mcp-gitlab` block from
+   [§3](#gitlab--full-inline-posting-zereightmcp-gitlab) into `~/.cursor/mcp.json`, set the token
+   reference and `GITLAB_API_URL`, then restart Cursor.
+3. Run `/pr-review !<some-open-MR-IID>` in a repository you can access.
+
+Jira is optional for both providers; add it later from [§3 Jira / Atlassian](#jira--atlassian) for
+acceptance-criteria checks.
 
 Stuck on any step? Jump to [§6 Troubleshooting](#6-troubleshooting).
 
@@ -55,6 +73,15 @@ can auto-apply it when you ask to review a GitHub PR or GitLab MR in natural lan
 be slash-command-only.
 
 ## What's in here
+
+### Provider inventory
+
+- **Shared:** `SKILL.md`, provider-neutral workflow phases, severity/finding policy, Jira integration,
+  and summary templates.
+- **GitHub:** App/MCP PR reads and standalone comments, exact-host `gh` read fallback,
+  `reference/github-inline-comments.md`, and `scripts/github-comment-positions.py`.
+- **GitLab:** MR/diff/pipeline MCP flow, inline threads or general notes,
+  `reference/gitlab-inline-comments.md`, and `scripts/diff-to-positions.py`.
 
 ```
 .cursor/skills/pr-review/
@@ -93,14 +120,25 @@ be slash-command-only.
 
 ## 1. Requirements
 
+### Shared requirements
+
 - **Cursor 2.4+** with Agent Skills enabled (Settings → Rules → import skills, or project
   `.cursor/skills/`). Skills ship in stable Cursor builds as of early 2026; if `/pr-review` does not
   appear, update Cursor and restart.
-- Node.js 18+ — required only for `@zereight/mcp-gitlab` via `npx`. The Cursor GitLab plugin and
-  Atlassian Rovo MCP do not need Node.js locally.
-- **GitLab PAT** with `api` scope (read MRs; write comments if posting) — see below. **Required.**
 - **Jira/Atlassian** account. Official remote server uses OAuth. **Optional** — the review runs fine
   without it; you just lose the acceptance-criteria checklist against linked Jira tickets.
+
+### GitHub requirements
+
+- A connected GitHub App/MCP for PR reads and posting, or `gh` authenticated to the exact host for
+  chat-only read fallback.
+- No GitLab PAT, GitLab MCP, or Node.js requirement.
+
+### GitLab requirements
+
+- **GitLab PAT** with `api` scope for the `@zereight/mcp-gitlab` path (read MRs; write comments when
+  posting), or the Cursor GitLab plugin/Duo MCP alternative.
+- Node.js 18+ only when running `@zereight/mcp-gitlab` through `npx`; the Cursor plugin does not need it.
 
 ### Create a GitLab Personal Access Token (PAT)
 
@@ -306,19 +344,26 @@ for the full matrix.
 
 ## 4. Use it
 
-Invoke with `/pr-review` **or** natural language (e.g. "review this MR …", "review !482"). The skill
-auto-invokes when the request clearly targets a GitLab merge request. A few common forms:
+Invoke with `/pr-review` or natural language. The skill auto-invokes when a request clearly targets a
+supported PR or MR.
+
+### Use with GitHub
+
+- `/pr-review https://github.com/owner/repo/pull/42`
+- `review PR #42 in owner/repo`
+- `/pr-review` — lists open PRs in a GitHub-scoped workspace, then asks you to choose when needed
+
+### Use with GitLab
 
 - `/pr-review https://gitlab.com/group/repo/-/merge_requests/482`
-- `review this pr https://gitlab.com/group/repo/-/merge_requests/482`
 - `/pr-review !482 in backend/payments` — or `review !482 in backend/payments`
 - `/pr-review` — lists open MRs, then reviews your current branch's MR (or asks you to pick)
 
 For the full invocation table and edge cases, see [examples.md](examples.md).
 
 **`review and post …`** does **not** unconditionally skip the Phase 3 confirmation gate. It skips
-confirmation **only** when the posting mode is `full` or `summary-only` **and** the MR is **not** a
-draft. `general-only` always shows its ⚠️ warning and requires confirmation, and any draft MR always
+confirmation **only** when the posting mode is `full` or `summary-only` and the PR/MR is not a draft.
+`general-only` always shows its ⚠️ warning and requires confirmation, and any draft PR/MR always
 requires confirmation.
 
 Phase 0 announces posting mode and workspace scope. Warnings when:
@@ -344,6 +389,16 @@ Phase 0 announces posting mode and workspace scope. Warnings when:
   takes precedence over the installed default when present.
 
 ## 6. Troubleshooting
+
+### GitHub troubleshooting
+
+| Symptom | Likely cause | Fix |
+|---------|--------------|-----|
+| GitHub `chat-only` — nothing posts | `gh` is read-only for this workflow or connected App/MCP lacks comment tools | Connect GitHub standalone inline-comment and issue-comment capabilities; verify the exact target host |
+| GitHub PR lookup fails on GHES | CLI authenticated to a different host | Run `gh auth status --hostname <exact-host>` and use the canonical GHES PR URL |
+| Current-branch PR appears missing | An old command used the 30-item CLI default | Use the documented `gh pr list --limit 1000 --head <branch>` path; exactly 1000 results is truncation, not “none” |
+
+### GitLab troubleshooting
 
 | Symptom | Likely cause | Fix |
 |---------|--------------|-----|

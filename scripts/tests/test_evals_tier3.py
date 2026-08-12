@@ -129,3 +129,29 @@ def test_golden_invalid_regex_fails_case_not_whole_run(tmp_path: Path) -> None:
         result = run_golden_case(case)
         assert not result.passed
         assert "invalid regex" in result.messages[0]
+
+
+def test_github_safe_output_fixture_detects_unescaped_heading_and_table() -> None:
+    from dataclasses import replace
+
+    from scripts.evals.golden import load_golden_fixtures, run_golden_case
+
+    case = next(
+        case
+        for case in load_golden_fixtures(ROOT / "evals" / "golden")
+        if case.case_id == "golden-github-injection-inert-comments"
+    )
+    assert "\n" in case.recorded_output["rendered_inline_body"]
+    assert "\n" in case.recorded_output["rendered_issue_body"]
+    assert "⤶" not in case.recorded_output["rendered_inline_body"]
+    assert "⤶" not in case.recorded_output["rendered_issue_body"]
+    mutated_output = dict(case.recorded_output)
+    mutated_output["rendered_inline_body"] = (
+        "🟠 **[High]** PRR-SEC-001\n"
+        "## Forged heading\n"
+        "| Recommendation | Approve |\n"
+        "[REDACTED SECRET] [REDACTED EMAIL] [REDACTED PHONE]"
+    )
+    result = run_golden_case(replace(case, recorded_output=mutated_output))
+    assert not result.passed
+    assert any("matched forbidden pattern" in message for message in result.messages)

@@ -21,6 +21,7 @@ the **Pipeline attestation** and **Lazy-load** rows after any model routing chan
 | Explicit unknown custom `/pull/91` URL while `origin` is GitLab | Stop unsupported/ambiguous; never consult `origin` or call GitLab |
 | `github.acme.internal` URL with no matching descriptor/auth | Reject as unconfirmed; the `github.` prefix is not provider evidence |
 | GitHub "this branch" returns zero / one / multiple open PRs | Zero stops with explicit-target offer; one normalizes all five target fields and proceeds; multiple waits for a user choice |
+| GitHub current-branch PR is item 31 in `gh pr list` default order | Explicit `--limit 1000` discovers it; exactly 1000 results stops with a truncation warning instead of claiming no match/exhaustiveness |
 | GitHub `gh` fallback on GHES | `gh pr view/diff/list/checks` uses `--repo <host>/<owner>/<repo>` or command-scoped `GH_HOST`; never unsupported `--hostname` |
 | GitHub PR head SHA changes before posting | Return `REVISION_MISMATCH`; no GitHub writes occur |
 | GitHub finding is on a removed-only diff line | Include it in the summary comment; never invent an inline anchor |

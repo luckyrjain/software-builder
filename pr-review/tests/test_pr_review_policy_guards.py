@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+ROOT = Path(__file__).resolve().parents[2]
 
 from pr_review_policy_guards import (  # noqa: E402
     apply_confidence_cap,
@@ -153,3 +154,33 @@ class TestFindingGates:
 
     def test_secret_non_negotiable_not_suppressed(self):
         assert should_suppress_at_path_gate(False, is_non_negotiable_observable=True) is False
+
+
+class TestProviderDocumentationContracts:
+    def test_github_cli_discovery_has_bound_and_truncation_stop(self):
+        inputs = (ROOT / "pr-review/workflow/inputs.md").read_text(encoding="utf-8")
+        assert "--limit 1000" in inputs
+        assert "exactly 1000" in inputs
+        assert "stop and report discovery truncation" in inputs
+
+    def test_summary_templates_parameterize_review_target_label(self):
+        templates = (ROOT / "pr-review/reference/comment-templates.md").read_text(encoding="utf-8")
+        posting = (ROOT / "pr-review/workflow/posting.md").read_text(encoding="utf-8")
+        assert "GitHub: `PR #<number>`" in templates
+        assert "GitLab: `MR !<iid>`" in templates
+        assert "Code Review — !<iid>" not in templates
+        assert "Code Review (re-review) — !<iid>" not in templates
+        assert "Post this review to !<iid>?" not in posting
+
+    def test_setup_has_independent_github_and_gitlab_paths(self):
+        setup = (ROOT / "pr-review/SETUP.md").read_text(encoding="utf-8")
+        github = setup.split("### GitHub quickstart", 1)[1].split("### GitLab quickstart", 1)[0]
+        assert "Create a GitLab PAT" not in github
+        assert "mcp-gitlab" not in github
+        assert "open PR" in github
+        assert "### GitHub requirements" in setup
+        assert "### GitLab requirements" in setup
+        assert "### Use with GitHub" in setup
+        assert "### Use with GitLab" in setup
+        assert "### GitHub troubleshooting" in setup
+        assert "### GitLab troubleshooting" in setup

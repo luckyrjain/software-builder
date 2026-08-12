@@ -15,6 +15,11 @@ consumes:
 
 # Phase 5 — Closeout & optional write-back
 
+Render provider-facing vocabulary from `review_target.provider`: GitHub uses PR, draft PR, checks,
+and merge queue; GitLab uses MR, draft/WIP MR, pipeline, and merge train. Internal normalized fields
+may retain `pipeline_status`, but headings and prose shown for a GitHub target must say **Checks**, not
+Pipeline, and must never use an MR/`!IID` target label.
+
 **Read this file** at the end of the review, after Phase 2 (and Phase 4 if posting ran).
 
 Honor **`fast_path`** from Phase 1 — omit Production risk and Architectural summary when profile is
@@ -105,7 +110,8 @@ Template structure: [report-template.md](../report-template.md#partial-review).
 7. `### Technical blockers` — Critical/High counts, runtime/payment correctness, coverage
 8. `### Process blockers` — CI, CODEOWNERS, Jira, approvals
 9. `**Reason:**` prose
-10. Review cost, Major concerns / Must fix *(blast-radius order)* / Nice to have, dimension scores, Pipeline line
+10. Review cost, Major concerns / Must fix *(blast-radius order)* / Nice to have, dimension scores,
+    provider CI line (**Checks** on GitHub; **Pipeline** on GitLab)
 
 **Security score:** use **Needs attention** (not Clear) when any High app-level SEC finding is open
 (`reference/executive-summary.md` §Security score bands).
@@ -149,10 +155,10 @@ justify the **Recommendation**. If all failing jobs are unrelated to changed pat
 each job. If any failing job plausibly relates to changed code and is not flaky, keep Request Changes.
 Never silently downgrade without explicit reasoning in the executive summary narrative.
 
-**Pipeline / approvals / merge train** — include inside the **Executive summary** using the taxonomy in
+**Checks or pipeline / approvals / merge queue or merge train** — include inside the **Executive summary** using the taxonomy in
 `reference/executive-summary.md`:
 
-- **Pipeline:** ✅ success on head / ❌ failed on head / ⏳ pending/running / ❓ not configured /
+- **Checks** (GitHub) or **Pipeline** (GitLab): ✅ success on head / ❌ failed on head / ⏳ pending/running / ❓ not configured /
   ❓ expected but missing / ❓ unavailable
 - **Approvals:** `N / M required approvals given` (omit if unavailable).
 - **Merge train:** status when enabled; **active train warning** when `fresh` / `stale` / `merging`:

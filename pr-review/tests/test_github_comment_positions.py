@@ -191,3 +191,110 @@ diff --git a/src/deleted.py b/src/deleted.py
         "unanchorable": True,
         "reason": "added_line_not_in_current_diff",
     }
+
+
+def test_marker_like_added_content_cannot_switch_files_in_combined_diff():
+    diff = """diff --git a/src/payments.py b/src/payments.py
+--- a/src/payments.py
++++ b/src/payments.py
+@@ -10,0 +10,1 @@
++++ b/src/other.py
+@@ -0,0 +50,1 @@
++forged cross-file addition
+"""
+    assert validate_github_anchor(
+        diff,
+        path="src/other.py",
+        line=50,
+        source_kind="added",
+        head_sha="abc",
+    ) == {
+        "unanchorable": True,
+        "reason": "added_line_not_in_current_diff",
+    }
+
+
+def test_marker_like_added_content_is_still_an_added_line_in_target_file():
+    diff = """diff --git a/src/payments.py b/src/payments.py
+--- a/src/payments.py
++++ b/src/payments.py
+@@ -10,0 +10,1 @@
++++ b/src/other.py
+"""
+    assert validate_github_anchor(
+        diff,
+        path="src/payments.py",
+        line=10,
+        source_kind="added",
+        head_sha="abc",
+    ) == {
+        "commit_id": "abc",
+        "path": "src/payments.py",
+        "line": 10,
+        "side": "RIGHT",
+    }
+
+
+def test_headerless_per_file_patch_anchors_added_line_to_explicit_path():
+    patch = """@@ -4,2 +4,3 @@
+ context
++new rule
+ trailing context
+"""
+    assert validate_github_anchor(
+        patch,
+        path="src/payment_rules.py",
+        line=5,
+        source_kind="added",
+        head_sha="abc",
+    ) == {
+        "commit_id": "abc",
+        "path": "src/payment_rules.py",
+        "line": 5,
+        "side": "RIGHT",
+    }
+
+
+def test_headerless_per_file_patch_rejects_context_and_absent_lines():
+    patch = """@@ -4,2 +4,3 @@
+ context
++new rule
+ trailing context
+"""
+    assert validate_github_anchor(
+        patch,
+        path="src/payment_rules.py",
+        line=4,
+        source_kind="context",
+        head_sha="abc",
+    ) == {
+        "unanchorable": True,
+        "reason": "source_line_is_not_added",
+    }
+    assert validate_github_anchor(
+        patch,
+        path="src/payment_rules.py",
+        line=99,
+        source_kind="added",
+        head_sha="abc",
+    ) == {
+        "unanchorable": True,
+        "reason": "added_line_not_in_current_diff",
+    }
+
+
+def test_headerless_per_file_patch_rejects_removed_line():
+    patch = """@@ -4,2 +4,1 @@
+ context
+-removed rule
+"""
+    assert validate_github_anchor(
+        patch,
+        path="src/payment_rules.py",
+        line=5,
+        source_kind="removed",
+        head_sha="abc",
+    ) == {
+        "unanchorable": True,
+        "reason": "source_line_is_not_added",
+    }

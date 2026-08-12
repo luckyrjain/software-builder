@@ -105,8 +105,12 @@ When no explicit review URL/number+repository was given:
    - **GitHub App/MCP** → use semantic list/search-by-head capability on `review_target.host`, paginate,
      and retain the returned canonical PR URLs.
    - **GitHub CLI read fallback** → use exact-host repository syntax:
-     `gh pr list --repo <host>/<owner>/<repo> --state open --json number,title,headRefName,baseRefName,url,isDraft`.
-     Add `--head <branch>` for "this branch". Do not use unsupported `--hostname` on `gh pr list`.
+     `gh pr list --repo <host>/<owner>/<repo> --state open --limit 1000 --json number,title,headRefName,baseRefName,url,isDraft`.
+     Add `--head <branch>` for "this branch". The explicit 1000-result bound prevents the CLI's
+     30-item default from hiding a current-branch match. If a repository returns exactly 1000 items,
+     stop and report discovery truncation; require an explicit URL/number or a narrower `--head`
+     query rather than reporting no match or an exhaustive list. Do not use unsupported `--hostname`
+     on `gh pr list`.
    - **Has a list tool** (`list_open_merge_requests` / `list_merge_requests`) → list open MRs per
      project, paginating each. This gives the full set.
    - **Only `search`** (official GitLab MCP / Cursor plugin) → `search` **requires a query term**, so

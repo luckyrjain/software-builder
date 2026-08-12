@@ -25,6 +25,10 @@ after a fresh install.** A correct minimal output should contain:
    `estimated_effort_min`, `coverage_pct`, `change_classification` (`reference/review-metrics.md`).
 6. **Phase 3 confirmation prompt** (or a skip note for `chat-only`; `workflow/posting.md`).
 
+For GitHub discovery smoke coverage, populate or mock at least 31 open PRs with the current branch's
+match after item 30. The CLI path must use `--limit 1000` and find that PR. A mocked response of exactly
+1000 items must stop with a truncation warning rather than claim the branch has no PR or the list is exhaustive.
+
 If any element is missing, check the selected provider capability: GitLab MCP for an MR; GitHub App/MCP
 or `gh auth status --hostname <host>` for a PR. Also check repository resolution and whether the review
 is closed/merged (the skill stops early by design).

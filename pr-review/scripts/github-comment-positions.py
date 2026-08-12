@@ -6,6 +6,8 @@ import re
 import shlex
 from typing import Literal
 
+HUNK_HEADER = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@")
+
 
 def _marker_path(raw: str) -> str | None:
     """Parse a ---/+++ marker path, including quoted paths and /dev/null."""
@@ -33,34 +35,45 @@ def validate_github_anchor(
     if source_kind != "added":
         return {"unanchorable": True, "reason": "source_line_is_not_added"}
 
-    current_path: str | None = None
+    lines = diff_text.splitlines()
+    parser_mode: Literal["combined", "per_file"] = (
+        "combined" if any(raw.startswith("diff --git ") for raw in lines) else "per_file"
+    )
+    parser_state: Literal["outside", "file_header", "hunk"] = "outside"
+    current_path: str | None = path if parser_mode == "per_file" else None
     new_line: int | None = None
-    wanted_in_file = False
+    wanted_in_file = parser_mode == "per_file"
 
-    for raw in diff_text.splitlines():
+    for raw in lines:
         if raw.startswith("diff --git "):
+            if parser_mode != "combined":
+                continue
+            parser_state = "file_header"
             current_path = None
             new_line = None
             wanted_in_file = False
-            continue
-        if raw.startswith("--- "):
-            current_path = None
-            new_line = None
-            wanted_in_file = False
-            continue
-        if raw.startswith("+++ "):
-            current_path = _marker_path(raw)
-            wanted_in_file = current_path == path
             continue
         if raw.startswith("@@"):
-            match = re.search(r"\+(\d+)(?:,\d+)?", raw)
+            match = HUNK_HEADER.match(raw)
+            if parser_mode == "combined" and parser_state == "outside":
+                continue
+            parser_state = "hunk"
             new_line = int(match.group(1)) if match and wanted_in_file else None
             continue
-        if not wanted_in_file or new_line is None:
+        if parser_mode == "combined" and parser_state == "file_header":
+            if raw.startswith("--- "):
+                current_path = None
+                new_line = None
+                wanted_in_file = False
+            elif raw.startswith("+++ "):
+                current_path = _marker_path(raw)
+                wanted_in_file = current_path == path
             continue
-        if raw.startswith("-") and not raw.startswith("---"):
+        if parser_state != "hunk" or not wanted_in_file or new_line is None:
             continue
-        if raw.startswith("+") and not raw.startswith("+++"):
+        if raw.startswith("-"):
+            continue
+        if raw.startswith("+"):
             if new_line == line:
                 return {"commit_id": head_sha, "path": path, "line": line, "side": "RIGHT"}
             new_line += 1

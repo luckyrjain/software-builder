@@ -109,7 +109,7 @@ head-SHA capture. GitHub's `mergeable` / `mergeStateStatus` replaces GitLab merg
 
    **After confirming state is open**, extract `changes_count` (or equivalent file count field) and output a one-line size summary before proceeding to step 2:
 
-   > Reviewing `group/repo` !482 — **N files changed** (~X additions, Y deletions). [comprehensive / focused / quick] review starting.
+   > Reviewing `owner/repo` PR #42 / `group/repo` MR !482 — **N files changed** (~X additions, Y deletions). [comprehensive / focused / quick] review starting.
 
    Use "comprehensive" for > 50 files, "focused" for 10–50, "quick" for < 10. If `changes_count` is `null` (GitLab truncates this field for very large MRs), output: *"File count unavailable (large MR) — comprehensive review, cap at 200 files."*
    **Metadata sub-checks** — apply `reference/phase-1-gather.md` §MR metadata sub-checks: the **early
@@ -238,7 +238,8 @@ head-SHA capture. GitHub's `mergeable` / `mergeStateStatus` replaces GitLab merg
 
 ## Special cases
 
-**Draft MR:** prefix executive summary narrative with *"Early review — MR is draft"*; skip posting unless user confirms (see `workflow/posting.md`).
+**Draft PR/MR:** prefix executive summary narrative with *"Early review — <PR|MR> is draft"* using the
+provider noun; apply the provider-neutral draft gate in `workflow/posting.md`.
 
 **Large MRs:** prioritise auth, payments, migrations, config, security paths; skip or skim
 `*.lock`, `vendor/`, `dist/`, generated fixtures — list what was deprioritised.

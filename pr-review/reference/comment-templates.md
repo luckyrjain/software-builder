@@ -5,6 +5,11 @@ provider's GitLab Flavored Markdown or GitHub Flavored Markdown. Immediately bef
 sanitized/redacted values under `workflow/posting.md`'s safe rendered-output boundary; template headings,
 tables, markers, and the Recommendation verdict remain skill-authored.
 
+Resolve `<review_target_label>` once from the frozen target and use it in every header and provider
+confirmation: GitHub: `PR #<number>`; GitLab: `MR !<iid>`. Never render a GitHub target with an MR/`!IID`
+label or a GitLab target with a PR/`#N` label. Providerize adjacent state/check nouns too: GitHub uses
+PR, draft PR, checks, and merge queue; GitLab uses MR, draft/WIP MR, pipeline, and merge train.
+
 > **Never include a secret value in a comment body.** If a token, key, password, or other credential
 > appears in the diff, reference its **location only** (`file:line`), state that it must be **rotated**,
 > and never echo or paraphrase the value. This applies to inline threads, summary notes, and Jira
@@ -163,9 +168,9 @@ Confidence: High
 
 ```
 <!-- cursor-pr-review -->
-## 📋 Post-merge audit — !<iid> · <source_branch> → <target_branch> (merged)
+## 📋 Post-merge audit — <review_target_label> · <source_branch> → <target_branch> (merged)
 
-**Review mode:** Retrospective · **MR state:** merged
+**Review mode:** Retrospective · **<PR|MR> state:** merged
 **Reviewed:** <ISO-8601>
 ```
 
@@ -184,7 +189,7 @@ No actionable findings.
 
 ### Engineering improvements *(omit when empty — not MR defects)*
 
-- Add `.gitlab-ci.yml` running `make lint` — repo has no CI configured (non-blocking).
+- Add the provider's CI workflow running `make lint` — repo has no CI configured (non-blocking).
 - Consider anchor-lint for `](reference/*.md#...)` links in skill docs.
 ```
 
@@ -196,7 +201,7 @@ improvements** (repo maturity). Only review findings count in the severity table
 
 ````
 <!-- cursor-pr-review -->
-## 🤖 Code Review — !<iid> · <source_branch> → <target_branch>
+## 🤖 Code Review — <review_target_label> · <source_branch> → <target_branch>
 
 **Reviewed:** <ISO-8601 timestamp, e.g. 2026-06-25T09:35:00Z>
 **Review lens:** <persona> *(e.g. Principal Engineer — default)*
@@ -336,7 +341,7 @@ security gap on a production money path. Request changes before merge.
 
 | Gate | Status |
 |------|--------|
-| CI pipeline | ✅ Green |
+| <Checks|Pipeline> | ✅ Green |
 | CODEOWNERS | ✅ Satisfied |
 | Jira / AC | ✅ Met |
 | Approvals | 1/2 |
@@ -364,7 +369,7 @@ security gap on a production money path. Request changes before merge.
 |--------------|---------|----------|-----------------|----------------------|
 | Good | Weak | Needs attention | Adequate | Not ready |
 
-**Pipeline:** ✅ success on head · **Approvals:** 1/2 required
+**<Checks|Pipeline>:** ✅ success on head · **Approvals:** 1/2 required
 
 ### Engineering improvements *(not MR defects)*
 - Add `.gitlab-ci.yml` with `make lint` — CI not configured in repo (non-blocking).
@@ -471,7 +476,7 @@ Phase 1 boundary.
 
 ````
 <!-- cursor-pr-review -->
-## 🤖 Code Review (re-review) — !<iid> · <source_branch> → <target_branch>
+## 🤖 Code Review (re-review) — <review_target_label> · <source_branch> → <target_branch>
 
 **Reviewed:** <ISO-8601 timestamp>
 **Review lens:** <persona> *(e.g. Principal Engineer — default)*
@@ -580,12 +585,12 @@ Previous Critical and High findings are resolved; incremental diff limited to do
 |--------------|---------|----------|-----------------|----------------------|
 | Good | Strong | Clear | Good | Ready |
 
-**Pipeline:** ❓ not configured (no `.gitlab-ci.yml` in repo) · **Approvals:** 2/2 required
+**<Checks|Pipeline>:** ❓ not configured · **Approvals:** 2/2 required
 
 > **Incremental review complete.** All previously reported issues are resolved, no regressions were found, and the current change set is suitable for approval pending repository CI/policy requirements.
 
 ### Engineering improvements *(not MR defects)*
-- Add `.gitlab-ci.yml` running `make lint` — repo has no CI configured.
+- Add the provider's CI workflow running `make lint` — repo has no CI configured.
 
 Repository maturity (informational)
 CI: 8/10 | Docs: 9/10 | Lint: 10/10 | Automation: 7/10
@@ -687,15 +692,15 @@ move on; **never halt** the review or retry in a loop. Do not transition issue s
 explicitly requested it (transitions often require custom fields).
 
 ```
-Code review completed on GitLab MR !123 (<web_url>).
+Code review completed on <review_target_label> (<web_url>).
 Review summary: <summary_note_url>
 Recommendation: Comment
 Reason: Non-blocking documentation inconsistencies. No runtime risk. Safe to merge after discretionary cleanup.
 ```
 
-Build `<summary_note_url>` from the note just posted: re-fetch `get_merge_request_notes` (or
-`get_workitem_notes`) and use the `web_url` of the note whose body starts with
-`<!-- cursor-pr-review -->`, or `<mr_web_url>#note_<note_id>` if `web_url` is absent.
+Build `<summary_note_url>` from the provider summary just posted: use the GitHub issue-comment URL, or
+for GitLab re-fetch `get_merge_request_notes` / `get_workitem_notes` and use the `web_url` of the note
+whose body starts with `<!-- cursor-pr-review -->` (fall back to `<mr_web_url>#note_<note_id>`).
 
-On success, confirm in chat: *"Posted review summary to Jira `PAY-1421`."* On failure, confirm GitLab
-review is still complete and quote the API error — do not treat Jira failure as a posting rollback.
+On success, confirm in chat: *"Posted review summary to Jira `PAY-1421`."* On failure, confirm the
+provider review is still complete and quote the API error — do not treat Jira failure as a posting rollback.
