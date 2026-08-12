@@ -8,6 +8,24 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 
 ## Platform
 
+### Give _check_predicate_types its own state, not the caller's (2026-08-12)
+
+- `scripts/validate_workflow_contracts.py`'s `_check_predicate_types` used to mutate two dicts
+  (`parsed_predicates`, `predicate_types`) passed in by the caller's loop and shared across
+  every route's call, in registry-iteration order — its own docstring said as much: "not a pure
+  computation of its route alone." No test in the file ever called it directly, only through the
+  full `validate_skill_contract()` integration path. Now returns a `RoutePredicateResult` (one
+  route's own contribution) instead, and the caller's loop does the accumulation itself — the
+  same pattern the file already used for `_check_route_prefix`'s returned `common_prefix`.
+- Three review rounds against the initial extraction found and fixed real issues in the new
+  code itself: a redundant defensive copy, a `frozen=True` that didn't actually deliver
+  immutability or hashability given the dataclass's mutable dict fields, and — after an earlier
+  fix renamed a field to match the caller's accumulator name — a same-name-different-scope
+  footgun where `predicate_types.update(result.predicate_types)` had two unrelated objects
+  sharing an identical name two words apart. Settled on `route_predicate_types`, which makes the
+  scope difference visible at the call site. Added 4 direct unit tests for the new return-value
+  contract, which the function had none of before.
+
 ### Unify the automation-only ↔ disable-model-invocation invariant (2026-08-12)
 
 - `scripts/registry/crosscheck.py`'s `validate_registry` (`make validate-registry`) and
