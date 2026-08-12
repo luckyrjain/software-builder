@@ -8,6 +8,22 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 
 ## Platform
 
+### Wire package_skill's integrity manifest into install verify (2026-08-12)
+
+- `package_skill.py` computes a sha256 per file into `.software-builder-manifest.json`
+  (ADR 0002's "integrity metadata for support/debugging"), but `cmd_verify` — the
+  implementation behind the user-facing `install.sh --verify <path>` command — never read
+  `manifest["files"]` at all. Proven by the repo's own pre-existing test: it wrote a
+  manifest claiming SKILL.md's hash was `"deadbeef"` for a file whose real content hashed to
+  something else entirely, and `cmd_verify` still returned 0. The sha256 computation was
+  write-only, with zero leverage — the interface name promised integrity checking, nothing
+  underneath it did that.
+- Wired `_verify_manifest_files` into `cmd_verify`, checking all three directions the
+  installed directory can drift from what was packaged: a manifest-listed file missing from
+  disk, a hash mismatch, and a file present on disk but not tracked in the manifest.
+  Verified end to end against a real packaged skill: clean package verifies ok, a one-byte
+  tamper is caught with an exact hash-mismatch message, an untracked extra file is caught too.
+
 ### Split validate_registry's 11 inlined concerns into named sub-checks (2026-08-12)
 
 - `crosscheck.py`'s `validate_registry` was one ~70-line function inlining every facet of the
