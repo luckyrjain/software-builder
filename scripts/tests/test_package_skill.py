@@ -54,6 +54,30 @@ def test_package_skill_vendors_framework_and_validates(isolated_repo: Path, tmp_
     assert errors == []
 
 
+def test_package_and_verify_agree_on_ignored_source_files(isolated_repo: Path, tmp_path: Path) -> None:
+    # Packaging (copytree_ignore) and the manifest verify walks in
+    # install_support.py used to apply the ignore patterns via two
+    # independently-maintained mechanisms that could disagree -- a source
+    # file matching one of the shared noise patterns (an editor backup file,
+    # say) would be silently dropped by copytree at packaging time in some
+    # cases and not others depending on which code path touched it, and a
+    # nested noise directory wasn't excluded consistently either. This
+    # exercises the full package -> verify round trip end to end, the one
+    # check that would have caught every divergence found in review.
+    (isolated_repo / "unit-test-creator" / "notes~").write_text("scratch\n", encoding="utf-8")
+
+    dest = tmp_path / "installed" / "unit-test-creator"
+    package_skill(skill="unit-test-creator", repo_root=isolated_repo, dest=dest, host="cursor")
+
+    assert not (dest / "notes~").exists()
+    manifest = json.loads((dest / ".software-builder-manifest.json").read_text(encoding="utf-8"))
+    assert "notes~" not in manifest["files"]
+
+    from scripts.install_support import cmd_verify
+
+    assert cmd_verify(dest) == 0
+
+
 def test_prd_architect_package_contains_executable_safe_output_renderer(tmp_path: Path) -> None:
     repo = tmp_path / "software-builder"
     shutil.copytree(ROOT / "prd-architect", repo / "prd-architect")

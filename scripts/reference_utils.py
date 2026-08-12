@@ -26,11 +26,45 @@ IGNORED_FILE_PATTERNS = ("*.pyc", ".DS_Store", "*.swp", "*~")
 def is_ignored_package_path(rel_path: str) -> bool:
     """True if rel_path (posix-style, relative to a package/install root) is
     filesystem noise rather than real package content.
+
+    Checks every path component against both IGNORED_DIR_NAMES and
+    IGNORED_FILE_PATTERNS -- mirroring shutil.ignore_patterns()'s per-level
+    matching (a noise-named directory anywhere in the path, not just the
+    immediate parent, excludes everything under it) -- so copytree_ignore()
+    and this function never disagree on what a nested path excludes.
     """
-    parts = rel_path.split("/")
-    if any(part in IGNORED_DIR_NAMES for part in parts[:-1]):
-        return True
-    return any(fnmatch.fnmatch(parts[-1], pattern) for pattern in IGNORED_FILE_PATTERNS)
+    for part in rel_path.split("/"):
+        if part in IGNORED_DIR_NAMES:
+            return True
+        if any(fnmatch.fnmatch(part, pattern) for pattern in IGNORED_FILE_PATTERNS):
+            return True
+    return False
+
+
+def copytree_ignore(root: Path):
+    """Build a shutil.copytree ignore() callback driven by is_ignored_package_path().
+
+    shutil.ignore_patterns() and is_ignored_package_path() used to be two
+    independently-maintained implementations that merely read from the same
+    constants -- they diverged in practice (directory-vs-file matching
+    granularity, and call sites like vendor_readme_superpowers_specs() that
+    copy files without going through copytree's ignore= at all), so a file
+    packaged under one path could be silently excluded when re-checked at
+    verify time, or vice versa. Routing copytree itself through
+    is_ignored_package_path() makes packaging and verification share the
+    exact same decision function instead of just the same constants.
+    """
+    root = root.resolve()
+
+    def ignore(directory: str, names: list[str]) -> set[str]:
+        dir_path = Path(directory).resolve()
+        return {
+            name
+            for name in names
+            if is_ignored_package_path((dir_path / name).relative_to(root).as_posix())
+        }
+
+    return ignore
 
 
 # CommonMark allows a fence delimiter to be indented up to 3 spaces (e.g. one nested inside

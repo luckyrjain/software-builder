@@ -6,6 +6,8 @@ import hashlib
 import json
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[2]
 
 _SKILL_MD_CONTENT = "# demo\n"
@@ -134,6 +136,82 @@ def test_verify_manifest_files_rejects_symlink(tmp_path: Path) -> None:
     errors = _verify_manifest_files(tmp_path, manifest)
 
     assert any("symlink not allowed in installed package: linked.md" in e for e in errors)
+
+
+def test_verify_manifest_files_symlinked_manifest_entry_reported_once(tmp_path: Path) -> None:
+    # A manifest-listed file replaced by a symlink used to trigger two
+    # contradictory-sounding errors for the same root cause: "symlink not
+    # allowed" AND "missing file listed in manifest" (the symlinked rel never
+    # made it into `actual`, so the missing-file check fired too). It should
+    # be reported once, via the symlink error.
+    from scripts.install_support import _verify_manifest_files
+
+    (tmp_path / "SKILL.md").write_text(_SKILL_MD_CONTENT, encoding="utf-8")
+    outside_target = tmp_path.parent / "outside2.txt"
+    outside_target.write_text("not part of the package\n", encoding="utf-8")
+    (tmp_path / "other.md").symlink_to(outside_target)
+    manifest = {"files": {"SKILL.md": _SKILL_MD_HASH, "other.md": "0" * 64}}
+
+    errors = _verify_manifest_files(tmp_path, manifest)
+
+    assert any("symlink not allowed in installed package: other.md" in e for e in errors)
+    assert not any("missing file listed in manifest: other.md" in e for e in errors)
+    assert len(errors) == 1
+
+
+def test_verify_manifest_files_rejects_fifo(tmp_path: Path) -> None:
+    # Neither is_file() nor is_symlink() is True for a FIFO/socket/device node,
+    # so it used to fall through both checks entirely -- silently untracked
+    # and unverified, defeating the "installed dir is byte-identical to what
+    # was packaged" guarantee this function exists to enforce.
+    import os
+
+    from scripts.install_support import _verify_manifest_files
+
+    (tmp_path / "SKILL.md").write_text(_SKILL_MD_CONTENT, encoding="utf-8")
+    fifo_path = tmp_path / "pipe"
+    os.mkfifo(fifo_path)
+    manifest = {"files": {"SKILL.md": _SKILL_MD_HASH}}
+
+    errors = _verify_manifest_files(tmp_path, manifest)
+
+    assert any("unexpected filesystem entry (not a regular file): pipe" in e for e in errors)
+
+
+def test_verify_manifest_files_ignores_noise_in_nested_directory(tmp_path: Path) -> None:
+    # is_ignored_package_path() used to only check IGNORED_FILE_PATTERNS
+    # against the final path component, so a noise-named *directory*
+    # anywhere but the immediate parent (e.g. a "backup~" dir two levels
+    # down) wasn't recognized as noise even though shutil.ignore_patterns()
+    # (used at packaging time) excludes it at every level.
+    from scripts.install_support import _verify_manifest_files
+
+    (tmp_path / "SKILL.md").write_text(_SKILL_MD_CONTENT, encoding="utf-8")
+    noisy_dir = tmp_path / "reference" / "backup~"
+    noisy_dir.mkdir(parents=True)
+    (noisy_dir / "old.md").write_text("stale\n", encoding="utf-8")
+    manifest = {"files": {"SKILL.md": _SKILL_MD_HASH}}
+
+    assert _verify_manifest_files(tmp_path, manifest) == []
+
+
+def test_verify_manifest_files_reports_unreadable_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # sha256_file() can raise OSError if a manifest-listed file becomes
+    # unreadable between the directory scan and the hash read; this must
+    # produce a clean error entry, not an uncaught traceback.
+    import scripts.install_support as install_support
+
+    (tmp_path / "SKILL.md").write_text(_SKILL_MD_CONTENT, encoding="utf-8")
+    manifest = {"files": {"SKILL.md": _SKILL_MD_HASH}}
+
+    def _raise(path: Path) -> str:
+        raise OSError("permission denied")
+
+    monkeypatch.setattr(install_support, "sha256_file", _raise)
+
+    errors = install_support._verify_manifest_files(tmp_path, manifest)
+
+    assert any("could not read SKILL.md to verify its hash" in e for e in errors)
 
 
 def test_verify_manifest_files_excludes_nested_manifest_name(tmp_path: Path) -> None:

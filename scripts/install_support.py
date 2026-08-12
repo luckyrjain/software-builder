@@ -47,7 +47,10 @@ def _verify_manifest_files(installed_path: Path, manifest: dict) -> list[str]:
     verification. A symlink anywhere under installed_path is flagged directly
     rather than followed -- cmd_verify validates untrusted-ish installed
     content, and hashing through a symlink would read whatever it points at,
-    including a path outside installed_path entirely.
+    including a path outside installed_path entirely. Anything that's neither
+    a regular file, a directory, nor a symlink (a FIFO, socket, or device
+    node) is flagged the same way -- the installed directory should contain
+    nothing but what package_skill.py wrote.
     """
     files = manifest.get("files")
     if not isinstance(files, dict):
@@ -55,21 +58,31 @@ def _verify_manifest_files(installed_path: Path, manifest: dict) -> list[str]:
 
     errors: list[str] = []
     actual: set[str] = set()
+    symlinks: set[str] = set()
+    other_entries: set[str] = set()
     for path in installed_path.rglob("*"):
+        rel = path.relative_to(installed_path).as_posix()
         if path.is_symlink():
-            errors.append(
-                f"symlink not allowed in installed package: "
-                f"{path.relative_to(installed_path).as_posix()}",
-            )
+            symlinks.add(rel)
+            continue
+        if path.is_dir():
             continue
         if not path.is_file():
+            other_entries.add(rel)
             continue
-        rel = path.relative_to(installed_path).as_posix()
         if path.name == MANIFEST_NAME or is_ignored_package_path(rel):
             continue
         actual.add(rel)
 
+    unusable = symlinks | other_entries
+    for rel in sorted(symlinks):
+        errors.append(f"symlink not allowed in installed package: {rel}")
+    for rel in sorted(other_entries):
+        errors.append(f"unexpected filesystem entry (not a regular file): {rel}")
+
     for rel, expected_hash in sorted(files.items()):
+        if rel in unusable:
+            continue
         if rel not in actual:
             errors.append(f"missing file listed in manifest: {rel}")
             continue
@@ -81,7 +94,7 @@ def _verify_manifest_files(installed_path: Path, manifest: dict) -> list[str]:
         if actual_hash != expected_hash:
             errors.append(f"hash mismatch for {rel}: expected {expected_hash}, got {actual_hash}")
 
-    for rel in sorted(actual - set(files.keys())):
+    for rel in sorted(actual - files.keys()):
         errors.append(f"unexpected file not in manifest: {rel}")
 
     return errors
