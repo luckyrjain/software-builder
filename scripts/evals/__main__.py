@@ -10,6 +10,9 @@ from typing import Any
 
 import yaml
 
+from scripts.evals.golden import load_golden_fixtures, run_golden_case
+from scripts.evals.transcript import load_transcript_fixtures, run_transcript_case
+from scripts.evals.types import EvalResult
 from scripts.registry.frontmatter import load_skill_frontmatter
 from scripts.registry.schema import parse_registry
 
@@ -30,14 +33,6 @@ class EvalCase:
     description: str
     assertions: list[dict[str, Any]]
     path: Path
-
-
-@dataclass(frozen=True)
-class EvalResult:
-    skill: str
-    case_id: str
-    passed: bool
-    messages: list[str]
 
 
 def load_fixtures(fixtures_dir: Path) -> list[EvalCase]:
@@ -167,9 +162,6 @@ def run_all(
     skill_filter: str | None = None,
     tier_filter: int | None = None,
 ) -> list[EvalResult]:
-    from scripts.evals.golden import load_golden_fixtures, run_golden_case
-    from scripts.evals.transcript import load_transcript_fixtures, run_transcript_case
-
     registry = parse_registry(root / "skills.yaml")
     cases = load_fixtures(FIXTURES_DIR)
     transcript_cases = load_transcript_fixtures(TRANSCRIPTS_DIR)
