@@ -440,6 +440,173 @@ def _selector_domains(
     return domains
 
 
+def _check_route_prefix(
+    route_id: str,
+    route_schema: dict[str, Any],
+    selection_phase: str | None,
+    common_prefix: list[str] | None,
+    errors: list[str],
+) -> tuple[list[Any] | None, bool, list[str] | None]:
+    """Validate one route's declared shape and its route-selection-phase prefix.
+
+    Returns (phase_names, valid_selection_prefix, updated_common_prefix).
+    phase_names is None when `route.phases` itself is malformed — the caller must
+    skip the rest of this route, matching the original inline `continue`.
+    """
+    route_schema_keys = _valid_mapping_keys(
+        route_schema, location=f"route {route_id!r}", errors=errors
+    )
+    unknown_route_keys = sorted(route_schema_keys - ROUTE_KEYS)
+    if unknown_route_keys:
+        errors.append(
+            f"route {route_id!r} unknown keys: {', '.join(unknown_route_keys)}"
+        )
+    phase_names = route_schema.get("phases")
+    if not isinstance(phase_names, list) or not phase_names:
+        errors.append(f"route {route_id!r}.phases must be a non-empty list")
+        return None, False, common_prefix
+    selection_count = phase_names.count(selection_phase) if selection_phase is not None else 0
+    valid_selection_prefix = selection_count == 1
+    if selection_phase is not None and not valid_selection_prefix:
+        errors.append(
+            f"route {route_id!r} must include route-selection phase {selection_phase!r} "
+            f"exactly once; found {selection_count}"
+        )
+    if valid_selection_prefix:
+        selection_index = phase_names.index(selection_phase)
+        selection_prefix = phase_names[: selection_index + 1]
+        if common_prefix is None:
+            common_prefix = selection_prefix
+        elif selection_prefix != common_prefix:
+            errors.append(
+                f"route {route_id!r} selection prefix {selection_prefix!r} differs from "
+                f"common prefix {common_prefix!r}"
+            )
+    return phase_names, valid_selection_prefix, common_prefix
+
+
+def _check_predicate_types(
+    route_id: str,
+    phase_names: list[Any],
+    phases: dict[str, PhaseContract],
+    selection_phase: str | None,
+    valid_selection_prefix: bool,
+    entry_required: dict[str, str],
+    entry_optional: dict[str, str],
+    route_schema: dict[str, Any],
+    parsed_predicates: dict[str, dict[str, tuple[str, object]]],
+    predicate_types: dict[str, str],
+    errors: list[str],
+) -> None:
+    """Walk one route's phases checking consumed-field type/availability, then parse
+    its `when` predicates at the route-selection phase. Mutates parsed_predicates and
+    predicate_types in place (same shared accumulators the original inline code
+    updated directly) — this function is not a pure computation of its route alone,
+    since a route's predicate fields feed the cross-route selector-domain check that
+    runs after every route has been walked.
+    """
+    available = dict(entry_required)
+    possible = {**entry_optional, **entry_required}
+    selection_available: dict[str, str] | None = None
+    for phase_name in phase_names:
+        if not isinstance(phase_name, str) or phase_name not in phases:
+            errors.append(f"route {route_id!r} references unknown phase {phase_name!r}")
+            continue
+        phase = phases[phase_name]
+        conditional = phase.conditional.get(route_id, {})
+        required = {**phase.required, **conditional.get("required", {})}
+        optional = {**phase.optional, **conditional.get("optional", {})}
+        _check_consumed_fields(
+            route_id=route_id,
+            phase=phase_name,
+            consumed=required,
+            available=available,
+            required=True,
+            errors=errors,
+        )
+        _check_consumed_fields(
+            route_id=route_id,
+            phase=phase_name,
+            consumed=optional,
+            available=possible,
+            required=False,
+            errors=errors,
+        )
+        available.update(phase.produces)
+        possible.update(phase.produces)
+        if phase_name == selection_phase and selection_available is None:
+            selection_available = dict(available)
+    if valid_selection_prefix and selection_available is not None:
+        parsed = _parse_predicates(
+            route_id=route_id,
+            raw=route_schema.get("when"),
+            available=selection_available,
+            errors=errors,
+        )
+        if parsed is not None:
+            parsed_predicates[route_id] = parsed
+            predicate_types.update(selection_available)
+
+
+def _check_selector_coverage(
+    routes: dict[str, Any],
+    parsed_predicates: dict[str, dict[str, tuple[str, object]]],
+    predicate_types: dict[str, str],
+    contract: dict[str, Any],
+    errors: list[str],
+) -> None:
+    """Cartesian-exhaustiveness/overlap check over the full selector space, once every
+    route's predicates parsed successfully. Appends to errors in place; the several
+    early `return`s below bail out of just this coverage pass (mirroring the original
+    function's early `return errors` points, which had nothing left to run after them
+    either — this was always the tail of validate_skill_contract()).
+    """
+    if len(parsed_predicates) != len(routes):
+        return
+    selector_fields = {
+        name for predicates in parsed_predicates.values() for name in predicates
+    }
+    selector_types = {name: predicate_types[name] for name in selector_fields}
+    domains = _selector_domains(contract.get("selector_domains"), selector_types, errors)
+    if len(domains) != len(selector_fields):
+        return
+    for route_id, predicates in parsed_predicates.items():
+        for name, (_, value) in predicates.items():
+            if value not in domains[name]:
+                errors.append(
+                    f"route {route_id!r}.when.{name} value {value!r} is not in "
+                    f"selector_domains.{name}"
+                )
+    if errors:
+        return
+    ordered_fields = sorted(domains)
+    selector_state_count = math.prod(len(domains[name]) for name in ordered_fields)
+    if selector_state_count > MAX_SELECTOR_STATES:
+        errors.append(
+            f"selector Cartesian space has {selector_state_count} states; "
+            f"maximum is {MAX_SELECTOR_STATES}"
+        )
+        return
+    overlapping_pairs: set[tuple[str, str]] = set()
+    for values in itertools.product(*(domains[name] for name in ordered_fields)):
+        state = dict(zip(ordered_fields, values, strict=True))
+        matching = [
+            route_id
+            for route_id, predicates in parsed_predicates.items()
+            if _predicate_matches(state, predicates)
+        ]
+        if not matching:
+            rendered = ", ".join(f"{name}={state[name]!r}" for name in ordered_fields)
+            errors.append(f"selector state {{{rendered}}} is not covered by any route")
+        elif len(matching) > 1:
+            for left_id, right_id in itertools.combinations(sorted(matching), 2):
+                overlapping_pairs.add((left_id, right_id))
+    for left_id, right_id in sorted(overlapping_pairs):
+        errors.append(
+            f"routes {left_id!r} and {right_id!r} have overlapping when predicates"
+        )
+
+
 def validate_skill_contract(skill_dir: Path) -> list[str]:
     """Return deterministic validation errors for one skill directory."""
     errors: list[str] = []
@@ -507,119 +674,26 @@ def validate_skill_contract(skill_dir: Path) -> list[str]:
         if not isinstance(route_schema, dict):
             errors.append(f"route {route_id!r} must be a mapping")
             continue
-        route_schema_keys = _valid_mapping_keys(
-            route_schema, location=f"route {route_id!r}", errors=errors
+        phase_names, valid_selection_prefix, common_prefix = _check_route_prefix(
+            route_id, route_schema, selection_phase, common_prefix, errors,
         )
-        unknown_route_keys = sorted(route_schema_keys - ROUTE_KEYS)
-        if unknown_route_keys:
-            errors.append(
-                f"route {route_id!r} unknown keys: {', '.join(unknown_route_keys)}"
-            )
-        phase_names = route_schema.get("phases")
-        if not isinstance(phase_names, list) or not phase_names:
-            errors.append(f"route {route_id!r}.phases must be a non-empty list")
+        if phase_names is None:
             continue
-        selection_count = phase_names.count(selection_phase) if selection_phase is not None else 0
-        valid_selection_prefix = selection_count == 1
-        if selection_phase is not None and not valid_selection_prefix:
-            errors.append(
-                f"route {route_id!r} must include route-selection phase {selection_phase!r} "
-                f"exactly once; found {selection_count}"
-            )
-        if valid_selection_prefix:
-            selection_index = phase_names.index(selection_phase)
-            selection_prefix = phase_names[: selection_index + 1]
-            if common_prefix is None:
-                common_prefix = selection_prefix
-            elif selection_prefix != common_prefix:
-                errors.append(
-                    f"route {route_id!r} selection prefix {selection_prefix!r} differs from "
-                    f"common prefix {common_prefix!r}"
-                )
-        available = dict(entry_required)
-        possible = {**entry_optional, **entry_required}
-        selection_available: dict[str, str] | None = None
-        for phase_name in phase_names:
-            if not isinstance(phase_name, str) or phase_name not in phases:
-                errors.append(f"route {route_id!r} references unknown phase {phase_name!r}")
-                continue
-            phase = phases[phase_name]
-            conditional = phase.conditional.get(route_id, {})
-            required = {**phase.required, **conditional.get("required", {})}
-            optional = {**phase.optional, **conditional.get("optional", {})}
-            _check_consumed_fields(
-                route_id=route_id,
-                phase=phase_name,
-                consumed=required,
-                available=available,
-                required=True,
-                errors=errors,
-            )
-            _check_consumed_fields(
-                route_id=route_id,
-                phase=phase_name,
-                consumed=optional,
-                available=possible,
-                required=False,
-                errors=errors,
-            )
-            available.update(phase.produces)
-            possible.update(phase.produces)
-            if phase_name == selection_phase and selection_available is None:
-                selection_available = dict(available)
-        if valid_selection_prefix and selection_available is not None:
-            parsed = _parse_predicates(
-                route_id=route_id,
-                raw=route_schema.get("when"),
-                available=selection_available,
-                errors=errors,
-            )
-            if parsed is not None:
-                parsed_predicates[route_id] = parsed
-                predicate_types.update(selection_available)
+        _check_predicate_types(
+            route_id,
+            phase_names,
+            phases,
+            selection_phase,
+            valid_selection_prefix,
+            entry_required,
+            entry_optional,
+            route_schema,
+            parsed_predicates,
+            predicate_types,
+            errors,
+        )
 
-    if len(parsed_predicates) == len(routes):
-        selector_fields = {
-            name for predicates in parsed_predicates.values() for name in predicates
-        }
-        selector_types = {name: predicate_types[name] for name in selector_fields}
-        domains = _selector_domains(contract.get("selector_domains"), selector_types, errors)
-        if len(domains) == len(selector_fields):
-            for route_id, predicates in parsed_predicates.items():
-                for name, (_, value) in predicates.items():
-                    if value not in domains[name]:
-                        errors.append(
-                            f"route {route_id!r}.when.{name} value {value!r} is not in "
-                            f"selector_domains.{name}"
-                        )
-            if errors:
-                return errors
-            ordered_fields = sorted(domains)
-            selector_state_count = math.prod(len(domains[name]) for name in ordered_fields)
-            if selector_state_count > MAX_SELECTOR_STATES:
-                errors.append(
-                    f"selector Cartesian space has {selector_state_count} states; "
-                    f"maximum is {MAX_SELECTOR_STATES}"
-                )
-                return errors
-            overlapping_pairs: set[tuple[str, str]] = set()
-            for values in itertools.product(*(domains[name] for name in ordered_fields)):
-                state = dict(zip(ordered_fields, values, strict=True))
-                matching = [
-                    route_id
-                    for route_id, predicates in parsed_predicates.items()
-                    if _predicate_matches(state, predicates)
-                ]
-                if not matching:
-                    rendered = ", ".join(f"{name}={state[name]!r}" for name in ordered_fields)
-                    errors.append(f"selector state {{{rendered}}} is not covered by any route")
-                elif len(matching) > 1:
-                    for left_id, right_id in itertools.combinations(sorted(matching), 2):
-                        overlapping_pairs.add((left_id, right_id))
-            for left_id, right_id in sorted(overlapping_pairs):
-                errors.append(
-                    f"routes {left_id!r} and {right_id!r} have overlapping when predicates"
-                )
+    _check_selector_coverage(routes, parsed_predicates, predicate_types, contract, errors)
     return errors
 
 
