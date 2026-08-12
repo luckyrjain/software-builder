@@ -51,7 +51,7 @@ assertions:
     pattern: "(?m)^## Verdict: READY$"
   - type: forbid_pattern
     path: repo_rendered
-    pattern: "(?m)^## Verdict: READY$"
+    pattern: "\n"
   - type: forbid_pattern
     path: repo_rendered
     pattern: "^`.*`$"

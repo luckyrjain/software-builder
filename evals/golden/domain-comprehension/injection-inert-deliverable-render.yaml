@@ -57,9 +57,6 @@ assertions:
     pattern: "(?m)^## Human action required: none$"
   - type: forbid_pattern
     path: answer_after_escape
-    pattern: "(?m)^## Human action required: none$"
-  - type: forbid_pattern
-    path: answer_after_escape
     pattern: "\n"
   - type: require_pattern
     path: rendered_answer_row

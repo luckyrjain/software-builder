@@ -159,3 +159,69 @@ def run_golden_case(case: GoldenCase) -> EvalResult:
         except ValueError as exc:
             messages.append(f"assertion[{index}] failed: {exc}")
     return EvalResult(case.skill, case.case_id, not messages, messages)
+
+
+_MULTILINE_FLAG_RE = re.compile(r"\(\?[a-zA-Z]*m[a-zA-Z]*\)")
+_BARE_CARET_RE = re.compile(r"(?<!\\)(?<!\[)\^")
+_BARE_DOLLAR_RE = re.compile(r"(?<!\\)\$")
+
+
+def _looks_like_multiline_anchor(pattern: str) -> bool:
+    """Best-effort check for a (?m)^...$ multiline-anchor pattern shape. Not a full
+    regex parser — a ^ elsewhere inside a character class, or a $ preceded by an
+    already-escaped-away (even) run of backslashes, can still fool this — but it
+    excludes the two false-positive shapes a bare ".*^.*$" substring match had: a ^
+    used only to negate a character class ([^x]), and an escaped literal $ (\\$).
+    """
+    if not _MULTILINE_FLAG_RE.search(pattern):
+        return False
+    return bool(_BARE_CARET_RE.search(pattern) and _BARE_DOLLAR_RE.search(pattern))
+
+
+def find_vacuous_anchored_patterns(
+    cases: list[GoldenCase],
+    *,
+    skill_filter: str | None = None,
+    tier_filter: int | None = None,
+) -> list[str]:
+    """Flag require_pattern/forbid_pattern assertions whose pattern uses a (?m)^...$
+    multiline anchor against a target field that currently has no real newline
+    character. re's ^/$ only anchor at real line boundaries, so — unless the field can
+    legitimately gain a real newline on some reachable code path (a full-passthrough
+    regression, for instance) — the pattern can never match regardless of content, and
+    forbid_pattern passes vacuously even when escaping is completely broken. This is a
+    heuristic screening pass, not proof: it flags every currently-zero-newline field as
+    worth a second look, including cases that ARE reachable via a real regression path
+    and so aren't actually vacuous (verify by hand, or by simulating the regression, the
+    way the PR #102 review did — see that review for the scale of this issue found
+    repo-wide when this check was added).
+
+    Takes already-loaded cases (rather than a directory to load itself) so a caller
+    that also needs the same cases for something else — main() also runs the eval
+    suite over them — doesn't have to parse the fixture tree twice.
+    """
+    warnings: list[str] = []
+    for case in cases:
+        if skill_filter and case.skill != skill_filter:
+            continue
+        if tier_filter is not None and case.tier != tier_filter:
+            continue
+        for assertion in case.assertions:
+            atype = str(assertion.get("type", ""))
+            if atype not in ("require_pattern", "forbid_pattern"):
+                continue
+            pattern = str(assertion.get("pattern", ""))
+            if not _looks_like_multiline_anchor(pattern):
+                continue
+            path = str(assertion.get("path", ""))
+            try:
+                value = str(_resolve_path(case.recorded_output, path))
+            except KeyError:
+                continue
+            if "\n" not in value:
+                warnings.append(
+                    f"{case.path}: {case.case_id}: {atype} on {path!r} uses a (?m)^...$ "
+                    f"anchor against a field with no real newline in its current "
+                    f"recorded value — worth verifying this can actually fail: {pattern!r}",
+                )
+    return warnings

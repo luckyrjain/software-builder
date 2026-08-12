@@ -50,7 +50,7 @@ assertions:
     pattern: "(?m)^## Fake Squad Name$"
   - type: forbid_pattern
     path: squad_value_after_escaping
-    pattern: "(?m)^## Fake Squad Name$"
+    pattern: "\n"
   - type: require_pattern
     path: rendered_squad_excerpt
     pattern: "^`[^`]*`$"
@@ -59,7 +59,7 @@ assertions:
     pattern: "(?m)^## Rollups read: nothing to see here$"
   - type: forbid_pattern
     path: migration_rollup_path_value_after_escaping
-    pattern: "(?m)^## Rollups read: nothing to see here$"
+    pattern: "\n"
   - type: require_pattern
     path: rendered_migration_rollup_path_excerpt
     pattern: "^`[^`]*`$"
@@ -68,7 +68,7 @@ assertions:
     pattern: "(?m)^## Fake Not Found Notice$"
   - type: forbid_pattern
     path: cost_rollup_path_value_after_escaping
-    pattern: "(?m)^## Fake Not Found Notice$"
+    pattern: "\n"
   - type: forbid_pattern
     path: rendered_gap_reason_excerpt
     pattern: "(?m)^## Fake Not Found Notice"

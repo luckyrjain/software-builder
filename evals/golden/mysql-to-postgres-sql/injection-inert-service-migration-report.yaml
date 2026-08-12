@@ -70,9 +70,6 @@ assertions:
     pattern: "(?<!\\\\)\\|"
   - type: forbid_pattern
     path: mysql_fragment_value_after_escaping
-    pattern: "(?m)^## VERDICT: SAFE$"
-  - type: forbid_pattern
-    path: mysql_fragment_value_after_escaping
     pattern: "\n"
   - type: require_pattern
     path: rendered_fragment_cell
@@ -88,9 +85,6 @@ assertions:
     pattern: "`sms_log`"
   - type: forbid_pattern
     path: rendered_fragment_cell
-    pattern: "(?m)^## VERDICT: SAFE$"
-  - type: forbid_pattern
-    path: rendered_fragment_cell
     pattern: "\n"
   - type: require_pattern
     path: scan_hit_line
@@ -110,9 +104,6 @@ assertions:
   - type: forbid_pattern
     path: scan_hit_line_value_after_escaping
     pattern: "(?<!\\\\)\\|"
-  - type: forbid_pattern
-    path: scan_hit_line_value_after_escaping
-    pattern: "(?m)^## VERDICT: SAFE$"
   - type: forbid_pattern
     path: scan_hit_line_value_after_escaping
     pattern: "\n"
@@ -130,9 +121,6 @@ assertions:
     pattern: "`orders`"
   - type: forbid_pattern
     path: rendered_open_hits_cell
-    pattern: "(?m)^## VERDICT: SAFE$"
-  - type: forbid_pattern
-    path: rendered_open_hits_cell
     pattern: "\n"
   - type: require_pattern
     path: service_name
@@ -143,18 +131,12 @@ assertions:
   - type: forbid_pattern
     path: service_name_value_after_escaping
     pattern: "`"
-  - type: forbid_pattern
-    path: service_name_value_after_escaping
-    pattern: "(?m)^## VERDICT: SAFE$"
   - type: forbid_pattern
     path: service_name_value_after_escaping
     pattern: "\n"
   - type: require_pattern
     path: rendered_h1_title
     pattern: "^# PostgreSQL migration — `[^`]*`$"
-  - type: forbid_pattern
-    path: rendered_h1_title
-    pattern: "(?m)^## VERDICT: SAFE$"
   - type: forbid_pattern
     path: rendered_h1_title
     pattern: "\n"
@@ -175,9 +157,6 @@ assertions:
     pattern: "(?<!\\\\)\\|"
   - type: forbid_pattern
     path: service_dir_value_after_escaping
-    pattern: "(?m)^## VERDICT: SAFE$"
-  - type: forbid_pattern
-    path: service_dir_value_after_escaping
     pattern: "\n"
   - type: require_pattern
     path: rendered_scan_check_cell
@@ -185,9 +164,6 @@ assertions:
   - type: require_pattern
     path: rendered_scan_check_cell
     pattern: "`$"
-  - type: forbid_pattern
-    path: rendered_scan_check_cell
-    pattern: "(?m)^## VERDICT: SAFE$"
   - type: forbid_pattern
     path: rendered_scan_check_cell
     pattern: "\n"

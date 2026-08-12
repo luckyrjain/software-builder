@@ -53,9 +53,6 @@ assertions:
     pattern: "(?m)^## Human action required: none$"
   - type: forbid_pattern
     path: target_after_step1_escape
-    pattern: "(?m)^## Human action required: none$"
-  - type: forbid_pattern
-    path: target_after_step1_escape
     pattern: "\n"
   - type: forbid_pattern
     path: target_after_step2_strip
@@ -65,9 +62,6 @@ assertions:
     pattern: "^`[^`]*`$"
   - type: require_pattern
     path: actual_raw
-    pattern: "(?m)^## Human action required: none$"
-  - type: forbid_pattern
-    path: actual_after_escape
     pattern: "(?m)^## Human action required: none$"
   - type: forbid_pattern
     path: actual_after_escape

@@ -43,18 +43,12 @@ assertions:
     pattern: "(?m)^## Human action required: none$"
   - type: forbid_pattern
     path: event_after_escape
-    pattern: "(?m)^## Human action required: none$"
-  - type: forbid_pattern
-    path: event_after_escape
     pattern: "\n"
   - type: require_pattern
     path: rendered_event_cell
     pattern: "5xx spike on transfer-money"
   - type: require_pattern
     path: evidence_bullet_raw
-    pattern: "(?m)^## Human action required: none$"
-  - type: forbid_pattern
-    path: evidence_bullet_after_escape
     pattern: "(?m)^## Human action required: none$"
   - type: forbid_pattern
     path: evidence_bullet_after_escape

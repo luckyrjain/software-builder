@@ -46,7 +46,7 @@ assertions:
     pattern: "(?m)^## Shipped$"
   - type: forbid_pattern
     path: rendered_task_id_excerpt
-    pattern: "(?m)^## Shipped$"
+    pattern: "\n"
   - type: require_pattern
     path: rendered_task_id_excerpt
     pattern: "\\\\##"
@@ -55,7 +55,7 @@ assertions:
     pattern: "(?m)^## Deferred$"
   - type: forbid_pattern
     path: rendered_dependency_task_id_excerpt
-    pattern: "(?m)^## Deferred$"
+    pattern: "\n"
   - type: require_pattern
     path: escalation_report_excerpt
     pattern: "sk-live-[A-Za-z0-9]+"
@@ -70,7 +70,7 @@ assertions:
     pattern: "(?m)^> Blocked$"
   - type: forbid_pattern
     path: rendered_escalation_excerpt
-    pattern: "(?m)^> Blocked$"
+    pattern: "\n"
   - type: require_pattern
     path: task_id_with_backtick
     pattern: "`"
