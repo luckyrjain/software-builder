@@ -128,3 +128,63 @@ def test_aggregate_schema_matching_passes_for_weekly_digest_contracts() -> None:
     registry = parse_registry(ROOT / "skills.yaml")
     errors = validate_composition_contracts(registry)
     assert errors == [], "\n".join(errors)
+
+
+def test_validate_schema_matching_reports_missing_fields_with_source_label() -> None:
+    """Direct unit test of the shared helper, isolated from both invoke/aggregate callers."""
+    from scripts.registry.composition_contracts import CompositionContract, _validate_schema_matching
+
+    parent = CompositionContract([], ["artifact"], "read-only", {}, {"artifact": ["a", "b"]})
+    child = CompositionContract(["artifact"], [], "read-only", {"artifact": ["a"]}, {})
+
+    errors = _validate_schema_matching(
+        "parent",
+        ["child"],
+        "some-label",
+        parent,
+        {"child": child},
+        artifact_schemas={},
+    )
+
+    assert len(errors) == 1
+    assert "some-label" in errors[0]
+    assert "'b'" in errors[0]
+    assert "'a'" not in errors[0].split("expose")[0]  # only the missing field is reported, not the covered one
+
+
+def test_validate_schema_matching_passes_when_fields_fully_covered() -> None:
+    from scripts.registry.composition_contracts import CompositionContract, _validate_schema_matching
+
+    parent = CompositionContract([], ["artifact"], "read-only", {}, {"artifact": ["a", "b"]})
+    child = CompositionContract(["artifact"], [], "read-only", {"artifact": ["a", "b"]}, {})
+
+    errors = _validate_schema_matching(
+        "parent",
+        ["child"],
+        "some-label",
+        parent,
+        {"child": child},
+        artifact_schemas={},
+    )
+
+    assert errors == []
+
+
+def test_validate_schema_matching_skips_silently_when_no_producer_found() -> None:
+    """No producer for the artifact is not this function's job to flag — the aggregate
+    caller has its own explicit 'no producer' pre-check for that; invoke has none by
+    design (see the comment in validate_composition_contracts())."""
+    from scripts.registry.composition_contracts import CompositionContract, _validate_schema_matching
+
+    parent = CompositionContract([], ["artifact"], "read-only", {}, {"artifact": ["a"]})
+
+    errors = _validate_schema_matching(
+        "parent",
+        [],  # no producer ids at all
+        "some-label",
+        parent,
+        contracts={},
+        artifact_schemas={},
+    )
+
+    assert errors == []
