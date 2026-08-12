@@ -30,14 +30,17 @@ def _make_yaml() -> YAML:
     return rt_yaml
 
 
-def load_catalog(path: Path = CATALOG_PATH) -> dict[str, dict[str, Any]]:
-    raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+def load_catalog(path: Path = CATALOG_PATH) -> dict[str, Any]:
+    # Loaded via the round-trip YAML so a catalog entry's own style choices
+    # (e.g. `required: [a, b]` written as flow style) survive into skills.yaml
+    # when a block is (re)generated, instead of being flattened to block style.
+    raw = _make_yaml().load(path.read_text(encoding="utf-8"))
     if not isinstance(raw, dict):
         raise ValueError(f"{path}: root must be a mapping")
     skills = raw.get("skills")
     if not isinstance(skills, dict):
         raise ValueError(f"{path}: skills must be a mapping")
-    return {str(skill_id): dict(entry) for skill_id, entry in skills.items()}
+    return {str(skill_id): entry for skill_id, entry in skills.items()}
 
 
 def _capabilities_valid(entry: dict[str, Any]) -> bool:
@@ -46,16 +49,26 @@ def _capabilities_valid(entry: dict[str, Any]) -> bool:
         return False
     required = caps.get("required")
     optional = caps.get("optional")
-    if not isinstance(required, list) or not isinstance(optional, list):
+    return isinstance(required, list) and isinstance(optional, list)
+
+
+def _capabilities_equal(current: Any, catalog_value: dict[str, Any]) -> bool:
+    if not isinstance(current, dict):
         return False
-    return bool(required or optional)
+    if set(current.get("required") or []) != set(catalog_value.get("required") or []):
+        return False
+    current_optional = {item.get("name"): item for item in (current.get("optional") or [])}
+    catalog_optional = {item.get("name"): item for item in (catalog_value.get("optional") or [])}
+    if current_optional != catalog_optional:
+        return False
+    return (current.get("degraded_modes") or {}) == (catalog_value.get("degraded_modes") or {})
 
 
 def _has_stray_capability_keys(entry: dict[str, Any]) -> bool:
     return any(key in entry for key in _STRAY_CAPABILITY_KEYS)
 
 
-def _apply_backfill(rt_yaml: YAML, skill_map: CommentedMap, capabilities: dict[str, Any]) -> None:
+def _apply_backfill(skill_map: CommentedMap, capabilities: Any) -> None:
     for key in _STRAY_CAPABILITY_KEYS:
         skill_map.pop(key, None)
     skill_map.pop("capabilities", None)
@@ -63,12 +76,13 @@ def _apply_backfill(rt_yaml: YAML, skill_map: CommentedMap, capabilities: dict[s
         lint_index = list(skill_map.keys()).index("lint")
     except ValueError as exc:
         raise ValueError("skill block missing lint section") from exc
-    caps_buf = io.StringIO()
-    rt_yaml.dump(capabilities, caps_buf)
-    caps_buf.seek(0)
-    skill_map.insert(lint_index, "capabilities", rt_yaml.load(caps_buf))
+    skill_map.insert(lint_index, "capabilities", capabilities)
     # Matches this tool's existing convention: a freshly-generated capabilities
-    # block is followed by a blank line before `lint:`.
+    # block is followed by a blank line before `lint:`. Clear any comment this
+    # tool previously attached to `lint` first -- yaml_set_comment_before_after_key
+    # appends rather than replaces, so re-backfilling the same skill without this
+    # would double the blank line each time.
+    skill_map.ca.items.pop("lint", None)
     skill_map.yaml_set_comment_before_after_key("lint", before="\n")
 
 
@@ -77,6 +91,7 @@ def backfill_skills_yaml_text(
     *,
     catalog_path: Path = CATALOG_PATH,
     overwrite: bool = False,
+    render: bool = True,
 ) -> tuple[str, list[str]]:
     catalog = load_catalog(catalog_path)
     rt_yaml = _make_yaml()
@@ -108,25 +123,31 @@ def backfill_skills_yaml_text(
 
         stray = _has_stray_capability_keys(entry)
         if overwrite:
-            if entry.get("capabilities") == catalog[skill_id] and not stray:
+            if _capabilities_equal(entry.get("capabilities"), catalog[skill_id]) and not stray:
                 continue
         elif _capabilities_valid(entry) and not stray:
             continue
 
-        _apply_backfill(rt_yaml, skills[skill_id], catalog[skill_id])
+        _apply_backfill(entry, catalog[skill_id])
         changes.append(skill_id)
 
+    if not render:
+        return "", changes
+
+    # Dumps the whole document, not just the skill(s) in `changes` -- intentional:
+    # any formatting drift elsewhere in skills.yaml self-heals on the next write
+    # instead of accumulating. See the PR that introduced this for the tradeoff.
     buf = io.StringIO()
     rt_yaml.dump(raw, buf)
     updated = buf.getvalue()
-    if not updated.endswith("\n") and text.endswith("\n"):
+    if text.endswith("\n") and not updated.endswith("\n"):
         updated += "\n"
+    elif not text.endswith("\n") and updated.endswith("\n"):
+        updated = updated[:-1]
     return updated, changes
 
 
 def validate_capabilities_present(skills_path: Path = SKILLS_PATH) -> list[str]:
-    from scripts.registry.schema import parse_registry
-
     raw = yaml.safe_load(skills_path.read_text(encoding="utf-8"))
     if not isinstance(raw, dict):
         return ["error: skills.yaml root must be a mapping"]
@@ -139,7 +160,7 @@ def validate_capabilities_present(skills_path: Path = SKILLS_PATH) -> list[str]:
         if not isinstance(entry, dict):
             errors.append(f"error: {skill_id}: skill entry must be a mapping")
             continue
-        for orphan_key in ("required", "optional", "degraded_modes"):
+        for orphan_key in _STRAY_CAPABILITY_KEYS:
             if orphan_key in entry:
                 errors.append(
                     f"error: {skill_id}: stray top-level {orphan_key!r} key (belongs under capabilities)",
@@ -155,19 +176,16 @@ def validate_capabilities_present(skills_path: Path = SKILLS_PATH) -> list[str]:
         if not isinstance(optional, list):
             errors.append(f"error: {skill_id}: capabilities.optional must be a list")
 
-    registry = parse_registry(skills_path)
-    for skill_id, entry in registry.skills.items():
-        caps = entry.capabilities
-        if not caps.required and not caps.optional:
-            errors.append(f"error: {skill_id}: capabilities block is empty after parse")
     return errors
 
 
 def cmd_backfill(*, check_only: bool, overwrite: bool, skills_path: Path) -> int:
     try:
         original = skills_path.read_text(encoding="utf-8")
-        updated, changes = backfill_skills_yaml_text(original, overwrite=overwrite)
-    except (ValueError, yaml.YAMLError, RuamelYAMLError) as exc:
+        updated, changes = backfill_skills_yaml_text(
+            original, overwrite=overwrite, render=not check_only,
+        )
+    except (ValueError, yaml.YAMLError, RuamelYAMLError, RecursionError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
 
@@ -177,7 +195,11 @@ def cmd_backfill(*, check_only: bool, overwrite: bool, skills_path: Path) -> int
                 f"error: {len(changes)} skill(s) missing capabilities: {', '.join(changes)}",
                 file=sys.stderr,
             )
-            print("hint: run python3 -m scripts.registry backfill-capabilities", file=sys.stderr)
+            hint_flag = " --overwrite" if overwrite else ""
+            print(
+                f"hint: run python3 -m scripts.registry backfill-capabilities{hint_flag}",
+                file=sys.stderr,
+            )
             return 1
         print("ok: all skills already have capabilities blocks")
         return 0

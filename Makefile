@@ -197,6 +197,12 @@ validate-registry:
 backfill-capabilities-check:
 	@python3 -m scripts.registry backfill-capabilities --check
 
+# Not wired into `lint` -- catches capability_catalog.yaml drift from what's
+# committed in skills.yaml, which is a maintainer-triggered repair, not a
+# per-PR gate. Run manually: make backfill-capabilities-drift-check
+backfill-capabilities-drift-check:
+	@python3 -m scripts.registry backfill-capabilities --check --overwrite
+
 validate-evals:
 	@python3 -m scripts.evals
 

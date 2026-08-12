@@ -136,9 +136,19 @@ def test_backfill_handles_multiple_skills_in_one_run(tmp_path: Path) -> None:
 def test_backfill_strips_stray_top_level_capability_keys(tmp_path: Path) -> None:
     from scripts.registry.backfill_capabilities import backfill_skills_yaml_text
 
+    # alpha's nested capabilities: already matches the catalog exactly, so this
+    # only gets backfilled because of the stray top-level required/optional keys
+    # -- exercising the "and not stray" gate itself, not the "missing/invalid
+    # capabilities" path.
     skills_yaml, catalog = _write_two_skill_fixture(
         tmp_path,
-        alpha_capabilities="    required: [stale.tool]\n    optional: []\n",
+        alpha_capabilities=(
+            "    capabilities:\n"
+            "      required: [host.repository.read]\n"
+            "      optional: []\n"
+            "    required: [stale.tool]\n"
+            "    optional: []\n"
+        ),
     )
     updated, changes = backfill_skills_yaml_text(
         skills_yaml.read_text(encoding="utf-8"),
@@ -149,6 +159,7 @@ def test_backfill_strips_stray_top_level_capability_keys(tmp_path: Path) -> None
     lines = updated.splitlines()
     top_level_required = [line for line in lines if line == "    required: [stale.tool]"]
     assert not top_level_required
+    assert "host.repository.read" in updated
 
 
 def test_backfill_handles_skill_at_end_of_file(tmp_path: Path) -> None:

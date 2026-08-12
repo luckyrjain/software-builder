@@ -12,6 +12,12 @@ LOCK_NAME_RE = re.compile(r"^([A-Za-z0-9][A-Za-z0-9._-]*)==")
 DIRECT_LOCK_MARKER = "# via -r requirements.txt"
 
 
+def _normalize(name: str) -> str:
+    # PEP 503: package name comparison is case-insensitive and treats runs of
+    # -, _, . as equivalent (uv/pip canonicalize to '-' in requirements.lock).
+    return re.sub(r"[-_.]+", "-", name.lower())
+
+
 def package_names_from_requirements(path: Path) -> set[str]:
     names: set[str] = set()
     for line in path.read_text(encoding="utf-8").splitlines():
@@ -21,7 +27,7 @@ def package_names_from_requirements(path: Path) -> set[str]:
         match = REQUIREMENT_NAME_RE.match(line)
         if not match:
             raise ValueError(f"unsupported requirements.txt entry: {line}")
-        names.add(match.group(1).lower())
+        names.add(_normalize(match.group(1)))
     return names
 
 
@@ -32,7 +38,7 @@ def direct_package_names_from_lock(path: Path) -> set[str]:
         head = line.strip().rstrip("\\").strip()
         match = LOCK_NAME_RE.match(head)
         if match:
-            current = match.group(1).lower()
+            current = _normalize(match.group(1))
         if DIRECT_LOCK_MARKER in line and current is not None:
             names.add(current)
     return names
