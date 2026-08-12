@@ -8,8 +8,11 @@ from scripts.registry.composition import validate_composition_graph
 from scripts.registry.frontmatter import load_skill_frontmatter
 from scripts.registry.graph import detect_cycles
 from scripts.registry.models import Registry
-from scripts.registry.schema import parse_registry
-from scripts.registry.skill_frontmatter_schema import validate_skill_frontmatter_fields
+from scripts.registry.schema import AUTOMATION_ONLY_INVOCATION, parse_registry
+from scripts.registry.skill_frontmatter_schema import (
+    automation_only_guard_errors,
+    validate_skill_frontmatter_fields,
+)
 
 _SKILL_ID_RE = re.compile(r"^[a-z0-9-]+$")
 _GENERATED_MARKER = "GENERATED from skills.yaml"
@@ -101,13 +104,11 @@ def validate_registry(root: Path) -> list[str]:
 
         errors.extend(validate_skill_frontmatter_fields(skill_id, frontmatter))
 
-        disable = frontmatter.get("disable-model-invocation") is True
-        automation_only = entry.invocation == "automation-only"
-        if disable != automation_only:
-            errors.append(
-                f"error: {skill_id}: disable-model-invocation={disable} "
-                f"but invocation={entry.invocation!r}",
-            )
+        errors.extend(
+            f"error: {skill_id}: {msg}"
+            for msg in automation_only_guard_errors(entry.invocation, frontmatter)
+        )
+        automation_only = entry.invocation == AUTOMATION_ONLY_INVOCATION
         if automation_only:
             if entry.hosts.cursor.discovery == "always":
                 errors.append(
