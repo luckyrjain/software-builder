@@ -167,9 +167,10 @@ def _fields_covered(required: list[str], available: list[str]) -> list[str]:
     return sorted(set(required) - set(available))
 
 
-def _validate_invoke_schema_matching(
+def _validate_schema_matching(
     skill_id: str,
-    entry,
+    producer_ids: list[str],
+    source_label: str,
     contract: CompositionContract,
     contracts: dict[str, CompositionContract],
     artifact_schemas: dict[str, list[str]],
@@ -179,51 +180,20 @@ def _validate_invoke_schema_matching(
         if not required_fields:
             continue
         producers = [
-            child_id
-            for child_id in entry.composition.invokes
-            if artifact in contracts.get(child_id, CompositionContract([], [], "read-only", {}, {})).produces
+            producer_id
+            for producer_id in producer_ids
+            if artifact in contracts.get(producer_id, CompositionContract([], [], "read-only", {}, {})).produces
         ]
         if not producers:
             continue
         available: set[str] = set()
-        for child_id in producers:
-            child = contracts[child_id]
-            available.update(_default_produce_fields(child, artifact, artifact_schemas))
+        for producer_id in producers:
+            producer_contract = contracts[producer_id]
+            available.update(_default_produce_fields(producer_contract, artifact, artifact_schemas))
         missing = _fields_covered(required_fields, sorted(available))
         if missing:
             errors.append(
-                f"error: {skill_id}: consume_fields.{artifact} requires {missing!r} but invoked "
-                f"producer(s) {producers} only expose {sorted(available)!r}",
-            )
-    return errors
-
-
-def _validate_aggregate_schema_matching(
-    skill_id: str,
-    entry,
-    contract: CompositionContract,
-    contracts: dict[str, CompositionContract],
-    artifact_schemas: dict[str, list[str]],
-) -> list[str]:
-    errors: list[str] = []
-    for artifact, required_fields in contract.consume_fields.items():
-        if not required_fields:
-            continue
-        producers = [
-            dep
-            for dep in entry.install.requires
-            if artifact in contracts.get(dep, CompositionContract([], [], "read-only", {}, {})).produces
-        ]
-        if not producers:
-            continue
-        available: set[str] = set()
-        for dep in producers:
-            dep_contract = contracts[dep]
-            available.update(_default_produce_fields(dep_contract, artifact, artifact_schemas))
-        missing = _fields_covered(required_fields, sorted(available))
-        if missing:
-            errors.append(
-                f"error: {skill_id}: consume_fields.{artifact} requires {missing!r} but install.requires "
+                f"error: {skill_id}: consume_fields.{artifact} requires {missing!r} but {source_label} "
                 f"producer(s) {producers} only expose {sorted(available)!r}",
             )
     return errors
@@ -281,9 +251,10 @@ def validate_composition_contracts(
                     f"max invoked skill authority (rank {max_child_authority})",
                 )
             errors.extend(
-                _validate_invoke_schema_matching(
+                _validate_schema_matching(
                     skill_id,
-                    entry,
+                    entry.composition.invokes,
+                    "invoked",
                     contract,
                     contracts,
                     artifact_schemas,
@@ -304,9 +275,10 @@ def validate_composition_contracts(
                         f"skill produces it",
                     )
             errors.extend(
-                _validate_aggregate_schema_matching(
+                _validate_schema_matching(
                     skill_id,
-                    entry,
+                    entry.install.requires,
+                    "install.requires",
                     contract,
                     contracts,
                     artifact_schemas,

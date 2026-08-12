@@ -3,32 +3,9 @@ from __future__ import annotations
 from pathlib import Path
 
 from scripts.registry.composition_contracts import validate_composition_contracts
+from scripts.registry.graph import detect_cycles
 from scripts.registry.models import Registry
 from scripts.registry.schema import parse_registry
-
-
-def _detect_cycles(skills: dict[str, list[str]], label: str) -> list[str]:
-    errors: list[str] = []
-    visiting: set[str] = set()
-    visited: set[str] = set()
-
-    def dfs(node: str, stack: list[str]) -> None:
-        if node in visiting:
-            errors.append(
-                f"error: {label}: cycle detected: {' -> '.join(stack + [node])}",
-            )
-            return
-        if node in visited:
-            return
-        visiting.add(node)
-        for dep in skills.get(node, []):
-            dfs(dep, stack + [node])
-        visiting.remove(node)
-        visited.add(node)
-
-    for skill_id in skills:
-        dfs(skill_id, [])
-    return errors
 
 
 def validate_composition_graph(registry: Registry) -> list[str]:
@@ -53,7 +30,7 @@ def validate_composition_graph(registry: Registry) -> list[str]:
                 f"error: {skill_id}: aggregate composition must not list runtime invokes",
             )
 
-    errors.extend(_detect_cycles(invokes_graph, "composition graph"))
+    errors.extend(detect_cycles(invokes_graph, "composition graph"))
     errors.extend(validate_composition_contracts(registry))
     return errors
 
