@@ -8,6 +8,68 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 
 ## Platform
 
+### Unify the automation-only ↔ disable-model-invocation invariant (2026-08-12)
+
+- `scripts/registry/crosscheck.py`'s `validate_registry` (`make validate-registry`) and
+  `scripts/evals/__main__.py`'s `automation_only_guard` assertion type (wired into every
+  registered skill via `evals/fixtures/_global.yaml`'s `adversarial` template, not just skills
+  whose own fixtures mention it) independently re-derived the same invariant — SKILL.md's
+  `disable-model-invocation` must agree with `skills.yaml`'s `invocation`. `crosscheck` checked
+  both directions; `evals` only checked one, so a skill with `disable-model-invocation` set but
+  `invocation` left as something other than `automation-only` passed `make validate-evals` while
+  `make validate-registry` correctly rejected it.
+- Extracted `automation_only_guard_errors()` into `scripts/registry/skill_frontmatter_schema.py`
+  (which already validates this field's type) as the one place the invariant is defined; both
+  callers now go through it, and `evals` gains the direction it was missing. Added
+  `AUTOMATION_ONLY_INVOCATION` to `scripts/registry/schema.py` so the `"automation-only"` literal
+  has one source instead of two independently-maintained copies. Direct unit tests added — the
+  function had none before, only reachable indirectly through the real `skills.yaml` (where every
+  skill already happened to be consistent) or eval fixtures that only assert pass/fail.
+
+### backfill_capabilities.py: structural YAML round-trip instead of line-based text surgery (2026-08-12)
+
+- Replaced hand-rolled line-scanning/regex logic for editing `skills.yaml`'s per-skill
+  `capabilities` blocks with `ruamel.yaml` round-trip parsing (new dependency). Preserves a
+  skill's existing formatting choices (e.g. flow-style `required: [a, b]` lists) that a plain
+  `yaml.safe_load`/`safe_dump` round trip would have flattened, and removes the class of bugs
+  that came from five line-based helpers needing to agree on indent depth and regex shape.
+  `skills.yaml` itself wasn't internally consistent about sequence-dash indent; normalized to the
+  majority convention as a one-time formatting-only diff, after which the tool self-heals any
+  future drift on its own.
+- Two review rounds against the initial rewrite found and fixed real bugs before merge: a crash
+  on malformed/schema-valid-but-unusual capability data (`_capabilities_equal` raising instead of
+  treating it as "needs regeneration"), a non-idempotent comment-clearing step that doubled a
+  blank line on repeated `--overwrite` runs, `load_catalog` losing its entry-shape validation, and
+  a dormant object-aliasing risk if two skills ever shared a catalog entry via a YAML anchor. Also
+  fixed a real gap unrelated to the YAML rewrite: skills with legitimately empty capabilities
+  could never pass `--check`. New `--overwrite` flag (force-regenerate a skill's capabilities from
+  the catalog) and `make backfill-capabilities-drift-check` target (not wired into `lint`) make
+  catalog drift detectable, which previously had no path to being caught at all.
+
+### Harden install.sh test subprocess environments (2026-08-12)
+
+- `scripts/tests/test_install_rollback.py`'s two `install.sh` subprocess tests built a from-scratch
+  environment with no `PATH`, so the child could resolve `python3` to a system interpreter lacking
+  this repo's dependencies (PyYAML) and fail with a raw `ModuleNotFoundError` before ever reaching
+  the behavior under test. A first fix (forwarding the host `PATH`) introduced its own regression —
+  an unset host `PATH` degrades to an empty string, which makes `bash` itself unresolvable, worse
+  than omitting the key entirely. Replaced with a self-contained construction
+  (`scripts/tests/install_test_helpers.py`): a temp directory holding a `python3` symlinked to
+  `sys.executable`, prepended to a fixed minimal `PATH` — guarantees the child's `python3` resolves
+  to the exact interpreter running the tests, regardless of host `PATH` or Python installation
+  layout. `scripts/tests/test_install_safety.py` had the identical latent gap (dormant only because
+  its one `install.sh` call is rejected before reaching `python3`); now shares the same helper.
+
+### Drop redundant awk frontmatter check for skills with a route-aware contract (2026-08-12)
+
+- `pr-review`, `k8s-overprovisioning-datadog`, `incident-rca`, `incident-triage-agent`, and
+  `prd-architect` each ran two lint checks for the same workflow-frontmatter facts: an awk macro
+  checking only that `workflow_version`/`phase`/`produces`/`consumes` keys are present, and
+  `scripts/validate_workflow_contracts.py`, which checks the same keys plus their types/shapes plus
+  full route-graph validity — a strict superset for these 5. Dropped the awk call for them only; the
+  other 13 workflow skills stay on the awk macro since none has a `workflow-contract.yaml` and their
+  `produces`/`consumes` frontmatter isn't in the richer shape the Python validator requires.
+
 ### Mock-tool execution harness + live model scoring for behavioral evals (2026-08-11)
 
 - ADR 0003's Tier 2/3 evals are entirely static — Tier 2 replays a hand-authored `tool`/`gate`/
