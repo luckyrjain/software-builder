@@ -1166,11 +1166,14 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
   wrapping the value in an inline code span. "Escape" is wrong: CommonMark matches code-span
   backtick delimiters *before* resolving backslash escapes, so a backslash in front of the backtick
   does not stop it from closing the span early — the rest of the value still renders as live
-  Markdown. Verified against a real CommonMark parser. Now says **strip**, unconditionally, matching
-  what `safe-output.md` Rule 4 already prescribed.
+  Markdown. Verified against a real CommonMark parser. Now says **strip**, unconditionally — `safe-output.md`
+  Rule 4 offers strip-or-lengthen-the-delimiter as a choice and calls out stripping as the simpler
+  option for an LLM-driven workflow (which this skill is), so this narrows to just that one option
+  rather than contradicting Rule 4.
 - `evals/golden/backlog-runner/injection-inert-summary.yaml`'s `task_id_with_backtick` case
-  previously recorded the backtick as backslash-escaped (`\\\``) in the rendered excerpt and asserted
-  only that the *pipe* stayed escaped — silently endorsing the wrong "escape" behavior above and
+  previously recorded the backtick as backslash-escaped (a backslash immediately followed by the
+  backtick) in the rendered excerpt and asserted only that the *pipe* stayed escaped — silently
+  endorsing the wrong "escape" behavior above and
   never actually testing the backtick itself. `rendered_task_id_with_backtick_excerpt` now records
   the backtick fully stripped, and the assertion changed from `require_pattern` (escaped backtick
   present) to `forbid_pattern` (no backtick, escaped or not, remains). Confirmed the corrected
