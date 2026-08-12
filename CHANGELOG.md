@@ -8,6 +8,27 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 
 ## Platform
 
+### Split validate_registry's 11 inlined concerns into named sub-checks (2026-08-12)
+
+- `crosscheck.py`'s `validate_registry` was one ~70-line function inlining every facet of the
+  `skills.yaml` contract it verifies: skill-directory sync, per-skill path validation, the
+  install-dependency graph, composition/capabilities delegation, and a large per-skill loop
+  covering frontmatter shape, name/description, automation-only agreement, and the discovery/
+  risk_class rules automation-only skills must follow — plus stale generated-adapter detection.
+  None of it was duplicated across files (composition validity in particular was already a
+  clean single delegated call), just unnamed: a bug report about an install cycle and one
+  about a missing description both pointed a reader at the same function.
+- Extracted 6 named helpers, each independently callable/testable — the first split produced
+  5, and a follow-up review round split one of those further (`_validate_skill_frontmatter_shape`
+  vs. `_validate_automation_only_rules`) once it turned out to still bundle frontmatter checks
+  together with automation-only business rules that never touch frontmatter at all.
+  `validate_registry` is now an 8-line sequence of `errors.extend(...)` calls. 3 review rounds
+  against the extraction found and fixed real issues: the further split above, missing direct
+  test coverage (self-cycle case for the install graph, all four cases for the automation-only
+  rules), and documented a real but harmless side effect — splitting the original combined
+  per-skill loop changed error ordering from per-skill-interleaved to per-check-grouped, which
+  nothing currently depends on but is worth stating rather than leaving implicit.
+
 ### Give _check_predicate_types its own state, not the caller's (2026-08-12)
 
 - `scripts/validate_workflow_contracts.py`'s `_check_predicate_types` used to mutate two dicts

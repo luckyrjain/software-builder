@@ -57,31 +57,44 @@ def find_stale_generated_adapters(root: Path, registry: Registry) -> list[Path]:
     return stale
 
 
-def validate_registry(root: Path) -> list[str]:
+def _validate_skill_directory_sync(root: Path, registry: Registry) -> list[str]:
+    """Every SKILL.md directory must have a registry entry and vice versa."""
     errors: list[str] = []
-    registry_path = root / "skills.yaml"
-    registry = parse_registry(registry_path)
-
     skill_dirs = _skill_directories(root)
     registry_ids = set(registry.skills.keys())
-
     for orphan in sorted(skill_dirs - registry_ids):
         errors.append(f"error: {orphan}: directory has SKILL.md but no registry entry")
     for missing in sorted(registry_ids - skill_dirs):
         errors.append(f"error: {missing}: registry entry has no SKILL.md directory")
+    return errors
 
-    install_graph: dict[str, list[str]] = {}
+
+def _validate_skill_paths(root: Path, registry: Registry) -> list[str]:
+    errors: list[str] = []
     for skill_id, entry in registry.skills.items():
         errors.extend(_validate_skill_path(root, skill_id, entry.path))
+    return errors
+
+
+def _validate_install_graph(registry: Registry) -> list[str]:
+    """install.requires must reference known skills and form no dependency cycle."""
+    errors: list[str] = []
+    install_graph: dict[str, list[str]] = {}
+    for skill_id, entry in registry.skills.items():
         install_graph[skill_id] = list(entry.install.requires)
         for dep in entry.install.requires:
             if dep not in registry.skills:
                 errors.append(f"error: {skill_id}: install.requires unknown skill {dep!r}")
-
     errors.extend(detect_cycles(install_graph, "install graph"))
-    errors.extend(validate_composition_graph(registry))
-    errors.extend(validate_capabilities_present(registry_path))
+    return errors
 
+
+def _validate_skill_frontmatter_shape(root: Path, registry: Registry) -> list[str]:
+    """Per-skill SKILL.md frontmatter checks: parses, and its name/description/
+    other fields agree with the registry -- everything except the automation-only
+    business rules, which live in _validate_automation_only_rules below.
+    """
+    errors: list[str] = []
     for skill_id, entry in registry.skills.items():
         skill_md = root / entry.path / "SKILL.md"
         try:
@@ -108,24 +121,58 @@ def validate_registry(root: Path) -> list[str]:
             f"error: {skill_id}: {msg}"
             for msg in automation_only_guard_errors(entry.invocation, frontmatter)
         )
-        automation_only = entry.invocation == AUTOMATION_ONLY_INVOCATION
-        if automation_only:
-            if entry.hosts.cursor.discovery == "always":
-                errors.append(
-                    f"error: {skill_id}: automation-only skills cannot use cursor discovery always",
-                )
-            if entry.hosts.kiro.discovery == "always":
-                errors.append(
-                    f"error: {skill_id}: automation-only skills cannot use kiro discovery always",
-                )
-            if "unattended" not in entry.risk_class:
-                errors.append(
-                    f"error: {skill_id}: automation-only skills must declare risk_class unattended",
-                )
+    return errors
 
-    errors.extend(
+
+def _validate_automation_only_rules(registry: Registry) -> list[str]:
+    """Discovery and risk_class rules an automation-only skill must additionally
+    declare, beyond agreeing with SKILL.md's disable-model-invocation (that
+    agreement is _validate_skill_frontmatter_shape's job, via automation_only_guard_errors).
+    """
+    errors: list[str] = []
+    for skill_id, entry in registry.skills.items():
+        if entry.invocation != AUTOMATION_ONLY_INVOCATION:
+            continue
+        if entry.hosts.cursor.discovery == "always":
+            errors.append(
+                f"error: {skill_id}: automation-only skills cannot use cursor discovery always",
+            )
+        if entry.hosts.kiro.discovery == "always":
+            errors.append(
+                f"error: {skill_id}: automation-only skills cannot use kiro discovery always",
+            )
+        if "unattended" not in entry.risk_class:
+            errors.append(
+                f"error: {skill_id}: automation-only skills must declare risk_class unattended",
+            )
+    return errors
+
+
+def _validate_stale_adapters(root: Path, registry: Registry) -> list[str]:
+    return [
         f"error: stale generated adapter: {path.relative_to(root)}"
         for path in find_stale_generated_adapters(root, registry)
-    )
+    ]
 
+
+def validate_registry(root: Path) -> list[str]:
+    # Each check below runs to completion across every skill before the next
+    # starts, so errors are grouped by check, not interleaved per skill the way
+    # a single combined loop would produce -- e.g. skill A's install-graph error
+    # now sorts after skill B's path error, not before it. Nothing currently
+    # depends on cross-check ordering (every existing consumer either checks
+    # membership or prints the full list), but it's a real, visible change from
+    # this function's pre-split shape.
+    registry_path = root / "skills.yaml"
+    registry = parse_registry(registry_path)
+
+    errors: list[str] = []
+    errors.extend(_validate_skill_directory_sync(root, registry))
+    errors.extend(_validate_skill_paths(root, registry))
+    errors.extend(_validate_install_graph(registry))
+    errors.extend(validate_composition_graph(registry))
+    errors.extend(validate_capabilities_present(registry_path))
+    errors.extend(_validate_skill_frontmatter_shape(root, registry))
+    errors.extend(_validate_automation_only_rules(registry))
+    errors.extend(_validate_stale_adapters(root, registry))
     return errors
