@@ -15,6 +15,9 @@ if str(_SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS_DIR))
 
 from reference_utils import (
+    IGNORED_DIR_NAMES,
+    IGNORED_FILE_PATTERNS,
+    MANIFEST_NAME,
     extract_markdown_links,
     framework_relative_path,
     is_local_markdown_link,
@@ -70,7 +73,7 @@ def vendor_framework_tree(repo_root: Path, package_root: Path) -> list[str]:
     shutil.copytree(
         framework_src,
         framework_dest,
-        ignore=shutil.ignore_patterns("__pycache__", "*.pyc", ".pytest_cache"),
+        ignore=shutil.ignore_patterns(*IGNORED_DIR_NAMES, *IGNORED_FILE_PATTERNS),
     )
 
     vendor_readme_superpowers_specs(repo_root, package_root)
@@ -96,7 +99,7 @@ def write_manifest(
 ) -> None:
     files: dict[str, str] = {}
     for path in sorted(package_root.rglob("*")):
-        if path.is_file() and path.name != ".software-builder-manifest.json":
+        if path.is_file() and path.name != MANIFEST_NAME:
             rel = path.relative_to(package_root).as_posix()
             files[rel] = sha256_file(path)
 
@@ -110,7 +113,7 @@ def write_manifest(
         "framework_files": framework_files,
         "files": files,
     }
-    manifest_path = package_root / ".software-builder-manifest.json"
+    manifest_path = package_root / MANIFEST_NAME
     manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
@@ -135,7 +138,7 @@ def package_skill(
     shutil.copytree(
         skill_src,
         dest,
-        ignore=shutil.ignore_patterns("__pycache__", "*.pyc", ".pytest_cache"),
+        ignore=shutil.ignore_patterns(*IGNORED_DIR_NAMES, *IGNORED_FILE_PATTERNS),
     )
 
     seed_files = collect_markdown_files(dest)

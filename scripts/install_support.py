@@ -8,11 +8,10 @@ import json
 import sys
 from pathlib import Path
 
-from scripts.reference_utils import sha256_file
+from scripts.reference_utils import MANIFEST_NAME, is_ignored_package_path, sha256_file
 from scripts.registry.schema import parse_registry
 
 ROOT = Path(__file__).resolve().parents[1]
-MANIFEST_NAME = ".software-builder-manifest.json"
 
 
 def registry_skill_ids(root: Path | None = None) -> list[str]:
@@ -40,26 +39,45 @@ def _verify_manifest_files(installed_path: Path, manifest: dict) -> list[str]:
     hash mismatches, and files present on disk but not tracked in the manifest
     -- the installed directory should be byte-identical to what was packaged,
     since install.sh moves the staged package into place with no further writes.
+
+    Filesystem noise that can legitimately appear after install (running a
+    bundled script writes __pycache__, editors/OS write dotfiles) is excluded
+    via the same is_ignored_package_path() package_skill.py's own copytree
+    ignore list is built from, so a normal post-install workflow doesn't fail
+    verification. A symlink anywhere under installed_path is flagged directly
+    rather than followed -- cmd_verify validates untrusted-ish installed
+    content, and hashing through a symlink would read whatever it points at,
+    including a path outside installed_path entirely.
     """
     files = manifest.get("files")
     if not isinstance(files, dict):
         return ["manifest missing files map"]
 
+    errors: list[str] = []
     actual: set[str] = set()
     for path in installed_path.rglob("*"):
+        if path.is_symlink():
+            errors.append(
+                f"symlink not allowed in installed package: "
+                f"{path.relative_to(installed_path).as_posix()}",
+            )
+            continue
         if not path.is_file():
             continue
         rel = path.relative_to(installed_path).as_posix()
-        if rel == MANIFEST_NAME:
+        if path.name == MANIFEST_NAME or is_ignored_package_path(rel):
             continue
         actual.add(rel)
 
-    errors: list[str] = []
     for rel, expected_hash in sorted(files.items()):
         if rel not in actual:
             errors.append(f"missing file listed in manifest: {rel}")
             continue
-        actual_hash = sha256_file(installed_path / rel)
+        try:
+            actual_hash = sha256_file(installed_path / rel)
+        except OSError as exc:
+            errors.append(f"could not read {rel} to verify its hash: {exc}")
+            continue
         if actual_hash != expected_hash:
             errors.append(f"hash mismatch for {rel}: expected {expected_hash}, got {actual_hash}")
 

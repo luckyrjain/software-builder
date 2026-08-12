@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import fnmatch
 import hashlib
 import os
 import re
@@ -10,6 +11,26 @@ from pathlib import Path
 
 MARKDOWN_LINK_RE = re.compile(r"\]\(([^)]+)\)")
 FRAMEWORK_MARKER = "docs/skill-framework/"
+
+MANIFEST_NAME = ".software-builder-manifest.json"
+
+# Filesystem noise that can legitimately appear after a skill is packaged/installed and
+# used (running a bundled script writes __pycache__, editors/OS write dotfiles) -- shared
+# by package_skill.py (excluded when copying source into a package) and install_support.py
+# (excluded when comparing an installed directory against its manifest) so the two agree
+# on what counts as real package content.
+IGNORED_DIR_NAMES = ("__pycache__", ".pytest_cache")
+IGNORED_FILE_PATTERNS = ("*.pyc", ".DS_Store", "*.swp", "*~")
+
+
+def is_ignored_package_path(rel_path: str) -> bool:
+    """True if rel_path (posix-style, relative to a package/install root) is
+    filesystem noise rather than real package content.
+    """
+    parts = rel_path.split("/")
+    if any(part in IGNORED_DIR_NAMES for part in parts[:-1]):
+        return True
+    return any(fnmatch.fnmatch(parts[-1], pattern) for pattern in IGNORED_FILE_PATTERNS)
 
 
 # CommonMark allows a fence delimiter to be indented up to 3 spaces (e.g. one nested inside

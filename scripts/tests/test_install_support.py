@@ -104,3 +104,49 @@ def test_verify_manifest_files_reports_all_three_cases_together(tmp_path: Path) 
     assert any("missing file listed in manifest: reference/missing.md" in e for e in errors)
     assert any("unexpected file not in manifest: extra.md" in e for e in errors)
     assert len(errors) == 3
+
+
+def test_verify_manifest_files_ignores_pycache_and_ds_store(tmp_path: Path) -> None:
+    # Running a skill's own bundled scripts, or ordinary Finder/editor activity,
+    # legitimately drops these into an installed directory after a clean install --
+    # they must not be treated as tampering.
+    from scripts.install_support import _verify_manifest_files
+
+    (tmp_path / "SKILL.md").write_text(_SKILL_MD_CONTENT, encoding="utf-8")
+    pycache_dir = tmp_path / "scripts" / "__pycache__"
+    pycache_dir.mkdir(parents=True)
+    (pycache_dir / "helper.cpython-312.pyc").write_bytes(b"\x00")
+    (tmp_path / ".DS_Store").write_bytes(b"\x00")
+    manifest = {"files": {"SKILL.md": _SKILL_MD_HASH}}
+
+    assert _verify_manifest_files(tmp_path, manifest) == []
+
+
+def test_verify_manifest_files_rejects_symlink(tmp_path: Path) -> None:
+    from scripts.install_support import _verify_manifest_files
+
+    (tmp_path / "SKILL.md").write_text(_SKILL_MD_CONTENT, encoding="utf-8")
+    outside_target = tmp_path.parent / "outside.txt"
+    outside_target.write_text("not part of the package\n", encoding="utf-8")
+    (tmp_path / "linked.md").symlink_to(outside_target)
+    manifest = {"files": {"SKILL.md": _SKILL_MD_HASH}}
+
+    errors = _verify_manifest_files(tmp_path, manifest)
+
+    assert any("symlink not allowed in installed package: linked.md" in e for e in errors)
+
+
+def test_verify_manifest_files_excludes_nested_manifest_name(tmp_path: Path) -> None:
+    # write_manifest() in package_skill.py excludes any file named MANIFEST_NAME
+    # anywhere in the tree (matched by basename), not just at the root -- the
+    # verify side must agree, or a skill shipping a nested file with that exact
+    # name would false-positive as "unexpected file".
+    from scripts.install_support import _verify_manifest_files
+
+    (tmp_path / "SKILL.md").write_text(_SKILL_MD_CONTENT, encoding="utf-8")
+    nested_dir = tmp_path / "reference"
+    nested_dir.mkdir()
+    (nested_dir / ".software-builder-manifest.json").write_text("{}\n", encoding="utf-8")
+    manifest = {"files": {"SKILL.md": _SKILL_MD_HASH}}
+
+    assert _verify_manifest_files(tmp_path, manifest) == []

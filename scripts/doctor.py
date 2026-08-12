@@ -12,9 +12,9 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from scripts.reference_utils import MANIFEST_NAME
 from scripts.registry.schema import parse_registry
 from scripts.release_info import read_distribution_version
-MANIFEST_NAME = ".software-builder-manifest.json"
 
 
 def _installed_manifest(skill_dest: Path) -> dict[str, object] | None:
