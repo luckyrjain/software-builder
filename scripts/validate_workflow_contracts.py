@@ -487,10 +487,17 @@ def _check_route_prefix(
 
 @dataclass
 class RoutePredicateResult:
-    """One route's contribution to the cross-route selector-domain check."""
+    """One route's contribution to the cross-route selector-domain check.
+
+    route_predicate_types is intentionally not named predicate_types: the
+    caller accumulates every route's contribution into its own dict of that
+    name, and giving this field the identical name risked a future edit
+    writing `predicate_types = result.predicate_types` (silently discarding
+    every other route's contribution) where `.update(...)` was meant.
+    """
 
     parsed: dict[str, tuple[str, object]]
-    predicate_types: dict[str, str]
+    route_predicate_types: dict[str, str]
 
 
 def _check_predicate_types(
@@ -553,7 +560,7 @@ def _check_predicate_types(
         if parsed is not None:
             # selection_available (line 545) is already a fresh copy, never mutated
             # again after this point -- no need to copy it a second time here.
-            return RoutePredicateResult(parsed=parsed, predicate_types=selection_available)
+            return RoutePredicateResult(parsed=parsed, route_predicate_types=selection_available)
     return None
 
 
@@ -701,7 +708,7 @@ def validate_skill_contract(skill_dir: Path) -> list[str]:
         )
         if result is not None:
             parsed_predicates[route_id] = result.parsed
-            predicate_types.update(result.predicate_types)
+            predicate_types.update(result.route_predicate_types)
 
     _check_selector_coverage(routes, parsed_predicates, predicate_types, contract, errors)
     return errors

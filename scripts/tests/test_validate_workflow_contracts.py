@@ -1420,7 +1420,7 @@ def test_check_predicate_types_returns_route_contribution_at_selection_phase():
     assert errors == []
     assert result == RoutePredicateResult(
         parsed={"kind": ("equals", "foo")},
-        predicate_types={"kind": "string"},
+        route_predicate_types={"kind": "string"},
     )
 
 
