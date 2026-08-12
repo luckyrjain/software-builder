@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import io
 import sys
 from pathlib import Path
@@ -40,6 +41,9 @@ def load_catalog(path: Path = CATALOG_PATH) -> dict[str, Any]:
     skills = raw.get("skills")
     if not isinstance(skills, dict):
         raise ValueError(f"{path}: skills must be a mapping")
+    for skill_id, entry in skills.items():
+        if not isinstance(entry, dict):
+            raise ValueError(f"{path}: skills.{skill_id} must be a mapping")
     return {str(skill_id): entry for skill_id, entry in skills.items()}
 
 
@@ -49,18 +53,48 @@ def _capabilities_valid(entry: dict[str, Any]) -> bool:
         return False
     required = caps.get("required")
     optional = caps.get("optional")
-    return isinstance(required, list) and isinstance(optional, list)
+    if not isinstance(required, list) or not isinstance(optional, list):
+        return False
+    return isinstance(caps.get("degraded_modes", {}), dict)
 
 
 def _capabilities_equal(current: Any, catalog_value: dict[str, Any]) -> bool:
+    # Never raises on malformed input (unhashable/non-string required items,
+    # non-dict optional items) -- treats it as "not equal" so the skill gets
+    # regenerated from the catalog instead of crashing the whole --overwrite run.
     if not isinstance(current, dict):
         return False
-    if set(current.get("required") or []) != set(catalog_value.get("required") or []):
+
+    current_required = current.get("required")
+    catalog_required = catalog_value.get("required")
+    if not (
+        isinstance(current_required, list)
+        and isinstance(catalog_required, list)
+        and all(isinstance(item, str) for item in current_required)
+        and all(isinstance(item, str) for item in catalog_required)
+    ):
         return False
-    current_optional = {item.get("name"): item for item in (current.get("optional") or [])}
-    catalog_optional = {item.get("name"): item for item in (catalog_value.get("optional") or [])}
-    if current_optional != catalog_optional:
+    if len(current_required) != len(set(current_required)):
         return False
+    if set(current_required) != set(catalog_required):
+        return False
+
+    current_optional = current.get("optional")
+    catalog_optional = catalog_value.get("optional")
+    if not (isinstance(current_optional, list) and isinstance(catalog_optional, list)):
+        return False
+    if not all(
+        isinstance(item, dict) and isinstance(item.get("name"), str)
+        for item in (*current_optional, *catalog_optional)
+    ):
+        return False
+    current_by_name = {item["name"]: item for item in current_optional}
+    catalog_by_name = {item["name"]: item for item in catalog_optional}
+    if len(current_by_name) != len(current_optional) or len(catalog_by_name) != len(catalog_optional):
+        return False
+    if current_by_name != catalog_by_name:
+        return False
+
     return (current.get("degraded_modes") or {}) == (catalog_value.get("degraded_modes") or {})
 
 
@@ -78,11 +112,15 @@ def _apply_backfill(skill_map: CommentedMap, capabilities: Any) -> None:
         raise ValueError("skill block missing lint section") from exc
     skill_map.insert(lint_index, "capabilities", capabilities)
     # Matches this tool's existing convention: a freshly-generated capabilities
-    # block is followed by a blank line before `lint:`. Clear any comment this
-    # tool previously attached to `lint` first -- yaml_set_comment_before_after_key
-    # appends rather than replaces, so re-backfilling the same skill without this
-    # would double the blank line each time.
-    skill_map.ca.items.pop("lint", None)
+    # block is followed by a blank line before `lint:`. Clear only the "before"
+    # comment slot (index 1) this tool may have attached on a prior backfill
+    # first -- yaml_set_comment_before_after_key appends rather than replaces,
+    # so skipping this would double the blank line on every re-backfill.
+    # Only index 1 is touched so an unrelated same-line comment on `lint:`
+    # (index 2) survives.
+    lint_comments = skill_map.ca.items.get("lint")
+    if lint_comments is not None:
+        lint_comments[1] = None
     skill_map.yaml_set_comment_before_after_key("lint", before="\n")
 
 
@@ -128,8 +166,12 @@ def backfill_skills_yaml_text(
         elif _capabilities_valid(entry) and not stray:
             continue
 
-        _apply_backfill(entry, catalog[skill_id])
         changes.append(skill_id)
+        if render:
+            # Deep-copied so two skills that ever share the same catalog
+            # entry object (e.g. a future YAML anchor/alias in the catalog)
+            # don't end up aliased to the same node in skills.yaml.
+            _apply_backfill(entry, copy.deepcopy(catalog[skill_id]))
 
     if not render:
         return "", changes
@@ -175,6 +217,9 @@ def validate_capabilities_present(skills_path: Path = SKILLS_PATH) -> list[str]:
             errors.append(f"error: {skill_id}: capabilities.required must be a list")
         if not isinstance(optional, list):
             errors.append(f"error: {skill_id}: capabilities.optional must be a list")
+        degraded_modes = capabilities.get("degraded_modes", {})
+        if not isinstance(degraded_modes, dict):
+            errors.append(f"error: {skill_id}: capabilities.degraded_modes must be a mapping")
 
     return errors
 
@@ -191,8 +236,9 @@ def cmd_backfill(*, check_only: bool, overwrite: bool, skills_path: Path) -> int
 
     if check_only:
         if changes:
+            reason = "capabilities out of date with the catalog" if overwrite else "missing capabilities"
             print(
-                f"error: {len(changes)} skill(s) missing capabilities: {', '.join(changes)}",
+                f"error: {len(changes)} skill(s) {reason}: {', '.join(changes)}",
                 file=sys.stderr,
             )
             hint_flag = " --overwrite" if overwrite else ""

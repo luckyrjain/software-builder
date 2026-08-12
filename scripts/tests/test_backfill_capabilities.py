@@ -233,3 +233,49 @@ def test_backfill_overwrite_skips_when_already_matching_catalog(tmp_path: Path) 
     )
     # alpha already matches the catalog exactly; only beta needs backfilling.
     assert changes == ["beta"]
+
+
+def test_capabilities_equal_order_insensitive() -> None:
+    from scripts.registry.backfill_capabilities import _capabilities_equal
+
+    current = {"required": ["b", "a"], "optional": []}
+    catalog_value = {"required": ["a", "b"], "optional": []}
+    assert _capabilities_equal(current, catalog_value)
+
+
+def test_capabilities_equal_rejects_without_raising_on_malformed_required() -> None:
+    from scripts.registry.backfill_capabilities import _capabilities_equal
+
+    catalog_value = {"required": ["a"], "optional": []}
+    # Unhashable/non-string required items must not crash set().
+    assert not _capabilities_equal({"required": [{"nested": "dict"}], "optional": []}, catalog_value)
+    # Duplicate required entries must not silently collapse to "equal".
+    assert not _capabilities_equal({"required": ["a", "a"], "optional": []}, catalog_value)
+
+
+def test_capabilities_equal_rejects_without_raising_on_malformed_optional() -> None:
+    from scripts.registry.backfill_capabilities import _capabilities_equal
+
+    catalog_value = {"required": [], "optional": [{"name": "x", "enables": "y"}]}
+    # Bare-string optional entries (schema.py's documented shorthand) must not
+    # crash `.get("name")`.
+    assert not _capabilities_equal({"required": [], "optional": ["x"]}, catalog_value)
+    # Two optional entries sharing a name must not silently collapse to one.
+    dup_current = {
+        "required": [],
+        "optional": [{"name": "x", "enables": "a"}, {"name": "x", "enables": "b"}],
+    }
+    assert not _capabilities_equal(dup_current, catalog_value)
+
+
+def test_load_catalog_rejects_non_mapping_entry(tmp_path: Path) -> None:
+    from scripts.registry.backfill_capabilities import load_catalog
+
+    catalog = tmp_path / "catalog.yaml"
+    catalog.write_text("skills:\n  demo: null\n", encoding="utf-8")
+    try:
+        load_catalog(catalog)
+    except ValueError as exc:
+        assert "demo" in str(exc)
+    else:
+        raise AssertionError("expected ValueError for non-mapping catalog entry")
