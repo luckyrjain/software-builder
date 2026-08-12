@@ -163,7 +163,7 @@ lint-actions-security:
 	@if command -v zizmor >/dev/null 2>&1; then \
 		if [ -n "$$GH_TOKEN" ] || [ -n "$$GITHUB_TOKEN" ]; then \
 			if ! output=$$(zizmor .github/workflows 2>&1); then \
-				if printf '%s\n' "$$output" | grep -q "fatal: no audit was performed"; then \
+				if printf '%s\n' "$$output" | sed 's/\x1b\[[0-9;]*m//g' | grep -q "fatal: no audit was performed"; then \
 					printf '%s\n' "$$output" >&2; \
 					echo "note: zizmor's online audit failed to reach the GitHub API (transient network/rate-limit issue, not a code finding) — falling back to --no-online-audits so this doesn't block on infrastructure flakiness" >&2; \
 					zizmor --no-online-audits .github/workflows; \

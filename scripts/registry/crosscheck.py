@@ -6,36 +6,13 @@ from pathlib import Path
 from scripts.registry.backfill_capabilities import validate_capabilities_present
 from scripts.registry.composition import validate_composition_graph
 from scripts.registry.frontmatter import load_skill_frontmatter
+from scripts.registry.graph import detect_cycles
 from scripts.registry.models import Registry
 from scripts.registry.schema import parse_registry
 from scripts.registry.skill_frontmatter_schema import validate_skill_frontmatter_fields
 
 _SKILL_ID_RE = re.compile(r"^[a-z0-9-]+$")
 _GENERATED_MARKER = "GENERATED from skills.yaml"
-
-
-def _detect_cycles(skills: dict[str, list[str]]) -> list[str]:
-    errors: list[str] = []
-    visiting: set[str] = set()
-    visited: set[str] = set()
-
-    def dfs(node: str, stack: list[str]) -> None:
-        if node in visiting:
-            errors.append(
-                f"error: install graph: cycle detected: {' -> '.join(stack + [node])}",
-            )
-            return
-        if node in visited:
-            return
-        visiting.add(node)
-        for dep in skills.get(node, []):
-            dfs(dep, stack + [node])
-        visiting.remove(node)
-        visited.add(node)
-
-    for skill_id in skills:
-        dfs(skill_id, [])
-    return errors
 
 
 def _skill_directories(root: Path) -> set[str]:
@@ -98,7 +75,7 @@ def validate_registry(root: Path) -> list[str]:
             if dep not in registry.skills:
                 errors.append(f"error: {skill_id}: install.requires unknown skill {dep!r}")
 
-    errors.extend(_detect_cycles(install_graph))
+    errors.extend(detect_cycles(install_graph, "install graph"))
     errors.extend(validate_composition_graph(registry))
     errors.extend(validate_capabilities_present(registry_path))
 
