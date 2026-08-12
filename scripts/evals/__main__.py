@@ -4,17 +4,18 @@ import argparse
 import json
 import re
 import sys
+from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import yaml
 
-from scripts.evals.golden import load_golden_fixtures, run_golden_case
+from scripts.evals.golden import find_vacuous_anchored_patterns, load_golden_fixtures, run_golden_case
 from scripts.evals.transcript import load_transcript_fixtures, run_transcript_case
 from scripts.evals.types import EvalResult
 from scripts.registry.frontmatter import load_skill_frontmatter
-from scripts.registry.schema import parse_registry
+from scripts.registry.schema import Registry, parse_registry
 
 ROOT = Path(__file__).resolve().parents[2]
 FIXTURES_DIR = ROOT / "evals" / "fixtures"
@@ -156,6 +157,40 @@ def run_case(root: Path, case: EvalCase) -> EvalResult:
     return EvalResult(case.skill, case.case_id, not messages, messages)
 
 
+def filtered(
+    case_list: Iterable[Any],
+    skill_filter: str | None,
+    tier_filter: int | None,
+) -> Iterator[Any]:
+    for case in case_list:
+        if skill_filter and case.skill != skill_filter:
+            continue
+        if tier_filter is not None and case.tier != tier_filter:
+            continue
+        yield case
+
+
+def admit_case(
+    case: Any,
+    dispatch: Callable[[Any], EvalResult],
+    *,
+    seen: set[tuple[str, str]],
+    registry: Registry,
+) -> EvalResult:
+    key = (case.skill, case.case_id)
+    if key in seen:
+        return EvalResult(
+            case.skill,
+            case.case_id,
+            False,
+            [f"duplicate eval case id for skill {case.skill!r}"],
+        )
+    seen.add(key)
+    if case.skill not in registry.skills:
+        return EvalResult(case.skill, case.case_id, False, ["skill not in skills.yaml"])
+    return dispatch(case)
+
+
 def run_all(
     root: Path,
     *,
@@ -192,77 +227,12 @@ def run_all(
 
     results: list[EvalResult] = []
     seen: set[tuple[str, str]] = set()
-    for case in cases:
-        if skill_filter and case.skill != skill_filter:
-            continue
-        if tier_filter is not None and case.tier != tier_filter:
-            continue
-        key = (case.skill, case.case_id)
-        if key in seen:
-            results.append(
-                EvalResult(
-                    case.skill,
-                    case.case_id,
-                    False,
-                    [f"duplicate eval case id for skill {case.skill!r}"],
-                ),
-            )
-            continue
-        seen.add(key)
-        if case.skill not in registry.skills:
-            results.append(
-                EvalResult(case.skill, case.case_id, False, ["skill not in skills.yaml"]),
-            )
-            continue
-        results.append(run_case(root, case))
-
-    for case in transcript_cases:
-        if skill_filter and case.skill != skill_filter:
-            continue
-        if tier_filter is not None and case.tier != tier_filter:
-            continue
-        key = (case.skill, case.case_id)
-        if key in seen:
-            results.append(
-                EvalResult(
-                    case.skill,
-                    case.case_id,
-                    False,
-                    [f"duplicate eval case id for skill {case.skill!r}"],
-                ),
-            )
-            continue
-        seen.add(key)
-        if case.skill not in registry.skills:
-            results.append(
-                EvalResult(case.skill, case.case_id, False, ["skill not in skills.yaml"]),
-            )
-            continue
-        results.append(run_transcript_case(case))
-
-    for case in golden_cases:
-        if skill_filter and case.skill != skill_filter:
-            continue
-        if tier_filter is not None and case.tier != tier_filter:
-            continue
-        key = (case.skill, case.case_id)
-        if key in seen:
-            results.append(
-                EvalResult(
-                    case.skill,
-                    case.case_id,
-                    False,
-                    [f"duplicate eval case id for skill {case.skill!r}"],
-                ),
-            )
-            continue
-        seen.add(key)
-        if case.skill not in registry.skills:
-            results.append(
-                EvalResult(case.skill, case.case_id, False, ["skill not in skills.yaml"]),
-            )
-            continue
-        results.append(run_golden_case(case))
+    for case in filtered(cases, skill_filter, tier_filter):
+        results.append(admit_case(case, lambda c: run_case(root, c), seen=seen, registry=registry))
+    for case in filtered(transcript_cases, skill_filter, tier_filter):
+        results.append(admit_case(case, run_transcript_case, seen=seen, registry=registry))
+    for case in filtered(golden_cases, skill_filter, tier_filter):
+        results.append(admit_case(case, run_golden_case, seen=seen, registry=registry))
     return results
 
 
@@ -291,6 +261,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--tier", type=int, help="run evals for one tier only (1=contract, 2=transcript, 3=golden)")
     parser.add_argument("--report", type=Path, help="write JSON report to path")
     args = parser.parse_args(argv)
+
+    for warning in find_vacuous_anchored_patterns(args.repo_root / "evals" / "golden"):
+        print(f"warning: {warning}", file=sys.stderr)
 
     try:
         results = run_all(args.repo_root, skill_filter=args.skill, tier_filter=args.tier)

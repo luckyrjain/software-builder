@@ -159,3 +159,42 @@ def run_golden_case(case: GoldenCase) -> EvalResult:
         except ValueError as exc:
             messages.append(f"assertion[{index}] failed: {exc}")
     return EvalResult(case.skill, case.case_id, not messages, messages)
+
+
+_MULTILINE_ANCHOR_RE = re.compile(r"\(\?[a-zA-Z]*m[a-zA-Z]*\).*\^.*\$")
+
+
+def find_vacuous_anchored_patterns(golden_dir: Path) -> list[str]:
+    """Flag require_pattern/forbid_pattern assertions whose pattern uses a (?m)^...$
+    multiline anchor against a target field that currently has no real newline
+    character. re's ^/$ only anchor at real line boundaries, so — unless the field can
+    legitimately gain a real newline on some reachable code path (a full-passthrough
+    regression, for instance) — the pattern can never match regardless of content, and
+    forbid_pattern passes vacuously even when escaping is completely broken. This is a
+    heuristic screening pass, not proof: it flags every currently-zero-newline field as
+    worth a second look, including cases that ARE reachable via a real regression path
+    and so aren't actually vacuous (verify by hand, or by simulating the regression, the
+    way the PR #102 review did — see that review for the scale of this issue found
+    repo-wide when this check was added).
+    """
+    warnings: list[str] = []
+    for case in load_golden_fixtures(golden_dir):
+        for assertion in case.assertions:
+            atype = str(assertion.get("type", ""))
+            if atype not in ("require_pattern", "forbid_pattern"):
+                continue
+            pattern = str(assertion.get("pattern", ""))
+            if not _MULTILINE_ANCHOR_RE.search(pattern):
+                continue
+            path = str(assertion.get("path", ""))
+            try:
+                value = str(_resolve_path(case.recorded_output, path))
+            except KeyError:
+                continue
+            if "\n" not in value:
+                warnings.append(
+                    f"{case.path}: {case.case_id}: {atype} on {path!r} uses a (?m)^...$ "
+                    f"anchor against a field with no real newline in its current "
+                    f"recorded value — worth verifying this can actually fail: {pattern!r}",
+                )
+    return warnings
