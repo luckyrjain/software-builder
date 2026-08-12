@@ -14,7 +14,7 @@ import yaml
 from scripts.evals.golden import find_vacuous_anchored_patterns, load_golden_fixtures, run_golden_case
 from scripts.evals.transcript import load_transcript_fixtures, run_transcript_case
 from scripts.evals.types import EvalResult
-from scripts.registry.frontmatter import load_skill_frontmatter
+from scripts.registry.frontmatter import automation_only_guard_errors, load_skill_frontmatter
 from scripts.registry.schema import Registry, parse_registry
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -134,10 +134,7 @@ def _run_assertion(
         registry = parse_registry(root / "skills.yaml")
         entry = registry.skills[skill_id]
         frontmatter = load_skill_frontmatter(_skill_dir(root, skill_id) / "SKILL.md")
-        disable = frontmatter.get("disable-model-invocation") is True
-        if entry.invocation == "automation-only" and not disable:
-            return ["automation-only skill missing disable-model-invocation"]
-        return []
+        return automation_only_guard_errors(entry.invocation, frontmatter)
 
     raise ValueError(f"unknown assertion type: {atype!r}")
 

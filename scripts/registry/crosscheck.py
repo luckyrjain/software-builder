@@ -5,7 +5,7 @@ from pathlib import Path
 
 from scripts.registry.backfill_capabilities import validate_capabilities_present
 from scripts.registry.composition import validate_composition_graph
-from scripts.registry.frontmatter import load_skill_frontmatter
+from scripts.registry.frontmatter import automation_only_guard_errors, load_skill_frontmatter
 from scripts.registry.graph import detect_cycles
 from scripts.registry.models import Registry
 from scripts.registry.schema import parse_registry
@@ -101,13 +101,11 @@ def validate_registry(root: Path) -> list[str]:
 
         errors.extend(validate_skill_frontmatter_fields(skill_id, frontmatter))
 
-        disable = frontmatter.get("disable-model-invocation") is True
+        errors.extend(
+            f"error: {skill_id}: {msg}"
+            for msg in automation_only_guard_errors(entry.invocation, frontmatter)
+        )
         automation_only = entry.invocation == "automation-only"
-        if disable != automation_only:
-            errors.append(
-                f"error: {skill_id}: disable-model-invocation={disable} "
-                f"but invocation={entry.invocation!r}",
-            )
         if automation_only:
             if entry.hosts.cursor.discovery == "always":
                 errors.append(
