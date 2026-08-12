@@ -8,6 +8,24 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 
 ## Platform
 
+### Unify the automation-only ↔ disable-model-invocation invariant (2026-08-12)
+
+- `scripts/registry/crosscheck.py`'s `validate_registry` (`make validate-registry`) and
+  `scripts/evals/__main__.py`'s `automation_only_guard` assertion type (wired into every
+  registered skill via `evals/fixtures/_global.yaml`'s `adversarial` template, not just skills
+  whose own fixtures mention it) independently re-derived the same invariant — SKILL.md's
+  `disable-model-invocation` must agree with `skills.yaml`'s `invocation`. `crosscheck` checked
+  both directions; `evals` only checked one, so a skill with `disable-model-invocation` set but
+  `invocation` left as something other than `automation-only` passed `make validate-evals` while
+  `make validate-registry` correctly rejected it.
+- Extracted `automation_only_guard_errors()` into `scripts/registry/skill_frontmatter_schema.py`
+  (which already validates this field's type) as the one place the invariant is defined; both
+  callers now go through it, and `evals` gains the direction it was missing. Added
+  `AUTOMATION_ONLY_INVOCATION` to `scripts/registry/schema.py` so the `"automation-only"` literal
+  has one source instead of two independently-maintained copies. Direct unit tests added — the
+  function had none before, only reachable indirectly through the real `skills.yaml` (where every
+  skill already happened to be consistent) or eval fixtures that only assert pass/fail.
+
 ### Mock-tool execution harness + live model scoring for behavioral evals (2026-08-11)
 
 - ADR 0003's Tier 2/3 evals are entirely static — Tier 2 replays a hand-authored `tool`/`gate`/
