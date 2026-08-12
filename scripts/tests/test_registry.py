@@ -323,7 +323,7 @@ def _skill_entry(
     cursor_discovery: str = "rule",
     kiro_discovery: str = "manual",
     risk_class: list[str] | None = None,
-) -> "SkillEntry":
+) -> SkillEntry:
     from scripts.registry.models import (
         CompositionSpec,
         HostClaude,
