@@ -2100,16 +2100,17 @@ _Pre-merge WIP on `feat/squad-map-skill` (internal v1.0–v1.5) is consolidated 
   and strips any backtick already present first (same choice made for backlog-runner, #67, over a
   longer-delimiter escape).
 - Replaced the vacuous assertions with a single strong, whole-string-anchored invariant on each rendered
-  field — `\A`[^`\n]*`\Z` — proving it is exactly one well-formed code span with no embedded backtick or
-  raw newline, plus raw-side `require_pattern`s proving the injected heading/pipe/fence content is
-  genuinely present in `mr_title`/`diff_excerpt`. Confirmed the corrected fixture passes the real
-  `golden.py` engine, and that four distinct broken renderings (backtick left unstripped, real newlines
-  preserved inside the span, no escaping at all, and a well-formed leading span followed by live
-  unescaped injected content on later lines) each fail it — proving the fixture discriminates. Uses
-  Python's `\A`/`\Z` rather than `^`/`$`: `golden.py`'s assertion engine hard-codes `re.MULTILINE`, under
-  which `^`/`$` anchor to line boundaries rather than the whole string, so a regression that reintroduces
-  a raw newline plus injected content on a later line would still satisfy a `^`[^`\n]*`$`-style check by
-  matching just the first line — the exact vacuous-assertion bug class this fixture exists to fix,
+  field, proving it is exactly one well-formed code span with no embedded backtick or raw newline, plus
+  raw-side `require_pattern`s proving the injected heading/pipe/fence content is genuinely present in
+  `mr_title`/`diff_excerpt`. Confirmed the corrected fixture passes the real `golden.py` engine, and that
+  four distinct broken renderings (backtick left unstripped, real newlines preserved inside the span, no
+  escaping at all, and a well-formed leading span followed by live unescaped injected content on later
+  lines) each fail it — proving the fixture discriminates. Uses Python's whole-string regex anchors,
+  not the caret/dollar line anchors: `golden.py`'s assertion engine hard-codes case-insensitive
+  multiline matching, under which a caret/dollar-anchored pattern anchors to line boundaries rather than
+  the whole string, so a regression that reintroduces a raw newline plus injected content on a later line
+  would still satisfy a caret/dollar-anchored single-code-span check by matching just the first line —
+  the exact vacuous-assertion bug class this fixture exists to fix,
   relocated rather than closed. Caught in review before merge. Fixes #64.
 
 ### Manual-notify template fence-nesting fix (2026-08-09)
