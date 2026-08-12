@@ -16,10 +16,10 @@ skills:
     capabilities:
       required: [gitlab.get_merge_request, gitlab.get_merge_request_diffs]
       optional:
-        - name: gitlab.create_merge_request_thread
-          enables: inline diff posting
-        - name: gitlab.create_note
-          enables: summary-only MR posting
+      - name: gitlab.create_merge_request_thread
+        enables: inline diff posting
+      - name: gitlab.create_note
+        enables: summary-only MR posting
       degraded_modes:
         gitlab.create_merge_request_thread: summary-only or chat-only posting
         gitlab.create_note: chat-only posting
@@ -44,8 +44,8 @@ skills:
     capabilities:
       required: [gitlab.get_merge_request]
       optional:
-        - name: gitlab.create_merge_request_thread
-          enables: unattended inline posting when policy allows
+      - name: gitlab.create_merge_request_thread
+        enables: unattended inline posting when policy allows
     lint:
       skill_md_max_lines: 180
       target: pr-gatekeeper
@@ -66,8 +66,8 @@ skills:
     capabilities:
       required: [datadog.query_metrics]
       optional:
-        - name: datadog.list_monitors
-          enables: monitor cross-check sections
+      - name: datadog.list_monitors
+        enables: monitor cross-check sections
     lint:
       skill_md_max_lines: 150
       target: k8s-skill
@@ -88,10 +88,10 @@ skills:
     capabilities:
       required: [telemetry.logs.query]
       optional:
-        - name: datadog.query_metrics
-          enables: metric corroboration paths
-        - name: gitlab.get_merge_request
-          enables: deploy-regression MR handoff
+      - name: datadog.query_metrics
+        enables: metric corroboration paths
+      - name: gitlab.get_merge_request
+        enables: deploy-regression MR handoff
     lint:
       skill_md_max_lines: 180
       target: incident-rca
@@ -536,11 +536,11 @@ skills:
       kiro: {discovery: manual}
     install:
       requires:
-        - unit-test-creator
-        - integration-test-creator
-        - contract-test-creator
-        - e2e-test-creator
-        - api-test-creator
+      - unit-test-creator
+      - integration-test-creator
+      - contract-test-creator
+      - e2e-test-creator
+      - api-test-creator
     capabilities:
       required:
       - host.repository.read

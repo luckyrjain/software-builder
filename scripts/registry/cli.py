@@ -149,6 +149,11 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="exit 1 if any skill is missing a capabilities block",
     )
+    backfill_parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="regenerate every skill's capabilities block from the catalog, even if already valid",
+    )
 
     args = parser.parse_args(argv)
     if args.command == "validate":
@@ -158,7 +163,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "backfill-capabilities":
         return cmd_backfill(
             check_only=args.check,
-            overwrite=False,
+            overwrite=args.overwrite,
             skills_path=ROOT / "skills.yaml",
         )
 
