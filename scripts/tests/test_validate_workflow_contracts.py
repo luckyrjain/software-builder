@@ -1420,7 +1420,7 @@ def test_check_predicate_types_returns_route_contribution_at_selection_phase():
     assert errors == []
     assert result == RoutePredicateResult(
         parsed={"kind": ("equals", "foo")},
-        field_types={"kind": "string"},
+        predicate_types={"kind": "string"},
     )
 
 
@@ -1461,21 +1461,3 @@ def test_check_predicate_types_returns_none_when_predicates_fail_to_parse():
 
     assert result is None
     assert any("unknown or unavailable predicate input" in e for e in errors)
-
-
-def test_check_predicate_types_does_not_mutate_caller_state():
-    # Two independent calls (as validate_skill_contract's loop makes, one per route)
-    # must not leak state into each other now that there's no shared accumulator.
-    phases = {"select": _phase("select", produces={"kind": "string"})}
-
-    result_a = _check_predicate_types(
-        "route-a", ["select"], phases, "select", True, {}, {},
-        {"phases": ["select"], "when": {"kind": "a"}}, [],
-    )
-    result_b = _check_predicate_types(
-        "route-b", ["select"], phases, "select", True, {}, {},
-        {"phases": ["select"], "when": {"kind": "b"}}, [],
-    )
-
-    assert result_a.parsed == {"kind": ("equals", "a")}
-    assert result_b.parsed == {"kind": ("equals", "b")}

@@ -485,12 +485,12 @@ def _check_route_prefix(
     return phase_names, valid_selection_prefix, common_prefix
 
 
-@dataclass(frozen=True)
+@dataclass
 class RoutePredicateResult:
     """One route's contribution to the cross-route selector-domain check."""
 
     parsed: dict[str, tuple[str, object]]
-    field_types: dict[str, str]
+    predicate_types: dict[str, str]
 
 
 def _check_predicate_types(
@@ -507,8 +507,10 @@ def _check_predicate_types(
     """Walk one route's phases checking consumed-field type/availability, then parse
     its `when` predicates at the route-selection phase. Returns this route's
     predicate/field-type contribution to the cross-route selector-domain check that
-    runs after every route has been walked, or None if there's nothing to contribute
-    (no valid selection prefix, or its predicates failed to parse).
+    runs after every route has been walked, or None if there's nothing to contribute:
+    no valid selection prefix, the route never reaches a phase matching
+    `selection_phase` (including because `phase_names` references an unknown phase),
+    or its `when` predicates fail to parse.
     """
     available = dict(entry_required)
     possible = {**entry_optional, **entry_required}
@@ -549,7 +551,9 @@ def _check_predicate_types(
             errors=errors,
         )
         if parsed is not None:
-            return RoutePredicateResult(parsed=parsed, field_types=dict(selection_available))
+            # selection_available (line 545) is already a fresh copy, never mutated
+            # again after this point -- no need to copy it a second time here.
+            return RoutePredicateResult(parsed=parsed, predicate_types=selection_available)
     return None
 
 
@@ -697,7 +701,7 @@ def validate_skill_contract(skill_dir: Path) -> list[str]:
         )
         if result is not None:
             parsed_predicates[route_id] = result.parsed
-            predicate_types.update(result.field_types)
+            predicate_types.update(result.predicate_types)
 
     _check_selector_coverage(routes, parsed_predicates, predicate_types, contract, errors)
     return errors
