@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import json
-import os
 import shutil
 import subprocess
 from pathlib import Path
+
+from scripts.tests.install_test_helpers import install_subprocess_env
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -54,18 +55,7 @@ def test_install_restores_previous_package_when_validation_fails(tmp_path: Path)
     result = subprocess.run(
         ["bash", str(repo / "scripts" / "install.sh"), "--agent", "cursor", "broken-skill"],
         cwd=repo,
-        env={
-            "HOME": str(home),
-            "PYTHONDONTWRITEBYTECODE": "1",
-            "PYTHONPATH": str(repo),
-            # install.sh shells out to plain `python3`, resolved via PATH. Without
-            # this, the subprocess falls back to the OS default PATH instead of
-            # the interpreter pytest itself is running under -- landing on a
-            # system python3 that doesn't have this repo's dependencies (PyYAML)
-            # installed, so install.sh fails with ModuleNotFoundError before
-            # ever reaching the behavior under test.
-            "PATH": os.environ.get("PATH", ""),
-        },
+        env=install_subprocess_env(home, repo=repo),
         capture_output=True,
         text=True,
         check=False,
@@ -88,18 +78,7 @@ def test_install_list_does_not_write_skills(tmp_path: Path) -> None:
     result = subprocess.run(
         ["bash", str(repo / "scripts" / "install.sh"), "--list"],
         cwd=repo,
-        env={
-            "HOME": str(home),
-            "PYTHONDONTWRITEBYTECODE": "1",
-            "PYTHONPATH": str(repo),
-            # install.sh shells out to plain `python3`, resolved via PATH. Without
-            # this, the subprocess falls back to the OS default PATH instead of
-            # the interpreter pytest itself is running under -- landing on a
-            # system python3 that doesn't have this repo's dependencies (PyYAML)
-            # installed, so install.sh fails with ModuleNotFoundError before
-            # ever reaching the behavior under test.
-            "PATH": os.environ.get("PATH", ""),
-        },
+        env=install_subprocess_env(home, repo=repo),
         capture_output=True,
         text=True,
         check=False,

@@ -5,11 +5,13 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
+from scripts.tests.install_test_helpers import install_subprocess_env
+
 ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_install_rejects_path_traversal_skill_name(tmp_path: Path) -> None:
-    env = {"HOME": str(tmp_path / "home")}
+    env = install_subprocess_env(tmp_path / "home", repo=ROOT)
     result = subprocess.run(
         ["bash", str(ROOT / "scripts" / "install.sh"), "--agent", "cursor", "../pr-review"],
         cwd=ROOT,
