@@ -21,6 +21,11 @@ class CompositionContract:
     consume_fields: dict[str, list[str]]
 
 
+# Sentinel for an id with no entry in `contracts` — produces nothing, so it never
+# satisfies a producer lookup.
+_UNKNOWN_CONTRACT = CompositionContract([], [], "read-only", {}, {})
+
+
 def _parse_field_map(
     raw: object,
     *,
@@ -182,7 +187,7 @@ def _validate_schema_matching(
         producers = [
             producer_id
             for producer_id in producer_ids
-            if artifact in contracts.get(producer_id, CompositionContract([], [], "read-only", {}, {})).produces
+            if artifact in contracts.get(producer_id, _UNKNOWN_CONTRACT).produces
         ]
         if not producers:
             continue
@@ -235,6 +240,12 @@ def validate_composition_contracts(
         errors.extend(_validate_declared_fields(skill_id, contract, artifact_schemas))
 
         if entry.composition.mode == "invoke" and entry.composition.invokes:
+            # No "producer missing" pre-check here (unlike aggregate below): an invoked
+            # child that produces nothing just yields an empty `producers` list inside
+            # _validate_schema_matching, which is silently skipped there. What invoke
+            # mode needs instead is this authority check, since invoking calls a child
+            # live at runtime and a wrapper can't safely claim broader write authority
+            # than anything it might call.
             max_child_authority = -1
             for child_id in entry.composition.invokes:
                 child = contracts.get(child_id)
@@ -262,12 +273,16 @@ def validate_composition_contracts(
             )
 
         if entry.composition.mode == "aggregate" and contract.consumes:
+            # No authority-escalation check here (unlike invoke above): aggregate mode
+            # only reads install-time artifacts, it never calls a child live, so there's
+            # no runtime write-authority chain to bound. What it needs instead is this
+            # explicit "no producer" check — a static config error, not something a live
+            # call would surface on its own the way invoke's would.
             for rollup_input in contract.consumes:
                 producers = [
                     dep
                     for dep in entry.install.requires
-                    if rollup_input
-                    in contracts.get(dep, CompositionContract([], [], "read-only", {}, {})).produces
+                    if rollup_input in contracts.get(dep, _UNKNOWN_CONTRACT).produces
                 ]
                 if not producers:
                     errors.append(
