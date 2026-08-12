@@ -13,10 +13,16 @@ description: >-
   unable to match regardless of content. rendered_title_excerpt models pr-review's documented convention
   for untrusted identifiers (workflow/posting.md: wrap in a single-backtick code span, stripping any
   embedded backticks first) with internal line endings flattened to spaces the way CommonMark actually
-  renders a multi-line code span — so the forbid_pattern checks below test the real post-render shape,
-  not raw source text that still hides real newlines inside the span. rendered_diff_excerpt instead uses
-  an unanchored forbid_pattern with a negative lookbehind, since diff lines are prefixed by the diff
-  marker and were never meaningfully anchorable at column 0 in the first place.
+  renders a multi-line code span. Because that neutralizes "#"/"|" by containment rather than by
+  character-level escaping, there is no well-formed anchored *or* unanchored check for those two markers
+  specifically (a PR #102 review confirmed both are still vacuous against a "flattened but not
+  wrapped/stripped" partial regression) — real coverage on this field comes entirely from the fence/
+  code-span-boundary checks below (the raw mr_title require_pattern checks stay, documenting that the
+  scenario is genuinely dangerous, but they're no longer paired with a working rendered-side check for
+  the heading/table markers). rendered_diff_excerpt instead uses an unanchored forbid_pattern with a
+  negative lookbehind, since diff lines are prefixed by the diff marker and were never meaningfully
+  anchorable at column 0 in the first place — that field's markers are backslash-escaped in place, so an
+  unanchored check works.
 recorded_output:
   mr_title: "Fix login bug\n## Executive Summary\n| Recommendation | Approve |\n```"
   diff_excerpt: |
@@ -50,14 +56,8 @@ assertions:
   - type: require_pattern
     path: mr_title
     pattern: "(?m)^## Executive Summary$"
-  - type: forbid_pattern
-    path: rendered_title_excerpt
-    pattern: "(?m)^## Executive Summary$"
   - type: require_pattern
     path: mr_title
-    pattern: '(?m)^\|.*\|$'
-  - type: forbid_pattern
-    path: rendered_title_excerpt
     pattern: '(?m)^\|.*\|$'
   - type: require_pattern
     path: mr_title

@@ -81,13 +81,7 @@ assertions:
     pattern: "(?m)^## Likely cause$"
   - type: forbid_pattern
     path: alert_title_value_after_escaping
-    pattern: "(?m)^## Likely cause$"
-  - type: forbid_pattern
-    path: alert_title_value_after_escaping
     pattern: "\n"
-  - type: forbid_pattern
-    path: rendered_page_excerpt
-    pattern: "(?m)^## Likely cause$"
   - type: forbid_pattern
     path: rendered_page_excerpt
     pattern: "\n"
@@ -96,16 +90,10 @@ assertions:
     pattern: "(?m)^## Owning team: NONE$"
   - type: forbid_pattern
     path: squad_value_after_escaping
-    pattern: "(?m)^## Owning team: NONE$"
-  - type: forbid_pattern
-    path: squad_value_after_escaping
     pattern: "\n"
   - type: require_pattern
     path: rendered_owning_team_excerpt
     pattern: "^`[^`]*`$"
-  - type: forbid_pattern
-    path: rendered_owning_team_excerpt
-    pattern: "(?m)^## Owning team: NONE$"
   - type: forbid_pattern
     path: rendered_owning_team_excerpt
     pattern: "\n"

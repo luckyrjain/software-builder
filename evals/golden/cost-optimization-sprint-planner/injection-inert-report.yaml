@@ -32,9 +32,6 @@ assertions:
     pattern: "(?m)^## UNKNOWN squad$"
   - type: forbid_pattern
     path: rendered_deployment_excerpt
-    pattern: "(?m)^## UNKNOWN squad$"
-  - type: forbid_pattern
-    path: rendered_deployment_excerpt
     pattern: "\n"
   - type: require_pattern
     path: deployment_name

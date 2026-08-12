@@ -196,11 +196,13 @@ def run_all(
     *,
     skill_filter: str | None = None,
     tier_filter: int | None = None,
+    golden_cases: list[Any] | None = None,
 ) -> list[EvalResult]:
     registry = parse_registry(root / "skills.yaml")
     cases = load_fixtures(FIXTURES_DIR)
     transcript_cases = load_transcript_fixtures(TRANSCRIPTS_DIR)
-    golden_cases = load_golden_fixtures(GOLDEN_DIR)
+    if golden_cases is None:
+        golden_cases = load_golden_fixtures(GOLDEN_DIR)
     if GLOBAL_FIXTURE.is_file():
         global_raw = yaml.safe_load(GLOBAL_FIXTURE.read_text(encoding="utf-8"))
         if isinstance(global_raw, dict):
@@ -262,11 +264,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--report", type=Path, help="write JSON report to path")
     args = parser.parse_args(argv)
 
-    for warning in find_vacuous_anchored_patterns(args.repo_root / "evals" / "golden"):
-        print(f"warning: {warning}", file=sys.stderr)
-
     try:
-        results = run_all(args.repo_root, skill_filter=args.skill, tier_filter=args.tier)
+        golden_cases = load_golden_fixtures(GOLDEN_DIR)
+        for warning in find_vacuous_anchored_patterns(
+            golden_cases, skill_filter=args.skill, tier_filter=args.tier,
+        ):
+            print(f"warning: {warning}", file=sys.stderr)
+        results = run_all(
+            args.repo_root, skill_filter=args.skill, tier_filter=args.tier, golden_cases=golden_cases,
+        )
     except (ValueError, yaml.YAMLError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2

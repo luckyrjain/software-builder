@@ -45,18 +45,12 @@ assertions:
     pattern: "(?m)^## Human action required: none$"
   - type: forbid_pattern
     path: task_id_value_after_escaping
-    pattern: "(?m)^## Human action required: none$"
-  - type: forbid_pattern
-    path: task_id_value_after_escaping
     pattern: "\n"
   - type: require_pattern
     path: rendered_task_id_excerpt
     pattern: "^`[^`]*`$"
   - type: require_pattern
     path: lens_a_summary
-    pattern: "(?m)^## Lens A \\(Safety and State\\): CLEAN$"
-  - type: forbid_pattern
-    path: lens_a_summary_value_after_escaping
     pattern: "(?m)^## Lens A \\(Safety and State\\): CLEAN$"
   - type: forbid_pattern
     path: lens_a_summary_value_after_escaping

@@ -58,9 +58,6 @@ assertions:
     pattern: "(?m)^## Fake Squad Name$"
   - type: forbid_pattern
     path: squad_value_after_escaping
-    pattern: "(?m)^## Fake Squad Name$"
-  - type: forbid_pattern
-    path: squad_value_after_escaping
     pattern: "\n"
   - type: require_pattern
     path: rendered_squad_excerpt
@@ -77,20 +74,11 @@ assertions:
   - type: require_pattern
     path: notes
     pattern: "(?m)^## Done$"
-  - type: forbid_pattern
-    path: rendered_notes_excerpt
-    pattern: "(?m)^## Done$"
   - type: require_pattern
     path: notes
     pattern: "(?m)^- fake list item$"
-  - type: forbid_pattern
-    path: rendered_notes_excerpt
-    pattern: "(?m)^- fake list item$"
   - type: require_pattern
     path: notes
-    pattern: "(?m)^> fake blockquote$"
-  - type: forbid_pattern
-    path: rendered_notes_excerpt
     pattern: "(?m)^> fake blockquote$"
   - type: forbid_pattern
     path: rendered_notes_excerpt
@@ -100,18 +88,12 @@ assertions:
     pattern: "(?m)^## Fake Heading$"
   - type: forbid_pattern
     path: rendered_mr_url_excerpt
-    pattern: "(?m)^## Fake Heading$"
-  - type: forbid_pattern
-    path: rendered_mr_url_excerpt
     pattern: "\n"
   - type: forbid_pattern
     path: rendered_mr_url_excerpt
     pattern: "(?<!\\\\)\\|"
   - type: require_pattern
     path: squad_map_path
-    pattern: "(?m)^## Owned$"
-  - type: forbid_pattern
-    path: rendered_gap_reason_excerpt
     pattern: "(?m)^## Owned$"
   - type: forbid_pattern
     path: rendered_gap_reason_excerpt
