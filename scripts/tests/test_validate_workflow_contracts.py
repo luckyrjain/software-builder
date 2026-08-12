@@ -9,7 +9,12 @@ import sys
 import pytest
 import yaml
 
-from scripts.validate_workflow_contracts import validate_skill_contract
+from scripts.validate_workflow_contracts import (
+    PhaseContract,
+    RoutePredicateResult,
+    _check_predicate_types,
+    validate_skill_contract,
+)
 
 
 FIXTURES = Path(__file__).parent / "fixtures" / "workflow-contracts"
@@ -1384,3 +1389,75 @@ def test_gate_renderer_redacts_phone_evidence_across_common_formats(phone: str) 
     assert phone not in rendered
     assert "[REDACTED PHONE]" in rendered
     assert "Sensitive source data was redacted" in rendered
+
+
+def _phase(name, *, produces=None, required=None, optional=None, conditional=None):
+    return PhaseContract(
+        name=name,
+        produces=produces or {},
+        required=required or {},
+        optional=optional or {},
+        conditional=conditional or {},
+    )
+
+
+def test_check_predicate_types_returns_route_contribution_at_selection_phase():
+    phases = {"select": _phase("select", produces={"kind": "string"})}
+    errors = []
+
+    result = _check_predicate_types(
+        "route-a",
+        ["select"],
+        phases,
+        "select",
+        True,
+        {},
+        {},
+        {"phases": ["select"], "when": {"kind": "foo"}},
+        errors,
+    )
+
+    assert errors == []
+    assert result == RoutePredicateResult(
+        parsed={"kind": ("equals", "foo")},
+        route_predicate_types={"kind": "string"},
+    )
+
+
+def test_check_predicate_types_returns_none_without_valid_selection_prefix():
+    phases = {"select": _phase("select", produces={"kind": "string"})}
+    errors = []
+
+    result = _check_predicate_types(
+        "route-a",
+        ["select"],
+        phases,
+        "select",
+        False,
+        {},
+        {},
+        {"phases": ["select"], "when": {"kind": "foo"}},
+        errors,
+    )
+
+    assert result is None
+
+
+def test_check_predicate_types_returns_none_when_predicates_fail_to_parse():
+    phases = {"select": _phase("select", produces={"kind": "string"})}
+    errors = []
+
+    result = _check_predicate_types(
+        "route-a",
+        ["select"],
+        phases,
+        "select",
+        True,
+        {},
+        {},
+        {"phases": ["select"], "when": {"unknown_field": "foo"}},
+        errors,
+    )
+
+    assert result is None
+    assert any("unknown or unavailable predicate input" in e for e in errors)
