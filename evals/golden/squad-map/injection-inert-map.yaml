@@ -54,6 +54,9 @@ assertions:
     pattern: "(?m)^## Verdict: READY$"
   - type: forbid_pattern
     path: repo_rendered
+    pattern: "\n"
+  - type: forbid_pattern
+    path: repo_rendered
     pattern: "^`.*`$"
   - type: field_equals
     path: benign_datadog_service

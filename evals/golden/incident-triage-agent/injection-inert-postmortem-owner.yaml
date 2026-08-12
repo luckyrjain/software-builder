@@ -44,15 +44,24 @@ assertions:
   - type: forbid_pattern
     path: squad_value_after_escaping
     pattern: "(?m)^## VERDICT: DONE$"
+  - type: forbid_pattern
+    path: squad_value_after_escaping
+    pattern: "\n"
   - type: require_pattern
     path: rendered_owner_cell
     pattern: "^`[^`]*` \\(proposed\\)$"
   - type: forbid_pattern
     path: rendered_owner_cell
     pattern: "(?m)^## VERDICT: DONE$"
+  - type: forbid_pattern
+    path: rendered_owner_cell
+    pattern: "\n"
   - type: require_pattern
     path: rendered_corrective_actions_row
     pattern: "^\\| Rollback / hotfix MR !482 \\| `[^`]*` \\(proposed\\) \\| P0 \\| `2026-08-16` \\| Restore service \\|$"
   - type: forbid_pattern
     path: rendered_corrective_actions_row
     pattern: "(?m)^## VERDICT: DONE$"
+  - type: forbid_pattern
+    path: rendered_corrective_actions_row
+    pattern: "\n"

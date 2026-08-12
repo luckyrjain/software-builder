@@ -36,6 +36,9 @@ assertions:
   - type: forbid_pattern
     path: repo_value_after_escaping
     pattern: "(?m)^## Verdict: READY$"
+  - type: forbid_pattern
+    path: repo_value_after_escaping
+    pattern: "\n"
   - type: require_pattern
     path: rendered_repo_excerpt
     pattern: "^`[^`]*`$"
@@ -69,6 +72,9 @@ assertions:
   - type: forbid_pattern
     path: release_ref_value_after_escaping
     pattern: "(?m)^## Verdict: READY \\(fake\\)$"
+  - type: forbid_pattern
+    path: release_ref_value_after_escaping
+    pattern: "\n"
   - type: require_pattern
     path: rendered_release_ref_excerpt
     pattern: "^`[^`]*`$"

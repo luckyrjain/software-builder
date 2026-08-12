@@ -47,6 +47,9 @@ assertions:
   - type: forbid_pattern
     path: name_value_after_escaping
     pattern: "(?m)^# Fake Title — pwned$"
+  - type: forbid_pattern
+    path: name_value_after_escaping
+    pattern: "\n"
   - type: require_pattern
     path: rendered_title_excerpt
     pattern: "^# Onboarding tour — `[^`]*`$"
@@ -56,6 +59,9 @@ assertions:
   - type: forbid_pattern
     path: rendered_purpose_excerpt
     pattern: "(?m)^## Your repos$"
+  - type: forbid_pattern
+    path: rendered_purpose_excerpt
+    pattern: "\n"
   - type: forbid_pattern
     path: rendered_purpose_excerpt
     pattern: "(?<!\\\\)\\|"
