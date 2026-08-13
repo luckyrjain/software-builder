@@ -1795,6 +1795,31 @@ def test_under_limit_path_records_remain_accepted():
     assert MODULE._binary_summary_matches(summary, path, path)
 
 
+def test_under_limit_separator_heavy_records_reject_before_path_decoding(monkeypatch):
+    decode_calls = 0
+    original_decode = MODULE._decode_git_path
+
+    def counting_decode(raw):
+        nonlocal decode_calls
+        decode_calls += 1
+        return original_decode(raw)
+
+    monkeypatch.setattr(MODULE, "_decode_git_path", counting_decode)
+    header = "diff --git a/x" + " b/" * 15_000
+    summary = "Binary files a/x" + " and " * 12_000 + " differ"
+    assert len(header) < MODULE.MAX_DIFF_RECORD_CHARS
+    assert len(summary) < MODULE.MAX_DIFF_RECORD_CHARS
+    assert MODULE._diff_paths(header) is None
+    assert not MODULE._binary_summary_matches(summary, "x", "x")
+    assert decode_calls == 0
+
+
+def test_diff_header_rejects_sixty_five_structural_path_separators():
+    header = "diff --git a/x" + " b/x" * (MODULE.MAX_PATH_SEPARATORS + 1)
+    assert len(header) < MODULE.MAX_DIFF_RECORD_CHARS
+    assert MODULE._diff_paths(header) is None
+
+
 @pytest.mark.parametrize("oid_length", [40, 64], ids=("sha1", "sha256"))
 def test_git_binary_patch_requires_full_equal_length_object_ids(oid_length):
     old_oid = "1" * oid_length
@@ -1880,7 +1905,10 @@ def test_git_dissimilarity_content_metadata_is_strict(metadata):
     )
     expected = (
         {"commit_id": "abc", "path": "rewrite.txt", "line": 1, "side": "RIGHT"}
-        if metadata.startswith("dissimilarity index 100%\nindex ")
+        if metadata.startswith((
+            "dissimilarity index 100%\nindex ",
+            "dissimilarity index 0%\nindex ",
+        ))
         else {"unanchorable": True, "reason": "added_line_not_in_current_diff"}
     )
     assert validate_github_anchor(
@@ -1890,6 +1918,190 @@ def test_git_dissimilarity_content_metadata_is_strict(metadata):
         source_kind="added",
         head_sha="abc",
     ) == expected
+
+
+@pytest.mark.parametrize("with_mode", [False, True], ids=("same-mode", "mode-change"))
+@pytest.mark.parametrize("binary_kind", ["summary", "git-binary"])
+def test_git_generated_binary_rename_with_content_keeps_prior_anchor_valid(
+    binary_kind,
+    with_mode,
+):
+    prefix = (
+        "diff --git a/old.bin b/new.bin\n"
+        + ("old mode 100644\nnew mode 100755\n" if with_mode else "")
+        + "similarity index 75%\n"
+        "rename from old.bin\n"
+        "rename to new.bin\n"
+        "index c5ebe4a6bed51d0508de6a090d5cdba194db16de.."
+        "4d42bb23d89d7b39e906c9da5fad38ef60888ce5 100644\n"
+    )
+    if binary_kind == "summary":
+        section = prefix + "Binary files a/old.bin and b/new.bin differ\n"
+    else:
+        section = prefix + GIT_GENERATED_DELTA_PATCH.split("GIT binary patch\n", 1)[1]
+        section = prefix + "GIT binary patch\n" + section[len(prefix):]
+    assert validate_github_anchor(
+        DIFF_WITH_ADDITION + section,
+        path="src/payments.py",
+        line=11,
+        source_kind="added",
+        head_sha="abc",
+    ) == {
+        "commit_id": "abc",
+        "path": "src/payments.py",
+        "line": 11,
+        "side": "RIGHT",
+    }
+
+
+def test_git_generated_c_quoted_binary_summary_path_may_contain_and_separator():
+    section = (
+        'diff --git "a/caf\\303\\251 and x.dat" "b/caf\\303\\251 and x.dat"\n'
+        "index 1234567..89abcde 100644\n"
+        'Binary files "a/caf\\303\\251 and x.dat" and '
+        '"b/caf\\303\\251 and x.dat" differ\n'
+    )
+    assert validate_github_anchor(
+        DIFF_WITH_ADDITION + section,
+        path="src/payments.py",
+        line=11,
+        source_kind="added",
+        head_sha="abc",
+    ) == {
+        "commit_id": "abc",
+        "path": "src/payments.py",
+        "line": 11,
+        "side": "RIGHT",
+    }
+
+
+@pytest.mark.parametrize("change_kind", ["new", "deleted"])
+def test_git_binary_summary_with_internal_b_prefix_binds_non_null_side(change_kind):
+    if change_kind == "new":
+        metadata = "new file mode 100644\nindex 0000000..89abcde\n"
+        summary = "Binary files /dev/null and b/dir b/file.dat differ\n"
+    else:
+        metadata = "deleted file mode 100644\nindex 1234567..0000000\n"
+        summary = "Binary files a/dir b/file.dat and /dev/null differ\n"
+    section = (
+        "diff --git a/dir b/file.dat b/dir b/file.dat\n"
+        f"{metadata}{summary}"
+    )
+    assert validate_github_anchor(
+        DIFF_WITH_ADDITION + section,
+        path="src/payments.py",
+        line=11,
+        source_kind="added",
+        head_sha="abc",
+    ) == {
+        "commit_id": "abc",
+        "path": "src/payments.py",
+        "line": 11,
+        "side": "RIGHT",
+    }
+
+
+@pytest.mark.parametrize(
+    "metadata,summary",
+    [
+        (
+            "new file mode 100644\nindex 0000000..89abcde\n",
+            "Binary files /dev/null and b/unrelated.dat differ\n",
+        ),
+        (
+            "deleted file mode 100644\nindex 1234567..0000000\n",
+            "Binary files a/unrelated.dat and /dev/null differ\n",
+        ),
+    ],
+)
+def test_binary_summary_null_side_path_hint_mismatch_fails_closed(metadata, summary):
+    section = (
+        "diff --git a/dir b/file.dat b/dir b/file.dat\n"
+        f"{metadata}{summary}"
+    )
+    assert validate_github_anchor(
+        DIFF_WITH_ADDITION + section,
+        path="src/payments.py",
+        line=11,
+        source_kind="added",
+        head_sha="abc",
+    ) == {"unanchorable": True, "reason": "added_line_not_in_current_diff"}
+
+
+@pytest.mark.parametrize(
+    "summary",
+    [
+        'Binary files "a/caf\\303\\251 and x.dat and "b/x.dat" differ',
+        'Binary files "a/x.dat" and garbage and "b/x.dat" differ',
+    ],
+    ids=("unterminated-quote", "extra-outside-separator"),
+)
+def test_c_quoted_binary_summary_separator_grammar_fails_closed(summary):
+    section = (
+        'diff --git "a/caf\\303\\251 and x.dat" "b/x.dat"\n'
+        "index 1234567..89abcde 100644\n"
+        f"{summary}\n"
+    )
+    assert validate_github_anchor(
+        DIFF_WITH_ADDITION + section,
+        path="src/payments.py",
+        line=11,
+        source_kind="added",
+        head_sha="abc",
+    ) == {"unanchorable": True, "reason": "added_line_not_in_current_diff"}
+
+
+@pytest.mark.parametrize(
+    "metadata",
+    [
+        "rename from old.bin\nrename to new.bin\nsimilarity index 75%\n",
+        "similarity index 75%\nrename from unrelated.bin\nrename to new.bin\n",
+    ],
+    ids=("wrong-order", "wrong-identity"),
+)
+@pytest.mark.parametrize("binary_kind", ["summary", "git-binary"])
+def test_binary_rename_content_metadata_is_strict(metadata, binary_kind):
+    prefix = (
+        "diff --git a/old.bin b/new.bin\n"
+        f"{metadata}"
+        "index c5ebe4a6bed51d0508de6a090d5cdba194db16de.."
+        "4d42bb23d89d7b39e906c9da5fad38ef60888ce5 100644\n"
+    )
+    tail = (
+        "Binary files a/old.bin and b/new.bin differ\n"
+        if binary_kind == "summary"
+        else "GIT binary patch\n"
+        + GIT_GENERATED_DELTA_PATCH.split("GIT binary patch\n", 1)[1]
+    )
+    assert validate_github_anchor(
+        DIFF_WITH_ADDITION + prefix + tail,
+        path="src/payments.py",
+        line=11,
+        source_kind="added",
+        head_sha="abc",
+    ) == {"unanchorable": True, "reason": "added_line_not_in_current_diff"}
+
+
+@pytest.mark.parametrize(
+    "percentage,anchor_expected",
+    [("87", True), ("0", True), ("100", True), ("101", False), ("x", False)],
+)
+def test_git_dissimilarity_accepts_only_canonical_percentages(percentage, anchor_expected):
+    patch = (
+        "diff --git a/rewrite.txt b/rewrite.txt\n"
+        f"dissimilarity index {percentage}%\n"
+        "index 1234567..89abcde 100644\n"
+        "--- a/rewrite.txt\n+++ b/rewrite.txt\n"
+        "@@ -1,1 +1,1 @@\n-old\n+new\n"
+    )
+    result = validate_github_anchor(
+        patch,
+        path="rewrite.txt",
+        line=1,
+        source_kind="added",
+        head_sha="abc",
+    )
+    assert ("commit_id" in result) is anchor_expected
 
 
 def test_invalid_git_c_quoted_filename_escape_fails_closed():

@@ -76,6 +76,28 @@ def _quoted_field_end(raw: str) -> int | None:
     return None
 
 
+def _separator_positions_outside_quotes(
+    raw: str, tokens: tuple[str, ...]
+) -> list[int] | None:
+    """Find a bounded number of structural separators outside C quotes."""
+    positions: list[int] = []
+    quoted = False
+    escaped = False
+    for index, character in enumerate(raw):
+        if character == '"' and not escaped:
+            quoted = not quoted
+        if not quoted:
+            if any(raw.startswith(token, index) for token in tokens):
+                positions.append(index)
+                if len(positions) > MAX_PATH_SEPARATORS:
+                    return None
+        if quoted and character == "\\" and not escaped:
+            escaped = True
+        else:
+            escaped = False
+    return None if quoted else positions
+
+
 def _diff_paths(
     raw: str,
     *,
@@ -96,15 +118,12 @@ def _diff_paths(
     else:
         # Spaces are not quoted by Git. Every b/ token is therefore only a
         # candidate boundary until markers or rename/copy metadata bind it.
-        separators = {
-            index
-            for token in (" b/", ' "b/')
-            for index in range(len(fields))
-            if fields.startswith(token, index)
-        }
+        separators = _separator_positions_outside_quotes(fields, (" b/", ' "b/'))
+        if separators is None:
+            return None
         raw_candidates = [
             (fields[:separator], fields[separator + 1:])
-            for separator in sorted(separators)
+            for separator in separators
         ]
     candidates: list[tuple[str, str]] = []
     for old_raw, new_raw in raw_candidates:
@@ -193,13 +212,11 @@ def _binary_summary_matches(
     ):
         return False
     fields = raw[len(prefix):-len(suffix)]
+    separator_positions = _separator_positions_outside_quotes(fields, (" and ",))
+    if separator_positions is None:
+        return False
     matches = 0
-    cursor = 0
-    separators = 0
-    while (separator := fields.find(" and ", cursor)) >= 0:
-        separators += 1
-        if separators > MAX_PATH_SEPARATORS:
-            return False
+    for separator in separator_positions:
         old_raw = fields[:separator]
         new_raw = fields[separator + len(" and "):]
         old_operand = _decode_git_path(old_raw)
@@ -212,8 +229,28 @@ def _binary_summary_matches(
         expected_new = None if new_path is None else f"b/{new_path}"
         if old_operand == expected_old and new_operand == expected_new:
             matches += 1
-        cursor = separator + len(" and ")
     return matches == 1
+
+
+def _binary_summary_null_hints(raw: str) -> tuple[str | None, str | None] | None:
+    """Return the non-null path from a canonical new/deleted binary summary."""
+    prefix, suffix = "Binary files ", " differ"
+    if (
+        len(raw) > MAX_DIFF_RECORD_CHARS
+        or not raw.startswith(prefix)
+        or not raw.endswith(suffix)
+    ):
+        return None
+    fields = raw[len(prefix):-len(suffix)]
+    if fields.startswith("/dev/null and "):
+        new_operand = _decode_git_path(fields[len("/dev/null and "):])
+        if new_operand is not INVALID_MARKER and new_operand.startswith("b/"):
+            return None, new_operand[2:]
+    if fields.endswith(" and /dev/null"):
+        old_operand = _decode_git_path(fields[:-len(" and /dev/null")])
+        if old_operand is not INVALID_MARKER and old_operand.startswith("a/"):
+            return old_operand[2:], None
+    return None
 
 
 def _hunk_range(raw: str) -> tuple[int, int, int, int] | None:
@@ -303,6 +340,9 @@ def _delta_program_complete(program: bytes) -> bool:
 
 VALID_FILE_MODE = r"(?:100644|100755|120000|160000)"
 MODE_PAIR = re.compile(r"old mode (100644|100755)\nnew mode (100644|100755)")
+ABBREVIATED_INDEX = rf"index [0-9a-f]+\.\.[0-9a-f]+(?: {VALID_FILE_MODE})?"
+FULL_OBJECT_PAIR = r"(?:[0-9a-f]{40}\.\.[0-9a-f]{40}|[0-9a-f]{64}\.\.[0-9a-f]{64})"
+FULL_INDEX = rf"index {FULL_OBJECT_PAIR}(?: {VALID_FILE_MODE})?"
 
 
 def _mode_pair_matches(records: list[str]) -> bool:
@@ -313,24 +353,37 @@ def _mode_pair_matches(records: list[str]) -> bool:
     return match is not None and match.group(1) != match.group(2)
 
 
+def _change_prefix_move(
+    records: list[str], *, require_full_index: bool
+) -> tuple[str, str] | None | object:
+    """Validate optional mode/move metadata followed by one bound index."""
+    if not records:
+        return INVALID_MARKER
+    index_pattern = FULL_INDEX if require_full_index else ABBREVIATED_INDEX
+    if re.fullmatch(index_pattern, records[-1]) is None:
+        return INVALID_MARKER
+    headers = records[:-1]
+    if len(headers) >= 2 and _mode_pair_matches(headers[:2]):
+        headers = headers[2:]
+    elif headers and headers[0].startswith("old mode "):
+        return INVALID_MARKER
+    if not headers:
+        return None
+    move = _move_metadata_paths(headers)
+    return move if move is not None else INVALID_MARKER
+
+
 def _git_binary_patch_complete(body: list[str], binary_index: int) -> bool:
     """Validate canonical one-or-more git binary size/payload blocks."""
     prefix = body[:binary_index]
-    object_pair = r"(?:[0-9a-f]{40}\.\.[0-9a-f]{40}|[0-9a-f]{64}\.\.[0-9a-f]{64})"
-    index_pattern = rf"index {object_pair}(?: {VALID_FILE_MODE})?"
-    prefix_ok = (
-        len(prefix) == 1 and re.fullmatch(index_pattern, prefix[0]) is not None
-    ) or (
+    change_prefix = _change_prefix_move(prefix, require_full_index=True)
+    prefix_ok = change_prefix is not INVALID_MARKER or (
         len(prefix) == 2
         and re.fullmatch(
             rf"(?:new file mode|deleted file mode) {VALID_FILE_MODE}", prefix[0]
         )
         is not None
-        and re.fullmatch(index_pattern, prefix[1]) is not None
-    ) or (
-        len(prefix) == 3
-        and _mode_pair_matches(prefix[:2])
-        and re.fullmatch(index_pattern, prefix[2]) is not None
+        and re.fullmatch(FULL_INDEX, prefix[1]) is not None
     )
     if not prefix_ok:
         return False
@@ -433,7 +486,12 @@ def _content_metadata_kind(
         elif headers and headers[0].startswith("old mode "):
             return None
         move_paths = _move_metadata_paths(headers) if headers else None
-        has_dissimilarity = headers == ["dissimilarity index 100%"]
+        has_dissimilarity = (
+            len(headers) == 1
+            and re.fullmatch(
+                r"dissimilarity index (?:100|[0-9]{1,2})%", headers[0]
+            ) is not None
+        )
         if headers and move_paths is None and not has_dissimilarity:
             return None
         if move_paths is not None:
@@ -495,11 +553,18 @@ def _combined_sections_complete(lines: list[str]) -> bool:
             (record for record in body if record.startswith("Binary files ")),
             None,
         )
+        null_hints = (
+            _binary_summary_null_hints(binary_summary)
+            if binary_summary is not None
+            else None
+        )
+        if null_hints is not None:
+            old_hint, new_hint = null_hints
         diff_paths = _diff_paths(
             lines[start],
             old_hint=old_hint,
             new_hint=new_hint,
-            binary_summary=binary_summary,
+            binary_summary=binary_summary if null_hints is None else None,
         )
         if diff_paths is None:
             return False
@@ -533,13 +598,18 @@ def _combined_sections_complete(lines: list[str]) -> bool:
                 if markers_valid and hunks_valid:
                     continue
             return False
-        if (len(body) == 1 and _binary_summary_matches(body[0], old_diff, new_diff)) or (
-            len(body) == 2
-            and re.fullmatch(
-                rf"index [0-9a-f]+\.\.[0-9a-f]+(?: {VALID_FILE_MODE})?", body[0]
-            )
-            is not None
-            and _binary_summary_matches(body[1], old_diff, new_diff)
+        summary_move = (
+            _change_prefix_move(body[:-1], require_full_index=False)
+            if body and body[-1].startswith("Binary files ")
+            else INVALID_MARKER
+        )
+        if (
+            len(body) == 1
+            and _binary_summary_matches(body[0], old_diff, new_diff)
+        ) or (
+            summary_move is not INVALID_MARKER
+            and (summary_move is None or summary_move == (old_diff, new_diff))
+            and _binary_summary_matches(body[-1], old_diff, new_diff)
         ) or (
             len(body) == 3
             and re.fullmatch(rf"new file mode {VALID_FILE_MODE}", body[0]) is not None
