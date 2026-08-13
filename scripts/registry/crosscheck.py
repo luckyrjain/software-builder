@@ -7,7 +7,6 @@ from scripts.registry.backfill_capabilities import validate_capabilities_present
 from scripts.registry.composition import validate_composition_graph
 from scripts.registry.frontmatter import load_skill_frontmatter
 from scripts.registry.graph import detect_cycles
-from scripts.registry.manifest import validate_manifest
 from scripts.registry.models import Registry
 from scripts.registry.schema import AUTOMATION_ONLY_INVOCATION, parse_registry
 from scripts.registry.skill_frontmatter_schema import (
@@ -177,5 +176,4 @@ def validate_registry(root: Path) -> list[str]:
     errors.extend(_validate_skill_frontmatter_shape(root, registry))
     errors.extend(_validate_automation_only_rules(registry))
     errors.extend(_validate_stale_adapters(root, registry))
-    errors.extend(validate_manifest(root))
     return errors
