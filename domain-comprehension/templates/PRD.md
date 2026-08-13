@@ -34,13 +34,13 @@ State requirements as behavior the implementation demonstrably enforces or suppo
 
 | ID | Requirement | Scope | Evidence | Status | Confidence |
 |---|---|---|---|---|---|
-| FR-001 | UNKNOWN | UNKNOWN | UNKNOWN | Observed / Inferred / Unknown | UNKNOWN |
+| FR-001 | UNKNOWN | UNKNOWN | UNKNOWN | Unknown | UNKNOWN |
 
 ## 5. Business rules and invariants
 
-| ID | Rule / invariant | Trigger / precondition | Outcome | Evidence | Confidence |
-|---|---|---|---|---|---|
-| BR-001 | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN |
+| ID | Rule / invariant | Scope | Trigger / precondition | Outcome | Evidence | Status | Confidence |
+|---|---|---|---|---|---|---|---|
+| BR-001 | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN | Unknown | UNKNOWN |
 
 ## 6. Journeys and workflows
 
@@ -86,9 +86,9 @@ Document evidenced authentication, authorization, role/permission rules, sensiti
 
 Record only properties enforced by code/config/contracts or corroborated by runtime evidence. Runtime observations validate current behavior; they do not by themselves establish intended SLOs.
 
-| ID | Area | Requirement / observed constraint | Evidence | Status | Confidence |
-|---|---|---|---|---|---|
-| NFR-001 | Availability / latency / throughput / consistency / durability / idempotency / scalability / rate limit / recovery | UNKNOWN | UNKNOWN | Observed / Inferred / Unknown | UNKNOWN |
+| ID | Area | Requirement / observed constraint | Scope | Evidence | Status | Confidence |
+|---|---|---|---|---|---|---|
+| NFR-001 | Availability / latency / throughput / consistency / durability / idempotency / scalability / rate limit / recovery | UNKNOWN | UNKNOWN | UNKNOWN | Unknown | UNKNOWN |
 
 ## 13. Configuration and deployment behavior
 
@@ -118,11 +118,13 @@ Include KPIs, SLOs, product success measures, funnels, or analytics only when ex
 
 ## 19. Requirement traceability
 
-Every `FR-*`, `BR-*`, and `NFR-*` above must appear here. A requirement without evidence is `Unknown`/`Inferred`, never silently presented as fact.
+Every `FR-*`, `BR-*`, and `NFR-*` above must appear here. A requirement without direct evidence is `Inferred` or `Unknown`, never silently presented as fact.
 
-| Requirement ID | Evidence source(s) | Evidence type | Confidence | Notes / contradiction |
-|---|---|---|---|---|
-| FR-001 | UNKNOWN | Code / contract / config / test / runtime / authoritative doc | UNKNOWN | UNKNOWN |
+| Requirement ID | Requirement status | Evidence source(s) | Evidence type | Confidence | Notes / contradiction |
+|---|---|---|---|---|---|
+| FR-001 | Unknown | UNKNOWN | Code / contract / config / test / runtime / authoritative doc | UNKNOWN | UNKNOWN |
+| BR-001 | Unknown | UNKNOWN | Code / contract / config / test / runtime / authoritative doc | UNKNOWN | UNKNOWN |
+| NFR-001 | Unknown | UNKNOWN | Code / contract / config / test / runtime / authoritative doc | UNKNOWN | UNKNOWN |
 
 ## 20. Open product-intent questions
 
