@@ -2,7 +2,11 @@
 
 **Normative.** Written to `docs/domain-comprehension/<domain-slug>/domain-config.yaml` at Session 0.
 The directory is created when absent. The default `scope.artifact_root` is
-`docs/domain-comprehension/<domain.name>`; callers may override it with another relative path.
+`docs/domain-comprehension/<domain-slug>`; callers may override it with another safe relative path.
+
+`domain-slug` is derived from the requested domain name using the rule in
+[run-scoped-artifacts.md](run-scoped-artifacts.md): lowercase letters/digits plus `-`, with other
+character runs replaced by `-`. It is one path segment and must not contain `/`, `\\`, or `..`.
 
 ```yaml
 domain:
@@ -26,8 +30,8 @@ scope:
     - <repo-name>
   artifact_root: docs/domain-comprehension/<domain-slug>
                                    # relative to workspace root; create when absent.
-                                   # Default is docs/domain-comprehension/<domain.name>.
-                                   # Parallel runs may append a run_id subdirectory.
+                                   # Parallel runs may append a safe run_id subdirectory.
+                                   # Absolute paths and `..` are invalid.
                                    # manifest.yaml stays at workspace root and records
                                    # engagement.artifact_root.
 
@@ -64,7 +68,7 @@ critical_path_tiers:
     - <repo-name>
 
 deliverables:
-  map_file: DOMAIN_MAP.md
+  map_file: DOMAIN_MAP.md         # relative to artifact_root; absolute / `..` paths are invalid
   core_section: Core Domain Deep Dive
 
 runbook_procedures:
