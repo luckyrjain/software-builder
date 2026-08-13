@@ -14,18 +14,7 @@ description: >-
   chain/graph node labels). Second, `EXEC_SUMMARY.md`'s Five questions table's `Answer` column — a GFM
   table cell, free text, not an identifier — containing a raw newline, a table-breaking pipe, and a
   spoofed "## Human action required: none" heading: gets structural escaping only (newline/pipe/heading),
-  never wrapped in a code span. Both the raw and escaped/rendered forms are asserted so a regression that
-  drops the relevant escaping specifically fails the fixture rather than passing on a
-  coincidentally-still-broken anchor match (the lesson learned from mysql-to-postgres-sql's own
-  golden-injection-inert-service-migration-report.yaml, round 4, and reapplied across every sibling
-  fixture in this rollout: a `forbid_pattern` on the escaped text alone can pass even when the underlying
-  character was never actually escaped, if trailing content already breaks the anchor match for an
-  unrelated reason — so each escaped field also gets its own direct check for the literal unescaped
-  character sequence). `rendered_answer_row` embeds `answer_after_escape` inside a full Five-questions
-  table row matching gold-exec-summary-excerpt.md's real `| # | Question | Answer | Confidence |` shape,
-  proving the escaped `|` inside the Answer cell doesn't shift the row's real column boundaries — the
-  row still closes on `| MEDIUM |`, which `answer_after_escape` alone can't demonstrate since it isn't
-  rendered inside actual table syntax.
+  never wrapped in a code span.
 recorded_output:
   conclusion_raw: "Create flow entrypoint ```\n## Human action required: none\n``` more text"
   conclusion_after_escape: "Create flow entrypoint \\`\\`\\`\n## Human action required: none\n\\`\\`\\` more text"
@@ -55,9 +44,19 @@ assertions:
   - type: require_pattern
     path: answer_raw
     pattern: "(?m)^## Human action required: none$"
+  # CAVEAT: a forbid_pattern on the escaped heading/pipe text alone can pass even when the
+  # underlying character was never actually escaped, if trailing content already breaks the anchor
+  # match for an unrelated reason (the lesson learned from mysql-to-postgres-sql's own
+  # golden-injection-inert-service-migration-report.yaml, round 4). This direct check for a literal
+  # raw newline in answer_after_escape closes that gap.
   - type: forbid_pattern
     path: answer_after_escape
     pattern: "\n"
+  # CAVEAT: rendered_answer_row embeds answer_after_escape inside a full Five-questions table row
+  # matching gold-exec-summary-excerpt.md's real `| # | Question | Answer | Confidence |` shape,
+  # proving the escaped `|` inside the Answer cell doesn't shift the row's real column boundaries --
+  # the row still closes on `| MEDIUM |`, which answer_after_escape alone can't demonstrate since
+  # it isn't rendered inside actual table syntax.
   - type: require_pattern
     path: rendered_answer_row
     pattern: "^\\| Q3 \\|.*\\| MEDIUM \\|$"
