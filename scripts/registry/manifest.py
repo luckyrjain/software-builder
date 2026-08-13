@@ -13,7 +13,9 @@ from scripts.yaml_safety import YAML_SAFETY_ERRORS, load_unique_yaml_file
 
 ROOT = Path(__file__).resolve().parents[2]
 CONTRACTS_PATH = Path(__file__).resolve().parent / "platform_contracts.yaml"
-_SEMVER_RE = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:[-+][0-9A-Za-z.-]+)?$")
+_SEMVER_RE = re.compile(
+    r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:[-+][0-9A-Za-z.-]+)?$",
+)
 _ALLOWED_TYPES = {"leaf", "router", "orchestrator", "trigger"}
 _REQUIRED_EVIDENCE = {"OBSERVED", "INFERRED", "UNKNOWN", "CONFLICTED", "NOT_APPLICABLE"}
 _REQUIRED_COMPLETION = {"SUCCESS", "PARTIAL", "BLOCKED", "FAILED", "ESCALATED"}
@@ -59,7 +61,9 @@ def _load_platform_contracts(path: Path = CONTRACTS_PATH) -> dict[str, Any]:
     evidence = _require_mapping(raw.get("evidence"), "platform contracts.evidence")
     evidence_statuses = evidence.get("statuses")
     if not isinstance(evidence_statuses, list) or set(map(str, evidence_statuses)) != _REQUIRED_EVIDENCE:
-        raise ValueError("platform contracts.evidence.statuses must define the canonical evidence statuses")
+        raise ValueError(
+            "platform contracts.evidence.statuses must define the canonical evidence statuses",
+        )
     if str(evidence.get("insufficient_evidence_status", "")) != "UNKNOWN":
         raise ValueError("platform contracts.evidence.insufficient_evidence_status must be UNKNOWN")
     if str(evidence.get("conflicting_evidence_status", "")) != "CONFLICTED":
@@ -68,27 +72,37 @@ def _load_platform_contracts(path: Path = CONTRACTS_PATH) -> dict[str, Any]:
     completion = _require_mapping(raw.get("completion"), "platform contracts.completion")
     completion_statuses = completion.get("statuses")
     if not isinstance(completion_statuses, list) or set(map(str, completion_statuses)) != _REQUIRED_COMPLETION:
-        raise ValueError("platform contracts.completion.statuses must define the canonical completion statuses")
+        raise ValueError(
+            "platform contracts.completion.statuses must define the canonical completion statuses",
+        )
 
     required_fields = completion.get("required_fields")
     if not isinstance(required_fields, list) or set(map(str, required_fields)) != _REQUIRED_COMPLETION_FIELDS:
-        raise ValueError("platform contracts.completion.required_fields must define the canonical result envelope")
+        raise ValueError(
+            "platform contracts.completion.required_fields must define the canonical result envelope",
+        )
 
     gates = _require_mapping(raw.get("action_gates"), "platform contracts.action_gates")
     normalized_gates = {str(key): str(value) for key, value in gates.items()}
     if normalized_gates != _REQUIRED_GATES:
-        raise ValueError("platform contracts.action_gates must define the canonical authorization policy")
+        raise ValueError(
+            "platform contracts.action_gates must define the canonical authorization policy",
+        )
 
     skill_types = _require_mapping(raw.get("skill_types"), "platform contracts.skill_types")
     invalid_types = sorted({str(value) for value in skill_types.values()} - _ALLOWED_TYPES)
     if invalid_types:
-        raise ValueError(f"platform contracts.skill_types has invalid types: {', '.join(invalid_types)}")
+        raise ValueError(
+            f"platform contracts.skill_types has invalid types: {', '.join(invalid_types)}",
+        )
     return raw
 
 
 def build_manifest(root: Path = ROOT) -> dict[str, Any]:
     registry = parse_registry(root / "skills.yaml")
-    platform = _load_platform_contracts(root / "scripts" / "registry" / "platform_contracts.yaml")
+    platform = _load_platform_contracts(
+        root / "scripts" / "registry" / "platform_contracts.yaml",
+    )
     _artifact_types, _artifact_schemas, _authority_levels, composition = load_contracts(
         root / "scripts" / "registry" / "composition_contracts.yaml",
     )
@@ -103,7 +117,9 @@ def build_manifest(root: Path = ROOT) -> dict[str, Any]:
             details.append(f"missing types: {', '.join(missing)}")
         if extra:
             details.append(f"unknown types: {', '.join(extra)}")
-        raise ValueError("platform contracts.skill_types registry drift: " + "; ".join(details))
+        raise ValueError(
+            "platform contracts.skill_types registry drift: " + "; ".join(details),
+        )
 
     if set(composition) != registry_ids:
         missing = sorted(registry_ids - set(composition))
@@ -113,7 +129,9 @@ def build_manifest(root: Path = ROOT) -> dict[str, Any]:
             details.append(f"missing authority contracts: {', '.join(missing)}")
         if extra:
             details.append(f"unknown authority contracts: {', '.join(extra)}")
-        raise ValueError("composition contract registry drift: " + "; ".join(details))
+        raise ValueError(
+            "composition contract registry drift: " + "; ".join(details),
+        )
 
     skills: dict[str, Any] = {}
     for skill_id, entry in registry.skills.items():
@@ -128,7 +146,9 @@ def build_manifest(root: Path = ROOT) -> dict[str, Any]:
         skills[skill_id] = {
             "name": skill_id,
             "version": version,
-            "version_source": "skill_frontmatter" if raw_version not in (None, "") else "implicit_v1",
+            "version_source": (
+                "skill_frontmatter" if raw_version not in (None, "") else "implicit_v1"
+            ),
             "type": str(skill_types[skill_id]),
             "category": entry.category,
             "description": description.strip(),
@@ -138,11 +158,22 @@ def build_manifest(root: Path = ROOT) -> dict[str, Any]:
             "authority": authority,
             "capabilities": {
                 "required": list(entry.capabilities.required),
-                "optional": [item.name for item in entry.capabilities.optional],
+                "optional": [
+                    {"name": item.name, "enables": item.enables}
+                    for item in entry.capabilities.optional
+                ],
                 "any_of": [
-                    {"name": path.name, "required": list(path.required)}
+                    {
+                        "name": path.name,
+                        "required": list(path.required),
+                        "optional": [
+                            {"name": item.name, "enables": item.enables}
+                            for item in path.optional
+                        ],
+                    }
                     for path in entry.capabilities.any_of
                 ],
+                "degraded_modes": dict(entry.capabilities.degraded_modes),
             },
             "dependencies": list(entry.install.requires),
             "composition": {
