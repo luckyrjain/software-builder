@@ -10,18 +10,22 @@ import shlex
 import sys
 from typing import Literal
 
+INVALID_MARKER = object()
+
 HUNK_HEADER = re.compile(
     r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@"
 )
 
 
-def _marker_path(raw: str) -> str | None:
+def _marker_path(raw: str) -> str | None | object:
     """Parse a ---/+++ marker path, including quoted paths and /dev/null."""
     try:
         fields = shlex.split(raw[4:])
     except ValueError:
-        return None
-    if not fields or fields[0] == "/dev/null":
+        return INVALID_MARKER
+    if not fields:
+        return INVALID_MARKER
+    if fields[0] == "/dev/null":
         return None
     marker_path = fields[0]
     return marker_path[2:] if marker_path.startswith(("a/", "b/")) else marker_path
@@ -40,7 +44,42 @@ def _hunk_range(raw: str) -> tuple[int, int, int, int] | None:
     # zero (new/deleted files) or the insertion/deletion point used by git.
     if (old_count > 0 and old_start == 0) or (new_count > 0 and new_start == 0):
         return None
+    if old_count == 0 and new_count == 0:
+        return None
     return old_start, old_count, new_start, new_count
+
+
+def _git_binary_patch_complete(body: list[str], binary_index: int) -> bool:
+    """Validate canonical one-or-more git binary size/payload blocks."""
+    if not all(
+        re.fullmatch(r"index [0-9a-f]+\.\.[0-9a-f]+(?: [0-7]{6})?", raw)
+        is not None
+        for raw in body[:binary_index]
+    ):
+        return False
+    cursor = binary_index + 1
+    blocks = 0
+    while cursor < len(body):
+        if re.fullmatch(r"(?:literal|delta) \d+", body[cursor]) is None:
+            return False
+        cursor += 1
+        payload_lines = 0
+        while cursor < len(body) and body[cursor] != "":
+            if re.fullmatch(r"[A-Za-z][!-~]+", body[cursor]) is None:
+                return False
+            payload_lines += 1
+            cursor += 1
+        if payload_lines == 0:
+            return False
+        blocks += 1
+        if cursor == len(body):
+            break
+        cursor += 1  # exactly one blank separator or trailing terminator
+        if cursor == len(body):
+            break
+        if body[cursor] == "":
+            return False
+    return blocks > 0
 
 
 def _combined_sections_complete(lines: list[str]) -> bool:
@@ -69,6 +108,8 @@ def _combined_sections_complete(lines: list[str]) -> bool:
                 new_marker = _marker_path(body[marker_indexes[0] + 1])
                 old_diff = diff_paths[0][2:] if diff_paths[0].startswith("a/") else diff_paths[0]
                 new_diff = diff_paths[1][2:] if diff_paths[1].startswith("b/") else diff_paths[1]
+                if old_marker is INVALID_MARKER or new_marker is INVALID_MARKER:
+                    return False
                 if (old_marker is None or old_marker == old_diff) and (
                     new_marker is None or new_marker == new_diff
                 ):
@@ -78,31 +119,7 @@ def _combined_sections_complete(lines: list[str]) -> bool:
             continue
         if "GIT binary patch" in body:
             binary_index = body.index("GIT binary patch")
-            size_indexes = [
-                index
-                for index in range(binary_index + 1, len(body))
-                if re.fullmatch(r"(?:literal|delta) \d+", body[index]) is not None
-            ]
-            prefix_ok = all(
-                raw.startswith("index ") for raw in body[:binary_index]
-            )
-            blocks_ok = bool(size_indexes)
-            for block, size_index in enumerate(size_indexes):
-                block_end = (
-                    size_indexes[block + 1] if block + 1 < len(size_indexes) else len(body)
-                )
-                payload = body[size_index + 1 : block_end]
-                if not payload or not all(
-                    re.fullmatch(r"[A-Za-z][!-~]+", raw) is not None for raw in payload
-                ):
-                    blocks_ok = False
-            recognized = {binary_index, *size_indexes}
-            for block, size_index in enumerate(size_indexes):
-                block_end = (
-                    size_indexes[block + 1] if block + 1 < len(size_indexes) else len(body)
-                )
-                recognized.update(range(size_index + 1, block_end))
-            if prefix_ok and blocks_ok and recognized == set(range(binary_index, len(body))):
+            if _git_binary_patch_complete(body, binary_index):
                 continue
             return False
         has_mode_pair = (
@@ -110,27 +127,34 @@ def _combined_sections_complete(lines: list[str]) -> bool:
             and re.fullmatch(r"old mode [0-7]{6}", body[0]) is not None
             and re.fullmatch(r"new mode [0-7]{6}", body[1]) is not None
         )
+        similarity = r"similarity index (?:100|[0-9]{1,2})%"
         has_rename = (
-            any(raw.startswith(("similarity index ", "dissimilarity index ")) for raw in body)
-            and any(raw.startswith("rename from ") for raw in body)
-            and any(raw.startswith("rename to ") for raw in body)
+            len(body) == 3
+            and re.fullmatch(similarity, body[0]) is not None
+            and body[1].startswith("rename from ")
+            and len(body[1]) > len("rename from ")
+            and body[2].startswith("rename to ")
+            and len(body[2]) > len("rename to ")
         )
         has_copy = (
-            any(raw.startswith(("similarity index ", "dissimilarity index ")) for raw in body)
-            and any(raw.startswith("copy from ") for raw in body)
-            and any(raw.startswith("copy to ") for raw in body)
+            len(body) == 3
+            and re.fullmatch(similarity, body[0]) is not None
+            and body[1].startswith("copy from ")
+            and len(body[1]) > len("copy from ")
+            and body[2].startswith("copy to ")
+            and len(body[2]) > len("copy to ")
         )
         empty_blob = r"e69de29[0-9a-f]*"
         zero_blob = r"0+"
-        has_new_empty_file = any(raw.startswith("new file mode ") for raw in body) and any(
-            re.fullmatch(rf"index {zero_blob}\.\.{empty_blob}(?: \d+)?", raw) is not None
-            for raw in body
+        has_new_empty_file = (
+            len(body) == 2
+            and re.fullmatch(r"new file mode [0-7]{6}", body[0]) is not None
+            and re.fullmatch(rf"index {zero_blob}\.\.{empty_blob}", body[1]) is not None
         )
-        has_deleted_empty_file = any(
-            raw.startswith("deleted file mode ") for raw in body
-        ) and any(
-            re.fullmatch(rf"index {empty_blob}\.\.{zero_blob}(?: \d+)?", raw) is not None
-            for raw in body
+        has_deleted_empty_file = (
+            len(body) == 2
+            and re.fullmatch(r"deleted file mode [0-7]{6}", body[0]) is not None
+            and re.fullmatch(rf"index {empty_blob}\.\.{zero_blob}", body[1]) is not None
         )
         if has_mode_pair or has_rename or has_copy or has_new_empty_file or has_deleted_empty_file:
             continue
@@ -205,6 +229,7 @@ def validate_github_anchor(
     new_side_eof = False
     last_old_end: int | None = None
     last_new_end: int | None = None
+    hunk_has_change = False
 
     index = 0
     while index < len(lines):
@@ -213,6 +238,8 @@ def validate_github_anchor(
 
         if raw.startswith("diff --git "):
             if parser_state == "hunk" and not hunk_complete:
+                malformed_hunk = True
+            if parser_state == "hunk" and not hunk_has_change:
                 malformed_hunk = True
             parser_state = "file_header"
             current_path = None
@@ -224,6 +251,7 @@ def validate_github_anchor(
             new_side_eof = False
             last_old_end = None
             last_new_end = None
+            hunk_has_change = False
             wanted_in_file = False
             index += 1
             continue
@@ -240,9 +268,14 @@ def validate_github_anchor(
             # deletion/addition records for the preceding file.
             if parser_state == "hunk" and not hunk_complete:
                 malformed_hunk = True
+            if parser_state == "hunk" and not hunk_has_change:
+                malformed_hunk = True
             if parser_mode == "headerless":
                 ambiguous_headerless_input = True
             current_path = _marker_path(lines[index + 1])
+            if current_path is INVALID_MARKER or _marker_path(raw) is INVALID_MARKER:
+                malformed_hunk = True
+                current_path = None
             wanted_in_file = current_path == path
             parser_state = "file_body"
             new_line = None
@@ -253,11 +286,14 @@ def validate_github_anchor(
             new_side_eof = False
             last_old_end = None
             last_new_end = None
+            hunk_has_change = False
             index += 2
             continue
 
         if raw.startswith("@@"):
             if parser_state == "hunk" and not hunk_complete:
+                malformed_hunk = True
+            if parser_state == "hunk" and not hunk_has_change:
                 malformed_hunk = True
             hunk_range = _hunk_range(raw)
             if not hunk_range:
@@ -276,10 +312,16 @@ def validate_github_anchor(
                 or (last_new_end is not None and hunk_start < last_new_end)
             ):
                 malformed_hunk = True
+            if last_old_end is not None and last_new_end is not None:
+                old_gap = old_start - last_old_end
+                new_gap = hunk_start - last_new_end
+                if old_gap != new_gap:
+                    malformed_hunk = True
             last_old_end = old_start + old_remaining
             last_new_end = hunk_start + new_remaining
             new_line = hunk_start if wanted_in_file else None
             previous_hunk_record = None
+            hunk_has_change = False
             index += 1
             continue
 
@@ -326,6 +368,7 @@ def validate_github_anchor(
             else:
                 old_remaining -= 1
             previous_hunk_record = "removed"
+            hunk_has_change = True
             index += 1
             continue
         if raw.startswith("+"):
@@ -338,6 +381,7 @@ def validate_github_anchor(
                     new_line += 1
                 new_remaining -= 1
             previous_hunk_record = "added"
+            hunk_has_change = True
             index += 1
             continue
         if raw.startswith(" "):
@@ -356,6 +400,8 @@ def validate_github_anchor(
         index += 1
 
     if parser_state == "hunk" and (old_remaining != 0 or new_remaining != 0):
+        malformed_hunk = True
+    if parser_state == "hunk" and not hunk_has_change:
         malformed_hunk = True
 
     if found_anchor and not ambiguous_headerless_input and not malformed_hunk:
