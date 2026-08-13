@@ -198,7 +198,7 @@ def build_manifest(root: Path = ROOT) -> dict[str, Any]:
 def validate_manifest(root: Path = ROOT) -> list[str]:
     try:
         build_manifest(root)
-    except YAML_SAFETY_ERRORS as exc:
+    except (OSError, *YAML_SAFETY_ERRORS) as exc:
         return [f"error: platform manifest: {exc}"]
     return []
 
@@ -206,7 +206,7 @@ def validate_manifest(root: Path = ROOT) -> list[str]:
 def main() -> int:
     try:
         manifest = build_manifest(ROOT)
-    except YAML_SAFETY_ERRORS as exc:
+    except (OSError, *YAML_SAFETY_ERRORS) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
     json.dump(manifest, sys.stdout, indent=2, sort_keys=True)
