@@ -34,7 +34,7 @@ Routing table: [skill-routing.md](../docs/skill-framework/shared/skill-routing.m
 | Use | Not |
 |-----|-----|
 | GitLab push-event webhook fires on an open MR | Human typing `/pr-review` or "review this MR" → **pr-review** |
-| Unattended, no-follow-up-turn review on every commit | GitHub PR, local diff → pr-review's own routing (`/review-bugbot`) |
+| Unattended, no-follow-up-turn review on every GitLab MR commit | GitHub PR webhooks are not supported by this GitLab-only gatekeeper |
 | — | Auto-fixing findings (loop-task-implementer hand-off) → not built yet, roadmap item follow-up |
 
 ## Deliverable

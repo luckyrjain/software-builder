@@ -1,24 +1,26 @@
 # Review modes (lifecycle-aware)
 
-**Normative.** Load in Phase 1 when MR state is known; apply through Phase 5 executive summary.
+**Normative.** Load in Phase 1 when PR/MR state is known; apply through Phase 5 executive summary.
 Three modes — different recommendation strategy, same finding pipeline.
 
 | Mode | Trigger | `review_metadata.review_mode` |
 |------|---------|-------------------------------|
-| **Pre-merge** | Open MR (`state: opened`) | `pre_merge` |
-| **Incremental** | Open MR + prior bot review on same MR | `incremental` |
-| **Post-merge (retrospective)** | `state: merged` + user confirms audit | `retrospective` |
+| **Pre-merge** | Open PR/MR (GitHub `state: open`; GitLab `state: opened`; normalized lifecycle `open`) | `pre_merge` |
+| **Incremental** | Open PR/MR + prior bot review on the same target | `incremental` |
+| **Post-merge (retrospective)** | Merged PR/MR + user confirms audit | `retrospective` |
 
 Also set `audit_type: retrospective` when `review_mode: retrospective` (dashboard alias).
 
-## Phase 1 — merged MR gate
+## Phase 1 — merged or closed review-target gate
 
-When `get_merge_request` returns `state: merged` or `closed`:
+When normalized `review_target.lifecycle_state` is `merged` or `closed`, branch all user-facing
+vocabulary on `review_target.provider`. Normalize GitHub `merged: true` as `merged` even though its raw
+state is normally `closed`; raw GitHub `closed` with `merged: false` remains closed:
 
 | User intent | Action |
 |-------------|--------|
-| No explicit audit request | Warn and **stop** — *"MR already merged. Pass an open MR, or confirm post-merge audit."* |
-| User says *post-merge audit*, *review merged MR*, *retrospective*, or confirms after prompt | Set `review_mode: retrospective`, `audit_type: retrospective`, continue full diff review |
+| No explicit audit request | GitHub: *"PR already merged or closed. Pass an open PR, or confirm post-merge audit."* GitLab: *"MR already merged or closed. Pass an open MR, or confirm post-merge audit."* Warn and **stop**. |
+| User says *post-merge audit*, *review merged PR/MR*, *retrospective*, or confirms after prompt | Set `review_mode: retrospective`, `audit_type: retrospective`, continue full diff review |
 
 Record `review_mode: retrospective`, `audit_type: retrospective`, and:
 
@@ -31,7 +33,9 @@ review_context:
 
 through Phase 5. Do not use `merge_blocking: true` on retrospective audits.
 
-Also record: `merge_before_review: true`, `mr_state: merged`, `merged_at` when available.
+Also record `merge_before_review: true` and `merged_at` when available. GitHub uses PR state in the
+provider payload; GitLab uses MR state. Normalize either into `review_target.state` for shared logic;
+do not expose an `mr_state` label for a GitHub target.
 
 ## Pre-merge mode
 
@@ -80,7 +84,7 @@ review_context:
 
 Prose after Decision gates:
 
-> **Post-merge audit** — no action required unless a follow-up MR is planned.
+> **Post-merge audit** — no action required unless a follow-up PR/MR is planned.
 
 Do **not** label retrospective audits as generic 💬 Comment — use **Retrospective observation** in the
 Decision gates **Recommendation** row and narrative.
@@ -90,7 +94,7 @@ Decision gates **Recommendation** row and narrative.
 | Rule | Behavior |
 |------|----------|
 | Inflate High? | **No** — reserve High/Critical for genuine incident / rollback material |
-| Process findings | Medium/Low — merge-before-CI, missing Jira, MR template gaps |
+| Process findings | Medium/Low — merge-before-CI, missing Jira, review-target template gaps |
 | Code quality | Medium/Low when implementation appears correct but tests/docs/process gap |
 | Code blockers table | May show *Code blockers: None* with process-only findings elsewhere |
 
@@ -209,7 +213,8 @@ recommendation: retrospective_observation
 
 ## Posting (Phase 3–4)
 
-Retrospective audits may post summary notes; inline threads optional. Warn: *"MR is merged — comments
-are for follow-up tracking, not merge gate."*
+Retrospective audits may post summary comments; inline threads are optional. Providerize the warning:
+GitHub uses *"PR is merged — comments are for follow-up tracking, not a merge gate."*; GitLab uses
+*"MR is merged — comments are for follow-up tracking, not a merge gate."*
 
 Cross-ref: `reference/executive-summary.md`, `reference/review-metrics.md`, `reference/incremental-rerun.md`.

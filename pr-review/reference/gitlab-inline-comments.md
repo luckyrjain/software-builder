@@ -3,6 +3,14 @@
 Load this file only when posting inline comments (`create_merge_request_thread` or equivalent) in
 **full** posting mode.
 
+Immediately before every thread call, rebuild and sanitize/redact its body at the provider write
+boundary in `workflow/posting.md`. Apply the same final boundary independently to every GitLab summary
+note; a body being safe in chat or in a prior render does not make later embedding safe.
+As the last GitLab-specific pass, encode the leading slash of an untrusted newline-leading `/approve`,
+`/merge`, `/close`, `/ready`, or `/run_pipeline` control line as `&#47;`. Apply the same pass when the
+finding moves to a summary/general note, fallback, or any newly built body; preserve authored template
+structure.
+
 ## Position object
 
 Build from `diff_refs` captured in Phase 1:
@@ -192,12 +200,23 @@ The agent reads whichever override applies in Phase 4 instead of the default **1
 
 ## SHA staleness
 
-**Always** re-fetch `get_merge_request` immediately before Phase 4 (before the first inline thread
-or summary note). Compare `diff_refs.head_sha` to the SHA captured in Phase 1 step 1 (when gathering
-began). If the author pushed during review:
+**Always** re-fetch `get_merge_request` immediately before every provider write: each inline thread,
+summary/general note, draft, and deterministic fallback. Compare `diff_refs.head_sha` to the SHA
+captured in Phase 1 step 1 (when gathering began). If the author pushed during review:
 
-1. Rebuild inline positions from the fresh `diff_refs` and updated diff, or
-2. Fall back to summary-only posting with `file:line` references.
+1. Return `REVISION_MISMATCH` immediately.
+2. Stop the current and all remaining provider writes in `full`, `summary-only`, `general-only`, and
+   draft modes; report which earlier writes were confirmed posted and which were skipped.
+3. Restart from Phase 1 against the new head before offering posting again.
 
-Never post inline threads anchored to a stale `head_sha` — GitLab will reject them or attach to the
-wrong revision.
+Never rebuild positions, degrade to a summary, or continue any partial batch after this mismatch. The
+provider invariant wins over posting convenience: no comment body prepared for the stale review may be
+posted against the new revision.
+
+## Ambiguous write response
+
+GitLab profiles do not guarantee complete paginated discussion/note readback. If a thread or note POST
+returns `timeout` or `server_error`, it may have been accepted: do not read back or retry, do not post a
+fallback or summary, and stop all remaining provider writes. Report `WRITE_DELIVERY_UNCERTAIN`, the
+possibly accepted body identity, confirmed earlier posts, and skipped writes. This conservative path
+prevents a duplicate even when delivery cannot be proven.

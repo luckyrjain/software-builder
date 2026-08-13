@@ -20,7 +20,7 @@ SKILLS_PATH = ROOT / "skills.yaml"
 # skills.yaml's own convention: sequence dashes sit at the same indent as their
 # parent key (37 of 41 existing required/optional blocks use this; the minority
 # get normalized to it on first write — see backfill_skills_yaml_text).
-_STRAY_CAPABILITY_KEYS = ("required", "optional", "degraded_modes")
+_STRAY_CAPABILITY_KEYS = ("required", "optional", "any_of", "degraded_modes")
 
 
 def _make_yaml() -> YAML:
@@ -53,9 +53,63 @@ def _capabilities_valid(entry: dict[str, Any]) -> bool:
         return False
     required = caps.get("required")
     optional = caps.get("optional")
-    if not isinstance(required, list) or not isinstance(optional, list):
+    any_of = caps.get("any_of", [])
+    if not (
+        isinstance(required, list)
+        and isinstance(optional, list)
+        and isinstance(any_of, list)
+    ):
         return False
     return isinstance(caps.get("degraded_modes", {}), dict)
+
+
+def _required_equal(current: Any, catalog_value: Any) -> bool:
+    if not (
+        isinstance(current, list)
+        and isinstance(catalog_value, list)
+        and all(isinstance(item, str) for item in current)
+        and all(isinstance(item, str) for item in catalog_value)
+    ):
+        return False
+    return len(current) == len(set(current)) and set(current) == set(catalog_value)
+
+
+def _optional_equal(current: Any, catalog_value: Any) -> bool:
+    if not (isinstance(current, list) and isinstance(catalog_value, list)):
+        return False
+    if not all(
+        isinstance(item, dict) and isinstance(item.get("name"), str)
+        for item in (*current, *catalog_value)
+    ):
+        return False
+    current_by_name = {item["name"]: item for item in current}
+    catalog_by_name = {item["name"]: item for item in catalog_value}
+    return (
+        len(current_by_name) == len(current)
+        and len(catalog_by_name) == len(catalog_value)
+        and current_by_name == catalog_by_name
+    )
+
+
+def _capability_path_equal(current: Any, catalog_value: Any) -> bool:
+    """Compare the schema-supported fields of one any_of capability path."""
+    if not (isinstance(current, dict) and isinstance(catalog_value, dict)):
+        return False
+    supported_keys = {"name", "required", "optional"}
+    if not set(current).issubset(supported_keys) or not set(catalog_value).issubset(supported_keys):
+        return False
+    if not (
+        isinstance(current.get("name"), str)
+        and current.get("name") == catalog_value.get("name")
+    ):
+        return False
+    return _required_equal(
+        current.get("required", []),
+        catalog_value.get("required", []),
+    ) and _optional_equal(
+        current.get("optional", []),
+        catalog_value.get("optional", []),
+    )
 
 
 def _capabilities_equal(current: Any, catalog_value: dict[str, Any]) -> bool:
@@ -65,34 +119,31 @@ def _capabilities_equal(current: Any, catalog_value: dict[str, Any]) -> bool:
     if not isinstance(current, dict):
         return False
 
-    current_required = current.get("required")
-    catalog_required = catalog_value.get("required")
-    if not (
-        isinstance(current_required, list)
-        and isinstance(catalog_required, list)
-        and all(isinstance(item, str) for item in current_required)
-        and all(isinstance(item, str) for item in catalog_required)
-    ):
-        return False
-    if len(current_required) != len(set(current_required)):
-        return False
-    if set(current_required) != set(catalog_required):
+    if not _required_equal(current.get("required"), catalog_value.get("required")):
         return False
 
-    current_optional = current.get("optional")
-    catalog_optional = catalog_value.get("optional")
-    if not (isinstance(current_optional, list) and isinstance(catalog_optional, list)):
+    if not _optional_equal(current.get("optional"), catalog_value.get("optional")):
+        return False
+
+    current_any_of = current.get("any_of", [])
+    catalog_any_of = catalog_value.get("any_of", [])
+    if not (isinstance(current_any_of, list) and isinstance(catalog_any_of, list)):
         return False
     if not all(
         isinstance(item, dict) and isinstance(item.get("name"), str)
-        for item in (*current_optional, *catalog_optional)
+        for item in (*current_any_of, *catalog_any_of)
     ):
         return False
-    current_by_name = {item["name"]: item for item in current_optional}
-    catalog_by_name = {item["name"]: item for item in catalog_optional}
-    if len(current_by_name) != len(current_optional) or len(catalog_by_name) != len(catalog_optional):
+    current_paths = {item["name"]: item for item in current_any_of}
+    catalog_paths = {item["name"]: item for item in catalog_any_of}
+    if len(current_paths) != len(current_any_of) or len(catalog_paths) != len(catalog_any_of):
         return False
-    if current_by_name != catalog_by_name:
+    if current_paths.keys() != catalog_paths.keys():
+        return False
+    if any(
+        not _capability_path_equal(current_paths[name], catalog_paths[name])
+        for name in current_paths
+    ):
         return False
 
     return (current.get("degraded_modes") or {}) == (catalog_value.get("degraded_modes") or {})
@@ -213,10 +264,13 @@ def validate_capabilities_present(skills_path: Path = SKILLS_PATH) -> list[str]:
             continue
         required = capabilities.get("required", [])
         optional = capabilities.get("optional", [])
+        any_of = capabilities.get("any_of", [])
         if not isinstance(required, list):
             errors.append(f"error: {skill_id}: capabilities.required must be a list")
         if not isinstance(optional, list):
             errors.append(f"error: {skill_id}: capabilities.optional must be a list")
+        if not isinstance(any_of, list):
+            errors.append(f"error: {skill_id}: capabilities.any_of must be a list")
         degraded_modes = capabilities.get("degraded_modes", {})
         if not isinstance(degraded_modes, dict):
             errors.append(f"error: {skill_id}: capabilities.degraded_modes must be a mapping")

@@ -29,7 +29,22 @@ def render_compatibility_matrix(root: Path) -> str:
         cap = capabilities.get(skill_id, {})
         contract = contracts.get(skill_id)
         required_list = cap.get("required", []) if isinstance(cap, dict) else []
-        required = ", ".join(required_list) if required_list else "—"
+        any_of = cap.get("any_of", []) if isinstance(cap, dict) else []
+        global_required = ", ".join(str(item) for item in required_list)
+        required_alternatives: list[str] = []
+        for path in any_of if isinstance(any_of, list) else []:
+            if isinstance(path, dict):
+                name = str(path.get("name", "path"))
+                path_required = path.get("required", [])
+                if isinstance(path_required, list):
+                    required_alternatives.append(
+                        f"{name}: {' + '.join(str(item) for item in path_required)}",
+                    )
+        alternative_required = " OR ".join(required_alternatives)
+        if global_required and alternative_required:
+            required = f"{global_required} AND ({alternative_required})"
+        else:
+            required = global_required or alternative_required or "—"
         write_authority = contract.write_authority if contract else "—"
         lines.append(
             f"| `{skill_id}` | {entry.invocation} | {entry.hosts.cursor.discovery} | "

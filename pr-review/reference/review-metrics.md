@@ -123,7 +123,7 @@ review_metadata:
     resolved: N
     remaining: N
     new: N
-  engineering_improvements: N      # repo maturity items — not MR defects
+  engineering_improvements: N      # repo maturity items — not <review_target_noun> defects
   recommendation: approve | comment | request_changes | retrospective_observation
   confidence: high | medium | low   # overall review confidence
   merge_before_review: false

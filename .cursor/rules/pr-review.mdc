@@ -1,5 +1,5 @@
 ---
-description: GitLab MR review by URL, !IID, or current branch. Phased workflow: context → findings pipeline → executive summary → optional post. Keywords: /pr-review, review MR/merge request, re-review, post-merge audit, list open MRs, review and post. Not for GitHub PRs, local-only diffs, RCA, or K8s rightsizing. Full phrase table: examples.md.
+description: GitHub pull-request and GitLab merge-request review by URL, number, or current branch. Phased workflow: context → findings pipeline → executive summary → optional comment post. Keywords: /pr-review, review PR/MR/pull request/merge request, re-review, post-merge audit, list open reviews, review and post. Supports GitHub.com, GitHub Enterprise Server, GitLab.com, and self-hosted GitLab. Not for local-only diffs, RCA, or K8s rightsizing. Full phrase table: examples.md.
 alwaysApply: false
 ---
 

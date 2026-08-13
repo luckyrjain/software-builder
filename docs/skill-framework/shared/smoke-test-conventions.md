@@ -62,7 +62,7 @@ Maintainer pressure scenarios: [pressure-tests.md](pressure-tests.md).
 
 | Skill | Invocation string | Expected first output |
 |-------|-------------------|------------------------|
-| pr-review | `/pr-review` on open MR <10 files in test project | Phase 0: posting mode (`full`/`summary-only`/…) + GitLab server name |
+| pr-review | `/pr-review` on open PR/MR <10 files in test project | Phase 0: posting mode (`full`/`summary-only`/…) + provider and host |
 | pr-gatekeeper | Webhook: `project`, `merge_request_iid`, `head_sha`, `auto_post_authorized: true` | pr-review's own Phase 0 posting-mode announcement — no pr-gatekeeper-specific preamble |
 | incident-rca | `RCA for <service> between <from> and <to> UTC — <symptom>` | MCP profile: `Datadog ✅ \| KubeSense … \| GitLab …` |
 | incident-triage-agent | Webhook: `event_type: page_triggered`, `service`, `triggered_at`, `alert_title`, `severity` | 30-minute window announced, UTC-suffixed, symmetric around `triggered_at` |

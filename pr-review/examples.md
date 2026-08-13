@@ -9,23 +9,25 @@ Slash command and natural language are equivalent — the agent loads this skill
 ### Skill routing keywords
 
 Used by skill discovery when the YAML `description` is truncated. Match when the user clearly targets a
-**GitLab merge request** (they often say "PR"):
+**GitHub pull request or GitLab merge request**:
 
 | Category | Phrases |
 |----------|---------|
-| **Core** | `/pr-review`, review this pr, review this MR, review merge request, review MR N, review !IID |
+| **Core** | `/pr-review`, review this PR/MR, review pull request/merge request, review PR #N, review MR !IID |
 | **Lifecycle** | re-review, check if blocking issues are fixed, post-merge audit, review merged MR, retrospective |
-| **Discovery** | list open MRs, what MRs are open, check MR before merge |
+| **Discovery** | list open PRs/MRs, what reviews are open, check review before merge |
 | **Posting** | review and post |
 | **Persona / focus** | review as SRE, security persona, architecture focus, architecture lens, review persona |
-| **Keywords** | merge request, MR, !IID, GitLab |
+| **Keywords** | pull request, PR, #number, merge request, MR, !IID, GitHub, GitLab |
 
-**Do not route here:** GitHub pull request, local uncommitted diff only, post-incident RCA, K8s
+**Do not route here:** local uncommitted diff only, post-incident RCA, K8s
 rightsizing — see [SKILL.md §When NOT to use](SKILL.md#when-not-to-use).
 
 | User says | Resolved target |
 |-----------|-----------------|
 | `review this pr https://gitlab.com/acme/backend/-/merge_requests/482` | `acme/backend` !482 |
+| `review this PR https://github.com/acme/backend/pull/482` | `acme/backend` #482 |
+| `review this PR https://github.acme.internal/acme/backend/pull/482` | `acme/backend` #482 on GHES |
 | `review this MR !482` | `acme/backend` !482 (from `origin`) |
 | `can you review my merge request?` (on `feat/PAY-1421-refund-webhook`) | Look up MRs → pick MR for that branch |
 | `re-review !482` / `check if blocking issues are fixed on !482` | Incremental re-review on `!482` |
@@ -365,7 +367,7 @@ After Phase 2, print **Review findings** sorted by **rank score (L × I)** desce
 | PRR-DATA-001 | 6 | 🟠 High | H | M | High | `payments/refund.py:88` | `payments/refund.py:88` | Refund amount uses `float` instead of `Decimal` |
 | PRR-API-001 | 3 | 🟡 Medium | L | H | Medium | `payments/config.py:12` | `payments/config.py:12` | Rare admin path missing validation — low traffic |
 
-### Engineering improvements *(not MR defects)*
+### Engineering improvements *(not <review_target_noun> defects)*
 - Add `.gitlab-ci.yml` — CI not configured in repo (non-blocking).
 
 Repository maturity (informational)

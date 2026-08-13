@@ -10,6 +10,11 @@ exact names.
 
 ## GitLab servers
 
+Every selected server must expose the **complete read pair**: MR metadata/current head and MR
+diff/changed files. Metadata-only and diff-only servers are unavailable and must stop, regardless of
+write tools; writes never compensate for a missing read. A complete read pair with no writes is
+read-only `chat-only`; a complete read pair plus writes may select a posting mode below.
+
 | Capability | `@zereight/mcp-gitlab` | GitLab Duo / Cursor plugin |
 |------------|------------------------|----------------------------|
 | Get MR metadata | `get_merge_request` | `get_merge_request` |
@@ -102,4 +107,38 @@ halt or roll back a completed GitLab review (see `workflow/phase-5.md`).
 
 ## GitHub
 
-This skill is **GitLab MR-specific** and does not support GitHub pull requests.
+GitHub.com and GitHub Enterprise Server are supported through the target host resolved in Inputs. Match
+semantic capability, not connector name.
+
+Require a complete read pair of PR metadata/current head plus PR files/diff before classifying posting.
+Metadata-only and diff-only connectors are unavailable; writes never compensate for a missing read.
+Complete read-only access selects `chat-only`. Every posting-enabled profile also requires both
+paginated complete review-comment readback and paginated complete issue-comment readback. A
+`metadata+files+writes` connector without either complete readback remains `chat-only`.
+
+| Profile | Read path | Write path | Posting mode |
+|---|---|---|---|
+| full | PR metadata, files/diff, paginated complete review-comment and issue-comment readback, checks | inline comment + issue comment | `full` |
+| summary-only | PR metadata, files/diff, paginated complete review-comment and issue-comment readback | issue comment | `summary-only` |
+| CLI read-only | authenticated `gh pr view` + `gh pr diff` on target host | none | `chat-only` |
+| unavailable | no MCP/App and no authenticated `gh` on target host | none | stop |
+
+Use a connected GitHub App/MCP first. `gh pr view`, `gh pr diff`, `gh pr list`, and `gh pr checks` do
+**not** accept `--hostname`; bind their exact host with repository syntax instead:
+
+```bash
+gh pr view <number> --repo <host>/<owner>/<repo> --json headRefOid,isDraft,url
+gh pr diff <number> --repo <host>/<owner>/<repo>
+```
+
+Command-scoped `GH_HOST=<host>` with `--repo <owner>/<repo>` is also valid. Keep `--hostname` only for
+commands that support it (for example `gh auth status --hostname <host>` and `gh api --hostname <host>`).
+Never send a GHES request to GitHub.com.
+
+## GitLab write recovery limitation
+
+The enabled GitLab write profiles do not claim complete paginated note/discussion readback. Therefore
+an ambiguous GitLab write response never enters the GitHub reconciliation flow: do not read back or
+retry, report delivery uncertain, identify confirmed earlier posts and the possibly accepted body, and
+stop all remaining provider writes. Deterministic rejections may follow the documented fallback only
+after the next per-write revision check passes.

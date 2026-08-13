@@ -8,9 +8,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 
 # pr-review's registry entry (skills.yaml) is the fixture every test below uses:
-# 2 required capabilities, 2 optional (each with a degraded_modes entry), no
-# composition.invokes. Asserting against it directly means status.status can be
-# pinned exactly instead of read off rendered text.
+# provider-specific GitLab and GitHub capability paths, each with optional write
+# capabilities and degraded-mode hints. Asserting against it directly keeps the
+# status tests aligned with the real provider-routing contract.
 
 
 def _pr_review_entry():
@@ -325,3 +325,133 @@ def test_cmd_doctor_exits_nonzero_on_version_mismatch(tmp_path: Path, capsys) ->
     assert code == 1
     output = capsys.readouterr().out
     assert "pr-review: VERSION_MISMATCH" in output
+
+
+def test_render_skill_status_lists_and_selects_provider_paths() -> None:
+    from scripts.doctor import _skill_status, render_skill_status
+
+    status = _skill_status(
+        "pr-review",
+        _pr_review_entry(),
+        available={"github.get_pull_request", "github.get_pull_request_files"},
+        install_roots=[Path("/nonexistent")],
+        distribution_version="1.0.0",
+    )
+
+    text = render_skill_status(status)
+
+    assert "GitLab read" in text
+    assert "GitHub read" in text
+    assert "selected capability path: GitHub read" in text
+
+
+def test_doctor_blocks_when_no_provider_read_path_is_available(capsys) -> None:
+    from scripts.doctor import cmd_doctor
+
+    code = cmd_doctor(
+        ROOT,
+        skill_filter="pr-review",
+        available=set(),
+        install_roots=[Path("/nonexistent")],
+    )
+
+    assert code == 1
+    output = capsys.readouterr().out
+    assert "pr-review: BLOCKED" in output
+    assert "GitLab read" in output
+    assert "GitHub read" in output
+
+
+def test_doctor_blocks_write_only_provider_capabilities(capsys) -> None:
+    from scripts.doctor import cmd_doctor
+
+    code = cmd_doctor(
+        ROOT,
+        skill_filter="pr-review",
+        available={
+            "gitlab.create_merge_request_thread",
+            "gitlab.create_note",
+            "github.create_pull_request_comment",
+            "github.create_issue_comment",
+        },
+        install_roots=[Path("/nonexistent")],
+    )
+
+    assert code == 1
+    assert "pr-review: BLOCKED" in capsys.readouterr().out
+
+
+def test_doctor_blocks_incomplete_github_read_path(capsys) -> None:
+    from scripts.doctor import cmd_doctor
+
+    code = cmd_doctor(
+        ROOT,
+        skill_filter="pr-review",
+        available={"github.get_pull_request"},
+        install_roots=[Path("/nonexistent")],
+    )
+
+    assert code == 1
+    output = capsys.readouterr().out
+    assert "pr-review: BLOCKED" in output
+    assert "github.get_pull_request_files" in output
+
+
+def test_doctor_supports_github_read_path_without_posting(capsys) -> None:
+    from scripts.doctor import cmd_doctor
+
+    code = cmd_doctor(
+        ROOT,
+        skill_filter="pr-review",
+        available={"github.get_pull_request", "github.get_pull_request_files"},
+        install_roots=[Path("/nonexistent")],
+    )
+
+    assert code == 0
+    output = capsys.readouterr().out
+    assert "pr-review: DEGRADED" in output
+    assert "github.create_pull_request_comment" in output
+
+
+def test_doctor_degrades_github_writes_without_paginated_readback(capsys) -> None:
+    from scripts.doctor import cmd_doctor
+
+    code = cmd_doctor(
+        ROOT,
+        skill_filter="pr-review",
+        available={
+            "github.get_pull_request",
+            "github.get_pull_request_files",
+            "github.create_pull_request_comment",
+            "github.create_issue_comment",
+        },
+        install_roots=[Path("/nonexistent")],
+    )
+
+    assert code == 0
+    output = capsys.readouterr().out
+    assert "pr-review: DEGRADED" in output
+    assert "github.list_pull_request_review_comments" in output
+    assert "github.list_issue_comments" in output
+    assert "chat-only posting" in output
+
+
+def test_doctor_ready_for_github_writes_with_paginated_readback(capsys) -> None:
+    from scripts.doctor import cmd_doctor
+
+    code = cmd_doctor(
+        ROOT,
+        skill_filter="pr-review",
+        available={
+            "github.get_pull_request",
+            "github.get_pull_request_files",
+            "github.list_pull_request_review_comments",
+            "github.list_issue_comments",
+            "github.create_pull_request_comment",
+            "github.create_issue_comment",
+        },
+        install_roots=[Path("/nonexistent")],
+    )
+
+    assert code == 0
+    assert "pr-review: READY" in capsys.readouterr().out

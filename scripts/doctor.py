@@ -14,7 +14,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from scripts.reference_utils import MANIFEST_NAME
-from scripts.registry.models import SkillEntry
+from scripts.registry.models import CapabilityPath, SkillEntry
 from scripts.registry.schema import parse_registry
 from scripts.release_info import read_distribution_version
 
@@ -33,19 +33,39 @@ def _installed_manifest(skill_dest: Path) -> dict[str, object] | None:
 def _capability_status(
     entry_required: list[str],
     entry_optional: list[str],
+    entry_any_of: list[CapabilityPath],
     available: set[str] | None,
-) -> tuple[list[str], list[str], str]:
+) -> tuple[list[str], list[str], str, CapabilityPath | None]:
     if available is None:
-        return [], [], "UNSPECIFIED"
+        return [], [], "UNSPECIFIED", None
     missing_required = [cap for cap in entry_required if cap not in available]
-    missing_optional = [cap for cap in entry_optional if cap not in available]
     if missing_required:
-        return missing_required, missing_optional, "BLOCKED"
+        return missing_required, [], "BLOCKED", None
+
+    active_path: CapabilityPath | None = None
+    if entry_any_of:
+        complete_paths = [
+            path for path in entry_any_of if all(cap in available for cap in path.required)
+        ]
+        if not complete_paths:
+            closest_path = min(
+                entry_any_of,
+                key=lambda path: sum(cap not in available for cap in path.required),
+            )
+            missing_required = [cap for cap in closest_path.required if cap not in available]
+            return missing_required, [], "BLOCKED", None
+        active_path = min(
+            complete_paths,
+            key=lambda path: sum(item.name not in available for item in path.optional),
+        )
+
+    active_optional = list(entry_optional)
+    if active_path is not None:
+        active_optional.extend(item.name for item in active_path.optional)
+    missing_optional = [cap for cap in active_optional if cap not in available]
     if missing_optional:
-        return missing_required, missing_optional, "DEGRADED"
-    if entry_required or entry_optional:
-        return missing_required, missing_optional, "READY"
-    return missing_required, missing_optional, "READY"
+        return missing_required, missing_optional, "DEGRADED", active_path
+    return missing_required, missing_optional, "READY", active_path
 
 
 @dataclass(frozen=True)
@@ -58,6 +78,8 @@ class SkillStatus:
     missing_required: list[str] = field(default_factory=list)
     missing_optional: list[str] = field(default_factory=list)
     installed_label: str = "not installed"
+    active_path: CapabilityPath | None = None
+    available: frozenset[str] | None = None
 
 
 def _skill_status(
@@ -69,9 +91,10 @@ def _skill_status(
     distribution_version: str,
 ) -> SkillStatus:
     optional_names = [item.name for item in entry.capabilities.optional]
-    missing_required, missing_optional, status = _capability_status(
+    missing_required, missing_optional, status, active_path = _capability_status(
         entry.capabilities.required,
         optional_names,
+        entry.capabilities.any_of,
         available,
     )
 
@@ -97,6 +120,8 @@ def _skill_status(
         missing_required=missing_required,
         missing_optional=missing_optional,
         installed_label=installed_label,
+        active_path=active_path,
+        available=frozenset(available) if available is not None else None,
     )
 
 
@@ -109,10 +134,25 @@ def render_skill_status(status: SkillStatus) -> str:
         lines.append(f"  invokes: {', '.join(entry.composition.invokes)}")
     if entry.capabilities.required:
         lines.append(f"  required capabilities: {', '.join(entry.capabilities.required)}")
-    if entry.capabilities.optional:
+    if entry.capabilities.any_of:
+        lines.append("  any-of capability paths:")
+        for path in entry.capabilities.any_of:
+            if status.available is None:
+                path_status = "not evaluated"
+            else:
+                path_missing = [cap for cap in path.required if cap not in status.available]
+                path_status = (
+                    "ready" if not path_missing else f"missing {', '.join(path_missing)}"
+                )
+            lines.append(f"    {path.name}: {', '.join(path.required)} ({path_status})")
+    active_optional = list(entry.capabilities.optional)
+    if status.active_path is not None:
+        lines.append(f"  selected capability path: {status.active_path.name}")
+        active_optional.extend(status.active_path.optional)
+    if active_optional:
         labels = [
             f"{item.name} ({item.enables})" if item.enables else item.name
-            for item in entry.capabilities.optional
+            for item in active_optional
         ]
         lines.append(f"  optional capabilities: {', '.join(labels)}")
     if status.missing_required:
@@ -128,7 +168,11 @@ def render_skill_status(status: SkillStatus) -> str:
             if degraded:
                 lines.append(f"    {cap} -> {degraded}")
     lines.append(f"  install: {status.installed_label}")
-    if status.status == "UNSPECIFIED" and (entry.capabilities.required or entry.capabilities.optional):
+    if status.status == "UNSPECIFIED" and (
+        entry.capabilities.required
+        or entry.capabilities.optional
+        or entry.capabilities.any_of
+    ):
         lines.append("  capability check: pass --available to evaluate host capabilities")
     return "\n".join(lines)
 

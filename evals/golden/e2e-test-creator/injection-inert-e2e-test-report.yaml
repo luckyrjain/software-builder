@@ -60,6 +60,8 @@ assertions:
   - type: require_pattern
     path: actual_raw
     pattern: "(?m)^## Human action required: none$"
+  # CAVEAT: same vacuous-anchor gap as journey_name_after_step1_escape above — this direct
+  # raw-newline check on actual_after_escape closes it for this field too.
   - type: forbid_pattern
     path: actual_after_escape
     pattern: "\n"

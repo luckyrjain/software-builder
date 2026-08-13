@@ -6,7 +6,7 @@ only through `finding-pipeline.md`. Re-review skips Inputs and Phase 0 unless **
 
 | Step | Read now | Produces |
 |------|----------|----------|
-| **Inputs** | `workflow/inputs.md` | `{ project_id, merge_request_iid }` |
+| **Inputs** | `workflow/inputs.md` | `{ review_target, project_id?, merge_request_iid? }` |
 | **Phase 0** | `workflow/phase-0.md` | `posting_mode`, `jira_write_available` |
 | **Phase 1** | `workflow/phase-1.md` | review boundary, `capability_profile`, baseline, CI, Jira AC |
 | **Phase 2** | `workflow/phase-2.md` | findings, `review_metrics`, root-cause groups |
@@ -28,10 +28,10 @@ Reference loads: [lazy-load-index.md](lazy-load-index.md). Report layout: [repor
 | Re-review | 1 → 2 → **2→3 gate** → 3–4 → 5 *(Inputs + Phase 0 if MCP reconnected or target branch/MR changed)* |
 | Partial review (stop mid Phase 2) | 1 → 2 *(partial)* → 5 — skip 3–4 unless user asks to post |
 | Phase 3 cancel before Phase 4 | … → 3 confirm → user cancel → 5 chat-only |
-| List MRs only | Inputs → stop |
-| Draft MR | Full path; draft gate in `workflow/posting.md` |
+| List PRs/MRs only | Inputs → stop |
+| Draft PR/MR | Full path; draft gate in `workflow/posting.md` |
 | Persona review (SRE, Security, …) | Same path; persona in Phase 2 |
 | Post-merge audit | User confirms on `state: merged` → `review_mode: retrospective` — full path; see [review-modes.md](review-modes.md) |
 
-Tool routing: GitLab MR → `/pr-review`; local diff → `/review-bugbot`; security local → `/review-security`;
-GitHub PR → `/review-bugbot` / `gh pr view`. See [SETUP.md](../SETUP.md).
+Tool routing: GitHub PR or GitLab MR → `/pr-review`; local diff → `/review-bugbot`; security local →
+`/review-security`. See [SETUP.md](../SETUP.md).

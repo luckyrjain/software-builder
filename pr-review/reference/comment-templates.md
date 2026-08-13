@@ -1,14 +1,23 @@
-# Comment Templates
+# Provider comment templates
 
-Use these so every review looks consistent and every comment is actionable. All bodies are GitLab
-Flavored Markdown.
+Use these so every review looks consistent and every comment is actionable. Bodies use the selected
+provider's GitLab Flavored Markdown or GitHub Flavored Markdown. Immediately before each provider write, interpolate only
+sanitized/redacted values under `workflow/posting.md`'s safe rendered-output boundary; template headings,
+tables, markers, and the Recommendation verdict remain skill-authored.
+
+Resolve `<review_target_label>` once from the frozen target and use it in every header and provider
+confirmation: GitHub: `PR #<number>`; GitLab: `MR !<iid>`. Never render a GitHub target with an MR/`!IID`
+label or a GitLab target with a PR/`#N` label. Providerize adjacent state/check nouns too: GitHub uses
+PR, draft PR, checks, and merge queue; GitLab uses MR, draft/WIP MR, pipeline, and merge train.
+Set `<review_target_noun>` to `PR` for GitHub and `MR` for GitLab in initial, incremental, and
+retrospective summaries, including Engineering improvements captions.
 
 > **Never include a secret value in a comment body.** If a token, key, password, or other credential
 > appears in the diff, reference its **location only** (`file:line`), state that it must be **rotated**,
 > and never echo or paraphrase the value. This applies to inline threads, summary notes, and Jira
 > write-back.
 
-## Inline comment (one per finding) → `create_merge_request_thread`
+## Inline comment (one per finding) → GitHub inline comment or GitLab `create_merge_request_thread`
 
 Format:
 
@@ -34,7 +43,7 @@ ID (optional for bundled nits). See `reference/severity-rubric.md` for definitio
 
 Example (added line, so `new_line` set, `old_line: null`):
 
-```
+````
 🟠 **[High]** PRR-API-001 — `fetch_user` has no timeout, so a slow upstream blocks the request thread indefinitely.
 Likelihood: High · Impact: Medium · Overall: High
 Confidence: High
@@ -45,7 +54,7 @@ Under upstream latency this exhausts the worker pool and cascades into a site-wi
 ```suggestion:-0+0
     resp = httpx.get(url, timeout=5.0)
 ```
-```
+````
 
 Architecture lens (§16 — prefix `arch · <concern>`):
 
@@ -161,13 +170,13 @@ Confidence: High
 
 ```
 <!-- cursor-pr-review -->
-## 📋 Post-merge audit — !<iid> · <source_branch> → <target_branch> (merged)
+## 📋 Post-merge audit — <review_target_label> · <source_branch> → <target_branch> (merged)
 
-**Review mode:** Retrospective · **MR state:** merged
+**Review mode:** Retrospective · **<PR|MR> state:** merged
 **Reviewed:** <ISO-8601>
 ```
 
-## Summary comment (exactly one) → `create_note`
+## Summary comment (exactly one) → GitHub issue comment or GitLab `create_note`
 
 The **first line must be** the idempotency marker so re-runs can detect a prior review:
 
@@ -180,9 +189,9 @@ the severity count table (all zeros), use:
 
 No actionable findings.
 
-### Engineering improvements *(omit when empty — not MR defects)*
+### Engineering improvements *(omit when empty — not <review_target_noun> defects)*
 
-- Add `.gitlab-ci.yml` running `make lint` — repo has no CI configured (non-blocking).
+- Add the provider's CI workflow running `make lint` — repo has no CI configured (non-blocking).
 - Consider anchor-lint for `](reference/*.md#...)` links in skill docs.
 ```
 
@@ -192,9 +201,9 @@ On incremental re-reviews with no new issues, use *No new actionable findings in
 **Output structure:** split **Review findings** (diff defects, severity-scored) from **Engineering
 improvements** (repo maturity). Only review findings count in the severity table and blocking gate.
 
-```
+````
 <!-- cursor-pr-review -->
-## 🤖 Code Review — !<iid> · <source_branch> → <target_branch>
+## 🤖 Code Review — <review_target_label> · <source_branch> → <target_branch>
 
 **Reviewed:** <ISO-8601 timestamp, e.g. 2026-06-25T09:35:00Z>
 **Review lens:** <persona> *(e.g. Principal Engineer — default)*
@@ -334,7 +343,7 @@ security gap on a production money path. Request changes before merge.
 
 | Gate | Status |
 |------|--------|
-| CI pipeline | ✅ Green |
+| <Checks|Pipeline> | ✅ Green |
 | CODEOWNERS | ✅ Satisfied |
 | Jira / AC | ✅ Met |
 | Approvals | 1/2 |
@@ -362,9 +371,9 @@ security gap on a production money path. Request changes before merge.
 |--------------|---------|----------|-----------------|----------------------|
 | Good | Weak | Needs attention | Adequate | Not ready |
 
-**Pipeline:** ✅ success on head · **Approvals:** 1/2 required
+**<Checks|Pipeline>:** ✅ success on head · **Approvals:** 1/2 required
 
-### Engineering improvements *(not MR defects)*
+### Engineering improvements *(not <review_target_noun> defects)*
 - Add `.gitlab-ci.yml` with `make lint` — CI not configured in repo (non-blocking).
 
 Repository maturity (informational)
@@ -455,7 +464,7 @@ review_metadata:
 - N findings could not be anchored inline — see entries above.
 
 _Reviewed by Cursor `/pr-review`. Reply to any thread to discuss; resolve when addressed._
-```
+````
 
 Adapt sections to what you actually found — drop empty severities, drop the acceptance-criteria block
 if there's no linked ticket. Pipeline and approvals live in **Executive Summary**, not Notes. Within each
@@ -467,9 +476,9 @@ Render **in chat and in the posted summary** when Phase 1 recorded an incrementa
 `reference/incremental-rerun.md` for dedupe; populate counters from `review_metrics.incremental` and
 Phase 1 boundary.
 
-```
+````
 <!-- cursor-pr-review -->
-## 🤖 Code Review (re-review) — !<iid> · <source_branch> → <target_branch>
+## 🤖 Code Review (re-review) — <review_target_label> · <source_branch> → <target_branch>
 
 **Reviewed:** <ISO-8601 timestamp>
 **Review lens:** <persona> *(e.g. Principal Engineer — default)*
@@ -578,12 +587,12 @@ Previous Critical and High findings are resolved; incremental diff limited to do
 |--------------|---------|----------|-----------------|----------------------|
 | Good | Strong | Clear | Good | Ready |
 
-**Pipeline:** ❓ not configured (no `.gitlab-ci.yml` in repo) · **Approvals:** 2/2 required
+**<Checks|Pipeline>:** ❓ not configured · **Approvals:** 2/2 required
 
 > **Incremental review complete.** All previously reported issues are resolved, no regressions were found, and the current change set is suitable for approval pending repository CI/policy requirements.
 
-### Engineering improvements *(not MR defects)*
-- Add `.gitlab-ci.yml` running `make lint` — repo has no CI configured.
+### Engineering improvements *(not <review_target_noun> defects)*
+- Add the provider's CI workflow running `make lint` — repo has no CI configured.
 
 Repository maturity (informational)
 CI: 8/10 | Docs: 9/10 | Lint: 10/10 | Automation: 7/10
@@ -671,6 +680,7 @@ review_metadata:
 ```
 
 _Re-reviewed by Cursor `/pr-review`._
+````
 
 **Empty incremental diff:** when head changed but no new findings and no file changes in boundary, still
 emit statistics, regression check, coverage, Evidence + Inference inside Executive Summary, and closing loop — *"No new
@@ -684,15 +694,15 @@ move on; **never halt** the review or retry in a loop. Do not transition issue s
 explicitly requested it (transitions often require custom fields).
 
 ```
-Code review completed on GitLab MR !123 (<web_url>).
+Code review completed on <review_target_label> (<web_url>).
 Review summary: <summary_note_url>
 Recommendation: Comment
 Reason: Non-blocking documentation inconsistencies. No runtime risk. Safe to merge after discretionary cleanup.
 ```
 
-Build `<summary_note_url>` from the note just posted: re-fetch `get_merge_request_notes` (or
-`get_workitem_notes`) and use the `web_url` of the note whose body starts with
-`<!-- cursor-pr-review -->`, or `<mr_web_url>#note_<note_id>` if `web_url` is absent.
+Build `<summary_note_url>` from the provider summary just posted: use the GitHub issue-comment URL, or
+for GitLab re-fetch `get_merge_request_notes` / `get_workitem_notes` and use the `web_url` of the note
+whose body starts with `<!-- cursor-pr-review -->` (fall back to `<mr_web_url>#note_<note_id>`).
 
-On success, confirm in chat: *"Posted review summary to Jira `PAY-1421`."* On failure, confirm GitLab
-review is still complete and quote the API error — do not treat Jira failure as a posting rollback.
+On success, confirm in chat: *"Posted review summary to Jira `PAY-1421`."* On failure, confirm the
+provider review is still complete and quote the API error — do not treat Jira failure as a posting rollback.

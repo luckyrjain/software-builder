@@ -50,9 +50,17 @@ class CapabilityOptional:
 
 
 @dataclass(frozen=True)
+class CapabilityPath:
+    name: str
+    required: list[str] = field(default_factory=list)
+    optional: list[CapabilityOptional] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
 class CapabilitiesSpec:
     required: list[str] = field(default_factory=list)
     optional: list[CapabilityOptional] = field(default_factory=list)
+    any_of: list[CapabilityPath] = field(default_factory=list)
     degraded_modes: dict[str, str] = field(default_factory=dict)
 
 

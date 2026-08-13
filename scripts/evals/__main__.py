@@ -269,14 +269,9 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         golden_cases = load_golden_fixtures(GOLDEN_DIR)
-        for warning in find_vacuous_anchored_patterns(
-            golden_cases, skill_filter=args.skill, tier_filter=args.tier,
-        ):
-            print(f"warning: {warning}", file=sys.stderr)
-        for warning in find_oversized_descriptions(
-            golden_cases, skill_filter=args.skill, tier_filter=args.tier,
-        ):
-            print(f"warning: {warning}", file=sys.stderr)
+        for checker in (find_vacuous_anchored_patterns, find_oversized_descriptions):
+            for warning in checker(golden_cases, skill_filter=args.skill, tier_filter=args.tier):
+                print(f"warning: {warning}", file=sys.stderr)
         results = run_all(
             args.repo_root, skill_filter=args.skill, tier_filter=args.tier, golden_cases=golden_cases,
         )

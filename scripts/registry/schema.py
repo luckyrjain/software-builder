@@ -8,6 +8,7 @@ import yaml
 from scripts.registry.models import (
     CapabilitiesSpec,
     CapabilityOptional,
+    CapabilityPath,
     CompositionSpec,
     HostClaude,
     HostCursor,
@@ -143,27 +144,39 @@ def _parse_capabilities(raw: Any, skill_id: str) -> CapabilitiesSpec:
     optional_raw = capabilities.get("optional", [])
     if not isinstance(optional_raw, list):
         raise ValueError(f"skills.{skill_id}.capabilities.optional must be a list")
+    optional = _parse_optional_capabilities(
+        optional_raw,
+        f"skills.{skill_id}.capabilities.optional",
+    )
 
-    optional: list[CapabilityOptional] = []
-    for index, item in enumerate(optional_raw):
-        if isinstance(item, str):
-            optional.append(CapabilityOptional(name=item))
-            continue
-        if isinstance(item, dict):
-            name = str(item.get("name", ""))
-            if not name:
-                raise ValueError(
-                    f"skills.{skill_id}.capabilities.optional[{index}].name is required",
-                )
-            optional.append(
-                CapabilityOptional(
-                    name=name,
-                    enables=str(item.get("enables", "")),
-                ),
+    any_of_raw = capabilities.get("any_of", [])
+    if not isinstance(any_of_raw, list):
+        raise ValueError(f"skills.{skill_id}.capabilities.any_of must be a list")
+    any_of: list[CapabilityPath] = []
+    for index, item in enumerate(any_of_raw):
+        path = _require_mapping(item, f"skills.{skill_id}.capabilities.any_of[{index}]")
+        name = str(path.get("name", ""))
+        if not name:
+            raise ValueError(f"skills.{skill_id}.capabilities.any_of[{index}].name is required")
+        path_required = path.get("required", [])
+        if not isinstance(path_required, list):
+            raise ValueError(
+                f"skills.{skill_id}.capabilities.any_of[{index}].required must be a list",
             )
-            continue
-        raise ValueError(
-            f"skills.{skill_id}.capabilities.optional[{index}] must be a string or mapping",
+        path_optional_raw = path.get("optional", [])
+        if not isinstance(path_optional_raw, list):
+            raise ValueError(
+                f"skills.{skill_id}.capabilities.any_of[{index}].optional must be a list",
+            )
+        any_of.append(
+            CapabilityPath(
+                name=name,
+                required=[str(item) for item in path_required],
+                optional=_parse_optional_capabilities(
+                    path_optional_raw,
+                    f"skills.{skill_id}.capabilities.any_of[{index}].optional",
+                ),
+            ),
         )
 
     degraded_raw = capabilities.get("degraded_modes", {})
@@ -174,8 +187,34 @@ def _parse_capabilities(raw: Any, skill_id: str) -> CapabilitiesSpec:
     return CapabilitiesSpec(
         required=[str(item) for item in required_raw],
         optional=optional,
+        any_of=any_of,
         degraded_modes=degraded_modes,
     )
+
+
+def _parse_optional_capabilities(
+    optional_raw: list[Any],
+    label: str,
+) -> list[CapabilityOptional]:
+
+    optional: list[CapabilityOptional] = []
+    for index, item in enumerate(optional_raw):
+        if isinstance(item, str):
+            optional.append(CapabilityOptional(name=item))
+            continue
+        if isinstance(item, dict):
+            name = str(item.get("name", ""))
+            if not name:
+                raise ValueError(f"{label}[{index}].name is required")
+            optional.append(
+                CapabilityOptional(
+                    name=name,
+                    enables=str(item.get("enables", "")),
+                ),
+            )
+            continue
+        raise ValueError(f"{label}[{index}] must be a string or mapping")
+    return optional
 
 
 def _parse_risk_class(raw: Any, skill_id: str) -> list[str]:

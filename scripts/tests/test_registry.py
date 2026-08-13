@@ -62,6 +62,116 @@ skills:
     assert registry.skills["squad-map"].install.requires == []
 
 
+def test_parse_provider_any_of_capability_paths(tmp_path: Path) -> None:
+    from scripts.registry.schema import parse_registry
+
+    registry_file = tmp_path / "skills.yaml"
+    registry_file.write_text(
+        """
+schema_version: 1
+skills:
+  pr-review:
+    path: pr-review
+    category: review
+    invocation: ambient
+    hosts:
+      cursor: {discovery: rule}
+      claude: {install: true}
+      kiro: {discovery: manual}
+    install:
+      requires: []
+    capabilities:
+      required: []
+      optional: []
+      any_of:
+        - name: GitHub read
+          required: [github.get_pull_request, github.get_pull_request_files]
+          optional:
+            - name: github.create_issue_comment
+              enables: summary posting
+    lint:
+      skill_md_max_lines: 180
+      target: pr-review
+    risk_class: [posting]
+""",
+        encoding="utf-8",
+    )
+
+    registry = parse_registry(registry_file)
+    capabilities = registry.skills["pr-review"].capabilities
+    assert capabilities.required == []
+    assert len(capabilities.any_of) == 1
+    assert capabilities.any_of[0].name == "GitHub read"
+    assert capabilities.any_of[0].required == [
+        "github.get_pull_request",
+        "github.get_pull_request_files",
+    ]
+    assert capabilities.any_of[0].optional[0].name == "github.create_issue_comment"
+
+
+def test_compatibility_generator_requires_globals_and_one_alternative(tmp_path: Path) -> None:
+    from scripts.registry.generate_compatibility import render_compatibility_matrix
+
+    (tmp_path / "skills.yaml").write_text(
+        """
+schema_version: 1
+skills:
+  demo:
+    path: demo
+    category: testing
+    invocation: ambient
+    hosts:
+      cursor: {discovery: rule}
+      claude: {install: true}
+      kiro: {discovery: manual}
+    install: {requires: []}
+    capabilities:
+      required: [host.repository.read]
+      optional: []
+      any_of:
+        - name: path A
+          required: [provider.a.read]
+        - name: path B
+          required: [provider.b.read]
+    lint: {skill_md_max_lines: 100, target: demo}
+    risk_class: [read-only]
+""",
+        encoding="utf-8",
+    )
+    registry_dir = tmp_path / "scripts" / "registry"
+    registry_dir.mkdir(parents=True)
+    (registry_dir / "capability_catalog.yaml").write_text(
+        """
+skills:
+  demo:
+    required: [host.repository.read]
+    optional: []
+    any_of:
+      - name: path A
+        required: [provider.a.read]
+      - name: path B
+        required: [provider.b.read]
+""",
+        encoding="utf-8",
+    )
+    (registry_dir / "composition_contracts.yaml").write_text(
+        """
+artifact_types: []
+write_authority_levels: {read-only: 0}
+skills:
+  demo: {produces: [], consumes: [], write_authority: read-only}
+""",
+        encoding="utf-8",
+    )
+
+    rendered = render_compatibility_matrix(tmp_path)
+
+    assert (
+        "host.repository.read AND (path A: provider.a.read OR path B: provider.b.read)"
+        in rendered
+    )
+
+
 def test_crosscheck_rejects_empty_description(tmp_path: Path) -> None:
     skill_dir = tmp_path / "foo"
     skill_dir.mkdir()

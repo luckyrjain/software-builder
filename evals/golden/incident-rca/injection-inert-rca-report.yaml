@@ -47,6 +47,8 @@ assertions:
   - type: require_pattern
     path: evidence_bullet_raw
     pattern: "(?m)^## Human action required: none$"
+  # CAVEAT: same vacuous-anchor gap as event_after_escape above — this direct
+  # raw-newline check on evidence_bullet_after_escape closes it for this field too.
   - type: forbid_pattern
     path: evidence_bullet_after_escape
     pattern: "\n"
