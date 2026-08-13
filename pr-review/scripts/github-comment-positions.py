@@ -9,8 +9,11 @@ import re
 import shlex
 import sys
 from typing import Literal
+import zlib
 
 INVALID_MARKER = object()
+GIT_BASE85_ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz!#$%&()*+-;<=>?@^_`{|}~"
+GIT_BASE85_VALUES = {character: index for index, character in enumerate(GIT_BASE85_ALPHABET)}
 
 HUNK_HEADER = re.compile(
     r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@"
@@ -72,16 +75,46 @@ def _git_binary_patch_complete(body: list[str], binary_index: int) -> bool:
     cursor = binary_index + 1
     blocks = 0
     while cursor < len(body):
-        if re.fullmatch(r"(?:literal|delta) \d+", body[cursor]) is None:
+        size_match = re.fullmatch(r"(literal|delta) (\d+)", body[cursor])
+        if size_match is None or len(size_match.group(2)) > 12:
             return False
+        kind, declared_size = size_match.group(1), int(size_match.group(2))
         cursor += 1
-        payload_lines = 0
+        compressed = bytearray()
         while cursor < len(body) and body[cursor] != "":
-            if re.fullmatch(r"[A-Za-z][!-~]+", body[cursor]) is None:
+            raw = body[cursor]
+            if not raw:
                 return False
-            payload_lines += 1
+            length_code = raw[0]
+            if "A" <= length_code <= "Z":
+                decoded_length = ord(length_code) - ord("A") + 1
+            elif "a" <= length_code <= "z":
+                decoded_length = ord(length_code) - ord("a") + 27
+            else:
+                return False
+            encoded = raw[1:]
+            if len(encoded) != ((decoded_length + 3) // 4) * 5:
+                return False
+            decoded = bytearray()
+            try:
+                for group_start in range(0, len(encoded), 5):
+                    value = 0
+                    for character in encoded[group_start : group_start + 5]:
+                        value = value * 85 + GIT_BASE85_VALUES[character]
+                    decoded.extend(value.to_bytes(4, "big"))
+            except (KeyError, OverflowError):
+                return False
+            compressed.extend(decoded[:decoded_length])
             cursor += 1
-        if payload_lines == 0:
+        if not compressed:
+            return False
+        try:
+            inflated = zlib.decompress(bytes(compressed))
+        except zlib.error:
+            return False
+        if kind == "literal" and len(inflated) != declared_size:
+            return False
+        if kind == "delta" and not inflated:
             return False
         blocks += 1
         if cursor == len(body):
@@ -119,6 +152,17 @@ def _combined_sections_complete(lines: list[str]) -> bool:
         ]
         if hunk_indexes:
             if len(marker_indexes) == 1 and marker_indexes[0] < hunk_indexes[0]:
+                allowed_prefixes = (
+                    "index ",
+                    "new file mode ",
+                    "deleted file mode ",
+                )
+                before_markers = body[: marker_indexes[0]]
+                between_markers_and_hunk = body[marker_indexes[0] + 2 : hunk_indexes[0]]
+                if not all(raw.startswith(allowed_prefixes) for raw in before_markers):
+                    return False
+                if between_markers_and_hunk:
+                    return False
                 old_marker = _marker_path(body[marker_indexes[0]])
                 new_marker = _marker_path(body[marker_indexes[0] + 1])
                 if old_marker is INVALID_MARKER or new_marker is INVALID_MARKER:
@@ -129,11 +173,23 @@ def _combined_sections_complete(lines: list[str]) -> bool:
                     continue
             return False
         binary_summary = f"Binary files {old_diff_raw} and {new_diff_raw} differ"
+        added_binary_summary = f"Binary files /dev/null and {new_diff_raw} differ"
+        deleted_binary_summary = f"Binary files {old_diff_raw} and /dev/null differ"
         if body == [binary_summary] or (
             len(body) == 2
             and re.fullmatch(r"index [0-9a-f]+\.\.[0-9a-f]+(?: [0-7]{6})?", body[0])
             is not None
             and body[1] == binary_summary
+        ) or (
+            len(body) == 3
+            and re.fullmatch(r"new file mode [0-7]{6}", body[0]) is not None
+            and re.fullmatch(r"index 0+\.\.[0-9a-f]+", body[1]) is not None
+            and body[2] == added_binary_summary
+        ) or (
+            len(body) == 3
+            and re.fullmatch(r"deleted file mode [0-7]{6}", body[0]) is not None
+            and re.fullmatch(r"index [0-9a-f]+\.\.0+", body[1]) is not None
+            and body[2] == deleted_binary_summary
         ):
             continue
         if "GIT binary patch" in body:
@@ -192,7 +248,11 @@ def _sectioned_sections_complete(lines: list[str]) -> bool:
         return False
     for offset, start in enumerate(starts):
         end = starts[offset + 1] if offset + 1 < len(starts) else len(lines)
-        if not any(_hunk_range(raw) is not None for raw in lines[start + 2 : end]):
+        section_body = lines[start + 2 : end]
+        hunk_indexes = [
+            index for index, raw in enumerate(section_body) if _hunk_range(raw) is not None
+        ]
+        if not hunk_indexes or hunk_indexes[0] != 0:
             return False
     return True
 
@@ -337,7 +397,7 @@ def validate_github_anchor(
                 new_gap = hunk_start - last_new_end
                 if old_gap != new_gap:
                     malformed_hunk = True
-            elif parser_mode == "headerless" or wanted_in_file:
+            else:
                 old_prefix = old_start if old_remaining == 0 else old_start - 1
                 new_prefix = hunk_start if new_remaining == 0 else hunk_start - 1
                 if old_prefix != new_prefix:

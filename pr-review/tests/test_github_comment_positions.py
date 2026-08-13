@@ -193,7 +193,7 @@ def test_deleted_file_header_resets_file_state():
 diff --git a/src/deleted.py b/src/deleted.py
 --- a/src/deleted.py
 +++ /dev/null
-@@ -11 +0,0 @@
+@@ -1 +0,0 @@
 -deleted value
 """
     assert validate_github_anchor(
@@ -380,7 +380,7 @@ def test_no_diff_git_deleted_and_created_files_reset_the_previous_path():
 +new
 --- a/src/deleted.py
 +++ /dev/null
-@@ -11 +0,0 @@
+@@ -1 +0,0 @@
 -deleted value
 --- /dev/null
 +++ b/src/created.py
@@ -965,17 +965,17 @@ def test_truncated_trailing_combined_section_invalidates_prior_anchor(trailing_s
         (
             "diff --git a/bin.dat b/bin.dat\nindex 1234567..89abcde 100644\n"
             "GIT binary patch\nliteral 4\n"
-            "Lc$@<O00001\n\nliteral 3\nKc$@<O001\n\n"
+            "LcmZQzWMT#Y01f~L\n\nliteral 0\nHcmV?d00001\n\n"
         ),
         (
             "diff --git a/new.bin b/new.bin\nnew file mode 100644\n"
             "index 0000000..89abcde\nGIT binary patch\nliteral 4\n"
-            "Lc$@<O00001\n\nliteral 0\nHcmV?d00001\n\n"
+            "LcmZQzWMT#Y01f~L\n\nliteral 0\nHcmV?d00001\n\n"
         ),
         (
             "diff --git a/old.bin b/old.bin\ndeleted file mode 100644\n"
             "index 89abcde..0000000\nGIT binary patch\nliteral 0\n"
-            "HcmV?d00001\n\nliteral 4\nLc$@<O00001\n\n"
+            "HcmV?d00001\n\nliteral 4\nLcmZQzWMT#Y01f~L\n\n"
         ),
     ],
     ids=(
@@ -1137,6 +1137,48 @@ def test_oversized_hunk_number_fails_closed_without_exception():
 def test_headerless_patch_rejects_unknown_text_before_first_hunk():
     assert validate_github_anchor(
         "garbage\n@@ -0,0 +1,1 @@\n+target\n",
+        path="src/payments.py",
+        line=1,
+        source_kind="added",
+        head_sha="abc",
+    ) == {"unanchorable": True, "reason": "added_line_not_in_current_diff"}
+
+
+@pytest.mark.parametrize(
+    "patch",
+    [
+        (
+            "diff --git a/src/payments.py b/src/payments.py\ngarbage\n"
+            "--- a/src/payments.py\n+++ b/src/payments.py\n"
+            "@@ -0,0 +1,1 @@\n+target\n"
+        ),
+        (
+            "--- a/src/payments.py\n+++ b/src/payments.py\ngarbage\n"
+            "@@ -0,0 +1,1 @@\n+target\n"
+        ),
+    ],
+    ids=("combined", "sectioned"),
+)
+def test_text_sections_reject_unknown_records_outside_hunks(patch):
+    assert validate_github_anchor(
+        patch,
+        path="src/payments.py",
+        line=1,
+        source_kind="added",
+        head_sha="abc",
+    ) == {"unanchorable": True, "reason": "added_line_not_in_current_diff"}
+
+
+def test_invalid_first_prefix_in_unrelated_file_invalidates_prior_anchor():
+    patch = (
+        "diff --git a/src/payments.py b/src/payments.py\n"
+        "--- a/src/payments.py\n+++ b/src/payments.py\n"
+        "@@ -0,0 +1,1 @@\n+target\n"
+        "diff --git a/other b/other\n--- a/other\n+++ b/other\n"
+        "@@ -1,0 +100,1 @@\n+other\n"
+    )
+    assert validate_github_anchor(
+        patch,
         path="src/payments.py",
         line=1,
         source_kind="added",
