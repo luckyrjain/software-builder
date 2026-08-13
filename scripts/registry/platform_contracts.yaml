@@ -15,6 +15,60 @@ completion:
   statuses: [SUCCESS, PARTIAL, BLOCKED, FAILED, ESCALATED]
   required_fields: [status, evidence_status, blockers, artifacts, recommended_next_skill]
 
+# Portable result envelope used by orchestrators and host adapters.
+result_envelope:
+  required_fields:
+    - skill
+    - version
+    - status
+    - confidence
+    - source_revision
+    - evidence_status
+    - artifacts
+    - blockers
+    - recommended_next_skill
+  confidence_values: [HIGH, MEDIUM, LOW, UNKNOWN]
+
+# Resolve information before asking the caller to repeat or manually retrieve it.
+input_resolution:
+  order:
+    - supplied_facts
+    - retrievable_authoritative_context
+    - safe_reversible_defaults
+    - focused_question
+  forbid_reasking_retrievable: true
+  optional_context_degrades: true
+
+# Default source precedence. A skill may document a domain-specific override.
+source_precedence:
+  - runtime_authoritative_state
+  - executable_code_config_contracts
+  - tests_and_executable_examples
+  - version_controlled_technical_docs
+  - tickets_and_design_docs
+  - human_prose_and_comments
+
+freshness:
+  observation_fields: [observed_at, source_revision, source_environment]
+  repository_fields: [repo, branch, commit_sha]
+  unknown_freshness_lowers_confidence: true
+
+handoff:
+  required_fields: [target_skill, reason, inputs, evidence_refs, assumptions, unresolved]
+
+execution_context:
+  required_fields: [invocation_id, parent_skill, visited_skills, depth]
+  default_max_depth: 3
+  block_revisit_by_default: true
+
+state_semantics:
+  values: [current_state, proposed_state, desired_state, transitional_state]
+
+artifact_ownership:
+  canonical_producer_owns_write: true
+  consumers_may_derive: true
+  consumers_may_silently_rewrite: false
+
 # Minimum authorization required for an action class. A skill may always be
 # stricter than this table; it may never be looser.
 action_gates:
