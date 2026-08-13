@@ -23,7 +23,7 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
   disk, a hash mismatch, and a file present on disk but not tracked in the manifest.
   Verified end to end against a real packaged skill: clean package verifies ok, a one-byte
   tamper is caught with an exact hash-mismatch message, an untracked extra file is caught too.
-- Four review rounds against the initial implementation found and fixed real bugs before merge:
+- Five review rounds against the initial implementation found and fixed real bugs before merge:
   a symlink anywhere under an installed package used to be silently hashed through instead of
   rejected (an arbitrary-file-read risk); `__pycache__`/`.DS_Store`/editor-swap noise that
   legitimately appears after install used to fail verification as tampering; `package_skill.py`'s
@@ -34,11 +34,14 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
   (`is_ignored_package_path()`); that fix in turn crashed on a symlinked source subdirectory
   until the ignore-callback stopped resolving paths shutil itself never resolves; FIFOs/sockets/
   device nodes used to evade verification entirely (neither hashed nor flagged); a symlinked
-  manifest-listed file used to print two contradictory errors for one cause; and
+  manifest-listed file used to print two contradictory errors for one cause;
   `install_support.py`'s new manifest-field validation surfaced a pre-existing, unrelated crash
   in `doctor.py` on a manifest with an explicit null `source_sha`/`distribution_version`, fixed
-  the same way. Full suite (`python3 -m pytest scripts/tests/`) at 506/506, `make validate-registry`
-  and `make validate-evals` both pass.
+  the same way; and `cmd_verify` crashed with an uncaught `AttributeError` on a manifest file
+  containing valid-but-non-object JSON (an array, string, number, or null), since `.get("skill")`
+  was called with no `isinstance(manifest, dict)` guard. Full suite
+  (`python3 -m pytest scripts/tests/`) at 507/507, `make validate-registry` and `make validate-evals`
+  both pass.
 
 ### Split validate_registry's 11 inlined concerns into named sub-checks (2026-08-12)
 
