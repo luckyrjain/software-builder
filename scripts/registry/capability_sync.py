@@ -42,5 +42,5 @@ def validate_capability_catalog_sync(root: Path) -> list[str]:
         if drifted:
             return ["error: capability catalog content drift: " + ", ".join(drifted)]
         return []
-    except YAML_SAFETY_ERRORS as exc:
+    except (OSError, *YAML_SAFETY_ERRORS) as exc:
         return [f"error: capability catalog sync: {exc}"]
