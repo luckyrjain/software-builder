@@ -14,7 +14,7 @@ scope:
   include_keywords: []
   exclude_patterns: []
   seed_repos: []
-  artifact_root: docs/domain-comprehension/example  # replace example with domain.name
+  artifact_root: ""  # Session 0 writes the resolved safe relative path here
 
 five_questions:
   - id: Q1
