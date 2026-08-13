@@ -21,6 +21,7 @@ from scripts.registry.generate_docs import (
 from scripts.registry.generate_kiro import generate_kiro_steering
 from scripts.registry.load import load_descriptions, load_registry
 from scripts.registry.manifest import validate_manifest
+from scripts.registry.p1_validation import validate_p1_contracts
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -97,6 +98,7 @@ def _validate_all(root: Path) -> list[str]:
         *validate_registry(root),
         *validate_capability_catalog_sync(root),
         *validate_manifest(root),
+        *validate_p1_contracts(root),
     ]
 
 
@@ -104,10 +106,19 @@ def _validate_for_generate(root: Path) -> list[str]:
     errors = validate_registry(root)
     capability_catalog = root / "scripts" / "registry" / "capability_catalog.yaml"
     platform_contracts = root / "scripts" / "registry" / "platform_contracts.yaml"
+    p1_files = [
+        root / "scripts" / "registry" / "host_contracts.yaml",
+        root / "scripts" / "registry" / "eval_contracts.yaml",
+        root / "docs" / "skill-framework" / "shared" / "runtime-contract.md",
+        root / "docs" / "skill-framework" / "shared" / "host-adapter-contract.md",
+        root / "docs" / "skill-framework" / "shared" / "eval-contract.md",
+    ]
     if capability_catalog.is_file():
         errors.extend(validate_capability_catalog_sync(root))
     if platform_contracts.is_file():
         errors.extend(validate_manifest(root))
+    if platform_contracts.is_file() and all(path.is_file() for path in p1_files):
+        errors.extend(validate_p1_contracts(root))
     return errors
 
 
@@ -117,7 +128,7 @@ def cmd_validate(root: Path) -> int:
         for error in errors:
             print(error, file=sys.stderr)
         return 1
-    print("ok: skills registry, capability catalogue and platform manifest validate")
+    print("ok: skills registry, capability catalogue, platform manifest and P1 contracts validate")
     return 0
 
 
