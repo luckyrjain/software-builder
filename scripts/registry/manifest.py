@@ -13,9 +13,8 @@ from scripts.yaml_safety import YAML_SAFETY_ERRORS, load_unique_yaml_file
 
 ROOT = Path(__file__).resolve().parents[2]
 CONTRACTS_PATH = Path(__file__).resolve().parent / "platform_contracts.yaml"
-_SEMVER_RE = re.compile(
-    r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:[-+][0-9A-Za-z.-]+)?$",
-)
+_CORE_SEMVER_RE = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$")
+_IDENTIFIER_RE = re.compile(r"^[0-9A-Za-z-]+$")
 _ALLOWED_TYPES = {"leaf", "router", "orchestrator", "trigger"}
 _REQUIRED_EVIDENCE = {"OBSERVED", "INFERRED", "UNKNOWN", "CONFLICTED", "NOT_APPLICABLE"}
 _REQUIRED_EVIDENCE_FIELDS = {"claim", "status", "provenance", "limitations"}
@@ -35,6 +34,15 @@ _REQUIRED_GATES = {
 }
 
 
+def _validate_semver_identifiers(raw: str, *, prerelease: bool) -> bool:
+    identifiers = raw.split(".")
+    if not identifiers or any(not item or not _IDENTIFIER_RE.fullmatch(item) for item in identifiers):
+        return False
+    if prerelease and any(item.isdigit() and len(item) > 1 and item.startswith("0") for item in identifiers):
+        return False
+    return True
+
+
 def _normalize_version(raw: Any) -> str:
     if raw is None or raw == "":
         return "1.0.0"
@@ -43,7 +51,15 @@ def _normalize_version(raw: Any) -> str:
         value = f"{value}.0.0"
     elif re.fullmatch(r"\d+\.\d+", value):
         value = f"{value}.0"
-    if not _SEMVER_RE.fullmatch(value):
+
+    core_and_pre, plus, build = value.partition("+")
+    core, dash, prerelease = core_and_pre.partition("-")
+    valid = bool(_CORE_SEMVER_RE.fullmatch(core))
+    if dash:
+        valid = valid and _validate_semver_identifiers(prerelease, prerelease=True)
+    if plus:
+        valid = valid and _validate_semver_identifiers(build, prerelease=False)
+    if not valid:
         raise ValueError(f"invalid skill_version {raw!r}; expected semantic version")
     return value
 
