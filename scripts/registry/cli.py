@@ -19,6 +19,7 @@ from scripts.registry.generate_docs import (
 )
 from scripts.registry.generate_kiro import generate_kiro_steering
 from scripts.registry.load import load_descriptions, load_registry
+from scripts.registry.manifest import validate_manifest
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -90,13 +91,17 @@ def _run_command(action: Callable[[], int]) -> int:
         return 2
 
 
+def _validate_all(root: Path) -> list[str]:
+    return [*validate_registry(root), *validate_manifest(root)]
+
+
 def cmd_validate(root: Path) -> int:
-    errors = validate_registry(root)
+    errors = _validate_all(root)
     if errors:
         for error in errors:
             print(error, file=sys.stderr)
         return 1
-    print("ok: skills registry validates")
+    print("ok: skills registry and platform manifest validate")
     return 0
 
 
@@ -104,7 +109,7 @@ def cmd_generate(root: Path, check_only: bool) -> int:
     if not check_only:
         _prune_stale_adapters(root)
 
-    validation_errors = validate_registry(root)
+    validation_errors = _validate_all(root)
     if validation_errors:
         for error in validation_errors:
             print(error, file=sys.stderr)
@@ -131,7 +136,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="scripts.registry")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    subparsers.add_parser("validate", help="validate skills.yaml and SKILL.md frontmatter")
+    subparsers.add_parser("validate", help="validate skills.yaml, SKILL.md and platform contracts")
 
     generate_parser = subparsers.add_parser("generate", help="generate adapters and derived docs")
     generate_parser.add_argument(
