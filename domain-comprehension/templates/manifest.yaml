@@ -37,6 +37,11 @@ artifacts:
     phase: session_0
     required: true
     status: stub
+  - id: prd
+    path: PRD.md
+    phase: p5
+    required: true
+    status: stub
   - id: map_file
     path: DOMAIN_MAP.md
     phase: session_0
