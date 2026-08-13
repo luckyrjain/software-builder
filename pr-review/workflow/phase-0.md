@@ -57,7 +57,7 @@ requires a GitLab MCP and a GitLab target never requires GitHub access.
 
 ## MCP retry policy (all phases)
 
-Provider writes participate through the readback rule below, not the automatic read retry.
+Provider writes use the provider-specific recovery rule below, not the automatic read retry.
 
 **Normative — stated once here:** Phase 0 probes and Phase 1 reads follow the shared 1-retry policy —
 [mcp-error-handling.md](../../docs/skill-framework/shared/mcp-error-handling.md) §3. `timeout`,
@@ -69,10 +69,13 @@ in `reference/mcp-capabilities.md` for the Phase 1/4 tools listed there. **Do no
 Prerequisites messages above for the GitLab/Jira wording).
 
 **Non-idempotent provider writes are exempt from that global retry rule.** A comment POST that returns
-`timeout` or `server_error` may already have succeeded, so do not blindly retry it. Use the selected
-provider's write-recovery procedure: read back the relevant comments/notes, match the deterministic
-marker and body hash, and retry at most once only when absence is proven. This guarantees no duplicate
-POST after an ambiguous response. Phase 4 applies that rule separately at each write boundary.
+`timeout` or `server_error` may already have succeeded, so do not blindly retry it. GitHub uses complete
+paginated readback plus the deterministic marker/body hash and retries at most once only when absence is proven.
+This recovery path guarantees no duplicate POST.
+GitLab posting profiles do not guarantee complete discussion/note readback: on a GitLab
+ambiguous write, do not read back or retry; report delivery uncertain, identify the possibly accepted
+body and already-posted partial state, and stop all remaining provider writes. Phase 4 applies the
+selected provider rule separately at every write boundary.
 
 ## Capability detection
 

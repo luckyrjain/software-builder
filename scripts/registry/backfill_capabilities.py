@@ -63,6 +63,55 @@ def _capabilities_valid(entry: dict[str, Any]) -> bool:
     return isinstance(caps.get("degraded_modes", {}), dict)
 
 
+def _required_equal(current: Any, catalog_value: Any) -> bool:
+    if not (
+        isinstance(current, list)
+        and isinstance(catalog_value, list)
+        and all(isinstance(item, str) for item in current)
+        and all(isinstance(item, str) for item in catalog_value)
+    ):
+        return False
+    return len(current) == len(set(current)) and set(current) == set(catalog_value)
+
+
+def _optional_equal(current: Any, catalog_value: Any) -> bool:
+    if not (isinstance(current, list) and isinstance(catalog_value, list)):
+        return False
+    if not all(
+        isinstance(item, dict) and isinstance(item.get("name"), str)
+        for item in (*current, *catalog_value)
+    ):
+        return False
+    current_by_name = {item["name"]: item for item in current}
+    catalog_by_name = {item["name"]: item for item in catalog_value}
+    return (
+        len(current_by_name) == len(current)
+        and len(catalog_by_name) == len(catalog_value)
+        and current_by_name == catalog_by_name
+    )
+
+
+def _capability_path_equal(current: Any, catalog_value: Any) -> bool:
+    """Compare the schema-supported fields of one any_of capability path."""
+    if not (isinstance(current, dict) and isinstance(catalog_value, dict)):
+        return False
+    supported_keys = {"name", "required", "optional"}
+    if not set(current).issubset(supported_keys) or not set(catalog_value).issubset(supported_keys):
+        return False
+    if not (
+        isinstance(current.get("name"), str)
+        and current.get("name") == catalog_value.get("name")
+    ):
+        return False
+    return _required_equal(
+        current.get("required", []),
+        catalog_value.get("required", []),
+    ) and _optional_equal(
+        current.get("optional", []),
+        catalog_value.get("optional", []),
+    )
+
+
 def _capabilities_equal(current: Any, catalog_value: dict[str, Any]) -> bool:
     # Never raises on malformed input (unhashable/non-string required items,
     # non-dict optional items) -- treats it as "not equal" so the skill gets
@@ -70,34 +119,10 @@ def _capabilities_equal(current: Any, catalog_value: dict[str, Any]) -> bool:
     if not isinstance(current, dict):
         return False
 
-    current_required = current.get("required")
-    catalog_required = catalog_value.get("required")
-    if not (
-        isinstance(current_required, list)
-        and isinstance(catalog_required, list)
-        and all(isinstance(item, str) for item in current_required)
-        and all(isinstance(item, str) for item in catalog_required)
-    ):
-        return False
-    if len(current_required) != len(set(current_required)):
-        return False
-    if set(current_required) != set(catalog_required):
+    if not _required_equal(current.get("required"), catalog_value.get("required")):
         return False
 
-    current_optional = current.get("optional")
-    catalog_optional = catalog_value.get("optional")
-    if not (isinstance(current_optional, list) and isinstance(catalog_optional, list)):
-        return False
-    if not all(
-        isinstance(item, dict) and isinstance(item.get("name"), str)
-        for item in (*current_optional, *catalog_optional)
-    ):
-        return False
-    current_by_name = {item["name"]: item for item in current_optional}
-    catalog_by_name = {item["name"]: item for item in catalog_optional}
-    if len(current_by_name) != len(current_optional) or len(catalog_by_name) != len(catalog_optional):
-        return False
-    if current_by_name != catalog_by_name:
+    if not _optional_equal(current.get("optional"), catalog_value.get("optional")):
         return False
 
     current_any_of = current.get("any_of", [])
@@ -116,7 +141,7 @@ def _capabilities_equal(current: Any, catalog_value: dict[str, Any]) -> bool:
     if current_paths.keys() != catalog_paths.keys():
         return False
     if any(
-        not _capabilities_equal(current_paths[name], catalog_paths[name])
+        not _capability_path_equal(current_paths[name], catalog_paths[name])
         for name in current_paths
     ):
         return False

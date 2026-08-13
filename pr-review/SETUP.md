@@ -383,9 +383,9 @@ supported PR or MR.
 For the full invocation table and edge cases, see [examples.md](examples.md).
 
 **`review and post …`** does **not** unconditionally skip the Phase 3 confirmation gate. It skips
-confirmation **only** when the posting mode is `full` or `summary-only` and the PR/MR is not a draft.
-`general-only` always shows its ⚠️ warning and requires confirmation, and any draft PR/MR always
-requires confirmation.
+confirmation **only** when the posting mode is `full` or `summary-only`, the PR/MR is not a draft, and
+`review_metrics.review_complete` is not `false`. `general-only` always shows its ⚠️ warning and
+requires confirmation, and any draft or incomplete PR/MR review always requires confirmation.
 
 Phase 0 announces posting mode and workspace scope. Warnings when:
 - **`general-only`** — comments are general MR notes, not inline on the diff.

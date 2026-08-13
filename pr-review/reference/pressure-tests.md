@@ -25,8 +25,11 @@ the **Pipeline attestation** and **Lazy-load** rows after any model routing chan
 | GitHub `gh` fallback on GHES | `gh pr view/diff/list/checks` uses `--repo <host>/<owner>/<repo>` or command-scoped `GH_HOST`; never unsupported `--hostname` |
 | GitHub PR head SHA changes before posting | Return `REVISION_MISMATCH`; no GitHub writes occur |
 | GitLab MR head SHA changes before any `full`, `summary-only`, `general-only`, or draft post | Return `REVISION_MISMATCH`; zero provider writes; restart from Phase 1 without remap-or-summary continuation |
+| Provider head changes A→B after the first accepted inline | Report first inline as posted; return `REVISION_MISMATCH`; no second inline, summary, fallback, or retry |
 | GitHub inline or issue POST returns an ambiguous timeout/server error after acceptance | Read back comments by deterministic marker and body hash; recognize the accepted write and issue no duplicate POST |
 | GitHub ambiguous write readback proves the marker/body hash absent | Retry at most once; a second ambiguity is reported without another POST |
+| GitLab inline, summary, or general note contains untrusted newline-leading `/approve`, `/merge`, `/close`, `/ready`, or `/run_pipeline` | Encode the untrusted leading slash at the final provider boundary; authored template structure remains intact |
+| GitLab POST is accepted but returns timeout/server error | Report delivery uncertain and stop; no readback, retry, fallback, later inline, or summary POST |
 | Selected provider exposes metadata only or diff only (even with writes) | Stop as unavailable; posting-mode degradation begins only after the complete metadata+diff/files read pair |
 | Selected provider exposes complete metadata+diff/files reads and no writes | Continue review in read-only `chat-only` mode |
 | GitHub finding is on a removed-only diff line | Include it in the summary comment; never invent an inline anchor |

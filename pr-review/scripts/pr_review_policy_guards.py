@@ -7,6 +7,7 @@ reference/review-metrics.md and reference/finding-gates.md.
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from typing import Literal
 from urllib.parse import urlparse
 
@@ -17,6 +18,77 @@ RecommendationDisplay = Literal[
     "💬 Comment",
     "✅ Approve",
 ]
+Provider = Literal["github", "gitlab"]
+
+_GITLAB_QUICK_ACTION_LINE = re.compile(
+    r"(?im)^(?P<indent>[ \t]*)/(?P<command>approve|merge|close|ready|run_pipeline)(?=[ \t]|$)",
+)
+
+
+def neutralize_provider_control_lines(text: str, *, provider: Provider) -> str:
+    """Make demonstrated provider control lines inert without flattening Markdown structure."""
+    if provider != "gitlab":
+        return text
+    return _GITLAB_QUICK_ACTION_LINE.sub(
+        lambda match: f"{match.group('indent')}&#47;{match.group('command')}",
+        text,
+    )
+
+
+def gitlab_ambiguous_write_decision(response: str) -> dict[str, object]:
+    """Return the conservative GitLab policy when POST delivery cannot be determined."""
+    if response not in {"timeout", "server_error"}:
+        raise ValueError("response must be timeout or server_error")
+    return {
+        "outcome": "delivery_uncertain",
+        "retry": False,
+        "readback": False,
+        "stop_remaining_writes": True,
+    }
+
+
+def execute_guarded_write_batch(
+    *,
+    provider: Provider,
+    captured_head: str,
+    write_ids: list[str],
+    fetch_head: Callable[[], str],
+    post: Callable[[str], str],
+) -> dict[str, object]:
+    """Exercise the provider write state machine used by the posting contract."""
+    posted: list[str] = []
+    observed_head = captured_head
+    for index, write_id in enumerate(write_ids):
+        observed_head = fetch_head()
+        if observed_head != captured_head:
+            return {
+                "status": "REVISION_MISMATCH",
+                "posted": posted,
+                "uncertain": None,
+                "remaining": write_ids[index:],
+                "expected_head": captured_head,
+                "observed_head": observed_head,
+            }
+        outcome = post(write_id)
+        if provider == "gitlab" and outcome in {"timeout", "server_error"}:
+            return {
+                "status": "WRITE_DELIVERY_UNCERTAIN",
+                "posted": posted,
+                "uncertain": write_id,
+                "remaining": write_ids[index + 1 :],
+                "expected_head": captured_head,
+                "observed_head": observed_head,
+            }
+        if outcome == "accepted":
+            posted.append(write_id)
+    return {
+        "status": "COMPLETE",
+        "posted": posted,
+        "uncertain": None,
+        "remaining": [],
+        "expected_head": captured_head,
+        "observed_head": observed_head,
+    }
 
 
 def highest_severity(severities: list[str]) -> Severity:

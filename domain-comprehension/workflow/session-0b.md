@@ -1,5 +1,5 @@
 ---
-workflow_version: 1.12
+workflow_version: 1.13
 phase: session-0b
 produces:
   - mcp_profile
@@ -12,47 +12,31 @@ consumes:
 
 # Session 0b — Squad enrichment (optional)
 
-**Goal:** Map each in-scope repo to a **squad** using GitLab group prefixes and Datadog service team tags.
-Runs after Session 0 census; may parallelize with keyword sweep (step 6 in Session 0).
-
-**Delegates to squad-map skill** — do not duplicate mapping procedure here.
+**Goal:** Map each in-scope repo to a squad using GitLab hierarchy and Datadog service team tags.
+Delegates mapping to **squad-map**; do not duplicate its algorithm.
 
 ## When to run
 
 | Condition | Action |
 |-----------|--------|
-| GitLab ✅ or Datadog ✅ expected | Run Session 0b via squad-map |
-| Both ❌ | Invoke squad-map anyway — CODEOWNERS fallback (confidence LOW) |
-| `SQUAD_MAP.md` exists and census unchanged | Skip unless user requests refresh |
+| GitLab or Datadog expected | Run via squad-map |
+| Both unavailable | Run CODEOWNERS fallback when possible |
+| Domain snapshot exists and census unchanged | Skip unless refresh requested |
 
 ## Steps
 
-1. **Preconditions:** Session 0 census complete; in-scope repo list available.
-
-2. **Invoke squad-map skill** — read [squad-map/SKILL.md](../../squad-map/SKILL.md) and follow its workflow:
-   - Pass `repos` = in-scope census from Session 0
-   - Pass `ownership_config` from `domain-config.yaml` `ownership:` block
-   - Set `workspace_root` from Session 0 inputs
-   - Do not re-discover repos independently
-
-   Normative mapping rules: [squad-map/reference/squad-mapping.md](../../squad-map/reference/squad-mapping.md)
-   MCP tools: [squad-map/reference/mcp-capabilities.md](../../squad-map/reference/mcp-capabilities.md)
-   Deliverable template: [squad-map/templates/SQUAD_MAP.md](../../squad-map/templates/SQUAD_MAP.md)
-
-3. **Verify output:** `SQUAD_MAP.md` exists at workspace root with MCP profile header and per-repo rows.
-
-4. **Domain-comprehension follow-up** — pre-fill `UNKNOWNS.md` **Likely owner** when confidence ≥ MEDIUM
-   (use Datadog team, else GitLab squad). This step stays in domain-comprehension only.
-
-5. **If squad-map skipped** (user declined or both MCP ❌ with no CODEOWNERS) — note in
-   `KNOWN_OMISSIONS.md`; P0 inventory uses UNKNOWN for squad columns.
+1. Require the Session 0 census and resolved `artifact_root`.
+2. Invoke [squad-map/SKILL.md](../../squad-map/SKILL.md) with the in-scope repo list and ownership config; do not re-discover repos independently.
+3. squad-map may maintain its shared `workspace_root/SQUAD_MAP.md`. After it completes, **copy the resulting snapshot to `{artifact_root}/SQUAD_MAP.md`** so domain-comprehension's canonical artifact set remains under `docs/` and the manifest validator resolves it consistently.
+4. Verify the artifact-root copy contains the MCP profile and per-repo rows.
+5. Pre-fill `{artifact_root}/UNKNOWNS.md` Likely owner when confidence ≥ MEDIUM. If mapping is unavailable, record the skip in `{artifact_root}/KNOWN_OMISSIONS.md` and use UNKNOWN squad values.
 
 ## Required outputs
 
 | Artifact | Location | Key fields | If absent |
 |----------|----------|------------|-----------|
-| MCP profile | `SQUAD_MAP.md` header | GitLab status, Datadog status | Phase incomplete |
-| Squad map | `SQUAD_MAP.md` | Repo, GitLab squad, Datadog team, Confidence, Evidence (§ Conflicts is a separate table) | Phase skipped — note in KNOWN_OMISSIONS.md |
+| MCP profile | `{artifact_root}/SQUAD_MAP.md` header | GitLab/Datadog status | Phase incomplete |
+| Squad map | `{artifact_root}/SQUAD_MAP.md` | Repo, GitLab squad, Datadog team, Confidence, Evidence | Phase skipped with omission |
 
 ## Checkpoint
 
