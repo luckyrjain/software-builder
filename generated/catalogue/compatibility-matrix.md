@@ -15,7 +15,7 @@ Distribution version: **1.4.0**
 | `incident-rca` | ambient | rule | yes | manual | telemetry.logs.query | read-only |
 | `incident-triage-agent` | automation-only | rule | yes | manual | pager.webhook.receive | read-only |
 | `integration-test-creator` | ambient | rule | yes | manual | host.repository.read_write | repository-write |
-| `k8s-overprovisioning-datadog` | ambient | rule | yes | manual | Kubernetes history-capable evidence: kubernetes.workloads.read + kubernetes.metrics.history OR Datadog historical evidence: datadog.query_metrics | read-only |
+| `k8s-overprovisioning-datadog` | ambient | rule | yes | manual | Kubernetes history-capable evidence: kubernetes.metrics.history OR Datadog historical evidence: datadog.query_metrics | read-only |
 | `loop-task-implementer` | ambient | rule | yes | manual | host.repository.read_write, host.role.isolation, host.ci.status, host.pull_request.write | repository-write |
 | `migration-program-manager` | ambient | rule | yes | manual | host.filesystem.read | read-only |
 | `mysql-to-postgres-sql` | ambient | rule | yes | manual | host.repository.read_write | repository-write |
