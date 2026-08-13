@@ -257,6 +257,32 @@ class TestProviderDocumentationContracts:
         assert "chat-only" in combined
         assert "writes never compensate for a missing read" in combined
 
+    def test_non_default_port_ghes_disables_all_cli_reads_without_host_only_fallback(self):
+        setup = (ROOT / "pr-review/SETUP.md").read_text(encoding="utf-8")
+        adapters = (ROOT / "pr-review/reference/provider-adapters.md").read_text(encoding="utf-8")
+        phase_zero = (ROOT / "pr-review/workflow/phase-0.md").read_text(encoding="utf-8")
+        phase_one = (ROOT / "pr-review/workflow/phase-1.md").read_text(encoding="utf-8")
+
+        for document in (setup, adapters, phase_zero, phase_one):
+            assert "non-default port" in document
+            assert "CLI fallback is unavailable" in document
+
+        for command in (
+            "`gh auth status`",
+            "`gh pr list`",
+            "`gh pr view`",
+            "`gh pr diff`",
+            "`gh pr checks`",
+            "`gh api`",
+        ):
+            assert command in phase_zero
+
+        assert "complete GitHub App/MCP read pair" in phase_zero
+        assert "metadata/current head plus changed files/diff hunks" in phase_zero
+        assert "zero `gh` calls" in phase_zero
+        assert "Never strip the port or make a hostname-only call" in phase_zero
+        assert "zero cross-authority calls" in phase_one
+
     def test_provider_head_mismatch_is_zero_write_for_every_mode(self):
         posting = (ROOT / "pr-review/workflow/posting.md").read_text(encoding="utf-8")
         gitlab_inline = (ROOT / "pr-review/reference/gitlab-inline-comments.md").read_text(

@@ -6,7 +6,9 @@ import re
 import shlex
 from typing import Literal
 
-HUNK_HEADER = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@")
+HUNK_HEADER = re.compile(
+    r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@"
+)
 
 
 def _marker_path(raw: str) -> str | None:
@@ -19,6 +21,16 @@ def _marker_path(raw: str) -> str | None:
         return None
     marker_path = fields[0]
     return marker_path[2:] if marker_path.startswith(("a/", "b/")) else marker_path
+
+
+def _hunk_range(raw: str) -> tuple[int, int, int] | None:
+    """Return the new start plus old/new line counts for a hunk header."""
+    match = HUNK_HEADER.match(raw)
+    if not match:
+        return None
+    old_count = int(match.group(2)) if match.group(2) is not None else 1
+    new_count = int(match.group(4)) if match.group(4) is not None else 1
+    return int(match.group(3)), old_count, new_count
 
 
 def validate_github_anchor(
@@ -36,49 +48,116 @@ def validate_github_anchor(
         return {"unanchorable": True, "reason": "source_line_is_not_added"}
 
     lines = diff_text.splitlines()
-    parser_mode: Literal["combined", "per_file"] = (
-        "combined" if any(raw.startswith("diff --git ") for raw in lines) else "per_file"
-    )
-    parser_state: Literal["outside", "file_header", "hunk"] = "outside"
-    current_path: str | None = path if parser_mode == "per_file" else None
-    new_line: int | None = None
-    wanted_in_file = parser_mode == "per_file"
+    has_diff_headers = any(raw.startswith("diff --git ") for raw in lines)
+    first_patch_token: Literal["markers", "hunk"] | None = None
+    if not has_diff_headers:
+        for index, raw in enumerate(lines):
+            if raw.startswith("--- ") and index + 1 < len(lines) and lines[index + 1].startswith("+++ "):
+                first_patch_token = "markers"
+                break
+            if raw.startswith("@@"):
+                first_patch_token = "hunk"
+                break
 
-    for raw in lines:
+    parser_mode: Literal["combined", "sectioned", "headerless"]
+    if has_diff_headers:
+        parser_mode = "combined"
+    elif first_patch_token == "markers":
+        parser_mode = "sectioned"
+    else:
+        parser_mode = "headerless"
+
+    parser_state: Literal["outside", "file_header", "file_body", "hunk"] = "outside"
+    current_path: str | None = path if parser_mode == "headerless" else None
+    new_line: int | None = None
+    old_remaining = 0
+    new_remaining = 0
+    wanted_in_file = parser_mode == "headerless"
+    found_anchor = False
+    ambiguous_headerless_input = False
+
+    index = 0
+    while index < len(lines):
+        raw = lines[index]
+        if parser_state == "hunk" and old_remaining == 0 and new_remaining == 0:
+            parser_state = "file_body"
+
         if raw.startswith("diff --git "):
-            if parser_mode != "combined":
-                continue
             parser_state = "file_header"
             current_path = None
             new_line = None
+            old_remaining = 0
+            new_remaining = 0
             wanted_in_file = False
+            index += 1
             continue
+
+        marker_pair = (
+            raw.startswith("--- ")
+            and index + 1 < len(lines)
+            and lines[index + 1].startswith("+++ ")
+            and parser_state != "hunk"
+        )
+        if marker_pair:
+            if parser_mode == "headerless":
+                ambiguous_headerless_input = True
+            current_path = _marker_path(lines[index + 1])
+            wanted_in_file = current_path == path
+            parser_state = "file_body"
+            new_line = None
+            old_remaining = 0
+            new_remaining = 0
+            index += 2
+            continue
+
         if raw.startswith("@@"):
-            match = HUNK_HEADER.match(raw)
-            if parser_mode == "combined" and parser_state == "outside":
-                continue
-            parser_state = "hunk"
-            new_line = int(match.group(1)) if match and wanted_in_file else None
-            continue
-        if parser_mode == "combined" and parser_state == "file_header":
-            if raw.startswith("--- "):
-                current_path = None
+            hunk_range = _hunk_range(raw)
+            if not hunk_range:
+                parser_state = "outside"
                 new_line = None
                 wanted_in_file = False
-            elif raw.startswith("+++ "):
-                current_path = _marker_path(raw)
-                wanted_in_file = current_path == path
+                index += 1
+                continue
+            parser_state = "hunk"
+            hunk_start, old_remaining, new_remaining = hunk_range
+            new_line = hunk_start if wanted_in_file else None
+            index += 1
             continue
-        if parser_state != "hunk" or not wanted_in_file or new_line is None:
+
+        if parser_state != "hunk":
+            if raw.startswith(("--- ", "+++ ")):
+                current_path = None
+                wanted_in_file = False
+                parser_state = "file_header"
+            index += 1
             continue
+
         if raw.startswith("-"):
+            if old_remaining > 0:
+                old_remaining -= 1
+            index += 1
             continue
         if raw.startswith("+"):
-            if new_line == line:
-                return {"commit_id": head_sha, "path": path, "line": line, "side": "RIGHT"}
-            new_line += 1
+            if new_remaining > 0:
+                if wanted_in_file and new_line == line:
+                    found_anchor = True
+                if new_line is not None:
+                    new_line += 1
+                new_remaining -= 1
+            index += 1
             continue
         if raw.startswith(" "):
-            new_line += 1
+            if old_remaining > 0:
+                old_remaining -= 1
+            if new_remaining > 0:
+                if new_line is not None:
+                    new_line += 1
+                new_remaining -= 1
+            index += 1
+            continue
+        index += 1
+
+    if found_anchor and not ambiguous_headerless_input:
+        return {"commit_id": head_sha, "path": path, "line": line, "side": "RIGHT"}
 
     return {"unanchorable": True, "reason": "added_line_not_in_current_diff"}

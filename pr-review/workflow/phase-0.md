@@ -33,6 +33,17 @@ If unavailable, stop with provider-specific setup guidance; never cross-host fal
    authority, treat selection as ambiguous and stop. If only a bare IID was given, derive the exact
    authority from `git remote get-url origin` before selecting a server.
 
+   **GitHub Enterprise Server on a non-default port:** evaluate the immutable
+   `review_target.authority` before any CLI probe. GitHub CLI accepts a hostname, not an authority with
+   a port, so CLI fallback is unavailable for a target such as `forge.company.internal:8443`. Make
+   zero `gh` calls for that target: no `gh auth status`, `gh pr list`, `gh pr view`, `gh pr diff`,
+   `gh pr checks`, or `gh api`. Require a complete GitHub App/MCP read pair bound to the exact
+   authority, covering metadata/current head plus changed files/diff hunks.
+   Never strip the port or make a hostname-only call, even for authentication or discovery; if the
+   exact-authority read pair is absent, stop as unavailable. This prevents every auth, list, view,
+   diff, checks, and API path from
+   crossing to a default-port service.
+
 2. **Jira / Atlassian MCP** (optional): verify by attempting `getAccessibleAtlassianResources`. If unavailable:
    > Jira MCP is not connected. The review will proceed without ticket context — acceptance criteria and linked ticket checks will be skipped. To enable, add the Atlassian MCP to your `mcp.json` (see **SETUP.md § 3 → Jira / Atlassian**).
 
@@ -89,7 +100,8 @@ servers have different posting modes, announce the active mode for this MR expli
 **GitHub target:** inspect GitHub App/MCP descriptors for semantic read (`get_pull_request`, files/diff,
 comments, checks) and comment operations. Prefer the app/MCP. If equivalent read tools are absent, run
 `gh auth status --hostname <review_target.host>`; only an authenticated exact-host result enables the
-`gh` fallback. Record one profile:
+`gh` fallback, and only when the normalized target uses the scheme's default port. For any non-default
+port, CLI fallback is unavailable under the prerequisite above; do not probe it. Record one profile:
 
 | GitHub profile | Capability | Posting mode |
 |---|---|---|

@@ -298,3 +298,117 @@ def test_headerless_per_file_patch_rejects_removed_line():
         "unanchorable": True,
         "reason": "source_line_is_not_added",
     }
+
+
+def test_no_diff_git_concatenated_headers_do_not_cross_file_boundaries():
+    patch = """--- a/src/payments.py
++++ b/src/payments.py
+@@ -1 +1 @@
+ context only
+--- a/src/other.py
++++ b/src/other.py
+@@ -10,0 +11,1 @@
++other file addition
+"""
+    assert validate_github_anchor(
+        patch,
+        path="src/payments.py",
+        line=11,
+        source_kind="added",
+        head_sha="abc",
+    ) == {
+        "unanchorable": True,
+        "reason": "added_line_not_in_current_diff",
+    }
+
+
+def test_no_diff_git_quoted_headers_bind_hunks_to_the_parsed_new_path():
+    patch = """--- a/src/payments.py
++++ b/src/payments.py
+@@ -1 +1 @@
+ context only
+--- "a/src/payment rules.py"
++++ "b/src/payment rules.py"
+@@ -4,0 +5,1 @@
++new rule
+"""
+    assert validate_github_anchor(
+        patch,
+        path="src/payments.py",
+        line=5,
+        source_kind="added",
+        head_sha="abc",
+    ) == {
+        "unanchorable": True,
+        "reason": "added_line_not_in_current_diff",
+    }
+    assert validate_github_anchor(
+        patch,
+        path="src/payment rules.py",
+        line=5,
+        source_kind="added",
+        head_sha="abc",
+    ) == {
+        "commit_id": "abc",
+        "path": "src/payment rules.py",
+        "line": 5,
+        "side": "RIGHT",
+    }
+
+
+def test_no_diff_git_deleted_and_created_files_reset_the_previous_path():
+    patch = """--- a/src/payments.py
++++ b/src/payments.py
+@@ -1 +1 @@
+ context only
+--- a/src/deleted.py
++++ /dev/null
+@@ -11 +0,0 @@
+-deleted value
+--- /dev/null
++++ b/src/created.py
+@@ -0,0 +11,1 @@
++created value
+"""
+    assert validate_github_anchor(
+        patch,
+        path="src/payments.py",
+        line=11,
+        source_kind="added",
+        head_sha="abc",
+    ) == {
+        "unanchorable": True,
+        "reason": "added_line_not_in_current_diff",
+    }
+    assert validate_github_anchor(
+        patch,
+        path="src/created.py",
+        line=11,
+        source_kind="added",
+        head_sha="abc",
+    ) == {
+        "commit_id": "abc",
+        "path": "src/created.py",
+        "line": 11,
+        "side": "RIGHT",
+    }
+
+
+def test_mixed_headerless_and_headerful_input_fails_closed():
+    patch = """@@ -4,0 +5,1 @@
++candidate from an unbound hunk
+--- a/src/other.py
++++ b/src/other.py
+@@ -1,0 +1,1 @@
++other file addition
+"""
+    assert validate_github_anchor(
+        patch,
+        path="src/payment_rules.py",
+        line=5,
+        source_kind="added",
+        head_sha="abc",
+    ) == {
+        "unanchorable": True,
+        "reason": "added_line_not_in_current_diff",
+    }

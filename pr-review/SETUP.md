@@ -26,11 +26,13 @@ Install the skill first for either provider: clone `software-builder` (root
 
 1. Connect a GitHub App/MCP with PR read/comment access, or install `gh` for a read-only fallback.
 2. For CLI fallback, run `gh auth login --hostname github.com` and verify with
-   `gh auth status --hostname github.com` (substitute the exact GHES host when applicable).
+   `gh auth status --hostname github.com` (substitute an exact default-port GHES host when applicable).
 3. Run `/pr-review https://github.com/owner/repo/pull/42` for an open PR.
 
 This path does not require a GitLab PAT, GitLab MCP, Node.js, or an MR. CLI fallback is chat-only;
-posting requires connected GitHub standalone inline-comment and issue-comment capabilities.
+posting requires connected GitHub standalone inline-comment and issue-comment capabilities. For GHES
+on a non-default port, CLI fallback is unavailable; connect a GitHub App/MCP complete read pair for the
+exact authority instead.
 
 ### GitLab quickstart
 
@@ -64,6 +66,13 @@ gh auth status --hostname github.example.com
 Use `/pr-review https://github.com/owner/repo/pull/42` or the equivalent GHES URL. A `gh` fallback is
 chat-only; full or summary posting requires GitHub comment capabilities. The skill never approves,
 requests changes, merges, closes, or submits a GitHub review verdict.
+
+`gh` host selection does not safely represent a GHES authority with a non-default port. For a URL such
+as `https://forge.company.internal:8443/owner/repo/pull/42`, CLI fallback is unavailable for auth,
+discovery, PR metadata, diff, checks, comments, and API reads. Do not authenticate or query the
+portless hostname as a substitute. Connect a GitHub App/MCP that supplies both PR metadata/current head
+and changed files/diff hunks for exactly `forge.company.internal:8443`; without that complete read pair,
+the review stops.
 
 ## Ambient discovery is intended
 
@@ -132,6 +141,8 @@ be slash-command-only.
 
 - A connected GitHub App/MCP for PR reads and posting, or `gh` authenticated to the exact host for
   chat-only read fallback.
+- GHES on a non-default port requires a complete GitHub App/MCP read pair for that exact authority;
+  CLI fallback is unavailable.
 - No GitLab PAT, GitLab MCP, or Node.js requirement.
 
 ### GitLab requirements
@@ -402,6 +413,7 @@ Phase 0 announces posting mode and workspace scope. Warnings when:
 |---------|--------------|-----|
 | GitHub `chat-only` — nothing posts | `gh` is read-only for this workflow or connected App/MCP lacks comment tools | Connect GitHub standalone inline-comment and issue-comment capabilities; verify the exact target host |
 | GitHub PR lookup fails on GHES | CLI authenticated to a different host | Run `gh auth status --hostname <exact-host>` and use the canonical GHES PR URL |
+| GHES URL uses a non-default port | `gh` cannot safely retain the target authority | CLI fallback is unavailable; connect a complete GitHub App/MCP read pair bound to the exact host and port |
 | Current-branch PR appears missing | An old command used the 30-item CLI default | Use the documented `gh pr list --limit 1000 --head <branch>` path; exactly 1000 results is truncation, not “none” |
 
 ### GitLab troubleshooting

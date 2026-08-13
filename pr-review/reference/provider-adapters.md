@@ -48,6 +48,13 @@ explicit GitHub write capability is present. Bind `gh pr` commands with
 whose help supports it, such as `gh auth status` and `gh api`. Never default a GitHub Enterprise Server
 request to GitHub.com.
 
+GitHub CLI accepts a hostname, not an authority with a port. When `review_target.authority` uses a
+non-default port (for example, `forge.company.internal:8443` over HTTPS), CLI fallback is unavailable.
+Do not run an auth, list, view, diff, checks, or API `gh` command for that target. Require a complete
+GitHub App/MCP read pair bound to the exact normalized authority; never strip the port, substitute a
+default-port hostname, or make a cross-authority call. This restriction applies even if `gh` is already
+authenticated for the hostname.
+
 ## Provider invariants
 
 - Every finding remains anchored to a changed diff line.
