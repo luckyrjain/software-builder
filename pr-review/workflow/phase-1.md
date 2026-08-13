@@ -66,18 +66,26 @@ authentication, metadata, diff, checks, comments, or API traffic to the hostname
 the same 200-file/20-page boundary, changed-line-only evidence rule, prior-summary dedupe marker, and
 head-SHA capture. GitHub's `mergeable` / `mergeStateStatus` replaces GitLab merge-conflict fields.
 
-1. `get_merge_request` → `diff_refs` SHAs, draft/WIP flag, target branch, labels, `web_url`, `merged_at`, `state`.
+1. Read provider metadata → SHAs, draft/WIP flag, target branch, labels, canonical URL, `merged_at`, and
+   raw provider state. Before any state or typed-SHA gate, derive `review_target.lifecycle_state`:
+   - GitHub `merged: true` → `merged` (GitHub normally also reports raw `state: closed`);
+   - GitHub raw `state: open` → `open`;
+   - GitHub raw `state: closed` with `merged: false` → `closed`;
+   - GitLab `state: opened` → `open`; GitLab `state: merged|closed` remains `merged|closed`.
+   Never infer a merge from GitHub raw `state: closed` alone.
    Record `diff_refs.head_sha` as `head_sha` — the Phase 2→3 gate and Phase 4's staleness re-check both
    consume this exact value; do not re-derive it later from a fresh API call.
    **Typed `expected_head_sha` check (before the state check, when the caller supplied it —
    [inputs.md § Typed invocation](inputs.md#typed-invocation-skill-to-skill-callers)):** compare
-   `expected_head_sha` to `merge_commit_sha` (when `state: merged`) or `diff_refs.head_sha` (otherwise).
+   `expected_head_sha` to `merge_commit_sha` (when normalized `review_target.lifecycle_state: merged`)
+   or `diff_refs.head_sha` (otherwise). A GitHub `state: closed, merged: true` payload therefore selects
+   the merge commit, not the source-branch head.
    On mismatch, stop and report the anomaly — do not proceed to review a commit other than the one the
    caller expected.
    **State check:**
    - Caller supplied `review_mode: retrospective` as a typed invocation field → skip straight to the
      "confirmed" branch below; no conversational ask.
-   - Otherwise, if `state` is `merged` or `closed` **and** the user did **not** request a post-merge audit
+   - Otherwise, if normalized `review_target.lifecycle_state` is `merged` or `closed` **and** the user did **not** request a post-merge audit
      (*post-merge audit*, *review merged MR*, *retrospective*, or explicit confirm after prompt) → stop
      and warn — do not review unless user confirms.
    - If user confirms post-merge audit (or the typed `review_mode: retrospective` field was supplied) →

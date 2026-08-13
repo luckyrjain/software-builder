@@ -86,6 +86,7 @@ def validate_github_anchor(
     found_anchor = False
     ambiguous_headerless_input = False
     malformed_hunk = False
+    no_newline_marker_allowed = False
 
     index = 0
     while index < len(lines):
@@ -100,6 +101,7 @@ def validate_github_anchor(
             new_line = None
             old_remaining = 0
             new_remaining = 0
+            no_newline_marker_allowed = False
             wanted_in_file = False
             index += 1
             continue
@@ -124,6 +126,7 @@ def validate_github_anchor(
             new_line = None
             old_remaining = 0
             new_remaining = 0
+            no_newline_marker_allowed = False
             index += 2
             continue
 
@@ -141,6 +144,7 @@ def validate_github_anchor(
             parser_state = "hunk"
             _, old_remaining, hunk_start, new_remaining = hunk_range
             new_line = hunk_start if wanted_in_file else None
+            no_newline_marker_allowed = False
             index += 1
             continue
 
@@ -153,6 +157,9 @@ def validate_github_anchor(
             continue
 
         if raw == r"\ No newline at end of file":
+            if not no_newline_marker_allowed:
+                malformed_hunk = True
+            no_newline_marker_allowed = False
             index += 1
             continue
         if hunk_complete:
@@ -167,6 +174,7 @@ def validate_github_anchor(
                 malformed_hunk = True
             else:
                 old_remaining -= 1
+            no_newline_marker_allowed = True
             index += 1
             continue
         if raw.startswith("+"):
@@ -178,6 +186,7 @@ def validate_github_anchor(
                 if new_line is not None:
                     new_line += 1
                 new_remaining -= 1
+            no_newline_marker_allowed = True
             index += 1
             continue
         if raw.startswith(" "):
@@ -188,9 +197,11 @@ def validate_github_anchor(
                 if new_line is not None:
                     new_line += 1
                 new_remaining -= 1
+            no_newline_marker_allowed = True
             index += 1
             continue
         malformed_hunk = True
+        no_newline_marker_allowed = False
         index += 1
 
     if parser_state == "hunk" and (old_remaining != 0 or new_remaining != 0):

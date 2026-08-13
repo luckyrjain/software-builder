@@ -451,3 +451,19 @@ class TestProviderDocumentationContracts:
         )[1]
         assert "No provider writes" in cancelled
         assert "No GitLab writes" not in cancelled
+
+    def test_github_lifecycle_is_normalized_before_typed_sha_gate(self):
+        phase_one = (ROOT / "pr-review/workflow/phase-1.md").read_text(encoding="utf-8")
+        modes = (ROOT / "pr-review/reference/review-modes.md").read_text(encoding="utf-8")
+
+        assert "GitHub `merged: true` → `merged`" in phase_one
+        assert "GitHub raw `state: open` → `open`" in phase_one
+        assert "GitHub raw `state: closed` with `merged: false` → `closed`" in phase_one
+        normalization = phase_one.index("derive `review_target.lifecycle_state`")
+        typed_gate = phase_one.index("**Typed `expected_head_sha` check")
+        assert normalization < typed_gate
+        assert "when normalized `review_target.lifecycle_state: merged`" in phase_one
+        assert "state: closed, merged: true" in phase_one
+        assert "GitHub `state: open`" in modes
+        assert "GitLab `state: opened`" in modes
+        assert "merged: false" in modes

@@ -752,3 +752,61 @@ def test_strict_hunk_grammar_retains_complete_valid_hunks(mode):
         "line": 11,
         "side": "RIGHT",
     }
+
+
+@pytest.mark.parametrize("mode", ["combined", "headerless", "concatenated"])
+@pytest.mark.parametrize(
+    "hunk_text",
+    [
+        "@@ -1,1 +1,2 @@\n\\ No newline at end of file\n context\n+target\n",
+        (
+            "@@ -1,1 +1,2 @@\n context\n\\ No newline at end of file\n"
+            "\\ No newline at end of file\n+target\n"
+        ),
+        (
+            "@@ -1,1 +1,2 @@\n context\n+target\n"
+            "@@ -4,1 +5,1 @@\n\\ No newline at end of file\n context\n"
+        ),
+    ],
+    ids=("leading", "repeated", "next-hunk-leading"),
+)
+def test_no_newline_diagnostic_is_rejected_outside_legal_body_position(mode, hunk_text):
+    assert validate_github_anchor(
+        _strict_grammar_patch(mode, hunk_text),
+        path="src/payments.py",
+        line=2,
+        source_kind="added",
+        head_sha="abc",
+    ) == {
+        "unanchorable": True,
+        "reason": "added_line_not_in_current_diff",
+    }
+
+
+@pytest.mark.parametrize("mode", ["combined", "headerless", "concatenated"])
+@pytest.mark.parametrize(
+    "hunk_text,target_line",
+    [
+        ("@@ -1,0 +1,1 @@\n+target\n\\ No newline at end of file\n", 1),
+        ("@@ -1,1 +1,0 @@\n-removed\n\\ No newline at end of file\n", 99),
+        ("@@ -1,1 +1,2 @@\n context\n\\ No newline at end of file\n+target\n", 2),
+    ],
+    ids=("after-addition", "after-removal", "after-context"),
+)
+def test_no_newline_diagnostic_is_valid_once_after_a_body_record(mode, hunk_text, target_line):
+    result = validate_github_anchor(
+        _strict_grammar_patch(mode, hunk_text),
+        path="src/payments.py",
+        line=target_line,
+        source_kind="added",
+        head_sha="abc",
+    )
+    if target_line == 99:
+        assert result == {"unanchorable": True, "reason": "added_line_not_in_current_diff"}
+    else:
+        assert result == {
+            "commit_id": "abc",
+            "path": "src/payments.py",
+            "line": target_line,
+            "side": "RIGHT",
+        }

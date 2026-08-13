@@ -5,7 +5,7 @@ Three modes — different recommendation strategy, same finding pipeline.
 
 | Mode | Trigger | `review_metadata.review_mode` |
 |------|---------|-------------------------------|
-| **Pre-merge** | Open MR (`state: opened`) | `pre_merge` |
+| **Pre-merge** | Open PR/MR (GitHub `state: open`; GitLab `state: opened`; normalized lifecycle `open`) | `pre_merge` |
 | **Incremental** | Open PR/MR + prior bot review on the same target | `incremental` |
 | **Post-merge (retrospective)** | Merged PR/MR + user confirms audit | `retrospective` |
 
@@ -13,8 +13,9 @@ Also set `audit_type: retrospective` when `review_mode: retrospective` (dashboar
 
 ## Phase 1 — merged or closed review-target gate
 
-When the selected provider returns a merged or closed review target, branch all user-facing vocabulary
-on `review_target.provider`:
+When normalized `review_target.lifecycle_state` is `merged` or `closed`, branch all user-facing
+vocabulary on `review_target.provider`. Normalize GitHub `merged: true` as `merged` even though its raw
+state is normally `closed`; raw GitHub `closed` with `merged: false` remains closed:
 
 | User intent | Action |
 |-------------|--------|
