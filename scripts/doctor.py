@@ -76,7 +76,8 @@ def cmd_doctor(
             if manifest is None:
                 continue
             installed_version = manifest.get("distribution_version", "unknown")
-            installed_sha = manifest.get("source_sha", "unknown")
+            installed_sha = manifest.get("source_sha")
+            installed_sha = installed_sha if isinstance(installed_sha, str) else "unknown"
             installed_label = f"installed ({installed_version} @ {installed_sha[:12]})"
             if installed_version != distribution_version:
                 status = "VERSION_MISMATCH"
