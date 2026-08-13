@@ -18,6 +18,7 @@ _SEMVER_RE = re.compile(
 )
 _ALLOWED_TYPES = {"leaf", "router", "orchestrator", "trigger"}
 _REQUIRED_EVIDENCE = {"OBSERVED", "INFERRED", "UNKNOWN", "CONFLICTED", "NOT_APPLICABLE"}
+_REQUIRED_EVIDENCE_FIELDS = {"claim", "status", "provenance", "limitations"}
 _REQUIRED_COMPLETION = {"SUCCESS", "PARTIAL", "BLOCKED", "FAILED", "ESCALATED"}
 _REQUIRED_COMPLETION_FIELDS = {
     "status",
@@ -53,34 +54,43 @@ def _require_mapping(raw: Any, label: str) -> dict[str, Any]:
     return raw
 
 
+def _validate_exact_string_set(raw: Any, expected: set[str], label: str) -> None:
+    if not isinstance(raw, list) or set(map(str, raw)) != expected:
+        raise ValueError(f"{label} must define the canonical values")
+
+
 def _load_platform_contracts(path: Path = CONTRACTS_PATH) -> dict[str, Any]:
     raw = _require_mapping(load_unique_yaml_file(path), "platform contracts")
     if int(raw.get("schema_version", 0)) != 1:
         raise ValueError("platform contracts: unsupported schema_version")
 
     evidence = _require_mapping(raw.get("evidence"), "platform contracts.evidence")
-    evidence_statuses = evidence.get("statuses")
-    if not isinstance(evidence_statuses, list) or set(map(str, evidence_statuses)) != _REQUIRED_EVIDENCE:
-        raise ValueError(
-            "platform contracts.evidence.statuses must define the canonical evidence statuses",
-        )
+    _validate_exact_string_set(
+        evidence.get("statuses"),
+        _REQUIRED_EVIDENCE,
+        "platform contracts.evidence.statuses",
+    )
+    _validate_exact_string_set(
+        evidence.get("required_fields"),
+        _REQUIRED_EVIDENCE_FIELDS,
+        "platform contracts.evidence.required_fields",
+    )
     if str(evidence.get("insufficient_evidence_status", "")) != "UNKNOWN":
         raise ValueError("platform contracts.evidence.insufficient_evidence_status must be UNKNOWN")
     if str(evidence.get("conflicting_evidence_status", "")) != "CONFLICTED":
         raise ValueError("platform contracts.evidence.conflicting_evidence_status must be CONFLICTED")
 
     completion = _require_mapping(raw.get("completion"), "platform contracts.completion")
-    completion_statuses = completion.get("statuses")
-    if not isinstance(completion_statuses, list) or set(map(str, completion_statuses)) != _REQUIRED_COMPLETION:
-        raise ValueError(
-            "platform contracts.completion.statuses must define the canonical completion statuses",
-        )
-
-    required_fields = completion.get("required_fields")
-    if not isinstance(required_fields, list) or set(map(str, required_fields)) != _REQUIRED_COMPLETION_FIELDS:
-        raise ValueError(
-            "platform contracts.completion.required_fields must define the canonical result envelope",
-        )
+    _validate_exact_string_set(
+        completion.get("statuses"),
+        _REQUIRED_COMPLETION,
+        "platform contracts.completion.statuses",
+    )
+    _validate_exact_string_set(
+        completion.get("required_fields"),
+        _REQUIRED_COMPLETION_FIELDS,
+        "platform contracts.completion.required_fields",
+    )
 
     gates = _require_mapping(raw.get("action_gates"), "platform contracts.action_gates")
     normalized_gates = {str(key): str(value) for key, value in gates.items()}
@@ -142,7 +152,7 @@ def build_manifest(root: Path = ROOT) -> dict[str, Any]:
         if not isinstance(description, str) or not description.strip():
             raise ValueError(f"{skill_id}: description must be a non-empty string")
 
-        authority = composition[skill_id].write_authority
+        artifact_contract = composition[skill_id]
         skills[skill_id] = {
             "name": skill_id,
             "version": version,
@@ -155,7 +165,7 @@ def build_manifest(root: Path = ROOT) -> dict[str, Any]:
             "path": entry.path,
             "invocation": entry.invocation,
             "risk_class": list(entry.risk_class),
-            "authority": authority,
+            "authority": artifact_contract.write_authority,
             "capabilities": {
                 "required": list(entry.capabilities.required),
                 "optional": [
@@ -180,6 +190,16 @@ def build_manifest(root: Path = ROOT) -> dict[str, Any]:
                 "invokes": list(entry.composition.invokes),
                 "escalation_targets": list(entry.composition.escalation_targets),
                 "mode": entry.composition.mode,
+            },
+            "artifacts": {
+                "produces": list(artifact_contract.produces),
+                "consumes": list(artifact_contract.consumes),
+                "produce_fields": {
+                    name: list(fields) for name, fields in artifact_contract.produce_fields.items()
+                },
+                "consume_fields": {
+                    name: list(fields) for name, fields in artifact_contract.consume_fields.items()
+                },
             },
         }
 
