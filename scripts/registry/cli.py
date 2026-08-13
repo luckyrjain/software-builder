@@ -100,6 +100,17 @@ def _validate_all(root: Path) -> list[str]:
     ]
 
 
+def _validate_for_generate(root: Path) -> list[str]:
+    errors = validate_registry(root)
+    capability_catalog = root / "scripts" / "registry" / "capability_catalog.yaml"
+    platform_contracts = root / "scripts" / "registry" / "platform_contracts.yaml"
+    if capability_catalog.is_file():
+        errors.extend(validate_capability_catalog_sync(root))
+    if platform_contracts.is_file():
+        errors.extend(validate_manifest(root))
+    return errors
+
+
 def cmd_validate(root: Path) -> int:
     errors = _validate_all(root)
     if errors:
@@ -114,7 +125,7 @@ def cmd_generate(root: Path, check_only: bool) -> int:
     if not check_only:
         _prune_stale_adapters(root)
 
-    validation_errors = _validate_all(root)
+    validation_errors = _validate_for_generate(root)
     if validation_errors:
         for error in validation_errors:
             print(error, file=sys.stderr)
