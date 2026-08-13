@@ -1191,6 +1191,23 @@ def test_binary_patch_rejects_compressed_bomb_and_trailing_stream_data():
         )
 
 
+def test_binary_patch_rejects_arbitrary_bytes_labeled_as_delta_programs():
+    payload = zlib.compress(b"not a git delta program")
+    assert not MODULE._git_binary_patch_complete(
+        [
+            "index 1234567..89abcde 100644",
+            "GIT binary patch",
+            "delta 123",
+            *git_base85_lines(payload),
+            "",
+            "delta 456",
+            *git_base85_lines(payload),
+            "",
+        ],
+        1,
+    )
+
+
 def test_headerless_patch_rejects_unknown_text_before_first_hunk():
     assert validate_github_anchor(
         "garbage\n@@ -0,0 +1,1 @@\n+target\n",
@@ -1291,3 +1308,223 @@ def test_non_overlapping_equal_gap_hunks_remain_anchorable(mode, hunks, target_l
         "line": target_line,
         "side": "RIGHT",
     }
+
+
+@pytest.mark.parametrize(
+    "patch,path,line",
+    [
+        (
+            "diff --git a/old name.txt b/new name.txt\n"
+            "similarity index 65%\n"
+            "rename from old name.txt\n"
+            "rename to new name.txt\n"
+            "index 85c3040..7048118 100644\n"
+            "--- a/old name.txt\t\n"
+            "+++ b/new name.txt\t\n"
+            "@@ -1,3 +1,4 @@\n alpha\n beta\n+inserted\n gamma\n",
+            "new name.txt",
+            3,
+        ),
+        (
+            "diff --git a/mode.txt b/mode.txt\n"
+            "old mode 100644\n"
+            "new mode 100755\n"
+            "index 814f4a4..6d92e6a\n"
+            "--- a/mode.txt\n"
+            "+++ b/mode.txt\n"
+            "@@ -1,2 +1,3 @@\n one\n+inserted\n two\n",
+            "mode.txt",
+            2,
+        ),
+    ],
+    ids=("git-rename-and-content", "git-mode-and-content"),
+)
+def test_git_generated_extended_headers_with_content_are_anchorable(patch, path, line):
+    assert validate_github_anchor(
+        patch,
+        path=path,
+        line=line,
+        source_kind="added",
+        head_sha="abc",
+    ) == {"commit_id": "abc", "path": path, "line": line, "side": "RIGHT"}
+
+
+@pytest.mark.parametrize(
+    "metadata,old_marker,new_marker,hunk",
+    [
+        (
+            "new file mode 100644\nindex 1234567..89abcde 100644\n",
+            "--- a/file.txt",
+            "+++ b/file.txt",
+            "@@ -1,1 +1,2 @@\n context\n+target\n",
+        ),
+        (
+            "deleted file mode 100644\nindex 1234567..89abcde 100644\n",
+            "--- a/file.txt",
+            "+++ b/file.txt",
+            "@@ -1,1 +1,2 @@\n context\n+target\n",
+        ),
+        (
+            "new file mode 100644\nindex 0000000..89abcde\n",
+            "--- /dev/null",
+            "+++ b/file.txt",
+            "@@ -1,1 +1,2 @@\n context\n+target\n",
+        ),
+        (
+            "deleted file mode 100644\nindex 1234567..0000000\n",
+            "--- a/file.txt",
+            "+++ /dev/null",
+            "@@ -0,0 +1,1 @@\n+target\n",
+        ),
+        (
+            "old mode 10064x\nnew mode 100755\nindex 1234567..89abcde\n",
+            "--- a/file.txt",
+            "+++ b/file.txt",
+            "@@ -1,1 +1,2 @@\n context\n+target\n",
+        ),
+    ],
+    ids=(
+        "new-mode-with-non-null-old",
+        "deleted-mode-with-non-null-new",
+        "new-file-hunk-has-old-lines",
+        "deleted-file-has-added-lines",
+        "invalid-old-mode",
+    ),
+)
+def test_extended_headers_bind_modes_hashes_markers_and_hunk_kinds(
+    metadata,
+    old_marker,
+    new_marker,
+    hunk,
+):
+    patch = (
+        "diff --git a/file.txt b/file.txt\n"
+        f"{metadata}{old_marker}\n{new_marker}\n{hunk}"
+    )
+    assert validate_github_anchor(
+        patch,
+        path="file.txt",
+        line=1,
+        source_kind="added",
+        head_sha="abc",
+    ) == {"unanchorable": True, "reason": "added_line_not_in_current_diff"}
+
+
+def test_git_c_quoted_octal_utf8_and_tab_path_is_decoded_for_headers_and_markers():
+    patch = (
+        'diff --git "a/caf\\303\\251\\tfile.txt" "b/caf\\303\\251\\tfile.txt"\n'
+        "index e584f07..562bd90 100644\n"
+        '--- "a/caf\\303\\251\\tfile.txt"\n'
+        '+++ "b/caf\\303\\251\\tfile.txt"\n'
+        "@@ -1,2 +1,3 @@\n alpha\n+inserted\n omega\n"
+    )
+    path = "café\tfile.txt"
+    assert validate_github_anchor(
+        patch,
+        path=path,
+        line=2,
+        source_kind="added",
+        head_sha="abc",
+    ) == {"commit_id": "abc", "path": path, "line": 2, "side": "RIGHT"}
+
+
+def test_git_header_decodes_independently_quoted_rename_paths():
+    patch = (
+        'diff --git a/plain.txt "b/caf\\303\\251\\tfile.txt"\n'
+        "similarity index 50%\n"
+        "rename from plain.txt\n"
+        'rename to "caf\\303\\251\\tfile.txt"\n'
+        "index e584f07..562bd90 100644\n"
+        "--- a/plain.txt\n"
+        '+++ "b/caf\\303\\251\\tfile.txt"\n'
+        "@@ -1,2 +1,3 @@\n alpha\n+inserted\n omega\n"
+    )
+    path = "café\tfile.txt"
+    assert validate_github_anchor(
+        patch,
+        path=path,
+        line=2,
+        source_kind="added",
+        head_sha="abc",
+    ) == {"commit_id": "abc", "path": path, "line": 2, "side": "RIGHT"}
+
+
+def test_invalid_git_c_quoted_filename_escape_fails_closed():
+    patch = (
+        'diff --git "a/bad\\q.txt" "b/bad\\q.txt"\n'
+        '--- "a/bad\\q.txt"\n+++ "b/bad\\q.txt"\n'
+        "@@ -0,0 +1,1 @@\n+target\n"
+    )
+    assert validate_github_anchor(
+        patch,
+        path="badq.txt",
+        line=1,
+        source_kind="added",
+        head_sha="abc",
+    ) == {"unanchorable": True, "reason": "added_line_not_in_current_diff"}
+
+
+GIT_GENERATED_DELTA_PATCH = """diff --git a/payload.bin b/payload.bin
+index c5ebe4a6bed51d0508de6a090d5cdba194db16de..4d42bb23d89d7b39e906c9da5fad38ef60888ce5 100755
+GIT binary patch
+delta 26
+icmaEHo#VxIjtz_glXo)lHwy@~3kWc77Z6~&Aq@bJxCq1m
+
+delta 38
+ucmaEHo#VxIjtz_g{PFQQnMuj<#U+VFCGok5%>n}L0s@TN1q7IGNCN;Z;|+)a
+"""
+
+
+def test_real_git_generated_delta_section_does_not_invalidate_other_file_anchor():
+    patch = DIFF_WITH_ADDITION + GIT_GENERATED_DELTA_PATCH
+    assert validate_github_anchor(
+        patch,
+        path="src/payments.py",
+        line=11,
+        source_kind="added",
+        head_sha="abc",
+    ) == {
+        "commit_id": "abc",
+        "path": "src/payments.py",
+        "line": 11,
+        "side": "RIGHT",
+    }
+
+
+def encode_delta_block(delta_program: bytes) -> list[str]:
+    return git_base85_lines(zlib.compress(delta_program))
+
+
+@pytest.mark.parametrize(
+    "delta_program,declared_size",
+    [
+        (b"\x80", 1),
+        (b"\x01\x80", 2),
+        (b"\x01\x01\x00", 3),
+        (b"\x01\x01\x91\x02\x01", 5),
+        (b"\x01\x02\x01A", 4),
+        (b"\x01\x01\x02A", 4),
+        (b"\x01\x02\x01A", 3),
+    ],
+    ids=(
+        "truncated-source-varint",
+        "truncated-result-varint",
+        "opcode-zero",
+        "copy-out-of-bounds",
+        "accumulated-output-mismatch",
+        "truncated-insert",
+        "declaration-program-size-mismatch",
+    ),
+)
+def test_binary_delta_structure_rejects_malformed_programs(delta_program, declared_size):
+    body = [
+        "index 1234567..89abcde 100644",
+        "GIT binary patch",
+        f"delta {declared_size}",
+        *encode_delta_block(delta_program),
+        "",
+        "literal 0",
+        *git_base85_lines(zlib.compress(b"")),
+        "",
+    ]
+    assert not MODULE._git_binary_patch_complete(body, 1)

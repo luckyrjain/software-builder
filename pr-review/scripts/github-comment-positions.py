@@ -6,7 +6,6 @@ import argparse
 import json
 from pathlib import Path
 import re
-import shlex
 import sys
 from typing import Literal
 import zlib
@@ -21,17 +20,103 @@ HUNK_HEADER = re.compile(
 )
 
 
+def _decode_git_path(raw: str) -> str | object:
+    """Decode one Git path field, including C-quoted octal UTF-8 bytes."""
+    if not raw.startswith('"'):
+        return raw
+    if len(raw) < 2 or not raw.endswith('"'):
+        return INVALID_MARKER
+    decoded = bytearray()
+    cursor = 1
+    escapes = {
+        "a": 7, "b": 8, "t": 9, "n": 10, "v": 11, "f": 12, "r": 13,
+        '"': 34, "\\": 92,
+    }
+    while cursor < len(raw) - 1:
+        character = raw[cursor]
+        if character != "\\":
+            decoded.extend(character.encode("utf-8"))
+            cursor += 1
+            continue
+        cursor += 1
+        if cursor >= len(raw) - 1:
+            return INVALID_MARKER
+        escaped = raw[cursor]
+        if escaped in escapes:
+            decoded.append(escapes[escaped])
+            cursor += 1
+            continue
+        if escaped not in "01234567":
+            return INVALID_MARKER
+        end = cursor
+        while end < min(cursor + 3, len(raw) - 1) and raw[end] in "01234567":
+            end += 1
+        value = int(raw[cursor:end], 8)
+        if value > 255:
+            return INVALID_MARKER
+        decoded.append(value)
+        cursor = end
+    try:
+        return decoded.decode("utf-8")
+    except UnicodeDecodeError:
+        return INVALID_MARKER
+
+
+def _quoted_field_end(raw: str) -> int | None:
+    escaped = False
+    for index in range(1, len(raw)):
+        if raw[index] == '"' and not escaped:
+            return index + 1
+        if raw[index] == "\\" and not escaped:
+            escaped = True
+        else:
+            escaped = False
+    return None
+
+
+def _diff_paths(raw: str) -> tuple[str, str] | None:
+    """Parse the two path fields from a canonical ``diff --git`` header."""
+    prefix = "diff --git "
+    if not raw.startswith(prefix):
+        return None
+    fields = raw[len(prefix):]
+    if fields.startswith('"'):
+        end = _quoted_field_end(fields)
+        if end is None or end >= len(fields) or fields[end] != " ":
+            return None
+        old_raw, new_raw = fields[:end], fields[end + 1:]
+    else:
+        # Git does not quote spaces, so the (possibly quoted) b/ prefix is the
+        # structural split. Each side is quoted independently.
+        separator = max(fields.rfind(" b/"), fields.rfind(' "b/'))
+        if separator < 0:
+            return None
+        old_raw, new_raw = fields[:separator], fields[separator + 1:]
+    old_path, new_path = _decode_git_path(old_raw), _decode_git_path(new_raw)
+    if old_path is INVALID_MARKER or new_path is INVALID_MARKER:
+        return None
+    if not old_path.startswith("a/") or not new_path.startswith("b/"):
+        return None
+    return old_path[2:], new_path[2:]
+
+
 def _marker_path(raw: str) -> str | None | object:
     """Parse a ---/+++ marker path, including quoted paths and /dev/null."""
-    try:
-        fields = shlex.split(raw[4:])
-    except ValueError:
+    field = raw[4:]
+    if not field:
         return INVALID_MARKER
-    if not fields:
+    if field.startswith('"'):
+        end = _quoted_field_end(field)
+        if end is None or (field[end:] and not field[end:].startswith("\t")):
+            return INVALID_MARKER
+        field = field[:end]
+    else:
+        field = field.split("\t", 1)[0]
+    marker_path = _decode_git_path(field)
+    if marker_path is INVALID_MARKER:
         return INVALID_MARKER
-    if fields[0] == "/dev/null":
+    if marker_path == "/dev/null":
         return None
-    marker_path = fields[0]
     return marker_path[2:] if marker_path.startswith(("a/", "b/")) else marker_path
 
 
@@ -57,6 +142,67 @@ def _hunk_range(raw: str) -> tuple[int, int, int, int] | None:
     if old_count == 0 and new_count == 0:
         return None
     return old_start, old_count, new_start, new_count
+
+
+def _delta_program_complete(program: bytes) -> bool:
+    """Validate Git delta varints and the exact instruction/output grammar."""
+    def read_varint(cursor: int) -> tuple[int, int] | None:
+        value = 0
+        shift = 0
+        while cursor < len(program) and shift <= 63:
+            byte = program[cursor]
+            cursor += 1
+            value |= (byte & 0x7f) << shift
+            if not byte & 0x80:
+                return value, cursor
+            shift += 7
+        return None
+
+    source_field = read_varint(0)
+    if source_field is None:
+        return False
+    source_size, cursor = source_field
+    result_field = read_varint(cursor)
+    if result_field is None:
+        return False
+    result_size, cursor = result_field
+    if source_size > MAX_BINARY_BLOCK_BYTES or result_size > MAX_BINARY_BLOCK_BYTES:
+        return False
+    output_size = 0
+    while cursor < len(program):
+        opcode = program[cursor]
+        cursor += 1
+        if opcode == 0:
+            return False
+        if opcode & 0x80:
+            copy_offset = 0
+            copy_size = 0
+            for bit, shift in zip((0x01, 0x02, 0x04, 0x08), (0, 8, 16, 24)):
+                if opcode & bit:
+                    if cursor >= len(program):
+                        return False
+                    copy_offset |= program[cursor] << shift
+                    cursor += 1
+            for bit, shift in zip((0x10, 0x20, 0x40), (0, 8, 16)):
+                if opcode & bit:
+                    if cursor >= len(program):
+                        return False
+                    copy_size |= program[cursor] << shift
+                    cursor += 1
+            if copy_size == 0:
+                copy_size = 0x10000
+            if copy_offset + copy_size > source_size:
+                return False
+            output_size += copy_size
+        else:
+            insert_size = opcode & 0x7f
+            if cursor + insert_size > len(program):
+                return False
+            cursor += insert_size
+            output_size += insert_size
+        if output_size > result_size:
+            return False
+    return output_size == result_size
 
 
 def _git_binary_patch_complete(body: list[str], binary_index: int) -> bool:
@@ -125,9 +271,9 @@ def _git_binary_patch_complete(body: list[str], binary_index: int) -> bool:
             or inflater.unconsumed_tail
         ):
             return False
-        if kind == "literal" and len(inflated) != declared_size:
+        if len(inflated) != declared_size:
             return False
-        if kind == "delta" and not inflated:
+        if kind == "delta" and not _delta_program_complete(inflated):
             return False
         blocks += 1
         if cursor == len(body):
@@ -140,6 +286,66 @@ def _git_binary_patch_complete(body: list[str], binary_index: int) -> bool:
     return blocks == 2
 
 
+VALID_FILE_MODE = r"(?:100644|100755|120000|160000)"
+INDEX_METADATA = re.compile(
+    rf"index ([0-9a-f]+)\.\.([0-9a-f]+)(?: ({VALID_FILE_MODE}))?"
+)
+
+
+def _content_metadata_kind(
+    metadata: list[str], old_path: str, new_path: str
+) -> tuple[str, str, str] | None:
+    """Validate extended headers and return kind plus bound old/new hashes."""
+    if not metadata:
+        return "regular", "unknown", "unknown"
+    index_match = INDEX_METADATA.fullmatch(metadata[-1])
+    if index_match is None:
+        return None
+    old_hash, new_hash = index_match.group(1), index_match.group(2)
+    headers = metadata[:-1]
+    if not headers:
+        kind = "regular"
+    elif len(headers) == 1 and re.fullmatch(
+        rf"new file mode {VALID_FILE_MODE}", headers[0]
+    ):
+        kind = "new"
+    elif len(headers) == 1 and re.fullmatch(
+        rf"deleted file mode {VALID_FILE_MODE}", headers[0]
+    ):
+        kind = "deleted"
+    elif (
+        len(headers) == 2
+        and re.fullmatch(rf"old mode {VALID_FILE_MODE}", headers[0])
+        and re.fullmatch(rf"new mode {VALID_FILE_MODE}", headers[1])
+    ):
+        kind = "regular"
+    elif len(headers) == 3 and re.fullmatch(
+        r"similarity index (?:100|[0-9]{1,2})%", headers[0]
+    ):
+        if headers[1].startswith("rename from ") and headers[2].startswith("rename to "):
+            source = _decode_git_path(headers[1][len("rename from "):])
+            target = _decode_git_path(headers[2][len("rename to "):])
+        elif headers[1].startswith("copy from ") and headers[2].startswith("copy to "):
+            source = _decode_git_path(headers[1][len("copy from "):])
+            target = _decode_git_path(headers[2][len("copy to "):])
+        else:
+            return None
+        if source != old_path or target != new_path:
+            return None
+        kind = "regular"
+    else:
+        return None
+    old_zero = set(old_hash) == {"0"}
+    new_zero = set(new_hash) == {"0"}
+    if (
+        (kind == "new" and (not old_zero or new_zero))
+        or (kind == "deleted" and (old_zero or not new_zero))
+        or (kind == "regular" and (old_zero or new_zero))
+    ):
+        return None
+    return kind, old_hash, new_hash
+
+
 def _combined_sections_complete(lines: list[str]) -> bool:
     """Reject truncated `diff --git` sections while allowing known metadata-only forms."""
     starts = [index for index, raw in enumerate(lines) if raw.startswith("diff --git ")]
@@ -148,15 +354,11 @@ def _combined_sections_complete(lines: list[str]) -> bool:
         body = lines[start + 1 : end]
         if not body:
             return False
-        try:
-            diff_fields = shlex.split(lines[start])
-        except ValueError:
+        diff_paths = _diff_paths(lines[start])
+        if diff_paths is None:
             return False
-        if len(diff_fields) != 4 or diff_fields[:2] != ["diff", "--git"]:
-            return False
-        old_diff_raw, new_diff_raw = diff_fields[2:]
-        old_diff = old_diff_raw[2:] if old_diff_raw.startswith("a/") else old_diff_raw
-        new_diff = new_diff_raw[2:] if new_diff_raw.startswith("b/") else new_diff_raw
+        old_diff, new_diff = diff_paths
+        old_diff_raw, new_diff_raw = f"a/{old_diff}", f"b/{new_diff}"
         hunk_indexes = [index for index, raw in enumerate(body) if _hunk_range(raw) is not None]
         marker_indexes = [
             index
@@ -167,24 +369,8 @@ def _combined_sections_complete(lines: list[str]) -> bool:
             if len(marker_indexes) == 1 and marker_indexes[0] < hunk_indexes[0]:
                 before_markers = body[: marker_indexes[0]]
                 between_markers_and_hunk = body[marker_indexes[0] + 2 : hunk_indexes[0]]
-                index_metadata = r"index [0-9a-f]+\.\.[0-9a-f]+(?: [0-7]{6})?"
-                metadata_valid = (
-                    not before_markers
-                    or (
-                        len(before_markers) == 1
-                        and re.fullmatch(index_metadata, before_markers[0]) is not None
-                    )
-                    or (
-                        len(before_markers) == 2
-                        and re.fullmatch(
-                            r"(?:new file mode|deleted file mode) [0-7]{6}",
-                            before_markers[0],
-                        )
-                        is not None
-                        and re.fullmatch(index_metadata, before_markers[1]) is not None
-                    )
-                )
-                if not metadata_valid:
+                metadata = _content_metadata_kind(before_markers, old_diff, new_diff)
+                if metadata is None:
                     return False
                 if between_markers_and_hunk:
                     return False
@@ -192,9 +378,24 @@ def _combined_sections_complete(lines: list[str]) -> bool:
                 new_marker = _marker_path(body[marker_indexes[0] + 1])
                 if old_marker is INVALID_MARKER or new_marker is INVALID_MARKER:
                     return False
-                if (old_marker is None or old_marker == old_diff) and (
-                    new_marker is None or new_marker == new_diff
-                ):
+                kind = metadata[0]
+                ranges = [_hunk_range(body[index]) for index in hunk_indexes]
+                markers_valid = (
+                    (kind == "new" and old_marker is None and new_marker == new_diff)
+                    or (kind == "deleted" and old_marker == old_diff and new_marker is None)
+                    or (
+                        kind == "regular"
+                        and old_marker == old_diff
+                        and new_marker == new_diff
+                    )
+                )
+                hunks_valid = all(
+                    item is not None
+                    and (kind != "new" or item[1] == 0)
+                    and (kind != "deleted" or item[3] == 0)
+                    for item in ranges
+                )
+                if markers_valid and hunks_valid:
                     continue
             return False
         binary_summary = f"Binary files {old_diff_raw} and {new_diff_raw} differ"
