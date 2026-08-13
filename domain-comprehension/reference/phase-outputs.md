@@ -21,7 +21,7 @@ Completion gate: [phase-completion-gate.md](phase-completion-gate.md). Machine s
 | Missing repositories | `UNKNOWNS.md` | Expected but absent repos |
 | Initial unknowns | `UNKNOWNS.md` | ≥0 rows; five questions DRAFT in `EXEC_SUMMARY.md` |
 | Evidence summary (stub) | `EXEC_SUMMARY.md` + `manifest.evidence_summary` | Counters initialized to 0 |
-| Deliverable stubs | All `templates/` copies | Non-empty headers only |
+| Deliverable stubs | All `templates/` copies, including `PRD.md` | Non-empty headers only |
 
 ---
 
@@ -155,6 +155,8 @@ Enums: [implementation-status.md](implementation-status.md). Precedence: [eviden
 | Output | Location | Required fields |
 |--------|----------|-----------------|
 | Final five questions | `EXEC_SUMMARY.md` | COMPLETE or UNKNOWN each |
+| As-built PRD | `PRD.md` | Scope/type, actors, capabilities, `FR-*`/`BR-*`/`NFR-*`, journeys, state/lifecycle, interfaces, data ownership, dependencies, controls, deployment/ops, failures, constraints, risks/gaps, requirement traceability, open product-intent questions |
+| PRD traceability | `PRD.md` § Requirement traceability | Every `FR-*`, `BR-*`, `NFR-*` maps to evidence; unsupported statements marked `Inferred` or `Unknown` |
 | Overall confidence | `EXEC_SUMMARY.md` | Question table + overall band |
 | Engineering leader summary | `EXEC_SUMMARY.md` § Engineering Leader Summary | [engineering-leader-summary.md](engineering-leader-summary.md) |
 | Architecture decisions | `ARCHITECTURE_DECISIONS.md` | ADRs or UNKNOWN |
@@ -167,6 +169,11 @@ Enums: [implementation-status.md](implementation-status.md). Precedence: [eviden
 | Postman/curl export | `postman/*` | When `api_tooling.export_mode: p5` — see [api-tooling-integration.md](api-tooling-integration.md) |
 | `manifest` `api_tooling_export` | `manifest.yaml` | `ok` \| `waived` \| `n_a` per export_mode |
 
+`PRD.md` is current-state/as-built. Do not infer desired future behavior, roadmap, business priority,
+product goals, personas, KPI targets, or SLO targets from code/runtime observations. When authoritative
+product documentation supplies one of these, cite it under normal evidence precedence; otherwise record
+it as a product-intent unknown.
+
 ---
 
 ## Cross-cutting rules
@@ -177,7 +184,8 @@ Enums: [implementation-status.md](implementation-status.md). Precedence: [eviden
 4. **KNOWN_OMISSIONS** ≠ **UNKNOWNS** — scope limits vs unanswered questions.
 5. **Diagrams** — missing required diagram → incomplete unless waived with reason in omissions/unknowns.
 6. **Evidence summary** — update `manifest.evidence_summary` every phase end.
-7. **Time & Effort** — refresh `EXEC_SUMMARY.md` § Time & Effort every phase end: append/update that
+7. **PRD traceability** — every `FR-*`, `BR-*`, and `NFR-*` must cite implementation/contract/config/test/runtime or authoritative documentation evidence; contradictions stay visible.
+8. **Time & Effort** — refresh `EXEC_SUMMARY.md` § Time & Effort every phase end: append/update that
    phase's row from `manifest.phases.<key>.completed_at`, measured against the previous non-skipped
    completed phase (first completed phase's elapsed is `—` — no prior anchor, never fabricate one) and
    formatted as `<h>h <m>m` (e.g. `1h 12m`); set `engagement.model_used` at Session 0 if knowable (leave
