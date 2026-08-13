@@ -1,0 +1,173 @@
+from __future__ import annotations
+
+import json
+import re
+import sys
+from pathlib import Path
+from typing import Any
+
+from scripts.registry.composition_contracts import load_contracts
+from scripts.registry.frontmatter import load_skill_frontmatter
+from scripts.registry.schema import parse_registry
+from scripts.yaml_safety import YAML_SAFETY_ERRORS, load_unique_yaml_file
+
+ROOT = Path(__file__).resolve().parents[2]
+CONTRACTS_PATH = Path(__file__).resolve().parent / "platform_contracts.yaml"
+_SEMVER_RE = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:[-+][0-9A-Za-z.-]+)?$")
+_ALLOWED_TYPES = {"leaf", "router", "orchestrator", "trigger"}
+_REQUIRED_EVIDENCE = {"OBSERVED", "INFERRED", "UNKNOWN", "CONFLICTED", "NOT_APPLICABLE"}
+_REQUIRED_COMPLETION = {"SUCCESS", "PARTIAL", "BLOCKED", "FAILED", "ESCALATED"}
+_REQUIRED_GATES = {
+    "read_only",
+    "local_reversible_write",
+    "remote_non_destructive_write",
+    "destructive_or_high_impact",
+}
+
+
+def _normalize_version(raw: Any) -> str:
+    if raw is None or raw == "":
+        return "1.0.0"
+    value = str(raw).strip()
+    if re.fullmatch(r"\d+", value):
+        value = f"{value}.0.0"
+    elif re.fullmatch(r"\d+\.\d+", value):
+        value = f"{value}.0"
+    if not _SEMVER_RE.fullmatch(value):
+        raise ValueError(f"invalid skill_version {raw!r}; expected semantic version")
+    return value
+
+
+def _require_mapping(raw: Any, label: str) -> dict[str, Any]:
+    if not isinstance(raw, dict):
+        raise ValueError(f"{label} must be a mapping")
+    return raw
+
+
+def _load_platform_contracts(path: Path = CONTRACTS_PATH) -> dict[str, Any]:
+    raw = _require_mapping(load_unique_yaml_file(path), "platform contracts")
+    if int(raw.get("schema_version", 0)) != 1:
+        raise ValueError("platform contracts: unsupported schema_version")
+
+    evidence = _require_mapping(raw.get("evidence"), "platform contracts.evidence")
+    evidence_statuses = evidence.get("statuses")
+    if not isinstance(evidence_statuses, list) or set(map(str, evidence_statuses)) != _REQUIRED_EVIDENCE:
+        raise ValueError("platform contracts.evidence.statuses must define the canonical evidence statuses")
+
+    completion = _require_mapping(raw.get("completion"), "platform contracts.completion")
+    completion_statuses = completion.get("statuses")
+    if not isinstance(completion_statuses, list) or set(map(str, completion_statuses)) != _REQUIRED_COMPLETION:
+        raise ValueError("platform contracts.completion.statuses must define the canonical completion statuses")
+
+    required_fields = completion.get("required_fields")
+    if not isinstance(required_fields, list) or not required_fields:
+        raise ValueError("platform contracts.completion.required_fields must be a non-empty list")
+
+    gates = _require_mapping(raw.get("action_gates"), "platform contracts.action_gates")
+    if set(map(str, gates)) != _REQUIRED_GATES:
+        raise ValueError("platform contracts.action_gates must define all canonical action classes")
+
+    skill_types = _require_mapping(raw.get("skill_types"), "platform contracts.skill_types")
+    invalid_types = sorted({str(value) for value in skill_types.values()} - _ALLOWED_TYPES)
+    if invalid_types:
+        raise ValueError(f"platform contracts.skill_types has invalid types: {', '.join(invalid_types)}")
+    return raw
+
+
+def build_manifest(root: Path = ROOT) -> dict[str, Any]:
+    registry = parse_registry(root / "skills.yaml")
+    platform = _load_platform_contracts(root / "scripts" / "registry" / "platform_contracts.yaml")
+    _artifact_types, _artifact_schemas, _authority_levels, composition = load_contracts(
+        root / "scripts" / "registry" / "composition_contracts.yaml",
+    )
+
+    skill_types = platform["skill_types"]
+    registry_ids = set(registry.skills)
+    if set(skill_types) != registry_ids:
+        missing = sorted(registry_ids - set(skill_types))
+        extra = sorted(set(skill_types) - registry_ids)
+        details: list[str] = []
+        if missing:
+            details.append(f"missing types: {', '.join(missing)}")
+        if extra:
+            details.append(f"unknown types: {', '.join(extra)}")
+        raise ValueError("platform contracts.skill_types registry drift: " + "; ".join(details))
+
+    if set(composition) != registry_ids:
+        missing = sorted(registry_ids - set(composition))
+        extra = sorted(set(composition) - registry_ids)
+        details = []
+        if missing:
+            details.append(f"missing authority contracts: {', '.join(missing)}")
+        if extra:
+            details.append(f"unknown authority contracts: {', '.join(extra)}")
+        raise ValueError("composition contract registry drift: " + "; ".join(details))
+
+    skills: dict[str, Any] = {}
+    for skill_id, entry in registry.skills.items():
+        frontmatter = load_skill_frontmatter(root / entry.path / "SKILL.md")
+        version = _normalize_version(frontmatter.get("skill_version"))
+        description = frontmatter.get("description")
+        if not isinstance(description, str) or not description.strip():
+            raise ValueError(f"{skill_id}: description must be a non-empty string")
+
+        authority = composition[skill_id].write_authority
+        skills[skill_id] = {
+            "name": skill_id,
+            "version": version,
+            "type": str(skill_types[skill_id]),
+            "category": entry.category,
+            "description": description.strip(),
+            "path": entry.path,
+            "invocation": entry.invocation,
+            "risk_class": list(entry.risk_class),
+            "authority": authority,
+            "capabilities": {
+                "required": list(entry.capabilities.required),
+                "optional": [item.name for item in entry.capabilities.optional],
+                "any_of": [
+                    {"name": path.name, "required": list(path.required)}
+                    for path in entry.capabilities.any_of
+                ],
+            },
+            "dependencies": list(entry.install.requires),
+            "composition": {
+                "invokes": list(entry.composition.invokes),
+                "escalation_targets": list(entry.composition.escalation_targets),
+                "mode": entry.composition.mode,
+            },
+        }
+
+    return {
+        "manifest_schema_version": 1,
+        "registry_schema_version": registry.schema_version,
+        "contracts": {
+            "evidence": platform["evidence"],
+            "completion": platform["completion"],
+            "action_gates": platform["action_gates"],
+        },
+        "skills": skills,
+    }
+
+
+def validate_manifest(root: Path = ROOT) -> list[str]:
+    try:
+        build_manifest(root)
+    except YAML_SAFETY_ERRORS as exc:
+        return [f"error: platform manifest: {exc}"]
+    return []
+
+
+def main() -> int:
+    try:
+        manifest = build_manifest(ROOT)
+    except YAML_SAFETY_ERRORS as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    json.dump(manifest, sys.stdout, indent=2, sort_keys=True)
+    sys.stdout.write("\n")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
