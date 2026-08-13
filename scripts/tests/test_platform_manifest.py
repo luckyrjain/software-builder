@@ -31,6 +31,12 @@ def test_manifest_exposes_shared_contracts() -> None:
         "CONFLICTED",
         "NOT_APPLICABLE",
     }
+    assert set(contracts["evidence"]["required_fields"]) == {
+        "claim",
+        "status",
+        "provenance",
+        "limitations",
+    }
     assert contracts["evidence"]["insufficient_evidence_status"] == "UNKNOWN"
     assert set(contracts["completion"]["statuses"]) == {
         "SUCCESS",
@@ -42,11 +48,30 @@ def test_manifest_exposes_shared_contracts() -> None:
     assert contracts["action_gates"]["destructive_or_high_impact"] == "explicit_action_authorization"
 
 
-def test_manifest_reuses_write_authority_contracts() -> None:
+def test_manifest_reuses_write_authority_and_artifact_contracts() -> None:
     skills = build_manifest(ROOT)["skills"]
     assert skills["pr-review"]["authority"] == "comment"
     assert skills["incident-rca"]["authority"] == "read-only"
     assert skills["loop-task-implementer"]["authority"] == "repository-write"
+
+    assert skills["pr-review"]["artifacts"]["produces"] == ["mr_review_report"]
+    assert skills["pr-review"]["artifacts"]["consumes"] == ["mr_context"]
+    assert skills["pr-review"]["artifacts"]["produce_fields"]["mr_review_report"] == [
+        "review_metadata",
+        "posted",
+        "head_sha",
+        "posting_mode",
+    ]
+    assert "implementation_task" in skills["loop-task-implementer"]["artifacts"]["consumes"]
+
+
+def test_manifest_preserves_capability_semantics() -> None:
+    capabilities = build_manifest(ROOT)["skills"]["k8s-overprovisioning-datadog"]["capabilities"]
+    path_names = {path["name"] for path in capabilities["any_of"]}
+    assert path_names == {"Kubernetes historical metrics", "Datadog historical metrics"}
+    assert capabilities["degraded_modes"]["datadog.query_metrics"] == (
+        "continue with equivalent Kubernetes historical metrics when available"
+    )
 
 
 def test_skill_versions_are_normalized_to_semver() -> None:
