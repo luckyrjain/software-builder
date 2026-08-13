@@ -5,8 +5,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 try:
@@ -103,29 +104,46 @@ EXEC_SUMMARY_REQUIRED_SECTIONS = (
 RUNTIME_VALIDATION_HEADING = "runtime validation"
 E2E_FLOW_RUNTIME_HEADING = "runtime validation"
 MERGE_CONFLICTS_HEADING = "## merge conflicts"
+WINDOWS_ABSOLUTE = re.compile(r"^[A-Za-z]:[/\\]")
+DISTRIBUTED_ARTIFACT_IDS = frozenset({"memory_bank_export"})
+
+
+def _relative_path_error(value: Any, label: str) -> str | None:
+    """Return an error when a manifest-controlled path can escape its intended root."""
+    if not isinstance(value, str) or not value.strip():
+        return f"{label} must be a non-empty relative path"
+    raw = value.strip()
+    normalized = raw.replace("\\", "/")
+    candidate = PurePosixPath(normalized)
+    if normalized.startswith("/") or WINDOWS_ABSOLUTE.match(raw) or candidate.is_absolute():
+        return f"{label} must be a relative path with no '..' segments: {raw}"
+    if ".." in candidate.parts:
+        return f"{label} must be a relative path with no '..' segments: {raw}"
+    return None
+
+
+def _artifact_root_error(value: Any) -> str | None:
+    """Validate a persisted artifact root without stranding legacy safe-relative engagements.
+
+    New domain-comprehension runs are required by workflow to write below ``docs/``. The manifest
+    validator remains backward-compatible with older safe relative roots so RESUME and
+    COMPLIANCE_RETROFIT can migrate them instead of rejecting them before they can be read.
+    """
+    return _relative_path_error(value, "engagement.artifact_root")
 
 
 def _resolve_effective_root(workspace_root: Path, engagement: Any) -> tuple[Path, list[str]]:
-    """Resolve where phase deliverables actually live.
-
-    manifest.yaml itself always stays at workspace_root (see reference/run-scoped-artifacts.md),
-    but when a run namespaces its deliverables under `engagement.artifact_root` (e.g. parallel
-    runs, large workspaces, QUICK-mode phase packets), every other file the validator checks —
-    EXEC_SUMMARY.md, the map file, E2E_FLOW.md, RISK_MAP.md, the Postman export — lives under that
-    subdirectory instead of directly at workspace_root.
-    """
+    """Resolve where phase deliverables actually live."""
     if not isinstance(engagement, dict):
         return workspace_root, []
     artifact_root = engagement.get("artifact_root")
     if not artifact_root:
         return workspace_root, []
-    artifact_root_str = str(artifact_root)
-    candidate = Path(artifact_root_str)
-    if candidate.is_absolute() or ".." in candidate.parts:
-        return workspace_root, [
-            f"engagement.artifact_root must be a relative path with no '..' segments: {artifact_root_str}"
-        ]
-    return workspace_root / candidate, []
+    error = _artifact_root_error(artifact_root)
+    if error:
+        return workspace_root, [error]
+    normalized = str(artifact_root).replace("\\", "/")
+    return workspace_root / Path(normalized), []
 
 
 def _load_yaml(path: Path) -> tuple[Any, list[str]]:
@@ -179,12 +197,17 @@ def _validate_artifact_list(items: Any, label: str, status_set: frozenset[str]) 
             errors.append(f"duplicate {label} id: {item_id}")
         else:
             seen_ids.add(item_id)
-        for field in ("path", "phase"):
-            if not isinstance(item.get(field), str) or not str(item.get(field)).strip():
-                errors.append(f"{prefix}.{field} must be a non-empty string")
+
+        path_error = _relative_path_error(item.get("path"), f"{prefix}.path")
+        if path_error:
+            errors.append(path_error)
+
         phase = item.get("phase")
-        if isinstance(phase, str) and phase not in PHASE_KEYS:
+        if not isinstance(phase, str) or not phase.strip():
+            errors.append(f"{prefix}.phase must be a non-empty string")
+        elif phase not in PHASE_KEYS:
             errors.append(f"{prefix}.phase unknown: {phase}")
+
         status = item.get("status")
         if status not in status_set:
             errors.append(f"{prefix}.status must be one of {sorted(status_set)}")
@@ -357,16 +380,13 @@ def _validate_merge_conflicts_gate(
             status_index = lowered.index("status")
             continue
 
-        # Separator row: after stripping leading/trailing "|" and whitespace,
-        # every remaining character is "-", ":", or whitespace.
         if set(stripped.strip("|").replace(" ", "")) <= {"-", ":"}:
             continue
 
         if status_index is None or len(cells) <= status_index:
             continue
 
-        value = cells[status_index].strip()
-        value = value.strip("`*").strip()
+        value = cells[status_index].strip().strip("`*").strip()
         if value.lower().startswith("status:"):
             value = value[len("status:") :].strip()
         if value.lower() == "open":
@@ -443,13 +463,20 @@ def validate_manifest(
                 errors.append(f"engagement missing field: {key}")
         if engagement.get("status") not in ENGAGEMENT_STATUS:
             errors.append("engagement.status invalid")
+        map_error = _relative_path_error(engagement.get("map_file"), "engagement.map_file")
+        if map_error:
+            errors.append(map_error)
+        artifact_root = engagement.get("artifact_root")
+        if artifact_root:
+            root_error = _artifact_root_error(artifact_root)
+            if root_error:
+                errors.append(root_error)
     else:
         errors.append("engagement must be an object")
 
     phases = data.get("phases")
     if isinstance(phases, dict):
-        missing_phases = PHASE_KEYS - set(phases.keys())
-        for key in sorted(missing_phases):
+        for key in sorted(PHASE_KEYS - set(phases.keys())):
             errors.append(f"phases missing key: {key}")
         for key, value in phases.items():
             if key not in PHASE_KEYS:
@@ -473,9 +500,7 @@ def validate_manifest(
             if key in runtime and not isinstance(runtime[key], int):
                 errors.append(f"runtime_validation.{key} must be an integer")
 
-    map_file = ""
-    if isinstance(engagement, dict):
-        map_file = str(engagement.get("map_file") or "")
+    map_file = str(engagement.get("map_file") or "") if isinstance(engagement, dict) else ""
 
     if workspace_root is not None:
         if not workspace_root.is_dir():
@@ -487,41 +512,35 @@ def validate_manifest(
             for item in data.get("artifacts") or []:
                 if not isinstance(item, dict):
                     continue
+                item_id = str(item.get("id") or "")
                 rel = str(item.get("path") or "")
-                if item.get("id") == "map_file" and map_file:
+                if item_id == "map_file" and map_file:
                     rel = map_file
+                if _relative_path_error(rel, "artifact path"):
+                    continue
                 status = item.get("status")
-                if status in ("ok", "stub") and rel:
-                    if not (effective_root / rel).is_file():
-                        errors.append(f"artifact file missing on disk: {rel} (status={status})")
+                if status in ("ok", "stub") and rel and item_id not in DISTRIBUTED_ARTIFACT_IDS:
+                    normalized_rel = rel.replace("\\", "/")
+                    target = effective_root / normalized_rel
+                    expects_directory = rel.endswith(("/", "\\"))
+                    present = target.is_dir() if expects_directory else target.is_file()
+                    if not present:
+                        kind = "directory" if expects_directory else "file"
+                        errors.append(f"artifact {kind} missing on disk: {rel} (status={status})")
 
-            if strict and isinstance(engagement, dict):
-                if engagement.get("status") == "FIRST_PASS_COMPLETE":
-                    for item in data.get("artifacts") or []:
-                        if not isinstance(item, dict) or not item.get("required"):
-                            continue
-                        if item.get("status") not in ("ok", "waived"):
-                            errors.append(
-                                f"strict: required artifact {item.get('id')} status={item.get('status')}"
-                            )
-                    for item in data.get("diagrams") or []:
-                        if not isinstance(item, dict) or not item.get("required"):
-                            continue
-                        if item.get("status") not in ("ok", "waived", "n_a"):
-                            errors.append(
-                                f"strict: required diagram {item.get('id')} status={item.get('status')}"
-                            )
-                    for key, value in (phases or {}).items():
-                        if isinstance(value, dict) and value.get("status") not in (
-                            "complete",
-                            "skipped",
-                        ):
-                            errors.append(f"strict: phase {key} not complete or skipped")
+            if strict and isinstance(engagement, dict) and engagement.get("status") == "FIRST_PASS_COMPLETE":
+                for item in data.get("artifacts") or []:
+                    if isinstance(item, dict) and item.get("required") and item.get("status") not in ("ok", "waived"):
+                        errors.append(f"strict: required artifact {item.get('id')} status={item.get('status')}")
+                for item in data.get("diagrams") or []:
+                    if isinstance(item, dict) and item.get("required") and item.get("status") not in ("ok", "waived", "n_a"):
+                        errors.append(f"strict: required diagram {item.get('id')} status={item.get('status')}")
+                for key, value in (phases or {}).items():
+                    if isinstance(value, dict) and value.get("status") not in ("complete", "skipped"):
+                        errors.append(f"strict: phase {key} not complete or skipped")
 
             if check_content:
-                errors.extend(
-                    _validate_exec_summary_content(effective_root / "EXEC_SUMMARY.md")
-                )
+                errors.extend(_validate_exec_summary_content(effective_root / "EXEC_SUMMARY.md"))
                 errors.extend(
                     _validate_p2b_runtime_gate(
                         effective_root,
@@ -549,17 +568,8 @@ def validate_manifest(
 def main() -> int:
     parser = argparse.ArgumentParser(description="Validate domain-comprehension manifest.yaml")
     parser.add_argument("manifest", type=Path, help="Path to manifest.yaml")
-    parser.add_argument(
-        "--workspace-root",
-        type=Path,
-        default=None,
-        help="Verify artifact paths exist under this directory",
-    )
-    parser.add_argument(
-        "--strict",
-        action="store_true",
-        help="Enforce FIRST_PASS_COMPLETE readiness rules",
-    )
+    parser.add_argument("--workspace-root", type=Path, default=None, help="Verify artifact paths exist under this directory")
+    parser.add_argument("--strict", action="store_true", help="Enforce FIRST_PASS_COMPLETE readiness rules")
     parser.add_argument(
         "--check-content",
         action="store_true",

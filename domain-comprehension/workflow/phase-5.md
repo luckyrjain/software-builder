@@ -1,8 +1,10 @@
 ---
-workflow_version: 1.7
+workflow_version: 1.8
 phase: 5
 produces:
   - final_five_questions
+  - as_built_prd
+  - prd_requirement_traceability
   - overall_confidence_final
   - engineering_leader_summary
   - architecture_decisions
@@ -18,17 +20,24 @@ consumes:
   - evidence_summary
   - core_domain_deep_dive
   - fraud_compliance_review
+  - business_flows
+  - state_machine
+  - api_catalog
+  - event_catalog
+  - data_ownership
 ---
 
 # Comprehension Phase P5 — Delivery and handoff
 
-Final evidence review, section confidence calibration, and delivery checklist.
+Final evidence review, as-built PRD synthesis, section confidence calibration, and delivery checklist.
 
 ## Required outputs
 
 | Artifact | Location | Key fields | If absent |
 |----------|----------|------------|-----------|
 | Final five questions | `EXEC_SUMMARY.md` | COMPLETE or UNKNOWN each — no DRAFT allowed | Phase incomplete |
+| As-built PRD | `PRD.md` | Current-state scope, actors, capabilities, requirements/rules/NFRs, workflows, state, interfaces, data, dependencies, controls, operations, failures, constraints, risks/gaps, traceability, open product-intent questions | Phase incomplete |
+| PRD requirement traceability | `PRD.md` § Requirement traceability | Every `FR-*`, `BR-*`, `NFR-*` cites evidence and has confidence/status | Phase incomplete |
 | Overall confidence | `EXEC_SUMMARY.md` | Question table + overall band | Phase incomplete |
 | Engineering leader summary | `EXEC_SUMMARY.md` § Engineering Leader Summary | Per [engineering-leader-summary.md](../reference/engineering-leader-summary.md) | Phase incomplete |
 | Architecture decisions | `ARCHITECTURE_DECISIONS.md` | ADRs or UNKNOWN | Phase incomplete |
@@ -36,6 +45,47 @@ Final evidence review, section confidence calibration, and delivery checklist.
 | Evidence summary (final) | `EXEC_SUMMARY.md` + manifest | All counters populated (non-zero where evidence exists) | Phase incomplete |
 | Section confidences | `EXEC_SUMMARY.md` | Per major section | Phase incomplete |
 | PROGRESS.md status | `PROGRESS.md` | `FIRST_PASS_COMPLETE` | Phase incomplete |
+
+## As-built PRD synthesis
+
+Use [templates/PRD.md](../templates/PRD.md) as the required skeleton. The PRD is a projection of the
+completed comprehension evidence into a requirements-oriented document; do not perform a second,
+independent product-discovery pass that can drift from the domain artifacts.
+
+1. Set the scope to the in-scope service(s), bounded context, or domain from `domain-config.yaml` and the
+   final inventory. A service-only run is valid; do not invent a larger product boundary.
+2. Derive actors/consumers and capabilities from evidenced entry points, callers/consumers, contracts,
+   flows, and ownership. Human personas are only named when authoritative evidence supports them.
+3. Create stable requirement IDs:
+   - `FR-*` for externally or internally observable functional behavior;
+   - `BR-*` for business rules, eligibility/validation rules, invariants, limits, and state-transition
+     preconditions;
+   - `NFR-*` for evidenced operational/correctness properties such as idempotency, consistency, ordering,
+     retries, rate limits, security, availability behavior, scaling constraints, and recovery behavior.
+4. For each requirement record evidence, scope, confidence, and status:
+   - `Observed` — directly established by executable code, contract/schema, config, or authoritative
+     documentation under [evidence-precedence.md](../reference/evidence-precedence.md);
+   - `Inferred` — not stated directly but supported by multiple corroborating signals; explain the
+     inference and keep confidence no higher than its weakest material support;
+   - `Unknown` — evidence is insufficient or contradictory. Preserve the question in `UNKNOWNS.md`.
+5. Reconcile `BUSINESS_FLOWS.md`, `STATE_MACHINE.md`, `API_CATALOG.md`, `EVENT_CATALOG.md`,
+   `DATA_OWNERSHIP.md`, `{map_file}`, `DEPENDENCY_GRAPH.md`, `ARCHITECTURE_DECISIONS.md`, `RISK_MAP.md`,
+   `RUNBOOK.md`, tests/config, and runtime validation. If two artifacts disagree, show the contradiction;
+   do not silently choose one.
+6. Treat telemetry as behavioral corroboration only. Observed traffic volume, p95 latency, error rate,
+   replica count, or throughput is **not** an intended KPI/SLO/NFR target unless a source/config/contract
+   explicitly establishes it as such.
+7. Do not manufacture product intent from implementation: no invented problem statement, goals,
+   non-goals, personas, roadmap, success metric, target SLO, MVP boundary, prioritization, or future
+   acceptance criteria. Put unrecoverable intent into `PRD.md` § Open product-intent questions and
+   `UNKNOWNS.md`.
+8. Populate `PRD.md` § Requirement traceability with every `FR-*`, `BR-*`, and `NFR-*`. No requirement
+   may exist only in prose without a corresponding traceability row.
+9. Apply the same safe-rendering and prompt-injection boundary as all other deliverables.
+
+A user who wants to turn this current-state baseline into a proposed/future-state specification should
+hand `PRD.md` plus the supporting evidence set to **prd-architect**. This phase itself does not author a
+build-readiness verdict for a proposed change.
 
 ## Memory Bank export (optional)
 
@@ -85,11 +135,11 @@ When `export_mode: never`, set manifest `api_tooling_export` → `n_a`.
 When earlier phases wrote [phase packets](../reference/run-scoped-artifacts.md#smaller-phase-packets)
 (`{artifact_root}/packets/P0-inventory.md`, etc. — QUICK delivery or `repos_in_scope` > 50) instead of
 editing `{map_file}` directly, merge every packet into the canonical deliverables under
-`artifact_root` now, before running the completion-gate checklist below: fold each packet's findings
-into `EXEC_SUMMARY.md` and `{map_file}` in the same section structure a non-packet run would have
+`artifact_root` now, before PRD synthesis and the completion-gate checklist below: fold each packet's
+findings into `EXEC_SUMMARY.md` and `{map_file}` in the same section structure a non-packet run would have
 produced. Packets are working notes, not a second source of truth — once merged, the manifest's
-required-artifact checks (`EXEC_SUMMARY.md`, `{map_file}`) are what's authoritative, exactly as in a
-run that never used packets.
+required-artifact checks (`EXEC_SUMMARY.md`, `{map_file}`) are what's authoritative, exactly as in a run
+that never used packets.
 
 ## Definition of Done
 
