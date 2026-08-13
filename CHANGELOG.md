@@ -8,6 +8,28 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 
 ## Platform
 
+### Relocate golden-eval per-assertion caveats out of the description blob (2026-08-13)
+
+- Across `evals/golden/**/*.yaml`, 35 of 40 fixtures packed a single `description` field with three
+  distinct kinds of content: plain test intent, per-assertion coverage caveats (e.g. pr-review's
+  fixture documenting that no well-formed check exists for two specific markers on one field — a real
+  gap, just non-local to the assertion it's about), and cross-fixture regression history repeated
+  near-verbatim across a family of sibling fixtures ("the lesson learned from mysql-to-postgres-sql's
+  ... round 4"). One fixture already showed the fix ad-hoc — a single caveat pulled into a plain YAML
+  comment right above its assertion — just not applied consistently anywhere else.
+- Migrated the 7 worst-offending fixtures (pr-review, domain-comprehension, integration/e2e/contract/
+  unit-test-creator, incident-rca — the ones with genuine per-assertion caveats, not just dense
+  multi-site test-intent prose), moving each caveat into a `# CAVEAT:` comment directly above the
+  assertion or field it describes, and trimming `description` down to test intent only.
+- Added `find_oversized_descriptions()` to `scripts/evals/golden.py` (mirroring the existing
+  `find_vacuous_anchored_patterns()` soft-warning pattern), wired into `python3 -m scripts.evals`: any
+  fixture with a description over 400 chars prints a warning, not a failure, since some legitimate
+  multi-site test-intent descriptions genuinely need more than a couple sentences.
+- One fixture (`domain-comprehension/golden-injection-confidence-rubric-unchanged`) was deliberately
+  left untouched — its `description` carries whole-skill workflow-contract-exemption design rationale,
+  a different problem (wrong content entirely, not just non-local placement) flagged as a separate
+  follow-up rather than folded into this change.
+
 ### Split doctor's per-skill status computation from its text rendering (2026-08-13)
 
 - `cmd_doctor()` in `scripts/doctor.py` mixed capability/install status computation, text

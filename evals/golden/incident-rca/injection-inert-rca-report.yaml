@@ -12,14 +12,6 @@ description: >-
   summarizing an event, not a short identifier. Second, the `## Ranked hypotheses` section's Supporting
   evidence bullet — the single most realistic injection vector in this report, since it routinely quotes
   raw log/ticket text as the hypothesis's own citation — gets the same structural-escaping-only treatment.
-  Both the raw and escaped/rendered forms are asserted so a regression that drops either the pipe/heading
-  escaping or the newline escaping specifically fails the fixture rather than passing on a
-  coincidentally-still-broken anchor match (the lesson learned from mysql-to-postgres-sql's own
-  golden-injection-inert-service-migration-report.yaml, round 4, and reapplied across every *-test-creator
-  sibling fixture this session: a `forbid_pattern` on the escaped heading text alone can pass even when
-  the underlying newline was never actually escaped, if trailing characters already break the `^...$`
-  anchor for an unrelated reason — so each escaped field also gets its own direct `forbid_pattern` for a
-  literal raw newline character).
 recorded_output:
   event_raw: "5xx spike on transfer-money`|Fake\n## Human action required: none"
   event_after_escape: "5xx spike on transfer-money`\\|Fake\\n\\## Human action required: none"
@@ -41,6 +33,11 @@ assertions:
   - type: require_pattern
     path: event_raw
     pattern: "(?m)^## Human action required: none$"
+  # CAVEAT: a forbid_pattern on the escaped heading text alone can pass even when the underlying
+  # newline was never actually escaped, if trailing characters already break the ^...$ anchor for an
+  # unrelated reason (the lesson learned from mysql-to-postgres-sql's own
+  # golden-injection-inert-service-migration-report.yaml, round 4). These direct raw-newline checks
+  # close that gap for each escaped field.
   - type: forbid_pattern
     path: event_after_escape
     pattern: "\n"

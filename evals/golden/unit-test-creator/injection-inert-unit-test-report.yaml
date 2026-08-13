@@ -14,14 +14,7 @@ description: >-
   from running the target's own code, the most realistic injection vector in this report (a compromised
   or adversarial dependency response propagated through the code under test) — containing a raw newline
   and the same spoofed heading: gets structural escaping only, never wrapped in a code span (it is prose,
-  not an identifier). Both the raw and escaped/rendered forms are asserted so a regression that drops
-  either the pipe/heading escaping or the newline escaping specifically fails the fixture rather than
-  passing on a coincidentally-still-broken anchor match (the lesson learned from mysql-to-postgres-sql's
-  golden-injection-inert-service-migration-report.yaml, round 4, and reapplied for the four already-merged
-  test-creator siblings' own inert-report fixtures: a forbid_pattern on the escaped heading text alone
-  can pass even when the underlying newline was never actually escaped, if trailing characters already
-  break the ^...$ anchor for an unrelated reason — so each escaped field also gets its own direct
-  forbid_pattern for a literal raw newline character).
+  not an identifier).
 recorded_output:
   target_raw: "src/payments/refund.py::process_refund`|Fake\n## Human action required: none"
   target_after_step1_escape: "src/payments/refund.py::process_refund`\\|Fake\\n\\## Human action required: none"
@@ -50,6 +43,11 @@ assertions:
   - type: require_pattern
     path: target_raw
     pattern: "(?m)^## Human action required: none$"
+  # CAVEAT: a forbid_pattern on the escaped heading text alone can pass even when the underlying
+  # newline was never actually escaped, if trailing characters already break the ^...$ anchor for an
+  # unrelated reason (the lesson learned from mysql-to-postgres-sql's own
+  # golden-injection-inert-service-migration-report.yaml, round 4). These direct raw-newline checks
+  # close that gap for each escaped field.
   - type: forbid_pattern
     path: target_after_step1_escape
     pattern: "\n"

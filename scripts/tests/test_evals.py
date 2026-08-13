@@ -80,14 +80,14 @@ def test_admit_case_dispatches_registered_skill() -> None:
     assert result == EvalResult(skill_id, "case-1", True, ["ran"])
 
 
-def _make_golden_case(skill: str, tier: int, recorded_output: dict, assertions: list[dict]):
+def _make_golden_case(skill: str, tier: int, recorded_output: dict, assertions: list[dict], description: str = ""):
     from scripts.evals.golden import GoldenCase
 
     return GoldenCase(
         skill=skill,
         case_id="case",
         tier=tier,
-        description="",
+        description=description,
         recorded_output=recorded_output,
         assertions=assertions,
         path=ROOT,
@@ -157,4 +157,52 @@ def test_find_vacuous_anchored_patterns_respects_skill_and_tier_filters() -> Non
     assert len(find_vacuous_anchored_patterns([case_a, case_b, case_c], tier_filter=3)) == 2
     assert len(
         find_vacuous_anchored_patterns([case_a, case_b, case_c], skill_filter="skill-a", tier_filter=3),
+    ) == 1
+
+
+def test_find_oversized_descriptions_flags_long_description() -> None:
+    from scripts.evals.golden import find_oversized_descriptions
+
+    case = _make_golden_case(
+        skill="test-skill",
+        tier=3,
+        recorded_output={},
+        assertions=[{"type": "field_equals", "path": "x", "value": 1}],
+        description="x" * 500,
+    )
+
+    warnings = find_oversized_descriptions([case])
+
+    assert len(warnings) == 1
+    assert "500" in warnings[0]
+
+
+def test_find_oversized_descriptions_silent_on_short_description() -> None:
+    from scripts.evals.golden import find_oversized_descriptions
+
+    case = _make_golden_case(
+        skill="test-skill",
+        tier=3,
+        recorded_output={},
+        assertions=[{"type": "field_equals", "path": "x", "value": 1}],
+        description="short and to the point",
+    )
+
+    assert find_oversized_descriptions([case]) == []
+
+
+def test_find_oversized_descriptions_respects_skill_and_tier_filters() -> None:
+    from scripts.evals.golden import find_oversized_descriptions
+
+    long_description = "x" * 500
+    minimal_assertions = [{"type": "field_equals", "path": "x", "value": 1}]
+    case_a = _make_golden_case("skill-a", 3, {}, minimal_assertions, description=long_description)
+    case_b = _make_golden_case("skill-b", 3, {}, minimal_assertions, description=long_description)
+    case_c = _make_golden_case("skill-a", 1, {}, minimal_assertions, description=long_description)
+
+    assert len(find_oversized_descriptions([case_a, case_b, case_c])) == 3
+    assert len(find_oversized_descriptions([case_a, case_b, case_c], skill_filter="skill-a")) == 2
+    assert len(find_oversized_descriptions([case_a, case_b, case_c], tier_filter=3)) == 2
+    assert len(
+        find_oversized_descriptions([case_a, case_b, case_c], skill_filter="skill-a", tier_filter=3),
     ) == 1

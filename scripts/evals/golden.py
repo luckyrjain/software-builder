@@ -225,3 +225,43 @@ def find_vacuous_anchored_patterns(
                     f"recorded value — worth verifying this can actually fail: {pattern!r}",
                 )
     return warnings
+
+
+DESCRIPTION_LENGTH_WARNING_THRESHOLD = 400
+
+
+def find_oversized_descriptions(
+    cases: list[GoldenCase],
+    *,
+    skill_filter: str | None = None,
+    tier_filter: int | None = None,
+) -> list[str]:
+    """Flag fixtures whose description exceeds DESCRIPTION_LENGTH_WARNING_THRESHOLD chars.
+
+    description is meant to state what a fixture verifies, not carry per-assertion
+    coverage caveats, cross-fixture regression history, or skill-level design rationale
+    unrelated to any specific assertion -- those belong as YAML comments next to the
+    assertion or field they actually describe (see e.g. pr-review's and the
+    *-test-creator siblings' golden fixtures for the convention: a `# CAVEAT: ...`
+    comment directly above the assertion it explains). A long description is the signal
+    that content worth relocating has accumulated; this is a heuristic length check, not
+    a content classifier, so a genuinely long single-paragraph test-intent explanation
+    can still legitimately cross the threshold -- hence a warning, not a failure.
+
+    Takes already-loaded cases for the same reason find_vacuous_anchored_patterns does:
+    main() also runs the eval suite over them, so a caller that already has them loaded
+    shouldn't have to parse the fixture tree twice.
+    """
+    warnings: list[str] = []
+    for case in cases:
+        if skill_filter and case.skill != skill_filter:
+            continue
+        if tier_filter is not None and case.tier != tier_filter:
+            continue
+        if len(case.description) > DESCRIPTION_LENGTH_WARNING_THRESHOLD:
+            warnings.append(
+                f"{case.path}: {case.case_id}: description is {len(case.description)} chars "
+                f"(over {DESCRIPTION_LENGTH_WARNING_THRESHOLD}) — consider moving per-assertion "
+                f"caveats or regression history into `# CAVEAT:` comments near what they describe",
+            )
+    return warnings
