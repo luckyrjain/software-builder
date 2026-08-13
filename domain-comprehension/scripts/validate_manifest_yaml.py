@@ -109,12 +109,7 @@ DISTRIBUTED_ARTIFACT_IDS = frozenset({"memory_bank_export"})
 
 
 def _relative_path_error(value: Any, label: str) -> str | None:
-    """Return an error when a manifest-controlled path can escape its intended root.
-
-    Normalize backslashes before validation because manifests may be produced on or copied from
-    Windows while CI commonly validates them on Linux, where ``Path('..\\x')`` would otherwise be
-    treated as one harmless-looking filename.
-    """
+    """Return an error when a manifest-controlled path can escape its intended root."""
     if not isinstance(value, str) or not value.strip():
         return f"{label} must be a non-empty relative path"
     raw = value.strip()
@@ -128,26 +123,17 @@ def _relative_path_error(value: Any, label: str) -> str | None:
 
 
 def _artifact_root_error(value: Any) -> str | None:
-    """Validate the domain artifact root, which must remain inside ``docs/``."""
-    error = _relative_path_error(value, "engagement.artifact_root")
-    if error:
-        return error
-    normalized = str(value).strip().replace("\\", "/")
-    parts = PurePosixPath(normalized).parts
-    if len(parts) < 2 or parts[0] != "docs":
-        return (
-            "engagement.artifact_root must be inside docs/ and include a subdirectory: "
-            f"{value}"
-        )
-    return None
+    """Validate a persisted artifact root without stranding legacy safe-relative engagements.
+
+    New domain-comprehension runs are required by workflow to write below ``docs/``. The manifest
+    validator remains backward-compatible with older safe relative roots so RESUME and
+    COMPLIANCE_RETROFIT can migrate them instead of rejecting them before they can be read.
+    """
+    return _relative_path_error(value, "engagement.artifact_root")
 
 
 def _resolve_effective_root(workspace_root: Path, engagement: Any) -> tuple[Path, list[str]]:
-    """Resolve where phase deliverables actually live.
-
-    manifest.yaml itself always stays at workspace_root. When ``engagement.artifact_root`` is set,
-    every canonical domain artifact the validator checks lives below that relative directory.
-    """
+    """Resolve where phase deliverables actually live."""
     if not isinstance(engagement, dict):
         return workspace_root, []
     artifact_root = engagement.get("artifact_root")
@@ -212,8 +198,7 @@ def _validate_artifact_list(items: Any, label: str, status_set: frozenset[str]) 
         else:
             seen_ids.add(item_id)
 
-        path_value = item.get("path")
-        path_error = _relative_path_error(path_value, f"{prefix}.path")
+        path_error = _relative_path_error(item.get("path"), f"{prefix}.path")
         if path_error:
             errors.append(path_error)
 
@@ -401,8 +386,7 @@ def _validate_merge_conflicts_gate(
         if status_index is None or len(cells) <= status_index:
             continue
 
-        value = cells[status_index].strip()
-        value = value.strip("`*").strip()
+        value = cells[status_index].strip().strip("`*").strip()
         if value.lower().startswith("status:"):
             value = value[len("status:") :].strip()
         if value.lower() == "open":
@@ -479,8 +463,7 @@ def validate_manifest(
                 errors.append(f"engagement missing field: {key}")
         if engagement.get("status") not in ENGAGEMENT_STATUS:
             errors.append("engagement.status invalid")
-        map_file = engagement.get("map_file")
-        map_error = _relative_path_error(map_file, "engagement.map_file")
+        map_error = _relative_path_error(engagement.get("map_file"), "engagement.map_file")
         if map_error:
             errors.append(map_error)
         artifact_root = engagement.get("artifact_root")
@@ -493,8 +476,7 @@ def validate_manifest(
 
     phases = data.get("phases")
     if isinstance(phases, dict):
-        missing_phases = PHASE_KEYS - set(phases.keys())
-        for key in sorted(missing_phases):
+        for key in sorted(PHASE_KEYS - set(phases.keys())):
             errors.append(f"phases missing key: {key}")
         for key, value in phases.items():
             if key not in PHASE_KEYS:
@@ -518,9 +500,7 @@ def validate_manifest(
             if key in runtime and not isinstance(runtime[key], int):
                 errors.append(f"runtime_validation.{key} must be an integer")
 
-    map_file = ""
-    if isinstance(engagement, dict):
-        map_file = str(engagement.get("map_file") or "")
+    map_file = str(engagement.get("map_file") or "") if isinstance(engagement, dict) else ""
 
     if workspace_root is not None:
         if not workspace_root.is_dir():
@@ -546,37 +526,21 @@ def validate_manifest(
                     present = target.is_dir() if expects_directory else target.is_file()
                     if not present:
                         kind = "directory" if expects_directory else "file"
-                        errors.append(
-                            f"artifact {kind} missing on disk: {rel} (status={status})"
-                        )
+                        errors.append(f"artifact {kind} missing on disk: {rel} (status={status})")
 
-            if strict and isinstance(engagement, dict):
-                if engagement.get("status") == "FIRST_PASS_COMPLETE":
-                    for item in data.get("artifacts") or []:
-                        if not isinstance(item, dict) or not item.get("required"):
-                            continue
-                        if item.get("status") not in ("ok", "waived"):
-                            errors.append(
-                                f"strict: required artifact {item.get('id')} status={item.get('status')}"
-                            )
-                    for item in data.get("diagrams") or []:
-                        if not isinstance(item, dict) or not item.get("required"):
-                            continue
-                        if item.get("status") not in ("ok", "waived", "n_a"):
-                            errors.append(
-                                f"strict: required diagram {item.get('id')} status={item.get('status')}"
-                            )
-                    for key, value in (phases or {}).items():
-                        if isinstance(value, dict) and value.get("status") not in (
-                            "complete",
-                            "skipped",
-                        ):
-                            errors.append(f"strict: phase {key} not complete or skipped")
+            if strict and isinstance(engagement, dict) and engagement.get("status") == "FIRST_PASS_COMPLETE":
+                for item in data.get("artifacts") or []:
+                    if isinstance(item, dict) and item.get("required") and item.get("status") not in ("ok", "waived"):
+                        errors.append(f"strict: required artifact {item.get('id')} status={item.get('status')}")
+                for item in data.get("diagrams") or []:
+                    if isinstance(item, dict) and item.get("required") and item.get("status") not in ("ok", "waived", "n_a"):
+                        errors.append(f"strict: required diagram {item.get('id')} status={item.get('status')}")
+                for key, value in (phases or {}).items():
+                    if isinstance(value, dict) and value.get("status") not in ("complete", "skipped"):
+                        errors.append(f"strict: phase {key} not complete or skipped")
 
             if check_content:
-                errors.extend(
-                    _validate_exec_summary_content(effective_root / "EXEC_SUMMARY.md")
-                )
+                errors.extend(_validate_exec_summary_content(effective_root / "EXEC_SUMMARY.md"))
                 errors.extend(
                     _validate_p2b_runtime_gate(
                         effective_root,
@@ -604,17 +568,8 @@ def validate_manifest(
 def main() -> int:
     parser = argparse.ArgumentParser(description="Validate domain-comprehension manifest.yaml")
     parser.add_argument("manifest", type=Path, help="Path to manifest.yaml")
-    parser.add_argument(
-        "--workspace-root",
-        type=Path,
-        default=None,
-        help="Verify artifact paths exist under this directory",
-    )
-    parser.add_argument(
-        "--strict",
-        action="store_true",
-        help="Enforce FIRST_PASS_COMPLETE readiness rules",
-    )
+    parser.add_argument("--workspace-root", type=Path, default=None, help="Verify artifact paths exist under this directory")
+    parser.add_argument("--strict", action="store_true", help="Enforce FIRST_PASS_COMPLETE readiness rules")
     parser.add_argument(
         "--check-content",
         action="store_true",
