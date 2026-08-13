@@ -152,6 +152,8 @@ def provider_from_remote(
         github_hosts=github_hosts,
         gitlab_hosts=gitlab_hosts,
     )
+    if provider == "github" and "://" in url and urlparse(url).scheme.lower() == "http":
+        return None
     return (provider, authority) if provider else None
 
 
@@ -177,7 +179,7 @@ def parse_review_url(
         gitlab_hosts=gitlab_hosts,
     )
     canonical_host = _format_authority(host, port) if port != _DEFAULT_PORTS[scheme] else host
-    if github_match and provider == "github" and int(github_match.group(3)) > 0:
+    if github_match and provider == "github" and scheme == "https" and int(github_match.group(3)) > 0:
         return {
             "provider": "github",
             "host": host,

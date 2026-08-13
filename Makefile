@@ -318,12 +318,13 @@ lint: validate-registry backfill-capabilities-check generate-check validate-eval
 lint-pr-review: lint-pr-review-skill lint-pr-review-scripts
 
 lint-pr-review-scripts:
-	@echo "py_compile pr-review/scripts/diff-to-positions.py pr-review/scripts/pr_review_policy_guards.py"
+	@echo "py_compile pr-review/scripts/diff-to-positions.py pr-review/scripts/github-comment-positions.py pr-review/scripts/pr_review_policy_guards.py"
 	@echo "pytest pr-review/tests/"
 	@cache="$(CURDIR)/.pycache-lint"; \
 	export PYTHONDONTWRITEBYTECODE=1 PYTHONPYCACHEPREFIX="$$cache"; \
 	trap 'rm -rf "$$cache"' EXIT; \
 	python3 -m py_compile pr-review/scripts/diff-to-positions.py || exit 1; \
+	python3 -m py_compile pr-review/scripts/github-comment-positions.py || exit 1; \
 	python3 -m py_compile pr-review/scripts/pr_review_policy_guards.py || exit 1; \
 	if python3 -c "import pytest" >/dev/null 2>&1; then \
 		python3 -m pytest -p no:cacheprovider pr-review/tests/ -q || exit 1; \

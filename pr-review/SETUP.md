@@ -67,6 +67,10 @@ Use `/pr-review https://github.com/owner/repo/pull/42` or the equivalent GHES UR
 chat-only; full or summary posting requires GitHub comment capabilities. The skill never approves,
 requests changes, merges, closes, or submits a GitHub review verdict.
 
+HTTP GitHub and GHES review URLs, including implicit or explicit port 80, are rejected during input
+validation. Use an HTTPS review URL; the skill never upgrades HTTP or sends an App/MCP or `gh` request
+to a substituted HTTPS authority.
+
 `gh` host selection does not safely represent a GHES authority with a non-default port. For a URL such
 as `https://forge.company.internal:8443/owner/repo/pull/42`, CLI fallback is unavailable for auth,
 discovery, PR metadata, diff, checks, comments, and API reads. Do not authenticate or query the

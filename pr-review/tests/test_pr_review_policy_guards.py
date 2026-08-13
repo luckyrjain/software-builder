@@ -81,6 +81,19 @@ class TestProviderRouting:
             github_hosts={"git.company.internal"},
         ) == ("github", "git.company.internal:22")
 
+    def test_rejects_implicit_and_explicit_port_80_github_remotes(self):
+        for remote in (
+            "http://forge.company.internal/platform/payments.git",
+            "http://forge.company.internal:80/platform/payments.git",
+        ):
+            assert (
+                provider_from_remote(
+                    remote,
+                    github_hosts={"http://forge.company.internal:80"},
+                )
+                is None
+            )
+
     def test_detects_confirmed_custom_gitlab_remote(self):
         assert provider_from_remote(
             "https://gitlab.acme.internal/platform/payments.git",
@@ -163,6 +176,39 @@ class TestProviderRouting:
             "repository_path": "platform/payments",
             "review_number": 91,
             "web_url": "https://github.acme.internal/platform/payments/pull/91",
+        }
+
+    def test_rejects_implicit_and_explicit_port_80_github_review_urls(self):
+        for url in (
+            "http://forge.company.internal/platform/payments/pull/91",
+            "http://forge.company.internal:80/platform/payments/pull/91",
+        ):
+            assert (
+                parse_review_url(
+                    url,
+                    github_hosts={"http://forge.company.internal:80"},
+                )
+                is None
+            )
+
+    def test_http_gitlab_review_urls_remain_supported(self):
+        assert parse_review_url("http://gitlab.com/platform/payments/-/merge_requests/17") == {
+            "provider": "gitlab",
+            "host": "gitlab.com",
+            "authority": "gitlab.com:80",
+            "repository_path": "platform/payments",
+            "review_number": 17,
+            "web_url": "http://gitlab.com/platform/payments/-/merge_requests/17",
+        }
+
+    def test_explicit_default_https_port_github_url_remains_supported(self):
+        assert parse_review_url("https://github.com:443/acme/repo/pull/42") == {
+            "provider": "github",
+            "host": "github.com",
+            "authority": "github.com:443",
+            "repository_path": "acme/repo",
+            "review_number": 42,
+            "web_url": "https://github.com/acme/repo/pull/42",
         }
 
     def test_parses_standard_gitlab_merge_request_url(self):
@@ -283,6 +329,17 @@ class TestProviderDocumentationContracts:
         assert "Never strip the port or make a hostname-only call" in phase_zero
         assert "zero cross-authority calls" in phase_one
 
+    def test_http_github_urls_are_rejected_before_any_cli_or_app_routing(self):
+        setup = (ROOT / "pr-review/SETUP.md").read_text(encoding="utf-8")
+        adapters = (ROOT / "pr-review/reference/provider-adapters.md").read_text(encoding="utf-8")
+        phase_zero = (ROOT / "pr-review/workflow/phase-0.md").read_text(encoding="utf-8")
+
+        for document in (setup, adapters, phase_zero):
+            assert "HTTP GitHub" in document
+            assert "reject" in document.lower()
+        assert "before any App/MCP selection or `gh` call" in " ".join(phase_zero.split())
+        assert "GitLab HTTP" in adapters
+
     def test_provider_head_mismatch_is_zero_write_for_every_mode(self):
         posting = (ROOT / "pr-review/workflow/posting.md").read_text(encoding="utf-8")
         gitlab_inline = (ROOT / "pr-review/reference/gitlab-inline-comments.md").read_text(
@@ -353,3 +410,16 @@ class TestProviderDocumentationContracts:
         assert "### Use with GitLab" in setup
         assert "### GitHub troubleshooting" in setup
         assert "### GitLab troubleshooting" in setup
+
+    def test_public_repository_docs_describe_both_provider_read_paths(self):
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        repository = (ROOT / "docs/REPOSITORY.md").read_text(encoding="utf-8")
+
+        for document in (readme, repository):
+            assert "GitHub/GHES or GitLab" in document
+            assert "complete" in document
+            assert "metadata+diff read path" in document
+        assert "GitHub/GHES PR or GitLab MR review" in readme
+        assert "GitHub RIGHT-side anchors and GitLab diff position mapping" in repository
+        assert "configured for provider posting" in repository
+        assert "pr-review | GitLab (read; write for posting)" not in repository

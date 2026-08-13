@@ -59,9 +59,9 @@ workflow consumes it:
 For a GitHub `gh` fallback, bind every command to `review_target.host`: use
 `--repo <host>/<owner>/<repo>` (or command-scoped `GH_HOST`) for `gh pr view`, `gh pr diff`, and
 `gh pr checks`; use `--hostname` only where supported, such as `gh api`. Do not invoke a GitLab tool on
-a GitHub target. This paragraph applies only to default-port authorities admitted by Phase 0. When the
-target uses a non-default port, CLI fallback is unavailable: use the selected complete GitHub App/MCP
-read pair for every operation or stop. Make zero cross-authority calls; never remove the port and send
+a GitHub target. This paragraph applies only to default-port HTTPS authorities admitted by Phase 0.
+When the target uses a non-default port, CLI fallback is unavailable: use the selected complete GitHub
+App/MCP read pair for every operation or stop. Make zero cross-authority calls; never remove the port and send
 authentication, metadata, diff, checks, comments, or API traffic to the hostname's default port. Preserve
 the same 200-file/20-page boundary, changed-line-only evidence rule, prior-summary dedupe marker, and
 head-SHA capture. GitHub's `mergeable` / `mergeStateStatus` replaces GitLab merge-conflict fields.

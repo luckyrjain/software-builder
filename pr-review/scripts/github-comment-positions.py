@@ -2,8 +2,12 @@
 """Validate GitHub inline-review anchors against a unified diff."""
 from __future__ import annotations
 
+import argparse
+import json
+from pathlib import Path
 import re
 import shlex
+import sys
 from typing import Literal
 
 HUNK_HEADER = re.compile(
@@ -75,6 +79,7 @@ def validate_github_anchor(
     wanted_in_file = parser_mode == "headerless"
     found_anchor = False
     ambiguous_headerless_input = False
+    malformed_hunk = False
 
     index = 0
     while index < len(lines):
@@ -83,6 +88,8 @@ def validate_github_anchor(
             parser_state = "file_body"
 
         if raw.startswith("diff --git "):
+            if parser_state == "hunk":
+                malformed_hunk = True
             parser_state = "file_header"
             current_path = None
             new_line = None
@@ -96,9 +103,10 @@ def validate_github_anchor(
             raw.startswith("--- ")
             and index + 1 < len(lines)
             and lines[index + 1].startswith("+++ ")
-            and parser_state != "hunk"
         )
         if marker_pair:
+            if parser_state == "hunk":
+                malformed_hunk = True
             if parser_mode == "headerless":
                 ambiguous_headerless_input = True
             current_path = _marker_path(lines[index + 1])
@@ -111,6 +119,8 @@ def validate_github_anchor(
             continue
 
         if raw.startswith("@@"):
+            if parser_state == "hunk":
+                malformed_hunk = True
             hunk_range = _hunk_range(raw)
             if not hunk_range:
                 parser_state = "outside"
@@ -157,7 +167,62 @@ def validate_github_anchor(
             continue
         index += 1
 
-    if found_anchor and not ambiguous_headerless_input:
+    if parser_state == "hunk" and (old_remaining != 0 or new_remaining != 0):
+        malformed_hunk = True
+
+    if found_anchor and not ambiguous_headerless_input and not malformed_hunk:
         return {"commit_id": head_sha, "path": path, "line": line, "side": "RIGHT"}
 
     return {"unanchorable": True, "reason": "added_line_not_in_current_diff"}
+
+
+def _argument_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description="Validate a GitHub RIGHT-side inline-comment anchor against a unified diff."
+    )
+    diff_input = parser.add_mutually_exclusive_group(required=True)
+    diff_input.add_argument("--diff-file", type=Path, help="read the unified diff from this file")
+    diff_input.add_argument(
+        "--diff-stdin",
+        action="store_true",
+        help="read the unified diff from standard input",
+    )
+    parser.add_argument("--path", required=True, help="repository-relative target path")
+    parser.add_argument("--line", required=True, type=int, help="new-file line number")
+    parser.add_argument(
+        "--source-kind",
+        required=True,
+        choices=("added", "context", "removed"),
+        help="diff source kind assigned by the review workflow",
+    )
+    parser.add_argument("--head-sha", required=True, help="current pull-request head SHA")
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = _argument_parser().parse_args(argv)
+    if args.diff_stdin:
+        diff_text = sys.stdin.read()
+    else:
+        try:
+            diff_text = args.diff_file.read_text(encoding="utf-8")
+        except OSError as exc:
+            print(
+                json.dumps({"error": "diff_input_unavailable", "detail": str(exc)}),
+                file=sys.stderr,
+            )
+            return 1
+
+    result = validate_github_anchor(
+        diff_text,
+        path=args.path,
+        line=args.line,
+        source_kind=args.source_kind,
+        head_sha=args.head_sha,
+    )
+    print(json.dumps(result, sort_keys=True))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

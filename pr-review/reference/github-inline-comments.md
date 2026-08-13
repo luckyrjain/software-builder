@@ -18,6 +18,21 @@ on the RIGHT side. Never infer a legacy `position`. Context/unchanged lines, del
 absent lines, old renamed paths, binary files, truncated hunks, cross-file matches, and validation
 failures are **summary-only** findings.
 
+Use exactly one explicit diff input mode and consume the JSON result:
+
+```bash
+python3 scripts/github-comment-positions.py \
+  --diff-file captured.diff \
+  --path src/file.py \
+  --line 42 \
+  --source-kind added \
+  --head-sha "$CAPTURED_HEAD_SHA"
+# Or replace --diff-file captured.diff with --diff-stdin and pipe the captured diff.
+```
+
+An anchor or `unanchorable` result is written as JSON to stdout. Argument errors exit 2; unreadable
+diff files exit 1 with a JSON error on stderr.
+
 The validator resets state on every `diff --git`, `---`, and `+++` file header, including quoted paths
 and `/dev/null`; a hunk from a later or deleted file must never satisfy an earlier file's anchor.
 

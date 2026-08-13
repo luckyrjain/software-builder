@@ -55,6 +55,10 @@ GitHub App/MCP read pair bound to the exact normalized authority; never strip th
 default-port hostname, or make a cross-authority call. This restriction applies even if `gh` is already
 authenticated for the hostname.
 
+An HTTP GitHub or GHES review URL is rejected before provider capability selection, whether port 80 is
+implicit or explicit. Never upgrade it to HTTPS or route it through an App/MCP or `gh`. GitLab HTTP
+review URLs remain valid when the exact GitLab authority is intentionally configured.
+
 ## Provider invariants
 
 - Every finding remains anchored to a changed diff line.

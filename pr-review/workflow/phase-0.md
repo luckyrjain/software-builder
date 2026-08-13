@@ -33,6 +33,11 @@ If unavailable, stop with provider-specific setup guidance; never cross-host fal
    authority, treat selection as ambiguous and stop. If only a bare IID was given, derive the exact
    authority from `git remote get-url origin` before selecting a server.
 
+   **HTTP GitHub input:** reject an HTTP GitHub or GHES review URL, or an HTTP origin used for
+   discovery, before any App/MCP selection or `gh` call, whether port 80 is implicit or explicit. Do
+   not upgrade the URL to HTTPS or substitute another authority. This input rule does not remove
+   intentionally configured GitLab HTTP support.
+
    **GitHub Enterprise Server on a non-default port:** evaluate the immutable
    `review_target.authority` before any CLI probe. GitHub CLI accepts a hostname, not an authority with
    a port, so CLI fallback is unavailable for a target such as `forge.company.internal:8443`. Make

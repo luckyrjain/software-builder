@@ -179,7 +179,7 @@ routes to skills in another category.
 |-------|--------|--------------|------|
 | [loop-task-implementer](loop-task-implementer/) | “Implement issue 42 and open a PR” | Isolated Builder → two-lens Reviewer → adjudication → remediation → PR loop | [README](loop-task-implementer/README.md) · [SETUP](loop-task-implementer/SETUP.md) |
 | [backlog-runner](backlog-runner/) | Scheduled trigger | Pulls tracker tasks and runs `loop-task-implementer` in dependency order without merging | [README](backlog-runner/README.md) · [SETUP](backlog-runner/SETUP.md) |
-| [pr-review](pr-review/) | `/pr-review` or “review this MR/PR” | GitLab MR review with evidence-backed findings and optional inline posts | [README](pr-review/README.md) · [SETUP](pr-review/SETUP.md) |
+| [pr-review](pr-review/) | `/pr-review` or “review this MR/PR” | GitHub/GHES PR or GitLab MR review with evidence-backed findings and optional inline posts | [README](pr-review/README.md) · [SETUP](pr-review/SETUP.md) |
 | [pr-gatekeeper](pr-gatekeeper/) | Push webhook | Runs `pr-review` on every push to an open MR and applies unattended posting policy | [README](pr-gatekeeper/README.md) · [SETUP](pr-gatekeeper/SETUP.md) |
 | [release-readiness-checker](release-readiness-checker/) | “Is this release ready?” | Aggregates review, Kubernetes, and incident signals into a release go/no-go report | [README](release-readiness-checker/README.md) · [SETUP](release-readiness-checker/SETUP.md) |
 | [prd-architect](prd-architect/) | “Write a PRD for …” / “Should we build this?” | Validates ideas and turns specs into implementation-ready PRDs with Build Readiness gating | [README](prd-architect/README.md) · [SETUP](prd-architect/SETUP.md) |
@@ -233,7 +233,7 @@ MCP is **skill-specific**, not a prerequisite for installing or browsing the rep
 | `unit-test-creator`, `integration-test-creator`, `contract-test-creator`, `e2e-test-creator`, `api-test-creator` | No MCP; use the host's repository read/write access and (optionally) its test-runner/browser/API access |
 | `domain-comprehension`, `squad-map` | No MCP for repository/CODEOWNERS mode; GitLab and Datadog improve coverage |
 | `migration-program-manager`, `weekly-squad-digest` | No MCP; aggregate files produced by upstream workflows |
-| `pr-review` | One complete GitLab or GitHub metadata+diff read path; provider write access only for posting |
+| `pr-review` | One complete GitHub/GHES or GitLab metadata+diff read path; provider write access only for posting |
 | `incident-rca` | At least one observability source: Datadog or KubeSense |
 | `k8s-overprovisioning-datadog` | At least one sufficient evidence source: read-only Kubernetes MCP or Datadog |
 | `cost-optimization-sprint-planner` | Datadog for its namespace pre-filter; then inherits the Kubernetes skill's per-deployment routing |
