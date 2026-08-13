@@ -168,13 +168,13 @@ def test_find_oversized_descriptions_flags_long_description() -> None:
         tier=3,
         recorded_output={},
         assertions=[{"type": "field_equals", "path": "x", "value": 1}],
-        description="x" * 500,
+        description="x" * 1500,
     )
 
     warnings = find_oversized_descriptions([case])
 
     assert len(warnings) == 1
-    assert "500" in warnings[0]
+    assert "1500" in warnings[0]
 
 
 def test_find_oversized_descriptions_silent_on_short_description() -> None:
@@ -191,10 +191,24 @@ def test_find_oversized_descriptions_silent_on_short_description() -> None:
     assert find_oversized_descriptions([case]) == []
 
 
+def test_find_oversized_descriptions_silent_exactly_at_threshold() -> None:
+    from scripts.evals.golden import DESCRIPTION_LENGTH_WARNING_THRESHOLD, find_oversized_descriptions
+
+    case = _make_golden_case(
+        skill="test-skill",
+        tier=3,
+        recorded_output={},
+        assertions=[{"type": "field_equals", "path": "x", "value": 1}],
+        description="x" * DESCRIPTION_LENGTH_WARNING_THRESHOLD,
+    )
+
+    assert find_oversized_descriptions([case]) == []
+
+
 def test_find_oversized_descriptions_respects_skill_and_tier_filters() -> None:
     from scripts.evals.golden import find_oversized_descriptions
 
-    long_description = "x" * 500
+    long_description = "x" * 1500
     minimal_assertions = [{"type": "field_equals", "path": "x", "value": 1}]
     case_a = _make_golden_case("skill-a", 3, {}, minimal_assertions, description=long_description)
     case_b = _make_golden_case("skill-b", 3, {}, minimal_assertions, description=long_description)

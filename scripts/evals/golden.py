@@ -227,7 +227,7 @@ def find_vacuous_anchored_patterns(
     return warnings
 
 
-DESCRIPTION_LENGTH_WARNING_THRESHOLD = 400
+DESCRIPTION_LENGTH_WARNING_THRESHOLD = 1200
 
 
 def find_oversized_descriptions(
@@ -247,6 +247,16 @@ def find_oversized_descriptions(
     that content worth relocating has accumulated; this is a heuristic length check, not
     a content classifier, so a genuinely long single-paragraph test-intent explanation
     can still legitimately cross the threshold -- hence a warning, not a failure.
+
+    The threshold sits just above 1191 chars, the longest description among the fixtures
+    already migrated to the # CAVEAT: convention (integration-test-creator's) -- picked
+    empirically from real, individually-reviewed exemplars rather than guessed, so a
+    genuinely multi-site test-intent description that's already been through the
+    relocation doesn't itself keep tripping the warning it exists to resolve. A lower
+    threshold sounded stricter but had weak discriminating power in practice: length
+    alone doesn't distinguish "has a misplaced caveat" from "legitimately describes a
+    multi-field injection scenario," so setting it below what clean fixtures actually
+    measure just produced noise on fixtures with nothing left to relocate.
 
     Takes already-loaded cases for the same reason find_vacuous_anchored_patterns does:
     main() also runs the eval suite over them, so a caller that already has them loaded

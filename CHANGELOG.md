@@ -23,8 +23,11 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
   assertion or field it describes, and trimming `description` down to test intent only.
 - Added `find_oversized_descriptions()` to `scripts/evals/golden.py` (mirroring the existing
   `find_vacuous_anchored_patterns()` soft-warning pattern), wired into `python3 -m scripts.evals`: any
-  fixture with a description over 400 chars prints a warning, not a failure, since some legitimate
-  multi-site test-intent descriptions genuinely need more than a couple sentences.
+  fixture with a description over 1200 chars prints a warning, not a failure. Threshold picked
+  empirically from the 7 migrated fixtures themselves (1191 chars is the longest of them) rather than
+  guessed, so the exemplars this PR's convention produced don't keep tripping the check they exist to
+  satisfy — length alone doesn't distinguish "has a misplaced caveat" from "legitimately describes a
+  multi-field injection scenario," so a lower threshold just produced noise on already-clean fixtures.
 - One fixture (`domain-comprehension/golden-injection-confidence-rubric-unchanged`) was deliberately
   left untouched — its `description` carries whole-skill workflow-contract-exemption design rationale,
   a different problem (wrong content entirely, not just non-local placement) flagged as a separate
