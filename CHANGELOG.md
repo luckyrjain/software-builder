@@ -8,6 +8,21 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 
 ## Platform
 
+### Split doctor's per-skill status computation from its text rendering (2026-08-13)
+
+- `cmd_doctor()` in `scripts/doctor.py` mixed capability/install status computation, text
+  rendering (direct `print()` calls), and exit-code aggregation into one function. The only
+  way to test the status logic was to capture stdout and substring-match rendered text —
+  visible in the existing test suite as an `or`-hedged assertion that couldn't pin an exact
+  expected status without re-deriving the capability logic from the rendered output.
+- Added a `SkillStatus` dataclass plus `_skill_status()` (pure computation) and
+  `render_skill_status()` (pure text formatting, no I/O). `cmd_doctor()` now composes the two
+  and prints the result. Rewrote `test_doctor.py` to assert on structured data directly,
+  fixing the hedged assertion in the process (pr-review's registry entry has 2 optional
+  capabilities the original "all required present" test didn't account for — the case is
+  actually DEGRADED, not ambiguous). Verified `python3 scripts/doctor.py`'s stdout is
+  byte-identical to before the refactor.
+
 ### Wire package_skill's integrity manifest into install verify (2026-08-12)
 
 - `package_skill.py` computes a sha256 per file into `.software-builder-manifest.json`
