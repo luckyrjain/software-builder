@@ -15,6 +15,10 @@ ROOT = Path(__file__).resolve().parents[2]
 CONTRACTS_PATH = Path(__file__).resolve().parent / "platform_contracts.yaml"
 _CORE_SEMVER_RE = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$")
 _IDENTIFIER_RE = re.compile(r"^[0-9A-Za-z-]+$")
+_LEGACY_NUMERIC_VERSION_RE = re.compile(
+    r"^skill_version:\s*([0-9]+\.[0-9]+)\s*(?:#.*)?$",
+    re.MULTILINE,
+)
 _ALLOWED_TYPES = {"leaf", "router", "orchestrator", "trigger"}
 _REQUIRED_EVIDENCE = {"OBSERVED", "INFERRED", "UNKNOWN", "CONFLICTED", "NOT_APPLICABLE"}
 _REQUIRED_EVIDENCE_FIELDS = {"claim", "status", "provenance", "limitations"}
@@ -71,6 +75,23 @@ def _normalize_version(raw: Any) -> str:
     if not valid:
         raise ValueError(f"invalid skill_version {raw!r}; expected semantic version")
     return value
+
+
+def _version_input(skill_md: Path, raw_version: Any) -> Any:
+    """Recover the exact source lexeme for legacy unquoted YAML decimal versions.
+
+    PyYAML turns ``skill_version: 1.10`` into float ``1.1`` before callers see it.
+    Reading the source token preserves the intended minor digits without accepting
+    arbitrary float values as a public version representation.
+    """
+    if not isinstance(raw_version, float):
+        return raw_version
+    match = _LEGACY_NUMERIC_VERSION_RE.search(skill_md.read_text(encoding="utf-8"))
+    if not match:
+        raise ValueError(
+            "legacy numeric skill_version could not be recovered; quote it as a semantic version",
+        )
+    return match.group(1)
 
 
 def _require_mapping(raw: Any, label: str) -> dict[str, Any]:
@@ -182,20 +203,28 @@ def build_manifest(root: Path = ROOT) -> dict[str, Any]:
 
     skills: dict[str, Any] = {}
     for skill_id, entry in registry.skills.items():
-        frontmatter = load_skill_frontmatter(root / entry.path / "SKILL.md")
+        skill_md = root / entry.path / "SKILL.md"
+        frontmatter = load_skill_frontmatter(skill_md)
         raw_version = frontmatter.get("skill_version")
-        version = _normalize_version(raw_version)
+        try:
+            version = _normalize_version(_version_input(skill_md, raw_version))
+        except ValueError as exc:
+            raise ValueError(f"{skill_id}: {exc}") from exc
         description = frontmatter.get("description")
         if not isinstance(description, str) or not description.strip():
             raise ValueError(f"{skill_id}: description must be a non-empty string")
 
         artifact_contract = composition[skill_id]
+        if raw_version in (None, ""):
+            version_source = "implicit_v1"
+        elif isinstance(raw_version, float):
+            version_source = "skill_frontmatter_legacy_numeric"
+        else:
+            version_source = "skill_frontmatter"
         skills[skill_id] = {
             "name": skill_id,
             "version": version,
-            "version_source": (
-                "skill_frontmatter" if raw_version not in (None, "") else "implicit_v1"
-            ),
+            "version_source": version_source,
             "type": str(skill_types[skill_id]),
             "category": entry.category,
             "description": description.strip(),
