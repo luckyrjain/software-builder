@@ -38,9 +38,9 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
   fixture with a description over 400 chars prints a warning, not a failure, since some legitimate
   multi-site test-intent descriptions genuinely need more than a couple sentences.
 - One fixture (`domain-comprehension/golden-injection-confidence-rubric-unchanged`) was deliberately
-  left untouched — its `description` carries whole-skill workflow-contract-exemption design rationale,
-  a different problem (wrong content entirely, not just non-local placement) flagged as a separate
-  follow-up rather than folded into this change.
+  left untouched here — its `description` carried whole-skill workflow-contract-exemption design
+  rationale, a different problem (wrong content entirely, not just non-local placement) flagged as a
+  separate follow-up rather than folded into this change. See the entry above for that follow-up.
 
 ### Split doctor's per-skill status computation from its text rendering (2026-08-13)
 
