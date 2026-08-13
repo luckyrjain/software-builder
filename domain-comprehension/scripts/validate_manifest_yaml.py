@@ -105,6 +105,7 @@ RUNTIME_VALIDATION_HEADING = "runtime validation"
 E2E_FLOW_RUNTIME_HEADING = "runtime validation"
 MERGE_CONFLICTS_HEADING = "## merge conflicts"
 WINDOWS_ABSOLUTE = re.compile(r"^[A-Za-z]:[/\\]")
+DISTRIBUTED_ARTIFACT_IDS = frozenset({"memory_bank_export"})
 
 
 def _relative_path_error(value: Any, label: str) -> str | None:
@@ -126,6 +127,21 @@ def _relative_path_error(value: Any, label: str) -> str | None:
     return None
 
 
+def _artifact_root_error(value: Any) -> str | None:
+    """Validate the domain artifact root, which must remain inside ``docs/``."""
+    error = _relative_path_error(value, "engagement.artifact_root")
+    if error:
+        return error
+    normalized = str(value).strip().replace("\\", "/")
+    parts = PurePosixPath(normalized).parts
+    if len(parts) < 2 or parts[0] != "docs":
+        return (
+            "engagement.artifact_root must be inside docs/ and include a subdirectory: "
+            f"{value}"
+        )
+    return None
+
+
 def _resolve_effective_root(workspace_root: Path, engagement: Any) -> tuple[Path, list[str]]:
     """Resolve where phase deliverables actually live.
 
@@ -137,7 +153,7 @@ def _resolve_effective_root(workspace_root: Path, engagement: Any) -> tuple[Path
     artifact_root = engagement.get("artifact_root")
     if not artifact_root:
         return workspace_root, []
-    error = _relative_path_error(artifact_root, "engagement.artifact_root")
+    error = _artifact_root_error(artifact_root)
     if error:
         return workspace_root, [error]
     normalized = str(artifact_root).replace("\\", "/")
@@ -469,7 +485,7 @@ def validate_manifest(
             errors.append(map_error)
         artifact_root = engagement.get("artifact_root")
         if artifact_root:
-            root_error = _relative_path_error(artifact_root, "engagement.artifact_root")
+            root_error = _artifact_root_error(artifact_root)
             if root_error:
                 errors.append(root_error)
     else:
@@ -516,16 +532,23 @@ def validate_manifest(
             for item in data.get("artifacts") or []:
                 if not isinstance(item, dict):
                     continue
+                item_id = str(item.get("id") or "")
                 rel = str(item.get("path") or "")
-                if item.get("id") == "map_file" and map_file:
+                if item_id == "map_file" and map_file:
                     rel = map_file
                 if _relative_path_error(rel, "artifact path"):
                     continue
                 status = item.get("status")
-                if status in ("ok", "stub") and rel:
+                if status in ("ok", "stub") and rel and item_id not in DISTRIBUTED_ARTIFACT_IDS:
                     normalized_rel = rel.replace("\\", "/")
-                    if not (effective_root / normalized_rel).is_file():
-                        errors.append(f"artifact file missing on disk: {rel} (status={status})")
+                    target = effective_root / normalized_rel
+                    expects_directory = rel.endswith(("/", "\\"))
+                    present = target.is_dir() if expects_directory else target.is_file()
+                    if not present:
+                        kind = "directory" if expects_directory else "file"
+                        errors.append(
+                            f"artifact {kind} missing on disk: {rel} (status={status})"
+                        )
 
             if strict and isinstance(engagement, dict):
                 if engagement.get("status") == "FIRST_PASS_COMPLETE":
