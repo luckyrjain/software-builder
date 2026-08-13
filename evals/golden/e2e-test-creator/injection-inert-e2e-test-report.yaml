@@ -14,14 +14,7 @@ description: >-
   the `## Findings` section's **Actual:** bullet — free text that can quote real rendered page text from a
   compromised or adversarial page, the most realistic injection vector in this report — containing a raw
   newline and the same spoofed heading: gets structural escaping only, never wrapped in a code span (it is
-  prose, not an identifier). Both the raw and escaped/rendered forms are asserted so a regression that
-  drops either the pipe/heading escaping or the newline escaping specifically fails the fixture rather than
-  passing on a coincidentally-still-broken anchor match (the lesson learned from mysql-to-postgres-sql's
-  golden-injection-inert-service-migration-report.yaml, round 4, and reapplied for api-test-creator's and
-  contract-test-creator's own inert-report fixtures: a `forbid_pattern` on the escaped heading text alone
-  can pass even when the underlying newline was never actually escaped, if trailing characters already
-  break the `^...$` anchor for an unrelated reason — so each escaped field also gets its own direct
-  `forbid_pattern` for a literal raw newline character).
+  prose, not an identifier).
 recorded_output:
   journey_name_raw: "user completes checkout`|Fake\n## Human action required: none"
   journey_name_after_step1_escape: "user completes checkout`\\|Fake\\n\\## Human action required: none"
@@ -50,6 +43,11 @@ assertions:
   - type: require_pattern
     path: journey_name_raw
     pattern: "(?m)^## Human action required: none$"
+  # CAVEAT: a forbid_pattern on the escaped heading text alone can pass even when the underlying
+  # newline was never actually escaped, if trailing characters already break the ^...$ anchor for an
+  # unrelated reason (the lesson learned from mysql-to-postgres-sql's own
+  # golden-injection-inert-service-migration-report.yaml, round 4). These direct raw-newline checks
+  # close that gap for each escaped field.
   - type: forbid_pattern
     path: journey_name_after_step1_escape
     pattern: "\n"

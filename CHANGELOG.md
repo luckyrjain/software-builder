@@ -8,6 +8,43 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 
 ## Platform
 
+### Trim domain-comprehension's workflow-contract-exemption rationale out of a golden-eval description (2026-08-13)
+
+- Follow-up to the item below: `evals/golden/domain-comprehension/injection-confidence-rubric-unchanged.yaml`'s
+  `description` mixed genuine test intent (row 7 of `reference/pressure-tests.md`, a wiki-paste
+  confidence-inflation attempt) with a full walkthrough of why domain-comprehension is exempt from
+  `workflow-contract.yaml` — whole-skill design rationale with nothing to do with what this fixture's
+  assertions verify.
+- That rationale already lives in this changelog, near-verbatim, under `## domain-comprehension` →
+  "Safe rendered-output boundary + injection-resistance golden evals (2026-08-10)" — so nothing needed
+  writing elsewhere. Trimmed the fixture's `description` down to test intent only, matching the
+  convention established below.
+
+### Relocate golden-eval per-assertion caveats out of the description blob (2026-08-13)
+
+- Across `evals/golden/**/*.yaml`, 35 of 40 fixtures packed a single `description` field with three
+  distinct kinds of content: plain test intent, per-assertion coverage caveats (e.g. pr-review's
+  fixture documenting that no well-formed check exists for two specific markers on one field — a real
+  gap, just non-local to the assertion it's about), and cross-fixture regression history repeated
+  near-verbatim across a family of sibling fixtures ("the lesson learned from mysql-to-postgres-sql's
+  ... round 4"). One fixture already showed the fix ad-hoc — a single caveat pulled into a plain YAML
+  comment right above its assertion — just not applied consistently anywhere else.
+- Migrated the 7 worst-offending fixtures (pr-review, domain-comprehension, integration/e2e/contract/
+  unit-test-creator, incident-rca — the ones with genuine per-assertion caveats, not just dense
+  multi-site test-intent prose), moving each caveat into a `# CAVEAT:` comment directly above the
+  assertion or field it describes, and trimming `description` down to test intent only.
+- Added `find_oversized_descriptions()` to `scripts/evals/golden.py` (mirroring the existing
+  `find_vacuous_anchored_patterns()` soft-warning pattern), wired into `python3 -m scripts.evals`: any
+  fixture with a description over 1200 chars prints a warning, not a failure. Threshold picked
+  empirically from the 7 migrated fixtures themselves (1191 chars is the longest of them) rather than
+  guessed, so the exemplars this PR's convention produced don't keep tripping the check they exist to
+  satisfy — length alone doesn't distinguish "has a misplaced caveat" from "legitimately describes a
+  multi-field injection scenario," so a lower threshold just produced noise on already-clean fixtures.
+- One fixture (`domain-comprehension/golden-injection-confidence-rubric-unchanged`) was deliberately
+  left untouched here — its `description` carried whole-skill workflow-contract-exemption design
+  rationale, a different problem (wrong content entirely, not just non-local placement) flagged as a
+  separate follow-up rather than folded into this change. See the entry above for that follow-up.
+
 ### Split doctor's per-skill status computation from its text rendering (2026-08-13)
 
 - `cmd_doctor()` in `scripts/doctor.py` mixed capability/install status computation, text

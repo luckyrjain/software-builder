@@ -11,7 +11,12 @@ from typing import Any
 
 import yaml
 
-from scripts.evals.golden import find_vacuous_anchored_patterns, load_golden_fixtures, run_golden_case
+from scripts.evals.golden import (
+    find_oversized_descriptions,
+    find_vacuous_anchored_patterns,
+    load_golden_fixtures,
+    run_golden_case,
+)
 from scripts.evals.transcript import load_transcript_fixtures, run_transcript_case
 from scripts.evals.types import EvalResult
 from scripts.registry.frontmatter import load_skill_frontmatter
@@ -265,6 +270,10 @@ def main(argv: list[str] | None = None) -> int:
     try:
         golden_cases = load_golden_fixtures(GOLDEN_DIR)
         for warning in find_vacuous_anchored_patterns(
+            golden_cases, skill_filter=args.skill, tier_filter=args.tier,
+        ):
+            print(f"warning: {warning}", file=sys.stderr)
+        for warning in find_oversized_descriptions(
             golden_cases, skill_filter=args.skill, tier_filter=args.tier,
         ):
             print(f"warning: {warning}", file=sys.stderr)

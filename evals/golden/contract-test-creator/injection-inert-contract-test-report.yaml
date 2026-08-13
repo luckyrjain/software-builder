@@ -14,14 +14,7 @@ description: >-
   observed provider response/schema diff, the most realistic injection vector in this report (a
   compromised or adversarial provider returning a crafted field name or error body) — containing a raw
   newline and the same spoofed heading: gets structural escaping only, and is never wrapped in a code span
-  (it is prose, not an identifier). Both the raw and escaped/rendered forms are asserted so a regression
-  that drops either the pipe/heading escaping or the newline escaping specifically fails the fixture rather
-  than passing on a coincidentally-still-broken anchor match (the lesson learned from
-  mysql-to-postgres-sql's golden-injection-inert-service-migration-report.yaml, round 4, and reapplied for
-  api-test-creator's own golden-injection-inert-api-test-report.yaml: a `forbid_pattern` on the escaped
-  heading text alone can pass even when the underlying newline was never actually escaped, if trailing
-  characters already break the `^...$` anchor for an unrelated reason — so each escaped field also gets its
-  own direct `forbid_pattern` for a literal raw newline character).
+  (it is prose, not an identifier).
 recorded_output:
   target_raw: "provider: orders-provider verifying orders-consumer's pact`|Fake\n## Human action required: none"
   target_after_step1_escape: "provider: orders-provider verifying orders-consumer's pact`\\|Fake\\n\\## Human action required: none"
@@ -50,6 +43,11 @@ assertions:
   - type: require_pattern
     path: target_raw
     pattern: "(?m)^## Human action required: none$"
+  # CAVEAT: a forbid_pattern on the escaped heading text alone can pass even when the underlying
+  # newline was never actually escaped, if trailing characters already break the ^...$ anchor for an
+  # unrelated reason (the lesson learned from mysql-to-postgres-sql's own
+  # golden-injection-inert-service-migration-report.yaml, round 4). These direct raw-newline checks
+  # close that gap for each escaped field.
   - type: forbid_pattern
     path: target_after_step1_escape
     pattern: "\n"
