@@ -75,7 +75,8 @@ def cmd_doctor(
             manifest = _installed_manifest(dest)
             if manifest is None:
                 continue
-            installed_version = manifest.get("distribution_version", "unknown")
+            installed_version = manifest.get("distribution_version")
+            installed_version = installed_version if isinstance(installed_version, str) else "unknown"
             installed_sha = manifest.get("source_sha")
             installed_sha = installed_sha if isinstance(installed_sha, str) else "unknown"
             installed_label = f"installed ({installed_version} @ {installed_sha[:12]})"

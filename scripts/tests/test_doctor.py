@@ -77,3 +77,32 @@ def test_doctor_handles_null_source_sha_in_manifest(tmp_path, capsys) -> None:
     assert "pr-review: UNSPECIFIED" in output
     assert f"install: installed ({distribution_version} @ unknown)" in output
     assert code == 0
+
+
+def test_doctor_handles_null_distribution_version_in_manifest(tmp_path, capsys) -> None:
+    # distribution_version got the same null-vs-missing treatment as
+    # source_sha above: manifest.get(key, default) only falls back for a
+    # missing key, not an explicit JSON null, so a null distribution_version
+    # used to print as the literal string "None" instead of "unknown".
+    from scripts.doctor import cmd_doctor
+    from scripts.reference_utils import MANIFEST_NAME
+
+    skill_dest = tmp_path / "pr-review"
+    skill_dest.mkdir()
+    manifest_path = skill_dest / MANIFEST_NAME
+    manifest_path.write_text(
+        json.dumps({"distribution_version": None, "source_sha": "deadbeefcafef00d1234"}),
+        encoding="utf-8",
+    )
+
+    code = cmd_doctor(
+        ROOT,
+        skill_filter="pr-review",
+        available=None,
+        install_roots=[tmp_path],
+    )
+
+    output = capsys.readouterr().out
+    assert "install: installed (unknown @ deadbeefcafe)" in output
+    assert "pr-review: VERSION_MISMATCH" in output
+    assert code == 1
