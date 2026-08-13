@@ -1,0 +1,47 @@
+schema_version: 1
+
+# Cross-skill result semantics. Skills may add domain-specific detail, but these
+# statuses are the portable envelope used by orchestrators and host adapters.
+evidence:
+  statuses: [OBSERVED, INFERRED, UNKNOWN, CONFLICTED, NOT_APPLICABLE]
+  insufficient_evidence_status: UNKNOWN
+  conflicting_evidence_status: CONFLICTED
+
+completion:
+  statuses: [SUCCESS, PARTIAL, BLOCKED, FAILED, ESCALATED]
+  required_fields: [status, evidence_status, blockers, artifacts, recommended_next_skill]
+
+# Minimum authorization required for an action class. A skill may always be
+# stricter than this table; it may never be looser.
+action_gates:
+  read_only: none
+  local_reversible_write: explicit_task_authorization
+  remote_non_destructive_write: explicit_task_authorization
+  destructive_or_high_impact: explicit_action_authorization
+
+# Skill topology is intentionally separate from skills.yaml catalogue data.
+# This file classifies behavior; it does not define installation or discovery.
+skill_types:
+  pr-review: leaf
+  pr-gatekeeper: trigger
+  k8s-overprovisioning-datadog: leaf
+  incident-rca: leaf
+  incident-triage-agent: trigger
+  domain-comprehension: leaf
+  squad-map: leaf
+  who-owns-x-bot: router
+  new-hire-guide: orchestrator
+  release-readiness-checker: orchestrator
+  migration-program-manager: orchestrator
+  cost-optimization-sprint-planner: orchestrator
+  mysql-to-postgres-sql: leaf
+  loop-task-implementer: orchestrator
+  backlog-runner: trigger
+  weekly-squad-digest: trigger
+  unit-test-creator: leaf
+  integration-test-creator: leaf
+  contract-test-creator: leaf
+  e2e-test-creator: leaf
+  api-test-creator: leaf
+  prd-architect: leaf
+  test-writer: router
