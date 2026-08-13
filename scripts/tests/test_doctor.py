@@ -196,3 +196,46 @@ def test_cmd_doctor_wires_status_and_render_together(capsys) -> None:
     output = capsys.readouterr().out
     assert "pr-review: UNSPECIFIED" in output
     assert "capability check: pass --available to evaluate host capabilities" in output
+
+
+def test_cmd_doctor_exits_nonzero_when_blocked(capsys) -> None:
+    # The exit-code aggregation (`if status.status in {"BLOCKED", "VERSION_MISMATCH"}:
+    # exit_code = 1`) lives in cmd_doctor itself, not in _skill_status -- the
+    # structured-data tests above cover status computation but never exercise
+    # this line, so a broken/typo'd condition there would pass the suite while
+    # doctor silently stopped returning a failing exit code.
+    from scripts.doctor import cmd_doctor
+
+    code = cmd_doctor(
+        ROOT,
+        skill_filter="pr-review",
+        available={"gitlab.get_merge_request"},
+        install_roots=[Path("/nonexistent")],
+    )
+
+    assert code == 1
+    output = capsys.readouterr().out
+    assert "pr-review: BLOCKED" in output
+
+
+def test_cmd_doctor_exits_nonzero_on_version_mismatch(tmp_path: Path, capsys) -> None:
+    from scripts.doctor import cmd_doctor
+    from scripts.reference_utils import MANIFEST_NAME
+
+    skill_dest = tmp_path / "pr-review"
+    skill_dest.mkdir()
+    (skill_dest / MANIFEST_NAME).write_text(
+        json.dumps({"distribution_version": None, "source_sha": "deadbeefcafef00d1234"}),
+        encoding="utf-8",
+    )
+
+    code = cmd_doctor(
+        ROOT,
+        skill_filter="pr-review",
+        available=None,
+        install_roots=[tmp_path],
+    )
+
+    assert code == 1
+    output = capsys.readouterr().out
+    assert "pr-review: VERSION_MISMATCH" in output
