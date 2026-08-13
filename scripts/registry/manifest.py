@@ -17,11 +17,18 @@ _SEMVER_RE = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:[-+][0-9A-
 _ALLOWED_TYPES = {"leaf", "router", "orchestrator", "trigger"}
 _REQUIRED_EVIDENCE = {"OBSERVED", "INFERRED", "UNKNOWN", "CONFLICTED", "NOT_APPLICABLE"}
 _REQUIRED_COMPLETION = {"SUCCESS", "PARTIAL", "BLOCKED", "FAILED", "ESCALATED"}
+_REQUIRED_COMPLETION_FIELDS = {
+    "status",
+    "evidence_status",
+    "blockers",
+    "artifacts",
+    "recommended_next_skill",
+}
 _REQUIRED_GATES = {
-    "read_only",
-    "local_reversible_write",
-    "remote_non_destructive_write",
-    "destructive_or_high_impact",
+    "read_only": "none",
+    "local_reversible_write": "explicit_task_authorization",
+    "remote_non_destructive_write": "explicit_task_authorization",
+    "destructive_or_high_impact": "explicit_action_authorization",
 }
 
 
@@ -53,6 +60,10 @@ def _load_platform_contracts(path: Path = CONTRACTS_PATH) -> dict[str, Any]:
     evidence_statuses = evidence.get("statuses")
     if not isinstance(evidence_statuses, list) or set(map(str, evidence_statuses)) != _REQUIRED_EVIDENCE:
         raise ValueError("platform contracts.evidence.statuses must define the canonical evidence statuses")
+    if str(evidence.get("insufficient_evidence_status", "")) != "UNKNOWN":
+        raise ValueError("platform contracts.evidence.insufficient_evidence_status must be UNKNOWN")
+    if str(evidence.get("conflicting_evidence_status", "")) != "CONFLICTED":
+        raise ValueError("platform contracts.evidence.conflicting_evidence_status must be CONFLICTED")
 
     completion = _require_mapping(raw.get("completion"), "platform contracts.completion")
     completion_statuses = completion.get("statuses")
@@ -60,12 +71,13 @@ def _load_platform_contracts(path: Path = CONTRACTS_PATH) -> dict[str, Any]:
         raise ValueError("platform contracts.completion.statuses must define the canonical completion statuses")
 
     required_fields = completion.get("required_fields")
-    if not isinstance(required_fields, list) or not required_fields:
-        raise ValueError("platform contracts.completion.required_fields must be a non-empty list")
+    if not isinstance(required_fields, list) or set(map(str, required_fields)) != _REQUIRED_COMPLETION_FIELDS:
+        raise ValueError("platform contracts.completion.required_fields must define the canonical result envelope")
 
     gates = _require_mapping(raw.get("action_gates"), "platform contracts.action_gates")
-    if set(map(str, gates)) != _REQUIRED_GATES:
-        raise ValueError("platform contracts.action_gates must define all canonical action classes")
+    normalized_gates = {str(key): str(value) for key, value in gates.items()}
+    if normalized_gates != _REQUIRED_GATES:
+        raise ValueError("platform contracts.action_gates must define the canonical authorization policy")
 
     skill_types = _require_mapping(raw.get("skill_types"), "platform contracts.skill_types")
     invalid_types = sorted({str(value) for value in skill_types.values()} - _ALLOWED_TYPES)
@@ -106,7 +118,8 @@ def build_manifest(root: Path = ROOT) -> dict[str, Any]:
     skills: dict[str, Any] = {}
     for skill_id, entry in registry.skills.items():
         frontmatter = load_skill_frontmatter(root / entry.path / "SKILL.md")
-        version = _normalize_version(frontmatter.get("skill_version"))
+        raw_version = frontmatter.get("skill_version")
+        version = _normalize_version(raw_version)
         description = frontmatter.get("description")
         if not isinstance(description, str) or not description.strip():
             raise ValueError(f"{skill_id}: description must be a non-empty string")
@@ -115,6 +128,7 @@ def build_manifest(root: Path = ROOT) -> dict[str, Any]:
         skills[skill_id] = {
             "name": skill_id,
             "version": version,
+            "version_source": "skill_frontmatter" if raw_version not in (None, "") else "implicit_v1",
             "type": str(skill_types[skill_id]),
             "category": entry.category,
             "description": description.strip(),
