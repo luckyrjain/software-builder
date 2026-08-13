@@ -28,7 +28,7 @@ REQUIREMENT_SECTIONS = (
 
 
 def _split_cells(line: str) -> list[str]:
-    """Split a GFM table row without treating an escaped ``\|`` as a delimiter."""
+    """Split a GFM table row without treating an escaped pipe as a delimiter."""
     raw = line.strip()
     if raw.startswith("|"):
         raw = raw[1:]
