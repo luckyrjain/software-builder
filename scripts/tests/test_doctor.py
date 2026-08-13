@@ -20,7 +20,7 @@ def _pr_review_entry():
     return registry.skills["pr-review"]
 
 
-def _make_entry(*, invokes=(), required=(), degraded_modes=None):
+def _make_entry(*, invokes=(), required=(), optional=(), degraded_modes=None):
     # A synthetic minimal SkillEntry for render_skill_status branches
     # pr-review's fixture doesn't reach (no composition.invokes, no
     # degraded_modes on a required capability) -- built by hand instead of
@@ -28,6 +28,7 @@ def _make_entry(*, invokes=(), required=(), degraded_modes=None):
     # test doesn't silently break if skills.yaml changes.
     from scripts.registry.models import (
         CapabilitiesSpec,
+        CapabilityOptional,
         CompositionSpec,
         HostClaude,
         HostCursor,
@@ -46,7 +47,11 @@ def _make_entry(*, invokes=(), required=(), degraded_modes=None):
         install=InstallSpec(),
         lint=LintSpec(skill_md_max_lines=500, target="skill.md"),
         composition=CompositionSpec(invokes=list(invokes)),
-        capabilities=CapabilitiesSpec(required=list(required), degraded_modes=degraded_modes or {}),
+        capabilities=CapabilitiesSpec(
+            required=list(required),
+            optional=[CapabilityOptional(name=name) for name in optional],
+            degraded_modes=degraded_modes or {},
+        ),
     )
 
 
@@ -236,6 +241,27 @@ def test_render_skill_status_includes_missing_required_degraded_hint() -> None:
 
     assert "missing required: cap.a" in text
     assert "cap.a -> fallback text" in text
+
+
+def test_render_skill_status_omits_hint_for_missing_optional_without_degraded_mode() -> None:
+    # Most optional capabilities across the real skills.yaml registry have no
+    # degraded_modes entry at all (only a minority document a fallback), so
+    # the "if degraded:" check inside the missing_optional loop must
+    # correctly render nothing for that common case, not just skip the hint
+    # when a degraded_modes entry happens to exist.
+    from scripts.doctor import SkillStatus, render_skill_status
+
+    status = SkillStatus(
+        skill_id="synthetic-skill",
+        entry=_make_entry(optional=["cap.b"]),
+        status="DEGRADED",
+        missing_optional=["cap.b"],
+    )
+
+    text = render_skill_status(status)
+
+    assert "missing optional: cap.b" in text
+    assert "->" not in text
 
 
 def test_cmd_doctor_wires_status_and_render_together(capsys) -> None:
