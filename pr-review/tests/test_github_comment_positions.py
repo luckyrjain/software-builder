@@ -1449,6 +1449,219 @@ def test_git_header_decodes_independently_quoted_rename_paths():
     ) == {"commit_id": "abc", "path": path, "line": 2, "side": "RIGHT"}
 
 
+def test_git_generated_unquoted_paths_containing_b_prefix_are_bound_to_markers():
+    patch = (
+        "diff --git a/dir b/file.txt b/dir b/file.txt\n"
+        "index 814f4a4..6d92e6a 100644\n"
+        "--- a/dir b/file.txt\n"
+        "+++ b/dir b/file.txt\n"
+        "@@ -1,2 +1,3 @@\n one\n+inserted\n two\n"
+    )
+    path = "dir b/file.txt"
+    assert validate_github_anchor(
+        patch,
+        path=path,
+        line=2,
+        source_kind="added",
+        head_sha="abc",
+    ) == {"commit_id": "abc", "path": path, "line": 2, "side": "RIGHT"}
+
+
+def test_git_generated_rename_mode_and_content_headers_are_anchorable():
+    patch = (
+        "diff --git a/old.sh b/new.sh\n"
+        "old mode 100644\n"
+        "new mode 100755\n"
+        "similarity index 66%\n"
+        "rename from old.sh\n"
+        "rename to new.sh\n"
+        "index 814f4a4..6d92e6a\n"
+        "--- a/old.sh\n"
+        "+++ b/new.sh\n"
+        "@@ -1,2 +1,3 @@\n one\n+inserted\n two\n"
+    )
+    assert validate_github_anchor(
+        patch,
+        path="new.sh",
+        line=2,
+        source_kind="added",
+        head_sha="abc",
+    ) == {"commit_id": "abc", "path": "new.sh", "line": 2, "side": "RIGHT"}
+
+
+def test_git_generated_c_quoted_metadata_only_rename_keeps_prior_anchor_valid():
+    rename = (
+        'diff --git "a/caf\\303\\251.txt" "b/r\\303\\251sum\\303\\251.txt"\n'
+        "similarity index 100%\n"
+        'rename from "caf\\303\\251.txt"\n'
+        'rename to "r\\303\\251sum\\303\\251.txt"\n'
+    )
+    assert validate_github_anchor(
+        DIFF_WITH_ADDITION + rename,
+        path="src/payments.py",
+        line=11,
+        source_kind="added",
+        head_sha="abc",
+    ) == {
+        "commit_id": "abc",
+        "path": "src/payments.py",
+        "line": 11,
+        "side": "RIGHT",
+    }
+
+
+def test_git_generated_c_quoted_binary_summary_keeps_prior_anchor_valid():
+    binary = (
+        'diff --git "a/caf\\303\\251.bin" "b/caf\\303\\251.bin"\n'
+        "index 1234567..89abcde 100644\n"
+        'Binary files "a/caf\\303\\251.bin" and "b/caf\\303\\251.bin" differ\n'
+    )
+    assert validate_github_anchor(
+        DIFF_WITH_ADDITION + binary,
+        path="src/payments.py",
+        line=11,
+        source_kind="added",
+        head_sha="abc",
+    ) == {
+        "commit_id": "abc",
+        "path": "src/payments.py",
+        "line": 11,
+        "side": "RIGHT",
+    }
+
+
+@pytest.mark.parametrize(
+    "old_marker,new_marker,hunk",
+    [
+        ("--- /dev/null", "+++ b/other.py", "@@ -1,1 +1,1 @@\n-old\n+new\n"),
+        ("--- a/other.py", "+++ /dev/null", "@@ -1,1 +1,1 @@\n-old\n+new\n"),
+    ],
+    ids=("old-dev-null-has-lines", "new-dev-null-has-lines"),
+)
+def test_sectioned_dev_null_markers_are_bound_to_empty_hunk_sides(
+    old_marker,
+    new_marker,
+    hunk,
+):
+    patch = (
+        "--- /dev/null\n"
+        "+++ b/target.py\n"
+        "@@ -0,0 +1,1 @@\n+target\n"
+        f"{old_marker}\n{new_marker}\n{hunk}"
+    )
+    assert validate_github_anchor(
+        patch,
+        path="target.py",
+        line=1,
+        source_kind="added",
+        head_sha="abc",
+    ) == {"unanchorable": True, "reason": "added_line_not_in_current_diff"}
+
+
+def test_direct_sectioned_dev_null_marker_is_bound_to_empty_old_hunk_side():
+    patch = (
+        "--- /dev/null\n"
+        "+++ b/other.py\n"
+        "@@ -1,1 +1,1 @@\n-old\n+new\n"
+    )
+    assert validate_github_anchor(
+        patch,
+        path="other.py",
+        line=1,
+        source_kind="added",
+        head_sha="abc",
+    ) == {"unanchorable": True, "reason": "added_line_not_in_current_diff"}
+
+
+def test_sectioned_marker_side_prefixes_cannot_be_swapped():
+    patch = (
+        "--- b/old.py\n"
+        "+++ a/new.py\n"
+        "@@ -1,1 +1,2 @@\n old\n+new\n"
+    )
+    assert validate_github_anchor(
+        patch,
+        path="new.py",
+        line=2,
+        source_kind="added",
+        head_sha="abc",
+    ) == {"unanchorable": True, "reason": "added_line_not_in_current_diff"}
+
+
+def test_combined_marker_side_prefixes_cannot_be_swapped():
+    patch = (
+        "diff --git a/old.py b/new.py\n"
+        "index 1234567..89abcde 100644\n"
+        "--- b/old.py\n"
+        "+++ a/new.py\n"
+        "@@ -1,1 +1,2 @@\n old\n+new\n"
+    )
+    assert validate_github_anchor(
+        patch,
+        path="new.py",
+        line=2,
+        source_kind="added",
+        head_sha="abc",
+    ) == {"unanchorable": True, "reason": "added_line_not_in_current_diff"}
+
+
+@pytest.mark.parametrize(
+    "invalid_section",
+    [
+        (
+            "diff --git a/script.sh b/script.sh\n"
+            "old mode 777777\n"
+            "new mode 777776\n"
+        ),
+        (
+            "diff --git a/empty b/empty\n"
+            "new file mode 777777\n"
+            "index 0000000..e69de29\n"
+        ),
+    ],
+    ids=("mode-only", "new-empty-file"),
+)
+def test_non_hunk_sections_reject_unsupported_git_file_modes(invalid_section):
+    assert validate_github_anchor(
+        DIFF_WITH_ADDITION + invalid_section,
+        path="src/payments.py",
+        line=11,
+        source_kind="added",
+        head_sha="abc",
+    ) == {"unanchorable": True, "reason": "added_line_not_in_current_diff"}
+
+
+def test_binary_prefix_rejects_unsupported_git_file_mode():
+    body = [
+        "new file mode 777777",
+        "index 0000000..89abcde",
+        "GIT binary patch",
+        "literal 4",
+        *git_base85_lines(zlib.compress(b"data")),
+        "",
+        "literal 0",
+        *git_base85_lines(zlib.compress(b"")),
+        "",
+    ]
+    assert not MODULE._git_binary_patch_complete(body, 2)
+
+
+def test_ambiguous_unquoted_diff_header_without_matching_markers_fails_closed():
+    patch = (
+        "diff --git a/dir b/file.txt b/dir b/file.txt\n"
+        "--- a/unrelated.txt\n"
+        "+++ b/unrelated.txt\n"
+        "@@ -1,1 +1,2 @@\n one\n+inserted\n"
+    )
+    assert validate_github_anchor(
+        patch,
+        path="unrelated.txt",
+        line=2,
+        source_kind="added",
+        head_sha="abc",
+    ) == {"unanchorable": True, "reason": "added_line_not_in_current_diff"}
+
+
 def test_invalid_git_c_quoted_filename_escape_fails_closed():
     patch = (
         'diff --git "a/bad\\q.txt" "b/bad\\q.txt"\n'
@@ -1479,6 +1692,27 @@ def test_real_git_generated_delta_section_does_not_invalidate_other_file_anchor(
     patch = DIFF_WITH_ADDITION + GIT_GENERATED_DELTA_PATCH
     assert validate_github_anchor(
         patch,
+        path="src/payments.py",
+        line=11,
+        source_kind="added",
+        head_sha="abc",
+    ) == {
+        "commit_id": "abc",
+        "path": "src/payments.py",
+        "line": 11,
+        "side": "RIGHT",
+    }
+
+
+def test_git_generated_mode_change_with_binary_delta_keeps_prior_anchor_valid():
+    binary = GIT_GENERATED_DELTA_PATCH.replace(
+        "index c5ebe4a6bed51d0508de6a090d5cdba194db16de",
+        "old mode 100644\nnew mode 100755\n"
+        "index c5ebe4a6bed51d0508de6a090d5cdba194db16de",
+        1,
+    )
+    assert validate_github_anchor(
+        DIFF_WITH_ADDITION + binary,
         path="src/payments.py",
         line=11,
         source_kind="added",

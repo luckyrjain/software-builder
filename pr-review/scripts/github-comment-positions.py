@@ -74,8 +74,13 @@ def _quoted_field_end(raw: str) -> int | None:
     return None
 
 
-def _diff_paths(raw: str) -> tuple[str, str] | None:
-    """Parse the two path fields from a canonical ``diff --git`` header."""
+def _diff_paths(
+    raw: str,
+    *,
+    old_hint: str | None = None,
+    new_hint: str | None = None,
+) -> tuple[str, str] | None:
+    """Parse a ``diff --git`` header, binding ambiguous spaces to section paths."""
     prefix = "diff --git "
     if not raw.startswith(prefix):
         return None
@@ -84,24 +89,39 @@ def _diff_paths(raw: str) -> tuple[str, str] | None:
         end = _quoted_field_end(fields)
         if end is None or end >= len(fields) or fields[end] != " ":
             return None
-        old_raw, new_raw = fields[:end], fields[end + 1:]
+        raw_candidates = [(fields[:end], fields[end + 1:])]
     else:
-        # Git does not quote spaces, so the (possibly quoted) b/ prefix is the
-        # structural split. Each side is quoted independently.
-        separator = max(fields.rfind(" b/"), fields.rfind(' "b/'))
-        if separator < 0:
-            return None
-        old_raw, new_raw = fields[:separator], fields[separator + 1:]
-    old_path, new_path = _decode_git_path(old_raw), _decode_git_path(new_raw)
-    if old_path is INVALID_MARKER or new_path is INVALID_MARKER:
-        return None
-    if not old_path.startswith("a/") or not new_path.startswith("b/"):
-        return None
-    return old_path[2:], new_path[2:]
+        # Spaces are not quoted by Git. Every b/ token is therefore only a
+        # candidate boundary until markers or rename/copy metadata bind it.
+        separators = {
+            index
+            for token in (" b/", ' "b/')
+            for index in range(len(fields))
+            if fields.startswith(token, index)
+        }
+        raw_candidates = [
+            (fields[:separator], fields[separator + 1:])
+            for separator in sorted(separators)
+        ]
+    candidates: list[tuple[str, str]] = []
+    for old_raw, new_raw in raw_candidates:
+        old_path = _decode_git_path(old_raw)
+        new_path = _decode_git_path(new_raw)
+        if old_path is INVALID_MARKER or new_path is INVALID_MARKER:
+            continue
+        if not old_path.startswith("a/") or not new_path.startswith("b/"):
+            continue
+        candidate = old_path[2:], new_path[2:]
+        if old_hint is not None and candidate[0] != old_hint:
+            continue
+        if new_hint is not None and candidate[1] != new_hint:
+            continue
+        candidates.append(candidate)
+    return candidates[0] if len(candidates) == 1 else None
 
 
-def _marker_path(raw: str) -> str | None | object:
-    """Parse a ---/+++ marker path, including quoted paths and /dev/null."""
+def _marker_operand(raw: str) -> str | object:
+    """Decode a marker operand while retaining its a/ or b/ side prefix."""
     field = raw[4:]
     if not field:
         return INVALID_MARKER
@@ -112,12 +132,67 @@ def _marker_path(raw: str) -> str | None | object:
         field = field[:end]
     else:
         field = field.split("\t", 1)[0]
-    marker_path = _decode_git_path(field)
+    return _decode_git_path(field)
+
+
+def _marker_path(raw: str) -> str | None | object:
+    """Parse a ---/+++ marker path, including quoted paths and /dev/null."""
+    marker_path = _marker_operand(raw)
     if marker_path is INVALID_MARKER:
         return INVALID_MARKER
     if marker_path == "/dev/null":
         return None
     return marker_path[2:] if marker_path.startswith(("a/", "b/")) else marker_path
+
+
+def _move_metadata_paths(records: list[str]) -> tuple[str, str] | None:
+    """Decode one canonical similarity + rename/copy metadata triple."""
+    if len(records) != 3 or re.fullmatch(
+        r"similarity index (?:100|[0-9]{1,2})%", records[0]
+    ) is None:
+        return None
+    if records[1].startswith("rename from ") and records[2].startswith("rename to "):
+        source_raw = records[1][len("rename from "):]
+        target_raw = records[2][len("rename to "):]
+    elif records[1].startswith("copy from ") and records[2].startswith("copy to "):
+        source_raw = records[1][len("copy from "):]
+        target_raw = records[2][len("copy to "):]
+    else:
+        return None
+    source = _decode_git_path(source_raw)
+    target = _decode_git_path(target_raw)
+    if source is INVALID_MARKER or target is INVALID_MARKER:
+        return None
+    return source, target
+
+
+def _binary_summary_matches(
+    raw: str,
+    old_path: str | None,
+    new_path: str | None,
+) -> bool:
+    """Bind decoded operands from a canonical Git binary-summary record."""
+    prefix, suffix = "Binary files ", " differ"
+    if not raw.startswith(prefix) or not raw.endswith(suffix):
+        return False
+    fields = raw[len(prefix):-len(suffix)]
+    matches = 0
+    for separator in range(len(fields)):
+        if not fields.startswith(" and ", separator):
+            continue
+        old_raw = fields[:separator]
+        new_raw = fields[separator + len(" and "):]
+        old_operand = _decode_git_path(old_raw)
+        new_operand = _decode_git_path(new_raw)
+        if old_operand is INVALID_MARKER or new_operand is INVALID_MARKER:
+            continue
+        old_operand = None if old_operand == "/dev/null" else old_operand
+        new_operand = None if new_operand == "/dev/null" else new_operand
+        expected_old = None if old_path is None else f"a/{old_path}"
+        expected_new = None if new_path is None else f"b/{new_path}"
+        if old_operand == expected_old and new_operand == expected_new:
+            matches += 1
+    return matches == 1
 
 
 def _hunk_range(raw: str) -> tuple[int, int, int, int] | None:
@@ -205,17 +280,29 @@ def _delta_program_complete(program: bytes) -> bool:
     return output_size == result_size
 
 
+VALID_FILE_MODE = r"(?:100644|100755|120000|160000)"
+
+
 def _git_binary_patch_complete(body: list[str], binary_index: int) -> bool:
     """Validate canonical one-or-more git binary size/payload blocks."""
     prefix = body[:binary_index]
-    index_pattern = r"index [0-9a-f]+\.\.[0-9a-f]+(?: [0-7]{6})?"
+    index_pattern = rf"index [0-9a-f]+\.\.[0-9a-f]+(?: {VALID_FILE_MODE})?"
     prefix_ok = (
         len(prefix) == 1 and re.fullmatch(index_pattern, prefix[0]) is not None
     ) or (
         len(prefix) == 2
-        and re.fullmatch(r"(?:new file mode|deleted file mode) [0-7]{6}", prefix[0])
+        and re.fullmatch(
+            rf"(?:new file mode|deleted file mode) {VALID_FILE_MODE}", prefix[0]
+        )
         is not None
         and re.fullmatch(index_pattern, prefix[1]) is not None
+    ) or (
+        len(prefix) == 3
+        and re.fullmatch(rf"old mode {VALID_FILE_MODE}", prefix[0])
+        is not None
+        and re.fullmatch(rf"new mode {VALID_FILE_MODE}", prefix[1])
+        is not None
+        and re.fullmatch(index_pattern, prefix[2]) is not None
     )
     if not prefix_ok:
         return False
@@ -286,7 +373,6 @@ def _git_binary_patch_complete(body: list[str], binary_index: int) -> bool:
     return blocks == 2
 
 
-VALID_FILE_MODE = r"(?:100644|100755|120000|160000)"
 INDEX_METADATA = re.compile(
     rf"index ([0-9a-f]+)\.\.([0-9a-f]+)(?: ({VALID_FILE_MODE}))?"
 )
@@ -313,28 +399,21 @@ def _content_metadata_kind(
         rf"deleted file mode {VALID_FILE_MODE}", headers[0]
     ):
         kind = "deleted"
-    elif (
-        len(headers) == 2
-        and re.fullmatch(rf"old mode {VALID_FILE_MODE}", headers[0])
-        and re.fullmatch(rf"new mode {VALID_FILE_MODE}", headers[1])
-    ):
-        kind = "regular"
-    elif len(headers) == 3 and re.fullmatch(
-        r"similarity index (?:100|[0-9]{1,2})%", headers[0]
-    ):
-        if headers[1].startswith("rename from ") and headers[2].startswith("rename to "):
-            source = _decode_git_path(headers[1][len("rename from "):])
-            target = _decode_git_path(headers[2][len("rename to "):])
-        elif headers[1].startswith("copy from ") and headers[2].startswith("copy to "):
-            source = _decode_git_path(headers[1][len("copy from "):])
-            target = _decode_git_path(headers[2][len("copy to "):])
-        else:
-            return None
-        if source != old_path or target != new_path:
-            return None
-        kind = "regular"
     else:
-        return None
+        if (
+            len(headers) >= 2
+            and re.fullmatch(rf"old mode {VALID_FILE_MODE}", headers[0])
+            and re.fullmatch(rf"new mode {VALID_FILE_MODE}", headers[1])
+        ):
+            headers = headers[2:]
+        move_paths = _move_metadata_paths(headers) if headers else None
+        if headers and move_paths is None:
+            return None
+        if move_paths is not None:
+            source, target = move_paths
+            if source != old_path or target != new_path:
+                return None
+        kind = "regular"
     old_zero = set(old_hash) == {"0"}
     new_zero = set(new_hash) == {"0"}
     if (
@@ -354,17 +433,45 @@ def _combined_sections_complete(lines: list[str]) -> bool:
         body = lines[start + 1 : end]
         if not body:
             return False
-        diff_paths = _diff_paths(lines[start])
-        if diff_paths is None:
-            return False
-        old_diff, new_diff = diff_paths
-        old_diff_raw, new_diff_raw = f"a/{old_diff}", f"b/{new_diff}"
         hunk_indexes = [index for index, raw in enumerate(body) if _hunk_range(raw) is not None]
         marker_indexes = [
             index
             for index, raw in enumerate(body[:-1])
             if raw.startswith("--- ") and body[index + 1].startswith("+++ ")
         ]
+        old_hint: str | None = None
+        new_hint: str | None = None
+        if len(marker_indexes) == 1:
+            old_operand = _marker_operand(body[marker_indexes[0]])
+            new_operand = _marker_operand(body[marker_indexes[0] + 1])
+            old_marker = _marker_path(body[marker_indexes[0]])
+            new_marker = _marker_path(body[marker_indexes[0] + 1])
+            if (
+                old_operand is INVALID_MARKER
+                or new_operand is INVALID_MARKER
+                or old_marker is INVALID_MARKER
+                or new_marker is INVALID_MARKER
+                or (old_marker is not None and not old_operand.startswith("a/"))
+                or (new_marker is not None and not new_operand.startswith("b/"))
+            ):
+                return False
+            old_hint, new_hint = old_marker, new_marker
+        else:
+            moves = [
+                move
+                for index in range(len(body) - 2)
+                if (move := _move_metadata_paths(body[index:index + 3])) is not None
+            ]
+            if len(moves) == 1:
+                old_hint, new_hint = moves[0]
+        diff_paths = _diff_paths(
+            lines[start],
+            old_hint=old_hint,
+            new_hint=new_hint,
+        )
+        if diff_paths is None:
+            return False
+        old_diff, new_diff = diff_paths
         if hunk_indexes:
             if len(marker_indexes) == 1 and marker_indexes[0] < hunk_indexes[0]:
                 before_markers = body[: marker_indexes[0]]
@@ -373,10 +480,6 @@ def _combined_sections_complete(lines: list[str]) -> bool:
                 if metadata is None:
                     return False
                 if between_markers_and_hunk:
-                    return False
-                old_marker = _marker_path(body[marker_indexes[0]])
-                new_marker = _marker_path(body[marker_indexes[0] + 1])
-                if old_marker is INVALID_MARKER or new_marker is INVALID_MARKER:
                     return False
                 kind = metadata[0]
                 ranges = [_hunk_range(body[index]) for index in hunk_indexes]
@@ -398,24 +501,23 @@ def _combined_sections_complete(lines: list[str]) -> bool:
                 if markers_valid and hunks_valid:
                     continue
             return False
-        binary_summary = f"Binary files {old_diff_raw} and {new_diff_raw} differ"
-        added_binary_summary = f"Binary files /dev/null and {new_diff_raw} differ"
-        deleted_binary_summary = f"Binary files {old_diff_raw} and /dev/null differ"
-        if body == [binary_summary] or (
+        if (len(body) == 1 and _binary_summary_matches(body[0], old_diff, new_diff)) or (
             len(body) == 2
-            and re.fullmatch(r"index [0-9a-f]+\.\.[0-9a-f]+(?: [0-7]{6})?", body[0])
+            and re.fullmatch(
+                rf"index [0-9a-f]+\.\.[0-9a-f]+(?: {VALID_FILE_MODE})?", body[0]
+            )
             is not None
-            and body[1] == binary_summary
+            and _binary_summary_matches(body[1], old_diff, new_diff)
         ) or (
             len(body) == 3
-            and re.fullmatch(r"new file mode [0-7]{6}", body[0]) is not None
+            and re.fullmatch(rf"new file mode {VALID_FILE_MODE}", body[0]) is not None
             and re.fullmatch(r"index 0+\.\.[0-9a-f]+", body[1]) is not None
-            and body[2] == added_binary_summary
+            and _binary_summary_matches(body[2], None, new_diff)
         ) or (
             len(body) == 3
-            and re.fullmatch(r"deleted file mode [0-7]{6}", body[0]) is not None
+            and re.fullmatch(rf"deleted file mode {VALID_FILE_MODE}", body[0]) is not None
             and re.fullmatch(r"index [0-9a-f]+\.\.0+", body[1]) is not None
-            and body[2] == deleted_binary_summary
+            and _binary_summary_matches(body[2], old_diff, None)
         ):
             continue
         if "GIT binary patch" in body:
@@ -425,39 +527,24 @@ def _combined_sections_complete(lines: list[str]) -> bool:
             return False
         has_mode_pair = (
             len(body) == 2
-            and re.fullmatch(r"old mode [0-7]{6}", body[0]) is not None
-            and re.fullmatch(r"new mode [0-7]{6}", body[1]) is not None
+            and re.fullmatch(rf"old mode {VALID_FILE_MODE}", body[0]) is not None
+            and re.fullmatch(rf"new mode {VALID_FILE_MODE}", body[1]) is not None
         )
-        similarity = r"similarity index (?:100|[0-9]{1,2})%"
-        has_rename = (
-            len(body) == 3
-            and re.fullmatch(similarity, body[0]) is not None
-            and body[1].startswith("rename from ")
-            and body[1][len("rename from ") :] == old_diff
-            and body[2].startswith("rename to ")
-            and body[2][len("rename to ") :] == new_diff
-        )
-        has_copy = (
-            len(body) == 3
-            and re.fullmatch(similarity, body[0]) is not None
-            and body[1].startswith("copy from ")
-            and body[1][len("copy from ") :] == old_diff
-            and body[2].startswith("copy to ")
-            and body[2][len("copy to ") :] == new_diff
-        )
+        move_paths = _move_metadata_paths(body)
+        has_move = move_paths == (old_diff, new_diff)
         empty_blob = r"e69de29[0-9a-f]*"
         zero_blob = r"0+"
         has_new_empty_file = (
             len(body) == 2
-            and re.fullmatch(r"new file mode [0-7]{6}", body[0]) is not None
+            and re.fullmatch(rf"new file mode {VALID_FILE_MODE}", body[0]) is not None
             and re.fullmatch(rf"index {zero_blob}\.\.{empty_blob}", body[1]) is not None
         )
         has_deleted_empty_file = (
             len(body) == 2
-            and re.fullmatch(r"deleted file mode [0-7]{6}", body[0]) is not None
+            and re.fullmatch(rf"deleted file mode {VALID_FILE_MODE}", body[0]) is not None
             and re.fullmatch(rf"index {empty_blob}\.\.{zero_blob}", body[1]) is not None
         )
-        if has_mode_pair or has_rename or has_copy or has_new_empty_file or has_deleted_empty_file:
+        if has_mode_pair or has_move or has_new_empty_file or has_deleted_empty_file:
             continue
         return False
     return True
@@ -475,11 +562,33 @@ def _sectioned_sections_complete(lines: list[str]) -> bool:
     for offset, start in enumerate(starts):
         end = starts[offset + 1] if offset + 1 < len(starts) else len(lines)
         section_body = lines[start + 2 : end]
+        old_operand = _marker_operand(lines[start])
+        new_operand = _marker_operand(lines[start + 1])
+        old_marker = _marker_path(lines[start])
+        new_marker = _marker_path(lines[start + 1])
+        if (
+            old_operand is INVALID_MARKER
+            or new_operand is INVALID_MARKER
+            or old_marker is INVALID_MARKER
+            or new_marker is INVALID_MARKER
+            or (old_marker is None and new_marker is None)
+            or (old_marker is not None and not old_operand.startswith("a/"))
+            or (new_marker is not None and not new_operand.startswith("b/"))
+        ):
+            return False
         hunk_indexes = [
             index for index, raw in enumerate(section_body) if _hunk_range(raw) is not None
         ]
         if not hunk_indexes or hunk_indexes[0] != 0:
             return False
+        for hunk_index in hunk_indexes:
+            hunk_range = _hunk_range(section_body[hunk_index])
+            if hunk_range is None:
+                return False
+            if (old_marker is None and hunk_range[1] != 0) or (
+                new_marker is None and hunk_range[3] != 0
+            ):
+                return False
     return True
 
 
