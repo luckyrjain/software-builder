@@ -1,12 +1,16 @@
 schema_version: 1
 
-# Cross-skill result semantics. Skills may add domain-specific detail, but these
-# statuses are the portable envelope used by orchestrators and host adapters.
+# Cross-skill evidence semantics. Skills may add domain-specific detail, but
+# every portable claim uses this envelope so orchestrators can distinguish
+# observation from inference and retain provenance instead of flattening it.
 evidence:
   statuses: [OBSERVED, INFERRED, UNKNOWN, CONFLICTED, NOT_APPLICABLE]
+  required_fields: [claim, status, provenance, limitations]
   insufficient_evidence_status: UNKNOWN
   conflicting_evidence_status: CONFLICTED
 
+# Cross-skill completion semantics. The artifact list is populated from the
+# producer/consumer contracts in composition_contracts.yaml.
 completion:
   statuses: [SUCCESS, PARTIAL, BLOCKED, FAILED, ESCALATED]
   required_fields: [status, evidence_status, blockers, artifacts, recommended_next_skill]
