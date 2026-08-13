@@ -46,11 +46,20 @@ def _validate_semver_identifiers(raw: str, *, prerelease: bool) -> bool:
 def _normalize_version(raw: Any) -> str:
     if raw is None or raw == "":
         return "1.0.0"
-    value = str(raw).strip()
-    if re.fullmatch(r"\d+", value):
-        value = f"{value}.0.0"
-    elif re.fullmatch(r"\d+\.\d+", value):
-        value = f"{value}.0"
+    if isinstance(raw, bool):
+        raise ValueError(f"invalid skill_version {raw!r}; expected semantic version string or integer major")
+    if isinstance(raw, int):
+        value = f"{raw}.0.0"
+    elif isinstance(raw, str):
+        value = raw.strip()
+        if re.fullmatch(r"\d+", value):
+            value = f"{value}.0.0"
+        elif re.fullmatch(r"\d+\.\d+", value):
+            value = f"{value}.0"
+    else:
+        raise ValueError(
+            f"invalid skill_version {raw!r}; expected semantic version string or integer major",
+        )
 
     core_and_pre, plus, build = value.partition("+")
     core, dash, prerelease = core_and_pre.partition("-")
@@ -70,14 +79,26 @@ def _require_mapping(raw: Any, label: str) -> dict[str, Any]:
     return raw
 
 
+def _require_schema_version(raw: Any, *, label: str) -> int:
+    if isinstance(raw, bool) or not isinstance(raw, (int, str)):
+        raise ValueError(f"{label} must be an integer")
+    try:
+        value = int(raw)
+    except ValueError as exc:
+        raise ValueError(f"{label} must be an integer") from exc
+    return value
+
+
 def _validate_exact_string_set(raw: Any, expected: set[str], label: str) -> None:
-    if not isinstance(raw, list) or set(map(str, raw)) != expected:
+    if not isinstance(raw, list) or not all(isinstance(item, str) for item in raw):
         raise ValueError(f"{label} must define the canonical values")
+    if len(raw) != len(expected) or len(set(raw)) != len(raw) or set(raw) != expected:
+        raise ValueError(f"{label} must define each canonical value exactly once")
 
 
 def _load_platform_contracts(path: Path = CONTRACTS_PATH) -> dict[str, Any]:
     raw = _require_mapping(load_unique_yaml_file(path), "platform contracts")
-    if int(raw.get("schema_version", 0)) != 1:
+    if _require_schema_version(raw.get("schema_version", 0), label="platform contracts.schema_version") != 1:
         raise ValueError("platform contracts: unsupported schema_version")
 
     evidence = _require_mapping(raw.get("evidence"), "platform contracts.evidence")
