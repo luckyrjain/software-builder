@@ -20,7 +20,10 @@ bash "${TMP_REPO}/scripts/install.sh" --agent cursor
 
 rm -rf "${TMP_REPO}"
 
-mapfile -t SKILLS < <(
+SKILLS=()
+while IFS= read -r line; do
+  SKILLS+=("${line}")
+done < <(
   PYTHONPATH="${REPO_ROOT}" python3 "${REPO_ROOT}/scripts/install_support.py" list
 )
 

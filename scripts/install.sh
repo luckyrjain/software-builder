@@ -305,7 +305,10 @@ if [[ ${#SKILLS[@]} -eq 0 ]]; then
     echo "error: skills.yaml registry returned no skills" >&2
     exit 1
   fi
-  mapfile -t SKILLS <<< "${LIST_OUTPUT}"
+  SKILLS=()
+  while IFS= read -r line; do
+    SKILLS+=("${line}")
+  done <<< "${LIST_OUTPUT}"
 fi
 
 while IFS= read -r dest_root; do

@@ -38,3 +38,24 @@ jobs:
           # Actions' tag history; the default token has enough scope for that read.
           GH_TOKEN: ${{ github.token }}
         run: make lint
+
+  install-macos:
+    # macOS ships bash 3.2 (last GPLv2 release) as /bin/bash and scripts/install.sh runs under
+    # that, not whatever bash `brew install bash` might add — the ubuntu-latest `lint` job above
+    # only ever exercises bash 5.x, so a bash-4+-only builtin (e.g. mapfile) here previously
+    # went undetected until a real macOS user hit it.
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: python3 -m pip install --require-hashes -r requirements.lock
+
+      - name: Verify install script under macOS's default bash
+        run: make verify-install verify-install-all
