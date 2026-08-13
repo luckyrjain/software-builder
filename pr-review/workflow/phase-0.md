@@ -79,8 +79,12 @@ POST after an ambiguous response. Phase 4 applies that rule separately at each w
 Before posting-mode degradation, require the selected provider's **complete read pair**: target
 metadata/current head plus changed files/diff hunks. A metadata-only or diff-only connector is
 `unavailable`, even if it exposes write tools; writes never compensate for a missing read. A complete
-read pair with no writes is valid read-only access and selects `chat-only`. A complete read pair plus
-the required write capability selects `full`, `summary-only`, or `general-only` as described below.
+read pair with no writes is valid read-only access and selects `chat-only`. For GitHub, posting also
+requires both paginated complete review-comment readback and paginated complete issue-comment
+readback for every posting-enabled profile. A `metadata+files+writes` surface without either complete
+comment readback is `chat-only`, because it cannot deduplicate or recover an ambiguous
+non-idempotent POST. A complete read pair plus the required write and readback capabilities selects
+`full`, `summary-only`, or `general-only` as described below.
 
 **GitLab target:** inspect connected GitLab MCP tool descriptors (Cursor Settings → MCP, or each server's
 tool JSON under the agent MCP descriptor path — e.g. `mcps/<server-name>/tools/*.json`) and identify
@@ -110,13 +114,14 @@ port, CLI fallback is unavailable under the prerequisite above; do not probe it.
 
 | GitHub profile | Capability | Posting mode |
 |---|---|---|
-| full | PR read + inline review comment + issue comment | `full` |
-| summary-only | PR read + issue comment | `summary-only` |
+| full | PR read + paginated complete review-comment and issue-comment readback + inline review comment + issue comment | `full` |
+| summary-only | PR read + paginated complete review-comment and issue-comment readback + issue comment | `summary-only` |
 | CLI read-only | exact-host authenticated `gh` read path | `chat-only` |
 | unavailable | no exact-host read capability | stop |
 
 The GitHub metadata and files/diff operations are an inseparable read pair: metadata-only and diff-only
-profiles are unavailable; a complete read pair with no comment writes is read-only `chat-only`. For
+profiles are unavailable; a complete read pair with no safe comment-write/readback pair is read-only
+`chat-only`. Comment reads must enumerate every page; first-page-only access is not complete. For
 GitHub `full`, comments are standalone line comments plus one issue summary; do not use
 `add_review_to_pr`, `APPROVE`, `REQUEST_CHANGES`, or a review-submission endpoint. Record
 `{provider, host, source, read_target, read_diff, read_comments, read_ci, post_inline, post_summary}`

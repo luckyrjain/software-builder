@@ -56,9 +56,21 @@ remain authoritative.
 ### Ambiguous write recovery
 
 GitHub inline-comment and issue-comment POSTs are non-idempotent and are exempt from the global MCP
-read retry. Before each call, hash the final sanitized body (SHA-256) and include a deterministic marker
-containing the target head, finding/summary identity, and body hash. If the call returns `timeout` or
-`server_error`, do not blindly retry: read back the relevant PR review comments or issue comments and
-match that deterministic marker and body hash. A match proves success. Retry at most once only when
-absence is proven by a complete readback; otherwise report the ambiguous result and make no duplicate
-POST. Rate-limit responses that prove no request was accepted may be retried after the advertised delay.
+read retry. Use `scripts/github-comment-recovery.py prepare` immediately after final sanitization. Its
+canonical hash domain is the exact UTF-8 sanitized comment body **excluding the marker**. It computes
+SHA-256 over those bytes, prepends exactly one marker with this grammar, then returns `post_body`:
+
+```text
+<!-- cursor-pr-review-write:v1 head=<head-sha> kind=<inline|summary> identity=<stable-id> body_sha256=<digest> -->
+<exact sanitized body>
+```
+
+The deterministic marker and body hash therefore have a reproducible, non-self-referential definition:
+the marker is never included in its own digest. Post `post_body` byte-for-byte. If the call returns
+`timeout` or `server_error`, do not blindly retry: obtain paginated complete readback of the relevant PR
+review comments or issue comments, then run `github-comment-recovery.py reconcile` against the same
+sanitized body and identity. An exact marked-body match proves success. Retry at most once only when the
+helper reports `absent` from complete readback; prepare the identical `post_body` for that retry. A
+second ambiguous result, incomplete pagination, or malformed readback always reports `ambiguous` with
+`retry: false`. Rate-limit responses that prove no request was accepted may be retried after the
+advertised delay.

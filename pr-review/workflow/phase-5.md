@@ -81,7 +81,7 @@ When the review stops before normal closeout, render Phase 5 with an explicit pa
 | Stop point | Behavior |
 |------------|----------|
 | **Phase 2 interrupted** — stop-search threshold, user says *stop* / *enough*, or diff cap without user continue | Jump to Phase 5. Header: **Partial review — stopped during analysis**. Emit findings so far; cap overall **Confidence** at **Medium**; list unreviewed files/dimensions in **Reason** and Notes. Skip Phase 3–4 unless user asks to post partial findings. |
-| **Phase 3 confirmed, user cancels before Phase 4** | Phase 5 chat summary only. Note: *Posting cancelled — chat-only deliverable*. No GitLab writes. |
+| **Phase 3 confirmed, user cancels before Phase 4** | Phase 5 chat summary only. Note: *Posting cancelled — chat-only deliverable*. No provider writes. |
 | **Phase 4 partial-post** | Continue Phase 5; list posted vs failed threads in **Posting notes** (`workflow/posting.md`). |
 
 Template structure: [report-template.md](../report-template.md#partial-review).

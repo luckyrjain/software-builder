@@ -115,6 +115,48 @@ def test_doctor_supports_complete_github_read_path_without_posting(capsys) -> No
     assert "github.create_pull_request_comment" in output
 
 
+def test_doctor_degrades_github_writes_without_complete_paginated_readback(capsys) -> None:
+    from scripts.doctor import cmd_doctor
+
+    code = cmd_doctor(
+        ROOT,
+        skill_filter="pr-review",
+        available={
+            "github.get_pull_request",
+            "github.get_pull_request_files",
+            "github.create_pull_request_comment",
+            "github.create_issue_comment",
+        },
+        install_roots=[Path("/nonexistent")],
+    )
+    assert code == 0
+    output = capsys.readouterr().out
+    assert "pr-review: DEGRADED" in output
+    assert "github.list_pull_request_review_comments" in output
+    assert "github.list_issue_comments" in output
+    assert "chat-only posting" in output
+
+
+def test_doctor_ready_for_github_writes_with_both_paginated_readbacks(capsys) -> None:
+    from scripts.doctor import cmd_doctor
+
+    code = cmd_doctor(
+        ROOT,
+        skill_filter="pr-review",
+        available={
+            "github.get_pull_request",
+            "github.get_pull_request_files",
+            "github.list_pull_request_review_comments",
+            "github.list_issue_comments",
+            "github.create_pull_request_comment",
+            "github.create_issue_comment",
+        },
+        install_roots=[Path("/nonexistent")],
+    )
+    assert code == 0
+    assert "pr-review: READY" in capsys.readouterr().out
+
+
 def test_doctor_ready_for_complete_gitlab_read_and_write_path(capsys) -> None:
     from scripts.doctor import cmd_doctor
 

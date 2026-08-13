@@ -1,6 +1,6 @@
 # Review modes (lifecycle-aware)
 
-**Normative.** Load in Phase 1 when MR state is known; apply through Phase 5 executive summary.
+**Normative.** Load in Phase 1 when PR/MR state is known; apply through Phase 5 executive summary.
 Three modes — different recommendation strategy, same finding pipeline.
 
 | Mode | Trigger | `review_metadata.review_mode` |
@@ -11,14 +11,15 @@ Three modes — different recommendation strategy, same finding pipeline.
 
 Also set `audit_type: retrospective` when `review_mode: retrospective` (dashboard alias).
 
-## Phase 1 — merged MR gate
+## Phase 1 — merged or closed review-target gate
 
-When `get_merge_request` returns `state: merged` or `closed`:
+When the selected provider returns a merged or closed review target, branch all user-facing vocabulary
+on `review_target.provider`:
 
 | User intent | Action |
 |-------------|--------|
-| No explicit audit request | Warn and **stop** — *"MR already merged. Pass an open MR, or confirm post-merge audit."* |
-| User says *post-merge audit*, *review merged MR*, *retrospective*, or confirms after prompt | Set `review_mode: retrospective`, `audit_type: retrospective`, continue full diff review |
+| No explicit audit request | GitHub: *"PR already merged or closed. Pass an open PR, or confirm post-merge audit."* GitLab: *"MR already merged or closed. Pass an open MR, or confirm post-merge audit."* Warn and **stop**. |
+| User says *post-merge audit*, *review merged PR/MR*, *retrospective*, or confirms after prompt | Set `review_mode: retrospective`, `audit_type: retrospective`, continue full diff review |
 
 Record `review_mode: retrospective`, `audit_type: retrospective`, and:
 
@@ -31,7 +32,9 @@ review_context:
 
 through Phase 5. Do not use `merge_blocking: true` on retrospective audits.
 
-Also record: `merge_before_review: true`, `mr_state: merged`, `merged_at` when available.
+Also record `merge_before_review: true` and `merged_at` when available. GitHub uses PR state in the
+provider payload; GitLab uses MR state. Normalize either into `review_target.state` for shared logic;
+do not expose an `mr_state` label for a GitHub target.
 
 ## Pre-merge mode
 

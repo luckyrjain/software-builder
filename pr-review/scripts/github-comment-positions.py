@@ -27,14 +27,20 @@ def _marker_path(raw: str) -> str | None:
     return marker_path[2:] if marker_path.startswith(("a/", "b/")) else marker_path
 
 
-def _hunk_range(raw: str) -> tuple[int, int, int] | None:
-    """Return the new start plus old/new line counts for a hunk header."""
+def _hunk_range(raw: str) -> tuple[int, int, int, int] | None:
+    """Return old/new starts and counts for a syntactically valid hunk header."""
     match = HUNK_HEADER.match(raw)
     if not match:
         return None
+    old_start = int(match.group(1))
     old_count = int(match.group(2)) if match.group(2) is not None else 1
+    new_start = int(match.group(3))
     new_count = int(match.group(4)) if match.group(4) is not None else 1
-    return int(match.group(3)), old_count, new_count
+    # A non-empty range cannot begin at line zero. Zero-count ranges may use
+    # zero (new/deleted files) or the insertion/deletion point used by git.
+    if (old_count > 0 and old_start == 0) or (new_count > 0 and new_start == 0):
+        return None
+    return old_start, old_count, new_start, new_count
 
 
 def validate_github_anchor(
@@ -84,11 +90,10 @@ def validate_github_anchor(
     index = 0
     while index < len(lines):
         raw = lines[index]
-        if parser_state == "hunk" and old_remaining == 0 and new_remaining == 0:
-            parser_state = "file_body"
+        hunk_complete = parser_state == "hunk" and old_remaining == 0 and new_remaining == 0
 
         if raw.startswith("diff --git "):
-            if parser_state == "hunk":
+            if parser_state == "hunk" and not hunk_complete:
                 malformed_hunk = True
             parser_state = "file_header"
             current_path = None
@@ -105,7 +110,11 @@ def validate_github_anchor(
             and lines[index + 1].startswith("+++ ")
         )
         if marker_pair:
-            if parser_state == "hunk":
+            # A ---/+++ pair is indistinguishable from marker-shaped hunk
+            # content when a capture is truncated at a file boundary. Treat
+            # that ambiguity as malformed instead of consuming the pair as
+            # deletion/addition records for the preceding file.
+            if parser_state == "hunk" and not hunk_complete:
                 malformed_hunk = True
             if parser_mode == "headerless":
                 ambiguous_headerless_input = True
@@ -119,17 +128,18 @@ def validate_github_anchor(
             continue
 
         if raw.startswith("@@"):
-            if parser_state == "hunk":
+            if parser_state == "hunk" and not hunk_complete:
                 malformed_hunk = True
             hunk_range = _hunk_range(raw)
             if not hunk_range:
+                malformed_hunk = True
                 parser_state = "outside"
                 new_line = None
                 wanted_in_file = False
                 index += 1
                 continue
             parser_state = "hunk"
-            hunk_start, old_remaining, new_remaining = hunk_range
+            _, old_remaining, hunk_start, new_remaining = hunk_range
             new_line = hunk_start if wanted_in_file else None
             index += 1
             continue
@@ -142,13 +152,27 @@ def validate_github_anchor(
             index += 1
             continue
 
+        if raw == r"\ No newline at end of file":
+            index += 1
+            continue
+        if hunk_complete:
+            # Once the declared body is exhausted, only a recognized next
+            # hunk/file boundary or the no-newline marker is legal.
+            malformed_hunk = True
+            parser_state = "file_body"
+            index += 1
+            continue
         if raw.startswith("-"):
-            if old_remaining > 0:
+            if old_remaining <= 0:
+                malformed_hunk = True
+            else:
                 old_remaining -= 1
             index += 1
             continue
         if raw.startswith("+"):
-            if new_remaining > 0:
+            if new_remaining <= 0:
+                malformed_hunk = True
+            else:
                 if wanted_in_file and new_line == line:
                     found_anchor = True
                 if new_line is not None:
@@ -157,14 +181,16 @@ def validate_github_anchor(
             index += 1
             continue
         if raw.startswith(" "):
-            if old_remaining > 0:
+            if old_remaining <= 0 or new_remaining <= 0:
+                malformed_hunk = True
+            else:
                 old_remaining -= 1
-            if new_remaining > 0:
                 if new_line is not None:
                     new_line += 1
                 new_remaining -= 1
             index += 1
             continue
+        malformed_hunk = True
         index += 1
 
     if parser_state == "hunk" and (old_remaining != 0 or new_remaining != 0):
@@ -206,7 +232,7 @@ def main(argv: list[str] | None = None) -> int:
     else:
         try:
             diff_text = args.diff_file.read_text(encoding="utf-8")
-        except OSError as exc:
+        except (OSError, UnicodeError) as exc:
             print(
                 json.dumps({"error": "diff_input_unavailable", "detail": str(exc)}),
                 file=sys.stderr,

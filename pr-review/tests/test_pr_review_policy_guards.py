@@ -423,3 +423,31 @@ class TestProviderDocumentationContracts:
         assert "GitHub RIGHT-side anchors and GitLab diff position mapping" in repository
         assert "configured for provider posting" in repository
         assert "pr-review | GitLab (read; write for posting)" not in repository
+
+    def test_github_posting_requires_complete_paginated_comment_readback(self):
+        phase_zero = (ROOT / "pr-review/workflow/phase-0.md").read_text(encoding="utf-8")
+        capabilities = (ROOT / "pr-review/reference/mcp-capabilities.md").read_text(
+            encoding="utf-8",
+        )
+        posting = (ROOT / "pr-review/workflow/posting.md").read_text(encoding="utf-8")
+        combined = phase_zero + capabilities + posting
+        assert "every posting-enabled profile" in combined.lower()
+        assert "paginated complete review-comment readback" in combined
+        assert "paginated complete issue-comment readback" in combined
+        assert "metadata+files+writes" in combined
+        assert "chat-only" in combined
+
+    def test_lifecycle_and_cancellation_messages_branch_on_provider_noun(self):
+        modes = (ROOT / "pr-review/reference/review-modes.md").read_text(encoding="utf-8")
+        phase_five = (ROOT / "pr-review/workflow/phase-5.md").read_text(encoding="utf-8")
+
+        assert 'GitHub: *"PR already merged or closed.' in modes
+        assert 'GitLab: *"MR already merged or closed.' in modes
+        assert "GitHub uses PR state" in modes
+        assert "GitLab uses MR state" in modes
+        cancelled = phase_five.split("Phase 3 confirmed, user cancels before Phase 4", 1)[1].split(
+            "|",
+            2,
+        )[1]
+        assert "No provider writes" in cancelled
+        assert "No GitLab writes" not in cancelled

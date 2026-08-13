@@ -656,3 +656,99 @@ def test_cli_unreadable_diff_file_exits_with_machine_readable_error(tmp_path):
     assert result.returncode == 1
     assert result.stdout == ""
     assert json.loads(result.stderr)["error"] == "diff_input_unavailable"
+
+
+def test_cli_invalid_utf8_diff_file_exits_with_machine_readable_error(tmp_path):
+    invalid = tmp_path / "invalid.diff"
+    invalid.write_bytes(b"\xff\xfe\x00")
+    result = run_cli(
+        "--diff-file",
+        str(invalid),
+        "--path",
+        "src/payments.py",
+        "--line",
+        "11",
+        "--source-kind",
+        "added",
+        "--head-sha",
+        "abc",
+    )
+    assert result.returncode == 1
+    assert result.stdout == ""
+    assert json.loads(result.stderr)["error"] == "diff_input_unavailable"
+
+
+def _strict_grammar_patch(mode: str, hunk_text: str) -> str:
+    if mode == "headerless":
+        return hunk_text
+    target = (
+        "diff --git a/src/payments.py b/src/payments.py\n"
+        if mode == "combined"
+        else "--- a/src/other.py\n+++ b/src/other.py\n@@ -1 +1 @@\n context\n"
+    )
+    return target + "--- a/src/payments.py\n+++ b/src/payments.py\n" + hunk_text
+
+
+@pytest.mark.parametrize("mode", ["combined", "headerless", "concatenated"])
+@pytest.mark.parametrize(
+    "hunk_text,target_line",
+    [
+        ("@@ -10,0 +10,2 @@\n impossible context\n+target\n", 11),
+        ("@@ -10,2 +10,1 @@\n+target\n impossible\n impossible again\n", 10),
+        ("@@ -10,0 +10,2 @@\n-impossible\n+target\n+other\n", 10),
+        (
+            "@@ -10,0 +10,1 @@\n+target\n"
+            "@@ -20,1 +20,0 @@\n+impossible\n-deleted\n",
+            10,
+        ),
+        (
+            "@@ -10,0 +10,1 @@\n+target\n"
+            "@@ -0,1 +20,1 @@\n invalid zero start\n",
+            10,
+        ),
+        ("@@ -10,0 +10,1 @@\n+target\n+surplus body\n", 10),
+    ],
+    ids=[
+        "context-without-old-range",
+        "context-without-new-range",
+        "deletion-without-old-range",
+        "addition-without-new-range",
+        "nonempty-range-with-zero-start",
+        "surplus-body",
+    ],
+)
+def test_strict_hunk_grammar_rejects_malformed_body_in_every_input_mode(
+    mode,
+    hunk_text,
+    target_line,
+):
+    assert validate_github_anchor(
+        _strict_grammar_patch(mode, hunk_text),
+        path="src/payments.py",
+        line=target_line,
+        source_kind="added",
+        head_sha="abc",
+    ) == {
+        "unanchorable": True,
+        "reason": "added_line_not_in_current_diff",
+    }
+
+
+@pytest.mark.parametrize("mode", ["combined", "headerless", "concatenated"])
+def test_strict_hunk_grammar_retains_complete_valid_hunks(mode):
+    patch = _strict_grammar_patch(
+        mode,
+        "@@ -10,2 +10,3 @@\n context\n+target\n trailing\n",
+    )
+    assert validate_github_anchor(
+        patch,
+        path="src/payments.py",
+        line=11,
+        source_kind="added",
+        head_sha="abc",
+    ) == {
+        "commit_id": "abc",
+        "path": "src/payments.py",
+        "line": 11,
+        "side": "RIGHT",
+    }

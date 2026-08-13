@@ -17,6 +17,10 @@ skills:
       - name: GitHub read
         required: [github.get_pull_request, github.get_pull_request_files]
         optional:
+          - name: github.list_pull_request_review_comments
+            enables: paginated complete review-comment readback required for safe posting
+          - name: github.list_issue_comments
+            enables: paginated complete issue-comment readback required for safe posting
           - name: github.create_pull_request_comment
             enables: GitHub inline PR comments
           - name: github.create_issue_comment
@@ -26,6 +30,8 @@ skills:
       gitlab.create_note: chat-only posting
       github.create_pull_request_comment: summary-only or chat-only posting
       github.create_issue_comment: chat-only posting
+      github.list_pull_request_review_comments: chat-only posting
+      github.list_issue_comments: chat-only posting
 
   pr-gatekeeper:
     required: [gitlab.get_merge_request]

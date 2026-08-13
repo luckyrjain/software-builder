@@ -139,9 +139,13 @@ merge via API; recommend a human maintainer gate and link GitLab approval rules 
 
 **Write retry policy:** provider comment calls are non-idempotent and do not use the global read retry.
 After an ambiguous `timeout` or `server_error`, read back the relevant comments/notes and match the
-deterministic marker plus body hash. Treat a matching comment as success; retry at most once only when
-absence is proven. Never issue a duplicate POST. A deterministic rejection is handled by the provider
-fallback below without blind retries.
+deterministic marker plus body hash. Every GitHub posting-enabled profile requires both paginated
+complete review-comment readback and paginated complete issue-comment readback;
+`metadata+files+writes` without either read is `chat-only`. Build and reconcile GitHub bodies with
+`scripts/github-comment-recovery.py` using the marker-excluded hash domain in
+`reference/github-inline-comments.md`. Treat a matching comment as success; retry at most once only
+when absence is proven. Never issue a duplicate POST. A deterministic rejection is handled by the
+provider fallback below without blind retries.
 
 Post **only** findings that survived Phase 2 finding dedupe — never re-post same location, root cause,
 stack, or API misuse already on the MR. **Cross-session dedupe:** before posting, re-fetch MR notes and

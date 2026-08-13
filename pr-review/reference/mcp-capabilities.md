@@ -112,12 +112,14 @@ semantic capability, not connector name.
 
 Require a complete read pair of PR metadata/current head plus PR files/diff before classifying posting.
 Metadata-only and diff-only connectors are unavailable; writes never compensate for a missing read.
-Complete read-only access selects `chat-only`; complete reads plus comment writes select the mode below.
+Complete read-only access selects `chat-only`. Every posting-enabled profile also requires both
+paginated complete review-comment readback and paginated complete issue-comment readback. A
+`metadata+files+writes` connector without either complete readback remains `chat-only`.
 
 | Profile | Read path | Write path | Posting mode |
 |---|---|---|---|
-| full | PR metadata, files/diff, comments, checks | inline comment + issue comment | `full` |
-| summary-only | PR metadata, files/diff, comments | issue comment | `summary-only` |
+| full | PR metadata, files/diff, paginated complete review-comment and issue-comment readback, checks | inline comment + issue comment | `full` |
+| summary-only | PR metadata, files/diff, paginated complete review-comment and issue-comment readback | issue comment | `summary-only` |
 | CLI read-only | authenticated `gh pr view` + `gh pr diff` on target host | none | `chat-only` |
 | unavailable | no MCP/App and no authenticated `gh` on target host | none | stop |
 
