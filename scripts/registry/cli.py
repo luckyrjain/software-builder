@@ -117,7 +117,7 @@ def _validate_for_generate(root: Path) -> list[str]:
         errors.extend(validate_capability_catalog_sync(root))
     if platform_contracts.is_file():
         errors.extend(validate_manifest(root))
-    if platform_contracts.is_file() and all(path.is_file() for path in p1_files):
+    if any(path.is_file() for path in p1_files):
         errors.extend(validate_p1_contracts(root))
     return errors
 
