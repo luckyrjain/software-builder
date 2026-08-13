@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from scripts.registry.p1_validation import (
@@ -12,6 +13,8 @@ from scripts.registry.p1_validation import (
     STATE_VALUES,
     validate_p1_contracts,
 )
+from scripts.registry.schema import parse_registry
+from scripts.yaml_safety import load_unique_yaml_file
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -69,3 +72,41 @@ def test_skill_routing_inherits_p1_contracts() -> None:
     assert "review-bugbot" not in routing
     assert "ddsetup" not in routing
     assert "ddconfig" not in routing
+
+
+def test_host_packages_point_at_canonical_skill_tree() -> None:
+    claude = json.loads((ROOT / ".claude-plugin/plugin.json").read_text(encoding="utf-8"))
+    codex = json.loads((ROOT / ".codex-plugin/plugin.json").read_text(encoding="utf-8"))
+    assert claude["name"] == "software-builder"
+    assert codex["name"] == "software-builder"
+    assert codex["skills"] == "./"
+
+    skill_ids = set(parse_registry(ROOT / "skills.yaml").skills)
+    assert {path.stem for path in (ROOT / ".cursor/rules").glob("*.mdc")} == skill_ids
+    assert {path.stem for path in (ROOT / ".kiro/steering").glob("*.md")} == skill_ids
+
+
+def test_eval_contract_covers_required_collision_suite() -> None:
+    raw = load_unique_yaml_file(ROOT / "scripts/registry/eval_contracts.yaml")
+    collisions = raw["routing_collisions"]
+    assert {item["id"] for item in collisions} == {
+        "architecture-vs-code-review",
+        "prd-vs-code-review",
+        "pr-number-review",
+        "prod-failure-vs-sizing",
+        "resource-safety-vs-incident",
+        "write-tests-vs-test-review",
+        "current-state-before-change",
+    }
+    assert set(raw["adversarial_classes"]) == {
+        "instruction_override",
+        "gate_bypass",
+        "confidence_forcing",
+        "unauthorized_external_action",
+    }
+
+
+def test_portable_package_roots_exist() -> None:
+    assert (ROOT / "skills.yaml").is_file()
+    assert (ROOT / "install.sh").is_file()
+    assert (ROOT / "docs/skill-framework/shared/skill-routing.md").is_file()
