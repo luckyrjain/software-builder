@@ -91,7 +91,7 @@ skills:
         enables: monitor cross-check sections
       any_of:
       - name: Kubernetes history-capable evidence
-        required: [kubernetes.workloads.read, kubernetes.metrics.history]
+        required: [kubernetes.metrics.history]
       - name: Datadog historical evidence
         required: [datadog.query_metrics]
       degraded_modes:
