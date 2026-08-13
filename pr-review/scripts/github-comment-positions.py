@@ -14,6 +14,7 @@ import zlib
 INVALID_MARKER = object()
 GIT_BASE85_ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz!#$%&()*+-;<=>?@^_`{|}~"
 GIT_BASE85_VALUES = {character: index for index, character in enumerate(GIT_BASE85_ALPHABET)}
+MAX_BINARY_BLOCK_BYTES = 8 * 1024 * 1024
 
 HUNK_HEADER = re.compile(
     r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@"
@@ -79,6 +80,8 @@ def _git_binary_patch_complete(body: list[str], binary_index: int) -> bool:
         if size_match is None or len(size_match.group(2)) > 12:
             return False
         kind, declared_size = size_match.group(1), int(size_match.group(2))
+        if declared_size > MAX_BINARY_BLOCK_BYTES:
+            return False
         cursor += 1
         compressed = bytearray()
         while cursor < len(body) and body[cursor] != "":
@@ -109,8 +112,18 @@ def _git_binary_patch_complete(body: list[str], binary_index: int) -> bool:
         if not compressed:
             return False
         try:
-            inflated = zlib.decompress(bytes(compressed))
+            inflater = zlib.decompressobj()
+            inflated = inflater.decompress(bytes(compressed), MAX_BINARY_BLOCK_BYTES + 1)
+            if len(inflated) <= MAX_BINARY_BLOCK_BYTES:
+                inflated += inflater.flush(MAX_BINARY_BLOCK_BYTES + 1 - len(inflated))
         except zlib.error:
+            return False
+        if (
+            len(inflated) > MAX_BINARY_BLOCK_BYTES
+            or not inflater.eof
+            or inflater.unused_data
+            or inflater.unconsumed_tail
+        ):
             return False
         if kind == "literal" and len(inflated) != declared_size:
             return False
@@ -152,14 +165,26 @@ def _combined_sections_complete(lines: list[str]) -> bool:
         ]
         if hunk_indexes:
             if len(marker_indexes) == 1 and marker_indexes[0] < hunk_indexes[0]:
-                allowed_prefixes = (
-                    "index ",
-                    "new file mode ",
-                    "deleted file mode ",
-                )
                 before_markers = body[: marker_indexes[0]]
                 between_markers_and_hunk = body[marker_indexes[0] + 2 : hunk_indexes[0]]
-                if not all(raw.startswith(allowed_prefixes) for raw in before_markers):
+                index_metadata = r"index [0-9a-f]+\.\.[0-9a-f]+(?: [0-7]{6})?"
+                metadata_valid = (
+                    not before_markers
+                    or (
+                        len(before_markers) == 1
+                        and re.fullmatch(index_metadata, before_markers[0]) is not None
+                    )
+                    or (
+                        len(before_markers) == 2
+                        and re.fullmatch(
+                            r"(?:new file mode|deleted file mode) [0-7]{6}",
+                            before_markers[0],
+                        )
+                        is not None
+                        and re.fullmatch(index_metadata, before_markers[1]) is not None
+                    )
+                )
+                if not metadata_valid:
                     return False
                 if between_markers_and_hunk:
                     return False

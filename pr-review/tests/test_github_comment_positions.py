@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 import subprocess
 import sys
+import zlib
 
 import pytest
 
@@ -15,6 +16,27 @@ assert SPEC and SPEC.loader
 MODULE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(MODULE)
 validate_github_anchor = MODULE.validate_github_anchor
+
+
+def git_base85_lines(data: bytes) -> list[str]:
+    alphabet = MODULE.GIT_BASE85_ALPHABET
+    lines: list[str] = []
+    for start in range(0, len(data), 52):
+        chunk = data[start : start + 52]
+        length_code = chr(ord("A") + len(chunk) - 1) if len(chunk) <= 26 else chr(
+            ord("a") + len(chunk) - 27
+        )
+        padded = chunk + b"\0" * ((4 - len(chunk) % 4) % 4)
+        encoded = []
+        for group_start in range(0, len(padded), 4):
+            value = int.from_bytes(padded[group_start : group_start + 4], "big")
+            digits = [""] * 5
+            for index in range(4, -1, -1):
+                value, remainder = divmod(value, 85)
+                digits[index] = alphabet[remainder]
+            encoded.extend(digits)
+        lines.append(length_code + "".join(encoded))
+    return lines
 
 
 def run_cli(*args: str, input_text: str | None = None) -> subprocess.CompletedProcess[str]:
@@ -1134,6 +1156,41 @@ def test_oversized_hunk_number_fails_closed_without_exception():
     ) == {"unanchorable": True, "reason": "added_line_not_in_current_diff"}
 
 
+def test_binary_patch_rejects_declared_size_above_resource_ceiling():
+    assert not MODULE._git_binary_patch_complete(
+        [
+            "index 1234567..89abcde 100644",
+            "GIT binary patch",
+            f"literal {MODULE.MAX_BINARY_BLOCK_BYTES + 1}",
+            *git_base85_lines(zlib.compress(b"A")),
+            "",
+            "literal 0",
+            *git_base85_lines(zlib.compress(b"")),
+            "",
+        ],
+        1,
+    )
+
+
+def test_binary_patch_rejects_compressed_bomb_and_trailing_stream_data():
+    bomb = zlib.compress(b"A" * (MODULE.MAX_BINARY_BLOCK_BYTES + 1))
+    trailing = zlib.compress(b"data") + b"JUNK"
+    for payload in (bomb, trailing):
+        assert not MODULE._git_binary_patch_complete(
+            [
+                "index 1234567..89abcde 100644",
+                "GIT binary patch",
+                "literal 4",
+                *git_base85_lines(payload),
+                "",
+                "literal 4",
+                *git_base85_lines(zlib.compress(b"data")),
+                "",
+            ],
+            1,
+        )
+
+
 def test_headerless_patch_rejects_unknown_text_before_first_hunk():
     assert validate_github_anchor(
         "garbage\n@@ -0,0 +1,1 @@\n+target\n",
@@ -1160,6 +1217,31 @@ def test_headerless_patch_rejects_unknown_text_before_first_hunk():
     ids=("combined", "sectioned"),
 )
 def test_text_sections_reject_unknown_records_outside_hunks(patch):
+    assert validate_github_anchor(
+        patch,
+        path="src/payments.py",
+        line=1,
+        source_kind="added",
+        head_sha="abc",
+    ) == {"unanchorable": True, "reason": "added_line_not_in_current_diff"}
+
+
+@pytest.mark.parametrize(
+    "metadata",
+    [
+        "index 1234567..",
+        "index garbage",
+        "new file mode nope",
+        "deleted file mode ",
+        "new file mode 100644\nindex garbage",
+    ],
+)
+def test_text_sections_reject_partial_pre_marker_metadata(metadata):
+    patch = (
+        "diff --git a/src/payments.py b/src/payments.py\n"
+        f"{metadata}\n--- a/src/payments.py\n+++ b/src/payments.py\n"
+        "@@ -0,0 +1,1 @@\n+target\n"
+    )
     assert validate_github_anchor(
         patch,
         path="src/payments.py",
