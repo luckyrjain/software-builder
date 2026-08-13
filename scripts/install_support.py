@@ -113,6 +113,9 @@ def cmd_verify(installed_path: Path) -> int:
     except json.JSONDecodeError as exc:
         print(f"error: invalid manifest JSON: {exc}", file=sys.stderr)
         return 1
+    if not isinstance(manifest, dict):
+        print("error: manifest is not a JSON object", file=sys.stderr)
+        return 1
     skill_name = manifest.get("skill")
     if not isinstance(skill_name, str) or not skill_name:
         print("error: manifest missing skill name", file=sys.stderr)

@@ -53,6 +53,22 @@ def test_verify_requires_manifest(tmp_path: Path) -> None:
     assert cmd_verify(skill_dir) == 1
 
 
+def test_verify_rejects_non_object_manifest(tmp_path: Path) -> None:
+    # json.loads succeeds on any valid JSON document, not just objects --
+    # manifest.get("skill") used to be called unconditionally afterward, so
+    # a manifest file containing valid-but-non-object JSON (e.g. a JSON
+    # array or null) raised an uncaught AttributeError instead of the clean
+    # "error: ..." + exit 1 every other malformed-manifest case produces.
+    from scripts.install_support import cmd_verify
+
+    skill_dir = tmp_path / "demo"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text("# demo\n", encoding="utf-8")
+    (skill_dir / ".software-builder-manifest.json").write_text("[]\n", encoding="utf-8")
+
+    assert cmd_verify(skill_dir) == 1
+
+
 def test_verify_passes_minimal_package(tmp_path: Path) -> None:
     from scripts.install_support import cmd_verify
 
