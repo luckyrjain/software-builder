@@ -1933,7 +1933,8 @@ def test_git_generated_binary_rename_with_content_keeps_prior_anchor_valid(
         "rename from old.bin\n"
         "rename to new.bin\n"
         "index c5ebe4a6bed51d0508de6a090d5cdba194db16de.."
-        "4d42bb23d89d7b39e906c9da5fad38ef60888ce5 100644\n"
+        "4d42bb23d89d7b39e906c9da5fad38ef60888ce5"
+        + ("\n" if with_mode else " 100644\n")
     )
     if binary_kind == "summary":
         section = prefix + "Binary files a/old.bin and b/new.bin differ\n"
@@ -2152,6 +2153,10 @@ def test_git_generated_mode_change_with_binary_delta_keeps_prior_anchor_valid():
         "old mode 100644\nnew mode 100755\n"
         "index c5ebe4a6bed51d0508de6a090d5cdba194db16de",
         1,
+    ).replace(
+        "4d42bb23d89d7b39e906c9da5fad38ef60888ce5 100755",
+        "4d42bb23d89d7b39e906c9da5fad38ef60888ce5",
+        1,
     )
     assert validate_github_anchor(
         DIFF_WITH_ADDITION + binary,
@@ -2204,3 +2209,125 @@ def test_binary_delta_structure_rejects_malformed_programs(delta_program, declar
         "",
     ]
     assert not MODULE._git_binary_patch_complete(body, 1)
+
+
+@pytest.mark.parametrize("form", ["hunk", "summary", "git-binary"])
+@pytest.mark.parametrize("index_has_mode", [False, True], ids=("canonical", "suffix"))
+def test_mode_pair_forbids_redundant_index_mode_suffix(form, index_has_mode):
+    index = "index 1234567..89abcde" + (" 100644" if index_has_mode else "")
+    prefix = (
+        "diff --git a/file b/file\n"
+        "old mode 100644\n"
+        "new mode 100755\n"
+        f"{index}\n"
+    )
+    if form == "hunk":
+        section = prefix + (
+            "--- a/file\n+++ b/file\n"
+            "@@ -1,1 +1,2 @@\n old\n+new\n"
+        )
+    elif form == "summary":
+        section = prefix + "Binary files a/file and b/file differ\n"
+    else:
+        full_index = (
+            "index 1111111111111111111111111111111111111111.."
+            "2222222222222222222222222222222222222222"
+            + (" 100644" if index_has_mode else "")
+        )
+        section = (
+            "diff --git a/file b/file\n"
+            "old mode 100644\nnew mode 100755\n"
+            f"{full_index}\n"
+            "GIT binary patch\nliteral 4\n"
+            "Lc$`Z~EJ*|a1ONe>\n\nliteral 0\nHcmV?d00001\n\n"
+        )
+    result = validate_github_anchor(
+        DIFF_WITH_ADDITION + section,
+        path="src/payments.py",
+        line=11,
+        source_kind="added",
+        head_sha="abc",
+    )
+    expected = (
+        {"unanchorable": True, "reason": "added_line_not_in_current_diff"}
+        if index_has_mode
+        else {
+            "commit_id": "abc",
+            "path": "src/payments.py",
+            "line": 11,
+            "side": "RIGHT",
+        }
+    )
+    assert result == expected
+
+
+@pytest.mark.parametrize("change_kind", ["new", "deleted"])
+@pytest.mark.parametrize("with_kind_metadata", [False, True], ids=("bare", "canonical"))
+def test_git_binary_zero_oid_requires_matching_file_kind_metadata(
+    change_kind,
+    with_kind_metadata,
+):
+    zero = "0" * 40
+    nonzero = "1" * 40
+    if change_kind == "new":
+        index = f"index {zero}..{nonzero}"
+        metadata = "new file mode 100644\n"
+    else:
+        index = f"index {nonzero}..{zero}"
+        metadata = "deleted file mode 100644\n"
+    section = (
+        "diff --git a/file b/file\n"
+        + (metadata if with_kind_metadata else "")
+        + f"{index}\n"
+        "GIT binary patch\nliteral 4\n"
+        "Lc$`Z~EJ*|a1ONe>\n\nliteral 0\nHcmV?d00001\n\n"
+    )
+    result = validate_github_anchor(
+        DIFF_WITH_ADDITION + section,
+        path="src/payments.py",
+        line=11,
+        source_kind="added",
+        head_sha="abc",
+    )
+    assert ("commit_id" in result) is with_kind_metadata
+
+
+@pytest.mark.parametrize(
+    "index",
+    ["index 0000000..89abcde", "index 1234567..0000000"],
+    ids=("bare-new", "bare-deleted"),
+)
+def test_binary_summary_zero_oid_cannot_masquerade_as_regular_change(index):
+    section = (
+        "diff --git a/file b/file\n"
+        f"{index}\n"
+        "Binary files a/file and b/file differ\n"
+    )
+    assert validate_github_anchor(
+        DIFF_WITH_ADDITION + section,
+        path="src/payments.py",
+        line=11,
+        source_kind="added",
+        head_sha="abc",
+    ) == {"unanchorable": True, "reason": "added_line_not_in_current_diff"}
+
+
+@pytest.mark.parametrize(
+    "index",
+    ["index 0000000..89abcde", "index 1234567..0000000"],
+    ids=("bare-new", "bare-deleted"),
+)
+def test_text_hunk_zero_oid_cannot_masquerade_as_regular_change(index):
+    section = (
+        "diff --git a/file b/file\n"
+        f"{index}\n"
+        "--- a/file\n+++ b/file\n"
+        "@@ -1,1 +1,2 @@\n old\n+new\n"
+    )
+    assert validate_github_anchor(
+        DIFF_WITH_ADDITION + section,
+        path="src/payments.py",
+        line=11,
+        source_kind="added",
+        head_sha="abc",
+    ) == {"unanchorable": True, "reason": "added_line_not_in_current_diff"}

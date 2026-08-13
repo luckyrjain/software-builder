@@ -340,9 +340,13 @@ def _delta_program_complete(program: bytes) -> bool:
 
 VALID_FILE_MODE = r"(?:100644|100755|120000|160000)"
 MODE_PAIR = re.compile(r"old mode (100644|100755)\nnew mode (100644|100755)")
-ABBREVIATED_INDEX = rf"index [0-9a-f]+\.\.[0-9a-f]+(?: {VALID_FILE_MODE})?"
-FULL_OBJECT_PAIR = r"(?:[0-9a-f]{40}\.\.[0-9a-f]{40}|[0-9a-f]{64}\.\.[0-9a-f]{64})"
-FULL_INDEX = rf"index {FULL_OBJECT_PAIR}(?: {VALID_FILE_MODE})?"
+ABBREVIATED_INDEX_PARTS = re.compile(
+    rf"index ([0-9a-f]+)\.\.([0-9a-f]+)(?: ({VALID_FILE_MODE}))?"
+)
+FULL_INDEX_PARTS = re.compile(
+    rf"index ([0-9a-f]{{40}})\.\.([0-9a-f]{{40}})(?: ({VALID_FILE_MODE}))?"
+    rf"|index ([0-9a-f]{{64}})\.\.([0-9a-f]{{64}})(?: ({VALID_FILE_MODE}))?"
+)
 
 
 def _mode_pair_matches(records: list[str]) -> bool:
@@ -359,13 +363,26 @@ def _change_prefix_move(
     """Validate optional mode/move metadata followed by one bound index."""
     if not records:
         return INVALID_MARKER
-    index_pattern = FULL_INDEX if require_full_index else ABBREVIATED_INDEX
-    if re.fullmatch(index_pattern, records[-1]) is None:
+    index_pattern = FULL_INDEX_PARTS if require_full_index else ABBREVIATED_INDEX_PARTS
+    index_match = index_pattern.fullmatch(records[-1])
+    if index_match is None:
         return INVALID_MARKER
+    if require_full_index:
+        old_oid = index_match.group(1) or index_match.group(4)
+        new_oid = index_match.group(2) or index_match.group(5)
+        index_mode = index_match.group(3) or index_match.group(6)
+    else:
+        old_oid, new_oid, index_mode = index_match.groups()
     headers = records[:-1]
+    consumed_mode_pair = False
     if len(headers) >= 2 and _mode_pair_matches(headers[:2]):
+        consumed_mode_pair = True
         headers = headers[2:]
     elif headers and headers[0].startswith("old mode "):
+        return INVALID_MARKER
+    if consumed_mode_pair and index_mode is not None:
+        return INVALID_MARKER
+    if set(old_oid) == {"0"} or set(new_oid) == {"0"}:
         return INVALID_MARKER
     if not headers:
         return None
@@ -373,17 +390,34 @@ def _change_prefix_move(
     return move if move is not None else INVALID_MARKER
 
 
+def _binary_file_kind_prefix_matches(prefix: list[str]) -> bool:
+    """Bind a full zero OID to its canonical new/deleted file-mode record."""
+    if len(prefix) != 2:
+        return False
+    kind_match = re.fullmatch(
+        rf"(new file mode|deleted file mode) {VALID_FILE_MODE}", prefix[0]
+    )
+    index_match = FULL_INDEX_PARTS.fullmatch(prefix[1])
+    if kind_match is None or index_match is None:
+        return False
+    old_oid = index_match.group(1) or index_match.group(4)
+    new_oid = index_match.group(2) or index_match.group(5)
+    index_mode = index_match.group(3) or index_match.group(6)
+    old_zero = set(old_oid) == {"0"}
+    new_zero = set(new_oid) == {"0"}
+    return index_mode is None and (
+        (kind_match.group(1) == "new file mode" and old_zero and not new_zero)
+        or (kind_match.group(1) == "deleted file mode" and not old_zero and new_zero)
+    )
+
+
 def _git_binary_patch_complete(body: list[str], binary_index: int) -> bool:
     """Validate canonical one-or-more git binary size/payload blocks."""
     prefix = body[:binary_index]
     change_prefix = _change_prefix_move(prefix, require_full_index=True)
-    prefix_ok = change_prefix is not INVALID_MARKER or (
-        len(prefix) == 2
-        and re.fullmatch(
-            rf"(?:new file mode|deleted file mode) {VALID_FILE_MODE}", prefix[0]
-        )
-        is not None
-        and re.fullmatch(FULL_INDEX, prefix[1]) is not None
+    prefix_ok = (
+        change_prefix is not INVALID_MARKER
+        or _binary_file_kind_prefix_matches(prefix)
     )
     if not prefix_ok:
         return False
@@ -481,9 +515,13 @@ def _content_metadata_kind(
     ):
         kind = "deleted"
     else:
+        consumed_mode_pair = False
         if len(headers) >= 2 and _mode_pair_matches(headers[:2]):
+            consumed_mode_pair = True
             headers = headers[2:]
         elif headers and headers[0].startswith("old mode "):
+            return None
+        if consumed_mode_pair and index_match.group(3) is not None:
             return None
         move_paths = _move_metadata_paths(headers) if headers else None
         has_dissimilarity = (
