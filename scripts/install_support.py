@@ -10,6 +10,7 @@ from pathlib import Path
 
 from scripts.reference_utils import MANIFEST_NAME, is_ignored_package_path, sha256_file
 from scripts.registry.schema import parse_registry
+from scripts.yaml_safety import YAML_SAFETY_ERRORS
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -149,12 +150,16 @@ def main(argv: list[str] | None = None) -> int:
     verify_parser.add_argument("installed_path", type=Path)
 
     args = parser.parse_args(argv)
-    if args.command == "list":
-        return cmd_list(args.repo_root)
-    if args.command == "check":
-        return cmd_check(args.skill_id, args.repo_root)
-    if args.command == "verify":
-        return cmd_verify(args.installed_path)
+    try:
+        if args.command == "list":
+            return cmd_list(args.repo_root)
+        if args.command == "check":
+            return cmd_check(args.skill_id, args.repo_root)
+        if args.command == "verify":
+            return cmd_verify(args.installed_path)
+    except YAML_SAFETY_ERRORS as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
 
     print(f"error: unknown command {args.command!r}", file=sys.stderr)
     return 2

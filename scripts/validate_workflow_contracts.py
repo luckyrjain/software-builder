@@ -6,13 +6,14 @@ from __future__ import annotations
 import argparse
 import itertools
 import math
-import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import yaml
+
+from scripts.yaml_safety import load_unique_frontmatter, load_unique_yaml_file
 
 ENTRY_INPUT_KEYS = {"type", "provenance", "required", "trust"}
 CONTRACT_KEYS = {
@@ -30,74 +31,9 @@ TRUST_VALUES = {"trusted", "untrusted", "mixed"}
 SUPPORTED_FIELD_TYPES = {"boolean", "content", "list", "object", "string"}
 PHASE_KEYS = {"workflow_version", "phase", "produces", "consumes"}
 SCALAR_TYPES = (str, int, float, bool)
-FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---", re.DOTALL)
-MAX_YAML_CHARS = 1_000_000
-MAX_YAML_NESTING = 100
 # Route exhaustiveness is exponential in selector count. Reject larger spaces
 # before constructing itertools.product so validation time and memory stay bounded.
 MAX_SELECTOR_STATES = 256
-
-
-class DuplicateKeyError(yaml.YAMLError):
-    """Raised when YAML would otherwise silently overwrite a mapping key."""
-
-
-class DuplicateKeySafeLoader(yaml.SafeLoader):
-    """SafeLoader variant that rejects duplicate keys recursively."""
-
-
-def _construct_unique_mapping(
-    loader: DuplicateKeySafeLoader, node: yaml.MappingNode, deep: bool = False
-) -> dict[object, object]:
-    loader.flatten_mapping(node)
-    mapping: dict[object, object] = {}
-    for key_node, value_node in node.value:
-        # Fully construct keys so malformed collection keys have deterministic content
-        # instead of PyYAML's still-empty deferred placeholder.
-        key = loader.construct_object(key_node, deep=True)
-        try:
-            hash(key)
-        except TypeError as exc:
-            raise DuplicateKeyError(f"unhashable YAML mapping key {key!r}") from exc
-        if key in mapping:
-            raise DuplicateKeyError(f"duplicate YAML mapping key {key!r}")
-        mapping[key] = loader.construct_object(value_node, deep=deep)
-    return mapping
-
-
-DuplicateKeySafeLoader.add_constructor(
-    yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG,
-    _construct_unique_mapping,
-)
-
-
-def _load_unique_yaml(text: str) -> Any:
-    if len(text) > MAX_YAML_CHARS:
-        raise yaml.YAMLError(f"YAML input exceeds {MAX_YAML_CHARS} characters")
-    # Parser events distinguish real YAML collections from brackets in quoted or
-    # block scalars and comments, while still running before recursive construction.
-    depth = 0
-    for event in yaml.parse(text, Loader=yaml.SafeLoader):
-        if isinstance(event, (yaml.MappingStartEvent, yaml.SequenceStartEvent)):
-            depth += 1
-            if depth > MAX_YAML_NESTING:
-                raise yaml.YAMLError(f"YAML nesting exceeds {MAX_YAML_NESTING} levels")
-        elif isinstance(event, (yaml.MappingEndEvent, yaml.SequenceEndEvent)):
-            depth -= 1
-    try:
-        return yaml.load(text, Loader=DuplicateKeySafeLoader)
-    except RecursionError as exc:
-        raise yaml.YAMLError("YAML nesting exceeds safe decoder limits") from exc
-
-
-def _load_unique_frontmatter(path: Path) -> dict[str, Any]:
-    match = FRONTMATTER_RE.match(path.read_text(encoding="utf-8"))
-    if not match:
-        raise ValueError("missing YAML frontmatter")
-    data = _load_unique_yaml(match.group(1))
-    if not isinstance(data, dict):
-        raise ValueError("frontmatter must be a mapping")
-    return data
 
 
 @dataclass(frozen=True)
@@ -149,11 +85,16 @@ def _load_phases(skill_dir: Path, errors: list[str]) -> dict[str, PhaseContract]
     phases: dict[str, PhaseContract] = {}
     for path in sorted(workflow_dir.glob("*.md")):
         try:
-            frontmatter = _load_unique_frontmatter(path)
+            frontmatter = load_unique_frontmatter(path)
         except UnicodeError:
             errors.append(f"{path.name}: file is not valid UTF-8")
             continue
-        except (OSError, ValueError, yaml.YAMLError, RecursionError) as exc:
+        except ValueError as exc:
+            # load_unique_frontmatter's ValueError messages already embed the
+            # path (missing/non-mapping frontmatter); don't double it up.
+            errors.append(str(exc))
+            continue
+        except (OSError, yaml.YAMLError) as exc:
             errors.append(f"{path.name}: {exc}")
             continue
         frontmatter_keys = _valid_mapping_keys(
@@ -628,7 +569,7 @@ def validate_skill_contract(skill_dir: Path) -> list[str]:
     errors: list[str] = []
     contract_path = skill_dir / "workflow-contract.yaml"
     try:
-        contract = _load_unique_yaml(contract_path.read_text(encoding="utf-8"))
+        contract = load_unique_yaml_file(contract_path)
     except UnicodeError:
         return ["workflow-contract.yaml is not valid UTF-8"]
     except OSError as exc:

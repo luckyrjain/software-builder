@@ -41,6 +41,7 @@ from scripts.evals.live_harness import (
     load_mock_tools,
     run_live_case,
 )
+from scripts.yaml_safety import load_unique_yaml_file
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_MODEL = "claude-sonnet-5"
@@ -49,7 +50,7 @@ _REQUIRED_LIVE_CASE_KEYS = ("skill", "case_id", "scenario_prompt", "mock_tools")
 
 
 def load_live_case(path: Path) -> dict[str, Any]:
-    raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+    raw = load_unique_yaml_file(path)
     if not isinstance(raw, dict):
         raise ValueError(f"{path}: live case root must be a mapping")
     missing = [key for key in _REQUIRED_LIVE_CASE_KEYS if key not in raw]
@@ -109,7 +110,7 @@ def score_against_golden(
     case_id: str,
     recorded_output: dict[str, Any],
 ):
-    raw = yaml.safe_load(golden_path.read_text(encoding="utf-8"))
+    raw = load_unique_yaml_file(golden_path)
     if not isinstance(raw, dict):
         raise ValueError(f"{golden_path}: golden fixture root must be a mapping")
     assertions = raw.get("assertions", [])
@@ -134,7 +135,7 @@ def write_transcript(
     note: str,
 ) -> None:
     if transcript_path.is_file():
-        raw = yaml.safe_load(transcript_path.read_text(encoding="utf-8"))
+        raw = load_unique_yaml_file(transcript_path)
         if not isinstance(raw, dict):
             raise ValueError(f"{transcript_path}: root must be a mapping")
         # Refuse to refresh a file that isn't actually the Tier-2 fixture for this case: neither

@@ -11,6 +11,12 @@ from pathlib import Path
 
 import yaml
 
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from scripts.yaml_safety import YAML_SAFETY_ERRORS, load_unique_yaml_file  # noqa: E402
+
 _FRESHNESS_HEADING = "## Freshness"
 _LAST_REVIEWED_RE = re.compile(
     r"\*\*Last reviewed\*\*\s*\|\s*(\d{4}-\d{2}-\d{2})",
@@ -61,7 +67,7 @@ def _insert_after_title(text: str, block: str) -> str:
 
 def _load_registry_skill_ids(root: Path) -> set[str]:
     registry_path = root / "skills.yaml"
-    raw = yaml.safe_load(registry_path.read_text(encoding="utf-8"))
+    raw = load_unique_yaml_file(registry_path)
     skills = raw.get("skills") if isinstance(raw, dict) else None
     if not isinstance(skills, dict):
         raise ValueError("skills.yaml skills must be a mapping")
@@ -156,7 +162,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    errors = ensure_setup_freshness(args.root, write=args.write)
+    try:
+        errors = ensure_setup_freshness(args.root, write=args.write)
+    except YAML_SAFETY_ERRORS as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
     if errors:
         for err in errors:
             print(err, file=sys.stderr)

@@ -3,8 +3,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-import yaml
-
 from scripts.registry.models import (
     CapabilitiesSpec,
     CapabilityOptional,
@@ -19,6 +17,7 @@ from scripts.registry.models import (
     Registry,
     SkillEntry,
 )
+from scripts.yaml_safety import load_unique_yaml_file
 
 ALLOWED_RISK_CLASSES = frozenset(
     {"posting", "merge", "unattended", "read-only", "repository-write"},
@@ -37,7 +36,7 @@ def _require_mapping(data: Any, label: str) -> dict[str, Any]:
 
 
 def parse_registry(path: Path) -> Registry:
-    raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+    raw = load_unique_yaml_file(path)
     root = _require_mapping(raw, "skills.yaml root")
     schema_version = int(root.get("schema_version", 0))
     if schema_version != 1:

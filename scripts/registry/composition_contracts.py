@@ -5,9 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-import yaml
-
 from scripts.registry.models import Registry
+from scripts.yaml_safety import YAML_SAFETY_ERRORS, load_unique_yaml_file
 
 CONTRACTS_PATH = Path(__file__).resolve().parent / "composition_contracts.yaml"
 
@@ -51,7 +50,7 @@ def load_contracts(
     path: Path | None = None,
 ) -> tuple[set[str], dict[str, list[str]], dict[str, int], dict[str, CompositionContract]]:
     contracts_path = path or CONTRACTS_PATH
-    raw = yaml.safe_load(contracts_path.read_text(encoding="utf-8"))
+    raw = load_unique_yaml_file(contracts_path)
     if not isinstance(raw, dict):
         raise ValueError(f"{contracts_path}: root must be a mapping")
 
@@ -227,7 +226,7 @@ def validate_composition_contracts(
     resolved_path = contracts_path or CONTRACTS_PATH
     try:
         _artifact_types, artifact_schemas, authority_levels, contracts = load_contracts(resolved_path)
-    except (ValueError, yaml.YAMLError) as exc:
+    except YAML_SAFETY_ERRORS as exc:
         return [f"error: composition contracts: {exc}"]
 
     missing = sorted(set(registry.skills.keys()) - set(contracts.keys()))

@@ -13,6 +13,7 @@ from scripts.registry.skill_frontmatter_schema import (
     automation_only_guard_errors,
     validate_skill_frontmatter_fields,
 )
+from scripts.yaml_safety import YAML_SAFETY_ERRORS
 
 _SKILL_ID_RE = re.compile(r"^[a-z0-9-]+$")
 _GENERATED_MARKER = "GENERATED from skills.yaml"
@@ -99,7 +100,7 @@ def _validate_skill_frontmatter_shape(root: Path, registry: Registry) -> list[st
         skill_md = root / entry.path / "SKILL.md"
         try:
             frontmatter = load_skill_frontmatter(skill_md)
-        except ValueError as exc:
+        except YAML_SAFETY_ERRORS as exc:
             errors.append(f"error: {skill_id}: {exc}")
             continue
 
