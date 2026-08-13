@@ -5,8 +5,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 try:
@@ -103,29 +104,44 @@ EXEC_SUMMARY_REQUIRED_SECTIONS = (
 RUNTIME_VALIDATION_HEADING = "runtime validation"
 E2E_FLOW_RUNTIME_HEADING = "runtime validation"
 MERGE_CONFLICTS_HEADING = "## merge conflicts"
+WINDOWS_ABSOLUTE = re.compile(r"^[A-Za-z]:[/\\]")
+
+
+def _relative_path_error(value: Any, label: str) -> str | None:
+    """Return an error when a manifest-controlled path can escape its intended root.
+
+    Normalize backslashes before validation because manifests may be produced on or copied from
+    Windows while CI commonly validates them on Linux, where ``Path('..\\x')`` would otherwise be
+    treated as one harmless-looking filename.
+    """
+    if not isinstance(value, str) or not value.strip():
+        return f"{label} must be a non-empty relative path"
+    raw = value.strip()
+    normalized = raw.replace("\\", "/")
+    candidate = PurePosixPath(normalized)
+    if normalized.startswith("/") or WINDOWS_ABSOLUTE.match(raw) or candidate.is_absolute():
+        return f"{label} must be a relative path with no '..' segments: {raw}"
+    if ".." in candidate.parts:
+        return f"{label} must be a relative path with no '..' segments: {raw}"
+    return None
 
 
 def _resolve_effective_root(workspace_root: Path, engagement: Any) -> tuple[Path, list[str]]:
     """Resolve where phase deliverables actually live.
 
-    manifest.yaml itself always stays at workspace_root (see reference/run-scoped-artifacts.md),
-    but when a run namespaces its deliverables under `engagement.artifact_root` (e.g. parallel
-    runs, large workspaces, QUICK-mode phase packets), every other file the validator checks —
-    EXEC_SUMMARY.md, the map file, E2E_FLOW.md, RISK_MAP.md, the Postman export — lives under that
-    subdirectory instead of directly at workspace_root.
+    manifest.yaml itself always stays at workspace_root. When ``engagement.artifact_root`` is set,
+    every canonical domain artifact the validator checks lives below that relative directory.
     """
     if not isinstance(engagement, dict):
         return workspace_root, []
     artifact_root = engagement.get("artifact_root")
     if not artifact_root:
         return workspace_root, []
-    artifact_root_str = str(artifact_root)
-    candidate = Path(artifact_root_str)
-    if candidate.is_absolute() or ".." in candidate.parts:
-        return workspace_root, [
-            f"engagement.artifact_root must be a relative path with no '..' segments: {artifact_root_str}"
-        ]
-    return workspace_root / candidate, []
+    error = _relative_path_error(artifact_root, "engagement.artifact_root")
+    if error:
+        return workspace_root, [error]
+    normalized = str(artifact_root).replace("\\", "/")
+    return workspace_root / Path(normalized), []
 
 
 def _load_yaml(path: Path) -> tuple[Any, list[str]]:
@@ -179,12 +195,18 @@ def _validate_artifact_list(items: Any, label: str, status_set: frozenset[str]) 
             errors.append(f"duplicate {label} id: {item_id}")
         else:
             seen_ids.add(item_id)
-        for field in ("path", "phase"):
-            if not isinstance(item.get(field), str) or not str(item.get(field)).strip():
-                errors.append(f"{prefix}.{field} must be a non-empty string")
+
+        path_value = item.get("path")
+        path_error = _relative_path_error(path_value, f"{prefix}.path")
+        if path_error:
+            errors.append(path_error)
+
         phase = item.get("phase")
-        if isinstance(phase, str) and phase not in PHASE_KEYS:
+        if not isinstance(phase, str) or not phase.strip():
+            errors.append(f"{prefix}.phase must be a non-empty string")
+        elif phase not in PHASE_KEYS:
             errors.append(f"{prefix}.phase unknown: {phase}")
+
         status = item.get("status")
         if status not in status_set:
             errors.append(f"{prefix}.status must be one of {sorted(status_set)}")
@@ -357,8 +379,6 @@ def _validate_merge_conflicts_gate(
             status_index = lowered.index("status")
             continue
 
-        # Separator row: after stripping leading/trailing "|" and whitespace,
-        # every remaining character is "-", ":", or whitespace.
         if set(stripped.strip("|").replace(" ", "")) <= {"-", ":"}:
             continue
 
@@ -443,6 +463,15 @@ def validate_manifest(
                 errors.append(f"engagement missing field: {key}")
         if engagement.get("status") not in ENGAGEMENT_STATUS:
             errors.append("engagement.status invalid")
+        map_file = engagement.get("map_file")
+        map_error = _relative_path_error(map_file, "engagement.map_file")
+        if map_error:
+            errors.append(map_error)
+        artifact_root = engagement.get("artifact_root")
+        if artifact_root:
+            root_error = _relative_path_error(artifact_root, "engagement.artifact_root")
+            if root_error:
+                errors.append(root_error)
     else:
         errors.append("engagement must be an object")
 
@@ -490,9 +519,12 @@ def validate_manifest(
                 rel = str(item.get("path") or "")
                 if item.get("id") == "map_file" and map_file:
                     rel = map_file
+                if _relative_path_error(rel, "artifact path"):
+                    continue
                 status = item.get("status")
                 if status in ("ok", "stub") and rel:
-                    if not (effective_root / rel).is_file():
+                    normalized_rel = rel.replace("\\", "/")
+                    if not (effective_root / normalized_rel).is_file():
                         errors.append(f"artifact file missing on disk: {rel} (status={status})")
 
             if strict and isinstance(engagement, dict):
