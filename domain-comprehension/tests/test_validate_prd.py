@@ -73,8 +73,7 @@ def test_every_requirement_must_be_traced(tmp_path: Path) -> None:
         "",
     )
     prd.write_text(text, encoding="utf-8")
-    errors = validate_prd(prd)
-    assert "missing traceability row: NFR-001" in errors
+    assert "missing traceability row: NFR-001" in validate_prd(prd)
 
 
 def test_observed_requirement_requires_evidence(tmp_path: Path) -> None:
@@ -85,8 +84,7 @@ def test_observed_requirement_requires_evidence(tmp_path: Path) -> None:
         "| FR-001 | Return current balance | ledger | UNKNOWN | Observed | HIGH |",
     )
     prd.write_text(text, encoding="utf-8")
-    errors = validate_prd(prd)
-    assert any("FR-001: Observed requirement must cite evidence" == error for error in errors)
+    assert "FR-001: Observed requirement must cite evidence" in validate_prd(prd)
 
 
 def test_unresolved_status_placeholder_fails(tmp_path: Path) -> None:
@@ -97,5 +95,60 @@ def test_unresolved_status_placeholder_fails(tmp_path: Path) -> None:
         "| FR-001 | Return current balance | ledger | src/balance.py:10 | Observed / Inferred / Unknown | HIGH |",
     )
     prd.write_text(text, encoding="utf-8")
-    errors = validate_prd(prd)
-    assert any("unresolved PRD status placeholder" in error for error in errors)
+    assert any("unresolved PRD status placeholder" in error for error in validate_prd(prd))
+
+
+def test_duplicate_requirement_definition_fails(tmp_path: Path) -> None:
+    prd = tmp_path / "PRD.md"
+    _write_valid_prd(prd)
+    text = prd.read_text(encoding="utf-8").replace(
+        "| FR-001 | Return current balance | ledger | src/balance.py:10 | Observed | HIGH |",
+        "| FR-001 | Return current balance | ledger | src/balance.py:10 | Observed | HIGH |\n"
+        "| FR-001 | Return cached balance | ledger | src/cache.py:11 | Observed | HIGH |",
+    )
+    prd.write_text(text, encoding="utf-8")
+    assert "duplicate requirement definition: FR-001" in validate_prd(prd)
+
+
+def test_trace_status_must_match_definition(tmp_path: Path) -> None:
+    prd = tmp_path / "PRD.md"
+    _write_valid_prd(prd)
+    text = prd.read_text(encoding="utf-8").replace(
+        "| FR-001 | Observed | src/balance.py:10 | Code | HIGH | none |",
+        "| FR-001 | Inferred | src/balance.py:10 | Code | HIGH | none |",
+    )
+    prd.write_text(text, encoding="utf-8")
+    assert any("traceability status" in error and "FR-001" in error for error in validate_prd(prd))
+
+
+def test_trace_confidence_must_match_definition(tmp_path: Path) -> None:
+    prd = tmp_path / "PRD.md"
+    _write_valid_prd(prd)
+    text = prd.read_text(encoding="utf-8").replace(
+        "| NFR-001 | Observed | src/api.py:30 | Code | MEDIUM | none |",
+        "| NFR-001 | Observed | src/api.py:30 | Code | LOW | none |",
+    )
+    prd.write_text(text, encoding="utf-8")
+    assert any("traceability confidence" in error and "NFR-001" in error for error in validate_prd(prd))
+
+
+def test_traceability_requires_evidence_type_column(tmp_path: Path) -> None:
+    prd = tmp_path / "PRD.md"
+    _write_valid_prd(prd)
+    text = prd.read_text(encoding="utf-8").replace(
+        "| Requirement ID | Requirement status | Evidence source(s) | Evidence type | Confidence | Notes / contradiction |",
+        "| Requirement ID | Requirement status | Evidence source(s) | Confidence | Notes / contradiction |",
+    )
+    prd.write_text(text, encoding="utf-8")
+    assert "traceability table missing column: evidence type" in validate_prd(prd)
+
+
+def test_escaped_pipe_in_requirement_text_does_not_break_table(tmp_path: Path) -> None:
+    prd = tmp_path / "PRD.md"
+    _write_valid_prd(prd)
+    text = prd.read_text(encoding="utf-8").replace(
+        "Return current balance",
+        r"Return current \| available balance",
+    )
+    prd.write_text(text, encoding="utf-8")
+    assert validate_prd(prd) == []
