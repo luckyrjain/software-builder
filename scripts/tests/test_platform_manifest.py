@@ -4,10 +4,34 @@ from pathlib import Path
 
 import pytest
 
-from scripts.registry.manifest import _normalize_version, build_manifest, validate_manifest
+from scripts.registry.manifest import (
+    _load_platform_contracts,
+    _normalize_version,
+    build_manifest,
+    validate_manifest,
+)
 from scripts.registry.schema import parse_registry
 
 ROOT = Path(__file__).resolve().parents[2]
+
+_VALID_PLATFORM_CONTRACTS = """
+schema_version: 1
+evidence:
+  statuses: [OBSERVED, INFERRED, UNKNOWN, CONFLICTED, NOT_APPLICABLE]
+  required_fields: [claim, status, provenance, limitations]
+  insufficient_evidence_status: UNKNOWN
+  conflicting_evidence_status: CONFLICTED
+completion:
+  statuses: [SUCCESS, PARTIAL, BLOCKED, FAILED, ESCALATED]
+  required_fields: [status, evidence_status, blockers, artifacts, recommended_next_skill]
+action_gates:
+  read_only: none
+  local_reversible_write: explicit_task_authorization
+  remote_non_destructive_write: explicit_task_authorization
+  destructive_or_high_impact: explicit_action_authorization
+skill_types:
+  demo: leaf
+"""
 
 
 def test_build_manifest_covers_registered_skills() -> None:
@@ -68,19 +92,52 @@ def test_manifest_reuses_write_authority_and_artifact_contracts() -> None:
 def test_manifest_preserves_capability_semantics() -> None:
     capabilities = build_manifest(ROOT)["skills"]["k8s-overprovisioning-datadog"]["capabilities"]
     path_names = {path["name"] for path in capabilities["any_of"]}
-    assert path_names == {"Kubernetes historical metrics", "Datadog historical metrics"}
+    assert path_names == {"Kubernetes history-capable evidence", "Datadog historical evidence"}
+    kubernetes_path = next(
+        path for path in capabilities["any_of"] if path["name"] == "Kubernetes history-capable evidence"
+    )
+    assert kubernetes_path["required"] == ["kubernetes.metrics.history"]
     assert capabilities["degraded_modes"]["datadog.query_metrics"] == (
-        "continue with equivalent Kubernetes historical metrics when available"
+        "continue only when Kubernetes exposes equivalent historical metrics and aggregation"
     )
 
 
 def test_skill_versions_are_normalized_to_semver() -> None:
     assert _normalize_version(None) == "1.0.0"
     assert _normalize_version(2) == "2.0.0"
-    assert _normalize_version(1.1) == "1.1.0"
+    assert _normalize_version("1.1") == "1.1.0"
     assert _normalize_version("3.5.0") == "3.5.0"
+    assert _normalize_version("1.2.3-alpha.1+build.5") == "1.2.3-alpha.1+build.5"
     with pytest.raises(ValueError, match="semantic version"):
         _normalize_version("v3")
+    with pytest.raises(ValueError, match="semantic version string or integer major"):
+        _normalize_version(1.10)
+    with pytest.raises(ValueError, match="semantic version string or integer major"):
+        _normalize_version(True)
+
+
+def test_platform_contracts_reject_duplicate_canonical_values(tmp_path: Path) -> None:
+    path = tmp_path / "platform_contracts.yaml"
+    path.write_text(
+        _VALID_PLATFORM_CONTRACTS.replace(
+            "statuses: [OBSERVED, INFERRED, UNKNOWN, CONFLICTED, NOT_APPLICABLE]",
+            "statuses: [OBSERVED, INFERRED, UNKNOWN, CONFLICTED, NOT_APPLICABLE, UNKNOWN]",
+            1,
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="exactly once"):
+        _load_platform_contracts(path)
+
+
+def test_platform_contracts_reject_non_scalar_schema_version(tmp_path: Path) -> None:
+    path = tmp_path / "platform_contracts.yaml"
+    path.write_text(
+        _VALID_PLATFORM_CONTRACTS.replace("schema_version: 1", "schema_version: [1]", 1),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="schema_version must be an integer"):
+        _load_platform_contracts(path)
 
 
 def test_manifest_marks_implicit_and_explicit_version_sources() -> None:
