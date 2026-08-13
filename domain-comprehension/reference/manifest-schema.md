@@ -71,6 +71,12 @@ skip_reason: <string or null>   # required when status=skipped
 | `required` | boolean |
 | `status` | `ok` \| `stub` \| `missing` \| `waived` \| `n_a` |
 
+Required P5 artifact: `prd` (`PRD.md`) — as-built/current-state requirements synthesis. It begins as a
+Session 0 stub because all `templates/` are copied at bootstrap, but its owning phase is `p5`; P5 must
+mark it `ok` only after stable `FR-*`, `BR-*`, and `NFR-*` requirements and their evidence traceability
+are populated. Product intent that implementation evidence cannot establish remains `Unknown` rather
+than being fabricated.
+
 New v2 artifacts: `known_omissions`, `business_flows`.
 
 Optional artifacts: `e2e_flow` (`E2E_FLOW.md`, P2 supplement when map § Runtime validation is stub+link).
@@ -119,7 +125,7 @@ See [evidence-summary.md](evidence-summary.md). All integer fields ≥ 0.
 1. **Session 0** — copy [templates/manifest.yaml](../templates/manifest.yaml); set `engagement.*`, all artifacts `stub`
 2. **End of phase** — phases, artifacts, diagrams, `evidence_summary`, `overall_confidence`; run validator
 3. **Skip phase** — `skipped` + `skip_reason`; optional artifacts `n_a` or `waived`
-4. **FIRST_PASS_COMPLETE** — validator `--strict`
+4. **FIRST_PASS_COMPLETE** — validator `--strict`; `prd` must be `ok` because it is a required P5 artifact
 5. **`ADD_REPO`** — add new `repos[]` entry at start; on merge conflict leave the owning phase at
    `status: in_progress` (do not mark `complete` while `RISK_MAP.md` § Merge Conflicts has an `open`
    row); run validator with `--check-content` same as end-of-phase
@@ -132,7 +138,7 @@ python3 domain-comprehension/scripts/validate_manifest_yaml.py manifest.yaml --w
 ```
 
 When `engagement.artifact_root` is set, `--workspace-root` still points at the directory holding
-`manifest.yaml` — the validator resolves every other deliverable (`EXEC_SUMMARY.md`, the map file,
-`E2E_FLOW.md`, `RISK_MAP.md`, the Postman export) under `<workspace_root>/<artifact_root>/` instead of
-directly under `<workspace_root>/`. An absolute `artifact_root` or one containing `..` segments is a
+`manifest.yaml` — the validator resolves every other deliverable (`EXEC_SUMMARY.md`, `PRD.md`, the map
+file, `E2E_FLOW.md`, `RISK_MAP.md`, the Postman export) under `<workspace_root>/<artifact_root>/` instead
+of directly under `<workspace_root>/`. An absolute `artifact_root` or one containing `..` segments is a
 validation error.
