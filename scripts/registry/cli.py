@@ -8,6 +8,7 @@ from pathlib import Path
 import yaml
 
 from scripts.registry.backfill_capabilities import cmd_backfill
+from scripts.registry.capability_sync import validate_capability_catalog_sync
 from scripts.registry.composition import render_composition_mermaid
 from scripts.registry.crosscheck import find_stale_generated_adapters, validate_registry
 from scripts.registry.generate_compatibility import render_compatibility_matrix
@@ -92,7 +93,11 @@ def _run_command(action: Callable[[], int]) -> int:
 
 
 def _validate_all(root: Path) -> list[str]:
-    return [*validate_registry(root), *validate_manifest(root)]
+    return [
+        *validate_registry(root),
+        *validate_capability_catalog_sync(root),
+        *validate_manifest(root),
+    ]
 
 
 def cmd_validate(root: Path) -> int:
@@ -101,7 +106,7 @@ def cmd_validate(root: Path) -> int:
         for error in errors:
             print(error, file=sys.stderr)
         return 1
-    print("ok: skills registry and platform manifest validate")
+    print("ok: skills registry, capability catalogue and platform manifest validate")
     return 0
 
 
@@ -136,7 +141,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="scripts.registry")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    subparsers.add_parser("validate", help="validate skills.yaml, SKILL.md and platform contracts")
+    subparsers.add_parser("validate", help="validate skills.yaml, capabilities and platform contracts")
 
     generate_parser = subparsers.add_parser("generate", help="generate adapters and derived docs")
     generate_parser.add_argument(
