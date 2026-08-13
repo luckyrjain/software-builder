@@ -47,12 +47,12 @@ branch/current review, re-review, or list open reviews. `/pr-review` is equivale
 
 | Request | Use instead |
 |---------|-------------|
-| Local uncommitted diff only | `/review-bugbot` |
+| Local uncommitted diff only | Use the host's local diff/code-review workflow; no registered skill owns local-only diff review |
 | Post-incident RCA / outage window | **incident-rca** |
 | K8s rightsizing / overprovisioning | **k8s-overprovisioning-datadog** |
 | Automated, unattended review on every push (webhook-triggered) | **pr-gatekeeper** |
 | Release go/no-go report across MRs/services since last release | **release-readiness-checker** |
-| Live rollback or merge approval | Not supported — this skill never approves or merges, at any phase; use the GitLab UI directly |
+| Live rollback or merge approval | Not supported — this skill never approves or merges, at any phase; use the provider UI or an explicitly authorized host workflow |
 
 ## Workflow
 
@@ -89,7 +89,7 @@ Full matrix: [cross-skill-escalation.md](../docs/skill-framework/shared/cross-sk
 |----------------------|------------|
 | Critical security / bad deploy in prod | **incident-rca** |
 | K8s/infra perf regression in MR | **k8s-overprovisioning-datadog** |
-| Resource-down MR merged | **k8s** + **incident-rca** if outage |
+| Resource-down MR merged | **k8s-overprovisioning-datadog** + **incident-rca** if outage |
 
 ## Framework
 
@@ -100,4 +100,4 @@ Routing: [skill-routing.md](../docs/skill-framework/shared/skill-routing.md) · 
 [safe-output.md](../docs/skill-framework/shared/safe-output.md) · MCP errors
 [mcp-error-handling.md](../docs/skill-framework/shared/mcp-error-handling.md) (1-retry policy for reads;
 non-idempotent writes use provider-specific recovery — `workflow/phase-0.md` §MCP retry policy) · post-actions
-[post-action-templates.md](../docs/skill-framework/shared/post-action-templates.md) (Jira §2, Slack §5, canvas §6).
+[post-action-templates.md](../docs/skill-framework/shared/post-action-templates.md) (Jira §2, Slack §5).
