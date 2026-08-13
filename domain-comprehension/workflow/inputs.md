@@ -1,5 +1,5 @@
 ---
-workflow_version: 1.16
+workflow_version: 1.17
 phase: inputs
 produces:
   - workspace_root
@@ -19,13 +19,34 @@ consumes: []
 | `workspace_root` | Yes | Ask if ambiguous |
 | `domain_name` | Yes | Infer from user message; confirm in Session 0 |
 | `workspace_layout` | No | Auto-detect: `sibling-repos` \| `monorepo` \| `single-repo` |
-| `domain_config` | No | Create at Session 0 from user input + optional domain pack |
+| `domain_config` | No | Create/load under the resolved `artifact_root` |
 | `delivery_mode` | No | `QUICK` when no `manifest.yaml` exists yet (first-time engagement) — see table below |
 | `domain_pack` | No | e.g. `fintech-payout` — see [domain-packs](../reference/domain-packs/README.md) |
-| `memory_bank.export_mode` | No | From `domain-config.yaml`; override in user message (`never` \| `optional` \| `p5`) |
-| `api_tooling.export_mode` | No | From `domain-config.yaml`; override in user message (`never` \| `optional` \| `p5`) |
+| `memory_bank.export_mode` | No | From `{artifact_root}/domain-config.yaml`; override in user message (`never` \| `optional` \| `p5`) |
+| `api_tooling.export_mode` | No | From `{artifact_root}/domain-config.yaml`; override in user message (`never` \| `optional` \| `p5`) |
 | `new_repo_path` | Only for `ADD_REPO` | Ask if ambiguous |
 | `proposal` | Only for `PROPOSAL_CHECK` | Ask if absent — free-text description: proposed name/domain area, claimed data entities, claimed API paths/producers |
+
+## Artifact location resolution
+
+`manifest.yaml` is the only domain-comprehension file stored directly at `workspace_root`. All other
+canonical domain artifacts are resolved under `engagement.artifact_root`, defaulting to
+`docs/domain-comprehension/<domain-slug>/`.
+
+- **First run:** derive `domain_slug` from `domain_name`, then use
+  `docs/domain-comprehension/<domain_slug>` unless the caller supplied another safe relative
+  `scope.artifact_root`. Session 0 creates it when absent.
+- **RESUME / DELTA / ADD_REPO / PROPOSAL_CHECK:** load root `manifest.yaml` first, then read
+  `engagement.artifact_root`; do not rediscover or silently change the artifact location.
+- `domain_slug` must be one path segment: lowercase letters/digits plus `-`; replace other runs of
+  characters with `-`, trim leading/trailing `-`, and reject an empty result. Never allow `/`, `\\`, an
+  absolute path, or `..` to enter the derived path.
+- In this workflow, an unqualified canonical artifact name such as `PROGRESS.md`, `RISK_MAP.md`,
+  `PRD.md`, or `API_CATALOG.md` means `{artifact_root}/<name>`. The only explicit root exception is
+  `manifest.yaml`. The standalone **squad-map** skill may also maintain a shared root `SQUAD_MAP.md`, but
+  domain-comprehension uses its snapshot at `{artifact_root}/SQUAD_MAP.md`.
+
+See [run-scoped-artifacts.md](../reference/run-scoped-artifacts.md).
 
 ## Workspace layout detection
 
@@ -37,8 +58,10 @@ consumes: []
 
 ## Domain config
 
-If `domain-config.yaml` exists at `workspace_root`, load it. Schema:
-[reference/domain-config-schema.md](../reference/domain-config-schema.md).
+On an existing engagement, read root `manifest.yaml` and load
+`{workspace_root}/{engagement.artifact_root}/domain-config.yaml`. On a first run, Session 0 creates
+`{artifact_root}/domain-config.yaml` from user input plus the optional domain pack. Schema:
+[domain-config-schema.md](../reference/domain-config-schema.md).
 
 If user names a domain pack, merge pack defaults then overlay user overrides.
 
@@ -62,11 +85,11 @@ opt into `FULL` explicitly.
 |------|----------|
 | `QUICK` | **Default for first-time engagements.** Session 0 + P0 + draft five questions only — no P0.5 mechanical pass |
 | `FULL` | All comprehension phases for all in-scope repos — opt in explicitly |
-| `RESUME` | Read `manifest.yaml` + `PROGRESS.md`; continue from Next action |
+| `RESUME` | Read root `manifest.yaml`, resolve `artifact_root`, then continue from `{artifact_root}/PROGRESS.md` / Next action |
 | `DELTA` | Re-run phases for repos whose HEAD SHA changed since last manifest |
 | `ADD_REPO` | Onboard one repo not currently in `manifest.repos[]` into an existing engagement; full-rigor P0–P1 for that repo, then re-run downstream phases per the DELTA affected-phases rules, gated by a merge-conflict check |
 | `COMPLIANCE_RETROFIT` | Normalize split deliverables + `manifest.yaml` from an existing first pass **without** re-analyzing code |
-| `PROPOSAL_CHECK` | Compare a proposal against the existing engagement's deliverables; read-only, no merge |
+| `PROPOSAL_CHECK` | Compare a proposal against the existing engagement's deliverables; read-only against canonical artifacts, with one report written under `artifact_root` |
 
 ### COMPLIANCE_RETROFIT — procedure
 
@@ -74,24 +97,35 @@ Use when analysis is done but artifacts are consolidated, split files missing, o
 
 **Entry criteria (all required):**
 
-- `PROGRESS.md` exists with substantive phase notes or `FIRST_PASS_COMPLETE`
+- An existing `PROGRESS.md` has substantive phase notes or `FIRST_PASS_COMPLETE`
 - At least one of: `{map_file}`, `EXEC_SUMMARY.md`, or `BOUNDED_CONTEXTS.md` has non-stub content
 - User confirms retrofit (do not discard existing analysis)
 
+When root `manifest.yaml` already exists, resolve all names above under its `engagement.artifact_root`.
+For a legacy pre-artifact-root engagement, discover the existing root files once, choose/create
+`docs/domain-comprehension/<domain-slug>/`, and move/copy the canonical domain artifacts there as part of
+the retrofit; do not leave a second canonical copy at root.
+
 **Steps:**
 
-1. Load `domain-config.yaml` (or infer `map_file` from existing `{DOMAIN}_MAP.md`)
-2. Copy any missing stubs from `templates/` to `workspace_root` — do **not** overwrite non-empty sections
-3. Split consolidated content into required split files (`BOUNDED_CONTEXTS.md`, `RISK_MAP.md`, etc.) by moving sections, leaving stub+link in `{map_file}` where appropriate
-4. Create or repair `manifest.yaml` from disk state; set `phases.*.status` from `PROGRESS.md` checkpoints
-5. Run `validate_manifest_yaml.py`; fix artifact/diagram rows until exit 0
-6. Set `engagement.next_action` to first incomplete phase, or P5 `--strict` if only gaps remain
+1. Load the existing `domain-config.yaml` (or infer `map_file` from an existing `{DOMAIN}_MAP.md`) and
+   resolve/create `artifact_root`.
+2. Copy missing domain stubs from `templates/` to `artifact_root` — do **not** overwrite non-empty
+   sections. Copy/create `manifest.yaml` at workspace root only.
+3. Split consolidated content into required files (`BOUNDED_CONTEXTS.md`, `RISK_MAP.md`, etc.) under
+   `artifact_root`, leaving stub+link in `{map_file}` where appropriate.
+4. Create or repair root `manifest.yaml` from disk state, set `engagement.artifact_root`, and set
+   `phases.*.status` from `{artifact_root}/PROGRESS.md` checkpoints.
+5. Run `validate_manifest_yaml.py --workspace-root <workspace_root>`; fix artifact/diagram rows until exit 0.
+6. Set `engagement.next_action` to first incomplete phase, or P5 `--strict` if only gaps remain.
 
-**Do not:** re-run `/understand`, re-grep repos, or rewrite conclusions unless a required table is literally empty.
+**Do not:** re-run `/understand`, re-grep repos, rewrite conclusions unless a required table is literally
+empty, or recreate canonical domain files at workspace root.
 
 ### DELTA mode — procedure
 
-Requires `manifest.yaml` with at least P0 complete. If not present, fall back to `FULL` with a warning.
+Requires root `manifest.yaml` with at least P0 complete. If not present, fall back to `FULL` with a warning.
+Resolve all canonical domain files through `engagement.artifact_root` before reading or writing them.
 
 1. Load `manifest.yaml`; for each `repos[]` entry run:
    ```bash
@@ -102,54 +136,46 @@ Requires `manifest.yaml` with at least P0 complete. If not present, fall back to
 2. Determine **affected phases** from the changed set:
    - **P0, P1**: re-run for every repo in the changed set
    - **P0.25**: re-run contract rows for changed repos only; carry forward unchanged repos' rows
-   - **P2**: re-run if any Tier 0/1 repo changed (flow likely affected), **or** if step P0.25 added or
-     removed any contract row for a changed repo at *any* tier — a low-tier repo gaining/losing a
-     producer/consumer contract changes the flow diagram even when the repo itself isn't Tier 0/1
+   - **P2**: re-run if any Tier 0/1 repo changed, **or** if P0.25 added/removed any contract row for a
+     changed repo at any tier
    - **P2b**: re-run if P2 re-ran and Datadog ✅
    - **P3**: re-run if any Tier 0/1 repo changed
    - **P3b**: re-run if P3 re-ran
    - **P4, P5**: always re-run after any upstream phase re-ran
 
-3. Phases with no upstream changes keep their `complete` status in manifest unchanged.
-
-4. At end: run `validate_manifest_yaml.py`; update `engagement.last_updated` and
-   `engagement.next_action`.
+3. Phases with no upstream changes keep their `complete` status unchanged.
+4. At end, run `validate_manifest_yaml.py --workspace-root <workspace_root>`; update
+   `engagement.last_updated` and `engagement.next_action`.
 
 ### ADD_REPO mode — procedure
 
-Requires `manifest.yaml` at `workspace_root` with `schema_version: 2` and `engagement.status` of
-`IN_PROGRESS` or `FIRST_PASS_COMPLETE`. `new_repo_path` must resolve to a repo **not** present in
-`manifest.repos[]` (match by `name`) — if it is present, stop and tell the user to use `DELTA` instead.
+Requires root `manifest.yaml` with `schema_version: 2` and `engagement.status` of `IN_PROGRESS` or
+`FIRST_PASS_COMPLETE`. Resolve `artifact_root` from that manifest before touching any domain artifact.
+`new_repo_path` must resolve to a repo **not** present in `manifest.repos[]` (match by `name`) — if it is
+present, stop and tell the user to use `DELTA` instead.
 
 1. Classify the new repo ([repo-classification.md](../reference/repo-classification.md)), assign
    provisional tier.
 2. Add a `manifest.repos[]` entry: `inventory: pending`, `understand: pending`, `deep_dive: pending`.
 3. Run, scoped to the new repo only, at the same evidence/confidence bar as `FULL`:
    - P0 (inventory) — append repo census row, tech stack, config surface, repo relationships
-   - P0.25 (contracts) — append this repo's producer/consumer rows to `API_CATALOG.md` /
-     `EVENT_CATALOG.md`
-   - P0.5 (mechanical) — run `/understand --full` for the new repo, merge into the existing
-     `.understand-anything/domain-graph.json` via `/understand-domain` (do not regenerate other repos'
-     graphs)
-   - P1 (deep dive) — per-repo deep dive subsection, ownership card, initial smells
-   - Session 0b squad enrichment — append one row to `SQUAD_MAP.md` for the new repo only
-4. **Merge gate.** Before writing any P0/P1 row into a shared deliverable (`BOUNDED_CONTEXTS.md`,
-   `DATA_OWNERSHIP.md`, `API_CATALOG.md`, `EVENT_CATALOG.md`), check the new repo's claim against
-   existing rows for the same entity/context/path:
+   - P0.25 (contracts) — append this repo's producer/consumer rows to
+     `{artifact_root}/API_CATALOG.md` / `{artifact_root}/EVENT_CATALOG.md`
+   - P0.5 (mechanical) — run `/understand --full` for the new repo and merge into
+     `{artifact_root}/.understand-anything/domain-graph.json` via `/understand-domain`
+   - P1 (deep dive) — append per-repo deep dive subsection, ownership card, initial smells
+   - Session 0b squad enrichment — refresh/append the domain snapshot at `{artifact_root}/SQUAD_MAP.md`
+4. **Merge gate.** Before writing any P0/P1 row into a canonical shared domain deliverable
+   (`BOUNDED_CONTEXTS.md`, `DATA_OWNERSHIP.md`, `API_CATALOG.md`, `EVENT_CATALOG.md`), check the new
+   repo's claim against existing rows for the same entity/context/path:
    - **No overlap** → append normally.
-   - **Overlap** (two repos both claim authoritative ownership of a table; a bounded context gains a
-     repo that contradicts its existing definition; an API path has a different producer than already
-     recorded) → do **not** merge that row. Instead:
-     - Add a row to `RISK_MAP.md` § Merge Conflicts with both claims + evidence + confidence,
-       `Status: open`
-     - Add the same conflict to `UNKNOWNS.md`
-     - Leave the owning phase (`p0` or `p1`) at `status: in_progress` in `manifest.yaml` — do **not**
-       mark it `complete` while any `RISK_MAP.md` § Merge Conflicts row is `Status: open`
-     - **Stop.** Report the conflict to the user; do not proceed to step 5 for the affected deliverable
-       until it's resolved
-5. Once new-repo P0–P1 merge is clean (no open conflicts, or the user explicitly accepts leaving them
-   open), determine downstream re-synthesis using the **DELTA mode affected-phases rules above**,
-   treating the new repo as the changed set of one:
+   - **Overlap** → do **not** merge that row. Instead:
+     - Add a row to `{artifact_root}/RISK_MAP.md` § Merge Conflicts with both claims + evidence +
+       confidence, `Status: open`
+     - Add the same conflict to `{artifact_root}/UNKNOWNS.md`
+     - Leave the owning phase (`p0` or `p1`) at `status: in_progress` in root `manifest.yaml`
+     - **Stop.** Report the conflict; do not proceed for the affected deliverable until resolved
+5. Once new-repo P0–P1 merge is clean, determine downstream re-synthesis using the DELTA rules:
    - P2 reruns if new repo is Tier 0/1
    - P2b reruns if P2 reran and Datadog ✅
    - P3 reruns if new repo is Tier 0/1
@@ -158,64 +184,46 @@ Requires `manifest.yaml` at `workspace_root` with `schema_version: 2` and `engag
 6. Run `validate_manifest_yaml.py --workspace-root <workspace_root> --check-content`; update
    `engagement.last_updated` and `engagement.next_action`.
 
-**Do not:** re-run P0–P1 for repos already in `manifest.repos[]` (that's `DELTA`'s job if their SHA
-changed); regenerate other repos' `/understand` graphs, only merge the new one in.
+**Do not:** re-run P0–P1 for repos already in `manifest.repos[]`; regenerate other repos' `/understand`
+graphs; or write canonical domain artifacts at workspace root.
 
 **Required outputs:**
 
 | Output | Location | Required fields |
 |--------|----------|-----------------|
-| New repo entry | `manifest.repos[]` | name, branch, sha, tier, classification |
-| Merge conflicts (if any) | `RISK_MAP.md` § Merge Conflicts | Both claims, evidence, confidence, status |
-| Re-synthesized exec summary | `EXEC_SUMMARY.md` | Five questions + overall confidence recomputed including new repo |
+| New repo entry | root `manifest.repos[]` | name, branch, sha, tier, classification |
+| Merge conflicts (if any) | `{artifact_root}/RISK_MAP.md` § Merge Conflicts | Both claims, evidence, confidence, status |
+| Re-synthesized exec summary | `{artifact_root}/EXEC_SUMMARY.md` | Five questions + overall confidence recomputed including new repo |
 
 ### PROPOSAL_CHECK mode — procedure
 
-Requires `manifest.yaml` at `workspace_root` with `schema_version: 2` and `engagement.status` of
-`IN_PROGRESS` or `FIRST_PASS_COMPLETE` (same engagement-wide bar `ADD_REPO` requires — see its own
-precondition above), **and**, for every repo plausibly touched by the proposal's claims (if the proposal
-names specific repos, check those; if it doesn't, check every repo in `manifest.repos[]`), that repo's own
-`repos[].inventory: complete` **and** `repos[].deep_dive` is `complete` **or** `skipped`. `skipped` counts
-as satisfied here — per [large-scale-execution.md](../reference/large-scale-execution.md) ("P1 | Deep dive
-tier 0/1 only unless flow-critical"), a Tier 2/3 repo with `deep_dive: skipped` is a legitimate, correctly
-terminal state on a finished engagement, not an incomplete one; requiring literal `complete` would HARD
-STOP on every large multi-repo engagement the framework itself considers done. If any touched repo's
-`inventory` is still `pending`, or its `deep_dive` is `pending` (not yet reached, unlike a deliberate
-`skipped`): **Stop.** Tell the user to run `FULL` or `QUICK` comprehension for this workspace first — do
-not fall back automatically, do not check against incomplete deliverables.
+Requires root `manifest.yaml` with `schema_version: 2` and `engagement.status` of `IN_PROGRESS` or
+`FIRST_PASS_COMPLETE`. Resolve `artifact_root` from that manifest first. For every repo plausibly touched
+by the proposal's claims, `repos[].inventory` must be `complete` and `repos[].deep_dive` must be
+`complete` or deliberately `skipped`. If any touched repo is still pending, **Stop** and tell the user to
+run `FULL` or `QUICK` comprehension first.
 
-1. Load `manifest.yaml`, `BOUNDED_CONTEXTS.md`, `DATA_OWNERSHIP.md`, `API_CATALOG.md`, `EVENT_CATALOG.md`.
-2. Parse the proposal's claims into the same three categories the merge gate checks: bounded-context
-   membership/definition, data-entity ownership, API-path production. A proposal that doesn't state a
-   claim in one category (e.g. no API paths mentioned) simply has nothing to check in that category —
-   don't invent claims it didn't make.
-3. **Reuses the ADD_REPO merge gate's overlap taxonomy** (step 4 of the ADD_REPO mode procedure above),
-   substituting "the proposal" for "the new repo," against the *existing* rows only — nothing is ever
-   appended or merged:
-   - **No overlap** → record as clear for that claim.
-   - **Overlap** (the proposal claims authoritative ownership of a table another repo already owns; the
-     proposal's bounded context contradicts an existing bounded context's recorded definition; the
-     proposal's API path already has a different producer on record) → record as a conflict, citing the
-     existing deliverable's row (repo, evidence, confidence) it collides with.
-4. **The proposal's own claims are not evidence** — a proposal that asserts "no conflict here" doesn't
-   make it so; every verdict must cite the *existing* deliverable's evidence, never just restate the
-   proposal's own text back as if verified.
-5. Write `PROPOSAL_CHECK_REPORT.md` (template: [templates/PROPOSAL_CHECK_REPORT.md](../templates/PROPOSAL_CHECK_REPORT.md)) —
-   one row per checked claim (Claim, Category, Verdict, Colliding existing entry + evidence + confidence
-   if any), plus an overall verdict (Clear / N conflict(s) found).
-6. **No writes to `manifest.yaml`, `RISK_MAP.md`, `BOUNDED_CONTEXTS.md`, `DATA_OWNERSHIP.md`,
-   `API_CATALOG.md`, or `EVENT_CATALOG.md`** — this mode only ever writes `PROPOSAL_CHECK_REPORT.md`. If
-   the proposal is later actually built, `ADD_REPO` (once real code exists) is the mode that merges it in.
+1. Load root `manifest.yaml` plus `{artifact_root}/BOUNDED_CONTEXTS.md`,
+   `{artifact_root}/DATA_OWNERSHIP.md`, `{artifact_root}/API_CATALOG.md`, and
+   `{artifact_root}/EVENT_CATALOG.md`.
+2. Parse proposal claims into bounded-context membership/definition, data-entity ownership, and API-path
+   production. Do not invent a category the proposal does not state.
+3. Reuse the ADD_REPO merge-gate overlap taxonomy against existing rows only; nothing is appended/merged.
+4. The proposal's own claims are not evidence; verdicts cite existing deliverable evidence.
+5. Write `{artifact_root}/PROPOSAL_CHECK_REPORT.md` from
+   [templates/PROPOSAL_CHECK_REPORT.md](../templates/PROPOSAL_CHECK_REPORT.md), one row per checked claim
+   plus overall verdict.
+6. **No writes** to root `manifest.yaml` or canonical evidence artifacts (`RISK_MAP.md`,
+   `BOUNDED_CONTEXTS.md`, `DATA_OWNERSHIP.md`, `API_CATALOG.md`, `EVENT_CATALOG.md`). This mode writes
+   only the report under `artifact_root`.
 
-**Do not:** treat a clear `PROPOSAL_CHECK_REPORT.md` verdict as installing the proposal into the
-engagement — a second `PROPOSAL_CHECK` run against a revised proposal, or the eventual real `ADD_REPO`
-run, starts from the same unmodified existing deliverables every time.
+**Do not:** treat a clear proposal-check verdict as installing the proposal into the engagement.
 
 **Required outputs:**
 
 | Output | Location | Required fields |
 |--------|----------|-----------------|
-| Proposal check report | `PROPOSAL_CHECK_REPORT.md` | Claim, category, verdict, colliding entry (repo/evidence/confidence) if conflict |
+| Proposal check report | `{artifact_root}/PROPOSAL_CHECK_REPORT.md` | Claim, category, verdict, colliding entry (repo/evidence/confidence) if conflict |
 
 ## Required outputs
 
