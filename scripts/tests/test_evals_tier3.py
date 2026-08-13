@@ -15,6 +15,7 @@ def test_golden_fixtures_load() -> None:
     assert ("pr-review", "golden-chat-only-not-posted") in case_ids
     assert ("pr-review", "golden-injection-inert-render") in case_ids
     assert ("pr-review", "golden-github-injection-inert-comments") in case_ids
+    assert ("pr-review", "golden-gitlab-quick-actions-inert-comments") in case_ids
     assert ("backlog-runner", "golden-injection-inert-summary") in case_ids
     assert ("cost-optimization-sprint-planner", "golden-injection-inert-report") in case_ids
     assert ("new-hire-guide", "golden-injection-inert-tour") in case_ids
@@ -53,7 +54,7 @@ def test_golden_fixtures_load() -> None:
     # tripping load_golden_fixtures' own malformed-fixture error. It won't catch a delete+add that
     # happens to net to the same count, but it catches the much more common single accidental
     # deletion or duplication. Bump this number when you intentionally add or remove a fixture.
-    assert len(cases) == 41
+    assert len(cases) == 42
 
 
 def test_golden_cases_pass_on_repository() -> None:
@@ -167,3 +168,21 @@ def test_github_safe_output_fixture_detects_each_body_mutation() -> None:
         result = run_golden_case(replace(case, recorded_output=mutated_output))
         assert not result.passed, label
         assert any("matched forbidden pattern" in message for message in result.messages), label
+
+
+def test_gitlab_quick_action_fixture_detects_each_write_path_mutation() -> None:
+    from dataclasses import replace
+
+    from scripts.evals.golden import load_golden_fixtures, run_golden_case
+
+    case = next(
+        case
+        for case in load_golden_fixtures(ROOT / "evals" / "golden")
+        if case.case_id == "golden-gitlab-quick-actions-inert-comments"
+    )
+    for field in ("rendered_inline_body", "rendered_summary_body", "rendered_general_body"):
+        mutated_output = dict(case.recorded_output)
+        mutated_output[field] += "\n/approve"
+        result = run_golden_case(replace(case, recorded_output=mutated_output))
+        assert not result.passed, field
+        assert any("matched forbidden pattern" in message for message in result.messages), field

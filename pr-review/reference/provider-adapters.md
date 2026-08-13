@@ -62,9 +62,11 @@ review URLs remain valid when the exact GitLab authority is intentionally config
 ## Provider invariants
 
 - Every finding remains anchored to a changed diff line.
-- Re-fetch the target immediately before the first provider write and compare its head SHA with Phase 1.
-- On a mismatch, return `REVISION_MISMATCH` and perform zero provider writes in `full`, `summary-only`,
-  `general-only`, and draft modes. Never remap positions, degrade to a summary, or continue a partial
-  batch against the new revision; restart the review from Phase 1.
+- Re-fetch the target immediately before every provider write — including each inline, summary,
+  fallback, draft, and allowed retry — and compare its head SHA with Phase 1.
+- On a mismatch, return `REVISION_MISMATCH`, stop the current and remaining writes, and report any
+  earlier confirmed posts plus skipped writes. Never remap positions, degrade to a summary, or continue
+  a partial batch against the new revision; restart the review from Phase 1.
+- A mismatch before the first write performs zero provider writes in `full`, `summary-only`, `general-only`, and draft modes.
 - The skill may write comments only. It never approves, requests changes, submits a review verdict,
   merges, closes, or reopens a GitHub PR or GitLab MR.

@@ -99,5 +99,5 @@ Routing: [skill-routing.md](../docs/skill-framework/shared/skill-routing.md) · 
 [prompt-injection.md](../docs/skill-framework/shared/prompt-injection.md) · safe output
 [safe-output.md](../docs/skill-framework/shared/safe-output.md) · MCP errors
 [mcp-error-handling.md](../docs/skill-framework/shared/mcp-error-handling.md) (1-retry policy for reads;
-non-idempotent provider writes use readback — `workflow/phase-0.md` §MCP retry policy) · post-actions
+non-idempotent writes use provider-specific recovery — `workflow/phase-0.md` §MCP retry policy) · post-actions
 [post-action-templates.md](../docs/skill-framework/shared/post-action-templates.md) (Jira §2, Slack §5, canvas §6).

@@ -12,8 +12,11 @@ ROOT = Path(__file__).resolve().parents[2]
 
 from pr_review_policy_guards import (  # noqa: E402
     apply_confidence_cap,
+    execute_guarded_write_batch,
+    gitlab_ambiguous_write_decision,
     highest_severity,
     is_github_remote,
+    neutralize_provider_control_lines,
     parse_review_url,
     provider_from_remote,
     provider_from_target,
@@ -280,6 +283,92 @@ class TestFindingGates:
         assert should_suppress_at_path_gate(False, is_non_negotiable_observable=True) is False
 
 
+class TestProviderWriteSafety:
+    def test_gitlab_quick_actions_are_inert_without_flattening_authored_structure(self):
+        untrusted = (
+            "Finding detail\n"
+            "/approve\n"
+            "  /merge now\n"
+            "\t/close\n"
+            "/ready\n"
+            "/run_pipeline deploy\n"
+            "/unrelated stays literal"
+        )
+
+        rendered = neutralize_provider_control_lines(untrusted, provider="gitlab")
+
+        assert rendered == (
+            "Finding detail\n"
+            "&#47;approve\n"
+            "  &#47;merge now\n"
+            "\t&#47;close\n"
+            "&#47;ready\n"
+            "&#47;run_pipeline deploy\n"
+            "/unrelated stays literal"
+        )
+        assert rendered.count("\n") == untrusted.count("\n")
+
+    def test_github_does_not_apply_gitlab_specific_control_line_transform(self):
+        untrusted = "/approve\n/merge"
+        assert neutralize_provider_control_lines(untrusted, provider="github") == untrusted
+
+    def test_head_change_after_first_inline_stops_every_remaining_write(self):
+        provider_heads = iter(["A", "B"])
+        provider_calls: list[str] = []
+
+        result = execute_guarded_write_batch(
+            provider="github",
+            captured_head="A",
+            write_ids=["inline-1", "inline-2", "summary", "retry-inline-2"],
+            fetch_head=lambda: next(provider_heads),
+            post=lambda write_id: provider_calls.append(write_id) or "accepted",
+        )
+
+        assert provider_calls == ["inline-1"]
+        assert result == {
+            "status": "REVISION_MISMATCH",
+            "posted": ["inline-1"],
+            "uncertain": None,
+            "remaining": ["inline-2", "summary", "retry-inline-2"],
+            "expected_head": "A",
+            "observed_head": "B",
+        }
+
+    def test_gitlab_accepted_but_timeout_is_never_retried_and_stops_batch(self):
+        accepted_by_provider: list[str] = []
+
+        def accepted_then_timeout(write_id: str) -> str:
+            accepted_by_provider.append(write_id)
+            return "timeout"
+
+        result = execute_guarded_write_batch(
+            provider="gitlab",
+            captured_head="A",
+            write_ids=["inline-1", "inline-2", "summary"],
+            fetch_head=lambda: "A",
+            post=accepted_then_timeout,
+        )
+
+        assert accepted_by_provider == ["inline-1"]
+        assert result == {
+            "status": "WRITE_DELIVERY_UNCERTAIN",
+            "posted": [],
+            "uncertain": "inline-1",
+            "remaining": ["inline-2", "summary"],
+            "expected_head": "A",
+            "observed_head": "A",
+        }
+
+    def test_gitlab_incomplete_readback_and_second_ambiguity_never_enable_retry(self):
+        for response in ("timeout", "server_error"):
+            assert gitlab_ambiguous_write_decision(response) == {
+                "outcome": "delivery_uncertain",
+                "retry": False,
+                "readback": False,
+                "stop_remaining_writes": True,
+            }
+
+
 class TestProviderDocumentationContracts:
     def test_phase_zero_matches_gitlab_servers_by_parsed_exact_authority(self):
         phase_zero = (ROOT / "pr-review/workflow/phase-0.md").read_text(encoding="utf-8")
@@ -436,6 +525,23 @@ class TestProviderDocumentationContracts:
         assert "paginated complete issue-comment readback" in combined
         assert "metadata+files+writes" in combined
         assert "chat-only" in combined
+
+    def test_gitlab_contract_uses_conservative_no_retry_without_readback(self):
+        phase_zero = (ROOT / "pr-review/workflow/phase-0.md").read_text(encoding="utf-8")
+        posting = (ROOT / "pr-review/workflow/posting.md").read_text(encoding="utf-8")
+        capabilities = (ROOT / "pr-review/reference/mcp-capabilities.md").read_text(
+            encoding="utf-8",
+        )
+        combined = " ".join((phase_zero + posting + capabilities).split())
+        assert "GitLab ambiguous write" in combined
+        assert "do not read back or retry" in combined
+        assert "delivery uncertain" in combined
+        assert "stop all remaining provider writes" in combined
+
+    def test_setup_noninteractive_posting_requires_complete_review(self):
+        setup = (ROOT / "pr-review/SETUP.md").read_text(encoding="utf-8")
+        section = setup.split("**`review and post …`**", 1)[1].split("Phase 0 announces", 1)[0]
+        assert "`review_metrics.review_complete` is not `false`" in section
 
     def test_lifecycle_and_cancellation_messages_branch_on_provider_noun(self):
         modes = (ROOT / "pr-review/reference/review-modes.md").read_text(encoding="utf-8")

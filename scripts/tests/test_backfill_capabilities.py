@@ -243,6 +243,94 @@ def test_capabilities_equal_order_insensitive() -> None:
     assert _capabilities_equal(current, catalog_value)
 
 
+def test_backfill_overwrite_skips_matching_any_of_path_with_omitted_optional(tmp_path: Path) -> None:
+    from scripts.registry.backfill_capabilities import backfill_skills_yaml_text
+
+    catalog = tmp_path / "catalog.yaml"
+    catalog.write_text(
+        """
+skills:
+  demo:
+    required: []
+    optional: []
+    any_of:
+      - name: GitHub read
+        required: [github.get_pull_request, github.get_pull_request_files]
+""",
+        encoding="utf-8",
+    )
+    current = """
+schema_version: 1
+skills:
+  demo:
+    path: demo
+    category: review
+    invocation: ambient
+    install: {requires: []}
+    capabilities:
+      required: []
+      optional: []
+      any_of:
+        - name: GitHub read
+          required: [github.get_pull_request, github.get_pull_request_files]
+    lint: {skill_md_max_lines: 180, target: demo}
+    risk_class: [read-only]
+"""
+
+    _updated, changes = backfill_skills_yaml_text(
+        current,
+        catalog_path=catalog,
+        overwrite=True,
+    )
+
+    assert changes == []
+
+
+def test_backfill_overwrite_detects_required_drift_in_any_of_path(tmp_path: Path) -> None:
+    from scripts.registry.backfill_capabilities import backfill_skills_yaml_text
+
+    catalog = tmp_path / "catalog.yaml"
+    catalog.write_text(
+        """
+skills:
+  demo:
+    required: []
+    optional: []
+    any_of:
+      - name: GitHub read
+        required: [github.get_pull_request, github.get_pull_request_files]
+""",
+        encoding="utf-8",
+    )
+    current = """
+schema_version: 1
+skills:
+  demo:
+    path: demo
+    category: review
+    invocation: ambient
+    install: {requires: []}
+    capabilities:
+      required: []
+      optional: []
+      any_of:
+        - name: GitHub read
+          required: [github.get_pull_request, github.get_issue]
+    lint: {skill_md_max_lines: 180, target: demo}
+    risk_class: [read-only]
+"""
+
+    updated, changes = backfill_skills_yaml_text(
+        current,
+        catalog_path=catalog,
+        overwrite=True,
+    )
+
+    assert changes == ["demo"]
+    assert "github.get_pull_request_files" in updated
+    assert "github.get_issue" not in updated
+
+
 def test_capabilities_equal_rejects_without_raising_on_malformed_required() -> None:
     from scripts.registry.backfill_capabilities import _capabilities_equal
 

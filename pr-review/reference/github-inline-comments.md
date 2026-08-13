@@ -49,7 +49,9 @@ remain authoritative.
 
 - One root-cause group becomes at most one inline comment, anchored at its first valid location.
 - Post an issue-comment summary after inline comments; include all unanchorable and failed inline items.
-- Re-fetch PR metadata before the first write. If `headRefOid` differs from the captured SHA, do not post.
+- Re-fetch PR metadata immediately before every inline, issue-summary, fallback, and retry write. If
+  `headRefOid` differs from the captured SHA, stop the current and remaining writes and report earlier
+  confirmed posts plus skipped writes.
 - Continue independent inline posts after one failure. Record failures and mark the review incomplete.
 - Never call GitHub submit-review, approve, request-changes, merge, close, or reopen operations.
 

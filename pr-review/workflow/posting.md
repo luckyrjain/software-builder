@@ -42,6 +42,13 @@ embedded in a new template/fence; sanitize and redact again for the actual desti
 redaction immediately before the API call so no retry, fallback, inline-to-summary copy, or partial-post
 recovery path can echo a secret or PII.
 
+After those provider-neutral transforms, apply a **provider-aware final pass** to the exact body that
+will be sent. For GitLab, neutralize an untrusted control line whose first non-whitespace token is one
+of the demonstrated quick actions `/approve`, `/merge`, `/close`, `/ready`, or `/run_pipeline` by
+encoding only its leading slash as `&#47;`. Keep the authored template's newlines, headings, lists, and
+other structure unchanged. Apply this final pass to every inline thread, summary note, `general-only`
+note, fallback body, and retry body. GitHub bodies do not receive this GitLab-specific transform.
+
 ## User text input gates
 
 When the skill must **wait for the user** — MR pick (ambiguous target), `general-only` acknowledgment,
@@ -138,14 +145,26 @@ merge via API; recommend a human maintainer gate and link GitLab approval rules 
 ## Phase 4 — Post (when mode allows)
 
 **Write retry policy:** provider comment calls are non-idempotent and do not use the global read retry.
-After an ambiguous `timeout` or `server_error`, read back the relevant comments/notes and match the
-deterministic marker plus body hash. Every GitHub posting-enabled profile requires both paginated
+For GitHub, after an ambiguous `timeout` or `server_error`, read back the relevant comments and match
+the deterministic marker plus body hash. Every GitHub posting-enabled profile requires both paginated
 complete review-comment readback and paginated complete issue-comment readback;
 `metadata+files+writes` without either read is `chat-only`. Build and reconcile GitHub bodies with
 `scripts/github-comment-recovery.py` using the marker-excluded hash domain in
 `reference/github-inline-comments.md`. Treat a matching comment as success; retry at most once only
-when absence is proven. Never issue a duplicate POST. A deterministic rejection is handled by the
-provider fallback below without blind retries.
+when absence is proven. Never issue a duplicate POST.
+
+GitLab profiles do not guarantee complete notes/discussion readback. On a GitLab ambiguous write
+(`timeout` or `server_error`), conservatively **do not read back or retry**: report that delivery is
+uncertain, identify the possibly accepted body, stop all remaining provider writes, and return the
+already-posted partial state. A deterministic rejection may use the provider fallback below, subject
+to the per-write head check, but is never blindly retried.
+
+**Per-write revision gate:** immediately before **every** provider write — each inline, summary,
+`general-only` note, deterministic fallback, draft post, and any allowed GitHub retry — re-fetch the
+target through the selected provider and compare its current head to the Phase 1 captured SHA. On any
+mismatch, issue no current or later write, return `REVISION_MISMATCH`, and report the partial state:
+which earlier writes were confirmed posted, which (if any) has uncertain delivery, and which writes
+were skipped. Never continue the batch, retry, remap, or degrade to summary against the new head.
 
 Post **only** findings that survived Phase 2 finding dedupe — never re-post same location, root cause,
 stack, or API misuse already on the MR. **Cross-session dedupe:** before posting, re-fetch MR notes and
@@ -158,9 +177,8 @@ body), not one comment per location.
 
 ### GitHub branch (`review_target.provider: github`)
 
-Follow `reference/github-inline-comments.md` and do **not** execute any GitLab instructions below. Before
-the first write, re-fetch the PR through the selected GitHub capability and compare `headRefOid` to the
-captured SHA. On mismatch return `REVISION_MISMATCH` and post nothing. In `full`, post independently one
+Follow `reference/github-inline-comments.md` and do **not** execute any GitLab instructions below. Apply
+the per-write revision gate above using GitHub `headRefOid`. In `full`, post independently one
 standalone RIGHT-side inline comment per root-cause group using `github-comment-positions.py`, then one
 issue-comment summary. In `summary-only`, post only that issue-comment summary. On an inline failure,
 continue the remaining independent comments, include failures/unanchorable findings in the summary, and
@@ -195,16 +213,17 @@ Summary template: `reference/comment-templates.md`. First line: `<!-- cursor-pr-
 `**Reviewed:**` (ISO-8601 timestamp), the machine-parseable **`- head_sha: \`<full_sha>\``** line, and
 the **actual** posting mode from Phase 0 for future re-reviews.
 
-**Always** re-fetch `get_merge_request` immediately before the first Phase 4 post and compare
-`diff_refs.head_sha` to the SHA captured in Phase 1 step 1. On any mismatch, return
-`REVISION_MISMATCH` and perform zero provider writes in `full`, `summary-only`, `general-only`, and
-draft modes. Do not remap positions, degrade to a summary, or continue; restart at Phase 1.
+Apply the per-write revision gate above with `get_merge_request` and `diff_refs.head_sha` in `full`,
+`summary-only`, `general-only`, and draft modes. A mismatch before the first post means zero writes; a
+mismatch later stops the rest and reports already-posted partial state. Restart at Phase 1 before
+offering any further posting.
 
 **Draft batch mode:** only when `create_draft_note` exists (`full` mode).
 
-**Partial-post recovery (never stop-on-error):** post threads independently — a failure on **any**
-thread does **not** abort the run. Continue all remaining threads, collect failures, include failed
-findings in the summary note and **Posting notes** section.
+**Partial-post recovery:** deterministic position/validation rejection on one thread does not abort the
+run; collect it for the summary and continue only after the per-write revision gate passes. A revision
+mismatch or ambiguous GitLab write is different: stop all remaining provider writes and report partial
+or uncertain delivery state as specified above.
 
 **Batch position-mapping failures:** `scripts/diff-to-positions.py --batch` exits **1** on partial
 failure — post the non-`error` threads and list `error` entries in **Posting notes**.

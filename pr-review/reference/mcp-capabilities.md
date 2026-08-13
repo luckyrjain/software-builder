@@ -134,3 +134,11 @@ gh pr diff <number> --repo <host>/<owner>/<repo>
 Command-scoped `GH_HOST=<host>` with `--repo <owner>/<repo>` is also valid. Keep `--hostname` only for
 commands that support it (for example `gh auth status --hostname <host>` and `gh api --hostname <host>`).
 Never send a GHES request to GitHub.com.
+
+## GitLab write recovery limitation
+
+The enabled GitLab write profiles do not claim complete paginated note/discussion readback. Therefore
+an ambiguous GitLab write response never enters the GitHub reconciliation flow: do not read back or
+retry, report delivery uncertain, identify confirmed earlier posts and the possibly accepted body, and
+stop all remaining provider writes. Deterministic rejections may follow the documented fallback only
+after the next per-write revision check passes.
