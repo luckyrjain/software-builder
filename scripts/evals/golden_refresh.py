@@ -21,15 +21,31 @@ Then run: python3 -m scripts.evals --tier 3
 from __future__ import annotations
 
 import argparse
+import io
 import json
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-import yaml
+from ruamel.yaml import YAML
+from ruamel.yaml import YAMLError as RuamelYAMLError
+from ruamel.yaml.scalarstring import LiteralScalarString
 
 from scripts.evals.golden import load_golden_fixtures, run_golden_case
+
+
+def _make_yaml() -> YAML:
+    # Round-trip loader/dumper (matches scripts/registry/backfill_capabilities.py's
+    # convention) so a fixture's `# CAVEAT: ...` comments survive a refresh instead of
+    # being silently dropped, which plain yaml.safe_load/safe_dump would do.
+    rt_yaml = YAML(typ="rt")
+    rt_yaml.preserve_quotes = True
+    rt_yaml.width = 100000
+    # golden fixtures indent sequence dashes two spaces under their key (`assertions:\n  - type: ...`),
+    # unlike skills.yaml's flush-left convention that scripts/registry/backfill_capabilities.py matches.
+    rt_yaml.indent(mapping=2, sequence=4, offset=2)
+    return rt_yaml
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -37,6 +53,45 @@ def _load_json(path: Path) -> dict[str, Any]:
     if not isinstance(data, dict):
         raise ValueError(f"{path}: recorded output must be a JSON object")
     return data
+
+
+def _as_scalar(value: str) -> Any:
+    # A block literal (`|`) is YAML-spec line-break-normalizing, so a string carrying
+    # literal \r\n would silently come back as \n on the next load — only use the
+    # readable block style when that's lossless; a \r-bearing string still round-trips
+    # exactly via ruamel's normal quoted-scalar escaping.
+    if "\n" in value and "\r" not in value:
+        return LiteralScalarString(value)
+    return value
+
+
+def _merge_recorded_output(existing: Any, new: Any) -> Any:
+    """Update a loaded ruamel node with freshly captured `recorded_output` data,
+    editing matching mapping keys / sequence indices in place rather than replacing
+    the whole node — ruamel attaches a `# CAVEAT: ...` comment on a recorded_output
+    field to that specific node, so wholesale replacement (the previous approach)
+    silently drops any comment attached inside recorded_output, as opposed to one
+    attached to an assertions: list item (a sibling, never-replaced node), which
+    survives either way.
+    """
+    if isinstance(new, dict):
+        if not isinstance(existing, dict):
+            return {key: _merge_recorded_output(None, val) for key, val in new.items()}
+        for key in list(existing.keys()):
+            if key not in new:
+                del existing[key]
+        for key, val in new.items():
+            existing[key] = _merge_recorded_output(existing.get(key), val)
+        return existing
+    if isinstance(new, list):
+        if not (isinstance(existing, list) and len(existing) == len(new)):
+            return [_merge_recorded_output(None, val) for val in new]
+        for index, val in enumerate(new):
+            existing[index] = _merge_recorded_output(existing[index], val)
+        return existing
+    if isinstance(new, str):
+        return _as_scalar(new)
+    return new
 
 
 def _golden_dir_for_fixture(fixture_path: Path) -> Path:
@@ -53,25 +108,27 @@ def refresh_fixture(
     dry_run: bool,
     note: str,
 ) -> None:
-    raw = yaml.safe_load(fixture_path.read_text(encoding="utf-8"))
+    rt_yaml = _make_yaml()
+    raw = rt_yaml.load(fixture_path.read_text(encoding="utf-8"))
     if not isinstance(raw, dict):
         raise ValueError(f"{fixture_path}: root must be a mapping")
 
-    raw["recorded_output"] = recorded_output
+    raw["recorded_output"] = _merge_recorded_output(raw.get("recorded_output"), recorded_output)
     refresh_meta = raw.setdefault("refresh_meta", {})
     if not isinstance(refresh_meta, dict):
         raise ValueError(f"{fixture_path}: refresh_meta must be a mapping")
     refresh_meta["last_refreshed_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     refresh_meta["refresh_note"] = note
 
+    buf = io.StringIO()
+    rt_yaml.dump(raw, buf)
+    dumped = buf.getvalue()
+
     if dry_run:
-        print(yaml.safe_dump(raw, sort_keys=False, allow_unicode=True))
+        print(dumped)
         return
 
-    fixture_path.write_text(
-        yaml.safe_dump(raw, sort_keys=False, allow_unicode=True),
-        encoding="utf-8",
-    )
+    fixture_path.write_text(dumped, encoding="utf-8")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -104,7 +161,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         recorded = _load_json(args.recorded_output.resolve())
         refresh_fixture(fixture_path, recorded, dry_run=args.dry_run, note=args.note)
-    except (ValueError, json.JSONDecodeError, OSError) as exc:
+    except (ValueError, json.JSONDecodeError, OSError, RuamelYAMLError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
 

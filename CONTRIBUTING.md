@@ -47,7 +47,10 @@ Please read and follow our [Code of Conduct](CODE_OF_CONDUCT.md).
 - **GitHub topics/description:** maintainers with repo admin access run
   `bash scripts/apply_repo_metadata.sh` (canonical values in `.github/repo-metadata.yaml`).
 - **Tier-3 golden fixtures:** refresh recorded outputs per
-  [docs/evals/GOLDEN-REFRESH.md](docs/evals/GOLDEN-REFRESH.md) — CI never calls a live LLM.
+  [docs/evals/GOLDEN-REFRESH.md](docs/evals/GOLDEN-REFRESH.md) — CI never calls a live LLM. Keep a
+  fixture's `description` to plain test intent; put per-assertion coverage caveats or regression
+  history in a `# CAVEAT: ...` YAML comment directly above the assertion or field it explains
+  (`python3 -m scripts.evals` warns, non-fatally, past 1200 chars).
 7. **Record user-visible changes** in the skill's own `CHANGELOG.md` (or the root one for cross-cutting
    changes), newest entry first.
 8. **Open a pull request** describing what changed and why, and the validation you ran (which

@@ -178,6 +178,14 @@ def _looks_like_multiline_anchor(pattern: str) -> bool:
     return bool(_BARE_CARET_RE.search(pattern) and _BARE_DOLLAR_RE.search(pattern))
 
 
+def _case_matches_filters(case: GoldenCase, skill_filter: str | None, tier_filter: int | None) -> bool:
+    if skill_filter and case.skill != skill_filter:
+        return False
+    if tier_filter is not None and case.tier != tier_filter:
+        return False
+    return True
+
+
 def find_vacuous_anchored_patterns(
     cases: list[GoldenCase],
     *,
@@ -202,9 +210,7 @@ def find_vacuous_anchored_patterns(
     """
     warnings: list[str] = []
     for case in cases:
-        if skill_filter and case.skill != skill_filter:
-            continue
-        if tier_filter is not None and case.tier != tier_filter:
+        if not _case_matches_filters(case, skill_filter, tier_filter):
             continue
         for assertion in case.assertions:
             atype = str(assertion.get("type", ""))
@@ -264,9 +270,7 @@ def find_oversized_descriptions(
     """
     warnings: list[str] = []
     for case in cases:
-        if skill_filter and case.skill != skill_filter:
-            continue
-        if tier_filter is not None and case.tier != tier_filter:
+        if not _case_matches_filters(case, skill_filter, tier_filter):
             continue
         if len(case.description) > DESCRIPTION_LENGTH_WARNING_THRESHOLD:
             warnings.append(

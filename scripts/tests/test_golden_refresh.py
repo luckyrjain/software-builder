@@ -44,6 +44,131 @@ assertions:
     assert run_golden_case(cases[0]).passed
 
 
+def test_refresh_fixture_preserves_comment_inside_recorded_output(tmp_path: Path) -> None:
+    fixture = tmp_path / "pr-review" / "sample.yaml"
+    fixture.parent.mkdir(parents=True)
+    fixture.write_text(
+        """\
+schema_version: 1
+skill: pr-review
+case_id: sample-case
+tier: 3
+description: test
+recorded_output:
+  # CAVEAT: this note must survive even though its own field's value changes.
+  rendered_title_excerpt: "old value"
+  other_field: "unchanged"
+assertions:
+  - type: field_equals
+    path: other_field
+    value: "unchanged"
+""",
+        encoding="utf-8",
+    )
+
+    new_output = {"rendered_title_excerpt": "new value", "other_field": "unchanged"}
+    refresh_fixture(fixture, new_output, dry_run=False, note="pytest")
+
+    refreshed = fixture.read_text(encoding="utf-8")
+    assert "# CAVEAT: this note must survive even though its own field's value changes." in refreshed
+
+    raw = yaml.safe_load(refreshed)
+    assert raw["recorded_output"] == new_output
+
+
+def test_refresh_fixture_preserves_crlf_line_endings(tmp_path: Path) -> None:
+    fixture = tmp_path / "pr-review" / "sample.yaml"
+    fixture.parent.mkdir(parents=True)
+    fixture.write_text(
+        """\
+schema_version: 1
+skill: pr-review
+case_id: sample-case
+tier: 3
+description: test
+recorded_output:
+  body: old
+assertions:
+  - type: field_equals
+    path: body
+    value: old
+""",
+        encoding="utf-8",
+    )
+
+    crlf_value = "line one\r\nline two\r\n"
+    refresh_fixture(fixture, {"body": crlf_value}, dry_run=False, note="pytest")
+
+    raw = yaml.safe_load(fixture.read_text(encoding="utf-8"))
+    assert raw["recorded_output"]["body"] == crlf_value
+
+
+def test_refresh_fixture_writes_multiline_strings_as_block_scalars(tmp_path: Path) -> None:
+    fixture = tmp_path / "pr-review" / "sample.yaml"
+    fixture.parent.mkdir(parents=True)
+    fixture.write_text(
+        """\
+schema_version: 1
+skill: pr-review
+case_id: sample-case
+tier: 3
+description: test
+recorded_output:
+  body_excerpt: |
+    line one
+    line two
+assertions:
+  - type: field_equals
+    path: review_metadata.posted
+    value: false
+""",
+        encoding="utf-8",
+    )
+
+    new_output = {"body_excerpt": "new line one\nnew line two"}
+    refresh_fixture(fixture, new_output, dry_run=False, note="pytest")
+
+    refreshed = fixture.read_text(encoding="utf-8")
+    assert "body_excerpt: |" in refreshed
+    assert '\\n' not in refreshed.split("recorded_output:", 1)[1].split("refresh_meta:", 1)[0]
+
+    raw = yaml.safe_load(refreshed)
+    assert raw["recorded_output"] == new_output
+
+
+def test_refresh_fixture_preserves_comments_and_indent(tmp_path: Path) -> None:
+    fixture = tmp_path / "pr-review" / "sample.yaml"
+    fixture.parent.mkdir(parents=True)
+    fixture.write_text(
+        """\
+schema_version: 1
+skill: pr-review
+case_id: sample-case
+tier: 3
+description: test
+recorded_output:
+  review_metadata:
+    posted: false
+assertions:
+  # CAVEAT: this note must survive a refresh, not just the recorded_output field.
+  - type: field_equals
+    path: review_metadata.posted
+    value: false
+""",
+        encoding="utf-8",
+    )
+
+    new_output = {"review_metadata": {"posted": False, "posting_mode": "chat-only"}}
+    refresh_fixture(fixture, new_output, dry_run=False, note="pytest")
+
+    refreshed = fixture.read_text(encoding="utf-8")
+    assert "# CAVEAT: this note must survive a refresh" in refreshed
+    assert "\n  - type: field_equals\n" in refreshed
+
+    raw = yaml.safe_load(refreshed)
+    assert raw["recorded_output"] == new_output
+
+
 def test_refresh_dry_run_does_not_write(tmp_path: Path) -> None:
     fixture = tmp_path / "case.yaml"
     original = "schema_version: 1\nskill: pr-review\ncase_id: x\ntier: 3\ndescription: d\nrecorded_output: {}\nassertions:\n  - type: field_equals\n    path: review_metadata.posted\n    value: false\n"

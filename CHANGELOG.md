@@ -22,7 +22,7 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 
 ### Relocate golden-eval per-assertion caveats out of the description blob (2026-08-13)
 
-- Across `evals/golden/**/*.yaml`, 35 of 40 fixtures packed a single `description` field with three
+- Across `evals/golden/**/*.yaml`, 35 of 41 fixtures packed a single `description` field with three
   distinct kinds of content: plain test intent, per-assertion coverage caveats (e.g. pr-review's
   fixture documenting that no well-formed check exists for two specific markers on one field — a real
   gap, just non-local to the assertion it's about), and cross-fixture regression history repeated
