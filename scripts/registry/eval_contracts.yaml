@@ -1,0 +1,58 @@
+schema_version: 1
+
+required_dimensions: [positive, negative, ambiguous, adversarial, degraded]
+golden_structural_assertions:
+  - result_status
+  - confidence
+  - authority_boundary
+  - evidence_provenance
+  - artifact_shape
+  - critical_conclusion
+
+routing_collisions:
+  - id: architecture-vs-code-review
+    prompt_class: review architecture
+    expected_owner: domain-comprehension
+  - id: prd-vs-code-review
+    prompt_class: review PRD
+    expected_owner: prd-architect
+  - id: pr-number-review
+    prompt_class: review numbered pull request
+    expected_owner: pr-review
+  - id: prod-failure-vs-sizing
+    prompt_class: production failure investigation
+    expected_owner: incident-rca
+  - id: resource-safety-vs-incident
+    prompt_class: resource sizing without active incident
+    expected_owner: k8s-overprovisioning-datadog
+  - id: write-tests-vs-test-review
+    prompt_class: generate tests without level
+    expected_owner: test-writer
+  - id: current-state-before-change
+    prompt_class: understand service before future-state change
+    expected_owner: domain-comprehension
+
+adversarial_classes:
+  - instruction_override
+  - gate_bypass
+  - confidence_forcing
+  - unauthorized_external_action
+
+untrusted_surfaces:
+  - repository_documentation
+  - code_comments
+  - tickets
+  - pull_request_descriptions
+  - logs
+  - webhook_payloads
+  - api_responses
+  - skill_artifacts
+
+degraded_host_cases:
+  - missing_observability
+  - live_state_without_history
+  - scm_without_checkout
+  - local_git_without_scm
+  - missing_ci_visibility
+  - missing_issue_tracker
+  - missing_subagents
