@@ -2,7 +2,8 @@
 
 **Normative.** Machine-readable engagement state at workspace root. Domain-specific artifacts live under
 `engagement.artifact_root`, defaulting to `docs/domain-comprehension/<domain-slug>/`. Humans and CI
-validate with `scripts/validate_manifest_yaml.py`.
+validate manifest/path/content state with `scripts/validate_manifest_yaml.py`; P5 additionally validates
+`PRD.md` with `scripts/validate_prd.py`.
 
 ## Purpose
 
@@ -10,6 +11,7 @@ validate with `scripts/validate_manifest_yaml.py`.
 - scriptable completion gate
 - resume locator without parsing prose
 - evidence/completeness metrics
+- a hard path boundary preventing manifest-controlled artifact lookup outside the workspace artifact root
 
 `manifest.yaml` is the source of truth for phase/artifact status; `PROGRESS.md` remains human-readable
 inside the artifact root.
@@ -40,8 +42,8 @@ Current schema: `2`.
 |-------|----------|
 | `domain_name` | domain slug |
 | `workspace_root` | absolute workspace path |
-| `artifact_root` | relative path, no `..`; default `docs/domain-comprehension/<domain_name>` |
-| `map_file` | filename such as `DISBURSEMENT_MAP.md` |
+| `artifact_root` | safe relative path; default `docs/domain-comprehension/<domain-slug>` |
+| `map_file` | safe relative path such as `DISBURSEMENT_MAP.md` |
 | `status` | `IN_PROGRESS | FIRST_PASS_COMPLETE` |
 | `last_updated` | ISO-8601 UTC |
 | `last_phase_completed` | phase key |
@@ -49,7 +51,9 @@ Current schema: `2`.
 | `model_used` | string or null |
 
 `manifest.yaml` itself stays at workspace root. The validator resolves domain artifacts under
-`<workspace_root>/<artifact_root>/`. See [run-scoped-artifacts.md](run-scoped-artifacts.md).
+`<workspace_root>/<artifact_root>/`. `artifact_root` and `map_file` must be relative and may not contain
+`..`; validation treats both `/` and `\\` as separators so Windows-style traversal cannot bypass Linux
+CI. See [run-scoped-artifacts.md](run-scoped-artifacts.md).
 
 ## `phases`
 
@@ -60,7 +64,8 @@ require a completion timestamp.
 ## `artifacts[]`
 
 Each row has `id`, `path`, `phase`, `required`, and `status` (`ok | stub | missing | waived | n_a`). Paths
-are relative to `artifact_root`, except the root manifest itself which is not an artifact row.
+are relative to `artifact_root`, except the root manifest itself which is not an artifact row. Artifact
+and diagram paths must also be safe relative paths with no `..`; absolute paths are invalid.
 
 Required P5 artifact `prd` (`PRD.md`) is the evidence-backed as-built/current-state requirements
 synthesis. P5 marks it `ok` only after stable `FR-*`, `BR-*`, and `NFR-*` requirements and traceability
@@ -70,8 +75,9 @@ Optional outputs include `E2E_FLOW.md`, Memory Bank export, Postman export, and 
 
 ## `diagrams[]`
 
-Diagram rows use the same relative-path resolution. Common ids include `logical_context`, `service_call`,
-`deployment`, `runtime`, `business_flow`, `sequence_happy`, `sequence_failure`, and `state_machine`.
+Diagram rows use the same relative-path resolution and path-boundary rules. Common ids include
+`logical_context`, `service_call`, `deployment`, `runtime`, `business_flow`, `sequence_happy`,
+`sequence_failure`, and `state_machine`.
 
 ## `five_questions` / confidence
 
@@ -91,18 +97,24 @@ understand status, and deep-dive status.
 
 ## Agent update rules
 
-1. Session 0 creates the docs artifact root, copies domain templates there, writes root `manifest.yaml`, and
-   sets `engagement.artifact_root`.
+1. Session 0 creates the docs artifact root, copies domain templates there, writes root `manifest.yaml`,
+   writes the same resolved path to `domain-config.yaml scope.artifact_root`, and sets
+   `engagement.artifact_root`.
 2. End each phase by updating phases/artifacts/diagrams/evidence/confidence and running validation.
 3. Skipped phases require a reason; optional artifacts become `n_a` or `waived` as appropriate.
-4. `FIRST_PASS_COMPLETE` requires `--strict`; required P5 `prd` must be `ok`.
+4. `FIRST_PASS_COMPLETE` requires manifest `--strict --check-content` plus `validate_prd.py`; required P5
+   `prd` must be `ok` and satisfy its requirement/traceability contract.
 5. `ADD_REPO` keeps affected phases in progress while merge conflicts remain open.
 
 ## Validation
 
 ```bash
 python3 domain-comprehension/scripts/validate_manifest_yaml.py manifest.yaml \
-  --workspace-root /path/to/workspace --strict
+  --workspace-root /path/to/workspace --strict --check-content
+
+python3 domain-comprehension/scripts/validate_prd.py \
+  /path/to/workspace/<artifact_root>/PRD.md
 ```
 
-An absolute `artifact_root` or one containing `..` is invalid.
+The PRD validator requires `Status` and `Confidence` on `FR-*`, `BR-*`, and `NFR-*` definitions, exactly
+one traceability row for every requirement id, and evidence for every `Observed` requirement.
