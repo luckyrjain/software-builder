@@ -1,12 +1,11 @@
 schema_version: 2
 
-# engagement.map_file must match domain-config.yaml deliverables.map_file.
-# Replace <domain-slug> during Session 0.
+# Session 0 sets engagement.artifact_root to docs/domain-comprehension/<domain-slug>.
+# Leave it unset in the reusable template so validator/root-compatibility tests remain portable.
 
 engagement:
   domain_name: ""
   workspace_root: ""
-  artifact_root: docs/domain-comprehension/<domain-slug>
   map_file: DOMAIN_MAP.md
   status: IN_PROGRESS
   last_updated: ""
@@ -71,7 +70,6 @@ five_questions:
   q3: { status: DRAFT, confidence: UNKNOWN }
   q4: { status: DRAFT, confidence: UNKNOWN }
   q5: { status: DRAFT, confidence: UNKNOWN }
-
 overall_confidence: UNKNOWN
 repos: []
 runtime_validation: { edges_total: 0, edges_confirmed: 0, skipped: false, skip_reason: null }
