@@ -1,6 +1,8 @@
 # Domain config schema
 
-**Normative.** Written to `workspace_root/domain-config.yaml` at Session 0.
+**Normative.** Written to `docs/domain-comprehension/<domain-slug>/domain-config.yaml` at Session 0.
+The directory is created when absent. The default `scope.artifact_root` is
+`docs/domain-comprehension/<domain.name>`; callers may override it with another relative path.
 
 ```yaml
 domain:
@@ -16,23 +18,22 @@ scope:
   include_keywords: [<grep/repo name terms>]
   exclude_patterns: [<glob or substring>]
   seed_repos: [<optional hints — agent still verifies>]
-  default_excluded_classifications:   # optional — see repo-classification.md
+  default_excluded_classifications:
     - documentation
     - archived
     - tooling
-  conditional_repos:              # include only if grep finds domain refs
+  conditional_repos:
     - <repo-name>
-  artifact_root: <relative path>  # optional — see run-scoped-artifacts.md. Set for parallel runs
-                                   # or large workspaces so this run's deliverables don't clobber
-                                   # another run's. Default when unset:
-                                   # .domain-comprehension/{run_id}/ (run_id = ISO-8601 UTC
-                                   # timestamp at Session 0 start, or a caller-supplied slug).
-                                   # manifest.yaml always stays directly at workspace_root — record
-                                   # the resolved value as engagement.artifact_root there.
+  artifact_root: docs/domain-comprehension/<domain-slug>
+                                   # relative to workspace root; create when absent.
+                                   # Default is docs/domain-comprehension/<domain.name>.
+                                   # Parallel runs may append a run_id subdirectory.
+                                   # manifest.yaml stays at workspace root and records
+                                   # engagement.artifact_root.
 
 context:
   regulatory_notes: <optional free text>
-  product_lines:                  # architecture signals to investigate
+  product_lines:
     - name: <line>
       hints: [<repo names, route prefixes, package patterns>]
 
@@ -59,14 +60,14 @@ critical_path_tiers:
     label: <e.g. BFF / gates>
     definition: ...
     provisional: []
-  flow_critical_gates:            # Tier 3 repos that block core flow — trace in P2
+  flow_critical_gates:
     - <repo-name>
 
 deliverables:
-  map_file: DOMAIN_MAP.md         # or {NAME}_MAP.md when name set
-  core_section: Core Domain Deep Dive   # P3 section title
+  map_file: DOMAIN_MAP.md
+  core_section: Core Domain Deep Dive
 
-runbook_procedures:               # optional override of P4 defaults
+runbook_procedures:
   - trace_end_to_end
   - replay_retry
   - reconcile_mismatch
@@ -74,40 +75,41 @@ runbook_procedures:               # optional override of P4 defaults
   - investigate_no_effect
   - emergency_stop
 
-ownership:                        # Session 0b — squad mapping (optional)
+ownership:
   gitlab:
-    org_prefix: <org>             # strip leading path segment
-    squad_path_segment: 2         # 1-based index → squad name from namespace path
-    group_prefixes:               # optional bulk list_group_projects
+    org_prefix: <org>
+    squad_path_segment: 2
+    group_prefixes:
       - <org/domain-group>
   datadog:
-    service_aliases:              # repo folder name → Datadog service name
+    service_aliases:
       <repo-name>: <service-name>
-    domain_service_query: "name:<keyword>*"   # optional bulk search_datadog_services
+    domain_service_query: "name:<keyword>*"
 
-architecture_validation:          # P2b — Datadog runtime architecture (optional)
+architecture_validation:
   enabled: true
   span_window: now-7d
   dependency_depth: 2
-  entry_services: []              # default: Tier 0/1 Datadog names from SQUAD_MAP
+  entry_services: []
   critical_paths:
     - name: <path-label>
       services: [service-a, service-b, service-c]
 
-memory_bank:                      # optional — per-repo Cursor Memory Bank (P5 export)
-  consume_existing: true          # Session 0 / P0: existing memory-bank/ as LOW evidence
-  export_mode: optional           # never | optional | p5
-  init_tool: none                 # none | templates-only | cursor-bank
-  merge_strategy: hand_wins       # .generated/ refreshes appendix only
-  per_repo_export: tier_0_1_only  # tier_0_only | tier_0_1_only | all_application
+memory_bank:
+  consume_existing: true
+  export_mode: optional
+  init_tool: none
+  merge_strategy: hand_wins
+  per_repo_export: tier_0_1_only
 
-api_tooling:                      # optional — per-engagement Postman/curl export (P5 export)
-  export_mode: never              # never | optional | p5
-  otp_helper: auto                # auto | always | never
-  envs: [qa, uat, prod]           # which postman_environment.<env>.json files to generate
+api_tooling:
+  export_mode: never
+  otp_helper: auto
+  envs: [qa, uat, prod]
 ```
 
-See [memory-bank-integration.md](memory-bank-integration.md) and
+See [run-scoped-artifacts.md](run-scoped-artifacts.md),
+[memory-bank-integration.md](memory-bank-integration.md), and
 [api-tooling-integration.md](api-tooling-integration.md).
 
 ## Map file naming
@@ -118,9 +120,7 @@ See [memory-bank-integration.md](memory-bank-integration.md) and
 | `auth` | `AUTH_MAP.md` or `DOMAIN_MAP.md` |
 | unset | `DOMAIN_MAP.md` |
 
-## Default five questions (generic)
-
-Use when user does not supply questions; confirm in Session 0:
+## Default five questions
 
 | ID | Question |
 |----|----------|
