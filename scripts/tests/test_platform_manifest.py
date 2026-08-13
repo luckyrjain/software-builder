@@ -5,14 +5,17 @@ from pathlib import Path
 import pytest
 
 from scripts.registry.manifest import _normalize_version, build_manifest, validate_manifest
+from scripts.registry.schema import parse_registry
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_build_manifest_covers_registered_skills() -> None:
     manifest = build_manifest(ROOT)
+    registry = parse_registry(ROOT / "skills.yaml")
+
     assert manifest["manifest_schema_version"] == 1
-    assert len(manifest["skills"]) == 23
+    assert set(manifest["skills"]) == set(registry.skills)
     assert manifest["skills"]["test-writer"]["type"] == "router"
     assert manifest["skills"]["pr-gatekeeper"]["type"] == "trigger"
     assert manifest["skills"]["loop-task-implementer"]["type"] == "orchestrator"
@@ -53,6 +56,13 @@ def test_skill_versions_are_normalized_to_semver() -> None:
     assert _normalize_version("3.5.0") == "3.5.0"
     with pytest.raises(ValueError, match="semantic version"):
         _normalize_version("v3")
+
+
+def test_manifest_marks_implicit_and_explicit_version_sources() -> None:
+    skills = build_manifest(ROOT)["skills"]
+    assert skills["pr-review"]["version_source"] == "implicit_v1"
+    assert skills["incident-rca"]["version_source"] == "skill_frontmatter"
+    assert skills["incident-rca"]["version"] == "2.0.0"
 
 
 def test_repository_platform_manifest_validates() -> None:
