@@ -8,6 +8,7 @@ from pathlib import Path
 import yaml
 
 from scripts.registry.backfill_capabilities import cmd_backfill
+from scripts.registry.capability_sync import validate_capability_catalog_sync
 from scripts.registry.composition import render_composition_mermaid
 from scripts.registry.crosscheck import find_stale_generated_adapters, validate_registry
 from scripts.registry.generate_compatibility import render_compatibility_matrix
@@ -19,6 +20,7 @@ from scripts.registry.generate_docs import (
 )
 from scripts.registry.generate_kiro import generate_kiro_steering
 from scripts.registry.load import load_descriptions, load_registry
+from scripts.registry.manifest import validate_manifest
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -90,13 +92,32 @@ def _run_command(action: Callable[[], int]) -> int:
         return 2
 
 
-def cmd_validate(root: Path) -> int:
+def _validate_all(root: Path) -> list[str]:
+    return [
+        *validate_registry(root),
+        *validate_capability_catalog_sync(root),
+        *validate_manifest(root),
+    ]
+
+
+def _validate_for_generate(root: Path) -> list[str]:
     errors = validate_registry(root)
+    capability_catalog = root / "scripts" / "registry" / "capability_catalog.yaml"
+    platform_contracts = root / "scripts" / "registry" / "platform_contracts.yaml"
+    if capability_catalog.is_file():
+        errors.extend(validate_capability_catalog_sync(root))
+    if platform_contracts.is_file():
+        errors.extend(validate_manifest(root))
+    return errors
+
+
+def cmd_validate(root: Path) -> int:
+    errors = _validate_all(root)
     if errors:
         for error in errors:
             print(error, file=sys.stderr)
         return 1
-    print("ok: skills registry validates")
+    print("ok: skills registry, capability catalogue and platform manifest validate")
     return 0
 
 
@@ -104,7 +125,7 @@ def cmd_generate(root: Path, check_only: bool) -> int:
     if not check_only:
         _prune_stale_adapters(root)
 
-    validation_errors = validate_registry(root)
+    validation_errors = _validate_for_generate(root)
     if validation_errors:
         for error in validation_errors:
             print(error, file=sys.stderr)
@@ -131,7 +152,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="scripts.registry")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    subparsers.add_parser("validate", help="validate skills.yaml and SKILL.md frontmatter")
+    subparsers.add_parser("validate", help="validate skills.yaml, capabilities and platform contracts")
 
     generate_parser = subparsers.add_parser("generate", help="generate adapters and derived docs")
     generate_parser.add_argument(

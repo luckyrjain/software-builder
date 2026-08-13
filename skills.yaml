@@ -83,10 +83,22 @@ skills:
     composition:
       escalation_targets: [incident-rca, pr-review]
     capabilities:
-      required: [datadog.query_metrics]
+      required: []
       optional:
+      - name: kubernetes.workloads.read
+        enables: live workload, autoscaler, policy, and pod-state truth
       - name: datadog.list_monitors
         enables: monitor cross-check sections
+      any_of:
+      - name: Kubernetes history-capable evidence
+        required: [kubernetes.metrics.history]
+      - name: Datadog historical evidence
+        required: [datadog.query_metrics]
+      degraded_modes:
+        kubernetes.workloads.read: use Git provider manifests or user-provided configuration for live-state checks
+        kubernetes.metrics.history: use Datadog history when available; otherwise defer historical sizing dimensions
+        datadog.query_metrics: continue only when Kubernetes exposes equivalent historical metrics and aggregation
+        datadog.list_monitors: omit monitor cross-checks and reduce confidence where applicable
     lint:
       skill_md_max_lines: 150
       target: k8s-skill

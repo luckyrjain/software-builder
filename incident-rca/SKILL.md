@@ -50,7 +50,7 @@ do **not** pick highest score as primary. Phase exit gates: [phase-exit-criteria
 |---------|-------------|
 | Overprovisioned / right-sized deployment? | **k8s-overprovisioning-datadog** |
 | Review a merge request / PR | **pr-review** |
-| Datadog MCP missing / 403 | **ddsetup** / **ddconfig**, then return |
+| Required observability provider unavailable / unauthorized | Follow [mcp-error-handling.md](../docs/skill-framework/shared/mcp-error-handling.md), report the missing capability, and return or use a documented fallback |
 | PagerDuty/Opsgenie page-fire or incident-resolved webhook (unattended) | **incident-triage-agent** |
 | Live remediation or rollback | Out of scope — read-only |
 
@@ -66,8 +66,8 @@ do **not** pick highest score as primary. Phase exit gates: [phase-exit-criteria
 
 ## Prerequisites
 
-≥1 observability MCP (Datadog, KubeSense). KubeSense-primary orgs: **`kubesense-mcp`** skill
-([dependencies.md](dependencies.md)). Optional: GitLab, Jenkins, Jira, correlator CLI ([SETUP.md](SETUP.md)).
+At least one observability capability is required; Datadog and KubeSense are provider examples, not
+registered skills. Optional: GitLab, Jenkins, Jira, correlator CLI ([SETUP.md](SETUP.md)).
 `telemetry.intent` on every Datadog call. Smoke: [reference/smoke-test.md](reference/smoke-test.md).
 
 Org-specific profiles (OpenSearch, acme): [org-profiles.md](reference/org-profiles.md).
@@ -105,8 +105,8 @@ Full matrix: [cross-skill-escalation.md](../docs/skill-framework/shared/cross-sk
 | `deploy_regression` ranked HIGH | **pr-review** on causative MR |
 | `infra_capacity` / OOM | **k8s-overprovisioning-datadog** — [handoff block](report-template.md#k8s-skill-handoff-infra-capacity-confirmed) |
 | `kafka_consumer_lag` / `kafka_lag_spike` | **k8s-overprovisioning-datadog** (replicas vs partitions) |
-| Monitor/alert gap in RCA actions | **kubesense-alerts** |
-| Dashboard needed for soak verification | **kubesense-dashboards** |
+| Monitor/alert gap in RCA actions | Use the available observability provider's alert-management capability; no registered skill is assumed |
+| Dashboard needed for soak verification | Use the available observability provider's dashboard capability; no registered skill is assumed |
 | Incident + unclear service owner | **squad-map** — "Who owns `{service}`? — need squad for RCA follow-up" |
 | PG cutover regression confirmed in RCA | **mysql-to-postgres-sql** audit on failing query |
 | Caller wants a release-wide go/no-go sweep, not a single incident's RCA | **release-readiness-checker** — invokes this skill per flagged service |
