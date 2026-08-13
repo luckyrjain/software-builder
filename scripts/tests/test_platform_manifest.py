@@ -1,0 +1,59 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from scripts.registry.manifest import _normalize_version, build_manifest, validate_manifest
+
+ROOT = Path(__file__).resolve().parents[2]
+
+
+def test_build_manifest_covers_registered_skills() -> None:
+    manifest = build_manifest(ROOT)
+    assert manifest["manifest_schema_version"] == 1
+    assert len(manifest["skills"]) == 23
+    assert manifest["skills"]["test-writer"]["type"] == "router"
+    assert manifest["skills"]["pr-gatekeeper"]["type"] == "trigger"
+    assert manifest["skills"]["loop-task-implementer"]["type"] == "orchestrator"
+    assert manifest["skills"]["pr-review"]["type"] == "leaf"
+
+
+def test_manifest_exposes_shared_contracts() -> None:
+    contracts = build_manifest(ROOT)["contracts"]
+    assert set(contracts["evidence"]["statuses"]) == {
+        "OBSERVED",
+        "INFERRED",
+        "UNKNOWN",
+        "CONFLICTED",
+        "NOT_APPLICABLE",
+    }
+    assert contracts["evidence"]["insufficient_evidence_status"] == "UNKNOWN"
+    assert set(contracts["completion"]["statuses"]) == {
+        "SUCCESS",
+        "PARTIAL",
+        "BLOCKED",
+        "FAILED",
+        "ESCALATED",
+    }
+    assert contracts["action_gates"]["destructive_or_high_impact"] == "explicit_action_authorization"
+
+
+def test_manifest_reuses_write_authority_contracts() -> None:
+    skills = build_manifest(ROOT)["skills"]
+    assert skills["pr-review"]["authority"] == "comment"
+    assert skills["incident-rca"]["authority"] == "read-only"
+    assert skills["loop-task-implementer"]["authority"] == "repository-write"
+
+
+def test_skill_versions_are_normalized_to_semver() -> None:
+    assert _normalize_version(None) == "1.0.0"
+    assert _normalize_version(2) == "2.0.0"
+    assert _normalize_version(1.1) == "1.1.0"
+    assert _normalize_version("3.5.0") == "3.5.0"
+    with pytest.raises(ValueError, match="semantic version"):
+        _normalize_version("v3")
+
+
+def test_repository_platform_manifest_validates() -> None:
+    assert validate_manifest(ROOT) == []
