@@ -7,9 +7,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import yaml
-
 from scripts.evals.types import EvalResult
+from scripts.yaml_safety import load_unique_yaml_file
 
 GOLDEN_DIR_NAME = "golden"
 
@@ -33,7 +32,7 @@ def load_golden_fixtures(golden_dir: Path) -> list[GoldenCase]:
     for path in sorted(golden_dir.rglob("*.yaml")):
         if path.name.startswith("_"):
             continue
-        raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+        raw = load_unique_yaml_file(path)
         if not isinstance(raw, dict):
             raise ValueError(f"{path}: golden fixture root must be a mapping")
 

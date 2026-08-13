@@ -6,6 +6,8 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+
+import yaml
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -240,7 +242,7 @@ def main(argv: list[str] | None = None) -> int:
             available=available,
             install_roots=install_roots,
         )
-    except ValueError as exc:
+    except (ValueError, yaml.YAMLError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
 

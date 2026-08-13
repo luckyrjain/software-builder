@@ -13,6 +13,8 @@ from ruamel.yaml import YAML
 from ruamel.yaml import YAMLError as RuamelYAMLError
 from ruamel.yaml.comments import CommentedMap
 
+from scripts.yaml_safety import load_unique_yaml_file
+
 ROOT = Path(__file__).resolve().parents[2]
 CATALOG_PATH = Path(__file__).resolve().parent / "capability_catalog.yaml"
 SKILLS_PATH = ROOT / "skills.yaml"
@@ -241,7 +243,7 @@ def backfill_skills_yaml_text(
 
 
 def validate_capabilities_present(skills_path: Path = SKILLS_PATH) -> list[str]:
-    raw = yaml.safe_load(skills_path.read_text(encoding="utf-8"))
+    raw = load_unique_yaml_file(skills_path)
     if not isinstance(raw, dict):
         return ["error: skills.yaml root must be a mapping"]
     skills = raw.get("skills")

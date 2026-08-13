@@ -11,6 +11,8 @@ from pathlib import Path
 
 import yaml
 
+from scripts.yaml_safety import load_unique_yaml_file
+
 _FRESHNESS_HEADING = "## Freshness"
 _LAST_REVIEWED_RE = re.compile(
     r"\*\*Last reviewed\*\*\s*\|\s*(\d{4}-\d{2}-\d{2})",
@@ -61,7 +63,7 @@ def _insert_after_title(text: str, block: str) -> str:
 
 def _load_registry_skill_ids(root: Path) -> set[str]:
     registry_path = root / "skills.yaml"
-    raw = yaml.safe_load(registry_path.read_text(encoding="utf-8"))
+    raw = load_unique_yaml_file(registry_path)
     skills = raw.get("skills") if isinstance(raw, dict) else None
     if not isinstance(skills, dict):
         raise ValueError("skills.yaml skills must be a mapping")

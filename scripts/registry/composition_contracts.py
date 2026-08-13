@@ -8,6 +8,7 @@ from pathlib import Path
 import yaml
 
 from scripts.registry.models import Registry
+from scripts.yaml_safety import load_unique_yaml_file
 
 CONTRACTS_PATH = Path(__file__).resolve().parent / "composition_contracts.yaml"
 
@@ -51,7 +52,7 @@ def load_contracts(
     path: Path | None = None,
 ) -> tuple[set[str], dict[str, list[str]], dict[str, int], dict[str, CompositionContract]]:
     contracts_path = path or CONTRACTS_PATH
-    raw = yaml.safe_load(contracts_path.read_text(encoding="utf-8"))
+    raw = load_unique_yaml_file(contracts_path)
     if not isinstance(raw, dict):
         raise ValueError(f"{contracts_path}: root must be a mapping")
 

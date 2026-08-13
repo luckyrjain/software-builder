@@ -3,6 +3,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import yaml
+
 from scripts.registry.backfill_capabilities import validate_capabilities_present
 from scripts.registry.composition import validate_composition_graph
 from scripts.registry.frontmatter import load_skill_frontmatter
@@ -99,7 +101,7 @@ def _validate_skill_frontmatter_shape(root: Path, registry: Registry) -> list[st
         skill_md = root / entry.path / "SKILL.md"
         try:
             frontmatter = load_skill_frontmatter(skill_md)
-        except ValueError as exc:
+        except (ValueError, yaml.YAMLError) as exc:
             errors.append(f"error: {skill_id}: {exc}")
             continue
 
