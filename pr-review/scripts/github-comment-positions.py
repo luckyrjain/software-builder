@@ -43,6 +43,49 @@ def _hunk_range(raw: str) -> tuple[int, int, int, int] | None:
     return old_start, old_count, new_start, new_count
 
 
+def _combined_sections_complete(lines: list[str]) -> bool:
+    """Reject truncated `diff --git` sections while allowing known metadata-only forms."""
+    starts = [index for index, raw in enumerate(lines) if raw.startswith("diff --git ")]
+    for offset, start in enumerate(starts):
+        end = starts[offset + 1] if offset + 1 < len(starts) else len(lines)
+        body = lines[start + 1 : end]
+        if not body:
+            return False
+        if any(_hunk_range(raw) is not None for raw in body):
+            continue
+        if any(raw.startswith("Binary files ") and raw.endswith(" differ") for raw in body):
+            continue
+        if "GIT binary patch" in body:
+            binary_index = body.index("GIT binary patch")
+            if any(
+                raw.startswith(("literal ", "delta "))
+                for raw in body[binary_index + 1 :]
+            ):
+                continue
+            return False
+        has_mode_pair = any(raw.startswith("old mode ") for raw in body) and any(
+            raw.startswith("new mode ") for raw in body
+        )
+        has_rename = (
+            any(raw.startswith(("similarity index ", "dissimilarity index ")) for raw in body)
+            and any(raw.startswith("rename from ") for raw in body)
+            and any(raw.startswith("rename to ") for raw in body)
+        )
+        has_copy = (
+            any(raw.startswith(("similarity index ", "dissimilarity index ")) for raw in body)
+            and any(raw.startswith("copy from ") for raw in body)
+            and any(raw.startswith("copy to ") for raw in body)
+        )
+        has_empty_file_metadata = (
+            any(raw.startswith(("new file mode ", "deleted file mode ")) for raw in body)
+            and any(raw.startswith("index ") for raw in body)
+        )
+        if has_mode_pair or has_rename or has_copy or has_empty_file_metadata:
+            continue
+        return False
+    return True
+
+
 def validate_github_anchor(
     diff_text: str,
     *,
@@ -85,8 +128,10 @@ def validate_github_anchor(
     wanted_in_file = parser_mode == "headerless"
     found_anchor = False
     ambiguous_headerless_input = False
-    malformed_hunk = False
-    no_newline_marker_allowed = False
+    malformed_hunk = has_diff_headers and not _combined_sections_complete(lines)
+    previous_hunk_record: Literal["added", "removed", "context"] | None = None
+    old_side_eof = False
+    new_side_eof = False
 
     index = 0
     while index < len(lines):
@@ -101,7 +146,9 @@ def validate_github_anchor(
             new_line = None
             old_remaining = 0
             new_remaining = 0
-            no_newline_marker_allowed = False
+            previous_hunk_record = None
+            old_side_eof = False
+            new_side_eof = False
             wanted_in_file = False
             index += 1
             continue
@@ -126,7 +173,9 @@ def validate_github_anchor(
             new_line = None
             old_remaining = 0
             new_remaining = 0
-            no_newline_marker_allowed = False
+            previous_hunk_record = None
+            old_side_eof = False
+            new_side_eof = False
             index += 2
             continue
 
@@ -143,8 +192,10 @@ def validate_github_anchor(
                 continue
             parser_state = "hunk"
             _, old_remaining, hunk_start, new_remaining = hunk_range
+            if (old_side_eof and old_remaining > 0) or (new_side_eof and new_remaining > 0):
+                malformed_hunk = True
             new_line = hunk_start if wanted_in_file else None
-            no_newline_marker_allowed = False
+            previous_hunk_record = None
             index += 1
             continue
 
@@ -157,9 +208,25 @@ def validate_github_anchor(
             continue
 
         if raw == r"\ No newline at end of file":
-            if not no_newline_marker_allowed:
+            marker_is_valid = (
+                (previous_hunk_record == "added" and new_remaining == 0)
+                or (previous_hunk_record == "removed" and old_remaining == 0)
+                or (
+                    previous_hunk_record == "context"
+                    and old_remaining == 0
+                    and new_remaining == 0
+                )
+            )
+            if not marker_is_valid:
                 malformed_hunk = True
-            no_newline_marker_allowed = False
+            elif previous_hunk_record == "added":
+                new_side_eof = True
+            elif previous_hunk_record == "removed":
+                old_side_eof = True
+            else:
+                old_side_eof = True
+                new_side_eof = True
+            previous_hunk_record = None
             index += 1
             continue
         if hunk_complete:
@@ -174,7 +241,7 @@ def validate_github_anchor(
                 malformed_hunk = True
             else:
                 old_remaining -= 1
-            no_newline_marker_allowed = True
+            previous_hunk_record = "removed"
             index += 1
             continue
         if raw.startswith("+"):
@@ -186,7 +253,7 @@ def validate_github_anchor(
                 if new_line is not None:
                     new_line += 1
                 new_remaining -= 1
-            no_newline_marker_allowed = True
+            previous_hunk_record = "added"
             index += 1
             continue
         if raw.startswith(" "):
@@ -197,11 +264,11 @@ def validate_github_anchor(
                 if new_line is not None:
                     new_line += 1
                 new_remaining -= 1
-            no_newline_marker_allowed = True
+            previous_hunk_record = "context"
             index += 1
             continue
         malformed_hunk = True
-        no_newline_marker_allowed = False
+        previous_hunk_record = None
         index += 1
 
     if parser_state == "hunk" and (old_remaining != 0 or new_remaining != 0):

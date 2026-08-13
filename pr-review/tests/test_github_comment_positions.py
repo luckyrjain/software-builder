@@ -756,25 +756,63 @@ def test_strict_hunk_grammar_retains_complete_valid_hunks(mode):
 
 @pytest.mark.parametrize("mode", ["combined", "headerless", "concatenated"])
 @pytest.mark.parametrize(
-    "hunk_text",
+    "hunk_text,target_line",
     [
-        "@@ -1,1 +1,2 @@\n\\ No newline at end of file\n context\n+target\n",
+        ("@@ -1,1 +1,2 @@\n\\ No newline at end of file\n context\n+target\n", 2),
         (
-            "@@ -1,1 +1,2 @@\n context\n\\ No newline at end of file\n"
-            "\\ No newline at end of file\n+target\n"
+            (
+                "@@ -1,1 +1,2 @@\n context\n\\ No newline at end of file\n"
+                "\\ No newline at end of file\n+target\n"
+            ),
+            2,
         ),
         (
-            "@@ -1,1 +1,2 @@\n context\n+target\n"
-            "@@ -4,1 +5,1 @@\n\\ No newline at end of file\n context\n"
+            (
+                "@@ -1,1 +1,2 @@\n context\n+target\n"
+                "@@ -4,1 +5,1 @@\n\\ No newline at end of file\n context\n"
+            ),
+            2,
+        ),
+        ("@@ -1,0 +1,2 @@\n+first\n\\ No newline at end of file\n+target\n", 2),
+        (
+            (
+                "@@ -1,0 +1,1 @@\n+first\n\\ No newline at end of file\n"
+                "@@ -4,0 +5,1 @@\n+target\n"
+            ),
+            5,
+        ),
+        (
+            (
+                "@@ -1,0 +1,1 @@\n+target\n\\ No newline at end of file\n"
+                "@@ -4,1 +5,1 @@\n context\n"
+            ),
+            1,
+        ),
+        (
+            (
+                "@@ -1,1 +1,1 @@\n-removed\n\\ No newline at end of file\n+target\n"
+                "@@ -4,1 +4,0 @@\n-later removal\n"
+            ),
+            1,
         ),
     ],
-    ids=("leading", "repeated", "next-hunk-leading"),
+    ids=(
+        "leading",
+        "repeated",
+        "next-hunk-leading",
+        "before-new-side-eof",
+        "later-hunk-after-new-side-eof",
+        "later-context-after-new-side-eof",
+        "later-removal-after-old-side-eof",
+    ),
 )
-def test_no_newline_diagnostic_is_rejected_outside_legal_body_position(mode, hunk_text):
+def test_no_newline_diagnostic_is_rejected_outside_legal_body_position(
+    mode, hunk_text, target_line
+):
     assert validate_github_anchor(
         _strict_grammar_patch(mode, hunk_text),
         path="src/payments.py",
-        line=2,
+        line=target_line,
         source_kind="added",
         head_sha="abc",
     ) == {
@@ -788,10 +826,14 @@ def test_no_newline_diagnostic_is_rejected_outside_legal_body_position(mode, hun
     "hunk_text,target_line",
     [
         ("@@ -1,0 +1,1 @@\n+target\n\\ No newline at end of file\n", 1),
-        ("@@ -1,1 +1,0 @@\n-removed\n\\ No newline at end of file\n", 99),
-        ("@@ -1,1 +1,2 @@\n context\n\\ No newline at end of file\n+target\n", 2),
+        (
+            "@@ -1,1 +1,1 @@\n-removed\n\\ No newline at end of file\n"
+            "+target\n\\ No newline at end of file\n",
+            1,
+        ),
+        ("@@ -1,1 +1,2 @@\n+target\n context\n\\ No newline at end of file\n", 1),
     ],
-    ids=("after-addition", "after-removal", "after-context"),
+    ids=("after-addition", "after-removal-before-addition", "after-final-context"),
 )
 def test_no_newline_diagnostic_is_valid_once_after_a_body_record(mode, hunk_text, target_line):
     result = validate_github_anchor(
@@ -801,12 +843,63 @@ def test_no_newline_diagnostic_is_valid_once_after_a_body_record(mode, hunk_text
         source_kind="added",
         head_sha="abc",
     )
-    if target_line == 99:
-        assert result == {"unanchorable": True, "reason": "added_line_not_in_current_diff"}
-    else:
-        assert result == {
-            "commit_id": "abc",
-            "path": "src/payments.py",
-            "line": target_line,
-            "side": "RIGHT",
-        }
+    assert result == {
+        "commit_id": "abc",
+        "path": "src/payments.py",
+        "line": target_line,
+        "side": "RIGHT",
+    }
+
+
+@pytest.mark.parametrize(
+    "trailing_section",
+    [
+        "diff --git a/src/next.py b/src/next.py\n",
+        "diff --git a/src/next.py b/src/next.py\n--- a/src/next.py\n",
+        "diff --git a/src/next.py b/src/next.py\nindex 1234567..89abcde 100644\n",
+    ],
+    ids=("bare-header", "incomplete-marker-pair", "incomplete-index-header"),
+)
+def test_truncated_trailing_combined_section_invalidates_prior_anchor(trailing_section):
+    patch = (
+        "diff --git a/src/payments.py b/src/payments.py\n"
+        "--- a/src/payments.py\n+++ b/src/payments.py\n"
+        "@@ -1,0 +1,1 @@\n+target\n"
+        + trailing_section
+    )
+    assert validate_github_anchor(
+        patch,
+        path="src/payments.py",
+        line=1,
+        source_kind="added",
+        head_sha="abc",
+    ) == {"unanchorable": True, "reason": "added_line_not_in_current_diff"}
+
+
+@pytest.mark.parametrize(
+    "complete_section",
+    [
+        (
+            "diff --git a/src/old.py b/src/new.py\n"
+            "similarity index 100%\nrename from src/old.py\nrename to src/new.py\n"
+        ),
+        "diff --git a/bin.dat b/bin.dat\nBinary files a/bin.dat and b/bin.dat differ\n",
+        "diff --git a/script.sh b/script.sh\nold mode 100644\nnew mode 100755\n",
+        "diff --git a/empty b/empty\nnew file mode 100644\nindex 0000000..e69de29\n",
+    ],
+    ids=("rename", "binary", "mode-only", "empty-file"),
+)
+def test_recognized_non_hunk_section_does_not_invalidate_prior_anchor(complete_section):
+    patch = (
+        "diff --git a/src/payments.py b/src/payments.py\n"
+        "--- a/src/payments.py\n+++ b/src/payments.py\n"
+        "@@ -1,0 +1,1 @@\n+target\n"
+        + complete_section
+    )
+    assert validate_github_anchor(
+        patch,
+        path="src/payments.py",
+        line=1,
+        source_kind="added",
+        head_sha="abc",
+    ) == {"commit_id": "abc", "path": "src/payments.py", "line": 1, "side": "RIGHT"}
