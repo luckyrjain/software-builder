@@ -16,6 +16,10 @@ assert SPEC and SPEC.loader
 MODULE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(MODULE)
 validate_github_anchor = MODULE.validate_github_anchor
+FULL_BINARY_INDEX = (
+    "index 1111111111111111111111111111111111111111.."
+    "2222222222222222222222222222222222222222 100644"
+)
 
 
 def git_base85_lines(data: bytes) -> list[str]:
@@ -927,7 +931,9 @@ def test_no_newline_diagnostic_is_valid_once_after_a_body_record(mode, hunk_text
             "rename from unrelated-old\nrename to unrelated-new\n"
         ),
         (
-            "diff --git a/bin.dat b/bin.dat\nindex 1234567..89abcde 100644\n"
+            "diff --git a/bin.dat b/bin.dat\n"
+            "index 1111111111111111111111111111111111111111.."
+            "2222222222222222222222222222222222222222 100644\n"
             "GIT binary patch\nliteral 4\nLc$@<O00001\n\n"
         ),
         (
@@ -985,18 +991,24 @@ def test_truncated_trailing_combined_section_invalidates_prior_anchor(trailing_s
         "diff --git a/script.sh b/script.sh\nold mode 100644\nnew mode 100755\n",
         "diff --git a/empty b/empty\nnew file mode 100644\nindex 0000000..e69de29\n",
         (
-            "diff --git a/bin.dat b/bin.dat\nindex 1234567..89abcde 100644\n"
+            "diff --git a/bin.dat b/bin.dat\n"
+            "index 1111111111111111111111111111111111111111.."
+            "2222222222222222222222222222222222222222 100644\n"
             "GIT binary patch\nliteral 4\n"
             "LcmZQzWMT#Y01f~L\n\nliteral 0\nHcmV?d00001\n\n"
         ),
         (
             "diff --git a/new.bin b/new.bin\nnew file mode 100644\n"
-            "index 0000000..89abcde\nGIT binary patch\nliteral 4\n"
+            "index 0000000000000000000000000000000000000000.."
+            "2222222222222222222222222222222222222222\n"
+            "GIT binary patch\nliteral 4\n"
             "LcmZQzWMT#Y01f~L\n\nliteral 0\nHcmV?d00001\n\n"
         ),
         (
             "diff --git a/old.bin b/old.bin\ndeleted file mode 100644\n"
-            "index 89abcde..0000000\nGIT binary patch\nliteral 0\n"
+            "index 1111111111111111111111111111111111111111.."
+            "0000000000000000000000000000000000000000\n"
+            "GIT binary patch\nliteral 0\n"
             "HcmV?d00001\n\nliteral 4\nLcmZQzWMT#Y01f~L\n\n"
         ),
     ],
@@ -1159,7 +1171,7 @@ def test_oversized_hunk_number_fails_closed_without_exception():
 def test_binary_patch_rejects_declared_size_above_resource_ceiling():
     assert not MODULE._git_binary_patch_complete(
         [
-            "index 1234567..89abcde 100644",
+            FULL_BINARY_INDEX,
             "GIT binary patch",
             f"literal {MODULE.MAX_BINARY_BLOCK_BYTES + 1}",
             *git_base85_lines(zlib.compress(b"A")),
@@ -1178,7 +1190,7 @@ def test_binary_patch_rejects_compressed_bomb_and_trailing_stream_data():
     for payload in (bomb, trailing):
         assert not MODULE._git_binary_patch_complete(
             [
-                "index 1234567..89abcde 100644",
+                FULL_BINARY_INDEX,
                 "GIT binary patch",
                 "literal 4",
                 *git_base85_lines(payload),
@@ -1195,7 +1207,7 @@ def test_binary_patch_rejects_arbitrary_bytes_labeled_as_delta_programs():
     payload = zlib.compress(b"not a git delta program")
     assert not MODULE._git_binary_patch_complete(
         [
-            "index 1234567..89abcde 100644",
+            FULL_BINARY_INDEX,
             "GIT binary patch",
             "delta 123",
             *git_base85_lines(payload),
@@ -1662,6 +1674,224 @@ def test_ambiguous_unquoted_diff_header_without_matching_markers_fails_closed():
     ) == {"unanchorable": True, "reason": "added_line_not_in_current_diff"}
 
 
+@pytest.mark.parametrize(
+    "section",
+    [
+        (
+            "diff --git a/dir b/file.bin b/dir b/file.bin\n"
+            "index 1234567..89abcde 100644\n"
+            "Binary files a/dir b/file.bin and b/dir b/file.bin differ\n"
+        ),
+        (
+            "diff --git a/dir b/file.bin b/dir b/file.bin\n"
+            "index c5ebe4a6bed51d0508de6a090d5cdba194db16de.."
+            "4d42bb23d89d7b39e906c9da5fad38ef60888ce5 100755\n"
+            "GIT binary patch\n"
+            "delta 26\n"
+            "icmaEHo#VxIjtz_glXo)lHwy@~3kWc77Z6~&Aq@bJxCq1m\n\n"
+            "delta 38\n"
+            "ucmaEHo#VxIjtz_g{PFQQnMuj<#U+VFCGok5%>n}L0s@TN1q7IGNCN;Z;|+)a\n"
+        ),
+        (
+            "diff --git a/dir b/file.bin b/dir b/file.bin\n"
+            "old mode 100644\nnew mode 100755\n"
+        ),
+        (
+            "diff --git a/dir b/file.bin b/dir b/file.bin\n"
+            "new file mode 100644\nindex 0000000..e69de29\n"
+        ),
+    ],
+    ids=("binary-summary", "binary-delta", "mode-only", "empty-file"),
+)
+def test_git_no_marker_sections_bind_unquoted_internal_b_prefix_paths(section):
+    assert validate_github_anchor(
+        DIFF_WITH_ADDITION + section,
+        path="src/payments.py",
+        line=11,
+        source_kind="added",
+        head_sha="abc",
+    ) == {
+        "commit_id": "abc",
+        "path": "src/payments.py",
+        "line": 11,
+        "side": "RIGHT",
+    }
+
+
+def test_git_generated_pure_rename_with_mode_change_keeps_prior_anchor_valid():
+    section = (
+        "diff --git a/old.sh b/new.sh\n"
+        "old mode 100644\n"
+        "new mode 100755\n"
+        "similarity index 100%\n"
+        "rename from old.sh\n"
+        "rename to new.sh\n"
+    )
+    assert validate_github_anchor(
+        DIFF_WITH_ADDITION + section,
+        path="src/payments.py",
+        line=11,
+        source_kind="added",
+        head_sha="abc",
+    ) == {
+        "commit_id": "abc",
+        "path": "src/payments.py",
+        "line": 11,
+        "side": "RIGHT",
+    }
+
+
+def test_git_generated_binary_content_and_mode_change_keeps_prior_anchor_valid():
+    section = (
+        "diff --git a/payload.bin b/payload.bin\n"
+        "old mode 100644\n"
+        "new mode 100755\n"
+        "index 1234567..89abcde\n"
+        "Binary files a/payload.bin and b/payload.bin differ\n"
+    )
+    assert validate_github_anchor(
+        DIFF_WITH_ADDITION + section,
+        path="src/payments.py",
+        line=11,
+        source_kind="added",
+        head_sha="abc",
+    ) == {
+        "commit_id": "abc",
+        "path": "src/payments.py",
+        "line": 11,
+        "side": "RIGHT",
+    }
+
+
+def test_separator_heavy_oversized_binary_summary_fails_closed_with_bounded_decode_work(
+    monkeypatch,
+):
+    decode_calls = 0
+    original_decode = MODULE._decode_git_path
+
+    def counting_decode(raw):
+        nonlocal decode_calls
+        decode_calls += 1
+        return original_decode(raw)
+
+    monkeypatch.setattr(MODULE, "_decode_git_path", counting_decode)
+    summary = "Binary files a/x" + " and a/x" * 20_000 + " differ"
+    assert not MODULE._binary_summary_matches(summary, "x", "x")
+    assert decode_calls <= 2
+
+
+def test_separator_heavy_oversized_diff_header_is_rejected_before_candidates_materialize():
+    header = "diff --git a/x" + " b/x" * 20_000
+    assert len(header) > MODULE.MAX_DIFF_RECORD_CHARS
+    assert MODULE._diff_paths(header) is None
+
+
+def test_under_limit_path_records_remain_accepted():
+    path = "segment/" + "x" * 4_096
+    header = f"diff --git a/{path} b/{path}"
+    summary = f"Binary files a/{path} and b/{path} differ"
+    assert len(header) < MODULE.MAX_DIFF_RECORD_CHARS
+    assert MODULE._diff_paths(header) == (path, path)
+    assert MODULE._binary_summary_matches(summary, path, path)
+
+
+@pytest.mark.parametrize("oid_length", [40, 64], ids=("sha1", "sha256"))
+def test_git_binary_patch_requires_full_equal_length_object_ids(oid_length):
+    old_oid = "1" * oid_length
+    new_oid = "2" * oid_length
+    body = [
+        f"index {old_oid}..{new_oid} 100644",
+        "GIT binary patch",
+        "literal 4",
+        *git_base85_lines(zlib.compress(b"data")),
+        "",
+        "literal 0",
+        *git_base85_lines(zlib.compress(b"")),
+        "",
+    ]
+    assert MODULE._git_binary_patch_complete(body, 1)
+
+
+def test_git_binary_patch_rejects_abbreviated_object_ids():
+    body = [
+        "index 1234567..89abcde 100644",
+        "GIT binary patch",
+        "literal 4",
+        *git_base85_lines(zlib.compress(b"data")),
+        "",
+        "literal 0",
+        *git_base85_lines(zlib.compress(b"")),
+        "",
+    ]
+    assert not MODULE._git_binary_patch_complete(body, 1)
+
+
+@pytest.mark.parametrize(
+    "old_mode,new_mode",
+    [("120000", "160000"), ("120000", "100644")],
+    ids=("symlink-to-gitlink", "symlink-to-regular"),
+)
+@pytest.mark.parametrize("form", ["content", "metadata-only", "binary"])
+def test_git_mode_pairs_reject_file_type_transitions(old_mode, new_mode, form):
+    prefix = (
+        "diff --git a/file b/file\n"
+        f"old mode {old_mode}\nnew mode {new_mode}\n"
+    )
+    if form == "content":
+        section = (
+            prefix
+            + "index 1234567..89abcde\n"
+            "--- a/file\n+++ b/file\n"
+            "@@ -1,1 +1,2 @@\n old\n+new\n"
+        )
+    elif form == "metadata-only":
+        section = prefix
+    else:
+        section = (
+            prefix
+            + "index 1234567..89abcde\n"
+            "Binary files a/file and b/file differ\n"
+        )
+    assert validate_github_anchor(
+        DIFF_WITH_ADDITION + section,
+        path="src/payments.py",
+        line=11,
+        source_kind="added",
+        head_sha="abc",
+    ) == {"unanchorable": True, "reason": "added_line_not_in_current_diff"}
+
+
+@pytest.mark.parametrize(
+    "metadata",
+    [
+        "dissimilarity index 100%\nindex 1234567..89abcde 100644\n",
+        "dissimilarity index 0%\nindex 1234567..89abcde 100644\n",
+        "index 1234567..89abcde 100644\ndissimilarity index 100%\n",
+    ],
+    ids=("canonical", "invalid-percentage", "invalid-order"),
+)
+def test_git_dissimilarity_content_metadata_is_strict(metadata):
+    patch = (
+        "diff --git a/rewrite.txt b/rewrite.txt\n"
+        f"{metadata}"
+        "--- a/rewrite.txt\n"
+        "+++ b/rewrite.txt\n"
+        "@@ -1,1 +1,1 @@\n-old\n+new\n"
+    )
+    expected = (
+        {"commit_id": "abc", "path": "rewrite.txt", "line": 1, "side": "RIGHT"}
+        if metadata.startswith("dissimilarity index 100%\nindex ")
+        else {"unanchorable": True, "reason": "added_line_not_in_current_diff"}
+    )
+    assert validate_github_anchor(
+        patch,
+        path="rewrite.txt",
+        line=1,
+        source_kind="added",
+        head_sha="abc",
+    ) == expected
+
+
 def test_invalid_git_c_quoted_filename_escape_fails_closed():
     patch = (
         'diff --git "a/bad\\q.txt" "b/bad\\q.txt"\n'
@@ -1752,7 +1982,7 @@ def encode_delta_block(delta_program: bytes) -> list[str]:
 )
 def test_binary_delta_structure_rejects_malformed_programs(delta_program, declared_size):
     body = [
-        "index 1234567..89abcde 100644",
+        FULL_BINARY_INDEX,
         "GIT binary patch",
         f"delta {declared_size}",
         *encode_delta_block(delta_program),

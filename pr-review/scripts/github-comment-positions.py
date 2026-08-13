@@ -14,6 +14,8 @@ INVALID_MARKER = object()
 GIT_BASE85_ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz!#$%&()*+-;<=>?@^_`{|}~"
 GIT_BASE85_VALUES = {character: index for index, character in enumerate(GIT_BASE85_ALPHABET)}
 MAX_BINARY_BLOCK_BYTES = 8 * 1024 * 1024
+MAX_DIFF_RECORD_CHARS = 64 * 1024
+MAX_PATH_SEPARATORS = 64
 
 HUNK_HEADER = re.compile(
     r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@"
@@ -79,10 +81,11 @@ def _diff_paths(
     *,
     old_hint: str | None = None,
     new_hint: str | None = None,
+    binary_summary: str | None = None,
 ) -> tuple[str, str] | None:
     """Parse a ``diff --git`` header, binding ambiguous spaces to section paths."""
     prefix = "diff --git "
-    if not raw.startswith(prefix):
+    if len(raw) > MAX_DIFF_RECORD_CHARS or not raw.startswith(prefix):
         return None
     fields = raw[len(prefix):]
     if fields.startswith('"'):
@@ -116,12 +119,20 @@ def _diff_paths(
             continue
         if new_hint is not None and candidate[1] != new_hint:
             continue
+        if binary_summary is not None and not _binary_summary_matches(
+            binary_summary, candidate[0], candidate[1]
+        ):
+            continue
         candidates.append(candidate)
+    if old_hint is None and new_hint is None and binary_summary is None:
+        candidates = [candidate for candidate in candidates if candidate[0] == candidate[1]]
     return candidates[0] if len(candidates) == 1 else None
 
 
 def _marker_operand(raw: str) -> str | object:
     """Decode a marker operand while retaining its a/ or b/ side prefix."""
+    if len(raw) > MAX_DIFF_RECORD_CHARS:
+        return INVALID_MARKER
     field = raw[4:]
     if not field:
         return INVALID_MARKER
@@ -147,6 +158,8 @@ def _marker_path(raw: str) -> str | None | object:
 
 def _move_metadata_paths(records: list[str]) -> tuple[str, str] | None:
     """Decode one canonical similarity + rename/copy metadata triple."""
+    if any(len(record) > MAX_DIFF_RECORD_CHARS for record in records):
+        return None
     if len(records) != 3 or re.fullmatch(
         r"similarity index (?:100|[0-9]{1,2})%", records[0]
     ) is None:
@@ -173,13 +186,20 @@ def _binary_summary_matches(
 ) -> bool:
     """Bind decoded operands from a canonical Git binary-summary record."""
     prefix, suffix = "Binary files ", " differ"
-    if not raw.startswith(prefix) or not raw.endswith(suffix):
+    if (
+        len(raw) > MAX_DIFF_RECORD_CHARS
+        or not raw.startswith(prefix)
+        or not raw.endswith(suffix)
+    ):
         return False
     fields = raw[len(prefix):-len(suffix)]
     matches = 0
-    for separator in range(len(fields)):
-        if not fields.startswith(" and ", separator):
-            continue
+    cursor = 0
+    separators = 0
+    while (separator := fields.find(" and ", cursor)) >= 0:
+        separators += 1
+        if separators > MAX_PATH_SEPARATORS:
+            return False
         old_raw = fields[:separator]
         new_raw = fields[separator + len(" and "):]
         old_operand = _decode_git_path(old_raw)
@@ -192,6 +212,7 @@ def _binary_summary_matches(
         expected_new = None if new_path is None else f"b/{new_path}"
         if old_operand == expected_old and new_operand == expected_new:
             matches += 1
+        cursor = separator + len(" and ")
     return matches == 1
 
 
@@ -281,12 +302,22 @@ def _delta_program_complete(program: bytes) -> bool:
 
 
 VALID_FILE_MODE = r"(?:100644|100755|120000|160000)"
+MODE_PAIR = re.compile(r"old mode (100644|100755)\nnew mode (100644|100755)")
+
+
+def _mode_pair_matches(records: list[str]) -> bool:
+    """Accept only Git's executable-bit transition for one retained path."""
+    if len(records) != 2:
+        return False
+    match = MODE_PAIR.fullmatch("\n".join(records))
+    return match is not None and match.group(1) != match.group(2)
 
 
 def _git_binary_patch_complete(body: list[str], binary_index: int) -> bool:
     """Validate canonical one-or-more git binary size/payload blocks."""
     prefix = body[:binary_index]
-    index_pattern = rf"index [0-9a-f]+\.\.[0-9a-f]+(?: {VALID_FILE_MODE})?"
+    object_pair = r"(?:[0-9a-f]{40}\.\.[0-9a-f]{40}|[0-9a-f]{64}\.\.[0-9a-f]{64})"
+    index_pattern = rf"index {object_pair}(?: {VALID_FILE_MODE})?"
     prefix_ok = (
         len(prefix) == 1 and re.fullmatch(index_pattern, prefix[0]) is not None
     ) or (
@@ -298,10 +329,7 @@ def _git_binary_patch_complete(body: list[str], binary_index: int) -> bool:
         and re.fullmatch(index_pattern, prefix[1]) is not None
     ) or (
         len(prefix) == 3
-        and re.fullmatch(rf"old mode {VALID_FILE_MODE}", prefix[0])
-        is not None
-        and re.fullmatch(rf"new mode {VALID_FILE_MODE}", prefix[1])
-        is not None
+        and _mode_pair_matches(prefix[:2])
         and re.fullmatch(index_pattern, prefix[2]) is not None
     )
     if not prefix_ok:
@@ -400,14 +428,13 @@ def _content_metadata_kind(
     ):
         kind = "deleted"
     else:
-        if (
-            len(headers) >= 2
-            and re.fullmatch(rf"old mode {VALID_FILE_MODE}", headers[0])
-            and re.fullmatch(rf"new mode {VALID_FILE_MODE}", headers[1])
-        ):
+        if len(headers) >= 2 and _mode_pair_matches(headers[:2]):
             headers = headers[2:]
+        elif headers and headers[0].startswith("old mode "):
+            return None
         move_paths = _move_metadata_paths(headers) if headers else None
-        if headers and move_paths is None:
+        has_dissimilarity = headers == ["dissimilarity index 100%"]
+        if headers and move_paths is None and not has_dissimilarity:
             return None
         if move_paths is not None:
             source, target = move_paths
@@ -464,10 +491,15 @@ def _combined_sections_complete(lines: list[str]) -> bool:
             ]
             if len(moves) == 1:
                 old_hint, new_hint = moves[0]
+        binary_summary = next(
+            (record for record in body if record.startswith("Binary files ")),
+            None,
+        )
         diff_paths = _diff_paths(
             lines[start],
             old_hint=old_hint,
             new_hint=new_hint,
+            binary_summary=binary_summary,
         )
         if diff_paths is None:
             return False
@@ -518,6 +550,11 @@ def _combined_sections_complete(lines: list[str]) -> bool:
             and re.fullmatch(rf"deleted file mode {VALID_FILE_MODE}", body[0]) is not None
             and re.fullmatch(r"index [0-9a-f]+\.\.0+", body[1]) is not None
             and _binary_summary_matches(body[2], old_diff, None)
+        ) or (
+            len(body) == 4
+            and _mode_pair_matches(body[:2])
+            and re.fullmatch(r"index [0-9a-f]+\.\.[0-9a-f]+", body[2]) is not None
+            and _binary_summary_matches(body[3], old_diff, new_diff)
         ):
             continue
         if "GIT binary patch" in body:
@@ -525,12 +562,9 @@ def _combined_sections_complete(lines: list[str]) -> bool:
             if _git_binary_patch_complete(body, binary_index):
                 continue
             return False
-        has_mode_pair = (
-            len(body) == 2
-            and re.fullmatch(rf"old mode {VALID_FILE_MODE}", body[0]) is not None
-            and re.fullmatch(rf"new mode {VALID_FILE_MODE}", body[1]) is not None
-        )
-        move_paths = _move_metadata_paths(body)
+        has_mode_pair = _mode_pair_matches(body)
+        move_records = body[2:] if len(body) == 5 and _mode_pair_matches(body[:2]) else body
+        move_paths = _move_metadata_paths(move_records)
         has_move = move_paths == (old_diff, new_diff)
         empty_blob = r"e69de29[0-9a-f]*"
         zero_blob = r"0+"
