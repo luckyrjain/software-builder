@@ -27,15 +27,17 @@ the canonical domain-comprehension artifact and the one referenced by its manife
 
 ## Path boundary
 
-`scope.artifact_root`, `engagement.artifact_root`, `engagement.map_file`, and every manifest artifact or
-diagram `path` must be relative and must not contain `..`. Treat both `/` and `\\` as separators when
-validating so a Windows-style traversal string cannot bypass a Linux CI check. The manifest validator
-enforces this boundary.
+`scope.artifact_root` and `engagement.artifact_root` must resolve **below `docs/`** and include at least one
+subdirectory after `docs`; `docs` itself, workspace root, and any path outside `docs/` are invalid.
+`engagement.map_file` and every manifest artifact/diagram `path` must be relative to the artifact root and
+must not contain `..`. Treat both `/` and `\\` as separators when validating so a Windows-style traversal
+string cannot bypass a Linux CI check. The manifest validator enforces this boundary.
 
 ## Explicit override and parallel runs
 
-A caller may provide another **relative** `scope.artifact_root` that satisfies the same path boundary.
-For parallel runs append a stable safe run id, for example:
+A caller may provide another safe relative `scope.artifact_root` only when it remains below `docs/`, for
+example `docs/architecture/repayment`. It may not opt back into workspace-root output. For parallel runs,
+append a stable safe run id, for example:
 
 ```text
 docs/domain-comprehension/{domain_slug}/{run_id}/
