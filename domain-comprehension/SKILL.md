@@ -41,6 +41,8 @@ Mandatory phase artifacts: [phase-outputs.md](reference/phase-outputs.md). Compl
 
 ## When to use / NOT to use
 
+Routing: [skill-routing.md](../docs/skill-framework/shared/skill-routing.md).
+
 | Use | Not |
 |-----|-----|
 | Domain/subsystem map, onboarding | **incident-rca** for time-window incidents |
