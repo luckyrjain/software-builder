@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from dataclasses import dataclass, field
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -13,6 +14,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from scripts.reference_utils import MANIFEST_NAME
+from scripts.registry.models import SkillEntry
 from scripts.registry.schema import parse_registry
 from scripts.release_info import read_distribution_version
 
@@ -46,6 +48,91 @@ def _capability_status(
     return missing_required, missing_optional, "READY"
 
 
+@dataclass(frozen=True)
+class SkillStatus:
+    """A skill's computed doctor status, independent of how it gets rendered."""
+
+    skill_id: str
+    entry: SkillEntry
+    status: str
+    missing_required: list[str] = field(default_factory=list)
+    missing_optional: list[str] = field(default_factory=list)
+    installed_label: str = "not installed"
+
+
+def _skill_status(
+    skill_id: str,
+    entry: SkillEntry,
+    *,
+    available: set[str] | None,
+    install_roots: list[Path],
+    distribution_version: str,
+) -> SkillStatus:
+    optional_names = [item.name for item in entry.capabilities.optional]
+    missing_required, missing_optional, status = _capability_status(
+        entry.capabilities.required,
+        optional_names,
+        available,
+    )
+
+    installed_label = "not installed"
+    for install_root in install_roots:
+        dest = install_root / skill_id
+        manifest = _installed_manifest(dest)
+        if manifest is None:
+            continue
+        installed_version = manifest.get("distribution_version")
+        installed_version = installed_version if isinstance(installed_version, str) else "unknown"
+        installed_sha = manifest.get("source_sha")
+        installed_sha = installed_sha if isinstance(installed_sha, str) else "unknown"
+        installed_label = f"installed ({installed_version} @ {installed_sha[:12]})"
+        if installed_version != distribution_version:
+            status = "VERSION_MISMATCH"
+        break
+
+    return SkillStatus(
+        skill_id=skill_id,
+        entry=entry,
+        status=status,
+        missing_required=missing_required,
+        missing_optional=missing_optional,
+        installed_label=installed_label,
+    )
+
+
+def render_skill_status(status: SkillStatus) -> str:
+    entry = status.entry
+    lines = [f"\n{status.skill_id}: {status.status}"]
+    lines.append(f"  invocation: {entry.invocation}")
+    lines.append(f"  composition.mode: {entry.composition.mode}")
+    if entry.composition.invokes:
+        lines.append(f"  invokes: {', '.join(entry.composition.invokes)}")
+    if entry.capabilities.required:
+        lines.append(f"  required capabilities: {', '.join(entry.capabilities.required)}")
+    if entry.capabilities.optional:
+        labels = [
+            f"{item.name} ({item.enables})" if item.enables else item.name
+            for item in entry.capabilities.optional
+        ]
+        lines.append(f"  optional capabilities: {', '.join(labels)}")
+    if status.missing_required:
+        lines.append(f"  missing required: {', '.join(status.missing_required)}")
+        for cap in status.missing_required:
+            degraded = entry.capabilities.degraded_modes.get(cap)
+            if degraded:
+                lines.append(f"    {cap} -> {degraded}")
+    if status.missing_optional:
+        lines.append(f"  missing optional: {', '.join(status.missing_optional)}")
+        for cap in status.missing_optional:
+            degraded = entry.capabilities.degraded_modes.get(cap)
+            if degraded:
+                lines.append(f"    {cap} -> {degraded}")
+    lines.append(f"  install: {status.installed_label}")
+    if status.status == "UNSPECIFIED" and (entry.capabilities.required or entry.capabilities.optional):
+        lines.append("  capability check: pass --available to evaluate host capabilities")
+    return "\n".join(lines)
+
+
 def cmd_doctor(
     root: Path,
     *,
@@ -62,59 +149,17 @@ def cmd_doctor(
         if skill_filter and skill_id != skill_filter:
             continue
 
-        optional_names = [item.name for item in entry.capabilities.optional]
-        missing_required, missing_optional, status = _capability_status(
-            entry.capabilities.required,
-            optional_names,
-            available,
+        status = _skill_status(
+            skill_id,
+            entry,
+            available=available,
+            install_roots=install_roots,
+            distribution_version=distribution_version,
         )
+        print(render_skill_status(status))
 
-        installed_label = "not installed"
-        for install_root in install_roots:
-            dest = install_root / skill_id
-            manifest = _installed_manifest(dest)
-            if manifest is None:
-                continue
-            installed_version = manifest.get("distribution_version")
-            installed_version = installed_version if isinstance(installed_version, str) else "unknown"
-            installed_sha = manifest.get("source_sha")
-            installed_sha = installed_sha if isinstance(installed_sha, str) else "unknown"
-            installed_label = f"installed ({installed_version} @ {installed_sha[:12]})"
-            if installed_version != distribution_version:
-                status = "VERSION_MISMATCH"
-            break
-
-        print(f"\n{skill_id}: {status}")
-        print(f"  invocation: {entry.invocation}")
-        print(f"  composition.mode: {entry.composition.mode}")
-        if entry.composition.invokes:
-            print(f"  invokes: {', '.join(entry.composition.invokes)}")
-        if entry.capabilities.required:
-            print(f"  required capabilities: {', '.join(entry.capabilities.required)}")
-        if entry.capabilities.optional:
-            labels = [
-                f"{item.name} ({item.enables})" if item.enables else item.name
-                for item in entry.capabilities.optional
-            ]
-            print(f"  optional capabilities: {', '.join(labels)}")
-        if missing_required:
-            print(f"  missing required: {', '.join(missing_required)}")
-            for cap in missing_required:
-                degraded = entry.capabilities.degraded_modes.get(cap)
-                if degraded:
-                    print(f"    {cap} -> {degraded}")
-        if missing_optional:
-            print(f"  missing optional: {', '.join(missing_optional)}")
-            for cap in missing_optional:
-                degraded = entry.capabilities.degraded_modes.get(cap)
-                if degraded:
-                    print(f"    {cap} -> {degraded}")
-        print(f"  install: {installed_label}")
-
-        if status in {"BLOCKED", "VERSION_MISMATCH"}:
+        if status.status in {"BLOCKED", "VERSION_MISMATCH"}:
             exit_code = 1
-        if status == "UNSPECIFIED" and (entry.capabilities.required or entry.capabilities.optional):
-            print("  capability check: pass --available to evaluate host capabilities")
 
     return exit_code
 
