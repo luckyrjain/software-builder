@@ -20,6 +20,36 @@ def _pr_review_entry():
     return registry.skills["pr-review"]
 
 
+def _make_entry(*, invokes=(), required=(), degraded_modes=None):
+    # A synthetic minimal SkillEntry for render_skill_status branches
+    # pr-review's fixture doesn't reach (no composition.invokes, no
+    # degraded_modes on a required capability) -- built by hand instead of
+    # hunting for a real skills.yaml entry with that exact shape, so the
+    # test doesn't silently break if skills.yaml changes.
+    from scripts.registry.models import (
+        CapabilitiesSpec,
+        CompositionSpec,
+        HostClaude,
+        HostCursor,
+        Hosts,
+        HostKiro,
+        InstallSpec,
+        LintSpec,
+        SkillEntry,
+    )
+
+    return SkillEntry(
+        path="synthetic-skill",
+        category="test",
+        invocation="ambient",
+        hosts=Hosts(cursor=HostCursor(discovery="skill.md"), claude=HostClaude(), kiro=HostKiro(discovery="skill.md")),
+        install=InstallSpec(),
+        lint=LintSpec(skill_md_max_lines=500, target="skill.md"),
+        composition=CompositionSpec(invokes=list(invokes)),
+        capabilities=CapabilitiesSpec(required=list(required), degraded_modes=degraded_modes or {}),
+    )
+
+
 def test_skill_status_unspecified_without_available() -> None:
     from scripts.doctor import _skill_status
 
@@ -176,6 +206,36 @@ def test_render_skill_status_includes_capability_check_hint_when_unspecified() -
     text = render_skill_status(status)
 
     assert "capability check: pass --available to evaluate host capabilities" in text
+
+
+def test_render_skill_status_includes_composition_invokes() -> None:
+    from scripts.doctor import SkillStatus, render_skill_status
+
+    status = SkillStatus(
+        skill_id="synthetic-skill",
+        entry=_make_entry(invokes=["other-skill"]),
+        status="READY",
+    )
+
+    text = render_skill_status(status)
+
+    assert "invokes: other-skill" in text
+
+
+def test_render_skill_status_includes_missing_required_degraded_hint() -> None:
+    from scripts.doctor import SkillStatus, render_skill_status
+
+    status = SkillStatus(
+        skill_id="synthetic-skill",
+        entry=_make_entry(required=["cap.a"], degraded_modes={"cap.a": "fallback text"}),
+        status="BLOCKED",
+        missing_required=["cap.a"],
+    )
+
+    text = render_skill_status(status)
+
+    assert "missing required: cap.a" in text
+    assert "cap.a -> fallback text" in text
 
 
 def test_cmd_doctor_wires_status_and_render_together(capsys) -> None:
