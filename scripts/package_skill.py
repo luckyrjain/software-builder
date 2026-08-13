@@ -15,8 +15,11 @@ if str(_SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS_DIR))
 
 from reference_utils import (
+    MANIFEST_NAME,
+    copytree_ignore,
     extract_markdown_links,
     framework_relative_path,
+    is_ignored_package_path,
     is_local_markdown_link,
     rewrite_framework_links,
     sha256_file,
@@ -57,6 +60,8 @@ def vendor_readme_superpowers_specs(repo_root: Path, package_root: Path) -> None
             continue
         if not rel.startswith("docs/superpowers/specs/"):
             continue
+        if is_ignored_package_path(rel):
+            continue
         dest = package_root / rel
         dest.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(resolved, dest)
@@ -70,7 +75,7 @@ def vendor_framework_tree(repo_root: Path, package_root: Path) -> list[str]:
     shutil.copytree(
         framework_src,
         framework_dest,
-        ignore=shutil.ignore_patterns("__pycache__", "*.pyc", ".pytest_cache"),
+        ignore=copytree_ignore(framework_src),
     )
 
     vendor_readme_superpowers_specs(repo_root, package_root)
@@ -96,9 +101,12 @@ def write_manifest(
 ) -> None:
     files: dict[str, str] = {}
     for path in sorted(package_root.rglob("*")):
-        if path.is_file() and path.name != ".software-builder-manifest.json":
-            rel = path.relative_to(package_root).as_posix()
-            files[rel] = sha256_file(path)
+        if not path.is_file():
+            continue
+        rel = path.relative_to(package_root).as_posix()
+        if path.name == MANIFEST_NAME or is_ignored_package_path(rel):
+            continue
+        files[rel] = sha256_file(path)
 
     manifest = {
         "skill": skill,
@@ -110,7 +118,7 @@ def write_manifest(
         "framework_files": framework_files,
         "files": files,
     }
-    manifest_path = package_root / ".software-builder-manifest.json"
+    manifest_path = package_root / MANIFEST_NAME
     manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
@@ -135,7 +143,7 @@ def package_skill(
     shutil.copytree(
         skill_src,
         dest,
-        ignore=shutil.ignore_patterns("__pycache__", "*.pyc", ".pytest_cache"),
+        ignore=copytree_ignore(skill_src),
     )
 
     seed_files = collect_markdown_files(dest)

@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import fnmatch
 import hashlib
 import os
 import re
@@ -10,6 +11,70 @@ from pathlib import Path
 
 MARKDOWN_LINK_RE = re.compile(r"\]\(([^)]+)\)")
 FRAMEWORK_MARKER = "docs/skill-framework/"
+
+MANIFEST_NAME = ".software-builder-manifest.json"
+
+# Filesystem noise that can legitimately appear after a skill is packaged/installed and
+# used (running a bundled script writes __pycache__, editors/OS write dotfiles) -- shared
+# by package_skill.py (excluded when copying source into a package) and install_support.py
+# (excluded when comparing an installed directory against its manifest) so the two agree
+# on what counts as real package content.
+IGNORED_DIR_NAMES = ("__pycache__", ".pytest_cache")
+IGNORED_FILE_PATTERNS = ("*.pyc", ".DS_Store", "*.swp", "*~")
+
+
+def is_ignored_package_path(rel_path: str) -> bool:
+    """True if rel_path (posix-style, relative to a package/install root) is
+    filesystem noise rather than real package content.
+
+    Checks every path component against both IGNORED_DIR_NAMES and
+    IGNORED_FILE_PATTERNS -- mirroring shutil.ignore_patterns()'s per-level
+    matching (a noise-named directory anywhere in the path, not just the
+    immediate parent, excludes everything under it) -- so copytree_ignore()
+    and this function never disagree on what a nested path excludes.
+    """
+    for part in rel_path.split("/"):
+        if part in IGNORED_DIR_NAMES:
+            return True
+        if any(fnmatch.fnmatch(part, pattern) for pattern in IGNORED_FILE_PATTERNS):
+            return True
+    return False
+
+
+def copytree_ignore(root: Path):
+    """Build a shutil.copytree ignore() callback driven by is_ignored_package_path().
+
+    shutil.ignore_patterns() and is_ignored_package_path() used to be two
+    independently-maintained implementations that merely read from the same
+    constants -- they diverged in practice (directory-vs-file matching
+    granularity, and call sites like vendor_readme_superpowers_specs() that
+    copy files without going through copytree's ignore= at all), so a file
+    packaged under one path could be silently excluded when re-checked at
+    verify time, or vice versa. Routing copytree itself through
+    is_ignored_package_path() makes packaging and verification share the
+    exact same decision function instead of just the same constants.
+
+    Deliberately does not call .resolve() on `root` or on the `directory`
+    shutil passes into ignore(): shutil.copytree builds every recursive
+    `directory` argument by joining path components onto the exact `root`
+    object passed to it, without ever resolving symlinks -- including when
+    it follows a symlinked subdirectory (its default, since copytree() is
+    called with symlinks=False at both call sites). Resolving here would
+    make `directory` jump to the symlink's real target while `root` stays
+    put, so relative_to(root) raises ValueError for any path reached through
+    a symlinked subdirectory. Comparing both unresolved keeps them on the
+    same textual prefix that shutil itself guarantees.
+    """
+
+    def ignore(directory: str, names: list[str]) -> set[str]:
+        dir_path = Path(directory)
+        return {
+            name
+            for name in names
+            if is_ignored_package_path((dir_path / name).relative_to(root).as_posix())
+        }
+
+    return ignore
 
 
 # CommonMark allows a fence delimiter to be indented up to 3 spaces (e.g. one nested inside
