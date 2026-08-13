@@ -108,5 +108,5 @@ def test_eval_contract_covers_required_collision_suite() -> None:
 
 def test_portable_package_roots_exist() -> None:
     assert (ROOT / "skills.yaml").is_file()
-    assert (ROOT / "install.sh").is_file()
+    assert (ROOT / "scripts/install.sh").is_file()
     assert (ROOT / "docs/skill-framework/shared/skill-routing.md").is_file()
