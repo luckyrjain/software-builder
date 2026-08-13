@@ -58,8 +58,21 @@ def _combined_sections_complete(lines: list[str]) -> bool:
             if raw.startswith("--- ") and body[index + 1].startswith("+++ ")
         ]
         if hunk_indexes:
-            if marker_indexes and marker_indexes[0] < hunk_indexes[0]:
-                continue
+            if len(marker_indexes) == 1 and marker_indexes[0] < hunk_indexes[0]:
+                try:
+                    diff_paths = shlex.split(lines[start])[2:4]
+                except ValueError:
+                    return False
+                if len(diff_paths) != 2:
+                    return False
+                old_marker = _marker_path(body[marker_indexes[0]])
+                new_marker = _marker_path(body[marker_indexes[0] + 1])
+                old_diff = diff_paths[0][2:] if diff_paths[0].startswith("a/") else diff_paths[0]
+                new_diff = diff_paths[1][2:] if diff_paths[1].startswith("b/") else diff_paths[1]
+                if (old_marker is None or old_marker == old_diff) and (
+                    new_marker is None or new_marker == new_diff
+                ):
+                    continue
             return False
         if any(raw.startswith("Binary files ") and raw.endswith(" differ") for raw in body):
             continue
@@ -68,16 +81,34 @@ def _combined_sections_complete(lines: list[str]) -> bool:
             size_indexes = [
                 index
                 for index in range(binary_index + 1, len(body))
-                if body[index].startswith(("literal ", "delta "))
+                if re.fullmatch(r"(?:literal|delta) \d+", body[index]) is not None
             ]
-            if size_indexes and any(
-                re.fullmatch(r"[A-Za-z][!-~]+", raw) is not None
-                for raw in body[size_indexes[0] + 1 :]
-            ):
+            prefix_ok = all(
+                raw.startswith("index ") for raw in body[:binary_index]
+            )
+            blocks_ok = bool(size_indexes)
+            for block, size_index in enumerate(size_indexes):
+                block_end = (
+                    size_indexes[block + 1] if block + 1 < len(size_indexes) else len(body)
+                )
+                payload = body[size_index + 1 : block_end]
+                if not payload or not all(
+                    re.fullmatch(r"[A-Za-z][!-~]+", raw) is not None for raw in payload
+                ):
+                    blocks_ok = False
+            recognized = {binary_index, *size_indexes}
+            for block, size_index in enumerate(size_indexes):
+                block_end = (
+                    size_indexes[block + 1] if block + 1 < len(size_indexes) else len(body)
+                )
+                recognized.update(range(size_index + 1, block_end))
+            if prefix_ok and blocks_ok and recognized == set(range(binary_index, len(body))):
                 continue
             return False
-        has_mode_pair = any(raw.startswith("old mode ") for raw in body) and any(
-            raw.startswith("new mode ") for raw in body
+        has_mode_pair = (
+            len(body) == 2
+            and re.fullmatch(r"old mode [0-7]{6}", body[0]) is not None
+            and re.fullmatch(r"new mode [0-7]{6}", body[1]) is not None
         )
         has_rename = (
             any(raw.startswith(("similarity index ", "dissimilarity index ")) for raw in body)
@@ -104,6 +135,22 @@ def _combined_sections_complete(lines: list[str]) -> bool:
         if has_mode_pair or has_rename or has_copy or has_new_empty_file or has_deleted_empty_file:
             continue
         return False
+    return True
+
+
+def _sectioned_sections_complete(lines: list[str]) -> bool:
+    """Require every concatenated ---/+++ file section to contain a valid hunk."""
+    starts = [
+        index
+        for index, raw in enumerate(lines[:-1])
+        if raw.startswith("--- ") and lines[index + 1].startswith("+++ ")
+    ]
+    if not starts:
+        return False
+    for offset, start in enumerate(starts):
+        end = starts[offset + 1] if offset + 1 < len(starts) else len(lines)
+        if not any(_hunk_range(raw) is not None for raw in lines[start + 2 : end]):
+            return False
     return True
 
 
@@ -149,7 +196,10 @@ def validate_github_anchor(
     wanted_in_file = parser_mode == "headerless"
     found_anchor = False
     ambiguous_headerless_input = False
-    malformed_hunk = has_diff_headers and not _combined_sections_complete(lines)
+    malformed_hunk = (
+        (parser_mode == "combined" and not _combined_sections_complete(lines))
+        or (parser_mode == "sectioned" and not _sectioned_sections_complete(lines))
+    )
     previous_hunk_record: Literal["added", "removed", "context"] | None = None
     old_side_eof = False
     new_side_eof = False
@@ -219,7 +269,7 @@ def validate_github_anchor(
                 continue
             parser_state = "hunk"
             old_start, old_remaining, hunk_start, new_remaining = hunk_range
-            if (old_side_eof and old_remaining > 0) or (new_side_eof and new_remaining > 0):
+            if old_side_eof or new_side_eof:
                 malformed_hunk = True
             if (
                 (last_old_end is not None and old_start < last_old_end)

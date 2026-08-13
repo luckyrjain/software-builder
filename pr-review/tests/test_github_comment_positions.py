@@ -795,6 +795,13 @@ def test_strict_hunk_grammar_retains_complete_valid_hunks(mode):
             ),
             1,
         ),
+        (
+            (
+                "@@ -1,0 +1,1 @@\n+target\n\\ No newline at end of file\n"
+                "@@ -4,1 +2,0 @@\n-later removal\n"
+            ),
+            1,
+        ),
     ],
     ids=(
         "leading",
@@ -804,6 +811,7 @@ def test_strict_hunk_grammar_retains_complete_valid_hunks(mode):
         "later-hunk-after-new-side-eof",
         "later-context-after-new-side-eof",
         "later-removal-after-old-side-eof",
+        "deletion-only-hunk-after-new-side-eof",
     ),
 )
 def test_no_newline_diagnostic_is_rejected_outside_legal_body_position(
@@ -863,6 +871,12 @@ def test_no_newline_diagnostic_is_valid_once_after_a_body_record(mode, hunk_text
             "diff --git a/not-empty b/not-empty\nnew file mode 100644\n"
             "index 0000000..1234567\n"
         ),
+        "diff --git a/bin.dat b/bin.dat\nGIT binary patch\nliteral nope\nLgarbage\n",
+        (
+            "diff --git a/bin.dat b/bin.dat\nGIT binary patch\nliteral 4\n"
+            "Lc$@<O00001\nliteral 4\n"
+        ),
+        "diff --git a/script.sh b/script.sh\nold mode nope\nnew mode nope\n",
     ],
     ids=(
         "bare-header",
@@ -871,6 +885,9 @@ def test_no_newline_diagnostic_is_valid_once_after_a_body_record(mode, hunk_text
         "unmarked-hunk",
         "binary-size-without-payload",
         "nonempty-new-file-metadata",
+        "nonnumeric-binary-size",
+        "truncated-second-binary-block",
+        "invalid-mode-syntax",
     ),
 )
 def test_truncated_trailing_combined_section_invalidates_prior_anchor(trailing_section):
@@ -920,6 +937,37 @@ def test_recognized_non_hunk_section_does_not_invalidate_prior_anchor(complete_s
         source_kind="added",
         head_sha="abc",
     ) == {"commit_id": "abc", "path": "src/payments.py", "line": 1, "side": "RIGHT"}
+
+
+def test_combined_section_cannot_switch_files_without_another_diff_git_header():
+    patch = (
+        "diff --git a/one b/one\n--- a/one\n+++ b/one\n"
+        "@@ -1 +1 @@\n context\n"
+        "--- a/src/payments.py\n+++ b/src/payments.py\n"
+        "@@ -0,0 +1,1 @@\n+target\n"
+    )
+    assert validate_github_anchor(
+        patch,
+        path="src/payments.py",
+        line=1,
+        source_kind="added",
+        head_sha="abc",
+    ) == {"unanchorable": True, "reason": "added_line_not_in_current_diff"}
+
+
+def test_concatenated_section_with_bare_trailing_marker_pair_invalidates_prior_anchor():
+    patch = (
+        "--- a/src/payments.py\n+++ b/src/payments.py\n"
+        "@@ -0,0 +1,1 @@\n+target\n"
+        "--- a/src/next.py\n+++ b/src/next.py\n"
+    )
+    assert validate_github_anchor(
+        patch,
+        path="src/payments.py",
+        line=1,
+        source_kind="added",
+        head_sha="abc",
+    ) == {"unanchorable": True, "reason": "added_line_not_in_current_diff"}
 
 
 @pytest.mark.parametrize("mode", ["combined", "headerless", "concatenated"])
