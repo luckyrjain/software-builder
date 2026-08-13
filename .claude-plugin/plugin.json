@@ -1,0 +1,10 @@
+{
+  "name": "software-builder",
+  "description": "Portable, evidence-driven software delivery skills for code review, incident response, architecture, testing, migrations, release readiness, and implementation workflows.",
+  "author": {
+    "name": "Lucky Jain"
+  },
+  "homepage": "https://github.com/luckyrjain/software-builder",
+  "repository": "https://github.com/luckyrjain/software-builder",
+  "skills": "./"
+}

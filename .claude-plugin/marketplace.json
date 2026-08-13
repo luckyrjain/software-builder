@@ -1,0 +1,21 @@
+{
+  "name": "software-builder",
+  "owner": {
+    "name": "Lucky Jain"
+  },
+  "plugins": [
+    {
+      "name": "software-builder",
+      "source": "./",
+      "description": "Evidence-driven software delivery workflows for engineering teams.",
+      "category": "development",
+      "tags": [
+        "software-engineering",
+        "code-review",
+        "incident-response",
+        "architecture",
+        "testing"
+      ]
+    }
+  ]
+}
