@@ -6,8 +6,6 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-
-import yaml
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -18,6 +16,7 @@ if str(ROOT) not in sys.path:
 from scripts.reference_utils import MANIFEST_NAME
 from scripts.registry.models import CapabilityPath, SkillEntry
 from scripts.registry.schema import parse_registry
+from scripts.yaml_safety import YAML_SAFETY_ERRORS
 from scripts.release_info import read_distribution_version
 
 
@@ -242,7 +241,7 @@ def main(argv: list[str] | None = None) -> int:
             available=available,
             install_roots=install_roots,
         )
-    except (ValueError, yaml.YAMLError) as exc:
+    except YAML_SAFETY_ERRORS as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
 

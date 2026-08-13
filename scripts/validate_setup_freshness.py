@@ -11,7 +11,7 @@ from pathlib import Path
 
 import yaml
 
-from scripts.yaml_safety import load_unique_yaml_file
+from scripts.yaml_safety import YAML_SAFETY_ERRORS, load_unique_yaml_file
 
 _FRESHNESS_HEADING = "## Freshness"
 _LAST_REVIEWED_RE = re.compile(
@@ -158,7 +158,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    errors = ensure_setup_freshness(args.root, write=args.write)
+    try:
+        errors = ensure_setup_freshness(args.root, write=args.write)
+    except YAML_SAFETY_ERRORS as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
     if errors:
         for err in errors:
             print(err, file=sys.stderr)

@@ -89,7 +89,12 @@ def _load_phases(skill_dir: Path, errors: list[str]) -> dict[str, PhaseContract]
         except UnicodeError:
             errors.append(f"{path.name}: file is not valid UTF-8")
             continue
-        except (OSError, ValueError, yaml.YAMLError, RecursionError) as exc:
+        except ValueError as exc:
+            # load_unique_frontmatter's ValueError messages already embed the
+            # path (missing/non-mapping frontmatter); don't double it up.
+            errors.append(str(exc))
+            continue
+        except (OSError, yaml.YAMLError) as exc:
             errors.append(f"{path.name}: {exc}")
             continue
         frontmatter_keys = _valid_mapping_keys(

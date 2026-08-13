@@ -17,6 +17,10 @@ MAX_YAML_NESTING = 100
 
 FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---", re.DOTALL)
 
+# PyYAML has no public name for this; it's the literal tag flatten_mapping()
+# matches on internally (see yaml.constructor.BaseConstructor.flatten_mapping).
+_MERGE_TAG = "tag:yaml.org,2002:merge"
+
 
 class DuplicateKeyError(yaml.YAMLError):
     """Raised when YAML would otherwise silently overwrite a mapping key."""
@@ -26,12 +30,28 @@ class DuplicateKeySafeLoader(yaml.SafeLoader):
     """SafeLoader variant that rejects duplicate keys recursively."""
 
 
+# Every function in this module raises from this set (or a subclass, e.g.
+# DuplicateKeyError). Callers should catch this tuple, not just ValueError.
+YAML_SAFETY_ERRORS = (ValueError, yaml.YAMLError)
+
+
 def _construct_unique_mapping(
     loader: DuplicateKeySafeLoader, node: yaml.MappingNode, deep: bool = False
 ) -> dict[object, object]:
+    # flatten_mapping() resolves `<<:` merge keys by prepending the merged pairs
+    # to node.value, relying on the *constructor* to let later (explicit) pairs
+    # silently win over earlier (merged) ones -- standard YAML merge-key
+    # semantics. Count explicit pairs before flattening so we know which tail
+    # of the flattened node.value is this mapping's own explicit content: only
+    # a key repeated within that explicit tail is a real accidental duplicate.
+    # A key that merely overrides a merged key, or two merge sources that
+    # collide with each other, resolve the same way plain yaml.safe_load does.
+    explicit_count = sum(1 for key_node, _ in node.value if key_node.tag != _MERGE_TAG)
     loader.flatten_mapping(node)
+    merge_count = len(node.value) - explicit_count
     mapping: dict[object, object] = {}
-    for key_node, value_node in node.value:
+    explicit_keys: set[object] = set()
+    for index, (key_node, value_node) in enumerate(node.value):
         # Fully construct keys so malformed collection keys have deterministic content
         # instead of PyYAML's still-empty deferred placeholder.
         key = loader.construct_object(key_node, deep=True)
@@ -39,8 +59,10 @@ def _construct_unique_mapping(
             hash(key)
         except TypeError as exc:
             raise DuplicateKeyError(f"unhashable YAML mapping key {key!r}") from exc
-        if key in mapping:
-            raise DuplicateKeyError(f"duplicate YAML mapping key {key!r}")
+        if index >= merge_count:
+            if key in explicit_keys:
+                raise DuplicateKeyError(f"duplicate YAML mapping key {key!r}")
+            explicit_keys.add(key)
         mapping[key] = loader.construct_object(value_node, deep=deep)
     return mapping
 
@@ -55,6 +77,13 @@ def load_unique_yaml(text: str) -> Any:
     """Parse YAML text, rejecting duplicate mapping keys and oversized/deeply
     nested input. Raises yaml.YAMLError (or a DuplicateKeyError subclass) on
     any violation.
+
+    Known limitation: self-referential anchors (a mapping that contains an
+    alias to itself, e.g. ``a: &x\\n  b: *x``) raise ConstructorError here
+    even though plain yaml.safe_load resolves them, because the duplicate-key
+    check needs the mapping fully built before returning it. No file in this
+    repo uses that pattern; supporting it would require the deferred,
+    generator-based construction PyYAML's own constructors use.
     """
     if len(text) > MAX_YAML_CHARS:
         raise yaml.YAMLError(f"YAML input exceeds {MAX_YAML_CHARS} characters")

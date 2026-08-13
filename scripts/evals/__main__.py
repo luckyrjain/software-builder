@@ -9,8 +9,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import yaml
-
 from scripts.evals.golden import (
     find_oversized_descriptions,
     find_vacuous_anchored_patterns,
@@ -22,7 +20,7 @@ from scripts.evals.types import EvalResult
 from scripts.registry.frontmatter import load_skill_frontmatter
 from scripts.registry.schema import Registry, parse_registry
 from scripts.registry.skill_frontmatter_schema import automation_only_guard_errors
-from scripts.yaml_safety import load_unique_yaml_file
+from scripts.yaml_safety import YAML_SAFETY_ERRORS, load_unique_yaml_file
 
 ROOT = Path(__file__).resolve().parents[2]
 FIXTURES_DIR = ROOT / "evals" / "fixtures"
@@ -111,7 +109,7 @@ def _run_assertion(
         for workflow_file in sorted(workflow_dir.glob("*.md")):
             try:
                 frontmatter = load_skill_frontmatter(workflow_file)
-            except (ValueError, yaml.YAMLError) as exc:
+            except YAML_SAFETY_ERRORS as exc:
                 errors.append(f"{workflow_file.name}: {exc}")
                 continue
             for key in WORKFLOW_REQUIRED_KEYS:
@@ -155,7 +153,7 @@ def run_case(root: Path, case: EvalCase) -> EvalResult:
     for index, assertion in enumerate(case.assertions):
         try:
             messages.extend(_run_assertion(root, case.skill, assertion))
-        except (OSError, ValueError, KeyError, yaml.YAMLError) as exc:
+        except (OSError, KeyError, *YAML_SAFETY_ERRORS) as exc:
             messages.append(f"assertion[{index}] failed: {exc}")
 
     return EvalResult(case.skill, case.case_id, not messages, messages)
@@ -276,7 +274,7 @@ def main(argv: list[str] | None = None) -> int:
         results = run_all(
             args.repo_root, skill_filter=args.skill, tier_filter=args.tier, golden_cases=golden_cases,
         )
-    except (ValueError, yaml.YAMLError) as exc:
+    except YAML_SAFETY_ERRORS as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
 
