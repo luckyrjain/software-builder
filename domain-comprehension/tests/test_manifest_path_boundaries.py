@@ -56,18 +56,18 @@ def test_rejects_windows_absolute_artifact_root() -> None:
     assert any("engagement.artifact_root must be a relative path" in error for error in errors)
 
 
-def test_rejects_artifact_root_outside_docs() -> None:
+def test_legacy_safe_relative_artifact_root_remains_valid() -> None:
     data = _manifest()
     data["engagement"]["artifact_root"] = "reports/repayment"
     errors = validate_manifest(data)
-    assert any("engagement.artifact_root must be inside docs/" in error for error in errors)
+    assert not any("engagement.artifact_root" in error for error in errors)
 
 
-def test_rejects_docs_root_without_domain_subdirectory() -> None:
+def test_legacy_single_segment_artifact_root_remains_valid() -> None:
     data = _manifest()
-    data["engagement"]["artifact_root"] = "docs"
+    data["engagement"]["artifact_root"] = "run-a"
     errors = validate_manifest(data)
-    assert any("engagement.artifact_root must be inside docs/" in error for error in errors)
+    assert not any("engagement.artifact_root" in error for error in errors)
 
 
 def test_valid_nested_artifact_root_resolves_under_workspace(tmp_path: Path) -> None:
