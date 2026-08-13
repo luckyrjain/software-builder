@@ -212,7 +212,7 @@ def test_marker_like_added_content_cannot_switch_files_in_combined_diff():
     diff = """diff --git a/src/payments.py b/src/payments.py
 --- a/src/payments.py
 +++ b/src/payments.py
-@@ -10,0 +10,1 @@
+@@ -9,0 +10,1 @@
 +++ b/src/other.py
 @@ -0,0 +50,1 @@
 +forged cross-file addition
@@ -233,7 +233,7 @@ def test_marker_like_added_content_is_still_an_added_line_in_target_file():
     diff = """diff --git a/src/payments.py b/src/payments.py
 --- a/src/payments.py
 +++ b/src/payments.py
-@@ -10,0 +10,1 @@
+@@ -9,0 +10,1 @@
 +++ b/src/other.py
 """
     assert validate_github_anchor(
@@ -384,7 +384,7 @@ def test_no_diff_git_deleted_and_created_files_reset_the_previous_path():
 -deleted value
 --- /dev/null
 +++ b/src/created.py
-@@ -0,0 +11,1 @@
+@@ -0,0 +1,1 @@
 +created value
 """
     assert validate_github_anchor(
@@ -400,13 +400,13 @@ def test_no_diff_git_deleted_and_created_files_reset_the_previous_path():
     assert validate_github_anchor(
         patch,
         path="src/created.py",
-        line=11,
+        line=1,
         source_kind="added",
         head_sha="abc",
     ) == {
         "commit_id": "abc",
         "path": "src/created.py",
-        "line": 11,
+        "line": 1,
         "side": "RIGHT",
     }
 
@@ -840,7 +840,7 @@ def test_no_newline_diagnostic_is_rejected_outside_legal_body_position(
 @pytest.mark.parametrize(
     "hunk_text,target_line",
     [
-        ("@@ -1,0 +1,1 @@\n+target\n\\ No newline at end of file\n", 1),
+        ("@@ -0,0 +1,1 @@\n+target\n\\ No newline at end of file\n", 1),
         (
             "@@ -1,1 +1,1 @@\n-removed\n\\ No newline at end of file\n"
             "+target\n\\ No newline at end of file\n",
@@ -896,6 +896,22 @@ def test_no_newline_diagnostic_is_valid_once_after_a_body_record(mode, hunk_text
             "diff --git a/empty b/empty\nnew file mode 100644\n"
             "index 0000000..e69de29\ngarbage\n"
         ),
+        (
+            "diff --git a/x.dat b/x.dat\ngarbage\n"
+            "Binary files a/x.dat and b/x.dat differ\nmore-garbage\n"
+        ),
+        (
+            "diff --git a/old b/new\nsimilarity index 100%\n"
+            "rename from unrelated-old\nrename to unrelated-new\n"
+        ),
+        (
+            "diff --git a/bin.dat b/bin.dat\nindex 1234567..89abcde 100644\n"
+            "GIT binary patch\nliteral 4\nLc$@<O00001\n\n"
+        ),
+        (
+            "diff --git a/next.py b/next.py extra\n"
+            "--- a/next.py\n+++ b/next.py\n@@ -0,0 +1,1 @@\n+new\n"
+        ),
     ],
     ids=(
         "bare-header",
@@ -910,13 +926,17 @@ def test_no_newline_diagnostic_is_valid_once_after_a_body_record(mode, hunk_text
         "invalid-rename-metadata",
         "invalid-copy-percentage",
         "empty-file-trailing-record",
+        "binary-summary-with-garbage",
+        "rename-path-mismatch",
+        "one-block-binary-patch",
+        "extra-diff-header-token",
     ),
 )
 def test_truncated_trailing_combined_section_invalidates_prior_anchor(trailing_section):
     patch = (
         "diff --git a/src/payments.py b/src/payments.py\n"
         "--- a/src/payments.py\n+++ b/src/payments.py\n"
-        "@@ -1,0 +1,1 @@\n+target\n"
+        "@@ -0,0 +1,1 @@\n+target\n"
         + trailing_section
     )
     assert validate_github_anchor(
@@ -943,17 +963,37 @@ def test_truncated_trailing_combined_section_invalidates_prior_anchor(trailing_s
         "diff --git a/script.sh b/script.sh\nold mode 100644\nnew mode 100755\n",
         "diff --git a/empty b/empty\nnew file mode 100644\nindex 0000000..e69de29\n",
         (
-            "diff --git a/bin.dat b/bin.dat\nGIT binary patch\nliteral 4\n"
+            "diff --git a/bin.dat b/bin.dat\nindex 1234567..89abcde 100644\n"
+            "GIT binary patch\nliteral 4\n"
             "Lc$@<O00001\n\nliteral 3\nKc$@<O001\n\n"
         ),
+        (
+            "diff --git a/new.bin b/new.bin\nnew file mode 100644\n"
+            "index 0000000..89abcde\nGIT binary patch\nliteral 4\n"
+            "Lc$@<O00001\n\nliteral 0\nHcmV?d00001\n\n"
+        ),
+        (
+            "diff --git a/old.bin b/old.bin\ndeleted file mode 100644\n"
+            "index 89abcde..0000000\nGIT binary patch\nliteral 0\n"
+            "HcmV?d00001\n\nliteral 4\nLc$@<O00001\n\n"
+        ),
     ],
-    ids=("rename", "copy", "binary", "mode-only", "empty-file", "git-binary-payload"),
+    ids=(
+        "rename",
+        "copy",
+        "binary",
+        "mode-only",
+        "empty-file",
+        "git-binary-payload",
+        "new-binary-file",
+        "deleted-binary-file",
+    ),
 )
 def test_recognized_non_hunk_section_does_not_invalidate_prior_anchor(complete_section):
     patch = (
         "diff --git a/src/payments.py b/src/payments.py\n"
         "--- a/src/payments.py\n+++ b/src/payments.py\n"
-        "@@ -1,0 +1,1 @@\n+target\n"
+        "@@ -0,0 +1,1 @@\n+target\n"
         + complete_section
     )
     assert validate_github_anchor(
@@ -1055,10 +1095,61 @@ def test_hunk_ranges_must_be_monotonic_and_non_overlapping(mode, hunks, target_l
 
 @pytest.mark.parametrize("mode", ["combined", "headerless", "concatenated"])
 @pytest.mark.parametrize(
+    "hunk,target_line",
+    [
+        ("@@ -1,0 +100,1 @@\n+target\n", 100),
+        ("@@ -100,1 +1,2 @@\n context\n+target\n", 2),
+    ],
+    ids=("new-prefix-jump", "old-prefix-jump"),
+)
+def test_first_hunk_requires_equal_unchanged_prefixes(mode, hunk, target_line):
+    assert validate_github_anchor(
+        _strict_grammar_patch(mode, hunk),
+        path="src/payments.py",
+        line=target_line,
+        source_kind="added",
+        head_sha="abc",
+    ) == {"unanchorable": True, "reason": "added_line_not_in_current_diff"}
+
+
+@pytest.mark.parametrize("mode", ["combined", "headerless", "concatenated"])
+def test_addition_before_removal_in_same_change_group_fails_closed(mode):
+    assert validate_github_anchor(
+        _strict_grammar_patch(mode, "@@ -1,1 +1,1 @@\n+target\n-old\n"),
+        path="src/payments.py",
+        line=1,
+        source_kind="added",
+        head_sha="abc",
+    ) == {"unanchorable": True, "reason": "added_line_not_in_current_diff"}
+
+
+def test_oversized_hunk_number_fails_closed_without_exception():
+    huge = "9" * 5000
+    assert validate_github_anchor(
+        f"@@ -{huge},0 +1,1 @@\n+target\n",
+        path="src/payments.py",
+        line=1,
+        source_kind="added",
+        head_sha="abc",
+    ) == {"unanchorable": True, "reason": "added_line_not_in_current_diff"}
+
+
+def test_headerless_patch_rejects_unknown_text_before_first_hunk():
+    assert validate_github_anchor(
+        "garbage\n@@ -0,0 +1,1 @@\n+target\n",
+        path="src/payments.py",
+        line=1,
+        source_kind="added",
+        head_sha="abc",
+    ) == {"unanchorable": True, "reason": "added_line_not_in_current_diff"}
+
+
+@pytest.mark.parametrize("mode", ["combined", "headerless", "concatenated"])
+@pytest.mark.parametrize(
     "hunks,target_line",
     [
-        ("@@ -5,0 +5,1 @@\n+earlier\n@@ -10,0 +11,1 @@\n+target\n", 11),
-        ("@@ -5,1 +5,0 @@\n-removed\n@@ -10,1 +9,2 @@\n context\n+target\n", 10),
+        ("@@ -4,0 +5,1 @@\n+earlier\n@@ -9,0 +11,1 @@\n+target\n", 11),
+        ("@@ -5,1 +4,0 @@\n-removed\n@@ -10,1 +8,2 @@\n context\n+target\n", 9),
     ],
     ids=("insertions", "deletion-then-addition"),
 )
