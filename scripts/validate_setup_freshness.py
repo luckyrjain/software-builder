@@ -11,7 +11,11 @@ from pathlib import Path
 
 import yaml
 
-from scripts.yaml_safety import YAML_SAFETY_ERRORS, load_unique_yaml_file
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from scripts.yaml_safety import YAML_SAFETY_ERRORS, load_unique_yaml_file  # noqa: E402
 
 _FRESHNESS_HEADING = "## Freshness"
 _LAST_REVIEWED_RE = re.compile(
