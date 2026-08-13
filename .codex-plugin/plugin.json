@@ -1,0 +1,36 @@
+{
+  "name": "software-builder",
+  "version": "0.1.0",
+  "description": "Portable, evidence-driven software delivery skills for code review, incident response, architecture, testing, migrations, release readiness, and implementation workflows.",
+  "author": {
+    "name": "Lucky Jain",
+    "url": "https://github.com/luckyrjain"
+  },
+  "homepage": "https://github.com/luckyrjain/software-builder",
+  "repository": "https://github.com/luckyrjain/software-builder",
+  "keywords": [
+    "software-engineering",
+    "code-review",
+    "incident-response",
+    "architecture",
+    "testing"
+  ],
+  "skills": "./",
+  "interface": {
+    "displayName": "Software Builder",
+    "shortDescription": "Evidence-driven software delivery workflows",
+    "longDescription": "Reusable engineering workflows for reviews, incidents, architecture discovery, testing, migrations, release readiness, and implementation.",
+    "developerName": "Lucky Jain",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/luckyrjain/software-builder",
+    "defaultPrompt": [
+      "Use Software Builder to review this change and report evidence-backed findings.",
+      "Use Software Builder to investigate this incident and produce an evidence-backed RCA.",
+      "Use Software Builder to implement this task with independent review and verification."
+    ]
+  }
+}
