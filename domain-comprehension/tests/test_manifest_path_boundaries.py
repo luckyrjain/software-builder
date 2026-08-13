@@ -56,6 +56,20 @@ def test_rejects_windows_absolute_artifact_root() -> None:
     assert any("engagement.artifact_root must be a relative path" in error for error in errors)
 
 
+def test_rejects_artifact_root_outside_docs() -> None:
+    data = _manifest()
+    data["engagement"]["artifact_root"] = "reports/repayment"
+    errors = validate_manifest(data)
+    assert any("engagement.artifact_root must be inside docs/" in error for error in errors)
+
+
+def test_rejects_docs_root_without_domain_subdirectory() -> None:
+    data = _manifest()
+    data["engagement"]["artifact_root"] = "docs"
+    errors = validate_manifest(data)
+    assert any("engagement.artifact_root must be inside docs/" in error for error in errors)
+
+
 def test_valid_nested_artifact_root_resolves_under_workspace(tmp_path: Path) -> None:
     data = _manifest()
     data["engagement"]["artifact_root"] = "docs/domain-comprehension/repayment"
@@ -66,3 +80,26 @@ def test_valid_nested_artifact_root_resolves_under_workspace(tmp_path: Path) -> 
 
     errors = validate_manifest(data, workspace_root=tmp_path)
     assert not any("domain-config.yaml" in error for error in errors)
+
+
+def test_directory_artifact_uses_is_dir(tmp_path: Path) -> None:
+    data = _manifest()
+    data["engagement"]["artifact_root"] = "docs/domain-comprehension/repayment"
+    artifact = next(item for item in data["artifacts"] if item["id"] == "api_tooling_export")
+    artifact["status"] = "ok"
+    target = tmp_path / "docs" / "domain-comprehension" / "repayment" / "postman"
+    target.mkdir(parents=True)
+
+    errors = validate_manifest(data, workspace_root=tmp_path)
+    assert not any("postman/" in error and "missing on disk" in error for error in errors)
+
+
+def test_distributed_memory_bank_artifact_skips_local_file_check(tmp_path: Path) -> None:
+    data = _manifest()
+    data["engagement"]["artifact_root"] = "docs/domain-comprehension/repayment"
+    artifact = next(item for item in data["artifacts"] if item["id"] == "memory_bank_export")
+    artifact["status"] = "ok"
+    (tmp_path / "docs" / "domain-comprehension" / "repayment").mkdir(parents=True)
+
+    errors = validate_manifest(data, workspace_root=tmp_path)
+    assert not any("memory-bank/" in error and "missing on disk" in error for error in errors)
