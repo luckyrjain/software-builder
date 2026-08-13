@@ -51,15 +51,28 @@ def _combined_sections_complete(lines: list[str]) -> bool:
         body = lines[start + 1 : end]
         if not body:
             return False
-        if any(_hunk_range(raw) is not None for raw in body):
-            continue
+        hunk_indexes = [index for index, raw in enumerate(body) if _hunk_range(raw) is not None]
+        marker_indexes = [
+            index
+            for index, raw in enumerate(body[:-1])
+            if raw.startswith("--- ") and body[index + 1].startswith("+++ ")
+        ]
+        if hunk_indexes:
+            if marker_indexes and marker_indexes[0] < hunk_indexes[0]:
+                continue
+            return False
         if any(raw.startswith("Binary files ") and raw.endswith(" differ") for raw in body):
             continue
         if "GIT binary patch" in body:
             binary_index = body.index("GIT binary patch")
-            if any(
-                raw.startswith(("literal ", "delta "))
-                for raw in body[binary_index + 1 :]
+            size_indexes = [
+                index
+                for index in range(binary_index + 1, len(body))
+                if body[index].startswith(("literal ", "delta "))
+            ]
+            if size_indexes and any(
+                re.fullmatch(r"[A-Za-z][!-~]+", raw) is not None
+                for raw in body[size_indexes[0] + 1 :]
             ):
                 continue
             return False
@@ -76,11 +89,19 @@ def _combined_sections_complete(lines: list[str]) -> bool:
             and any(raw.startswith("copy from ") for raw in body)
             and any(raw.startswith("copy to ") for raw in body)
         )
-        has_empty_file_metadata = (
-            any(raw.startswith(("new file mode ", "deleted file mode ")) for raw in body)
-            and any(raw.startswith("index ") for raw in body)
+        empty_blob = r"e69de29[0-9a-f]*"
+        zero_blob = r"0+"
+        has_new_empty_file = any(raw.startswith("new file mode ") for raw in body) and any(
+            re.fullmatch(rf"index {zero_blob}\.\.{empty_blob}(?: \d+)?", raw) is not None
+            for raw in body
         )
-        if has_mode_pair or has_rename or has_copy or has_empty_file_metadata:
+        has_deleted_empty_file = any(
+            raw.startswith("deleted file mode ") for raw in body
+        ) and any(
+            re.fullmatch(rf"index {empty_blob}\.\.{zero_blob}(?: \d+)?", raw) is not None
+            for raw in body
+        )
+        if has_mode_pair or has_rename or has_copy or has_new_empty_file or has_deleted_empty_file:
             continue
         return False
     return True
@@ -132,6 +153,8 @@ def validate_github_anchor(
     previous_hunk_record: Literal["added", "removed", "context"] | None = None
     old_side_eof = False
     new_side_eof = False
+    last_old_end: int | None = None
+    last_new_end: int | None = None
 
     index = 0
     while index < len(lines):
@@ -149,6 +172,8 @@ def validate_github_anchor(
             previous_hunk_record = None
             old_side_eof = False
             new_side_eof = False
+            last_old_end = None
+            last_new_end = None
             wanted_in_file = False
             index += 1
             continue
@@ -176,6 +201,8 @@ def validate_github_anchor(
             previous_hunk_record = None
             old_side_eof = False
             new_side_eof = False
+            last_old_end = None
+            last_new_end = None
             index += 2
             continue
 
@@ -191,9 +218,16 @@ def validate_github_anchor(
                 index += 1
                 continue
             parser_state = "hunk"
-            _, old_remaining, hunk_start, new_remaining = hunk_range
+            old_start, old_remaining, hunk_start, new_remaining = hunk_range
             if (old_side_eof and old_remaining > 0) or (new_side_eof and new_remaining > 0):
                 malformed_hunk = True
+            if (
+                (last_old_end is not None and old_start < last_old_end)
+                or (last_new_end is not None and hunk_start < last_new_end)
+            ):
+                malformed_hunk = True
+            last_old_end = old_start + old_remaining
+            last_new_end = hunk_start + new_remaining
             new_line = hunk_start if wanted_in_file else None
             previous_hunk_record = None
             index += 1

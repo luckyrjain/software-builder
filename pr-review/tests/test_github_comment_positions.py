@@ -857,8 +857,21 @@ def test_no_newline_diagnostic_is_valid_once_after_a_body_record(mode, hunk_text
         "diff --git a/src/next.py b/src/next.py\n",
         "diff --git a/src/next.py b/src/next.py\n--- a/src/next.py\n",
         "diff --git a/src/next.py b/src/next.py\nindex 1234567..89abcde 100644\n",
+        "diff --git a/src/next.py b/src/next.py\n@@ -1,0 +1,1 @@\n+unmarked\n",
+        "diff --git a/bin.dat b/bin.dat\nGIT binary patch\nliteral 4\n",
+        (
+            "diff --git a/not-empty b/not-empty\nnew file mode 100644\n"
+            "index 0000000..1234567\n"
+        ),
     ],
-    ids=("bare-header", "incomplete-marker-pair", "incomplete-index-header"),
+    ids=(
+        "bare-header",
+        "incomplete-marker-pair",
+        "incomplete-index-header",
+        "unmarked-hunk",
+        "binary-size-without-payload",
+        "nonempty-new-file-metadata",
+    ),
 )
 def test_truncated_trailing_combined_section_invalidates_prior_anchor(trailing_section):
     patch = (
@@ -886,8 +899,12 @@ def test_truncated_trailing_combined_section_invalidates_prior_anchor(trailing_s
         "diff --git a/bin.dat b/bin.dat\nBinary files a/bin.dat and b/bin.dat differ\n",
         "diff --git a/script.sh b/script.sh\nold mode 100644\nnew mode 100755\n",
         "diff --git a/empty b/empty\nnew file mode 100644\nindex 0000000..e69de29\n",
+        (
+            "diff --git a/bin.dat b/bin.dat\nGIT binary patch\nliteral 4\n"
+            "Lc$@<O00001\n"
+        ),
     ],
-    ids=("rename", "binary", "mode-only", "empty-file"),
+    ids=("rename", "binary", "mode-only", "empty-file", "git-binary-payload"),
 )
 def test_recognized_non_hunk_section_does_not_invalidate_prior_anchor(complete_section):
     patch = (
@@ -903,3 +920,46 @@ def test_recognized_non_hunk_section_does_not_invalidate_prior_anchor(complete_s
         source_kind="added",
         head_sha="abc",
     ) == {"commit_id": "abc", "path": "src/payments.py", "line": 1, "side": "RIGHT"}
+
+
+@pytest.mark.parametrize("mode", ["combined", "headerless", "concatenated"])
+@pytest.mark.parametrize(
+    "hunks,target_line",
+    [
+        ("@@ -10,0 +10,1 @@\n+target\n@@ -5,0 +5,1 @@\n+earlier\n", 10),
+        (
+            "@@ -10,2 +10,3 @@\n context\n+target\n trailing\n"
+            "@@ -11,1 +13,1 @@\n overlapping\n",
+            11,
+        ),
+        (
+            "@@ -10,1 +10,2 @@\n context\n+target\n"
+            "@@ -11,1 +11,1 @@\n reverse-new-side\n",
+            11,
+        ),
+    ],
+    ids=("reverse-ordered", "old-range-overlap", "new-range-overlap"),
+)
+def test_hunk_ranges_must_be_monotonic_and_non_overlapping(mode, hunks, target_line):
+    assert validate_github_anchor(
+        _strict_grammar_patch(mode, hunks),
+        path="src/payments.py",
+        line=target_line,
+        source_kind="added",
+        head_sha="abc",
+    ) == {"unanchorable": True, "reason": "added_line_not_in_current_diff"}
+
+
+@pytest.mark.parametrize("mode", ["combined", "headerless", "concatenated"])
+def test_non_overlapping_forward_hunks_remain_anchorable(mode):
+    patch = _strict_grammar_patch(
+        mode,
+        "@@ -5,0 +5,1 @@\n+earlier\n@@ -10,0 +11,1 @@\n+target\n",
+    )
+    assert validate_github_anchor(
+        patch,
+        path="src/payments.py",
+        line=11,
+        source_kind="added",
+        head_sha="abc",
+    ) == {"commit_id": "abc", "path": "src/payments.py", "line": 11, "side": "RIGHT"}
