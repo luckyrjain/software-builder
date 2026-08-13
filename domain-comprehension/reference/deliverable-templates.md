@@ -8,6 +8,7 @@ Normative phase requirements: [phase-outputs.md](phase-outputs.md).
 | File | Populated in |
 |------|--------------|
 | `EXEC_SUMMARY.md` | Session 0 → P5 (evidence summary, time & effort, overall confidence, leader summary) |
+| `PRD.md` | Session 0 stub → P5 synthesis; evidence-backed as-built/current-state requirements for the in-scope service(s) and/or domain |
 | `{map_file}` | All phases (narrative index) |
 | `BOUNDED_CONTEXTS.md` | P0 initial, P1 refined, P4 change impact |
 | `DATA_OWNERSHIP.md` | P1 initial, P3 refined |
@@ -30,6 +31,11 @@ Normative phase requirements: [phase-outputs.md](phase-outputs.md).
 | `PROPOSAL_CHECK_REPORT.md` | Optional — only written when `delivery_mode: PROPOSAL_CHECK` runs; never merged into any other deliverable |
 | `<repo>/memory-bank/*.md` | Optional P5 — per-repo Memory Bank export ([memory-bank-integration.md](memory-bank-integration.md)) |
 | `postman/*` | Optional P5 — Postman/curl export ([api-tooling-integration.md](api-tooling-integration.md)) |
+
+`PRD.md` is an **as-built** artifact. It must preserve the same evidence/confidence discipline as the rest
+of the comprehension set: stable `FR-*`, `BR-*`, and `NFR-*` IDs, traceability to implementation or
+other allowed evidence, and explicit `Inferred`/`Unknown` status where product intent cannot be recovered.
+A future-state product specification remains the responsibility of **prd-architect**.
 
 Export templates (not copied at Session 0): [templates/memory-bank/](../templates/memory-bank/),
 [templates/postman/](../templates/postman/).
@@ -67,13 +73,13 @@ than a per-file enumeration, since the same two render shapes recur across all 2
   Rule 4 documents and incident-rca already applies to a fenced narrative block elsewhere in this skill
   family (its Causal chain/graph node labels).
 - **Every Q&A-style "Answer" column and narrative prose section** — `EXEC_SUMMARY.md`'s Five questions
-  table, the Engineering Leader Summary paragraph, and the equivalent free-text cells/paragraphs in
-  `{map_file}`, `RISK_MAP.md`, `UNKNOWNS.md`, `KNOWN_OMISSIONS.md`, and per-repo deep-dive notes — all
-  carry the same untrusted content class. These are GFM table cells or prose, not identifiers:
-  structurally escape a raw newline, a leading `#`/`>`/`-`, and (in a table cell) the `|` delimiter
-  before writing the value — a GFM table row can't contain a real newline anyway, so this also protects
-  the row from being split by one. Never wrap the whole cell or paragraph in a code span; that would
-  misrepresent an answer or narrative as a single literal token.
+  table, the Engineering Leader Summary paragraph, `PRD.md`'s requirement/rule/constraint cells, and
+  the equivalent free-text cells/paragraphs in `{map_file}`, `RISK_MAP.md`, `UNKNOWNS.md`,
+  `KNOWN_OMISSIONS.md`, and per-repo deep-dive notes — all carry the same untrusted content class. These
+  are GFM table cells or prose, not identifiers: structurally escape a raw newline, a leading `#`/`>`/`-`,
+  and (in a table cell) the `|` delimiter before writing the value — a GFM table row can't contain a real
+  newline anyway, so this also protects the row from being split by one. Never wrap the whole cell or
+  paragraph in a code span; that would misrepresent an answer or narrative as a single literal token.
 - **Short identifier fields** (repo names, tier labels, SHAs, file paths in the Repo map table) are
   drawn from the workspace's own filesystem/git state, not analyzed narrative content, and the existing
   templates already render them as plain table values with no legitimate reason to contain Markdown
