@@ -8,6 +8,41 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 
 ## Platform
 
+### Wire package_skill's integrity manifest into install verify (2026-08-12)
+
+- `package_skill.py` computes a sha256 per file into `.software-builder-manifest.json`
+  (ADR 0002's "integrity metadata for support/debugging"), but `cmd_verify` — the
+  implementation behind the user-facing `install.sh --verify <path>` command — never read
+  `manifest["files"]` at all. Proven by the repo's own pre-existing test: it wrote a
+  manifest claiming SKILL.md's hash was `"deadbeef"` for a file whose real content hashed to
+  something else entirely, and `cmd_verify` still returned 0. The sha256 computation was
+  write-only, with zero leverage — the interface name promised integrity checking, nothing
+  underneath it did that.
+- Wired `_verify_manifest_files` into `cmd_verify`, checking all three directions the
+  installed directory can drift from what was packaged: a manifest-listed file missing from
+  disk, a hash mismatch, and a file present on disk but not tracked in the manifest.
+  Verified end to end against a real packaged skill: clean package verifies ok, a one-byte
+  tamper is caught with an exact hash-mismatch message, an untracked extra file is caught too.
+- Five review rounds against the initial implementation found and fixed real bugs before merge:
+  a symlink anywhere under an installed package used to be silently hashed through instead of
+  rejected (an arbitrary-file-read risk); `__pycache__`/`.DS_Store`/editor-swap noise that
+  legitimately appears after install used to fail verification as tampering; `package_skill.py`'s
+  `shutil.copytree` ignore list and `install_support.py`'s verify-time ignore check were two
+  independently-maintained mechanisms that disagreed on matching granularity and which call
+  sites even applied the filter, so a source file could pass packaging and still fail verify —
+  fixed by adding `copytree_ignore()` so both sides share one decision function
+  (`is_ignored_package_path()`); that fix in turn crashed on a symlinked source subdirectory
+  until the ignore-callback stopped resolving paths shutil itself never resolves; FIFOs/sockets/
+  device nodes used to evade verification entirely (neither hashed nor flagged); a symlinked
+  manifest-listed file used to print two contradictory errors for one cause;
+  `install_support.py`'s new manifest-field validation surfaced a pre-existing, unrelated crash
+  in `doctor.py` on a manifest with an explicit null `source_sha`/`distribution_version`, fixed
+  the same way; and `cmd_verify` crashed with an uncaught `AttributeError` on a manifest file
+  containing valid-but-non-object JSON (an array, string, number, or null), since `.get("skill")`
+  was called with no `isinstance(manifest, dict)` guard. Full suite
+  (`python3 -m pytest scripts/tests/`) at 507/507, `make validate-registry` and `make validate-evals`
+  both pass.
+
 ### Split validate_registry's 11 inlined concerns into named sub-checks (2026-08-12)
 
 - `crosscheck.py`'s `validate_registry` was one ~70-line function inlining every facet of the

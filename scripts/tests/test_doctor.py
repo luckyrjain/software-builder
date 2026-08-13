@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -173,3 +174,56 @@ def test_doctor_ready_for_complete_gitlab_read_and_write_path(capsys) -> None:
     )
     assert code == 0
     assert "pr-review: READY" in capsys.readouterr().out
+
+
+def test_doctor_handles_null_source_sha_in_manifest(tmp_path, capsys) -> None:
+    from scripts.doctor import cmd_doctor
+    from scripts.reference_utils import MANIFEST_NAME
+    from scripts.release_info import read_distribution_version
+
+    distribution_version = read_distribution_version(ROOT)
+
+    skill_dest = tmp_path / "pr-review"
+    skill_dest.mkdir()
+    manifest_path = skill_dest / MANIFEST_NAME
+    manifest_path.write_text(
+        json.dumps({"distribution_version": distribution_version, "source_sha": None}),
+        encoding="utf-8",
+    )
+
+    code = cmd_doctor(
+        ROOT,
+        skill_filter="pr-review",
+        available=None,
+        install_roots=[tmp_path],
+    )
+
+    output = capsys.readouterr().out
+    assert "pr-review: UNSPECIFIED" in output
+    assert f"install: installed ({distribution_version} @ unknown)" in output
+    assert code == 0
+
+
+def test_doctor_handles_null_distribution_version_in_manifest(tmp_path, capsys) -> None:
+    from scripts.doctor import cmd_doctor
+    from scripts.reference_utils import MANIFEST_NAME
+
+    skill_dest = tmp_path / "pr-review"
+    skill_dest.mkdir()
+    manifest_path = skill_dest / MANIFEST_NAME
+    manifest_path.write_text(
+        json.dumps({"distribution_version": None, "source_sha": "deadbeefcafef00d1234"}),
+        encoding="utf-8",
+    )
+
+    code = cmd_doctor(
+        ROOT,
+        skill_filter="pr-review",
+        available=None,
+        install_roots=[tmp_path],
+    )
+
+    output = capsys.readouterr().out
+    assert "install: installed (unknown @ deadbeefcafe)" in output
+    assert "pr-review: VERSION_MISMATCH" in output
+    assert code == 1

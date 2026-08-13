@@ -12,11 +12,11 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from scripts.reference_utils import MANIFEST_NAME
 from scripts.registry.models import CapabilityPath
 from scripts.registry.schema import parse_registry
 from scripts.release_info import read_distribution_version
 
-MANIFEST_NAME = ".software-builder-manifest.json"
 
 
 def _installed_manifest(skill_dest: Path) -> dict[str, object] | None:
@@ -98,8 +98,10 @@ def cmd_doctor(
             manifest = _installed_manifest(dest)
             if manifest is None:
                 continue
-            installed_version = manifest.get("distribution_version", "unknown")
-            installed_sha = manifest.get("source_sha", "unknown")
+            installed_version = manifest.get("distribution_version")
+            installed_version = installed_version if isinstance(installed_version, str) else "unknown"
+            installed_sha = manifest.get("source_sha")
+            installed_sha = installed_sha if isinstance(installed_sha, str) else "unknown"
             installed_label = f"installed ({installed_version} @ {installed_sha[:12]})"
             if installed_version != distribution_version:
                 status = "VERSION_MISMATCH"
