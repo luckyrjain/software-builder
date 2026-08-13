@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -159,13 +160,12 @@ def test_verify_manifest_files_symlinked_manifest_entry_reported_once(tmp_path: 
     assert len(errors) == 1
 
 
+@pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="os.mkfifo unavailable on this platform")
 def test_verify_manifest_files_rejects_fifo(tmp_path: Path) -> None:
     # Neither is_file() nor is_symlink() is True for a FIFO/socket/device node,
     # so it used to fall through both checks entirely -- silently untracked
     # and unverified, defeating the "installed dir is byte-identical to what
     # was packaged" guarantee this function exists to enforce.
-    import os
-
     from scripts.install_support import _verify_manifest_files
 
     (tmp_path / "SKILL.md").write_text(_SKILL_MD_CONTENT, encoding="utf-8")

@@ -53,11 +53,21 @@ def copytree_ignore(root: Path):
     verify time, or vice versa. Routing copytree itself through
     is_ignored_package_path() makes packaging and verification share the
     exact same decision function instead of just the same constants.
+
+    Deliberately does not call .resolve() on `root` or on the `directory`
+    shutil passes into ignore(): shutil.copytree builds every recursive
+    `directory` argument by joining path components onto the exact `root`
+    object passed to it, without ever resolving symlinks -- including when
+    it follows a symlinked subdirectory (its default, since copytree() is
+    called with symlinks=False at both call sites). Resolving here would
+    make `directory` jump to the symlink's real target while `root` stays
+    put, so relative_to(root) raises ValueError for any path reached through
+    a symlinked subdirectory. Comparing both unresolved keeps them on the
+    same textual prefix that shutil itself guarantees.
     """
-    root = root.resolve()
 
     def ignore(directory: str, names: list[str]) -> set[str]:
-        dir_path = Path(directory).resolve()
+        dir_path = Path(directory)
         return {
             name
             for name in names
