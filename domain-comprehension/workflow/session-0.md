@@ -1,5 +1,5 @@
 ---
-workflow_version: 1.4
+workflow_version: 1.5
 phase: session-0
 produces:
   - domain_config_yaml
@@ -25,15 +25,30 @@ Large workspace (100+ repos): read [large-scale-execution.md](../reference/large
 
 ## Steps
 
-1. Resolve `domain_slug` from the requested/configured domain name. Set `scope.artifact_root` to `docs/domain-comprehension/<domain_slug>` unless the caller supplied another relative path. **Create that directory when absent.** For parallel runs, append a stable run id per [run-scoped-artifacts.md](../reference/run-scoped-artifacts.md). `manifest.yaml` remains at `workspace_root` as machine state.
-2. **Create or load `domain-config.yaml` inside `artifact_root`** per [domain-config-schema.md](../reference/domain-config-schema.md), copying [templates/domain-config.yaml](../templates/domain-config.yaml) when absent. Merge a domain pack if specified.
-3. **Repo/module census** — every in-scope unit, ascending by name. Record purpose, language, branch, SHA, provisional tier, [classification](../reference/repo-classification.md), and evidence. Existing Memory Bank content is LOW evidence until corroborated.
-4. Apply scope filters: `include_keywords`, `exclude_patterns`, `seed_repos`, `default_excluded_classifications`, and conditional-repo evidence gates.
-5. Record deliberate exclusions in `KNOWN_OMISSIONS.md`; missing knowledge belongs in `UNKNOWNS.md`. Detect near-duplicate repos and flag them.
+1. Resolve `domain_slug` from the requested/configured domain name using the single-segment safety rule in
+   [run-scoped-artifacts.md](../reference/run-scoped-artifacts.md). Set `scope.artifact_root` to
+   `docs/domain-comprehension/<domain_slug>` unless the caller supplied another safe relative path.
+   **Create that directory when absent.** For parallel runs, append a safe stable run id. `manifest.yaml`
+   remains at `workspace_root` as machine state.
+2. **Create or load `domain-config.yaml` inside `artifact_root`** per
+   [domain-config-schema.md](../reference/domain-config-schema.md), copying
+   [templates/domain-config.yaml](../templates/domain-config.yaml) when absent. Merge a domain pack if
+   specified, then write the resolved relative path into `scope.artifact_root`; do not leave the template's
+   empty placeholder or a path that differs from the manifest value.
+3. **Repo/module census** — every in-scope unit, ascending by name. Record purpose, language, branch, SHA,
+   provisional tier, [classification](../reference/repo-classification.md), and evidence. Existing Memory
+   Bank content is LOW evidence until corroborated.
+4. Apply scope filters: `include_keywords`, `exclude_patterns`, `seed_repos`,
+   `default_excluded_classifications`, and conditional-repo evidence gates.
+5. Record deliberate exclusions in `KNOWN_OMISSIONS.md`; missing knowledge belongs in `UNKNOWNS.md`.
+   Detect near-duplicate repos and flag them.
 6. Invoke [session-0b.md](session-0b.md) for squad enrichment. It may run in parallel with the keyword sweep.
 7. Run [search-playbook.md](../reference/search-playbook.md) for the five questions; record top evidence hits.
 8. Draft five answers in `EXEC_SUMMARY.md`; initialize evidence summary and overall confidence.
-9. **Create deliverables:** copy all domain artifact templates into `artifact_root`; copy `manifest.yaml` to `workspace_root` only. Do not place generated domain Markdown/config files at workspace root. Set `manifest.yaml engagement.artifact_root` to the resolved relative path; initialize artifact status/evidence counters.
+9. **Create deliverables:** copy all domain artifact templates into `artifact_root`; copy `manifest.yaml` to
+   `workspace_root` only. Do not place generated domain Markdown/config files at workspace root. Set root
+   `manifest.yaml engagement.artifact_root` to exactly the same resolved relative path written to
+   `domain-config.yaml scope.artifact_root`; initialize artifact status/evidence counters.
 10. Before P0.5, report repo count by tier/classification and obtain mechanical-analysis scope approval.
 11. Update `manifest.yaml` and run the [phase-completion-gate.md](../reference/phase-completion-gate.md).
 
@@ -41,14 +56,14 @@ Large workspace (100+ repos): read [large-scale-execution.md](../reference/large
 
 | Artifact | Location | Key fields | If absent |
 |----------|----------|------------|-----------|
-| Domain config | `{artifact_root}/domain-config.yaml` | All schema fields/defaults | Phase incomplete |
+| Domain config | `{artifact_root}/domain-config.yaml` | All schema fields/defaults; `scope.artifact_root` matches manifest | Phase incomplete |
 | Workspace inventory | `{artifact_root}/PROGRESS.md` § Repo status | Repo, branch, SHA, tier, classification | Phase incomplete |
 | Known omissions | `{artifact_root}/KNOWN_OMISSIONS.md` | MCP gaps, bulk excludes | Phase incomplete |
 | Entry services | `{artifact_root}/{map_file}` § Inventory | Repo, entry-point type, file path | Phase incomplete |
 | Initial unknowns | `{artifact_root}/UNKNOWNS.md` | Five questions DRAFT in summary | Phase incomplete |
 | Evidence summary | `{artifact_root}/EXEC_SUMMARY.md` + manifest | Counters initialized | Phase incomplete |
 | Deliverable stubs | All domain templates under `artifact_root` | Non-empty headers | Phase incomplete |
-| `manifest.yaml` | workspace root | schema_version: 2, artifact_root set | Phase incomplete |
+| `manifest.yaml` | workspace root | schema_version: 2, artifact_root set and matching config | Phase incomplete |
 
 ## Classification
 
