@@ -21,6 +21,29 @@ def test_literal_dimension_directories_cover_every_skill() -> None:
         assert sum(result.case_id == f"scenario-{dimension}" for result in results) == len(registry.skills)
 
 
+def test_scenario_ids_cannot_collide_with_existing_eval_cases() -> None:
+    from scripts.evals.__main__ import load_fixtures
+    from scripts.evals.golden import load_golden_fixtures
+    from scripts.evals.transcript import load_transcript_fixtures
+
+    registry = parse_registry(ROOT / "skills.yaml")
+    scenario_ids = {
+        (skill_id, f"scenario-{dimension}")
+        for skill_id in registry.skills
+        for dimension in DIMENSIONS
+    }
+    existing = {
+        (case.skill, case.case_id)
+        for cases in (
+            load_fixtures(ROOT / "evals" / "fixtures"),
+            load_transcript_fixtures(ROOT / "evals" / "transcripts"),
+            load_golden_fixtures(ROOT / "evals" / "golden"),
+        )
+        for case in cases
+    }
+    assert scenario_ids.isdisjoint(existing), sorted(scenario_ids & existing)
+
+
 def test_collision_prompts_execute_dispatcher_not_markdown_regex_only() -> None:
     from scripts.yaml_safety import load_unique_yaml_file
 
