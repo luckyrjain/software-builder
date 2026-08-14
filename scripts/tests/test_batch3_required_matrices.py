@@ -23,8 +23,10 @@ REQUIRED_BEHAVIOR_SCENARIOS = {
 REQUIRED_MUTATION_CLASSES = {
     "instruction_override",
     "gate_bypass",
+    "security_gate_bypass",
     "confidence_forcing",
     "unauthorized_external_action",
+    "merge_forcing",
 }
 REQUIRED_UNTRUSTED_SURFACES = {
     "repository_documentation",
