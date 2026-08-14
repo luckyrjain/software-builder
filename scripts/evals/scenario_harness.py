@@ -4,16 +4,17 @@ Loads literal evals/{positive,negative,ambiguous,adversarial,degraded}/cases.yam
 and executes each case against the deterministic dispatcher or capability-loss
 simulator. Every dimension must contain exactly one scenario for every
 registered skill; missing/duplicate skills fail closed. Adversarial cases also
-execute one guardrail golden per skill; degraded scenarios must match the
-canonical per-skill degraded_behavior.yaml policy.
+require one passing guardrail golden per skill; degraded scenarios must match
+the canonical per-skill degraded_behavior.yaml policy.
 """
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
-from scripts.evals.dispatcher import dispatch_prompt, simulate_capability_loss
+from scripts.evals.dispatcher import RoutingRule, dispatch_with_rules, load_routing_rules, simulate_capability_loss
 from scripts.evals.golden import GoldenCase, load_golden_fixtures, run_golden_case
 from scripts.evals.types import EvalResult
 from scripts.registry.schema import Registry
@@ -71,18 +72,18 @@ def _load_degraded_policy(root: Path, registry: Registry) -> dict[str, dict[str,
 
 
 def _routing_case(
-    root: Path,
-    registry: Registry,
+    rules: dict[str, RoutingRule],
     dimension: str,
     case: dict[str, Any],
     golden_by_ref: dict[str, GoldenCase],
+    golden_results: dict[str, EvalResult],
 ) -> EvalResult:
     skill = str(case["skill"])
     prompt = case.get("prompt")
     messages: list[str] = []
     if not isinstance(prompt, str) or not prompt.strip():
         return EvalResult(skill, f"scenario-{dimension}", False, ["prompt must be non-empty"])
-    result = dispatch_prompt(root, registry, prompt)
+    result = dispatch_with_rules(rules, prompt)
     expected_status = case.get("expected_status")
     if result.status != expected_status:
         messages.append(f"dispatch status {result.status!r} != expected {expected_status!r}; candidates={list(result.candidates)}")
@@ -100,9 +101,7 @@ def _routing_case(
         if not isinstance(expected_candidates, list) or not all(isinstance(item, str) for item in expected_candidates):
             messages.append("expected_candidates must be a string list")
         elif tuple(sorted(result.candidates)) != tuple(sorted(expected_candidates)):
-            messages.append(
-                f"dispatch candidates {sorted(result.candidates)} != expected {sorted(expected_candidates)}",
-            )
+            messages.append(f"dispatch candidates {sorted(result.candidates)} != expected {sorted(expected_candidates)}")
     if dimension == "adversarial":
         golden_ref = case.get("golden_ref")
         if not isinstance(golden_ref, str) or not golden_ref:
@@ -114,11 +113,11 @@ def _routing_case(
             elif golden.skill != skill:
                 messages.append(f"adversarial golden {golden_ref} belongs to {golden.skill}, not {skill}")
             else:
-                golden_result = run_golden_case(golden)
+                golden_result = golden_results.get(golden_ref)
+                if golden_result is None:
+                    golden_result = run_golden_case(golden)
                 if not golden_result.passed:
-                    messages.append(
-                        f"adversarial golden is failing: {golden_ref}: {'; '.join(golden_result.messages)}",
-                    )
+                    messages.append(f"adversarial golden is failing: {golden_ref}: {'; '.join(golden_result.messages)}")
     return EvalResult(skill, f"scenario-{dimension}", not messages, messages)
 
 
@@ -136,15 +135,12 @@ def _degraded_case(registry: Registry, case: dict[str, Any], policy: dict[str, d
         messages.append(f"invalid expected_behavior {expected!r}")
 
     declared = policy[skill]
-    declared_missing = declared.get("missing_capability")
-    declared_available = declared.get("available_capabilities")
-    declared_behavior = declared.get("behavior")
-    if missing != declared_missing:
-        messages.append(f"scenario missing_capability {missing!r} != declared policy {declared_missing!r}")
-    if available != declared_available:
-        messages.append(f"scenario available_capabilities {available!r} != declared policy {declared_available!r}")
-    if expected != declared_behavior:
-        messages.append(f"scenario expected_behavior {expected!r} != declared policy {declared_behavior!r}")
+    if missing != declared.get("missing_capability"):
+        messages.append(f"scenario missing_capability {missing!r} != declared policy {declared.get('missing_capability')!r}")
+    if available != declared.get("available_capabilities"):
+        messages.append(f"scenario available_capabilities {available!r} != declared policy {declared.get('available_capabilities')!r}")
+    if expected != declared.get("behavior"):
+        messages.append(f"scenario expected_behavior {expected!r} != declared policy {declared.get('behavior')!r}")
 
     if messages:
         return EvalResult(skill, "scenario-degraded", False, messages)
@@ -156,17 +152,27 @@ def _degraded_case(registry: Registry, case: dict[str, Any], policy: dict[str, d
     return EvalResult(skill, "scenario-degraded", not messages, messages)
 
 
-def run_per_skill_scenarios(root: Path, registry: Registry) -> list[EvalResult]:
+def run_per_skill_scenarios(
+    root: Path,
+    registry: Registry,
+    *,
+    case_results: Iterable[EvalResult] | None = None,
+    golden_cases: Iterable[GoldenCase] | None = None,
+) -> list[EvalResult]:
     results: list[EvalResult] = []
+    rules = load_routing_rules(root, registry)
     degraded_policy = _load_degraded_policy(root, registry)
-    golden_by_ref = {
-        f"{case.skill}/{case.case_id}": case
-        for case in load_golden_fixtures(root / "evals" / "golden")
+    golden_list = list(golden_cases) if golden_cases is not None else load_golden_fixtures(root / "evals" / "golden")
+    golden_by_ref = {f"{case.skill}/{case.case_id}": case for case in golden_list}
+    golden_results = {
+        f"{result.skill}/{result.case_id}": result
+        for result in (case_results or [])
+        if f"{result.skill}/{result.case_id}" in golden_by_ref
     }
     for dimension in DIMENSIONS:
         for case in _load_cases(root, dimension, registry):
             if dimension == "degraded":
                 results.append(_degraded_case(registry, case, degraded_policy))
             else:
-                results.append(_routing_case(root, registry, dimension, case, golden_by_ref))
+                results.append(_routing_case(rules, dimension, case, golden_by_ref, golden_results))
     return results
