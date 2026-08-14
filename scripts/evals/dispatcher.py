@@ -74,10 +74,9 @@ def load_routing_rules(root: Path, registry: Registry) -> dict[str, RoutingRule]
     return compiled
 
 
-def dispatch_prompt(root: Path, registry: Registry, prompt: str) -> DispatchResult:
+def dispatch_with_rules(rules: dict[str, RoutingRule], prompt: str) -> DispatchResult:
     if not isinstance(prompt, str) or not prompt.strip():
         return DispatchResult("no_match", ())
-    rules = load_routing_rules(root, registry)
     matches = tuple(
         skill_id
         for skill_id, rule in sorted(rules.items())
@@ -89,6 +88,10 @@ def dispatch_prompt(root: Path, registry: Registry, prompt: str) -> DispatchResu
     if len(matches) == 1:
         return DispatchResult("selected", matches)
     return DispatchResult("ambiguous", matches)
+
+
+def dispatch_prompt(root: Path, registry: Registry, prompt: str) -> DispatchResult:
+    return dispatch_with_rules(load_routing_rules(root, registry), prompt)
 
 
 def simulate_capability_loss(registry: Registry, skill_id: str, missing: str, available: list[str]) -> str:
