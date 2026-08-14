@@ -12,6 +12,7 @@ remain the place to measure model judgement and prompt quality.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
@@ -60,7 +61,7 @@ def _positive_case(skill_id: str, results: dict[str, EvalResult]) -> EvalResult:
     return _result("batch3-positive", messages, skill=skill_id)
 
 
-def _negative_case(root: Path, registry: Registry, skill_id: str, platform: dict[str, Any]) -> EvalResult:
+def _negative_case(registry: Registry, skill_id: str, platform: dict[str, Any]) -> EvalResult:
     """Verify the skill cannot silently widen its declared authority boundary."""
     messages: list[str] = []
     permissions = require_mapping(platform.get("skill_permissions"), "skill_permissions")
@@ -150,7 +151,7 @@ def _all_skill_dimensions(
         output.extend(
             [
                 _positive_case(skill_id, results),
-                _negative_case(root, registry, skill_id, platform),
+                _negative_case(registry, skill_id, platform),
                 _ambiguous_case(root, registry, skill_id, composition),
                 _adversarial_case(root, registry, skill_id, results),
                 _degraded_case(registry, skill_id),
@@ -219,6 +220,63 @@ def _referenced_matrix(
     return _result(case_id, messages)
 
 
+def _mutation_anchor_matrix(
+    root: Path,
+    results: dict[str, EvalResult],
+    golden_cases: Iterable[GoldenCase],
+) -> EvalResult:
+    """Prove each mutation class is anchored to genuinely dangerous fixture input."""
+    contract = require_mapping(
+        load_unique_yaml_file(root / "scripts" / "registry" / "eval_contracts.yaml"),
+        "eval contracts",
+    )
+    adversarial = require_mapping(contract.get("adversarial_classes"), "adversarial_classes")
+    anchor_doc = require_mapping(
+        load_unique_yaml_file(root / "scripts" / "registry" / "mutation_anchors.yaml"),
+        "mutation anchors",
+    )
+    if anchor_doc.get("schema_version") != 1:
+        return _result("mutation-anchor-matrix", ["mutation_anchors.schema_version must be 1"])
+    anchors = require_mapping(anchor_doc.get("anchors"), "mutation anchors.anchors")
+    messages: list[str] = []
+    if set(anchors) != set(adversarial):
+        messages.append(
+            "mutation anchor classes must exactly match adversarial_classes; "
+            f"missing={sorted(set(adversarial) - set(anchors))}, extra={sorted(set(anchors) - set(adversarial))}",
+        )
+
+    golden_by_ref = {f"{case.skill}/{case.case_id}": case for case in golden_cases}
+    for class_id, raw in sorted(anchors.items()):
+        config = require_mapping(raw, f"mutation anchors.{class_id}")
+        case_ref = config.get("case_ref")
+        raw_pattern = config.get("raw_pattern")
+        if not isinstance(case_ref, str) or not case_ref:
+            messages.append(f"{class_id}: case_ref is required")
+            continue
+        if not isinstance(raw_pattern, str) or not raw_pattern:
+            messages.append(f"{class_id}: raw_pattern is required")
+            continue
+        result = results.get(case_ref)
+        if result is None:
+            messages.append(f"{class_id}: anchored eval result is missing: {case_ref}")
+            continue
+        if not result.passed:
+            messages.append(f"{class_id}: anchored eval result is failing: {case_ref}")
+        fixture = golden_by_ref.get(case_ref)
+        if fixture is None:
+            messages.append(f"{class_id}: anchor must reference a golden fixture: {case_ref}")
+            continue
+        try:
+            fixture_text = fixture.path.read_text(encoding="utf-8")
+            if not re.search(raw_pattern, fixture_text, flags=re.IGNORECASE | re.MULTILINE):
+                messages.append(
+                    f"{class_id}: anchored fixture does not contain dangerous raw pattern {raw_pattern!r}",
+                )
+        except re.error as exc:
+            messages.append(f"{class_id}: invalid raw_pattern {raw_pattern!r}: {exc}")
+    return _result("mutation-anchor-matrix", messages)
+
+
 def _routing_matrix(root: Path, results: dict[str, EvalResult]) -> EvalResult:
     contract = require_mapping(
         load_unique_yaml_file(root / "scripts" / "registry" / "eval_contracts.yaml"),
@@ -251,9 +309,10 @@ def run_batch3_contract_checks(
 ) -> list[EvalResult]:
     """Run Batch 3 completeness checks after the existing deterministic harness."""
     result_map = _result_map(case_results)
+    golden_list = list(golden_cases)
     return [
         *_all_skill_dimensions(root, registry, result_map),
-        _all_skill_golden(registry, result_map, golden_cases),
+        _all_skill_golden(registry, result_map, golden_list),
         _routing_matrix(root, result_map),
         _referenced_matrix(
             root,
@@ -262,6 +321,7 @@ def run_batch3_contract_checks(
             case_id="mutation-matrix",
             require_mutation=True,
         ),
+        _mutation_anchor_matrix(root, result_map, golden_list),
         _referenced_matrix(
             root,
             result_map,
