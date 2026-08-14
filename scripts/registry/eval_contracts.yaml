@@ -35,7 +35,7 @@ routing_collisions:
     route_pattern: "Review PRD, PRD gaps"
     expected_owner: prd-architect
   - id: pr-number-review
-    prompt: Review PR #123 for correctness and regressions.
+    prompt: "Review PR #123 for correctness and regressions."
     prompt_class: review numbered pull request
     prompt_pattern: "Review PR #123"
     route_pattern: "Review PR/MR, review pull request"
