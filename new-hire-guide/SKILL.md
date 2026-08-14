@@ -1,5 +1,6 @@
 ---
 name: new-hire-guide
+platform_contract: skill-platform-v1
 description: >-
   Personalized onboarding tour for a NAMED new engineer joining a squad — resolves their squad's
   repos/services via squad-map, runs domain-comprehension (unscoped), and curates the result into a
