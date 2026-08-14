@@ -15,18 +15,13 @@ from typing import Any, Iterable
 from scripts.evals.types import EvalResult
 from scripts.registry.schema import Registry
 from scripts.yaml_safety import load_unique_yaml_file
+from scripts.yaml_safety import require_mapping as _as_mapping
 
 PLATFORM_SKILL = "platform"
 
 
 def _result(case_id: str, messages: list[str]) -> EvalResult:
     return EvalResult(PLATFORM_SKILL, case_id, not messages, messages)
-
-
-def _as_mapping(value: Any, label: str) -> dict[str, Any]:
-    if not isinstance(value, dict):
-        raise ValueError(f"{label} must be a mapping")
-    return value
 
 
 def _as_string_list(value: Any, label: str) -> list[str]:

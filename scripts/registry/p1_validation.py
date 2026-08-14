@@ -4,9 +4,10 @@ from pathlib import Path
 from typing import Any
 
 from scripts.registry.frontmatter import load_skill_frontmatter
+from scripts.registry.models import Registry
 from scripts.registry.schema import parse_registry
 from scripts.registry.skill_frontmatter_schema import PLATFORM_CONTRACT
-from scripts.yaml_safety import YAML_SAFETY_ERRORS, load_unique_yaml_file
+from scripts.yaml_safety import YAML_SAFETY_ERRORS, load_unique_yaml_file, require_mapping
 
 RUNTIME_DOCS = {"runtime-contract.md", "host-adapter-contract.md", "eval-contract.md"}
 RESULT_FIELDS = {"skill", "version", "status", "confidence", "source_revision", "evidence_status", "artifacts", "blockers", "recommended_next_skill"}
@@ -22,12 +23,6 @@ REPOSITORY_PERMISSIONS = {"read", "write"}
 EXTERNAL_PERMISSIONS = {"none", "read", "write"}
 
 
-def _mapping(value: Any, label: str) -> dict[str, Any]:
-    if not isinstance(value, dict):
-        raise ValueError(f"{label} must be a mapping")
-    return value
-
-
 def _strings(value: Any, label: str) -> set[str]:
     if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
         raise ValueError(f"{label} must be a list of strings")
@@ -41,10 +36,9 @@ def _require_v1(data: dict[str, Any], label: str) -> None:
         raise ValueError(f"{label}.schema_version must be 1")
 
 
-def _validate_platform_markers(root: Path) -> list[str]:
+def _validate_platform_markers(root: Path, registry: Registry) -> list[str]:
     """Every skill in a P1-enabled repository must visibly declare the contract it inherits."""
     errors: list[str] = []
-    registry = parse_registry(root / "skills.yaml")
     for skill_id, entry in sorted(registry.skills.items()):
         frontmatter = load_skill_frontmatter(root / entry.path / "SKILL.md")
         actual = frontmatter.get("platform_contract")
@@ -55,11 +49,10 @@ def _validate_platform_markers(root: Path) -> list[str]:
     return errors
 
 
-def _validate_permissions(root: Path, platform: dict[str, Any]) -> list[str]:
+def _validate_permissions(registry: Registry, platform: dict[str, Any]) -> list[str]:
     errors: list[str] = []
-    registry = parse_registry(root / "skills.yaml")
     skill_ids = set(registry.skills)
-    schema = _mapping(platform.get("permission_schema"), "permission_schema")
+    schema = require_mapping(platform.get("permission_schema"), "permission_schema")
     if _strings(schema.get("required_fields"), "permission fields") != PERMISSION_FIELDS:
         errors.append("error: P1 permission fields drift")
     if _strings(schema.get("repository_values"), "repository permission values") != REPOSITORY_PERMISSIONS:
@@ -67,7 +60,7 @@ def _validate_permissions(root: Path, platform: dict[str, Any]) -> list[str]:
     if _strings(schema.get("external_action_values"), "external permission values") != EXTERNAL_PERMISSIONS:
         errors.append("error: P1 external permission values drift")
 
-    permissions = _mapping(platform.get("skill_permissions"), "skill_permissions")
+    permissions = require_mapping(platform.get("skill_permissions"), "skill_permissions")
     if set(permissions) != skill_ids:
         missing = sorted(skill_ids - set(permissions))
         extra = sorted(set(permissions) - skill_ids)
@@ -77,7 +70,7 @@ def _validate_permissions(root: Path, platform: dict[str, Any]) -> list[str]:
             errors.append("error: P1 permissions unknown skills: " + ", ".join(extra))
 
     for skill_id in sorted(skill_ids & set(permissions)):
-        permission = _mapping(permissions[skill_id], f"skill_permissions.{skill_id}")
+        permission = require_mapping(permissions[skill_id], f"skill_permissions.{skill_id}")
         if set(permission) != PERMISSION_FIELDS:
             errors.append(f"error: {skill_id}: permissions must declare every field exactly once")
             continue
@@ -103,43 +96,44 @@ def _validate_permissions(root: Path, platform: dict[str, Any]) -> list[str]:
 def validate_p1_contracts(root: Path) -> list[str]:
     try:
         errors: list[str] = []
-        platform = _mapping(load_unique_yaml_file(root / "scripts/registry/platform_contracts.yaml"), "platform contracts")
+        registry = parse_registry(root / "skills.yaml")
+        platform = require_mapping(load_unique_yaml_file(root / "scripts/registry/platform_contracts.yaml"), "platform contracts")
         _require_v1(platform, "platform contracts")
-        errors.extend(_validate_platform_markers(root))
-        result = _mapping(platform.get("result_envelope"), "result_envelope")
+        errors.extend(_validate_platform_markers(root, registry))
+        result = require_mapping(platform.get("result_envelope"), "result_envelope")
         if _strings(result.get("required_fields"), "result fields") != RESULT_FIELDS:
             errors.append("error: P1 result envelope fields drift")
-        handoff = _mapping(platform.get("handoff"), "handoff")
+        handoff = require_mapping(platform.get("handoff"), "handoff")
         if _strings(handoff.get("required_fields"), "handoff fields") != HANDOFF_FIELDS:
             errors.append("error: P1 handoff fields drift")
-        execution = _mapping(platform.get("execution_context"), "execution_context")
+        execution = require_mapping(platform.get("execution_context"), "execution_context")
         if _strings(execution.get("required_fields"), "execution fields") != EXECUTION_FIELDS or execution.get("default_max_depth") != 3:
             errors.append("error: P1 recursion contract drift")
-        states = _mapping(platform.get("state_semantics"), "state_semantics")
+        states = require_mapping(platform.get("state_semantics"), "state_semantics")
         if _strings(states.get("values"), "state values") != STATE_VALUES:
             errors.append("error: P1 state semantics drift")
-        resolution = _mapping(platform.get("input_resolution"), "input_resolution")
+        resolution = require_mapping(platform.get("input_resolution"), "input_resolution")
         if resolution.get("order") != ["supplied_facts", "retrievable_authoritative_context", "safe_reversible_defaults", "focused_question"]:
             errors.append("error: P1 input resolution order drift")
         if platform.get("source_precedence") != ["runtime_authoritative_state", "executable_code_config_contracts", "tests_and_executable_examples", "version_controlled_technical_docs", "tickets_and_design_docs", "human_prose_and_comments"]:
             errors.append("error: P1 source precedence drift")
-        errors.extend(_validate_permissions(root, platform))
+        errors.extend(_validate_permissions(registry, platform))
 
-        hosts = _mapping(load_unique_yaml_file(root / "scripts/registry/host_contracts.yaml"), "host contracts")
+        hosts = require_mapping(load_unique_yaml_file(root / "scripts/registry/host_contracts.yaml"), "host contracts")
         _require_v1(hosts, "host contracts")
         if _strings(hosts.get("capability_families"), "host capability families") != HOST_CAPABILITIES:
             errors.append("error: P1 host capability families drift")
         if _strings(hosts.get("allowed_support"), "host support values") != SUPPORT_VALUES:
             errors.append("error: P1 host support values drift")
-        host_map = _mapping(hosts.get("hosts"), "hosts")
+        host_map = require_mapping(hosts.get("hosts"), "hosts")
         if set(host_map) != HOSTS:
             errors.append("error: P1 host coverage drift")
         for host_id, config in host_map.items():
-            support = _mapping(_mapping(config, host_id).get("support"), f"{host_id}.support")
+            support = require_mapping(require_mapping(config, host_id).get("support"), f"{host_id}.support")
             if set(support) != HOST_CAPABILITIES or set(map(str, support.values())) - SUPPORT_VALUES:
                 errors.append(f"error: P1 host capability profile drift: {host_id}")
 
-        evals = _mapping(load_unique_yaml_file(root / "scripts/registry/eval_contracts.yaml"), "eval contracts")
+        evals = require_mapping(load_unique_yaml_file(root / "scripts/registry/eval_contracts.yaml"), "eval contracts")
         _require_v1(evals, "eval contracts")
         if _strings(evals.get("required_dimensions"), "eval dimensions") != EVAL_DIMENSIONS:
             errors.append("error: P1 eval dimensions drift")

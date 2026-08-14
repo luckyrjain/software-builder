@@ -95,12 +95,23 @@ def _run_command(action: Callable[[], int]) -> int:
 
 
 def _validate_all(root: Path) -> list[str]:
-    return [
-        *validate_registry(root),
-        *validate_capability_catalog_sync(root),
-        *validate_runtime_manifest(root),
-        *validate_p1_contracts(root),
+    errors = validate_registry(root)
+    capability_catalog = root / "scripts" / "registry" / "capability_catalog.yaml"
+    platform_contracts = root / "scripts" / "registry" / "platform_contracts.yaml"
+    p1_files = [
+        root / "scripts" / "registry" / "host_contracts.yaml",
+        root / "scripts" / "registry" / "eval_contracts.yaml",
+        root / "docs" / "skill-framework" / "shared" / "runtime-contract.md",
+        root / "docs" / "skill-framework" / "shared" / "host-adapter-contract.md",
+        root / "docs" / "skill-framework" / "shared" / "eval-contract.md",
     ]
+    if capability_catalog.is_file():
+        errors.extend(validate_capability_catalog_sync(root))
+    if platform_contracts.is_file():
+        errors.extend(validate_runtime_manifest(root))
+    if any(path.is_file() for path in p1_files):
+        errors.extend(validate_p1_contracts(root))
+    return errors
 
 
 def _validate_for_generate(root: Path) -> list[str]:

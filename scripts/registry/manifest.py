@@ -10,6 +10,7 @@ from scripts.registry.composition_contracts import load_contracts
 from scripts.registry.frontmatter import load_skill_frontmatter
 from scripts.registry.schema import parse_registry
 from scripts.yaml_safety import YAML_SAFETY_ERRORS, load_unique_yaml_file
+from scripts.yaml_safety import require_mapping as _require_mapping
 
 ROOT = Path(__file__).resolve().parents[2]
 CONTRACTS_PATH = Path(__file__).resolve().parent / "platform_contracts.yaml"
@@ -92,12 +93,6 @@ def _version_input(skill_md: Path, raw_version: Any) -> Any:
             "legacy numeric skill_version could not be recovered; quote it as a semantic version",
         )
     return match.group(1)
-
-
-def _require_mapping(raw: Any, label: str) -> dict[str, Any]:
-    if not isinstance(raw, dict):
-        raise ValueError(f"{label} must be a mapping")
-    return raw
 
 
 def _require_schema_version(raw: Any, *, label: str) -> int:

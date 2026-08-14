@@ -108,6 +108,13 @@ def load_unique_yaml_file(path: Path) -> Any:
     return load_unique_yaml(path.read_text(encoding="utf-8"))
 
 
+def require_mapping(value: Any, label: str) -> dict[str, Any]:
+    """Return value if it's a mapping, else raise ValueError naming the offending field."""
+    if not isinstance(value, dict):
+        raise ValueError(f"{label} must be a mapping")
+    return value
+
+
 def load_unique_frontmatter(path: Path) -> dict[str, Any]:
     """Extract and parse a Markdown file's leading ``---`` frontmatter block
     via load_unique_yaml. Raises ValueError if the block is missing or is not
