@@ -10,7 +10,11 @@ import yaml
 from scripts.registry.backfill_capabilities import cmd_backfill
 from scripts.registry.capability_sync import validate_capability_catalog_sync
 from scripts.registry.composition import render_composition_mermaid
-from scripts.registry.composition_runtime import validate_composition_runtime
+from scripts.registry.composition_runtime import (
+    handoff_allowed,
+    render_dependency_graph,
+    validate_composition_runtime,
+)
 from scripts.registry.crosscheck import find_stale_generated_adapters, validate_registry
 from scripts.registry.generate_compatibility import render_compatibility_matrix
 from scripts.registry.generate_cursor import generate_cursor_rules
@@ -53,6 +57,13 @@ def _collect_outputs(root: Path) -> dict[Path, str]:
     if compatibility_catalog.is_file() and composition_contracts.is_file():
         outputs[root / "generated" / "catalogue" / "compatibility-matrix.md"] = (
             render_compatibility_matrix(root)
+        )
+    composition_runtime = _composition_runtime_path(root)
+    if composition_runtime.is_file() and composition_contracts.is_file():
+        outputs[root / "generated" / "catalogue" / "composition-runtime.mmd"] = render_dependency_graph(
+            registry,
+            runtime_path=composition_runtime,
+            contracts_path=composition_contracts,
         )
     return outputs
 
@@ -119,7 +130,6 @@ def _p1_layer_paths(root: Path) -> list[Path]:
 
 def _validate_for_generate(root: Path) -> list[str]:
     errors = validate_registry(root)
-    registry = load_registry(root)
     if _capability_catalog_path(root).is_file():
         errors.extend(validate_capability_catalog_sync(root))
     if _platform_contracts_path(root).is_file():
@@ -129,7 +139,7 @@ def _validate_for_generate(root: Path) -> list[str]:
     if _composition_runtime_path(root).is_file():
         errors.extend(
             validate_composition_runtime(
-                registry,
+                load_registry(root),
                 runtime_path=_composition_runtime_path(root),
                 contracts_path=root / "scripts" / "registry" / "composition_contracts.yaml",
             )
@@ -152,7 +162,10 @@ def cmd_validate(root: Path) -> int:
         for error in errors:
             print(error, file=sys.stderr)
         return 1
-    print("ok: skills registry, capability catalogue, integrated runtime manifest and composition contracts validate")
+    print(
+        "ok: skills registry, capability catalogue, integrated runtime manifest, "
+        "P1 contracts and composition contracts validate"
+    )
     return 0
 
 
@@ -183,6 +196,20 @@ def cmd_generate(root: Path, check_only: bool) -> int:
     return 0
 
 
+def cmd_check_handoff(root: Path, target_skill: str, visited_skills: list[str], depth: int) -> int:
+    allowed, reason = handoff_allowed(
+        target_skill,
+        visited_skills=visited_skills,
+        depth=depth,
+        runtime_path=_composition_runtime_path(root),
+    )
+    if allowed:
+        print(f"ok: handoff to {target_skill!r} allowed at depth {depth}")
+        return 0
+    print(f"error: handoff to {target_skill!r} blocked: {reason}", file=sys.stderr)
+    return 1
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="scripts.registry")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -211,6 +238,18 @@ def main(argv: list[str] | None = None) -> int:
         help="regenerate every skill's capabilities block from the catalog, even if already valid",
     )
 
+    handoff_parser = subparsers.add_parser(
+        "check-handoff",
+        help="apply the recursion guard before an orchestrator/router/trigger hands off to another skill",
+    )
+    handoff_parser.add_argument("target_skill", help="skill id the handoff would invoke")
+    handoff_parser.add_argument("--depth", type=int, required=True, help="current execution_context.depth")
+    handoff_parser.add_argument(
+        "--visited",
+        default="",
+        help="comma-separated execution_context.visited_skills (e.g. release-readiness-checker,pr-review)",
+    )
+
     args = parser.parse_args(argv)
     if args.command == "validate":
         return _run_command(lambda: cmd_validate(ROOT))
@@ -221,6 +260,11 @@ def main(argv: list[str] | None = None) -> int:
             check_only=args.check,
             overwrite=args.overwrite,
             skills_path=ROOT / "skills.yaml",
+        )
+    if args.command == "check-handoff":
+        visited = [skill_id for skill_id in args.visited.split(",") if skill_id]
+        return _run_command(
+            lambda: cmd_check_handoff(ROOT, args.target_skill, visited, args.depth)
         )
 
     print(f"error: unknown command {args.command!r}", file=sys.stderr)
