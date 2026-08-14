@@ -44,13 +44,24 @@ def _is_exempt(capability_id: str) -> bool:
     return any(capability_id.endswith(suffix) for suffix in _EXEMPT_SUFFIXES)
 
 
-def _catalog_capability_ids(entry: dict[str, Any]) -> set[str]:
+def _optional_names(optional: Any, *, label: str) -> list[str]:
+    if optional is None:
+        return []
+    if not isinstance(optional, list) or not all(isinstance(item, dict) and "name" in item for item in optional):
+        raise ValueError(f"{label} must be a list of {{name: ...}} mappings")
+    return [item["name"] for item in optional]
+
+
+def _catalog_capability_ids(entry: dict[str, Any], *, skill_id: str) -> set[str]:
     ids: set[str] = set()
     ids.update(entry.get("required") or [])
-    ids.update(item["name"] for item in entry.get("optional") or [])
+    ids.update(_optional_names(entry.get("optional"), label=f"{skill_id}.optional"))
     for path in entry.get("any_of") or []:
+        path_name = path.get("name", "<unnamed any_of path>")
         ids.update(path.get("required") or [])
-        ids.update(item["name"] for item in path.get("optional") or [])
+        ids.update(
+            _optional_names(path.get("optional"), label=f"{skill_id}.any_of[{path_name!r}].optional"),
+        )
     ids.update((entry.get("degraded_modes") or {}).keys())
     return ids
 
@@ -83,8 +94,11 @@ def validate_capability_families(
         return [f"error: capability families: {exc}"]
 
     catalog_ids: set[str] = set()
-    for entry in catalog.values():
-        catalog_ids.update(_catalog_capability_ids(entry))
+    try:
+        for skill_id, entry in catalog.items():
+            catalog_ids.update(_catalog_capability_ids(entry, skill_id=skill_id))
+    except ValueError as exc:
+        return [f"error: capability families: {exc}"]
 
     resolved_ids: set[str] = set()
     errors: list[str] = []

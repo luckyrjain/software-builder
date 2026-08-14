@@ -8,11 +8,32 @@ individual skill is checked against.
 """
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from scripts.registry.models import Registry
 
 REQUIRED_CONTRACT_MARKERS = ("skill_result", "action_gates", "definition_of_done")
+REQUIRED_CONTRACT_LINK = "runtime-contract.md"
+
+_FRAMEWORK_SECTION_RE = re.compile(r"^## Framework\s*$", re.MULTILINE)
+_NEXT_SECTION_RE = re.compile(r"^## ", re.MULTILINE)
+
+
+def _framework_section(text: str) -> str | None:
+    """Return the "## Framework" section's own text, or None if absent.
+
+    Scoped deliberately: a bare substring search over the whole file would
+    pass if the three marker words showed up anywhere at all -- an unrelated
+    troubleshooting note or a "we don't use action_gates here" caveat would
+    satisfy it without the skill actually declaring adoption.
+    """
+    start_match = _FRAMEWORK_SECTION_RE.search(text)
+    if start_match is None:
+        return None
+    end_match = _NEXT_SECTION_RE.search(text, start_match.end())
+    end = end_match.start() if end_match else len(text)
+    return text[start_match.end() : end]
 
 
 def validate_skill_contract_adoption(root: Path, registry: Registry) -> list[str]:
@@ -21,11 +42,16 @@ def validate_skill_contract_adoption(root: Path, registry: Registry) -> list[str
         skill_md = root / entry.path / "SKILL.md"
         if not skill_md.is_file():
             continue
-        text = skill_md.read_text(encoding="utf-8")
-        missing = [marker for marker in REQUIRED_CONTRACT_MARKERS if marker not in text]
+        section = _framework_section(skill_md.read_text(encoding="utf-8"))
+        if section is None:
+            errors.append(f"error: {skill_id}: SKILL.md has no '## Framework' section")
+            continue
+        missing = [marker for marker in REQUIRED_CONTRACT_MARKERS if marker not in section]
+        if REQUIRED_CONTRACT_LINK not in section:
+            missing.append(REQUIRED_CONTRACT_LINK)
         if missing:
             errors.append(
-                f"error: {skill_id}: SKILL.md does not reference framework contract(s): "
+                f"error: {skill_id}: SKILL.md's Framework section does not reference: "
                 + ", ".join(missing),
             )
     return errors

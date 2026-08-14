@@ -51,9 +51,13 @@ def validate_skill_frontmatter_fields(skill_id: str, frontmatter: dict[str, Any]
         errors.append(f"error: {skill_id}: skill_version is mandatory")
     else:
         version = frontmatter["skill_version"]
-        if not isinstance(version, (int, float)):
+        # Shape check only: a number (legacy `1.0`/`2`) or a string (full
+        # semver, e.g. "1.2.3-alpha.1+build.5") -- manifest.py's
+        # _normalize_version does the actual semantic validation.
+        if isinstance(version, bool) or not isinstance(version, (int, float, str)):
             errors.append(
-                f"error: {skill_id}: skill_version must be a number, got {type(version).__name__}",
+                f"error: {skill_id}: skill_version must be a number or a semver string, "
+                f"got {type(version).__name__}",
             )
 
     if "disable-model-invocation" in frontmatter:

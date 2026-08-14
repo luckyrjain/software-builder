@@ -8,9 +8,12 @@
 #
 # Every concrete, provider-branded capability id used anywhere in
 # capability_catalog.yaml must resolve to exactly one family here (validated
-# by capability_family_sync.py). host.*, <skill-id>.invoke, and already
-# provider-neutral ids (telemetry.*, pager.*, scheduler.*, slack.*) are exempt
-# -- they don't name a specific vendor to abstract away from.
+# by capability_family_sync.py). Exempt: any `host.*` id, any `<skill-id>.invoke`
+# id, and the specific already-neutral ids listed in that module's
+# _EXEMPT_IDS (telemetry.logs.query, pager.webhook.receive, etc) -- they
+# don't name a specific vendor to abstract away from. A NEW capability in one
+# of those namespaces is NOT automatically exempt: add it to _EXEMPT_IDS in
+# capability_family_sync.py, or give it a family here.
 schema_version: 1
 
 families:
