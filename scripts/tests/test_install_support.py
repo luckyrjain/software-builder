@@ -69,6 +69,18 @@ def test_verify_rejects_non_object_manifest(tmp_path: Path) -> None:
     assert cmd_verify(skill_dir) == 1
 
 
+def test_verify_rejects_invalid_manifest_json(tmp_path: Path, capsys) -> None:
+    from scripts.install_support import cmd_verify
+
+    skill_dir = tmp_path / "demo"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text("# demo\n", encoding="utf-8")
+    (skill_dir / ".software-builder-manifest.json").write_text("{not valid json", encoding="utf-8")
+
+    assert cmd_verify(skill_dir) == 1
+    assert "invalid manifest JSON" in capsys.readouterr().err
+
+
 def test_verify_passes_minimal_package(tmp_path: Path) -> None:
     from scripts.install_support import cmd_verify
 
