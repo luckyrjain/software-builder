@@ -49,7 +49,8 @@ def test_generic_package_is_deterministic_complete_and_link_safe(tmp_path: Path)
     assert "software-builder/skills.yaml" in names
     assert "software-builder/docs/skill-framework/shared/skill-routing.md" in names
     assert "software-builder/docs/skill-framework/shared/runtime-contract.md" in names
-    assert not any("/.git/" in f"/{name}/" or "/.github/" in f"/{name}/" for name in names)
+    assert not any("/.git/" in f"/{name}/" for name in names)
+    assert not any("/dist/" in f"/{name}/" for name in names)
     assert not any("__pycache__" in name or name.endswith(".pyc") for name in names)
 
     packaged_root = extract_root / "software-builder"
