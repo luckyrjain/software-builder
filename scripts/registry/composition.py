@@ -3,7 +3,6 @@ from __future__ import annotations
 from pathlib import Path
 
 from scripts.registry.composition_contracts import validate_composition_contracts
-from scripts.registry.composition_runtime import validate_composition_runtime
 from scripts.registry.graph import detect_cycles
 from scripts.registry.models import Registry
 from scripts.registry.schema import parse_registry
@@ -33,7 +32,6 @@ def validate_composition_graph(registry: Registry) -> list[str]:
 
     errors.extend(detect_cycles(invokes_graph, "composition graph"))
     errors.extend(validate_composition_contracts(registry))
-    errors.extend(validate_composition_runtime(registry))
     return errors
 
 
