@@ -1,5 +1,6 @@
 ---
 name: pr-review
+skill_version: 1.0
 platform_contract: skill-platform-v1
 description: >-
   GitHub pull-request and GitLab merge-request review by URL, number, or current branch. Phased workflow:
@@ -93,6 +94,16 @@ Full matrix: [cross-skill-escalation.md](../docs/skill-framework/shared/cross-sk
 | Resource-down MR merged | **k8s-overprovisioning-datadog** + **incident-rca** if outage |
 
 ## Framework
+
+Completion emits the canonical `skill_result` envelope; actions classify against
+`action_gates`; scope follows `definition_of_done` — all defined in
+[runtime-contract.md](../docs/skill-framework/shared/runtime-contract.md).
+
+`definition_of_done`: required_artifacts=[chat-rendered review, executive summary, posted PR/MR comment(s)
+post-Phase-4]; required_checks=[diff-line citation via `get_merge_request_diffs`, severity-rubric calibration,
+stop-search thresholds, fast-path detection, untrusted-content redaction]; blocked_conditions=[Phase 2→3 gate
+blocked, no valid target, approve/merge/close/reopen requested]; partial_result_behavior=render Phase 5 chat
+summary from findings so far, noting skipped phases per workflow/phase-5.md.
 
 Routing: [skill-routing.md](../docs/skill-framework/shared/skill-routing.md) · shared conventions:
 [docs/skill-framework/README.md](../docs/skill-framework/README.md) · confidence

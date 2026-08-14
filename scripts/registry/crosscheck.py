@@ -7,8 +7,11 @@ from scripts.registry.backfill_capabilities import validate_capabilities_present
 from scripts.registry.composition import validate_composition_graph
 from scripts.registry.frontmatter import load_skill_frontmatter
 from scripts.registry.graph import detect_cycles
+from scripts.registry.install_targets_sync import validate_install_targets
 from scripts.registry.models import Registry
+from scripts.registry.routing_sync import validate_skill_routing_references
 from scripts.registry.schema import AUTOMATION_ONLY_INVOCATION, parse_registry
+from scripts.registry.skill_contract_adoption_sync import validate_skill_contract_adoption
 from scripts.registry.skill_frontmatter_schema import (
     automation_only_guard_errors,
     validate_skill_frontmatter_fields,
@@ -189,4 +192,7 @@ def validate_registry(root: Path) -> list[str]:
     errors.extend(_validate_skill_frontmatter_shape(root, registry))
     errors.extend(_validate_automation_only_rules(registry))
     errors.extend(_validate_stale_adapters(root, registry))
+    errors.extend(validate_skill_routing_references(root, registry))
+    errors.extend(validate_install_targets(root, registry))
+    errors.extend(validate_skill_contract_adoption(root, registry))
     return errors

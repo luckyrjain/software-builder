@@ -1,5 +1,6 @@
 ---
 name: backlog-runner
+skill_version: 1.0
 platform_contract: skill-platform-v1
 description: >-
   Scheduled queue-management wrapper around loop-task-implementer — pulls N tickets from a Jira/GitHub
@@ -99,6 +100,22 @@ None of its own — the morning summary routes via the configured notification p
 [post-action-templates.md](../docs/skill-framework/shared/post-action-templates.md).
 
 ## Framework
+
+Completion emits the canonical `skill_result` envelope; actions classify against
+`action_gates`; scope follows `definition_of_done` — all defined in
+[runtime-contract.md](../docs/skill-framework/shared/runtime-contract.md).
+
+`definition_of_done`: required_artifacts=[one PR per completed ticket via loop-task-implementer, unedited;
+one morning summary — Shipped/Blocked/Deferred/Skipped tables plus `stopped_reason`];
+required_checks=[`max_tasks_per_run` cap enforced; existing branch/PR skip applied; dependencies
+topo-ordered and merge-into-base-branch verified per queue-policy.md §2 rule 4;
+`autonomous_merge_authorized` confirmed false on every loop-task-implementer invocation; stop conditions
+re-checked after each ticket]; blocked_conditions=[`tracker_query`, `max_tasks_per_run`, or `repo_context`
+missing — HARD STOP; issue-tracker MCP or loop-task-implementer itself unavailable/unconfigured];
+partial_result_behavior=any mid-run stop condition (`MAX_TASKS_REACHED`, `DEADLINE_REACHED`,
+`TOKEN_BUDGET_EXHAUSTED`, `CONSECUTIVE_ESCALATION_BREAKER`) still emits the full morning summary with
+whatever Shipped/Blocked/Deferred/Skipped state accrued and its `stopped_reason` — never a fabricated
+completion, and the ticket already in-flight always finishes before the run stops.
 
 Routing: [skill-routing.md](../docs/skill-framework/shared/skill-routing.md) · shared conventions:
 [docs/skill-framework/README.md](../docs/skill-framework/README.md) · prompt injection

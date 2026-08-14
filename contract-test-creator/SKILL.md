@@ -103,6 +103,17 @@ ticket/chat write-back. See [post-action-templates.md](../docs/skill-framework/s
 
 ## Framework
 
+Completion emits the canonical `skill_result` envelope; actions classify against
+`action_gates`; scope follows `definition_of_done` — all defined in
+[runtime-contract.md](../docs/skill-framework/shared/runtime-contract.md).
+
+`definition_of_done`: required_artifacts=[contract test file(s), pact file for a consumer target,
+`CONTRACT_TEST_REPORT.md`]; required_checks=[`target.role` present, shape traces to real observed usage,
+tests run and pass, prod code never patched to force green]; blocked_conditions=[`target.role`
+missing/malformed, Pact tooling/broker ambiguous, no observed interaction to derive from];
+partial_result_behavior=per-target status in `CONTRACT_TEST_REPORT.md` (passing, bug flagged,
+`NEEDS_OBSERVED_INTERACTION`, needs human, covered, skipped); passing tests kept, skips always listed.
+
 Routing: [skill-routing.md](../docs/skill-framework/shared/skill-routing.md) · shared conventions:
 [docs/skill-framework/README.md](../docs/skill-framework/README.md) · prompt injection
 [prompt-injection.md](../docs/skill-framework/shared/prompt-injection.md).

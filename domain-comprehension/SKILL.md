@@ -1,5 +1,6 @@
 ---
 name: domain-comprehension
+skill_version: 1.0
 platform_contract: skill-platform-v1
 description: >-
   Build a verifiable, evidence-backed representation of a business domain and an
@@ -143,6 +144,16 @@ None by default. Deliverables are workspace artifacts; optional Memory Bank/Post
 P5.
 
 ## Framework
+
+Completion emits the canonical `skill_result` envelope; actions classify against
+`action_gates`; scope follows `definition_of_done` — all defined in
+[runtime-contract.md](../docs/skill-framework/shared/runtime-contract.md).
+
+`definition_of_done`: required_artifacts=[manifest.yaml, PROGRESS.md, EXEC_SUMMARY.md, PRD.md];
+required_checks=[Evidence/Conclusion/Confidence contract, phase-completion-gate report, read-only source
+boundary]; blocked_conditions=[source mutation, artifact outside artifact_root, PRD claim missing evidence
+status, manifest.yaml missing at RESUME]; partial_result_behavior=preserves PROGRESS.md/manifest.yaml,
+routes gaps to UNKNOWNS.md/KNOWN_OMISSIONS.md.
 
 [docs/skill-framework/README.md](../docs/skill-framework/README.md) ·
 [safe-output.md](../docs/skill-framework/shared/safe-output.md) ·

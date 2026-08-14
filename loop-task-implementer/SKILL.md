@@ -1,5 +1,6 @@
 ---
 name: loop-task-implementer
+skill_version: 1.0
 platform_contract: skill-platform-v1
 description: >-
   Use when autonomously implementing one or more software tasks through isolated build,
@@ -79,12 +80,7 @@ Both lenses must be clean for the same normalized diff fingerprint.
 
 ## Blocking standard
 
-A finding is blocking only when evidence shows at least one of: an explicit acceptance criterion is
-violated; an enforced repository, security, compatibility, or deployment rule is violated; a
-demonstrable input/state/race/failure/deployment path is materially incorrect or unsafe; a
-reproducible check fails because of the change; or the change materially exposes/worsens a
-pre-existing defect. Style preferences, optional metrics, speculative risks, and unrelated cleanup
-are not blocking.
+A finding is blocking only when evidence shows at least one of: an explicit acceptance criterion is violated; an enforced repository, security, compatibility, or deployment rule is violated; a demonstrable input/state/race/failure/deployment path is materially incorrect or unsafe; a reproducible check fails because of the change; or the change materially exposes/worsens a pre-existing defect. Style preferences, optional metrics, speculative risks, and unrelated cleanup are not blocking.
 
 ## Adjudication
 
@@ -124,10 +120,7 @@ A content-neutral fast-forward, clean rebase, or merge-queue update preserves le
 
 ## Platform behavior
 
-Use the strongest isolation primitive available: (1) native subagents, (2) separate fresh sessions,
-(3) separate disposable worktrees, (4) sequential role simulation with explicit context resets, last
-resort. Read [reference/platform-adapters.md](reference/platform-adapters.md) for Cursor,
-ChatGPT/Codex, Claude Code, and Kiro setup.
+Use the strongest isolation primitive available: (1) native subagents, (2) separate fresh sessions, (3) separate disposable worktrees, (4) sequential role simulation with explicit context resets, last resort. Read [reference/platform-adapters.md](reference/platform-adapters.md) for Cursor, ChatGPT/Codex, Claude Code, and Kiro setup.
 
 ## Required state
 
@@ -136,10 +129,7 @@ the only role allowed to mutate official workflow state.
 
 ## Role prompts
 
-Load only the role prompt needed for the active context — see [reference/lazy-load-index.md](reference/lazy-load-index.md):
-[workflow/orchestrator.md](workflow/orchestrator.md) ·
-[workflow/builder.md](workflow/builder.md) ·
-[workflow/reviewer.md](workflow/reviewer.md).
+Load only the role prompt needed for the active context — see [reference/lazy-load-index.md](reference/lazy-load-index.md): [workflow/orchestrator.md](workflow/orchestrator.md) · [workflow/builder.md](workflow/builder.md) · [workflow/reviewer.md](workflow/reviewer.md).
 
 Do not give the Reviewer the Orchestrator prompt, Builder scratchpad, prior verdicts, PR narrative, branch or commit-message framing.
 
@@ -151,10 +141,14 @@ that report follows [safe-output.md](../docs/skill-framework/shared/safe-output.
 
 ## Framework
 
-Follows [docs/skill-framework/README.md](../docs/skill-framework/README.md) ·
-[skill-routing](../docs/skill-framework/shared/skill-routing.md). No Datadog/GitLab/Jira MCP
-dependency (see [reference/mcp-capabilities.md](reference/mcp-capabilities.md)); not a
-bounded-context investigation skill, so `confidence-bands.md`/`phase-glossary.md` don't apply.
+Completion emits the canonical `skill_result` envelope; actions classify against `action_gates`; scope follows `definition_of_done` — all defined in [runtime-contract.md](../docs/skill-framework/shared/runtime-contract.md).
+
+`definition_of_done`: required_artifacts=[PR when authorized, completion report (report-template.md)]; required_checks=[both lenses clean on same
+diff fingerprint; authoritative checks (CI>Orchestrator>Reviewer>Builder) passing for exact commit]; blocked_conditions=[circuit breaker tripped:
+dirty-review/contested-finding limits, diff over hard limit, CI undiagnosable, budget exhausted, missing required decision];
+partial_result_behavior=reports state reached, preserves findings/evidence, escalates instead of completing.
+
+Follows [docs/skill-framework/README.md](../docs/skill-framework/README.md) · [skill-routing](../docs/skill-framework/shared/skill-routing.md). No Datadog/GitLab/Jira MCP dependency (see [reference/mcp-capabilities.md](reference/mcp-capabilities.md)); not a bounded-context investigation skill, so `confidence-bands.md`/`phase-glossary.md` don't apply.
 
 ## Guardrails
 
@@ -176,5 +170,4 @@ Full matrix: [cross-skill-escalation.md](../docs/skill-framework/shared/cross-sk
 
 ## Post-actions
 
-None beyond the PR itself — no Jira/Slack/canvas write-back. See
-[post-action-templates.md](../docs/skill-framework/shared/post-action-templates.md).
+None beyond the PR itself — no Jira/Slack/canvas write-back. See [post-action-templates.md](../docs/skill-framework/shared/post-action-templates.md).

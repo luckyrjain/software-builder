@@ -103,6 +103,17 @@ write-back. See [post-action-templates.md](../docs/skill-framework/shared/post-a
 
 ## Framework
 
+Completion emits the canonical `skill_result` envelope; actions classify against
+`action_gates`; scope follows `definition_of_done` — all defined in
+[runtime-contract.md](../docs/skill-framework/shared/runtime-contract.md).
+
+`definition_of_done`: required_artifacts=[`E2E_TEST_REPORT.md`, new/modified e2e spec files matching repo
+conventions]; required_checks=[browser tooling/layout detected, assertions user-visible only, no hard-coded
+sleep, run against a reachable app instance and iterate until green]; blocked_conditions=[no reachable app
+instance, unresolved tooling ambiguity, journeys dropped past `max_files_per_run` without being listed];
+partial_result_behavior=per-journey status in `E2E_TEST_REPORT.md` (passing, flags a probable production
+bug, blocked without instance, needs a human, skipped by cap).
+
 Routing: [skill-routing.md](../docs/skill-framework/shared/skill-routing.md) · shared conventions:
 [docs/skill-framework/README.md](../docs/skill-framework/README.md) · prompt injection
 [prompt-injection.md](../docs/skill-framework/shared/prompt-injection.md).

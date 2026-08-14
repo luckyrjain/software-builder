@@ -161,6 +161,14 @@ Fleet migration status lives separately in `MIGRATION_STATUS.yaml`.
 
 ## Framework
 
+Completion emits the canonical `skill_result` envelope; actions classify against
+`action_gates`; scope follows `definition_of_done` — all defined in
+[runtime-contract.md](../docs/skill-framework/shared/runtime-contract.md).
+
+`definition_of_done`: required_artifacts=[SERVICE_PG_MIGRATION.md, MIGRATION_STATUS.yaml]; required_checks=[scan
+gate 0 hits, shadow-compare match, config cutover verified]; blocked_conditions=[P0/P1 SQL unrewritten, non-zero
+scan, shadow mismatch]; partial_result_behavior=records per-gate status in MIGRATION_STATUS.yaml.
+
 Routing: [skill-routing.md](../docs/skill-framework/shared/skill-routing.md) · shared conventions:
 [docs/skill-framework/README.md](../docs/skill-framework/README.md) · prompt injection
 [prompt-injection.md](../docs/skill-framework/shared/prompt-injection.md).

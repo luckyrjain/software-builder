@@ -13,6 +13,7 @@ from scripts.registry.p1_validation import (
     STATE_VALUES,
     validate_p1_contracts,
 )
+from scripts.registry.routing_sync import validate_skill_routing_references
 from scripts.registry.schema import parse_registry
 from scripts.yaml_safety import load_unique_yaml_file
 
@@ -69,9 +70,11 @@ def test_skill_routing_inherits_p1_contracts() -> None:
     assert "runtime-contract.md" in routing
     assert "host-adapter-contract.md" in routing
     assert "eval-contract.md" in routing
-    assert "review-bugbot" not in routing
-    assert "ddsetup" not in routing
-    assert "ddconfig" not in routing
+
+
+def test_skill_routing_has_no_dangling_or_missing_skill_references() -> None:
+    registry = parse_registry(ROOT / "skills.yaml")
+    assert validate_skill_routing_references(ROOT, registry) == []
 
 
 def test_host_packages_point_at_canonical_skill_tree() -> None:

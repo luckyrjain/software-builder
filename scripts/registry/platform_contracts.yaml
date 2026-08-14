@@ -15,6 +15,12 @@ completion:
   statuses: [SUCCESS, PARTIAL, BLOCKED, FAILED, ESCALATED]
   required_fields: [status, evidence_status, blockers, artifacts, recommended_next_skill]
 
+# Universal Definition of Done. Every skill declares these four fields instead
+# of leaving "done" to vague prose; orchestrators can check them mechanically
+# before treating a handoff's result as final.
+definition_of_done:
+  required_fields: [required_artifacts, required_checks, blocked_conditions, partial_result_behavior]
+
 # Portable result envelope used by orchestrators and host adapters.
 result_envelope:
   required_fields:
