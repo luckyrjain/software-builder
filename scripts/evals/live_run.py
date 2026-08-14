@@ -32,7 +32,7 @@ from typing import Any
 
 import yaml
 
-from scripts.evals.golden import GoldenCase, run_golden_case
+from scripts.evals.golden import parse_golden_fixture, run_golden_case
 from scripts.evals.live_harness import (
     AnthropicModelClient,
     LiveHarnessError,
@@ -110,20 +110,11 @@ def score_against_golden(
     case_id: str,
     recorded_output: dict[str, Any],
 ):
-    raw = load_unique_yaml_file(golden_path)
-    if not isinstance(raw, dict):
-        raise ValueError(f"{golden_path}: golden fixture root must be a mapping")
-    assertions = raw.get("assertions", [])
-    if not isinstance(assertions, list) or not assertions:
-        raise ValueError(f"{golden_path}: assertions must be a non-empty list")
-    case = GoldenCase(
+    case = parse_golden_fixture(
+        golden_path,
         skill=skill,
         case_id=case_id,
-        tier=int(raw.get("tier", 3)),
-        description=str(raw.get("description", "")),
         recorded_output=recorded_output,
-        assertions=assertions,
-        path=golden_path,
     )
     return run_golden_case(case)
 
