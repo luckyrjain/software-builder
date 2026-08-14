@@ -1,6 +1,7 @@
 ---
 name: e2e-test-creator
 skill_version: 1.0
+platform_contract: skill-platform-v1
 description: >-
   Generates full user-journey end-to-end tests through a real browser UI using Playwright, Cypress, or
   Selenium/WebDriver. Detects the repo's browser test tooling and layout convention, infers journeys from
