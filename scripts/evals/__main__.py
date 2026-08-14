@@ -9,13 +9,16 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from scripts.evals.batch3_contract import run_batch3_contract_checks
 from scripts.evals.golden import (
     find_oversized_descriptions,
     find_vacuous_anchored_patterns,
     load_golden_fixtures,
     run_golden_case,
 )
+from scripts.evals.mutation_guard import run_guardrail_mutation_checks
 from scripts.evals.platform_contract import run_platform_contract_checks
+from scripts.evals.scenario_harness import run_per_skill_scenarios
 from scripts.evals.transcript import load_transcript_fixtures, run_transcript_case
 from scripts.evals.types import EvalResult
 from scripts.registry.frontmatter import load_skill_frontmatter
@@ -236,17 +239,43 @@ def run_all(
     for case in filtered(golden_cases, skill_filter, tier_filter):
         results.append(admit_case(case, run_golden_case, seen=seen, registry=registry))
 
-    # Platform contract checks are repository-wide. Keep per-skill and per-tier
-    # focused runs focused; the normal unfiltered lint path always executes them.
+    # Repository-wide scenario/contract checks belong to the normal unfiltered
+    # harness. Focused --skill/--tier runs stay focused and do not claim full
+    # platform coverage.
     if skill_filter is None and tier_filter is None:
+        scenario_results = run_per_skill_scenarios(
+            root,
+            registry,
+            case_results=results,
+            golden_cases=golden_cases,
+        )
+        results.extend(scenario_results)
+
+        platform_results = run_platform_contract_checks(
+            root,
+            registry,
+            case_results=results,
+            golden_cases=golden_cases,
+        )
+        results.extend(platform_results)
+
+        mutation_results = run_guardrail_mutation_checks(root, golden_cases)
+        results.extend(mutation_results)
+
         results.extend(
-            run_platform_contract_checks(
+            run_batch3_contract_checks(
                 root,
                 registry,
                 case_results=results,
                 golden_cases=golden_cases,
             ),
         )
+        # Dynamic mutate-and-reassert guardrail proof (distinct from
+        # _mutation_anchor_matrix above, which only checks the anchor's
+        # static raw_pattern -- this actually mutates fixtures and reruns
+        # golden assertions against them). Must run through the real eval
+        # CLI, not just pytest, or a broken guardrail is invisible here.
+        results.extend(run_guardrail_mutation_checks(root, golden_cases))
     return results
 
 

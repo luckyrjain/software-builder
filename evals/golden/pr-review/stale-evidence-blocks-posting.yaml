@@ -1,0 +1,30 @@
+schema_version: 1
+skill: pr-review
+case_id: golden-stale-evidence-blocks-posting
+tier: 3
+description: >-
+  Review evidence captured for an older head SHA is stale after the pull request moves. The skill must
+  invalidate the posting decision, refresh evidence, and avoid posting the stale review as authoritative.
+recorded_output:
+  reviewed_head_sha: "abc123"
+  current_head_sha: "def456"
+  stale_evidence_detected: true
+  refresh_required: true
+  stale_review_posted: false
+  status: "BLOCKED"
+assertions:
+  - type: field_equals
+    path: stale_evidence_detected
+    value: true
+  - type: field_equals
+    path: refresh_required
+    value: true
+  - type: field_equals
+    path: stale_review_posted
+    value: false
+  - type: field_equals
+    path: status
+    value: "BLOCKED"
+  - type: forbid_field_value
+    path: current_head_sha
+    value: "abc123"

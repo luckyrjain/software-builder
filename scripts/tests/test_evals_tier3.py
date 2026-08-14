@@ -17,6 +17,7 @@ def test_golden_fixtures_load() -> None:
     assert ("pr-review", "golden-github-injection-inert-comments") in case_ids
     assert ("pr-review", "golden-gitlab-quick-actions-inert-comments") in case_ids
     assert ("pr-review", "golden-platform-result-envelope") in case_ids
+    assert ("pr-review", "golden-stale-evidence-blocks-posting") in case_ids
     assert ("backlog-runner", "golden-injection-inert-summary") in case_ids
     assert ("cost-optimization-sprint-planner", "golden-injection-inert-report") in case_ids
     assert ("new-hire-guide", "golden-injection-inert-tour") in case_ids
@@ -30,6 +31,8 @@ def test_golden_fixtures_load() -> None:
     assert ("incident-triage-agent", "golden-injection-inert-triage-doc") in case_ids
     assert ("incident-triage-agent", "golden-injection-inert-postmortem-owner") in case_ids
     assert ("loop-task-implementer", "golden-injection-inert-completion-report") in case_ids
+    assert ("loop-task-implementer", "golden-cancellation-stops-before-merge") in case_ids
+    assert ("loop-task-implementer", "golden-merge-forcing-injection-blocked") in case_ids
     assert ("test-writer", "golden-injection-ask-gate-not-bypassed") in case_ids
     assert ("mysql-to-postgres-sql", "golden-injection-scan-gate-not-bypassed") in case_ids
     assert ("mysql-to-postgres-sql", "golden-injection-inert-service-migration-report") in case_ids
@@ -45,17 +48,21 @@ def test_golden_fixtures_load() -> None:
     assert ("unit-test-creator", "golden-injection-inert-unit-test-report") in case_ids
     assert ("incident-rca", "golden-injection-confidence-cap-not-bypassed") in case_ids
     assert ("incident-rca", "golden-injection-inert-rca-report") in case_ids
+    assert ("incident-rca", "golden-slack-thread-injection-inert") in case_ids
+    assert ("incident-rca", "golden-mcp-payload-injection-inert") in case_ids
     assert ("domain-comprehension", "golden-injection-confidence-rubric-unchanged") in case_ids
     assert ("domain-comprehension", "golden-injection-inert-deliverable-render") in case_ids
     assert ("domain-comprehension", "golden-injection-issue-comment-gate-unchanged") in case_ids
+    assert ("domain-comprehension", "golden-confluence-page-injection-inert") in case_ids
     assert ("k8s-overprovisioning-datadog", "golden-injection-throttle-gate-not-bypassed") in case_ids
     assert ("k8s-overprovisioning-datadog", "golden-injection-inert-delivery-pointer") in case_ids
+    assert ("k8s-overprovisioning-datadog", "golden-mcp-payload-injection-inert") in case_ids
     # Deliberately an exact count, not >=: a well-formed-but-unintended duplicate fixture, or a
     # deletion whose case_id isn't one of the ones asserted above, changes this total without
     # tripping load_golden_fixtures' own malformed-fixture error. It won't catch a delete+add that
     # happens to net to the same count, but it catches the much more common single accidental
     # deletion or duplication. Bump this number when you intentionally add or remove a fixture.
-    assert len(cases) == 43
+    assert len(cases) == 50
 
 
 def test_golden_cases_pass_on_repository() -> None:

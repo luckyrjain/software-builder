@@ -38,6 +38,8 @@ skills:
     optional:
       - name: gitlab.create_merge_request_thread
         enables: unattended inline posting when policy allows
+    degraded_modes:
+      gitlab.create_merge_request_thread: fall back to summary-only or chat-only posting per auto-post-policy.md
 
   k8s-overprovisioning-datadog:
     required: []
@@ -64,12 +66,17 @@ skills:
         enables: metric corroboration paths
       - name: gitlab.get_merge_request
         enables: deploy-regression MR handoff
+    degraded_modes:
+      datadog.query_metrics: rely on logs alone for corroboration; cap confidence below what a matching metric signal would support
+      gitlab.get_merge_request: treat deploy-regression hypothesis as UNKNOWN rather than ruled in or out, not as absence of evidence
 
   incident-triage-agent:
     required: [pager.webhook.receive]
     optional:
       - name: slack.post.message
         enables: paging summary delivery when configured
+    degraded_modes:
+      slack.post.message: still produce the triage_doc/postmortem_draft artifact; paging summary is simply not delivered to Slack
 
   domain-comprehension:
     required: [host.repository.read]
@@ -80,6 +87,10 @@ skills:
         enables: runtime validation passes
       - name: telemetry.logs.query
         enables: KubeSense/log corroboration
+    degraded_modes:
+      gitlab.search_code: fall back to local checkout traversal for the repository census
+      datadog.query_metrics: skip the runtime validation pass; mark runtime-dependent claims UNKNOWN instead of inferring from static evidence
+      telemetry.logs.query: skip KubeSense/log corroboration; mark log-dependent claims UNKNOWN
 
   squad-map:
     required: [gitlab.list_projects]
@@ -88,6 +99,9 @@ skills:
         enables: CODEOWNERS and ownership file reads
       - name: datadog.list_service_definitions
         enables: service alias crosswalk
+    degraded_modes:
+      gitlab.get_repository_file: ownership falls back to fuzzy/contributor-based signals only, confidence capped at LOW
+      datadog.list_service_definitions: skip the service alias crosswalk; ownership stays repo-level only
 
   who-owns-x-bot:
     required: [slack.slash_command.receive]
@@ -112,6 +126,10 @@ skills:
         enables: per-service health slice
       - name: telemetry.logs.query
         enables: incident window cross-check
+    degraded_modes:
+      gitlab.list_merge_requests: require an explicit release_ref per manifest entry instead of auto-discovering MRs
+      datadog.query_metrics: per-service health slice becomes UNKNOWN rather than READY/NOT_READY for that dimension
+      telemetry.logs.query: incident window cross-check becomes UNKNOWN; falls through to incident-rca's own signal instead
 
   migration-program-manager:
     required: [host.filesystem.read]
@@ -130,6 +148,8 @@ skills:
     optional:
       - name: gitlab.get_merge_request
         enables: migration MR review handoff
+    degraded_modes:
+      gitlab.get_merge_request: skip the migration MR review handoff; still produce the SQL rewrite/scan report standalone
 
   loop-task-implementer:
     required:
@@ -140,6 +160,8 @@ skills:
     optional:
       - name: host.issue_tracker.read
         enables: task sourced from tracker instead of user text
+    degraded_modes:
+      host.issue_tracker.read: task must be supplied as direct user text; cannot autonomously source tasks from a tracker query
 
   backlog-runner:
     required: [scheduler.cron.trigger, host.issue_tracker.read]
@@ -152,12 +174,16 @@ skills:
     optional:
       - name: slack.post.message
         enables: scheduled digest delivery
+    degraded_modes:
+      slack.post.message: WEEKLY_SQUAD_DIGEST.md is still written; the digest simply is not delivered via Slack
 
   unit-test-creator:
     required: [host.repository.read_write]
     optional:
       - name: host.test_runner.execute
         enables: generated test verification loop
+    degraded_modes:
+      host.test_runner.execute: tests are written but left UNVERIFIED; run-until-green iteration cannot happen locally
 
   integration-test-creator:
     required: [host.repository.read_write]
@@ -166,12 +192,17 @@ skills:
         enables: generated test verification loop
       - name: host.dependency.reachable
         enables: real adjacent dependency under test
+    degraded_modes:
+      host.test_runner.execute: tests are written but left UNVERIFIED; run-until-green iteration cannot happen locally
+      host.dependency.reachable: no real adjacent dependency to test against; escalate or skip the target rather than fall back to mocking (that belongs to unit-test-creator)
 
   contract-test-creator:
     required: [host.repository.read_write]
     optional:
       - name: host.test_runner.execute
         enables: generated contract test verification
+    degraded_modes:
+      host.test_runner.execute: contract tests are written but left UNVERIFIED; run-until-green iteration cannot happen locally
 
   e2e-test-creator:
     required: [host.repository.read_write]
@@ -180,6 +211,9 @@ skills:
         enables: UI journey execution
       - name: host.test_runner.execute
         enables: generated e2e verification
+    degraded_modes:
+      host.browser.automation: cannot execute generated browser journeys locally; ship them UNVERIFIED
+      host.test_runner.execute: tests are written but left UNVERIFIED; run-until-green iteration cannot happen locally
 
   api-test-creator:
     required: [host.repository.read_write]
@@ -188,6 +222,9 @@ skills:
         enables: black-box HTTP suite against running API
       - name: host.test_runner.execute
         enables: Newman or equivalent runner
+    degraded_modes:
+      host.api.reachable: generate the request/assertion collection but skip execution; mark status UNVERIFIED
+      host.test_runner.execute: collection is generated but hand off for manual/CI execution instead of iterating to green locally
 
   test-writer:
     required: [host.repository.read]

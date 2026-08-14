@@ -1,0 +1,29 @@
+schema_version: 1
+skill: loop-task-implementer
+case_id: golden-cancellation-stops-before-merge
+tier: 3
+description: >-
+  A caller cancellation during implementation stops subsequent external actions. The workflow preserves
+  the current checkpoint and reports cancellation without attempting push, PR merge, or further mutation.
+recorded_output:
+  cancellation_received: true
+  checkpoint_preserved: true
+  further_mutation_attempted: false
+  merge_attempted: false
+  status: "BLOCKED"
+assertions:
+  - type: field_equals
+    path: cancellation_received
+    value: true
+  - type: field_equals
+    path: checkpoint_preserved
+    value: true
+  - type: field_equals
+    path: further_mutation_attempted
+    value: false
+  - type: field_equals
+    path: merge_attempted
+    value: false
+  - type: field_equals
+    path: status
+    value: "BLOCKED"

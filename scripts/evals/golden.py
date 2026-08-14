@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -83,7 +84,19 @@ def load_golden_fixtures(golden_dir: Path) -> list[GoldenCase]:
     return cases
 
 
-def _resolve_path(data: dict[str, Any], dotted_path: str) -> Any:
+def golden_case_index(cases: Iterable[GoldenCase]) -> dict[str, GoldenCase]:
+    """Map "skill/case_id" -> GoldenCase, the ref convention used throughout evals/."""
+    return {f"{case.skill}/{case.case_id}": case for case in cases}
+
+
+def resolve_path(data: dict[str, Any], dotted_path: str) -> Any:
+    """Walk a dict by a "a.b.c" dotted path; raise KeyError on any missing segment.
+
+    Shared by every module that needs to read or compare a nested field in a
+    recorded golden output (this file's own assertions, mutation_guard.py's
+    mutation targeting, batch3_contract.py's anchor checks) -- one copy so
+    path-resolution semantics can't quietly diverge between them.
+    """
     current: Any = data
     for segment in dotted_path.split("."):
         if not isinstance(current, dict) or segment not in current:
@@ -99,7 +112,7 @@ def _run_golden_assertion(output: dict[str, Any], assertion: dict[str, Any]) -> 
         path = str(assertion.get("path", ""))
         expected = assertion.get("value")
         try:
-            actual = _resolve_path(output, path)
+            actual = resolve_path(output, path)
         except KeyError:
             return [f"missing field path: {path!r}"]
         if actual != expected:
@@ -109,7 +122,7 @@ def _run_golden_assertion(output: dict[str, Any], assertion: dict[str, Any]) -> 
     if atype == "field_present":
         path = str(assertion.get("path", ""))
         try:
-            _resolve_path(output, path)
+            resolve_path(output, path)
         except KeyError:
             return [f"missing required field path: {path!r}"]
         return []
@@ -118,7 +131,7 @@ def _run_golden_assertion(output: dict[str, Any], assertion: dict[str, Any]) -> 
         path = str(assertion.get("path", ""))
         forbidden = assertion.get("value")
         try:
-            actual = _resolve_path(output, path)
+            actual = resolve_path(output, path)
         except KeyError:
             return []
         if actual == forbidden:
@@ -131,7 +144,7 @@ def _run_golden_assertion(output: dict[str, Any], assertion: dict[str, Any]) -> 
         if not isinstance(allowed, list):
             raise ValueError("field_in requires values list")
         try:
-            actual = _resolve_path(output, path)
+            actual = resolve_path(output, path)
         except KeyError:
             return [f"missing field path: {path!r}"]
         if actual not in allowed:
@@ -142,7 +155,7 @@ def _run_golden_assertion(output: dict[str, Any], assertion: dict[str, Any]) -> 
         path = str(assertion.get("path", ""))
         pattern = str(assertion.get("pattern", ""))
         try:
-            actual = _resolve_path(output, path)
+            actual = resolve_path(output, path)
         except KeyError:
             return []
         if _pattern_matches(pattern, str(actual)):
@@ -153,7 +166,7 @@ def _run_golden_assertion(output: dict[str, Any], assertion: dict[str, Any]) -> 
         path = str(assertion.get("path", ""))
         pattern = str(assertion.get("pattern", ""))
         try:
-            actual = _resolve_path(output, path)
+            actual = resolve_path(output, path)
         except KeyError:
             return [f"missing field path: {path!r}"]
         if not _pattern_matches(pattern, str(actual)):
@@ -161,6 +174,21 @@ def _run_golden_assertion(output: dict[str, Any], assertion: dict[str, Any]) -> 
         return []
 
     raise ValueError(f"unknown golden assertion type: {atype!r}")
+
+
+def field_matches_pattern(data: dict[str, Any], dotted_path: str, pattern: str) -> bool:
+    """True if the string field at dotted_path matches pattern.
+
+    Deliberately resolves dotted_path first rather than searching the whole
+    serialized fixture -- a mutation anchor's raw_pattern is supposed to prove
+    a SPECIFIC field (raw_path) carries dangerous content, not merely that the
+    pattern appears somewhere in the fixture. Matching against the whole blob
+    lets an anchor pass even when raw_path points at an unrelated, harmless
+    field and the pattern happens to match elsewhere in the same fixture.
+    Raises KeyError if dotted_path is missing, ValueError if pattern is invalid.
+    """
+    value = resolve_path(data, dotted_path)
+    return _pattern_matches(pattern, str(value))
 
 
 def _pattern_matches(pattern: str, text: str) -> bool:
@@ -240,7 +268,7 @@ def find_vacuous_anchored_patterns(
                 continue
             path = str(assertion.get("path", ""))
             try:
-                value = str(_resolve_path(case.recorded_output, path))
+                value = str(resolve_path(case.recorded_output, path))
             except KeyError:
                 continue
             if "\n" not in value:

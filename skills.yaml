@@ -65,6 +65,10 @@ skills:
       optional:
       - name: gitlab.create_merge_request_thread
         enables: unattended inline posting when policy allows
+      degraded_modes:
+        gitlab.create_merge_request_thread: fall back to summary-only or chat-only posting per auto-post-policy.md
+
+
     lint:
       skill_md_max_lines: 180
       target: pr-gatekeeper
@@ -123,6 +127,11 @@ skills:
         enables: metric corroboration paths
       - name: gitlab.get_merge_request
         enables: deploy-regression MR handoff
+      degraded_modes:
+        datadog.query_metrics: rely on logs alone for corroboration; cap confidence below what a matching metric signal would support
+        gitlab.get_merge_request: treat deploy-regression hypothesis as UNKNOWN rather than ruled in or out, not as absence of evidence
+
+
     lint:
       skill_md_max_lines: 180
       target: incident-rca
@@ -142,11 +151,13 @@ skills:
       invokes: [incident-rca, squad-map]
       escalation_targets: [incident-rca, squad-map]
     capabilities:
-      required:
-      - pager.webhook.receive
+      required: [pager.webhook.receive]
       optional:
       - name: slack.post.message
         enables: paging summary delivery when configured
+      degraded_modes:
+        slack.post.message: still produce the triage_doc/postmortem_draft artifact; paging summary is simply not delivered to Slack
+
 
     lint:
       skill_md_max_lines: 180
@@ -164,8 +175,7 @@ skills:
     install:
       requires: [squad-map]
     capabilities:
-      required:
-      - host.repository.read
+      required: [host.repository.read]
       optional:
       - name: gitlab.search_code
         enables: repository census without local checkout
@@ -173,6 +183,11 @@ skills:
         enables: runtime validation passes
       - name: telemetry.logs.query
         enables: KubeSense/log corroboration
+      degraded_modes:
+        gitlab.search_code: fall back to local checkout traversal for the repository census
+        datadog.query_metrics: skip the runtime validation pass; mark runtime-dependent claims UNKNOWN instead of inferring from static evidence
+        telemetry.logs.query: skip KubeSense/log corroboration; mark log-dependent claims UNKNOWN
+
 
     lint:
       skill_md_max_lines: 180
@@ -190,13 +205,16 @@ skills:
     install:
       requires: []
     capabilities:
-      required:
-      - gitlab.list_projects
+      required: [gitlab.list_projects]
       optional:
       - name: gitlab.get_repository_file
         enables: CODEOWNERS and ownership file reads
       - name: datadog.list_service_definitions
         enables: service alias crosswalk
+      degraded_modes:
+        gitlab.get_repository_file: ownership falls back to fuzzy/contributor-based signals only, confidence capped at LOW
+        datadog.list_service_definitions: skip the service alias crosswalk; ownership stays repo-level only
+
 
     lint:
       skill_md_max_lines: 180
@@ -263,8 +281,7 @@ skills:
       invokes: [pr-review, k8s-overprovisioning-datadog, incident-rca]
       escalation_targets: [pr-review, k8s-overprovisioning-datadog, incident-rca]
     capabilities:
-      required:
-      - host.report.write
+      required: [host.report.write]
       optional:
       - name: gitlab.list_merge_requests
         enables: release-candidate MR enumeration
@@ -272,6 +289,11 @@ skills:
         enables: per-service health slice
       - name: telemetry.logs.query
         enables: incident window cross-check
+      degraded_modes:
+        gitlab.list_merge_requests: require an explicit release_ref per manifest entry instead of auto-discovering MRs
+        datadog.query_metrics: per-service health slice becomes UNKNOWN rather than READY/NOT_READY for that dimension
+        telemetry.logs.query: incident window cross-check becomes UNKNOWN; falls through to incident-rca's own signal instead
+
 
     lint:
       skill_md_max_lines: 180
@@ -336,11 +358,13 @@ skills:
     install:
       requires: []
     capabilities:
-      required:
-      - host.repository.read_write
+      required: [host.repository.read_write]
       optional:
       - name: gitlab.get_merge_request
         enables: migration MR review handoff
+      degraded_modes:
+        gitlab.get_merge_request: skip the migration MR review handoff; still produce the SQL rewrite/scan report standalone
+
 
     lint:
       skill_md_max_lines: 180
@@ -366,6 +390,9 @@ skills:
       optional:
       - name: host.issue_tracker.read
         enables: task sourced from tracker instead of user text
+      degraded_modes:
+        host.issue_tracker.read: task must be supplied as direct user text; cannot autonomously source tasks from a tracker query
+
 
     lint:
       skill_md_max_lines: 180
@@ -409,11 +436,13 @@ skills:
       mode: aggregate
       escalation_targets: [migration-program-manager, cost-optimization-sprint-planner]
     capabilities:
-      required:
-      - scheduler.cron.trigger
+      required: [scheduler.cron.trigger]
       optional:
       - name: slack.post.message
         enables: scheduled digest delivery
+      degraded_modes:
+        slack.post.message: WEEKLY_SQUAD_DIGEST.md is still written; the digest simply is not delivered via Slack
+
 
     lint:
       skill_md_max_lines: 180
@@ -431,11 +460,13 @@ skills:
     install:
       requires: []
     capabilities:
-      required:
-      - host.repository.read_write
+      required: [host.repository.read_write]
       optional:
       - name: host.test_runner.execute
         enables: generated test verification loop
+      degraded_modes:
+        host.test_runner.execute: tests are written but left UNVERIFIED; run-until-green iteration cannot happen locally
+
 
     lint:
       skill_md_max_lines: 180
@@ -453,13 +484,16 @@ skills:
     install:
       requires: []
     capabilities:
-      required:
-      - host.repository.read_write
+      required: [host.repository.read_write]
       optional:
       - name: host.test_runner.execute
         enables: generated test verification loop
       - name: host.dependency.reachable
         enables: real adjacent dependency under test
+      degraded_modes:
+        host.test_runner.execute: tests are written but left UNVERIFIED; run-until-green iteration cannot happen locally
+        host.dependency.reachable: no real adjacent dependency to test against; escalate or skip the target rather than fall back to mocking (that belongs to unit-test-creator)
+
 
     lint:
       skill_md_max_lines: 180
@@ -477,11 +511,13 @@ skills:
     install:
       requires: []
     capabilities:
-      required:
-      - host.repository.read_write
+      required: [host.repository.read_write]
       optional:
       - name: host.test_runner.execute
         enables: generated contract test verification
+      degraded_modes:
+        host.test_runner.execute: contract tests are written but left UNVERIFIED; run-until-green iteration cannot happen locally
+
 
     lint:
       skill_md_max_lines: 180
@@ -499,13 +535,16 @@ skills:
     install:
       requires: []
     capabilities:
-      required:
-      - host.repository.read_write
+      required: [host.repository.read_write]
       optional:
       - name: host.browser.automation
         enables: UI journey execution
       - name: host.test_runner.execute
         enables: generated e2e verification
+      degraded_modes:
+        host.browser.automation: cannot execute generated browser journeys locally; ship them UNVERIFIED
+        host.test_runner.execute: tests are written but left UNVERIFIED; run-until-green iteration cannot happen locally
+
 
     lint:
       skill_md_max_lines: 180
@@ -523,13 +562,16 @@ skills:
     install:
       requires: []
     capabilities:
-      required:
-      - host.repository.read_write
+      required: [host.repository.read_write]
       optional:
       - name: host.api.reachable
         enables: black-box HTTP suite against running API
       - name: host.test_runner.execute
         enables: Newman or equivalent runner
+      degraded_modes:
+        host.api.reachable: generate the request/assertion collection but skip execution; mark status UNVERIFIED
+        host.test_runner.execute: collection is generated but hand off for manual/CI execution instead of iterating to green locally
+
 
     lint:
       skill_md_max_lines: 180

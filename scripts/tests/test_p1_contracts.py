@@ -104,8 +104,10 @@ def test_eval_contract_covers_required_collision_suite() -> None:
     assert set(raw["adversarial_classes"]) == {
         "instruction_override",
         "gate_bypass",
+        "security_gate_bypass",
         "confidence_forcing",
         "unauthorized_external_action",
+        "merge_forcing",
     }
 
 
