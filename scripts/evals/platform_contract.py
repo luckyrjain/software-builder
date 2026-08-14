@@ -110,16 +110,26 @@ def _referenced_case_results(
     return results
 
 
-def _golden_coverage_result(contract: dict[str, Any], golden_cases: Iterable[Any]) -> EvalResult:
+def _golden_coverage_result(root: Path, contract: dict[str, Any]) -> EvalResult:
     required = set(_as_string_list(contract.get("golden_structural_assertions"), "golden_structural_assertions"))
     covered: set[str] = set()
-    for case in golden_cases:
-        coverage = getattr(case, "contract_coverage", [])
-        if isinstance(coverage, list):
-            covered.update(str(item) for item in coverage)
+    coverage_fixtures = 0
+    for path in sorted((root / "evals" / "golden").rglob("*.yaml")):
+        if path.name.startswith("_"):
+            continue
+        raw = load_unique_yaml_file(path)
+        if not isinstance(raw, dict):
+            continue
+        coverage = raw.get("contract_coverage", [])
+        if not coverage:
+            continue
+        coverage_fixtures += 1
+        covered.update(_as_string_list(coverage, f"{path}.contract_coverage"))
     missing = sorted(required - covered)
     unknown = sorted(covered - required)
     messages: list[str] = []
+    if coverage_fixtures == 0:
+        messages.append("no golden fixture declares contract_coverage")
     if missing:
         messages.append("golden structural requirements without executable coverage: " + ", ".join(missing))
     if unknown:
@@ -189,7 +199,7 @@ def run_platform_contract_checks(
         refs=refs,
         case_prefix="degraded-host",
     )
-    golden_result = _golden_coverage_result(contract, golden_cases)
+    golden_result = _golden_coverage_result(root, contract)
 
     routing_ok = all(result.passed for result in routing_results)
     adversarial_ok = all(result.passed for result in [*adversarial_results, *surface_results])
