@@ -1,13 +1,12 @@
-"""Batch 3 evaluation coverage gates.
+"""Batch 3 evaluation completeness gates.
 
-Batch 3 turns the shared evaluation policy into an all-skills completeness
-contract. These deterministic checks prove every registered skill participates
-in positive, negative, ambiguous, adversarial, and degraded evaluation; every
-skill has passing golden coverage; and routing, behavior, mutation,
-untrusted-surface, and degraded-host declarations remain tied to passing cases.
+The common harness executes five concrete scenario dimensions for every
+registered skill before these repository-level checks run. This module verifies
+that those behavioral results are complete and passing, then checks golden,
+routing, mutation, untrusted-surface, and degraded-host coverage.
 
-This is intentionally not a live/model-quality benchmark. Tier-2/3 live evals
-remain the place to measure model judgement and prompt quality.
+This remains deterministic CI. Live/model evals measure model judgement and
+host-specific routing quality separately.
 """
 
 from __future__ import annotations
@@ -18,15 +17,15 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
+from scripts.evals.dispatcher import dispatch_prompt
 from scripts.evals.golden import GoldenCase
+from scripts.evals.scenario_harness import DIMENSIONS
 from scripts.evals.types import EvalResult
-from scripts.registry.frontmatter import load_skill_frontmatter
 from scripts.registry.schema import Registry
-from scripts.registry.skill_frontmatter_schema import PLATFORM_CONTRACT, automation_only_guard_errors
 from scripts.yaml_safety import load_unique_yaml_file, require_mapping
 
 BATCH3_SKILL = "batch3"
-REQUIRED_DIMENSIONS = ("positive", "negative", "ambiguous", "adversarial", "degraded")
+REQUIRED_DIMENSIONS = DIMENSIONS
 REQUIRED_BEHAVIOR_SCENARIOS = {
     "correct_invocation",
     "correct_non_invocation",
@@ -41,8 +40,8 @@ REQUIRED_BEHAVIOR_SCENARIOS = {
 }
 
 
-def _result(case_id: str, messages: list[str], *, skill: str = BATCH3_SKILL) -> EvalResult:
-    return EvalResult(skill, case_id, not messages, messages)
+def _result(case_id: str, messages: list[str]) -> EvalResult:
+    return EvalResult(BATCH3_SKILL, case_id, not messages, messages)
 
 
 def _result_map(results: Iterable[EvalResult]) -> dict[str, EvalResult]:
@@ -56,128 +55,25 @@ def _eval_contract(root: Path) -> dict[str, Any]:
     )
 
 
-def _platform_data(root: Path) -> dict[str, Any]:
-    return require_mapping(
-        load_unique_yaml_file(root / "scripts" / "registry" / "platform_contracts.yaml"),
-        "platform contracts",
-    )
-
-
-def _composition_data(root: Path) -> dict[str, Any]:
-    return require_mapping(
-        load_unique_yaml_file(root / "scripts" / "registry" / "composition_runtime.yaml"),
-        "composition runtime",
-    )
-
-
-def _positive_case(skill_id: str, results: dict[str, EvalResult]) -> EvalResult:
-    ref = f"{skill_id}/global-happy"
-    result = results.get(ref)
+def _all_skill_scenarios(registry: Registry, results: dict[str, EvalResult]) -> EvalResult:
     messages: list[str] = []
-    if result is None:
-        messages.append("missing global-happy baseline")
-    elif not result.passed:
-        messages.append("global-happy baseline is failing")
-    return _result("batch3-positive", messages, skill=skill_id)
-
-
-def _negative_case(registry: Registry, skill_id: str, platform: dict[str, Any]) -> EvalResult:
-    """Verify the skill cannot silently widen its declared authority boundary."""
-    messages: list[str] = []
-    permissions = require_mapping(platform.get("skill_permissions"), "skill_permissions")
-    permission = require_mapping(permissions.get(skill_id), f"skill_permissions.{skill_id}")
-    risks = set(registry.skills[skill_id].risk_class)
-
-    repository = permission.get("repository")
-    external = permission.get("external_actions")
-    unattended = permission.get("unattended")
-    merge = permission.get("merge")
-    if (repository == "write") != bool({"repository-write", "merge"} & risks):
-        messages.append("repository permission does not match risk_class")
-    if unattended != ("unattended" in risks):
-        messages.append("unattended permission does not match risk_class")
-    if merge != ("merge" in risks):
-        messages.append("merge permission does not match risk_class")
-    if "posting" in risks and external != "write":
-        messages.append("posting risk does not require external write permission")
-    if external == "write" and not ({"posting", "merge", "repository-write", "unattended"} & risks):
-        messages.append("external write permission has no matching risk declaration")
-    return _result("batch3-negative", messages, skill=skill_id)
-
-
-def _ambiguous_case(root: Path, registry: Registry, skill_id: str, composition: dict[str, Any]) -> EvalResult:
-    """Verify routing/invocation metadata remains explicit under ambiguous prompts."""
-    messages: list[str] = []
-    entry = registry.skills[skill_id]
-    if entry.invocation not in {"ambient", "automation-only"}:
-        messages.append(f"unknown invocation mode {entry.invocation!r}")
-    skill_types = require_mapping(composition.get("skill_types"), "skill_types")
-    skill_type = skill_types.get(skill_id)
-    if skill_type not in {"leaf", "router", "orchestrator", "trigger"}:
-        messages.append(f"missing or invalid composition skill type {skill_type!r}")
-    frontmatter = load_skill_frontmatter(root / entry.path / "SKILL.md")
-    messages.extend(automation_only_guard_errors(entry.invocation, frontmatter))
-    return _result("batch3-ambiguous", messages, skill=skill_id)
-
-
-def _adversarial_case(root: Path, registry: Registry, skill_id: str, results: dict[str, EvalResult]) -> EvalResult:
-    """Verify inherited guardrails and the per-skill adversarial baseline."""
-    messages: list[str] = []
-    baseline = results.get(f"{skill_id}/global-adversarial")
-    if baseline is None:
-        messages.append("missing global-adversarial baseline")
-    elif not baseline.passed:
-        messages.append("global-adversarial baseline is failing")
-    frontmatter = load_skill_frontmatter(root / registry.skills[skill_id].path / "SKILL.md")
-    if frontmatter.get("platform_contract") != PLATFORM_CONTRACT:
-        messages.append("skill does not inherit the platform guardrail contract")
-    return _result("batch3-adversarial", messages, skill=skill_id)
-
-
-def _declared_capability_names(entry: Any) -> set[str]:
-    names = set(entry.capabilities.required)
-    names.update(optional.name for optional in entry.capabilities.optional)
-    for path in entry.capabilities.any_of:
-        names.update(path.required)
-        names.update(optional.name for optional in path.optional)
-    return names
-
-
-def _degraded_case(registry: Registry, skill_id: str) -> EvalResult:
-    """Verify degraded-mode declarations cannot point at imaginary capabilities."""
-    entry = registry.skills[skill_id]
-    declared = _declared_capability_names(entry)
-    messages: list[str] = []
-    for capability, behavior in sorted(entry.capabilities.degraded_modes.items()):
-        if capability not in declared:
-            messages.append(f"degraded mode references undeclared capability {capability!r}")
-        if not isinstance(behavior, str) or not behavior.strip():
-            messages.append(f"degraded mode for {capability!r} is empty")
-    for path in entry.capabilities.any_of:
-        if not path.required:
-            messages.append(f"capability path {path.name!r} has no required capability")
-    return _result("batch3-degraded", messages, skill=skill_id)
-
-
-def _all_skill_dimensions(
-    root: Path,
-    registry: Registry,
-    results: dict[str, EvalResult],
-) -> list[EvalResult]:
-    platform = _platform_data(root)
-    composition = _composition_data(root)
-    output: list[EvalResult] = []
     for skill_id in sorted(registry.skills):
-        output.extend(
-            [
-                _positive_case(skill_id, results),
-                _negative_case(registry, skill_id, platform),
-                _ambiguous_case(root, registry, skill_id, composition),
-                _adversarial_case(root, registry, skill_id, results),
-                _degraded_case(registry, skill_id),
-            ],
-        )
-    return output
+        for dimension in REQUIRED_DIMENSIONS:
+            ref = f"{skill_id}/scenario-{dimension}"
+            result = results.get(ref)
+            if result is None:
+                messages.append(f"{skill_id}: missing executable {dimension} scenario")
+            elif not result.passed:
+                messages.append(f"{skill_id}: {dimension} scenario is failing: {'; '.join(result.messages)}")
+    expected = len(registry.skills) * len(REQUIRED_DIMENSIONS)
+    actual = sum(
+        1
+        for ref in results
+        if any(ref == f"{skill_id}/scenario-{dimension}" for skill_id in registry.skills for dimension in REQUIRED_DIMENSIONS)
+    )
+    if actual != expected:
+        messages.append(f"scenario result count {actual} != expected {expected}")
+    return _result("all-skill-five-dimension-scenarios", messages)
 
 
 def _all_skill_golden(
@@ -189,7 +85,6 @@ def _all_skill_golden(
     by_skill: dict[str, list[GoldenCase]] = {}
     for case in golden_cases:
         by_skill.setdefault(case.skill, []).append(case)
-
     for skill_id in sorted(registry.skills):
         cases = by_skill.get(skill_id, [])
         if not cases:
@@ -202,7 +97,6 @@ def _all_skill_golden(
 
 
 def _behavior_scenario_matrix(root: Path, results: dict[str, EvalResult]) -> EvalResult:
-    """Require the ten item-24 behavior scenarios to be executable and passing."""
     contract = _eval_contract(root)
     scenarios = require_mapping(contract.get("behavior_scenarios"), "behavior_scenarios")
     messages: list[str] = []
@@ -212,7 +106,6 @@ def _behavior_scenario_matrix(root: Path, results: dict[str, EvalResult]) -> Eva
             f"missing={sorted(REQUIRED_BEHAVIOR_SCENARIOS - set(scenarios))}, "
             f"extra={sorted(set(scenarios) - REQUIRED_BEHAVIOR_SCENARIOS)}",
         )
-
     for scenario_id, raw in sorted(scenarios.items()):
         config = require_mapping(raw, f"behavior_scenarios.{scenario_id}")
         refs = config.get("case_refs")
@@ -236,7 +129,7 @@ def _behavior_scenario_matrix(root: Path, results: dict[str, EvalResult]) -> Eva
             continue
         prefix_by_gate = {
             "routing_collisions": "platform/routing-",
-            "adversarial_matrix": "platform/adversarial-class-",
+            "adversarial_matrix": "batch3-mutation/",
         }
         prefix = prefix_by_gate.get(str(gate))
         if prefix is None:
@@ -250,29 +143,46 @@ def _behavior_scenario_matrix(root: Path, results: dict[str, EvalResult]) -> Eva
     return _result("behavior-scenario-matrix", messages)
 
 
+def _routing_matrix(root: Path, registry: Registry) -> EvalResult:
+    """Execute the seven collision prompts through the deterministic dispatcher."""
+    contract = _eval_contract(root)
+    collisions = contract.get("routing_collisions")
+    messages: list[str] = []
+    if not isinstance(collisions, list) or not collisions:
+        return _result("routing-collision-suite", ["routing_collisions must be non-empty"])
+    seen: set[str] = set()
+    for raw in collisions:
+        if not isinstance(raw, dict):
+            messages.append("routing collision entry must be a mapping")
+            continue
+        collision_id = str(raw.get("id", ""))
+        prompt = str(raw.get("prompt", ""))
+        expected = str(raw.get("expected_owner", ""))
+        if not collision_id or collision_id in seen:
+            messages.append(f"invalid/duplicate routing collision id {collision_id!r}")
+            continue
+        seen.add(collision_id)
+        result = dispatch_prompt(root, registry, prompt)
+        if result.status != "selected" or result.owner != expected:
+            messages.append(
+                f"{collision_id}: dispatcher returned status={result.status}, "
+                f"candidates={list(result.candidates)}; expected owner={expected}",
+            )
+    return _result("routing-collision-suite", messages)
+
+
 def _referenced_matrix(
     root: Path,
     results: dict[str, EvalResult],
     *,
     key: str,
     case_id: str,
-    require_mutation: bool = False,
 ) -> EvalResult:
     contract = _eval_contract(root)
     matrix = require_mapping(contract.get(key), key)
     messages: list[str] = []
-    seen_mutations: set[str] = set()
     for item_id, raw in sorted(matrix.items()):
         config = require_mapping(raw, f"{key}.{item_id}")
-        if require_mutation:
-            mutation = config.get("mutation")
-            if not isinstance(mutation, str) or not mutation.strip():
-                messages.append(f"{item_id}: missing mutation payload")
-            else:
-                normalized = mutation.strip().casefold()
-                if normalized in seen_mutations:
-                    messages.append(f"{item_id}: mutation payload duplicates another class")
-                seen_mutations.add(normalized)
         refs = config.get("case_refs")
         if not isinstance(refs, list) or not refs or not all(isinstance(ref, str) and ref for ref in refs):
             messages.append(f"{item_id}: case_refs must be a non-empty list")
@@ -286,12 +196,25 @@ def _referenced_matrix(
     return _result(case_id, messages)
 
 
+def _mutation_matrix(root: Path, results: dict[str, EvalResult]) -> EvalResult:
+    contract = _eval_contract(root)
+    adversarial = require_mapping(contract.get("adversarial_classes"), "adversarial_classes")
+    messages: list[str] = []
+    for class_id in sorted(adversarial):
+        ref = f"batch3-mutation/{class_id}"
+        result = results.get(ref)
+        if result is None:
+            messages.append(f"missing executable mutation result {ref}")
+        elif not result.passed:
+            messages.append(f"mutation result is failing: {ref}: {'; '.join(result.messages)}")
+    return _result("mutation-matrix", messages)
+
+
 def _mutation_anchor_matrix(
     root: Path,
     results: dict[str, EvalResult],
     golden_cases: Iterable[GoldenCase],
 ) -> EvalResult:
-    """Prove each mutation class is anchored to genuinely dangerous recorded input."""
     contract = _eval_contract(root)
     adversarial = require_mapping(contract.get("adversarial_classes"), "adversarial_classes")
     anchor_doc = require_mapping(
@@ -307,7 +230,6 @@ def _mutation_anchor_matrix(
             "mutation anchor classes must exactly match adversarial_classes; "
             f"missing={sorted(set(adversarial) - set(anchors))}, extra={sorted(set(anchors) - set(adversarial))}",
         )
-
     golden_by_ref = {f"{case.skill}/{case.case_id}": case for case in golden_cases}
     for class_id, raw in sorted(anchors.items()):
         config = require_mapping(raw, f"mutation anchors.{class_id}")
@@ -320,11 +242,8 @@ def _mutation_anchor_matrix(
             messages.append(f"{class_id}: raw_pattern is required")
             continue
         result = results.get(case_ref)
-        if result is None:
-            messages.append(f"{class_id}: anchored eval result is missing: {case_ref}")
-            continue
-        if not result.passed:
-            messages.append(f"{class_id}: anchored eval result is failing: {case_ref}")
+        if result is None or not result.passed:
+            messages.append(f"{class_id}: anchor fixture must exist and pass: {case_ref}")
         fixture = golden_by_ref.get(case_ref)
         if fixture is None:
             messages.append(f"{class_id}: anchor must reference a golden fixture: {case_ref}")
@@ -332,32 +251,10 @@ def _mutation_anchor_matrix(
         try:
             recorded = json.dumps(fixture.recorded_output, sort_keys=True)
             if not re.search(raw_pattern, recorded, flags=re.IGNORECASE | re.MULTILINE):
-                messages.append(
-                    f"{class_id}: recorded_output does not contain dangerous raw pattern {raw_pattern!r}",
-                )
+                messages.append(f"{class_id}: recorded_output lacks raw pattern {raw_pattern!r}")
         except re.error as exc:
             messages.append(f"{class_id}: invalid raw_pattern {raw_pattern!r}: {exc}")
     return _result("mutation-anchor-matrix", messages)
-
-
-def _routing_matrix(root: Path, results: dict[str, EvalResult]) -> EvalResult:
-    contract = _eval_contract(root)
-    collisions = contract.get("routing_collisions")
-    messages: list[str] = []
-    if not isinstance(collisions, list) or not collisions:
-        return _result("routing-collision-suite", ["routing_collisions must be non-empty"])
-    for raw in collisions:
-        if not isinstance(raw, dict):
-            messages.append("routing collision entry must be a mapping")
-            continue
-        collision_id = str(raw.get("id", ""))
-        ref = f"platform/routing-{collision_id}"
-        result = results.get(ref)
-        if result is None:
-            messages.append(f"missing routing collision result {ref}")
-        elif not result.passed:
-            messages.append(f"routing collision is failing: {collision_id}")
-    return _result("routing-collision-suite", messages)
 
 
 def run_batch3_contract_checks(
@@ -367,32 +264,15 @@ def run_batch3_contract_checks(
     case_results: Iterable[EvalResult],
     golden_cases: Iterable[GoldenCase],
 ) -> list[EvalResult]:
-    """Run Batch 3 completeness checks after the existing deterministic harness."""
     result_map = _result_map(case_results)
     golden_list = list(golden_cases)
     return [
-        *_all_skill_dimensions(root, registry, result_map),
+        _all_skill_scenarios(registry, result_map),
         _all_skill_golden(registry, result_map, golden_list),
         _behavior_scenario_matrix(root, result_map),
-        _routing_matrix(root, result_map),
-        _referenced_matrix(
-            root,
-            result_map,
-            key="adversarial_classes",
-            case_id="mutation-matrix",
-            require_mutation=True,
-        ),
+        _routing_matrix(root, registry),
+        _mutation_matrix(root, result_map),
         _mutation_anchor_matrix(root, result_map, golden_list),
-        _referenced_matrix(
-            root,
-            result_map,
-            key="untrusted_surfaces",
-            case_id="untrusted-surface-matrix",
-        ),
-        _referenced_matrix(
-            root,
-            result_map,
-            key="degraded_host_cases",
-            case_id="degraded-host-matrix",
-        ),
+        _referenced_matrix(root, result_map, key="untrusted_surfaces", case_id="untrusted-surface-matrix"),
+        _referenced_matrix(root, result_map, key="degraded_host_cases", case_id="degraded-host-matrix"),
     ]
