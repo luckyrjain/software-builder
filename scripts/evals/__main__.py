@@ -16,7 +16,9 @@ from scripts.evals.golden import (
     load_golden_fixtures,
     run_golden_case,
 )
+from scripts.evals.mutation_guard import run_guardrail_mutation_checks
 from scripts.evals.platform_contract import run_platform_contract_checks
+from scripts.evals.scenario_harness import run_per_skill_scenarios
 from scripts.evals.transcript import load_transcript_fixtures, run_transcript_case
 from scripts.evals.types import EvalResult
 from scripts.registry.frontmatter import load_skill_frontmatter
@@ -237,9 +239,13 @@ def run_all(
     for case in filtered(golden_cases, skill_filter, tier_filter):
         results.append(admit_case(case, run_golden_case, seen=seen, registry=registry))
 
-    # Repository-wide contract checks belong to the normal unfiltered harness.
-    # Focused --skill/--tier runs stay focused and do not claim repository-wide coverage.
+    # Repository-wide scenario/contract checks belong to the normal unfiltered
+    # harness. Focused --skill/--tier runs stay focused and do not claim full
+    # platform coverage.
     if skill_filter is None and tier_filter is None:
+        scenario_results = run_per_skill_scenarios(root, registry)
+        results.extend(scenario_results)
+
         platform_results = run_platform_contract_checks(
             root,
             registry,
@@ -247,6 +253,10 @@ def run_all(
             golden_cases=golden_cases,
         )
         results.extend(platform_results)
+
+        mutation_results = run_guardrail_mutation_checks(root, golden_cases)
+        results.extend(mutation_results)
+
         results.extend(
             run_batch3_contract_checks(
                 root,
