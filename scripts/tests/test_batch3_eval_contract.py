@@ -19,18 +19,19 @@ def _baseline():
     return registry, golden, results
 
 
-def test_batch3_all_registered_skills_cover_five_dimensions() -> None:
-    registry, golden, results = _baseline()
-    checks = run_batch3_contract_checks(
-        ROOT,
-        registry,
-        case_results=results,
-        golden_cases=golden,
-    )
-    per_skill = [result for result in checks if result.skill in registry.skills]
-    assert len(per_skill) == len(registry.skills) * len(REQUIRED_DIMENSIONS) == 115
-    assert all(result.passed for result in per_skill), [
-        (result.skill, result.case_id, result.messages) for result in per_skill if not result.passed
+def test_batch3_all_registered_skills_execute_five_scenarios() -> None:
+    registry, _golden, results = _baseline()
+    scenario_results = [
+        result
+        for result in results
+        if result.skill in registry.skills and result.case_id.startswith("scenario-")
+    ]
+    assert len(scenario_results) == len(registry.skills) * len(REQUIRED_DIMENSIONS) == 115
+    assert {result.case_id for result in scenario_results} == {
+        f"scenario-{dimension}" for dimension in REQUIRED_DIMENSIONS
+    }
+    assert all(result.passed for result in scenario_results), [
+        (result.skill, result.case_id, result.messages) for result in scenario_results if not result.passed
     ]
 
 
@@ -42,8 +43,8 @@ def test_batch3_repository_matrices_and_golden_coverage_pass() -> None:
         case_results=results,
         golden_cases=golden,
     )
-    repository_checks = [result for result in checks if result.skill == "batch3"]
-    assert {result.case_id for result in repository_checks} == {
+    assert {result.case_id for result in checks} == {
+        "all-skill-five-dimension-scenarios",
         "all-skill-golden",
         "behavior-scenario-matrix",
         "routing-collision-suite",
@@ -52,9 +53,27 @@ def test_batch3_repository_matrices_and_golden_coverage_pass() -> None:
         "untrusted-surface-matrix",
         "degraded-host-matrix",
     }
-    assert all(result.passed for result in repository_checks), [
-        (result.case_id, result.messages) for result in repository_checks if not result.passed
+    assert all(result.passed for result in checks), [
+        (result.case_id, result.messages) for result in checks if not result.passed
     ]
+
+
+def test_batch3_scenario_gate_fails_when_one_skill_loses_a_dimension() -> None:
+    registry, golden, results = _baseline()
+    filtered = [
+        result
+        for result in results
+        if not (result.skill == "pr-review" and result.case_id == "scenario-degraded")
+    ]
+    checks = run_batch3_contract_checks(
+        ROOT,
+        registry,
+        case_results=filtered,
+        golden_cases=golden,
+    )
+    gate = next(result for result in checks if result.case_id == "all-skill-five-dimension-scenarios")
+    assert not gate.passed
+    assert any("pr-review: missing executable degraded scenario" in message for message in gate.messages)
 
 
 def test_batch3_golden_gate_fails_when_a_skill_loses_all_golden_coverage() -> None:
@@ -71,12 +90,12 @@ def test_batch3_golden_gate_fails_when_a_skill_loses_all_golden_coverage() -> No
     assert any("pr-review: no golden fixture" in message for message in gate.messages)
 
 
-def test_batch3_mutation_gate_fails_when_referenced_regression_is_missing() -> None:
+def test_batch3_mutation_gate_fails_when_executable_mutation_is_missing() -> None:
     registry, golden, results = _baseline()
     filtered = [
         result
         for result in results
-        if not (result.skill == "pr-review" and result.case_id == "golden-chat-only-not-posted")
+        if not (result.skill == "batch3-mutation" and result.case_id == "unauthorized_external_action")
     ]
     checks = run_batch3_contract_checks(
         ROOT,
@@ -86,7 +105,7 @@ def test_batch3_mutation_gate_fails_when_referenced_regression_is_missing() -> N
     )
     gate = next(result for result in checks if result.case_id == "mutation-matrix")
     assert not gate.passed
-    assert any("pr-review/golden-chat-only-not-posted" in message for message in gate.messages)
+    assert any("batch3-mutation/unauthorized_external_action" in message for message in gate.messages)
 
 
 def test_batch3_mutation_anchor_requires_passing_dangerous_fixture() -> None:
