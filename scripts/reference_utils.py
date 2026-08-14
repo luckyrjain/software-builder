@@ -33,12 +33,17 @@ def read_manifest_file(path: Path) -> dict[str, Any]:
     if not path.is_file():
         raise ManifestError(f"missing manifest: {path}")
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
+        text = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise ManifestError(f"cannot read manifest: {exc}") from exc
+    try:
+        data = json.loads(text)
     except json.JSONDecodeError as exc:
         raise ManifestError(f"invalid manifest JSON: {exc}") from exc
     if not isinstance(data, dict):
         raise ManifestError("manifest is not a JSON object")
     return data
+
 
 # Filesystem noise that can legitimately appear after a skill is packaged/installed and
 # used (running a bundled script writes __pycache__, editors/OS write dotfiles) -- shared
