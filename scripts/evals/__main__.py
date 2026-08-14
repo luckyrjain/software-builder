@@ -24,10 +24,6 @@ from scripts.registry.skill_frontmatter_schema import automation_only_guard_erro
 from scripts.yaml_safety import YAML_SAFETY_ERRORS, load_unique_yaml_file
 
 ROOT = Path(__file__).resolve().parents[2]
-FIXTURES_DIR = ROOT / "evals" / "fixtures"
-TRANSCRIPTS_DIR = ROOT / "evals" / "transcripts"
-GOLDEN_DIR = ROOT / "evals" / "golden"
-GLOBAL_FIXTURE = FIXTURES_DIR / "_global.yaml"
 
 WORKFLOW_REQUIRED_KEYS = ("workflow_version", "phase", "produces", "consumes")
 
