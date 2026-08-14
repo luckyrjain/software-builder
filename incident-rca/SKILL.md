@@ -114,6 +114,10 @@ Full matrix: [cross-skill-escalation.md](../docs/skill-framework/shared/cross-sk
 
 ## Framework
 
+Completion emits the canonical `skill_result` envelope; actions classify against
+`action_gates`; scope follows `definition_of_done` — all defined in
+[runtime-contract.md](../docs/skill-framework/shared/runtime-contract.md).
+
 Routing: [skill-routing.md](../docs/skill-framework/shared/skill-routing.md) · shared conventions:
 [docs/skill-framework/README.md](../docs/skill-framework/README.md) · confidence
 [confidence-bands.md](../docs/skill-framework/shared/confidence-bands.md) · prompt injection

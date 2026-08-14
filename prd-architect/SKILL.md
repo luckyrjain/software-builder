@@ -92,6 +92,10 @@ None by default — deliverable is the PRD artifact in chat (or a user-requested
 
 ## Framework
 
+Completion emits the canonical `skill_result` envelope; actions classify against
+`action_gates`; scope follows `definition_of_done` — all defined in
+[runtime-contract.md](../docs/skill-framework/shared/runtime-contract.md).
+
 [docs/skill-framework/README.md](../docs/skill-framework/README.md) ·
 [prompt-injection.md](../docs/skill-framework/shared/prompt-injection.md) ·
 [safe-output.md](../docs/skill-framework/shared/safe-output.md) · Smoke test:

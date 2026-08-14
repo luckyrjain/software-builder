@@ -1,5 +1,6 @@
 ---
 name: loop-task-implementer
+skill_version: 1.0
 platform_contract: skill-platform-v1
 description: >-
   Use when autonomously implementing one or more software tasks through isolated build,
@@ -79,12 +80,7 @@ Both lenses must be clean for the same normalized diff fingerprint.
 
 ## Blocking standard
 
-A finding is blocking only when evidence shows at least one of: an explicit acceptance criterion is
-violated; an enforced repository, security, compatibility, or deployment rule is violated; a
-demonstrable input/state/race/failure/deployment path is materially incorrect or unsafe; a
-reproducible check fails because of the change; or the change materially exposes/worsens a
-pre-existing defect. Style preferences, optional metrics, speculative risks, and unrelated cleanup
-are not blocking.
+A finding is blocking only when evidence shows at least one of: an explicit acceptance criterion is violated; an enforced repository, security, compatibility, or deployment rule is violated; a demonstrable input/state/race/failure/deployment path is materially incorrect or unsafe; a reproducible check fails because of the change; or the change materially exposes/worsens a pre-existing defect. Style preferences, optional metrics, speculative risks, and unrelated cleanup are not blocking.
 
 ## Adjudication
 
@@ -151,6 +147,10 @@ that report follows [safe-output.md](../docs/skill-framework/shared/safe-output.
 
 ## Framework
 
+Completion emits the canonical `skill_result` envelope; actions classify against
+`action_gates`; scope follows `definition_of_done` — all defined in
+[runtime-contract.md](../docs/skill-framework/shared/runtime-contract.md).
+
 Follows [docs/skill-framework/README.md](../docs/skill-framework/README.md) ·
 [skill-routing](../docs/skill-framework/shared/skill-routing.md). No Datadog/GitLab/Jira MCP
 dependency (see [reference/mcp-capabilities.md](reference/mcp-capabilities.md)); not a
@@ -176,5 +176,4 @@ Full matrix: [cross-skill-escalation.md](../docs/skill-framework/shared/cross-sk
 
 ## Post-actions
 
-None beyond the PR itself — no Jira/Slack/canvas write-back. See
-[post-action-templates.md](../docs/skill-framework/shared/post-action-templates.md).
+None beyond the PR itself — no Jira/Slack/canvas write-back. See [post-action-templates.md](../docs/skill-framework/shared/post-action-templates.md).

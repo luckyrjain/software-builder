@@ -8,6 +8,7 @@ from pathlib import Path
 import yaml
 
 from scripts.registry.backfill_capabilities import cmd_backfill
+from scripts.registry.capability_family_sync import validate_capability_families
 from scripts.registry.capability_sync import validate_capability_catalog_sync
 from scripts.registry.composition import render_composition_mermaid
 from scripts.registry.composition_runtime import (
@@ -110,6 +111,10 @@ def _capability_catalog_path(root: Path) -> Path:
     return root / "scripts" / "registry" / "capability_catalog.yaml"
 
 
+def _capability_families_path(root: Path) -> Path:
+    return root / "scripts" / "registry" / "capability_families.yaml"
+
+
 def _platform_contracts_path(root: Path) -> Path:
     return root / "scripts" / "registry" / "platform_contracts.yaml"
 
@@ -132,6 +137,13 @@ def _validate_for_generate(root: Path) -> list[str]:
     errors = validate_registry(root)
     if _capability_catalog_path(root).is_file():
         errors.extend(validate_capability_catalog_sync(root))
+    if _capability_catalog_path(root).is_file() and _capability_families_path(root).is_file():
+        errors.extend(
+            validate_capability_families(
+                catalog_path=_capability_catalog_path(root),
+                families_path=_capability_families_path(root),
+            )
+        )
     if _platform_contracts_path(root).is_file():
         errors.extend(validate_manifest(root))
     if any(path.is_file() for path in _p1_layer_paths(root)):

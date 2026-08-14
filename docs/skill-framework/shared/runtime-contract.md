@@ -139,3 +139,27 @@ Current-state evidence must not be represented as a future-state recommendation,
 ## 10. Concise completion
 
 User-facing completion answers should make four things clear without exposing internal control flow: what was done, what evidence supports it, what remains or is blocked, and what the next action is.
+
+## 11. Action authorization gates
+
+Every action a skill takes falls into exactly one `action_gates` tier from `platform_contracts.yaml`, which sets the minimum authorization the action requires (a skill may always require more, never less):
+
+| Tier | Examples | Minimum authorization |
+|------|----------|------------------------|
+| `read_only` | Reading files, querying metrics, listing PRs | none |
+| `local_reversible_write` | Writing a local branch, a scratch file | explicit task authorization |
+| `remote_non_destructive_write` | Posting a PR comment, creating an issue | explicit task authorization |
+| `destructive_or_high_impact` | Merge, deploy, delete, rollback | explicit action authorization |
+
+Classify each action a skill can take against this table instead of inventing skill-local confirmation language.
+
+## 12. Definition of Done
+
+Every skill declares, for its own output, the `definition_of_done` fields from `platform_contracts.yaml`:
+
+- `required_artifacts` — what must exist for the result to count as complete.
+- `required_checks` — what must have been verified (tests, validators, re-reads).
+- `blocked_conditions` — the specific states that force a `BLOCKED` status instead of `SUCCESS`/`PARTIAL`.
+- `partial_result_behavior` — what a skill reports and preserves when only some of its work could complete.
+
+A skill may define these once, narrowly, in its own words; it must not leave "done" implicit.

@@ -47,7 +47,9 @@ def validate_skill_frontmatter_fields(skill_id: str, frontmatter: dict[str, Any]
                 f"got {platform_contract!r}",
             )
 
-    if "skill_version" in frontmatter:
+    if "skill_version" not in frontmatter:
+        errors.append(f"error: {skill_id}: skill_version is mandatory")
+    else:
         version = frontmatter["skill_version"]
         if not isinstance(version, (int, float)):
             errors.append(

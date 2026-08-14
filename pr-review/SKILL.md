@@ -1,5 +1,6 @@
 ---
 name: pr-review
+skill_version: 1.0
 platform_contract: skill-platform-v1
 description: >-
   GitHub pull-request and GitLab merge-request review by URL, number, or current branch. Phased workflow:
@@ -93,6 +94,10 @@ Full matrix: [cross-skill-escalation.md](../docs/skill-framework/shared/cross-sk
 | Resource-down MR merged | **k8s-overprovisioning-datadog** + **incident-rca** if outage |
 
 ## Framework
+
+Completion emits the canonical `skill_result` envelope; actions classify against
+`action_gates`; scope follows `definition_of_done` — all defined in
+[runtime-contract.md](../docs/skill-framework/shared/runtime-contract.md).
 
 Routing: [skill-routing.md](../docs/skill-framework/shared/skill-routing.md) · shared conventions:
 [docs/skill-framework/README.md](../docs/skill-framework/README.md) · confidence

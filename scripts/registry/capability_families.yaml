@@ -1,0 +1,61 @@
+# Capability families: provider-agnostic names skills can require, resolved to
+# concrete provider/tool capability ids by whatever adapter a host has
+# installed. Skills declare `any_of`/`required`/`optional` using the concrete
+# ids in capability_catalog.yaml (unchanged, since that catalogue mirrors what
+# each skill's reference/mcp-capabilities.md actually calls); this file is the
+# adapter-resolution layer that lets a host swap GitLab for GitHub, or Datadog
+# for Kubernetes-native metrics, without the skill prompt naming either one.
+#
+# Every concrete, provider-branded capability id used anywhere in
+# capability_catalog.yaml must resolve to exactly one family here (validated
+# by capability_family_sync.py). host.*, <skill-id>.invoke, and already
+# provider-neutral ids (telemetry.*, pager.*, scheduler.*, slack.*) are exempt
+# -- they don't name a specific vendor to abstract away from.
+schema_version: 1
+
+families:
+  scm.pull_request.read:
+    resolves:
+      - gitlab.get_merge_request
+      - gitlab.get_merge_request_diffs
+      - github.get_pull_request
+      - github.get_pull_request_files
+
+  scm.pull_request.comment.write:
+    resolves:
+      - gitlab.create_merge_request_thread
+      - gitlab.create_note
+      - github.create_pull_request_comment
+      - github.create_issue_comment
+
+  scm.pull_request.comment.read:
+    resolves:
+      - github.list_pull_request_review_comments
+      - github.list_issue_comments
+
+  scm.repository.read:
+    resolves:
+      - gitlab.get_repository_file
+      - gitlab.search_code
+
+  scm.merge_request.list:
+    resolves:
+      - gitlab.list_merge_requests
+      - gitlab.list_projects
+
+  observability.metrics.query:
+    resolves:
+      - datadog.query_metrics
+      - kubernetes.metrics.history
+
+  observability.monitors.list:
+    resolves:
+      - datadog.list_monitors
+
+  observability.service_catalog.read:
+    resolves:
+      - datadog.list_service_definitions
+
+  infra.workloads.read:
+    resolves:
+      - kubernetes.workloads.read

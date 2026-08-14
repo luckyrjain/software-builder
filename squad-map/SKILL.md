@@ -1,5 +1,6 @@
 ---
 name: squad-map
+skill_version: 1.0
 platform_contract: skill-platform-v1
 description: >-
   Maps repos to org squads (GitLab group hierarchy) and runtime squads (Datadog
@@ -112,6 +113,10 @@ None — squad-map is read-only and produces no Jira/Slack/canvas write-back. Ou
 `SQUAD_MAP.md`. See [post-action-templates.md](../docs/skill-framework/shared/post-action-templates.md).
 
 ## Framework
+
+Completion emits the canonical `skill_result` envelope; actions classify against
+`action_gates`; scope follows `definition_of_done` — all defined in
+[runtime-contract.md](../docs/skill-framework/shared/runtime-contract.md).
 
 Routing: [skill-routing.md](../docs/skill-framework/shared/skill-routing.md) · shared conventions:
 [docs/skill-framework/README.md](../docs/skill-framework/README.md) · confidence

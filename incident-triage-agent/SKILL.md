@@ -1,5 +1,6 @@
 ---
 name: incident-triage-agent
+skill_version: 1.0
 platform_contract: skill-platform-v1
 description: >-
   Paging-webhook-triggered composition of incident-rca and squad-map. Page fires → fast triage doc
@@ -106,6 +107,10 @@ paste-ready blocks render into this skill's own doc instead. See
 [post-action-templates.md](../docs/skill-framework/shared/post-action-templates.md).
 
 ## Framework
+
+Completion emits the canonical `skill_result` envelope; actions classify against
+`action_gates`; scope follows `definition_of_done` — all defined in
+[runtime-contract.md](../docs/skill-framework/shared/runtime-contract.md).
 
 Routing: [skill-routing.md](../docs/skill-framework/shared/skill-routing.md) · shared conventions:
 [docs/skill-framework/README.md](../docs/skill-framework/README.md) · confidence
