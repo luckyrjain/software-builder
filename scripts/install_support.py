@@ -4,11 +4,16 @@
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from pathlib import Path
 
-from scripts.reference_utils import MANIFEST_NAME, is_ignored_package_path, sha256_file
+from scripts.reference_utils import (
+    MANIFEST_NAME,
+    ManifestError,
+    is_ignored_package_path,
+    read_manifest_file,
+    sha256_file,
+)
 from scripts.registry.schema import parse_registry
 from scripts.yaml_safety import YAML_SAFETY_ERRORS
 
@@ -105,17 +110,12 @@ def cmd_verify(installed_path: Path) -> int:
     if not installed_path.is_dir():
         print(f"error: not a directory: {installed_path}", file=sys.stderr)
         return 1
-    manifest_path = installed_path / MANIFEST_NAME
-    if not manifest_path.is_file():
-        print(f"error: missing manifest: {manifest_path}", file=sys.stderr)
-        return 1
     try:
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as exc:
-        print(f"error: invalid manifest JSON: {exc}", file=sys.stderr)
-        return 1
-    if not isinstance(manifest, dict):
-        print("error: manifest is not a JSON object", file=sys.stderr)
+        manifest = read_manifest_file(installed_path / MANIFEST_NAME)
+    except ManifestError as exc:
+        # Unlike doctor.py's status check, a broken manifest IS the failure
+        # this command reports -- surface it, don't degrade silently.
+        print(f"error: {exc}", file=sys.stderr)
         return 1
     skill_name = manifest.get("skill")
     if not isinstance(skill_name, str) or not skill_name:

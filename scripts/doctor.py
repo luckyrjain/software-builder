@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -13,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from scripts.reference_utils import MANIFEST_NAME
+from scripts.reference_utils import ManifestError, MANIFEST_NAME, read_manifest_file
 from scripts.registry.models import CapabilityPath, SkillEntry
 from scripts.registry.schema import parse_registry
 from scripts.yaml_safety import YAML_SAFETY_ERRORS
@@ -21,14 +20,12 @@ from scripts.release_info import read_distribution_version
 
 
 def _installed_manifest(skill_dest: Path) -> dict[str, object] | None:
-    manifest_path = skill_dest / MANIFEST_NAME
-    if not manifest_path.is_file():
-        return None
     try:
-        data = json.loads(manifest_path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError:
+        return read_manifest_file(skill_dest / MANIFEST_NAME)
+    except ManifestError:
+        # A missing or corrupt manifest just means "can't determine install
+        # status" for this skill -- not a doctor-run failure.
         return None
-    return data if isinstance(data, dict) else None
 
 
 def _capability_status(
