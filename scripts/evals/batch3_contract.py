@@ -11,14 +11,12 @@ host-specific routing quality separately.
 
 from __future__ import annotations
 
-import json
-import re
 from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
 from scripts.evals.dispatcher import dispatch_prompt
-from scripts.evals.golden import GoldenCase
+from scripts.evals.golden import GoldenCase, field_matches_pattern, golden_case_index
 from scripts.evals.scenario_harness import DIMENSIONS
 from scripts.evals.types import EvalResult
 from scripts.registry.schema import Registry
@@ -230,16 +228,20 @@ def _mutation_anchor_matrix(
             "mutation anchor classes must exactly match adversarial_classes; "
             f"missing={sorted(set(adversarial) - set(anchors))}, extra={sorted(set(anchors) - set(adversarial))}",
         )
-    golden_by_ref = {f"{case.skill}/{case.case_id}": case for case in golden_cases}
+    golden_by_ref = golden_case_index(golden_cases)
     for class_id, raw in sorted(anchors.items()):
         config = require_mapping(raw, f"mutation anchors.{class_id}")
         case_ref = config.get("case_ref")
         raw_pattern = config.get("raw_pattern")
+        raw_path = config.get("raw_path")
         if not isinstance(case_ref, str) or not case_ref:
             messages.append(f"{class_id}: case_ref is required")
             continue
         if not isinstance(raw_pattern, str) or not raw_pattern:
             messages.append(f"{class_id}: raw_pattern is required")
+            continue
+        if not isinstance(raw_path, str) or not raw_path:
+            messages.append(f"{class_id}: raw_path is required")
             continue
         result = results.get(case_ref)
         if result is None or not result.passed:
@@ -249,10 +251,16 @@ def _mutation_anchor_matrix(
             messages.append(f"{class_id}: anchor must reference a golden fixture: {case_ref}")
             continue
         try:
-            recorded = json.dumps(fixture.recorded_output, sort_keys=True)
-            if not re.search(raw_pattern, recorded, flags=re.IGNORECASE | re.MULTILINE):
-                messages.append(f"{class_id}: recorded_output lacks raw pattern {raw_pattern!r}")
-        except re.error as exc:
+            # Scoped to raw_path, not the whole serialized fixture -- proving
+            # the pattern appears SOMEWHERE doesn't prove raw_path (the field
+            # the mutation actually targets) carries dangerous content; a
+            # pattern coincidentally matching an unrelated field would
+            # otherwise pass vacuously. See golden.field_matches_pattern.
+            if not field_matches_pattern(fixture.recorded_output, raw_path, raw_pattern):
+                messages.append(f"{class_id}: raw_path {raw_path!r} lacks raw pattern {raw_pattern!r}")
+        except KeyError:
+            messages.append(f"{class_id}: raw_path does not exist: {raw_path!r}")
+        except ValueError as exc:
             messages.append(f"{class_id}: invalid raw_pattern {raw_pattern!r}: {exc}")
     return _result("mutation-anchor-matrix", messages)
 

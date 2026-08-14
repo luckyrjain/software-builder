@@ -44,6 +44,17 @@ def _case_result_map(case_results: Iterable[EvalResult]) -> dict[str, EvalResult
 
 
 def _routing_results(root: Path, registry: Registry, contract: dict[str, Any]) -> list[EvalResult]:
+    """Verify each routing_collisions entry's own three declared fields (prompt,
+    prompt_pattern, route_pattern) are mutually consistent with each other AND
+    with a single, correctly-owned row in the canonical routing table.
+
+    This is a documentation self-consistency check, not a routing decision:
+    it does not evaluate the `prompt` against any OTHER skill's criteria, so
+    it cannot detect that a second skill's routing rule would also plausibly
+    claim the same prompt -- the actual "collision" scenario the name implies.
+    Proving that requires either a live dispatch run or per-skill structured
+    routing-keyword data that doesn't exist in this registry today.
+    """
     routing_text = (root / "docs/skill-framework/shared/skill-routing.md").read_text(encoding="utf-8")
     routing_rows = [line for line in routing_text.splitlines() if line.lstrip().startswith("|")]
     raw_cases = contract.get("routing_collisions")

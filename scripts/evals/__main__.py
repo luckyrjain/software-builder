@@ -270,6 +270,12 @@ def run_all(
                 golden_cases=golden_cases,
             ),
         )
+        # Dynamic mutate-and-reassert guardrail proof (distinct from
+        # _mutation_anchor_matrix above, which only checks the anchor's
+        # static raw_pattern -- this actually mutates fixtures and reruns
+        # golden assertions against them). Must run through the real eval
+        # CLI, not just pytest, or a broken guardrail is invisible here.
+        results.extend(run_guardrail_mutation_checks(root, golden_cases))
     return results
 
 

@@ -16,24 +16,13 @@ evals; it proves the regression assertions are wired to detect guardrail loss.
 from __future__ import annotations
 
 import copy
-import json
-import re
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
-from scripts.evals.golden import GoldenCase, run_golden_case
+from scripts.evals.golden import GoldenCase, field_matches_pattern, golden_case_index, resolve_path, run_golden_case
 from scripts.evals.types import EvalResult
 from scripts.yaml_safety import load_unique_yaml_file, require_mapping
-
-
-def _resolve_path(data: dict[str, Any], dotted_path: str) -> Any:
-    current: Any = data
-    for segment in dotted_path.split("."):
-        if not isinstance(current, dict) or segment not in current:
-            raise KeyError(dotted_path)
-        current = current[segment]
-    return current
 
 
 def _set_path(data: dict[str, Any], dotted_path: str, value: Any) -> None:
@@ -65,7 +54,7 @@ def run_guardrail_mutation_checks(
         "mutation anchors",
     )
     anchors = require_mapping(anchor_doc.get("anchors"), "mutation anchors.anchors")
-    golden_by_ref = {f"{case.skill}/{case.case_id}": case for case in golden_cases}
+    golden_by_ref = golden_case_index(golden_cases)
 
     output: list[EvalResult] = []
     for class_id in sorted(adversarial):
@@ -111,14 +100,20 @@ def run_guardrail_mutation_checks(
             messages.append(f"baseline golden fixture is already failing: {case_ref}")
 
         try:
-            recorded = json.dumps(fixture.recorded_output, sort_keys=True)
-            if not re.search(raw_pattern, recorded, flags=re.IGNORECASE | re.MULTILINE):
-                messages.append(f"raw pattern {raw_pattern!r} is absent from recorded_output")
-        except re.error as exc:
+            # Scoped to raw_path specifically, not the whole serialized
+            # fixture -- proving the pattern appears SOMEWHERE in the fixture
+            # doesn't prove raw_path (the field the mutation actually targets
+            # below) carries dangerous content; a pattern coincidentally
+            # matching an unrelated field would pass vacuously otherwise.
+            if not field_matches_pattern(fixture.recorded_output, raw_path, raw_pattern):
+                messages.append(f"raw_path {raw_path!r} does not contain raw pattern {raw_pattern!r}")
+        except KeyError:
+            messages.append(f"raw_path does not exist: {raw_path!r}")
+        except ValueError as exc:
             messages.append(f"invalid raw_pattern {raw_pattern!r}: {exc}")
 
         try:
-            raw_value = _resolve_path(fixture.recorded_output, raw_path)
+            raw_value = resolve_path(fixture.recorded_output, raw_path)
             if not isinstance(raw_value, str):
                 messages.append(f"raw_path {raw_path!r} must resolve to a string")
             else:
@@ -134,7 +129,7 @@ def run_guardrail_mutation_checks(
             messages.append(f"raw_path does not exist: {raw_path!r}")
 
         try:
-            original_unsafe = _resolve_path(fixture.recorded_output, unsafe_path)
+            original_unsafe = resolve_path(fixture.recorded_output, unsafe_path)
             if original_unsafe == unsafe_value:
                 messages.append(f"unsafe_path {unsafe_path!r} is already at the unsafe value")
             else:
