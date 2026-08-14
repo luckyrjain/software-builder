@@ -243,7 +243,12 @@ def run_all(
     # harness. Focused --skill/--tier runs stay focused and do not claim full
     # platform coverage.
     if skill_filter is None and tier_filter is None:
-        scenario_results = run_per_skill_scenarios(root, registry)
+        scenario_results = run_per_skill_scenarios(
+            root,
+            registry,
+            case_results=results,
+            golden_cases=golden_cases,
+        )
         results.extend(scenario_results)
 
         platform_results = run_platform_contract_checks(
