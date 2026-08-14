@@ -19,7 +19,14 @@ EXPECTED_SURFACES = {
     "kiro": "per_skill_generated",
     "generic": "canonical_root",
 }
-HOST_BRANCH_RE = re.compile(r"\b(?:if|when|for|under|on)\b.{0,48}\b(?:Cursor|Claude|Codex|ChatGPT|Kiro)\b", re.I)
+# Flag actual host-specific execution branches (for example, "if running on
+# Cursor ..."), not neutral prose that merely documents supported hosts or
+# links to host setup guidance.
+HOST_BRANCH_RE = re.compile(
+    r"^\s*(?:[-*]\s*)?(?:if|when)\s+(?:running\s+)?(?:on|in|under|with)\s+"
+    r"(?:Cursor|Claude(?: Code)?|Codex|ChatGPT|Kiro)\b",
+    re.I | re.M,
+)
 
 
 def _generated_surface_errors(root: Path, directory: Path, suffix: str, skills: set[str], host: str) -> list[str]:
