@@ -1,5 +1,6 @@
 ---
 name: cost-optimization-sprint-planner
+platform_contract: skill-platform-v1
 description: >-
   Org-wide cost/waste sweep composing k8s-overprovisioning-datadog once per in-scope deployment, ranked
   by monthly_savings_total descending and grouped by squad. Optional namespace-ranking pre-filter before
