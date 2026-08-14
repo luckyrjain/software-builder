@@ -7,5 +7,5 @@
 pytest>=9.1.1
 PyYAML>=6.0.3
 ruamel.yaml>=0.19.1
-sqlglot>=30.15.0
+sqlglot>=30.16.0
 zizmor>=1.29.0
