@@ -1,5 +1,6 @@
 ---
 name: incident-triage-agent
+platform_contract: skill-platform-v1
 description: >-
   Paging-webhook-triggered composition of incident-rca and squad-map. Page fires → fast triage doc
   (root cause + owning team) for on-call. Incident resolves → drafted postmortem using incident-rca's
