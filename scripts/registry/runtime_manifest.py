@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from scripts.registry.manifest import ROOT, build_manifest
-from scripts.yaml_safety import load_unique_yaml_file
+from scripts.yaml_safety import YAML_SAFETY_ERRORS, load_unique_yaml_file
 
 P1_CONTRACT_KEYS = (
     "result_envelope",
@@ -47,3 +47,15 @@ def build_runtime_manifest(root: Path = ROOT) -> dict[str, Any]:
             raise ValueError(f"runtime manifest skill must be a mapping: {skill_id}")
         skill["permissions"] = permissions[skill_id]
     return manifest
+
+
+def validate_runtime_manifest(root: Path = ROOT) -> list[str]:
+    """Validate the integrated manifest consumed by hosts and orchestrators."""
+    try:
+        manifest = build_runtime_manifest(root)
+        skills = manifest.get("skills")
+        if not isinstance(skills, dict) or not skills:
+            return ["error: runtime manifest must contain registered skills"]
+        return []
+    except (OSError, ValueError, *YAML_SAFETY_ERRORS) as exc:
+        return [f"error: runtime manifest: {exc}"]
