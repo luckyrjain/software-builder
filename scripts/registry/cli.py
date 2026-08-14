@@ -10,6 +10,7 @@ import yaml
 from scripts.registry.backfill_capabilities import cmd_backfill
 from scripts.registry.capability_sync import validate_capability_catalog_sync
 from scripts.registry.composition import render_composition_mermaid
+from scripts.registry.composition_runtime import validate_composition_runtime
 from scripts.registry.crosscheck import find_stale_generated_adapters, validate_registry
 from scripts.registry.generate_compatibility import render_compatibility_matrix
 from scripts.registry.generate_cursor import generate_cursor_rules
@@ -102,6 +103,10 @@ def _platform_contracts_path(root: Path) -> Path:
     return root / "scripts" / "registry" / "platform_contracts.yaml"
 
 
+def _composition_runtime_path(root: Path) -> Path:
+    return root / "scripts" / "registry" / "composition_runtime.yaml"
+
+
 def _p1_layer_paths(root: Path) -> list[Path]:
     return [
         root / "scripts" / "registry" / "host_contracts.yaml",
@@ -114,12 +119,21 @@ def _p1_layer_paths(root: Path) -> list[Path]:
 
 def _validate_for_generate(root: Path) -> list[str]:
     errors = validate_registry(root)
+    registry = load_registry(root)
     if _capability_catalog_path(root).is_file():
         errors.extend(validate_capability_catalog_sync(root))
     if _platform_contracts_path(root).is_file():
         errors.extend(validate_manifest(root))
     if any(path.is_file() for path in _p1_layer_paths(root)):
         errors.extend(validate_p1_contracts(root))
+    if _composition_runtime_path(root).is_file():
+        errors.extend(
+            validate_composition_runtime(
+                registry,
+                runtime_path=_composition_runtime_path(root),
+                contracts_path=root / "scripts" / "registry" / "composition_contracts.yaml",
+            )
+        )
     return errors
 
 
@@ -138,7 +152,7 @@ def cmd_validate(root: Path) -> int:
         for error in errors:
             print(error, file=sys.stderr)
         return 1
-    print("ok: skills registry, capability catalogue, integrated runtime manifest and P1 contracts validate")
+    print("ok: skills registry, capability catalogue, integrated runtime manifest and composition contracts validate")
     return 0
 
 
