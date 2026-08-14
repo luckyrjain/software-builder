@@ -26,7 +26,25 @@ class DispatchResult:
         return self.candidates[0] if self.status == "selected" and len(self.candidates) == 1 else None
 
 
-def load_routing_rules(root: Path, registry: Registry) -> dict[str, tuple[re.Pattern[str], ...]]:
+@dataclass(frozen=True)
+class RoutingRule:
+    include: tuple[re.Pattern[str], ...]
+    exclude: tuple[re.Pattern[str], ...]
+
+
+def _compile_list(value: Any, label: str, *, required: bool) -> tuple[re.Pattern[str], ...]:
+    if value is None and not required:
+        return ()
+    if not isinstance(value, list) or (required and not value) or not all(isinstance(item, str) and item for item in value):
+        qualifier = "non-empty " if required else ""
+        raise ValueError(f"{label} must be a {qualifier}string list")
+    try:
+        return tuple(re.compile(pattern, flags=re.IGNORECASE) for pattern in value)
+    except re.error as exc:
+        raise ValueError(f"{label}: invalid regex: {exc}") from exc
+
+
+def load_routing_rules(root: Path, registry: Registry) -> dict[str, RoutingRule]:
     raw = require_mapping(
         load_unique_yaml_file(root / "scripts" / "registry" / "routing_rules.yaml"),
         "routing rules",
@@ -42,16 +60,17 @@ def load_routing_rules(root: Path, registry: Registry) -> dict[str, tuple[re.Pat
             f"missing={sorted(registered - declared)}, extra={sorted(declared - registered)}",
         )
 
-    compiled: dict[str, tuple[re.Pattern[str], ...]] = {}
+    compiled: dict[str, RoutingRule] = {}
     for skill_id, config_raw in sorted(routes.items()):
         config = require_mapping(config_raw, f"routing rules.routes.{skill_id}")
-        patterns = config.get("patterns")
-        if not isinstance(patterns, list) or not patterns or not all(isinstance(item, str) and item for item in patterns):
-            raise ValueError(f"routing rules.routes.{skill_id}.patterns must be a non-empty string list")
-        try:
-            compiled[skill_id] = tuple(re.compile(pattern, flags=re.IGNORECASE) for pattern in patterns)
-        except re.error as exc:
-            raise ValueError(f"routing rules.routes.{skill_id}: invalid regex: {exc}") from exc
+        compiled[skill_id] = RoutingRule(
+            include=_compile_list(config.get("patterns"), f"routing rules.routes.{skill_id}.patterns", required=True),
+            exclude=_compile_list(
+                config.get("exclude_patterns"),
+                f"routing rules.routes.{skill_id}.exclude_patterns",
+                required=False,
+            ),
+        )
     return compiled
 
 
@@ -61,8 +80,9 @@ def dispatch_prompt(root: Path, registry: Registry, prompt: str) -> DispatchResu
     rules = load_routing_rules(root, registry)
     matches = tuple(
         skill_id
-        for skill_id, patterns in sorted(rules.items())
-        if any(pattern.search(prompt) for pattern in patterns)
+        for skill_id, rule in sorted(rules.items())
+        if any(pattern.search(prompt) for pattern in rule.include)
+        and not any(pattern.search(prompt) for pattern in rule.exclude)
     )
     if not matches:
         return DispatchResult("no_match", ())
