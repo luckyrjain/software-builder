@@ -33,5 +33,6 @@ Reference loads: [lazy-load-index.md](lazy-load-index.md). Report layout: [repor
 | Persona review (SRE, Security, …) | Same path; persona in Phase 2 |
 | Post-merge audit | User confirms on `state: merged` → `review_mode: retrospective` — full path; see [review-modes.md](review-modes.md) |
 
-Tool routing: GitHub PR or GitLab MR → `/pr-review`; local diff → `/review-bugbot`; security local →
-`/review-security`. See [SETUP.md](../SETUP.md).
+Tool routing: GitHub PR or GitLab MR → `/pr-review`; local diff → the host's local diff/code-review
+workflow (no registered skill owns local-only diff review); security local → `/review-security`. See
+[SETUP.md](../SETUP.md).
