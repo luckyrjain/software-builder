@@ -18,6 +18,7 @@ from scripts.registry.models import (
     SkillEntry,
 )
 from scripts.yaml_safety import load_unique_yaml_file
+from scripts.yaml_safety import require_mapping as _require_mapping
 
 ALLOWED_RISK_CLASSES = frozenset(
     {"posting", "merge", "unattended", "read-only", "repository-write"},
@@ -27,12 +28,6 @@ ALLOWED_INVOCATION = {"ambient", AUTOMATION_ONLY_INVOCATION}
 ALLOWED_CURSOR_DISCOVERY = {"rule", "manual", "always"}
 ALLOWED_KIRO_DISCOVERY = {"manual", "always"}
 ALLOWED_COMPOSITION_MODE = {"invoke", "aggregate"}
-
-
-def _require_mapping(data: Any, label: str) -> dict[str, Any]:
-    if not isinstance(data, dict):
-        raise ValueError(f"{label} must be a mapping")
-    return data
 
 
 def parse_registry(path: Path) -> Registry:

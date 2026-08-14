@@ -161,7 +161,11 @@ def _load_platform_contracts(path: Path = CONTRACTS_PATH) -> dict[str, Any]:
     return raw
 
 
-def build_manifest(root: Path = ROOT) -> dict[str, Any]:
+def _build_manifest(root: Path) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Build the manifest and return it alongside the raw platform contracts
+    mapping it was built from, so callers needing P1-only sections don't have
+    to re-read and re-parse platform_contracts.yaml a second time.
+    """
     registry = parse_registry(root / "skills.yaml")
     platform = _load_platform_contracts(
         root / "scripts" / "registry" / "platform_contracts.yaml",
@@ -264,7 +268,7 @@ def build_manifest(root: Path = ROOT) -> dict[str, Any]:
             },
         }
 
-    return {
+    manifest = {
         "manifest_schema_version": 1,
         "registry_schema_version": registry.schema_version,
         "contracts": {
@@ -274,6 +278,12 @@ def build_manifest(root: Path = ROOT) -> dict[str, Any]:
         },
         "skills": skills,
     }
+    return manifest, platform
+
+
+def build_manifest(root: Path = ROOT) -> dict[str, Any]:
+    manifest, _platform = _build_manifest(root)
+    return manifest
 
 
 def validate_manifest(root: Path = ROOT) -> list[str]:
