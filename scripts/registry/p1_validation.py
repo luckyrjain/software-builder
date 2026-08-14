@@ -3,7 +3,9 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from scripts.registry.frontmatter import load_skill_frontmatter
 from scripts.registry.schema import parse_registry
+from scripts.registry.skill_frontmatter_schema import PLATFORM_CONTRACT
 from scripts.yaml_safety import YAML_SAFETY_ERRORS, load_unique_yaml_file
 
 RUNTIME_DOCS = {"runtime-contract.md", "host-adapter-contract.md", "eval-contract.md"}
@@ -37,6 +39,20 @@ def _strings(value: Any, label: str) -> set[str]:
 def _require_v1(data: dict[str, Any], label: str) -> None:
     if data.get("schema_version") != 1:
         raise ValueError(f"{label}.schema_version must be 1")
+
+
+def _validate_platform_markers(root: Path) -> list[str]:
+    """Every skill in a P1-enabled repository must visibly declare the contract it inherits."""
+    errors: list[str] = []
+    registry = parse_registry(root / "skills.yaml")
+    for skill_id, entry in sorted(registry.skills.items()):
+        frontmatter = load_skill_frontmatter(root / entry.path / "SKILL.md")
+        actual = frontmatter.get("platform_contract")
+        if actual != PLATFORM_CONTRACT:
+            errors.append(
+                f"error: {skill_id}: platform_contract must be {PLATFORM_CONTRACT!r}, got {actual!r}",
+            )
+    return errors
 
 
 def _validate_permissions(root: Path, platform: dict[str, Any]) -> list[str]:
@@ -89,6 +105,7 @@ def validate_p1_contracts(root: Path) -> list[str]:
         errors: list[str] = []
         platform = _mapping(load_unique_yaml_file(root / "scripts/registry/platform_contracts.yaml"), "platform contracts")
         _require_v1(platform, "platform contracts")
+        errors.extend(_validate_platform_markers(root))
         result = _mapping(platform.get("result_envelope"), "result_envelope")
         if _strings(result.get("required_fields"), "result fields") != RESULT_FIELDS:
             errors.append("error: P1 result envelope fields drift")
