@@ -26,19 +26,26 @@ ALLOWED_FRONTMATTER_KEYS = frozenset(
 
 
 def validate_skill_frontmatter_fields(skill_id: str, frontmatter: dict[str, Any]) -> list[str]:
-    """Return human-readable errors for invalid or unknown SKILL.md frontmatter keys."""
+    """Return human-readable errors for invalid or unknown SKILL.md frontmatter keys.
+
+    This shape validator accepts a missing ``platform_contract`` so isolated/minimal
+    repositories can use the generic registry tooling without installing the P1
+    platform layer. When that layer is installed, ``validate_p1_contracts`` requires
+    the marker on every registered skill.
+    """
     errors: list[str] = []
 
     for key in frontmatter:
         if key not in ALLOWED_FRONTMATTER_KEYS:
             errors.append(f"error: {skill_id}: unknown SKILL.md frontmatter key {key!r}")
 
-    platform_contract = frontmatter.get("platform_contract")
-    if platform_contract != PLATFORM_CONTRACT:
-        errors.append(
-            f"error: {skill_id}: platform_contract must be {PLATFORM_CONTRACT!r}, "
-            f"got {platform_contract!r}",
-        )
+    if "platform_contract" in frontmatter:
+        platform_contract = frontmatter["platform_contract"]
+        if platform_contract != PLATFORM_CONTRACT:
+            errors.append(
+                f"error: {skill_id}: platform_contract must be {PLATFORM_CONTRACT!r}, "
+                f"got {platform_contract!r}",
+            )
 
     if "skill_version" in frontmatter:
         version = frontmatter["skill_version"]
