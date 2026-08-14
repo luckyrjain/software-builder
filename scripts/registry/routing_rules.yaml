@@ -24,6 +24,7 @@ routes:
   incident-triage-agent:
     patterns:
       - '\b(pager|page|alert webhook|incident webhook)\b.*\b(triage|automation|route|owner)\b'
+      - '\btriage\b.*\b(pager|page|alert webhook|incident webhook)\b'
   domain-comprehension:
     patterns:
       - '\b(domain comprehension|bounded context|current[- ]state domain|understand the existing .* service)\b'
