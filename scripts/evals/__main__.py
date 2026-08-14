@@ -247,9 +247,7 @@ def run_all(
             run_platform_contract_checks(
                 root,
                 registry,
-                fixture_cases=cases,
-                transcript_cases=transcript_cases,
-                golden_cases=golden_cases,
+                case_results=results,
             ),
         )
     return results
