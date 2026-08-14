@@ -1,5 +1,6 @@
 ---
 name: pr-review
+platform_contract: skill-platform-v1
 description: >-
   GitHub pull-request and GitLab merge-request review by URL, number, or current branch. Phased workflow:
   context → findings pipeline → executive summary → optional comment post. Keywords: /pr-review, review
