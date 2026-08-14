@@ -1,6 +1,7 @@
 ---
 name: integration-test-creator
 skill_version: 1.0
+platform_contract: skill-platform-v1
 description: >-
   Generates integration tests that exercise the real seam between a component and one real adjacent
   dependency (database, queue, cache, internal service) — never a mock of that dependency. Detects the
