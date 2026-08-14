@@ -39,11 +39,8 @@ def render_composition_mermaid(registry: Registry) -> str:
     lines = ["graph TD"]
     edges = 0
     for skill_id, entry in sorted(registry.skills.items()):
-        for dep in entry.install.requires:
-            lines.append(f"  {skill_id} -->|requires| {dep}")
-            edges += 1
         for dep in entry.composition.invokes:
-            lines.append(f"  {skill_id} ==>|handoff| {dep}")
+            lines.append(f"  {skill_id} -->|invokes| {dep}")
             edges += 1
         for target in entry.composition.escalation_targets:
             lines.append(f"  {skill_id} -.->|escalates| {target}")
