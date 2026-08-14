@@ -103,6 +103,17 @@ chat write-back. See [post-action-templates.md](../docs/skill-framework/shared/p
 
 ## Framework
 
+Completion emits the canonical `skill_result` envelope; actions classify against
+`action_gates`; scope follows `definition_of_done` — all defined in
+[runtime-contract.md](../docs/skill-framework/shared/runtime-contract.md).
+
+`definition_of_done`: required_artifacts=[unit test files matching repo conventions, `UNIT_TEST_REPORT.md`];
+required_checks=[framework/convention detected, every dependency mocked/stubbed, tests run and pass, prod
+code never patched to force green]; blocked_conditions=[target needs a real dependency, no framework exists
+and none chosen, a skipped test left unflagged]; partial_result_behavior=per-target status in
+`UNIT_TEST_REPORT.md` (passing, bug flagged, untestable, needs human, covered, skipped); skips always
+listed; `UNVERIFIED` when unrun.
+
 Routing: [skill-routing.md](../docs/skill-framework/shared/skill-routing.md) · shared conventions:
 [docs/skill-framework/README.md](../docs/skill-framework/README.md) · prompt injection
 [prompt-injection.md](../docs/skill-framework/shared/prompt-injection.md).

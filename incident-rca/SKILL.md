@@ -114,6 +114,17 @@ Full matrix: [cross-skill-escalation.md](../docs/skill-framework/shared/cross-sk
 
 ## Framework
 
+Completion emits the canonical `skill_result` envelope; actions classify against
+`action_gates`; scope follows `definition_of_done` — all defined in
+[runtime-contract.md](../docs/skill-framework/shared/runtime-contract.md).
+
+`definition_of_done`: required_artifacts=[RCA report per report-template.md mandatory section order,
+validated `causal_graph`]; required_checks=[evidence-quality/evidence-coverage scoring, confidence-cap
+application, phase-exit-criteria per phase, causal-graph acyclicity]; blocked_conditions=[Phase 4 with
+empty `error_signals`/`infra_signals`, circular causal graph, missing required time window/anchor before
+Phase 0]; partial_result_behavior=ranked hypotheses capped at MEDIUM/LOW with cited Gaps and attempted
+queries, concluding *No defensible root cause* instead of a best-guess primary.
+
 Routing: [skill-routing.md](../docs/skill-framework/shared/skill-routing.md) · shared conventions:
 [docs/skill-framework/README.md](../docs/skill-framework/README.md) · confidence
 [confidence-bands.md](../docs/skill-framework/shared/confidence-bands.md) · prompt injection

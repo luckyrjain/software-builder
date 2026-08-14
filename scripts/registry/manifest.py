@@ -31,6 +31,12 @@ _REQUIRED_COMPLETION_FIELDS = {
     "artifacts",
     "recommended_next_skill",
 }
+_REQUIRED_DOD_FIELDS = {
+    "required_artifacts",
+    "required_checks",
+    "blocked_conditions",
+    "partial_result_behavior",
+}
 _REQUIRED_GATES = {
     "read_only": "none",
     "local_reversible_write": "explicit_task_authorization",
@@ -50,7 +56,7 @@ def _validate_semver_identifiers(raw: str, *, prerelease: bool) -> bool:
 
 def _normalize_version(raw: Any) -> str:
     if raw is None or raw == "":
-        return "1.0.0"
+        raise ValueError("skill_version is mandatory")
     if isinstance(raw, bool):
         raise ValueError(f"invalid skill_version {raw!r}; expected semantic version string or integer major")
     if isinstance(raw, int):
@@ -145,6 +151,15 @@ def _load_platform_contracts(path: Path = CONTRACTS_PATH) -> dict[str, Any]:
         "platform contracts.completion.required_fields",
     )
 
+    definition_of_done = _require_mapping(
+        raw.get("definition_of_done"), "platform contracts.definition_of_done",
+    )
+    _validate_exact_string_set(
+        definition_of_done.get("required_fields"),
+        _REQUIRED_DOD_FIELDS,
+        "platform contracts.definition_of_done.required_fields",
+    )
+
     gates = _require_mapping(raw.get("action_gates"), "platform contracts.action_gates")
     normalized_gates = {str(key): str(value) for key, value in gates.items()}
     if normalized_gates != _REQUIRED_GATES:
@@ -214,12 +229,9 @@ def _build_manifest(root: Path) -> tuple[dict[str, Any], dict[str, Any]]:
             raise ValueError(f"{skill_id}: description must be a non-empty string")
 
         artifact_contract = composition[skill_id]
-        if raw_version in (None, ""):
-            version_source = "implicit_v1"
-        elif isinstance(raw_version, float):
-            version_source = "skill_frontmatter_legacy_numeric"
-        else:
-            version_source = "skill_frontmatter"
+        version_source = (
+            "skill_frontmatter_legacy_numeric" if isinstance(raw_version, float) else "skill_frontmatter"
+        )
         skills[skill_id] = {
             "name": skill_id,
             "version": version,
@@ -275,6 +287,7 @@ def _build_manifest(root: Path) -> tuple[dict[str, Any], dict[str, Any]]:
             "evidence": platform["evidence"],
             "completion": platform["completion"],
             "action_gates": platform["action_gates"],
+            "definition_of_done": platform["definition_of_done"],
         },
         "skills": skills,
     }

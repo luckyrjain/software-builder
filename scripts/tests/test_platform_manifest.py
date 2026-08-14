@@ -29,6 +29,8 @@ action_gates:
   local_reversible_write: explicit_task_authorization
   remote_non_destructive_write: explicit_task_authorization
   destructive_or_high_impact: explicit_action_authorization
+definition_of_done:
+  required_fields: [required_artifacts, required_checks, blocked_conditions, partial_result_behavior]
 skill_types:
   demo: leaf
 """
@@ -70,6 +72,12 @@ def test_manifest_exposes_shared_contracts() -> None:
         "ESCALATED",
     }
     assert contracts["action_gates"]["destructive_or_high_impact"] == "explicit_action_authorization"
+    assert set(contracts["definition_of_done"]["required_fields"]) == {
+        "required_artifacts",
+        "required_checks",
+        "blocked_conditions",
+        "partial_result_behavior",
+    }
 
 
 def test_manifest_reuses_write_authority_and_artifact_contracts() -> None:
@@ -103,7 +111,6 @@ def test_manifest_preserves_capability_semantics() -> None:
 
 
 def test_skill_versions_are_normalized_to_semver() -> None:
-    assert _normalize_version(None) == "1.0.0"
     assert _normalize_version(2) == "2.0.0"
     assert _normalize_version("1.1") == "1.1.0"
     assert _normalize_version("3.5.0") == "3.5.0"
@@ -140,11 +147,19 @@ def test_platform_contracts_reject_non_scalar_schema_version(tmp_path: Path) -> 
         _load_platform_contracts(path)
 
 
-def test_manifest_marks_implicit_and_explicit_version_sources() -> None:
+def test_manifest_marks_explicit_version_sources() -> None:
     skills = build_manifest(ROOT)["skills"]
-    assert skills["pr-review"]["version_source"] == "implicit_v1"
+    assert skills["pr-review"]["version_source"] == "skill_frontmatter_legacy_numeric"
+    assert skills["pr-review"]["version"] == "1.0.0"
     assert skills["incident-rca"]["version_source"] == "skill_frontmatter"
     assert skills["incident-rca"]["version"] == "2.0.0"
+
+
+def test_manifest_rejects_missing_skill_version() -> None:
+    with pytest.raises(ValueError, match="skill_version is mandatory"):
+        _normalize_version(None)
+    with pytest.raises(ValueError, match="skill_version is mandatory"):
+        _normalize_version("")
 
 
 def test_repository_platform_manifest_validates() -> None:

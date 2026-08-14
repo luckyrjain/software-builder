@@ -1,5 +1,6 @@
 ---
 name: squad-map
+skill_version: 1.0
 platform_contract: skill-platform-v1
 description: >-
   Maps repos to org squads (GitLab group hierarchy) and runtime squads (Datadog
@@ -112,6 +113,19 @@ None — squad-map is read-only and produces no Jira/Slack/canvas write-back. Ou
 `SQUAD_MAP.md`. See [post-action-templates.md](../docs/skill-framework/shared/post-action-templates.md).
 
 ## Framework
+
+Completion emits the canonical `skill_result` envelope; actions classify against
+`action_gates`; scope follows `definition_of_done` — all defined in
+[runtime-contract.md](../docs/skill-framework/shared/runtime-contract.md).
+
+`definition_of_done`: required_artifacts=[`SQUAD_MAP.md`]; required_checks=[Phase 0 MCP profile
+announced and written to header before mapping, `squad_path_segment` resolved (HARD STOP else),
+pre-render attestation — reconciliation never HIGH when GitLab squad ≠ Datadog team, fuzzy-alias and
+CODEOWNERS-fallback confidence capped at LOW, render-boundary escaping per safe-output.md];
+blocked_conditions=[`squad_path_segment` missing without explicit GitLab-out-of-scope opt-out,
+`workspace_root`/repo scope unresolved]; partial_result_behavior=atomic temp-file rename preserves
+already-written rows on MCP timeout/rate-limit; rerun skips existing rows unless `refresh: true`,
+unmapped repos land in the Unmapped table rather than blocking the run.
 
 Routing: [skill-routing.md](../docs/skill-framework/shared/skill-routing.md) · shared conventions:
 [docs/skill-framework/README.md](../docs/skill-framework/README.md) · confidence

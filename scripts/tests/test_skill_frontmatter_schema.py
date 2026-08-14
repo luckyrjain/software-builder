@@ -22,6 +22,14 @@ def test_skill_version_accepts_float():
     )
 
 
+def test_skill_version_is_mandatory():
+    errors = validate_skill_frontmatter_fields(
+        "api-test-creator",
+        {"name": "api-test-creator", "description": "ok"},
+    )
+    assert any("skill_version is mandatory" in e for e in errors)
+
+
 def test_disable_model_invocation_must_be_bool():
     errors = validate_skill_frontmatter_fields(
         "pr-gatekeeper",

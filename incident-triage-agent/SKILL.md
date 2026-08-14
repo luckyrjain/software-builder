@@ -1,5 +1,6 @@
 ---
 name: incident-triage-agent
+skill_version: 1.0
 platform_contract: skill-platform-v1
 description: >-
   Paging-webhook-triggered composition of incident-rca and squad-map. Page fires → fast triage doc
@@ -106,6 +107,19 @@ paste-ready blocks render into this skill's own doc instead. See
 [post-action-templates.md](../docs/skill-framework/shared/post-action-templates.md).
 
 ## Framework
+
+Completion emits the canonical `skill_result` envelope; actions classify against
+`action_gates`; scope follows `definition_of_done` — all defined in
+[runtime-contract.md](../docs/skill-framework/shared/runtime-contract.md).
+
+`definition_of_done`: required_artifacts=[`triage_doc` (Mode 1) or `postmortem_draft` (Mode 2), formats
+in `reference/triage-doc-format.md` / `reference/postmortem-format.md`]; required_checks=[inputs resolved
+per `workflow/inputs.md`, incident-rca and squad-map both invoked, every unattended gate answered per
+`reference/unattended-gate-policy.md`, untrusted payload text rendered per `safe-output.md`];
+blocked_conditions=[`event_type`/`service`/`triggered_at` missing, `resolved_at` missing on a postmortem
+event, incident-rca or squad-map uninstalled/unconfigured, unrecognized `event_type`];
+partial_result_behavior=incident-rca's report and squad-map's team render independently — an unresolved
+squad-map lookup falls back to postmortem-format.md's owner placeholder instead of blocking the doc.
 
 Routing: [skill-routing.md](../docs/skill-framework/shared/skill-routing.md) · shared conventions:
 [docs/skill-framework/README.md](../docs/skill-framework/README.md) · confidence

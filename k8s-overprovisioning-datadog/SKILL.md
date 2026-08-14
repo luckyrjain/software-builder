@@ -1,5 +1,6 @@
 ---
 name: k8s-overprovisioning-datadog
+skill_version: 1.0
 platform_contract: skill-platform-v1
 description: >-
   Use when the user asks whether a Kubernetes deployment or service is overprovisioned, right-sized,
@@ -85,6 +86,18 @@ Full matrix: [cross-skill-escalation.md](../docs/skill-framework/shared/cross-sk
 | Ready cut applied | Re-run this skill in **7d** — [PostChangeVerification](templates/human-report.md#postchangeverification) |
 
 ## Framework
+
+Completion emits the canonical `skill_result` envelope; actions classify against
+`action_gates`; scope follows `definition_of_done` — all defined in
+[runtime-contract.md](../docs/skill-framework/shared/runtime-contract.md).
+
+`definition_of_done`: required_artifacts=[`decision_graph`, Human Report, Technical Appendix];
+required_checks=[invariant validation ([invariants.md](reference/invariants.md)), source-capability
+sufficiency check (DISCOVER_SOURCES), VPA+HPA same-dimension conflict check, KEDA external-metric
+replica check]; blocked_conditions=[`STOP_REASON: insufficient_metrics` when no source has sufficient
+evidence, critical `invariant_violations[]` non-empty, unresolved VPA/HPA controller conflict];
+partial_result_behavior=on invariant failure, emit `decision_graph` + violations only, no Human Report
+prose; on insufficient metrics, emit `STOP_REASON` with no sizing recommendation.
 
 Routing: [skill-routing.md](../docs/skill-framework/shared/skill-routing.md) · shared conventions:
 [docs/skill-framework/README.md](../docs/skill-framework/README.md) · confidence

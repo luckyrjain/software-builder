@@ -1,5 +1,6 @@
 ---
 name: weekly-squad-digest
+skill_version: 1.0
 platform_contract: skill-platform-v1
 description: >-
   Scheduled digest combining migration-program-manager's and cost-optimization-sprint-planner's own
@@ -100,6 +101,16 @@ posts anywhere itself, same as backlog-runner's morning summary. See
 [post-action-templates.md](../docs/skill-framework/shared/post-action-templates.md).
 
 ## Framework
+
+Completion emits the canonical `skill_result` envelope; actions classify against
+`action_gates`; scope follows `definition_of_done` — all defined in
+[runtime-contract.md](../docs/skill-framework/shared/runtime-contract.md).
+
+`definition_of_done`: required_artifacts=[`WEEKLY_SQUAD_DIGEST.md`]; required_checks=[both rollups parse as
+valid `org_rollup_item` JSON, group by `squad` then `metric_type` without re-deriving status/priority,
+staleness flagged against `staleness_warning_days` display-only]; blocked_conditions=[`rollup_manifest` has
+neither `migration_rollup_path` nor `cost_rollup_path` set]; partial_result_behavior=a missing or unreadable
+rollup is listed under Rollup gaps while the other rollup's squad sections still render in full.
 
 Routing: [skill-routing.md](../docs/skill-framework/shared/skill-routing.md) · shared conventions:
 [docs/skill-framework/README.md](../docs/skill-framework/README.md) · confidence

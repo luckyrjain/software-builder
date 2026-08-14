@@ -248,7 +248,7 @@ def test_generate_prunes_stale_generated_adapter(tmp_path: Path, monkeypatch: py
     skill_dir = tmp_path / "solo"
     skill_dir.mkdir()
     (skill_dir / "SKILL.md").write_text(
-        "---\nname: solo\ndescription: Solo skill.\n---\n",
+        "---\nname: solo\nskill_version: 1.0\ndescription: Solo skill.\n---\n## Framework\n\nskill_result action_gates definition_of_done required_artifacts required_checks blocked_conditions partial_result_behavior runtime-contract.md\n",
         encoding="utf-8",
     )
     (tmp_path / "skills.yaml").write_text(
@@ -686,7 +686,7 @@ def test_generate_check_fails_when_cursor_rule_drift(tmp_path: Path, monkeypatch
     skill_dir = tmp_path / "solo"
     skill_dir.mkdir()
     (skill_dir / "SKILL.md").write_text(
-        "---\nname: solo\ndescription: Solo skill.\n---\n",
+        "---\nname: solo\nskill_version: 1.0\ndescription: Solo skill.\n---\n## Framework\n\nskill_result action_gates definition_of_done required_artifacts required_checks blocked_conditions partial_result_behavior runtime-contract.md\n",
         encoding="utf-8",
     )
     (tmp_path / "skills.yaml").write_text(
