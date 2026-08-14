@@ -10,7 +10,7 @@ from pathlib import Path
 from scripts.registry.schema import parse_registry
 
 PACKAGE_ROOT = "software-builder"
-EXCLUDED_PARTS = {".git", ".github", "__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache"}
+EXCLUDED_PARTS = {".git", "__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache", "dist"}
 EXCLUDED_SUFFIXES = {".pyc", ".pyo"}
 
 
@@ -27,19 +27,15 @@ def _is_safe_file(root: Path, path: Path) -> bool:
 
 def _package_files(root: Path) -> list[Path]:
     registry = parse_registry(root / "skills.yaml")
-    candidates: set[Path] = {root / "skills.yaml"}
-    license_path = root / "LICENSE"
-    if license_path.is_file():
-        candidates.add(license_path)
-    framework = root / "docs" / "skill-framework"
-    if not framework.is_dir():
-        raise ValueError("generic package requires docs/skill-framework")
-    candidates.update(path for path in framework.rglob("*") if _is_safe_file(root, path))
     for skill_id, entry in registry.skills.items():
-        skill_root = root / entry.path
-        if not (skill_root / "SKILL.md").is_file():
+        if not (root / entry.path / "SKILL.md").is_file():
             raise ValueError(f"generic package missing canonical SKILL.md for {skill_id}")
-        candidates.update(path for path in skill_root.rglob("*") if _is_safe_file(root, path))
+
+    # Package the repository's portable content closure, excluding only VCS,
+    # cache, bytecode, and output directories. This keeps every relative
+    # Markdown/reference dependency reachable after extraction instead of
+    # maintaining a fragile hand-written allowlist of shared docs.
+    candidates = {path for path in root.rglob("*") if _is_safe_file(root, path)}
     return sorted(candidates, key=lambda path: path.relative_to(root).as_posix())
 
 
