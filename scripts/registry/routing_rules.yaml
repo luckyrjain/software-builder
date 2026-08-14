@@ -1,0 +1,81 @@
+schema_version: 1
+
+# Deterministic routing oracle used by Batch 3 scenario evals. These rules model
+# intent ownership; host/model routing quality is still measured separately by live evals.
+routes:
+  pr-review:
+    patterns:
+      - '\b(review|inspect|analy[sz]e)\b.*\b(PR|MR|pull request|merge request|diff)\b'
+      - '\b(PR|MR|pull request|merge request)\b.*\b(review|regression|correctness)\b'
+  pr-gatekeeper:
+    patterns:
+      - '\b(PR|MR|pull request|merge request)\b.*\b(webhook|gatekeeper|automation gate|opened event)\b'
+  k8s-overprovisioning-datadog:
+    patterns:
+      - '\b(k8s|kubernetes|pod|deployment)\b.*\b(overprovision|right-?siz|requests?|limits?|CPU|memory)\b'
+      - '\boverprovisioned\b.*\bCPU\b.*\bmemory\b'
+  incident-rca:
+    patterns:
+      - '\b(RCA|root cause|postmortem|production incident|incident investigation)\b'
+      - '\b(5xx|error|latency)\b.*\b(spike|incident|production)\b'
+  incident-triage-agent:
+    patterns:
+      - '\b(pager|page|alert webhook|incident webhook)\b.*\b(triage|automation|route|owner)\b'
+  domain-comprehension:
+    patterns:
+      - '\b(domain comprehension|bounded context|current[- ]state domain|understand the existing .* service)\b'
+      - '\bunderstand\b.*\bcurrent domain\b'
+  squad-map:
+    patterns:
+      - '\b(squad map|ownership map|CODEOWNERS|service ownership map)\b'
+  who-owns-x-bot:
+    patterns:
+      - '\bwho owns\b'
+      - '\bownership lookup\b.*\b(slack|slash command|bot)\b'
+  new-hire-guide:
+    patterns:
+      - '\b(new hire|onboarding)\b.*\b(guide|tour|first week|service map)\b'
+  release-readiness-checker:
+    patterns:
+      - '\b(release readiness|go[- /]?no[- ]?go|ready to release|release candidate)\b'
+  migration-program-manager:
+    patterns:
+      - '\b(migration program|migration portfolio|migration status rollup|migration program status)\b'
+  cost-optimization-sprint-planner:
+    patterns:
+      - '\b(cost optimization|cost reduction)\b.*\b(sprint|backlog|prioriti[sz]|plan)\b'
+  mysql-to-postgres-sql:
+    patterns:
+      - '\b(MySQL|mysql)\b.*\b(Postgres|PostgreSQL|postgresql)\b'
+      - '\bmigrate\b.*\bSQL dialect\b'
+  loop-task-implementer:
+    patterns:
+      - '\bimplement\b.*\b(task|ticket|change)\b.*\b(review|fix|until|loop)\b'
+      - '\brepeat\b.*\b(review|fix)\b.*\b0 issues|zero issues\b'
+  backlog-runner:
+    patterns:
+      - '\b(backlog|tickets?)\b.*\b(overnight|scheduled|nightly|queue runner)\b'
+  weekly-squad-digest:
+    patterns:
+      - '\bweekly\b.*\b(squad|team)\b.*\b(digest|summary|rollup)\b'
+  unit-test-creator:
+    patterns:
+      - '\b(unit tests?|unit-test)\b'
+  integration-test-creator:
+    patterns:
+      - '\b(integration tests?|integration-test)\b'
+  contract-test-creator:
+    patterns:
+      - '\b(contract tests?|consumer[- ]driven contract|pact tests?)\b'
+  e2e-test-creator:
+    patterns:
+      - '\b(e2e|end[- ]to[- ]end)\b.*\btests?|testing\b'
+  api-test-creator:
+    patterns:
+      - '\b(API|HTTP|REST)\b.*\btests?|testing suite\b'
+  prd-architect:
+    patterns:
+      - '\b(PRD|product requirements?|requirements document|build readiness)\b'
+  test-writer:
+    patterns:
+      - '\b(write|generate|add)\b\s+(tests?|test coverage)\b(?!.*\b(unit|integration|contract|e2e|end[- ]to[- ]end|API|HTTP|REST)\b)'
