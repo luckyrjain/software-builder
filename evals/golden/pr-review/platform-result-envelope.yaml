@@ -5,7 +5,8 @@ tier: 3
 description: >-
   Canonical recorded result proving the shared platform golden-output requirements are executable:
   status, confidence, authority, provenance, artifact shape, and critical conclusion are asserted
-  structurally without snapshotting prose.
+  structurally without snapshotting prose. Authority records the skill's permission ceiling separately
+  from whether a write was authorized for this invocation.
 contract_coverage:
   - result_status
   - confidence
@@ -28,7 +29,8 @@ recorded_output:
     recommended_next_skill: null
   authority:
     repository: read
-    external_actions: none
+    external_actions: write
+    external_write_authorized: false
     merge: false
   critical_conclusion: No blocking findings were identified in the reviewed diff.
 assertions:
@@ -39,8 +41,14 @@ assertions:
     path: skill_result.confidence
     values: [HIGH, MEDIUM, LOW, UNKNOWN]
   - type: field_equals
+    path: authority.repository
+    value: read
+  - type: field_equals
     path: authority.external_actions
-    value: none
+    value: write
+  - type: field_equals
+    path: authority.external_write_authorized
+    value: false
   - type: field_equals
     path: authority.merge
     value: false
