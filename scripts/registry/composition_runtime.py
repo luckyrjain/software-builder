@@ -9,6 +9,7 @@ from scripts.yaml_safety import YAML_SAFETY_ERRORS, load_unique_yaml_file
 RUNTIME_PATH = Path(__file__).resolve().parent / "composition_runtime.yaml"
 _ALLOWED_TYPES = {"leaf", "router", "orchestrator", "trigger"}
 _ALLOWED_OWNERSHIP_MODES = {"canonical", "shared", "external"}
+_LOAD_ERRORS = (OSError, ValueError) + YAML_SAFETY_ERRORS
 
 
 def load_composition_runtime(path: Path | None = None) -> dict[str, object]:
@@ -30,7 +31,7 @@ def validate_composition_runtime(
     try:
         raw = load_composition_runtime(resolved)
         artifact_types, _schemas, _levels, contracts = load_contracts(contracts_path)
-    except (OSError, ValueError, *YAML_SAFETY_ERRORS) as exc:
+    except _LOAD_ERRORS as exc:
         return [f"error: composition runtime: {exc}"]
 
     errors: list[str] = []
@@ -77,14 +78,13 @@ def validate_composition_runtime(
             if not isinstance(artifacts, list) or not artifacts:
                 errors.append(f"error: {source_id}->{target_id}: handoff artifacts must be a non-empty list")
                 continue
-            source_contract = contracts.get(source_id)
             target_contract = contracts.get(target_id)
-            if source_contract is None or target_contract is None:
+            if target_contract is None:
                 continue
             for artifact in artifacts:
                 if artifact not in artifact_types:
                     errors.append(f"error: {source_id}->{target_id}: unknown handoff artifact {artifact!r}")
-                if artifact not in target_contract.consumes:
+                elif artifact not in target_contract.consumes:
                     errors.append(f"error: {source_id}->{target_id}: target does not consume {artifact!r}")
 
     recursion = raw.get("recursion_guard")
@@ -92,7 +92,7 @@ def validate_composition_runtime(
         errors.append(f"error: {resolved}: recursion_guard must be a mapping")
     else:
         max_depth = recursion.get("default_max_depth")
-        if not isinstance(max_depth, int) or max_depth < 1:
+        if not isinstance(max_depth, int) or isinstance(max_depth, bool) or max_depth < 1:
             errors.append("error: recursion_guard.default_max_depth must be a positive integer")
         if recursion.get("block_revisit_by_default") is not True:
             errors.append("error: recursion_guard.block_revisit_by_default must be true")
