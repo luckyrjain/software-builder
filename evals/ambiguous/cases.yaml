@@ -1,0 +1,26 @@
+schema_version: 1
+dimension: ambiguous
+cases:
+  - {skill: pr-review, prompt: "Review PR #123 for correctness and regressions. Also review this PRD for build readiness.", expected_status: ambiguous, expected_candidates: [pr-review, prd-architect]}
+  - {skill: pr-gatekeeper, prompt: "Handle the PR webhook opened event through the automation gate and triage this pager alert webhook.", expected_status: ambiguous, expected_candidates: [incident-triage-agent, pr-gatekeeper]}
+  - {skill: k8s-overprovisioning-datadog, prompt: "Check whether this Kubernetes deployment is overprovisioned and run an RCA for the production incident.", expected_status: ambiguous, expected_candidates: [incident-rca, k8s-overprovisioning-datadog]}
+  - {skill: incident-rca, prompt: "Run an RCA for the production incident and also right-size Kubernetes CPU and memory requests.", expected_status: ambiguous, expected_candidates: [incident-rca, k8s-overprovisioning-datadog]}
+  - {skill: incident-triage-agent, prompt: "Triage this pager alert webhook and also handle the PR webhook through the automation gate.", expected_status: ambiguous, expected_candidates: [incident-triage-agent, pr-gatekeeper]}
+  - {skill: domain-comprehension, prompt: "Understand the current-state domain and bounded contexts and build a squad ownership map from CODEOWNERS.", expected_status: ambiguous, expected_candidates: [domain-comprehension, squad-map]}
+  - {skill: squad-map, prompt: "Build a squad map from CODEOWNERS and answer who owns the repayment service.", expected_status: ambiguous, expected_candidates: [squad-map, who-owns-x-bot]}
+  - {skill: who-owns-x-bot, prompt: "Who owns the repayment service, and build the full squad ownership map from CODEOWNERS.", expected_status: ambiguous, expected_candidates: [squad-map, who-owns-x-bot]}
+  - {skill: new-hire-guide, prompt: "Create a new hire onboarding guide and also understand the current-state domain and bounded contexts.", expected_status: ambiguous, expected_candidates: [domain-comprehension, new-hire-guide]}
+  - {skill: release-readiness-checker, prompt: "Run release readiness go/no-go and review PR #123 for regressions.", expected_status: ambiguous, expected_candidates: [pr-review, release-readiness-checker]}
+  - {skill: migration-program-manager, prompt: "Create a migration program status rollup and migrate this MySQL SQL to PostgreSQL.", expected_status: ambiguous, expected_candidates: [migration-program-manager, mysql-to-postgres-sql]}
+  - {skill: cost-optimization-sprint-planner, prompt: "Plan a cost optimization sprint and right-size this Kubernetes deployment CPU and memory requests.", expected_status: ambiguous, expected_candidates: [cost-optimization-sprint-planner, k8s-overprovisioning-datadog]}
+  - {skill: mysql-to-postgres-sql, prompt: "Migrate this MySQL SQL to PostgreSQL and create the migration program status rollup.", expected_status: ambiguous, expected_candidates: [migration-program-manager, mysql-to-postgres-sql]}
+  - {skill: loop-task-implementer, prompt: "Implement this task, review and fix until zero issues, and review PR #123 for regressions.", expected_status: ambiguous, expected_candidates: [loop-task-implementer, pr-review]}
+  - {skill: backlog-runner, prompt: "Run backlog tickets overnight and implement this task, review and fix until zero issues.", expected_status: ambiguous, expected_candidates: [backlog-runner, loop-task-implementer]}
+  - {skill: weekly-squad-digest, prompt: "Create the weekly squad digest and the migration program status rollup.", expected_status: ambiguous, expected_candidates: [migration-program-manager, weekly-squad-digest]}
+  - {skill: unit-test-creator, prompt: "Write unit tests and integration tests for the payment repository.", expected_status: ambiguous, expected_candidates: [integration-test-creator, unit-test-creator]}
+  - {skill: integration-test-creator, prompt: "Write integration tests and unit tests for the payment repository.", expected_status: ambiguous, expected_candidates: [integration-test-creator, unit-test-creator]}
+  - {skill: contract-test-creator, prompt: "Write contract tests and API tests for the payment provider API.", expected_status: ambiguous, expected_candidates: [api-test-creator, contract-test-creator]}
+  - {skill: e2e-test-creator, prompt: "Write end-to-end tests and API tests for the checkout service.", expected_status: ambiguous, expected_candidates: [api-test-creator, e2e-test-creator]}
+  - {skill: api-test-creator, prompt: "Write API tests and contract tests for the payment provider.", expected_status: ambiguous, expected_candidates: [api-test-creator, contract-test-creator]}
+  - {skill: prd-architect, prompt: "Review this PRD for build readiness and understand the current-state domain and bounded contexts.", expected_status: ambiguous, expected_candidates: [domain-comprehension, prd-architect]}
+  - {skill: test-writer, prompt: "Write tests for this change; the level is unspecified, and review this PRD for build readiness.", expected_status: ambiguous, expected_candidates: [prd-architect, test-writer]}
