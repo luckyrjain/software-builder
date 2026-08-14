@@ -31,7 +31,7 @@ rightsizing — see [SKILL.md §When NOT to use](SKILL.md#when-not-to-use).
 | `review this MR !482` | `acme/backend` !482 (from `origin`) |
 | `can you review my merge request?` (on `feat/PAY-1421-refund-webhook`) | Look up MRs → pick MR for that branch |
 | `re-review !482` / `check if blocking issues are fixed on !482` | Incremental re-review on `!482` |
-| `review my local changes` / `review unstaged diff` | **Wrong skill** — `/review-bugbot`, not pr-review |
+| `review my local changes` / `review unstaged diff` | **Wrong skill** — use the host's local diff/code-review workflow, not pr-review |
 | `/pr-review https://gitlab.com/acme/backend/-/merge_requests/482` | `acme/backend` !482 |
 | `/pr-review !38 post-merge audit` | Retrospective mode on merged MR |
 | `review merged MR !38` | `review_mode: retrospective` |

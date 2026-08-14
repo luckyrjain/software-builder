@@ -1,5 +1,6 @@
 ---
 name: pr-gatekeeper
+platform_contract: skill-platform-v1
 description: >-
   Auto-runs pr-review on every push to an open GitLab MR (webhook-triggered), posting inline exactly as
   pr-review already supports — when pr-review's own posting-confirmation rules allow it. Delegates all

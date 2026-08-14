@@ -1,5 +1,6 @@
 ---
 name: weekly-squad-digest
+platform_contract: skill-platform-v1
 description: >-
   Scheduled digest combining migration-program-manager's and cost-optimization-sprint-planner's own
   rollup JSON outputs into one squad-grouped report — never re-runs either aggregator, never re-derives

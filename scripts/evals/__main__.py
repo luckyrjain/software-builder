@@ -15,6 +15,7 @@ from scripts.evals.golden import (
     load_golden_fixtures,
     run_golden_case,
 )
+from scripts.evals.platform_contract import run_platform_contract_checks
 from scripts.evals.transcript import load_transcript_fixtures, run_transcript_case
 from scripts.evals.types import EvalResult
 from scripts.registry.frontmatter import load_skill_frontmatter
@@ -23,10 +24,6 @@ from scripts.registry.skill_frontmatter_schema import automation_only_guard_erro
 from scripts.yaml_safety import YAML_SAFETY_ERRORS, load_unique_yaml_file
 
 ROOT = Path(__file__).resolve().parents[2]
-FIXTURES_DIR = ROOT / "evals" / "fixtures"
-TRANSCRIPTS_DIR = ROOT / "evals" / "transcripts"
-GOLDEN_DIR = ROOT / "evals" / "golden"
-GLOBAL_FIXTURE = FIXTURES_DIR / "_global.yaml"
 
 WORKFLOW_REQUIRED_KEYS = ("workflow_version", "phase", "produces", "consumes")
 
@@ -201,12 +198,13 @@ def run_all(
     golden_cases: list[Any] | None = None,
 ) -> list[EvalResult]:
     registry = parse_registry(root / "skills.yaml")
-    cases = load_fixtures(FIXTURES_DIR)
-    transcript_cases = load_transcript_fixtures(TRANSCRIPTS_DIR)
+    cases = load_fixtures(root / "evals" / "fixtures")
+    transcript_cases = load_transcript_fixtures(root / "evals" / "transcripts")
     if golden_cases is None:
-        golden_cases = load_golden_fixtures(GOLDEN_DIR)
-    if GLOBAL_FIXTURE.is_file():
-        global_raw = load_unique_yaml_file(GLOBAL_FIXTURE)
+        golden_cases = load_golden_fixtures(root / "evals" / "golden")
+    global_fixture = root / "evals" / "fixtures" / "_global.yaml"
+    if global_fixture.is_file():
+        global_raw = load_unique_yaml_file(global_fixture)
         if isinstance(global_raw, dict):
             for skill_id in sorted(registry.skills):
                 if skill_filter and skill_id != skill_filter:
@@ -225,7 +223,7 @@ def run_all(
                             tier=int(template.get("tier", 1)),
                             description=str(template.get("description", "")),
                             assertions=assertions,
-                            path=GLOBAL_FIXTURE,
+                            path=global_fixture,
                         ),
                     )
 
@@ -237,6 +235,18 @@ def run_all(
         results.append(admit_case(case, run_transcript_case, seen=seen, registry=registry))
     for case in filtered(golden_cases, skill_filter, tier_filter):
         results.append(admit_case(case, run_golden_case, seen=seen, registry=registry))
+
+    # Platform contract checks are repository-wide. Keep per-skill and per-tier
+    # focused runs focused; the normal unfiltered lint path always executes them.
+    if skill_filter is None and tier_filter is None:
+        results.extend(
+            run_platform_contract_checks(
+                root,
+                registry,
+                case_results=results,
+                golden_cases=golden_cases,
+            ),
+        )
     return results
 
 
@@ -267,14 +277,15 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     try:
-        golden_cases = load_golden_fixtures(GOLDEN_DIR)
+        golden_dir = args.repo_root / "evals" / "golden"
+        golden_cases = load_golden_fixtures(golden_dir)
         for checker in (find_vacuous_anchored_patterns, find_oversized_descriptions):
             for warning in checker(golden_cases, skill_filter=args.skill, tier_filter=args.tier):
                 print(f"warning: {warning}", file=sys.stderr)
         results = run_all(
             args.repo_root, skill_filter=args.skill, tier_filter=args.tier, golden_cases=golden_cases,
         )
-    except YAML_SAFETY_ERRORS as exc:
+    except (OSError, ValueError, *YAML_SAFETY_ERRORS) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
 

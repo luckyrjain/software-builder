@@ -1,0 +1,43 @@
+# Host Adapter Contract
+
+**Normative.** Core skills depend on capabilities, not product or provider names. Host adapters translate those capabilities into the active environment.
+
+## Required adapter surface
+
+A host profile declares support for these capability families:
+
+```yaml
+host:
+  discover_files: full|degraded|unsupported
+  read_repo: full|degraded|unsupported
+  write_repo: full|degraded|unsupported
+  git: full|degraded|unsupported
+  scm: full|degraded|unsupported
+  subagents: full|degraded|unsupported
+  task_isolation: full|degraded|unsupported
+  terminal: full|degraded|unsupported
+  browser: full|degraded|unsupported
+  connectors: full|degraded|unsupported
+```
+
+A skill must resolve its declared capabilities against the profile before execution. Missing optional capabilities trigger documented degraded modes; missing required capability paths produce `BLOCKED` rather than invented substitutes.
+
+## Core/runtime boundary
+
+Core skill logic must not branch on host brand names such as Cursor, Claude, Codex, ChatGPT, or Kiro. Brand-specific discovery, paths, invocation syntax, and packaging belong in generated or explicit host adapters.
+
+Provider names such as Datadog, GitHub, GitLab, Kubernetes, Jira, and Slack may appear as examples or adapter implementations, but routing decisions should be expressed as capability requirements.
+
+## Packaging validation
+
+The repository validates these surfaces:
+
+- **Claude:** `.claude-plugin/plugin.json` and marketplace metadata are valid and point at the canonical skill tree.
+- **Codex / ChatGPT:** `.codex-plugin/plugin.json` is valid and exposes the canonical skill tree. ChatGPT uses the same portable skill package contract; no ChatGPT-only prompt copy is maintained.
+- **Cursor:** `.cursor/rules/*.mdc` are generated from the registry and checked for drift.
+- **Kiro:** `.kiro/steering/*.md` are generated from the registry and checked for drift.
+- **Generic agents:** the repository root plus `skills.yaml`, shared framework, and referenced skill files form the portable package; package generation must preserve relative references.
+
+## Degraded operation
+
+A host profile may be `degraded` for a capability family. The skill must state which outcome is unavailable and continue only when its own capability contract permits that mode. Host limitations never grant additional write or merge authority.

@@ -1,0 +1,100 @@
+schema_version: 1
+
+capability_families:
+  - discover_files
+  - read_repo
+  - write_repo
+  - git
+  - scm
+  - subagents
+  - task_isolation
+  - terminal
+  - browser
+  - connectors
+
+allowed_support: [full, degraded, unsupported]
+
+hosts:
+  cursor:
+    adapter: generated_cursor_rules
+    support:
+      discover_files: full
+      read_repo: full
+      write_repo: full
+      git: full
+      scm: degraded
+      subagents: degraded
+      task_isolation: degraded
+      terminal: full
+      browser: degraded
+      connectors: degraded
+
+  claude:
+    adapter: claude_plugin
+    support:
+      discover_files: full
+      read_repo: full
+      write_repo: full
+      git: full
+      scm: degraded
+      subagents: full
+      task_isolation: degraded
+      terminal: full
+      browser: degraded
+      connectors: degraded
+
+  codex:
+    adapter: codex_plugin
+    support:
+      discover_files: full
+      read_repo: full
+      write_repo: full
+      git: full
+      scm: full
+      subagents: full
+      task_isolation: full
+      terminal: full
+      browser: degraded
+      connectors: full
+
+  chatgpt:
+    adapter: codex_plugin_portable_package
+    support:
+      discover_files: degraded
+      read_repo: degraded
+      write_repo: degraded
+      git: unsupported
+      scm: full
+      subagents: degraded
+      task_isolation: degraded
+      terminal: unsupported
+      browser: full
+      connectors: full
+
+  kiro:
+    adapter: generated_kiro_steering
+    support:
+      discover_files: full
+      read_repo: full
+      write_repo: full
+      git: full
+      scm: degraded
+      subagents: degraded
+      task_isolation: degraded
+      terminal: full
+      browser: degraded
+      connectors: degraded
+
+  generic:
+    adapter: portable_root_package
+    support:
+      discover_files: degraded
+      read_repo: degraded
+      write_repo: degraded
+      git: degraded
+      scm: degraded
+      subagents: unsupported
+      task_isolation: unsupported
+      terminal: degraded
+      browser: unsupported
+      connectors: degraded

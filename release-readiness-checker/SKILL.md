@@ -1,5 +1,6 @@
 ---
 name: release-readiness-checker
+platform_contract: skill-platform-v1
 description: >-
   Release go/no-go report composing pr-review (MRs merged since last release, never posts), k8s-
   overprovisioning-datadog (per-service rightsizing verdict), and incident-rca (per-service open-incident

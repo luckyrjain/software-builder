@@ -11,9 +11,9 @@ When adding a new skill, add it here first; then each existing skill only needs 
 | User intent / keywords | Route to | NOT these |
 |------------------------|----------|-----------|
 | Overprovisioned, right-size, rightsizing, CPU/memory requests, HPA, replicas, throttling, OOM (sizing context), Kafka consumer lag (scaling), cost/waste, namespace waste ranking | **k8s-overprovisioning-datadog** | incident-rca, pr-review |
-| RCA, root cause, postmortem, incident, outage, 5xx spike, error spike, deploy regression (time-window), consumer lag (incident), SLO breach, P1/P2, INC-, on-call (interactive, conversational) | **incident-rca** | k8s, pr-review |
+| RCA, root cause, postmortem, incident, outage, 5xx spike, error spike, deploy regression (time-window), consumer lag (incident), SLO breach, P1/P2, INC-, on-call (interactive, conversational) | **incident-rca** | k8s-overprovisioning-datadog, pr-review |
 | PagerDuty/Opsgenie page-fire or incident-resolved webhook, no follow-up turn possible | **incident-triage-agent** | incident-rca, squad-map (that's what it delegates to internally — do not call either directly for an unattended paging event, their own confirmation gates are designed to wait for a human chat turn) |
-| Review PR/MR, review pull request/merge request, review #number/!IID, /pr-review, re-review, post-merge audit, list open reviews, review as SRE/security/architect (interactive, conversational) | **pr-review** | incident-rca, k8s |
+| Review PR/MR, review pull request/merge request, review #number/!IID, /pr-review, re-review, post-merge audit, list open reviews, review as SRE/security/architect (interactive, conversational) | **pr-review** | incident-rca, k8s-overprovisioning-datadog |
 | GitLab push-event webhook, automated review on every push, no follow-up turn possible | **pr-gatekeeper** | pr-review (that's what it delegates to internally — do not call pr-review directly for an unattended webhook run, its own posting confirmation is designed to wait for a human chat turn) |
 | Domain comprehension, bounded context, data ownership, critical path, architecture smells, subsystem onboarding **with no person named**, multi-repo ground truth, five questions | **domain-comprehension** | squad-map (ownership only), incident-rca, new-hire-guide (onboarding **a named person**, not a subsystem) |
 | Squad map, ownership, who owns, CODEOWNERS, GitLab group, Datadog team, team reconciliation (interactive, conversational) | **squad-map** | domain-comprehension (full map) |
@@ -35,9 +35,9 @@ When adding a new skill, add it here first; then each existing skill only needs 
 | Contract tests, consumer-driven contract, Pact, provider verification, "does the API still match what the consumer expects" | **contract-test-creator** | integration-test-creator (a real dependency, not an interface agreement), api-test-creator (a standalone black-box suite, not a consumer/provider agreement) |
 | E2E tests, end-to-end, browser test, user journey, Playwright/Cypress/Selenium, click-through test | **e2e-test-creator** | integration-test-creator (below the UI), unit-test-creator (function-level), api-test-creator (no browser involved) |
 | API tests, Postman, Newman, black-box API test, request/response assertion, REST endpoint test | **api-test-creator** | integration-test-creator (in-process/testcontainers-backed, not black-box HTTP), contract-test-creator (a consumer/provider agreement, not a standalone suite), e2e-test-creator (a browser journey, not an API-only one) |
-| Local uncommitted diff, review unstaged | **review-bugbot** (external) | pr-review |
-| Datadog MCP missing / 403, configure Datadog | **ddsetup** / **ddconfig** | all others |
-| Live rollback, kubectl apply, deploy, restart pods | **Out of scope** — human operator | all skills |
+| Local uncommitted diff, review unstaged | **Host local diff/code-review workflow** — no registered skill owns local-only diff review | pr-review |
+| Required provider/capability unavailable or unauthorized | Follow **mcp-error-handling.md** and the skill's declared degraded mode; do not route to an unregistered setup skill | all registered skills |
+| Live rollback, kubectl apply, deploy, restart pods | **Out of scope** — accountable operator or explicitly authorized host workflow | all skills |
 | Security-only deep review (no MR) | **pr-review** with security persona | — |
 
 ## Disambiguation rules
@@ -47,50 +47,25 @@ When adding a new skill, add it here first; then each existing skill only needs 
 3. **GitLab MR target** → pr-review (even if the MR changes resources)
 4. **"Who owns X?"** without domain map intent → squad-map
 5. **"Map the domain / bounded contexts"** → domain-comprehension (which delegates ownership to squad-map at Session 0b)
-6. **OOM in sizing context** ("is this overprovisioned?") → k8s; **OOM in incident context** ("what caused the outage?") → incident-rca
-7. **Kafka lag in scaling context** → k8s; **Kafka lag in incident context** → incident-rca
+6. **OOM in sizing context** ("is this overprovisioned?") → k8s-overprovisioning-datadog; **OOM in incident context** ("what caused the outage?") → incident-rca
+7. **Kafka lag in scaling context** → k8s-overprovisioning-datadog; **Kafka lag in incident context** → incident-rca
 8. **Native SQL / JDBC migration to PostgreSQL** → mysql-to-postgres-sql; **domain map / bounded contexts** → domain-comprehension
 9. **Migration MR review** → pr-review (even if diff is SQL rewrites)
-10. **Ownership request from an automated, single-shot caller** (Slack slash command, no follow-up turn) →
-    who-owns-x-bot; **ownership request from an interactive human turn** → squad-map directly
-11. **Review request from a push webhook, no human turn available** → pr-gatekeeper; **review request from
-    an interactive human turn** → pr-review directly
-12. **Page-fire or incident-resolved event from a paging system, no human turn available** →
-    incident-triage-agent; **RCA or ownership request from an interactive human turn** → incident-rca /
-    squad-map directly
-13. **Scheduled overnight ticket-queue sweep, no human turn available** → backlog-runner; **single-task or
-    human-driven multi-task request** → loop-task-implementer directly
-14. **Onboarding request naming a person** ("onboard `<name>`, joining `<squad>`") → new-hire-guide;
-    **onboarding request naming a subsystem/domain, no person named** ("help me onboard to the payments
-    subsystem") → domain-comprehension directly, even though both skills use the word "onboarding";
-    **plain "who owns X?"** (no new-hire input) → squad-map directly
-15. **Release-wide go/no-go request with a `release_manifest`** → release-readiness-checker; **one
-    specific MR** → pr-review directly; **one specific service's rightsizing** → k8s-overprovisioning-datadog
-    directly; **full RCA on a known/suspected incident** → incident-rca directly
-16. **Org-wide migration status across many workspaces with a `program_manifest`** →
-    migration-program-manager; **one workspace's own migration status** → mysql-to-postgres-sql directly;
-    **plain "who owns X?" with no migration angle** → squad-map directly
-17. **Org-wide cost/waste ranking across many deployments with a `sweep_scope`** →
-    cost-optimization-sprint-planner; **one deployment's own rightsizing question** →
-    k8s-overprovisioning-datadog directly; **plain "who owns X?" with no cost angle** → squad-map directly
-18. **Scheduled combined squad digest, no human turn available** → weekly-squad-digest; **a fresh
-    single-source rollup, interactive** → migration-program-manager / cost-optimization-sprint-planner
-    directly
-19. **"Write/generate/backfill tests" with the level unspecified** → test-writer (asks which level if
-    genuinely ambiguous, per its own classify gate); **level named explicitly** ("unit tests", "integration
-    tests", "contract/Pact tests", "e2e/browser tests", "Postman/API tests") → the matching
-    `*-test-creator` skill directly, no need to route through test-writer first; **"review this test suite
-    / MR's test quality"** → pr-review directly; **"implement the feature"** (not just its tests) →
-    loop-task-implementer directly
-20. **Product spec / PRD / requirements doc** → prd-architect; **"should we build X?" without an
-    authoritative PRD** → prd-architect Validation Mode; **existing PRD + gaps/readiness** → prd-architect
-    Review Mode; **"implement the PRD"** → loop-task-implementer directly; **"map the domain / bounded
-    contexts"** → domain-comprehension directly
+10. **Ownership request from an automated, single-shot caller** (Slack slash command, no follow-up turn) → who-owns-x-bot; **ownership request from an interactive human turn** → squad-map directly
+11. **Review request from a push webhook, no human turn available** → pr-gatekeeper; **review request from an interactive human turn** → pr-review directly
+12. **Page-fire or incident-resolved event from a paging system, no human turn available** → incident-triage-agent; **RCA or ownership request from an interactive human turn** → incident-rca / squad-map directly
+13. **Scheduled overnight ticket-queue sweep, no human turn available** → backlog-runner; **single-task or human-driven multi-task request** → loop-task-implementer directly
+14. **Onboarding request naming a person** ("onboard `<name>`, joining `<squad>`") → new-hire-guide; **onboarding request naming a subsystem/domain, no person named** ("help me onboard to the payments subsystem") → domain-comprehension directly, even though both skills use the word "onboarding"; **plain "who owns X?"** (no new-hire input) → squad-map directly
+15. **Release-wide go/no-go request with a `release_manifest`** → release-readiness-checker; **one specific MR** → pr-review directly; **one specific service's rightsizing** → k8s-overprovisioning-datadog directly; **full RCA on a known/suspected incident** → incident-rca directly
+16. **Org-wide migration status across many workspaces with a `program_manifest`** → migration-program-manager; **one workspace's own migration status** → mysql-to-postgres-sql directly; **plain "who owns X?" with no migration angle** → squad-map directly
+17. **Org-wide cost/waste ranking across many deployments with a `sweep_scope`** → cost-optimization-sprint-planner; **one deployment's own rightsizing question** → k8s-overprovisioning-datadog directly; **plain "who owns X?" with no cost angle** → squad-map directly
+18. **Scheduled combined squad digest, no human turn available** → weekly-squad-digest; **a fresh single-source rollup, interactive** → migration-program-manager / cost-optimization-sprint-planner directly
+19. **"Write/generate/backfill tests" with the level unspecified** → test-writer (asks which level if genuinely ambiguous, per its own classify gate); **level named explicitly** ("unit tests", "integration tests", "contract/Pact tests", "e2e/browser tests", "Postman/API tests") → the matching `*-test-creator` skill directly, no need to route through test-writer first; **"review this test suite / MR's test quality"** → pr-review directly; **"implement the feature"** (not just its tests) → loop-task-implementer directly
+20. **Product spec / PRD / requirements doc** → prd-architect; **"should we build X?" without an authoritative PRD** → prd-architect Validation Mode; **existing PRD + gaps/readiness** → prd-architect Review Mode; **"implement the PRD"** → loop-task-implementer directly; **"map the domain / bounded contexts"** → domain-comprehension directly
 
 ## Ambiguous requests — ask
 
-If the user's intent matches multiple skills equally (e.g. "checkout-api has OOM and high latency"),
-ask which angle they want:
+If the user's intent matches multiple skills equally (e.g. "checkout-api has OOM and high latency"), ask which angle they want:
 - "Investigate the incident?" → incident-rca
 - "Assess resource sizing?" → k8s-overprovisioning-datadog
 
@@ -98,8 +73,17 @@ Do not default to one skill when the intent is genuinely ambiguous.
 
 ## Cross-skill handoffs
 
-After a skill completes, it may recommend invoking another skill. See
-[cross-skill-escalation.md](cross-skill-escalation.md) for the full handoff matrix.
+After a skill completes, it may recommend invoking another skill. See [cross-skill-escalation.md](cross-skill-escalation.md) for the full handoff matrix. Handoffs use the portable envelope and recursion rules in [runtime-contract.md](runtime-contract.md).
+
+## Universal inherited contracts
+
+Every registered skill inherits these shared contracts through this routing document:
+
+- Runtime/input/evidence/freshness/stopping/result/handoff/state semantics: [runtime-contract.md](runtime-contract.md)
+- Host/provider capability boundary and packaging behavior: [host-adapter-contract.md](host-adapter-contract.md)
+- Positive/negative/ambiguous/adversarial/degraded evaluation requirements: [eval-contract.md](eval-contract.md)
+
+These files are normative. Skill-local text should document only domain-specific deltas instead of copying the shared rules.
 
 ## How skills reference this table
 
@@ -109,5 +93,4 @@ From a skill's `SKILL.md`:
 Routing: [skill-routing.md](../docs/skill-framework/shared/skill-routing.md)
 ```
 
-Each skill's "When NOT to use" section should link here and list only its 3–5 most common mis-routes
-as a quick reference — not a complete routing table.
+Each skill's "When NOT to use" section should link here and list only its 3–5 most common mis-routes as a quick reference — not a complete routing table.

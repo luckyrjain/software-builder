@@ -1,6 +1,7 @@
 ---
 name: incident-rca
 skill_version: 2
+platform_contract: skill-platform-v1
 description: >-
   RCA and post-incident investigation for outages, error spikes, deploy regressions, and latency
   incidents in a time window. Keywords: RCA, root cause, postmortem, INC-, P1/P2, on-call. Datadog or
