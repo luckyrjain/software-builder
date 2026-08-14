@@ -1,12 +1,9 @@
 """SKILL.md YAML frontmatter schema (v1).
 
 Platform facts live in skills.yaml; SKILL.md frontmatter is agent-discovery prose
-only -- except automation_only_guard_errors below, which exists specifically to
-check one frontmatter field against its skills.yaml counterpart. That's the one
-sanctioned exception, not a precedent: a check that's purely about frontmatter
-shape belongs in validate_skill_frontmatter_fields; a check that needs a second
-platform fact from skills.yaml belongs here only if it's checking frontmatter
-against that fact, not deriving new facts from skills.yaml alone.
+only -- except for explicit cross-check markers such as ``platform_contract`` and
+automation invocation guards. The detailed platform policy remains centralized;
+frontmatter only declares which contract a skill inherits.
 """
 
 from __future__ import annotations
@@ -15,11 +12,14 @@ from typing import Any
 
 from scripts.registry.schema import AUTOMATION_ONLY_INVOCATION
 
+PLATFORM_CONTRACT = "skill-platform-v1"
+
 ALLOWED_FRONTMATTER_KEYS = frozenset(
     {
         "name",
         "description",
         "skill_version",
+        "platform_contract",
         "disable-model-invocation",
     },
 )
@@ -32,6 +32,13 @@ def validate_skill_frontmatter_fields(skill_id: str, frontmatter: dict[str, Any]
     for key in frontmatter:
         if key not in ALLOWED_FRONTMATTER_KEYS:
             errors.append(f"error: {skill_id}: unknown SKILL.md frontmatter key {key!r}")
+
+    platform_contract = frontmatter.get("platform_contract")
+    if platform_contract != PLATFORM_CONTRACT:
+        errors.append(
+            f"error: {skill_id}: platform_contract must be {PLATFORM_CONTRACT!r}, "
+            f"got {platform_contract!r}",
+        )
 
     if "skill_version" in frontmatter:
         version = frontmatter["skill_version"]
