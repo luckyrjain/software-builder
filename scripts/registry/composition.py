@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from scripts.registry.composition_contracts import validate_composition_contracts
+from scripts.registry.composition_runtime import validate_composition_runtime
 from scripts.registry.graph import detect_cycles
 from scripts.registry.models import Registry
 from scripts.registry.schema import parse_registry
@@ -32,6 +33,7 @@ def validate_composition_graph(registry: Registry) -> list[str]:
 
     errors.extend(detect_cycles(invokes_graph, "composition graph"))
     errors.extend(validate_composition_contracts(registry))
+    errors.extend(validate_composition_runtime(registry))
     return errors
 
 
@@ -39,8 +41,11 @@ def render_composition_mermaid(registry: Registry) -> str:
     lines = ["graph TD"]
     edges = 0
     for skill_id, entry in sorted(registry.skills.items()):
+        for dep in entry.install.requires:
+            lines.append(f"  {skill_id} -->|requires| {dep}")
+            edges += 1
         for dep in entry.composition.invokes:
-            lines.append(f"  {skill_id} -->|invokes| {dep}")
+            lines.append(f"  {skill_id} ==>|handoff| {dep}")
             edges += 1
         for target in entry.composition.escalation_targets:
             lines.append(f"  {skill_id} -.->|escalates| {target}")
