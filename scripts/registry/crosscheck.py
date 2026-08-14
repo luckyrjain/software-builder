@@ -90,11 +90,35 @@ def _validate_install_graph(registry: Registry) -> list[str]:
     return errors
 
 
+def _invoke_capability_names(entry: object) -> list[str]:
+    capabilities = getattr(entry, "capabilities")
+    names = [item.name for item in capabilities.optional]
+    for path in capabilities.any_of:
+        names.extend(item.name for item in path.optional)
+        names.extend(path.required)
+    names.extend(capabilities.required)
+    return [name for name in names if name.endswith(".invoke")]
+
+
+def _validate_invoke_skill_references(registry: Registry) -> list[str]:
+    """Machine-readable skill invocation references must resolve and be installable."""
+    errors: list[str] = []
+    known = set(registry.skills)
+    for skill_id, entry in registry.skills.items():
+        dependencies = set(entry.install.requires)
+        for capability in _invoke_capability_names(entry):
+            target = capability[: -len(".invoke")]
+            if target not in known:
+                errors.append(f"error: {skill_id}: capability references unknown skill {target!r}")
+            elif target not in dependencies:
+                errors.append(
+                    f"error: {skill_id}: capability {capability!r} requires install.requires {target!r}",
+                )
+    return errors
+
+
 def _validate_skill_frontmatter_shape(root: Path, registry: Registry) -> list[str]:
-    """Per-skill SKILL.md frontmatter checks: parses, and its name/description/
-    other fields agree with the registry -- everything except the automation-only
-    business rules, which live in _validate_automation_only_rules below.
-    """
+    """Per-skill SKILL.md frontmatter checks against the registry."""
     errors: list[str] = []
     for skill_id, entry in registry.skills.items():
         skill_md = root / entry.path / "SKILL.md"
@@ -117,7 +141,6 @@ def _validate_skill_frontmatter_shape(root: Path, registry: Registry) -> list[st
                 errors.append(f"error: {skill_id}: description must be a non-empty string")
 
         errors.extend(validate_skill_frontmatter_fields(skill_id, frontmatter))
-
         errors.extend(
             f"error: {skill_id}: {msg}"
             for msg in automation_only_guard_errors(entry.invocation, frontmatter)
@@ -126,10 +149,6 @@ def _validate_skill_frontmatter_shape(root: Path, registry: Registry) -> list[st
 
 
 def _validate_automation_only_rules(registry: Registry) -> list[str]:
-    """Discovery and risk_class rules an automation-only skill must additionally
-    declare, beyond agreeing with SKILL.md's disable-model-invocation (that
-    agreement is _validate_skill_frontmatter_shape's job, via automation_only_guard_errors).
-    """
     errors: list[str] = []
     for skill_id, entry in registry.skills.items():
         if entry.invocation != AUTOMATION_ONLY_INVOCATION:
@@ -157,13 +176,6 @@ def _validate_stale_adapters(root: Path, registry: Registry) -> list[str]:
 
 
 def validate_registry(root: Path) -> list[str]:
-    # Each check below runs to completion across every skill before the next
-    # starts, so errors are grouped by check, not interleaved per skill the way
-    # a single combined loop would produce -- e.g. skill A's install-graph error
-    # now sorts after skill B's path error, not before it. Nothing currently
-    # depends on cross-check ordering (every existing consumer either checks
-    # membership or prints the full list), but it's a real, visible change from
-    # this function's pre-split shape.
     registry_path = root / "skills.yaml"
     registry = parse_registry(registry_path)
 
@@ -171,6 +183,7 @@ def validate_registry(root: Path) -> list[str]:
     errors.extend(_validate_skill_directory_sync(root, registry))
     errors.extend(_validate_skill_paths(root, registry))
     errors.extend(_validate_install_graph(registry))
+    errors.extend(_validate_invoke_skill_references(registry))
     errors.extend(validate_composition_graph(registry))
     errors.extend(validate_capabilities_present(registry_path))
     errors.extend(_validate_skill_frontmatter_shape(root, registry))
