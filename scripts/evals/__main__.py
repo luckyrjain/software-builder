@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from scripts.evals.batch3_contract import run_batch3_contract_checks
 from scripts.evals.golden import (
     find_oversized_descriptions,
     find_vacuous_anchored_patterns,
@@ -236,11 +237,18 @@ def run_all(
     for case in filtered(golden_cases, skill_filter, tier_filter):
         results.append(admit_case(case, run_golden_case, seen=seen, registry=registry))
 
-    # Platform contract checks are repository-wide. Keep per-skill and per-tier
-    # focused runs focused; the normal unfiltered lint path always executes them.
+    # Repository-wide contract checks belong to the normal unfiltered harness.
+    # Focused --skill/--tier runs stay focused and do not claim repository-wide coverage.
     if skill_filter is None and tier_filter is None:
+        platform_results = run_platform_contract_checks(
+            root,
+            registry,
+            case_results=results,
+            golden_cases=golden_cases,
+        )
+        results.extend(platform_results)
         results.extend(
-            run_platform_contract_checks(
+            run_batch3_contract_checks(
                 root,
                 registry,
                 case_results=results,
