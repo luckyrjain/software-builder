@@ -6,6 +6,7 @@ import yaml
 
 from scripts.registry.composition_runtime import (
     RUNTIME_PATH,
+    handoff_allowed,
     render_dependency_graph,
     validate_composition_runtime,
 )
@@ -28,7 +29,7 @@ def _write_runtime(tmp_path: Path, data: dict) -> Path:
 def test_batch2_runtime_contracts_validate_for_all_registered_skills() -> None:
     registry = load_registry(ROOT)
     assert validate_composition_runtime(registry, contracts_path=CONTRACTS) == []
-    assert len(_runtime()["skill_types"]) == len(registry.skills) == 23
+    assert set(_runtime()["skill_types"]) == set(registry.skills)
 
 
 def test_missing_skill_type_fails_closed(tmp_path: Path) -> None:
@@ -69,6 +70,17 @@ def test_recursion_guard_cannot_fail_open(tmp_path: Path) -> None:
     assert any("block_revisit_by_default" in error for error in errors)
 
 
+def test_executable_recursion_guard_blocks_depth_and_revisits() -> None:
+    allowed, reason = handoff_allowed("pr-review", visited_skills=["release-readiness-checker"], depth=1)
+    assert allowed is True and reason is None
+
+    allowed, reason = handoff_allowed("pr-review", visited_skills=["pr-review"], depth=1)
+    assert allowed is False and "already visited" in str(reason)
+
+    allowed, reason = handoff_allowed("pr-review", visited_skills=[], depth=3)
+    assert allowed is False and "maximum composition depth" in str(reason)
+
+
 def test_artifact_owner_must_produce_owned_artifact(tmp_path: Path) -> None:
     registry = load_registry(ROOT)
     data = _runtime()
@@ -79,6 +91,18 @@ def test_artifact_owner_must_produce_owned_artifact(tmp_path: Path) -> None:
         contracts_path=CONTRACTS,
     )
     assert any("prd_report" in error and "does not produce artifact" in error for error in errors)
+
+
+def test_canonical_artifact_requires_declared_delegated_producers(tmp_path: Path) -> None:
+    registry = load_registry(ROOT)
+    data = _runtime()
+    data["artifact_ownership"]["mr_review_report"].pop("delegates")
+    errors = validate_composition_runtime(
+        registry,
+        runtime_path=_write_runtime(tmp_path, data),
+        contracts_path=CONTRACTS,
+    )
+    assert any("mr_review_report" in error and "undeclared delegated producers" in error for error in errors)
 
 
 def test_dependency_graph_contains_types_handoffs_and_artifact_edges() -> None:
