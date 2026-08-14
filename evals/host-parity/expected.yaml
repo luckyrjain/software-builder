@@ -1,0 +1,14 @@
+schema_version: 1
+runtime_contracts:
+  - runtime-contract.md
+  - host-adapter-contract.md
+  - eval-contract.md
+routing_source: docs/skill-framework/shared/skill-routing.md
+invocation_source: skills.yaml
+hosts:
+  cursor: {adapter: generated_cursor_rules, skill_surface: per_skill_generated}
+  claude: {adapter: claude_plugin, skill_surface: canonical_root}
+  codex: {adapter: codex_plugin, skill_surface: canonical_root}
+  chatgpt: {adapter: codex_plugin_portable_package, skill_surface: canonical_root}
+  kiro: {adapter: generated_kiro_steering, skill_surface: per_skill_generated}
+  generic: {adapter: portable_root_package, skill_surface: canonical_root}
