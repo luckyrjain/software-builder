@@ -7,6 +7,9 @@ routes:
     patterns:
       - '\b(review|inspect|analy[sz]e)\b.*\b(PR|MR|pull request|merge request|diff)\b'
       - '\b(PR|MR|pull request|merge request)\b.*\b(review|regression|correctness)\b'
+    exclude_patterns:
+      - '\b(no|without)\s+(PR|MR|pull request|merge request)\b'
+      - '\bthere is no\s+(PR|MR|pull request|merge request)\b'
   pr-gatekeeper:
     patterns:
       - '\b(PR|MR|pull request|merge request)\b.*\b(webhook|gatekeeper|automation gate|opened event)\b'
@@ -51,7 +54,7 @@ routes:
   loop-task-implementer:
     patterns:
       - '\bimplement\b.*\b(task|ticket|change)\b.*\b(review|fix|until|loop)\b'
-      - '\brepeat\b.*\b(review|fix)\b.*\b0 issues|zero issues\b'
+      - '\brepeat\b.*\b(review|fix)\b.*\b(0 issues|zero issues)\b'
   backlog-runner:
     patterns:
       - '\b(backlog|tickets?)\b.*\b(overnight|scheduled|nightly|queue runner)\b'
@@ -69,10 +72,10 @@ routes:
       - '\b(contract tests?|consumer[- ]driven contract|pact tests?)\b'
   e2e-test-creator:
     patterns:
-      - '\b(e2e|end[- ]to[- ]end)\b.*\btests?|testing\b'
+      - '\b(e2e|end[- ]to[- ]end)\b.*\b(tests?|testing)\b'
   api-test-creator:
     patterns:
-      - '\b(API|HTTP|REST)\b.*\btests?|testing suite\b'
+      - '\b(API|HTTP|REST)\b.*\b(tests?|testing suite)\b'
   prd-architect:
     patterns:
       - '\b(PRD|product requirements?|requirements document|build readiness)\b'
