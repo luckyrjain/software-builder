@@ -1,18 +1,49 @@
 #!/usr/bin/env python3
-"""Shared helpers for Markdown link extraction and framework path handling."""
+"""Shared helpers for Markdown link extraction, framework path handling, and
+the install-package manifest workflow (packaging, verification) per ADR 0002.
+"""
 
 from __future__ import annotations
 
 import fnmatch
 import hashlib
+import json
 import os
 import re
 from pathlib import Path
+from typing import Any
 
 MARKDOWN_LINK_RE = re.compile(r"\]\(([^)]+)\)")
 FRAMEWORK_MARKER = "docs/skill-framework/"
 
 MANIFEST_NAME = ".software-builder-manifest.json"
+
+
+class ManifestError(ValueError):
+    """Raised when a MANIFEST_NAME file is missing, unreadable, or malformed."""
+
+
+def read_manifest_file(path: Path) -> dict[str, Any]:
+    """Read and parse a MANIFEST_NAME file into its JSON object.
+
+    Raises ManifestError with a specific, human-readable reason on any
+    failure (missing file, invalid JSON, JSON root not an object) -- callers
+    decide how to surface it.
+    """
+    if not path.is_file():
+        raise ManifestError(f"missing manifest: {path}")
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise ManifestError(f"cannot read manifest: {exc}") from exc
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise ManifestError(f"invalid manifest JSON: {exc}") from exc
+    if not isinstance(data, dict):
+        raise ManifestError("manifest is not a JSON object")
+    return data
+
 
 # Filesystem noise that can legitimately appear after a skill is packaged/installed and
 # used (running a bundled script writes __pycache__, editors/OS write dotfiles) -- shared

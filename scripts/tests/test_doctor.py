@@ -177,6 +177,48 @@ def test_skill_status_handles_null_distribution_version_in_manifest(tmp_path: Pa
     assert status.status == "VERSION_MISMATCH"
 
 
+def test_skill_status_degrades_gracefully_on_invalid_manifest_json(tmp_path: Path) -> None:
+    # _installed_manifest routes through the shared read_manifest_file, which
+    # raises ManifestError for invalid JSON -- confirm doctor.py still
+    # degrades to "not installed" here, same as a missing manifest, rather
+    # than letting the exception escape uncaught.
+    from scripts.doctor import _skill_status
+    from scripts.reference_utils import MANIFEST_NAME
+
+    skill_dest = tmp_path / "pr-review"
+    skill_dest.mkdir()
+    (skill_dest / MANIFEST_NAME).write_text("{not valid json", encoding="utf-8")
+
+    status = _skill_status(
+        "pr-review",
+        _pr_review_entry(),
+        available=None,
+        install_roots=[tmp_path],
+        distribution_version="1.0.0",
+    )
+
+    assert status.installed_label == "not installed"
+
+
+def test_skill_status_degrades_gracefully_on_non_object_manifest(tmp_path: Path) -> None:
+    from scripts.doctor import _skill_status
+    from scripts.reference_utils import MANIFEST_NAME
+
+    skill_dest = tmp_path / "pr-review"
+    skill_dest.mkdir()
+    (skill_dest / MANIFEST_NAME).write_text(json.dumps([1, 2, 3]), encoding="utf-8")
+
+    status = _skill_status(
+        "pr-review",
+        _pr_review_entry(),
+        available=None,
+        install_roots=[tmp_path],
+        distribution_version="1.0.0",
+    )
+
+    assert status.installed_label == "not installed"
+
+
 def test_render_skill_status_includes_missing_optional_and_degraded_hints() -> None:
     from scripts.doctor import _skill_status, render_skill_status
 
