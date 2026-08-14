@@ -112,6 +112,103 @@ def test_score_against_golden_reuses_golden_engine(tmp_path: Path) -> None:
     assert "payments" in failing.messages[0]
 
 
+def test_score_against_golden_picks_up_contract_coverage(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # score_against_golden used to hand-roll its own GoldenCase construction,
+    # separate from load_golden_fixtures' -- when contract_coverage was added
+    # to the golden-fixture schema, load_golden_fixtures picked it up but this
+    # path silently didn't. Now both go through parse_golden_fixture, so a
+    # live-scored case carries the fixture's contract_coverage too. Capture
+    # the GoldenCase run_golden_case actually receives -- score_against_golden
+    # itself only returns an EvalResult, which has no contract_coverage field,
+    # so asserting through score_against_golden's own return value can't prove
+    # this; calling parse_golden_fixture directly wouldn't prove
+    # score_against_golden actually wires it through either.
+    golden_path = tmp_path / "golden.yaml"
+    golden_path.write_text(
+        yaml.safe_dump(
+            {
+                "schema_version": 1,
+                "skill": "demo-skill",
+                "case_id": "demo-case",
+                "tier": 3,
+                "description": "d",
+                "assertions": [{"type": "field_equals", "path": "squad", "value": "payments"}],
+                "contract_coverage": ["INV-01"],
+            },
+        ),
+        encoding="utf-8",
+    )
+
+    captured: list[object] = []
+    real_run_golden_case = live_run.run_golden_case
+
+    def spy_run_golden_case(case):
+        captured.append(case)
+        return real_run_golden_case(case)
+
+    monkeypatch.setattr(live_run, "run_golden_case", spy_run_golden_case)
+
+    result = score_against_golden(
+        golden_path,
+        skill="demo-skill",
+        case_id="demo-case",
+        recorded_output={"squad": "payments"},
+    )
+
+    assert result.passed
+    assert len(captured) == 1
+    assert captured[0].contract_coverage == ["INV-01"]
+
+
+def test_score_against_golden_rejects_non_mapping_recorded_output(tmp_path: Path) -> None:
+    # recorded_output is always an override on this path (never read from the
+    # fixture file), so it needs its own type check -- without one, a caller
+    # passing e.g. a list would flow through unvalidated and only surface as
+    # a confusing crash deep inside assertion evaluation instead of a clear
+    # error here.
+    golden_path = tmp_path / "golden.yaml"
+    golden_path.write_text(
+        yaml.safe_dump(
+            {
+                "schema_version": 1,
+                "skill": "demo-skill",
+                "case_id": "demo-case",
+                "assertions": [{"type": "field_equals", "path": "squad", "value": "payments"}],
+            },
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="recorded_output must be a mapping"):
+        score_against_golden(
+            golden_path,
+            skill="demo-skill",
+            case_id="demo-case",
+            recorded_output=["not", "a", "mapping"],
+        )
+
+
+def test_score_against_golden_rejects_fixture_missing_assertions(tmp_path: Path) -> None:
+    # assertions is never overridable (always read from the golden file even
+    # on the live-run scoring path) -- confirm that still raises the same
+    # error it did before this path was routed through parse_golden_fixture.
+    golden_path = tmp_path / "golden.yaml"
+    golden_path.write_text(
+        yaml.safe_dump({"schema_version": 1, "skill": "demo-skill", "case_id": "demo-case"}),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="assertions must be a non-empty list"):
+        score_against_golden(
+            golden_path,
+            skill="demo-skill",
+            case_id="demo-case",
+            recorded_output={"squad": "payments"},
+        )
+
+
 def test_write_transcript_bootstraps_new_fixture_from_case_assertions(tmp_path: Path) -> None:
     case = {
         "skill": "demo-skill",

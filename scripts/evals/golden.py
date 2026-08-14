@@ -25,6 +25,52 @@ class GoldenCase:
     contract_coverage: list[str] = field(default_factory=list)
 
 
+def parse_golden_fixture(
+    path: Path,
+    *,
+    skill: str | None = None,
+    case_id: str | None = None,
+    recorded_output: dict[str, Any] | None = None,
+) -> GoldenCase:
+    """Parse one golden fixture file into a GoldenCase.
+
+    skill/case_id/recorded_output are read from the fixture file by default
+    (load_golden_fixtures' directory-scan case). Pass overrides to use values
+    from elsewhere instead -- scripts/evals/live_run.py's score_against_golden
+    scores a *live* run's fresh output against an existing fixture's
+    assertions, so recorded_output must be this run's output, not whatever
+    the fixture recorded when it was captured, and skill/case_id come from
+    the live case rather than trusting the golden file's own labels.
+    """
+    raw = load_unique_yaml_file(path)
+    if not isinstance(raw, dict):
+        raise ValueError(f"{path}: golden fixture root must be a mapping")
+
+    resolved_skill = skill if skill is not None else str(raw.get("skill", ""))
+    resolved_case_id = case_id if case_id is not None else str(raw.get("case_id", ""))
+    if not resolved_skill or not resolved_case_id:
+        raise ValueError(f"{path}: skill and case_id are required")
+
+    resolved_recorded_output = recorded_output if recorded_output is not None else raw.get("recorded_output", {})
+    if not isinstance(resolved_recorded_output, dict):
+        raise ValueError(f"{path}: recorded_output must be a mapping")
+
+    assertions = raw.get("assertions", [])
+    if not isinstance(assertions, list) or not assertions:
+        raise ValueError(f"{path}: assertions must be a non-empty list")
+
+    return GoldenCase(
+        skill=resolved_skill,
+        case_id=resolved_case_id,
+        tier=int(raw.get("tier", 3)),
+        description=str(raw.get("description", "")),
+        recorded_output=resolved_recorded_output,
+        assertions=assertions,
+        path=path,
+        contract_coverage=raw.get("contract_coverage", []),
+    )
+
+
 def load_golden_fixtures(golden_dir: Path) -> list[GoldenCase]:
     if not golden_dir.is_dir():
         return []
@@ -33,35 +79,7 @@ def load_golden_fixtures(golden_dir: Path) -> list[GoldenCase]:
     for path in sorted(golden_dir.rglob("*.yaml")):
         if path.name.startswith("_"):
             continue
-        raw = load_unique_yaml_file(path)
-        if not isinstance(raw, dict):
-            raise ValueError(f"{path}: golden fixture root must be a mapping")
-
-        skill = str(raw.get("skill", ""))
-        case_id = str(raw.get("case_id", ""))
-        if not skill or not case_id:
-            raise ValueError(f"{path}: skill and case_id are required")
-
-        recorded_output = raw.get("recorded_output", {})
-        if not isinstance(recorded_output, dict):
-            raise ValueError(f"{path}: recorded_output must be a mapping")
-
-        assertions = raw.get("assertions", [])
-        if not isinstance(assertions, list) or not assertions:
-            raise ValueError(f"{path}: assertions must be a non-empty list")
-
-        cases.append(
-            GoldenCase(
-                skill=skill,
-                case_id=case_id,
-                tier=int(raw.get("tier", 3)),
-                description=str(raw.get("description", "")),
-                recorded_output=recorded_output,
-                assertions=assertions,
-                path=path,
-                contract_coverage=raw.get("contract_coverage", []),
-            ),
-        )
+        cases.append(parse_golden_fixture(path))
     return cases
 
 
