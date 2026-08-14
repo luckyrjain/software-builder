@@ -111,3 +111,77 @@ def test_dependency_graph_contains_types_handoffs_and_artifact_edges() -> None:
     assert 'test-writer["test-writer<br/>router"]' in graph
     assert "pr-gatekeeper ==>|handoff| pr-review" in graph
     assert "pr-review -->|mr_review_report| release-readiness-checker" in graph
+
+
+def test_dependency_graph_fails_closed_on_missing_skill_type(tmp_path: Path) -> None:
+    registry = load_registry(ROOT)
+    data = _runtime()
+    data["skill_types"].pop("pr-review")
+    try:
+        render_dependency_graph(
+            registry,
+            runtime_path=_write_runtime(tmp_path, data),
+            contracts_path=CONTRACTS,
+        )
+        assert False, "expected ValueError for a skill missing from skill_types"
+    except ValueError as exc:
+        assert "missing skill types: pr-review" in str(exc)
+
+
+def test_ownership_producer_without_composition_contract_fails_closed(tmp_path: Path) -> None:
+    registry = load_registry(ROOT)
+    contracts_raw = yaml.safe_load(CONTRACTS.read_text(encoding="utf-8"))
+    contracts_raw["skills"].pop("pr-review")
+    contracts_path = tmp_path / "composition_contracts.yaml"
+    contracts_path.write_text(yaml.safe_dump(contracts_raw, sort_keys=False), encoding="utf-8")
+    errors = validate_composition_runtime(registry, contracts_path=contracts_path)
+    assert any(
+        "mr_review_report" in error and "pr-review" in error and "does not produce artifact" in error
+        for error in errors
+    )
+
+
+def test_external_artifact_rejects_declared_owners(tmp_path: Path) -> None:
+    registry = load_registry(ROOT)
+    data = _runtime()
+    data["artifact_ownership"]["mr_context"]["owners"] = ["pr-review"]
+    errors = validate_composition_runtime(
+        registry,
+        runtime_path=_write_runtime(tmp_path, data),
+        contracts_path=CONTRACTS,
+    )
+    assert any("mr_context" in error and "cannot have skill producers" in error for error in errors)
+
+
+def test_external_artifact_rejects_a_real_producer(tmp_path: Path) -> None:
+    registry = load_registry(ROOT)
+    contracts_raw = yaml.safe_load(CONTRACTS.read_text(encoding="utf-8"))
+    contracts_raw["skills"]["mysql-to-postgres-sql"]["produces"].append("mr_context")
+    contracts_path = tmp_path / "composition_contracts.yaml"
+    contracts_path.write_text(yaml.safe_dump(contracts_raw, sort_keys=False), encoding="utf-8")
+    errors = validate_composition_runtime(registry, contracts_path=contracts_path)
+    assert any(
+        "mr_context" in error and "must have no producers" in error and "mysql-to-postgres-sql" in error
+        for error in errors
+    )
+
+
+def test_handoff_schema_rejects_duplicate_fields(tmp_path: Path) -> None:
+    registry = load_registry(ROOT)
+    data = _runtime()
+    data["handoff_schema"]["required_fields"] = [
+        "target_skill",
+        "target_skill",
+        "reason",
+        "inputs",
+        "evidence_refs",
+        "assumptions",
+        "unresolved",
+        "execution_context",
+    ]
+    errors = validate_composition_runtime(
+        registry,
+        runtime_path=_write_runtime(tmp_path, data),
+        contracts_path=CONTRACTS,
+    )
+    assert any("required_fields must define the canonical handoff envelope" in error for error in errors)

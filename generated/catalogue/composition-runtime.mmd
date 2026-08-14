@@ -1,0 +1,94 @@
+graph TD
+  api-test-creator["api-test-creator<br/>leaf"]
+  backlog-runner["backlog-runner<br/>trigger"]
+  contract-test-creator["contract-test-creator<br/>leaf"]
+  cost-optimization-sprint-planner["cost-optimization-sprint-planner<br/>orchestrator"]
+  domain-comprehension["domain-comprehension<br/>orchestrator"]
+  e2e-test-creator["e2e-test-creator<br/>leaf"]
+  incident-rca["incident-rca<br/>leaf"]
+  incident-triage-agent["incident-triage-agent<br/>trigger"]
+  integration-test-creator["integration-test-creator<br/>leaf"]
+  k8s-overprovisioning-datadog["k8s-overprovisioning-datadog<br/>leaf"]
+  loop-task-implementer["loop-task-implementer<br/>orchestrator"]
+  migration-program-manager["migration-program-manager<br/>orchestrator"]
+  mysql-to-postgres-sql["mysql-to-postgres-sql<br/>leaf"]
+  new-hire-guide["new-hire-guide<br/>orchestrator"]
+  pr-gatekeeper["pr-gatekeeper<br/>trigger"]
+  pr-review["pr-review<br/>leaf"]
+  prd-architect["prd-architect<br/>leaf"]
+  release-readiness-checker["release-readiness-checker<br/>orchestrator"]
+  squad-map["squad-map<br/>leaf"]
+  test-writer["test-writer<br/>router"]
+  unit-test-creator["unit-test-creator<br/>leaf"]
+  weekly-squad-digest["weekly-squad-digest<br/>orchestrator"]
+  who-owns-x-bot["who-owns-x-bot<br/>router"]
+  backlog-runner -->|requires| loop-task-implementer
+  backlog-runner ==>|handoff| loop-task-implementer
+  cost-optimization-sprint-planner -->|requires| k8s-overprovisioning-datadog
+  cost-optimization-sprint-planner -->|requires| squad-map
+  cost-optimization-sprint-planner ==>|handoff| k8s-overprovisioning-datadog
+  cost-optimization-sprint-planner ==>|handoff| squad-map
+  domain-comprehension -->|requires| squad-map
+  domain-comprehension ==>|handoff| squad-map
+  incident-rca -.->|escalates| k8s-overprovisioning-datadog
+  incident-rca -.->|escalates| pr-review
+  incident-rca -.->|escalates| squad-map
+  incident-triage-agent -->|requires| incident-rca
+  incident-triage-agent -->|requires| squad-map
+  incident-triage-agent ==>|handoff| incident-rca
+  incident-triage-agent ==>|handoff| squad-map
+  incident-triage-agent -.->|escalates| incident-rca
+  incident-triage-agent -.->|escalates| squad-map
+  k8s-overprovisioning-datadog -.->|escalates| incident-rca
+  k8s-overprovisioning-datadog -.->|escalates| pr-review
+  migration-program-manager -->|requires| mysql-to-postgres-sql
+  migration-program-manager -->|requires| squad-map
+  migration-program-manager -.->|escalates| mysql-to-postgres-sql
+  migration-program-manager -.->|escalates| pr-review
+  migration-program-manager -.->|escalates| squad-map
+  new-hire-guide -->|requires| domain-comprehension
+  new-hire-guide -->|requires| squad-map
+  new-hire-guide ==>|handoff| domain-comprehension
+  new-hire-guide ==>|handoff| squad-map
+  pr-gatekeeper -->|requires| pr-review
+  pr-gatekeeper ==>|handoff| pr-review
+  pr-gatekeeper -.->|escalates| pr-review
+  pr-review -.->|escalates| incident-rca
+  pr-review -.->|escalates| k8s-overprovisioning-datadog
+  prd-architect -.->|escalates| domain-comprehension
+  prd-architect -.->|escalates| loop-task-implementer
+  prd-architect -.->|escalates| pr-review
+  prd-architect -.->|escalates| test-writer
+  release-readiness-checker -->|requires| incident-rca
+  release-readiness-checker -->|requires| k8s-overprovisioning-datadog
+  release-readiness-checker -->|requires| pr-review
+  release-readiness-checker ==>|handoff| incident-rca
+  release-readiness-checker ==>|handoff| k8s-overprovisioning-datadog
+  release-readiness-checker ==>|handoff| pr-review
+  release-readiness-checker -.->|escalates| incident-rca
+  release-readiness-checker -.->|escalates| k8s-overprovisioning-datadog
+  release-readiness-checker -.->|escalates| pr-review
+  test-writer -->|requires| api-test-creator
+  test-writer -->|requires| contract-test-creator
+  test-writer -->|requires| e2e-test-creator
+  test-writer -->|requires| integration-test-creator
+  test-writer -->|requires| unit-test-creator
+  test-writer ==>|handoff| api-test-creator
+  test-writer ==>|handoff| contract-test-creator
+  test-writer ==>|handoff| e2e-test-creator
+  test-writer ==>|handoff| integration-test-creator
+  test-writer ==>|handoff| unit-test-creator
+  weekly-squad-digest -->|requires| cost-optimization-sprint-planner
+  weekly-squad-digest -->|requires| migration-program-manager
+  weekly-squad-digest -.->|escalates| cost-optimization-sprint-planner
+  weekly-squad-digest -.->|escalates| migration-program-manager
+  who-owns-x-bot -->|requires| squad-map
+  who-owns-x-bot ==>|handoff| squad-map
+  cost-optimization-sprint-planner -->|cost_sweep_rollup| weekly-squad-digest
+  k8s-overprovisioning-datadog -->|k8s_rightsizing_report| release-readiness-checker
+  migration-program-manager -->|migration_status_rollup| weekly-squad-digest
+  pr-gatekeeper -->|mr_review_report| release-readiness-checker
+  pr-review -->|mr_review_report| release-readiness-checker
+  prd-architect -->|prd_report| loop-task-implementer
+  incident-rca -->|rca_report| release-readiness-checker
+  incident-triage-agent -->|rca_report| release-readiness-checker
