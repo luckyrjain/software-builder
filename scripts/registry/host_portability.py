@@ -10,7 +10,14 @@ from scripts.registry.schema import parse_registry
 from scripts.registry.skill_frontmatter_schema import automation_only_guard_errors
 from scripts.yaml_safety import load_unique_yaml_file, require_mapping
 
-SKILL_SURFACES = {"per_skill_generated", "canonical_root"}
+EXPECTED_SURFACES = {
+    "cursor": "per_skill_generated",
+    "claude": "canonical_root",
+    "codex": "canonical_root",
+    "chatgpt": "canonical_root",
+    "kiro": "per_skill_generated",
+    "generic": "canonical_root",
+}
 
 
 def _generated_surface_errors(root: Path, directory: Path, suffix: str, skills: set[str], host: str) -> list[str]:
@@ -38,6 +45,25 @@ def _plugin_errors(path: Path, host: str) -> list[str]:
     return errors
 
 
+def _claude_marketplace_errors(root: Path) -> list[str]:
+    path = root / ".claude-plugin/marketplace.json"
+    if not path.is_file():
+        return ["error: Claude marketplace manifest missing"]
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    errors: list[str] = []
+    if payload.get("name") != "software-builder":
+        errors.append("error: Claude marketplace identity drift")
+    plugins = payload.get("plugins")
+    if not isinstance(plugins, list) or not plugins:
+        return errors + ["error: Claude marketplace plugins must be a non-empty list"]
+    matches = [plugin for plugin in plugins if isinstance(plugin, dict) and plugin.get("name") == "software-builder"]
+    if len(matches) != 1:
+        errors.append("error: Claude marketplace must contain exactly one software-builder plugin")
+    elif matches[0].get("source") != "./":
+        errors.append("error: Claude marketplace plugin source must be './'")
+    return errors
+
+
 def validate_host_portability(root: Path) -> list[str]:
     """Validate items 30–34: adapter contract plus host packaging semantic parity."""
     errors = validate_host_adapter_interface(root)
@@ -57,21 +83,26 @@ def validate_host_portability(root: Path) -> list[str]:
         snapshot = require_mapping(snapshots[host], f"expected.hosts.{host}")
         if actual.get("adapter") != snapshot.get("adapter"):
             errors.append(f"error: {host}: adapter identity drift")
-        if snapshot.get("skill_surface") not in SKILL_SURFACES:
-            errors.append(f"error: {host}: invalid skill_surface {snapshot.get('skill_surface')!r}")
+        if snapshot.get("skill_surface") != EXPECTED_SURFACES[host]:
+            errors.append(
+                f"error: {host}: skill_surface must be {EXPECTED_SURFACES[host]!r}, got {snapshot.get('skill_surface')!r}",
+            )
 
     errors.extend(_generated_surface_errors(root, root / ".cursor/rules", ".mdc", skills, "Cursor"))
     errors.extend(_generated_surface_errors(root, root / ".kiro/steering", ".md", skills, "Kiro"))
     errors.extend(_plugin_errors(root / ".claude-plugin/plugin.json", "Claude"))
+    errors.extend(_claude_marketplace_errors(root))
     errors.extend(_plugin_errors(root / ".codex-plugin/plugin.json", "Codex/ChatGPT"))
 
-    # Every host ultimately delegates execution to canonical SKILL.md. Keep
-    # automation-only semantics in the canonical registry/frontmatter contract.
     for skill_id, entry in sorted(registry.skills.items()):
         skill_md = root / entry.path / "SKILL.md"
         if not skill_md.is_file():
             errors.append(f"error: canonical root skill missing for {skill_id}")
             continue
+        text = skill_md.read_text(encoding="utf-8")
+        for directive in ("alwaysApply:", "inclusion:"):
+            if directive in text:
+                errors.append(f"error: canonical skill {skill_id} leaks host-adapter directive {directive!r}")
         frontmatter = load_skill_frontmatter(skill_md)
         for error in automation_only_guard_errors(entry.invocation, frontmatter):
             errors.append(f"error: host invocation semantics {skill_id}: {error}")
