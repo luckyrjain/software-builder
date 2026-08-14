@@ -47,6 +47,7 @@ def test_batch3_repository_matrices_and_golden_coverage_pass() -> None:
         "all-skill-golden",
         "routing-collision-suite",
         "mutation-matrix",
+        "mutation-anchor-matrix",
         "untrusted-surface-matrix",
         "degraded-host-matrix",
     }
@@ -85,3 +86,21 @@ def test_batch3_mutation_gate_fails_when_referenced_regression_is_missing() -> N
     gate = next(result for result in checks if result.case_id == "mutation-matrix")
     assert not gate.passed
     assert any("pr-review/golden-chat-only-not-posted" in message for message in gate.messages)
+
+
+def test_batch3_mutation_anchor_requires_passing_dangerous_fixture() -> None:
+    registry, golden, results = _baseline()
+    filtered = [
+        result
+        for result in results
+        if not (result.skill == "pr-review" and result.case_id == "golden-injection-inert-render")
+    ]
+    checks = run_batch3_contract_checks(
+        ROOT,
+        registry,
+        case_results=filtered,
+        golden_cases=golden,
+    )
+    gate = next(result for result in checks if result.case_id == "mutation-anchor-matrix")
+    assert not gate.passed
+    assert any("pr-review/golden-injection-inert-render" in message for message in gate.messages)
