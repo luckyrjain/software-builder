@@ -22,6 +22,28 @@ def load_composition_runtime(path: Path | None = None) -> dict[str, object]:
     return raw
 
 
+def handoff_allowed(
+    target_skill: str,
+    *,
+    visited_skills: list[str],
+    depth: int,
+    runtime_path: Path | None = None,
+) -> tuple[bool, str | None]:
+    """Apply the portable recursion guard before a cross-skill handoff."""
+    raw = load_composition_runtime(runtime_path)
+    recursion = raw.get("recursion_guard")
+    if not isinstance(recursion, dict):
+        return False, "recursion guard is unavailable"
+    max_depth = recursion.get("default_max_depth")
+    if not isinstance(max_depth, int) or isinstance(max_depth, bool) or max_depth < 1:
+        return False, "recursion guard depth is invalid"
+    if depth >= max_depth:
+        return False, f"maximum composition depth {max_depth} reached"
+    if recursion.get("block_revisit_by_default") is True and target_skill in visited_skills:
+        return False, f"skill {target_skill!r} was already visited"
+    return True, None
+
+
 def validate_composition_runtime(
     registry: Registry,
     runtime_path: Path | None = None,
@@ -50,6 +72,14 @@ def validate_composition_runtime(
     for skill_id, skill_type in skill_types.items():
         if skill_type not in _ALLOWED_TYPES:
             errors.append(f"error: {skill_id}: invalid skill type {skill_type!r}")
+            continue
+        if skill_id not in registry.skills:
+            continue
+        invokes = registry.skills[skill_id].composition.invokes
+        if skill_type == "leaf" and invokes:
+            errors.append(f"error: {skill_id}: leaf skills cannot invoke child skills")
+        if skill_type == "router" and not invokes:
+            errors.append(f"error: {skill_id}: router skills must declare at least one invoke target")
 
     handoff_schema = raw.get("handoff_schema")
     if not isinstance(handoff_schema, dict):
@@ -111,30 +141,50 @@ def validate_composition_runtime(
         errors.append(f"error: artifact ownership missing types: {', '.join(missing_artifacts)}")
     if extra_artifacts:
         errors.append(f"error: artifact ownership unknown types: {', '.join(extra_artifacts)}")
+
+    artifact_producers: dict[str, set[str]] = {artifact: set() for artifact in artifact_types}
+    for skill_id, contract in contracts.items():
+        for artifact in contract.produces:
+            artifact_producers.setdefault(artifact, set()).add(skill_id)
+
     for artifact, spec in ownership.items():
         if not isinstance(spec, dict):
             errors.append(f"error: artifact_ownership.{artifact} must be a mapping")
             continue
         mode = spec.get("mode")
         owners = spec.get("owners")
+        delegates = spec.get("delegates", [])
         if mode not in _ALLOWED_OWNERSHIP_MODES:
             errors.append(f"error: artifact_ownership.{artifact}.mode invalid: {mode!r}")
             continue
-        if not isinstance(owners, list):
-            errors.append(f"error: artifact_ownership.{artifact}.owners must be a list")
+        if not isinstance(owners, list) or not isinstance(delegates, list):
+            errors.append(f"error: artifact_ownership.{artifact}.owners and delegates must be lists")
             continue
         owner_ids = [str(owner) for owner in owners]
-        for owner in owner_ids:
-            if owner not in skill_ids:
-                errors.append(f"error: artifact_ownership.{artifact}: unknown owner {owner!r}")
-            elif artifact not in contracts[owner].produces:
-                errors.append(f"error: artifact_ownership.{artifact}: owner {owner!r} does not produce artifact")
-        if mode == "external" and owner_ids:
-            errors.append(f"error: artifact_ownership.{artifact}: external artifacts cannot have skill owners")
-        if mode == "canonical" and len(owner_ids) != 1:
-            errors.append(f"error: artifact_ownership.{artifact}: canonical mode requires exactly one owner")
-        if mode == "shared" and len(owner_ids) < 2:
-            errors.append(f"error: artifact_ownership.{artifact}: shared mode requires at least two owners")
+        delegate_ids = [str(delegate) for delegate in delegates]
+        declared_producers = set(owner_ids) | set(delegate_ids)
+        for producer in owner_ids + delegate_ids:
+            if producer not in skill_ids:
+                errors.append(f"error: artifact_ownership.{artifact}: unknown producer {producer!r}")
+            elif artifact not in contracts[producer].produces:
+                errors.append(f"error: artifact_ownership.{artifact}: producer {producer!r} does not produce artifact")
+        if mode == "external":
+            if owner_ids or delegate_ids:
+                errors.append(f"error: artifact_ownership.{artifact}: external artifacts cannot have skill producers")
+        elif mode == "canonical":
+            if len(owner_ids) != 1:
+                errors.append(f"error: artifact_ownership.{artifact}: canonical mode requires exactly one owner")
+            undeclared = sorted(artifact_producers.get(artifact, set()) - declared_producers)
+            if undeclared:
+                errors.append(
+                    f"error: artifact_ownership.{artifact}: undeclared delegated producers: {', '.join(undeclared)}"
+                )
+        elif mode == "shared":
+            if len(owner_ids) < 2 or delegate_ids:
+                errors.append(f"error: artifact_ownership.{artifact}: shared mode requires two or more owners and no delegates")
+            undeclared = sorted(artifact_producers.get(artifact, set()) - set(owner_ids))
+            if undeclared:
+                errors.append(f"error: artifact_ownership.{artifact}: shared producers missing owners: {', '.join(undeclared)}")
 
     return errors
 
