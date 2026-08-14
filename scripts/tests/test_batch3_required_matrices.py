@@ -2,10 +2,24 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from scripts.evals.__main__ import run_all
+from scripts.evals.golden import load_golden_fixtures
 from scripts.yaml_safety import load_unique_yaml_file, require_mapping
 
 ROOT = Path(__file__).resolve().parents[2]
 
+REQUIRED_BEHAVIOR_SCENARIOS = {
+    "correct_invocation",
+    "correct_non_invocation",
+    "routing",
+    "insufficient_evidence",
+    "tool_failure",
+    "prompt_injection",
+    "missing_permissions",
+    "output_schema",
+    "cancellation",
+    "stale_evidence",
+}
 REQUIRED_MUTATION_CLASSES = {
     "instruction_override",
     "gate_bypass",
@@ -47,6 +61,38 @@ REQUIRED_ROUTING_COLLISIONS = {
 def _contract() -> dict:
     raw = load_unique_yaml_file(ROOT / "scripts" / "registry" / "eval_contracts.yaml")
     return require_mapping(raw, "eval contracts")
+
+
+def test_batch3_behavior_scenario_matrix_is_complete_and_executable() -> None:
+    contract = _contract()
+    scenarios = require_mapping(contract.get("behavior_scenarios"), "behavior_scenarios")
+    assert set(scenarios) == REQUIRED_BEHAVIOR_SCENARIOS
+
+    golden = load_golden_fixtures(ROOT / "evals" / "golden")
+    results = run_all(ROOT, golden_cases=golden)
+    result_map = {f"{result.skill}/{result.case_id}": result for result in results}
+    for scenario_id, raw in scenarios.items():
+        config = require_mapping(raw, f"behavior_scenarios.{scenario_id}")
+        refs = config.get("case_refs", [])
+        gate = config.get("contract_gate")
+        assert bool(refs) ^ bool(gate), f"{scenario_id}: declare exactly one of case_refs or contract_gate"
+        if refs:
+            assert isinstance(refs, list) and all(isinstance(ref, str) and ref for ref in refs)
+            for ref in refs:
+                assert ref in result_map, f"{scenario_id}: missing eval result {ref}"
+                assert result_map[ref].passed, f"{scenario_id}: eval result is failing: {ref}"
+        if gate == "routing_collisions":
+            routing = [result for key, result in result_map.items() if key.startswith("platform/routing-")]
+            assert routing and all(result.passed for result in routing)
+        elif gate == "adversarial_matrix":
+            adversarial = [
+                result
+                for key, result in result_map.items()
+                if key.startswith("platform/adversarial-class-")
+            ]
+            assert adversarial and all(result.passed for result in adversarial)
+        elif gate is not None:
+            raise AssertionError(f"{scenario_id}: unknown contract_gate {gate!r}")
 
 
 def test_batch3_adversarial_and_surface_matrices_are_complete() -> None:
