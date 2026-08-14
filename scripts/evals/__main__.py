@@ -244,6 +244,7 @@ def run_all(
                 root,
                 registry,
                 case_results=results,
+                golden_cases=golden_cases,
             ),
         )
     return results
@@ -284,7 +285,7 @@ def main(argv: list[str] | None = None) -> int:
         results = run_all(
             args.repo_root, skill_filter=args.skill, tier_filter=args.tier, golden_cases=golden_cases,
         )
-    except (ValueError, *YAML_SAFETY_ERRORS) as exc:
+    except (OSError, ValueError, *YAML_SAFETY_ERRORS) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
 
