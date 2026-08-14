@@ -115,6 +115,14 @@ execution_context:
 
 Default maximum handoff depth is **3**. A skill must block or return control to the parent when the next handoff would revisit a skill already in `visited_skills` or exceed the maximum depth, unless a named orchestrator contract explicitly permits the cycle.
 
+Before performing a handoff, run the guard rather than reasoning about depth/revisits by hand:
+
+```bash
+python3 -m scripts.registry.cli check-handoff <target_skill> --depth <execution_context.depth> --visited <comma-separated execution_context.visited_skills>
+```
+
+A non-zero exit means the handoff is blocked; print the reason and return control to the parent instead of proceeding.
+
 ## 9. Artifact ownership and state semantics
 
 The producer declared in `composition_contracts.yaml` owns the canonical artifact. Consumers may read, cite, or derive a new artifact; they must not silently rewrite another skill's canonical artifact.
