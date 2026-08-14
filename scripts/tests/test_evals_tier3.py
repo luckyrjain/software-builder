@@ -49,6 +49,7 @@ def test_golden_fixtures_load() -> None:
     assert ("incident-rca", "golden-injection-confidence-cap-not-bypassed") in case_ids
     assert ("incident-rca", "golden-injection-inert-rca-report") in case_ids
     assert ("incident-rca", "golden-slack-thread-injection-inert") in case_ids
+    assert ("incident-rca", "golden-mcp-payload-injection-inert") in case_ids
     assert ("domain-comprehension", "golden-injection-confidence-rubric-unchanged") in case_ids
     assert ("domain-comprehension", "golden-injection-inert-deliverable-render") in case_ids
     assert ("domain-comprehension", "golden-injection-issue-comment-gate-unchanged") in case_ids
@@ -60,7 +61,7 @@ def test_golden_fixtures_load() -> None:
     # tripping load_golden_fixtures' own malformed-fixture error. It won't catch a delete+add that
     # happens to net to the same count, but it catches the much more common single accidental
     # deletion or duplication. Bump this number when you intentionally add or remove a fixture.
-    assert len(cases) == 48
+    assert len(cases) == 49
 
 
 def test_golden_cases_pass_on_repository() -> None:
