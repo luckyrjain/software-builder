@@ -33,12 +33,12 @@ def _as_string_list(value: Any, label: str) -> list[str]:
 
 
 def _case_result_map(case_results: Iterable[EvalResult]) -> dict[str, EvalResult]:
+    # A duplicate (skill, case_id) is already reported as its own failing
+    # EvalResult by __main__.admit_case; don't raise here and blow away the
+    # rest of the run's per-case report over the same problem.
     mapped: dict[str, EvalResult] = {}
     for result in case_results:
-        ref = f"{result.skill}/{result.case_id}"
-        if ref in mapped:
-            raise ValueError(f"duplicate eval result ref: {ref}")
-        mapped[ref] = result
+        mapped[f"{result.skill}/{result.case_id}"] = result
     return mapped
 
 
