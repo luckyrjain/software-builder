@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import subprocess
 import tarfile
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 import pytest
 
@@ -39,7 +39,10 @@ def test_generic_package_is_deterministic_complete_and_link_safe(tmp_path: Path)
     registry = parse_registry(ROOT / "skills.yaml")
     extract_root = tmp_path / "extract"
     with tarfile.open(first, "r:gz") as archive:
-        names = set(archive.getnames())
+        members = archive.getmembers()
+        names = {member.name for member in members}
+        assert all(member.isfile() for member in members)
+        assert all(not PurePosixPath(name).is_absolute() and ".." not in PurePosixPath(name).parts for name in names)
         archive.extractall(extract_root, filter="data")
     for skill_id, entry in registry.skills.items():
         assert f"software-builder/{entry.path}/SKILL.md" in names, skill_id
