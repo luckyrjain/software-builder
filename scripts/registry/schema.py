@@ -30,6 +30,29 @@ ALLOWED_KIRO_DISCOVERY = {"manual", "always"}
 ALLOWED_COMPOSITION_MODE = {"invoke", "aggregate"}
 
 
+class RegistryParseError(ValueError):
+    """Raised when one or more skills in skills.yaml have invalid shape.
+
+    Subclasses ValueError so every existing `except ValueError` /
+    `except YAML_SAFETY_ERRORS` call site keeps working unchanged. Unlike a
+    plain ValueError, the message lists every broken skill's problem in one
+    pass instead of just the first one found, so fixing skills.yaml doesn't
+    mean fix-one/rerun/fix-the-next. Each skill's own fields are still
+    validated fail-fast: a skill entry stops at its first bad field and
+    moves on to the next skill, rather than accumulating every field of
+    every skill -- a smaller, cheaper scope than field-level accumulation
+    that still closes the actual complaint (unrelated skills no longer hide
+    each other's errors).
+    """
+
+    def __init__(self, errors: list[str]) -> None:
+        self.errors = errors
+        # Every caller renders this as `f"error: {exc}"`; indent continuation
+        # lines instead of leaving them bare so all N errors read as one
+        # message block, not just the first with the rest looking unflagged.
+        super().__init__("\n  ".join(errors))
+
+
 def parse_registry(path: Path) -> Registry:
     raw = load_unique_yaml_file(path)
     root = _require_mapping(raw, "skills.yaml root")
@@ -39,60 +62,70 @@ def parse_registry(path: Path) -> Registry:
 
     skills_raw = _require_mapping(root.get("skills"), "skills")
     skills: dict[str, SkillEntry] = {}
+    errors: list[str] = []
     for skill_id, entry_raw in skills_raw.items():
-        entry = _require_mapping(entry_raw, f"skills.{skill_id}")
-        invocation = str(entry.get("invocation", ""))
-        if invocation not in ALLOWED_INVOCATION:
-            raise ValueError(f"skills.{skill_id}.invocation invalid: {invocation!r}")
-
-        hosts_raw = _require_mapping(entry.get("hosts"), f"skills.{skill_id}.hosts")
-        cursor_raw = _require_mapping(hosts_raw.get("cursor"), f"skills.{skill_id}.hosts.cursor")
-        kiro_raw = _require_mapping(hosts_raw.get("kiro"), f"skills.{skill_id}.hosts.kiro")
-        claude_raw = hosts_raw.get("claude", {"install": True})
-        claude_map = _require_mapping(claude_raw, f"skills.{skill_id}.hosts.claude")
-
-        cursor_discovery = str(cursor_raw.get("discovery", ""))
-        kiro_discovery = str(kiro_raw.get("discovery", ""))
-        if cursor_discovery not in ALLOWED_CURSOR_DISCOVERY:
-            raise ValueError(f"skills.{skill_id}.hosts.cursor.discovery invalid: {cursor_discovery!r}")
-        if kiro_discovery not in ALLOWED_KIRO_DISCOVERY:
-            raise ValueError(f"skills.{skill_id}.hosts.kiro.discovery invalid: {kiro_discovery!r}")
-
-        install_raw = _require_mapping(entry.get("install"), f"skills.{skill_id}.install")
-        requires = install_raw.get("requires", [])
-        if not isinstance(requires, list):
-            raise ValueError(f"skills.{skill_id}.install.requires must be a list")
-
-        lint_raw = _require_mapping(entry.get("lint"), f"skills.{skill_id}.lint")
-
-        composition_raw = entry.get("composition")
-        composition = _parse_composition(
-            composition_raw,
-            skill_id,
-            [str(item) for item in requires],
-        )
-        capabilities = _parse_capabilities(entry.get("capabilities"), skill_id)
-        risk_class = _parse_risk_class(entry.get("risk_class"), skill_id)
-
-        skills[skill_id] = SkillEntry(
-            path=str(entry.get("path", skill_id)),
-            category=str(entry.get("category", "")),
-            invocation=invocation,
-            hosts=Hosts(
-                cursor=HostCursor(discovery=cursor_discovery),
-                claude=HostClaude(install=bool(claude_map.get("install", True))),
-                kiro=HostKiro(discovery=kiro_discovery),
-            ),
-            install=InstallSpec(requires=[str(item) for item in requires]),
-            lint=LintSpec(
-                skill_md_max_lines=int(lint_raw.get("skill_md_max_lines", 180)),
-                target=str(lint_raw.get("target", skill_id)),
-            ),
-            composition=composition,
-            capabilities=capabilities,
-            risk_class=risk_class,
-        )
+        try:
+            skills[skill_id] = _parse_skill_entry(skill_id, entry_raw)
+        except ValueError as exc:
+            errors.append(str(exc))
+    if errors:
+        raise RegistryParseError(errors)
     return Registry(schema_version=schema_version, skills=skills)
+
+
+def _parse_skill_entry(skill_id: str, entry_raw: Any) -> SkillEntry:
+    entry = _require_mapping(entry_raw, f"skills.{skill_id}")
+    invocation = str(entry.get("invocation", ""))
+    if invocation not in ALLOWED_INVOCATION:
+        raise ValueError(f"skills.{skill_id}.invocation invalid: {invocation!r}")
+
+    hosts_raw = _require_mapping(entry.get("hosts"), f"skills.{skill_id}.hosts")
+    cursor_raw = _require_mapping(hosts_raw.get("cursor"), f"skills.{skill_id}.hosts.cursor")
+    kiro_raw = _require_mapping(hosts_raw.get("kiro"), f"skills.{skill_id}.hosts.kiro")
+    claude_raw = hosts_raw.get("claude", {"install": True})
+    claude_map = _require_mapping(claude_raw, f"skills.{skill_id}.hosts.claude")
+
+    cursor_discovery = str(cursor_raw.get("discovery", ""))
+    kiro_discovery = str(kiro_raw.get("discovery", ""))
+    if cursor_discovery not in ALLOWED_CURSOR_DISCOVERY:
+        raise ValueError(f"skills.{skill_id}.hosts.cursor.discovery invalid: {cursor_discovery!r}")
+    if kiro_discovery not in ALLOWED_KIRO_DISCOVERY:
+        raise ValueError(f"skills.{skill_id}.hosts.kiro.discovery invalid: {kiro_discovery!r}")
+
+    install_raw = _require_mapping(entry.get("install"), f"skills.{skill_id}.install")
+    requires = install_raw.get("requires", [])
+    if not isinstance(requires, list):
+        raise ValueError(f"skills.{skill_id}.install.requires must be a list")
+
+    lint_raw = _require_mapping(entry.get("lint"), f"skills.{skill_id}.lint")
+
+    composition_raw = entry.get("composition")
+    composition = _parse_composition(
+        composition_raw,
+        skill_id,
+        [str(item) for item in requires],
+    )
+    capabilities = _parse_capabilities(entry.get("capabilities"), skill_id)
+    risk_class = _parse_risk_class(entry.get("risk_class"), skill_id)
+
+    return SkillEntry(
+        path=str(entry.get("path", skill_id)),
+        category=str(entry.get("category", "")),
+        invocation=invocation,
+        hosts=Hosts(
+            cursor=HostCursor(discovery=cursor_discovery),
+            claude=HostClaude(install=bool(claude_map.get("install", True))),
+            kiro=HostKiro(discovery=kiro_discovery),
+        ),
+        install=InstallSpec(requires=[str(item) for item in requires]),
+        lint=LintSpec(
+            skill_md_max_lines=int(lint_raw.get("skill_md_max_lines", 180)),
+            target=str(lint_raw.get("target", skill_id)),
+        ),
+        composition=composition,
+        capabilities=capabilities,
+        risk_class=risk_class,
+    )
 
 
 def _parse_composition(

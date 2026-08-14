@@ -732,3 +732,82 @@ skills:
     assert cmd_generate(tmp_path, check_only=True) == 1
     assert cmd_generate(tmp_path, check_only=False) == 0
     assert cmd_generate(tmp_path, check_only=True) == 0
+
+
+def _skill_block(name: str, *, invocation: str = "ambient", cursor_discovery: str = "rule") -> str:
+    return f"""
+  {name}:
+    path: {name}
+    category: architecture
+    invocation: {invocation}
+    hosts:
+      cursor: {{discovery: {cursor_discovery}}}
+      claude: {{install: true}}
+      kiro: {{discovery: manual}}
+    install:
+      requires: []
+    lint:
+      skill_md_max_lines: 180
+      target: {name}
+    risk_class: [read-only]
+"""
+
+
+def test_parse_registry_reports_every_broken_skill_in_one_pass(tmp_path: Path) -> None:
+    from scripts.registry.schema import RegistryParseError, parse_registry
+
+    registry_file = tmp_path / "skills.yaml"
+    registry_file.write_text(
+        "schema_version: 1\nskills:\n"
+        + _skill_block("broken-a", invocation="nonsense")
+        + _skill_block("broken-b", cursor_discovery="totally-wrong")
+        + _skill_block("fine-one"),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(RegistryParseError) as excinfo:
+        parse_registry(registry_file)
+
+    assert len(excinfo.value.errors) == 2
+    assert "skills.broken-a.invocation invalid: 'nonsense'" in excinfo.value.errors[0]
+    assert "skills.broken-b.hosts.cursor.discovery invalid: 'totally-wrong'" in excinfo.value.errors[1]
+    # subclasses ValueError -- existing `except ValueError` call sites still catch it
+    assert isinstance(excinfo.value, ValueError)
+
+
+def test_parse_registry_single_broken_skill_message_is_unchanged(tmp_path: Path) -> None:
+    # A single skill with a single bad field should read exactly like the old
+    # fail-fast ValueError -- no behavior change for the common case.
+    from scripts.registry.schema import parse_registry
+
+    registry_file = tmp_path / "skills.yaml"
+    registry_file.write_text(
+        "schema_version: 1\nskills:\n" + _skill_block("broken-a", invocation="nonsense"),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match=r"^skills\.broken-a\.invocation invalid: 'nonsense'$"):
+        parse_registry(registry_file)
+
+
+def test_parse_registry_stops_at_first_bad_field_within_one_skill(tmp_path: Path) -> None:
+    # Within a single skill, fields are still validated fail-fast: a skill
+    # with two independent bad fields (invocation, then cursor discovery)
+    # only ever surfaces the first one -- accumulation happens ACROSS
+    # skills, not across a skill's own fields. See RegistryParseError's
+    # docstring for why.
+    from scripts.registry.schema import RegistryParseError, parse_registry
+
+    registry_file = tmp_path / "skills.yaml"
+    registry_file.write_text(
+        "schema_version: 1\nskills:\n"
+        + _skill_block("broken-both", invocation="nonsense", cursor_discovery="also-wrong"),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(RegistryParseError) as excinfo:
+        parse_registry(registry_file)
+
+    assert len(excinfo.value.errors) == 1
+    assert "skills.broken-both.invocation invalid: 'nonsense'" in excinfo.value.errors[0]
+    assert "cursor.discovery" not in excinfo.value.errors[0]
