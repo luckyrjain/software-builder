@@ -3,8 +3,8 @@
 Batch 3 turns the shared evaluation policy into an all-skills completeness
 contract. These deterministic checks prove every registered skill participates
 in positive, negative, ambiguous, adversarial, and degraded evaluation; every
-skill has passing golden coverage; and routing, mutation, untrusted-surface,
-and degraded-host declarations remain tied to passing cases.
+skill has passing golden coverage; and routing, behavior, mutation,
+untrusted-surface, and degraded-host declarations remain tied to passing cases.
 
 This is intentionally not a live/model-quality benchmark. Tier-2/3 live evals
 remain the place to measure model judgement and prompt quality.
@@ -12,6 +12,7 @@ remain the place to measure model judgement and prompt quality.
 
 from __future__ import annotations
 
+import json
 import re
 from collections.abc import Iterable
 from pathlib import Path
@@ -26,6 +27,18 @@ from scripts.yaml_safety import load_unique_yaml_file, require_mapping
 
 BATCH3_SKILL = "batch3"
 REQUIRED_DIMENSIONS = ("positive", "negative", "ambiguous", "adversarial", "degraded")
+REQUIRED_BEHAVIOR_SCENARIOS = {
+    "correct_invocation",
+    "correct_non_invocation",
+    "routing",
+    "insufficient_evidence",
+    "tool_failure",
+    "prompt_injection",
+    "missing_permissions",
+    "output_schema",
+    "cancellation",
+    "stale_evidence",
+}
 
 
 def _result(case_id: str, messages: list[str], *, skill: str = BATCH3_SKILL) -> EvalResult:
@@ -34,6 +47,13 @@ def _result(case_id: str, messages: list[str], *, skill: str = BATCH3_SKILL) -> 
 
 def _result_map(results: Iterable[EvalResult]) -> dict[str, EvalResult]:
     return {f"{result.skill}/{result.case_id}": result for result in results}
+
+
+def _eval_contract(root: Path) -> dict[str, Any]:
+    return require_mapping(
+        load_unique_yaml_file(root / "scripts" / "registry" / "eval_contracts.yaml"),
+        "eval contracts",
+    )
 
 
 def _platform_data(root: Path) -> dict[str, Any]:
@@ -181,6 +201,55 @@ def _all_skill_golden(
     return _result("all-skill-golden", messages)
 
 
+def _behavior_scenario_matrix(root: Path, results: dict[str, EvalResult]) -> EvalResult:
+    """Require the ten item-24 behavior scenarios to be executable and passing."""
+    contract = _eval_contract(root)
+    scenarios = require_mapping(contract.get("behavior_scenarios"), "behavior_scenarios")
+    messages: list[str] = []
+    if set(scenarios) != REQUIRED_BEHAVIOR_SCENARIOS:
+        messages.append(
+            "behavior scenarios must exactly match Batch 3 requirements; "
+            f"missing={sorted(REQUIRED_BEHAVIOR_SCENARIOS - set(scenarios))}, "
+            f"extra={sorted(set(scenarios) - REQUIRED_BEHAVIOR_SCENARIOS)}",
+        )
+
+    for scenario_id, raw in sorted(scenarios.items()):
+        config = require_mapping(raw, f"behavior_scenarios.{scenario_id}")
+        refs = config.get("case_refs")
+        gate = config.get("contract_gate")
+        has_refs = isinstance(refs, list) and bool(refs)
+        has_gate = isinstance(gate, str) and bool(gate)
+        if has_refs == has_gate:
+            messages.append(f"{scenario_id}: declare exactly one of case_refs or contract_gate")
+            continue
+        if has_refs:
+            assert isinstance(refs, list)
+            for ref in refs:
+                if not isinstance(ref, str) or not ref:
+                    messages.append(f"{scenario_id}: invalid case_ref {ref!r}")
+                    continue
+                result = results.get(ref)
+                if result is None:
+                    messages.append(f"{scenario_id}: missing eval result {ref}")
+                elif not result.passed:
+                    messages.append(f"{scenario_id}: eval result is failing: {ref}")
+            continue
+        prefix_by_gate = {
+            "routing_collisions": "platform/routing-",
+            "adversarial_matrix": "platform/adversarial-class-",
+        }
+        prefix = prefix_by_gate.get(str(gate))
+        if prefix is None:
+            messages.append(f"{scenario_id}: unknown contract_gate {gate!r}")
+            continue
+        matching = [result for ref, result in results.items() if ref.startswith(prefix)]
+        if not matching:
+            messages.append(f"{scenario_id}: contract gate {gate!r} has no executable results")
+        elif any(not result.passed for result in matching):
+            messages.append(f"{scenario_id}: contract gate {gate!r} is failing")
+    return _result("behavior-scenario-matrix", messages)
+
+
 def _referenced_matrix(
     root: Path,
     results: dict[str, EvalResult],
@@ -189,10 +258,7 @@ def _referenced_matrix(
     case_id: str,
     require_mutation: bool = False,
 ) -> EvalResult:
-    contract = require_mapping(
-        load_unique_yaml_file(root / "scripts" / "registry" / "eval_contracts.yaml"),
-        "eval contracts",
-    )
+    contract = _eval_contract(root)
     matrix = require_mapping(contract.get(key), key)
     messages: list[str] = []
     seen_mutations: set[str] = set()
@@ -225,11 +291,8 @@ def _mutation_anchor_matrix(
     results: dict[str, EvalResult],
     golden_cases: Iterable[GoldenCase],
 ) -> EvalResult:
-    """Prove each mutation class is anchored to genuinely dangerous fixture input."""
-    contract = require_mapping(
-        load_unique_yaml_file(root / "scripts" / "registry" / "eval_contracts.yaml"),
-        "eval contracts",
-    )
+    """Prove each mutation class is anchored to genuinely dangerous recorded input."""
+    contract = _eval_contract(root)
     adversarial = require_mapping(contract.get("adversarial_classes"), "adversarial_classes")
     anchor_doc = require_mapping(
         load_unique_yaml_file(root / "scripts" / "registry" / "mutation_anchors.yaml"),
@@ -267,10 +330,10 @@ def _mutation_anchor_matrix(
             messages.append(f"{class_id}: anchor must reference a golden fixture: {case_ref}")
             continue
         try:
-            fixture_text = fixture.path.read_text(encoding="utf-8")
-            if not re.search(raw_pattern, fixture_text, flags=re.IGNORECASE | re.MULTILINE):
+            recorded = json.dumps(fixture.recorded_output, sort_keys=True)
+            if not re.search(raw_pattern, recorded, flags=re.IGNORECASE | re.MULTILINE):
                 messages.append(
-                    f"{class_id}: anchored fixture does not contain dangerous raw pattern {raw_pattern!r}",
+                    f"{class_id}: recorded_output does not contain dangerous raw pattern {raw_pattern!r}",
                 )
         except re.error as exc:
             messages.append(f"{class_id}: invalid raw_pattern {raw_pattern!r}: {exc}")
@@ -278,10 +341,7 @@ def _mutation_anchor_matrix(
 
 
 def _routing_matrix(root: Path, results: dict[str, EvalResult]) -> EvalResult:
-    contract = require_mapping(
-        load_unique_yaml_file(root / "scripts" / "registry" / "eval_contracts.yaml"),
-        "eval contracts",
-    )
+    contract = _eval_contract(root)
     collisions = contract.get("routing_collisions")
     messages: list[str] = []
     if not isinstance(collisions, list) or not collisions:
@@ -313,6 +373,7 @@ def run_batch3_contract_checks(
     return [
         *_all_skill_dimensions(root, registry, result_map),
         _all_skill_golden(registry, result_map, golden_list),
+        _behavior_scenario_matrix(root, result_map),
         _routing_matrix(root, result_map),
         _referenced_matrix(
             root,
