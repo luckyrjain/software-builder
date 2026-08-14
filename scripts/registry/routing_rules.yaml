@@ -16,6 +16,7 @@ routes:
   k8s-overprovisioning-datadog:
     patterns:
       - '\b(k8s|kubernetes|pod|deployment)\b.*\b(overprovision|right-?siz|requests?|limits?|CPU|memory)\b'
+      - '\b(overprovision|right-?siz)\w*\b.*\b(k8s|kubernetes|pod|deployment|CPU|memory)\b'
       - '\boverprovisioned\b.*\bCPU\b.*\bmemory\b'
   incident-rca:
     patterns:
@@ -27,7 +28,8 @@ routes:
       - '\btriage\b.*\b(pager|page|alert webhook|incident webhook)\b'
   domain-comprehension:
     patterns:
-      - '\b(domain comprehension|bounded context|current[- ]state domain|understand the existing .* service)\b'
+      - '\b(domain comprehension|bounded contexts?|current[- ]state domain|understand the existing .* service)\b'
+      - '\barchitecture\b.*\bbounded contexts?\b'
       - '\bunderstand\b.*\bcurrent domain\b'
   squad-map:
     patterns:
