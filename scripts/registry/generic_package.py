@@ -28,10 +28,9 @@ def _is_safe_file(root: Path, path: Path) -> bool:
 def _package_files(root: Path) -> list[Path]:
     registry = parse_registry(root / "skills.yaml")
     candidates: set[Path] = {root / "skills.yaml"}
-    for optional in ("README.md", "SETUP.md", "LICENSE"):
-        path = root / optional
-        if path.is_file():
-            candidates.add(path)
+    license_path = root / "LICENSE"
+    if license_path.is_file():
+        candidates.add(license_path)
     framework = root / "docs" / "skill-framework"
     if not framework.is_dir():
         raise ValueError("generic package requires docs/skill-framework")
