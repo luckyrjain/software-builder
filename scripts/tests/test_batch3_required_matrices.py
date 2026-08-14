@@ -37,6 +37,7 @@ REQUIRED_UNTRUSTED_SURFACES = {
     "logs",
     "slack_threads",
     "webhook_payloads",
+    "mcp_payloads",
     "api_responses",
     "skill_artifacts",
 }
@@ -84,13 +85,13 @@ def test_batch3_behavior_scenario_matrix_is_complete_and_executable() -> None:
                 assert ref in result_map, f"{scenario_id}: missing eval result {ref}"
                 assert result_map[ref].passed, f"{scenario_id}: eval result is failing: {ref}"
         if gate == "routing_collisions":
-            routing = [result for key, result in result_map.items() if key.startswith("platform/routing-")]
+            routing = [result for key, result in result_map.items() if key.startswith("batch3/routing-collision-suite")]
             assert routing and all(result.passed for result in routing)
         elif gate == "adversarial_matrix":
             adversarial = [
                 result
                 for key, result in result_map.items()
-                if key.startswith("platform/adversarial-class-")
+                if key.startswith("batch3-mutation/")
             ]
             assert adversarial and all(result.passed for result in adversarial)
         elif gate is not None:
