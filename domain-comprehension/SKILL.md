@@ -149,6 +149,12 @@ Completion emits the canonical `skill_result` envelope; actions classify against
 `action_gates`; scope follows `definition_of_done` — all defined in
 [runtime-contract.md](../docs/skill-framework/shared/runtime-contract.md).
 
+`definition_of_done`: required_artifacts=[manifest.yaml, PROGRESS.md, EXEC_SUMMARY.md, PRD.md];
+required_checks=[Evidence/Conclusion/Confidence contract, phase-completion-gate report, read-only source
+boundary]; blocked_conditions=[source mutation, artifact outside artifact_root, PRD claim missing evidence
+status, manifest.yaml missing at RESUME]; partial_result_behavior=preserves PROGRESS.md/manifest.yaml,
+routes gaps to UNKNOWNS.md/KNOWN_OMISSIONS.md.
+
 [docs/skill-framework/README.md](../docs/skill-framework/README.md) ·
 [safe-output.md](../docs/skill-framework/shared/safe-output.md) ·
 [cross-skill-escalation.md](../docs/skill-framework/shared/cross-skill-escalation.md)

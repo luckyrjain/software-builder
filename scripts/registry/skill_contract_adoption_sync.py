@@ -13,7 +13,18 @@ from pathlib import Path
 
 from scripts.registry.models import Registry
 
-REQUIRED_CONTRACT_MARKERS = ("skill_result", "action_gates", "definition_of_done")
+REQUIRED_CONTRACT_MARKERS = (
+    "skill_result",
+    "action_gates",
+    # Requiring the umbrella term alone let a skill "adopt" definition_of_done
+    # by mentioning the word without ever declaring its own four fields --
+    # require each field name so the check reflects real per-skill content,
+    # not a copy-pasted disclaimer.
+    "required_artifacts",
+    "required_checks",
+    "blocked_conditions",
+    "partial_result_behavior",
+)
 REQUIRED_CONTRACT_LINK = "runtime-contract.md"
 
 _FRAMEWORK_SECTION_RE = re.compile(r"^## Framework\s*$", re.MULTILINE)

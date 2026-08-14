@@ -52,8 +52,9 @@ def test_markers_inside_framework_section_are_accepted(tmp_path: Path) -> None:
     (skill_dir / "SKILL.md").write_text(
         "---\nname: demo\n---\n"
         "## Framework\n\n"
-        "Emits `skill_result`; classifies against `action_gates`; follows `definition_of_done` "
-        "in runtime-contract.md.\n",
+        "Emits `skill_result`; classifies against `action_gates`; `definition_of_done`: "
+        "required_artifacts=[x]; required_checks=[y]; blocked_conditions=[z]; "
+        "partial_result_behavior=w. See runtime-contract.md.\n",
         encoding="utf-8",
     )
 

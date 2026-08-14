@@ -113,6 +113,16 @@ Completion emits the canonical `skill_result` envelope; actions classify against
 `action_gates`; scope follows `definition_of_done` — all defined in
 [runtime-contract.md](../docs/skill-framework/shared/runtime-contract.md).
 
+`definition_of_done`: required_artifacts=[written/modified Postman collection request(s) plus environment
+variables for any chained flow, `API_TEST_REPORT.md`]; required_checks=[every request/assertion pair
+traces to a real observed request/response shape, `newman run` executed against a reachable API instance
+with failing assertions iterated until green]; blocked_conditions=[no reachable API instance to run
+against (`NEEDS_API_ENV`), a target has no real observed endpoint to derive its shape from
+(`NEEDS_OBSERVED_ENDPOINT`)]; partial_result_behavior=`API_TEST_REPORT.md` records per-target status
+(written & passing, written but flags a probable production bug, needs observed endpoint, blocked
+without a reachable API instance, needs a human, already covered, skipped by the file cap) and never
+silently drops a target past `max_files_per_run`.
+
 Routing: [skill-routing.md](../docs/skill-framework/shared/skill-routing.md) · shared conventions:
 [docs/skill-framework/README.md](../docs/skill-framework/README.md) · prompt injection
 [prompt-injection.md](../docs/skill-framework/shared/prompt-injection.md).

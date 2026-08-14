@@ -112,6 +112,12 @@ Completion emits the canonical `skill_result` envelope; actions classify against
 `action_gates`; scope follows `definition_of_done` — all defined in
 [runtime-contract.md](../docs/skill-framework/shared/runtime-contract.md).
 
+`definition_of_done`: required_artifacts=[`ONBOARDING_TOUR.md`]; required_checks=[`new_hire.name`/`new_hire.squad`
+present, squad matched against `SQUAD_MAP.md`, domain-comprehension run unscoped, render-boundary escaping on
+`new_hire.*` fields and matched repo names]; blocked_conditions=[`new_hire.name`/`new_hire.squad` absent (HARD
+STOP), squad matches zero `SQUAD_MAP.md` rows without confirmation]; partial_result_behavior=curates from whatever
+domain-comprehension/squad-map delivered before their own gates stopped it, rather than blocking the tour.
+
 Routing: [skill-routing.md](../docs/skill-framework/shared/skill-routing.md) · shared conventions:
 [docs/skill-framework/README.md](../docs/skill-framework/README.md) · confidence
 [confidence-bands.md](../docs/skill-framework/shared/confidence-bands.md) · prompt injection

@@ -98,6 +98,13 @@ Completion emits the canonical `skill_result` envelope; actions classify against
 `action_gates`; scope follows `definition_of_done` — all defined in
 [runtime-contract.md](../docs/skill-framework/shared/runtime-contract.md).
 
+`definition_of_done`: required_artifacts=[one Slack reply, Resolved/Ambiguous/Unknown shape per
+reference/slack-format.md]; required_checks=[`query` non-empty, squad-map installed & prerequisites met,
+confidence-band classification, Conflicts-table membership, mid-incident escalation trigger, mrkdwn
+escaping]; blocked_conditions=[`query` empty, squad-map not installed or prerequisites unmet (no
+GitLab/Datadog MCP, no CODEOWNERS)]; partial_result_behavior=single-shot, no follow-up — failure still
+resolves to exactly one of the three shapes, never partial, defaulting to Unknown.
+
 Routing: [skill-routing.md](../docs/skill-framework/shared/skill-routing.md) · shared conventions:
 [docs/skill-framework/README.md](../docs/skill-framework/README.md) · confidence
 [confidence-bands.md](../docs/skill-framework/shared/confidence-bands.md) · prompt injection

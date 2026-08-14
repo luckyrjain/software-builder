@@ -116,6 +116,18 @@ Completion emits the canonical `skill_result` envelope; actions classify against
 `action_gates`; scope follows `definition_of_done` — all defined in
 [runtime-contract.md](../docs/skill-framework/shared/runtime-contract.md).
 
+`definition_of_done`: required_artifacts=[`COST_OPTIMIZATION_SPRINT_REPORT.md`,
+`cost_optimization_sprint_rollup.json`, per-deployment `decision-graph-<deployment>.json`];
+required_checks=[`sweep_scope` env/deployments/namespace_prefilter presence, `cost_rate`
+provider/dollars_per_core_month/dollars_per_gib_month presence, per-deployment gate resolution per
+gate-policy.md and sweep-policy.md, squad join via `SQUAD_MAP.md`]; blocked_conditions=[`sweep_scope`
+missing `env`, missing both `deployments` and `namespace_prefilter`, `namespace_prefilter` missing
+`top_n_namespaces`/`top_n_deployments_per_namespace`, `cost_rate` absent or missing `provider`/
+`dollars_per_core_month`/`dollars_per_gib_month` — all HARD STOP per Required inputs];
+partial_result_behavior=per-deployment failure isolation keeps the sweep running; deployments hitting
+`insufficient_metrics` or an unresolved ambiguous-name gate land in the report's sweep-gaps section
+instead of blocking the rest of the rollup.
+
 Routing: [skill-routing.md](../docs/skill-framework/shared/skill-routing.md) · shared conventions:
 [docs/skill-framework/README.md](../docs/skill-framework/README.md) · confidence
 [confidence-bands.md](../docs/skill-framework/shared/confidence-bands.md) · prompt injection

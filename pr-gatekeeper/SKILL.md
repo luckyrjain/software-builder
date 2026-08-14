@@ -100,6 +100,16 @@ Completion emits the canonical `skill_result` envelope; actions classify against
 `action_gates`; scope follows `definition_of_done` — all defined in
 [runtime-contract.md](../docs/skill-framework/shared/runtime-contract.md).
 
+`definition_of_done`: required_artifacts=[`review_outcome` (`posted: bool`, pr-review's `recommendation`,
+notification target when held)]; required_checks=[event filtering (push-to-open-MR, GitLab-only provider,
+`head_sha` vs `last_processed_head_sha`), `expected_head_sha` verified against pr-review's actual reviewed
+head, every pr-review ask-point answered per auto-post-policy.md's deterministic table, outer-fence
+backtick-run escaping before pasting the executive summary into the manual-notify template];
+blocked_conditions=[`project`/`merge_request_iid` missing, non-GitLab payload (`UNSUPPORTED_PROVIDER`),
+`expected_head_sha` mismatch mid-run]; partial_result_behavior=Hold/`chat-only` outcomes still route
+pr-review's full findings and executive summary through the notification path, never a stub without them;
+a stale head-mismatch run is flagged explicit and routed for a fresh webhook event, never silently retried.
+
 Routing: [skill-routing.md](../docs/skill-framework/shared/skill-routing.md) · shared conventions:
 [docs/skill-framework/README.md](../docs/skill-framework/README.md) · confidence
 [confidence-bands.md](../docs/skill-framework/shared/confidence-bands.md) · prompt injection

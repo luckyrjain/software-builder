@@ -110,6 +110,15 @@ Completion emits the canonical `skill_result` envelope; actions classify against
 `action_gates`; scope follows `definition_of_done` — all defined in
 [runtime-contract.md](../docs/skill-framework/shared/runtime-contract.md).
 
+`definition_of_done`: required_artifacts=[`RELEASE_READINESS_REPORT.md`]; required_checks=[per-entry
+MR-range resolution, pr-review severity capture (posting mode noted, never posted), k8s rightsizing
+verdict per service, incident-rca Phase-1 signal within `incident_lookback_hours`,
+`release_ref`/`target_branch` HEAD match, fixed-precedence verdict derivation];
+blocked_conditions=[`release_manifest` empty — HARD STOP; pr-review, k8s-overprovisioning-datadog, or
+incident-rca not installed or configured]; partial_result_behavior=per-entry failure isolation keeps the
+sweep running — unresolved `since`, insufficient/ambiguous k8s outcomes, or a ref/HEAD mismatch land as
+`UNKNOWN`, never dropped or folded into `NOT_READY`/`READY`.
+
 Routing: [skill-routing.md](../docs/skill-framework/shared/skill-routing.md) · shared conventions:
 [docs/skill-framework/README.md](../docs/skill-framework/README.md) · confidence
 [confidence-bands.md](../docs/skill-framework/shared/confidence-bands.md) · prompt injection

@@ -107,6 +107,15 @@ Completion emits the canonical `skill_result` envelope; actions classify against
 `action_gates`; scope follows `definition_of_done` — all defined in
 [runtime-contract.md](../docs/skill-framework/shared/runtime-contract.md).
 
+`definition_of_done`: required_artifacts=[`MIGRATION_PROGRAM_REPORT.md`,
+`migration_program_rollup.json`]; required_checks=[`program_manifest` non-empty,
+`staleness_threshold_days` present, per-workspace `MIGRATION_STATUS.yaml` read and squad join via
+`SQUAD_MAP.md`, render-boundary escaping on service/workspace/squad/`mr_url`/notes/gap-reason fields];
+blocked_conditions=[`program_manifest` empty, `staleness_threshold_days` absent — both HARD STOP per
+Required inputs]; partial_result_behavior=a workspace missing `MIGRATION_STATUS.yaml` or `SQUAD_MAP.md`
+lands as a Workspace-gaps row (or `squad: UNKNOWN`) instead of blocking the run — every other manifest
+entry still aggregates into the rollup.
+
 Routing: [skill-routing.md](../docs/skill-framework/shared/skill-routing.md) · shared conventions:
 [docs/skill-framework/README.md](../docs/skill-framework/README.md) · confidence
 [confidence-bands.md](../docs/skill-framework/shared/confidence-bands.md) · prompt injection
