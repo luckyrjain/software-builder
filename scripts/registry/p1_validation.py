@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from scripts.registry.schema import parse_registry
 from scripts.yaml_safety import YAML_SAFETY_ERRORS, load_unique_yaml_file
 
 RUNTIME_DOCS = {"runtime-contract.md", "host-adapter-contract.md", "eval-contract.md"}
@@ -14,6 +15,9 @@ EVAL_DIMENSIONS = {"positive", "negative", "ambiguous", "adversarial", "degraded
 HOSTS = {"cursor", "claude", "codex", "chatgpt", "kiro", "generic"}
 HOST_CAPABILITIES = {"discover_files", "read_repo", "write_repo", "git", "scm", "subagents", "task_isolation", "terminal", "browser", "connectors"}
 SUPPORT_VALUES = {"full", "degraded", "unsupported"}
+PERMISSION_FIELDS = {"repository", "external_actions", "unattended", "merge"}
+REPOSITORY_PERMISSIONS = {"read", "write"}
+EXTERNAL_PERMISSIONS = {"none", "read", "write"}
 
 
 def _mapping(value: Any, label: str) -> dict[str, Any]:
@@ -30,10 +34,61 @@ def _strings(value: Any, label: str) -> set[str]:
     return set(value)
 
 
+def _require_v1(data: dict[str, Any], label: str) -> None:
+    if data.get("schema_version") != 1:
+        raise ValueError(f"{label}.schema_version must be 1")
+
+
+def _validate_permissions(root: Path, platform: dict[str, Any]) -> list[str]:
+    errors: list[str] = []
+    registry = parse_registry(root / "skills.yaml")
+    skill_ids = set(registry.skills)
+    schema = _mapping(platform.get("permission_schema"), "permission_schema")
+    if _strings(schema.get("required_fields"), "permission fields") != PERMISSION_FIELDS:
+        errors.append("error: P1 permission fields drift")
+    if _strings(schema.get("repository_values"), "repository permission values") != REPOSITORY_PERMISSIONS:
+        errors.append("error: P1 repository permission values drift")
+    if _strings(schema.get("external_action_values"), "external permission values") != EXTERNAL_PERMISSIONS:
+        errors.append("error: P1 external permission values drift")
+
+    permissions = _mapping(platform.get("skill_permissions"), "skill_permissions")
+    if set(permissions) != skill_ids:
+        missing = sorted(skill_ids - set(permissions))
+        extra = sorted(set(permissions) - skill_ids)
+        if missing:
+            errors.append("error: P1 permissions missing skills: " + ", ".join(missing))
+        if extra:
+            errors.append("error: P1 permissions unknown skills: " + ", ".join(extra))
+
+    for skill_id in sorted(skill_ids & set(permissions)):
+        permission = _mapping(permissions[skill_id], f"skill_permissions.{skill_id}")
+        if set(permission) != PERMISSION_FIELDS:
+            errors.append(f"error: {skill_id}: permissions must declare every field exactly once")
+            continue
+        if permission["repository"] not in REPOSITORY_PERMISSIONS:
+            errors.append(f"error: {skill_id}: invalid repository permission")
+        if permission["external_actions"] not in EXTERNAL_PERMISSIONS:
+            errors.append(f"error: {skill_id}: invalid external_actions permission")
+        if not isinstance(permission["unattended"], bool) or not isinstance(permission["merge"], bool):
+            errors.append(f"error: {skill_id}: unattended and merge permissions must be booleans")
+
+        risks = set(registry.skills[skill_id].risk_class)
+        if (permission["repository"] == "write") != ("repository-write" in risks or "merge" in risks):
+            errors.append(f"error: {skill_id}: repository permission does not match risk_class")
+        if permission["unattended"] != ("unattended" in risks):
+            errors.append(f"error: {skill_id}: unattended permission does not match risk_class")
+        if permission["merge"] != ("merge" in risks):
+            errors.append(f"error: {skill_id}: merge permission does not match risk_class")
+        if "posting" in risks and permission["external_actions"] != "write":
+            errors.append(f"error: {skill_id}: posting risk requires external_actions write")
+    return errors
+
+
 def validate_p1_contracts(root: Path) -> list[str]:
     try:
         errors: list[str] = []
         platform = _mapping(load_unique_yaml_file(root / "scripts/registry/platform_contracts.yaml"), "platform contracts")
+        _require_v1(platform, "platform contracts")
         result = _mapping(platform.get("result_envelope"), "result_envelope")
         if _strings(result.get("required_fields"), "result fields") != RESULT_FIELDS:
             errors.append("error: P1 result envelope fields drift")
@@ -51,8 +106,10 @@ def validate_p1_contracts(root: Path) -> list[str]:
             errors.append("error: P1 input resolution order drift")
         if platform.get("source_precedence") != ["runtime_authoritative_state", "executable_code_config_contracts", "tests_and_executable_examples", "version_controlled_technical_docs", "tickets_and_design_docs", "human_prose_and_comments"]:
             errors.append("error: P1 source precedence drift")
+        errors.extend(_validate_permissions(root, platform))
 
         hosts = _mapping(load_unique_yaml_file(root / "scripts/registry/host_contracts.yaml"), "host contracts")
+        _require_v1(hosts, "host contracts")
         if _strings(hosts.get("capability_families"), "host capability families") != HOST_CAPABILITIES:
             errors.append("error: P1 host capability families drift")
         if _strings(hosts.get("allowed_support"), "host support values") != SUPPORT_VALUES:
@@ -66,6 +123,7 @@ def validate_p1_contracts(root: Path) -> list[str]:
                 errors.append(f"error: P1 host capability profile drift: {host_id}")
 
         evals = _mapping(load_unique_yaml_file(root / "scripts/registry/eval_contracts.yaml"), "eval contracts")
+        _require_v1(evals, "eval contracts")
         if _strings(evals.get("required_dimensions"), "eval dimensions") != EVAL_DIMENSIONS:
             errors.append("error: P1 eval dimensions drift")
         for dirname in ("fixtures", "golden", "live", "transcripts"):
