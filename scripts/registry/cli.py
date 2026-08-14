@@ -22,6 +22,7 @@ from scripts.registry.generate_kiro import generate_kiro_steering
 from scripts.registry.load import load_descriptions, load_registry
 from scripts.registry.manifest import validate_manifest
 from scripts.registry.p1_validation import validate_p1_contracts
+from scripts.registry.runtime_manifest import validate_runtime_manifest
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -97,7 +98,7 @@ def _validate_all(root: Path) -> list[str]:
     return [
         *validate_registry(root),
         *validate_capability_catalog_sync(root),
-        *validate_manifest(root),
+        *validate_runtime_manifest(root),
         *validate_p1_contracts(root),
     ]
 
@@ -128,7 +129,7 @@ def cmd_validate(root: Path) -> int:
         for error in errors:
             print(error, file=sys.stderr)
         return 1
-    print("ok: skills registry, capability catalogue, platform manifest and P1 contracts validate")
+    print("ok: skills registry, capability catalogue, integrated runtime manifest and P1 contracts validate")
     return 0
 
 
