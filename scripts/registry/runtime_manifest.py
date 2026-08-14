@@ -15,20 +15,35 @@ P1_CONTRACT_KEYS = (
     "execution_context",
     "state_semantics",
     "artifact_ownership",
+    "permission_schema",
 )
 
 
 def build_runtime_manifest(root: Path = ROOT) -> dict[str, Any]:
-    """Return the normalized skill manifest plus P1 portable runtime contracts."""
+    """Return one normalized manifest for every registered skill and P1 contract."""
     manifest = build_manifest(root)
     platform = load_unique_yaml_file(root / "scripts/registry/platform_contracts.yaml")
     if not isinstance(platform, dict):
         raise ValueError("platform contracts must be a mapping")
     contracts = manifest.get("contracts")
+    skills = manifest.get("skills")
+    permissions = platform.get("skill_permissions")
     if not isinstance(contracts, dict):
         raise ValueError("platform manifest contracts must be a mapping")
+    if not isinstance(skills, dict):
+        raise ValueError("platform manifest skills must be a mapping")
+    if not isinstance(permissions, dict):
+        raise ValueError("platform contracts skill_permissions must be a mapping")
+
     for key in P1_CONTRACT_KEYS:
         if key not in platform:
             raise ValueError(f"platform contracts missing P1 section: {key}")
         contracts[key] = platform[key]
+
+    if set(skills) != set(permissions):
+        raise ValueError("runtime manifest skill/permission coverage drift")
+    for skill_id, skill in skills.items():
+        if not isinstance(skill, dict):
+            raise ValueError(f"runtime manifest skill must be a mapping: {skill_id}")
+        skill["permissions"] = permissions[skill_id]
     return manifest
