@@ -25,36 +25,43 @@ routing_collisions:
   - id: architecture-vs-code-review
     prompt: Review the architecture and bounded contexts of this service; there is no PR or MR.
     prompt_class: review architecture
+    prompt_pattern: "architecture.*bounded context"
     route_pattern: "Domain comprehension, bounded context"
     expected_owner: domain-comprehension
   - id: prd-vs-code-review
     prompt: Review this PRD for requirement gaps and build readiness.
     prompt_class: review PRD
+    prompt_pattern: "Review this PRD"
     route_pattern: "Review PRD, PRD gaps"
     expected_owner: prd-architect
   - id: pr-number-review
     prompt: Review PR #123 for correctness and regressions.
     prompt_class: review numbered pull request
+    prompt_pattern: "Review PR #123"
     route_pattern: "Review PR/MR, review pull request"
     expected_owner: pr-review
   - id: prod-failure-vs-sizing
     prompt: Production checkout-api has a 5xx spike since the last deploy; investigate the incident.
     prompt_class: production failure investigation
+    prompt_pattern: "5xx spike.*incident"
     route_pattern: "RCA, root cause, postmortem, incident"
     expected_owner: incident-rca
   - id: resource-safety-vs-incident
     prompt: Is checkout-api overprovisioned and are its CPU and memory requests safe to reduce?
     prompt_class: resource sizing without active incident
+    prompt_pattern: "overprovisioned.*CPU.*memory"
     route_pattern: "Overprovisioned, right-size, rightsizing"
     expected_owner: k8s-overprovisioning-datadog
   - id: write-tests-vs-test-review
     prompt: Write tests for this change; I have not specified the test level.
     prompt_class: generate tests without level
+    prompt_pattern: "Write tests.*test level"
     route_pattern: "Write tests, generate tests, add test coverage"
     expected_owner: test-writer
   - id: current-state-before-change
     prompt: Understand the existing payments service and its current domain before we design the future-state change.
     prompt_class: understand service before future-state change
+    prompt_pattern: "Understand.*current domain.*future-state"
     route_pattern: "Domain comprehension, bounded context"
     expected_owner: domain-comprehension
 
