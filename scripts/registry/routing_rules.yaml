@@ -15,8 +15,8 @@ routes:
       - '\b(PR|MR|pull request|merge request)\b.*\b(webhook|gatekeeper|automation gate|opened event)\b'
   k8s-overprovisioning-datadog:
     patterns:
-      - '\b(k8s|kubernetes|pod|deployment)\b.*\b(overprovision|right-?siz|requests?|limits?|CPU|memory)\b'
-      - '\b(overprovision|right-?siz)\w*\b.*\b(k8s|kubernetes|pod|deployment|CPU|memory)\b'
+      - '\b(k8s|kubernetes|pod|deployment)\b.*\b(overprovision\w*|right-?siz\w*|requests?|limits?|CPU|memory)\b'
+      - '\b(overprovision\w*|right-?siz\w*)\b.*\b(k8s|kubernetes|pod|deployment|CPU|memory)\b'
       - '\boverprovisioned\b.*\bCPU\b.*\bmemory\b'
   incident-rca:
     patterns:
