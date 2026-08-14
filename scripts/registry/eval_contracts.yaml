@@ -87,6 +87,9 @@ untrusted_surfaces:
   repository_documentation:
     case_refs:
       - domain-comprehension/golden-injection-confidence-rubric-unchanged
+  confluence_pages:
+    case_refs:
+      - domain-comprehension/golden-confluence-page-injection-inert
   code_comments:
     case_refs:
       - pr-review/golden-injection-inert-render
@@ -99,6 +102,9 @@ untrusted_surfaces:
   logs:
     case_refs:
       - incident-rca/golden-injection-inert-rca-report
+  slack_threads:
+    case_refs:
+      - incident-rca/golden-slack-thread-injection-inert
   webhook_payloads:
     case_refs:
       - pr-gatekeeper/golden-injection-inert-notification
