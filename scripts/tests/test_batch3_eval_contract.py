@@ -45,6 +45,7 @@ def test_batch3_repository_matrices_and_golden_coverage_pass() -> None:
     repository_checks = [result for result in checks if result.skill == "batch3"]
     assert {result.case_id for result in repository_checks} == {
         "all-skill-golden",
+        "behavior-scenario-matrix",
         "routing-collision-suite",
         "mutation-matrix",
         "mutation-anchor-matrix",
