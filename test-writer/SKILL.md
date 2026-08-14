@@ -1,6 +1,7 @@
 ---
 name: test-writer
 skill_version: 2.0
+platform_contract: skill-platform-v1
 description: >-
   Thin router for test-writing requests that don't name a level. Classifies "write tests for X" into
   unit, integration, contract, e2e, or api, then dispatches to exactly one of unit-test-creator,
