@@ -10,6 +10,7 @@ from scripts.registry.composition_contracts import load_contracts
 from scripts.registry.frontmatter import load_skill_frontmatter
 from scripts.registry.schema import parse_registry
 from scripts.yaml_safety import YAML_SAFETY_ERRORS, load_unique_yaml_file
+from scripts.yaml_safety import require_mapping as _require_mapping
 
 ROOT = Path(__file__).resolve().parents[2]
 CONTRACTS_PATH = Path(__file__).resolve().parent / "platform_contracts.yaml"
@@ -94,12 +95,6 @@ def _version_input(skill_md: Path, raw_version: Any) -> Any:
     return match.group(1)
 
 
-def _require_mapping(raw: Any, label: str) -> dict[str, Any]:
-    if not isinstance(raw, dict):
-        raise ValueError(f"{label} must be a mapping")
-    return raw
-
-
 def _require_schema_version(raw: Any, *, label: str) -> int:
     if isinstance(raw, bool) or not isinstance(raw, (int, str)):
         raise ValueError(f"{label} must be an integer")
@@ -166,7 +161,11 @@ def _load_platform_contracts(path: Path = CONTRACTS_PATH) -> dict[str, Any]:
     return raw
 
 
-def build_manifest(root: Path = ROOT) -> dict[str, Any]:
+def _build_manifest(root: Path) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Build the manifest and return it alongside the raw platform contracts
+    mapping it was built from, so callers needing P1-only sections don't have
+    to re-read and re-parse platform_contracts.yaml a second time.
+    """
     registry = parse_registry(root / "skills.yaml")
     platform = _load_platform_contracts(
         root / "scripts" / "registry" / "platform_contracts.yaml",
@@ -269,7 +268,7 @@ def build_manifest(root: Path = ROOT) -> dict[str, Any]:
             },
         }
 
-    return {
+    manifest = {
         "manifest_schema_version": 1,
         "registry_schema_version": registry.schema_version,
         "contracts": {
@@ -279,6 +278,12 @@ def build_manifest(root: Path = ROOT) -> dict[str, Any]:
         },
         "skills": skills,
     }
+    return manifest, platform
+
+
+def build_manifest(root: Path = ROOT) -> dict[str, Any]:
+    manifest, _platform = _build_manifest(root)
+    return manifest
 
 
 def validate_manifest(root: Path = ROOT) -> list[str]:

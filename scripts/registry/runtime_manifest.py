@@ -3,8 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from scripts.registry.manifest import ROOT, build_manifest
-from scripts.yaml_safety import YAML_SAFETY_ERRORS, load_unique_yaml_file
+from scripts.registry.manifest import ROOT, _build_manifest
+from scripts.yaml_safety import YAML_SAFETY_ERRORS
 
 P1_CONTRACT_KEYS = (
     "result_envelope",
@@ -21,10 +21,7 @@ P1_CONTRACT_KEYS = (
 
 def build_runtime_manifest(root: Path = ROOT) -> dict[str, Any]:
     """Return one normalized manifest for every registered skill and P1 contract."""
-    manifest = build_manifest(root)
-    platform = load_unique_yaml_file(root / "scripts/registry/platform_contracts.yaml")
-    if not isinstance(platform, dict):
-        raise ValueError("platform contracts must be a mapping")
+    manifest, platform = _build_manifest(root)
     contracts = manifest.get("contracts")
     skills = manifest.get("skills")
     permissions = platform.get("skill_permissions")

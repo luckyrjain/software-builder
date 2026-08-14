@@ -22,9 +22,9 @@ threads, and emits a structured re-review note with `review_metadata` YAML.
 
 | Use pr-review | Use something else |
 |---------------|-------------------|
-| Review a GitHub PR or GitLab MR by URL or number | Local uncommitted diff → `/review-bugbot` |
-| Re-review after fixes pushed | Security-only local diff → `/review-security` |
-| Post severity-tagged inline comments | Security-only local diff → `/review-security` |
+| Review a GitHub PR or GitLab MR by URL or number | Local uncommitted diff → the host's local diff/code-review workflow (no registered skill) |
+| Re-review after fixes pushed | Security-only local diff → the host's local diff/code-review workflow (no registered skill) |
+| Post severity-tagged inline comments | Security-only local diff → the host's local diff/code-review workflow (no registered skill) |
 | Check Jira AC against the MR diff | Keep MR merge-ready as new commits land (webhook-triggered) → **pr-gatekeeper** |
 | — | Release-wide go/no-go sweep across many MRs/services → **release-readiness-checker** |
 

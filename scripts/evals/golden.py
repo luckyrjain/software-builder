@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +22,7 @@ class GoldenCase:
     recorded_output: dict[str, Any]
     assertions: list[dict[str, Any]]
     path: Path
+    contract_coverage: list[str] = field(default_factory=list)
 
 
 def load_golden_fixtures(golden_dir: Path) -> list[GoldenCase]:
@@ -58,6 +59,7 @@ def load_golden_fixtures(golden_dir: Path) -> list[GoldenCase]:
                 recorded_output=recorded_output,
                 assertions=assertions,
                 path=path,
+                contract_coverage=raw.get("contract_coverage", []),
             ),
         )
     return cases

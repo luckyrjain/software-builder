@@ -12,21 +12,17 @@ import re
 from pathlib import Path
 from typing import Any, Iterable
 
+from scripts.evals.golden import GoldenCase
 from scripts.evals.types import EvalResult
 from scripts.registry.schema import Registry
 from scripts.yaml_safety import load_unique_yaml_file
+from scripts.yaml_safety import require_mapping as _as_mapping
 
 PLATFORM_SKILL = "platform"
 
 
 def _result(case_id: str, messages: list[str]) -> EvalResult:
     return EvalResult(PLATFORM_SKILL, case_id, not messages, messages)
-
-
-def _as_mapping(value: Any, label: str) -> dict[str, Any]:
-    if not isinstance(value, dict):
-        raise ValueError(f"{label} must be a mapping")
-    return value
 
 
 def _as_string_list(value: Any, label: str) -> list[str]:
@@ -38,12 +34,12 @@ def _as_string_list(value: Any, label: str) -> list[str]:
 
 
 def _case_result_map(case_results: Iterable[EvalResult]) -> dict[str, EvalResult]:
+    # A duplicate (skill, case_id) is already reported as its own failing
+    # EvalResult by __main__.admit_case; don't raise here and blow away the
+    # rest of the run's per-case report over the same problem.
     mapped: dict[str, EvalResult] = {}
     for result in case_results:
-        ref = f"{result.skill}/{result.case_id}"
-        if ref in mapped:
-            raise ValueError(f"duplicate eval result ref: {ref}")
-        mapped[ref] = result
+        mapped[f"{result.skill}/{result.case_id}"] = result
     return mapped
 
 
@@ -140,27 +136,18 @@ def _referenced_case_results(
 
 
 def _golden_coverage_result(
-    root: Path,
+    golden_cases: Iterable[GoldenCase],
     contract: dict[str, Any],
     case_results: dict[str, EvalResult],
 ) -> EvalResult:
     required = set(_as_string_list(contract.get("golden_structural_assertions"), "golden_structural_assertions"))
     covered: set[str] = set()
     coverage_refs: set[str] = set()
-    for path in sorted((root / "evals" / "golden").rglob("*.yaml")):
-        if path.name.startswith("_"):
+    for case in golden_cases:
+        if not case.contract_coverage:
             continue
-        raw = load_unique_yaml_file(path)
-        if not isinstance(raw, dict):
-            continue
-        coverage = raw.get("contract_coverage", [])
-        if not coverage:
-            continue
-        skill = str(raw.get("skill", ""))
-        case_id = str(raw.get("case_id", ""))
-        if skill and case_id:
-            coverage_refs.add(f"{skill}/{case_id}")
-        covered.update(_as_string_list(coverage, f"{path}.contract_coverage"))
+        coverage_refs.add(f"{case.skill}/{case.case_id}")
+        covered.update(_as_string_list(case.contract_coverage, f"{case.path}.contract_coverage"))
 
     missing = sorted(required - covered)
     unknown = sorted(covered - required)
@@ -226,6 +213,7 @@ def run_platform_contract_checks(
     registry: Registry,
     *,
     case_results: Iterable[EvalResult],
+    golden_cases: Iterable[GoldenCase],
 ) -> list[EvalResult]:
     """Run deterministic P1 eval-contract checks as normal eval results."""
     raw = load_unique_yaml_file(root / "scripts/registry/eval_contracts.yaml")
@@ -251,7 +239,7 @@ def run_platform_contract_checks(
         case_results=result_map,
         case_prefix="degraded-host",
     )
-    golden_result = _golden_coverage_result(root, contract, result_map)
+    golden_result = _golden_coverage_result(golden_cases, contract, result_map)
 
     routing_ok = all(result.passed for result in routing_results)
     adversarial_ok = all(result.passed for result in [*adversarial_results, *surface_results])

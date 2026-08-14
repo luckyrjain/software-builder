@@ -24,10 +24,6 @@ from scripts.registry.skill_frontmatter_schema import automation_only_guard_erro
 from scripts.yaml_safety import YAML_SAFETY_ERRORS, load_unique_yaml_file
 
 ROOT = Path(__file__).resolve().parents[2]
-FIXTURES_DIR = ROOT / "evals" / "fixtures"
-TRANSCRIPTS_DIR = ROOT / "evals" / "transcripts"
-GOLDEN_DIR = ROOT / "evals" / "golden"
-GLOBAL_FIXTURE = FIXTURES_DIR / "_global.yaml"
 
 WORKFLOW_REQUIRED_KEYS = ("workflow_version", "phase", "produces", "consumes")
 
@@ -248,6 +244,7 @@ def run_all(
                 root,
                 registry,
                 case_results=results,
+                golden_cases=golden_cases,
             ),
         )
     return results
@@ -288,7 +285,7 @@ def main(argv: list[str] | None = None) -> int:
         results = run_all(
             args.repo_root, skill_filter=args.skill, tier_filter=args.tier, golden_cases=golden_cases,
         )
-    except (ValueError, *YAML_SAFETY_ERRORS) as exc:
+    except (OSError, ValueError, *YAML_SAFETY_ERRORS) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
 
