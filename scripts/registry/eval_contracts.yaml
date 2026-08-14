@@ -139,6 +139,9 @@ untrusted_surfaces:
   webhook_payloads:
     case_refs:
       - pr-gatekeeper/golden-injection-inert-notification
+  mcp_payloads:
+    case_refs:
+      - incident-rca/golden-mcp-payload-injection-inert
   api_responses:
     case_refs:
       - api-test-creator/golden-injection-inert-api-test-report
