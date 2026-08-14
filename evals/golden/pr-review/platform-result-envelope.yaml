@@ -1,0 +1,54 @@
+schema_version: 1
+skill: pr-review
+case_id: golden-platform-result-envelope
+tier: 3
+description: >-
+  Canonical recorded result proving the shared platform golden-output requirements are executable:
+  status, confidence, authority, provenance, artifact shape, and critical conclusion are asserted
+  structurally without snapshotting prose.
+contract_coverage:
+  - result_status
+  - confidence
+  - authority_boundary
+  - evidence_provenance
+  - artifact_shape
+  - critical_conclusion
+recorded_output:
+  skill_result:
+    skill: pr-review
+    version: 1.0.0
+    status: SUCCESS
+    confidence: HIGH
+    source_revision: sha256:abc123
+    evidence_status: OBSERVED
+    artifacts:
+      - type: review
+        id: review-abc123
+    blockers: []
+    recommended_next_skill: null
+  authority:
+    repository: read
+    external_actions: none
+    merge: false
+  critical_conclusion: No blocking findings were identified in the reviewed diff.
+assertions:
+  - type: field_equals
+    path: skill_result.status
+    value: SUCCESS
+  - type: field_in
+    path: skill_result.confidence
+    values: [HIGH, MEDIUM, LOW, UNKNOWN]
+  - type: field_equals
+    path: authority.external_actions
+    value: none
+  - type: field_equals
+    path: authority.merge
+    value: false
+  - type: field_present
+    path: skill_result.source_revision
+  - type: field_present
+    path: skill_result.evidence_status
+  - type: field_present
+    path: skill_result.artifacts
+  - type: field_present
+    path: critical_conclusion
