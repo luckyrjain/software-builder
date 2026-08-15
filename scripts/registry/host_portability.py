@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
+from typing import Any
 
 from scripts.registry.frontmatter import load_skill_frontmatter
 from scripts.registry.host_adapter import HOSTS, validate_host_adapter_interface
@@ -45,11 +46,19 @@ def _generated_surface_errors(root: Path, directory: Path, suffix: str, skills: 
     return errors
 
 
+def _json_object(path: Path, label: str) -> tuple[dict[str, Any] | None, list[str]]:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        return None, [f"error: {label} must be a JSON object"]
+    return payload, []
+
+
 def _plugin_errors(path: Path, host: str) -> list[str]:
     if not path.is_file():
         return [f"error: {host} package manifest missing: {path}"]
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    errors: list[str] = []
+    payload, errors = _json_object(path, f"{host} package manifest")
+    if payload is None:
+        return errors
     if payload.get("name") != "software-builder":
         errors.append(f"error: {host} package identity drift")
     if payload.get("skills") != "./":
@@ -61,8 +70,9 @@ def _claude_marketplace_errors(root: Path) -> list[str]:
     path = root / ".claude-plugin/marketplace.json"
     if not path.is_file():
         return ["error: Claude marketplace manifest missing"]
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    errors: list[str] = []
+    payload, errors = _json_object(path, "Claude marketplace manifest")
+    if payload is None:
+        return errors
     if payload.get("name") != "software-builder":
         errors.append("error: Claude marketplace identity drift")
     plugins = payload.get("plugins")
