@@ -7,7 +7,13 @@ from pathlib import Path, PurePosixPath
 import pytest
 
 from scripts.registry import cli as registry_cli
-from scripts.registry.generic_package import _is_safe_file, _packaged_bytes, _validate_output_path, build_generic_package
+from scripts.registry.generic_package import (
+    _is_safe_file,
+    _packaged_bytes,
+    _strip_non_runtime_links,
+    _validate_output_path,
+    build_generic_package,
+)
 from scripts.registry.host_adapter import HOSTS, capability_support, validate_host_adapter_interface
 from scripts.registry.host_portability import (
     HOST_BRANCH_RE,
@@ -79,6 +85,12 @@ def test_generic_package_strips_only_non_runtime_changelog_links() -> None:
     assert "CHANGELOG.md" in packaged
     assert "[phase-0.md](../../pr-review/workflow/phase-0.md)" in packaged
 
+    sample = "[history](CHANGELOG.md)\n![image](CHANGELOG.md)\n```md\n[example](CHANGELOG.md)\n```\n"
+    rewritten = _strip_non_runtime_links(sample)
+    assert rewritten.startswith("history\n")
+    assert "![image](CHANGELOG.md)" in rewritten
+    assert "[example](CHANGELOG.md)" in rewritten
+
 
 def test_generic_package_refuses_ci_sensitive_and_self_including_paths(tmp_path: Path) -> None:
     github_file = tmp_path / ".github" / "workflow.yml"
@@ -105,6 +117,10 @@ def test_generic_package_refuses_ci_sensitive_and_self_including_paths(tmp_path:
     mixed_case_env.write_text("TOKEN=example\n", encoding="utf-8")
     with pytest.raises(ValueError, match="potentially sensitive"):
         _is_safe_file(tmp_path, mixed_case_env)
+
+    mixed_case_changelog = tmp_path / "Changelog.MD"
+    mixed_case_changelog.write_text("history\n", encoding="utf-8")
+    assert _is_safe_file(tmp_path, mixed_case_changelog) is False
 
     with pytest.raises(ValueError, match="output inside repository"):
         _validate_output_path(tmp_path, tmp_path / "skill" / "bundle.tar.gz")
@@ -138,7 +154,7 @@ def test_generic_package_is_deterministic_complete_and_link_safe(tmp_path: Path)
     assert not any("/dist/" in f"/{name}/" for name in names)
     assert not any("/tests/" in f"/{name}/" for name in names)
     assert not any("__pycache__" in name or name.endswith(".pyc") for name in names)
-    assert not any(PurePosixPath(name).name == "CHANGELOG.md" for name in names)
+    assert not any(PurePosixPath(name).name.lower() == "changelog.md" for name in names)
 
     packaged_root = extract_root / "software-builder"
     markdown_files = sorted(str(path) for path in packaged_root.rglob("*.md"))
