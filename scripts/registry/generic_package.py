@@ -36,6 +36,16 @@ CI configuration, caches, VCS metadata, and credential-like files.
 
 Start with `skills.yaml` to discover registered skills. Each skill's canonical instructions live in
 its `SKILL.md`; shared runtime and routing contracts live under `docs/skill-framework/`.
+
+## Install
+
+Extract the archive into the workspace used by your agent host, then use `skills.yaml` to discover the
+available skills and their canonical `SKILL.md` entry points.
+
+## Install for your specific coding agent
+
+This is the generic-agent bundle. Host-specific adapters remain outside this archive; follow the shared
+host contract in `docs/skill-framework/shared/host-adapter-contract.md` for capability semantics.
 """
 PORTABLE_ADR_INDEX = """# Architecture Decision Records
 
