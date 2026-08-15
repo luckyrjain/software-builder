@@ -25,6 +25,15 @@ NON_RUNTIME_NAMES = {"CHANGELOG.md"}
 SENSITIVE_NAMES = {".env", ".netrc", "credentials.json", "secrets.yaml", "secrets.yml"}
 SENSITIVE_SUFFIXES = {".pem", ".key", ".p12", ".pfx"}
 MARKDOWN_LINK_RE = re.compile(r"\]\(([a-zA-Z0-9_./~-]+\.md)(?:#[a-zA-Z0-9_-]+)?\)")
+PORTABLE_README = """# Software Builder — portable skill bundle
+
+This archive contains the registered Software Builder skills and their runtime framework dependencies.
+It is generated for generic agent hosts and intentionally omits repository contribution history,
+CI configuration, caches, VCS metadata, and credential-like files.
+
+Start with `skills.yaml` to discover registered skills. Each skill's canonical instructions live in
+its `SKILL.md`; shared runtime and routing contracts live under `docs/skill-framework/`.
+"""
 
 
 def _is_safe_file(root: Path, path: Path) -> bool:
@@ -76,8 +85,15 @@ def _markdown_without_fences(text: str) -> str:
     return "\n".join(visible)
 
 
+def _packaged_bytes(root: Path, path: Path) -> bytes:
+    """Return archive content, substituting portable docs for repo-only surfaces."""
+    if path.resolve() == (root / "README.md").resolve():
+        return PORTABLE_README.encode("utf-8")
+    return path.read_bytes()
+
+
 def _markdown_targets(root: Path, path: Path) -> set[Path]:
-    text = _markdown_without_fences(path.read_text(encoding="utf-8"))
+    text = _markdown_without_fences(_packaged_bytes(root, path).decode("utf-8"))
     targets: set[Path] = set()
     for match in MARKDOWN_LINK_RE.finditer(text):
         rel = match.group(1)
@@ -130,6 +146,9 @@ def _package_files(root: Path) -> list[Path]:
     # Follow only references reachable from the portable runtime roots.
     # Per-skill changelogs are deliberately excluded: they are release history,
     # not execution dependencies, and may reference historical design records.
+    # If runtime docs reach the repository README, the archive emits a portable
+    # README at the same path so links remain valid without importing repo-only
+    # contribution/history dependencies.
     queue = [path for path in candidates if path.suffix.lower() == ".md"]
     inspected: set[Path] = set()
     while queue:
@@ -155,7 +174,7 @@ def build_generic_package_bytes(root: Path) -> bytes:
             for path in _package_files(root):
                 rel = path.relative_to(root).as_posix()
                 arcname = f"{PACKAGE_ROOT}/{rel}"
-                data = path.read_bytes()
+                data = _packaged_bytes(root, path)
                 info = tarfile.TarInfo(arcname)
                 info.size = len(data)
                 info.mtime = 0
