@@ -201,7 +201,7 @@ def _heading_slugs(root: Path, path: Path) -> set[str]:
     return slugs
 
 
-def _markdown_targets(root: Path, path: Path, tracked: set[Path]) -> set[Path]:
+def _markdown_targets(root: Path, path: Path, tracked_regular: set[Path]) -> set[Path]:
     text = _markdown_without_fences(_packaged_bytes(root, path).decode("utf-8"))
     targets: set[Path] = set()
     for match in MARKDOWN_LINK_RE.finditer(text):
@@ -220,7 +220,7 @@ def _markdown_targets(root: Path, path: Path, tracked: set[Path]) -> set[Path]:
             raise ValueError(
                 f"generic package reference escapes repository: {rel} referenced in {path.relative_to(root)}",
             ) from exc
-        if target not in {candidate.resolve() for candidate in tracked if not candidate.is_symlink()}:
+        if target not in tracked_regular:
             raise ValueError(
                 f"generic package reference points to untracked file: {rel} referenced in {path.relative_to(root)}",
             )
@@ -297,7 +297,7 @@ def _package_files(root: Path) -> list[Path]:
         if path in inspected:
             continue
         inspected.add(path)
-        for target in _markdown_targets(root, path, tracked):
+        for target in _markdown_targets(root, path, tracked_regular):
             if target in candidates:
                 continue
             candidates.add(target)
