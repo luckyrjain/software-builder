@@ -89,6 +89,7 @@ def test_generic_package_is_deterministic_complete_and_link_safe(tmp_path: Path)
     assert not any("/.git/" in f"/{name}/" or "/.github/" in f"/{name}/" for name in names)
     assert not any("/dist/" in f"/{name}/" for name in names)
     assert not any("__pycache__" in name or name.endswith(".pyc") for name in names)
+    assert not any(PurePosixPath(name).name == "CHANGELOG.md" for name in names)
 
     packaged_root = extract_root / "software-builder"
     markdown_files = sorted(str(path) for path in packaged_root.rglob("*.md"))
