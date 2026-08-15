@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import gzip
 import io
+import re
 import sys
 import tarfile
 from pathlib import Path
@@ -12,6 +13,7 @@ from scripts.registry.schema import parse_registry
 PACKAGE_ROOT = "software-builder"
 EXCLUDED_PARTS = {".git", "__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache", "dist"}
 EXCLUDED_SUFFIXES = {".pyc", ".pyo"}
+MARKDOWN_LINK_RE = re.compile(r"\]\(([a-zA-Z0-9_./~-]+\.md)(?:#[a-zA-Z0-9_-]+)?\)")
 
 
 def _is_safe_file(root: Path, path: Path) -> bool:
@@ -25,21 +27,96 @@ def _is_safe_file(root: Path, path: Path) -> bool:
     return path.is_file()
 
 
-def _package_files(root: Path) -> list[Path]:
-    registry = parse_registry(root / "skills.yaml")
-    for skill_id, entry in registry.skills.items():
-        if not (root / entry.path / "SKILL.md").is_file():
-            raise ValueError(f"generic package missing canonical SKILL.md for {skill_id}")
+def _markdown_without_fences(text: str) -> str:
+    """Mirror the repository link linter's fenced-code exclusion semantics."""
+    visible: list[str] = []
+    fence_len = 0
+    for raw in text.splitlines():
+        line = raw
+        leading = len(line) - len(line.lstrip(" "))
+        candidate = line[leading:] if leading <= 3 else line
+        if fence_len == 0:
+            opening = re.match(r"`{3,}", candidate)
+            if opening:
+                fence_len = len(opening.group(0))
+                continue
+            visible.append(raw)
+            continue
 
-    # Package the repository's portable content closure, excluding only VCS,
-    # cache, bytecode, and output directories. This keeps every relative
-    # Markdown/reference dependency reachable after extraction instead of
-    # maintaining a fragile hand-written allowlist of shared docs.
-    candidates = {path for path in root.rglob("*") if _is_safe_file(root, path)}
+        closing = candidate.rstrip(" \t\r")
+        if closing and set(closing) == {"`"} and len(closing) >= fence_len:
+            fence_len = 0
+    return "\n".join(visible)
+
+
+def _markdown_targets(root: Path, path: Path) -> set[Path]:
+    text = _markdown_without_fences(path.read_text(encoding="utf-8"))
+    targets: set[Path] = set()
+    for match in MARKDOWN_LINK_RE.finditer(text):
+        rel = match.group(1)
+        if rel.startswith("~"):
+            continue
+        target = (path.parent / rel).resolve()
+        try:
+            target.relative_to(root)
+        except ValueError as exc:
+            raise ValueError(
+                f"generic package reference escapes repository: {rel} referenced in {path.relative_to(root)}",
+            ) from exc
+        if not target.is_file():
+            raise ValueError(
+                f"generic package dangling markdown reference: {rel} referenced in {path.relative_to(root)}",
+            )
+        if not _is_safe_file(root, target):
+            raise ValueError(
+                f"generic package reference points to excluded file: {rel} referenced in {path.relative_to(root)}",
+            )
+        targets.add(target)
+    return targets
+
+
+def _package_files(root: Path) -> list[Path]:
+    root = root.resolve()
+    registry = parse_registry(root / "skills.yaml")
+
+    candidates: set[Path] = {root / "skills.yaml"}
+    license_path = root / "LICENSE"
+    if license_path.is_file():
+        candidates.add(license_path)
+
+    framework = root / "docs" / "skill-framework"
+    if not framework.is_dir():
+        raise ValueError("generic package requires docs/skill-framework")
+    candidates.update(path for path in framework.rglob("*") if _is_safe_file(root, path))
+
+    for skill_id, entry in registry.skills.items():
+        skill_root = root / entry.path
+        if not (skill_root / "SKILL.md").is_file():
+            raise ValueError(f"generic package missing canonical SKILL.md for {skill_id}")
+        candidates.update(path for path in skill_root.rglob("*") if _is_safe_file(root, path))
+
+    # Follow only references reachable from the portable skill/framework roots.
+    # This keeps the archive self-contained without sweeping unrelated historical
+    # plans/specs into the artifact merely because they live in the repository.
+    queue = [path for path in candidates if path.suffix.lower() == ".md"]
+    inspected: set[Path] = set()
+    while queue:
+        path = queue.pop()
+        if path in inspected:
+            continue
+        inspected.add(path)
+        for target in _markdown_targets(root, path):
+            if target in candidates:
+                continue
+            candidates.add(target)
+            if target.suffix.lower() == ".md":
+                queue.append(target)
+
     return sorted(candidates, key=lambda path: path.relative_to(root).as_posix())
 
 
 def build_generic_package_bytes(root: Path) -> bytes:
+    root = root.resolve()
     buffer = io.BytesIO()
     with gzip.GzipFile(filename="", mode="wb", fileobj=buffer, mtime=0) as gz:
         with tarfile.open(fileobj=gz, mode="w", format=tarfile.USTAR_FORMAT) as archive:
