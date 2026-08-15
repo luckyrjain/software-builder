@@ -7,7 +7,7 @@ from pathlib import Path, PurePosixPath
 import pytest
 
 from scripts.registry import cli as registry_cli
-from scripts.registry.generic_package import _is_safe_file, _validate_output_path, build_generic_package
+from scripts.registry.generic_package import _is_safe_file, _packaged_bytes, _validate_output_path, build_generic_package
 from scripts.registry.host_adapter import HOSTS, capability_support, validate_host_adapter_interface
 from scripts.registry.host_portability import HOST_BRANCH_RE, validate_host_portability
 from scripts.registry.schema import parse_registry
@@ -54,6 +54,14 @@ def test_registry_package_generic_command(tmp_path: Path) -> None:
     output = tmp_path / "generic.tar.gz"
     assert registry_cli.main(["package-generic", "--output", str(output)]) == 0
     assert output.is_file()
+
+
+def test_generic_package_strips_only_non_runtime_changelog_links() -> None:
+    source = ROOT / "release-readiness-checker" / "reference" / "gate-policy.md"
+    packaged = _packaged_bytes(ROOT, source).decode("utf-8")
+    assert "[CHANGELOG.md](../CHANGELOG.md)" not in packaged
+    assert "CHANGELOG.md" in packaged
+    assert "[phase-0.md](../../pr-review/workflow/phase-0.md)" in packaged
 
 
 def test_generic_package_refuses_ci_sensitive_and_self_including_paths(tmp_path: Path) -> None:
