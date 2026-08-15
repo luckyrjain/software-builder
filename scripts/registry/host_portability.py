@@ -19,12 +19,15 @@ EXPECTED_SURFACES = {
     "kiro": "per_skill_generated",
     "generic": "canonical_root",
 }
-# Flag actual host-specific execution branches (for example, "if running on
-# Cursor ..."), not neutral prose that merely documents supported hosts or
-# links to host setup guidance.
+# Flag actual host-specific execution branches while allowing neutral prose that
+# merely lists supported hosts or links to host setup guidance.
+_HOST = r"(?:Cursor|Claude(?: Code)?|Codex|ChatGPT|Kiro)"
 HOST_BRANCH_RE = re.compile(
-    r"^\s*(?:[-*]\s*)?(?:if|when)\s+(?:running\s+)?(?:on|in|under|with)\s+"
-    r"(?:Cursor|Claude(?: Code)?|Codex|ChatGPT|Kiro)\b",
+    rf"^\s*(?:[-*]\s*)?(?:"
+    rf"(?:if|when)\s+(?:running\s+)?(?:on|in|under|with)\s+{_HOST}\b"
+    rf"|(?:on|under|with)\s+{_HOST}\s*[:,]\s*\w+"
+    rf"|for\s+{_HOST}\s*[:,]\s*(?:use|run|load|invoke|set|write|read|prefer|install)\b"
+    rf")",
     re.I | re.M,
 )
 
