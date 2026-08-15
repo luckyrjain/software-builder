@@ -26,7 +26,7 @@ A skill must resolve its declared capabilities against the profile before execut
 
 ## Core/runtime boundary
 
-Core skill logic must not branch on host brand names such as Cursor, Claude, Codex, ChatGPT, or Kiro. Brand-specific discovery, paths, invocation syntax, and packaging belong in generated or explicit host adapters.
+Core skill logic must not branch on host brand names such as Cursor, Claude, Codex, ChatGPT, or Kiro. Brand-specific discovery, paths, invocation syntax, and packaging belong in generated or explicit host adapters. Validation covers canonical `SKILL.md` plus runtime `workflow/` and `reference/` Markdown; setup, history, and test surfaces are not treated as core execution logic.
 
 Provider names such as Datadog, GitHub, GitLab, Kubernetes, Jira, and Slack may appear as examples or adapter implementations, but routing decisions should be expressed as capability requirements.
 
@@ -38,7 +38,7 @@ The repository validates these surfaces:
 - **Codex / ChatGPT:** `.codex-plugin/plugin.json` is valid and exposes the canonical skill tree. ChatGPT uses the same portable skill package contract; no ChatGPT-only prompt copy is maintained.
 - **Cursor:** `.cursor/rules/*.mdc` are generated from the registry, cover exactly the registered skills, reference canonical `SKILL.md` files, and are checked for drift.
 - **Kiro:** `.kiro/steering/*.md` are generated from the registry, cover exactly the registered skills, reference canonical `SKILL.md` files, and are checked for drift.
-- **Generic agents:** build the deterministic portable bundle with `python3 -m scripts.registry package-generic --output dist/software-builder-skills.tar.gz`. The archive is seeded from the runtime files in every registered skill tree, the shared framework, `skills.yaml`, and the license, then follows the transitive set of reachable relative Markdown references. Per-skill `CHANGELOG.md` history, test/verification fixtures, VCS/CI/cache/build-output content, symlinks, and common credential/private-key files are excluded or rejected. Changelog links in packaged Markdown are rendered as plain labels rather than dangling links. Archive metadata is normalized and all remaining packaged relative Markdown references and anchors must remain valid after extraction.
+- **Generic agents:** build the deterministic portable bundle with `python3 -m scripts.registry package-generic --output dist/software-builder-skills.tar.gz`. Only Git-tracked files are eligible package inputs; arbitrary untracked working-tree files never enter the archive. The archive is seeded from runtime files in every registered skill tree, the shared framework, `skills.yaml`, and the license, then follows the transitive set of reachable relative Markdown references. Per-skill `CHANGELOG.md` history, test/verification fixtures, VCS/CI/cache/build-output content, symlinks, and common credential/private-key files are excluded or rejected. Changelog links in packaged Markdown are rendered as plain labels rather than dangling links. Before writing the archive, package generation fails closed on excluded or untracked references, missing Markdown targets, and missing Markdown anchors. Archive metadata is normalized and post-extraction link validation remains a regression check.
 
 `evals/host-parity/expected.yaml` captures semantic host-surface expectations; it is validated against the canonical registry and host contract instead of snapshotting exact prompt prose.
 
