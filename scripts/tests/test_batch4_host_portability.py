@@ -96,6 +96,16 @@ def test_generic_package_refuses_ci_sensitive_and_self_including_paths(tmp_path:
     with pytest.raises(ValueError, match="potentially sensitive"):
         _is_safe_file(tmp_path, secret)
 
+    mixed_case_secret = tmp_path / "Credentials.JSON"
+    mixed_case_secret.write_text("{}\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="potentially sensitive"):
+        _is_safe_file(tmp_path, mixed_case_secret)
+
+    mixed_case_env = tmp_path / ".ENV.production"
+    mixed_case_env.write_text("TOKEN=example\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="potentially sensitive"):
+        _is_safe_file(tmp_path, mixed_case_env)
+
     with pytest.raises(ValueError, match="output inside repository"):
         _validate_output_path(tmp_path, tmp_path / "skill" / "bundle.tar.gz")
     with pytest.raises(ValueError, match="output inside repository"):
