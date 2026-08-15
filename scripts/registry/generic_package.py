@@ -32,11 +32,24 @@ def _is_safe_file(root: Path, path: Path) -> bool:
         return False
     if path.suffix in EXCLUDED_SUFFIXES:
         return False
-    if path.name in SENSITIVE_NAMES or path.suffix.lower() in SENSITIVE_SUFFIXES:
+    if path.name in SENSITIVE_NAMES or path.name.startswith(".env.") or path.suffix.lower() in SENSITIVE_SUFFIXES:
         raise ValueError(f"generic package refuses potentially sensitive file: {rel}")
     if path.is_symlink():
         raise ValueError(f"generic package refuses symlink: {rel}")
     return path.is_file()
+
+
+def _validate_output_path(root: Path, output: Path) -> None:
+    root = root.resolve()
+    output = output.resolve()
+    try:
+        rel = output.relative_to(root)
+    except ValueError:
+        return
+    if not any(part in EXCLUDED_PARTS for part in rel.parts):
+        raise ValueError(
+            f"generic package output inside repository must live under an excluded directory such as dist/: {rel}",
+        )
 
 
 def _markdown_without_fences(text: str) -> str:
@@ -154,6 +167,9 @@ def build_generic_package_bytes(root: Path) -> bytes:
 
 
 def build_generic_package(root: Path, output: Path) -> None:
+    root = root.resolve()
+    output = output.resolve()
+    _validate_output_path(root, output)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_bytes(build_generic_package_bytes(root))
 
