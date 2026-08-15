@@ -95,12 +95,14 @@ def _tracked_files(root: Path) -> set[Path]:
         if not raw:
             continue
         rel = raw.decode("utf-8", errors="strict")
-        path = (root / rel).resolve()
+        unresolved = root / rel
         try:
-            path.relative_to(root)
+            unresolved.relative_to(root)
         except ValueError as exc:
             raise ValueError(f"generic package tracked path escapes repository: {rel}") from exc
-        tracked.add(path)
+        if unresolved.is_symlink():
+            raise ValueError(f"generic package refuses tracked symlink: {rel}")
+        tracked.add(unresolved.resolve())
     return tracked
 
 
