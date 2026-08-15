@@ -86,6 +86,29 @@ def _claude_marketplace_errors(root: Path) -> list[str]:
     return errors
 
 
+def _runtime_markdown_files(skill_root: Path) -> list[Path]:
+    """Return canonical execution docs; setup/history/tests are adapter or verification surfaces."""
+    files: set[Path] = set()
+    skill_md = skill_root / "SKILL.md"
+    if skill_md.is_file():
+        files.add(skill_md)
+    for directory_name in ("workflow", "reference"):
+        directory = skill_root / directory_name
+        if directory.is_dir():
+            files.update(path for path in directory.rglob("*.md") if path.is_file())
+    return sorted(files)
+
+
+def _runtime_host_branch_errors(skill_root: Path, skill_id: str) -> list[str]:
+    errors: list[str] = []
+    for path in _runtime_markdown_files(skill_root):
+        text = path.read_text(encoding="utf-8")
+        if HOST_BRANCH_RE.search(text):
+            rel = path.relative_to(skill_root).as_posix()
+            errors.append(f"error: canonical skill {skill_id} contains host-brand conditional logic in {rel}")
+    return errors
+
+
 def validate_host_portability(root: Path) -> list[str]:
     """Validate items 30–34: adapter contract plus host packaging semantic parity."""
     errors = validate_host_adapter_interface(root)
@@ -118,7 +141,8 @@ def validate_host_portability(root: Path) -> list[str]:
         errors.extend(_plugin_errors(root / ".codex-plugin/plugin.json", "Codex/ChatGPT"))
 
         for skill_id, entry in sorted(registry.skills.items()):
-            skill_md = root / entry.path / "SKILL.md"
+            skill_root = root / entry.path
+            skill_md = skill_root / "SKILL.md"
             if not skill_md.is_file():
                 errors.append(f"error: canonical root skill missing for {skill_id}")
                 continue
@@ -126,8 +150,7 @@ def validate_host_portability(root: Path) -> list[str]:
             for directive in ("alwaysApply:", "inclusion:"):
                 if directive in text:
                     errors.append(f"error: canonical skill {skill_id} leaks host-adapter directive {directive!r}")
-            if HOST_BRANCH_RE.search(text):
-                errors.append(f"error: canonical skill {skill_id} contains host-brand conditional logic")
+            errors.extend(_runtime_host_branch_errors(skill_root, skill_id))
             frontmatter = load_skill_frontmatter(skill_md)
             for error in automation_only_guard_errors(entry.invocation, frontmatter):
                 errors.append(f"error: host invocation semantics {skill_id}: {error}")
