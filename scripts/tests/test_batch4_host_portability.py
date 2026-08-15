@@ -7,7 +7,7 @@ from pathlib import Path, PurePosixPath
 import pytest
 
 from scripts.registry import cli as registry_cli
-from scripts.registry.generic_package import _is_safe_file, build_generic_package
+from scripts.registry.generic_package import _is_safe_file, _validate_output_path, build_generic_package
 from scripts.registry.host_adapter import HOSTS, capability_support, validate_host_adapter_interface
 from scripts.registry.host_portability import validate_host_portability
 from scripts.registry.schema import parse_registry
@@ -47,16 +47,21 @@ def test_registry_package_generic_command(tmp_path: Path) -> None:
     assert output.is_file()
 
 
-def test_generic_package_refuses_ci_and_sensitive_files(tmp_path: Path) -> None:
+def test_generic_package_refuses_ci_sensitive_and_self_including_paths(tmp_path: Path) -> None:
     github_file = tmp_path / ".github" / "workflow.yml"
     github_file.parent.mkdir()
     github_file.write_text("name: test\n", encoding="utf-8")
     assert _is_safe_file(tmp_path, github_file) is False
 
-    secret = tmp_path / ".env"
+    secret = tmp_path / ".env.local"
     secret.write_text("TOKEN=example\n", encoding="utf-8")
     with pytest.raises(ValueError, match="potentially sensitive"):
         _is_safe_file(tmp_path, secret)
+
+    with pytest.raises(ValueError, match="output inside repository"):
+        _validate_output_path(tmp_path, tmp_path / "skill" / "bundle.tar.gz")
+    _validate_output_path(tmp_path, tmp_path / "dist" / "bundle.tar.gz")
+    _validate_output_path(tmp_path, tmp_path.parent / "outside.tar.gz")
 
 
 def test_generic_package_is_deterministic_complete_and_link_safe(tmp_path: Path) -> None:
