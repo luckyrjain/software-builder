@@ -6,10 +6,10 @@ from pathlib import Path
 
 import pytest
 
-from scripts.registry.generic_package import _tracked_files
+from scripts.registry.generic_package import _is_safe_file, _tracked_files
 
 
-def test_tracked_symlink_is_rejected_before_resolution(tmp_path: Path) -> None:
+def test_tracked_symlink_remains_lexical_and_is_rejected_only_if_packaged(tmp_path: Path) -> None:
     if not hasattr(os, "symlink"):
         pytest.skip("symlinks unsupported")
     subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
@@ -19,5 +19,8 @@ def test_tracked_symlink_is_rejected_before_resolution(tmp_path: Path) -> None:
     link.symlink_to(target.name)
     subprocess.run(["git", "-C", str(tmp_path), "add", "link.md"], check=True)
 
-    with pytest.raises(ValueError, match="tracked symlink"):
-        _tracked_files(tmp_path.resolve())
+    tracked = _tracked_files(tmp_path.resolve())
+    assert link in tracked
+    assert target not in tracked
+    with pytest.raises(ValueError, match="refuses symlink"):
+        _is_safe_file(tmp_path.resolve(), link)
