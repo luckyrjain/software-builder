@@ -60,6 +60,8 @@ def test_generic_package_refuses_ci_sensitive_and_self_including_paths(tmp_path:
 
     with pytest.raises(ValueError, match="output inside repository"):
         _validate_output_path(tmp_path, tmp_path / "skill" / "bundle.tar.gz")
+    with pytest.raises(ValueError, match="output inside repository"):
+        _validate_output_path(tmp_path, tmp_path / ".git" / "bundle.tar.gz")
     _validate_output_path(tmp_path, tmp_path / "dist" / "bundle.tar.gz")
     _validate_output_path(tmp_path, tmp_path.parent / "outside.tar.gz")
 
