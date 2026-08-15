@@ -81,7 +81,7 @@ def _is_safe_file(root: Path, path: Path) -> bool:
 
 
 def _tracked_files(root: Path) -> set[Path]:
-    """Return the Git-tracked file set; arbitrary working-tree files are never package inputs."""
+    """Return lexical Git-tracked paths; arbitrary working-tree files are never package inputs."""
     result = subprocess.run(
         ["git", "-C", str(root), "ls-files", "-z", "--cached"],
         capture_output=True,
@@ -95,14 +95,12 @@ def _tracked_files(root: Path) -> set[Path]:
         if not raw:
             continue
         rel = raw.decode("utf-8", errors="strict")
-        unresolved = root / rel
+        path = root / rel
         try:
-            unresolved.relative_to(root)
+            path.relative_to(root)
         except ValueError as exc:
             raise ValueError(f"generic package tracked path escapes repository: {rel}") from exc
-        if unresolved.is_symlink():
-            raise ValueError(f"generic package refuses tracked symlink: {rel}")
-        tracked.add(unresolved.resolve())
+        tracked.add(path)
     return tracked
 
 
@@ -222,7 +220,7 @@ def _markdown_targets(root: Path, path: Path, tracked: set[Path]) -> set[Path]:
             raise ValueError(
                 f"generic package reference escapes repository: {rel} referenced in {path.relative_to(root)}",
             ) from exc
-        if target not in tracked:
+        if target not in {candidate.resolve() for candidate in tracked if not candidate.is_symlink()}:
             raise ValueError(
                 f"generic package reference points to untracked file: {rel} referenced in {path.relative_to(root)}",
             )
@@ -246,16 +244,17 @@ def _package_files(root: Path) -> list[Path]:
     root = root.resolve()
     registry = parse_registry(root / "skills.yaml")
     tracked = _tracked_files(root)
+    tracked_regular = {path.resolve() for path in tracked if not path.is_symlink()}
 
     readme_path = (root / "README.md").resolve()
     skills_path = (root / "skills.yaml").resolve()
-    if readme_path not in tracked or not readme_path.is_file():
+    if readme_path not in tracked_regular or not readme_path.is_file():
         raise ValueError("generic package requires tracked README.md")
-    if skills_path not in tracked or not skills_path.is_file():
+    if skills_path not in tracked_regular or not skills_path.is_file():
         raise ValueError("generic package requires tracked skills.yaml")
     candidates: set[Path] = {skills_path, readme_path}
     license_path = (root / "LICENSE").resolve()
-    if license_path in tracked and license_path.is_file():
+    if license_path in tracked_regular and license_path.is_file():
         candidates.add(license_path)
 
     framework = (root / "docs" / "skill-framework").resolve()
@@ -267,12 +266,12 @@ def _package_files(root: Path) -> list[Path]:
         except ValueError:
             continue
         if _is_safe_file(root, path):
-            candidates.add(path)
+            candidates.add(path.resolve())
 
     for skill_id, entry in registry.skills.items():
         skill_root = (root / entry.path).resolve()
         skill_md = (skill_root / "SKILL.md").resolve()
-        if skill_md not in tracked or not skill_md.is_file():
+        if skill_md not in tracked_regular or not skill_md.is_file():
             raise ValueError(f"generic package missing tracked canonical SKILL.md for {skill_id}")
         for path in tracked:
             try:
@@ -280,7 +279,7 @@ def _package_files(root: Path) -> list[Path]:
             except ValueError:
                 continue
             if _is_safe_file(root, path):
-                candidates.add(path)
+                candidates.add(path.resolve())
 
     # Follow only references reachable from the portable runtime roots.
     # Per-skill changelogs and test fixtures are deliberately excluded: they are
