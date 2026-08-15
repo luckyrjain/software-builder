@@ -10,10 +10,11 @@ consumes:
 
 # Triage — fast root cause + owning team for on-call
 
-**Goal:** Within minutes of a page, tell on-call what likely broke and who owns it. No new investigation
-or ownership logic here — see § Non-goals in the
-[design spec](../../docs/superpowers/specs/2026-08-05-incident-triage-agent-design.md#non-goals-explicitly-out-of-scope-for-this-item)
-and [reference/unattended-gate-policy.md](../reference/unattended-gate-policy.md).
+**Goal:** Within minutes of a page, tell on-call what likely broke and who owns it. This workflow does
+not introduce new investigation or ownership logic: incident-rca remains authoritative for investigation
+and squad-map remains authoritative for ownership. The wrapper only constructs the paging window,
+answers documented unattended gates, composes their outputs, and renders the triage artifact per
+[reference/unattended-gate-policy.md](../reference/unattended-gate-policy.md).
 
 ## Steps
 
