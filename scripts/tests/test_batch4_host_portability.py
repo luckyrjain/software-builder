@@ -147,6 +147,7 @@ def test_generic_package_is_deterministic_complete_and_link_safe(tmp_path: Path)
         archive.extractall(extract_root, filter="data")
     for skill_id, entry in registry.skills.items():
         assert f"software-builder/{entry.path}/SKILL.md" in names, skill_id
+    assert "software-builder/README.md" in names
     assert "software-builder/skills.yaml" in names
     assert "software-builder/docs/skill-framework/shared/skill-routing.md" in names
     assert "software-builder/docs/skill-framework/shared/runtime-contract.md" in names
