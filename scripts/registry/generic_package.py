@@ -21,6 +21,7 @@ EXCLUDED_PARTS = {
     "dist",
 }
 EXCLUDED_SUFFIXES = {".pyc", ".pyo"}
+NON_RUNTIME_NAMES = {"CHANGELOG.md"}
 SENSITIVE_NAMES = {".env", ".netrc", "credentials.json", "secrets.yaml", "secrets.yml"}
 SENSITIVE_SUFFIXES = {".pem", ".key", ".p12", ".pfx"}
 MARKDOWN_LINK_RE = re.compile(r"\]\(([a-zA-Z0-9_./~-]+\.md)(?:#[a-zA-Z0-9_-]+)?\)")
@@ -30,7 +31,7 @@ def _is_safe_file(root: Path, path: Path) -> bool:
     rel = path.relative_to(root)
     if any(part in EXCLUDED_PARTS for part in rel.parts):
         return False
-    if path.suffix in EXCLUDED_SUFFIXES:
+    if path.name in NON_RUNTIME_NAMES or path.suffix in EXCLUDED_SUFFIXES:
         return False
     if path.name in SENSITIVE_NAMES or path.name.startswith(".env.") or path.suffix.lower() in SENSITIVE_SUFFIXES:
         raise ValueError(f"generic package refuses potentially sensitive file: {rel}")
@@ -126,9 +127,9 @@ def _package_files(root: Path) -> list[Path]:
             raise ValueError(f"generic package missing canonical SKILL.md for {skill_id}")
         candidates.update(path for path in skill_root.rglob("*") if _is_safe_file(root, path))
 
-    # Follow only references reachable from the portable skill/framework roots.
-    # This keeps the archive self-contained without sweeping unrelated historical
-    # plans/specs into the artifact merely because they live in the repository.
+    # Follow only references reachable from the portable runtime roots.
+    # Per-skill changelogs are deliberately excluded: they are release history,
+    # not execution dependencies, and may reference historical design records.
     queue = [path for path in candidates if path.suffix.lower() == ".md"]
     inspected: set[Path] = set()
     while queue:
