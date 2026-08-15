@@ -34,6 +34,19 @@ CI configuration, caches, VCS metadata, and credential-like files.
 Start with `skills.yaml` to discover registered skills. Each skill's canonical instructions live in
 its `SKILL.md`; shared runtime and routing contracts live under `docs/skill-framework/`.
 """
+PORTABLE_ADR_INDEX = """# Architecture Decision Records
+
+Lightweight ADRs for platform-level choices in **software-builder**. Each record captures context,
+decision, and consequences so portable hosts can understand the runtime contract without repository
+maintenance history.
+
+| ADR | Title | Status |
+|-----|-------|--------|
+| [0001](0001-skills-registry.md) | Canonical `skills.yaml` registry | Accepted |
+| [0002](0002-self-contained-skill-packages.md) | Self-contained skill install packages | Accepted |
+| [0003](0003-behavioral-evals-tiers.md) | Tiered behavioral eval harness | Accepted |
+| [0004](0004-live-eval-harness.md) | Mock-tool execution harness, kept out of CI | Accepted |
+"""
 
 
 def _is_safe_file(root: Path, path: Path) -> bool:
@@ -87,8 +100,11 @@ def _markdown_without_fences(text: str) -> str:
 
 def _packaged_bytes(root: Path, path: Path) -> bytes:
     """Return archive content, substituting portable docs for repo-only surfaces."""
-    if path.resolve() == (root / "README.md").resolve():
+    resolved = path.resolve()
+    if resolved == (root / "README.md").resolve():
         return PORTABLE_README.encode("utf-8")
+    if resolved == (root / "docs" / "adr" / "README.md").resolve():
+        return PORTABLE_ADR_INDEX.encode("utf-8")
     return path.read_bytes()
 
 
@@ -146,9 +162,9 @@ def _package_files(root: Path) -> list[Path]:
     # Follow only references reachable from the portable runtime roots.
     # Per-skill changelogs are deliberately excluded: they are release history,
     # not execution dependencies, and may reference historical design records.
-    # If runtime docs reach the repository README, the archive emits a portable
-    # README at the same path so links remain valid without importing repo-only
-    # contribution/history dependencies.
+    # If runtime docs reach repository-level overview/index docs, the archive
+    # emits portable equivalents at the same paths so links remain valid without
+    # importing contribution/history dependencies.
     queue = [path for path in candidates if path.suffix.lower() == ".md"]
     inspected: set[Path] = set()
     while queue:
