@@ -11,8 +11,18 @@ from pathlib import Path
 from scripts.registry.schema import parse_registry
 
 PACKAGE_ROOT = "software-builder"
-EXCLUDED_PARTS = {".git", "__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache", "dist"}
+EXCLUDED_PARTS = {
+    ".git",
+    ".github",
+    "__pycache__",
+    ".pytest_cache",
+    ".mypy_cache",
+    ".ruff_cache",
+    "dist",
+}
 EXCLUDED_SUFFIXES = {".pyc", ".pyo"}
+SENSITIVE_NAMES = {".env", ".netrc", "credentials.json", "secrets.yaml", "secrets.yml"}
+SENSITIVE_SUFFIXES = {".pem", ".key", ".p12", ".pfx"}
 MARKDOWN_LINK_RE = re.compile(r"\]\(([a-zA-Z0-9_./~-]+\.md)(?:#[a-zA-Z0-9_-]+)?\)")
 
 
@@ -22,6 +32,8 @@ def _is_safe_file(root: Path, path: Path) -> bool:
         return False
     if path.suffix in EXCLUDED_SUFFIXES:
         return False
+    if path.name in SENSITIVE_NAMES or path.suffix.lower() in SENSITIVE_SUFFIXES:
+        raise ValueError(f"generic package refuses potentially sensitive file: {rel}")
     if path.is_symlink():
         raise ValueError(f"generic package refuses symlink: {rel}")
     return path.is_file()
@@ -56,7 +68,12 @@ def _markdown_targets(root: Path, path: Path) -> set[Path]:
         rel = match.group(1)
         if rel.startswith("~"):
             continue
-        target = (path.parent / rel).resolve()
+        unresolved = path.parent / rel
+        if unresolved.is_symlink():
+            raise ValueError(
+                f"generic package reference uses symlink: {rel} referenced in {path.relative_to(root)}",
+            )
+        target = unresolved.resolve()
         try:
             target.relative_to(root)
         except ValueError as exc:
