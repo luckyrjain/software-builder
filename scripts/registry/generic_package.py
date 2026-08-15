@@ -4,6 +4,7 @@ import argparse
 import gzip
 import io
 import re
+import subprocess
 import sys
 import tarfile
 from pathlib import Path
@@ -25,7 +26,9 @@ EXCLUDED_SUFFIXES = {".pyc", ".pyo"}
 NON_RUNTIME_NAMES = {"changelog.md"}
 SENSITIVE_NAMES = {".env", ".netrc", "credentials.json", "secrets.yaml", "secrets.yml"}
 SENSITIVE_SUFFIXES = {".pem", ".key", ".p12", ".pfx"}
-MARKDOWN_LINK_RE = re.compile(r"\]\(([a-zA-Z0-9_./~-]+\.md)(?:#[a-zA-Z0-9_-]+)?\)")
+MARKDOWN_LINK_RE = re.compile(
+    r"\]\(([a-zA-Z0-9_./~-]+\.md)(?:#([a-zA-Z0-9_-]+))?\)",
+)
 MARKDOWN_NAMED_LINK_RE = re.compile(
     r"(?<!!)\[([^\]\n]+)\]\(([a-zA-Z0-9_./~-]+\.md)(?:#[a-zA-Z0-9_-]+)?\)",
 )
@@ -75,6 +78,30 @@ def _is_safe_file(root: Path, path: Path) -> bool:
     if path.is_symlink():
         raise ValueError(f"generic package refuses symlink: {rel}")
     return path.is_file()
+
+
+def _tracked_files(root: Path) -> set[Path]:
+    """Return the Git-tracked file set; arbitrary working-tree files are never package inputs."""
+    result = subprocess.run(
+        ["git", "-C", str(root), "ls-files", "-z", "--cached"],
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        stderr = result.stderr.decode("utf-8", errors="replace").strip()
+        raise ValueError(f"generic package requires a readable Git index: {stderr or 'git ls-files failed'}")
+    tracked: set[Path] = set()
+    for raw in result.stdout.split(b"\0"):
+        if not raw:
+            continue
+        rel = raw.decode("utf-8", errors="strict")
+        path = (root / rel).resolve()
+        try:
+            path.relative_to(root)
+        except ValueError as exc:
+            raise ValueError(f"generic package tracked path escapes repository: {rel}") from exc
+        tracked.add(path)
+    return tracked
 
 
 def _validate_output_path(root: Path, output: Path) -> None:
@@ -159,11 +186,26 @@ def _packaged_bytes(root: Path, path: Path) -> bytes:
     return _strip_non_runtime_links(text).encode("utf-8")
 
 
-def _markdown_targets(root: Path, path: Path) -> set[Path]:
+def _heading_slugs(root: Path, path: Path) -> set[str]:
+    """Match the repository Markdown linter's simple GitHub-style heading slug rules."""
+    text = _packaged_bytes(root, path).decode("utf-8")
+    slugs: set[str] = set()
+    for line in text.splitlines():
+        match = re.match(r"^#{1,6} (.+)$", line)
+        if not match:
+            continue
+        heading = match.group(1).lower()
+        heading = re.sub(r"[^a-z0-9 -]", "", heading)
+        heading = re.sub(r" +", " ", heading).replace(" ", "-")
+        slugs.add(heading)
+    return slugs
+
+
+def _markdown_targets(root: Path, path: Path, tracked: set[Path]) -> set[Path]:
     text = _markdown_without_fences(_packaged_bytes(root, path).decode("utf-8"))
     targets: set[Path] = set()
     for match in MARKDOWN_LINK_RE.finditer(text):
-        rel = match.group(1)
+        rel, anchor = match.groups()
         if rel.startswith("~"):
             continue
         unresolved = path.parent / rel
@@ -178,6 +220,10 @@ def _markdown_targets(root: Path, path: Path) -> set[Path]:
             raise ValueError(
                 f"generic package reference escapes repository: {rel} referenced in {path.relative_to(root)}",
             ) from exc
+        if target not in tracked:
+            raise ValueError(
+                f"generic package reference points to untracked file: {rel} referenced in {path.relative_to(root)}",
+            )
         if not target.is_file():
             raise ValueError(
                 f"generic package dangling markdown reference: {rel} referenced in {path.relative_to(root)}",
@@ -186,6 +232,10 @@ def _markdown_targets(root: Path, path: Path) -> set[Path]:
             raise ValueError(
                 f"generic package reference points to excluded file: {rel} referenced in {path.relative_to(root)}",
             )
+        if anchor and anchor.lower() not in _heading_slugs(root, target):
+            raise ValueError(
+                f"generic package dangling markdown anchor: {rel}#{anchor} referenced in {path.relative_to(root)}",
+            )
         targets.add(target)
     return targets
 
@@ -193,34 +243,52 @@ def _markdown_targets(root: Path, path: Path) -> set[Path]:
 def _package_files(root: Path) -> list[Path]:
     root = root.resolve()
     registry = parse_registry(root / "skills.yaml")
+    tracked = _tracked_files(root)
 
-    readme_path = root / "README.md"
-    if not readme_path.is_file():
-        raise ValueError("generic package requires README.md")
-    candidates: set[Path] = {root / "skills.yaml", readme_path}
-    license_path = root / "LICENSE"
-    if license_path.is_file():
+    readme_path = (root / "README.md").resolve()
+    skills_path = (root / "skills.yaml").resolve()
+    if readme_path not in tracked or not readme_path.is_file():
+        raise ValueError("generic package requires tracked README.md")
+    if skills_path not in tracked or not skills_path.is_file():
+        raise ValueError("generic package requires tracked skills.yaml")
+    candidates: set[Path] = {skills_path, readme_path}
+    license_path = (root / "LICENSE").resolve()
+    if license_path in tracked and license_path.is_file():
         candidates.add(license_path)
 
-    framework = root / "docs" / "skill-framework"
+    framework = (root / "docs" / "skill-framework").resolve()
     if not framework.is_dir():
         raise ValueError("generic package requires docs/skill-framework")
-    candidates.update(path for path in framework.rglob("*") if _is_safe_file(root, path))
+    for path in tracked:
+        try:
+            path.relative_to(framework)
+        except ValueError:
+            continue
+        if _is_safe_file(root, path):
+            candidates.add(path)
 
     for skill_id, entry in registry.skills.items():
-        skill_root = root / entry.path
-        if not (skill_root / "SKILL.md").is_file():
-            raise ValueError(f"generic package missing canonical SKILL.md for {skill_id}")
-        candidates.update(path for path in skill_root.rglob("*") if _is_safe_file(root, path))
+        skill_root = (root / entry.path).resolve()
+        skill_md = (skill_root / "SKILL.md").resolve()
+        if skill_md not in tracked or not skill_md.is_file():
+            raise ValueError(f"generic package missing tracked canonical SKILL.md for {skill_id}")
+        for path in tracked:
+            try:
+                path.relative_to(skill_root)
+            except ValueError:
+                continue
+            if _is_safe_file(root, path):
+                candidates.add(path)
 
     # Follow only references reachable from the portable runtime roots.
     # Per-skill changelogs and test fixtures are deliberately excluded: they are
     # repository history/verification material, not execution dependencies.
     # Packaged Markdown retains the human-readable label for changelog links while
-    # removing the prose link itself. All other excluded/dangling references fail closed.
-    # If runtime docs reach repository-level overview/index docs, the archive
-    # emits portable equivalents at the same paths so links remain valid without
-    # importing contribution/history dependencies.
+    # removing the prose link itself. All other excluded, untracked, or dangling
+    # references and anchors fail closed before an archive is written.
+    # If runtime docs reach repository-level overview/index docs, the archive emits
+    # portable equivalents at the same paths so links remain valid without importing
+    # contribution/history dependencies.
     queue = [path for path in candidates if path.suffix.lower() == ".md"]
     inspected: set[Path] = set()
     while queue:
@@ -228,7 +296,7 @@ def _package_files(root: Path) -> list[Path]:
         if path in inspected:
             continue
         inspected.add(path)
-        for target in _markdown_targets(root, path):
+        for target in _markdown_targets(root, path, tracked):
             if target in candidates:
                 continue
             candidates.add(target)
@@ -274,7 +342,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         build_generic_package(args.root.resolve(), args.output.resolve())
-    except (OSError, ValueError) as exc:
+    except (OSError, UnicodeError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
     print(f"ok: wrote deterministic generic package to {args.output}")
