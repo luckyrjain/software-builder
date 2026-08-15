@@ -9,7 +9,7 @@ import pytest
 from scripts.registry import cli as registry_cli
 from scripts.registry.generic_package import _is_safe_file, _validate_output_path, build_generic_package
 from scripts.registry.host_adapter import HOSTS, capability_support, validate_host_adapter_interface
-from scripts.registry.host_portability import validate_host_portability
+from scripts.registry.host_portability import HOST_BRANCH_RE, validate_host_portability
 from scripts.registry.schema import parse_registry
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -24,6 +24,15 @@ def test_host_adapter_interface_covers_canonical_hosts() -> None:
         capability_support(ROOT, "unknown-host", "scm")
     with pytest.raises(ValueError):
         capability_support(ROOT, "codex", "unknown-capability")
+
+
+def test_host_branch_detector_rejects_directives_not_neutral_host_lists() -> None:
+    assert HOST_BRANCH_RE.search("If running on Cursor, load .cursor/rules.")
+    assert HOST_BRANCH_RE.search("On Claude Code: use the plugin adapter.")
+    assert HOST_BRANCH_RE.search("For Kiro, load the steering file.")
+    assert not HOST_BRANCH_RE.search(
+        "Read platform-adapters.md for Cursor, ChatGPT/Codex, Claude Code, and Kiro setup.",
+    )
 
 
 def test_host_packaging_semantics_validate() -> None:
