@@ -25,6 +25,9 @@ NON_RUNTIME_NAMES = {"CHANGELOG.md"}
 SENSITIVE_NAMES = {".env", ".netrc", "credentials.json", "secrets.yaml", "secrets.yml"}
 SENSITIVE_SUFFIXES = {".pem", ".key", ".p12", ".pfx"}
 MARKDOWN_LINK_RE = re.compile(r"\]\(([a-zA-Z0-9_./~-]+\.md)(?:#[a-zA-Z0-9_-]+)?\)")
+MARKDOWN_NAMED_LINK_RE = re.compile(
+    r"\[([^\]\n]+)\]\(([a-zA-Z0-9_./~-]+\.md)(?:#[a-zA-Z0-9_-]+)?\)",
+)
 PORTABLE_README = """# Software Builder — portable skill bundle
 
 This archive contains the registered Software Builder skills and their runtime framework dependencies.
@@ -98,14 +101,31 @@ def _markdown_without_fences(text: str) -> str:
     return "\n".join(visible)
 
 
+def _strip_non_runtime_links(text: str) -> str:
+    """Keep link labels while removing links to deliberately omitted release history."""
+
+    def replace(match: re.Match[str]) -> str:
+        label, target = match.groups()
+        if Path(target).name in NON_RUNTIME_NAMES:
+            return label
+        return match.group(0)
+
+    return MARKDOWN_NAMED_LINK_RE.sub(replace, text)
+
+
 def _packaged_bytes(root: Path, path: Path) -> bytes:
     """Return archive content, substituting portable docs for repo-only surfaces."""
     resolved = path.resolve()
     if resolved == (root / "README.md").resolve():
-        return PORTABLE_README.encode("utf-8")
-    if resolved == (root / "docs" / "adr" / "README.md").resolve():
-        return PORTABLE_ADR_INDEX.encode("utf-8")
-    return path.read_bytes()
+        text = PORTABLE_README
+    elif resolved == (root / "docs" / "adr" / "README.md").resolve():
+        text = PORTABLE_ADR_INDEX
+    else:
+        data = path.read_bytes()
+        if path.suffix.lower() != ".md":
+            return data
+        text = data.decode("utf-8")
+    return _strip_non_runtime_links(text).encode("utf-8")
 
 
 def _markdown_targets(root: Path, path: Path) -> set[Path]:
@@ -162,6 +182,8 @@ def _package_files(root: Path) -> list[Path]:
     # Follow only references reachable from the portable runtime roots.
     # Per-skill changelogs are deliberately excluded: they are release history,
     # not execution dependencies, and may reference historical design records.
+    # Packaged Markdown retains the human-readable label for those links while
+    # removing the link itself. All other excluded/dangling references fail closed.
     # If runtime docs reach repository-level overview/index docs, the archive
     # emits portable equivalents at the same paths so links remain valid without
     # importing contribution/history dependencies.
