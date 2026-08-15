@@ -9,8 +9,10 @@ import pytest
 from scripts.registry import cli as registry_cli
 from scripts.registry.generic_package import (
     _is_safe_file,
+    _markdown_targets,
     _packaged_bytes,
     _strip_non_runtime_links,
+    _tracked_files,
     _validate_output_path,
     build_generic_package,
 )
@@ -19,6 +21,7 @@ from scripts.registry.host_portability import (
     HOST_BRANCH_RE,
     _claude_marketplace_errors,
     _plugin_errors,
+    _runtime_host_branch_errors,
     validate_host_portability,
 )
 from scripts.registry.schema import parse_registry
@@ -44,6 +47,24 @@ def test_host_branch_detector_rejects_directives_not_neutral_host_lists() -> Non
     assert not HOST_BRANCH_RE.search(
         "Read platform-adapters.md for Cursor, ChatGPT/Codex, Claude Code, and Kiro setup.",
     )
+
+
+def test_runtime_host_branch_detector_scans_workflow_and_reference_docs(tmp_path: Path) -> None:
+    skill_root = tmp_path / "sample-skill"
+    (skill_root / "workflow").mkdir(parents=True)
+    (skill_root / "reference").mkdir()
+    (skill_root / "SKILL.md").write_text("# Sample\nHost-neutral core.\n", encoding="utf-8")
+    (skill_root / "workflow" / "phase.md").write_text(
+        "# Phase\nOn Cursor: use the generated adapter.\n",
+        encoding="utf-8",
+    )
+    (skill_root / "reference" / "notes.md").write_text(
+        "# Notes\nSupports Cursor, Claude Code, and Kiro through adapters.\n",
+        encoding="utf-8",
+    )
+    assert _runtime_host_branch_errors(skill_root, "sample-skill") == [
+        "error: canonical skill sample-skill contains host-brand conditional logic in workflow/phase.md",
+    ]
 
 
 def test_host_packaging_semantics_validate() -> None:
@@ -76,6 +97,35 @@ def test_registry_package_generic_command(tmp_path: Path) -> None:
     output = tmp_path / "generic.tar.gz"
     assert registry_cli.main(["package-generic", "--output", str(output)]) == 0
     assert output.is_file()
+
+
+def test_generic_package_uses_only_git_tracked_files(tmp_path: Path) -> None:
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    tracked = tmp_path / "tracked.md"
+    tracked.write_text("# Tracked\n", encoding="utf-8")
+    subprocess.run(["git", "-C", str(tmp_path), "add", "tracked.md"], check=True)
+    untracked = tmp_path / "id_rsa"
+    untracked.write_text("PRIVATE MATERIAL\n", encoding="utf-8")
+
+    tracked_files = _tracked_files(tmp_path.resolve())
+    assert tracked.resolve() in tracked_files
+    assert untracked.resolve() not in tracked_files
+
+
+def test_generic_package_rejects_untracked_markdown_targets_and_bad_anchors(tmp_path: Path) -> None:
+    source = tmp_path / "source.md"
+    target = tmp_path / "target.md"
+    source.write_text("[target](target.md)\n", encoding="utf-8")
+    target.write_text("# Valid heading\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="untracked file"):
+        _markdown_targets(tmp_path, source, {source})
+
+    source.write_text("[target](target.md#missing)\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="dangling markdown anchor"):
+        _markdown_targets(tmp_path, source, {source, target})
+
+    source.write_text("[target](target.md#valid-heading)\n", encoding="utf-8")
+    assert _markdown_targets(tmp_path, source, {source, target}) == {target}
 
 
 def test_generic_package_strips_only_non_runtime_changelog_links() -> None:
