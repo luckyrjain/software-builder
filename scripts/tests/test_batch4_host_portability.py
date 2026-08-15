@@ -9,7 +9,12 @@ import pytest
 from scripts.registry import cli as registry_cli
 from scripts.registry.generic_package import _is_safe_file, _packaged_bytes, _validate_output_path, build_generic_package
 from scripts.registry.host_adapter import HOSTS, capability_support, validate_host_adapter_interface
-from scripts.registry.host_portability import HOST_BRANCH_RE, validate_host_portability
+from scripts.registry.host_portability import (
+    HOST_BRANCH_RE,
+    _claude_marketplace_errors,
+    _plugin_errors,
+    validate_host_portability,
+)
 from scripts.registry.schema import parse_registry
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -37,6 +42,17 @@ def test_host_branch_detector_rejects_directives_not_neutral_host_lists() -> Non
 
 def test_host_packaging_semantics_validate() -> None:
     assert validate_host_portability(ROOT) == []
+
+
+def test_host_manifests_fail_closed_on_non_object_json(tmp_path: Path) -> None:
+    plugin = tmp_path / "plugin.json"
+    plugin.write_text("[]\n", encoding="utf-8")
+    assert _plugin_errors(plugin, "TestHost") == ["error: TestHost package manifest must be a JSON object"]
+
+    marketplace_dir = tmp_path / ".claude-plugin"
+    marketplace_dir.mkdir()
+    (marketplace_dir / "marketplace.json").write_text("[]\n", encoding="utf-8")
+    assert _claude_marketplace_errors(tmp_path) == ["error: Claude marketplace manifest must be a JSON object"]
 
 
 def test_registry_validate_includes_host_portability(monkeypatch: pytest.MonkeyPatch) -> None:
