@@ -19,6 +19,7 @@ EXCLUDED_PARTS = {
     ".mypy_cache",
     ".ruff_cache",
     "dist",
+    "tests",
 }
 EXCLUDED_SUFFIXES = {".pyc", ".pyo"}
 NON_RUNTIME_NAMES = {"CHANGELOG.md"}
@@ -32,7 +33,7 @@ PORTABLE_README = """# Software Builder — portable skill bundle
 
 This archive contains the registered Software Builder skills and their runtime framework dependencies.
 It is generated for generic agent hosts and intentionally omits repository contribution history,
-CI configuration, caches, VCS metadata, and credential-like files.
+CI configuration, caches, VCS metadata, test fixtures, and credential-like files.
 
 Start with `skills.yaml` to discover registered skills. Each skill's canonical instructions live in
 its `SKILL.md`; shared runtime and routing contracts live under `docs/skill-framework/`.
@@ -190,9 +191,9 @@ def _package_files(root: Path) -> list[Path]:
         candidates.update(path for path in skill_root.rglob("*") if _is_safe_file(root, path))
 
     # Follow only references reachable from the portable runtime roots.
-    # Per-skill changelogs are deliberately excluded: they are release history,
-    # not execution dependencies, and may reference historical design records.
-    # Packaged Markdown retains the human-readable label for those links while
+    # Per-skill changelogs and test fixtures are deliberately excluded: they are
+    # repository history/verification material, not execution dependencies.
+    # Packaged Markdown retains the human-readable label for changelog links while
     # removing the link itself. All other excluded/dangling references fail closed.
     # If runtime docs reach repository-level overview/index docs, the archive
     # emits portable equivalents at the same paths so links remain valid without
