@@ -194,7 +194,10 @@ def _package_files(root: Path) -> list[Path]:
     root = root.resolve()
     registry = parse_registry(root / "skills.yaml")
 
-    candidates: set[Path] = {root / "skills.yaml"}
+    readme_path = root / "README.md"
+    if not readme_path.is_file():
+        raise ValueError("generic package requires README.md")
+    candidates: set[Path] = {root / "skills.yaml", readme_path}
     license_path = root / "LICENSE"
     if license_path.is_file():
         candidates.add(license_path)
