@@ -6,6 +6,7 @@ from pathlib import Path, PurePosixPath
 
 import pytest
 
+from scripts.registry import cli as registry_cli
 from scripts.registry.generic_package import build_generic_package
 from scripts.registry.host_adapter import HOSTS, capability_support, validate_host_adapter_interface
 from scripts.registry.host_portability import validate_host_portability
@@ -27,6 +28,23 @@ def test_host_adapter_interface_covers_canonical_hosts() -> None:
 
 def test_host_packaging_semantics_validate() -> None:
     assert validate_host_portability(ROOT) == []
+
+
+def test_registry_validate_includes_host_portability(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(registry_cli, "_validate_for_generate", lambda root: [])
+    monkeypatch.setattr(registry_cli, "validate_runtime_manifest", lambda root: [])
+    monkeypatch.setattr(
+        registry_cli,
+        "validate_host_portability",
+        lambda root: ["error: host-portability-marker"],
+    )
+    assert registry_cli._validate_all(ROOT) == ["error: host-portability-marker"]
+
+
+def test_registry_package_generic_command(tmp_path: Path) -> None:
+    output = tmp_path / "generic.tar.gz"
+    assert registry_cli.main(["package-generic", "--output", str(output)]) == 0
+    assert output.is_file()
 
 
 def test_generic_package_is_deterministic_complete_and_link_safe(tmp_path: Path) -> None:
