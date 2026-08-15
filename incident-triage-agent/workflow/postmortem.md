@@ -11,10 +11,10 @@ consumes:
 # Postmortem — full investigation + pre-assigned follow-ups
 
 **Goal:** Once an incident resolves, produce a drafted postmortem using incident-rca's own full report,
-with follow-up owners pre-filled from squad-map. No new investigation, ownership, or action-item schema
-here — see § Non-goals in the
-[design spec](../../docs/superpowers/specs/2026-08-05-incident-triage-agent-design.md#non-goals-explicitly-out-of-scope-for-this-item)
-and [reference/unattended-gate-policy.md](../reference/unattended-gate-policy.md).
+with follow-up owners pre-filled from squad-map. This workflow adds no new investigation, ownership,
+or action-item schema: incident-rca remains authoritative for investigation and action structure,
+squad-map remains authoritative for ownership resolution, and this workflow only orchestrates them
+according to [reference/unattended-gate-policy.md](../reference/unattended-gate-policy.md).
 
 ## Steps
 

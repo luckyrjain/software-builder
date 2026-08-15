@@ -25,6 +25,8 @@ from scripts.registry.generate_docs import (
     update_repository_table,
 )
 from scripts.registry.generate_kiro import generate_kiro_steering
+from scripts.registry.generic_package import build_generic_package
+from scripts.registry.host_portability import validate_host_portability
 from scripts.registry.load import load_descriptions, load_registry
 from scripts.registry.manifest import validate_manifest
 from scripts.registry.p1_validation import validate_p1_contracts
@@ -102,7 +104,7 @@ def _check_outputs(root: Path, outputs: dict[Path, str]) -> list[str]:
 def _run_command(action: Callable[[], int]) -> int:
     try:
         return action()
-    except (ValueError, yaml.YAMLError) as exc:
+    except (OSError, ValueError, yaml.YAMLError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
 
@@ -161,10 +163,13 @@ def _validate_for_generate(root: Path) -> list[str]:
 
 def _validate_all(root: Path) -> list[str]:
     # Strict superset of _validate_for_generate: same optional-layer gating,
-    # plus the integrated runtime manifest once the P1 layer is present.
+    # plus integrated runtime and host-portability validation. Portability is
+    # intentionally kept out of the mutating generate path because it checks
+    # generated Cursor/Kiro surfaces that `generate` may need to repair.
     errors = _validate_for_generate(root)
     if any(path.is_file() for path in _p1_layer_paths(root)):
         errors.extend(validate_runtime_manifest(root))
+    errors.extend(validate_host_portability(root))
     return errors
 
 
@@ -176,7 +181,7 @@ def cmd_validate(root: Path) -> int:
         return 1
     print(
         "ok: skills registry, capability catalogue, integrated runtime manifest, "
-        "P1 contracts and composition contracts validate"
+        "P1/composition contracts and host portability validate"
     )
     return 0
 
@@ -208,6 +213,12 @@ def cmd_generate(root: Path, check_only: bool) -> int:
     return 0
 
 
+def cmd_package_generic(root: Path, output: Path) -> int:
+    build_generic_package(root, output)
+    print(f"ok: wrote deterministic generic package to {output}")
+    return 0
+
+
 def cmd_check_handoff(root: Path, target_skill: str, visited_skills: list[str], depth: int) -> int:
     allowed, reason = handoff_allowed(
         target_skill,
@@ -233,6 +244,17 @@ def main(argv: list[str] | None = None) -> int:
         "--check",
         action="store_true",
         help="exit 1 if generated files would change",
+    )
+
+    package_parser = subparsers.add_parser(
+        "package-generic",
+        help="build the deterministic generic-agent skill bundle",
+    )
+    package_parser.add_argument(
+        "--output",
+        type=Path,
+        default=Path("dist/software-builder-skills.tar.gz"),
+        help="archive output path",
     )
 
     backfill_parser = subparsers.add_parser(
@@ -267,6 +289,9 @@ def main(argv: list[str] | None = None) -> int:
         return _run_command(lambda: cmd_validate(ROOT))
     if args.command == "generate":
         return _run_command(lambda: cmd_generate(ROOT, check_only=args.check))
+    if args.command == "package-generic":
+        output = args.output if args.output.is_absolute() else ROOT / args.output
+        return _run_command(lambda: cmd_package_generic(ROOT, output.resolve()))
     if args.command == "backfill-capabilities":
         return cmd_backfill(
             check_only=args.check,
