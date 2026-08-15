@@ -46,10 +46,11 @@ def _validate_output_path(root: Path, output: Path) -> None:
         rel = output.relative_to(root)
     except ValueError:
         return
-    if not any(part in EXCLUDED_PARTS for part in rel.parts):
-        raise ValueError(
-            f"generic package output inside repository must live under an excluded directory such as dist/: {rel}",
-        )
+    if rel.parts and rel.parts[0] == "dist":
+        return
+    raise ValueError(
+        f"generic package output inside repository must live under top-level dist/: {rel}",
+    )
 
 
 def _markdown_without_fences(text: str) -> str:
