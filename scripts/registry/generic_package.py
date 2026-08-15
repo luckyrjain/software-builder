@@ -69,7 +69,8 @@ def _is_safe_file(root: Path, path: Path) -> bool:
         return False
     if path.name in NON_RUNTIME_NAMES or path.suffix in EXCLUDED_SUFFIXES:
         return False
-    if path.name in SENSITIVE_NAMES or path.name.startswith(".env.") or path.suffix.lower() in SENSITIVE_SUFFIXES:
+    name = path.name.lower()
+    if name in SENSITIVE_NAMES or name.startswith(".env.") or path.suffix.lower() in SENSITIVE_SUFFIXES:
         raise ValueError(f"generic package refuses potentially sensitive file: {rel}")
     if path.is_symlink():
         raise ValueError(f"generic package refuses symlink: {rel}")
