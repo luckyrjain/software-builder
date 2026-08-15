@@ -70,6 +70,11 @@ def test_generic_package_refuses_ci_sensitive_and_self_including_paths(tmp_path:
     github_file.write_text("name: test\n", encoding="utf-8")
     assert _is_safe_file(tmp_path, github_file) is False
 
+    tests_file = tmp_path / "skill" / "tests" / "fixture.yaml"
+    tests_file.parent.mkdir(parents=True)
+    tests_file.write_text("payload: adversarial\n", encoding="utf-8")
+    assert _is_safe_file(tmp_path, tests_file) is False
+
     secret = tmp_path / ".env.local"
     secret.write_text("TOKEN=example\n", encoding="utf-8")
     with pytest.raises(ValueError, match="potentially sensitive"):
@@ -105,6 +110,7 @@ def test_generic_package_is_deterministic_complete_and_link_safe(tmp_path: Path)
     assert "software-builder/docs/skill-framework/shared/runtime-contract.md" in names
     assert not any("/.git/" in f"/{name}/" or "/.github/" in f"/{name}/" for name in names)
     assert not any("/dist/" in f"/{name}/" for name in names)
+    assert not any("/tests/" in f"/{name}/" for name in names)
     assert not any("__pycache__" in name or name.endswith(".pyc") for name in names)
     assert not any(PurePosixPath(name).name == "CHANGELOG.md" for name in names)
 
