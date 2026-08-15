@@ -22,12 +22,12 @@ EXCLUDED_PARTS = {
     "tests",
 }
 EXCLUDED_SUFFIXES = {".pyc", ".pyo"}
-NON_RUNTIME_NAMES = {"CHANGELOG.md"}
+NON_RUNTIME_NAMES = {"changelog.md"}
 SENSITIVE_NAMES = {".env", ".netrc", "credentials.json", "secrets.yaml", "secrets.yml"}
 SENSITIVE_SUFFIXES = {".pem", ".key", ".p12", ".pfx"}
 MARKDOWN_LINK_RE = re.compile(r"\]\(([a-zA-Z0-9_./~-]+\.md)(?:#[a-zA-Z0-9_-]+)?\)")
 MARKDOWN_NAMED_LINK_RE = re.compile(
-    r"\[([^\]\n]+)\]\(([a-zA-Z0-9_./~-]+\.md)(?:#[a-zA-Z0-9_-]+)?\)",
+    r"(?<!!)\[([^\]\n]+)\]\(([a-zA-Z0-9_./~-]+\.md)(?:#[a-zA-Z0-9_-]+)?\)",
 )
 PORTABLE_README = """# Software Builder — portable skill bundle
 
@@ -67,7 +67,7 @@ def _is_safe_file(root: Path, path: Path) -> bool:
     rel = path.relative_to(root)
     if any(part in EXCLUDED_PARTS for part in rel.parts):
         return False
-    if path.name in NON_RUNTIME_NAMES or path.suffix in EXCLUDED_SUFFIXES:
+    if path.name.lower() in NON_RUNTIME_NAMES or path.suffix in EXCLUDED_SUFFIXES:
         return False
     name = path.name.lower()
     if name in SENSITIVE_NAMES or name.startswith(".env.") or path.suffix.lower() in SENSITIVE_SUFFIXES:
@@ -114,15 +114,34 @@ def _markdown_without_fences(text: str) -> str:
 
 
 def _strip_non_runtime_links(text: str) -> str:
-    """Keep link labels while removing links to deliberately omitted release history."""
+    """Strip release-history prose links without mutating fenced examples or images."""
 
     def replace(match: re.Match[str]) -> str:
         label, target = match.groups()
-        if Path(target).name in NON_RUNTIME_NAMES:
+        if Path(target).name.lower() in NON_RUNTIME_NAMES:
             return label
         return match.group(0)
 
-    return MARKDOWN_NAMED_LINK_RE.sub(replace, text)
+    rewritten: list[str] = []
+    fence_len = 0
+    for raw in text.splitlines(keepends=True):
+        line = raw.rstrip("\r\n")
+        leading = len(line) - len(line.lstrip(" "))
+        candidate = line[leading:] if leading <= 3 else line
+        if fence_len == 0:
+            opening = re.match(r"`{3,}", candidate)
+            if opening:
+                fence_len = len(opening.group(0))
+                rewritten.append(raw)
+                continue
+            rewritten.append(MARKDOWN_NAMED_LINK_RE.sub(replace, raw))
+            continue
+
+        rewritten.append(raw)
+        closing = candidate.rstrip(" \t\r")
+        if closing and set(closing) == {"`"} and len(closing) >= fence_len:
+            fence_len = 0
+    return "".join(rewritten)
 
 
 def _packaged_bytes(root: Path, path: Path) -> bytes:
@@ -195,7 +214,7 @@ def _package_files(root: Path) -> list[Path]:
     # Per-skill changelogs and test fixtures are deliberately excluded: they are
     # repository history/verification material, not execution dependencies.
     # Packaged Markdown retains the human-readable label for changelog links while
-    # removing the link itself. All other excluded/dangling references fail closed.
+    # removing the prose link itself. All other excluded/dangling references fail closed.
     # If runtime docs reach repository-level overview/index docs, the archive
     # emits portable equivalents at the same paths so links remain valid without
     # importing contribution/history dependencies.
