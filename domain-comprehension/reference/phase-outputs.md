@@ -17,7 +17,7 @@ Completion gate: [phase-completion-gate.md](phase-completion-gate.md). Machine s
 |--------|----------|-----------------|
 | Domain config | `domain-config.yaml` | All schema fields or defaults |
 | Workspace inventory | `PROGRESS.md` § Repo status | Repo, branch, SHA, tier (provisional), [classification](repo-classification.md) |
-| Discovery budget | `PROGRESS.md` | Profile/limits + consumed repositories/search queries/deep reads initialized |
+| Discovery budget | root `manifest.yaml` + `PROGRESS.md` | Profile/limits + consumed repositories/search queries/deep reads initialized; manifest is machine source of truth |
 | Known omissions (seed) | `KNOWN_OMISSIONS.md` | MCP gaps, bulk excludes |
 | Entry services (provisional) | `{map_file}` § Inventory stub | Repo, entry-point type, file path |
 | Known domains / scope | `domain-config.yaml` `scope` | include_keywords, seed_repos |
@@ -49,7 +49,7 @@ Skip allowed when both MCP ❌ — document skip reason in header; record in `KN
 | Config surface | `{map_file}` § Inventory | Config table (names only) |
 | Repo relationships | `{map_file}` § Inventory | Relationship table |
 | `manifest.repos[]` | `manifest.yaml` | name, branch, sha, tier, classification, inventory: complete |
-| Discovery budget checkpoint | `PROGRESS.md` | Configured + consumed counters; PARTIAL if exhausted before gate |
+| Discovery budget checkpoint | root `manifest.yaml` + `PROGRESS.md` | Configured + consumed counters synchronized; PARTIAL if exhausted before gate |
 
 ---
 
@@ -173,22 +173,23 @@ Enums: [implementation-status.md](implementation-status.md). Precedence: [eviden
 | Machine data ownership (final) | `DATA_OWNERSHIP_GRAPH.yaml` | reconciled current-state nodes/edges + source revisions/evidence/confidence |
 | Machine dependency graph (final) | `DEPENDENCY_GRAPH.yaml` | reconciled current-state dependency semantics + source revisions/evidence/confidence |
 | Capability traceability (final) | `CAPABILITY_TRACEABILITY.yaml` | reconciled capability→code ownership + source revisions/evidence/confidence |
-| Stale-PRD result | `PROGRESS.md` (DELTA/ADD_REPO) | regenerated/current or explicitly STALE with reason; silent retention forbidden |
+| Stale-PRD result | root `manifest.yaml` PRD artifact row + `PROGRESS.md` (DELTA/ADD_REPO) | manifest `ok` after clean comparison/regeneration or `stale` immediately on stale condition; human reason/evidence required; silent `ok` retention forbidden |
 | Overall confidence | `EXEC_SUMMARY.md` | Question table + overall band |
 | Engineering leader summary | `EXEC_SUMMARY.md` § Engineering Leader Summary | [engineering-leader-summary.md](engineering-leader-summary.md) |
 | Architecture decisions | `ARCHITECTURE_DECISIONS.md` | ADRs or UNKNOWN |
 | Repo map table | `EXEC_SUMMARY.md` | classification + squad + tier + branch + SHA |
 | Evidence summary (final) | `EXEC_SUMMARY.md` + manifest | All counters populated |
 | Section confidences | `EXEC_SUMMARY.md` | Per major section |
-| `PROGRESS.md` | `FIRST_PASS_COMPLETE` | All checkpoints |
+| `PROGRESS.md` | `FIRST_PASS_COMPLETE` | All checkpoints; impossible while manifest PRD status is `stale` |
 | Per-repo Memory Bank | `<repo>/memory-bank/*.md` | When `memory_bank.export_mode: p5` — see [memory-bank-integration.md](memory-bank-integration.md) |
 | `manifest` `memory_bank_export` | `manifest.yaml` | `ok` \| `waived` \| `n_a` per export_mode |
 | Postman/curl export | `postman/*` | When `api_tooling.export_mode: p5` — see [api-tooling-integration.md](api-tooling-integration.md) |
 | `manifest` `api_tooling_export` | `manifest.yaml` | `ok` \| `waived` \| `n_a` per export_mode |
 
 P5 machine reconciliation follows [machine-domain-model.md](machine-domain-model.md). A missing required machine
-artifact in FULL mode makes P5 incomplete/PARTIAL. DELTA/ADD_REPO must refresh affected projections and run the
-stale-PRD gate before claiming the retained PRD is current.
+artifact or stale PRD in FULL mode makes P5 incomplete/PARTIAL. DELTA/ADD_REPO must refresh affected
+projections, run the stale-PRD gate, and synchronize the PRD manifest row before claiming the retained PRD is
+current.
 
 `PRD.md` is current-state/as-built. Do not infer desired future behavior, roadmap, business priority,
 product goals, personas, KPI targets, or SLO targets from code/runtime observations. When authoritative
@@ -207,8 +208,9 @@ it as a product-intent unknown.
 6. **Evidence summary** — update `manifest.evidence_summary` every phase end.
 7. **PRD traceability** — every `FR-*`, `BR-*`, and `NFR-*` must cite implementation/contract/config/test/runtime or authoritative documentation evidence; contradictions stay visible.
 8. **Machine traceability** — every populated machine record/edge/capability carries evidence/confidence and source revision; contradictions remain visible rather than being averaged or overwritten.
-9. **Discovery budget** — persist configured/consumed counters; limit exhaustion before completion produces PARTIAL + `UNKNOWNS.md`, never silent overrun.
-10. **Time & Effort** — refresh `EXEC_SUMMARY.md` § Time & Effort every phase end: append/update that
+9. **Discovery budget** — persist configured/consumed counters in manifest machine state and mirror to `PROGRESS.md`; limit exhaustion before completion produces PARTIAL + `UNKNOWNS.md`, never silent overrun.
+10. **PRD freshness** — DELTA/ADD_REPO sets manifest PRD status `stale` before any current-state claim when a stale condition fires; only a clean regeneration/comparison restores `ok`.
+11. **Time & Effort** — refresh `EXEC_SUMMARY.md` § Time & Effort every phase end: append/update that
    phase's row from `manifest.phases.<key>.completed_at`, measured against the previous non-skipped
    completed phase (first completed phase's elapsed is `—` — no prior anchor, never fabricate one) and
    formatted as `<h>h <m>m` (e.g. `1h 12m`); set `engagement.model_used` at Session 0 if knowable (leave
