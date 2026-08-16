@@ -11,6 +11,7 @@
 # Platform-level paths affecting every skill — changes here get the most scrutiny.
 /.github/                              @luckyrjain
 /Makefile                              @luckyrjain
+/make/                                 @luckyrjain
 /scripts/                              @luckyrjain
 /skills.yaml                            @luckyrjain
 /requirements.txt                      @luckyrjain
