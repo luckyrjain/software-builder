@@ -214,11 +214,11 @@ def test_prd_canonical_docs_align_metrics_traceability_and_engineering_triggers(
 
     requirements = _text("prd-architect/reference/requirements-format.md")
     assert "TR-FR##-##" in requirements
-    assert "every material `FR-*` requires at least one testable `AC-*`" in requirements.lower()
+    assert "every material `fr-*` requires at least one testable `ac-*`" in requirements.lower()
 
     depth = _text("prd-architect/reference/depth.md")
     assert "Requirements Traceability" in depth
-    assert "never meet a\nword budget by dropping" in depth
+    assert "never meet a\nword budget by dropping" in depth.lower()
 
     output = _text("prd-architect/reference/output-contract.md")
     assert "measurable Success Metrics" in output
