@@ -19,6 +19,17 @@ if [[ -d "${REPO_ROOT}/docs/superpowers" ]]; then
   cp -a "${REPO_ROOT}/docs/superpowers" "${TMP_REPO}/docs/superpowers"
 fi
 
+# package_skill.py records distribution_version/source_sha via
+# release_info.py, which now fails closed instead of falling back to
+# "0.0.0"/"unknown" -- give this checkout-style fixture a real VERSION file
+# and Git repo so it still exercises the code paths that need one.
+echo "0.0.0" >"${TMP_REPO}/VERSION"
+git init -q "${TMP_REPO}"
+git -C "${TMP_REPO}" config user.email "test@example.com"
+git -C "${TMP_REPO}" config user.name "Test"
+git -C "${TMP_REPO}" add -A
+git -C "${TMP_REPO}" commit -qm fixture
+
 bash "${TMP_REPO}/scripts/install.sh" --agent cursor unit-test-creator weekly-squad-digest
 
 rm -rf "${TMP_REPO}"

@@ -4,17 +4,22 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 TMP_HOME="$(mktemp -d)"
 TMP_REPO="$(mktemp -d)"
-trap 'rm -rf "${TMP_HOME}" "${TMP_REPO}"' EXIT
+TMP_DIST="$(mktemp -d)"
+trap 'rm -rf "${TMP_HOME}" "${TMP_REPO}" "${TMP_DIST}"' EXIT
 
 export HOME="${TMP_HOME}"
 export PYTHONDONTWRITEBYTECODE=1
 
-tar -C "${REPO_ROOT}" \
-  --exclude='.git' \
-  --exclude='dist' \
-  --exclude='__pycache__' \
-  --exclude='.pytest_cache' \
-  -cf - . | tar -C "${TMP_REPO}" -xf -
+# Build and extract a real release bundle rather than a raw tar copy, so this
+# exercises the actual documented flow (docs/RELEASE.md: download bundle,
+# extract, run install.sh) -- an extracted bundle never contains .git since
+# .git is never a tracked file, but it does carry RELEASE-MANIFEST.json,
+# which package_skill.py now needs as its provenance source in exactly this
+# no-.git case.
+PYTHONPATH="${REPO_ROOT}" python3 "${REPO_ROOT}/scripts/package_release.py" \
+  --repo-root "${REPO_ROOT}" --output-dir "${TMP_DIST}"
+ARCHIVE="$(ls "${TMP_DIST}"/software-builder-*.tar.gz)"
+tar -xzf "${ARCHIVE}" -C "${TMP_REPO}" --strip-components=1
 
 bash "${TMP_REPO}/scripts/install.sh" --agent cursor
 

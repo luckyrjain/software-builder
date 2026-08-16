@@ -91,6 +91,30 @@ def rewrite_package_links(package_root: Path) -> None:
             md_file.write_text(rewritten, encoding="utf-8")
 
 
+def _release_provenance(repo_root: Path) -> tuple[str, str]:
+    """Distribution version and source SHA to record in an install manifest.
+
+    Prefers RELEASE-MANIFEST.json at repo_root (present when installing from
+    an extracted release bundle -- .git is never a tracked file, so a bundle
+    built by package_release.py never contains one) and falls back to live
+    Git/VERSION metadata when installing directly from a Git checkout. Without
+    this, every install from a downloaded-and-extracted release tarball -- the
+    flow docs/RELEASE.md documents -- would hard-fail: git_source_sha() now
+    raises instead of degrading to "unknown" when repo_root has no .git.
+    """
+    release_manifest_path = repo_root / "RELEASE-MANIFEST.json"
+    if release_manifest_path.is_file():
+        try:
+            release_manifest = json.loads(release_manifest_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"{release_manifest_path}: invalid JSON: {exc}") from exc
+        version = release_manifest.get("distribution_version")
+        sha = release_manifest.get("source_sha")
+        if isinstance(version, str) and isinstance(sha, str):
+            return version, sha
+    return read_distribution_version(repo_root), git_source_sha(repo_root)
+
+
 def write_manifest(
     package_root: Path,
     *,
@@ -108,11 +132,12 @@ def write_manifest(
             continue
         files[rel] = sha256_file(path)
 
+    distribution_version, source_sha = _release_provenance(repo_root)
     manifest = {
         "skill": skill,
-        "distribution_version": read_distribution_version(repo_root),
+        "distribution_version": distribution_version,
         "source_repo": repo_root.name,
-        "source_sha": git_source_sha(repo_root),
+        "source_sha": source_sha,
         "installed_at": datetime.now(timezone.utc).isoformat(),
         "host": host,
         "framework_files": framework_files,

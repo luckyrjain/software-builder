@@ -115,6 +115,19 @@ def require_mapping(value: Any, label: str) -> dict[str, Any]:
     return value
 
 
+def read_schema_version(path: Path) -> int:
+    """Read and validate the integer ``schema_version`` field of a YAML mapping file.
+
+    Shared by release_contract.py and package_release.py, which both need the
+    same schema_version a release's compatibility fields are checked against.
+    """
+    raw = require_mapping(load_unique_yaml_file(path), str(path))
+    value = raw.get("schema_version")
+    if not isinstance(value, int) or isinstance(value, bool):
+        raise ValueError(f"{path}: schema_version must be an integer")
+    return value
+
+
 def load_unique_frontmatter(path: Path) -> dict[str, Any]:
     """Extract and parse a Markdown file's leading ``---`` frontmatter block
     via load_unique_yaml. Raises ValueError if the block is missing or is not

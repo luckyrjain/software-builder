@@ -30,10 +30,35 @@ if str(_SCRIPTS_DIR) not in sys.path:
 
 from reference_utils import sha256_file
 from release_info import git_source_sha, read_distribution_version
-from yaml_safety import load_unique_yaml_file, require_mapping
+from yaml_safety import read_schema_version
 
 ROOT = Path(__file__).resolve().parents[1]
 MANIFEST_NAME = "RELEASE-MANIFEST.json"
+
+
+def _ensure_clean_worktree(root: Path) -> None:
+    """Refuse to package a release whose tracked files differ from HEAD.
+
+    Without this, an uncommitted local edit to a tracked file would silently
+    ship in the archive while RELEASE-MANIFEST.json's source_sha still names
+    the last commit -- breaking the "source_sha ... matching ... the Git
+    commit the bundle was built from" guarantee docs/RELEASE.md promises.
+    Nothing downstream can catch this after the fact: verify_release_bundle.py
+    only checks the bundle's internal self-consistency (does the manifest
+    match the archive?), not whether that content matches the named commit.
+    """
+    result = subprocess.run(
+        ["git", "-C", str(root), "diff", "--quiet", "HEAD", "--"],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode == 1:
+        raise ValueError(
+            "release inputs must match the Git HEAD commit exactly -- commit or stash "
+            "pending changes to tracked files before packaging a release",
+        )
+    if result.returncode not in (0, 1):
+        raise ValueError(f"could not check Git working tree status: {result.stderr.strip()}")
 
 
 def _tracked_files(root: Path) -> list[tuple[str, Path]]:
@@ -56,14 +81,6 @@ def _tracked_files(root: Path) -> list[tuple[str, Path]]:
         if abs_path.is_file():
             files.append((rel, abs_path))
     return files
-
-
-def _schema_version(path: Path) -> int:
-    raw = require_mapping(load_unique_yaml_file(path), str(path))
-    value = raw.get("schema_version")
-    if not isinstance(value, int) or isinstance(value, bool):
-        raise ValueError(f"{path}: schema_version must be an integer")
-    return value
 
 
 def _tar_info(arcname: str, *, size: int, mode: int) -> tarfile.TarInfo:
@@ -105,6 +122,7 @@ def _write_reproducible_archive(
 def package_release(root: Path, output_dir: Path) -> tuple[Path, Path]:
     version = read_distribution_version(root)
     sha = git_source_sha(root)
+    _ensure_clean_worktree(root)
     bundle_name = f"software-builder-{version}"
 
     tracked = _tracked_files(root)
@@ -114,8 +132,8 @@ def package_release(root: Path, output_dir: Path) -> tuple[Path, Path]:
         "schema_version": 1,
         "distribution_version": version,
         "source_sha": sha,
-        "registry_schema_version": _schema_version(root / "skills.yaml"),
-        "host_contract_schema_version": _schema_version(root / "scripts" / "registry" / "host_contracts.yaml"),
+        "registry_schema_version": read_schema_version(root / "skills.yaml"),
+        "host_contract_schema_version": read_schema_version(root / "scripts" / "registry" / "host_contracts.yaml"),
         "files": file_hashes,
     }
     manifest_bytes = (json.dumps(manifest, indent=2, sort_keys=True) + "\n").encode("utf-8")

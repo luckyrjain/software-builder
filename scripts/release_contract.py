@@ -20,7 +20,12 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from scripts.release_info import read_distribution_version
-from scripts.yaml_safety import YAML_SAFETY_ERRORS, load_unique_yaml_file, require_mapping
+from scripts.yaml_safety import (
+    YAML_SAFETY_ERRORS,
+    load_unique_yaml_file,
+    read_schema_version,
+    require_mapping,
+)
 
 CONTRACT_PATH = Path(__file__).resolve().parent / "release_contract.yaml"
 
@@ -30,11 +35,6 @@ def _load_contract(path: Path = CONTRACT_PATH) -> dict:
     if raw.get("schema_version") != 1:
         raise ValueError(f"{path}: schema_version must be 1")
     return raw
-
-
-def _schema_version(path: Path) -> object:
-    raw = require_mapping(load_unique_yaml_file(path), str(path))
-    return raw.get("schema_version")
 
 
 def required_provenance_fields(path: Path = CONTRACT_PATH) -> set[str]:
@@ -90,7 +90,7 @@ def validate_release_contract(root: Path = ROOT) -> list[str]:
     for key, path in schema_checks.items():
         expected = compatibility.get(key)
         try:
-            actual = _schema_version(path)
+            actual = read_schema_version(path)
         except (OSError, *YAML_SAFETY_ERRORS) as exc:
             errors.append(f"error: release contract: {path}: {exc}")
             continue
