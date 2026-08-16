@@ -11,6 +11,7 @@ validate manifest/path/content state with `scripts/validate_manifest_yaml.py`; P
 - scriptable completion gate
 - resume locator without parsing prose
 - persisted discovery-budget state for deterministic bounded discovery
+- explicit machine-readable stale/current state for `PRD.md`
 - evidence/completeness metrics
 - a hard path boundary preventing manifest-controlled artifact lookup outside the workspace artifact root
 
@@ -88,9 +89,15 @@ require a completion timestamp.
 
 ## `artifacts[]`
 
-Each row has `id`, `path`, `phase`, `required`, and `status` (`ok | stub | missing | waived | n_a`). Paths
-are relative to `artifact_root`, except the root manifest itself which is not an artifact row. Artifact
-and diagram paths must also be safe relative paths with no `..`; absolute paths are invalid.
+Each row has `id`, `path`, `phase`, `required`, and `status`
+(`ok | stub | missing | stale | waived | n_a`). Paths are relative to `artifact_root`, except the root
+manifest itself which is not an artifact row. Artifact and diagram paths must also be safe relative paths with
+no `..`; absolute paths are invalid.
+
+`stale` is valid **only** for artifact id `prd`. It means the file still exists but DELTA/ADD_REPO evidence
+proved that it no longer represents current state. The validator therefore still checks that a stale PRD file
+exists on disk, while strict `FIRST_PASS_COMPLETE` rejects the stale status because required artifacts must be
+`ok`/`waived`. Other artifacts may not use `stale`.
 
 Required P5 artifacts for a completed FULL engagement are:
 
@@ -103,9 +110,11 @@ Required P5 artifacts for a completed FULL engagement are:
 | `capability_traceability` | `CAPABILITY_TRACEABILITY.yaml` | capability → repositories/code locations/owner/evidence |
 
 P5 marks `prd` `ok` only after stable `FR-*`, `BR-*`, and `NFR-*` requirements and traceability are
-populated. It marks the four machine artifacts `ok` only after the reconciliation procedure in
-[machine-domain-model.md](machine-domain-model.md). Unrecoverable product intent or machine evidence stays
-`Unknown`; it is never guessed to satisfy completion.
+populated and the stale-PRD comparison says the document is current. DELTA/ADD_REPO sets the PRD row to
+`stale` as soon as a configured stale condition fires, before any handoff can claim the document is current;
+regeneration returns the row to `ok`. P5 marks the four machine artifacts `ok` only after the reconciliation
+procedure in [machine-domain-model.md](machine-domain-model.md). Unrecoverable product intent or machine
+evidence stays `Unknown`; it is never guessed to satisfy completion.
 
 QUICK engagements may create the machine files as stubs without completing P5. Strict validation only
 requires all `required: true` artifact rows to be `ok`/`waived` when `engagement.status` is
@@ -144,11 +153,13 @@ understand status, and deep-dive status.
    `engagement.artifact_root`, and initializes `discovery_budget` from the selected profile.
 2. End each discovery-bearing phase by updating `discovery_budget.consumed` in the manifest and mirroring it
    to `PROGRESS.md`; never reset counters between phases or RESUME.
-3. End each phase by updating phases/artifacts/diagrams/evidence/confidence and running validation.
-4. Skipped phases require a reason; optional artifacts become `n_a` or `waived` as appropriate.
-5. `FIRST_PASS_COMPLETE` requires manifest `--strict --check-content` plus `validate_prd.py`; all required
+3. DELTA/ADD_REPO sets `artifacts[id=prd].status: stale` immediately when stale-PRD detection fires; do not
+   leave the row `ok` while only disclosing staleness in prose. Regeneration restores `ok`.
+4. End each phase by updating phases/artifacts/diagrams/evidence/confidence and running validation.
+5. Skipped phases require a reason; optional artifacts become `n_a` or `waived` as appropriate.
+6. `FIRST_PASS_COMPLETE` requires manifest `--strict --check-content` plus `validate_prd.py`; all required
    P5 artifacts must be `ok`/`waived`, and the PRD must satisfy its requirement/traceability contract.
-6. `ADD_REPO` keeps affected phases in progress while merge conflicts remain open and must refresh affected
+7. `ADD_REPO` keeps affected phases in progress while merge conflicts remain open and must refresh affected
    machine artifacts before P5 freshness claims.
 
 ## Validation
@@ -161,7 +172,8 @@ python3 domain-comprehension/scripts/validate_prd.py \
   /path/to/workspace/<artifact_root>/PRD.md
 ```
 
-The manifest validator validates `discovery_budget` whenever it is present and rejects malformed/negative or
-over-limit counters. The PRD validator requires `Status` and `Confidence` on `FR-*`, `BR-*`, and `NFR-*`
-definitions, exactly one traceability row for every requirement id, and evidence for every `Observed`
-requirement.
+The manifest validator validates `discovery_budget` whenever it is present, rejects malformed/negative or
+over-limit counters, restricts `stale` to the PRD artifact, verifies a stale PRD still exists, and rejects
+stale required artifacts under strict completion. The PRD validator requires `Status` and `Confidence` on
+`FR-*`, `BR-*`, and `NFR-*` definitions, exactly one traceability row for every requirement id, and evidence
+for every `Observed` requirement.
