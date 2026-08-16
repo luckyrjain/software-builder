@@ -1,5 +1,5 @@
 schema_version: 1
-policy_version: "1.2"
+policy_version: "1.3"
 prompt_bundle_version: "1"
 evaluator_version: "1"
 
@@ -161,6 +161,7 @@ prompt_diff_risk:
       - "scripts/operational_upkeep.yaml"
       - "scripts/operational_upkeep.py"
       - "scripts/deprecation_lifecycle.py"
+      - "scripts/deprecation_diff_guard.py"
       - "scripts/eval_tier_health.py"
       - ".github/workflows/lint.yml"
     authority-capability:
