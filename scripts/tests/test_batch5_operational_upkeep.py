@@ -3,11 +3,15 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
+import pytest
+
 from scripts.operational_upkeep import (
     _deprecation_candidates,
+    _matches,
     _nested_mappings,
     _tracked_relative_files,
     _validate_deprecation_mapping,
+    _yaml_mapping,
     build_health_report,
     classify_diff,
     classify_file_role,
@@ -18,6 +22,7 @@ from scripts.operational_upkeep import (
     validate_policy,
 )
 from scripts.registry.install_targets_sync import _read_makefile_graph
+from scripts.yaml_safety import YAML_SAFETY_ERRORS
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -69,6 +74,26 @@ def test_file_roles_separate_runtime_reference_and_maintainer_surfaces() -> None
     assert classify_file_role("scripts/README.md", policy) == "maintainer"
     assert classify_file_role("make/README.md", policy) == "maintainer"
     assert classify_file_role("docs/superpowers/plans/README.md", policy) == "maintainer"
+
+
+def test_directory_glob_pattern_requires_path_separator_boundary() -> None:
+    assert _matches("scripts/foo.py", "scripts/**") is True
+    assert _matches("scripts-legacy/foo.py", "scripts/**") is False
+    assert _matches("scripts", "scripts/**") is True
+
+
+def test_bare_pattern_does_not_match_as_unanchored_substring() -> None:
+    assert _matches("CODEOWNERS", "CODEOWNERS") is True
+    assert _matches("docs/CODEOWNERS-policy.md", "CODEOWNERS") is False
+    assert _matches("Makefile", "Makefile") is True
+    assert _matches("scripts/legacy-Makefile-notes.md", "Makefile") is False
+
+
+def test_yaml_mapping_fails_closed_on_duplicate_keys(tmp_path: Path) -> None:
+    path = tmp_path / "duplicate.yaml"
+    path.write_text("status: active\nstatus: deprecated\n", encoding="utf-8")
+    with pytest.raises(YAML_SAFETY_ERRORS):
+        _yaml_mapping(path)
 
 
 def test_contract_owner_resolution_uses_matching_codeowners_rule() -> None:

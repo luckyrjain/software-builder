@@ -10,13 +10,12 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
-import yaml
-
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from scripts.deprecation_lifecycle import validate_deprecation_item
+from scripts.yaml_safety import load_unique_yaml
 
 POLICY_PATH = "scripts/operational_upkeep.yaml"
 
@@ -36,7 +35,7 @@ def _git_text(root: Path, ref: str, path: str) -> str | None:
 def _mapping(text: str | None) -> dict[str, Any]:
     if text is None:
         return {}
-    value = yaml.safe_load(text)
+    value = load_unique_yaml(text)
     return value if isinstance(value, dict) else {}
 
 
@@ -46,7 +45,7 @@ def _frontmatter(text: str | None) -> dict[str, Any]:
     end = text.find("\n---", 4)
     if end < 0:
         return {}
-    value = yaml.safe_load(text[4:end])
+    value = load_unique_yaml(text[4:end])
     return value if isinstance(value, dict) else {}
 
 

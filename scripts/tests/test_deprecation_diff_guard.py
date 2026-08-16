@@ -3,8 +3,11 @@ from __future__ import annotations
 from datetime import date
 from pathlib import Path
 
+import pytest
+
 import scripts.deprecation_diff_guard as guard
 from scripts.deprecation_diff_guard import validate_removed_items
+from scripts.yaml_safety import YAML_SAFETY_ERRORS
 
 
 LIFECYCLE = {
@@ -73,6 +76,17 @@ def test_removal_after_window_is_allowed() -> None:
     )
 
     assert errors == []
+
+
+def test_mapping_fails_closed_on_duplicate_keys() -> None:
+    with pytest.raises(YAML_SAFETY_ERRORS):
+        guard._mapping("status: active\nstatus: deprecated\n")
+
+
+def test_frontmatter_fails_closed_on_duplicate_keys() -> None:
+    text = "---\nstatus: active\nstatus: deprecated\n---\nbody\n"
+    with pytest.raises(YAML_SAFETY_ERRORS):
+        guard._frontmatter(text)
 
 
 def test_same_identity_retained_does_not_require_deprecation() -> None:

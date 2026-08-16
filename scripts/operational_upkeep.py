@@ -10,11 +10,11 @@ from collections import Counter
 from pathlib import Path
 from typing import Any, Iterable, Iterator
 
-import yaml
-
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
+
+from scripts.yaml_safety import load_unique_yaml, load_unique_yaml_file
 
 POLICY_PATH = ROOT / "scripts" / "operational_upkeep.yaml"
 GENERATOR_VERSION = "1.3"
@@ -22,7 +22,7 @@ _ID_RE = re.compile(r"^(route|stop|report)\.[a-z0-9][a-z0-9.-]*$")
 
 
 def load_policy(path: Path = POLICY_PATH) -> dict[str, Any]:
-    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    data = load_unique_yaml_file(path)
     if not isinstance(data, dict):
         raise ValueError("operational upkeep policy must be a mapping")
     return data
@@ -57,10 +57,11 @@ def _tracked_relative_files(root: Path) -> list[Path]:
 
 def _matches(path: str, pattern: str) -> bool:
     if pattern.endswith("/**"):
-        return path.startswith(pattern[:-3])
+        prefix = pattern[:-3]
+        return path == prefix or path.startswith(f"{prefix}/")
     if pattern.startswith("/"):
         return pattern[1:] in path
-    return fnmatch.fnmatch(path, pattern) or pattern in path
+    return fnmatch.fnmatch(path, pattern)
 
 
 def classify_file_role(path: str, policy: dict[str, Any]) -> str | None:
@@ -109,7 +110,7 @@ def codeowners_for(path: str, text: str) -> list[str]:
 
 
 def _yaml_mapping(path: Path) -> dict[str, Any]:
-    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    data = load_unique_yaml_file(path)
     return data if isinstance(data, dict) else {}
 
 
@@ -152,7 +153,7 @@ def _markdown_frontmatter(path: Path) -> dict[str, Any]:
     end = text.find("\n---", 4)
     if end < 0:
         return {}
-    data = yaml.safe_load(text[4:end])
+    data = load_unique_yaml(text[4:end])
     return data if isinstance(data, dict) else {}
 
 
