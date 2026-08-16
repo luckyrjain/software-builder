@@ -65,7 +65,14 @@ def _matches(path: str, pattern: str) -> bool:
         # unanchored substring: "/tests/" must match ".../tests/..." and must
         # not match "contests/..." or "protests/..." merely containing "tests/".
         segment = pattern[1:]
-        return path.startswith(segment) or f"/{segment}" in path
+        if segment.endswith("/"):
+            # Directory-style: the pattern's own trailing "/" is the right
+            # boundary already ("tests/" can't be followed by more of the
+            # same segment name).
+            return path.startswith(segment) or f"/{segment}" in path
+        # Filename-style (e.g. "/SKILL.md"): also require a right boundary so
+        # "SKILL.md.bak" isn't matched by an unanchored "SKILL.md" prefix.
+        return path == segment or path.endswith(f"/{segment}")
     return fnmatch.fnmatch(path, pattern)
 
 

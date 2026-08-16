@@ -28,6 +28,55 @@ def test_eval_tier_health_covers_all_deterministic_tiers() -> None:
     assert is_healthy(report) is True
 
 
+_MINIMAL_SKILLS_YAML = """
+schema_version: 1
+skills:
+  example:
+    path: example
+    category: architecture
+    invocation: ambient
+    hosts:
+      cursor: {discovery: rule}
+      claude: {install: true}
+      kiro: {discovery: manual}
+    install:
+      requires: []
+    capabilities:
+      required: [host.repository.read]
+    lint:
+      skill_md_max_lines: 180
+      target: example
+    risk_class: [read-only]
+"""
+
+
+def test_global_template_with_invalid_assertions_is_excluded(tmp_path: Path) -> None:
+    (tmp_path / "skills.yaml").write_text(_MINIMAL_SKILLS_YAML, encoding="utf-8")
+    fixtures_dir = tmp_path / "evals" / "fixtures"
+    fixtures_dir.mkdir(parents=True)
+    (tmp_path / "evals" / "transcripts").mkdir(parents=True)
+    (tmp_path / "evals" / "golden").mkdir(parents=True)
+    (fixtures_dir / "_global.yaml").write_text(
+        "happy:\n"
+        "  tier: 1\n"
+        "  assertions:\n"
+        "    - type: contains\n"
+        "      value: ok\n"
+        "adversarial:\n"
+        "  tier: 1\n"
+        "  assertions: null\n",
+        encoding="utf-8",
+    )
+
+    report = build_eval_tier_health(tmp_path)
+
+    # scripts.evals.__main__.run_all() skips a global template whose
+    # `assertions` isn't a list -- this report must not claim coverage the
+    # real eval runner wouldn't execute. Only "happy" (1 registered skill)
+    # should be counted; "adversarial" has assertions: null.
+    assert report["tiers"]["tier_1_structural"] == 1
+
+
 def test_missing_live_harness_does_not_fail_deterministic_health() -> None:
     report = build_eval_tier_health()
     report["live_model_harness"] = {"available": False, "ci_blocking": False}

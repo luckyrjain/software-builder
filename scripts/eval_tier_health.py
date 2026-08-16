@@ -36,8 +36,14 @@ def build_eval_tier_health(root: Path = ROOT) -> dict[str, Any]:
         if isinstance(global_raw, dict):
             for name in ("happy", "adversarial"):
                 template = global_raw.get(name)
-                if isinstance(template, dict):
-                    counts[int(template.get("tier", 1))] += len(registry.skills)
+                if not isinstance(template, dict):
+                    continue
+                # Mirror scripts.evals.__main__.run_all()'s validity check so this
+                # report can't claim coverage the real eval runner wouldn't execute.
+                assertions = template.get("assertions", [])
+                if not isinstance(assertions, list):
+                    continue
+                counts[int(template.get("tier", 1))] += len(registry.skills)
 
     for case in load_transcript_fixtures(root / "evals" / "transcripts"):
         counts[case.tier] += 1
