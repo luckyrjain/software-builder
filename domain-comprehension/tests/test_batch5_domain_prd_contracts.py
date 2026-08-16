@@ -63,6 +63,41 @@ def test_domain_machine_templates_exist_and_match_contract():
     deliverables = _text("domain-comprehension/reference/deliverable-templates.md")
     for name in expected:
         assert f"`{name}`" in deliverables
+    assert "machine-domain-model.md" in deliverables
+
+
+def test_domain_workflow_operationalizes_budget_machine_outputs_and_stale_prd():
+    inputs = _text("domain-comprehension/workflow/inputs.md")
+    for token in (
+        "- discovery_budget",
+        "configured and consumed counters",
+        "stop discovery",
+        "stale_prd_detection",
+        "Never silently retain a stale PRD",
+    ):
+        assert token.lower() in inputs.lower()
+
+    outputs = _text("domain-comprehension/reference/phase-outputs.md")
+    for token in (
+        "Discovery budget",
+        "API_EVENT_SCHEMA.yaml",
+        "DATA_OWNERSHIP_GRAPH.yaml",
+        "DEPENDENCY_GRAPH.yaml",
+        "CAPABILITY_TRACEABILITY.yaml",
+        "Stale-PRD result",
+    ):
+        assert token in outputs
+
+    phase5 = _text("domain-comprehension/workflow/phase-5.md")
+    for token in (
+        "api_event_schema_final",
+        "data_ownership_graph_final",
+        "dependency_graph_final",
+        "capability_traceability_final",
+        "stale_prd_status",
+        "Machine-domain reconciliation",
+    ):
+        assert token in phase5
 
 
 def test_domain_skill_requires_machine_artifacts_and_delta_staleness_check():
@@ -165,16 +200,43 @@ def test_prd_workflow_carries_reviews_repairs_and_gates_new_contract_fields():
         assert token in gate
 
 
+def test_prd_canonical_docs_align_metrics_traceability_and_engineering_triggers():
+    triggers = _text("prd-architect/reference/output-tables.md")
+    for row in (
+        "| Success Metrics | PRD/Review Mode",
+        "| Requirements Traceability | PRD/Review Mode",
+        "| Operational Readiness | Production change",
+        "| Migration / Backward Compatibility | Existing system",
+        "| API / Event / Schema Impact | API, event, or schema contract changes",
+        "| Observability Requirements | Production change",
+    ):
+        assert row in triggers
+
+    requirements = _text("prd-architect/reference/requirements-format.md")
+    assert "TR-FR##-##" in requirements
+    assert "every material `FR-*` requires at least one testable `AC-*`" in requirements.lower()
+
+    depth = _text("prd-architect/reference/depth.md")
+    assert "Requirements Traceability" in depth
+    assert "never meet a\nword budget by dropping" in depth
+
+    output = _text("prd-architect/reference/output-contract.md")
+    assert "measurable Success Metrics" in output
+    assert "FR-* -> AC-* -> TR-*" in output
+
+
 def test_prd_template_exposes_traceability_and_readiness_sections():
     text = _text("prd-architect/report-template.md")
     for heading in (
         "## Success Metrics",
-        "## Assumption Register",
         "## Requirements Traceability",
         "## Rollout / Rollback",
         "## Operational Readiness",
         "## Migration / Backward Compatibility",
         "## API / Event / Schema Impact",
+        "## Data / Privacy Impact",
+        "## Cost Impact",
         "## Observability Requirements",
     ):
         assert heading in text
+    assert "When consequential assumptions exist" in text
