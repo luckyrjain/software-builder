@@ -28,7 +28,6 @@ Depth: Lite — <reason>
 ## Functional Requirements
 ## Key Failure / Edge Cases
 ## Acceptance Criteria
-## Assumption Register
 ## Requirements Traceability
 ## Risks
 
@@ -37,17 +36,18 @@ Depth: Lite — <reason>
 <rationale>
 ```
 
-Every success metric must be measurable: baseline, target, timeframe, and measurement source. Keep a
-stable assumption register. Trace material requirements as `FR-* -> AC-* -> TR-*`; orphan requirements
-or acceptance criteria block Build Readiness.
+Every success metric must be measurable: baseline, target, timeframe, and measurement source. Trace every
+material functional requirement as `FR-* -> AC-* -> TR-*`; orphan requirements or acceptance criteria block
+Build Readiness. When consequential assumptions exist, add a stable **Assumption Register** with `A-*` IDs.
 
 Add sections from [section-triggers.md](reference/section-triggers.md) when material (e.g., Roles &
-Permissions, Failure Handling, Security / Privacy / Abuse).
+Permissions, Failure Handling, Security / Privacy / Abuse, Assumption Register).
 
 ### Standard / Rigorous
 
 Same header pattern. Add triggered sections only — e.g., State Model, Data Invariants, End-to-End Flow,
-Correctness & Reconciliation. Use FR-/BR-/NFR-/INV-/AC- IDs when required per
+Correctness & Reconciliation. Material functional requirements always use `FR-*`, `AC-*`, and `TR-*`; use
+`BR-*`, `NFR-*`, and `INV-*` IDs when required per
 [requirements-format.md](reference/requirements-format.md).
 
 For existing or production systems, emit the following when their contract trigger fires:
@@ -78,7 +78,7 @@ For existing or production systems, emit the following when their contract trigg
 ### Appendices (when triggered)
 
 - **Decisions & Constraints** — resolved decisions and mandatory constraints only
-- **Assumption Register** — table when ≥3 consequential or Risky assumptions (Standard/Rigorous)
+- **Assumption Register** — when consequential assumptions exist; table strongly preferred when ≥3
 - **Requirements Traceability** — `FR-* -> AC-* -> TR-*` matrix for engineering-verifiable requirements
 - **Unresolved Questions** — only non-empty categories
 - **Adversarial Review Summary** / **Gap Analysis** — only when material context beyond inline fixes
