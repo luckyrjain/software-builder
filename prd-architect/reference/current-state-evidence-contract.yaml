@@ -1,0 +1,60 @@
+schema_version: 1
+producer: domain-comprehension
+consumer: prd-architect
+
+current_state_evidence:
+  required_when: existing_system
+  accepted_artifacts:
+    - PRD.md
+    - API_EVENT_SCHEMA.yaml
+    - DATA_OWNERSHIP_GRAPH.yaml
+    - CAPABILITY_TRACEABILITY.yaml
+  source_revision:
+    required: true
+    fields: [repo, branch, commit_sha, observed_at]
+  preserve_observed_state: true
+  future_state_changes_must_be_explicit: true
+
+success_metric_quality:
+  required_fields: [metric, baseline, target, timeframe, measurement_source]
+  reject_if: [not_measurable, no_target, no_measurement_source]
+
+assumption_register:
+  required_fields: [id, statement, impact, validation, owner, status]
+  status_values: [OPEN, VALIDATED, INVALIDATED, ACCEPTED_RISK]
+
+requirements_traceability:
+  functional_requirement_prefix: FR-
+  acceptance_criteria_prefix: AC-
+  test_requirement_prefix: TR-
+  required_edges: [FR_to_AC, AC_to_TR]
+  orphan_behavior: build_readiness_blocker
+
+rollout_rollback_evidence:
+  rollout_requires: [strategy, success_signal, abort_signal]
+  rollback_requires: [trigger, mechanism, data_compatibility, verification]
+
+operational_readiness:
+  required_when: production_change
+  checks: [ownership, runbook, alerts, dashboards, support_path, capacity, dependencies]
+
+backward_compatibility:
+  required_when: existing_system
+  evaluate: [api, event, schema, data, config, client]
+  breaking_change_requires: [migration_plan, rollout_sequence, rollback_constraints]
+
+api_event_schema_impact:
+  trigger_when: [api_changed, event_changed, schema_changed]
+  require: [before, after, compatibility, consumers, migration]
+
+data_privacy_trigger:
+  trigger_when: [personal_data, sensitive_data, retention_change, access_change]
+  require: [classification, access, retention, audit, compliance_review]
+
+cost_trigger:
+  trigger_when: [new_infrastructure, material_traffic_change, paid_dependency, storage_growth]
+  require: [baseline, expected_delta, measurement_plan]
+
+observability_requirements:
+  trigger_when: production_change
+  require: [metrics, logs, traces, alerts, dashboard, correlation]
