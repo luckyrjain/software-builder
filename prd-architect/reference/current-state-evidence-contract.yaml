@@ -3,7 +3,8 @@ producer: domain-comprehension
 consumer: prd-architect
 
 current_state_evidence:
-  required_when: existing_system
+  required_when: existing_system_and_response_mode_PRD_or_Review
+  validation_behavior: missing_evidence_goes_to_evidence_needed_next
   accepted_artifacts:
     - PRD.md
     - API_EVENT_SCHEMA.yaml
