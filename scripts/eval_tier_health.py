@@ -62,6 +62,14 @@ def build_eval_tier_health(root: Path = ROOT) -> dict[str, Any]:
     }
 
 
+def is_healthy(report: dict[str, Any]) -> bool:
+    """Return deterministic CI health; the live model harness is visibility-only."""
+    return (
+        report["covered_tiers"] == report["required_tiers"]
+        and not report["unexpected_static_tiers"]
+    )
+
+
 def render_markdown(report: dict[str, Any]) -> str:
     tiers = report["tiers"]
     live = report["live_model_harness"]
@@ -86,13 +94,8 @@ def main() -> int:
     parser.add_argument("--format", choices=("json", "markdown"), default="markdown")
     args = parser.parse_args()
     report = build_eval_tier_health()
-    healthy = (
-        report["covered_tiers"] == report["required_tiers"]
-        and not report["unexpected_static_tiers"]
-        and report["live_model_harness"]["available"]
-    )
     print(render_markdown(report) if args.format == "markdown" else json.dumps(report, sort_keys=True, indent=2))
-    return 0 if healthy else 1
+    return 0 if is_healthy(report) else 1
 
 
 if __name__ == "__main__":
