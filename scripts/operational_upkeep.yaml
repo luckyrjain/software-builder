@@ -1,0 +1,181 @@
+schema_version: 1
+policy_version: "1.4"
+prompt_bundle_version: "1"
+evaluator_version: "1"
+
+file_roles:
+  runtime:
+    description: Instructions and contracts that an agent may need during execution.
+    patterns:
+      - "*/SKILL.md"
+      - "*/workflow/*.md"
+      - "docs/skill-framework/shared/runtime-contract.md"
+      - "docs/skill-framework/shared/skill-routing.md"
+      - "docs/skill-framework/shared/prompt-injection.md"
+      - "docs/skill-framework/shared/safe-output.md"
+  reference:
+    description: Supporting material loaded on demand but not mandatory runtime control flow.
+    patterns:
+      - "*/reference/*"
+      - "*/examples.md"
+      - "*/SETUP.md"
+      - "*/README.md"
+      - "docs/skill-framework/shared/**"
+  maintainer:
+    description: Build, validation, evaluation, governance, and design-time material.
+    patterns:
+      - "scripts/**"
+      - "evals/**"
+      - "generated/**"
+      - "docs/superpowers/**"
+      - ".github/**"
+      - "make/**"
+      - "CODEOWNERS"
+      - "Makefile"
+
+stable_ids:
+  routes:
+    - id: route.architecture-review
+      owner: domain-comprehension
+      source_path: scripts/registry/eval_contracts.yaml
+      source_key: routing_collisions
+      token_budget: 1400
+    - id: route.prd-review
+      owner: prd-architect
+      source_path: scripts/registry/eval_contracts.yaml
+      source_key: routing_collisions
+      token_budget: 1200
+    - id: route.code-review
+      owner: pr-review
+      source_path: scripts/registry/eval_contracts.yaml
+      source_key: routing_collisions
+      token_budget: 1400
+    - id: route.incident-analysis
+      owner: incident-rca
+      source_path: scripts/registry/eval_contracts.yaml
+      source_key: routing_collisions
+      token_budget: 1400
+    - id: route.k8s-rightsizing
+      owner: k8s-overprovisioning-datadog
+      source_path: scripts/registry/eval_contracts.yaml
+      source_key: routing_collisions
+      token_budget: 1200
+    - id: route.test-generation
+      owner: test-writer
+      source_path: scripts/registry/eval_contracts.yaml
+      source_key: routing_collisions
+      token_budget: 1200
+  stop_conditions:
+    - id: stop.insufficient-evidence
+      owner: runtime-contract
+      source_path: scripts/registry/platform_contracts.yaml
+      source_key: evidence.insufficient_evidence_status
+    - id: stop.missing-authorization
+      owner: runtime-contract
+      source_path: scripts/registry/platform_contracts.yaml
+      source_key: action_gates
+    - id: stop.prompt-injection
+      owner: prompt-injection
+      source_path: docs/skill-framework/shared/prompt-injection.md
+      source_key: Rule
+    - id: stop.failed-required-check
+      owner: runtime-contract
+      source_path: scripts/registry/platform_contracts.yaml
+      source_key: definition_of_done.required_fields
+    - id: stop.cancellation
+      owner: runtime-contract
+      source_path: scripts/registry/eval_contracts.yaml
+      source_key: behavior_scenarios.cancellation
+  report_fields:
+    - id: report.result-status
+      field: result_status
+      source_path: scripts/registry/eval_contracts.yaml
+      source_key: golden_structural_assertions
+    - id: report.confidence
+      field: confidence
+      source_path: scripts/registry/eval_contracts.yaml
+      source_key: golden_structural_assertions
+    - id: report.authority-boundary
+      field: authority_boundary
+      source_path: scripts/registry/eval_contracts.yaml
+      source_key: golden_structural_assertions
+    - id: report.evidence-provenance
+      field: evidence_provenance
+      source_path: scripts/registry/eval_contracts.yaml
+      source_key: golden_structural_assertions
+    - id: report.artifact-shape
+      field: artifact_shape
+      source_path: scripts/registry/eval_contracts.yaml
+      source_key: golden_structural_assertions
+    - id: report.critical-conclusion
+      field: critical_conclusion
+      source_path: scripts/registry/eval_contracts.yaml
+      source_key: golden_structural_assertions
+
+contract_owners:
+  capability-schema:
+    path: scripts/registry/capability_catalog.yaml
+    owner: "@luckyrjain"
+  composition-schema:
+    path: scripts/registry/composition_contracts.yaml
+    owner: "@luckyrjain"
+  safe-output:
+    path: docs/skill-framework/shared/safe-output.md
+    owner: "@luckyrjain"
+  artifact-writes:
+    path: scripts/registry/composition_runtime.yaml
+    owner: "@luckyrjain"
+  routing:
+    path: docs/skill-framework/shared/skill-routing.md
+    owner: "@luckyrjain"
+  adapter-generation:
+    path: scripts/registry/generate_cursor.py
+    owner: "@luckyrjain"
+  eval-infrastructure:
+    path: scripts/registry/eval_contracts.yaml
+    owner: "@luckyrjain"
+
+deprecation:
+  compatibility_window_days: 90
+  required_fields:
+    - deprecated_since
+    - replacement
+    - remove_after
+    - migration_note
+    - aliases
+
+prompt_diff_risk:
+  order: [editorial, behavioral, authority-capability, schema, routing]
+  high_risk_classes: [behavioral, authority-capability, schema, routing]
+  evidence_paths:
+    - "scripts/tests/**"
+    - "evals/**"
+    - "/tests/"
+  path_rules:
+    routing:
+      - "docs/skill-framework/shared/skill-routing.md"
+      - "scripts/registry/composition_runtime.yaml"
+      - "scripts/registry/eval_contracts.yaml"
+    schema:
+      - "skills.yaml"
+      - "scripts/registry/composition_contracts.yaml"
+      - "scripts/registry/platform_contracts.yaml"
+      - "scripts/registry/skill_frontmatter_schema.py"
+      - "scripts/operational_upkeep.yaml"
+      - "scripts/operational_upkeep.py"
+      - "scripts/deprecation_lifecycle.py"
+      - "scripts/deprecation_diff_guard.py"
+      - "scripts/eval_tier_health.py"
+      - ".github/workflows/lint.yml"
+    authority-capability:
+      - "scripts/registry/capability_catalog.yaml"
+      - "scripts/registry/host_contracts.yaml"
+      - "docs/skill-framework/shared/runtime-contract.md"
+      - "docs/skill-framework/shared/safe-output.md"
+      - "docs/skill-framework/shared/prompt-injection.md"
+    behavioral:
+      - "/SKILL.md"
+      - "/workflow/"
+    editorial:
+      - "README.md"
+      - "docs/**"

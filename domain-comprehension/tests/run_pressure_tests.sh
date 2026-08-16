@@ -18,11 +18,20 @@ pass() {
   echo "  ok — $*"
 }
 
+makefile_text() {
+  cat "$REPO_ROOT/Makefile"
+  if [ -f "$REPO_ROOT/make/core.mk" ]; then
+    cat "$REPO_ROOT/make/core.mk"
+  fi
+}
+
 echo "domain-comprehension pressure tests"
 
-# #14 — Makefile wires --check-content (static)
-if grep -q 'check-content' "$REPO_ROOT/Makefile" && \
-   grep -q 'fixtures/check-content' "$REPO_ROOT/Makefile"; then
+# #14 — Makefile wires --check-content (static). Root Makefile may delegate to
+# a checked-in literal include, so inspect the repository's public Make entry
+# point plus its canonical core include.
+if makefile_text | grep -q 'check-content' && \
+   makefile_text | grep -q 'fixtures/check-content'; then
   pass "#14 Makefile lint runs --check-content on fixture"
 else
   fail "#14 Makefile must run validator with --check-content on check-content fixture"
