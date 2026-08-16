@@ -85,6 +85,32 @@ def test_release_inputs_ignore_untracked_files_and_reject_tracked_symlinks(tmp_p
         package_release(root, output)
 
 
+def test_release_inputs_reject_tracked_submodule(tmp_path: Path) -> None:
+    # A submodule reference is a "gitlink" tree entry (mode 160000) -- neither a
+    # symlink nor a regular file on disk. Without an explicit check it would
+    # silently vanish from the release instead of erroring: abs_path.is_symlink()
+    # and abs_path.is_file() are both False for a submodule path, so it would
+    # just never be added to _tracked_files()'s output.
+    root, _ = _minimal_repo(tmp_path)
+    sub = tmp_path / "sub"
+    sub.mkdir()
+    _init_repo(sub)
+    (sub / "f.txt").write_text("hi\n", encoding="utf-8")
+    _commit_all(sub)
+
+    subprocess.run(
+        ["git", "-c", "protocol.file.allow=always", "submodule", "add", "-q", str(sub), "vendor/sub"],
+        cwd=root,
+        check=True,
+    )
+    _commit_all(root)
+
+    output = tmp_path / "out"
+    output.mkdir()
+    with pytest.raises(ValueError, match="submodule"):
+        package_release(root, output)
+
+
 def test_release_inputs_exclude_tracked_repo_dev_tooling(tmp_path: Path) -> None:
     # git ls-files can't distinguish "untracked build noise" from "tracked
     # repo-development tooling" -- only the untracked half is naturally solved
@@ -154,6 +180,12 @@ def test_release_manifest_has_exact_provenance_and_file_hashes(tmp_path: Path) -
     assert manifest["source_sha"] == sha
     assert manifest["registry_schema_version"] == 1
     assert manifest["host_contract_schema_version"] == 1
+    # _minimal_repo's host_contracts.yaml/skills.yaml declare no hosts/skills,
+    # so these are present but empty -- this still pins the field's presence
+    # and shape (list / mapping), which release_contract.yaml's
+    # provenance.required_fields mandates every manifest carry.
+    assert manifest["supported_hosts"] == []
+    assert manifest["skill_versions"] == {}
     assert manifest["files"]
     assert all(len(digest) == 64 for digest in manifest["files"].values())
 

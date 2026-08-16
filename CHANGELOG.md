@@ -20,8 +20,9 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
   outright. Archives are now byte-reproducible: every tar entry's mtime/uid/gid/uname/gname is
   pinned, the gzip header's embedded name/mtime is suppressed, and content is written directly
   without an intermediate staging copy. Each bundle now embeds `RELEASE-MANIFEST.json` (schema
-  version, distribution version, exact source SHA, registry/host-contract schema versions, and a
-  SHA-256 per bundled file) alongside the pre-existing outer `.sha256`/`.files.sha256` assets.
+  version, distribution version, exact source SHA, registry/host-contract schema versions, every
+  supported host, each skill's normalized version, and a SHA-256 per bundled file) alongside the
+  pre-existing outer `.sha256`/`.files.sha256` assets.
 - Added `scripts/verify_release_bundle.py`: extracts a bundle into an isolated directory with
   `tarfile`'s `"data"` extraction filter (rejecting path traversal and other unsafe tar members),
   then checks the manifest's provenance fields and its file list/hashes exactly match the bundle

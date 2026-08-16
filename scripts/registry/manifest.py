@@ -176,6 +176,22 @@ def _load_platform_contracts(path: Path = CONTRACTS_PATH) -> dict[str, Any]:
     return raw
 
 
+def _resolve_skill_version(skill_id: str, skill_md: Path, frontmatter: dict[str, Any]) -> tuple[str, Any]:
+    """Normalized semantic version and the raw frontmatter value it came from.
+
+    Shared by _build_manifest() (which also needs the raw value, to tell a
+    legacy-numeric skill_version apart from a plain string for version_source)
+    and skill_versions() (which only needs the normalized string), so the two
+    never drift on how a skill's skill_version is read and normalized.
+    """
+    raw_version = frontmatter.get("skill_version")
+    try:
+        version = _normalize_version(_version_input(skill_md, raw_version))
+    except ValueError as exc:
+        raise ValueError(f"{skill_id}: {exc}") from exc
+    return version, raw_version
+
+
 def _build_manifest(root: Path) -> tuple[dict[str, Any], dict[str, Any]]:
     """Build the manifest and return it alongside the raw platform contracts
     mapping it was built from, so callers needing P1-only sections don't have
@@ -219,11 +235,7 @@ def _build_manifest(root: Path) -> tuple[dict[str, Any], dict[str, Any]]:
     for skill_id, entry in registry.skills.items():
         skill_md = root / entry.path / "SKILL.md"
         frontmatter = load_skill_frontmatter(skill_md)
-        raw_version = frontmatter.get("skill_version")
-        try:
-            version = _normalize_version(_version_input(skill_md, raw_version))
-        except ValueError as exc:
-            raise ValueError(f"{skill_id}: {exc}") from exc
+        version, raw_version = _resolve_skill_version(skill_id, skill_md, frontmatter)
         description = frontmatter.get("description")
         if not isinstance(description, str) or not description.strip():
             raise ValueError(f"{skill_id}: description must be a non-empty string")
@@ -313,11 +325,8 @@ def skill_versions(root: Path = ROOT) -> dict[str, str]:
     for skill_id, entry in registry.skills.items():
         skill_md = root / entry.path / "SKILL.md"
         frontmatter = load_skill_frontmatter(skill_md)
-        raw_version = frontmatter.get("skill_version")
-        try:
-            versions[skill_id] = _normalize_version(_version_input(skill_md, raw_version))
-        except ValueError as exc:
-            raise ValueError(f"{skill_id}: {exc}") from exc
+        version, _raw_version = _resolve_skill_version(skill_id, skill_md, frontmatter)
+        versions[skill_id] = version
     return versions
 
 

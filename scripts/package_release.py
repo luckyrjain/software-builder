@@ -81,6 +81,10 @@ def _ensure_clean_worktree(root: Path) -> None:
 # EXCLUDE_DIRS.
 _EXCLUDED_PATH_COMPONENTS = {"__pycache__", ".pytest_cache", "node_modules", "dist"}
 
+# Git's tree-entry mode for a submodule reference (a "gitlink"), distinct from
+# the 100644/100755 blob modes _tracked_files() otherwise expects.
+_GITLINK_MODE = 0o160000
+
 
 def _is_release_excluded(rel: str) -> bool:
     """True if rel (posix path, relative to repo root) is repo-development
@@ -119,16 +123,19 @@ def _tracked_files(root: Path) -> list[tuple[str, Path, int]]:
 
     Raises ValueError if any tracked, non-excluded path is a symlink --
     release inputs must be plain file content, never a link that could point
-    outside the bundle. Raises ValueError if a tracked, non-excluded path is
-    the reserved manifest filename -- otherwise the per-file loop and the
-    generated-manifest write in _write_reproducible_archive would both target
-    the same tar member name, silently discarding the tracked file's real
-    content in the archive. Raises ValueError (not
-    subprocess.CalledProcessError) if `git ls-files` itself fails, matching
-    how _ensure_clean_worktree already converts a git failure on its own git
-    invocation -- otherwise main()'s `except (OSError, *YAML_SAFETY_ERRORS)`
-    wouldn't catch it, and the CLI would crash with a raw traceback instead of
-    a clean error message.
+    outside the bundle. Raises ValueError if a tracked, non-excluded path is a
+    submodule reference (gitlink) -- silently dropping it (the alternative,
+    since it's neither a symlink nor a regular file on disk) would produce a
+    release that's missing content with no error at all. Raises ValueError if
+    a tracked, non-excluded path is the reserved manifest filename --
+    otherwise the per-file loop and the generated-manifest write in
+    _write_reproducible_archive would both target the same tar member name,
+    silently discarding the tracked file's real content in the archive.
+    Raises ValueError (not subprocess.CalledProcessError) if `git ls-files`
+    itself fails, matching how _ensure_clean_worktree already converts a git
+    failure on its own git invocation -- otherwise main()'s
+    `except (OSError, *YAML_SAFETY_ERRORS)` wouldn't catch it, and the CLI
+    would crash with a raw traceback instead of a clean error message.
     """
     try:
         result = subprocess.run(
@@ -154,6 +161,10 @@ def _tracked_files(root: Path) -> list[tuple[str, Path, int]]:
         if rel == MANIFEST_NAME:
             raise ValueError(
                 f"release inputs must not track the reserved manifest filename: {rel}",
+            )
+        if git_mode == _GITLINK_MODE:
+            raise ValueError(
+                f"release inputs must be regular files; found tracked submodule (gitlink): {rel}",
             )
         abs_path = root / rel
         if abs_path.is_symlink():

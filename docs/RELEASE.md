@@ -20,6 +20,13 @@ cd software-builder-1.4.0
 bash scripts/install.sh
 ```
 
+`scripts/install.sh` requires one of these two flows: a `.git` checkout (`git clone`/`git checkout`), or an
+extracted bundle produced by `scripts/package_release.py` (which carries `RELEASE-MANIFEST.json`).
+Provenance recording fails closed, so a directory that has neither -- e.g. GitHub's auto-generated
+"Source code (zip/tar.gz)" download attached to every tag/release, or a plain copy of the tree with
+`.git/` stripped out -- cannot install: `distribution_version`/`source_sha` are required, not
+best-effort, so there is no third, degraded path.
+
 ## Release contract
 
 `scripts/release_contract.yaml` is the machine-readable policy a release must satisfy: the tag
