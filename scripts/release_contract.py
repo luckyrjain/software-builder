@@ -48,8 +48,15 @@ def required_provenance_fields(path: Path = CONTRACT_PATH) -> set[str]:
 
 
 def validate_release_contract(root: Path = ROOT) -> list[str]:
+    # Load the contract from root's own scripts/release_contract.yaml, not the
+    # hardcoded CONTRACT_PATH default -- otherwise a caller that passes a root
+    # other than this script's own repo (e.g. `--repo-root` pointed at a
+    # different checkout) would silently validate that repo's VERSION/
+    # skills.yaml/host_contracts.yaml against *this* repo's contract instead
+    # of its own. For the common case (root is this repo), the two paths
+    # resolve identically, so default behavior is unchanged.
     try:
-        contract = _load_contract()
+        contract = _load_contract(root / "scripts" / "release_contract.yaml")
     except (OSError, *YAML_SAFETY_ERRORS) as exc:
         return [f"error: release contract: {exc}"]
 
@@ -112,7 +119,7 @@ def validate_release_contract(root: Path = ROOT) -> list[str]:
             )
 
     try:
-        required_provenance_fields()
+        required_provenance_fields(root / "scripts" / "release_contract.yaml")
     except ValueError as exc:
         errors.append(f"error: release contract: {exc}")
 

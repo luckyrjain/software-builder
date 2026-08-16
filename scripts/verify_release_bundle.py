@@ -26,6 +26,7 @@ if str(ROOT) not in sys.path:
 from scripts.reference_utils import sha256_file
 from scripts.release_contract import required_provenance_fields
 from scripts.release_info import MANIFEST_NAME, SEMVER_RE, SHA_RE
+from scripts.yaml_safety import YAML_SAFETY_ERRORS
 
 _HEX64_RE = re.compile(r"^[0-9a-f]{64}$")
 
@@ -63,7 +64,7 @@ def verify_release_bundle(archive: Path) -> list[str]:
 
         try:
             fields = required_provenance_fields()
-        except ValueError as exc:
+        except (OSError, *YAML_SAFETY_ERRORS) as exc:
             return [f"error: release contract: {exc}"]
         missing_fields = sorted(fields - set(manifest))
         if missing_fields:
@@ -77,6 +78,16 @@ def verify_release_bundle(archive: Path) -> list[str]:
         version = manifest.get("distribution_version")
         if not isinstance(version, str) or not SEMVER_RE.fullmatch(version):
             errors.append(f"error: {MANIFEST_NAME} distribution_version is invalid: {version!r}")
+        elif bundle_root.name != f"software-builder-{version}":
+            # Defends the "nothing tampered" guarantee this verifier exists to provide:
+            # without this, a bundle whose top-level directory was renamed after
+            # packaging (but whose manifest/file hashes are otherwise self-consistent)
+            # would still report "ok: verified" even though it no longer matches the
+            # canonical software-builder-{version} artifact convention.
+            errors.append(
+                f"error: release bundle top-level directory {bundle_root.name!r} does not match "
+                f"expected 'software-builder-{version}'",
+            )
 
         source_sha = manifest.get("source_sha")
         if not isinstance(source_sha, str) or not SHA_RE.fullmatch(source_sha):

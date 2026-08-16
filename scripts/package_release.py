@@ -76,13 +76,21 @@ def _tracked_files(root: Path) -> list[tuple[str, Path, int]]:
     otherwise the per-file loop and the generated-manifest write in
     _write_reproducible_archive would both target the same tar member name,
     silently discarding the tracked file's real content in the archive.
+    Raises ValueError (not subprocess.CalledProcessError) if `git ls-files`
+    itself fails, matching how _ensure_clean_worktree already converts a git
+    failure on its own git invocation -- otherwise main()'s
+    `except (OSError, *YAML_SAFETY_ERRORS)` wouldn't catch it, and the CLI
+    would crash with a raw traceback instead of a clean error message.
     """
-    result = subprocess.run(
-        ["git", "-C", str(root), "ls-files", "-s", "-z"],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(root), "ls-files", "-s", "-z"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        raise ValueError(f"could not list Git-tracked files: {exc.stderr.strip()}") from exc
     entries: list[tuple[str, int]] = []
     for raw_entry in result.stdout.split("\0"):
         if not raw_entry:

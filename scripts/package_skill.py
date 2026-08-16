@@ -27,7 +27,13 @@ from reference_utils import (
 )
 
 
-from release_info import git_source_sha, read_distribution_version
+from release_info import (
+    MANIFEST_NAME as RELEASE_MANIFEST_NAME,
+    SEMVER_RE,
+    SHA_RE,
+    git_source_sha,
+    read_distribution_version,
+)
 
 
 def collect_markdown_files(root: Path) -> list[Path]:
@@ -102,7 +108,7 @@ def _release_provenance(repo_root: Path) -> tuple[str, str]:
     flow docs/RELEASE.md documents -- would hard-fail: git_source_sha() now
     raises instead of degrading to "unknown" when repo_root has no .git.
     """
-    release_manifest_path = repo_root / "RELEASE-MANIFEST.json"
+    release_manifest_path = repo_root / RELEASE_MANIFEST_NAME
     if release_manifest_path.is_file():
         try:
             release_manifest = json.loads(release_manifest_path.read_text(encoding="utf-8"))
@@ -112,8 +118,19 @@ def _release_provenance(repo_root: Path) -> tuple[str, str]:
             raise ValueError(f"{release_manifest_path}: must be a JSON object")
         version = release_manifest.get("distribution_version")
         sha = release_manifest.get("source_sha")
-        if isinstance(version, str) and isinstance(sha, str):
+        # Enforce the same shape the live Git/VERSION fallback below already
+        # guarantees (read_distribution_version/git_source_sha both validate
+        # against these same patterns) -- otherwise a corrupted or tampered
+        # RELEASE-MANIFEST.json could silently write a garbage-but-string
+        # distribution_version/source_sha into every install's manifest.
+        if (
+            isinstance(version, str)
+            and SEMVER_RE.fullmatch(version)
+            and isinstance(sha, str)
+            and SHA_RE.fullmatch(sha)
+        ):
             return version, sha
+        raise ValueError(f"{release_manifest_path}: distribution_version/source_sha are invalid")
     return read_distribution_version(repo_root), git_source_sha(repo_root)
 
 
