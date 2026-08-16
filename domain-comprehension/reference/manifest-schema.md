@@ -67,11 +67,28 @@ Each row has `id`, `path`, `phase`, `required`, and `status` (`ok | stub | missi
 are relative to `artifact_root`, except the root manifest itself which is not an artifact row. Artifact
 and diagram paths must also be safe relative paths with no `..`; absolute paths are invalid.
 
-Required P5 artifact `prd` (`PRD.md`) is the evidence-backed as-built/current-state requirements
-synthesis. P5 marks it `ok` only after stable `FR-*`, `BR-*`, and `NFR-*` requirements and traceability
-are populated. Unrecoverable product intent stays `Unknown`.
+Required P5 artifacts for a completed FULL engagement are:
 
-Optional outputs include `E2E_FLOW.md`, Memory Bank export, Postman export, and runtime dependency graph.
+| ID | Path | Contract |
+|---|---|---|
+| `prd` | `PRD.md` | evidence-backed as-built/current-state requirements + traceability |
+| `api_event_schema` | `API_EVENT_SCHEMA.yaml` | machine API/event contracts + source revision/evidence/confidence |
+| `data_ownership_graph` | `DATA_OWNERSHIP_GRAPH.yaml` | machine authoritative data ownership/access graph |
+| `dependency_graph_machine` | `DEPENDENCY_GRAPH.yaml` | machine sync/async, upstream/downstream, criticality graph |
+| `capability_traceability` | `CAPABILITY_TRACEABILITY.yaml` | capability → repositories/code locations/owner/evidence |
+
+P5 marks `prd` `ok` only after stable `FR-*`, `BR-*`, and `NFR-*` requirements and traceability are
+populated. It marks the four machine artifacts `ok` only after the reconciliation procedure in
+[machine-domain-model.md](machine-domain-model.md). Unrecoverable product intent or machine evidence stays
+`Unknown`; it is never guessed to satisfy completion.
+
+QUICK engagements may create the machine files as stubs without completing P5. Strict validation only
+requires all `required: true` artifact rows to be `ok`/`waived` when `engagement.status` is
+`FIRST_PASS_COMPLETE`. COMPLIANCE_RETROFIT may use `waived` where re-analysis would be required; the waiver
+must be disclosed in the human handoff/omissions rather than fabricating machine evidence.
+
+Optional outputs include `E2E_FLOW.md`, Memory Bank export, Postman export, and runtime-only diagram
+supplements.
 
 ## `diagrams[]`
 
@@ -102,9 +119,10 @@ understand status, and deep-dive status.
    `engagement.artifact_root`.
 2. End each phase by updating phases/artifacts/diagrams/evidence/confidence and running validation.
 3. Skipped phases require a reason; optional artifacts become `n_a` or `waived` as appropriate.
-4. `FIRST_PASS_COMPLETE` requires manifest `--strict --check-content` plus `validate_prd.py`; required P5
-   `prd` must be `ok` and satisfy its requirement/traceability contract.
-5. `ADD_REPO` keeps affected phases in progress while merge conflicts remain open.
+4. `FIRST_PASS_COMPLETE` requires manifest `--strict --check-content` plus `validate_prd.py`; all required
+   P5 artifacts must be `ok`/`waived`, and the PRD must satisfy its requirement/traceability contract.
+5. `ADD_REPO` keeps affected phases in progress while merge conflicts remain open and must refresh affected
+   machine artifacts before P5 freshness claims.
 
 ## Validation
 
