@@ -4,6 +4,7 @@ import subprocess
 from pathlib import Path
 
 from scripts.operational_upkeep import (
+    _deprecation_candidates,
     _nested_mappings,
     _tracked_relative_files,
     _validate_deprecation_mapping,
@@ -63,8 +64,11 @@ def test_file_roles_separate_runtime_reference_and_maintainer_surfaces() -> None
     assert classify_file_role("pr-review/SKILL.md", policy) == "runtime"
     assert classify_file_role("pr-review/workflow/inputs.md", policy) == "runtime"
     assert classify_file_role("pr-review/reference/smoke-test.md", policy) == "reference"
+    assert classify_file_role("pr-review/README.md", policy) == "reference"
     assert classify_file_role("scripts/registry/eval_contracts.yaml", policy) == "maintainer"
-    assert classify_file_role("make/core.mk", policy) == "maintainer"
+    assert classify_file_role("scripts/README.md", policy) == "maintainer"
+    assert classify_file_role("make/README.md", policy) == "maintainer"
+    assert classify_file_role("docs/superpowers/plans/README.md", policy) == "maintainer"
 
 
 def test_contract_owner_resolution_uses_matching_codeowners_rule() -> None:
@@ -107,6 +111,17 @@ def test_nested_artifact_deprecation_is_reachable_by_validator() -> None:
         for error in _validate_deprecation_mapping(mapping, label, required)
     ]
     assert any("legacy_report" in error and "deprecated_since" in error for error in errors)
+
+
+def test_deprecation_discovery_includes_yaml_and_yml_registry_files(tmp_path: Path) -> None:
+    registry = tmp_path / "scripts" / "registry"
+    registry.mkdir(parents=True)
+    (registry / "one.yaml").write_text("status: active\n", encoding="utf-8")
+    (registry / "two.yml").write_text("status: deprecated\n", encoding="utf-8")
+
+    labels = {label for label, _ in _deprecation_candidates(tmp_path, [])}
+    assert "scripts/registry/one.yaml" in labels
+    assert "scripts/registry/two.yml" in labels
 
 
 def test_health_inputs_ignore_untracked_worktree_files(tmp_path: Path) -> None:
