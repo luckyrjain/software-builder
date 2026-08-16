@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from datetime import date
+from pathlib import Path
 
+import scripts.deprecation_diff_guard as guard
 from scripts.deprecation_diff_guard import validate_removed_items
 
 
@@ -28,6 +30,12 @@ def _deprecated(*, remove_after: str) -> dict:
             "aliases": [],
         },
     }
+
+
+def test_policy_bootstrap_is_allowed_when_base_has_no_lifecycle_policy(monkeypatch) -> None:
+    monkeypatch.setattr(guard, "_git_text", lambda root, ref, path: None)
+
+    assert guard.validate_revision_removals(Path("."), "base", "head") == []
 
 
 def test_removal_requires_prior_deprecation_in_base_revision() -> None:
