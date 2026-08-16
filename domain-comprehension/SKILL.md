@@ -1,6 +1,6 @@
 ---
 name: domain-comprehension
-skill_version: 1.0
+skill_version: 1.1
 platform_contract: skill-platform-v1
 description: >-
   Build a verifiable, evidence-backed representation of a business domain and an
@@ -41,6 +41,10 @@ Mandatory phase artifacts: [phase-outputs.md](reference/phase-outputs.md). Compl
 [large-scale-execution.md](reference/large-scale-execution.md). Required diagrams:
 [required-diagrams.md](reference/required-diagrams.md).
 
+Repository discovery is budgeted, not open-ended. Record configured and consumed repository/search/deep-read
+limits and stop PARTIAL rather than silently exceeding them. The normative machine contract is
+[domain-model-contract.yaml](reference/domain-model-contract.yaml).
+
 ## When to use / NOT to use
 
 Routing: [skill-routing.md](../docs/skill-framework/shared/skill-routing.md).
@@ -67,7 +71,7 @@ uses **squad-map**; Datadog/KubeSense runtime validation is optional. Setup: [SE
 | **QUICK** | `domain-config.yaml`, `EXEC_SUMMARY.md`, `PROGRESS.md` | `PRD.md` and remaining full artifacts |
 | **FULL** | All Living deliverables, including `PRD.md` | `E2E_FLOW.md`, per-repo Memory Bank |
 | **RESUME** | updated `manifest.yaml`, `PROGRESS.md`, incomplete outputs | Complete outputs unchanged |
-| **DELTA** | changed outputs + manifest/progress; update `PRD.md` when behavior changed | Unchanged outputs |
+| **DELTA** | changed outputs + manifest/progress; update `PRD.md` when behavior changed or mark stale PRD explicitly | Unchanged outputs |
 | **ADD_REPO** | merge new repo evidence; re-run summary/risk/PRD and affected downstream phases | E2E update if P2 reruns |
 | **COMPLIANCE_RETROFIT** | manifest + schema normalization | No code re-analysis; no invented PRD evidence |
 | **PROPOSAL_CHECK** | `PROPOSAL_CHECK_REPORT.md` only | Never merge into canonical artifacts |
@@ -78,6 +82,17 @@ P5 synthesizes `PRD.md` from the completed evidence set. Requirements use stable
 `NFR-*` IDs plus `Observed | Inferred | Unknown` status, confidence, and evidence. Never manufacture
 future-state intent, personas, KPIs, SLOs, roadmap, or acceptance criteria. Full contract:
 [as-built-prd.md](reference/as-built-prd.md). Template: [templates/PRD.md](templates/PRD.md).
+
+## Machine domain model
+
+FULL runs and affected DELTA/ADD_REPO phases emit machine-readable `API_EVENT_SCHEMA.yaml`,
+`DATA_OWNERSHIP_GRAPH.yaml`, and `CAPABILITY_TRACEABILITY.yaml`. Dependency edges distinguish synchronous
+from asynchronous interaction, upstream from downstream direction, and carry evidence-backed criticality.
+Confidence rolls up deterministically using the weakest material claim; it is never averaged upward.
+Before retaining an existing `PRD.md` in DELTA/ADD_REPO, run the contract's stale PRD checks against source
+revision, contracts, data ownership, dependency semantics, and capability ownership. These artifacts are the
+current-state handoff consumed by **prd-architect**; that consumer may propose future state but must not rewrite
+observed evidence.
 
 ## Workflow
 
@@ -114,7 +129,7 @@ architectural smells in P4 using [architectural-smells.md](reference/architectur
 Full index/templates/phase ownership: [deliverable-templates.md](reference/deliverable-templates.md).
 `FULL` mode includes `EXEC_SUMMARY.md`, `PRD.md`, bounded contexts, ownership, dependency graph, business
 flows/state machine, API/event catalogs, risk map, glossary, ADRs, runbook, unknowns/omissions, progress,
-config, and the domain map under the configured artifact root.
+config, the machine domain-model artifacts, and the domain map under the configured artifact root.
 
 ## Resume
 
@@ -135,7 +150,7 @@ phase.
 | Security finding needs MR-level inspection | **pr-review** |
 | Architecture smell needs incident context | **incident-rca** |
 | Overprovisioned service | **k8s-overprovisioning-datadog** |
-| Future-state PRD/MVP/build-readiness work | **prd-architect** using `PRD.md` + evidence as baseline |
+| Future-state PRD/MVP/build-readiness work | **prd-architect** using `PRD.md` + machine domain-model evidence as baseline |
 | MySQL→Postgres rewrite artifact | **mysql-to-postgres-sql** |
 
 ## Post-actions
@@ -149,11 +164,12 @@ Completion emits the canonical `skill_result` envelope; actions classify against
 `action_gates`; scope follows `definition_of_done` — all defined in
 [runtime-contract.md](../docs/skill-framework/shared/runtime-contract.md).
 
-`definition_of_done`: required_artifacts=[manifest.yaml, PROGRESS.md, EXEC_SUMMARY.md, PRD.md];
-required_checks=[Evidence/Conclusion/Confidence contract, phase-completion-gate report, read-only source
-boundary]; blocked_conditions=[source mutation, artifact outside artifact_root, PRD claim missing evidence
-status, manifest.yaml missing at RESUME]; partial_result_behavior=preserves PROGRESS.md/manifest.yaml,
-routes gaps to UNKNOWNS.md/KNOWN_OMISSIONS.md.
+`definition_of_done`: required_artifacts=[manifest.yaml, PROGRESS.md, EXEC_SUMMARY.md, PRD.md,
+API_EVENT_SCHEMA.yaml, DATA_OWNERSHIP_GRAPH.yaml, CAPABILITY_TRACEABILITY.yaml]; required_checks=[Evidence/Conclusion/Confidence
+contract, phase-completion-gate report, discovery budget, stale PRD check, read-only source boundary];
+blocked_conditions=[source mutation, artifact outside artifact_root, PRD claim missing evidence status,
+manifest.yaml missing at RESUME]; partial_result_behavior=preserves PROGRESS.md/manifest.yaml, routes gaps to
+UNKNOWNS.md/KNOWN_OMISSIONS.md.
 
 [docs/skill-framework/README.md](../docs/skill-framework/README.md) ·
 [safe-output.md](../docs/skill-framework/shared/safe-output.md) ·
@@ -161,7 +177,7 @@ routes gaps to UNKNOWNS.md/KNOWN_OMISSIONS.md.
 
 ## Begin
 
-1. [workflow/inputs.md](workflow/inputs.md) — resolve `delivery_mode`, domain, workspace, and artifact root.
+1. [workflow/inputs.md](workflow/inputs.md) — resolve `delivery_mode`, domain, workspace, artifact root, and discovery budget.
 2. `manifest.yaml` exists → resume/retrofit; otherwise run **Session 0**.
 3. Run **Session 0b** via squad-map.
-4. Execute P0 → P5; P5 synthesizes the final evidence-backed `PRD.md`.
+4. Execute P0 → P5; P5 synthesizes the final evidence-backed `PRD.md` plus machine domain-model artifacts.
