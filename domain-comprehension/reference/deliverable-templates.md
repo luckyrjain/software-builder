@@ -42,10 +42,11 @@ because it is a shared **squad-map** artifact rather than a domain-specific docu
 confidence, and `Observed | Inferred | Unknown` status. Future-state specification belongs to
 **prd-architect**.
 
-The four YAML machine artifacts follow [domain-model-contract.yaml](domain-model-contract.yaml). Their
-`source_revision` must identify the analyzed repo revisions, and every populated record/edge/capability must
-retain evidence and confidence rather than converting unknowns into guessed values. These files are copied
-as stubs during Session 0 and completed by the owning phases.
+The four YAML machine artifacts follow [domain-model-contract.yaml](domain-model-contract.yaml) and the
+phase-by-phase procedure in [machine-domain-model.md](machine-domain-model.md). Their `source_revision` must
+identify the analyzed repo revisions, and every populated record/edge/capability must retain evidence and
+confidence rather than converting unknowns into guessed values. These files are copied as stubs during
+Session 0 and completed by the owning phases.
 
 Export templates not copied at Session 0: [templates/memory-bank/](../templates/memory-bank/) and
 [templates/postman/](../templates/postman/).
