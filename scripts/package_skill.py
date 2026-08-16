@@ -108,6 +108,8 @@ def _release_provenance(repo_root: Path) -> tuple[str, str]:
             release_manifest = json.loads(release_manifest_path.read_text(encoding="utf-8"))
         except json.JSONDecodeError as exc:
             raise ValueError(f"{release_manifest_path}: invalid JSON: {exc}") from exc
+        if not isinstance(release_manifest, dict):
+            raise ValueError(f"{release_manifest_path}: must be a JSON object")
         version = release_manifest.get("distribution_version")
         sha = release_manifest.get("source_sha")
         if isinstance(version, str) and isinstance(sha, str):

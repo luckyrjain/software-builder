@@ -18,7 +18,6 @@ import gzip
 import hashlib
 import io
 import json
-import os
 import subprocess
 import sys
 import tarfile
@@ -61,25 +60,42 @@ def _ensure_clean_worktree(root: Path) -> None:
         raise ValueError(f"could not check Git working tree status: {result.stderr.strip()}")
 
 
-def _tracked_files(root: Path) -> list[tuple[str, Path]]:
-    """Git-tracked regular files under root, as (posix relative path, absolute path).
+def _tracked_files(root: Path) -> list[tuple[str, Path, int]]:
+    """Git-tracked regular files under root, as (posix relative path, absolute
+    path, tar mode).
+
+    The tar mode is read from Git's own index (``git ls-files -s``), not from
+    the filesystem: a filesystem executable bit that has drifted from Git's
+    recorded mode -- e.g. under ``core.fileMode=false``, where the
+    ``_ensure_clean_worktree`` diff check can't see the drift -- would
+    otherwise make the archive depend on the machine it was built on instead
+    of only on the Git tree, breaking reproducibility.
 
     Raises ValueError if any tracked path is a symlink -- release inputs must
     be plain file content, never a link that could point outside the bundle.
     """
     result = subprocess.run(
-        ["git", "-C", str(root), "ls-files", "-z"],
+        ["git", "-C", str(root), "ls-files", "-s", "-z"],
         check=True,
         capture_output=True,
         text=True,
     )
-    files: list[tuple[str, Path]] = []
-    for rel in sorted(entry for entry in result.stdout.split("\0") if entry):
+    entries: list[tuple[str, int]] = []
+    for raw_entry in result.stdout.split("\0"):
+        if not raw_entry:
+            continue
+        meta, _, rel = raw_entry.partition("\t")
+        git_mode = int(meta.split(" ", 1)[0], 8)
+        entries.append((rel, git_mode))
+
+    files: list[tuple[str, Path, int]] = []
+    for rel, git_mode in sorted(entries, key=lambda item: item[0]):
         abs_path = root / rel
         if abs_path.is_symlink():
             raise ValueError(f"release inputs must be regular files; found tracked symlink: {rel}")
         if abs_path.is_file():
-            files.append((rel, abs_path))
+            mode = 0o755 if git_mode & 0o111 else 0o644
+            files.append((rel, abs_path, mode))
     return files
 
 
@@ -98,25 +114,55 @@ def _tar_info(arcname: str, *, size: int, mode: int) -> tarfile.TarInfo:
     return info
 
 
+class _HashingReader:
+    """Wrap a binary file object, updating `digest` with every chunk read.
+
+    tarfile.addfile() streams a member's content by calling .read(bufsize) on
+    the given file object in a loop. Wrapping the handle here lets that one
+    read pass -- the pass that copies file content into the archive -- also
+    compute the file's SHA-256, instead of reading every tracked file twice
+    (once whole, to hash, and again to stream into the tar).
+    """
+
+    def __init__(self, fileobj, digest) -> None:
+        self._fileobj = fileobj
+        self._digest = digest
+
+    def read(self, size: int = -1) -> bytes:
+        chunk = self._fileobj.read(size)
+        self._digest.update(chunk)
+        return chunk
+
+
 def _write_reproducible_archive(
     archive_path: Path,
     bundle_name: str,
-    tracked: list[tuple[str, Path]],
-    manifest_bytes: bytes,
-) -> None:
+    tracked: list[tuple[str, Path, int]],
+    manifest_fields: dict,
+) -> tuple[dict[str, str], bytes]:
+    """Write every tracked file plus RELEASE-MANIFEST.json into a reproducible
+    archive, hashing each tracked file exactly once as it streams into the
+    tar. Returns (file_hashes, manifest_bytes) so the caller can write the
+    sibling .sha256/.files.sha256 assets without re-reading any file.
+    """
+    file_hashes: dict[str, str] = {}
     with archive_path.open("wb") as raw:
         # filename="" (not the default of raw.name) keeps the gzip header
         # itself reproducible regardless of the output path chosen.
         with gzip.GzipFile(filename="", mode="wb", fileobj=raw, mtime=0) as gz:
             with tarfile.open(fileobj=gz, mode="w") as tar:
-                for rel, abs_path in tracked:
-                    mode = 0o755 if os.access(abs_path, os.X_OK) else 0o644
+                for rel, abs_path, mode in tracked:
                     info = _tar_info(f"{bundle_name}/{rel}", size=abs_path.stat().st_size, mode=mode)
+                    digest = hashlib.sha256()
                     with abs_path.open("rb") as handle:
-                        tar.addfile(info, handle)
+                        tar.addfile(info, _HashingReader(handle, digest))
+                    file_hashes[rel] = digest.hexdigest()
 
+                manifest = {**manifest_fields, "files": file_hashes}
+                manifest_bytes = (json.dumps(manifest, indent=2, sort_keys=True) + "\n").encode("utf-8")
                 info = _tar_info(f"{bundle_name}/{MANIFEST_NAME}", size=len(manifest_bytes), mode=0o644)
                 tar.addfile(info, io.BytesIO(manifest_bytes))
+    return file_hashes, manifest_bytes
 
 
 def package_release(root: Path, output_dir: Path) -> tuple[Path, Path]:
@@ -126,21 +172,17 @@ def package_release(root: Path, output_dir: Path) -> tuple[Path, Path]:
     bundle_name = f"software-builder-{version}"
 
     tracked = _tracked_files(root)
-    file_hashes = {rel: sha256_file(abs_path) for rel, abs_path in tracked}
-
-    manifest = {
+    manifest_fields = {
         "schema_version": 1,
         "distribution_version": version,
         "source_sha": sha,
         "registry_schema_version": read_schema_version(root / "skills.yaml"),
         "host_contract_schema_version": read_schema_version(root / "scripts" / "registry" / "host_contracts.yaml"),
-        "files": file_hashes,
     }
-    manifest_bytes = (json.dumps(manifest, indent=2, sort_keys=True) + "\n").encode("utf-8")
-    manifest_digest = hashlib.sha256(manifest_bytes).hexdigest()
 
     archive_path = output_dir / f"{bundle_name}.tar.gz"
-    _write_reproducible_archive(archive_path, bundle_name, tracked, manifest_bytes)
+    file_hashes, manifest_bytes = _write_reproducible_archive(archive_path, bundle_name, tracked, manifest_fields)
+    manifest_digest = hashlib.sha256(manifest_bytes).hexdigest()
 
     checksum_lines = sorted(
         [f"{digest}  {rel}" for rel, digest in file_hashes.items()]

@@ -32,7 +32,8 @@ CONTRACT_PATH = Path(__file__).resolve().parent / "release_contract.yaml"
 
 def _load_contract(path: Path = CONTRACT_PATH) -> dict:
     raw = require_mapping(load_unique_yaml_file(path), "release contract")
-    if raw.get("schema_version") != 1:
+    schema_version = raw.get("schema_version")
+    if not isinstance(schema_version, int) or isinstance(schema_version, bool) or schema_version != 1:
         raise ValueError(f"{path}: schema_version must be 1")
     return raw
 
@@ -62,10 +63,17 @@ def validate_release_contract(root: Path = ROOT) -> list[str]:
     tag_pattern = contract.get("tag_pattern")
     if not isinstance(tag_pattern, str):
         errors.append("error: release contract: tag_pattern must be a string")
-    elif not re.fullmatch(tag_pattern, f"v{version}"):
-        errors.append(
-            f"error: release contract: VERSION {version!r} does not produce a tag matching {tag_pattern!r}",
-        )
+    else:
+        try:
+            tag_matches = re.fullmatch(tag_pattern, f"v{version}")
+        except re.error as exc:
+            errors.append(f"error: release contract: tag_pattern {tag_pattern!r} is not a valid regex: {exc}")
+        else:
+            if not tag_matches:
+                errors.append(
+                    f"error: release contract: VERSION {version!r} does not produce a tag matching "
+                    f"{tag_pattern!r}",
+                )
 
     templates = contract.get("artifact_name_templates")
     if not isinstance(templates, list) or not templates or not all(isinstance(item, str) for item in templates):
@@ -89,6 +97,9 @@ def validate_release_contract(root: Path = ROOT) -> list[str]:
     }
     for key, path in schema_checks.items():
         expected = compatibility.get(key)
+        if not isinstance(expected, int) or isinstance(expected, bool):
+            errors.append(f"error: release contract: compatibility.{key} must be an integer")
+            continue
         try:
             actual = read_schema_version(path)
         except (OSError, *YAML_SAFETY_ERRORS) as exc:

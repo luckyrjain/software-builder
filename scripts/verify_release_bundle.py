@@ -25,9 +25,8 @@ if str(ROOT) not in sys.path:
 
 from scripts.reference_utils import sha256_file
 from scripts.release_contract import required_provenance_fields
+from scripts.release_info import SEMVER_RE, SHA_RE
 
-_SEMVER_RE = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$")
-_SHA_RE = re.compile(r"^[0-9a-f]{40,64}$")
 _HEX64_RE = re.compile(r"^[0-9a-f]{64}$")
 MANIFEST_NAME = "RELEASE-MANIFEST.json"
 
@@ -72,15 +71,16 @@ def verify_release_bundle(archive: Path) -> list[str]:
             return [f"error: {MANIFEST_NAME} missing fields: {missing_fields}"]
 
         errors: list[str] = []
-        if manifest.get("schema_version") != 1:
+        schema_version = manifest.get("schema_version")
+        if not isinstance(schema_version, int) or isinstance(schema_version, bool) or schema_version != 1:
             errors.append(f"error: {MANIFEST_NAME} schema_version must be 1")
 
         version = manifest.get("distribution_version")
-        if not isinstance(version, str) or not _SEMVER_RE.fullmatch(version):
+        if not isinstance(version, str) or not SEMVER_RE.fullmatch(version):
             errors.append(f"error: {MANIFEST_NAME} distribution_version is invalid: {version!r}")
 
         source_sha = manifest.get("source_sha")
-        if not isinstance(source_sha, str) or not _SHA_RE.fullmatch(source_sha):
+        if not isinstance(source_sha, str) or not SHA_RE.fullmatch(source_sha):
             errors.append(f"error: {MANIFEST_NAME} source_sha is invalid: {source_sha!r}")
 
         for key in ("registry_schema_version", "host_contract_schema_version"):
