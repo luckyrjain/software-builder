@@ -39,9 +39,11 @@ jobs:
           python3 scripts/operational_upkeep.py validate
           python3 -m scripts.deprecation_lifecycle
 
-      - name: Publish prompt-system health, eval tiers and provenance
+      - name: Publish prompt-system health and enforce eval tier coverage
         run: |
           python3 scripts/operational_upkeep.py health --format markdown --revision "$GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
+          # Deterministic tier coverage is enforced (non-zero exit fails this step);
+          # only the live-model harness sub-check inside this report is non-blocking.
           python3 scripts/eval_tier_health.py --format markdown >> "$GITHUB_STEP_SUMMARY"
 
       - name: Enforce prompt-diff risk and removal lifecycle

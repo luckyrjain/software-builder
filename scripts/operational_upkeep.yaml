@@ -20,6 +20,7 @@ file_roles:
       - "*/examples.md"
       - "*/SETUP.md"
       - "*/README.md"
+      - "docs/skill-framework/shared/**"
   maintainer:
     description: Build, validation, evaluation, governance, and design-time material.
     patterns:

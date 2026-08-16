@@ -22,7 +22,7 @@ _INSTALL_ARG_RE = re.compile(
     r"bash scripts/install\.sh (?:--\S+ \S+ )*([a-z0-9]+(?:-[a-z0-9]+)*)\s*$",
     re.MULTILINE,
 )
-_INCLUDE_RE = re.compile(r"^\s*-?include\s+([^#\s]+)\s*(?:#.*)?$", re.MULTILINE)
+_INCLUDE_RE = re.compile(r"^\s*-?include\s+([^#]+?)\s*(?:#.*)?$", re.MULTILINE)
 
 MAKEFILE_RELATIVE = Path("Makefile")
 
@@ -50,10 +50,11 @@ def _read_makefile_graph(root: Path, relative: Path = MAKEFILE_RELATIVE) -> str:
         text = resolved.read_text(encoding="utf-8")
         chunks.append(text)
         for match in _INCLUDE_RE.finditer(text):
-            token = match.group(1)
-            if "$" in token or "*" in token or "?" in token or "[" in token:
-                continue
-            visit(root_resolved / token)
+            # GNU Make allows multiple space-separated files on one include line.
+            for token in match.group(1).split():
+                if "$" in token or "*" in token or "?" in token or "[" in token:
+                    continue
+                visit(root_resolved / token)
 
     visit(root_resolved / relative)
     return "\n".join(chunks)

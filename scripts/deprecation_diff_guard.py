@@ -15,7 +15,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from scripts.deprecation_lifecycle import validate_deprecation_item
-from scripts.yaml_safety import load_unique_yaml
+from scripts.yaml_safety import FRONTMATTER_RE, load_unique_yaml
 
 POLICY_PATH = "scripts/operational_upkeep.yaml"
 
@@ -40,12 +40,12 @@ def _mapping(text: str | None) -> dict[str, Any]:
 
 
 def _frontmatter(text: str | None) -> dict[str, Any]:
-    if not text or not text.startswith("---\n"):
+    if text is None:
         return {}
-    end = text.find("\n---", 4)
-    if end < 0:
+    match = FRONTMATTER_RE.match(text)
+    if not match:
         return {}
-    value = load_unique_yaml(text[4:end])
+    value = load_unique_yaml(match.group(1))
     return value if isinstance(value, dict) else {}
 
 

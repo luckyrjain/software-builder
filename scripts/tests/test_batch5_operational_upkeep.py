@@ -61,6 +61,25 @@ def test_install_target_scan_ignores_dynamic_and_escaping_includes(tmp_path: Pat
     assert "should-not-load" not in _read_makefile_graph(tmp_path)
 
 
+def test_install_target_scan_follows_multi_file_include_lines(tmp_path: Path) -> None:
+    (tmp_path / "make").mkdir()
+    (tmp_path / "Makefile").write_text(
+        "include make/core.mk make/extra.mk\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "make" / "core.mk").write_text(
+        "install-example:\n\tbash scripts/install.sh example\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "make" / "extra.mk").write_text(
+        "install-second:\n\tbash scripts/install.sh second\n",
+        encoding="utf-8",
+    )
+    text = _read_makefile_graph(tmp_path)
+    assert "bash scripts/install.sh example" in text
+    assert "bash scripts/install.sh second" in text
+
+
 def test_operational_policy_validates_repository() -> None:
     assert validate_policy(ROOT) == []
 
@@ -117,6 +136,20 @@ def test_yaml_mapping_fails_closed_on_duplicate_keys(tmp_path: Path) -> None:
     path.write_text("status: active\nstatus: deprecated\n", encoding="utf-8")
     with pytest.raises(YAML_SAFETY_ERRORS):
         _yaml_mapping(path)
+
+
+def test_all_shared_framework_docs_are_classified() -> None:
+    policy = load_policy(ROOT / "scripts" / "operational_upkeep.yaml")
+    shared_dir = ROOT / "docs" / "skill-framework" / "shared"
+    for path in sorted(shared_dir.glob("*.md")):
+        rel = path.relative_to(ROOT).as_posix()
+        assert classify_file_role(rel, policy) is not None, f"{rel} is not classified by any file role"
+    # The explicit core runtime contracts must still win over the broad reference default.
+    assert classify_file_role("docs/skill-framework/shared/runtime-contract.md", policy) == "runtime"
+    assert classify_file_role("docs/skill-framework/shared/skill-routing.md", policy) == "runtime"
+    assert classify_file_role("docs/skill-framework/shared/prompt-injection.md", policy) == "runtime"
+    assert classify_file_role("docs/skill-framework/shared/safe-output.md", policy) == "runtime"
+    assert classify_file_role("docs/skill-framework/shared/cross-skill-escalation.md", policy) == "reference"
 
 
 def test_contract_owner_resolution_uses_matching_codeowners_rule() -> None:

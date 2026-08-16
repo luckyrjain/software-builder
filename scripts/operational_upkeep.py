@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from scripts.yaml_safety import load_unique_yaml, load_unique_yaml_file
+from scripts.yaml_safety import FRONTMATTER_RE, load_unique_yaml, load_unique_yaml_file
 
 POLICY_PATH = ROOT / "scripts" / "operational_upkeep.yaml"
 GENERATOR_VERSION = "1.3"
@@ -148,13 +148,10 @@ def _validate_deprecation_mapping(data: dict[str, Any], label: str, required: se
 
 
 def _markdown_frontmatter(path: Path) -> dict[str, Any]:
-    text = path.read_text(encoding="utf-8")
-    if not text.startswith("---\n"):
+    match = FRONTMATTER_RE.match(path.read_text(encoding="utf-8"))
+    if not match:
         return {}
-    end = text.find("\n---", 4)
-    if end < 0:
-        return {}
-    data = load_unique_yaml(text[4:end])
+    data = load_unique_yaml(match.group(1))
     return data if isinstance(data, dict) else {}
 
 
