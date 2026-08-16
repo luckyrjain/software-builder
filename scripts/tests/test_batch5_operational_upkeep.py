@@ -146,7 +146,7 @@ def test_health_report_is_deterministic_with_complete_provenance() -> None:
     assert provenance["prompt_bundle_version"] == "1"
     assert provenance["evaluator_version"] == "1"
     assert provenance["operational_policy_version"] == "1.2"
-    assert provenance["generator_version"] == "1.2"
+    assert provenance["generator_version"] == "1.3"
 
     health = first["health"]
     assert health["skills"] >= 23
