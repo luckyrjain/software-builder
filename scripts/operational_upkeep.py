@@ -157,7 +157,7 @@ def _validate_deprecation_mapping(data: dict[str, Any], label: str, required: se
     )
     if empty:
         return [f"error: {label}: deprecation fields must be non-empty: {', '.join(empty)}"]
-    if not isinstance(block.get("aliases"), list):
+    if "aliases" in required and not isinstance(block.get("aliases"), list):
         return [f"error: {label}: deprecation aliases must be a list"]
     return []
 

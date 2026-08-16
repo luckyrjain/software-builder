@@ -213,6 +213,45 @@ def test_deprecated_contract_fails_closed_when_lifecycle_metadata_is_missing() -
     assert "aliases" in errors[0]
 
 
+def test_aliases_shape_check_honors_the_required_set() -> None:
+    # "aliases" required (the shipped policy's shape): a non-list value fails.
+    required_with_aliases = {"deprecated_since", "replacement", "remove_after", "migration_note", "aliases"}
+    errors = _validate_deprecation_mapping(
+        {
+            "status": "deprecated",
+            "deprecation": {
+                "deprecated_since": "2026-01-01",
+                "replacement": "route.new",
+                "remove_after": "2026-04-01",
+                "migration_note": "migrate",
+                "aliases": "not-a-list",
+            },
+        },
+        "fixture.yaml",
+        required_with_aliases,
+    )
+    assert errors == ["error: fixture.yaml: deprecation aliases must be a list"]
+
+    # "aliases" not required: an item that omits it entirely must not fail on
+    # the aliases-shape check, since that check is meant to be parameterized
+    # by `required`, not hardcoded.
+    required_without_aliases = {"deprecated_since", "replacement", "remove_after", "migration_note"}
+    errors = _validate_deprecation_mapping(
+        {
+            "status": "deprecated",
+            "deprecation": {
+                "deprecated_since": "2026-01-01",
+                "replacement": "route.new",
+                "remove_after": "2026-04-01",
+                "migration_note": "migrate",
+            },
+        },
+        "fixture.yaml",
+        required_without_aliases,
+    )
+    assert errors == []
+
+
 def test_nested_artifact_deprecation_is_reachable_by_validator() -> None:
     nested = {
         "artifact_schemas": {
