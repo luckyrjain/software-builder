@@ -10,19 +10,20 @@ from collections import Counter
 from pathlib import Path
 from typing import Any, Iterable, Iterator
 
-import yaml
-
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from scripts.yaml_safety import FRONTMATTER_RE, load_unique_yaml, load_unique_yaml_file
+
 POLICY_PATH = ROOT / "scripts" / "operational_upkeep.yaml"
 GENERATOR_VERSION = "1.3"
 _ID_RE = re.compile(r"^(route|stop|report)\.[a-z0-9][a-z0-9.-]*$")
+_CAPABILITY_NAME_RE = re.compile(r"^[a-z][a-z0-9_-]*(\.[a-z][a-z0-9_-]*)+$")
 
 
 def load_policy(path: Path = POLICY_PATH) -> dict[str, Any]:
-    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    data = load_unique_yaml_file(path)
     if not isinstance(data, dict):
         raise ValueError("operational upkeep policy must be a mapping")
     return data
@@ -57,10 +58,22 @@ def _tracked_relative_files(root: Path) -> list[Path]:
 
 def _matches(path: str, pattern: str) -> bool:
     if pattern.endswith("/**"):
-        return path.startswith(pattern[:-3])
+        prefix = pattern[:-3]
+        return path == prefix or path.startswith(f"{prefix}/")
     if pattern.startswith("/"):
-        return pattern[1:] in path
-    return fnmatch.fnmatch(path, pattern) or pattern in path
+        # A leading-"/" pattern matches its target as a path *segment*, not an
+        # unanchored substring: "/tests/" must match ".../tests/..." and must
+        # not match "contests/..." or "protests/..." merely containing "tests/".
+        segment = pattern[1:]
+        if segment.endswith("/"):
+            # Directory-style: the pattern's own trailing "/" is the right
+            # boundary already ("tests/" can't be followed by more of the
+            # same segment name).
+            return path.startswith(segment) or f"/{segment}" in path
+        # Filename-style (e.g. "/SKILL.md"): also require a right boundary so
+        # "SKILL.md.bak" isn't matched by an unanchored "SKILL.md" prefix.
+        return path == segment or path.endswith(f"/{segment}")
+    return fnmatch.fnmatch(path, pattern)
 
 
 def classify_file_role(path: str, policy: dict[str, Any]) -> str | None:
@@ -109,13 +122,17 @@ def codeowners_for(path: str, text: str) -> list[str]:
 
 
 def _yaml_mapping(path: Path) -> dict[str, Any]:
-    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    data = load_unique_yaml_file(path)
     return data if isinstance(data, dict) else {}
 
 
 def _source_key_exists(path: Path, source_key: str) -> bool:
     if path.suffix.lower() not in {".yaml", ".yml"}:
-        return source_key.lower() in path.read_text(encoding="utf-8").lower()
+        # Markdown sources: require an actual heading, not just an incidental
+        # mention of the word anywhere in prose (which stays true even after
+        # the referenced section is renamed or removed).
+        heading_re = re.compile(rf"^#+\s+{re.escape(source_key)}\s*$", re.IGNORECASE | re.MULTILINE)
+        return heading_re.search(path.read_text(encoding="utf-8")) is not None
     current: Any = _yaml_mapping(path)
     for part in source_key.split("."):
         if not isinstance(current, dict) or part not in current:
@@ -140,19 +157,16 @@ def _validate_deprecation_mapping(data: dict[str, Any], label: str, required: se
     )
     if empty:
         return [f"error: {label}: deprecation fields must be non-empty: {', '.join(empty)}"]
-    if not isinstance(block.get("aliases"), list):
+    if "aliases" in required and not isinstance(block.get("aliases"), list):
         return [f"error: {label}: deprecation aliases must be a list"]
     return []
 
 
 def _markdown_frontmatter(path: Path) -> dict[str, Any]:
-    text = path.read_text(encoding="utf-8")
-    if not text.startswith("---\n"):
+    match = FRONTMATTER_RE.match(path.read_text(encoding="utf-8"))
+    if not match:
         return {}
-    end = text.find("\n---", 4)
-    if end < 0:
-        return {}
-    data = yaml.safe_load(text[4:end])
+    data = load_unique_yaml(match.group(1))
     return data if isinstance(data, dict) else {}
 
 
@@ -269,9 +283,17 @@ def validate_policy(root: Path = ROOT) -> list[str]:
 
 
 def _collect_capability_names(value: Any) -> set[str]:
+    """Collect dotted external-capability identifiers (e.g. ``datadog.query_metrics``).
+
+    Excludes free-text values that merely contain a period (degraded_modes
+    prose, filenames mentioned in a sentence) and ``<skill-id>.invoke``
+    entries, which reference another registered skill rather than an
+    external tool/platform capability.
+    """
     names: set[str] = set()
-    if isinstance(value, str) and "." in value:
-        names.add(value)
+    if isinstance(value, str):
+        if _CAPABILITY_NAME_RE.fullmatch(value) and not value.endswith(".invoke"):
+            names.add(value)
     elif isinstance(value, list):
         for item in value:
             names.update(_collect_capability_names(item))
@@ -328,7 +350,10 @@ def build_health_report(root: Path = ROOT, revision: str | None = None) -> dict[
             if isinstance(entry, dict):
                 eval_case_refs += len(entry.get("case_refs", []))
 
-    capability_names = _collect_capability_names(skills)
+    capability_names: set[str] = set()
+    for entry in skills.values():
+        if isinstance(entry, dict):
+            capability_names.update(_collect_capability_names(entry.get("capabilities")))
     external_families = sorted({name.split(".", 1)[0] for name in capability_names})
     orphan_modules = _orphan_runtime_modules(skills, tracked_files)
 
@@ -421,13 +446,14 @@ def validate_diff_risk(
 ) -> tuple[str, list[str]]:
     risk, _ = classify_diff(paths, policy)
     high = set(policy["prompt_diff_risk"]["high_risk_classes"])
-    evidence_prefixes = tuple(policy["prompt_diff_risk"]["evidence_paths"])
+    evidence_patterns = policy["prompt_diff_risk"]["evidence_paths"]
     candidates = paths if evidence_paths is None else evidence_paths
     errors: list[str] = []
-    if risk in high and not any(path.startswith(evidence_prefixes) for path in candidates):
+    has_evidence = any(_matches(path, pattern) for path in candidates for pattern in evidence_patterns)
+    if risk in high and not has_evidence:
         errors.append(
             f"error: prompt-diff risk {risk} requires changed eval/test evidence under "
-            + " or ".join(evidence_prefixes)
+            + " or ".join(evidence_patterns)
         )
     return risk, errors
 

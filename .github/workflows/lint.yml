@@ -34,15 +34,14 @@ jobs:
           sudo apt-get install -y shellcheck ripgrep
           python3 -m pip install --require-hashes -r requirements.lock
 
-      - name: Validate operational upkeep policy
-        run: |
-          python3 scripts/operational_upkeep.py validate
-          python3 -m scripts.deprecation_lifecycle
-
-      - name: Publish prompt-system health, eval tiers and provenance
+      # operational_upkeep.py validate / deprecation_lifecycle / eval_tier_health
+      # enforcement all live in `make lint`'s validate-operational-upkeep
+      # target below (also the locally-reproducible entry point, and early
+      # enough in `lint`'s prerequisite chain to fail fast before the
+      # per-skill lint targets run), so this step only publishes.
+      - name: Publish prompt-system health
         run: |
           python3 scripts/operational_upkeep.py health --format markdown --revision "$GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
-          python3 scripts/eval_tier_health.py --format markdown >> "$GITHUB_STEP_SUMMARY"
 
       - name: Enforce prompt-diff risk and removal lifecycle
         if: github.event_name == 'pull_request'

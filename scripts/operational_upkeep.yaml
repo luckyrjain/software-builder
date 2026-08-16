@@ -20,6 +20,7 @@ file_roles:
       - "*/examples.md"
       - "*/SETUP.md"
       - "*/README.md"
+      - "docs/skill-framework/shared/**"
   maintainer:
     description: Build, validation, evaluation, governance, and design-time material.
     patterns:
@@ -147,8 +148,9 @@ prompt_diff_risk:
   order: [editorial, behavioral, authority-capability, schema, routing]
   high_risk_classes: [behavioral, authority-capability, schema, routing]
   evidence_paths:
-    - "scripts/tests/"
-    - "evals/"
+    - "scripts/tests/**"
+    - "evals/**"
+    - "/tests/"
   path_rules:
     routing:
       - "docs/skill-framework/shared/skill-routing.md"
@@ -176,4 +178,4 @@ prompt_diff_risk:
       - "/workflow/"
     editorial:
       - "README.md"
-      - "docs/"
+      - "docs/**"
