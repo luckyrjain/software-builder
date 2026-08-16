@@ -1,0 +1,78 @@
+schema_version: 1
+producer: domain-comprehension
+consumer: prd-architect
+state_semantics: current_state
+
+# Repository discovery is bounded and recorded per run. A profile is a ceiling,
+# not a target; stop earlier when the evidence/completion gates are satisfied.
+discovery_budget:
+  profile: QUICK | FULL | DELTA | CUSTOM
+  limits:
+    repositories: integer
+    search_queries: integer
+    deep_file_reads: integer
+  consumed:
+    repositories: integer
+    search_queries: integer
+    deep_file_reads: integer
+  exhausted_behavior: PARTIAL
+  exhausted_output: UNKNOWNS.md
+
+# Confidence aggregation is deterministic: confidence is never averaged upward.
+# UNKNOWN < LOW < MEDIUM < HIGH; a parent takes the weakest material child.
+confidence_aggregation:
+  ordering: [UNKNOWN, LOW, MEDIUM, HIGH]
+  section_rule: minimum_material_claim
+  document_rule: minimum_required_section
+  conflict_cap: LOW
+  missing_required_evidence: UNKNOWN
+
+artifacts:
+  api_event_schema:
+    path: API_EVENT_SCHEMA.yaml
+    schema_version: 1
+    records: [api, event]
+    required_fields: [id, kind, owner, direction, contract, evidence, confidence]
+  data_ownership_graph:
+    path: DATA_OWNERSHIP_GRAPH.yaml
+    schema_version: 1
+    node_kinds: [service, datastore, table, entity, cache, index]
+    edge_fields: [source, target, operation, owner, evidence, confidence]
+  capability_code_ownership:
+    path: CAPABILITY_TRACEABILITY.yaml
+    schema_version: 1
+    required_fields: [capability, repositories, code_locations, owner, evidence, confidence]
+
+dependency_edges:
+  required_fields:
+    - source
+    - target
+    - direction
+    - interaction
+    - criticality
+    - evidence
+    - confidence
+  direction: upstream | downstream
+  interaction: synchronous | asynchronous
+  criticality:
+    values: [CRITICAL, HIGH, MEDIUM, LOW, UNKNOWN]
+    basis: user_impact_and_recovery_dependency
+
+stale_prd_detection:
+  modes: [DELTA, ADD_REPO]
+  compare: [source_revision, api_event_schema, data_ownership_graph, dependency_edges, capability_code_ownership]
+  stale_when:
+    - behavior_affecting_source_revision_changed
+    - externally_observable_contract_changed
+    - authoritative_data_owner_changed
+    - critical_dependency_semantics_changed
+  required_action: regenerate_or_mark_PRD_stale
+  forbidden_action: silently_keep_stale_PRD
+
+compatibility:
+  consumer: prd-architect
+  source_revision_required: true
+  evidence_status_values: [Observed, Inferred, Unknown, Conflicted, Not_Applicable]
+  confidence_values: [HIGH, MEDIUM, LOW, UNKNOWN]
+  preserve_ids: true
+  future_state_mutation: forbidden
