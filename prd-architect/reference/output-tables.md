@@ -43,10 +43,13 @@ emit time — never emit a header without `|---|---|`.
 | Risks | Material risks exist |
 | Open Questions | Material unresolved decisions exist |
 
-## Assumption ledger (Standard/Rigorous)
-| ID | Assumption | Evidence | Impact If Wrong | Validation |
-|---|---|---|---|---|
-Evidence levels: Verified | Supported | Unverified | **Risky**
+## Assumption ledger
+| ID | Assumption | Evidence | Impact If Wrong | Validation | Owner | Status |
+|---|---|---|---|---|---|---|
+Every consequential assumption must include the contract fields `id`, `statement`, `impact`, `validation`,
+`owner`, and `status`; Evidence is optional supporting context and must not turn an assumption into a fact.
+Status uses `OPEN | VALIDATED | INVALIDATED | ACCEPTED_RISK` from
+[current-state-evidence-contract.yaml](current-state-evidence-contract.yaml).
 
 ## Requirements traceability
 | Requirement | Acceptance Criteria | Test Requirement | Evidence / Source |
