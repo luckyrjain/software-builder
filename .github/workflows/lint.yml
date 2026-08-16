@@ -44,12 +44,13 @@ jobs:
           python3 scripts/operational_upkeep.py health --format markdown --revision "$GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
           python3 scripts/eval_tier_health.py --format markdown >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Enforce prompt-diff risk evidence
+      - name: Enforce prompt-diff risk and removal lifecycle
         if: github.event_name == 'pull_request'
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
+          python3 scripts/deprecation_diff_guard.py --base "$BASE_SHA" --head "$HEAD_SHA" | tee -a "$GITHUB_STEP_SUMMARY"
           python3 scripts/operational_upkeep.py classify-diff --base "$BASE_SHA" --head "$HEAD_SHA" | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: make lint
