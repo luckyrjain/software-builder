@@ -34,17 +34,17 @@ jobs:
           sudo apt-get install -y shellcheck ripgrep
           python3 -m pip install --require-hashes -r requirements.lock
 
-      # operational_upkeep.py validate / deprecation_lifecycle / eval_tier_health
-      # enforcement lives in `make lint`'s validate-operational-upkeep target
-      # below (also the locally-reproducible entry point); this step only adds
-      # the job-summary report and the live-model-harness visibility line that
-      # `make lint` intentionally doesn't print.
+      # operational_upkeep.py validate / deprecation_lifecycle enforcement lives
+      # in `make lint`'s validate-operational-upkeep target below (also the
+      # locally-reproducible entry point), so this step only publishes.
       - name: Publish prompt-system health and enforce eval tier coverage
         run: |
           python3 scripts/operational_upkeep.py health --format markdown --revision "$GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
-          # Deterministic tier coverage is enforced (non-zero exit fails this step);
-          # only the live-model harness sub-check inside this report is non-blocking.
-          python3 scripts/eval_tier_health.py --format markdown >> "$GITHUB_STEP_SUMMARY"
+          # The report above already includes the eval-tier breakdown and the
+          # live-model-harness line; this call exists only to enforce
+          # deterministic tier coverage via exit code (the health command
+          # above never fails on its own), so its markdown isn't reprinted.
+          python3 scripts/eval_tier_health.py --format markdown > /dev/null
 
       - name: Enforce prompt-diff risk and removal lifecycle
         if: github.event_name == 'pull_request'
