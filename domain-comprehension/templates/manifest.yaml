@@ -13,6 +13,11 @@ engagement:
   next_action: "Session 0 — repo census"
   model_used: null
 
+discovery_budget:
+  profile: QUICK
+  limits: { repositories: 12, search_queries: 80, deep_file_reads: 60 }
+  consumed: { repositories: 0, search_queries: 0, deep_file_reads: 0 }
+
 phases:
   session_0: { status: pending, completed_at: null, skip_reason: null }
   session_0b: { status: pending, completed_at: null, skip_reason: null }
