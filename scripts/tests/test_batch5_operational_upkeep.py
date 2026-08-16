@@ -310,3 +310,40 @@ def test_high_risk_prompt_diff_requires_test_or_eval_evidence() -> None:
     )
     assert risk == "routing"
     assert errors == []
+
+
+def test_per_skill_tests_directory_satisfies_high_risk_evidence_gate() -> None:
+    policy = load_policy(ROOT / "scripts" / "operational_upkeep.yaml")
+    risk, errors = validate_diff_risk(
+        ["pr-review/SKILL.md", "pr-review/tests/test_diff_to_positions.py"],
+        policy,
+    )
+    assert risk == "behavioral"
+    assert errors == []
+
+    risk, errors = validate_diff_risk(["pr-review/SKILL.md"], policy)
+    assert risk == "behavioral"
+    assert errors and "requires changed eval/test evidence" in errors[0]
+
+
+def test_capability_collection_is_scoped_to_capabilities_subtree() -> None:
+    skills = {
+        "example": {
+            "path": "example",
+            "notes": "see api.version for details",
+            "capabilities": {
+                "required": ["datadog.query_metrics"],
+                "optional": [{"name": "squad-map.invoke", "enables": "full mapping table"}],
+                "any_of": [
+                    {
+                        "name": "GitLab read",
+                        "required": ["gitlab.get_merge_request"],
+                    }
+                ],
+            },
+        }
+    }
+    names: set[str] = set()
+    for entry in skills.values():
+        names.update(_collect_capability_names(entry.get("capabilities")))
+    assert names == {"datadog.query_metrics", "gitlab.get_merge_request"}

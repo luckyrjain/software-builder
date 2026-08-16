@@ -335,7 +335,10 @@ def build_health_report(root: Path = ROOT, revision: str | None = None) -> dict[
             if isinstance(entry, dict):
                 eval_case_refs += len(entry.get("case_refs", []))
 
-    capability_names = _collect_capability_names(skills)
+    capability_names: set[str] = set()
+    for entry in skills.values():
+        if isinstance(entry, dict):
+            capability_names.update(_collect_capability_names(entry.get("capabilities")))
     external_families = sorted({name.split(".", 1)[0] for name in capability_names})
     orphan_modules = _orphan_runtime_modules(skills, tracked_files)
 
@@ -428,13 +431,14 @@ def validate_diff_risk(
 ) -> tuple[str, list[str]]:
     risk, _ = classify_diff(paths, policy)
     high = set(policy["prompt_diff_risk"]["high_risk_classes"])
-    evidence_prefixes = tuple(policy["prompt_diff_risk"]["evidence_paths"])
+    evidence_patterns = policy["prompt_diff_risk"]["evidence_paths"]
     candidates = paths if evidence_paths is None else evidence_paths
     errors: list[str] = []
-    if risk in high and not any(path.startswith(evidence_prefixes) for path in candidates):
+    has_evidence = any(_matches(path, pattern) for path in candidates for pattern in evidence_patterns)
+    if risk in high and not has_evidence:
         errors.append(
             f"error: prompt-diff risk {risk} requires changed eval/test evidence under "
-            + " or ".join(evidence_prefixes)
+            + " or ".join(evidence_patterns)
         )
     return risk, errors
 
