@@ -97,6 +97,7 @@ After the repaired PRD body:
 ## Material Changes
 
 | Area | Before | After | Reason |
+|---|---|---|---|
 ```
 
 Include **Change Impact** when reviewing an existing product/system. Re-run compatibility, rollout,
@@ -117,6 +118,7 @@ Depth: <depth> — <reason>
 ## Gap Analysis
 
 | Area | Gap | Scenario | Impact | Resolution |
+|---|---|---|---|---|
 
 ## Build Readiness
 **Verdict:** ...
