@@ -18,6 +18,8 @@ if str(ROOT) not in sys.path:
 
 from scripts.deprecation_lifecycle import validate_deprecation_item
 
+POLICY_PATH = "scripts/operational_upkeep.yaml"
+
 
 def _git_text(root: Path, ref: str, path: str) -> str | None:
     try:
@@ -50,7 +52,7 @@ def _frontmatter(text: str | None) -> dict[str, Any]:
 
 def governed_items(root: Path, ref: str) -> tuple[dict[str, dict[str, Any]], dict[str, Any]]:
     """Return durable identities plus the revision's lifecycle configuration."""
-    upkeep = _mapping(_git_text(root, ref, "scripts/operational_upkeep.yaml"))
+    upkeep = _mapping(_git_text(root, ref, POLICY_PATH))
     items: dict[str, dict[str, Any]] = {}
 
     skills_file = _mapping(_git_text(root, ref, "skills.yaml"))
@@ -129,6 +131,12 @@ def validate_revision_removals(
     *,
     as_of: date | None = None,
 ) -> list[str]:
+    # Batch 5 introduces this policy. Until it exists in the base revision there
+    # is no prior lifecycle contract to enforce; once merged, every subsequent
+    # removal is checked against the base policy and cannot bootstrap around it.
+    if _git_text(root, base, POLICY_PATH) is None:
+        return []
+
     base_items, lifecycle = governed_items(root, base)
     head_items, _ = governed_items(root, head)
     return validate_removed_items(
