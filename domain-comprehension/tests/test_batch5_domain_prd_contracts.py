@@ -258,3 +258,5 @@ def test_prd_template_exposes_traceability_and_readiness_sections():
         "before contract, after contract, compatibility, consumers, migration",
     ):
         assert required_field_guidance in text
+    assert "| Area | Before | After | Reason |\n|---|---|---|---|" in text
+    assert "| Area | Gap | Scenario | Impact | Resolution |\n|---|---|---|---|---|" in text
