@@ -28,11 +28,10 @@ if str(_SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS_DIR))
 
 from reference_utils import sha256_file
-from release_info import git_source_sha, read_distribution_version
-from yaml_safety import read_schema_version
+from release_info import MANIFEST_NAME, git_source_sha, read_distribution_version
+from yaml_safety import YAML_SAFETY_ERRORS, read_schema_version
 
 ROOT = Path(__file__).resolve().parents[1]
-MANIFEST_NAME = "RELEASE-MANIFEST.json"
 
 
 def _ensure_clean_worktree(root: Path) -> None:
@@ -73,6 +72,10 @@ def _tracked_files(root: Path) -> list[tuple[str, Path, int]]:
 
     Raises ValueError if any tracked path is a symlink -- release inputs must
     be plain file content, never a link that could point outside the bundle.
+    Raises ValueError if a tracked path is the reserved manifest filename --
+    otherwise the per-file loop and the generated-manifest write in
+    _write_reproducible_archive would both target the same tar member name,
+    silently discarding the tracked file's real content in the archive.
     """
     result = subprocess.run(
         ["git", "-C", str(root), "ls-files", "-s", "-z"],
@@ -90,6 +93,10 @@ def _tracked_files(root: Path) -> list[tuple[str, Path, int]]:
 
     files: list[tuple[str, Path, int]] = []
     for rel, git_mode in sorted(entries, key=lambda item: item[0]):
+        if rel == MANIFEST_NAME:
+            raise ValueError(
+                f"release inputs must not track the reserved manifest filename: {rel}",
+            )
         abs_path = root / rel
         if abs_path.is_symlink():
             raise ValueError(f"release inputs must be regular files; found tracked symlink: {rel}")
@@ -207,7 +214,11 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    archive_path, checksum_path = package_release(args.repo_root, args.output_dir)
+    try:
+        archive_path, checksum_path = package_release(args.repo_root, args.output_dir)
+    except (OSError, *YAML_SAFETY_ERRORS) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
     bundle_name = checksum_path.name[: -len(".sha256")]
     print(f"ok: {archive_path}")
     print(f"ok: {checksum_path}")

@@ -25,10 +25,9 @@ if str(ROOT) not in sys.path:
 
 from scripts.reference_utils import sha256_file
 from scripts.release_contract import required_provenance_fields
-from scripts.release_info import SEMVER_RE, SHA_RE
+from scripts.release_info import MANIFEST_NAME, SEMVER_RE, SHA_RE
 
 _HEX64_RE = re.compile(r"^[0-9a-f]{64}$")
-MANIFEST_NAME = "RELEASE-MANIFEST.json"
 
 
 def _safe_extract(archive: Path, dest: Path) -> None:

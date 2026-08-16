@@ -5,7 +5,8 @@ REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 TMP_HOME="$(mktemp -d)"
 TMP_REPO="$(mktemp -d)"
 TMP_DIST="$(mktemp -d)"
-trap 'rm -rf "${TMP_HOME}" "${TMP_REPO}" "${TMP_DIST}"' EXIT
+TMP_SRC="$(mktemp -d)"
+trap 'rm -rf "${TMP_HOME}" "${TMP_REPO}" "${TMP_DIST}" "${TMP_SRC}"' EXIT
 
 export HOME="${TMP_HOME}"
 export PYTHONDONTWRITEBYTECODE=1
@@ -16,8 +17,22 @@ export PYTHONDONTWRITEBYTECODE=1
 # .git is never a tracked file, but it does carry RELEASE-MANIFEST.json,
 # which package_skill.py now needs as its provenance source in exactly this
 # no-.git case.
+#
+# package_release.py now requires a clean Git worktree and reads inputs from
+# `git ls-files`, so this snapshots HEAD's tracked tree into an isolated Git
+# commit rather than pointing package_release.py at REPO_ROOT directly --
+# packaging straight from REPO_ROOT made this test fail on any uncommitted
+# edit to a tracked file anywhere in the real repo, even one with nothing to
+# do with installation (same problem, same fix, as
+# scripts/tests/test_release.py's _minimal_release_repo).
+git -C "${REPO_ROOT}" archive HEAD | tar -x -C "${TMP_SRC}"
+git init -q "${TMP_SRC}"
+git -C "${TMP_SRC}" config user.email "test@example.com"
+git -C "${TMP_SRC}" config user.name "Test"
+git -C "${TMP_SRC}" add -A
+git -C "${TMP_SRC}" commit -qm snapshot
 PYTHONPATH="${REPO_ROOT}" python3 "${REPO_ROOT}/scripts/package_release.py" \
-  --repo-root "${REPO_ROOT}" --output-dir "${TMP_DIST}"
+  --repo-root "${TMP_SRC}" --output-dir "${TMP_DIST}"
 ARCHIVE="$(ls "${TMP_DIST}"/software-builder-*.tar.gz)"
 tar -xzf "${ARCHIVE}" -C "${TMP_REPO}" --strip-components=1
 

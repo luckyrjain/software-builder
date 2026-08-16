@@ -14,6 +14,10 @@ VERSION_FILE = ROOT / "VERSION"
 # of truth keeps the two "is this a valid version/SHA" definitions from drifting.
 SEMVER_RE = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$")
 SHA_RE = re.compile(r"^[0-9a-f]{40,64}$")
+# Shared between package_release.py (which writes this file into every release
+# archive) and verify_release_bundle.py (which reads it back out) so the two
+# never drift to different filenames.
+MANIFEST_NAME = "RELEASE-MANIFEST.json"
 
 
 def read_distribution_version(root: Path | None = None) -> str:
