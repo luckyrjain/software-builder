@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import re
 import sys
 from datetime import date, timedelta
 from pathlib import Path
@@ -16,6 +17,7 @@ from scripts.operational_upkeep import (
 )
 
 ROOT = Path(__file__).resolve().parents[1]
+_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
 def validate_deprecation_item(
@@ -37,7 +39,7 @@ def validate_deprecation_item(
     for field in ("deprecated_since", "remove_after"):
         raw = block.get(field)
         try:
-            if not isinstance(raw, str):
+            if not isinstance(raw, str) or not _DATE_RE.fullmatch(raw):
                 raise ValueError
             parsed[field] = date.fromisoformat(raw)
         except ValueError:
