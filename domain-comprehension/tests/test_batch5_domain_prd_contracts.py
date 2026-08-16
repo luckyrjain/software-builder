@@ -114,14 +114,17 @@ def test_prd_architect_has_current_state_ingestion_contract():
 def test_prd_workflow_carries_and_gates_new_contract_fields():
     workflow = _yaml("prd-architect/workflow-contract.yaml")
     entry = workflow["entry_inputs"]["current_state_evidence"]
+    assert entry["type"] == "object"
     assert entry["provenance"] == "domain_comprehension_or_repository"
     assert entry["trust"] == "untrusted"
 
     inputs = _text("prd-architect/workflow/inputs.md")
-    assert "current_state_evidence: artifact_set" in inputs
+    assert "current_state_evidence: object" in inputs
+    assert "artifact_set" not in inputs
     assert "preserve observed current state" in inputs
 
     specify = _text("prd-architect/workflow/specify.md")
+    assert "current_state_evidence: object" in specify
     for token in (
         "FR-* -> AC-* -> TR-*",
         "success_metrics: list",
@@ -132,6 +135,7 @@ def test_prd_workflow_carries_and_gates_new_contract_fields():
         assert token in specify
 
     gate = _text("prd-architect/workflow/gate.md")
+    assert "current_state_evidence: object" in gate
     for token in (
         "no traceability orphan remains",
         "baseline, target, timeframe, and measurement source",
