@@ -123,6 +123,8 @@ def test_prd_architect_has_current_state_ingestion_contract():
     contract = _yaml("prd-architect/reference/current-state-evidence-contract.yaml")
     assert contract["producer"] == "domain-comprehension"
     current = contract["current_state_evidence"]
+    assert current["required_when"] == "existing_system_and_response_mode_PRD_or_Review"
+    assert current["validation_behavior"] == "missing_evidence_goes_to_evidence_needed_next"
     for artifact in (
         "PRD.md",
         "API_EVENT_SCHEMA.yaml",
@@ -209,7 +211,7 @@ def test_prd_workflow_carries_reviews_repairs_and_gates_new_contract_fields():
 
 
 def test_prd_canonical_docs_align_metrics_traceability_and_engineering_triggers():
-    triggers = _text("prd-architect/reference/output-tables.md")
+    tables = _text("prd-architect/reference/output-tables.md")
     for row in (
         "| Success Metrics | PRD/Review Mode",
         "| Requirements Traceability | PRD/Review Mode",
@@ -217,8 +219,10 @@ def test_prd_canonical_docs_align_metrics_traceability_and_engineering_triggers(
         "| Migration / Backward Compatibility | Existing system",
         "| API / Event / Schema Impact | API, event, or schema contract changes",
         "| Observability Requirements | Production change",
+        "| Metric | Baseline | Target | Timeframe | Measurement Source | Baseline Measurement Action |",
+        "| ID | Assumption | Evidence | Impact If Wrong | Validation | Owner | Status |",
     ):
-        assert row in triggers
+        assert row in tables
 
     requirements = _text("prd-architect/reference/requirements-format.md")
     assert "TR-FR##-##" in requirements
@@ -247,4 +251,10 @@ def test_prd_template_exposes_traceability_and_readiness_sections():
         "## Observability Requirements",
     ):
         assert heading in text
-    assert "When consequential assumptions exist" in text
+    for required_field_guidance in (
+        "migration plan, rollout sequence, rollback constraints",
+        "classification, access, retention, audit, compliance review",
+        "baseline, expected delta, measurement plan",
+        "before contract, after contract, compatibility, consumers, migration",
+    ):
+        assert required_field_guidance in text
