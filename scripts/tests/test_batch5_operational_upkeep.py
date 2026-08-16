@@ -123,6 +123,14 @@ def test_bare_pattern_does_not_match_as_unanchored_substring() -> None:
     assert _matches("scripts/legacy-Makefile-notes.md", "Makefile") is False
 
 
+def test_leading_slash_pattern_requires_path_segment_boundary() -> None:
+    assert _matches("pr-review/tests/foo.py", "/tests/") is True
+    assert _matches("scripts/tests/foo.py", "/tests/") is True
+    assert _matches("tests/root_level.py", "/tests/") is True
+    assert _matches("contests/README.md", "/tests/") is False
+    assert _matches("protests/notes.md", "/tests/") is False
+
+
 def test_collect_capability_names_ignores_prose_and_skill_self_references() -> None:
     payload = {
         "capabilities": {

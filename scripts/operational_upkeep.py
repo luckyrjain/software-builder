@@ -61,7 +61,11 @@ def _matches(path: str, pattern: str) -> bool:
         prefix = pattern[:-3]
         return path == prefix or path.startswith(f"{prefix}/")
     if pattern.startswith("/"):
-        return pattern[1:] in path
+        # A leading-"/" pattern matches its target as a path *segment*, not an
+        # unanchored substring: "/tests/" must match ".../tests/..." and must
+        # not match "contests/..." or "protests/..." merely containing "tests/".
+        segment = pattern[1:]
+        return path.startswith(segment) or f"/{segment}" in path
     return fnmatch.fnmatch(path, pattern)
 
 

@@ -39,9 +39,16 @@ def validate_deprecation_item(
     for field in ("deprecated_since", "remove_after"):
         raw = block.get(field)
         try:
-            if not isinstance(raw, str) or not _DATE_RE.fullmatch(raw):
+            # PyYAML's SafeLoader auto-parses an unquoted YYYY-MM-DD scalar into
+            # a datetime.date, not a str; accept both spellings. Reject
+            # datetime.datetime (a date subclass) explicitly -- comparing a
+            # naive datetime to a plain date raises TypeError below.
+            if type(raw) is date:
+                parsed[field] = raw
+            elif isinstance(raw, str) and _DATE_RE.fullmatch(raw):
+                parsed[field] = date.fromisoformat(raw)
+            else:
                 raise ValueError
-            parsed[field] = date.fromisoformat(raw)
         except ValueError:
             errors.append(f"error: {label}: deprecation {field} must be an ISO date (YYYY-MM-DD)")
 
