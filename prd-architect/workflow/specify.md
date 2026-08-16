@@ -1,5 +1,5 @@
 ---
-workflow_version: 1.4
+workflow_version: 1.5
 phase: specify
 produces:
   mvp_scope: object
@@ -43,10 +43,15 @@ prototype, manual workflow, fake-door, shadow mode, internal pilot, limited coho
 
 ## Current-state baseline
 
-For `existing_system=true`, begin from `current_state_evidence` when available. Keep observed behavior,
-ownership, contracts, and source revisions separate from proposed changes. A proposed PRD may change current
-state, but every such change must be explicit and traceable to the baseline. Do not silently reinterpret an
-`Observed` fact as future intent.
+For `existing_system=true`, PRD/Review requires `current_state_evidence` under
+[current-state-evidence-contract.yaml](../reference/current-state-evidence-contract.yaml). Begin from that
+baseline when present. If it is missing, continue only far enough to make the evidence gap and resulting
+compatibility uncertainty explicit; never fill the baseline from guesses, and Gate must keep Build Readiness
+Not Ready until the required evidence is supplied.
+
+Keep observed behavior, ownership, contracts, and source revisions separate from proposed changes. A proposed
+PRD may change current state, but every such change must be explicit and traceable to the baseline. Do not
+silently reinterpret an `Observed` fact as future intent.
 
 ## Section triggers
 
