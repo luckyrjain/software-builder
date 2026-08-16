@@ -1,5 +1,5 @@
 ---
-workflow_version: 1.10
+workflow_version: 2.0
 phase: 5
 produces:
   - final_five_questions
