@@ -28,6 +28,7 @@ file_roles:
       - "generated/**"
       - "docs/superpowers/**"
       - ".github/**"
+      - "make/**"
       - "CODEOWNERS"
       - "Makefile"
 
