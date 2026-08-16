@@ -99,6 +99,12 @@ compatibility:
   source_revision_required: true
   source_revision_shape: {repos: [{repo: string, branch: string, commit_sha: string, observed_at: string}]}
   accepted_artifacts: [PRD.md, API_EVENT_SCHEMA.yaml, DATA_OWNERSHIP_GRAPH.yaml, DEPENDENCY_GRAPH.yaml, CAPABILITY_TRACEABILITY.yaml]
+  prd_freshness:
+    source: manifest.artifacts[id=prd].status
+    handoff_required: true
+    current_value: ok
+    stale_value: stale
+    stale_behavior: do_not_claim_current_state
   evidence_status_values: [Observed, Inferred, Unknown, Conflicted, Not_Applicable]
   confidence_values: [HIGH, MEDIUM, LOW, UNKNOWN]
   preserve_ids: true
