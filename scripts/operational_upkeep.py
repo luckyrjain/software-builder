@@ -413,12 +413,18 @@ def classify_diff(paths: list[str], policy: dict[str, Any]) -> tuple[str, list[s
     return risk, sorted(matched, key=order.index)
 
 
-def validate_diff_risk(paths: list[str], policy: dict[str, Any]) -> tuple[str, list[str]]:
+def validate_diff_risk(
+    paths: list[str],
+    policy: dict[str, Any],
+    *,
+    evidence_paths: list[str] | None = None,
+) -> tuple[str, list[str]]:
     risk, _ = classify_diff(paths, policy)
     high = set(policy["prompt_diff_risk"]["high_risk_classes"])
     evidence_prefixes = tuple(policy["prompt_diff_risk"]["evidence_paths"])
+    candidates = paths if evidence_paths is None else evidence_paths
     errors: list[str] = []
-    if risk in high and not any(path.startswith(evidence_prefixes) for path in paths):
+    if risk in high and not any(path.startswith(evidence_prefixes) for path in candidates):
         errors.append(
             f"error: prompt-diff risk {risk} requires changed eval/test evidence under "
             + " or ".join(evidence_prefixes)
@@ -426,10 +432,18 @@ def validate_diff_risk(paths: list[str], policy: dict[str, Any]) -> tuple[str, l
     return risk, errors
 
 
-def _changed_paths(root: Path, base: str, head: str) -> list[str]:
-    output = subprocess.check_output(
-        ["git", "diff", "--name-only", f"{base}...{head}"], cwd=root, text=True
-    )
+def _changed_paths(
+    root: Path,
+    base: str,
+    head: str,
+    *,
+    diff_filter: str | None = None,
+) -> list[str]:
+    command = ["git", "diff", "--name-only"]
+    if diff_filter:
+        command.append(f"--diff-filter={diff_filter}")
+    command.append(f"{base}...{head}")
+    output = subprocess.check_output(command, cwd=root, text=True)
     return [line for line in output.splitlines() if line]
 
 
@@ -462,7 +476,13 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "classify-diff":
         policy = load_policy(POLICY_PATH)
         paths = _changed_paths(ROOT, args.base, args.head)
-        risk, errors = validate_diff_risk(paths, policy)
+        evidence_paths = _changed_paths(
+            ROOT,
+            args.base,
+            args.head,
+            diff_filter="ACMRTUXB",
+        )
+        risk, errors = validate_diff_risk(paths, policy, evidence_paths=evidence_paths)
         print(f"prompt_diff_risk={risk}")
         print("changed_paths=" + ",".join(paths))
         if errors:
