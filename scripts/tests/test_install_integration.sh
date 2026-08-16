@@ -28,7 +28,10 @@ git init -q "${TMP_REPO}"
 git -C "${TMP_REPO}" config user.email "test@example.com"
 git -C "${TMP_REPO}" config user.name "Test"
 git -C "${TMP_REPO}" add -A
-git -C "${TMP_REPO}" commit -qm fixture
+# -c commit.gpgsign=false: don't depend on the invoking machine's global Git
+# signing config -- commit signing turned on (common under org policy) would
+# otherwise block this fixture commit on a passphrase/hardware-key prompt.
+git -C "${TMP_REPO}" -c commit.gpgsign=false commit -qm fixture
 
 bash "${TMP_REPO}/scripts/install.sh" --agent cursor unit-test-creator weekly-squad-digest
 

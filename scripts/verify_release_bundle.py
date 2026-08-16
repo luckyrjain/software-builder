@@ -57,7 +57,7 @@ def verify_release_bundle(archive: Path) -> list[str]:
             return [f"error: release bundle missing {MANIFEST_NAME}"]
         try:
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        except json.JSONDecodeError as exc:
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
             return [f"error: {MANIFEST_NAME} is not valid JSON: {exc}"]
         if not isinstance(manifest, dict):
             return [f"error: {MANIFEST_NAME} must be a JSON object"]

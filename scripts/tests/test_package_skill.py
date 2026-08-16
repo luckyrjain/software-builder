@@ -32,7 +32,10 @@ def isolated_repo(tmp_path: Path) -> Path:
     subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo, check=True)
     subprocess.run(["git", "config", "user.name", "Test"], cwd=repo, check=True)
     subprocess.run(["git", "add", "."], cwd=repo, check=True)
-    subprocess.run(["git", "commit", "-qm", "fixture"], cwd=repo, check=True)
+    # -c commit.gpgsign=false: don't depend on the invoking machine's global
+    # Git signing config (commit signing turned on would otherwise block this
+    # fixture commit on a passphrase/hardware-key prompt or fail outright).
+    subprocess.run(["git", "-c", "commit.gpgsign=false", "commit", "-qm", "fixture"], cwd=repo, check=True)
     return repo
 
 
@@ -120,7 +123,10 @@ def test_prd_architect_package_contains_executable_safe_output_renderer(tmp_path
     subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo, check=True)
     subprocess.run(["git", "config", "user.name", "Test"], cwd=repo, check=True)
     subprocess.run(["git", "add", "."], cwd=repo, check=True)
-    subprocess.run(["git", "commit", "-qm", "fixture"], cwd=repo, check=True)
+    # -c commit.gpgsign=false: don't depend on the invoking machine's global
+    # Git signing config (commit signing turned on would otherwise block this
+    # fixture commit on a passphrase/hardware-key prompt or fail outright).
+    subprocess.run(["git", "-c", "commit.gpgsign=false", "commit", "-qm", "fixture"], cwd=repo, check=True)
     dest = tmp_path / "installed" / "prd-architect"
     package_skill(skill="prd-architect", repo_root=repo, dest=dest, host="test")
 

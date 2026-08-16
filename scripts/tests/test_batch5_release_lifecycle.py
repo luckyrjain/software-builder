@@ -23,7 +23,13 @@ def _init_repo(root: Path) -> None:
 
 def _commit_all(root: Path) -> str:
     subprocess.run(["git", "add", "."], cwd=root, check=True)
-    subprocess.run(["git", "commit", "-qm", "fixture"], cwd=root, check=True)
+    # -c commit.gpgsign=false: don't inherit the invoking machine's global Git
+    # signing config -- a contributor or CI runner with commit signing turned
+    # on (common under org policy) would otherwise have every fixture commit
+    # here block on a passphrase/hardware-key prompt or fail outright.
+    subprocess.run(
+        ["git", "-c", "commit.gpgsign=false", "commit", "-qm", "fixture"], cwd=root, check=True
+    )
     return subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()
 
 
@@ -72,7 +78,9 @@ def test_release_inputs_ignore_untracked_files_and_reject_tracked_symlinks(tmp_p
     link = root / "linked-readme.md"
     os.symlink(target.name, link)
     subprocess.run(["git", "add", "linked-readme.md"], cwd=root, check=True)
-    subprocess.run(["git", "commit", "-qm", "add symlink"], cwd=root, check=True)
+    subprocess.run(
+        ["git", "-c", "commit.gpgsign=false", "commit", "-qm", "add symlink"], cwd=root, check=True
+    )
     with pytest.raises(ValueError, match="symlink"):
         package_release(root, output)
 

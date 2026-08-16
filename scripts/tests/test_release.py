@@ -27,7 +27,12 @@ def _minimal_release_repo(tmp_path: Path) -> Path:
         "schema_version: 1\nhosts: {}\n", encoding="utf-8"
     )
     subprocess.run(["git", "add", "."], cwd=root, check=True)
-    subprocess.run(["git", "commit", "-qm", "fixture"], cwd=root, check=True)
+    # -c commit.gpgsign=false: don't depend on the invoking machine's global
+    # Git signing config (commit signing turned on would otherwise block this
+    # fixture commit on a passphrase/hardware-key prompt or fail outright).
+    subprocess.run(
+        ["git", "-c", "commit.gpgsign=false", "commit", "-qm", "fixture"], cwd=root, check=True
+    )
     return root
 
 

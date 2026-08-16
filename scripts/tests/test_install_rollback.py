@@ -49,7 +49,10 @@ def test_install_restores_previous_package_when_validation_fails(tmp_path: Path)
     subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo, check=True)
     subprocess.run(["git", "config", "user.name", "Test"], cwd=repo, check=True)
     subprocess.run(["git", "add", "."], cwd=repo, check=True)
-    subprocess.run(["git", "commit", "-qm", "fixture"], cwd=repo, check=True)
+    # -c commit.gpgsign=false: don't depend on the invoking machine's global
+    # Git signing config (commit signing turned on would otherwise block this
+    # fixture commit on a passphrase/hardware-key prompt or fail outright).
+    subprocess.run(["git", "-c", "commit.gpgsign=false", "commit", "-qm", "fixture"], cwd=repo, check=True)
 
     dest = home / ".cursor" / "skills" / "broken-skill"
     dest.parent.mkdir(parents=True)
@@ -127,7 +130,10 @@ def test_package_skill_writes_manifest(tmp_path: Path) -> None:
     subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo, check=True)
     subprocess.run(["git", "config", "user.name", "Test"], cwd=repo, check=True)
     subprocess.run(["git", "add", "."], cwd=repo, check=True)
-    subprocess.run(["git", "commit", "-qm", "fixture"], cwd=repo, check=True)
+    # -c commit.gpgsign=false: don't depend on the invoking machine's global
+    # Git signing config (commit signing turned on would otherwise block this
+    # fixture commit on a passphrase/hardware-key prompt or fail outright).
+    subprocess.run(["git", "-c", "commit.gpgsign=false", "commit", "-qm", "fixture"], cwd=repo, check=True)
     dest = tmp_path / "installed"
 
     subprocess.run(

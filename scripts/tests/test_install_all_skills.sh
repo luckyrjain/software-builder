@@ -30,7 +30,10 @@ git init -q "${TMP_SRC}"
 git -C "${TMP_SRC}" config user.email "test@example.com"
 git -C "${TMP_SRC}" config user.name "Test"
 git -C "${TMP_SRC}" add -A
-git -C "${TMP_SRC}" commit -qm snapshot
+# -c commit.gpgsign=false: don't depend on the invoking machine's global Git
+# signing config -- commit signing turned on (common under org policy) would
+# otherwise block this fixture commit on a passphrase/hardware-key prompt.
+git -C "${TMP_SRC}" -c commit.gpgsign=false commit -qm snapshot
 PYTHONPATH="${REPO_ROOT}" python3 "${REPO_ROOT}/scripts/package_release.py" \
   --repo-root "${TMP_SRC}" --output-dir "${TMP_DIST}"
 ARCHIVE="$(ls "${TMP_DIST}"/software-builder-*.tar.gz)"
