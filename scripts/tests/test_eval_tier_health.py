@@ -4,7 +4,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from scripts.eval_tier_health import build_eval_tier_health, render_markdown
+from scripts.eval_tier_health import build_eval_tier_health, is_healthy, render_markdown
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -25,6 +25,15 @@ def test_eval_tier_health_covers_all_deterministic_tiers() -> None:
         "available": True,
         "ci_blocking": False,
     }
+    assert is_healthy(report) is True
+
+
+def test_missing_live_harness_does_not_fail_deterministic_health() -> None:
+    report = build_eval_tier_health()
+    report["live_model_harness"] = {"available": False, "ci_blocking": False}
+
+    assert is_healthy(report) is True
+    assert "Live model harness: **missing** (non-blocking)" in render_markdown(report)
 
 
 def test_eval_tier_health_markdown_is_deterministic_and_explicit() -> None:
