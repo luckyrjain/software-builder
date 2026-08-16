@@ -38,13 +38,16 @@ def _load_contract(path: Path = CONTRACT_PATH) -> dict:
     return raw
 
 
-def required_provenance_fields(path: Path = CONTRACT_PATH) -> set[str]:
-    contract = _load_contract(path)
+def _required_provenance_fields_from_contract(contract: dict) -> set[str]:
     provenance = require_mapping(contract.get("provenance"), "release contract.provenance")
     fields = provenance.get("required_fields")
     if not isinstance(fields, list) or not fields or not all(isinstance(item, str) for item in fields):
         raise ValueError("release contract.provenance.required_fields must be a non-empty list of strings")
     return set(fields)
+
+
+def required_provenance_fields(path: Path = CONTRACT_PATH) -> set[str]:
+    return _required_provenance_fields_from_contract(_load_contract(path))
 
 
 def validate_release_contract(root: Path = ROOT) -> list[str]:
@@ -89,7 +92,11 @@ def validate_release_contract(root: Path = ROOT) -> list[str]:
         for template in templates:
             try:
                 template.format(version=version)
-            except (KeyError, IndexError):
+            except (KeyError, IndexError, ValueError):
+                # ValueError also covers a malformed format spec/conversion (e.g. a typo'd
+                # "{version:04d}" or "{version!z}") -- str.format() raises ValueError for
+                # those, not KeyError/IndexError, so omitting it let a contract-file typo
+                # crash this validator with a raw traceback instead of a clean error.
                 errors.append(f"error: release contract: artifact_name_template {template!r} is malformed")
 
     try:
@@ -119,7 +126,7 @@ def validate_release_contract(root: Path = ROOT) -> list[str]:
             )
 
     try:
-        required_provenance_fields(root / "scripts" / "release_contract.yaml")
+        _required_provenance_fields_from_contract(contract)
     except ValueError as exc:
         errors.append(f"error: release contract: {exc}")
 

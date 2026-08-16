@@ -44,19 +44,30 @@ def _ensure_clean_worktree(root: Path) -> None:
     Nothing downstream can catch this after the fact: verify_release_bundle.py
     only checks the bundle's internal self-consistency (does the manifest
     match the archive?), not whether that content matches the named commit.
+
+    Checks both hops -- working tree vs HEAD, and index vs HEAD -- because
+    _tracked_files() reads each file's tar mode from the *index* (`git
+    ls-files -s`) while its content comes from the *working tree* on disk.
+    Checking only the worktree-vs-HEAD hop (as a single `git diff HEAD`
+    would) misses a staged-then-reverted mode change: e.g. `chmod +x f; git
+    add f; chmod -x f` leaves the working tree byte-identical to HEAD (so a
+    worktree-only check reports clean) while the index still carries the
+    stale staged mode, which would then be baked into the archive even
+    though it doesn't match the commit named as source_sha.
     """
-    result = subprocess.run(
-        ["git", "-C", str(root), "diff", "--quiet", "HEAD", "--"],
-        capture_output=True,
-        text=True,
-    )
-    if result.returncode == 1:
-        raise ValueError(
-            "release inputs must match the Git HEAD commit exactly -- commit or stash "
-            "pending changes to tracked files before packaging a release",
+    for diff_args in (["diff", "--quiet", "HEAD", "--"], ["diff", "--quiet", "--cached", "--"]):
+        result = subprocess.run(
+            ["git", "-C", str(root), *diff_args],
+            capture_output=True,
+            text=True,
         )
-    if result.returncode not in (0, 1):
-        raise ValueError(f"could not check Git working tree status: {result.stderr.strip()}")
+        if result.returncode == 1:
+            raise ValueError(
+                "release inputs must match the Git HEAD commit exactly -- commit or stash "
+                "pending changes to tracked files before packaging a release",
+            )
+        if result.returncode not in (0, 1):
+            raise ValueError(f"could not check Git working tree status: {result.stderr.strip()}")
 
 
 def _tracked_files(root: Path) -> list[tuple[str, Path, int]]:

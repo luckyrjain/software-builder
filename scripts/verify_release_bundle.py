@@ -46,6 +46,12 @@ def verify_release_bundle(archive: Path) -> list[str]:
             _safe_extract(archive, extract_dir)
         except (tarfile.TarError, OSError) as exc:
             return [f"error: unsafe or unreadable release archive: {exc}"]
+        except TypeError as exc:
+            # tarfile.extractall()'s `filter=` keyword requires Python 3.8.17+/3.9.17+/
+            # 3.10.12+/3.11.4+ or 3.12+ (PEP 706); on an older 3.x patch release it's an
+            # unknown keyword argument, which is a TypeError, not a TarError/OSError, so
+            # without this it crashed with a raw traceback instead of a clean CLI error.
+            return [f"error: Python version does not support safe tar extraction: {exc}"]
 
         roots = list(extract_dir.iterdir())
         if len(roots) != 1 or not roots[0].is_dir():
