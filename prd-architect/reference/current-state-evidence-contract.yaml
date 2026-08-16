@@ -8,16 +8,20 @@ current_state_evidence:
     - PRD.md
     - API_EVENT_SCHEMA.yaml
     - DATA_OWNERSHIP_GRAPH.yaml
+    - DEPENDENCY_GRAPH.yaml
     - CAPABILITY_TRACEABILITY.yaml
   source_revision:
     required: true
     fields: [repo, branch, commit_sha, observed_at]
   preserve_observed_state: true
   future_state_changes_must_be_explicit: true
+  conflict_behavior: surface_conflict_and_reduce_confidence
+  stale_behavior: do_not_treat_as_current_without_disclosure
 
 success_metric_quality:
   required_fields: [metric, baseline, target, timeframe, measurement_source]
   reject_if: [not_measurable, no_target, no_measurement_source]
+  unknown_baseline_requires: [baseline_status_unknown, baseline_measurement_action]
 
 assumption_register:
   required_fields: [id, statement, impact, validation, owner, status]
