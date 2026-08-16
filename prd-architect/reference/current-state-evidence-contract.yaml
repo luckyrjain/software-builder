@@ -11,6 +11,13 @@ current_state_evidence:
     - DATA_OWNERSHIP_GRAPH.yaml
     - DEPENDENCY_GRAPH.yaml
     - CAPABILITY_TRACEABILITY.yaml
+  prd_freshness:
+    source: domain_comprehension_manifest_prd_artifact_status
+    required_when: PRD.md_from_domain_comprehension
+    current_value: ok
+    stale_value: stale
+    stale_behavior: blocking_before_build_do_not_treat_PRD_as_current
+    unknown_behavior: disclose_and_verify_before_current_state_claim
   source_revision:
     required: true
     shape: repos
