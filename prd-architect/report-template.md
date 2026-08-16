@@ -36,9 +36,12 @@ Depth: Lite — <reason>
 <rationale>
 ```
 
-Every success metric must be measurable: baseline, target, timeframe, and measurement source. Trace every
-material functional requirement as `FR-* -> AC-* -> TR-*`; orphan requirements or acceptance criteria block
-Build Readiness. When consequential assumptions exist, add a stable **Assumption Register** with `A-*` IDs.
+Every success metric must be measurable using the canonical table in
+[output-tables.md](reference/output-tables.md) § Success metrics: baseline, target, timeframe, measurement
+source, and a baseline measurement action when the baseline is Unknown. Trace every material functional
+requirement as `FR-* -> AC-* -> TR-*`; orphan requirements or acceptance criteria block Build Readiness.
+When consequential assumptions exist, add a stable **Assumption Register** using the canonical ledger,
+including Owner and Status.
 
 Add sections from [section-triggers.md](reference/section-triggers.md) when material (e.g., Roles &
 Permissions, Failure Handling, Security / Privacy / Abuse, Assumption Register).
@@ -54,31 +57,32 @@ For existing or production systems, emit the following when their contract trigg
 
 ```markdown
 ## Rollout / Rollback
-<!-- rollout strategy, success/abort signals; rollback trigger, mechanism, data compatibility, verification -->
+<!-- rollout strategy, success signal, abort signal; rollback trigger, mechanism, data compatibility, verification -->
 
 ## Operational Readiness
 <!-- ownership, runbook, alerts, dashboards, support path, capacity, dependency readiness -->
 
 ## Migration / Backward Compatibility
-<!-- API/event/schema/data/config/client compatibility and migration sequencing -->
+<!-- evaluate API/event/schema/data/config/client compatibility; for breaking changes include migration plan, rollout sequence, rollback constraints -->
 
 ## API / Event / Schema Impact
-<!-- before/after contracts, consumers, compatibility and migration -->
+<!-- before contract, after contract, compatibility, consumers, migration -->
 
 ## Data / Privacy Impact
-<!-- only when personal/sensitive data, retention or access changes -->
+<!-- classification, access, retention, audit, compliance review; only when personal/sensitive data, retention, or access changes -->
 
 ## Cost Impact
-<!-- only when infrastructure/traffic/storage/paid-dependency economics materially change -->
+<!-- baseline, expected delta, measurement plan; only when new infrastructure, material traffic/storage growth, or paid-dependency change fires -->
 
 ## Observability Requirements
-<!-- metrics, logs, traces, alerts, dashboards, correlation -->
+<!-- metrics, logs, traces, alerts, dashboard, correlation -->
 ```
 
 ### Appendices (when triggered)
 
 - **Decisions & Constraints** — resolved decisions and mandatory constraints only
-- **Assumption Register** — when consequential assumptions exist; table strongly preferred when ≥3
+- **Assumption Register** — when consequential assumptions exist; use the canonical ledger in
+  [output-tables.md](reference/output-tables.md) so ID, impact, validation, owner, and status are preserved
 - **Requirements Traceability** — `FR-* -> AC-* -> TR-*` matrix for engineering-verifiable requirements
 - **Unresolved Questions** — only non-empty categories
 - **Adversarial Review Summary** / **Gap Analysis** — only when material context beyond inline fixes
