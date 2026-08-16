@@ -2,7 +2,7 @@ schema_version: 1
 entry_inputs:
   request: {type: string, provenance: user_invocation, required: true, trust: untrusted}
   source_material: {type: content, provenance: user_or_attachment, required: false, trust: untrusted}
-  current_state_evidence: {type: artifact_set, provenance: domain_comprehension_or_repository, required: false, trust: evidence_subject_to_precedence}
+  current_state_evidence: {type: artifact_set, provenance: domain_comprehension_or_repository, required: false, trust: untrusted}
   mode_hint: {type: string, provenance: user_invocation, required: false, trust: untrusted}
   depth_hint: {type: string, provenance: user_invocation, required: false, trust: untrusted}
   constraints: {type: list, provenance: user_or_source_material, required: false, trust: untrusted}
