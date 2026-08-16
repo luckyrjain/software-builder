@@ -196,11 +196,14 @@ def test_prd_workflow_carries_reviews_repairs_and_gates_new_contract_fields():
 
     gate = _text("prd-architect/workflow/gate.md")
     assert "current_state_evidence: object" in gate
+    assert "existing_system: boolean" in gate
     for token in (
         "no traceability orphan remains",
         "baseline, target, timeframe, and measurement source",
         "every engineering trigger was evaluated",
         "a required engineering-impact section fired but lacks its contract fields",
+        "missing required baseline evidence is a Blocking Before Build gap",
+        "required `current_state_evidence` is missing",
     ):
         assert token in gate
 
