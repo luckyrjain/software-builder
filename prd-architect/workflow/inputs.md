@@ -1,10 +1,10 @@
 ---
-workflow_version: 1.3
+workflow_version: 1.4
 phase: inputs
 produces:
   request: string
   source_material: content
-  current_state_evidence: artifact_set
+  current_state_evidence: object
   mode_hint: string
   depth_hint: string
   constraints: list
@@ -17,7 +17,7 @@ consumes:
     request: string
   optional:
     source_material: content
-    current_state_evidence: artifact_set
+    current_state_evidence: object
     mode_hint: string
     depth_hint: string
     constraints: list
@@ -47,7 +47,7 @@ consumes:
 | Field | Default | Notes |
 |-------|---------|-------|
 | `source_material` | Inline in `request` | Existing PRD, spec, ticket, diagram, competitor note |
-| `current_state_evidence` | None | Prefer `domain-comprehension` PRD + machine artifacts for existing systems; validate against `current-state-evidence-contract.yaml` |
+| `current_state_evidence` | None | Object containing a `domain-comprehension` PRD/machine-artifact handoff or equivalent repository evidence |
 | `mode_hint` | Inferred | `prd` \| `validation` \| `review` \| `critique-only` |
 | `depth_hint` | Auto | `lite` \| `standard` \| `rigorous` — override only when user states it |
 | `constraints` | [] | Mandatory boundaries (legal, security, compatibility, deadlines) |
@@ -59,9 +59,10 @@ consumes:
 ## Existing-system evidence ingestion
 
 When `existing_system=true`, inspect `current_state_evidence` before Specify. Prefer the canonical
-`domain-comprehension` handoff: `PRD.md`, `API_EVENT_SCHEMA.yaml`, `DATA_OWNERSHIP_GRAPH.yaml`, and
-`CAPABILITY_TRACEABILITY.yaml`, with source revision metadata. Missing artifacts do not authorize invention:
-record the gap as an assumption/unknown and cap claims according to the source evidence.
+`domain-comprehension` handoff: `PRD.md`, `API_EVENT_SCHEMA.yaml`, `DATA_OWNERSHIP_GRAPH.yaml`,
+`DEPENDENCY_GRAPH.yaml`, and `CAPABILITY_TRACEABILITY.yaml`, with source revision metadata. Missing artifacts
+do not authorize invention: record the gap as an assumption/unknown and cap claims according to the source
+evidence.
 
 Preserve observed current state verbatim in meaning. Proposed future-state behavior must be identified as a
 proposal/change, never silently rewritten into the observed baseline. If source revisions conflict or artifacts
