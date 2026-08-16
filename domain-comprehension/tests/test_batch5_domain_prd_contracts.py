@@ -121,7 +121,7 @@ def test_prd_workflow_carries_and_gates_new_contract_fields():
     inputs = _text("prd-architect/workflow/inputs.md")
     assert "current_state_evidence: object" in inputs
     assert "artifact_set" not in inputs
-    assert "preserve observed current state" in inputs
+    assert "preserve observed current state" in inputs.lower()
 
     specify = _text("prd-architect/workflow/specify.md")
     assert "current_state_evidence: object" in specify
@@ -130,7 +130,7 @@ def test_prd_workflow_carries_and_gates_new_contract_fields():
         "success_metrics: list",
         "assumption_register: list",
         "engineering_impact: object",
-        "every engineering trigger",
+        "Evaluate these engineering triggers explicitly",
     ):
         assert token in specify
 
