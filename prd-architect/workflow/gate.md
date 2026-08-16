@@ -1,9 +1,9 @@
 ---
-workflow_version: 1.7
+workflow_version: 1.8
 phase: gate
 produces: {final_artifact: string, build_readiness: string}
 consumes:
-  required: {response_mode: string, depth: string, critique_only: boolean, user_insists_on_full_prd: boolean, premise_verdict: string, problem_summary: object, alternatives_considered: list}
+  required: {response_mode: string, depth: string, critique_only: boolean, user_insists_on_full_prd: boolean, premise_verdict: string, problem_summary: object, alternatives_considered: list, existing_system: boolean}
   optional: {current_state_evidence: object}
   conditional:
     validation:
@@ -69,7 +69,7 @@ Verify:
 - realistic failures have defined behavior
 - accepted adversarial findings were repaired inline (or surfaced in critique-only findings)
 - security/privacy/compliance analysis matches actual risk
-- existing-system current-state evidence was ingested when available, source revision checked, and observed facts were not silently rewritten as proposals
+- for PRD/Review on `existing_system=true`, `current_state_evidence` is present, source revisions were checked, stale/conflicting evidence is surfaced, and observed facts were not silently rewritten as proposals; missing required baseline evidence is a Blocking Before Build gap
 - existing-system changes include Change Impact when needed
 - every engineering trigger was evaluated: rollout/rollback, operational readiness, migration/backward compatibility, API/event/schema impact, data/privacy, cost, observability
 - every fired engineering trigger has a complete section per `current-state-evidence-contract.yaml`; every omitted section has a recorded not-triggered result
@@ -104,6 +104,7 @@ Assign **exactly one** verdict (PRD and Review; optional for pure Validation unl
 - Risky assumption affects MVP viability without acceptable validation plan
 - required security/regulatory behavior unknown
 - critical acceptance criteria absent
+- PRD/Review targets `existing_system=true` but required `current_state_evidence` is missing, stale without disclosure, or materially conflicted such that compatibility cannot be established
 - any material `FR-*`/`AC-*` traceability orphan remains
 - a required engineering-impact section fired but lacks its contract fields
 - a breaking change has no compatible migration/rollout/rollback plan
