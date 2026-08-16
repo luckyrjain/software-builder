@@ -1,5 +1,5 @@
 ---
-workflow_version: 1.17
+workflow_version: 1.18
 phase: inputs
 produces:
   - workspace_root
@@ -7,6 +7,7 @@ produces:
   - domain_name
   - domain_config
   - delivery_mode
+  - discovery_budget
 consumes: []
 ---
 
@@ -21,11 +22,24 @@ consumes: []
 | `workspace_layout` | No | Auto-detect: `sibling-repos` \| `monorepo` \| `single-repo` |
 | `domain_config` | No | Create/load under the resolved `artifact_root` |
 | `delivery_mode` | No | `QUICK` when no `manifest.yaml` exists yet (first-time engagement) — see table below |
+| `discovery_budget` | No | Profile default for QUICK/FULL/DELTA/ADD_REPO from [domain-model-contract.yaml](../reference/domain-model-contract.yaml); CUSTOM requires explicit limits |
 | `domain_pack` | No | e.g. `fintech-payout` — see [domain-packs](../reference/domain-packs/README.md) |
 | `memory_bank.export_mode` | No | From `{artifact_root}/domain-config.yaml`; override in user message (`never` \| `optional` \| `p5`) |
 | `api_tooling.export_mode` | No | From `{artifact_root}/domain-config.yaml`; override in user message (`never` \| `optional` \| `p5`) |
 | `new_repo_path` | Only for `ADD_REPO` | Ask if ambiguous |
 | `proposal` | Only for `PROPOSAL_CHECK` | Ask if absent — free-text description: proposed name/domain area, claimed data entities, claimed API paths/producers |
+
+## Discovery budget
+
+Resolve the run budget before repository discovery. Use the selected delivery mode's `default_limits` from
+[domain-model-contract.yaml](../reference/domain-model-contract.yaml), unless the caller explicitly selects
+CUSTOM limits. Track both configured and consumed counters for repositories, search queries, and deep file
+reads in `PROGRESS.md` (and the run handoff where applicable).
+
+Stop discovery when the completion/evidence gate is satisfied or any configured limit is reached. If a limit
+is reached first, mark the run/phase PARTIAL, record the unresolved evidence gap in `UNKNOWNS.md`, and do not
+silently exceed the budget. RESUME continues from the persisted remaining/consumed state rather than resetting
+counters. PROPOSAL_CHECK uses existing artifacts and therefore does not open a new source-discovery budget.
 
 ## Artifact location resolution
 
@@ -143,8 +157,13 @@ Resolve all canonical domain files through `engagement.artifact_root` before rea
    - **P3b**: re-run if P3 re-ran
    - **P4, P5**: always re-run after any upstream phase re-ran
 
-3. Phases with no upstream changes keep their `complete` status unchanged.
-4. At end, run `validate_manifest_yaml.py --workspace-root <workspace_root>`; update
+3. Refresh affected machine artifacts per [machine-domain-model.md](../reference/machine-domain-model.md),
+   then compare previous vs refreshed source revisions, API/event contracts, data ownership, dependency
+   semantics, and capability ownership/code locations using `stale_prd_detection`. If any stale condition
+   fires, regenerate affected `PRD.md` requirements/traceability or explicitly mark the PRD stale in
+   `PROGRESS.md` and block claims that it is current. Never silently retain a stale PRD.
+4. Phases with no upstream changes keep their `complete` status unchanged.
+5. At end, run `validate_manifest_yaml.py --workspace-root <workspace_root>`; update
    `engagement.last_updated` and `engagement.next_action`.
 
 ### ADD_REPO mode — procedure
@@ -181,7 +200,10 @@ present, stop and tell the user to use `DELTA` instead.
    - P3 reruns if new repo is Tier 0/1
    - P3b reruns if P3 reran
    - P4, P5 **always** rerun
-6. Run `validate_manifest_yaml.py --workspace-root <workspace_root> --check-content`; update
+6. Refresh the four machine artifacts and run the same stale-PRD comparison as DELTA. Regenerate affected
+   PRD requirements/traceability or mark the PRD stale explicitly; never retain it silently after a stale
+   condition fires.
+7. Run `validate_manifest_yaml.py --workspace-root <workspace_root> --check-content`; update
    `engagement.last_updated` and `engagement.next_action`.
 
 **Do not:** re-run P0–P1 for repos already in `manifest.repos[]`; regenerate other repos' `/understand`
@@ -233,6 +255,7 @@ run `FULL` or `QUICK` comprehension first.
 | `workspace_layout` | Auto-detect or user-specified | Default to `sibling-repos` detection |
 | `domain_name` | User message; confirm in Session 0 | Ask user |
 | `delivery_mode` | User message | Default `QUICK` (no `manifest.yaml` yet) |
+| `discovery_budget` | Delivery profile or explicit CUSTOM input | Apply default; CUSTOM without limits is invalid |
 | `domain_pack` | User message (optional) | Skip — no pack merge |
 
 ## Environment constraints
