@@ -67,7 +67,10 @@ def classify_file_role(path: str, policy: dict[str, Any]) -> str | None:
             matches.append(role)
     if not matches:
         return None
-    for role in ("runtime", "reference", "maintainer"):
+    # Runtime controls always win. Maintainer-only trees then override broad
+    # reference patterns such as */README.md so build/design docs are not
+    # misreported as agent reference material.
+    for role in ("runtime", "maintainer", "reference"):
         if role in matches:
             return role
     return matches[0]
@@ -161,7 +164,9 @@ def _nested_mappings(value: Any, label: str) -> Iterator[tuple[str, dict[str, An
 
 
 def _deprecation_candidates(root: Path, skill_paths: Iterable[str]) -> Iterable[tuple[str, dict[str, Any]]]:
-    for path in sorted((root / "scripts" / "registry").glob("*.yaml")):
+    registry = root / "scripts" / "registry"
+    registry_paths = sorted({*registry.glob("*.yaml"), *registry.glob("*.yml")})
+    for path in registry_paths:
         rel = path.relative_to(root).as_posix()
         yield from _nested_mappings(_yaml_mapping(path), rel)
     for skill_path in skill_paths:
