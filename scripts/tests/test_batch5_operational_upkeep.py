@@ -145,7 +145,7 @@ def test_health_report_is_deterministic_with_complete_provenance() -> None:
     assert provenance["registry_schema_version"] == 1
     assert provenance["prompt_bundle_version"] == "1"
     assert provenance["evaluator_version"] == "1"
-    assert provenance["operational_policy_version"] == "1.2"
+    assert provenance["operational_policy_version"] == "1.3"
     assert provenance["generator_version"] == "1.3"
 
     health = first["health"]
@@ -186,6 +186,7 @@ def test_upkeep_enforcement_paths_are_self_protected() -> None:
     for path in (
         "scripts/operational_upkeep.py",
         "scripts/deprecation_lifecycle.py",
+        "scripts/deprecation_diff_guard.py",
         "scripts/eval_tier_health.py",
         ".github/workflows/lint.yml",
     ):
