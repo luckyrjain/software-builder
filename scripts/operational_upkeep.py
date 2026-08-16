@@ -19,6 +19,7 @@ from scripts.yaml_safety import load_unique_yaml, load_unique_yaml_file
 POLICY_PATH = ROOT / "scripts" / "operational_upkeep.yaml"
 GENERATOR_VERSION = "1.3"
 _ID_RE = re.compile(r"^(route|stop|report)\.[a-z0-9][a-z0-9.-]*$")
+_CAPABILITY_NAME_RE = re.compile(r"^[a-z][a-z0-9_-]*(\.[a-z][a-z0-9_-]*)+$")
 
 
 def load_policy(path: Path = POLICY_PATH) -> dict[str, Any]:
@@ -270,9 +271,17 @@ def validate_policy(root: Path = ROOT) -> list[str]:
 
 
 def _collect_capability_names(value: Any) -> set[str]:
+    """Collect dotted external-capability identifiers (e.g. ``datadog.query_metrics``).
+
+    Excludes free-text values that merely contain a period (degraded_modes
+    prose, filenames mentioned in a sentence) and ``<skill-id>.invoke``
+    entries, which reference another registered skill rather than an
+    external tool/platform capability.
+    """
     names: set[str] = set()
-    if isinstance(value, str) and "." in value:
-        names.add(value)
+    if isinstance(value, str):
+        if _CAPABILITY_NAME_RE.fullmatch(value) and not value.endswith(".invoke"):
+            names.add(value)
     elif isinstance(value, list):
         for item in value:
             names.update(_collect_capability_names(item))

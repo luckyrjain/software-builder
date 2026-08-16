@@ -176,4 +176,4 @@ prompt_diff_risk:
       - "/workflow/"
     editorial:
       - "README.md"
-      - "docs/"
+      - "docs/**"

@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from scripts.operational_upkeep import (
+    _collect_capability_names,
     _deprecation_candidates,
     _matches,
     _nested_mappings,
@@ -87,6 +88,28 @@ def test_bare_pattern_does_not_match_as_unanchored_substring() -> None:
     assert _matches("docs/CODEOWNERS-policy.md", "CODEOWNERS") is False
     assert _matches("Makefile", "Makefile") is True
     assert _matches("scripts/legacy-Makefile-notes.md", "Makefile") is False
+
+
+def test_collect_capability_names_ignores_prose_and_skill_self_references() -> None:
+    payload = {
+        "capabilities": {
+            "required": ["datadog.query_metrics"],
+            "optional": [{"name": "squad-map.invoke", "enables": "full mapping table"}],
+        },
+        "degraded_modes": {
+            "slack.post.message": "WEEKLY_SQUAD_DIGEST.md is still written; not delivered via Slack",
+            "gitlab.create_merge_request_thread": "fall back to summary-only posting per auto-post-policy.md",
+        },
+    }
+    names = _collect_capability_names(payload)
+    assert names == {"datadog.query_metrics"}
+
+
+def test_editorial_docs_pattern_matches_nested_paths() -> None:
+    policy = load_policy(ROOT / "scripts" / "operational_upkeep.yaml")
+    risk, matched = classify_diff(["docs/adr/0002-example.md"], policy)
+    assert risk == "editorial"
+    assert matched == ["editorial"]
 
 
 def test_yaml_mapping_fails_closed_on_duplicate_keys(tmp_path: Path) -> None:
@@ -180,7 +203,9 @@ def test_health_report_is_deterministic_with_complete_provenance() -> None:
     assert health["stable_stop_conditions"] >= 5
     assert health["stable_report_fields"] >= 6
     assert health["contract_owners"] >= 7
-    assert health["external_dependency_count"] > 0
+    assert 0 < health["external_dependency_count"] < 15
+    assert all(" " not in family for family in health["external_dependency_families"])
+    assert not any(family.endswith(".invoke") for family in health["external_dependency_families"])
     assert health["orphan_runtime_modules"] == []
 
     markdown = render_health_markdown(first)
