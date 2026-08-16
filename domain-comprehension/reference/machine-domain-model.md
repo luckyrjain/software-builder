@@ -7,18 +7,20 @@ Markdown deliverables.
 
 ## Bootstrap
 
-Session 0 copies these stubs from `templates/` into `artifact_root` for FULL runs:
+Session 0 copies these stubs from `templates/` into `artifact_root` for every normal engagement so the root
+manifest's `stub` artifact rows remain valid:
 
 - `API_EVENT_SCHEMA.yaml`
 - `DATA_OWNERSHIP_GRAPH.yaml`
 - `DEPENDENCY_GRAPH.yaml`
 - `CAPABILITY_TRACEABILITY.yaml`
 
-For DELTA/ADD_REPO, retain existing files only after the stale checks below. QUICK may omit them unless the
-user explicitly requests machine output.
+FULL runs populate and reconcile them through the owning phases. QUICK keeps them as unpopulated stubs unless
+the user explicitly requests machine output; their presence does not make them QUICK deliverables. For
+DELTA/ADD_REPO, retain existing populated files only after the stale checks below.
 
-Every file records analyzed `source_revision` data. If a repo revision is unknown, record UNKNOWN/null per the
-artifact shape; never substitute the current local branch without evidence.
+Every file records analyzed `source_revision` data once populated. If a repo revision is unknown, record
+UNKNOWN/null per the artifact shape; never substitute the current local branch without evidence.
 
 ## Phase ownership
 
