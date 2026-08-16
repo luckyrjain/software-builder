@@ -117,7 +117,11 @@ def _yaml_mapping(path: Path) -> dict[str, Any]:
 
 def _source_key_exists(path: Path, source_key: str) -> bool:
     if path.suffix.lower() not in {".yaml", ".yml"}:
-        return source_key.lower() in path.read_text(encoding="utf-8").lower()
+        # Markdown sources: require an actual heading, not just an incidental
+        # mention of the word anywhere in prose (which stays true even after
+        # the referenced section is renamed or removed).
+        heading_re = re.compile(rf"^#+\s+{re.escape(source_key)}\s*$", re.IGNORECASE | re.MULTILINE)
+        return heading_re.search(path.read_text(encoding="utf-8")) is not None
     current: Any = _yaml_mapping(path)
     for part in source_key.split("."):
         if not isinstance(current, dict) or part not in current:

@@ -10,6 +10,7 @@ from scripts.operational_upkeep import (
     _deprecation_candidates,
     _matches,
     _nested_mappings,
+    _source_key_exists,
     _tracked_relative_files,
     _validate_deprecation_mapping,
     _yaml_mapping,
@@ -142,6 +143,24 @@ def test_editorial_docs_pattern_matches_nested_paths() -> None:
     risk, matched = classify_diff(["docs/adr/0002-example.md"], policy)
     assert risk == "editorial"
     assert matched == ["editorial"]
+
+
+def test_markdown_source_key_requires_an_actual_heading(tmp_path: Path) -> None:
+    path = tmp_path / "prompt-injection.md"
+    path.write_text(
+        "# Prompt injection\n\n## Rule\n\nContent.\n",
+        encoding="utf-8",
+    )
+    assert _source_key_exists(path, "Rule") is True
+
+    # Renaming the heading must fail the check even though the word still
+    # appears elsewhere in prose -- a bare substring search would stay True.
+    path.write_text(
+        "# Prompt injection\n\n## Guardrail Statement\n\n"
+        "This companion rule repeats the rule from elsewhere.\n",
+        encoding="utf-8",
+    )
+    assert _source_key_exists(path, "Rule") is False
 
 
 def test_yaml_mapping_fails_closed_on_duplicate_keys(tmp_path: Path) -> None:
