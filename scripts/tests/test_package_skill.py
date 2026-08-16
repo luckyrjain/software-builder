@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -26,6 +27,12 @@ def isolated_repo(tmp_path: Path) -> Path:
     specs = ROOT / "docs" / "superpowers" / "specs"
     if specs.is_dir():
         shutil.copytree(specs, repo / "docs" / "superpowers" / "specs")
+    (repo / "VERSION").write_text("0.0.0\n", encoding="utf-8")
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+    subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo, check=True)
+    subprocess.run(["git", "config", "user.name", "Test"], cwd=repo, check=True)
+    subprocess.run(["git", "add", "."], cwd=repo, check=True)
+    subprocess.run(["git", "commit", "-qm", "fixture"], cwd=repo, check=True)
     return repo
 
 
@@ -108,6 +115,12 @@ def test_prd_architect_package_contains_executable_safe_output_renderer(tmp_path
     repo = tmp_path / "software-builder"
     shutil.copytree(ROOT / "prd-architect", repo / "prd-architect")
     shutil.copytree(ROOT / "docs" / "skill-framework", repo / "docs" / "skill-framework")
+    (repo / "VERSION").write_text("0.0.0\n", encoding="utf-8")
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+    subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo, check=True)
+    subprocess.run(["git", "config", "user.name", "Test"], cwd=repo, check=True)
+    subprocess.run(["git", "add", "."], cwd=repo, check=True)
+    subprocess.run(["git", "commit", "-qm", "fixture"], cwd=repo, check=True)
     dest = tmp_path / "installed" / "prd-architect"
     package_skill(skill="prd-architect", repo_root=repo, dest=dest, host="test")
 

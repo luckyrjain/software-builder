@@ -216,6 +216,13 @@ verify-release-tag:
 	@test -n "$(TAG)" || (echo "error: set TAG=vX.Y.Z" >&2; exit 1)
 	@python3 scripts/verify_release_tag.py "$(TAG)"
 
+validate-release-contract:
+	@python3 scripts/release_contract.py
+
+verify-release-bundle:
+	@test -n "$(ARCHIVE)" || (echo "error: set ARCHIVE=dist/software-builder-X.Y.Z.tar.gz" >&2; exit 1)
+	@python3 scripts/verify_release_bundle.py "$(ARCHIVE)"
+
 generate:
 	@python3 -m scripts.registry generate
 

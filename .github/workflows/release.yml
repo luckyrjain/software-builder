@@ -65,6 +65,16 @@ jobs:
           make lint
           make package-release
 
+      - name: Validate release contract
+        run: python3 scripts/release_contract.py
+
+      - name: Verify release bundle
+        env:
+          RELEASE_TAG: ${{ steps.tag.outputs.name }}
+        run: |
+          VERSION="${RELEASE_TAG#v}"
+          python3 scripts/verify_release_bundle.py "dist/software-builder-${VERSION}.tar.gz"
+
       - name: Upload release assets
         env:
           GH_TOKEN: ${{ github.token }}

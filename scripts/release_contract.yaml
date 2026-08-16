@@ -1,0 +1,28 @@
+schema_version: 1
+
+# Anchored regex a release tag must satisfy; verify_release_tag.py enforces
+# the same shape and cross-checks it against VERSION.
+tag_pattern: '^v\d+\.\d+\.\d+$'
+
+# {version} is substituted with the repository VERSION value.
+artifact_name_templates:
+  - "software-builder-{version}.tar.gz"
+  - "software-builder-{version}.sha256"
+  - "software-builder-{version}.files.sha256"
+
+# A release bundle's RELEASE-MANIFEST.json must be built from a repository
+# whose schema_version fields exactly match these values, so an installed
+# release always carries a manifest describing the schemas it was built
+# against.
+compatibility:
+  registry_schema_version: 1
+  host_contract_schema_version: 1
+
+provenance:
+  required_fields:
+    - schema_version
+    - distribution_version
+    - source_sha
+    - registry_schema_version
+    - host_contract_schema_version
+    - files

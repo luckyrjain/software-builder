@@ -236,5 +236,7 @@ def rewrite_framework_links(content: str, source_file: Path, package_root: Path)
 
 def sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
-    digest.update(path.read_bytes())
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
     return digest.hexdigest()

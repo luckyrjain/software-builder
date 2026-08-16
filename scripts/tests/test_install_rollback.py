@@ -17,6 +17,7 @@ def test_install_restores_previous_package_when_validation_fails(tmp_path: Path)
     skill_dir = repo / "broken-skill"
     shutil.copytree(ROOT / "scripts", repo / "scripts")
     shutil.copy2(ROOT / "skills.yaml", repo / "skills.yaml")
+    (repo / "VERSION").write_text("0.0.0\n", encoding="utf-8")
     # Append a registry entry so install.sh allowlist permits the skill.
     skills_yaml = repo / "skills.yaml"
     text = skills_yaml.read_text(encoding="utf-8")
@@ -44,6 +45,11 @@ def test_install_restores_previous_package_when_validation_fails(tmp_path: Path)
         "See [missing](reference/missing.md)\n",
         encoding="utf-8",
     )
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+    subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo, check=True)
+    subprocess.run(["git", "config", "user.name", "Test"], cwd=repo, check=True)
+    subprocess.run(["git", "add", "."], cwd=repo, check=True)
+    subprocess.run(["git", "commit", "-qm", "fixture"], cwd=repo, check=True)
 
     dest = home / ".cursor" / "skills" / "broken-skill"
     dest.parent.mkdir(parents=True)
@@ -82,6 +88,7 @@ def test_install_list_does_not_write_skills(tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     shutil.copytree(ROOT / "scripts", repo / "scripts")
     shutil.copy2(ROOT / "skills.yaml", repo / "skills.yaml")
+    (repo / "VERSION").write_text("0.0.0\n", encoding="utf-8")
     shutil.copytree(ROOT / "unit-test-creator", repo / "unit-test-creator")
     shutil.copytree(ROOT / "docs" / "skill-framework", repo / "docs" / "skill-framework")
 
@@ -115,6 +122,12 @@ def test_package_skill_writes_manifest(tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     shutil.copytree(ROOT / "unit-test-creator", repo / "unit-test-creator")
     shutil.copytree(ROOT / "docs" / "skill-framework", repo / "docs" / "skill-framework")
+    (repo / "VERSION").write_text("0.0.0\n", encoding="utf-8")
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+    subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo, check=True)
+    subprocess.run(["git", "config", "user.name", "Test"], cwd=repo, check=True)
+    subprocess.run(["git", "add", "."], cwd=repo, check=True)
+    subprocess.run(["git", "commit", "-qm", "fixture"], cwd=repo, check=True)
     dest = tmp_path / "installed"
 
     subprocess.run(
