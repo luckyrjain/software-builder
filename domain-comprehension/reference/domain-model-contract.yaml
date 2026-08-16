@@ -3,6 +3,12 @@ producer: domain-comprehension
 consumer: prd-architect
 state_semantics: current_state
 
+source_revision:
+  required: true
+  shape: repos
+  repo_required_fields: [repo, branch, commit_sha, observed_at]
+  unknown_rule: preserve_unknown_field_do_not_substitute_local_state
+
 # Repository discovery is bounded and recorded per run. Defaults are ceilings,
 # not targets; stop earlier when the evidence/completion gates are satisfied.
 discovery_budget:
@@ -91,6 +97,7 @@ stale_prd_detection:
 compatibility:
   consumer: prd-architect
   source_revision_required: true
+  source_revision_shape: {repos: [{repo: string, branch: string, commit_sha: string, observed_at: string}]}
   accepted_artifacts: [PRD.md, API_EVENT_SCHEMA.yaml, DATA_OWNERSHIP_GRAPH.yaml, DEPENDENCY_GRAPH.yaml, CAPABILITY_TRACEABILITY.yaml]
   evidence_status_values: [Observed, Inferred, Unknown, Conflicted, Not_Applicable]
   confidence_values: [HIGH, MEDIUM, LOW, UNKNOWN]
