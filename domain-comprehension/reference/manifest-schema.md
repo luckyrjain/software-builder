@@ -10,10 +10,11 @@ validate manifest/path/content state with `scripts/validate_manifest_yaml.py`; P
 - deterministic artifact checklist and phase state
 - scriptable completion gate
 - resume locator without parsing prose
+- persisted discovery-budget state for deterministic bounded discovery
 - evidence/completeness metrics
 - a hard path boundary preventing manifest-controlled artifact lookup outside the workspace artifact root
 
-`manifest.yaml` is the source of truth for phase/artifact status; `PROGRESS.md` remains human-readable
+`manifest.yaml` is the source of truth for phase/artifact/budget status; `PROGRESS.md` remains human-readable
 inside the artifact root.
 
 ## Schema version
@@ -26,6 +27,7 @@ Current schema: `2`.
 |-------|----------|
 | `schema_version` | yes |
 | `engagement` | yes |
+| `discovery_budget` | no for legacy schema-v2 manifests; written by all new runs and backfilled before RESUME discovery |
 | `phases` | yes |
 | `artifacts` | yes |
 | `diagrams` | yes |
@@ -54,6 +56,29 @@ Current schema: `2`.
 `<workspace_root>/<artifact_root>/`. `artifact_root` and `map_file` must be relative and may not contain
 `..`; validation treats both `/` and `\\` as separators so Windows-style traversal cannot bypass Linux
 CI. See [run-scoped-artifacts.md](run-scoped-artifacts.md).
+
+## `discovery_budget`
+
+New engagements persist the bounded-discovery profile and counters in machine state:
+
+```yaml
+discovery_budget:
+  profile: QUICK
+  limits: { repositories: 12, search_queries: 80, deep_file_reads: 60 }
+  consumed: { repositories: 0, search_queries: 0, deep_file_reads: 0 }
+```
+
+`profile` is `QUICK | FULL | DELTA | ADD_REPO | CUSTOM`. Every configured limit is a positive integer; every
+consumed counter is a non-negative integer and may not exceed its configured limit. The delivery-mode defaults
+come from [domain-model-contract.yaml](domain-model-contract.yaml); Session 0 must replace the reusable
+QUICK template values when another profile is selected.
+
+The field remains optional to preserve RESUME compatibility with pre-Batch-5 schema-v2 manifests. Before a
+legacy engagement performs new source discovery, RESUME must create the block from the active delivery profile
+and any already-recorded counters that can be recovered without guessing. If prior consumption cannot be
+recovered, record that limitation and choose a conservative remaining budget rather than silently resetting an
+exhausted run. Mirror counters into `PROGRESS.md` for humans, but the manifest block is the machine source of
+truth once present.
 
 ## `phases`
 
@@ -115,13 +140,15 @@ understand status, and deep-dive status.
 ## Agent update rules
 
 1. Session 0 creates the docs artifact root, copies domain templates there, writes root `manifest.yaml`,
-   writes the same resolved path to `domain-config.yaml scope.artifact_root`, and sets
-   `engagement.artifact_root`.
-2. End each phase by updating phases/artifacts/diagrams/evidence/confidence and running validation.
-3. Skipped phases require a reason; optional artifacts become `n_a` or `waived` as appropriate.
-4. `FIRST_PASS_COMPLETE` requires manifest `--strict --check-content` plus `validate_prd.py`; all required
+   writes the same resolved path to `domain-config.yaml scope.artifact_root`, sets
+   `engagement.artifact_root`, and initializes `discovery_budget` from the selected profile.
+2. End each discovery-bearing phase by updating `discovery_budget.consumed` in the manifest and mirroring it
+   to `PROGRESS.md`; never reset counters between phases or RESUME.
+3. End each phase by updating phases/artifacts/diagrams/evidence/confidence and running validation.
+4. Skipped phases require a reason; optional artifacts become `n_a` or `waived` as appropriate.
+5. `FIRST_PASS_COMPLETE` requires manifest `--strict --check-content` plus `validate_prd.py`; all required
    P5 artifacts must be `ok`/`waived`, and the PRD must satisfy its requirement/traceability contract.
-5. `ADD_REPO` keeps affected phases in progress while merge conflicts remain open and must refresh affected
+6. `ADD_REPO` keeps affected phases in progress while merge conflicts remain open and must refresh affected
    machine artifacts before P5 freshness claims.
 
 ## Validation
@@ -134,5 +161,7 @@ python3 domain-comprehension/scripts/validate_prd.py \
   /path/to/workspace/<artifact_root>/PRD.md
 ```
 
-The PRD validator requires `Status` and `Confidence` on `FR-*`, `BR-*`, and `NFR-*` definitions, exactly
-one traceability row for every requirement id, and evidence for every `Observed` requirement.
+The manifest validator validates `discovery_budget` whenever it is present and rejects malformed/negative or
+over-limit counters. The PRD validator requires `Status` and `Confidence` on `FR-*`, `BR-*`, and `NFR-*`
+definitions, exactly one traceability row for every requirement id, and evidence for every `Observed`
+requirement.
