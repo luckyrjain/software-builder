@@ -1,6 +1,12 @@
 from __future__ import annotations
 
+import subprocess
+import sys
+from pathlib import Path
+
 from scripts.eval_tier_health import build_eval_tier_health, render_markdown
+
+ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_eval_tier_health_covers_all_deterministic_tiers() -> None:
@@ -14,6 +20,7 @@ def test_eval_tier_health_covers_all_deterministic_tiers() -> None:
         "tier_3_golden",
     }
     assert all(count > 0 for count in report["tiers"].values())
+    assert report["unexpected_static_tiers"] == {}
     assert report["live_model_harness"] == {
         "available": True,
         "ci_blocking": False,
@@ -32,4 +39,18 @@ def test_eval_tier_health_markdown_is_deterministic_and_explicit() -> None:
     assert "Tier 2 transcript cases" in first
     assert "Tier 3 golden cases" in first
     assert "Deterministic tiers covered: **3/3**" in first
+    assert "Unexpected static tiers: **0**" in first
     assert "Live model harness: **available** (non-blocking)" in first
+
+
+def test_eval_tier_health_cli_runs_from_repository_root() -> None:
+    result = subprocess.run(
+        [sys.executable, "scripts/eval_tier_health.py", "--format", "json"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert '"covered_tiers": 3' in result.stdout
+    assert '"unexpected_static_tiers": {}' in result.stdout
