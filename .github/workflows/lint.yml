@@ -35,7 +35,9 @@ jobs:
           python3 -m pip install --require-hashes -r requirements.lock
 
       - name: Validate operational upkeep policy
-        run: python3 scripts/operational_upkeep.py validate
+        run: |
+          python3 scripts/operational_upkeep.py validate
+          python3 -m scripts.deprecation_lifecycle
 
       - name: Publish prompt-system health, eval tiers and provenance
         run: |
