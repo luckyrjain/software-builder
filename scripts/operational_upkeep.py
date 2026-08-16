@@ -8,13 +8,13 @@ import subprocess
 import sys
 from collections import Counter
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Iterable, Iterator
 
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 POLICY_PATH = ROOT / "scripts" / "operational_upkeep.yaml"
-GENERATOR_VERSION = "1.1"
+GENERATOR_VERSION = "1.2"
 _ID_RE = re.compile(r"^(route|stop|report)\.[a-z0-9][a-z0-9.-]*$")
 
 
@@ -32,6 +32,24 @@ def _git_revision(root: Path) -> str:
         ).strip()
     except (OSError, subprocess.CalledProcessError):
         return "unknown"
+
+
+def _tracked_relative_files(root: Path) -> list[Path]:
+    """Return tracked regular files so health output depends on repository state, not local debris."""
+    try:
+        output = subprocess.check_output(
+            ["git", "ls-files", "-z"], cwd=root, stderr=subprocess.DEVNULL
+        )
+    except (OSError, subprocess.CalledProcessError) as exc:
+        raise RuntimeError("prompt-system health requires a Git worktree") from exc
+    tracked: list[Path] = []
+    for raw in output.split(b"\0"):
+        if not raw:
+            continue
+        rel = Path(raw.decode("utf-8", errors="strict"))
+        if (root / rel).is_file():
+            tracked.append(rel)
+    return sorted(tracked, key=lambda path: path.as_posix())
 
 
 def _matches(path: str, pattern: str) -> bool:
@@ -109,6 +127,15 @@ def _validate_deprecation_mapping(data: dict[str, Any], label: str, required: se
     missing = sorted(required - set(block))
     if missing:
         return [f"error: {label}: deprecation missing fields: {', '.join(missing)}"]
+    empty = sorted(
+        field
+        for field in required - {"aliases"}
+        if block.get(field) is None or (isinstance(block.get(field), str) and not block[field].strip())
+    )
+    if empty:
+        return [f"error: {label}: deprecation fields must be non-empty: {', '.join(empty)}"]
+    if not isinstance(block.get("aliases"), list):
+        return [f"error: {label}: deprecation aliases must be a list"]
     return []
 
 
@@ -123,17 +150,30 @@ def _markdown_frontmatter(path: Path) -> dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
+def _nested_mappings(value: Any, label: str) -> Iterator[tuple[str, dict[str, Any]]]:
+    if isinstance(value, dict):
+        yield label, value
+        for key, child in value.items():
+            yield from _nested_mappings(child, f"{label}.{key}")
+    elif isinstance(value, list):
+        for index, child in enumerate(value):
+            yield from _nested_mappings(child, f"{label}[{index}]")
+
+
 def _deprecation_candidates(root: Path, skill_paths: Iterable[str]) -> Iterable[tuple[str, dict[str, Any]]]:
     for path in sorted((root / "scripts" / "registry").glob("*.yaml")):
-        yield path.relative_to(root).as_posix(), _yaml_mapping(path)
+        rel = path.relative_to(root).as_posix()
+        yield from _nested_mappings(_yaml_mapping(path), rel)
     for skill_path in skill_paths:
         directory = root / skill_path
         skill_md = directory / "SKILL.md"
         if skill_md.is_file():
-            yield skill_md.relative_to(root).as_posix(), _markdown_frontmatter(skill_md)
+            rel = skill_md.relative_to(root).as_posix()
+            yield from _nested_mappings(_markdown_frontmatter(skill_md), rel)
         for pattern in ("reference/*.yaml", "reference/*.yml", "templates/*.yaml", "templates/*.yml"):
             for path in sorted(directory.glob(pattern)):
-                yield path.relative_to(root).as_posix(), _yaml_mapping(path)
+                rel = path.relative_to(root).as_posix()
+                yield from _nested_mappings(_yaml_mapping(path), rel)
 
 
 def _registered_skills(root: Path) -> dict[str, Any]:
@@ -198,7 +238,6 @@ def validate_policy(root: Path = ROOT) -> list[str]:
     for label, data in _deprecation_candidates(root, skill_paths):
         errors.extend(_validate_deprecation_mapping(data, label, required))
 
-    # Every registered execution surface has an explicit visible role.
     for skill_id, entry in skills.items():
         if not isinstance(entry, dict):
             continue
@@ -218,7 +257,6 @@ def validate_policy(root: Path = ROOT) -> list[str]:
             rel = path.relative_to(root).as_posix()
             if classify_file_role(rel, policy) != "reference":
                 errors.append(f"error: operational-upkeep: {rel} must be reference")
-
     return errors
 
 
@@ -235,16 +273,16 @@ def _collect_capability_names(value: Any) -> set[str]:
     return names
 
 
-def _orphan_runtime_modules(root: Path, skills: dict[str, Any]) -> list[str]:
+def _orphan_runtime_modules(skills: dict[str, Any], tracked_files: Iterable[Path]) -> list[str]:
     registered_paths = {
         str(entry.get("path", skill_id))
         for skill_id, entry in skills.items()
         if isinstance(entry, dict)
     }
     discovered = {
-        path.parent.relative_to(root).as_posix()
-        for path in root.glob("*/SKILL.md")
-        if path.is_file()
+        path.parent.as_posix()
+        for path in tracked_files
+        if path.name == "SKILL.md" and len(path.parts) == 2
     }
     return sorted(discovered - registered_paths)
 
@@ -257,6 +295,7 @@ def build_health_report(root: Path = ROOT, revision: str | None = None) -> dict[
     composition = _yaml_mapping(root / "scripts" / "registry" / "composition_contracts.yaml")
     runtime = _yaml_mapping(root / "scripts" / "registry" / "composition_runtime.yaml")
     eval_contracts = _yaml_mapping(root / "scripts" / "registry" / "eval_contracts.yaml")
+    tracked_files = _tracked_relative_files(root)
 
     authority = Counter(
         str(spec.get("write_authority", "unknown"))
@@ -264,11 +303,10 @@ def build_health_report(root: Path = ROOT, revision: str | None = None) -> dict[
         if isinstance(spec, dict)
     )
     role_counts = Counter()
-    for path in root.rglob("*"):
-        if path.is_file() and ".git" not in path.parts:
-            role = classify_file_role(path.relative_to(root).as_posix(), policy)
-            if role:
-                role_counts[role] += 1
+    for path in tracked_files:
+        role = classify_file_role(path.as_posix(), policy)
+        if role:
+            role_counts[role] += 1
 
     route_items = policy.get("stable_ids", {}).get("routes", [])
     stop_items = policy.get("stable_ids", {}).get("stop_conditions", [])
@@ -281,7 +319,7 @@ def build_health_report(root: Path = ROOT, revision: str | None = None) -> dict[
 
     capability_names = _collect_capability_names(skills)
     external_families = sorted({name.split(".", 1)[0] for name in capability_names})
-    orphan_modules = _orphan_runtime_modules(root, skills)
+    orphan_modules = _orphan_runtime_modules(skills, tracked_files)
 
     return {
         "schema_version": 1,
