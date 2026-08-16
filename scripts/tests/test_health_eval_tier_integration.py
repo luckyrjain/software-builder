@@ -1,6 +1,12 @@
 from __future__ import annotations
 
+import subprocess
+from pathlib import Path
+
 from scripts.operational_upkeep import build_health_report, render_health_markdown
+
+
+ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_health_report_contains_eval_tier_snapshot() -> None:
@@ -18,3 +24,25 @@ def test_health_report_contains_eval_tier_snapshot() -> None:
     assert "Eval tiers: **3/3 covered**" in markdown
     assert "Unexpected static eval tiers: **0**" in markdown
     assert "Live model harness: **available**" in markdown
+
+
+def test_health_cli_executes_directly_from_repo_root() -> None:
+    result = subprocess.run(
+        [
+            "python3",
+            "scripts/operational_upkeep.py",
+            "health",
+            "--format",
+            "markdown",
+            "--revision",
+            "deadbeef",
+        ],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "Repository revision: `deadbeef`" in result.stdout
+    assert "Eval tiers: **3/3 covered**" in result.stdout
