@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
 from scripts.operational_upkeep import (
+    _nested_mappings,
+    _tracked_relative_files,
     _validate_deprecation_mapping,
     build_health_report,
     classify_diff,
@@ -85,6 +88,39 @@ def test_deprecated_contract_fails_closed_when_lifecycle_metadata_is_missing() -
     assert "aliases" in errors[0]
 
 
+def test_nested_artifact_deprecation_is_reachable_by_validator() -> None:
+    nested = {
+        "artifact_schemas": {
+            "legacy_report": {
+                "status": "deprecated",
+                "deprecation": {"replacement": "report.v2"},
+            }
+        }
+    }
+    mappings = list(_nested_mappings(nested, "composition_contracts.yaml"))
+    labels = {label for label, _ in mappings}
+    assert "composition_contracts.yaml.artifact_schemas.legacy_report" in labels
+    required = {"deprecated_since", "replacement", "remove_after", "migration_note", "aliases"}
+    errors = [
+        error
+        for label, mapping in mappings
+        for error in _validate_deprecation_mapping(mapping, label, required)
+    ]
+    assert any("legacy_report" in error and "deprecated_since" in error for error in errors)
+
+
+def test_health_inputs_ignore_untracked_worktree_files(tmp_path: Path) -> None:
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    tracked = tmp_path / "tracked.txt"
+    tracked.write_text("tracked\n", encoding="utf-8")
+    subprocess.run(["git", "add", "tracked.txt"], cwd=tmp_path, check=True)
+    (tmp_path / "untracked.txt").write_text("local-only\n", encoding="utf-8")
+    (tmp_path / "__pycache__").mkdir()
+    (tmp_path / "__pycache__" / "noise.pyc").write_bytes(b"noise")
+
+    assert _tracked_relative_files(tmp_path) == [Path("tracked.txt")]
+
+
 def test_health_report_is_deterministic_with_complete_provenance() -> None:
     first = build_health_report(ROOT, revision="deadbeef")
     second = build_health_report(ROOT, revision="deadbeef")
@@ -95,6 +131,7 @@ def test_health_report_is_deterministic_with_complete_provenance() -> None:
     assert provenance["prompt_bundle_version"] == "1"
     assert provenance["evaluator_version"] == "1"
     assert provenance["operational_policy_version"] == "1.1"
+    assert provenance["generator_version"] == "1.2"
 
     health = first["health"]
     assert health["skills"] >= 23
