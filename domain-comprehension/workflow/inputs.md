@@ -1,5 +1,5 @@
 ---
-workflow_version: 1.19
+workflow_version: 1.20
 phase: inputs
 produces:
   - workspace_root
@@ -168,8 +168,10 @@ or backfill `discovery_budget` before any repo/search/deep-read work.
 3. Refresh affected machine artifacts per [machine-domain-model.md](../reference/machine-domain-model.md),
    then compare previous vs refreshed source revisions, API/event contracts, data ownership, dependency
    semantics, and capability ownership/code locations using `stale_prd_detection`. If any stale condition
-   fires, regenerate affected `PRD.md` requirements/traceability or explicitly mark the PRD stale in
-   `PROGRESS.md` and block claims that it is current. Never silently retain a stale PRD.
+   fires, immediately set root `manifest.yaml` `artifacts[id=prd].status: stale`, record the reason/evidence
+   in `PROGRESS.md`, and regenerate affected `PRD.md` requirements/traceability or leave the stale row in
+   place and block claims that the PRD is current. Restore `status: ok` only after regeneration and a clean
+   freshness comparison. Never leave a known-stale PRD as manifest `ok`.
 4. Phases with no upstream changes keep their `complete` status unchanged.
 5. At end, persist `discovery_budget.consumed`, run `validate_manifest_yaml.py --workspace-root <workspace_root>`;
    update `engagement.last_updated` and `engagement.next_action`.
@@ -208,9 +210,10 @@ before source discovery. `new_repo_path` must resolve to a repo **not** present 
    - P3 reruns if new repo is Tier 0/1
    - P3b reruns if P3 reran
    - P4, P5 **always** rerun
-6. Refresh the four machine artifacts and run the same stale-PRD comparison as DELTA. Regenerate affected
-   PRD requirements/traceability or mark the PRD stale explicitly; never retain it silently after a stale
-   condition fires.
+6. Refresh the four machine artifacts and run the same stale-PRD comparison as DELTA. If stale, immediately
+   set `artifacts[id=prd].status: stale`, record the reason in `PROGRESS.md`, and regenerate affected PRD
+   requirements/traceability or keep the stale row and block current-state claims. Restore `ok` only after a
+   clean comparison; never retain a known-stale PRD as manifest `ok`.
 7. Persist `discovery_budget.consumed`, run `validate_manifest_yaml.py --workspace-root <workspace_root>
    --check-content`; update `engagement.last_updated` and `engagement.next_action`.
 
