@@ -1,5 +1,5 @@
 ---
-workflow_version: 1.9
+workflow_version: 1.10
 phase: 5
 produces:
   - final_five_questions
@@ -48,7 +48,7 @@ and delivery checklist.
 | Data ownership machine graph | `DATA_OWNERSHIP_GRAPH.yaml` | source revisions + evidenced nodes/edges/owner/confidence | Phase incomplete in FULL |
 | Dependency machine graph | `DEPENDENCY_GRAPH.yaml` | focal perspective + direction/interaction/criticality/evidence/confidence | Phase incomplete in FULL |
 | Capability traceability | `CAPABILITY_TRACEABILITY.yaml` | capability → repos/code locations/owner/evidence/confidence | Phase incomplete in FULL |
-| DELTA/ADD_REPO PRD freshness | `PROGRESS.md` | current/regenerated or explicit STALE + reason | Phase incomplete if unchecked |
+| DELTA/ADD_REPO PRD freshness | root `manifest.yaml` PRD artifact row + `PROGRESS.md` | manifest `ok` after clean comparison/regeneration; `stale` immediately on stale condition + human reason/evidence | Phase incomplete if unchecked or stale |
 | Overall confidence | `EXEC_SUMMARY.md` | Question table + overall band | Phase incomplete |
 | Engineering leader summary | `EXEC_SUMMARY.md` § Engineering Leader Summary | Per [engineering-leader-summary.md](../reference/engineering-leader-summary.md) | Phase incomplete |
 | Architecture decisions | `ARCHITECTURE_DECISIONS.md` | ADRs or UNKNOWN | Phase incomplete |
@@ -103,11 +103,14 @@ fields become UNKNOWN/Conflicted according to evidence precedence rather than be
 
 For DELTA/ADD_REPO, compare previous versus refreshed source revisions and machine projections using
 `stale_prd_detection` in [domain-model-contract.yaml](../reference/domain-model-contract.yaml). If any stale
-condition fires, update the affected PRD requirements/traceability or mark `PRD.md` explicitly STALE in
-`PROGRESS.md`; never claim an unchecked or stale PRD is current.
+condition fires, set root `manifest.yaml` `artifacts[id=prd].status: stale` immediately and record the reason
+and evidence in `PROGRESS.md`. Update the affected PRD requirements/traceability and restore manifest `ok` only
+after a clean comparison; otherwise keep the phase/engagement incomplete. Never claim an unchecked or stale
+PRD is current, and never leave a known-stale PRD as manifest `ok`.
 
-The machine files plus `PRD.md` form the current-state handoff to **prd-architect**. That skill may propose a
-future state, but it must preserve observed evidence and make every change explicit.
+The machine files plus `PRD.md` and its manifest freshness status form the current-state handoff to
+**prd-architect**. That skill may propose a future state, but it must preserve observed evidence and make every
+change explicit.
 
 ## Memory Bank export (optional)
 
