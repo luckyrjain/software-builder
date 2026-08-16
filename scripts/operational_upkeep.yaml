@@ -1,5 +1,5 @@
 schema_version: 1
-policy_version: "1.1"
+policy_version: "1.2"
 prompt_bundle_version: "1"
 evaluator_version: "1"
 
@@ -159,6 +159,10 @@ prompt_diff_risk:
       - "scripts/registry/composition_contracts.yaml"
       - "scripts/registry/platform_contracts.yaml"
       - "scripts/operational_upkeep.yaml"
+      - "scripts/operational_upkeep.py"
+      - "scripts/deprecation_lifecycle.py"
+      - "scripts/eval_tier_health.py"
+      - ".github/workflows/lint.yml"
     authority-capability:
       - "scripts/registry/capability_catalog.yaml"
       - "scripts/registry/host_contracts.yaml"
