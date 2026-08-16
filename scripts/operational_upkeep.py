@@ -13,6 +13,9 @@ from typing import Any, Iterable, Iterator
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 POLICY_PATH = ROOT / "scripts" / "operational_upkeep.yaml"
 GENERATOR_VERSION = "1.3"
 _ID_RE = re.compile(r"^(route|stop|report)\.[a-z0-9][a-z0-9.-]*$")
