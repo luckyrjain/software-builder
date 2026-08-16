@@ -43,6 +43,13 @@ emit time — never emit a header without `|---|---|`.
 | Risks | Material risks exist |
 | Open Questions | Material unresolved decisions exist |
 
+## Success metrics
+| Metric | Baseline | Target | Timeframe | Measurement Source | Baseline Measurement Action |
+|---|---|---|---|---|---|
+Every material metric must populate `metric`, `baseline`, `target`, `timeframe`, and `measurement_source`.
+When Baseline is `Unknown`, Baseline Measurement Action is required and states how/when the baseline will be
+established; otherwise that cell may be left blank. Do not invent a baseline to avoid the measurement action.
+
 ## Assumption ledger
 | ID | Assumption | Evidence | Impact If Wrong | Validation | Owner | Status |
 |---|---|---|---|---|---|---|
