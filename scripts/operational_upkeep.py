@@ -14,7 +14,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 POLICY_PATH = ROOT / "scripts" / "operational_upkeep.yaml"
-GENERATOR_VERSION = "1.2"
+GENERATOR_VERSION = "1.3"
 _ID_RE = re.compile(r"^(route|stop|report)\.[a-z0-9][a-z0-9.-]*$")
 
 
@@ -293,6 +293,8 @@ def _orphan_runtime_modules(skills: dict[str, Any], tracked_files: Iterable[Path
 
 
 def build_health_report(root: Path = ROOT, revision: str | None = None) -> dict[str, Any]:
+    from scripts.eval_tier_health import build_eval_tier_health
+
     policy = load_policy(root / "scripts" / "operational_upkeep.yaml")
     skills_file = _yaml_mapping(root / "skills.yaml")
     skills = skills_file.get("skills", {})
@@ -300,6 +302,7 @@ def build_health_report(root: Path = ROOT, revision: str | None = None) -> dict[
     composition = _yaml_mapping(root / "scripts" / "registry" / "composition_contracts.yaml")
     runtime = _yaml_mapping(root / "scripts" / "registry" / "composition_runtime.yaml")
     eval_contracts = _yaml_mapping(root / "scripts" / "registry" / "eval_contracts.yaml")
+    eval_tier_health = build_eval_tier_health(root)
     tracked_files = _tracked_relative_files(root)
 
     authority = Counter(
@@ -342,6 +345,7 @@ def build_health_report(root: Path = ROOT, revision: str | None = None) -> dict[
             "artifact_schemas": len(composition.get("artifact_schemas", {})),
             "runtime_handoffs": sum(len(v) for v in runtime.get("handoffs", {}).values()),
             "eval_contract_refs": eval_case_refs,
+            "eval_tiers": eval_tier_health,
             "stable_routes": len(route_items),
             "route_token_budget_coverage": sum(
                 1 for item in route_items if isinstance(item.get("token_budget"), int) and item["token_budget"] > 0
@@ -362,6 +366,8 @@ def build_health_report(root: Path = ROOT, revision: str | None = None) -> dict[
 def render_health_markdown(report: dict[str, Any]) -> str:
     p = report["provenance"]
     h = report["health"]
+    eval_tiers = h["eval_tiers"]
+    tiers = eval_tiers["tiers"]
     lines = [
         "## Prompt-system health",
         "",
@@ -376,6 +382,10 @@ def render_health_markdown(report: dict[str, Any]) -> str:
         f"- Artifact schemas: **{h['artifact_schemas']}**",
         f"- Runtime handoffs: **{h['runtime_handoffs']}**",
         f"- Eval contract refs: **{h['eval_contract_refs']}**",
+        f"- Eval tiers: **{eval_tiers['covered_tiers']}/{eval_tiers['required_tiers']} covered** "
+        f"(T1={tiers['tier_1_structural']}, T2={tiers['tier_2_transcript']}, T3={tiers['tier_3_golden']})",
+        f"- Unexpected static eval tiers: **{len(eval_tiers['unexpected_static_tiers'])}**",
+        f"- Live model harness: **{'available' if eval_tiers['live_model_harness']['available'] else 'missing'}** (non-blocking)",
         f"- Stable IDs: **{h['stable_routes']} routes / {h['stable_stop_conditions']} stops / {h['stable_report_fields']} report fields**",
         f"- Route token-budget coverage: **{h['route_token_budget_coverage']}/{h['stable_routes']}**",
         f"- External dependency families: **{h['external_dependency_count']}**",
