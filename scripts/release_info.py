@@ -3,19 +3,23 @@
 
 from __future__ import annotations
 
+import re
 import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 VERSION_FILE = ROOT / "VERSION"
+_SEMVER_RE = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$")
 
 
 def read_distribution_version(root: Path | None = None) -> str:
     version_path = (root or ROOT) / "VERSION"
     if not version_path.is_file():
-        return "0.0.0"
+        raise ValueError(f"missing distribution VERSION file: {version_path}")
     version = version_path.read_text(encoding="utf-8").strip()
-    return version or "0.0.0"
+    if not _SEMVER_RE.fullmatch(version):
+        raise ValueError(f"VERSION must be MAJOR.MINOR.PATCH semantic version, got {version!r}")
+    return version
 
 
 def git_source_sha(repo_root: Path) -> str:
@@ -26,6 +30,9 @@ def git_source_sha(repo_root: Path) -> str:
             capture_output=True,
             text=True,
         )
-        return result.stdout.strip()
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        return "unknown"
+        sha = result.stdout.strip()
+    except (subprocess.CalledProcessError, FileNotFoundError) as exc:
+        raise ValueError("release provenance requires a readable Git HEAD") from exc
+    if not re.fullmatch(r"[0-9a-f]{40,64}", sha):
+        raise ValueError(f"unexpected Git source SHA: {sha!r}")
+    return sha
