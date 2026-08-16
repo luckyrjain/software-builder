@@ -18,17 +18,21 @@ the user-visible header.
 
 **Use for:** clearly isolated, low-risk, reversible changes with few actors and minimal integrations.
 
-**Target PRD body:** ≤1,500 words (~1 page; roughly 6–8 substantive sections).
+**Target PRD body:** ≤1,500 words (~1 page; roughly 6–8 substantive sections plus compact mandatory
+traceability/readiness material).
 
-**Prefer sections:** Overview; Problem; Goals / Non-Goals; MVP; Functional Requirements; Key Failure /
-Edge Cases; Acceptance Criteria; Risks; Assumptions (short in-body subsection when needed); Build
-Readiness.
+**Prefer sections:** Overview; Problem; Goals / Non-Goals; MVP; Success Metrics; Functional Requirements;
+Key Failure / Edge Cases; Acceptance Criteria; Requirements Traceability; Risks; Build Readiness.
+Consequential assumptions add a compact Assumption Register/subsection. Engineering sections remain
+trigger-driven.
 
-Use cases may fold into MVP or requirements. Metrics may fold into Goals. Avoid formal traceability,
-assumption tables, extensive NFRs, and review appendices unless materially triggered.
+Use cases may fold into MVP or requirements. Keep metrics and traceability concise rather than omitting
+them: material metrics still require baseline + target + timeframe + measurement source, and material
+functional requirements still require `FR-* -> AC-* -> TR-*`. Avoid extensive NFRs and review appendices
+unless materially triggered.
 
-For Lite, include assumptions as a short subsection inside the PRD body. Do not create a separate
-Assumptions appendix unless ≥3 consequential assumptions or a Risky assumption affects Build Readiness.
+For Lite, consequential assumptions may be a short in-body register. Prefer a separate table when ≥3
+consequential assumptions or a Risky assumption affects Build Readiness.
 
 ## Standard
 
@@ -63,4 +67,6 @@ Honor `depth_hint` from inputs only when the user explicitly requests a depth le
 ## Proportionate length check (Gate)
 
 At Gate, if the PRD body is obviously over budget (e.g., Lite with long appendix chains, or Standard
-with Rigorous-only sections untriggered), cut or demote non-material content before emitting.
+with Rigorous-only sections untriggered), cut or demote non-material content before emitting. Never meet a
+word budget by dropping a mandatory metric, material traceability edge, or triggered engineering-safety
+section.
