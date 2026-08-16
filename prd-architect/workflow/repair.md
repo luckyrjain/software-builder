@@ -1,10 +1,25 @@
 ---
-workflow_version: 1.1
+workflow_version: 1.2
 phase: repair
-produces: {repaired_requirements: object, remaining_blockers: list, adversarial_summary: object}
+produces:
+  repaired_requirements: object
+  remaining_blockers: list
+  adversarial_summary: object
+  success_metrics: list
+  assumption_register: list
+  requirements_traceability: object
+  engineering_impact: object
 consumes:
-  required: {adversarial_findings: list, scenarios: list, requirements_draft: object, non_goals: list}
-  optional: {}
+  required:
+    adversarial_findings: list
+    scenarios: list
+    requirements_draft: object
+    non_goals: list
+    success_metrics: list
+    assumption_register: list
+    requirements_traceability: object
+    engineering_impact: object
+  optional: {current_state_evidence: object}
   conditional: {}
 ---
 
@@ -27,19 +42,25 @@ consumes:
 | Medium | Repair when useful |
 | Low | Repair only when clearly valuable |
 
-Update affected: requirements, business rules, flows, state, data rules, permissions, failure handling,
-acceptance criteria, risks, assumptions, rollout behavior.
+Repair the complete PRD contract, not just requirement prose. Update affected requirements, business rules,
+flows, state, data rules, permissions, failure handling, acceptance criteria, success metrics, assumptions,
+`FR -> AC -> TR` traceability, and triggered engineering-impact sections. When repairing an existing-system
+proposal, preserve the observed baseline from `current_state_evidence`; a repair may change the proposal but
+must not rewrite current-state evidence to make the finding disappear.
+
+After repairs:
+
+- re-check success metrics for baseline/target/timeframe/measurement-source completeness;
+- ensure consequential assumptions retain stable IDs, owner, validation path, impact, and status;
+- regenerate traceability for changed requirements/acceptance criteria and leave no material orphan;
+- re-evaluate rollout/rollback, operational readiness, compatibility, API/event/schema, data/privacy, cost,
+  and observability triggers after the repaired behavior; and
+- keep unresolved Critical/High issues in `remaining_blockers` with the affected contract area.
 
 **Scope rule:** if fixing a Critical/High finding requires expanding Non-Goals, surface as an **unresolved
 decision** — do not silently expand scope.
 
-## One re-review
+## Re-review
 
-Perform **exactly one** independent re-review after repairs. **Do not loop.**
-
-Remaining Critical findings and unsafe High findings → `remaining_blockers` for Gate.
-
-## Appendices
-
-Populate Adversarial Review Summary and Gap Analysis only when material findings add useful context
-beyond what is already in the repaired PRD body.
+Perform exactly one fresh adversarial re-review of the repaired complete contract. Do not reuse the original
+finding list as proof. New Critical/High findings remain blockers; do not loop indefinitely inside Repair.
