@@ -2,10 +2,16 @@
 """Machine-readable release contract: repository version, tag shape, release
 artifact names, compatibility policy, and required provenance fields.
 
-The contract data lives in release_contract.yaml so package_release.py (which
-builds RELEASE-MANIFEST.json) and verify_release_bundle.py (which checks it)
-share a single source of truth for the provenance fields a release must
-carry, instead of each hardcoding its own copy of the list.
+`provenance.required_fields` is genuinely the single source of truth for what
+a release manifest must carry: package_release.py's manifest builder and
+verify_release_bundle.py's field check both call required_provenance_fields()
+here instead of hardcoding their own copy. `tag_pattern` and
+`artifact_name_templates` are declarative policy checked here for
+well-formedness and consistency with VERSION, but -- unlike required_fields --
+nothing downstream derives its actual tag/filename strings from them yet;
+verify_release_tag.py and package_release.py/.github/workflows/release.yml
+still compute those independently. Keep that gap in mind when editing either
+field: this validator won't catch it drifting from what actually ships.
 """
 
 from __future__ import annotations

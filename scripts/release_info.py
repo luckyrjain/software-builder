@@ -13,7 +13,10 @@ VERSION_FILE = ROOT / "VERSION"
 # (distribution_version, source_sha) in a release manifest -- a single source
 # of truth keeps the two "is this a valid version/SHA" definitions from drifting.
 SEMVER_RE = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$")
-SHA_RE = re.compile(r"^[0-9a-f]{40,64}$")
+# A real Git commit SHA is always exactly 40 hex chars (SHA-1) or exactly 64
+# (SHA-256) -- never anything in between -- so this doesn't accept e.g. a
+# 50-char string as "SHA-shaped".
+SHA_RE = re.compile(r"^([0-9a-f]{40}|[0-9a-f]{64})$")
 # Shared between package_release.py (which writes this file into every release
 # archive) and verify_release_bundle.py (which reads it back out) so the two
 # never drift to different filenames.

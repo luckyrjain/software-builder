@@ -136,6 +136,12 @@ def test_release_inputs_exclude_tracked_repo_dev_tooling(tmp_path: Path) -> None
     (root / ".kiro" / "steering.md").write_text("steering\n", encoding="utf-8")
     (root / ".github").mkdir()
     (root / ".github" / "keep-me.txt").write_text("kept\n", encoding="utf-8")
+    # Nested, not just top-level: a per-skill .cursor/.kiro dir buried under
+    # another directory must be excluded too, not only one sitting at the repo
+    # root -- the dotdir-name check alone (parts[0].startswith(".")) wouldn't
+    # catch this since parts[0] here is "some-skill", not ".cursor".
+    (root / "some-skill" / ".cursor" / "rules").mkdir(parents=True)
+    (root / "some-skill" / ".cursor" / "rules" / "nested.mdc").write_text("rule\n", encoding="utf-8")
     _commit_all(root)
 
     output = tmp_path / "out"

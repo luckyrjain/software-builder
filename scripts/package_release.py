@@ -77,9 +77,12 @@ def _ensure_clean_worktree(root: Path) -> None:
 
 
 # Path components that never belong in a release even if accidentally tracked
-# (build output, caches) -- matches the pre-reproducibility-rewrite collector's
-# EXCLUDE_DIRS.
-_EXCLUDED_PATH_COMPONENTS = {"__pycache__", ".pytest_cache", "node_modules", "dist"}
+# (build output, caches, generated per-host IDE rules) -- matches the
+# pre-reproducibility-rewrite collector's EXCLUDE_DIRS, which excluded these
+# at *any* depth, not just at the repo root (unlike the dotfile/dotdir rule
+# below, which -- matching that same prior collector -- only applies at the
+# top level).
+_EXCLUDED_PATH_COMPONENTS = {"__pycache__", ".pytest_cache", "node_modules", "dist", ".cursor", ".kiro"}
 
 # Git's tree-entry mode for a submodule reference (a "gitlink"), distinct from
 # the 100644/100755 blob modes _tracked_files() otherwise expects.
@@ -226,7 +229,13 @@ def _write_reproducible_archive(
         # filename="" (not the default of raw.name) keeps the gzip header
         # itself reproducible regardless of the output path chosen.
         with gzip.GzipFile(filename="", mode="wb", fileobj=raw, mtime=0) as gz:
-            with tarfile.open(fileobj=gz, mode="w") as tar:
+            # format=USTAR_FORMAT (matching scripts/registry/generic_package.py's
+            # existing reproducible-archive precedent): tarfile's default is PAX,
+            # whose extended headers (needed for e.g. long paths) aren't
+            # guaranteed byte-stable across Python versions/platforms the way a
+            # pinned classic format is -- without this, "byte-for-byte
+            # reproducible" would only hold on identical Python builds.
+            with tarfile.open(fileobj=gz, mode="w", format=tarfile.USTAR_FORMAT) as tar:
                 for rel, abs_path, mode in tracked:
                     info = _tar_info(f"{bundle_name}/{rel}", size=abs_path.stat().st_size, mode=mode)
                     digest = hashlib.sha256()
