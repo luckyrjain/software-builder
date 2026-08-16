@@ -26,6 +26,15 @@ def test_domain_and_prd_share_source_revision_shape():
     assert producer["unknown_rule"] == consumer["unknown_rule"]
 
 
+def test_prd_consumer_rejects_stale_domain_prd_as_current_state():
+    prd = _load("prd-architect/reference/current-state-evidence-contract.yaml")
+    freshness = prd["current_state_evidence"]["prd_freshness"]
+    assert freshness["source"] == "domain_comprehension_manifest_prd_artifact_status"
+    assert freshness["current_value"] == "ok"
+    assert freshness["stale_value"] == "stale"
+    assert freshness["stale_behavior"] == "blocking_before_build_do_not_treat_PRD_as_current"
+
+
 def test_all_machine_templates_use_multi_repo_source_revision():
     for name in (
         "API_EVENT_SCHEMA.yaml",
