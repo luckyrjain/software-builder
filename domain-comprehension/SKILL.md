@@ -127,11 +127,16 @@ after every phase via [phase-completion-gate.md](reference/phase-completion-gate
 ## Framework
 
 Completion emits canonical `skill_result`; actions use `action_gates`; scope follows `definition_of_done` in
-[runtime-contract.md](../docs/skill-framework/shared/runtime-contract.md). FULL required artifacts include
-manifest/progress/summary/PRD plus the four machine model files; QUICK follows its delivery-mode table.
-Required checks include Evidence/Conclusion/Confidence, phase completion, discovery budget, stale-PRD check
-when applicable, and read-only source boundary. Partial results preserve manifest/progress and route gaps to
-unknowns/omissions.
+[runtime-contract.md](../docs/skill-framework/shared/runtime-contract.md).
+
+`definition_of_done`: required_artifacts=[delivery-mode-required artifacts; FULL includes manifest.yaml,
+PROGRESS.md, EXEC_SUMMARY.md, PRD.md, API_EVENT_SCHEMA.yaml, DATA_OWNERSHIP_GRAPH.yaml,
+DEPENDENCY_GRAPH.yaml, CAPABILITY_TRACEABILITY.yaml]; required_checks=[Evidence/Conclusion/Confidence,
+phase-completion-gate, discovery budget, DELTA/ADD_REPO stale-PRD check, read-only source boundary];
+blocked_conditions=[source mutation, artifact outside artifact_root, missing required evidence/status,
+manifest.yaml missing at RESUME, silently exceeded discovery budget, silently retained stale PRD];
+partial_result_behavior=preserve manifest.yaml/PROGRESS.md and route unresolved evidence to
+UNKNOWNS.md/KNOWN_OMISSIONS.md.
 
 [docs/skill-framework/README.md](../docs/skill-framework/README.md) ·
 [safe-output.md](../docs/skill-framework/shared/safe-output.md) ·
