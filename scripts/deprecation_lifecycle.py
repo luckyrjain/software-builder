@@ -6,56 +6,16 @@ from __future__ import annotations
 import sys
 from datetime import date, timedelta
 from pathlib import Path
-from typing import Any, Iterable, Iterator
+from typing import Any
 
-import yaml
+from scripts.operational_upkeep import (
+    _deprecation_candidates,
+    _registered_skills,
+    _validate_deprecation_mapping,
+    load_policy,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
-
-
-def _mapping(path: Path) -> dict[str, Any]:
-    data = yaml.safe_load(path.read_text(encoding="utf-8"))
-    return data if isinstance(data, dict) else {}
-
-
-def _frontmatter(path: Path) -> dict[str, Any]:
-    text = path.read_text(encoding="utf-8")
-    if not text.startswith("---\n"):
-        return {}
-    end = text.find("\n---", 4)
-    if end < 0:
-        return {}
-    data = yaml.safe_load(text[4:end])
-    return data if isinstance(data, dict) else {}
-
-
-def _nested(value: Any, label: str) -> Iterator[tuple[str, dict[str, Any]]]:
-    if isinstance(value, dict):
-        yield label, value
-        for key, child in value.items():
-            yield from _nested(child, f"{label}.{key}")
-    elif isinstance(value, list):
-        for index, child in enumerate(value):
-            yield from _nested(child, f"{label}[{index}]")
-
-
-def _candidates(root: Path) -> Iterable[tuple[str, dict[str, Any]]]:
-    for path in sorted((root / "scripts" / "registry").glob("*.yaml")):
-        yield from _nested(_mapping(path), path.relative_to(root).as_posix())
-
-    skills = _mapping(root / "skills.yaml").get("skills", {})
-    if not isinstance(skills, dict):
-        return
-    for skill_id, entry in skills.items():
-        if not isinstance(entry, dict):
-            continue
-        skill_path = root / str(entry.get("path", skill_id))
-        skill_md = skill_path / "SKILL.md"
-        if skill_md.is_file():
-            yield from _nested(_frontmatter(skill_md), skill_md.relative_to(root).as_posix())
-        for pattern in ("reference/*.yaml", "reference/*.yml", "templates/*.yaml", "templates/*.yml"):
-            for path in sorted(skill_path.glob(pattern)):
-                yield from _nested(_mapping(path), path.relative_to(root).as_posix())
 
 
 def validate_deprecation_item(
@@ -65,24 +25,14 @@ def validate_deprecation_item(
     required_fields: set[str],
     compatibility_window_days: int,
 ) -> list[str]:
+    base_errors = _validate_deprecation_mapping(data, label, required_fields)
     if data.get("status") != "deprecated" and data.get("deprecated") is not True:
-        return []
-    block = data.get("deprecation")
-    if not isinstance(block, dict):
-        return [f"error: {label}: deprecated item requires a deprecation mapping"]
+        return base_errors
+    if base_errors:
+        return base_errors
 
-    missing = sorted(required_fields - set(block))
-    if missing:
-        return [f"error: {label}: deprecation missing fields: {', '.join(missing)}"]
-
+    block = data["deprecation"]
     errors: list[str] = []
-    for field in required_fields - {"aliases"}:
-        value = block.get(field)
-        if value is None or (isinstance(value, str) and not value.strip()):
-            errors.append(f"error: {label}: deprecation field {field} must be non-empty")
-    if not isinstance(block.get("aliases"), list):
-        errors.append(f"error: {label}: deprecation aliases must be a list")
-
     parsed: dict[str, date] = {}
     for field in ("deprecated_since", "remove_after"):
         raw = block.get(field)
@@ -103,7 +53,7 @@ def validate_deprecation_item(
 
 
 def validate_repository(root: Path = ROOT) -> list[str]:
-    policy = _mapping(root / "scripts" / "operational_upkeep.yaml")
+    policy = load_policy(root / "scripts" / "operational_upkeep.yaml")
     lifecycle = policy.get("deprecation", {})
     required = set(lifecycle.get("required_fields", [])) if isinstance(lifecycle, dict) else set()
     window = lifecycle.get("compatibility_window_days") if isinstance(lifecycle, dict) else None
@@ -113,7 +63,14 @@ def validate_repository(root: Path = ROOT) -> list[str]:
     if not isinstance(window, int) or window <= 0:
         errors.append("error: deprecation compatibility_window_days must be a positive integer")
         return errors
-    for label, data in _candidates(root):
+
+    skills = _registered_skills(root)
+    skill_paths = [
+        str(entry.get("path", skill_id))
+        for skill_id, entry in skills.items()
+        if isinstance(entry, dict)
+    ]
+    for label, data in _deprecation_candidates(root, skill_paths):
         errors.extend(
             validate_deprecation_item(
                 data,
