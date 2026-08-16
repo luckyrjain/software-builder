@@ -1,0 +1,132 @@
+schema_version: 1
+policy_version: "1.0"
+
+file_roles:
+  runtime:
+    description: Instructions and contracts that an agent may need during execution.
+    patterns:
+      - "*/SKILL.md"
+      - "*/workflow/*.md"
+      - "docs/skill-framework/shared/runtime-contract.md"
+      - "docs/skill-framework/shared/skill-routing.md"
+      - "docs/skill-framework/shared/prompt-injection.md"
+      - "docs/skill-framework/shared/safe-output.md"
+  reference:
+    description: Supporting material loaded on demand but not mandatory runtime control flow.
+    patterns:
+      - "*/reference/*"
+      - "*/examples.md"
+      - "*/SETUP.md"
+      - "*/README.md"
+  maintainer:
+    description: Build, validation, evaluation, governance, and design-time material.
+    patterns:
+      - "scripts/**"
+      - "evals/**"
+      - "generated/**"
+      - "docs/superpowers/**"
+      - ".github/**"
+      - "CODEOWNERS"
+      - "Makefile"
+
+stable_ids:
+  routes:
+    - id: route.architecture-review
+      owner: domain-comprehension
+    - id: route.prd-review
+      owner: prd-architect
+    - id: route.code-review
+      owner: pr-review
+    - id: route.incident-analysis
+      owner: incident-rca
+    - id: route.k8s-rightsizing
+      owner: k8s-overprovisioning-datadog
+    - id: route.test-generation
+      owner: test-writer
+  stop_conditions:
+    - id: stop.insufficient-evidence
+      owner: runtime-contract
+    - id: stop.missing-authorization
+      owner: runtime-contract
+    - id: stop.prompt-injection
+      owner: prompt-injection
+    - id: stop.failed-required-check
+      owner: runtime-contract
+    - id: stop.cancellation
+      owner: runtime-contract
+  report_fields:
+    - id: report.result-status
+      field: result_status
+    - id: report.confidence
+      field: confidence
+    - id: report.authority-boundary
+      field: authority_boundary
+    - id: report.evidence-provenance
+      field: evidence_provenance
+    - id: report.artifact-shape
+      field: artifact_shape
+    - id: report.critical-conclusion
+      field: critical_conclusion
+
+contract_owners:
+  capability-schema:
+    path: scripts/registry/capability_catalog.yaml
+    owner: "@luckyrjain"
+  composition-schema:
+    path: scripts/registry/composition_contracts.yaml
+    owner: "@luckyrjain"
+  safe-output:
+    path: docs/skill-framework/shared/safe-output.md
+    owner: "@luckyrjain"
+  artifact-writes:
+    path: scripts/registry/composition_runtime.yaml
+    owner: "@luckyrjain"
+  routing:
+    path: docs/skill-framework/shared/skill-routing.md
+    owner: "@luckyrjain"
+  adapter-generation:
+    path: scripts/registry/generate_cursor.py
+    owner: "@luckyrjain"
+  eval-infrastructure:
+    path: scripts/registry/eval_contracts.yaml
+    owner: "@luckyrjain"
+
+# A deprecated prompt module or artifact schema must declare every field below.
+deprecation:
+  compatibility_window_days: 90
+  required_fields:
+    - deprecated_since
+    - replacement
+    - remove_after
+    - migration_note
+    - aliases
+
+prompt_diff_risk:
+  order: [editorial, behavioral, authority-capability, schema, routing]
+  high_risk_classes: [behavioral, authority-capability, schema, routing]
+  evidence_paths:
+    - "scripts/tests/"
+    - "evals/"
+  path_rules:
+    routing:
+      - "docs/skill-framework/shared/skill-routing.md"
+      - "scripts/registry/composition_runtime.yaml"
+      - "scripts/registry/eval_contracts.yaml"
+    schema:
+      - "skills.yaml"
+      - "scripts/registry/composition_contracts.yaml"
+      - "scripts/registry/platform_contracts.yaml"
+      - "scripts/registry/operational_upkeep.yaml"
+      - "scripts/operational_upkeep.yaml"
+    authority-capability:
+      - "scripts/registry/capability_catalog.yaml"
+      - "scripts/registry/host_contracts.yaml"
+      - "docs/skill-framework/shared/runtime-contract.md"
+      - "docs/skill-framework/shared/safe-output.md"
+      - "docs/skill-framework/shared/prompt-injection.md"
+    behavioral:
+      - "/SKILL.md"
+      - "/workflow/"
+    editorial:
+      - "README.md"
+      - "docs/"
