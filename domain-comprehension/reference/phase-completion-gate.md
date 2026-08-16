@@ -12,6 +12,7 @@ Phase: <name>
 [ ] manifest.yaml artifact/diagram rows updated for this phase
 [ ] discovery-bearing phase: manifest.yaml discovery_budget.consumed updated and mirrored to PROGRESS.md
 [ ] discovery_budget consumed counters do not exceed configured limits
+[ ] DELTA/ADD_REPO P5 freshness: manifest artifacts[id=prd].status is ok after a clean comparison/regeneration; stale blocks completion
 [ ] evidence_summary counters updated
 [ ] EXEC_SUMMARY.md § Time & Effort row appended for this phase
 [ ] overall_confidence recalculated (when five questions touched)
@@ -30,7 +31,9 @@ Phase: <name>
 
 1. Set `engagement.last_phase_completed`, `engagement.last_updated`, `engagement.next_action`.
 2. Set `phases.<key>.status: complete` and `completed_at` (or `skipped` + `skip_reason`).
-3. Flip `artifacts[]` / `diagrams[]` touched this phase → `ok` (or `waived`/`n_a`).
+3. Flip `artifacts[]` / `diagrams[]` touched this phase → `ok` (or `waived`/`n_a`). For DELTA/ADD_REPO,
+   stale-PRD detection is the exception: set `artifacts[id=prd].status: stale` immediately when a stale
+   condition fires and restore `ok` only after regeneration plus a clean freshness comparison.
 4. For phases that perform repository/search/deep-read discovery, update `discovery_budget.consumed` and
    mirror the counters to `PROGRESS.md`. Do not reset or exceed persisted limits.
 5. Update `five_questions`, `repos`, `runtime_validation`, `evidence_summary`, `overall_confidence`.
@@ -52,10 +55,12 @@ python3 <skill>/scripts/validate_prd.py \
   "$WORKSPACE_ROOT/$ARTIFACT_ROOT/PRD.md"
 ```
 
-`validate_manifest_yaml.py` validates the discovery-budget block whenever present and rejects malformed,
-negative, or over-limit counters. `validate_prd.py` enforces the P5 requirement contract: functional
-requirements, business rules, and NFRs must have `Observed | Inferred | Unknown` status and confidence;
-every `FR-*`, `BR-*`, and `NFR-*` must have exactly one traceability row; `Observed` rows must cite evidence.
+`validate_manifest_yaml.py` validates the discovery-budget block whenever present, rejects malformed,
+negative, or over-limit counters, restricts artifact `stale` to the PRD, verifies a stale PRD still exists,
+and rejects stale required artifacts under strict completion. `validate_prd.py` enforces the P5 requirement
+contract: functional requirements, business rules, and NFRs must have `Observed | Inferred | Unknown` status
+and confidence; every `FR-*`, `BR-*`, and `NFR-*` must have exactly one traceability row; `Observed` rows must
+cite evidence.
 
 ## Coverage report (required)
 
@@ -63,6 +68,7 @@ every `FR-*`, `BR-*`, and `NFR-*` must have exactly one traceability row; `Obser
 Comprehension Phase: <name> complete | Next: <name>
 Manifest: phases.<key>=complete | validator ok | schema_version=2
 Discovery budget: profile=<profile> | repos used/limit | queries used/limit | deep reads used/limit
+PRD freshness: <ok | stale> (DELTA/ADD_REPO; stale is a blocker)
 Five questions: Q1 … Q5 statuses | Overall confidence: <band>
 Evidence: repos X/Y | files N | runtime edges A/B | unknowns U | omissions O
 Phase artifacts: <list> — all present | missing: <list>
@@ -79,6 +85,7 @@ Do **not** advance phase if:
 
 - `validate_manifest_yaml.py` exits non-zero
 - a configured discovery limit is exceeded, or discovery continues after budget exhaustion instead of returning PARTIAL
+- DELTA/ADD_REPO stale-PRD detection fired and root `manifest.yaml` still has `artifacts[id=prd].status: stale`
 - P5 `validate_prd.py` exits non-zero
 - Required artifact file missing on disk (when validator checks workspace)
 - Implementation matrix uses values outside [implementation-status.md](implementation-status.md)
