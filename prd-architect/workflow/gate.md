@@ -1,5 +1,5 @@
 ---
-workflow_version: 1.8
+workflow_version: 1.9
 phase: gate
 produces: {final_artifact: string, build_readiness: string}
 consumes:
@@ -69,7 +69,7 @@ Verify:
 - realistic failures have defined behavior
 - accepted adversarial findings were repaired inline (or surfaced in critique-only findings)
 - security/privacy/compliance analysis matches actual risk
-- for PRD/Review on `existing_system=true`, `current_state_evidence` is present, source revisions were checked, stale/conflicting evidence is surfaced, and observed facts were not silently rewritten as proposals; missing required baseline evidence is a Blocking Before Build gap
+- for PRD/Review on `existing_system=true`, `current_state_evidence` is present and source revisions were checked; when the PRD came from `domain-comprehension`, its producer-manifest PRD artifact freshness was explicitly checked and must be `ok` before the PRD is treated as current; `stale` or unknown freshness is surfaced and blocks current-state readiness; observed facts were not silently rewritten as proposals
 - existing-system changes include Change Impact when needed
 - every engineering trigger was evaluated: rollout/rollback, operational readiness, migration/backward compatibility, API/event/schema impact, data/privacy, cost, observability
 - every fired engineering trigger has a complete section per `current-state-evidence-contract.yaml`; every omitted section has a recorded not-triggered result
@@ -104,7 +104,8 @@ Assign **exactly one** verdict (PRD and Review; optional for pure Validation unl
 - Risky assumption affects MVP viability without acceptable validation plan
 - required security/regulatory behavior unknown
 - critical acceptance criteria absent
-- PRD/Review targets `existing_system=true` but required `current_state_evidence` is missing, stale without disclosure, or materially conflicted such that compatibility cannot be established
+- PRD/Review targets `existing_system=true` but required `current_state_evidence` is missing or materially conflicted such that compatibility cannot be established
+- a `domain-comprehension` PRD handoff has producer-manifest PRD freshness `stale` or missing/unknown freshness that has not been independently verified current
 - any material `FR-*`/`AC-*` traceability orphan remains
 - a required engineering-impact section fired but lacks its contract fields
 - a breaking change has no compatible migration/rollout/rollback plan
