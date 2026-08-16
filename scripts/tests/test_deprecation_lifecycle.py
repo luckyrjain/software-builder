@@ -24,13 +24,14 @@ def test_repository_deprecation_lifecycle_is_valid() -> None:
 
 
 def test_deprecation_requires_iso_dates() -> None:
-    errors = validate_deprecation_item(
-        _item(deprecated_since="Jan 1 2026"),
-        "fixture",
-        required_fields=REQUIRED,
-        compatibility_window_days=90,
-    )
-    assert any("deprecated_since must be an ISO date" in error for error in errors)
+    for invalid in ("Jan 1 2026", "20260101", "2026-1-01"):
+        errors = validate_deprecation_item(
+            _item(deprecated_since=invalid),
+            "fixture",
+            required_fields=REQUIRED,
+            compatibility_window_days=90,
+        )
+        assert any("deprecated_since must be an ISO date" in error for error in errors)
 
 
 def test_deprecation_enforces_compatibility_window() -> None:
