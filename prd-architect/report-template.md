@@ -3,7 +3,9 @@
 Emit **only triggered sections** per [section-triggers.md](reference/section-triggers.md). **Never** copy
 an entire template wholesale — add a section only when its trigger fired.
 
-Full rules: [reference/output-contract.md](reference/output-contract.md).
+Full rules: [reference/output-contract.md](reference/output-contract.md). For an existing system, ingest
+current-state evidence according to [current-state-evidence-contract.yaml](reference/current-state-evidence-contract.yaml)
+and preserve observed facts separately from proposed behavior.
 
 ---
 
@@ -22,17 +24,22 @@ Depth: Lite — <reason>
 ## Problem Statement
 ## Goals & Non-Goals
 ## MVP Scope
+## Success Metrics
 ## Functional Requirements
 ## Key Failure / Edge Cases
 ## Acceptance Criteria
+## Assumption Register
+## Requirements Traceability
 ## Risks
-## Assumptions
-<!-- short in-body list when needed -->
 
 ## Build Readiness
 **Verdict:** Ready | Ready With Non-Blocking Questions | Not Ready
 <rationale>
 ```
+
+Every success metric must be measurable: baseline, target, timeframe, and measurement source. Keep a
+stable assumption register. Trace material requirements as `FR-* -> AC-* -> TR-*`; orphan requirements
+or acceptance criteria block Build Readiness.
 
 Add sections from [section-triggers.md](reference/section-triggers.md) when material (e.g., Roles &
 Permissions, Failure Handling, Security / Privacy / Abuse).
@@ -40,13 +47,39 @@ Permissions, Failure Handling, Security / Privacy / Abuse).
 ### Standard / Rigorous
 
 Same header pattern. Add triggered sections only — e.g., State Model, Data Invariants, End-to-End Flow,
-Correctness & Reconciliation, Rollout / Migration. Use FR-/BR-/NFR-/INV-/AC- IDs when required per
+Correctness & Reconciliation. Use FR-/BR-/NFR-/INV-/AC- IDs when required per
 [requirements-format.md](reference/requirements-format.md).
+
+For existing or production systems, emit the following when their contract trigger fires:
+
+```markdown
+## Rollout / Rollback
+<!-- rollout strategy, success/abort signals; rollback trigger, mechanism, data compatibility, verification -->
+
+## Operational Readiness
+<!-- ownership, runbook, alerts, dashboards, support path, capacity, dependency readiness -->
+
+## Migration / Backward Compatibility
+<!-- API/event/schema/data/config/client compatibility and migration sequencing -->
+
+## API / Event / Schema Impact
+<!-- before/after contracts, consumers, compatibility and migration -->
+
+## Data / Privacy Impact
+<!-- only when personal/sensitive data, retention or access changes -->
+
+## Cost Impact
+<!-- only when infrastructure/traffic/storage/paid-dependency economics materially change -->
+
+## Observability Requirements
+<!-- metrics, logs, traces, alerts, dashboards, correlation -->
+```
 
 ### Appendices (when triggered)
 
 - **Decisions & Constraints** — resolved decisions and mandatory constraints only
-- **Assumptions** — table when ≥3 consequential or Risky assumptions (Standard/Rigorous)
+- **Assumption Register** — table when ≥3 consequential or Risky assumptions (Standard/Rigorous)
+- **Requirements Traceability** — `FR-* -> AC-* -> TR-*` matrix for engineering-verifiable requirements
 - **Unresolved Questions** — only non-empty categories
 - **Adversarial Review Summary** / **Gap Analysis** — only when material context beyond inline fixes
 
@@ -62,7 +95,8 @@ After the repaired PRD body:
 | Area | Before | After | Reason |
 ```
 
-Include **Change Impact** when reviewing an existing product/system.
+Include **Change Impact** when reviewing an existing product/system. Re-run compatibility, rollout,
+operational-readiness, cost, privacy, and observability triggers against the repaired state.
 
 ---
 
