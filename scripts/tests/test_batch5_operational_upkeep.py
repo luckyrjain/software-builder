@@ -6,6 +6,7 @@ from scripts.operational_upkeep import (
     build_health_report,
     classify_diff,
     classify_file_role,
+    codeowners_for,
     load_policy,
     render_health_markdown,
     validate_diff_risk,
@@ -40,19 +41,39 @@ def test_file_roles_separate_runtime_reference_and_maintainer_surfaces() -> None
     assert classify_file_role("scripts/registry/eval_contracts.yaml", policy) == "maintainer"
 
 
-def test_health_report_is_deterministic_with_explicit_revision() -> None:
+def test_contract_owner_resolution_uses_matching_codeowners_rule() -> None:
+    codeowners = (ROOT / "CODEOWNERS").read_text(encoding="utf-8")
+    assert "@luckyrjain" in codeowners_for("scripts/registry/eval_contracts.yaml", codeowners)
+    assert "@luckyrjain" in codeowners_for("docs/skill-framework/shared/safe-output.md", codeowners)
+
+
+def test_health_report_is_deterministic_with_complete_provenance() -> None:
     first = build_health_report(ROOT, revision="deadbeef")
     second = build_health_report(ROOT, revision="deadbeef")
     assert first == second
-    assert first["provenance"]["repository_revision"] == "deadbeef"
-    assert first["provenance"]["operational_policy_version"] == "1.0"
-    assert first["health"]["skills"] >= 23
-    assert first["health"]["stable_routes"] >= 6
-    assert first["health"]["stable_stop_conditions"] >= 5
-    assert first["health"]["stable_report_fields"] >= 6
+    provenance = first["provenance"]
+    assert provenance["repository_revision"] == "deadbeef"
+    assert provenance["registry_schema_version"] == 1
+    assert provenance["prompt_bundle_version"] == "1"
+    assert provenance["evaluator_version"] == "1"
+    assert provenance["operational_policy_version"] == "1.1"
+
+    health = first["health"]
+    assert health["skills"] >= 23
+    assert health["stable_routes"] >= 6
+    assert health["route_token_budget_coverage"] == health["stable_routes"]
+    assert health["stable_stop_conditions"] >= 5
+    assert health["stable_report_fields"] >= 6
+    assert health["contract_owners"] >= 7
+    assert health["external_dependency_count"] > 0
+    assert health["orphan_runtime_modules"] == []
+
     markdown = render_health_markdown(first)
     assert "Repository revision: `deadbeef`" in markdown
-    assert "Stable IDs:" in markdown
+    assert "Prompt bundle: `1`" in markdown
+    assert "Evaluator: `1`" in markdown
+    assert "Route token-budget coverage:" in markdown
+    assert "Orphan runtime modules: **0**" in markdown
 
 
 def test_prompt_diff_risk_uses_highest_matching_class() -> None:
