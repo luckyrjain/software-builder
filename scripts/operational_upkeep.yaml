@@ -1,5 +1,7 @@
 schema_version: 1
-policy_version: "1.0"
+policy_version: "1.1"
+prompt_bundle_version: "1"
+evaluator_version: "1"
 
 file_roles:
   runtime:
@@ -33,40 +35,80 @@ stable_ids:
   routes:
     - id: route.architecture-review
       owner: domain-comprehension
+      source_path: scripts/registry/eval_contracts.yaml
+      source_key: routing_collisions
+      token_budget: 1400
     - id: route.prd-review
       owner: prd-architect
+      source_path: scripts/registry/eval_contracts.yaml
+      source_key: routing_collisions
+      token_budget: 1200
     - id: route.code-review
       owner: pr-review
+      source_path: scripts/registry/eval_contracts.yaml
+      source_key: routing_collisions
+      token_budget: 1400
     - id: route.incident-analysis
       owner: incident-rca
+      source_path: scripts/registry/eval_contracts.yaml
+      source_key: routing_collisions
+      token_budget: 1400
     - id: route.k8s-rightsizing
       owner: k8s-overprovisioning-datadog
+      source_path: scripts/registry/eval_contracts.yaml
+      source_key: routing_collisions
+      token_budget: 1200
     - id: route.test-generation
       owner: test-writer
+      source_path: scripts/registry/eval_contracts.yaml
+      source_key: routing_collisions
+      token_budget: 1200
   stop_conditions:
     - id: stop.insufficient-evidence
       owner: runtime-contract
+      source_path: scripts/registry/platform_contracts.yaml
+      source_key: evidence.insufficient_evidence_status
     - id: stop.missing-authorization
       owner: runtime-contract
+      source_path: scripts/registry/platform_contracts.yaml
+      source_key: action_gates
     - id: stop.prompt-injection
       owner: prompt-injection
+      source_path: docs/skill-framework/shared/prompt-injection.md
+      source_key: Rule
     - id: stop.failed-required-check
       owner: runtime-contract
+      source_path: scripts/registry/platform_contracts.yaml
+      source_key: definition_of_done.required_fields
     - id: stop.cancellation
       owner: runtime-contract
+      source_path: scripts/registry/eval_contracts.yaml
+      source_key: behavior_scenarios.cancellation
   report_fields:
     - id: report.result-status
       field: result_status
+      source_path: scripts/registry/eval_contracts.yaml
+      source_key: golden_structural_assertions
     - id: report.confidence
       field: confidence
+      source_path: scripts/registry/eval_contracts.yaml
+      source_key: golden_structural_assertions
     - id: report.authority-boundary
       field: authority_boundary
+      source_path: scripts/registry/eval_contracts.yaml
+      source_key: golden_structural_assertions
     - id: report.evidence-provenance
       field: evidence_provenance
+      source_path: scripts/registry/eval_contracts.yaml
+      source_key: golden_structural_assertions
     - id: report.artifact-shape
       field: artifact_shape
+      source_path: scripts/registry/eval_contracts.yaml
+      source_key: golden_structural_assertions
     - id: report.critical-conclusion
       field: critical_conclusion
+      source_path: scripts/registry/eval_contracts.yaml
+      source_key: golden_structural_assertions
 
 contract_owners:
   capability-schema:
@@ -91,7 +133,6 @@ contract_owners:
     path: scripts/registry/eval_contracts.yaml
     owner: "@luckyrjain"
 
-# A deprecated prompt module or artifact schema must declare every field below.
 deprecation:
   compatibility_window_days: 90
   required_fields:
@@ -116,7 +157,6 @@ prompt_diff_risk:
       - "skills.yaml"
       - "scripts/registry/composition_contracts.yaml"
       - "scripts/registry/platform_contracts.yaml"
-      - "scripts/registry/operational_upkeep.yaml"
       - "scripts/operational_upkeep.yaml"
     authority-capability:
       - "scripts/registry/capability_catalog.yaml"
