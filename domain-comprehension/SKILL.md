@@ -32,9 +32,9 @@ phase artifacts: [phase-outputs.md](reference/phase-outputs.md). Completion gate
 [large-scale-execution.md](reference/large-scale-execution.md). Required diagrams:
 [required-diagrams.md](reference/required-diagrams.md).
 
-Repository discovery is budgeted. Record configured/consumed repository, search-query and deep-read
-limits; stop PARTIAL instead of silently exceeding them. Normative contract:
-[domain-model-contract.yaml](reference/domain-model-contract.yaml).
+Repository discovery is budgeted. Use the profile defaults or explicit CUSTOM limits in
+[domain-model-contract.yaml](reference/domain-model-contract.yaml), record configured/consumed repository,
+search-query and deep-read limits, and stop PARTIAL instead of silently exceeding them.
 
 ## When to use / NOT to use
 
@@ -73,12 +73,13 @@ P5 synthesizes `PRD.md` from completed evidence. Requirements use stable `FR-*`,
 `Observed | Inferred | Unknown`, confidence and evidence. Never manufacture future-state intent, personas,
 KPIs, SLOs, roadmap, or acceptance criteria. Contract: [as-built-prd.md](reference/as-built-prd.md).
 
-FULL and affected DELTA/ADD_REPO runs emit `API_EVENT_SCHEMA.yaml`, `DATA_OWNERSHIP_GRAPH.yaml`, and
-`CAPABILITY_TRACEABILITY.yaml`. Dependency edges identify synchronous/asynchronous interaction,
-upstream/downstream direction and evidence-backed criticality. Confidence uses the weakest material claim;
-never average upward. DELTA/ADD_REPO must run stale PRD detection before retaining `PRD.md`. These artifacts
-are the current-state handoff to **prd-architect**, which may propose future state but cannot rewrite observed
-evidence. Schema and compatibility: [domain-model-contract.yaml](reference/domain-model-contract.yaml).
+FULL and affected DELTA/ADD_REPO runs emit `API_EVENT_SCHEMA.yaml`, `DATA_OWNERSHIP_GRAPH.yaml`,
+`DEPENDENCY_GRAPH.yaml`, and `CAPABILITY_TRACEABILITY.yaml`. Dependency edges identify a focal perspective,
+synchronous/asynchronous interaction, upstream/downstream direction and evidence-backed criticality.
+Confidence uses the weakest material claim; never average upward. DELTA/ADD_REPO must run stale PRD detection
+before retaining `PRD.md`. These artifacts are the current-state handoff to **prd-architect**, which may
+propose future state but cannot rewrite observed evidence. Schema, budgets and compatibility:
+[domain-model-contract.yaml](reference/domain-model-contract.yaml).
 
 ## Workflow
 
@@ -127,7 +128,7 @@ after every phase via [phase-completion-gate.md](reference/phase-completion-gate
 
 Completion emits canonical `skill_result`; actions use `action_gates`; scope follows `definition_of_done` in
 [runtime-contract.md](../docs/skill-framework/shared/runtime-contract.md). FULL required artifacts include
-manifest/progress/summary/PRD plus the three machine model files; QUICK follows its delivery-mode table.
+manifest/progress/summary/PRD plus the four machine model files; QUICK follows its delivery-mode table.
 Required checks include Evidence/Conclusion/Confidence, phase completion, discovery budget, stale-PRD check
 when applicable, and read-only source boundary. Partial results preserve manifest/progress and route gaps to
 unknowns/omissions.
