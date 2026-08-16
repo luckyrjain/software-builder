@@ -1,5 +1,5 @@
 ---
-workflow_version: 1.3
+workflow_version: 1.4
 phase: specify
 produces:
   mvp_scope: object
@@ -75,7 +75,8 @@ Write per [requirements-format.md](../reference/requirements-format.md):
 - necessary, atomic, unambiguous, feasible, testable, consistent, non-duplicative
 - implementation-neutral unless constrained
 - use decision tables for complex multi-variable business logic
-- stable IDs (FR/BR/NFR/INV/A/AC) when ≥8 material requirements or ≥2 delivery teams
+- every material functional requirement gets stable `FR-*`, `AC-*`, and `TR-*` identifiers so engineering traceability is possible at every depth
+- use stable `BR-*`, `NFR-*`, and `INV-*` IDs when the existing requirements-format thresholds apply; consequential assumptions always use stable `A-*` IDs
 
 For every material `FR-*`, create or identify at least one `AC-*`, and create the corresponding `TR-*`
 verification requirement. Maintain `FR-* -> AC-* -> TR-*` in `requirements_traceability`. An orphaned material
