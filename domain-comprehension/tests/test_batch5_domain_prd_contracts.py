@@ -70,12 +70,17 @@ def test_domain_workflow_operationalizes_budget_machine_outputs_and_stale_prd():
     inputs = _text("domain-comprehension/workflow/inputs.md")
     for token in (
         "- discovery_budget",
-        "configured and consumed counters",
+        "configured limits, and consumed counters",
         "stop discovery",
         "stale_prd_detection",
         "Never silently retain a stale PRD",
     ):
         assert token.lower() in inputs.lower()
+
+    manifest = _yaml("domain-comprehension/templates/manifest.yaml")
+    discovery_budget = manifest["discovery_budget"]
+    assert set(discovery_budget["limits"]) == {"repositories", "search_queries", "deep_file_reads"}
+    assert set(discovery_budget["consumed"]) == {"repositories", "search_queries", "deep_file_reads"}
 
     outputs = _text("domain-comprehension/reference/phase-outputs.md")
     for token in (
