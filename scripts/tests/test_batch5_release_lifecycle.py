@@ -85,6 +85,45 @@ def test_release_inputs_ignore_untracked_files_and_reject_tracked_symlinks(tmp_p
         package_release(root, output)
 
 
+def test_release_inputs_exclude_tracked_repo_dev_tooling(tmp_path: Path) -> None:
+    # git ls-files can't distinguish "untracked build noise" from "tracked
+    # repo-development tooling" -- only the untracked half is naturally solved
+    # by sourcing release inputs from Git. .cursor/.kiro/.agents/.claude-plugin/
+    # .codex-plugin/.gitignore are all committed to *this* repo (generated
+    # per-host IDE rules, plugin manifests, etc. for developing software-builder
+    # itself) but must still never ship in a release bundle meant for someone
+    # installing a skill via install.sh.
+    root = tmp_path / "repo"
+    root.mkdir()
+    _init_repo(root)
+    (root / "VERSION").write_text("2.3.4\n", encoding="utf-8")
+    (root / "skills.yaml").write_text("schema_version: 1\nskills: {}\n", encoding="utf-8")
+    (root / "scripts" / "registry").mkdir(parents=True)
+    (root / "scripts" / "registry" / "host_contracts.yaml").write_text(
+        "schema_version: 1\nhosts: {}\n", encoding="utf-8"
+    )
+    (root / "README.md").write_text("# Fixture\n", encoding="utf-8")
+    (root / ".gitignore").write_text("dist/\n", encoding="utf-8")
+    (root / ".cursor" / "rules").mkdir(parents=True)
+    (root / ".cursor" / "rules" / "example.mdc").write_text("rule\n", encoding="utf-8")
+    (root / ".kiro").mkdir()
+    (root / ".kiro" / "steering.md").write_text("steering\n", encoding="utf-8")
+    (root / ".github").mkdir()
+    (root / ".github" / "keep-me.txt").write_text("kept\n", encoding="utf-8")
+    _commit_all(root)
+
+    output = tmp_path / "out"
+    output.mkdir()
+    archive, _ = package_release(root, output)
+    with tarfile.open(archive, "r:gz") as tar:
+        names = set(tar.getnames())
+    assert not any(".cursor/" in name for name in names)
+    assert not any(".kiro/" in name for name in names)
+    assert not any(name.endswith(".gitignore") for name in names)
+    # .github is the one dotdir release bundles have always carried.
+    assert any(name.endswith(".github/keep-me.txt") for name in names)
+
+
 def test_release_bundle_is_byte_reproducible_for_same_git_tree(tmp_path: Path) -> None:
     root, _ = _minimal_repo(tmp_path)
     out_a = tmp_path / "a"

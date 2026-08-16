@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Create a byte-reproducible, checksummed release bundle for software-builder.
 
-Release inputs are exactly the Git-tracked regular files at ``root`` -- Git is
-the single source of truth for what ships, so untracked files (caches, build
-output, local secrets) can never leak into a release, and a tracked symlink
-is rejected outright rather than silently dereferenced. The archive embeds a
+Release inputs are the Git-tracked regular files at ``root``, minus repo
+development tooling (see ``_is_release_excluded``) -- Git is the source of
+truth for what ships, so untracked files (caches, build output, local
+secrets) can never leak into a release, and a tracked symlink is rejected
+outright rather than silently dereferenced. The archive embeds a
 ``RELEASE-MANIFEST.json`` with exact provenance (distribution version, source
 SHA, registry/host-contract schema versions, supported hosts, per-skill
 versions) and a SHA-256 per bundled file, so verify_release_bundle.py can
@@ -75,9 +76,39 @@ def _ensure_clean_worktree(root: Path) -> None:
             raise ValueError(f"could not check Git working tree status: {result.stderr.strip()}")
 
 
+# Path components that never belong in a release even if accidentally tracked
+# (build output, caches) -- matches the pre-reproducibility-rewrite collector's
+# EXCLUDE_DIRS.
+_EXCLUDED_PATH_COMPONENTS = {"__pycache__", ".pytest_cache", "node_modules", "dist"}
+
+
+def _is_release_excluded(rel: str) -> bool:
+    """True if rel (posix path, relative to repo root) is repo-development
+    tooling or build noise that must never enter a release, even though it's
+    Git-tracked.
+
+    Switching release-input collection to `git ls-files` (from a directory
+    walk with its own exclude-list) correctly stopped untracked noise from
+    leaking into a release -- that noise is never tracked, so Git itself now
+    guarantees it. But on its own that switch also silently started shipping
+    *tracked* repo-development tooling that the old collector explicitly kept
+    out via "skip any top-level dotfile/dotdir except .github": generated
+    per-host IDE rules like ``.cursor/rules/*.mdc`` and ``.kiro/*`` (meant for
+    developing *this* repo, not for someone installing a skill from a release
+    bundle), ``.agents/``, ``.claude-plugin/``, ``.codex-plugin/``, and
+    ``.gitignore``. Restoring that rule keeps a release bundle scoped to
+    actual release content the way it always was.
+    """
+    parts = Path(rel).parts
+    if any(part in _EXCLUDED_PATH_COMPONENTS for part in parts):
+        return True
+    return parts[0].startswith(".") and parts[0] != ".github"
+
+
 def _tracked_files(root: Path) -> list[tuple[str, Path, int]]:
-    """Git-tracked regular files under root, as (posix relative path, absolute
-    path, tar mode).
+    """Git-tracked regular release files under root, as (posix relative path,
+    absolute path, tar mode) -- excludes repo-development tooling per
+    _is_release_excluded (see there).
 
     The tar mode is read from Git's own index (``git ls-files -s``), not from
     the filesystem: a filesystem executable bit that has drifted from Git's
@@ -86,17 +117,18 @@ def _tracked_files(root: Path) -> list[tuple[str, Path, int]]:
     otherwise make the archive depend on the machine it was built on instead
     of only on the Git tree, breaking reproducibility.
 
-    Raises ValueError if any tracked path is a symlink -- release inputs must
-    be plain file content, never a link that could point outside the bundle.
-    Raises ValueError if a tracked path is the reserved manifest filename --
-    otherwise the per-file loop and the generated-manifest write in
-    _write_reproducible_archive would both target the same tar member name,
-    silently discarding the tracked file's real content in the archive.
-    Raises ValueError (not subprocess.CalledProcessError) if `git ls-files`
-    itself fails, matching how _ensure_clean_worktree already converts a git
-    failure on its own git invocation -- otherwise main()'s
-    `except (OSError, *YAML_SAFETY_ERRORS)` wouldn't catch it, and the CLI
-    would crash with a raw traceback instead of a clean error message.
+    Raises ValueError if any tracked, non-excluded path is a symlink --
+    release inputs must be plain file content, never a link that could point
+    outside the bundle. Raises ValueError if a tracked, non-excluded path is
+    the reserved manifest filename -- otherwise the per-file loop and the
+    generated-manifest write in _write_reproducible_archive would both target
+    the same tar member name, silently discarding the tracked file's real
+    content in the archive. Raises ValueError (not
+    subprocess.CalledProcessError) if `git ls-files` itself fails, matching
+    how _ensure_clean_worktree already converts a git failure on its own git
+    invocation -- otherwise main()'s `except (OSError, *YAML_SAFETY_ERRORS)`
+    wouldn't catch it, and the CLI would crash with a raw traceback instead of
+    a clean error message.
     """
     try:
         result = subprocess.run(
@@ -117,6 +149,8 @@ def _tracked_files(root: Path) -> list[tuple[str, Path, int]]:
 
     files: list[tuple[str, Path, int]] = []
     for rel, git_mode in sorted(entries, key=lambda item: item[0]):
+        if _is_release_excluded(rel):
+            continue
         if rel == MANIFEST_NAME:
             raise ValueError(
                 f"release inputs must not track the reserved manifest filename: {rel}",

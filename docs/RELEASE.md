@@ -32,10 +32,13 @@ is ever cut.
 
 ## Release bundle and manifest
 
-`scripts/package_release.py` builds a release bundle from exactly the Git-tracked regular files at
-the repository root -- untracked files (caches, build output, local secrets) never enter a release,
-and a tracked symlink is rejected rather than silently dereferenced. Given the same Git tree, the
-resulting `.tar.gz` is byte-for-byte reproducible.
+`scripts/package_release.py` builds a release bundle from the Git-tracked regular files at the
+repository root, minus repo-development tooling that has nothing to do with installing a skill
+(`.cursor/`, `.kiro/`, `.agents/`, `.claude-plugin/`, `.codex-plugin/`, `.gitignore`, and any
+`__pycache__`/`.pytest_cache`/`node_modules`/`dist` that ended up tracked) -- untracked files
+(caches, build output, local secrets) never enter a release, and a tracked symlink is rejected
+rather than silently dereferenced. Given the same Git tree, the resulting `.tar.gz` is
+byte-for-byte reproducible.
 
 Each bundle embeds `RELEASE-MANIFEST.json` at its root with:
 

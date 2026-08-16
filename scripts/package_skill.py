@@ -112,7 +112,7 @@ def _release_provenance(repo_root: Path) -> tuple[str, str]:
     if release_manifest_path.is_file():
         try:
             release_manifest = json.loads(release_manifest_path.read_text(encoding="utf-8"))
-        except json.JSONDecodeError as exc:
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
             raise ValueError(f"{release_manifest_path}: invalid JSON: {exc}") from exc
         if not isinstance(release_manifest, dict):
             raise ValueError(f"{release_manifest_path}: must be a JSON object")
