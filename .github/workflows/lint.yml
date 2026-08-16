@@ -37,8 +37,10 @@ jobs:
       - name: Validate operational upkeep policy
         run: python3 scripts/operational_upkeep.py validate
 
-      - name: Publish prompt-system health and provenance
-        run: python3 scripts/operational_upkeep.py health --format markdown --revision "$GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
+      - name: Publish prompt-system health, eval tiers and provenance
+        run: |
+          python3 scripts/operational_upkeep.py health --format markdown --revision "$GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
+          python3 scripts/eval_tier_health.py --format markdown >> "$GITHUB_STEP_SUMMARY"
 
       - name: Enforce prompt-diff risk evidence
         if: github.event_name == 'pull_request'
