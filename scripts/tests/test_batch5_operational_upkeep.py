@@ -130,7 +130,7 @@ def test_health_report_is_deterministic_with_complete_provenance() -> None:
     assert provenance["registry_schema_version"] == 1
     assert provenance["prompt_bundle_version"] == "1"
     assert provenance["evaluator_version"] == "1"
-    assert provenance["operational_policy_version"] == "1.1"
+    assert provenance["operational_policy_version"] == "1.2"
     assert provenance["generator_version"] == "1.2"
 
     health = first["health"]
@@ -164,6 +164,19 @@ def test_prompt_diff_risk_uses_highest_matching_class() -> None:
     )
     assert risk == "routing"
     assert matched == ["editorial", "behavioral", "authority-capability", "routing"]
+
+
+def test_upkeep_enforcement_paths_are_self_protected() -> None:
+    policy = load_policy(ROOT / "scripts" / "operational_upkeep.yaml")
+    for path in (
+        "scripts/operational_upkeep.py",
+        "scripts/deprecation_lifecycle.py",
+        "scripts/eval_tier_health.py",
+        ".github/workflows/lint.yml",
+    ):
+        risk, errors = validate_diff_risk([path], policy)
+        assert risk == "schema"
+        assert errors and "requires changed eval/test evidence" in errors[0]
 
 
 def test_high_risk_prompt_diff_requires_test_or_eval_evidence() -> None:
