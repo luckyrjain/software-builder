@@ -1,5 +1,5 @@
 ---
-workflow_version: 1.4
+workflow_version: 1.5
 phase: inputs
 produces:
   request: string
@@ -60,13 +60,23 @@ consumes:
 
 When `existing_system=true`, inspect `current_state_evidence` before Specify. Prefer the canonical
 `domain-comprehension` handoff: `PRD.md`, `API_EVENT_SCHEMA.yaml`, `DATA_OWNERSHIP_GRAPH.yaml`,
-`DEPENDENCY_GRAPH.yaml`, and `CAPABILITY_TRACEABILITY.yaml`, with source revision metadata. Missing artifacts
-do not authorize invention: record the gap as an assumption/unknown and cap claims according to the source
-evidence.
+`DEPENDENCY_GRAPH.yaml`, and `CAPABILITY_TRACEABILITY.yaml`, with source revision metadata.
+
+When the PRD came from `domain-comprehension`, also inspect the producer manifest PRD artifact freshness status
+required by [current-state-evidence-contract.yaml](../reference/current-state-evidence-contract.yaml):
+
+- `ok` — eligible to be used as current-state PRD evidence, subject to source-revision/conflict checks;
+- `stale` — **Blocking Before Build** for PRD/Review and the PRD must not be treated as current;
+- missing/unknown freshness — disclose the gap and verify freshness before any current-state claim.
+
+Missing artifacts or freshness metadata do not authorize invention: record the gap as an assumption/unknown and
+cap claims according to the source evidence. Validation mode may proceed with the gap surfaced under Evidence
+Needed Next; it must not silently promote stale/unknown evidence to current state.
 
 Preserve observed current state verbatim in meaning. Proposed future-state behavior must be identified as a
-proposal/change, never silently rewritten into the observed baseline. If source revisions conflict or artifacts
-are stale/contradictory, surface the conflict before using them for compatibility or impact analysis.
+proposal/change, never silently rewritten into the observed baseline. If source revisions conflict, the PRD
+manifest status is `stale`, freshness is unknown, or artifacts otherwise contradict, surface the issue before
+using them for compatibility or impact analysis.
 
 ## Extraction checklist
 
@@ -78,6 +88,7 @@ Before Classify, identify:
 - constraints vs assumptions vs unknowns
 - contradictions between sources
 - current source revision and observed/inferred/unknown evidence status for existing systems
+- domain PRD manifest freshness (`ok | stale | unknown`) when a domain-comprehension PRD is supplied
 - known API/event/schema, data ownership, dependency, and capability ownership impacts
 
 ## Clarification policy
@@ -95,7 +106,7 @@ Prefer, in order:
 
 1. explicit current user decisions
 2. mandatory legal, regulatory, contractual, security, or business constraints
-3. verified existing-system behavior and current-state machine evidence
+3. verified existing-system behavior and current-state machine evidence with current PRD freshness
 4. authoritative external evidence
 5. established product decisions
 6. assumptions
