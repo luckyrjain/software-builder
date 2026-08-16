@@ -8,13 +8,13 @@ import subprocess
 import sys
 from collections import Counter
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
 
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 POLICY_PATH = ROOT / "scripts" / "operational_upkeep.yaml"
-GENERATOR_VERSION = "1.0"
+GENERATOR_VERSION = "1.1"
 _ID_RE = re.compile(r"^(route|stop|report)\.[a-z0-9][a-z0-9.-]*$")
 
 
@@ -49,8 +49,6 @@ def classify_file_role(path: str, policy: dict[str, Any]) -> str | None:
             matches.append(role)
     if not matches:
         return None
-    # Runtime beats reference when a broad reference glob also catches a runtime path;
-    # maintainer paths are intentionally disjoint from skill runtime/reference paths.
     for role in ("runtime", "reference", "maintainer"):
         if role in matches:
             return role
@@ -62,23 +60,85 @@ def _load_codeowners(root: Path) -> str:
     return path.read_text(encoding="utf-8") if path.is_file() else ""
 
 
-def _validate_deprecated_yaml(path: Path, required: set[str]) -> list[str]:
-    errors: list[str] = []
-    try:
-        data = yaml.safe_load(path.read_text(encoding="utf-8"))
-    except (OSError, yaml.YAMLError):
-        return errors
-    if not isinstance(data, dict):
-        return errors
+def _codeowner_pattern_matches(path: str, pattern: str) -> bool:
+    normalized = pattern.lstrip("/")
+    if normalized == "*":
+        return True
+    if normalized.endswith("/"):
+        return path.startswith(normalized)
+    return fnmatch.fnmatch(path, normalized) or fnmatch.fnmatch(path, f"**/{normalized}")
+
+
+def codeowners_for(path: str, text: str) -> list[str]:
+    owners: list[str] = []
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        fields = line.split()
+        if len(fields) < 2:
+            continue
+        pattern, declared = fields[0], fields[1:]
+        if _codeowner_pattern_matches(path, pattern):
+            owners = declared
+    return owners
+
+
+def _yaml_mapping(path: Path) -> dict[str, Any]:
+    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    return data if isinstance(data, dict) else {}
+
+
+def _source_key_exists(path: Path, source_key: str) -> bool:
+    if path.suffix.lower() not in {".yaml", ".yml"}:
+        return source_key.lower() in path.read_text(encoding="utf-8").lower()
+    current: Any = _yaml_mapping(path)
+    for part in source_key.split("."):
+        if not isinstance(current, dict) or part not in current:
+            return False
+        current = current[part]
+    return True
+
+
+def _validate_deprecation_mapping(data: dict[str, Any], label: str, required: set[str]) -> list[str]:
     if data.get("status") != "deprecated" and data.get("deprecated") is not True:
-        return errors
+        return []
     block = data.get("deprecation")
     if not isinstance(block, dict):
-        return [f"error: {path}: deprecated item requires a deprecation mapping"]
+        return [f"error: {label}: deprecated item requires a deprecation mapping"]
     missing = sorted(required - set(block))
     if missing:
-        errors.append(f"error: {path}: deprecation missing fields: {', '.join(missing)}")
-    return errors
+        return [f"error: {label}: deprecation missing fields: {', '.join(missing)}"]
+    return []
+
+
+def _markdown_frontmatter(path: Path) -> dict[str, Any]:
+    text = path.read_text(encoding="utf-8")
+    if not text.startswith("---\n"):
+        return {}
+    end = text.find("\n---", 4)
+    if end < 0:
+        return {}
+    data = yaml.safe_load(text[4:end])
+    return data if isinstance(data, dict) else {}
+
+
+def _deprecation_candidates(root: Path, skill_paths: Iterable[str]) -> Iterable[tuple[str, dict[str, Any]]]:
+    for path in sorted((root / "scripts" / "registry").glob("*.yaml")):
+        yield path.relative_to(root).as_posix(), _yaml_mapping(path)
+    for skill_path in skill_paths:
+        directory = root / skill_path
+        skill_md = directory / "SKILL.md"
+        if skill_md.is_file():
+            yield skill_md.relative_to(root).as_posix(), _markdown_frontmatter(skill_md)
+        for pattern in ("reference/*.yaml", "reference/*.yml", "templates/*.yaml", "templates/*.yml"):
+            for path in sorted(directory.glob(pattern)):
+                yield path.relative_to(root).as_posix(), _yaml_mapping(path)
+
+
+def _registered_skills(root: Path) -> dict[str, Any]:
+    skills = _yaml_mapping(root / "skills.yaml").get("skills", {})
+    return skills if isinstance(skills, dict) else {}
 
 
 def validate_policy(root: Path = ROOT) -> list[str]:
@@ -86,11 +146,15 @@ def validate_policy(root: Path = ROOT) -> list[str]:
     errors: list[str] = []
     if policy.get("schema_version") != 1:
         errors.append("error: operational-upkeep: unsupported schema_version")
+    for key in ("policy_version", "prompt_bundle_version", "evaluator_version"):
+        if not isinstance(policy.get(key), str) or not policy[key].strip():
+            errors.append(f"error: operational-upkeep: {key} must be a non-empty string")
 
     roles = policy.get("file_roles", {})
     if set(roles) != {"runtime", "reference", "maintainer"}:
         errors.append("error: operational-upkeep: file_roles must be runtime/reference/maintainer")
 
+    skills = _registered_skills(root)
     seen: set[str] = set()
     stable_ids = policy.get("stable_ids", {})
     for group in ("routes", "stop_conditions", "report_fields"):
@@ -101,44 +165,95 @@ def validate_policy(root: Path = ROOT) -> list[str]:
             if item_id in seen:
                 errors.append(f"error: operational-upkeep: duplicate stable id {item_id}")
             seen.add(item_id)
+            source_path = root / str(item.get("source_path", ""))
+            source_key = str(item.get("source_key", ""))
+            if not source_path.is_file():
+                errors.append(f"error: operational-upkeep: {item_id} source missing: {source_path.relative_to(root)}")
+            elif not source_key or not _source_key_exists(source_path, source_key):
+                errors.append(f"error: operational-upkeep: {item_id} source key not reachable: {source_key!r}")
+            if group == "routes":
+                owner = str(item.get("owner", ""))
+                if owner not in skills:
+                    errors.append(f"error: operational-upkeep: {item_id} route owner is not a registered skill: {owner!r}")
+                budget = item.get("token_budget")
+                if not isinstance(budget, int) or budget <= 0:
+                    errors.append(f"error: operational-upkeep: {item_id} requires a positive token_budget")
 
     codeowners = _load_codeowners(root)
     for name, contract in policy.get("contract_owners", {}).items():
-        contract_path = root / str(contract.get("path", ""))
+        rel = str(contract.get("path", ""))
+        contract_path = root / rel
         owner = str(contract.get("owner", ""))
         if not contract_path.is_file():
-            errors.append(f"error: operational-upkeep: owner contract {name} path missing: {contract_path.relative_to(root)}")
+            errors.append(f"error: operational-upkeep: owner contract {name} path missing: {rel}")
         if not owner.startswith("@"):
             errors.append(f"error: operational-upkeep: owner contract {name} has invalid owner {owner!r}")
-        if owner and owner not in codeowners:
-            errors.append(f"error: operational-upkeep: owner {owner} for {name} is absent from CODEOWNERS")
+        elif owner not in codeowners_for(rel, codeowners):
+            errors.append(f"error: operational-upkeep: CODEOWNERS does not assign {owner} to {rel}")
 
     required = set(policy.get("deprecation", {}).get("required_fields", []))
-    for path in sorted((root / "scripts" / "registry").glob("*.yaml")):
-        errors.extend(_validate_deprecated_yaml(path, required))
+    if not required:
+        errors.append("error: operational-upkeep: deprecation required_fields must not be empty")
+    skill_paths = [str(entry.get("path", skill_id)) for skill_id, entry in skills.items() if isinstance(entry, dict)]
+    for label, data in _deprecation_candidates(root, skill_paths):
+        errors.extend(_validate_deprecation_mapping(data, label, required))
 
-    # Mandatory surfaces must have a visible role so generated health output cannot
-    # silently drop the most consequential prompt-system files.
-    mandatory = [
-        "pr-review/SKILL.md",
-        "pr-review/workflow/inputs.md",
-        "pr-review/reference/smoke-test.md",
-        "scripts/registry/eval_contracts.yaml",
-    ]
-    for path in mandatory:
-        if classify_file_role(path, policy) is None:
-            errors.append(f"error: operational-upkeep: no file role for {path}")
+    # Every registered execution surface has an explicit visible role.
+    for skill_id, entry in skills.items():
+        if not isinstance(entry, dict):
+            continue
+        skill_path = str(entry.get("path", skill_id))
+        skill_md = root / skill_path / "SKILL.md"
+        if not skill_md.is_file():
+            continue
+        if classify_file_role(f"{skill_path}/SKILL.md", policy) != "runtime":
+            errors.append(f"error: operational-upkeep: {skill_path}/SKILL.md must be runtime")
+        for path in sorted((root / skill_path / "workflow").glob("*.md")):
+            rel = path.relative_to(root).as_posix()
+            if classify_file_role(rel, policy) != "runtime":
+                errors.append(f"error: operational-upkeep: {rel} must be runtime")
+        for path in sorted((root / skill_path / "reference").glob("*")):
+            if not path.is_file():
+                continue
+            rel = path.relative_to(root).as_posix()
+            if classify_file_role(rel, policy) != "reference":
+                errors.append(f"error: operational-upkeep: {rel} must be reference")
+
     return errors
 
 
-def _yaml_mapping(path: Path) -> dict[str, Any]:
-    data = yaml.safe_load(path.read_text(encoding="utf-8"))
-    return data if isinstance(data, dict) else {}
+def _collect_capability_names(value: Any) -> set[str]:
+    names: set[str] = set()
+    if isinstance(value, str) and "." in value:
+        names.add(value)
+    elif isinstance(value, list):
+        for item in value:
+            names.update(_collect_capability_names(item))
+    elif isinstance(value, dict):
+        for item in value.values():
+            names.update(_collect_capability_names(item))
+    return names
+
+
+def _orphan_runtime_modules(root: Path, skills: dict[str, Any]) -> list[str]:
+    registered_paths = {
+        str(entry.get("path", skill_id))
+        for skill_id, entry in skills.items()
+        if isinstance(entry, dict)
+    }
+    discovered = {
+        path.parent.relative_to(root).as_posix()
+        for path in root.glob("*/SKILL.md")
+        if path.is_file()
+    }
+    return sorted(discovered - registered_paths)
 
 
 def build_health_report(root: Path = ROOT, revision: str | None = None) -> dict[str, Any]:
     policy = load_policy(root / "scripts" / "operational_upkeep.yaml")
-    skills = _yaml_mapping(root / "skills.yaml").get("skills", {})
+    skills_file = _yaml_mapping(root / "skills.yaml")
+    skills = skills_file.get("skills", {})
+    skills = skills if isinstance(skills, dict) else {}
     composition = _yaml_mapping(root / "scripts" / "registry" / "composition_contracts.yaml")
     runtime = _yaml_mapping(root / "scripts" / "registry" / "composition_runtime.yaml")
     eval_contracts = _yaml_mapping(root / "scripts" / "registry" / "eval_contracts.yaml")
@@ -155,33 +270,46 @@ def build_health_report(root: Path = ROOT, revision: str | None = None) -> dict[
             if role:
                 role_counts[role] += 1
 
-    route_count = len(policy.get("stable_ids", {}).get("routes", []))
-    stop_count = len(policy.get("stable_ids", {}).get("stop_conditions", []))
-    report_field_count = len(policy.get("stable_ids", {}).get("report_fields", []))
+    route_items = policy.get("stable_ids", {}).get("routes", [])
+    stop_items = policy.get("stable_ids", {}).get("stop_conditions", [])
+    report_items = policy.get("stable_ids", {}).get("report_fields", [])
     eval_case_refs = 0
     for section in ("dimension_coverage", "behavior_scenarios", "degraded_host_cases"):
         for entry in eval_contracts.get(section, {}).values():
             if isinstance(entry, dict):
                 eval_case_refs += len(entry.get("case_refs", []))
 
+    capability_names = _collect_capability_names(skills)
+    external_families = sorted({name.split(".", 1)[0] for name in capability_names})
+    orphan_modules = _orphan_runtime_modules(root, skills)
+
     return {
         "schema_version": 1,
         "provenance": {
             "repository_revision": revision or _git_revision(root),
-            "registry_schema_version": _yaml_mapping(root / "skills.yaml").get("schema_version"),
+            "registry_schema_version": skills_file.get("schema_version"),
+            "prompt_bundle_version": policy.get("prompt_bundle_version"),
+            "evaluator_version": policy.get("evaluator_version"),
             "operational_policy_version": policy.get("policy_version"),
             "generator_version": GENERATOR_VERSION,
         },
         "health": {
-            "skills": len(skills) if isinstance(skills, dict) else 0,
+            "skills": len(skills),
             "composition_contracts": len(composition.get("skills", {})),
             "artifact_schemas": len(composition.get("artifact_schemas", {})),
             "runtime_handoffs": sum(len(v) for v in runtime.get("handoffs", {}).values()),
             "eval_contract_refs": eval_case_refs,
-            "stable_routes": route_count,
-            "stable_stop_conditions": stop_count,
-            "stable_report_fields": report_field_count,
+            "stable_routes": len(route_items),
+            "route_token_budget_coverage": sum(
+                1 for item in route_items if isinstance(item.get("token_budget"), int) and item["token_budget"] > 0
+            ),
+            "stable_stop_conditions": len(stop_items),
+            "stable_report_fields": len(report_items),
             "contract_owners": len(policy.get("contract_owners", {})),
+            "external_dependency_families": external_families,
+            "external_dependency_count": len(external_families),
+            "orphan_runtime_modules": orphan_modules,
+            "orphan_runtime_module_count": len(orphan_modules),
             "file_roles": dict(sorted(role_counts.items())),
             "authority_levels": dict(sorted(authority.items())),
         },
@@ -196,6 +324,8 @@ def render_health_markdown(report: dict[str, Any]) -> str:
         "",
         f"- Repository revision: `{p['repository_revision']}`",
         f"- Registry schema: `{p['registry_schema_version']}`",
+        f"- Prompt bundle: `{p['prompt_bundle_version']}`",
+        f"- Evaluator: `{p['evaluator_version']}`",
         f"- Operational policy: `{p['operational_policy_version']}`",
         f"- Health generator: `{p['generator_version']}`",
         f"- Skills: **{h['skills']}**",
@@ -204,6 +334,9 @@ def render_health_markdown(report: dict[str, Any]) -> str:
         f"- Runtime handoffs: **{h['runtime_handoffs']}**",
         f"- Eval contract refs: **{h['eval_contract_refs']}**",
         f"- Stable IDs: **{h['stable_routes']} routes / {h['stable_stop_conditions']} stops / {h['stable_report_fields']} report fields**",
+        f"- Route token-budget coverage: **{h['route_token_budget_coverage']}/{h['stable_routes']}**",
+        f"- External dependency families: **{h['external_dependency_count']}**",
+        f"- Orphan runtime modules: **{h['orphan_runtime_module_count']}**",
         f"- Cross-cutting contract owners: **{h['contract_owners']}**",
         "",
     ]
@@ -225,7 +358,7 @@ def classify_diff(paths: list[str], policy: dict[str, Any]) -> tuple[str, list[s
 
 
 def validate_diff_risk(paths: list[str], policy: dict[str, Any]) -> tuple[str, list[str]]:
-    risk, matched = classify_diff(paths, policy)
+    risk, _ = classify_diff(paths, policy)
     high = set(policy["prompt_diff_risk"]["high_risk_classes"])
     evidence_prefixes = tuple(policy["prompt_diff_risk"]["evidence_paths"])
     errors: list[str] = []
