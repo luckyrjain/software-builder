@@ -55,8 +55,7 @@ def test_domain_machine_templates_exist_and_match_contract():
         "CAPABILITY_TRACEABILITY.yaml": "capabilities",
     }
     for name, field in expected.items():
-        path = f"domain-comprehension/templates/{name}"
-        document = _yaml(path)
+        document = _yaml(f"domain-comprehension/templates/{name}")
         assert document["schema_version"] == 1
         assert "source_revision" in document
         assert field in document
@@ -111,7 +110,7 @@ def test_prd_architect_has_current_state_ingestion_contract():
         assert section in contract
 
 
-def test_prd_workflow_carries_and_gates_new_contract_fields():
+def test_prd_workflow_carries_reviews_repairs_and_gates_new_contract_fields():
     workflow = _yaml("prd-architect/workflow-contract.yaml")
     entry = workflow["entry_inputs"]["current_state_evidence"]
     assert entry["type"] == "object"
@@ -124,8 +123,8 @@ def test_prd_workflow_carries_and_gates_new_contract_fields():
     assert "preserve observed current state" in inputs.lower()
 
     specify = _text("prd-architect/workflow/specify.md")
-    assert "current_state_evidence: object" in specify
     for token in (
+        "current_state_evidence: object",
         "FR-* -> AC-* -> TR-*",
         "success_metrics: list",
         "assumption_register: list",
@@ -133,6 +132,27 @@ def test_prd_workflow_carries_and_gates_new_contract_fields():
         "Evaluate these engineering triggers explicitly",
     ):
         assert token in specify
+
+    break_phase = _text("prd-architect/workflow/break.md")
+    for token in (
+        "success_metrics: list",
+        "assumption_register: list",
+        "requirements_traceability: object",
+        "engineering_impact: object",
+        "complete draft contract",
+    ):
+        assert token in break_phase
+
+    repair = _text("prd-architect/workflow/repair.md")
+    for token in (
+        "success_metrics: list",
+        "assumption_register: list",
+        "requirements_traceability: object",
+        "engineering_impact: object",
+        "Repair the complete PRD contract",
+        "exactly one fresh adversarial re-review",
+    ):
+        assert token in repair
 
     gate = _text("prd-architect/workflow/gate.md")
     assert "current_state_evidence: object" in gate
