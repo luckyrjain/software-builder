@@ -37,7 +37,7 @@ PHASE_KEYS = frozenset(
 
 PHASE_STATUS = frozenset({"pending", "in_progress", "complete", "skipped"})
 ENGAGEMENT_STATUS = frozenset({"IN_PROGRESS", "FIRST_PASS_COMPLETE"})
-ARTIFACT_STATUS = frozenset({"ok", "stub", "missing", "waived", "n_a"})
+ARTIFACT_STATUS = frozenset({"ok", "stub", "missing", "stale", "waived", "n_a"})
 DIAGRAM_STATUS = frozenset({"pending", "ok", "waived", "n_a"})
 QUESTION_STATUS = frozenset({"DRAFT", "PARTIAL", "COMPLETE", "UNKNOWN"})
 CONFIDENCE = frozenset({"HIGH", "MEDIUM", "LOW", "UNKNOWN"})
@@ -268,8 +268,11 @@ def _validate_artifact_list(items: Any, label: str, status_set: frozenset[str]) 
         status = item.get("status")
         if status not in status_set:
             errors.append(f"{prefix}.status must be one of {sorted(status_set)}")
-        if label == "artifacts" and not isinstance(item.get("required"), bool):
-            errors.append(f"{prefix}.required must be a boolean")
+        if label == "artifacts":
+            if not isinstance(item.get("required"), bool):
+                errors.append(f"{prefix}.required must be a boolean")
+            if status == "stale" and item_id != "prd":
+                errors.append(f"{prefix}.status=stale is only valid for artifact id 'prd'")
     return errors
 
 
@@ -578,7 +581,7 @@ def validate_manifest(
                 if _relative_path_error(rel, "artifact path"):
                     continue
                 status = item.get("status")
-                if status in ("ok", "stub") and rel and item_id not in DISTRIBUTED_ARTIFACT_IDS:
+                if status in ("ok", "stub", "stale") and rel and item_id not in DISTRIBUTED_ARTIFACT_IDS:
                     normalized_rel = rel.replace("\\", "/")
                     target = effective_root / normalized_rel
                     expects_directory = rel.endswith(("/", "\\"))
