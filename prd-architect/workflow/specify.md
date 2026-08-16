@@ -1,5 +1,5 @@
 ---
-workflow_version: 1.2
+workflow_version: 1.3
 phase: specify
 produces:
   mvp_scope: object
@@ -23,7 +23,7 @@ consumes:
     depth: string
     risk_domains: list
   optional:
-    current_state_evidence: artifact_set
+    current_state_evidence: object
   conditional: {}
 ---
 
