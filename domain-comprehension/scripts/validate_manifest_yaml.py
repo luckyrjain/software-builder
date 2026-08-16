@@ -41,6 +41,8 @@ ARTIFACT_STATUS = frozenset({"ok", "stub", "missing", "waived", "n_a"})
 DIAGRAM_STATUS = frozenset({"pending", "ok", "waived", "n_a"})
 QUESTION_STATUS = frozenset({"DRAFT", "PARTIAL", "COMPLETE", "UNKNOWN"})
 CONFIDENCE = frozenset({"HIGH", "MEDIUM", "LOW", "UNKNOWN"})
+DISCOVERY_BUDGET_PROFILES = frozenset({"QUICK", "FULL", "DELTA", "ADD_REPO", "CUSTOM"})
+DISCOVERY_BUDGET_COUNTERS = ("repositories", "search_queries", "deep_file_reads")
 REPO_CLASSIFICATION = frozenset(
     {
         "application",
@@ -180,6 +182,61 @@ def _validate_phase_entry(key: str, value: Any) -> list[str]:
     return errors
 
 
+def _validate_discovery_budget(value: Any) -> list[str]:
+    """Validate optional schema-v2 discovery-budget machine state.
+
+    The field is optional for backward compatibility with existing schema-v2 engagements. New runs
+    create it from the template; RESUME may backfill it before performing new discovery.
+    """
+    if value is None:
+        return []
+    if not isinstance(value, dict):
+        return ["discovery_budget must be an object"]
+
+    errors: list[str] = []
+    profile = value.get("profile")
+    if profile not in DISCOVERY_BUDGET_PROFILES:
+        errors.append(
+            f"discovery_budget.profile must be one of {sorted(DISCOVERY_BUDGET_PROFILES)}"
+        )
+
+    limits = value.get("limits")
+    consumed = value.get("consumed")
+    for label, block, allow_zero in (
+        ("limits", limits, False),
+        ("consumed", consumed, True),
+    ):
+        if not isinstance(block, dict):
+            errors.append(f"discovery_budget.{label} must be an object")
+            continue
+        for key in DISCOVERY_BUDGET_COUNTERS:
+            counter = block.get(key)
+            if not isinstance(counter, int) or isinstance(counter, bool):
+                errors.append(f"discovery_budget.{label}.{key} must be an integer")
+                continue
+            if allow_zero:
+                if counter < 0:
+                    errors.append(f"discovery_budget.{label}.{key} must be >= 0")
+            elif counter <= 0:
+                errors.append(f"discovery_budget.{label}.{key} must be > 0")
+
+    if isinstance(limits, dict) and isinstance(consumed, dict):
+        for key in DISCOVERY_BUDGET_COUNTERS:
+            limit = limits.get(key)
+            used = consumed.get(key)
+            if (
+                isinstance(limit, int)
+                and not isinstance(limit, bool)
+                and isinstance(used, int)
+                and not isinstance(used, bool)
+                and used > limit
+            ):
+                errors.append(
+                    f"discovery_budget.consumed.{key} exceeds configured limit ({used} > {limit})"
+                )
+    return errors
+
+
 def _validate_artifact_list(items: Any, label: str, status_set: frozenset[str]) -> list[str]:
     errors: list[str] = []
     if not isinstance(items, list):
@@ -251,9 +308,9 @@ def _validate_repos(repos: Any) -> list[str]:
             ("understand", REPO_UNDERSTAND),
             ("deep_dive", REPO_DEEP_DIVE),
         ):
-            value = item.get(field)
-            if value is not None and value not in allowed:
-                errors.append(f"{prefix}.{field} invalid: {value}")
+            field_value = item.get(field)
+            if field_value is not None and field_value not in allowed:
+                errors.append(f"{prefix}.{field} invalid: {field_value}")
     return errors
 
 
@@ -386,10 +443,10 @@ def _validate_merge_conflicts_gate(
         if status_index is None or len(cells) <= status_index:
             continue
 
-        value = cells[status_index].strip().strip("`*").strip()
-        if value.lower().startswith("status:"):
-            value = value[len("status:") :].strip()
-        if value.lower() == "open":
+        cell_value = cells[status_index].strip().strip("`*").strip()
+        if cell_value.lower().startswith("status:"):
+            cell_value = cell_value[len("status:") :].strip()
+        if cell_value.lower() == "open":
             has_open_conflict = True
 
     if not has_open_conflict or not isinstance(phases, dict):
@@ -455,6 +512,8 @@ def validate_manifest(
 
     if data.get("overall_confidence") not in CONFIDENCE:
         errors.append("overall_confidence invalid")
+
+    errors.extend(_validate_discovery_budget(data.get("discovery_budget")))
 
     engagement = data.get("engagement")
     if isinstance(engagement, dict):
@@ -535,8 +594,8 @@ def validate_manifest(
                 for item in data.get("diagrams") or []:
                     if isinstance(item, dict) and item.get("required") and item.get("status") not in ("ok", "waived", "n_a"):
                         errors.append(f"strict: required diagram {item.get('id')} status={item.get('status')}")
-                for key, value in (phases or {}).items():
-                    if isinstance(value, dict) and value.get("status") not in ("complete", "skipped"):
+                for key, phase_value in (phases or {}).items():
+                    if isinstance(phase_value, dict) and phase_value.get("status") not in ("complete", "skipped"):
                         errors.append(f"strict: phase {key} not complete or skipped")
 
             if check_content:
