@@ -104,6 +104,16 @@ def verify_release_bundle(archive: Path) -> list[str]:
             if not isinstance(value, int) or isinstance(value, bool):
                 errors.append(f"error: {MANIFEST_NAME} {key} must be an integer")
 
+        supported_hosts = manifest.get("supported_hosts")
+        if not isinstance(supported_hosts, list) or not all(isinstance(item, str) for item in supported_hosts):
+            errors.append(f"error: {MANIFEST_NAME} supported_hosts must be a list of strings")
+
+        skill_versions = manifest.get("skill_versions")
+        if not isinstance(skill_versions, dict) or not all(
+            isinstance(k, str) and isinstance(v, str) for k, v in skill_versions.items()
+        ):
+            errors.append(f"error: {MANIFEST_NAME} skill_versions must be a mapping of strings")
+
         files = manifest.get("files")
         if not isinstance(files, dict) or not files:
             errors.append(f"error: {MANIFEST_NAME} files map is empty or invalid")

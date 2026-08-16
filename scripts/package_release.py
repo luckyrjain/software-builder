@@ -6,9 +6,9 @@ the single source of truth for what ships, so untracked files (caches, build
 output, local secrets) can never leak into a release, and a tracked symlink
 is rejected outright rather than silently dereferenced. The archive embeds a
 ``RELEASE-MANIFEST.json`` with exact provenance (distribution version, source
-SHA, registry/host-contract schema versions) and a SHA-256 per bundled file,
-so verify_release_bundle.py can check a release independently of how it was
-built.
+SHA, registry/host-contract schema versions, supported hosts, per-skill
+versions) and a SHA-256 per bundled file, so verify_release_bundle.py can
+check a release independently of how it was built.
 """
 
 from __future__ import annotations
@@ -27,11 +27,16 @@ _SCRIPTS_DIR = Path(__file__).resolve().parent
 if str(_SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS_DIR))
 
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 from reference_utils import sha256_file
 from release_info import MANIFEST_NAME, git_source_sha, read_distribution_version
 from yaml_safety import YAML_SAFETY_ERRORS, read_schema_version
 
-ROOT = Path(__file__).resolve().parents[1]
+from scripts.registry.host_adapter import supported_hosts
+from scripts.registry.manifest import skill_versions
 
 
 def _ensure_clean_worktree(root: Path) -> None:
@@ -204,6 +209,8 @@ def package_release(root: Path, output_dir: Path) -> tuple[Path, Path]:
         "source_sha": sha,
         "registry_schema_version": read_schema_version(root / "skills.yaml"),
         "host_contract_schema_version": read_schema_version(root / "scripts" / "registry" / "host_contracts.yaml"),
+        "supported_hosts": supported_hosts(root),
+        "skill_versions": skill_versions(root),
     }
 
     archive_path = output_dir / f"{bundle_name}.tar.gz"

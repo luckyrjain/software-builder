@@ -299,6 +299,28 @@ def build_manifest(root: Path = ROOT) -> dict[str, Any]:
     return manifest
 
 
+def skill_versions(root: Path = ROOT) -> dict[str, str]:
+    """skill_id -> normalized semantic version, for every skill in skills.yaml.
+
+    Lighter than build_manifest(): reads only skills.yaml and each skill's
+    SKILL.md frontmatter, so it stays usable (e.g. for release packaging)
+    even for a repository that doesn't have platform_contracts.yaml /
+    composition_contracts.yaml -- the full P1 platform-contract layer
+    build_manifest() requires.
+    """
+    registry = parse_registry(root / "skills.yaml")
+    versions: dict[str, str] = {}
+    for skill_id, entry in registry.skills.items():
+        skill_md = root / entry.path / "SKILL.md"
+        frontmatter = load_skill_frontmatter(skill_md)
+        raw_version = frontmatter.get("skill_version")
+        try:
+            versions[skill_id] = _normalize_version(_version_input(skill_md, raw_version))
+        except ValueError as exc:
+            raise ValueError(f"{skill_id}: {exc}") from exc
+    return versions
+
+
 def validate_manifest(root: Path = ROOT) -> list[str]:
     try:
         build_manifest(root)

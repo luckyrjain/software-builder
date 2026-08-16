@@ -43,6 +43,8 @@ Each bundle embeds `RELEASE-MANIFEST.json` at its root with:
   the bundle was built from.
 - `registry_schema_version` and `host_contract_schema_version` -- the schema versions the bundle is
   compatible with.
+- `supported_hosts` -- every host declared in `scripts/registry/host_contracts.yaml`.
+- `skill_versions` -- each skill's normalized `skill_version` from its `SKILL.md` frontmatter.
 - `files` -- a SHA-256 digest for every other file in the bundle.
 
 The outer `.sha256` (archive checksum) and `.files.sha256` (per-file checksums) assets are still

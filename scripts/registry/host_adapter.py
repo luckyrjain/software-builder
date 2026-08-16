@@ -27,6 +27,12 @@ def _contracts(root: Path) -> dict:
     )
 
 
+def supported_hosts(root: Path) -> list[str]:
+    contracts = _contracts(root)
+    hosts = require_mapping(contracts.get("hosts"), "hosts")
+    return sorted(hosts)
+
+
 def capability_support(root: Path, host: str, capability: str) -> str:
     if host not in HOSTS:
         raise ValueError(f"unknown host {host!r}")
