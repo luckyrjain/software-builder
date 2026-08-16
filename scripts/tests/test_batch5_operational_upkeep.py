@@ -29,16 +29,29 @@ from scripts.yaml_safety import YAML_SAFETY_ERRORS
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def _phony_targets(makefile: Path) -> set[str]:
+def _phony_targets_from_text(text: str) -> set[str]:
     targets: set[str] = set()
-    for line in makefile.read_text(encoding="utf-8").splitlines():
+    for line in text.splitlines():
         if line.startswith(".PHONY:"):
             targets.update(line.removeprefix(".PHONY:").split())
     return targets
 
 
+def _phony_targets(makefile: Path) -> set[str]:
+    return _phony_targets_from_text(makefile.read_text(encoding="utf-8"))
+
+
 def test_lint_prd_architect_is_declared_phony() -> None:
     assert "lint-prd-architect" in _phony_targets(ROOT / "Makefile")
+
+
+def test_operational_upkeep_is_wired_into_make_lint() -> None:
+    graph = _read_makefile_graph(ROOT)
+    assert "validate-operational-upkeep" in _phony_targets_from_text(graph)
+    lint_rule = next(
+        line for line in graph.splitlines() if line.startswith("lint: ") or line.startswith("lint:\t")
+    )
+    assert "validate-operational-upkeep" in lint_rule.split()
 
 
 def test_install_target_scan_follows_literal_make_includes(tmp_path: Path) -> None:
