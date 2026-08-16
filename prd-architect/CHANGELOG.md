@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+### Added
+
+- Existing-system current-state handoff contract compatible with `domain-comprehension` machine artifacts,
+  including multi-repo source revisions and preservation of observed state.
+- Engineering-verifiable PRD fields for measurable success metrics, stable assumption registers,
+  `FR-* -> AC-* -> TR-*` traceability, rollout/rollback, operational readiness, backward compatibility,
+  API/event/schema impact, data/privacy, cost, and observability.
+
+### Changed
+
+- Specify, Break, Repair, and Gate now carry the new metric/assumption/traceability/engineering-impact
+  fields through the complete route rather than treating them as template-only guidance.
+- Canonical section triggers, depth guidance, requirements format, output contract, and report templates
+  now use the same engineering-readiness rules.
+
 ### Fixed
 
 - Gate now escapes/fences untrusted Markdown structure, redacts sensitive excerpts, and reserves the
