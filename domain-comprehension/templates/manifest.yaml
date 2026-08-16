@@ -47,6 +47,10 @@ artifacts:
   - { id: risk_map, path: RISK_MAP.md, phase: session_0, required: true, status: stub }
   - { id: domain_glossary, path: DOMAIN_GLOSSARY.md, phase: session_0, required: true, status: stub }
   - { id: architecture_decisions, path: ARCHITECTURE_DECISIONS.md, phase: session_0, required: true, status: stub }
+  - { id: api_event_schema, path: API_EVENT_SCHEMA.yaml, phase: p5, required: true, status: stub }
+  - { id: data_ownership_graph, path: DATA_OWNERSHIP_GRAPH.yaml, phase: p5, required: true, status: stub }
+  - { id: dependency_graph_machine, path: DEPENDENCY_GRAPH.yaml, phase: p5, required: true, status: stub }
+  - { id: capability_traceability, path: CAPABILITY_TRACEABILITY.yaml, phase: p5, required: true, status: stub }
   - { id: e2e_flow, path: E2E_FLOW.md, phase: p2, required: false, status: n_a }
   - { id: understand_manifest, path: .understand-anything/manifest.json, phase: p0_5, required: false, status: n_a }
   - { id: memory_bank_export, path: memory-bank/, phase: p5, required: false, status: n_a }
