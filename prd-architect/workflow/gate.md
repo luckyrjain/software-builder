@@ -1,10 +1,10 @@
 ---
-workflow_version: 1.5
+workflow_version: 1.6
 phase: gate
 produces: {final_artifact: string, build_readiness: string}
 consumes:
   required: {response_mode: string, depth: string, critique_only: boolean, user_insists_on_full_prd: boolean, premise_verdict: string, problem_summary: object, alternatives_considered: list}
-  optional: {current_state_evidence: artifact_set, success_metrics: list, assumption_register: list, requirements_traceability: object, engineering_impact: object}
+  optional: {current_state_evidence: object, success_metrics: list, assumption_register: list, requirements_traceability: object, engineering_impact: object}
   conditional:
     validation:
       required: {validation_blockers: list}
