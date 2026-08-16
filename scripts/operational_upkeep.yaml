@@ -1,5 +1,5 @@
 schema_version: 1
-policy_version: "1.3"
+policy_version: "1.4"
 prompt_bundle_version: "1"
 evaluator_version: "1"
 
@@ -158,6 +158,7 @@ prompt_diff_risk:
       - "skills.yaml"
       - "scripts/registry/composition_contracts.yaml"
       - "scripts/registry/platform_contracts.yaml"
+      - "scripts/registry/skill_frontmatter_schema.py"
       - "scripts/operational_upkeep.yaml"
       - "scripts/operational_upkeep.py"
       - "scripts/deprecation_lifecycle.py"
