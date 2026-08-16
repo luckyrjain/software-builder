@@ -26,6 +26,17 @@ def test_domain_and_prd_share_source_revision_shape():
     assert producer["unknown_rule"] == consumer["unknown_rule"]
 
 
+def test_domain_and_prd_share_prd_freshness_values():
+    domain = _load("domain-comprehension/reference/domain-model-contract.yaml")
+    prd = _load("prd-architect/reference/current-state-evidence-contract.yaml")
+
+    producer = domain["compatibility"]["prd_freshness"]
+    consumer = prd["current_state_evidence"]["prd_freshness"]
+    assert producer["handoff_required"] is True
+    assert producer["current_value"] == consumer["current_value"] == "ok"
+    assert producer["stale_value"] == consumer["stale_value"] == "stale"
+
+
 def test_prd_consumer_rejects_stale_domain_prd_as_current_state():
     prd = _load("prd-architect/reference/current-state-evidence-contract.yaml")
     freshness = prd["current_state_evidence"]["prd_freshness"]
