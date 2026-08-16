@@ -78,8 +78,9 @@ Before P5 completes in FULL mode:
 5. Apply deterministic confidence aggregation from `domain-model-contract.yaml`; never average upward.
 6. Any contradiction remains visible as Conflicted/UNKNOWN/LOW according to evidence precedence; do not
    silently choose the nicer representation.
+7. Confirm the manifest PRD artifact row is `ok`, never `stale`, before claiming the baseline is current.
 
-A missing required machine artifact in FULL mode makes the run PARTIAL/incomplete.
+A missing required machine artifact or stale PRD in FULL mode makes the run PARTIAL/incomplete.
 
 ## DELTA / ADD_REPO stale-PRD gate
 
@@ -88,15 +89,20 @@ stale when any configured `stale_when` condition in `domain-model-contract.yaml`
 contract changes, authoritative data-owner changes, critical dependency semantics changes, or capability
 ownership/code-location changes.
 
-Required outcome is exactly one of:
+As soon as a stale condition fires, set root `manifest.yaml` `artifacts[id=prd].status: stale` **before** any
+handoff or completion claim. The stale file remains on disk and its human-readable reason/evidence is recorded
+in `PROGRESS.md`/handoff. Required outcome is exactly one of:
 
-- regenerate/update the affected PRD requirements/traceability; or
-- mark `PRD.md` stale explicitly in `PROGRESS.md`/handoff and block claims that it represents current state.
+- regenerate/update the affected PRD requirements/traceability, re-run the comparison, then restore the
+  manifest PRD row to `ok`; or
+- leave the manifest PRD row `stale`, keep the engagement/affected phase incomplete, and block claims that
+  the PRD represents current state.
 
-Silently preserving a stale PRD is forbidden.
+Silently preserving a stale PRD as manifest `ok` is forbidden.
 
 ## prd-architect handoff
 
-Pass `PRD.md` plus the four machine artifacts and source revision metadata. The consumer may propose a future
-state but must preserve the observed baseline and explicitly identify changes. Contract:
+Pass `PRD.md`, its manifest freshness status, the four machine artifacts, and source revision metadata. The
+consumer may propose a future state but must preserve the observed baseline and explicitly identify changes;
+a `stale` PRD must not be treated as current evidence without disclosure. Contract:
 [../../prd-architect/reference/current-state-evidence-contract.yaml](../../prd-architect/reference/current-state-evidence-contract.yaml).
