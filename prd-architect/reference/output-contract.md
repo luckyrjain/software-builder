@@ -3,8 +3,9 @@
 The PRD body must contain **all accepted fixes**. Appendices are explanatory, not required to
 reconstruct the specification.
 
-Table column schemas: [output-tables.md](output-tables.md) — **always include separator rows** when
-emitting tables.
+Table column schemas and canonical section triggers: [output-tables.md](output-tables.md) — **always
+include separator rows** when emitting tables. Existing-system evidence rules:
+[current-state-evidence-contract.yaml](current-state-evidence-contract.yaml).
 
 ## PRD Mode
 
@@ -15,7 +16,15 @@ emitting tables.
 **Always output:**
 
 - Final PRD (repaired body with all accepted fixes inline)
+- measurable Success Metrics for material outcomes
+- material `FR-* -> AC-* -> TR-*` Requirements Traceability
 - Build Readiness
+
+Consequential assumptions use a stable Assumption Register. Existing/production-system engineering sections
+are emitted only when their canonical trigger fires: Rollout / Rollback, Operational Readiness, Migration /
+Backward Compatibility, API / Event / Schema Impact, Data / Privacy Impact, Cost Impact, and Observability
+Requirements. A fired trigger with incomplete required fields is a readiness blocker, not a reason to omit the
+section.
 
 ### Fundamentally flawed premise
 
@@ -30,10 +39,10 @@ Produce a full PRD only when the user **explicitly** requested one despite the f
 
 Only resolved user decisions and mandatory/verified constraints. Do not duplicate assumptions.
 
-### Assumptions
+### Assumption Register
 
-Consequential uncertain propositions and validation plans. Table schema:
-[output-tables.md](output-tables.md) § Assumption ledger.
+Consequential uncertain propositions and validation plans with stable `A-*` IDs. Table schema:
+[output-tables.md](output-tables.md) § Assumption ledger. Do not emit an empty register.
 
 ### Unresolved Questions
 
@@ -64,9 +73,12 @@ Only when material gaps add useful context beyond the PRD body. Schema:
 
 **Always output:**
 
-- Repaired PRD
+- Repaired PRD, including measurable material metrics and material `FR-* -> AC-* -> TR-*` traceability
 - Material Changes ([output-tables.md](output-tables.md) § Material Changes)
 - Build Readiness
+
+For existing systems, preserve observed current-state evidence separately from proposed/repaired behavior and
+re-run all engineering-impact triggers after Repair.
 
 ### Critique only (`critique_only`)
 
@@ -78,9 +90,11 @@ Only when material gaps add useful context beyond the PRD body. Schema:
 **Material Changes table:**
 
 | Area | Before | After | Reason |
+|---|---|---|---|
 
-**Include when triggered:** Change Impact; Decisions & Constraints; Assumptions; Unresolved Questions;
-Research provenance; Adversarial Review Summary (same rules as PRD Mode).
+**Include when triggered:** Change Impact; Decisions & Constraints; Assumption Register; Unresolved Questions;
+Research provenance; Adversarial Review Summary; and the engineering-impact sections from the canonical
+trigger matrix (same rules as PRD Mode when a repaired PRD is emitted).
 
 ## Validation Mode
 
@@ -96,7 +110,8 @@ Research provenance; Adversarial Review Summary (same rules as PRD Mode).
 6. Recommendation
 7. Evidence Needed Next
 
-Research provenance; Adversarial Review Summary (same rules as PRD Mode).
+Research provenance may be included when external research materially influenced the assessment. Do not run
+Specify/Break/Repair merely to manufacture PRD-only metrics, traceability, or engineering sections.
 
 Do not produce a full PRD unless requested.
 
