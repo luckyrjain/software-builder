@@ -195,7 +195,7 @@ def _validate_discovery_budget(value: Any) -> list[str]:
 
     errors: list[str] = []
     profile = value.get("profile")
-    if profile not in DISCOVERY_BUDGET_PROFILES:
+    if not isinstance(profile, str) or profile not in DISCOVERY_BUDGET_PROFILES:
         errors.append(
             f"discovery_budget.profile must be one of {sorted(DISCOVERY_BUDGET_PROFILES)}"
         )

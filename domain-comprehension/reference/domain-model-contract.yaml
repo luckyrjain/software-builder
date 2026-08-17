@@ -104,7 +104,7 @@ compatibility:
     handoff_required: true
     current_value: ok
     stale_value: stale
-    stale_behavior: do_not_claim_current_state
+    stale_behavior: blocking_before_build_do_not_treat_PRD_as_current
   evidence_status_values: [Observed, Inferred, Unknown, Conflicted, Not_Applicable]
   confidence_values: [HIGH, MEDIUM, LOW, UNKNOWN]
   preserve_ids: true
