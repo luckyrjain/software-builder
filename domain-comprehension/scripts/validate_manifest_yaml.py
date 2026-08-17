@@ -108,6 +108,7 @@ E2E_FLOW_RUNTIME_HEADING = "runtime validation"
 MERGE_CONFLICTS_HEADING = "## merge conflicts"
 WINDOWS_ABSOLUTE = re.compile(r"^[A-Za-z]:[/\\]")
 DISTRIBUTED_ARTIFACT_IDS = frozenset({"memory_bank_export"})
+STALEABLE_ARTIFACT_IDS = frozenset({"prd"})
 
 
 def _relative_path_error(value: Any, label: str) -> str | None:
@@ -288,7 +289,7 @@ def _validate_artifact_list(items: Any, label: str, status_set: frozenset[str]) 
         if label == "artifacts":
             if not isinstance(item.get("required"), bool):
                 errors.append(f"{prefix}.required must be a boolean")
-            if status == "stale" and item_id != "prd":
+            if status == "stale" and item_id not in STALEABLE_ARTIFACT_IDS:
                 errors.append(f"{prefix}.status=stale is only valid for artifact id 'prd'")
     return errors
 

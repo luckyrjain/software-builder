@@ -58,7 +58,7 @@ artifacts:
   dependency_graph_machine:
     path: DEPENDENCY_GRAPH.yaml
     schema_version: 1
-    required_fields: [source, target, perspective, direction, interaction, criticality, evidence, confidence]
+    required_fields: [source, target, perspective, direction, interaction, criticality, evidence, confidence]  # keep in sync with dependency_edges.required_fields below
   capability_traceability:
     path: CAPABILITY_TRACEABILITY.yaml
     schema_version: 1
