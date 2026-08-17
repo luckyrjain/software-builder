@@ -1,5 +1,5 @@
 ---
-workflow_version: 1.12
+workflow_version: 1.13
 phase: 2
 produces:
   - trigger_catalog
@@ -11,6 +11,7 @@ produces:
   - sync_async_boundary_table
   - code_graph_divergence
   - dependency_graph_refined
+  - discovery_budget_checkpoint
 consumes:
   - per_repo_deep_dives
   - ownership_cards
@@ -36,6 +37,7 @@ Map runtime flow patterns from code and config, building trigger catalogs, seque
 | Sync/async boundary table | `{map_file}` § Flow | Step, sync/async, transport, timeout owner, evidence | Phase incomplete |
 | Code/graph divergence | `{map_file}` § Flow | Classified edges: MISSING_IN_CODE \| DEAD_CODE \| DYNAMIC_DISPATCH \| UNKNOWN | Phase incomplete |
 | Machine dependency graph (refined) | `DEPENDENCY_GRAPH.yaml` | sync/async boundaries + upstream/downstream semantics + evidence-backed criticality | Phase incomplete in FULL mode |
+| Discovery budget checkpoint | root `manifest.yaml` + `PROGRESS.md` | Configured + consumed counters synchronized | Phase incomplete unless PARTIAL for budget exhaustion |
 
 ## Machine-domain projection (required in FULL mode)
 
@@ -60,6 +62,15 @@ disagree:
    - **UNKNOWN** — disagreement noted but neither static nor manual evidence is sufficient to classify; state the reason, do not guess.
 3. Record all four classes in `{map_file}` § Flow even when a category is empty — an empty
    MISSING_IN_CODE/DEAD_CODE list is a real (positive) finding, not an omission.
+
+## Discovery budget checkpoint (required)
+
+Before the checkpoint below, update root `manifest.yaml` `discovery_budget.consumed` (repositories,
+search_queries, deep_file_reads) to reflect what this phase's code/graph-divergence investigation actually
+spent and mirror the totals into `PROGRESS.md`. If any limit is reached before flow analysis is complete,
+stop, mark the engagement `PARTIAL`, and record the gap in `UNKNOWNS.md` — never silently exceed a
+configured limit. See
+[manifest-schema.md § discovery_budget](../reference/manifest-schema.md#discoverybudget).
 
 ## Checkpoint
 

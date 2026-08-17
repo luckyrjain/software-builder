@@ -1,5 +1,5 @@
 ---
-workflow_version: 1.3
+workflow_version: 1.4
 phase: 0.5
 produces:
   - knowledge_graph_merged
@@ -7,6 +7,7 @@ produces:
   - mechanical_insights
   - manifest_json
   - dependency_graph_initial
+  - discovery_budget_checkpoint
 consumes:
   - inventory
   - contract_inventory
@@ -72,6 +73,14 @@ P2 refines sync/async boundaries and P2b reconciles against runtime evidence. Do
 call frequency alone; use `UNKNOWN` where direction/interaction/criticality is unsupported. QUICK keeps the
 Session 0 stub as-is.
 
+## Discovery budget checkpoint (required)
+
+Before the checkpoint below, update root `manifest.yaml` `discovery_budget.consumed` (repositories,
+search_queries, deep_file_reads) to reflect what P0.5's graph build and queries actually spent and mirror
+the totals into `PROGRESS.md`. If any limit is reached before the mechanical model is complete, stop, mark
+the engagement `PARTIAL`, and record the gap in `UNKNOWNS.md` — never silently exceed a configured limit.
+See [manifest-schema.md § discovery_budget](../reference/manifest-schema.md#discoverybudget).
+
 ## Required outputs
 
 | Artifact | Location | Key fields | If absent |
@@ -81,6 +90,7 @@ Session 0 stub as-is.
 | Machine dependency graph (initial) | `DEPENDENCY_GRAPH.yaml` | focal perspective + source/target/direction/interaction/criticality/evidence/confidence | Phase incomplete in FULL mode |
 | Graph manifest | `.understand-anything/manifest.json` | Tier 0/1 entries: ok or failed with reason | Phase incomplete |
 | Metrics | `.understand-anything/metrics.csv` | Present or N/A with reason | Phase incomplete — waived with reason allowed |
+| Discovery budget checkpoint | root `manifest.yaml` + `PROGRESS.md` | Configured + consumed counters synchronized | Phase incomplete unless PARTIAL for budget exhaustion |
 
 ## Checkpoint
 

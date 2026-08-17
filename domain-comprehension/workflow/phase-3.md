@@ -1,5 +1,5 @@
 ---
-workflow_version: 1.4
+workflow_version: 1.5
 phase: 3
 produces:
   - core_domain_deep_dive
@@ -9,6 +9,7 @@ produces:
   - overall_confidence
   - data_ownership_graph_refined
   - capability_traceability_refined
+  - discovery_budget_checkpoint
 consumes:
   - bounded_contexts
   - data_ownership
@@ -32,6 +33,7 @@ Synthesize bounded contexts, data flows, and architectural non-negotiables into 
 | Capability traceability (refined) | `CAPABILITY_TRACEABILITY.yaml` | material capabilities mapped to all evidenced code locations | Phase incomplete in FULL mode |
 | Draft five questions | `EXEC_SUMMARY.md` | Updated through P3 — all five present | Phase incomplete |
 | Overall confidence | `EXEC_SUMMARY.md` + `manifest.overall_confidence` | Per confidence-rubric.md | Phase incomplete |
+| Discovery budget checkpoint | root `manifest.yaml` + `PROGRESS.md` | Configured + consumed counters synchronized | Phase incomplete unless PARTIAL for budget exhaustion |
 
 ## Machine-domain projection (required in FULL mode)
 
@@ -40,6 +42,15 @@ domain deep dive per [machine-domain-model.md](../reference/machine-domain-model
 
 - **`DATA_OWNERSHIP_GRAPH.yaml`** ([§ Data ownership projection](../reference/machine-domain-model.md#data-ownership-projection)) — every entity in the refined `DATA_OWNERSHIP.md` table gets its authoritative writer, replicas, caches, and indexes reflected as nodes/edges; multiple evidenced writers stay visible and feed the Multiple writers smell rather than being resolved to one owner.
 - **`CAPABILITY_TRACEABILITY.yaml`** ([§ Capability-to-code projection](../reference/machine-domain-model.md#capability-to-code-projection)) — extend the P1 initial pass with any capability, code location, or owner refined during this phase's core domain deep dive.
+
+## Discovery budget checkpoint (required)
+
+Before the checkpoint below, update root `manifest.yaml` `discovery_budget.consumed` (repositories,
+search_queries, deep_file_reads) to reflect what this phase's core-domain deep dive actually spent and
+mirror the totals into `PROGRESS.md`. If any limit is reached before the core domain section is complete,
+stop, mark the engagement `PARTIAL`, and record the gap in `UNKNOWNS.md` — never silently exceed a
+configured limit. See
+[manifest-schema.md § discovery_budget](../reference/manifest-schema.md#discoverybudget).
 
 ## Checkpoint
 

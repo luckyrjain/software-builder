@@ -1,5 +1,5 @@
 ---
-workflow_version: 2.0
+workflow_version: 2.1
 phase: 5
 produces:
   - final_five_questions
@@ -98,8 +98,9 @@ independent product-discovery pass that can drift from the domain artifacts.
 
 Run [machine-domain-model.md](../reference/machine-domain-model.md) before completion. In FULL mode, parse
 and reconcile all four machine artifacts against the narrative catalogs/graphs and current source revisions.
-Every populated machine record/edge/capability retains evidence and confidence; missing or contradictory
-fields become UNKNOWN/Conflicted according to evidence precedence rather than being guessed.
+Every populated machine record/edge/capability retains evidence and confidence; missing fields become UNKNOWN
+and contradictory fields have confidence capped at LOW (`confidence_aggregation.conflict_cap`) according to
+evidence precedence rather than being guessed.
 
 For DELTA/ADD_REPO, compare previous versus refreshed source revisions and machine projections using
 `stale_prd_detection` in [domain-model-contract.yaml](../reference/domain-model-contract.yaml). If any stale

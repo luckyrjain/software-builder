@@ -76,8 +76,9 @@ Before P5 completes in FULL mode:
 4. Reconcile API/event records with catalogs, ownership graph with `DATA_OWNERSHIP.md`, dependency graph with
    `DEPENDENCY_GRAPH.md`/runtime evidence, and capability traceability with PRD/bounded-context evidence.
 5. Apply deterministic confidence aggregation from `domain-model-contract.yaml`; never average upward.
-6. Any contradiction remains visible as Conflicted/UNKNOWN/LOW according to evidence precedence; do not
-   silently choose the nicer representation.
+6. Any contradiction remains visible as UNKNOWN or as confidence capped at LOW (per
+   `confidence_aggregation.conflict_cap`) according to evidence precedence; do not silently choose the nicer
+   representation.
 7. Confirm the manifest PRD artifact row is `ok`, never `stale`, before claiming the baseline is current.
 
 A missing required machine artifact or stale PRD in FULL mode makes the run PARTIAL/incomplete.
