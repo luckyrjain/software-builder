@@ -1,0 +1,93 @@
+schema_version: 1
+producer: domain-comprehension
+consumer: prd-architect
+
+current_state_evidence:
+  required_when: existing_system_and_response_mode_PRD_or_Review
+  # Mode-specific missing-evidence outcomes. Do not apply Validation's non-blocking path to PRD/Review.
+  missing_evidence_means:
+    - current_state_evidence_absent_when_required
+    - any_accepted_artifact_absent_or_ineligible
+    - source_revision_incomplete
+    - prd_freshness_stale_or_unknown_for_domain_comprehension_prd
+    - any_accepted_machine_artifact_waived_missing_or_not_ok
+    - material_conflict
+  validation_missing_evidence_behavior: evidence_needed_next
+  prd_review_missing_evidence_behavior: block_build_ready
+  accepted_artifacts:
+    - PRD.md
+    - API_EVENT_SCHEMA.yaml
+    - DATA_OWNERSHIP_GRAPH.yaml
+    - DEPENDENCY_GRAPH.yaml
+    - CAPABILITY_TRACEABILITY.yaml
+  prd_freshness:
+    source: domain_comprehension_manifest_prd_artifact_status
+    required_when: PRD.md_from_domain_comprehension
+    current_value: ok
+    stale_value: stale
+    stale_behavior: blocking_before_build_do_not_treat_PRD_as_current
+    unknown_behavior: block_build_ready
+    integrity_check: recompute_against_source_revision_and_machine_artifacts_before_accepting_ok
+    integrity_mismatch_behavior: treat_as_stale_and_block_build_ready
+  prd_ok_requires_accepted_machine_artifacts_ok: true
+  waived_or_missing_machine_behavior: block_build_ready
+  source_revision:
+    required: true
+    shape: repos
+    repo_required_fields: [repo, branch, commit_sha, observed_at]
+    repo_field_constraints: non_empty_string
+    build_ready_requires: no_unknown_in_repo_or_commit_sha
+    unknown_rule: preserve_unknown_field_do_not_substitute_local_state_not_handoff_eligible
+  preserve_observed_state: true
+  future_state_changes_must_be_explicit: true
+  conflict_behavior: surface_conflict_and_block_build_ready
+  stale_behavior: blocking_before_build_do_not_treat_as_current_disclosure_insufficient
+  greenfield_current_state_evidence:
+    value: {not_applicable: true}
+    counts_as_evidence_present: false
+    allowed_only_when: existing_system_false_AND_no_domain_handoff_artifacts
+
+success_metric_quality:
+  required_fields: [metric, baseline, target, timeframe, measurement_source]
+  reject_if: [not_measurable, no_target, no_measurement_source]
+  when_baseline_is_unknown_require: [baseline_measurement_action]
+
+assumption_register:
+  required_fields: [id, statement, impact, validation, owner, status]
+  status_values: [OPEN, VALIDATED, INVALIDATED, ACCEPTED_RISK]
+
+requirements_traceability:
+  functional_requirement_prefix: FR-
+  acceptance_criteria_prefix: AC-
+  test_requirement_prefix: TR-
+  required_edges: [FR_to_AC, AC_to_TR]
+  orphan_behavior: build_readiness_blocker
+
+rollout_rollback_evidence:
+  rollout_requires: [strategy, success_signal, abort_signal]
+  rollback_requires: [trigger, mechanism, data_compatibility, verification]
+
+operational_readiness:
+  required_when: production_change
+  checks: [ownership, runbook, alerts, dashboards, support_path, capacity, dependencies]
+
+backward_compatibility:
+  required_when: existing_system
+  evaluate: [api, event, schema, data, config, client]
+  breaking_change_requires: [migration_plan, rollout_sequence, rollback_constraints]
+
+api_event_schema_impact:
+  trigger_when: [api_changed, event_changed, schema_changed]
+  require: [before, after, compatibility, consumers, migration]
+
+data_privacy_trigger:
+  trigger_when: [personal_data, sensitive_data, retention_change, access_change]
+  require: [classification, access, retention, audit, compliance_review]
+
+cost_trigger:
+  trigger_when: [new_infrastructure, material_traffic_change, paid_dependency, storage_growth]
+  require: [baseline, expected_delta, measurement_plan]
+
+observability_requirements:
+  trigger_when: production_change
+  require: [metrics, logs, traces, alerts, dashboard, correlation]

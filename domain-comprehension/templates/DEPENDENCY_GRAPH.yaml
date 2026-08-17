@@ -1,0 +1,7 @@
+schema_version: 1
+source_revision:
+  repos: []
+perspective: null
+edges: []
+# Each edge records source, target, perspective, direction (upstream|downstream),
+# interaction (synchronous|asynchronous), criticality, evidence, confidence.

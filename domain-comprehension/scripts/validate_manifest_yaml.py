@@ -37,10 +37,56 @@ PHASE_KEYS = frozenset(
 
 PHASE_STATUS = frozenset({"pending", "in_progress", "complete", "skipped"})
 ENGAGEMENT_STATUS = frozenset({"IN_PROGRESS", "FIRST_PASS_COMPLETE"})
-ARTIFACT_STATUS = frozenset({"ok", "stub", "missing", "waived", "n_a"})
+ARTIFACT_STATUS = frozenset({"ok", "stub", "missing", "stale", "waived", "n_a"})
 DIAGRAM_STATUS = frozenset({"pending", "ok", "waived", "n_a"})
 QUESTION_STATUS = frozenset({"DRAFT", "PARTIAL", "COMPLETE", "UNKNOWN"})
 CONFIDENCE = frozenset({"HIGH", "MEDIUM", "LOW", "UNKNOWN"})
+DISCOVERY_BUDGET_PROFILES = frozenset({"QUICK", "FULL", "DELTA", "ADD_REPO", "CUSTOM"})
+DISCOVERY_BUDGET_COUNTERS = ("repositories", "search_queries", "deep_file_reads")
+# Mirrors domain-model-contract.yaml discovery_budget.default_limits. Non-CUSTOM profiles must
+# persist exactly these ceilings so a FULL run cannot silently keep QUICK budgets.
+DISCOVERY_BUDGET_DEFAULT_LIMITS: dict[str, dict[str, int]] = {
+    "QUICK": {"repositories": 12, "search_queries": 80, "deep_file_reads": 60},
+    "FULL": {"repositories": 50, "search_queries": 400, "deep_file_reads": 300},
+    "DELTA": {"repositories": 20, "search_queries": 160, "deep_file_reads": 120},
+    "ADD_REPO": {"repositories": 20, "search_queries": 160, "deep_file_reads": 120},
+}
+DISCOVERY_BEARING_PHASES = frozenset(
+    {
+        "session_0",
+        "session_0b",
+        "p0",
+        "p0_25",
+        "p0_5",
+        "p1",
+        "p2",
+        "p2b",
+        "p3",
+        "p3b",
+        "p4",
+        "p5",
+    }
+)
+REQUIRED_MACHINE_ARTIFACT_IDS = frozenset(
+    {
+        "api_event_schema",
+        "data_ownership_graph",
+        "dependency_graph_machine",
+        "capability_traceability",
+    }
+)
+# Canonical basenames under artifact_root (manifest-schema.md Path column).
+CANONICAL_ARTIFACT_PATHS = {
+    "prd": "PRD.md",
+    "api_event_schema": "API_EVENT_SCHEMA.yaml",
+    "data_ownership_graph": "DATA_OWNERSHIP_GRAPH.yaml",
+    "dependency_graph_machine": "DEPENDENCY_GRAPH.yaml",
+    "capability_traceability": "CAPABILITY_TRACEABILITY.yaml",
+}
+# Mirrors domain-model-contract.yaml / current-state-evidence-contract.yaml source_revision.
+SOURCE_REVISION_REPO_REQUIRED_FIELDS = ("repo", "branch", "commit_sha", "observed_at")
+# Fields that must be concrete for status=ok handoff (literal "unknown" is a recorded gap, not Ready).
+SOURCE_REVISION_HANDOFF_CONCRETE_FIELDS = frozenset({"repo", "commit_sha"})
 REPO_CLASSIFICATION = frozenset(
     {
         "application",
@@ -180,6 +226,274 @@ def _validate_phase_entry(key: str, value: Any) -> list[str]:
     return errors
 
 
+def _discovery_budget_required(phases: Any, *, strict: bool) -> bool:
+    """Budget is required under --strict or once any discovery-bearing phase has started."""
+    if strict:
+        return True
+    if not isinstance(phases, dict):
+        return False
+    for key in DISCOVERY_BEARING_PHASES:
+        entry = phases.get(key)
+        if isinstance(entry, dict) and entry.get("status") in ("in_progress", "complete"):
+            return True
+    return False
+
+
+def _validate_discovery_budget(value: Any, *, required: bool = False) -> list[str]:
+    """Validate schema-v2 discovery-budget machine state.
+
+    Absence is allowed only for untouched legacy schema-v2 engagements that have not started
+    discovery and are not under --strict. New runs create it from the template; RESUME must
+    backfill it before performing new discovery.
+    """
+    if value is None:
+        if required:
+            return ["discovery_budget is required once discovery has started or under --strict"]
+        return []
+    if not isinstance(value, dict):
+        return ["discovery_budget must be an object"]
+
+    errors: list[str] = []
+    profile = value.get("profile")
+    if profile not in DISCOVERY_BUDGET_PROFILES:
+        errors.append(
+            f"discovery_budget.profile must be one of {sorted(DISCOVERY_BUDGET_PROFILES)}"
+        )
+
+    limits = value.get("limits")
+    consumed = value.get("consumed")
+    for label, block, allow_zero in (
+        ("limits", limits, False),
+        ("consumed", consumed, True),
+    ):
+        if not isinstance(block, dict):
+            errors.append(f"discovery_budget.{label} must be an object")
+            continue
+        for key in DISCOVERY_BUDGET_COUNTERS:
+            counter = block.get(key)
+            if not isinstance(counter, int) or isinstance(counter, bool):
+                errors.append(f"discovery_budget.{label}.{key} must be an integer")
+                continue
+            if allow_zero:
+                if counter < 0:
+                    errors.append(f"discovery_budget.{label}.{key} must be >= 0")
+            elif counter <= 0:
+                errors.append(f"discovery_budget.{label}.{key} must be > 0")
+
+    if isinstance(limits, dict) and profile in DISCOVERY_BUDGET_DEFAULT_LIMITS:
+        expected = DISCOVERY_BUDGET_DEFAULT_LIMITS[profile]
+        for key in DISCOVERY_BUDGET_COUNTERS:
+            limit = limits.get(key)
+            if (
+                isinstance(limit, int)
+                and not isinstance(limit, bool)
+                and limit != expected[key]
+            ):
+                errors.append(
+                    f"discovery_budget.limits.{key} must equal {expected[key]} for profile {profile}"
+                )
+
+    if isinstance(limits, dict) and isinstance(consumed, dict):
+        for key in DISCOVERY_BUDGET_COUNTERS:
+            limit = limits.get(key)
+            used = consumed.get(key)
+            if (
+                isinstance(limit, int)
+                and not isinstance(limit, bool)
+                and isinstance(used, int)
+                and not isinstance(used, bool)
+                and used > limit
+            ):
+                errors.append(
+                    f"discovery_budget.consumed.{key} exceeds configured limit ({used} > {limit})"
+                )
+    return errors
+
+
+def _artifact_rows_by_id(artifacts: Any) -> dict[str, dict[str, Any]]:
+    by_id: dict[str, dict[str, Any]] = {}
+    if not isinstance(artifacts, list):
+        return by_id
+    for item in artifacts:
+        if isinstance(item, dict) and isinstance(item.get("id"), str):
+            by_id[item["id"]] = item
+    return by_id
+
+
+def _validate_prd_ok_requires_machine_artifacts_ok(artifacts: Any) -> list[str]:
+    """PRD freshness ok is never eligible while required machine artifacts are non-ok."""
+    by_id = _artifact_rows_by_id(artifacts)
+    prd = by_id.get("prd")
+    if prd is None or prd.get("status") != "ok":
+        return []
+    errors: list[str] = []
+    for artifact_id in sorted(REQUIRED_MACHINE_ARTIFACT_IDS):
+        row = by_id.get(artifact_id)
+        if row is None:
+            errors.append(
+                "artifact prd status=ok is forbidden while required machine artifact "
+                f"{artifact_id} is missing (integrity basis missing)"
+            )
+            continue
+        status = row.get("status")
+        if status != "ok":
+            errors.append(
+                "artifact prd status=ok is forbidden while required machine artifact "
+                f"{artifact_id} status is {status!r} (integrity basis missing)"
+            )
+    return errors
+
+
+def _validate_strict_completion_artifacts(artifacts: Any) -> list[str]:
+    """FIRST_PASS_COMPLETE requires current PRD and required machine artifacts at status=ok.
+
+    COMPLIANCE_RETROFIT may keep machine rows ``waived`` only while ``engagement.status`` remains
+    ``IN_PROGRESS``; waived machines cannot claim first-pass completion or PRD freshness ``ok``.
+    """
+    errors: list[str] = []
+    if not isinstance(artifacts, list):
+        return ["strict: artifacts must be an array"]
+
+    by_id = _artifact_rows_by_id(artifacts)
+
+    prd = by_id.get("prd")
+    if prd is None:
+        errors.append("strict: required artifact prd is missing")
+    else:
+        if prd.get("required") is not True:
+            errors.append("strict: artifact prd must have required=true")
+        if prd.get("status") != "ok":
+            errors.append(
+                f"strict: artifact prd must have status=ok for current-state completion "
+                f"(got {prd.get('status')!r}; waived/stale/n_a are not allowed)"
+            )
+
+    for artifact_id in sorted(REQUIRED_MACHINE_ARTIFACT_IDS):
+        row = by_id.get(artifact_id)
+        if row is None:
+            errors.append(f"strict: required machine artifact {artifact_id} is missing")
+            continue
+        if row.get("required") is not True:
+            errors.append(f"strict: machine artifact {artifact_id} must have required=true")
+        status = row.get("status")
+        if status != "ok":
+            errors.append(
+                f"strict: machine artifact {artifact_id} must have status=ok for FIRST_PASS_COMPLETE "
+                f"(got {status!r}; waived/stale/n_a are not allowed)"
+            )
+    errors.extend(_validate_prd_ok_requires_machine_artifacts_ok(artifacts))
+    return errors
+
+
+def _validate_p5_prd_freshness(phases: Any, artifacts: Any) -> list[str]:
+    """Phase P5 complete requires a current PRD row (status=ok)."""
+    if not isinstance(phases, dict):
+        return []
+    p5 = phases.get("p5")
+    if not isinstance(p5, dict) or p5.get("status") != "complete":
+        return []
+    prd_status = None
+    if isinstance(artifacts, list):
+        for item in artifacts:
+            if isinstance(item, dict) and item.get("id") == "prd":
+                prd_status = item.get("status")
+                break
+    if prd_status == "ok":
+        return []
+    if prd_status is None:
+        return ["phases.p5 cannot be complete while artifacts[id=prd] is missing"]
+    return [
+        f"phases.p5 cannot be complete while artifacts[id=prd].status is {prd_status!r} "
+        "(requires status=ok)"
+    ]
+
+
+def _validate_source_revision_repos(repos: Any, artifact_id: str) -> list[str]:
+    """Enforce contract repo_required_fields on each source_revision.repos entry."""
+    errors: list[str] = []
+    if not isinstance(repos, list) or not repos:
+        return [
+            f"strict: {artifact_id} source_revision.repos must be a non-empty list for status=ok"
+        ]
+    for index, entry in enumerate(repos):
+        prefix = f"strict: {artifact_id} source_revision.repos[{index}]"
+        if not isinstance(entry, dict):
+            errors.append(f"{prefix} must be an object")
+            continue
+        for field in SOURCE_REVISION_REPO_REQUIRED_FIELDS:
+            value = entry.get(field)
+            if not isinstance(value, str) or not value.strip():
+                errors.append(f"{prefix}.{field} must be a non-empty string")
+                continue
+            if (
+                field in SOURCE_REVISION_HANDOFF_CONCRETE_FIELDS
+                and value.strip().lower() == "unknown"
+            ):
+                errors.append(
+                    f"{prefix}.{field} must be a concrete value for status=ok "
+                    "(literal 'unknown' is not eligible for current-state handoff)"
+                )
+    return errors
+
+
+def _validate_machine_artifact_content(path: Path, artifact_id: str) -> list[str]:
+    """Minimum executable shape for machine artifacts marked status=ok."""
+    data, load_errors = _load_yaml(path)
+    if load_errors:
+        return [f"strict: {artifact_id}: {err}" for err in load_errors]
+    if not isinstance(data, dict):
+        return [f"strict: {artifact_id} must be a YAML mapping"]
+    version = data.get("schema_version")
+    if not isinstance(version, int) or isinstance(version, bool) or version != 1:
+        return [f"strict: {artifact_id} must have schema_version=1 for status=ok"]
+    revision = data.get("source_revision")
+    if not isinstance(revision, dict):
+        return [f"strict: {artifact_id} source_revision must be an object for status=ok"]
+    return _validate_source_revision_repos(revision.get("repos"), artifact_id)
+
+
+def _validate_first_pass_complete_readiness(
+    *,
+    engagement: Any,
+    phases: Any,
+    artifacts: Any,
+    diagrams: Any,
+) -> list[str]:
+    """Status-only FIRST_PASS_COMPLETE gates (no disk I/O)."""
+    errors: list[str] = []
+    if not (isinstance(engagement, dict) and engagement.get("status") == "FIRST_PASS_COMPLETE"):
+        return errors
+    errors.extend(_validate_strict_completion_artifacts(artifacts))
+    if isinstance(artifacts, list):
+        for item in artifacts:
+            if not isinstance(item, dict):
+                continue
+            item_id = item.get("id")
+            # PRD and machine artifacts have dedicated strict rules above.
+            if item_id == "prd" or item_id in REQUIRED_MACHINE_ARTIFACT_IDS:
+                continue
+            if item.get("required") and item.get("status") not in ("ok", "waived"):
+                errors.append(f"strict: required artifact {item_id} status={item.get('status')}")
+    if isinstance(diagrams, list):
+        for item in diagrams:
+            if (
+                isinstance(item, dict)
+                and item.get("required")
+                and item.get("status") not in ("ok", "waived", "n_a")
+            ):
+                errors.append(
+                    f"strict: required diagram {item.get('id')} status={item.get('status')}"
+                )
+    if isinstance(phases, dict):
+        for key, phase_value in phases.items():
+            if isinstance(phase_value, dict) and phase_value.get("status") not in (
+                "complete",
+                "skipped",
+            ):
+                errors.append(f"strict: phase {key} not complete or skipped")
+    return errors
+
+
 def _validate_artifact_list(items: Any, label: str, status_set: frozenset[str]) -> list[str]:
     errors: list[str] = []
     if not isinstance(items, list):
@@ -201,6 +515,23 @@ def _validate_artifact_list(items: Any, label: str, status_set: frozenset[str]) 
         path_error = _relative_path_error(item.get("path"), f"{prefix}.path")
         if path_error:
             errors.append(path_error)
+        elif (
+            label == "artifacts"
+            and isinstance(item_id, str)
+            and item_id in CANONICAL_ARTIFACT_PATHS
+            and isinstance(item.get("path"), str)
+        ):
+            expected = CANONICAL_ARTIFACT_PATHS[item_id]
+            normalized = item["path"].replace("\\", "/").rstrip("/")
+            if PurePosixPath(normalized).name != expected:
+                errors.append(
+                    f"{prefix}.path must be exactly {expected!r} for artifact id {item_id!r} "
+                    f"(got {item['path']!r})"
+                )
+            if item_id in REQUIRED_MACHINE_ARTIFACT_IDS and item["path"].endswith(("/", "\\")):
+                errors.append(
+                    f"strict: machine artifact {item_id} path must be a file, not a directory: {item['path']}"
+                )
 
         phase = item.get("phase")
         if not isinstance(phase, str) or not phase.strip():
@@ -211,8 +542,11 @@ def _validate_artifact_list(items: Any, label: str, status_set: frozenset[str]) 
         status = item.get("status")
         if status not in status_set:
             errors.append(f"{prefix}.status must be one of {sorted(status_set)}")
-        if label == "artifacts" and not isinstance(item.get("required"), bool):
-            errors.append(f"{prefix}.required must be a boolean")
+        if label == "artifacts":
+            if not isinstance(item.get("required"), bool):
+                errors.append(f"{prefix}.required must be a boolean")
+            if status == "stale" and item_id != "prd":
+                errors.append(f"{prefix}.status=stale is only valid for artifact id 'prd'")
     return errors
 
 
@@ -251,9 +585,9 @@ def _validate_repos(repos: Any) -> list[str]:
             ("understand", REPO_UNDERSTAND),
             ("deep_dive", REPO_DEEP_DIVE),
         ):
-            value = item.get(field)
-            if value is not None and value not in allowed:
-                errors.append(f"{prefix}.{field} invalid: {value}")
+            field_value = item.get(field)
+            if field_value is not None and field_value not in allowed:
+                errors.append(f"{prefix}.{field} invalid: {field_value}")
     return errors
 
 
@@ -386,10 +720,10 @@ def _validate_merge_conflicts_gate(
         if status_index is None or len(cells) <= status_index:
             continue
 
-        value = cells[status_index].strip().strip("`*").strip()
-        if value.lower().startswith("status:"):
-            value = value[len("status:") :].strip()
-        if value.lower() == "open":
+        cell_value = cells[status_index].strip().strip("`*").strip()
+        if cell_value.lower().startswith("status:"):
+            cell_value = cell_value[len("status:") :].strip()
+        if cell_value.lower() == "open":
             has_open_conflict = True
 
     if not has_open_conflict or not isinstance(phases, dict):
@@ -456,6 +790,12 @@ def validate_manifest(
     if data.get("overall_confidence") not in CONFIDENCE:
         errors.append("overall_confidence invalid")
 
+    phases = data.get("phases")
+    budget_required = _discovery_budget_required(phases, strict=strict)
+    errors.extend(
+        _validate_discovery_budget(data.get("discovery_budget"), required=budget_required)
+    )
+
     engagement = data.get("engagement")
     if isinstance(engagement, dict):
         for key in REQUIRED_ENGAGEMENT:
@@ -474,7 +814,6 @@ def validate_manifest(
     else:
         errors.append("engagement must be an object")
 
-    phases = data.get("phases")
     if isinstance(phases, dict):
         for key in sorted(PHASE_KEYS - set(phases.keys())):
             errors.append(f"phases missing key: {key}")
@@ -491,6 +830,24 @@ def validate_manifest(
     errors.extend(_validate_five_questions(data.get("five_questions")))
     errors.extend(_validate_repos(data.get("repos")))
     errors.extend(_validate_evidence_summary(data.get("evidence_summary")))
+    errors.extend(_validate_prd_ok_requires_machine_artifacts_ok(data.get("artifacts")))
+    errors.extend(_validate_p5_prd_freshness(phases, data.get("artifacts")))
+    errors.extend(
+        _validate_first_pass_complete_readiness(
+            engagement=engagement,
+            phases=phases,
+            artifacts=data.get("artifacts"),
+            diagrams=data.get("diagrams"),
+        )
+    )
+
+    first_pass_complete = (
+        isinstance(engagement, dict) and engagement.get("status") == "FIRST_PASS_COMPLETE"
+    )
+    if first_pass_complete and workspace_root is None:
+        errors.append(
+            "strict: FIRST_PASS_COMPLETE requires --workspace-root to validate machine artifact content"
+        )
 
     runtime = data.get("runtime_validation")
     if not isinstance(runtime, dict):
@@ -519,25 +876,27 @@ def validate_manifest(
                 if _relative_path_error(rel, "artifact path"):
                     continue
                 status = item.get("status")
-                if status in ("ok", "stub") and rel and item_id not in DISTRIBUTED_ARTIFACT_IDS:
+                if status in ("ok", "stub", "stale") and rel and item_id not in DISTRIBUTED_ARTIFACT_IDS:
                     normalized_rel = rel.replace("\\", "/")
                     target = effective_root / normalized_rel
                     expects_directory = rel.endswith(("/", "\\"))
+                    is_machine = item_id in REQUIRED_MACHINE_ARTIFACT_IDS
+                    if is_machine and expects_directory:
+                        errors.append(
+                            f"strict: machine artifact {item_id} path must be a file, not a directory: {rel}"
+                        )
+                        continue
+                    if is_machine and target.is_dir():
+                        errors.append(
+                            f"strict: machine artifact {item_id} path resolves to a directory, expected a file: {rel}"
+                        )
+                        continue
                     present = target.is_dir() if expects_directory else target.is_file()
                     if not present:
                         kind = "directory" if expects_directory else "file"
                         errors.append(f"artifact {kind} missing on disk: {rel} (status={status})")
-
-            if strict and isinstance(engagement, dict) and engagement.get("status") == "FIRST_PASS_COMPLETE":
-                for item in data.get("artifacts") or []:
-                    if isinstance(item, dict) and item.get("required") and item.get("status") not in ("ok", "waived"):
-                        errors.append(f"strict: required artifact {item.get('id')} status={item.get('status')}")
-                for item in data.get("diagrams") or []:
-                    if isinstance(item, dict) and item.get("required") and item.get("status") not in ("ok", "waived", "n_a"):
-                        errors.append(f"strict: required diagram {item.get('id')} status={item.get('status')}")
-                for key, value in (phases or {}).items():
-                    if isinstance(value, dict) and value.get("status") not in ("complete", "skipped"):
-                        errors.append(f"strict: phase {key} not complete or skipped")
+                    elif status == "ok" and is_machine:
+                        errors.extend(_validate_machine_artifact_content(target, item_id))
 
             if check_content:
                 errors.extend(_validate_exec_summary_content(effective_root / "EXEC_SUMMARY.md"))
