@@ -24,6 +24,8 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from scripts.reference_utils import sha256_file
+from scripts.registry.host_adapter import supported_hosts as _host_contract_supported_hosts
+from scripts.registry.manifest import skill_versions as _registry_skill_versions
 from scripts.release_contract import (
     compatibility_schema_versions_from_contract,
     load_contract,
@@ -145,12 +147,42 @@ def verify_release_bundle(archive: Path) -> list[str]:
         supported_hosts = manifest.get("supported_hosts")
         if not isinstance(supported_hosts, list) or not all(isinstance(item, str) for item in supported_hosts):
             errors.append(f"error: {RELEASE_MANIFEST_NAME} supported_hosts must be a list of strings")
+        else:
+            # A well-typed list of strings isn't the same as the *right* list -- the
+            # "files" hash map (checked below) covers the bundled host_contracts.yaml's
+            # own bytes, but never cross-checks this top-level summary field against it.
+            # Without this, a manifest that fabricates, drops, or renames a host here
+            # still reports "ok: verified" as long as every individual file hash matches.
+            try:
+                expected_hosts = _host_contract_supported_hosts(bundle_root)
+            except (OSError, *YAML_SAFETY_ERRORS) as exc:
+                errors.append(f"error: could not verify supported_hosts against bundled host_contracts.yaml: {exc}")
+            else:
+                if sorted(supported_hosts) != expected_hosts:
+                    errors.append(
+                        f"error: {RELEASE_MANIFEST_NAME} supported_hosts {sorted(supported_hosts)} does not "
+                        f"match bundled host_contracts.yaml {expected_hosts}",
+                    )
 
         skill_versions = manifest.get("skill_versions")
         if not isinstance(skill_versions, dict) or not all(
             isinstance(k, str) and isinstance(v, str) for k, v in skill_versions.items()
         ):
             errors.append(f"error: {RELEASE_MANIFEST_NAME} skill_versions must be a mapping of strings")
+        else:
+            # Same gap as supported_hosts above: cross-check against the bundle's own
+            # bundled skills.yaml + each skill's SKILL.md frontmatter (each individually
+            # hash-verified below) rather than only checking this summary field's shape.
+            try:
+                expected_versions = _registry_skill_versions(bundle_root)
+            except (OSError, *YAML_SAFETY_ERRORS) as exc:
+                errors.append(f"error: could not verify skill_versions against bundled skills.yaml: {exc}")
+            else:
+                if skill_versions != expected_versions:
+                    errors.append(
+                        f"error: {RELEASE_MANIFEST_NAME} skill_versions does not match bundled "
+                        "skills.yaml/SKILL.md frontmatter",
+                    )
 
         files = manifest.get("files")
         if not isinstance(files, dict) or not files:

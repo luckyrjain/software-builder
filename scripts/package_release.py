@@ -23,7 +23,7 @@ import os
 import subprocess
 import sys
 import tarfile
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -126,7 +126,16 @@ def _ensure_manifest_inputs_tracked(
     _require("skills.yaml", why="registry_schema_version/skill_versions")
     _require("scripts/registry/host_contracts.yaml", why="host_contract_schema_version/supported_hosts")
     for skill_id, entry in registry.skills.items():
-        _require(f"{entry.path}/SKILL.md", why=f"skill_versions[{skill_id!r}]")
+        # Normalized via PurePosixPath (not an f-string join) before the `tracked_rel`
+        # membership check: `tracked_rel` holds Git's own canonical path strings (no
+        # "./" prefix, no doubled/trailing slashes -- `git ls-files` never emits those),
+        # but entry.path comes straight from skills.yaml's hand-edited `path:` field. A
+        # raw f"{entry.path}/SKILL.md" join would compare unequal to the tracked path for
+        # any non-canonical-but-valid `path:` value (e.g. a trailing slash or a "./"
+        # prefix) even though the file genuinely is tracked, spuriously failing a release
+        # that should succeed.
+        skill_md_rel = PurePosixPath(entry.path, "SKILL.md").as_posix()
+        _require(skill_md_rel, why=f"skill_versions[{skill_id!r}]")
 
 
 # Path components that never belong in a release even if accidentally tracked
