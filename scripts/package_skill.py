@@ -28,7 +28,7 @@ from reference_utils import (
 
 
 from release_info import (
-    MANIFEST_NAME as RELEASE_MANIFEST_NAME,
+    RELEASE_MANIFEST_NAME,
     SEMVER_RE,
     SHA_RE,
     git_source_sha,

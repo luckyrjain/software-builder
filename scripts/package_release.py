@@ -19,6 +19,7 @@ import gzip
 import hashlib
 import io
 import json
+import os
 import subprocess
 import sys
 import tarfile
@@ -43,8 +44,13 @@ from scripts.registry.manifest import skill_versions
 from scripts.registry.models import Registry
 from scripts.registry.schema import parse_registry
 from scripts.release_contract import required_provenance_fields
-from scripts.release_info import MANIFEST_NAME, PACKAGE_NAME, git_source_sha, read_distribution_version
-from scripts.yaml_safety import YAML_SAFETY_ERRORS, read_schema_version
+from scripts.release_info import (
+    PACKAGE_NAME,
+    RELEASE_MANIFEST_NAME,
+    git_source_sha,
+    read_distribution_version,
+)
+from scripts.yaml_safety import YAML_SAFETY_ERRORS, load_unique_yaml_file, read_schema_version, require_mapping
 
 
 def _ensure_clean_worktree(root: Path) -> None:
@@ -245,7 +251,7 @@ def _tracked_files(root: Path) -> list[tuple[str, Path, int]]:
     for rel, git_mode in sorted(entries, key=lambda item: item[0]):
         if _is_release_excluded(rel):
             continue
-        if rel == MANIFEST_NAME:
+        if rel == RELEASE_MANIFEST_NAME:
             raise ValueError(
                 f"release inputs must not track the reserved manifest filename: {rel}",
             )
@@ -335,15 +341,26 @@ def _write_reproducible_archive(
             # reproducible" would only hold on identical Python builds.
             with tarfile.open(fileobj=gz, mode="w", format=tarfile.USTAR_FORMAT) as tar:
                 for rel, abs_path, mode in tracked:
-                    info = _tar_info(f"{bundle_name}/{rel}", size=abs_path.stat().st_size, mode=mode)
                     digest = hashlib.sha256()
                     with abs_path.open("rb") as handle:
+                        # Size comes from the already-open handle (os.fstat), not a
+                        # separate abs_path.stat() call before opening -- otherwise a
+                        # tracked file that changes size between the stat and the read
+                        # (e.g. a concurrent edit mid-build) either aborts the archive
+                        # write with "unexpected end of data" (file shrank) or silently
+                        # bakes in content whose length no longer matches what was
+                        # hashed (file grew), quietly breaking the byte-for-byte
+                        # reproducibility and per-file provenance this module exists to
+                        # guarantee. fstat() on the open fd reflects exactly the bytes
+                        # the subsequent read loop will consume.
+                        size = os.fstat(handle.fileno()).st_size
+                        info = _tar_info(f"{bundle_name}/{rel}", size=size, mode=mode)
                         tar.addfile(info, _HashingReader(handle, digest))
                     file_hashes[rel] = digest.hexdigest()
 
                 manifest = {**manifest_fields, "files": file_hashes}
                 manifest_bytes = (json.dumps(manifest, indent=2, sort_keys=True) + "\n").encode("utf-8")
-                info = _tar_info(f"{bundle_name}/{MANIFEST_NAME}", size=len(manifest_bytes), mode=0o644)
+                info = _tar_info(f"{bundle_name}/{RELEASE_MANIFEST_NAME}", size=len(manifest_bytes), mode=0o644)
                 tar.addfile(info, io.BytesIO(manifest_bytes))
     return file_hashes, manifest_bytes
 
@@ -362,13 +379,19 @@ def package_release(root: Path, output_dir: Path) -> tuple[Path, Path]:
     # registry.schema_version is exactly the value a second read would produce.
     registry = parse_registry(root / "skills.yaml")
     _ensure_manifest_inputs_tracked(root, tracked, registry)
+    # Parsed once and reused for both the manifest's host_contract_schema_version
+    # field and its supported_hosts field, instead of re-parsing host_contracts.yaml
+    # a second time via supported_hosts() -- same reasoning as registry/skills.yaml
+    # above.
+    host_contracts_path = root / "scripts" / "registry" / "host_contracts.yaml"
+    host_contracts = require_mapping(load_unique_yaml_file(host_contracts_path), str(host_contracts_path))
     manifest_fields = {
         "schema_version": 1,
         "distribution_version": version,
         "source_sha": sha,
         "registry_schema_version": registry.schema_version,
-        "host_contract_schema_version": read_schema_version(root / "scripts" / "registry" / "host_contracts.yaml"),
-        "supported_hosts": supported_hosts(root),
+        "host_contract_schema_version": read_schema_version(host_contracts_path, raw=host_contracts),
+        "supported_hosts": supported_hosts(root, contracts=host_contracts),
         "skill_versions": skill_versions(root, registry=registry),
     }
     # required_provenance_fields() (release_contract.yaml's provenance.required_fields) is the
@@ -400,7 +423,7 @@ def package_release(root: Path, output_dir: Path) -> tuple[Path, Path]:
 
     checksum_lines = sorted(
         [f"{digest}  {rel}" for rel, digest in file_hashes.items()]
-        + [f"{manifest_digest}  {MANIFEST_NAME}"],
+        + [f"{manifest_digest}  {RELEASE_MANIFEST_NAME}"],
     )
     (output_dir / f"{bundle_name}.files.sha256").write_text(
         "\n".join(checksum_lines) + "\n",

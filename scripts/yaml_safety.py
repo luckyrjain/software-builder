@@ -115,13 +115,19 @@ def require_mapping(value: Any, label: str) -> dict[str, Any]:
     return value
 
 
-def read_schema_version(path: Path) -> int:
+def read_schema_version(path: Path, *, raw: dict[str, Any] | None = None) -> int:
     """Read and validate the integer ``schema_version`` field of a YAML mapping file.
 
     Shared by release_contract.py and package_release.py, which both need the
     same schema_version a release's compatibility fields are checked against.
+
+    Pass `raw` when the caller already parsed+shape-checked the file (e.g.
+    package_release.py also reads host_contracts.yaml's ``hosts`` key for
+    supported_hosts()) so this doesn't re-read and re-parse the same file a
+    second time; omitted, it loads and validates `path` itself as before.
     """
-    raw = require_mapping(load_unique_yaml_file(path), str(path))
+    if raw is None:
+        raw = require_mapping(load_unique_yaml_file(path), str(path))
     value = raw.get("schema_version")
     if not isinstance(value, int) or isinstance(value, bool):
         raise ValueError(f"{path}: schema_version must be an integer")

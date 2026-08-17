@@ -19,8 +19,12 @@ SEMVER_RE = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$")
 SHA_RE = re.compile(r"^([0-9a-f]{40}|[0-9a-f]{64})$")
 # Shared between package_release.py (which writes this file into every release
 # archive) and verify_release_bundle.py (which reads it back out) so the two
-# never drift to different filenames.
-MANIFEST_NAME = "RELEASE-MANIFEST.json"
+# never drift to different filenames. Named RELEASE_MANIFEST_NAME (not
+# MANIFEST_NAME) to avoid colliding with reference_utils.MANIFEST_NAME, a
+# different constant (the *installed-skill* manifest filename,
+# ".software-builder-manifest.json") that a caller needing both (e.g.
+# package_skill.py) would otherwise have to import under an alias.
+RELEASE_MANIFEST_NAME = "RELEASE-MANIFEST.json"
 # Shared between package_release.py (which names the bundle directory/archive
 # from this) and verify_release_bundle.py (which checks the bundle's
 # top-level directory name against this) so the two never drift to different

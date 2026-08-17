@@ -29,7 +29,7 @@ from scripts.release_contract import (
     load_contract,
     required_provenance_fields_from_contract,
 )
-from scripts.release_info import MANIFEST_NAME, PACKAGE_NAME, SEMVER_RE, SHA_RE
+from scripts.release_info import PACKAGE_NAME, RELEASE_MANIFEST_NAME, SEMVER_RE, SHA_RE
 from scripts.yaml_safety import YAML_SAFETY_ERRORS
 
 _HEX64_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -62,15 +62,15 @@ def verify_release_bundle(archive: Path) -> list[str]:
             return ["error: release bundle must contain exactly one top-level directory"]
         bundle_root = roots[0]
 
-        manifest_path = bundle_root / MANIFEST_NAME
+        manifest_path = bundle_root / RELEASE_MANIFEST_NAME
         if not manifest_path.is_file():
-            return [f"error: release bundle missing {MANIFEST_NAME}"]
+            return [f"error: release bundle missing {RELEASE_MANIFEST_NAME}"]
         try:
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-            return [f"error: {MANIFEST_NAME} is not valid JSON: {exc}"]
+            return [f"error: {RELEASE_MANIFEST_NAME} is not valid JSON: {exc}"]
         if not isinstance(manifest, dict):
-            return [f"error: {MANIFEST_NAME} must be a JSON object"]
+            return [f"error: {RELEASE_MANIFEST_NAME} must be a JSON object"]
 
         # Read the contract the bundle itself embeds (scripts/release_contract.yaml is a
         # regular tracked file, so every bundle ships its own copy) rather than falling
@@ -95,16 +95,16 @@ def verify_release_bundle(archive: Path) -> list[str]:
             return [f"error: release contract: {exc}"]
         missing_fields = sorted(fields - set(manifest))
         if missing_fields:
-            return [f"error: {MANIFEST_NAME} missing fields: {missing_fields}"]
+            return [f"error: {RELEASE_MANIFEST_NAME} missing fields: {missing_fields}"]
 
         errors: list[str] = []
         schema_version = manifest.get("schema_version")
         if not isinstance(schema_version, int) or isinstance(schema_version, bool) or schema_version != 1:
-            errors.append(f"error: {MANIFEST_NAME} schema_version must be 1")
+            errors.append(f"error: {RELEASE_MANIFEST_NAME} schema_version must be 1")
 
         version = manifest.get("distribution_version")
         if not isinstance(version, str) or not SEMVER_RE.fullmatch(version):
-            errors.append(f"error: {MANIFEST_NAME} distribution_version is invalid: {version!r}")
+            errors.append(f"error: {RELEASE_MANIFEST_NAME} distribution_version is invalid: {version!r}")
         elif bundle_root.name != f"{PACKAGE_NAME}-{version}":
             # Defends the "nothing tampered" guarantee this verifier exists to provide:
             # without this, a bundle whose top-level directory was renamed after
@@ -118,7 +118,7 @@ def verify_release_bundle(archive: Path) -> list[str]:
 
         source_sha = manifest.get("source_sha")
         if not isinstance(source_sha, str) or not SHA_RE.fullmatch(source_sha):
-            errors.append(f"error: {MANIFEST_NAME} source_sha is invalid: {source_sha!r}")
+            errors.append(f"error: {RELEASE_MANIFEST_NAME} source_sha is invalid: {source_sha!r}")
 
         try:
             expected_schema_versions = compatibility_schema_versions_from_contract(contract)
@@ -129,7 +129,7 @@ def verify_release_bundle(archive: Path) -> list[str]:
         for key in ("registry_schema_version", "host_contract_schema_version"):
             value = manifest.get(key)
             if not isinstance(value, int) or isinstance(value, bool):
-                errors.append(f"error: {MANIFEST_NAME} {key} must be an integer")
+                errors.append(f"error: {RELEASE_MANIFEST_NAME} {key} must be an integer")
             elif key in expected_schema_versions and value != expected_schema_versions[key]:
                 # A bundle's compatibility fields being well-typed integers isn't the
                 # same as them being the *right* integers -- the "files" hash map never
@@ -138,23 +138,23 @@ def verify_release_bundle(archive: Path) -> list[str]:
                 # bug, or a tampered-but-internally-consistent manifest) still reports
                 # "ok: verified".
                 errors.append(
-                    f"error: {MANIFEST_NAME} {key} {value!r} does not match release contract "
+                    f"error: {RELEASE_MANIFEST_NAME} {key} {value!r} does not match release contract "
                     f"compatibility.{key} {expected_schema_versions[key]!r}",
                 )
 
         supported_hosts = manifest.get("supported_hosts")
         if not isinstance(supported_hosts, list) or not all(isinstance(item, str) for item in supported_hosts):
-            errors.append(f"error: {MANIFEST_NAME} supported_hosts must be a list of strings")
+            errors.append(f"error: {RELEASE_MANIFEST_NAME} supported_hosts must be a list of strings")
 
         skill_versions = manifest.get("skill_versions")
         if not isinstance(skill_versions, dict) or not all(
             isinstance(k, str) and isinstance(v, str) for k, v in skill_versions.items()
         ):
-            errors.append(f"error: {MANIFEST_NAME} skill_versions must be a mapping of strings")
+            errors.append(f"error: {RELEASE_MANIFEST_NAME} skill_versions must be a mapping of strings")
 
         files = manifest.get("files")
         if not isinstance(files, dict) or not files:
-            errors.append(f"error: {MANIFEST_NAME} files map is empty or invalid")
+            errors.append(f"error: {RELEASE_MANIFEST_NAME} files map is empty or invalid")
             return errors
 
         actual_files: dict[str, str] = {}
@@ -165,7 +165,7 @@ def verify_release_bundle(archive: Path) -> list[str]:
                 continue
             if not path.is_file():
                 continue
-            if rel == MANIFEST_NAME:
+            if rel == RELEASE_MANIFEST_NAME:
                 continue
             try:
                 actual_files[rel] = sha256_file(path)
@@ -179,13 +179,13 @@ def verify_release_bundle(archive: Path) -> list[str]:
 
         for rel, digest in sorted(files.items()):
             if not isinstance(rel, str) or not isinstance(digest, str):
-                errors.append(f"error: {MANIFEST_NAME} files entry has invalid types: {rel!r}")
+                errors.append(f"error: {RELEASE_MANIFEST_NAME} files entry has invalid types: {rel!r}")
                 continue
             if not rel or rel.startswith("/") or ".." in Path(rel).parts:
                 errors.append(f"error: unsafe file reference in manifest: {rel!r}")
                 continue
             if not _HEX64_RE.fullmatch(digest):
-                errors.append(f"error: {MANIFEST_NAME} hash for {rel} is not a sha256 digest")
+                errors.append(f"error: {RELEASE_MANIFEST_NAME} hash for {rel} is not a sha256 digest")
                 continue
             if rel not in actual_files:
                 errors.append(f"error: manifest lists missing file: {rel}")

@@ -27,8 +27,16 @@ def _contracts(root: Path) -> dict:
     )
 
 
-def supported_hosts(root: Path) -> list[str]:
-    contracts = _contracts(root)
+def supported_hosts(root: Path, *, contracts: dict | None = None) -> list[str]:
+    """Every host declared in host_contracts.yaml, sorted.
+
+    Pass `contracts` when the caller already parsed host_contracts.yaml (e.g.
+    package_release.py, which also needs its schema_version) so this doesn't
+    re-read and re-parse the same file a second time; omitted, it parses
+    host_contracts.yaml itself as before.
+    """
+    if contracts is None:
+        contracts = _contracts(root)
     hosts = require_mapping(contracts.get("hosts"), "hosts")
     return sorted(hosts)
 
