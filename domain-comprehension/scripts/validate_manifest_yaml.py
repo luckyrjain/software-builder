@@ -440,7 +440,14 @@ def _validate_merge_conflicts_gate(
             header_seen = False
             status_index = None
             continue
-        if not in_section or not stripped.startswith("|"):
+        if not in_section:
+            continue
+        if not stripped.startswith("|"):
+            # A non-table line ends the current table without ending the section (e.g. prose
+            # between two tables under the same heading). Reset so the next table's own header
+            # row is parsed fresh instead of being read as a data row against a stale column index.
+            header_seen = False
+            status_index = None
             continue
 
         cells = [c.strip() for c in stripped.strip("|").split("|")]

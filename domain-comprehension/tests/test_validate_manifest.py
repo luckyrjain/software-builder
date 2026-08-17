@@ -300,6 +300,37 @@ def test_check_content_merge_conflict_dash_evidence_not_mistaken_for_separator(t
     assert any("phases.p0 must not be complete" in e for e in errors)
 
 
+def test_check_content_merge_conflict_second_table_in_section_detected(tmp_path: Path) -> None:
+    """A second table under the same heading must get its own header row, not the first table's.
+
+    Without resetting header/column tracking between tables, the second table's header row is
+    read as a data row against the first table's column index, so an `open` status in a
+    differently-ordered second table can be missed entirely.
+    """
+    data = _minimal_manifest()
+    data["phases"]["p0"]["status"] = "complete"
+    data["phases"]["p0"]["completed_at"] = "2026-07-29T00:00:00Z"
+    (tmp_path / "EXEC_SUMMARY.md").write_text(
+        "## Evidence summary\n## Engineering Leader Summary\n## Section confidences\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "RISK_MAP.md").write_text(
+        "## Merge Conflicts (ADD_REPO mode)\n\n"
+        "First table already resolved:\n\n"
+        "| New repo | Existing claim | New claim | Entity/Context/Path | Evidence (existing) | Evidence (new) | Confidence | Status |\n"
+        "|----------|-----------------|-----------|----------------------|----------------------|-----------------|------------|--------|\n"
+        "| svc-b | svc-a owns `users` table | svc-b owns `users` table | users table | svc-a/Repo.java:12 | svc-b/Repo.java:9 | HIGH | resolved |\n"
+        "\n"
+        "Second table, columns in a different order, still open:\n\n"
+        "| Status | New repo | Entity/Context/Path |\n"
+        "|--------|----------|----------------------|\n"
+        "| open | svc-c | orders table |\n",
+        encoding="utf-8",
+    )
+    errors = validate_manifest(data, workspace_root=tmp_path, check_content=True)
+    assert any("phases.p0 must not be complete" in e for e in errors)
+
+
 def _mark_api_tooling_ok(data: dict) -> None:
     for artifact in data["artifacts"]:
         if artifact["id"] == "api_tooling_export":
