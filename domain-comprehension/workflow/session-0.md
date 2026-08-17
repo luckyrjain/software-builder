@@ -51,12 +51,12 @@ Large workspace (100+ repos): read [large-scale-execution.md](../reference/large
 9. **Create deliverables:** copy all domain artifact templates into `artifact_root`; copy `manifest.yaml` to
    `workspace_root` only. Do not place generated domain Markdown/config files at workspace root. Set root
    `manifest.yaml engagement.artifact_root` to exactly the same resolved relative path written to
-   `domain-config.yaml scope.artifact_root`; initialize artifact status/evidence counters. Set
-   `manifest.yaml discovery_budget.profile` to the resolved `delivery_mode` (`QUICK`/`FULL`/`DELTA`/`ADD_REPO`)
-   and `discovery_budget.limits` to that profile's `default_limits` in
-   [domain-model-contract.yaml](../reference/domain-model-contract.yaml) — or the caller's explicit `CUSTOM`
-   limits — instead of leaving the template's reusable `QUICK` placeholder values in place; leave `consumed`
-   at zero.
+   `domain-config.yaml scope.artifact_root`; initialize artifact status/evidence counters.
+   **Initialize `discovery_budget` before any further discovery:** set `profile` from `delivery_mode`
+   (`QUICK`/`FULL`/`DELTA`/`ADD_REPO`, or `CUSTOM` when the caller supplies explicit limits), copy
+   `default_limits[profile]` from [domain-model-contract.yaml](../reference/domain-model-contract.yaml)
+   (or the caller CUSTOM limits), zero all `consumed` counters, and mirror the same profile/limits/consumed
+   block into `PROGRESS.md`. Do not leave the template's QUICK ceilings on a FULL/DELTA/ADD_REPO run.
 10. Before P0.5, report repo count by tier/classification and obtain mechanical-analysis scope approval.
 11. Update `manifest.yaml` and run the [phase-completion-gate.md](../reference/phase-completion-gate.md).
 
@@ -65,12 +65,12 @@ Large workspace (100+ repos): read [large-scale-execution.md](../reference/large
 | Artifact | Location | Key fields | If absent |
 |----------|----------|------------|-----------|
 | Domain config | `{artifact_root}/domain-config.yaml` | All schema fields/defaults; `scope.artifact_root` matches manifest | Phase incomplete |
-| Discovery budget | root `manifest.yaml` `discovery_budget` | `profile` set to the resolved `delivery_mode`, `limits` from that profile's `default_limits` (or explicit `CUSTOM` values), `consumed` at zero | Phase incomplete |
 | Workspace inventory | `{artifact_root}/PROGRESS.md` § Repo status | Repo, branch, SHA, tier, classification | Phase incomplete |
 | Known omissions | `{artifact_root}/KNOWN_OMISSIONS.md` | MCP gaps, bulk excludes | Phase incomplete |
 | Entry services | `{artifact_root}/{map_file}` § Inventory | Repo, entry-point type, file path | Phase incomplete |
 | Initial unknowns | `{artifact_root}/UNKNOWNS.md` | Five questions DRAFT in summary | Phase incomplete |
 | Evidence summary | `{artifact_root}/EXEC_SUMMARY.md` + manifest | Counters initialized | Phase incomplete |
+| Discovery budget | root `manifest.yaml` `discovery_budget` + `PROGRESS.md` | profile, limits from contract defaults, consumed zeros | Phase incomplete |
 | Deliverable stubs | All domain templates under `artifact_root` | Non-empty headers | Phase incomplete |
 | `manifest.yaml` | workspace root | schema_version: 2, artifact_root set and matching config | Phase incomplete |
 

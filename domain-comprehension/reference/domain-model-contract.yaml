@@ -105,6 +105,7 @@ compatibility:
     current_value: ok
     stale_value: stale
     stale_behavior: blocking_before_build_do_not_treat_PRD_as_current
+    integrity_check: consumer_must_reverify_against_source_revision_and_machine_artifacts
   evidence_status_values: [Observed, Inferred, Unknown]
   confidence_values: [HIGH, MEDIUM, LOW, UNKNOWN]
   preserve_ids: true

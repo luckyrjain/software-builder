@@ -110,13 +110,18 @@ For **Lite**, a compact in-body subsection is acceptable. Consequential assumpti
 stable Assumption Register with the canonical schema in [output-tables.md](output-tables.md) §
 Assumption ledger:
 
+For **Standard/Rigorous**, consequential assumptions use the canonical Assumption Register:
+
 | ID | Assumption | Evidence | Impact If Wrong | Validation | Owner | Status |
+|---|---|---|---|---|---|---|
 
-Status uses `OPEN | VALIDATED | INVALIDATED | ACCEPTED_RISK` from
-[current-state-evidence-contract.yaml](current-state-evidence-contract.yaml). Evidence is optional
-supporting context and must not turn an assumption into a fact.
+Required contract fields are `id`, `statement`, `impact`, `validation`, `owner`, and `status` from
+[current-state-evidence-contract.yaml](current-state-evidence-contract.yaml). Status uses
+`OPEN | VALIDATED | INVALIDATED | ACCEPTED_RISK`. Evidence is optional supporting context and must not turn an
+assumption into a fact.
 
-A **Risky** or **OPEN** assumption affecting MVP viability must influence Build Readiness.
+An **OPEN** assumption that affects MVP viability (sometimes called "risky" in prose) must influence Build
+Readiness — "Risky" is not a Status enum value.
 
-Every material unknown becomes either an explicit assumption (with owner and status) or a classified
-open question — never generic TBD.
+Every material unknown becomes either an explicit assumption or a classified open question — never
+generic TBD.

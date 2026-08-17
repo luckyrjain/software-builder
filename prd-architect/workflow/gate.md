@@ -69,7 +69,7 @@ Verify:
 - realistic failures have defined behavior
 - accepted adversarial findings were repaired inline (or surfaced in critique-only findings)
 - security/privacy/compliance analysis matches actual risk
-- for PRD/Review on `existing_system=true`, `current_state_evidence` is present **and complete enough for the claimed baseline**: required source-revision metadata exists and any missing accepted artifact needed for the proposed change is surfaced as a blocker/unknown; when the PRD came from `domain-comprehension`, its producer-manifest PRD artifact freshness was explicitly checked and must be `ok` before the PRD is treated as current; stale/unknown freshness or incomplete required revision evidence blocks current-state readiness; observed facts were not silently rewritten as proposals
+- for PRD/Review on the existing-system path (`existing_system=true`, **or** `current_state_evidence` / domain-comprehension handoff present — untrusted `existing_system=false` cannot clear this path), `current_state_evidence` is present **and complete enough for the claimed baseline**: required source-revision metadata exists and any missing accepted artifact needed for the proposed change is surfaced as a blocker/unknown; when the PRD came from `domain-comprehension`, its producer-manifest PRD artifact freshness was explicitly checked and must be `ok` before the PRD is treated as current, and the integrity check against source revisions/machine artifacts must match; stale/unknown freshness, integrity mismatch, or incomplete required revision evidence blocks current-state readiness; observed facts were not silently rewritten as proposals
 - existing-system changes include Change Impact when needed
 - every engineering trigger was evaluated: rollout/rollback, operational readiness, migration/backward compatibility, API/event/schema impact, data/privacy, cost, observability
 - every fired engineering trigger has a complete section per `current-state-evidence-contract.yaml`; every omitted section has a recorded not-triggered result
@@ -104,8 +104,8 @@ Assign **exactly one** verdict (PRD and Review; optional for pure Validation unl
 - Risky assumption affects MVP viability without acceptable validation plan
 - required security/regulatory behavior unknown
 - critical acceptance criteria absent
-- PRD/Review targets `existing_system=true` but required `current_state_evidence` is missing **or lacks required source-revision/baseline evidence needed to establish compatibility**, or is materially conflicted
-- a `domain-comprehension` PRD handoff has producer-manifest PRD freshness `stale` or missing/unknown freshness that has not been independently verified current
+- PRD/Review is on the existing-system path (`existing_system=true` or current-state/domain handoff supplied) but required `current_state_evidence` is missing **or lacks required source-revision/baseline evidence needed to establish compatibility**, or is materially conflicted
+- a `domain-comprehension` PRD handoff has producer-manifest PRD freshness `stale` or missing/unknown freshness that has not been independently verified current, or an integrity mismatch against source revisions/machine artifacts
 - any material `FR-*`/`AC-*` traceability orphan remains
 - a required engineering-impact section fired but lacks its contract fields
 - a breaking change has no compatible migration/rollout/rollback plan

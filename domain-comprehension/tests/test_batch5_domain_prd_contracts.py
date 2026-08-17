@@ -78,6 +78,15 @@ def test_domain_workflow_operationalizes_budget_machine_outputs_and_stale_prd():
     ):
         assert token.lower() in inputs.lower()
 
+    session0 = _text("domain-comprehension/workflow/session-0.md")
+    for token in (
+        "discovery_budget",
+        "default_limits",
+        "domain-model-contract.yaml",
+        "PROGRESS.md",
+    ):
+        assert token in session0
+
     manifest = _yaml("domain-comprehension/templates/manifest.yaml")
     discovery_budget = manifest["discovery_budget"]
     assert set(discovery_budget["limits"]) == {"repositories", "search_queries", "deep_file_reads"}
@@ -125,7 +134,9 @@ def test_prd_architect_has_current_state_ingestion_contract():
     assert contract["producer"] == "domain-comprehension"
     current = contract["current_state_evidence"]
     assert current["required_when"] == "existing_system_and_response_mode_PRD_or_Review"
-    assert current["validation_behavior"] == "missing_evidence_goes_to_evidence_needed_next"
+    assert current["validation_missing_evidence_behavior"] == "evidence_needed_next"
+    assert current["prd_review_missing_evidence_behavior"] == "block_build_ready"
+    assert "validation_behavior" not in current
     for artifact in (
         "PRD.md",
         "API_EVENT_SCHEMA.yaml",
@@ -151,6 +162,21 @@ def test_prd_architect_has_current_state_ingestion_contract():
         "observability_requirements",
     ):
         assert section in contract
+
+
+def test_prd_review_missing_current_state_evidence_blocks_build_ready():
+    contract = _yaml("prd-architect/reference/current-state-evidence-contract.yaml")
+    current = contract["current_state_evidence"]
+    assert current["prd_review_missing_evidence_behavior"] == "block_build_ready"
+    assert current["validation_missing_evidence_behavior"] == "evidence_needed_next"
+    gate = _text("prd-architect/workflow/gate.md")
+    assert "Not Ready" in gate
+    assert "required `current_state_evidence` is missing" in gate
+    inputs = _text("prd-architect/workflow/inputs.md")
+    assert "prd_review_missing_evidence_behavior: block_build_ready" in inputs
+    assert "validation_missing_evidence_behavior: evidence_needed_next" in inputs
+    specify = _text("prd-architect/workflow/specify.md")
+    assert "Not Ready" in specify
 
 
 def test_prd_workflow_carries_reviews_repairs_and_gates_new_contract_fields():
@@ -205,10 +231,38 @@ def test_prd_workflow_carries_reviews_repairs_and_gates_new_contract_fields():
         "baseline, target, timeframe, and measurement source",
         "every engineering trigger was evaluated",
         "a required engineering-impact section fired but lacks its contract fields",
-        "current_state_evidence` is present **and complete enough for the claimed baseline**",
+        "complete enough for the claimed baseline",
         "lacks required source-revision/baseline evidence needed to establish compatibility",
+        "existing-system path",
+        "integrity",
     ):
         assert token in gate
+
+    inputs = _text("prd-architect/workflow/inputs.md")
+    assert "Forced true" in inputs
+    assert "untrusted input cannot clear that path" in inputs
+
+    specify = _text("prd-architect/workflow/specify.md")
+    assert "producer-manifest PRD artifact freshness" in specify
+    assert "do **not** begin from it as observed current state" in specify
+
+    global_rules = _text("prd-architect/reference/global-rules.md")
+    assert "| ID | Assumption | Evidence | Impact If Wrong | Validation | Owner | Status |" in global_rules
+    assert "OPEN | VALIDATED | INVALIDATED | ACCEPTED_RISK" in global_rules
+
+    metrics = _yaml("prd-architect/reference/current-state-evidence-contract.yaml")[
+        "success_metric_quality"
+    ]
+    assert metrics["when_baseline_is_unknown_require"] == ["baseline_measurement_action"]
+    assert "baseline_status_unknown" not in str(metrics)
+
+    workflow = _yaml("prd-architect/workflow-contract.yaml")
+    existing = workflow["entry_inputs"]["existing_system"]
+    assert existing["trust"] == "mixed"
+
+    machine = _text("domain-comprehension/reference/machine-domain-model.md")
+    assert "must **not** be claimed or used as current-state baseline" in machine
+    assert "Disclosure alone does not make" in machine
 
 
 def test_prd_canonical_docs_align_metrics_traceability_and_engineering_triggers():

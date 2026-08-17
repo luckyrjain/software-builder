@@ -26,6 +26,9 @@
 - Phase input contracts now declare every required, optional, and conditional mapping explicitly.
 - Workflow lint now closes the field-type and phase-frontmatter vocabularies and reports malformed
   YAML mapping keys deterministically.
+- Existing-system path is forced when current-state/domain handoff evidence is present so untrusted
+  `existing_system=false` cannot skip freshness/baseline gates; Specify refuses stale PRD baselines;
+  assumption ledger and unknown-baseline metric fields align with the readiness contract.
 
 ## 1.1.0 — 2026-08-09
 

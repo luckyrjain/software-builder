@@ -7,7 +7,7 @@ entry_inputs:
   depth_hint: {type: string, provenance: user_invocation, required: false, trust: untrusted}
   constraints: {type: list, provenance: user_or_source_material, required: false, trust: untrusted}
   explicit_decisions: {type: list, provenance: user_or_source_material, required: false, trust: untrusted}
-  existing_system: {type: boolean, provenance: user_or_source_material, required: false, trust: untrusted}
+  existing_system: {type: boolean, provenance: user_or_source_material, required: false, trust: mixed}
   critique_only: {type: boolean, provenance: user_invocation, required: false, trust: untrusted}
   user_insists_on_full_prd: {type: boolean, provenance: user_invocation, required: false, trust: untrusted}
 selector_domains:

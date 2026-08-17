@@ -43,11 +43,24 @@ prototype, manual workflow, fake-door, shadow mode, internal pilot, limited coho
 
 ## Current-state baseline
 
-For `existing_system=true`, PRD/Review requires `current_state_evidence` under
-[current-state-evidence-contract.yaml](../reference/current-state-evidence-contract.yaml). Begin from that
-baseline when present. If it is missing, continue only far enough to make the evidence gap and resulting
-compatibility uncertainty explicit; never fill the baseline from guesses, and Gate must keep Build Readiness
-Not Ready until the required evidence is supplied.
+For `existing_system=true`, or whenever `current_state_evidence` / a domain-comprehension handoff is supplied,
+PRD/Review requires that evidence under
+[current-state-evidence-contract.yaml](../reference/current-state-evidence-contract.yaml).
+
+If the PRD came from `domain-comprehension`, read the producer-manifest PRD artifact freshness **before**
+adopting it as baseline:
+
+- `ok` — eligible as current-state baseline only after the integrity check against source revisions and
+  machine artifacts succeeds;
+- `stale` — do **not** begin from it as observed current state; treat it as non-baseline/stale evidence,
+  surface the gap, and leave Build Readiness to Gate's Not Ready path;
+- missing/unverified unknown freshness — disclose and verify before any current-state claim; do not treat
+  the PRD as current meanwhile.
+
+Begin from the baseline only when present **and** eligible as current. If required evidence is missing,
+continue only far enough to make the evidence gap and resulting compatibility uncertainty explicit; never
+fill the baseline from guesses, and Gate must keep Build Readiness Not Ready until the required evidence is
+supplied.
 
 Keep observed behavior, ownership, contracts, and source revisions separate from proposed changes. A proposed
 PRD may change current state, but every such change must be explicit and traceable to the baseline. Do not
