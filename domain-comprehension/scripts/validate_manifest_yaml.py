@@ -177,6 +177,17 @@ def _invalid_enum(value: Any, allowed: frozenset[str]) -> bool:
     return not isinstance(value, str) or value not in allowed
 
 
+def _plain_int(value: Any) -> bool:
+    """True when ``value`` is an ``int`` and not a ``bool``.
+
+    ``bool`` is a subclass of ``int`` in Python, so a bare ``isinstance(value, int)`` check
+    accepts ``True``/``False`` wherever an integer count or version is expected. Centralizes the
+    exclusion so every int-valued field check (``schema_version``, discovery-budget counters) uses
+    the same guard instead of re-deriving it at each call site.
+    """
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
 def _validate_phase_entry(key: str, value: Any) -> list[str]:
     errors: list[str] = []
     if not isinstance(value, dict):
@@ -223,7 +234,7 @@ def _validate_discovery_budget(value: Any) -> list[str]:
             continue
         for key in DISCOVERY_BUDGET_COUNTERS:
             counter = block.get(key)
-            if not isinstance(counter, int) or isinstance(counter, bool):
+            if not _plain_int(counter):
                 errors.append(f"discovery_budget.{label}.{key} must be an integer")
                 continue
             if allow_zero:
@@ -236,13 +247,7 @@ def _validate_discovery_budget(value: Any) -> list[str]:
         for key in DISCOVERY_BUDGET_COUNTERS:
             limit = limits.get(key)
             used = consumed.get(key)
-            if (
-                isinstance(limit, int)
-                and not isinstance(limit, bool)
-                and isinstance(used, int)
-                and not isinstance(used, bool)
-                and used > limit
-            ):
+            if _plain_int(limit) and _plain_int(used) and used > limit:
                 errors.append(
                     f"discovery_budget.consumed.{key} exceeds configured limit ({used} > {limit})"
                 )
@@ -455,10 +460,13 @@ def _validate_merge_conflicts_gate(
         if not header_seen:
             header_seen = True
             lowered = [c.lower() for c in cells]
-            if "status" not in lowered:
-                in_section = False
-                continue
-            status_index = lowered.index("status")
+            # A table without a Status column contributes no conflict rows, but must not end the
+            # section: a later table under the same heading may still have its own Status column
+            # and an open conflict. Leave status_index unset so this table's rows are skipped
+            # below, while the non-table-line branch above resets header_seen/status_index for
+            # whatever table (if any) comes next.
+            if "status" in lowered:
+                status_index = lowered.index("status")
             continue
 
         if set(stripped.strip("|").replace(" ", "")) <= {"-", ":"}:
@@ -527,11 +535,7 @@ def validate_manifest(
     errors: list[str] = []
 
     schema_version = data.get("schema_version")
-    if (
-        not isinstance(schema_version, int)
-        or isinstance(schema_version, bool)
-        or schema_version not in SUPPORTED_SCHEMA_VERSIONS
-    ):
+    if not _plain_int(schema_version) or schema_version not in SUPPORTED_SCHEMA_VERSIONS:
         errors.append(f"schema_version must be one of {sorted(SUPPORTED_SCHEMA_VERSIONS)}")
 
     for key in REQUIRED_TOP:
@@ -658,7 +662,11 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Validate domain-comprehension manifest.yaml")
     parser.add_argument("manifest", type=Path, help="Path to manifest.yaml")
     parser.add_argument("--workspace-root", type=Path, default=None, help="Verify artifact paths exist under this directory")
-    parser.add_argument("--strict", action="store_true", help="Enforce FIRST_PASS_COMPLETE readiness rules")
+    parser.add_argument(
+        "--strict",
+        action="store_true",
+        help="Enforce FIRST_PASS_COMPLETE readiness rules (requires --workspace-root)",
+    )
     parser.add_argument(
         "--check-content",
         action="store_true",
@@ -668,6 +676,15 @@ def main() -> int:
 
     if args.check_content and args.workspace_root is None:
         print("--check-content requires --workspace-root", file=sys.stderr)
+        return 1
+
+    if args.strict and args.workspace_root is None:
+        # The strict readiness checks (required artifacts ok/waived, stale-PRD block, phase
+        # completion) only run inside the `workspace_root is not None` branch of
+        # validate_manifest(). Without this guard, `--strict` silently degrades to a no-op —
+        # exit 0 — instead of enforcing FIRST_PASS_COMPLETE readiness, mirroring the existing
+        # --check-content guard above.
+        print("--strict requires --workspace-root", file=sys.stderr)
         return 1
 
     data, load_errors = _load_yaml(args.manifest)
