@@ -123,9 +123,10 @@ QUICK engagements may create the machine files as stubs without completing P5. C
 the four machine artifacts must be present as `ok`/`waived`. COMPLIANCE_RETROFIT may waive machine
 rows where re-analysis would be required, but **PRD `ok` is forbidden while any required machine
 artifact is waived** (no integrity basis for current-state handoff). Machine artifacts marked `ok`
-must also parse as schema_version=1 YAML with a non-empty `source_revision.repos` list when
-`--workspace-root` is provided. Waivers must be disclosed in the human handoff/omissions rather
-than fabricating machine evidence.
+must also parse as schema_version=1 YAML with a populated `source_revision.repos` list (each entry
+requires non-empty `repo`, `branch`, `commit_sha`, and `observed_at`; literal `unknown` is allowed)
+when `--workspace-root` is provided. Machine artifact paths must be files, not directories. Waivers must
+be disclosed in the human handoff/omissions rather than fabricating machine evidence.
 
 Optional outputs include `E2E_FLOW.md`, Memory Bank export, Postman export, and runtime-only diagram
 supplements.

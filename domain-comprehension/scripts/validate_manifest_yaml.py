@@ -75,6 +75,8 @@ REQUIRED_MACHINE_ARTIFACT_IDS = frozenset(
         "capability_traceability",
     }
 )
+# Mirrors domain-model-contract.yaml / current-state-evidence-contract.yaml source_revision.
+SOURCE_REVISION_REPO_REQUIRED_FIELDS = ("repo", "branch", "commit_sha", "observed_at")
 REPO_CLASSIFICATION = frozenset(
     {
         "application",
@@ -351,7 +353,7 @@ def _validate_strict_completion_artifacts(artifacts: Any) -> list[str]:
 
 
 def _validate_p5_prd_freshness(phases: Any, artifacts: Any) -> list[str]:
-    """Phase P5 cannot be complete while the PRD row is machine-stale."""
+    """Phase P5 complete requires a current PRD row (status=ok)."""
     if not isinstance(phases, dict):
         return []
     p5 = phases.get("p5")
@@ -363,11 +365,36 @@ def _validate_p5_prd_freshness(phases: Any, artifacts: Any) -> list[str]:
             if isinstance(item, dict) and item.get("id") == "prd":
                 prd_status = item.get("status")
                 break
-    if prd_status == "stale":
+    if prd_status == "ok":
+        return []
+    if prd_status is None:
+        return ["phases.p5 cannot be complete while artifacts[id=prd] is missing"]
+    return [
+        f"phases.p5 cannot be complete while artifacts[id=prd].status is {prd_status!r} "
+        "(requires status=ok)"
+    ]
+
+
+def _validate_source_revision_repos(repos: Any, artifact_id: str) -> list[str]:
+    """Enforce contract repo_required_fields on each source_revision.repos entry."""
+    errors: list[str] = []
+    if not isinstance(repos, list) or not repos:
         return [
-            "phases.p5 cannot be complete while artifacts[id=prd].status is stale"
+            f"strict: {artifact_id} source_revision.repos must be a non-empty list for status=ok"
         ]
-    return []
+    for index, entry in enumerate(repos):
+        prefix = f"strict: {artifact_id} source_revision.repos[{index}]"
+        if not isinstance(entry, dict):
+            errors.append(f"{prefix} must be an object")
+            continue
+        for field in SOURCE_REVISION_REPO_REQUIRED_FIELDS:
+            value = entry.get(field)
+            if not isinstance(value, str) or not value.strip():
+                errors.append(
+                    f"{prefix}.{field} must be a non-empty string "
+                    "(literal 'unknown' allowed when revision is unknown)"
+                )
+    return errors
 
 
 def _validate_machine_artifact_content(path: Path, artifact_id: str) -> list[str]:
@@ -382,12 +409,7 @@ def _validate_machine_artifact_content(path: Path, artifact_id: str) -> list[str
     revision = data.get("source_revision")
     if not isinstance(revision, dict):
         return [f"strict: {artifact_id} source_revision must be an object for status=ok"]
-    repos = revision.get("repos")
-    if not isinstance(repos, list) or not repos:
-        return [
-            f"strict: {artifact_id} source_revision.repos must be a non-empty list for status=ok"
-        ]
-    return []
+    return _validate_source_revision_repos(revision.get("repos"), artifact_id)
 
 
 def _validate_first_pass_complete_readiness(
@@ -453,6 +475,16 @@ def _validate_artifact_list(items: Any, label: str, status_set: frozenset[str]) 
         path_error = _relative_path_error(item.get("path"), f"{prefix}.path")
         if path_error:
             errors.append(path_error)
+        elif (
+            label == "artifacts"
+            and isinstance(item_id, str)
+            and item_id in REQUIRED_MACHINE_ARTIFACT_IDS
+            and isinstance(item.get("path"), str)
+            and item["path"].endswith(("/", "\\"))
+        ):
+            errors.append(
+                f"strict: machine artifact {item_id} path must be a file, not a directory: {item['path']}"
+            )
 
         phase = item.get("phase")
         if not isinstance(phase, str) or not phase.strip():
@@ -792,15 +824,22 @@ def validate_manifest(
                     normalized_rel = rel.replace("\\", "/")
                     target = effective_root / normalized_rel
                     expects_directory = rel.endswith(("/", "\\"))
+                    is_machine = item_id in REQUIRED_MACHINE_ARTIFACT_IDS
+                    if is_machine and expects_directory:
+                        errors.append(
+                            f"strict: machine artifact {item_id} path must be a file, not a directory: {rel}"
+                        )
+                        continue
+                    if is_machine and target.is_dir():
+                        errors.append(
+                            f"strict: machine artifact {item_id} path resolves to a directory, expected a file: {rel}"
+                        )
+                        continue
                     present = target.is_dir() if expects_directory else target.is_file()
                     if not present:
                         kind = "directory" if expects_directory else "file"
                         errors.append(f"artifact {kind} missing on disk: {rel} (status={status})")
-                    elif (
-                        status == "ok"
-                        and item_id in REQUIRED_MACHINE_ARTIFACT_IDS
-                        and not expects_directory
-                    ):
+                    elif status == "ok" and is_machine:
                         errors.extend(_validate_machine_artifact_content(target, item_id))
 
             if check_content:
