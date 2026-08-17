@@ -9,9 +9,8 @@ from pathlib import Path
 from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from validate_manifest_yaml import _invalid_enum  # noqa: E402
+from validate_manifest_yaml import CONFIDENCE, _invalid_enum  # noqa: E402
 
-CONFIDENCE = frozenset({"HIGH", "MEDIUM", "LOW", "UNKNOWN"})
 REQUIRED_TOP = ("repo", "phase", "findings", "open_questions", "conflicts", "files_read")
 
 

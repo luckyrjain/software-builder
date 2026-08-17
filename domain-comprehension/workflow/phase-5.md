@@ -166,6 +166,11 @@ produced. Packets are working notes, not a second source of truth — once merge
 required-artifact checks (`EXEC_SUMMARY.md`, `{map_file}`) are what's authoritative, exactly as in a run
 that never used packets.
 
+## Post-action Jira paste
+
+Optional — on completion, offer the Jira summary paste (never post without explicit user confirmation) per
+[post-action-templates.md](../../docs/skill-framework/shared/post-action-templates.md) §3b.
+
 ## Definition of Done
 
 [phase-completion-gate.md](../reference/phase-completion-gate.md)
