@@ -22,12 +22,38 @@ def test_legacy_schema_v2_manifest_without_discovery_budget_remains_valid() -> N
     assert validate_manifest(data) == []
 
 
-@pytest.mark.parametrize("profile", ["", "RESUME", "full", None])
+@pytest.mark.parametrize("profile", ["", "RESUME", "full", None, ["QUICK"], {"value": "QUICK"}])
 def test_discovery_budget_rejects_invalid_profile(profile: object) -> None:
     data = _manifest()
     data["discovery_budget"]["profile"] = profile
     errors = validate_manifest(data)
     assert any("discovery_budget.profile" in error for error in errors)
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda d: d["phases"]["p0"].__setitem__("status", {"nested": True}),
+        lambda d: d.__setitem__("overall_confidence", ["not", "a", "string"]),
+        lambda d: d.__setitem__("schema_version", {"nested": True}),
+        lambda d: d["engagement"].__setitem__("status", {"nested": True}),
+        lambda d: d["five_questions"]["q1"].__setitem__("status", {"nested": True}),
+        lambda d: d["five_questions"]["q1"].__setitem__("confidence", {"nested": True}),
+        lambda d: d["artifacts"][0].__setitem__("status", {"nested": True}),
+        lambda d: d.__setitem__("repos", [{"name": "r", "classification": {"nested": True}}]),
+        lambda d: d.__setitem__("repos", [{"name": "r", "inventory": {"nested": True}}]),
+    ],
+)
+def test_validator_reports_errors_instead_of_crashing_on_unhashable_enum_fields(mutate) -> None:
+    """A hand-edited manifest can put a mapping/list where a string enum is expected.
+
+    The validator's job is to report that cleanly, not raise TypeError from `x not in
+    some_frozenset` — unhashable values must never reach a frozenset membership test.
+    """
+    data = _manifest()
+    mutate(data)
+    errors = validate_manifest(data)
+    assert errors
 
 
 @pytest.mark.parametrize("counter", ["repositories", "search_queries", "deep_file_reads"])
