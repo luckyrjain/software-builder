@@ -107,9 +107,22 @@ def _release_provenance(repo_root: Path) -> tuple[str, str]:
     this, every install from a downloaded-and-extracted release tarball -- the
     flow docs/RELEASE.md documents -- would hard-fail: git_source_sha() now
     raises instead of degrading to "unknown" when repo_root has no .git.
+
+    Only trusts RELEASE-MANIFEST.json when repo_root has no .git: the two are
+    meant to be mutually exclusive by construction (a tracked symlink/file
+    named RELEASE-MANIFEST.json is rejected by package_release.py, and a bundle
+    it builds never contains .git), but nothing stops a leftover
+    RELEASE-MANIFEST.json -- e.g. docs/RELEASE.md's own "download and extract
+    the newer bundle" upgrade path applied on top of an existing Git checkout,
+    or any other stray copy -- from sitting next to a real .git. Without this
+    guard, that leftover file would silently and permanently shadow the live
+    checkout's actual HEAD in every subsequent install's manifest (with no
+    error), which then makes doctor.py's installed-vs-running distribution_version
+    comparison report a false VERSION_MISMATCH even though the skill content is
+    current.
     """
     release_manifest_path = repo_root / RELEASE_MANIFEST_NAME
-    if release_manifest_path.is_file():
+    if not (repo_root / ".git").exists() and release_manifest_path.is_file():
         try:
             release_manifest = json.loads(release_manifest_path.read_text(encoding="utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError) as exc:

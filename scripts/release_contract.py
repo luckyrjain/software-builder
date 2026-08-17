@@ -43,8 +43,12 @@ CONTRACT_PATH = Path(__file__).resolve().parent / "release_contract.yaml"
 
 def _load_contract(path: Path = CONTRACT_PATH) -> dict:
     raw = require_mapping(load_unique_yaml_file(path), "release contract")
-    schema_version = raw.get("schema_version")
-    if not isinstance(schema_version, int) or isinstance(schema_version, bool) or schema_version != 1:
+    # Reuses the same "read + type-check schema_version" logic every other schema_version
+    # check in this codebase shares (yaml_safety.read_schema_version), instead of
+    # re-implementing the int/bool type check inline here too -- otherwise a future change
+    # to what counts as a valid schema_version would need to be mirrored in both places or
+    # they'd drift, exactly what sharing this helper elsewhere in this module already avoids.
+    if read_schema_version(path, raw=raw) != 1:
         raise ValueError(f"{path}: schema_version must be 1")
     return raw
 
