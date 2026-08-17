@@ -58,13 +58,20 @@ artifacts:
   dependency_graph_machine:
     path: DEPENDENCY_GRAPH.yaml
     schema_version: 1
-    required_fields: [source, target, perspective, direction, interaction, criticality, evidence, confidence]  # keep in sync with dependency_edges.required_fields below
+    # required_fields mixes one file-level field (perspective, set once per run at the document root —
+    # see DEPENDENCY_GRAPH.yaml) with the seven per-edge fields; it is not the key set of each edge object.
+    # keep in sync with dependency_edges.required_fields below
+    required_fields: [source, target, perspective, direction, interaction, criticality, evidence, confidence]
   capability_traceability:
     path: CAPABILITY_TRACEABILITY.yaml
     schema_version: 1
     required_fields: [capability, repositories, code_locations, owner, evidence, confidence]
 
 dependency_edges:
+  # perspective is set once per run as a file-level field (DEPENDENCY_GRAPH.yaml's top-level
+  # `perspective` key) — not a key repeated on every edge object. It is still listed in
+  # required_fields below because a complete artifact needs it populated exactly once; the other
+  # seven fields are the ones each edge object itself must carry.
   perspective: focal_service_or_context
   required_fields:
     - source

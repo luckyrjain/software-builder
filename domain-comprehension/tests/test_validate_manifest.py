@@ -90,6 +90,23 @@ def test_evidence_summary_negative_rejected() -> None:
     assert any("files_inspected" in e for e in errors)
 
 
+def test_evidence_summary_boolean_count_rejected() -> None:
+    # bool is a subclass of int in Python, so a bare `isinstance(x, int)` check silently accepts
+    # `true`/`false` wherever a count is expected — same footgun _plain_int() guards against for
+    # schema_version and discovery_budget counters.
+    data = _minimal_manifest()
+    data["evidence_summary"]["files_inspected"] = True
+    errors = validate_manifest(data)
+    assert any("evidence_summary.files_inspected must be an integer" in e for e in errors)
+
+
+def test_runtime_validation_boolean_count_rejected() -> None:
+    data = _minimal_manifest()
+    data["runtime_validation"]["edges_total"] = False
+    errors = validate_manifest(data)
+    assert any("runtime_validation.edges_total must be an integer" in e for e in errors)
+
+
 def test_check_content_p2b_pending_skips_runtime_gate(tmp_path: Path) -> None:
     data = _minimal_manifest()
     (tmp_path / "EXEC_SUMMARY.md").write_text(

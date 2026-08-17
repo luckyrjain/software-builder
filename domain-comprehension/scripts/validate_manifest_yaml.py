@@ -350,7 +350,7 @@ def _validate_evidence_summary(value: Any) -> list[str]:
             if value.get(key) is not None and not isinstance(value.get(key), str):
                 errors.append("evidence_summary.last_updated must be a string")
             continue
-        if key in value and not isinstance(value[key], int):
+        if key in value and not _plain_int(value[key]):
             errors.append(f"evidence_summary.{key} must be an integer")
         elif key in value and value[key] < 0:
             errors.append(f"evidence_summary.{key} must be >= 0")
@@ -592,7 +592,7 @@ def validate_manifest(
         errors.append("runtime_validation must be an object")
     else:
         for key in ("edges_total", "edges_confirmed"):
-            if key in runtime and not isinstance(runtime[key], int):
+            if key in runtime and not _plain_int(runtime[key]):
                 errors.append(f"runtime_validation.{key} must be an integer")
 
     map_file = str(engagement.get("map_file") or "") if isinstance(engagement, dict) else ""
