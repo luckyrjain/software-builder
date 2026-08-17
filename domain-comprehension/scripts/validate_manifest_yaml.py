@@ -504,7 +504,22 @@ def _validate_merge_conflicts_gate(
         if _is_table_separator_line(stripped):
             continue
 
-        if not header_seen or status_index is None or len(cells) <= status_index:
+        if not header_seen:
+            # No confirmed header yet for the table we're in: either the lookahead above didn't
+            # fire (e.g. a missing separator row, or a malformed one like `|====|` that isn't
+            # made up purely of `-`/`:`), or this is simply the first pipe row of a fresh table.
+            # header_seen is only False immediately after entering the section or after a
+            # table-ending reset (see the non-table-line branch above and the `## ` branch), so
+            # there is no adjacent-table ambiguity here — unconditionally treat this row as the
+            # header, matching the pre-lookahead behavior. Without this fallback, a missing or
+            # mistyped GFM separator row would leave header_seen/status_index unset for the rest
+            # of the table, silently skipping every data row (including an open conflict).
+            header_seen = True
+            lowered = [c.lower() for c in cells]
+            status_index = lowered.index("status") if "status" in lowered else None
+            continue
+
+        if status_index is None or len(cells) <= status_index:
             continue
 
         cell_value = cells[status_index].strip().strip("`*").strip()

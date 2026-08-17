@@ -76,6 +76,18 @@ def test_schema_version_one_rejected() -> None:
     assert any("schema_version" in e for e in errors)
 
 
+def test_schema_version_float_rejected() -> None:
+    # A bare `schema_version not in SUPPORTED_SCHEMA_VERSIONS` frozenset-membership check would
+    # silently accept 2.0 here, since Python's `2.0 == 2` and `hash(2.0) == hash(2)` make floats
+    # and ints interchangeable in a set lookup. Locks in the `_plain_int()` guard added in front
+    # of that check so a future refactor back to the bare membership test doesn't reopen it —
+    # same footgun _plain_int() guards against for the boolean-count fields below.
+    data = _minimal_manifest()
+    data["schema_version"] = 2.0
+    errors = validate_manifest(data)
+    assert any("schema_version" in e for e in errors)
+
+
 def test_invalid_repo_classification() -> None:
     data = _minimal_manifest()
     data["repos"] = [{"name": "foo", "classification": "ACTIVE"}]
@@ -352,6 +364,59 @@ def test_check_content_merge_conflict_dash_placeholder_row_mid_table_still_detec
         "| orders table | open |\n"
         "| - | - |\n"
         "| payments table | open |\n",
+        encoding="utf-8",
+    )
+    errors = validate_manifest(data, workspace_root=tmp_path, check_content=True)
+    assert any("phases.p0 must not be complete" in e for e in errors)
+
+
+def test_check_content_merge_conflict_malformed_separator_row_still_detected(
+    tmp_path: Path,
+) -> None:
+    """A header row must still be recognized when the GFM separator row is malformed.
+
+    Regression guard: the lookahead-based header detection (a row is a header only when the
+    *next* line is a well-formed `-`/`:` separator) previously left header_seen/status_index
+    unset for the whole table when the separator row was mistyped (e.g. `|====|` instead of
+    `|----|`), silently dropping every data row in the table — including an open conflict.
+    """
+    data = _minimal_manifest()
+    data["phases"]["p0"]["status"] = "complete"
+    data["phases"]["p0"]["completed_at"] = "2026-07-29T00:00:00Z"
+    (tmp_path / "EXEC_SUMMARY.md").write_text(
+        "## Evidence summary\n## Engineering Leader Summary\n## Section confidences\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "RISK_MAP.md").write_text(
+        "## Merge Conflicts (ADD_REPO mode)\n\n"
+        "| ID | Status |\n"
+        "|====|========|\n"
+        "| 1 | Open |\n",
+        encoding="utf-8",
+    )
+    errors = validate_manifest(data, workspace_root=tmp_path, check_content=True)
+    assert any("phases.p0 must not be complete" in e for e in errors)
+
+
+def test_check_content_merge_conflict_missing_separator_row_still_detected(
+    tmp_path: Path,
+) -> None:
+    """A header row must still be recognized when the GFM separator row is missing entirely.
+
+    Same regression guard as the malformed-separator case above, but for a table that skips the
+    separator row altogether (a plausible hand-edit or an imperfect sub-agent merge of the table).
+    """
+    data = _minimal_manifest()
+    data["phases"]["p0"]["status"] = "complete"
+    data["phases"]["p0"]["completed_at"] = "2026-07-29T00:00:00Z"
+    (tmp_path / "EXEC_SUMMARY.md").write_text(
+        "## Evidence summary\n## Engineering Leader Summary\n## Section confidences\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "RISK_MAP.md").write_text(
+        "## Merge Conflicts (ADD_REPO mode)\n\n"
+        "| ID | Status |\n"
+        "| 1 | Open |\n",
         encoding="utf-8",
     )
     errors = validate_manifest(data, workspace_root=tmp_path, check_content=True)
