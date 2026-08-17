@@ -1,11 +1,12 @@
 ---
-workflow_version: 1.2
+workflow_version: 1.3
 phase: 0.5
 produces:
   - knowledge_graph_merged
   - domain_graph
   - mechanical_insights
   - manifest_json
+  - dependency_graph_initial
 consumes:
   - inventory
   - contract_inventory
@@ -61,12 +62,23 @@ Write to `{map_file}` § Mechanical Insights and `.understand-anything/metrics.c
 
 Write dependency graph to `DEPENDENCY_GRAPH.md` per [required-diagrams.md](../reference/required-diagrams.md).
 
+## Machine-domain projection (required in FULL mode)
+
+Set `perspective` (focal service/context for this run) and populate `DEPENDENCY_GRAPH.yaml` from the mechanical
+graph per
+[machine-domain-model.md § Dependency projection](../reference/machine-domain-model.md#dependency-projection):
+source/target/direction/interaction/criticality/evidence/confidence per edge. This is the **initial** pass —
+P2 refines sync/async boundaries and P2b reconciles against runtime evidence. Do not derive criticality from
+call frequency alone; use `UNKNOWN` where direction/interaction/criticality is unsupported. QUICK keeps the
+Session 0 stub as-is.
+
 ## Required outputs
 
 | Artifact | Location | Key fields | If absent |
 |----------|----------|------------|-----------|
 | Mechanical insights | `{map_file}` § Mechanical Insights | Top 20 files, top 15 endpoints, domain flows, 10 essential files | Phase incomplete |
 | Service call graph | `DEPENDENCY_GRAPH.md` § Service call | Mermaid diagram + confidence | Phase incomplete |
+| Machine dependency graph (initial) | `DEPENDENCY_GRAPH.yaml` | focal perspective + source/target/direction/interaction/criticality/evidence/confidence | Phase incomplete in FULL mode |
 | Graph manifest | `.understand-anything/manifest.json` | Tier 0/1 entries: ok or failed with reason | Phase incomplete |
 | Metrics | `.understand-anything/metrics.csv` | Present or N/A with reason | Phase incomplete — waived with reason allowed |
 

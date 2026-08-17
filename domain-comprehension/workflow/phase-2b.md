@@ -1,5 +1,5 @@
 ---
-workflow_version: 1.9
+workflow_version: 1.10
 phase: 2b
 produces:
   - runtime_validation_table
@@ -7,6 +7,7 @@ produces:
   - runtime_graph
   - datadog_subgraphs
   - exercise_updates
+  - dependency_graph_runtime_reconciled
 consumes:
   - trigger_catalog
   - runtime_sequence
@@ -38,6 +39,15 @@ section entirely.
 | Exercise updates | `API_CATALOG.md`, `EVENT_CATALOG.md`, `BUSINESS_FLOWS.md` | `runtime_confirmed` where applicable | Phase incomplete if Datadog ✅ |
 | Datadog subgraphs | `.understand-anything/diagrams/datadog-service-deps.md` | Per entry service | Phase incomplete if Datadog ✅ |
 | Skip record | `{map_file}` § Flow stub + `KNOWN_OMISSIONS.md` | Skip reason | Required when Datadog ❌ |
+| Machine dependency runtime reconciliation | `DEPENDENCY_GRAPH.yaml` | runtime-confirmed/divergent edges retain evidence/confidence | Phase incomplete if Datadog ✅ |
+
+## Machine-domain projection (required when Datadog ✅)
+
+Reconcile `DEPENDENCY_GRAPH.yaml` against the runtime validation table above: mark edges the Datadog trace
+confirms as runtime-confirmed, and keep divergent or unconfirmed edges visible with their existing
+evidence/confidence rather than deleting or silently averaging them away. Do not invent an edge's intent
+from telemetry alone — traffic volume/latency corroborates an already-evidenced edge, it does not create a
+new one. Skipped (Datadog ❌) runs leave the P2 `DEPENDENCY_GRAPH.yaml` as-is.
 
 ## Checkpoint
 

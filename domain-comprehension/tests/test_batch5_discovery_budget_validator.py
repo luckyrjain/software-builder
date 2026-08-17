@@ -85,3 +85,28 @@ def test_discovery_budget_rejects_boolean_counter_values() -> None:
     data["discovery_budget"]["limits"]["repositories"] = True
     errors = validate_manifest(data)
     assert any("discovery_budget.limits.repositories must be an integer" in error for error in errors)
+
+
+@pytest.mark.parametrize("value", [["QUICK"], "QUICK", 1, True])
+def test_discovery_budget_rejects_non_object_value(value: object) -> None:
+    data = _manifest()
+    data["discovery_budget"] = value
+    errors = validate_manifest(data)
+    assert any("discovery_budget must be an object" in error for error in errors)
+
+
+@pytest.mark.parametrize("field", ["limits", "consumed"])
+@pytest.mark.parametrize("value", [["repositories"], "repositories", 1, None])
+def test_discovery_budget_rejects_non_object_limits_or_consumed(field: str, value: object) -> None:
+    data = _manifest()
+    data["discovery_budget"][field] = value
+    errors = validate_manifest(data)
+    assert any(f"discovery_budget.{field} must be an object" in error for error in errors)
+
+
+@pytest.mark.parametrize("field", ["limits", "consumed"])
+def test_discovery_budget_rejects_missing_limits_or_consumed(field: str) -> None:
+    data = _manifest()
+    del data["discovery_budget"][field]
+    errors = validate_manifest(data)
+    assert any(f"discovery_budget.{field} must be an object" in error for error in errors)

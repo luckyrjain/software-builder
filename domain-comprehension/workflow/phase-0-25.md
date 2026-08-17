@@ -1,8 +1,9 @@
 ---
-workflow_version: 1.10
+workflow_version: 1.11
 phase: 0.25
 produces:
   - contract_inventory
+  - api_event_schema_initial
 consumes:
   - inventory
 ---
@@ -116,6 +117,14 @@ rg -l 'enum.*Error|ErrorCode|@ExceptionHandler|ErrorResponse' --glob '!test*' --
 | Code | Message | HTTP status | Repo | Evidence |
 |------|---------|-------------|------|----------|
 
+## Machine-domain projection (required in FULL mode)
+
+Project the Contract/API/Event catalogs above into `API_EVENT_SCHEMA.yaml` per
+[machine-domain-model.md § API and event projection](../reference/machine-domain-model.md#api-and-event-projection):
+one stable record per externally or internally relevant API/event contract, with
+owner/direction/contract/evidence/confidence populated and `source_revision` recorded. Consumers/producers
+without evidence stay `UNKNOWN` rather than inferred from naming. QUICK keeps the Session 0 stub as-is.
+
 ## Sub-agents
 
 One `explore` agent, multi-repo grep across Tier 0/1 repos.
@@ -127,6 +136,7 @@ One `explore` agent, multi-repo grep across Tier 0/1 repos.
 | Contract inventory | `{map_file}` § Contracts | Contract, Type, Producer repo, Consumer repo(s), Schema location, Evidence | Phase incomplete |
 | API catalog | `API_CATALOG.md` | method, path, producer, consumers, implementation, exercise | Phase incomplete |
 | Event catalog | `EVENT_CATALOG.md` | topic, schema, producer, consumers, implementation, exercise | Phase incomplete — UNKNOWN rows with reason allowed |
+| Machine API/event schema (initial) | `API_EVENT_SCHEMA.yaml` | source revision + stable API/event records with owner/direction/contract/evidence/confidence | Phase incomplete in FULL mode |
 | Error code catalog | `{map_file}` § Contracts | Code, message, HTTP status, repo, evidence | Phase incomplete — UNKNOWN rows with reason allowed |
 
 ## Checkpoint

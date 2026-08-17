@@ -1,5 +1,5 @@
 ---
-workflow_version: 1.11
+workflow_version: 1.12
 phase: 2
 produces:
   - trigger_catalog
@@ -10,6 +10,7 @@ produces:
   - deployment_graph
   - sync_async_boundary_table
   - code_graph_divergence
+  - dependency_graph_refined
 consumes:
   - per_repo_deep_dives
   - ownership_cards
@@ -34,6 +35,17 @@ Map runtime flow patterns from code and config, building trigger catalogs, seque
 | Deployment graph | `DEPENDENCY_GRAPH.md` § Deployment | Service → placement from config, plus per-env base URL (BFF + direct ingress) | Phase incomplete — UNKNOWN allowed with reason |
 | Sync/async boundary table | `{map_file}` § Flow | Step, sync/async, transport, timeout owner, evidence | Phase incomplete |
 | Code/graph divergence | `{map_file}` § Flow | Classified edges: MISSING_IN_CODE \| DEAD_CODE \| DYNAMIC_DISPATCH \| UNKNOWN | Phase incomplete |
+| Machine dependency graph (refined) | `DEPENDENCY_GRAPH.yaml` | sync/async boundaries + upstream/downstream semantics + evidence-backed criticality | Phase incomplete in FULL mode |
+
+## Machine-domain projection (required in FULL mode)
+
+Refine the P0.5 `DEPENDENCY_GRAPH.yaml` with this phase's sync/async boundary table and code/graph
+divergence findings per
+[machine-domain-model.md § Dependency projection](../reference/machine-domain-model.md#dependency-projection):
+resolve `interaction` (synchronous/asynchronous) and `direction` (upstream/downstream relative to the focal
+perspective) from evidenced transport/control flow, and update `criticality` from user impact plus recovery
+dependency — never from call frequency alone. Preserve edges/evidence already recorded in P0.5; do not
+overwrite an evidenced value with `UNKNOWN`.
 
 ## Investigation recipes (Code/graph divergence)
 

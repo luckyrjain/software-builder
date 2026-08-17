@@ -135,18 +135,21 @@ def _artifact_root_error(value: Any) -> str | None:
     return _relative_path_error(value, "engagement.artifact_root")
 
 
-def _resolve_effective_root(workspace_root: Path, engagement: Any) -> tuple[Path, list[str]]:
-    """Resolve where phase deliverables actually live."""
+def _resolve_effective_root(workspace_root: Path, engagement: Any) -> Path:
+    """Resolve where phase deliverables actually live.
+
+    Assumes ``engagement.artifact_root`` has already been validated by the caller (the engagement
+    block validates it once via ``_artifact_root_error`` before this runs), so this does not
+    re-validate or return errors of its own — an invalid or missing root just falls back to
+    ``workspace_root`` silently, avoiding a duplicate error message for one underlying defect.
+    """
     if not isinstance(engagement, dict):
-        return workspace_root, []
+        return workspace_root
     artifact_root = engagement.get("artifact_root")
-    if not artifact_root:
-        return workspace_root, []
-    error = _artifact_root_error(artifact_root)
-    if error:
-        return workspace_root, [error]
+    if not artifact_root or _artifact_root_error(artifact_root):
+        return workspace_root
     normalized = str(artifact_root).replace("\\", "/")
-    return workspace_root / Path(normalized), []
+    return workspace_root / Path(normalized)
 
 
 def _load_yaml(path: Path) -> tuple[Any, list[str]]:
@@ -603,8 +606,7 @@ def validate_manifest(
         if not workspace_root.is_dir():
             errors.append(f"workspace_root not a directory: {workspace_root}")
         else:
-            effective_root, root_errors = _resolve_effective_root(workspace_root, engagement)
-            errors.extend(root_errors)
+            effective_root = _resolve_effective_root(workspace_root, engagement)
 
             for item in data.get("artifacts") or []:
                 if not isinstance(item, dict):
@@ -662,7 +664,7 @@ def validate_manifest(
     return errors
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Validate domain-comprehension manifest.yaml")
     parser.add_argument("manifest", type=Path, help="Path to manifest.yaml")
     parser.add_argument("--workspace-root", type=Path, default=None, help="Verify artifact paths exist under this directory")
@@ -676,7 +678,7 @@ def main() -> int:
         action="store_true",
         help="Verify EXEC_SUMMARY.md sections, P2b runtime validation gate, RISK_MAP.md merge-conflicts gate, and postman_collection.json validity (requires --workspace-root)",
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     if args.check_content and args.workspace_root is None:
         print("--check-content requires --workspace-root", file=sys.stderr)
