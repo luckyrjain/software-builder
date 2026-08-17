@@ -106,6 +106,7 @@ Pass `PRD.md`, its manifest freshness status, the four machine artifacts, and so
 consumer may propose a future state but must preserve the observed baseline and explicitly identify changes.
 A `stale` PRD must **not** be claimed or used as current-state baseline evidence — hand it off only as
 non-current/stale evidence. The consumer must keep Build Readiness **Not Ready** until the PRD is regenerated
-to manifest `ok` or independently re-verified current against source revisions. Disclosure alone does not make
+to manifest `ok` and the integrity check against source revisions/machine artifacts passes
+(no ad-hoc independently verified escape for domain-comprehension handoffs). Disclosure alone does not make
 a stale PRD current. Contract:
 [../../prd-architect/reference/current-state-evidence-contract.yaml](../../prd-architect/reference/current-state-evidence-contract.yaml).

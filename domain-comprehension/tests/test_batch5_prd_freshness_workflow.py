@@ -29,3 +29,10 @@ def test_prd_gate_blocks_stale_or_unverified_domain_prd():
         "no ad-hoc “independently verified” escape",
     ):
         assert token in text
+
+
+def test_machine_domain_model_forbids_independently_reverified_escape():
+    text = _text("domain-comprehension/reference/machine-domain-model.md")
+    assert "independently re-verified" not in text
+    assert "no ad-hoc independently verified escape" in text
+    assert "integrity check against source revisions/machine artifacts passes" in text
