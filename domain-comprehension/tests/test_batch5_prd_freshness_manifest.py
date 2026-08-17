@@ -32,6 +32,19 @@ def test_stale_status_is_restricted_to_prd_artifact() -> None:
     assert any("status=stale is only valid for artifact id 'prd'" in error for error in errors)
 
 
+def test_stale_status_with_unhashable_artifact_id_does_not_crash() -> None:
+    # Regression test: the stale-id check used to do a raw `item_id not in
+    # STALEABLE_ARTIFACT_IDS` frozenset-membership test, which raises TypeError for an
+    # unhashable id (a hand-edited manifest.yaml can put a list/mapping where a string id is
+    # expected) instead of reporting a clean validation error.
+    data = _manifest()
+    item = _artifact(data, "api_event_schema")
+    item["id"] = ["not", "a", "string"]
+    item["status"] = "stale"
+    errors = validate_manifest(data)
+    assert any("status=stale is only valid for artifact id 'prd'" in error for error in errors)
+
+
 def test_stale_prd_blocks_strict_first_pass_completion(tmp_path: Path) -> None:
     data = _manifest()
     data["engagement"]["status"] = "FIRST_PASS_COMPLETE"

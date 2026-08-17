@@ -1916,6 +1916,18 @@ _Pre-merge WIP on `feat/squad-map-skill` (internal v1.0–v1.5) is consolidated 
   `tests/test_batch5_domain_prd_contracts.py`, `tests/test_batch5_handoff_compatibility.py`,
   `tests/test_batch5_manifest_machine_artifacts.py`, `tests/test_batch5_prd_freshness_manifest.py`,
   `tests/test_batch5_prd_freshness_workflow.py`.
+- **Round-2 review fix (same day):** `reference/phase-outputs.md`'s P5 table still required
+  `PROGRESS.md == FIRST_PASS_COMPLETE` only, contradicting `workflow/phase-5.md`'s identical row (same
+  batch) which accepts an explicit PARTIAL reason under the discovery-budget-exhaustion contract above —
+  reworded to accept both, scoped so the stale-PRD block applies only to `FIRST_PASS_COMPLETE` (PARTIAL,
+  with the stale condition as its reason, is the intended path). `workflow/session-0.md` gained its
+  discovery-budget-init step and output row above without a `workflow_version` bump, violating this
+  skill's own versioning rule; bumped (1.5 → 1.6) and logged in `workflow-changelog.md`. The `"prd"`-only
+  stale-status check is now a named `STALEABLE_ARTIFACT_IDS` constant routed through the existing
+  `_invalid_enum()` guard — an intermediate version of this same fix swapped in a raw frozenset-membership
+  test, which raised `TypeError` on a non-string artifact id instead of reporting a clean validation
+  error; caught and fixed within the same round, with a regression test added
+  (`test_stale_status_with_unhashable_artifact_id_does_not_crash`).
 
 ### Safe rendered-output boundary + injection-resistance golden evals (2026-08-10)
 
