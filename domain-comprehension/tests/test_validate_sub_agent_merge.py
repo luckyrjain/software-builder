@@ -72,3 +72,17 @@ def test_non_string_list_item_is_rejected(field: str):
     data[field] = [123, {"a": 1}, None]
     errors = validate_merge(data)
     assert any(f"{field}[0]" in e for e in errors)
+
+
+@pytest.mark.parametrize("field", ["evidence", "conclusion"])
+@pytest.mark.parametrize("bad_value", [None, 42, ["a", "b"], {"k": "v"}])
+def test_non_string_finding_evidence_or_conclusion_is_rejected(field: str, bad_value) -> None:
+    """findings[].evidence / findings[].conclusion must be strings per the JSON schema.
+
+    Previously only key *presence* was checked, so a null, list, dict, or number silently passed
+    validation despite reference/sub-agent-merge.schema.json typing both fields as `string`.
+    """
+    data = json.loads(VALID.read_text(encoding="utf-8"))
+    data["findings"][0][field] = bad_value
+    errors = validate_merge(data)
+    assert any(f"findings[0].{field}" in e for e in errors)

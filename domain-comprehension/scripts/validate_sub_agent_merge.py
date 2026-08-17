@@ -47,6 +47,9 @@ def validate_merge(data: Any) -> list[str]:
                 for key in ("evidence", "conclusion", "confidence"):
                     if key not in item:
                         errors.append(f"{prefix} missing required field: {key}")
+                for key in ("evidence", "conclusion"):
+                    if key in item and not isinstance(item.get(key), str):
+                        errors.append(f"{prefix}.{key} must be a string")
                 conf = item.get("confidence")
                 if "confidence" in item and _invalid_enum(conf, CONFIDENCE):
                     errors.append(f"{prefix}.confidence must be HIGH|MEDIUM|LOW|UNKNOWN")

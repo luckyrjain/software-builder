@@ -327,6 +327,37 @@ def test_check_content_merge_conflict_dash_evidence_not_mistaken_for_separator(t
     assert any("phases.p0 must not be complete" in e for e in errors)
 
 
+def test_check_content_merge_conflict_dash_placeholder_row_mid_table_still_detected(
+    tmp_path: Path,
+) -> None:
+    """An all-dash divider row *inside* a table must not be mistaken for a new header row.
+
+    Regression guard: the header-detection lookahead (a row is a header when the *next* line is
+    separator-shaped) previously fired on any data row immediately followed by an all-dash/colon
+    placeholder row, even when that placeholder row was itself just an ordinary data row within
+    the same table (not a genuine GFM separator pairing with a real header). That silently reset
+    status_index and dropped both the misclassified row's own status and every row after it.
+    """
+    data = _minimal_manifest()
+    data["phases"]["p0"]["status"] = "complete"
+    data["phases"]["p0"]["completed_at"] = "2026-07-29T00:00:00Z"
+    (tmp_path / "EXEC_SUMMARY.md").write_text(
+        "## Evidence summary\n## Engineering Leader Summary\n## Section confidences\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "RISK_MAP.md").write_text(
+        "## Merge Conflicts (ADD_REPO mode)\n\n"
+        "| Table | Status |\n"
+        "|---|---|\n"
+        "| orders table | open |\n"
+        "| - | - |\n"
+        "| payments table | open |\n",
+        encoding="utf-8",
+    )
+    errors = validate_manifest(data, workspace_root=tmp_path, check_content=True)
+    assert any("phases.p0 must not be complete" in e for e in errors)
+
+
 def test_check_content_merge_conflict_second_table_in_section_detected(tmp_path: Path) -> None:
     """A second table under the same heading must get its own header row, not the first table's.
 

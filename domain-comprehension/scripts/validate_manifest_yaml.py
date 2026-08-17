@@ -485,14 +485,21 @@ def _validate_merge_conflicts_gate(
         # table (checked against its column index) instead of starting a fresh one.
         next_stripped = lines[idx + 1].strip() if idx + 1 < len(lines) else ""
         if _is_table_separator_line(next_stripped):
-            header_seen = True
             lowered = [c.lower() for c in cells]
-            # A table without a Status column contributes no conflict rows, but must not end the
-            # section: a later table under the same heading may still have its own Status column
-            # and an open conflict. Leave status_index unset so this table's rows are skipped
-            # below.
-            status_index = lowered.index("status") if "status" in lowered else None
-            continue
+            candidate_status_index = lowered.index("status") if "status" in lowered else None
+            # An all-dash/colon placeholder or divider *data* row inside the current table has the
+            # same shape as a genuine GFM separator, so it would otherwise be misread as signaling
+            # that this row is a fresh header — silently dropping the already-established Status
+            # column (and this row's own status) for the table we are still inside. A genuine
+            # header row for this gate's tables always has a literal "Status" cell (that's what
+            # candidate_status_index just looked for); a coincidental placeholder row's cell text
+            # is ordinary data and won't contain that literal, so only trust the reclassification
+            # when either we don't already have a Status column tracked for the current table, or
+            # the candidate header row does have its own "Status" cell.
+            if candidate_status_index is not None or status_index is None:
+                header_seen = True
+                status_index = candidate_status_index
+                continue
 
         if _is_table_separator_line(stripped):
             continue
