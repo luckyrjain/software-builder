@@ -161,6 +161,11 @@ understand status, and deep-dive status.
    P5 artifacts must be `ok`/`waived`, and the PRD must satisfy its requirement/traceability contract.
 7. `ADD_REPO` keeps affected phases in progress while merge conflicts remain open and must refresh affected
    machine artifacts before P5 freshness claims.
+8. RESUME/DELTA/ADD_REPO on a manifest whose `artifacts[]` predates the current template (missing an id the
+   template defines, e.g. a machine domain-model artifact) backfill the missing row(s) as `stub`/`n_a` before
+   relying on `--strict`/`--check-content` — see [inputs.md](../workflow/inputs.md) § Legacy manifest artifact
+   rows. A required id absent from `artifacts[]` is invisible to `--strict`'s per-row check, so skipping the
+   backfill silently defeats the required-P5-artifacts contract above.
 
 ## Validation
 

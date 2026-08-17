@@ -47,6 +47,17 @@ is reached first, mark the run/phase PARTIAL, record the unresolved evidence gap
 silently exceed the budget. Persist consumed counters after every discovery-bearing phase. PROPOSAL_CHECK uses
 existing artifacts and therefore does not open a new source-discovery budget.
 
+## Legacy manifest artifact rows
+
+`templates/manifest.yaml` is the current schema; an engagement created by an older skill version can have an
+`artifacts[]` array missing rows the current template defines (for example the four machine domain-model
+artifacts). RESUME/DELTA/ADD_REPO must not silently skip a row just because it is absent: on first touching
+such a manifest, add the missing row(s) from `templates/manifest.yaml` with `status: stub` (or `n_a` for a
+`required: false` row that does not apply to this engagement's delivery mode) before relying on
+`--strict`/`--check-content` to reflect current requirements — do not fabricate `ok`/evidence for a row that
+was never produced. `COMPLIANCE_RETROFIT` already reconciles `artifacts[]` against disk state as part of its
+own procedure.
+
 ## Artifact location resolution
 
 `manifest.yaml` is the only domain-comprehension file stored directly at `workspace_root`. All other
@@ -105,7 +116,7 @@ opt into `FULL` explicitly.
 |------|----------|
 | `QUICK` | **Default for first-time engagements.** Session 0 + P0 + draft five questions only — no P0.5 mechanical pass |
 | `FULL` | All comprehension phases for all in-scope repos — opt in explicitly |
-| `RESUME` | Read root `manifest.yaml`, resolve `artifact_root`, restore/backfill discovery budget, then continue from `{artifact_root}/PROGRESS.md` / Next action |
+| `RESUME` | Read root `manifest.yaml`, resolve `artifact_root`, restore/backfill discovery budget and any missing artifact rows (see § Legacy manifest artifact rows), then continue from `{artifact_root}/PROGRESS.md` / Next action |
 | `DELTA` | Re-run phases for repos whose HEAD SHA changed since last manifest |
 | `ADD_REPO` | Onboard one repo not currently in `manifest.repos[]` into an existing engagement; full-rigor P0–P1 for that repo, then re-run downstream phases per the DELTA affected-phases rules, gated by a merge-conflict check |
 | `COMPLIANCE_RETROFIT` | Normalize split deliverables + `manifest.yaml` from an existing first pass **without** re-analyzing code |
@@ -147,7 +158,8 @@ empty, or recreate canonical domain files at workspace root.
 
 Requires root `manifest.yaml` with at least P0 complete. If not present, fall back to `FULL` with a warning.
 Resolve all canonical domain files through `engagement.artifact_root` before reading or writing them. Restore
-or backfill `discovery_budget` before any repo/search/deep-read work.
+or backfill `discovery_budget` and any missing artifact rows (§ Legacy manifest artifact rows) before any
+repo/search/deep-read work.
 
 1. Load `manifest.yaml`; for each `repos[]` entry run:
    ```bash
@@ -179,9 +191,10 @@ or backfill `discovery_budget` before any repo/search/deep-read work.
 ### ADD_REPO mode — procedure
 
 Requires root `manifest.yaml` with `schema_version: 2` and `engagement.status` of `IN_PROGRESS` or
-`FIRST_PASS_COMPLETE`. Resolve `artifact_root` from that manifest and restore/backfill `discovery_budget`
-before source discovery. `new_repo_path` must resolve to a repo **not** present in `manifest.repos[]` (match by
-`name`) — if it is present, stop and tell the user to use `DELTA` instead.
+`FIRST_PASS_COMPLETE`. Resolve `artifact_root` from that manifest and restore/backfill `discovery_budget` and
+any missing artifact rows (§ Legacy manifest artifact rows) before source discovery. `new_repo_path` must
+resolve to a repo **not** present in `manifest.repos[]` (match by `name`) — if it is present, stop and tell the
+user to use `DELTA` instead.
 
 1. Classify the new repo ([repo-classification.md](../reference/repo-classification.md)), assign
    provisional tier.

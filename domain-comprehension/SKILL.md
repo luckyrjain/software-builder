@@ -124,6 +124,11 @@ after every phase via [phase-completion-gate.md](reference/phase-completion-gate
 | Future-state PRD/MVP/build-readiness | **prd-architect** using PRD + machine evidence |
 | MySQL→Postgres rewrite artifact | **mysql-to-postgres-sql** |
 
+## Post-actions
+
+None by default — deliverables are workspace artifacts; optional Memory Bank/Postman exports are handled in
+P5. Optional Jira summary template: [post-action-templates.md](../docs/skill-framework/shared/post-action-templates.md).
+
 ## Framework
 
 Completion emits canonical `skill_result`; actions use `action_gates`; scope follows `definition_of_done` in
