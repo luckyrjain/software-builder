@@ -46,6 +46,7 @@ def _minimal_release_repo(tmp_path: Path) -> Path:
         "    - host_contract_schema_version\n"
         "    - supported_hosts\n"
         "    - skill_versions\n"
+        "    - executable_files\n"
         "    - files\n",
         encoding="utf-8",
     )

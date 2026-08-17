@@ -38,6 +38,13 @@ def supported_hosts(root: Path, *, contracts: dict | None = None) -> list[str]:
     if contracts is None:
         contracts = _contracts(root)
     hosts = require_mapping(contracts.get("hosts"), "hosts")
+    # Every host key must be a string before sorting -- a non-string key (e.g. a bare
+    # numeric YAML key) makes sorted() raise TypeError comparing str to int, which
+    # isn't a ValueError/OSError callers here catch, crashing with a raw traceback
+    # instead of a clean error.
+    non_string_hosts = sorted(str(key) for key in hosts if not isinstance(key, str))
+    if non_string_hosts:
+        raise ValueError(f"hosts keys must be strings, got non-string key(s): {non_string_hosts}")
     return sorted(hosts)
 
 

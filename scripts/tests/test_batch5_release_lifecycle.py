@@ -56,6 +56,7 @@ provenance:
     - host_contract_schema_version
     - supported_hosts
     - skill_versions
+    - executable_files
     - files
 """
 
@@ -94,6 +95,124 @@ def test_release_contract_validates_repository() -> None:
     from scripts.release_contract import validate_release_contract
 
     assert validate_release_contract(ROOT) == []
+
+
+def _write_contract_test_repo(root: Path, *, version: str = "1.0.0") -> None:
+    # A bare repo directory for validate_release_contract() -- it doesn't require a
+    # Git repo or a clean worktree (unlike package_release()), just VERSION,
+    # skills.yaml, host_contracts.yaml, and a release_contract.yaml to validate.
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "VERSION").write_text(f"{version}\n", encoding="utf-8")
+    (root / "skills.yaml").write_text("schema_version: 1\nskills: {}\n", encoding="utf-8")
+    (root / "scripts" / "registry").mkdir(parents=True, exist_ok=True)
+    (root / "scripts" / "registry" / "host_contracts.yaml").write_text(
+        "schema_version: 1\nhosts: {}\n", encoding="utf-8"
+    )
+
+
+def test_release_contract_rejects_invalid_tag_pattern_regex(tmp_path: Path) -> None:
+    from scripts.release_contract import validate_release_contract
+
+    root = tmp_path / "repo"
+    _write_contract_test_repo(root)
+    (root / "scripts" / "release_contract.yaml").write_text(
+        "schema_version: 1\n"
+        "tag_pattern: '['\n"
+        "artifact_name_templates:\n"
+        '  - "software-builder-{version}.tar.gz"\n'
+        "compatibility:\n"
+        "  registry_schema_version: 1\n"
+        "  host_contract_schema_version: 1\n"
+        "provenance:\n"
+        "  required_fields: [schema_version]\n",
+        encoding="utf-8",
+    )
+    errors = validate_release_contract(root)
+    assert any("not a valid regex" in error for error in errors)
+
+
+def test_release_contract_rejects_version_not_matching_tag_pattern(tmp_path: Path) -> None:
+    from scripts.release_contract import validate_release_contract
+
+    root = tmp_path / "repo"
+    _write_contract_test_repo(root, version="1.0.0")
+    (root / "scripts" / "release_contract.yaml").write_text(
+        "schema_version: 1\n"
+        "tag_pattern: '^rel-\\d+$'\n"
+        "artifact_name_templates:\n"
+        '  - "software-builder-{version}.tar.gz"\n'
+        "compatibility:\n"
+        "  registry_schema_version: 1\n"
+        "  host_contract_schema_version: 1\n"
+        "provenance:\n"
+        "  required_fields: [schema_version]\n",
+        encoding="utf-8",
+    )
+    errors = validate_release_contract(root)
+    assert any("does not produce a tag matching" in error for error in errors)
+
+
+def test_release_contract_rejects_malformed_artifact_name_template(tmp_path: Path) -> None:
+    from scripts.release_contract import validate_release_contract
+
+    root = tmp_path / "repo"
+    _write_contract_test_repo(root)
+    (root / "scripts" / "release_contract.yaml").write_text(
+        "schema_version: 1\n"
+        "tag_pattern: '^v\\d+\\.\\d+\\.\\d+$'\n"
+        "artifact_name_templates:\n"
+        '  - "software-builder-{version.major}.tar.gz"\n'
+        "compatibility:\n"
+        "  registry_schema_version: 1\n"
+        "  host_contract_schema_version: 1\n"
+        "provenance:\n"
+        "  required_fields: [schema_version]\n",
+        encoding="utf-8",
+    )
+    errors = validate_release_contract(root)
+    assert any("is malformed" in error for error in errors)
+
+
+def test_release_contract_rejects_schema_version_mismatch(tmp_path: Path) -> None:
+    from scripts.release_contract import validate_release_contract
+
+    root = tmp_path / "repo"
+    _write_contract_test_repo(root)
+    (root / "scripts" / "release_contract.yaml").write_text(
+        "schema_version: 1\n"
+        "tag_pattern: '^v\\d+\\.\\d+\\.\\d+$'\n"
+        "artifact_name_templates:\n"
+        '  - "software-builder-{version}.tar.gz"\n'
+        "compatibility:\n"
+        "  registry_schema_version: 2\n"
+        "  host_contract_schema_version: 1\n"
+        "provenance:\n"
+        "  required_fields: [schema_version]\n",
+        encoding="utf-8",
+    )
+    errors = validate_release_contract(root)
+    assert any("registry_schema_version" in error and "does not match" in error for error in errors)
+
+
+def test_release_contract_rejects_malformed_required_fields(tmp_path: Path) -> None:
+    from scripts.release_contract import validate_release_contract
+
+    root = tmp_path / "repo"
+    _write_contract_test_repo(root)
+    (root / "scripts" / "release_contract.yaml").write_text(
+        "schema_version: 1\n"
+        "tag_pattern: '^v\\d+\\.\\d+\\.\\d+$'\n"
+        "artifact_name_templates:\n"
+        '  - "software-builder-{version}.tar.gz"\n'
+        "compatibility:\n"
+        "  registry_schema_version: 1\n"
+        "  host_contract_schema_version: 1\n"
+        "provenance:\n"
+        "  required_fields: []\n",
+        encoding="utf-8",
+    )
+    errors = validate_release_contract(root)
+    assert any("required_fields" in error for error in errors)
 
 
 def test_release_inputs_ignore_untracked_files_and_reject_tracked_symlinks(tmp_path: Path) -> None:
@@ -277,6 +396,8 @@ def test_release_manifest_has_exact_provenance_and_file_hashes(tmp_path: Path) -
     # provenance.required_fields mandates every manifest carry.
     assert manifest["supported_hosts"] == []
     assert manifest["skill_versions"] == {}
+    # None of _minimal_repo's tracked files are chmod +x, so none should be listed.
+    assert manifest["executable_files"] == []
     assert manifest["files"]
     assert all(len(digest) == 64 for digest in manifest["files"].values())
 
@@ -302,6 +423,115 @@ def test_release_bundle_verifier_accepts_clean_bundle_and_rejects_tampering(tmp_
 
     errors = verify_release_bundle(tampered)
     assert any("hash mismatch" in error for error in errors)
+
+
+def _extract_and_repack(archive: Path, tmp_path: Path, mutate) -> Path:
+    """Extract archive, call mutate(bundle_root) to alter its contents on disk, repack it."""
+    extract = tmp_path / "extract"
+    with tarfile.open(archive, "r:gz") as tar:
+        tar.extractall(extract)
+    bundle_root = next(extract.iterdir())
+    mutate(bundle_root)
+    tampered = tmp_path / "tampered.tar.gz"
+    with tarfile.open(tampered, "w:gz") as tar:
+        tar.add(bundle_root, arcname=bundle_root.name)
+    return tampered
+
+
+def test_release_bundle_verifier_rejects_version_content_mismatch(tmp_path: Path) -> None:
+    from scripts.verify_release_bundle import verify_release_bundle
+
+    root, _ = _minimal_repo(tmp_path)
+    output = tmp_path / "out"
+    output.mkdir()
+    archive, _ = package_release(root, output)
+
+    def mutate(bundle_root: Path) -> None:
+        # Change the *bundled VERSION file's own content* while leaving the manifest's
+        # distribution_version claim untouched, and update the manifest's file hash to
+        # match the tampered VERSION so the per-file hash check alone doesn't catch
+        # it -- only the distribution_version-vs-bundled-VERSION cross-check should.
+        (bundle_root / "VERSION").write_text("9.9.9\n", encoding="utf-8")
+        manifest_path = bundle_root / "RELEASE-MANIFEST.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["files"]["VERSION"] = hashlib.sha256(b"9.9.9\n").hexdigest()
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    tampered = _extract_and_repack(archive, tmp_path, mutate)
+    errors = verify_release_bundle(tampered)
+    assert any("does not match bundled VERSION" in error for error in errors)
+
+
+def test_release_bundle_verifier_rejects_schema_version_drift_from_bundled_files(tmp_path: Path) -> None:
+    from scripts.verify_release_bundle import verify_release_bundle
+
+    root, _ = _minimal_repo(tmp_path)
+    output = tmp_path / "out"
+    output.mkdir()
+    archive, _ = package_release(root, output)
+
+    def mutate(bundle_root: Path) -> None:
+        # Bump both the manifest's claimed registry_schema_version and the bundled
+        # release_contract.yaml's compatibility policy together (so the
+        # compatibility-vs-contract check alone wouldn't catch it), while leaving the
+        # actually-bundled skills.yaml at schema_version: 1 -- exactly the "manifest
+        # disagrees with what's really in the bundle" gap this check exists to close.
+        contract_path = bundle_root / "scripts" / "release_contract.yaml"
+        contract_text = contract_path.read_text(encoding="utf-8").replace(
+            "registry_schema_version: 1", "registry_schema_version: 2",
+        )
+        contract_path.write_text(contract_text, encoding="utf-8")
+        manifest_path = bundle_root / "RELEASE-MANIFEST.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["registry_schema_version"] = 2
+        manifest["files"]["scripts/release_contract.yaml"] = hashlib.sha256(
+            contract_text.encode("utf-8"),
+        ).hexdigest()
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    tampered = _extract_and_repack(archive, tmp_path, mutate)
+    errors = verify_release_bundle(tampered)
+    assert any("does not match bundled skills.yaml schema_version" in error for error in errors)
+
+
+def test_release_bundle_verifier_rejects_executable_bit_tampering(tmp_path: Path) -> None:
+    from scripts.verify_release_bundle import verify_release_bundle
+
+    root, _ = _minimal_repo(tmp_path)
+    output = tmp_path / "out"
+    output.mkdir()
+    archive, _ = package_release(root, output)
+
+    def mutate(bundle_root: Path) -> None:
+        (bundle_root / "README.md").chmod(0o755)
+
+    tampered = _extract_and_repack(archive, tmp_path, mutate)
+    errors = verify_release_bundle(tampered)
+    assert any("executable file(s) not listed" in error for error in errors)
+
+
+def test_package_release_does_not_corrupt_prior_archive_on_build_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from scripts import package_release as package_release_module
+
+    root, _ = _minimal_repo(tmp_path)
+    output = tmp_path / "out"
+    output.mkdir()
+    archive, _ = package_release(root, output)
+    original_bytes = archive.read_bytes()
+
+    def _boom(*args, **kwargs):
+        raise ValueError("simulated mid-build failure")
+
+    monkeypatch.setattr(package_release_module, "_tar_info", _boom)
+    with pytest.raises(ValueError, match="simulated mid-build failure"):
+        package_release(root, output)
+
+    # The archive at the same path from the earlier successful build must survive a
+    # later failed rebuild untouched -- not truncated/overwritten by the failed
+    # attempt's partial output.
+    assert archive.read_bytes() == original_bytes
 
 
 def test_release_workflow_runs_contract_and_bundle_verification_before_upload() -> None:

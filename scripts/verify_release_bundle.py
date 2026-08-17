@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import stat
 import sys
 import tarfile
 import tempfile
@@ -32,7 +33,7 @@ from scripts.release_contract import (
     required_provenance_fields_from_contract,
 )
 from scripts.release_info import PACKAGE_NAME, RELEASE_MANIFEST_NAME, SEMVER_RE, SHA_RE
-from scripts.yaml_safety import YAML_SAFETY_ERRORS
+from scripts.yaml_safety import YAML_SAFETY_ERRORS, read_schema_version
 
 _HEX64_RE = re.compile(r"^[0-9a-f]{64}$")
 
@@ -107,16 +108,32 @@ def verify_release_bundle(archive: Path) -> list[str]:
         version = manifest.get("distribution_version")
         if not isinstance(version, str) or not SEMVER_RE.fullmatch(version):
             errors.append(f"error: {RELEASE_MANIFEST_NAME} distribution_version is invalid: {version!r}")
-        elif bundle_root.name != f"{PACKAGE_NAME}-{version}":
-            # Defends the "nothing tampered" guarantee this verifier exists to provide:
-            # without this, a bundle whose top-level directory was renamed after
-            # packaging (but whose manifest/file hashes are otherwise self-consistent)
-            # would still report "ok: verified" even though it no longer matches the
-            # canonical {PACKAGE_NAME}-{version} artifact convention.
-            errors.append(
-                f"error: release bundle top-level directory {bundle_root.name!r} does not match "
-                f"expected '{PACKAGE_NAME}-{version}'",
-            )
+        else:
+            if bundle_root.name != f"{PACKAGE_NAME}-{version}":
+                # Defends the "nothing tampered" guarantee this verifier exists to provide:
+                # without this, a bundle whose top-level directory was renamed after
+                # packaging (but whose manifest/file hashes are otherwise self-consistent)
+                # would still report "ok: verified" even though it no longer matches the
+                # canonical {PACKAGE_NAME}-{version} artifact convention.
+                errors.append(
+                    f"error: release bundle top-level directory {bundle_root.name!r} does not match "
+                    f"expected '{PACKAGE_NAME}-{version}'",
+                )
+            # The "files" hash map (checked below) covers the bundled VERSION file's own
+            # bytes, but never cross-checks this top-level summary field against it --
+            # without this, a manifest whose distribution_version disagrees with the
+            # release's own bundled VERSION file still reports "ok: verified" as long as
+            # every individual file hash matches.
+            try:
+                actual_version = (bundle_root / "VERSION").read_text(encoding="utf-8").strip()
+            except (OSError, UnicodeDecodeError) as exc:
+                errors.append(f"error: could not verify distribution_version against bundled VERSION: {exc}")
+            else:
+                if actual_version != version:
+                    errors.append(
+                        f"error: {RELEASE_MANIFEST_NAME} distribution_version {version!r} does not match "
+                        f"bundled VERSION file {actual_version!r}",
+                    )
 
         source_sha = manifest.get("source_sha")
         if not isinstance(source_sha, str) or not SHA_RE.fullmatch(source_sha):
@@ -128,11 +145,15 @@ def verify_release_bundle(archive: Path) -> list[str]:
             errors.append(f"error: release contract: {exc}")
             expected_schema_versions = {}
 
-        for key in ("registry_schema_version", "host_contract_schema_version"):
+        for key, source_rel in (
+            ("registry_schema_version", "skills.yaml"),
+            ("host_contract_schema_version", "scripts/registry/host_contracts.yaml"),
+        ):
             value = manifest.get(key)
             if not isinstance(value, int) or isinstance(value, bool):
                 errors.append(f"error: {RELEASE_MANIFEST_NAME} {key} must be an integer")
-            elif key in expected_schema_versions and value != expected_schema_versions[key]:
+                continue
+            if key in expected_schema_versions and value != expected_schema_versions[key]:
                 # A bundle's compatibility fields being well-typed integers isn't the
                 # same as them being the *right* integers -- the "files" hash map never
                 # covers these top-level manifest fields, so without this a manifest
@@ -143,6 +164,22 @@ def verify_release_bundle(archive: Path) -> list[str]:
                     f"error: {RELEASE_MANIFEST_NAME} {key} {value!r} does not match release contract "
                     f"compatibility.{key} {expected_schema_versions[key]!r}",
                 )
+            # Separately: cross-check against the *actual* schema_version in the bundle's
+            # own bundled skills.yaml/host_contracts.yaml -- the compatibility.{key} check
+            # above only catches drift from what the contract *declares*, not drift from
+            # what the bundle *actually ships*, so a manifest claiming a schema_version
+            # that matches the contract but not the bundled source file itself would
+            # otherwise still verify clean.
+            try:
+                actual_schema_version = read_schema_version(bundle_root / source_rel)
+            except (OSError, *YAML_SAFETY_ERRORS) as exc:
+                errors.append(f"error: could not verify {key} against bundled {source_rel}: {exc}")
+            else:
+                if value != actual_schema_version:
+                    errors.append(
+                        f"error: {RELEASE_MANIFEST_NAME} {key} {value!r} does not match bundled "
+                        f"{source_rel} schema_version {actual_schema_version!r}",
+                    )
 
         supported_hosts = manifest.get("supported_hosts")
         if not isinstance(supported_hosts, list) or not all(isinstance(item, str) for item in supported_hosts):
@@ -184,12 +221,21 @@ def verify_release_bundle(archive: Path) -> list[str]:
                         "skills.yaml/SKILL.md frontmatter",
                     )
 
+        executable_files = manifest.get("executable_files")
+        if not isinstance(executable_files, list) or not all(isinstance(item, str) for item in executable_files):
+            errors.append(f"error: {RELEASE_MANIFEST_NAME} executable_files must be a list of strings")
+            executable_files = None
+        elif any(item.startswith("/") or ".." in Path(item).parts for item in executable_files):
+            errors.append(f"error: unsafe path reference in {RELEASE_MANIFEST_NAME} executable_files")
+            executable_files = None
+
         files = manifest.get("files")
         if not isinstance(files, dict) or not files:
             errors.append(f"error: {RELEASE_MANIFEST_NAME} files map is empty or invalid")
             return errors
 
         actual_files: dict[str, str] = {}
+        actual_executable: set[str] = set()
         for path in sorted(bundle_root.rglob("*")):
             rel = path.relative_to(bundle_root).as_posix()
             if path.is_symlink():
@@ -199,6 +245,13 @@ def verify_release_bundle(archive: Path) -> list[str]:
                 continue
             if rel == RELEASE_MANIFEST_NAME:
                 continue
+            # The "files" hash map covers content only, never mode -- without recording
+            # each bundled file's actual executable bit here for the executable_files
+            # cross-check below, a bundled file's mode could be tampered with (chmod +x
+            # or -x, then repacked) and go completely undetected even though
+            # package_release.py derives that bit carefully from Git's own index.
+            if stat.S_IMODE(path.stat().st_mode) & 0o111:
+                actual_executable.add(rel)
             try:
                 actual_files[rel] = sha256_file(path)
             except OSError as exc:
@@ -208,6 +261,21 @@ def verify_release_bundle(archive: Path) -> list[str]:
                 # file (disk/filesystem hiccup, permissions) shouldn't be the one path
                 # left to crash main() with a raw traceback instead of a CLI error.
                 errors.append(f"error: could not hash {rel}: {exc}")
+
+        if executable_files is not None:
+            manifest_executable = set(executable_files)
+            missing_exec = sorted(manifest_executable - actual_executable)
+            extra_exec = sorted(actual_executable - manifest_executable)
+            if missing_exec:
+                errors.append(
+                    f"error: {RELEASE_MANIFEST_NAME} executable_files claims executable but not "
+                    f"executable in bundle: {missing_exec}",
+                )
+            if extra_exec:
+                errors.append(
+                    f"error: bundle has executable file(s) not listed in {RELEASE_MANIFEST_NAME} "
+                    f"executable_files: {extra_exec}",
+                )
 
         for rel, digest in sorted(files.items()):
             if not isinstance(rel, str) or not isinstance(digest, str):

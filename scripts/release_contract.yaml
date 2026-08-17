@@ -27,4 +27,5 @@ provenance:
     - host_contract_schema_version
     - supported_hosts
     - skill_versions
+    - executable_files
     - files

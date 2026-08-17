@@ -8,13 +8,17 @@ secrets) can never leak into a release, and a tracked symlink is rejected
 outright rather than silently dereferenced. The archive embeds a
 ``RELEASE-MANIFEST.json`` with exact provenance (distribution version, source
 SHA, registry/host-contract schema versions, supported hosts, per-skill
-versions) and a SHA-256 per bundled file, so verify_release_bundle.py can
-check a release independently of how it was built.
+versions), the set of files that must be executable, and a SHA-256 per
+bundled file, so verify_release_bundle.py can check a release independently
+of how it was built. The archive and its sidecar checksum files are written
+atomically (temp file + rename), so a failed build never corrupts or
+destroys a prior successful artifact left over in the same output directory.
 """
 
 from __future__ import annotations
 
 import argparse
+import contextlib
 import gzip
 import hashlib
 import io
@@ -23,6 +27,7 @@ import os
 import subprocess
 import sys
 import tarfile
+import tempfile
 from pathlib import Path, PurePosixPath
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -291,6 +296,34 @@ def _tracked_files(root: Path) -> list[tuple[str, Path, int]]:
     return files
 
 
+@contextlib.contextmanager
+def _atomic_write(path: Path, *, mode: str = "wb"):
+    """Open a temp file in path's own directory; replace path with it atomically
+    on success, remove it and leave path untouched on any failure.
+
+    Without this, a failure partway through writing (a tracked file's archive
+    path exceeding tarfile's USTAR name-length limit, a tracked file that
+    shrinks between being listed and read, disk-full, a killed process) would
+    truncate/corrupt whatever file previously existed at `path` -- silently
+    destroying a prior, valid release artifact left over from an earlier
+    successful run in the same output directory -- instead of failing without
+    touching it. Matches scripts/registry/generic_package.py's existing
+    "build fully, then write only once complete" precedent for the same
+    "must never damage prior output" property.
+    """
+    fd, tmp_name = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
+    tmp_path = Path(tmp_name)
+    success = False
+    try:
+        with os.fdopen(fd, mode, encoding=None if "b" in mode else "utf-8") as handle:
+            yield handle
+        os.replace(tmp_path, path)
+        success = True
+    finally:
+        if not success:
+            tmp_path.unlink(missing_ok=True)
+
+
 def _tar_info(arcname: str, *, size: int, mode: int) -> tarfile.TarInfo:
     # Every field that could vary between two builds of the same Git tree
     # (mtime, ownership, names) is pinned so the resulting archive is
@@ -338,7 +371,7 @@ def _write_reproducible_archive(
     sibling .sha256/.files.sha256 assets without re-reading any file.
     """
     file_hashes: dict[str, str] = {}
-    with archive_path.open("wb") as raw:
+    with _atomic_write(archive_path) as raw:
         # filename="" (not the default of raw.name) keeps the gzip header
         # itself reproducible regardless of the output path chosen.
         with gzip.GzipFile(filename="", mode="wb", fileobj=raw, mtime=0) as gz:
@@ -402,6 +435,12 @@ def package_release(root: Path, output_dir: Path) -> tuple[Path, Path]:
         "host_contract_schema_version": read_schema_version(host_contracts_path, raw=host_contracts),
         "supported_hosts": supported_hosts(root, contracts=host_contracts),
         "skill_versions": skill_versions(root, registry=registry),
+        # The "files" hash map (added below) covers content only, never mode -- without
+        # this, verify_release_bundle.py has no way to detect a bundled file's executable
+        # bit being tampered with after packaging (chmod +x/-x then repacking), even
+        # though _tracked_files() goes to considerable effort to derive that bit correctly
+        # from Git's own index.
+        "executable_files": sorted(rel for rel, _, mode in tracked if mode == 0o755),
     }
     # required_provenance_fields() (release_contract.yaml's provenance.required_fields) is the
     # single source of truth for what a release manifest must carry -- "files" is the one field
@@ -434,14 +473,13 @@ def package_release(root: Path, output_dir: Path) -> tuple[Path, Path]:
         [f"{digest}  {rel}" for rel, digest in file_hashes.items()]
         + [f"{manifest_digest}  {RELEASE_MANIFEST_NAME}"],
     )
-    (output_dir / f"{bundle_name}.files.sha256").write_text(
-        "\n".join(checksum_lines) + "\n",
-        encoding="utf-8",
-    )
+    with _atomic_write(output_dir / f"{bundle_name}.files.sha256", mode="w") as handle:
+        handle.write("\n".join(checksum_lines) + "\n")
 
     archive_digest = sha256_file(archive_path)
     checksum_path = output_dir / f"{bundle_name}.sha256"
-    checksum_path.write_text(f"{archive_digest}  {archive_path.name}\n", encoding="utf-8")
+    with _atomic_write(checksum_path, mode="w") as handle:
+        handle.write(f"{archive_digest}  {archive_path.name}\n")
 
     return archive_path, checksum_path
 

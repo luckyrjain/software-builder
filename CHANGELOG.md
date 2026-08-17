@@ -8,6 +8,38 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 
 ## Platform
 
+### Harden Batch 5 release lifecycle: atomic writes, manifest-vs-bundle cross-checks, fail-closed edge cases (2026-08-17)
+
+Follow-up to the item below, from a multi-angle parallel review (six independent finders --
+Git tracking/worktree semantics, archive reproducibility/safety, manifest provenance integrity,
+fail-closed error handling, cross-file reuse, test/doc accuracy -- each verifying candidates
+empirically, then a 3-vote adversarial verification panel per finding) run after ~21 rounds of
+single-pass review-and-fix had already landed.
+
+- `scripts/package_release.py`: the release archive and its `.sha256`/`.files.sha256` sidecars are
+  now written atomically (temp file in the same directory, renamed into place only once complete)
+  instead of directly to their final path. A failed build (a tracked path exceeding tarfile's
+  USTAR name-length limit, a tracked file that shrinks mid-build, disk-full, a killed process)
+  previously truncated/corrupted whatever file already existed at that path -- silently destroying
+  a prior, valid release artifact left over from an earlier successful run in the same output
+  directory -- instead of failing without touching it.
+- `RELEASE-MANIFEST.json` gains `executable_files`: every bundled path whose Git index mode has the
+  executable bit set. `scripts/verify_release_bundle.py` cross-checks it against each extracted
+  file's actual on-disk mode -- previously the manifest's `files` map covered content only, so a
+  bundled file's executable bit could be tampered with (`chmod +x`/`-x`, repack) with nothing to
+  detect it, even though `package_release.py` derives that bit carefully from Git's own index
+  specifically to defend against `core.fileMode` drift.
+- `scripts/verify_release_bundle.py` now cross-checks `distribution_version` against the bundled
+  `VERSION` file's actual content, and `registry_schema_version`/`host_contract_schema_version`
+  against the bundled `skills.yaml`/`host_contracts.yaml` files' actual `schema_version` (not just
+  against the bundled `release_contract.yaml`'s compatibility policy, which only catches contract
+  drift, not drift between the manifest and what the bundle actually ships).
+- `scripts/registry/schema.py`'s `schema_version`/`skill_md_max_lines` parsing, and
+  `scripts/registry/host_adapter.py`'s `supported_hosts()`, now reject a malformed value (`null`, a
+  list/mapping, a non-string host key) with a clean `ValueError` instead of an uncaught `TypeError`
+  from Python's own `int()`/`sorted()` -- both `package_release.py` and `verify_release_bundle.py`
+  reach these functions and previously crashed with a raw traceback instead of a clean CLI error.
+
 ### Implement Batch 5 release lifecycle: reproducible bundles, provenance manifest, independent verification (2026-08-16)
 
 - Added `scripts/release_contract.py` + `scripts/release_contract.yaml`: a machine-readable policy

@@ -45,7 +45,9 @@ repository root, minus repo-development tooling that has nothing to do with inst
 `__pycache__`/`.pytest_cache`/`node_modules`/`dist` that ended up tracked) -- untracked files
 (caches, build output, local secrets) never enter a release, and a tracked symlink is rejected
 rather than silently dereferenced. Given the same Git tree, the resulting `.tar.gz` is
-byte-for-byte reproducible.
+byte-for-byte reproducible. The archive and its sidecar checksum files are written atomically
+(built to a temp file, then renamed into place only once complete), so a failed build never
+corrupts or destroys a prior successful artifact left over in the same output directory.
 
 Each bundle embeds `RELEASE-MANIFEST.json` at its root with:
 
@@ -55,6 +57,8 @@ Each bundle embeds `RELEASE-MANIFEST.json` at its root with:
   compatible with.
 - `supported_hosts` -- every host declared in `scripts/registry/host_contracts.yaml`.
 - `skill_versions` -- each skill's normalized `skill_version` from its `SKILL.md` frontmatter.
+- `executable_files` -- every bundled path that must be executable (its Git index mode had the
+  executable bit set).
 - `files` -- a SHA-256 digest for every other file in the bundle.
 
 The outer `.sha256` (archive checksum) and `.files.sha256` (per-file checksums) assets are still
@@ -65,8 +69,14 @@ produced alongside the archive for compatibility with existing verification tool
 `scripts/verify_release_bundle.py` independently re-derives what `RELEASE-MANIFEST.json` claims:
 it extracts the archive into an isolated directory (rejecting path traversal and other unsafe tar
 members), then checks that every provenance field is present and well-formed and that the manifest's
-file list and hashes exactly match the bundle contents -- nothing missing, nothing extra, nothing
-tampered.
+file list, hashes, and executable bits exactly match the bundle contents -- nothing missing, nothing
+extra, nothing tampered. Every summary field is also cross-checked against the bundle's own bundled
+source (`distribution_version` against the bundled `VERSION`, `registry_schema_version`/
+`host_contract_schema_version` against the bundled `skills.yaml`/`host_contracts.yaml` and the
+bundled `scripts/release_contract.yaml`'s compatibility policy, `supported_hosts`/`skill_versions`
+against the bundled `host_contracts.yaml`/`skills.yaml`+`SKILL.md`), not just checked for being
+well-typed -- a manifest that fabricates or drifts on any of those fields, even with every
+individual file hash still matching, is rejected.
 
 ```bash
 python3 scripts/verify_release_bundle.py dist/software-builder-1.4.0.tar.gz
