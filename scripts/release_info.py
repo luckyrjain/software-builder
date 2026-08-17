@@ -21,6 +21,11 @@ SHA_RE = re.compile(r"^([0-9a-f]{40}|[0-9a-f]{64})$")
 # archive) and verify_release_bundle.py (which reads it back out) so the two
 # never drift to different filenames.
 MANIFEST_NAME = "RELEASE-MANIFEST.json"
+# Shared between package_release.py (which names the bundle directory/archive
+# from this) and verify_release_bundle.py (which checks the bundle's
+# top-level directory name against this) so the two never drift to different
+# project-name prefixes.
+PACKAGE_NAME = "software-builder"
 
 
 def read_distribution_version(root: Path | None = None) -> str:

@@ -19,14 +19,15 @@ from reference_utils import copytree_ignore  # noqa: E402
 from validate_references import validate_tree  # noqa: E402
 
 
-@pytest.fixture
-def isolated_repo(tmp_path: Path) -> Path:
-    repo = tmp_path / "software-builder"
-    shutil.copytree(ROOT / "unit-test-creator", repo / "unit-test-creator")
-    shutil.copytree(ROOT / "docs" / "skill-framework", repo / "docs" / "skill-framework")
-    specs = ROOT / "docs" / "superpowers" / "specs"
-    if specs.is_dir():
-        shutil.copytree(specs, repo / "docs" / "superpowers" / "specs")
+def _init_fixture_repo(repo: Path) -> None:
+    """Write a VERSION file and commit repo's current contents as a fresh Git repo.
+
+    Shared by isolated_repo() and any standalone test building its own repo tree
+    (rather than using that fixture), so this identical package_release.py-required
+    setup (a real VERSION file plus a real, clean Git HEAD -- see release_info.py's
+    fail-closed read_distribution_version()/git_source_sha()) isn't duplicated at
+    every call site.
+    """
     (repo / "VERSION").write_text("0.0.0\n", encoding="utf-8")
     subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
     subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo, check=True)
@@ -36,6 +37,17 @@ def isolated_repo(tmp_path: Path) -> Path:
     # Git signing config (commit signing turned on would otherwise block this
     # fixture commit on a passphrase/hardware-key prompt or fail outright).
     subprocess.run(["git", "-c", "commit.gpgsign=false", "commit", "-qm", "fixture"], cwd=repo, check=True)
+
+
+@pytest.fixture
+def isolated_repo(tmp_path: Path) -> Path:
+    repo = tmp_path / "software-builder"
+    shutil.copytree(ROOT / "unit-test-creator", repo / "unit-test-creator")
+    shutil.copytree(ROOT / "docs" / "skill-framework", repo / "docs" / "skill-framework")
+    specs = ROOT / "docs" / "superpowers" / "specs"
+    if specs.is_dir():
+        shutil.copytree(specs, repo / "docs" / "superpowers" / "specs")
+    _init_fixture_repo(repo)
     return repo
 
 
@@ -118,15 +130,7 @@ def test_prd_architect_package_contains_executable_safe_output_renderer(tmp_path
     repo = tmp_path / "software-builder"
     shutil.copytree(ROOT / "prd-architect", repo / "prd-architect")
     shutil.copytree(ROOT / "docs" / "skill-framework", repo / "docs" / "skill-framework")
-    (repo / "VERSION").write_text("0.0.0\n", encoding="utf-8")
-    subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
-    subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo, check=True)
-    subprocess.run(["git", "config", "user.name", "Test"], cwd=repo, check=True)
-    subprocess.run(["git", "add", "."], cwd=repo, check=True)
-    # -c commit.gpgsign=false: don't depend on the invoking machine's global
-    # Git signing config (commit signing turned on would otherwise block this
-    # fixture commit on a passphrase/hardware-key prompt or fail outright).
-    subprocess.run(["git", "-c", "commit.gpgsign=false", "commit", "-qm", "fixture"], cwd=repo, check=True)
+    _init_fixture_repo(repo)
     dest = tmp_path / "installed" / "prd-architect"
     package_skill(skill="prd-architect", repo_root=repo, dest=dest, host="test")
 

@@ -56,6 +56,30 @@ def required_provenance_fields(path: Path = CONTRACT_PATH) -> set[str]:
     return _required_provenance_fields_from_contract(_load_contract(path))
 
 
+def _compatibility_schema_versions_from_contract(contract: dict) -> dict[str, int]:
+    compatibility = require_mapping(contract.get("compatibility"), "release contract.compatibility")
+    versions: dict[str, int] = {}
+    for key in ("registry_schema_version", "host_contract_schema_version"):
+        value = compatibility.get(key)
+        if not isinstance(value, int) or isinstance(value, bool):
+            raise ValueError(f"release contract.compatibility.{key} must be an integer")
+        versions[key] = value
+    return versions
+
+
+def compatibility_schema_versions(path: Path = CONTRACT_PATH) -> dict[str, int]:
+    """registry_schema_version/host_contract_schema_version a release manifest must
+    declare to be compatible with this contract.
+
+    Shared with verify_release_bundle.py so a manifest's schema-version fields are
+    checked against the same compatibility policy validate_release_contract() enforces
+    on a live repository -- not just checked for being well-typed integers, which would
+    let a bundle embedding a stale or wrong schema version (a package_release.py bug, or
+    a tampered manifest with self-consistent file hashes) verify cleanly.
+    """
+    return _compatibility_schema_versions_from_contract(_load_contract(path))
+
+
 def validate_release_contract(root: Path = ROOT) -> list[str]:
     # Load the contract from root's own scripts/release_contract.yaml, not the
     # hardcoded CONTRACT_PATH default -- otherwise a caller that passes a root

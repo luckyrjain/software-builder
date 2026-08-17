@@ -33,7 +33,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from reference_utils import sha256_file
-from release_info import MANIFEST_NAME, git_source_sha, read_distribution_version
+from release_info import MANIFEST_NAME, PACKAGE_NAME, git_source_sha, read_distribution_version
 from yaml_safety import YAML_SAFETY_ERRORS, read_schema_version
 
 from scripts.registry.host_adapter import supported_hosts
@@ -191,9 +191,21 @@ def _tracked_files(root: Path) -> list[tuple[str, Path, int]]:
         abs_path = root / rel
         if abs_path.is_symlink():
             raise ValueError(f"release inputs must be regular files; found tracked symlink: {rel}")
-        if abs_path.is_file():
-            mode = 0o755 if git_mode & 0o111 else 0o644
-            files.append((rel, abs_path, mode))
+        if not abs_path.is_file():
+            # _ensure_clean_worktree() already confirmed the working tree and index
+            # match HEAD, so under normal operation every remaining tracked path is a
+            # real regular file on disk. The one way this still trips is a Git
+            # skip-worktree/assume-unchanged bit (or a mid-build removal): either
+            # hides the discrepancy from the `git diff` checks above, and staying
+            # silent here would ship a release that's quietly missing tracked
+            # content -- the exact failure mode the gitlink/symlink checks above
+            # this exist to prevent.
+            raise ValueError(
+                f"release inputs must be regular files; tracked path is missing or not a "
+                f"regular file on disk: {rel}",
+            )
+        mode = 0o755 if git_mode & 0o111 else 0o644
+        files.append((rel, abs_path, mode))
     return files
 
 
@@ -273,7 +285,7 @@ def package_release(root: Path, output_dir: Path) -> tuple[Path, Path]:
     version = read_distribution_version(root)
     sha = git_source_sha(root)
     _ensure_clean_worktree(root)
-    bundle_name = f"software-builder-{version}"
+    bundle_name = f"{PACKAGE_NAME}-{version}"
 
     tracked = _tracked_files(root)
     manifest_fields = {

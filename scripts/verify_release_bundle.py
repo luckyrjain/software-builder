@@ -24,8 +24,8 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from scripts.reference_utils import sha256_file
-from scripts.release_contract import required_provenance_fields
-from scripts.release_info import MANIFEST_NAME, SEMVER_RE, SHA_RE
+from scripts.release_contract import compatibility_schema_versions, required_provenance_fields
+from scripts.release_info import MANIFEST_NAME, PACKAGE_NAME, SEMVER_RE, SHA_RE
 from scripts.yaml_safety import YAML_SAFETY_ERRORS
 
 _HEX64_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -84,25 +84,42 @@ def verify_release_bundle(archive: Path) -> list[str]:
         version = manifest.get("distribution_version")
         if not isinstance(version, str) or not SEMVER_RE.fullmatch(version):
             errors.append(f"error: {MANIFEST_NAME} distribution_version is invalid: {version!r}")
-        elif bundle_root.name != f"software-builder-{version}":
+        elif bundle_root.name != f"{PACKAGE_NAME}-{version}":
             # Defends the "nothing tampered" guarantee this verifier exists to provide:
             # without this, a bundle whose top-level directory was renamed after
             # packaging (but whose manifest/file hashes are otherwise self-consistent)
             # would still report "ok: verified" even though it no longer matches the
-            # canonical software-builder-{version} artifact convention.
+            # canonical {PACKAGE_NAME}-{version} artifact convention.
             errors.append(
                 f"error: release bundle top-level directory {bundle_root.name!r} does not match "
-                f"expected 'software-builder-{version}'",
+                f"expected '{PACKAGE_NAME}-{version}'",
             )
 
         source_sha = manifest.get("source_sha")
         if not isinstance(source_sha, str) or not SHA_RE.fullmatch(source_sha):
             errors.append(f"error: {MANIFEST_NAME} source_sha is invalid: {source_sha!r}")
 
+        try:
+            expected_schema_versions = compatibility_schema_versions()
+        except (OSError, *YAML_SAFETY_ERRORS) as exc:
+            errors.append(f"error: release contract: {exc}")
+            expected_schema_versions = {}
+
         for key in ("registry_schema_version", "host_contract_schema_version"):
             value = manifest.get(key)
             if not isinstance(value, int) or isinstance(value, bool):
                 errors.append(f"error: {MANIFEST_NAME} {key} must be an integer")
+            elif key in expected_schema_versions and value != expected_schema_versions[key]:
+                # A bundle's compatibility fields being well-typed integers isn't the
+                # same as them being the *right* integers -- the "files" hash map never
+                # covers these top-level manifest fields, so without this a manifest
+                # claiming an incompatible/stale schema version (a package_release.py
+                # bug, or a tampered-but-internally-consistent manifest) still reports
+                # "ok: verified".
+                errors.append(
+                    f"error: {MANIFEST_NAME} {key} {value!r} does not match release contract "
+                    f"compatibility.{key} {expected_schema_versions[key]!r}",
+                )
 
         supported_hosts = manifest.get("supported_hosts")
         if not isinstance(supported_hosts, list) or not all(isinstance(item, str) for item in supported_hosts):
