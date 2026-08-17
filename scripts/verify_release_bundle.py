@@ -24,7 +24,11 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from scripts.reference_utils import sha256_file
-from scripts.release_contract import compatibility_schema_versions, required_provenance_fields
+from scripts.release_contract import (
+    compatibility_schema_versions_from_contract,
+    load_contract,
+    required_provenance_fields_from_contract,
+)
 from scripts.release_info import MANIFEST_NAME, PACKAGE_NAME, SEMVER_RE, SHA_RE
 from scripts.yaml_safety import YAML_SAFETY_ERRORS
 
@@ -75,10 +79,19 @@ def verify_release_bundle(archive: Path) -> list[str]:
         # verifier happens to be running from (e.g. re-checking an older release's bundle
         # from a fresh clone of main) would silently check it against the wrong,
         # contemporaneous-with-neither contract instead of the bundle's own.
+        #
+        # Parsed once via load_contract() and reused below for the compatibility-schema
+        # check too, instead of calling required_provenance_fields()/
+        # compatibility_schema_versions() separately -- each re-reads and re-parses the
+        # same YAML file from disk independently.
         contract_path = bundle_root / "scripts" / "release_contract.yaml"
         try:
-            fields = required_provenance_fields(contract_path)
+            contract = load_contract(contract_path)
         except (OSError, *YAML_SAFETY_ERRORS) as exc:
+            return [f"error: release contract: {exc}"]
+        try:
+            fields = required_provenance_fields_from_contract(contract)
+        except ValueError as exc:
             return [f"error: release contract: {exc}"]
         missing_fields = sorted(fields - set(manifest))
         if missing_fields:
@@ -108,8 +121,8 @@ def verify_release_bundle(archive: Path) -> list[str]:
             errors.append(f"error: {MANIFEST_NAME} source_sha is invalid: {source_sha!r}")
 
         try:
-            expected_schema_versions = compatibility_schema_versions(contract_path)
-        except (OSError, *YAML_SAFETY_ERRORS) as exc:
+            expected_schema_versions = compatibility_schema_versions_from_contract(contract)
+        except ValueError as exc:
             errors.append(f"error: release contract: {exc}")
             expected_schema_versions = {}
 

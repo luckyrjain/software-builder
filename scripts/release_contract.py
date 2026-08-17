@@ -49,7 +49,21 @@ def _load_contract(path: Path = CONTRACT_PATH) -> dict:
     return raw
 
 
-def _required_provenance_fields_from_contract(contract: dict) -> set[str]:
+def load_contract(path: Path = CONTRACT_PATH) -> dict:
+    """Parse and shape-check the release contract YAML file (schema_version == 1).
+
+    Exposed publicly (unlike _load_contract) so a caller needing more than one
+    contract-derived value in a single pass -- verify_release_bundle.py needs both
+    required_provenance_fields_from_contract() and
+    compatibility_schema_versions_from_contract() -- can read and parse the YAML file
+    once and reuse the resulting dict, instead of calling required_provenance_fields()
+    and compatibility_schema_versions() separately and re-reading/re-parsing the same
+    file from disk for each.
+    """
+    return _load_contract(path)
+
+
+def required_provenance_fields_from_contract(contract: dict) -> set[str]:
     provenance = require_mapping(contract.get("provenance"), "release contract.provenance")
     fields = provenance.get("required_fields")
     if not isinstance(fields, list) or not fields or not all(isinstance(item, str) for item in fields):
@@ -58,10 +72,10 @@ def _required_provenance_fields_from_contract(contract: dict) -> set[str]:
 
 
 def required_provenance_fields(path: Path = CONTRACT_PATH) -> set[str]:
-    return _required_provenance_fields_from_contract(_load_contract(path))
+    return required_provenance_fields_from_contract(_load_contract(path))
 
 
-def _compatibility_schema_versions_from_contract(contract: dict) -> dict[str, int]:
+def compatibility_schema_versions_from_contract(contract: dict) -> dict[str, int]:
     compatibility = require_mapping(contract.get("compatibility"), "release contract.compatibility")
     versions: dict[str, int] = {}
     for key in ("registry_schema_version", "host_contract_schema_version"):
@@ -82,7 +96,7 @@ def compatibility_schema_versions(path: Path = CONTRACT_PATH) -> dict[str, int]:
     let a bundle embedding a stale or wrong schema version (a package_release.py bug, or
     a tampered manifest with self-consistent file hashes) verify cleanly.
     """
-    return _compatibility_schema_versions_from_contract(_load_contract(path))
+    return compatibility_schema_versions_from_contract(_load_contract(path))
 
 
 def validate_release_contract(root: Path = ROOT) -> list[str]:
@@ -170,7 +184,7 @@ def validate_release_contract(root: Path = ROOT) -> list[str]:
             )
 
     try:
-        _required_provenance_fields_from_contract(contract)
+        required_provenance_fields_from_contract(contract)
     except ValueError as exc:
         errors.append(f"error: release contract: {exc}")
 
