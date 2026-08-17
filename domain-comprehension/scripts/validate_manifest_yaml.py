@@ -170,8 +170,9 @@ def _invalid_enum(value: Any, allowed: frozenset[str]) -> bool:
 
     Centralizes the isinstance-before-membership-check pattern: ``value not in allowed`` raises
     TypeError when ``value`` is an unhashable type (a hand-edited manifest.yaml can put a list or
-    mapping where a string enum is expected), so every enum check must route through here instead
-    of hand-rolling the guard at each call site.
+    mapping where a string enum is expected), so every *string*-valued enum check must route
+    through here instead of hand-rolling the guard at each call site. ``schema_version`` is
+    int-valued, so it guards itself inline instead of through this helper.
     """
     return not isinstance(value, str) or value not in allowed
 
