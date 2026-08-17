@@ -70,19 +70,25 @@ When on the existing-system path, inspect `current_state_evidence` before Specif
 When the PRD came from `domain-comprehension`, also inspect the producer manifest PRD artifact freshness status
 required by [current-state-evidence-contract.yaml](../reference/current-state-evidence-contract.yaml):
 
-- `ok` — eligible to be used as current-state PRD evidence only after re-checking integrity against
-  source revisions and machine artifacts;
-- `stale` — **Blocking Before Build** for PRD/Review and the PRD must not be treated as current;
-- missing/unknown freshness — disclose the gap and verify freshness before any current-state claim.
+- `ok` — eligible as current-state PRD evidence only when integrity re-check against source revisions and
+  machine artifacts passes **and** every accepted machine artifact is itself `ok` (not `waived`/`missing`);
+- `stale` — **Blocking Before Build** / **Not Ready** for PRD/Review; do not treat the PRD as current;
+- missing/unknown freshness — **Blocking Before Build** / **Not Ready** for PRD/Review until producer
+  `artifacts[id=prd].status=ok` and `integrity_check` both pass (no ad-hoc independent-verification escape
+  for domain-comprehension handoffs).
 
 Missing artifacts or freshness metadata do not authorize invention: record the gap as an assumption/unknown and
 cap claims according to the source evidence. Mode-specific outcomes come from
-[current-state-evidence-contract.yaml](../reference/current-state-evidence-contract.yaml):
+[current-state-evidence-contract.yaml](../reference/current-state-evidence-contract.yaml)
+(`missing_evidence_means` defines the trigger set):
 
-- **Validation** (`validation_missing_evidence_behavior: evidence_needed_next`) may proceed with the gap
+- **Validation** (`validation_missing_evidence_behavior: evidence_needed_next`) may proceed with those gaps
   surfaced under Evidence Needed Next; it must not silently promote stale/unknown evidence to current state.
 - **PRD/Review** (`prd_review_missing_evidence_behavior: block_build_ready`) must keep Build Readiness
-  **Not Ready** until required current-state evidence is present and eligible.
+  **Not Ready** until required current-state evidence is present and eligible — including every
+  `accepted_artifacts` entry, complete `source_revision`, eligible PRD freshness, and machine artifacts `ok`
+  whenever PRD freshness is `ok`. There is no “needed for the proposed change” discretion and these gaps
+  must not be parked as non-blocking unknowns.
 
 Preserve observed current state verbatim in meaning. Proposed future-state behavior must be identified as a
 proposal/change, never silently rewritten into the observed baseline. If source revisions conflict, the PRD

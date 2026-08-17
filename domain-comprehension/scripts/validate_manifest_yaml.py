@@ -300,21 +300,51 @@ def _validate_discovery_budget(value: Any, *, required: bool = False) -> list[st
     return errors
 
 
-def _validate_strict_completion_artifacts(artifacts: Any) -> list[str]:
-    """FIRST_PASS_COMPLETE requires a current PRD plus required machine artifact rows.
+def _artifact_rows_by_id(artifacts: Any) -> dict[str, dict[str, Any]]:
+    by_id: dict[str, dict[str, Any]] = {}
+    if not isinstance(artifacts, list):
+        return by_id
+    for item in artifacts:
+        if isinstance(item, dict) and isinstance(item.get("id"), str):
+            by_id[item["id"]] = item
+    return by_id
 
-    Machine rows may be ``waived`` for COMPLIANCE_RETROFIT, but PRD ``ok`` is forbidden while
-    any required machine artifact is waived — there is then no integrity basis for current-state
-    handoff.
+
+def _validate_prd_ok_requires_machine_artifacts_ok(artifacts: Any) -> list[str]:
+    """PRD freshness ok is never eligible while required machine artifacts are non-ok."""
+    by_id = _artifact_rows_by_id(artifacts)
+    prd = by_id.get("prd")
+    if prd is None or prd.get("status") != "ok":
+        return []
+    errors: list[str] = []
+    for artifact_id in sorted(REQUIRED_MACHINE_ARTIFACT_IDS):
+        row = by_id.get(artifact_id)
+        if row is None:
+            errors.append(
+                "artifact prd status=ok is forbidden while required machine artifact "
+                f"{artifact_id} is missing (integrity basis missing)"
+            )
+            continue
+        status = row.get("status")
+        if status != "ok":
+            errors.append(
+                "artifact prd status=ok is forbidden while required machine artifact "
+                f"{artifact_id} status is {status!r} (integrity basis missing)"
+            )
+    return errors
+
+
+def _validate_strict_completion_artifacts(artifacts: Any) -> list[str]:
+    """FIRST_PASS_COMPLETE requires current PRD and required machine artifacts at status=ok.
+
+    COMPLIANCE_RETROFIT may keep machine rows ``waived`` only while ``engagement.status`` remains
+    ``IN_PROGRESS``; waived machines cannot claim first-pass completion or PRD freshness ``ok``.
     """
     errors: list[str] = []
     if not isinstance(artifacts, list):
         return ["strict: artifacts must be an array"]
 
-    by_id: dict[str, dict[str, Any]] = {}
-    for item in artifacts:
-        if isinstance(item, dict) and isinstance(item.get("id"), str):
-            by_id[item["id"]] = item
+    by_id = _artifact_rows_by_id(artifacts)
 
     prd = by_id.get("prd")
     if prd is None:
@@ -328,7 +358,6 @@ def _validate_strict_completion_artifacts(artifacts: Any) -> list[str]:
                 f"(got {prd.get('status')!r}; waived/stale/n_a are not allowed)"
             )
 
-    waived_machines: list[str] = []
     for artifact_id in sorted(REQUIRED_MACHINE_ARTIFACT_IDS):
         row = by_id.get(artifact_id)
         if row is None:
@@ -337,18 +366,12 @@ def _validate_strict_completion_artifacts(artifacts: Any) -> list[str]:
         if row.get("required") is not True:
             errors.append(f"strict: machine artifact {artifact_id} must have required=true")
         status = row.get("status")
-        if status not in ("ok", "waived"):
+        if status != "ok":
             errors.append(
-                f"strict: machine artifact {artifact_id} status must be ok or waived (got {status!r})"
+                f"strict: machine artifact {artifact_id} must have status=ok for FIRST_PASS_COMPLETE "
+                f"(got {status!r}; waived/stale/n_a are not allowed)"
             )
-        elif status == "waived":
-            waived_machines.append(artifact_id)
-
-    if waived_machines and prd is not None and prd.get("status") == "ok":
-        errors.append(
-            "strict: PRD status=ok is forbidden while required machine artifact(s) are waived "
-            f"({', '.join(waived_machines)}; integrity basis missing)"
-        )
+    errors.extend(_validate_prd_ok_requires_machine_artifacts_ok(artifacts))
     return errors
 
 
@@ -783,6 +806,7 @@ def validate_manifest(
     errors.extend(_validate_five_questions(data.get("five_questions")))
     errors.extend(_validate_repos(data.get("repos")))
     errors.extend(_validate_evidence_summary(data.get("evidence_summary")))
+    errors.extend(_validate_prd_ok_requires_machine_artifacts_ok(data.get("artifacts")))
     errors.extend(_validate_p5_prd_freshness(phases, data.get("artifacts")))
     errors.extend(
         _validate_first_pass_complete_readiness(

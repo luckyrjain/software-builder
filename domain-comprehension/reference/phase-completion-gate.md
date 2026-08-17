@@ -18,6 +18,7 @@ Phase: <name>
 [ ] overall_confidence recalculated (when five questions touched)
 [ ] python3 scripts/validate_manifest_yaml.py manifest.yaml --workspace-root <root> → exit 0
 [ ] P5 FIRST_PASS_COMPLETE: manifest validator runs with --strict --check-content
+[ ] P5 FIRST_PASS_COMPLETE: artifacts[id=prd].status=ok and all four machine artifacts status=ok (waived machines cannot claim FIRST_PASS_COMPLETE)
 [ ] P5 FIRST_PASS_COMPLETE: validate_prd.py <artifact_root>/PRD.md → exit 0
 [ ] P2b complete: `{map_file}` § Runtime validation exists or map stub links to `E2E_FLOW.md` § Runtime validation
 [ ] No required table is empty (UNKNOWN rows allowed with reason)

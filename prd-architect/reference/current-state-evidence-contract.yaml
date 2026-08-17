@@ -5,6 +5,12 @@ consumer: prd-architect
 current_state_evidence:
   required_when: existing_system_and_response_mode_PRD_or_Review
   # Mode-specific missing-evidence outcomes. Do not apply Validation's non-blocking path to PRD/Review.
+  missing_evidence_means:
+    - current_state_evidence_absent_when_required
+    - any_accepted_artifact_absent_or_ineligible
+    - source_revision_incomplete
+    - prd_freshness_stale_or_unknown_for_domain_comprehension_prd
+    - any_accepted_machine_artifact_waived_or_not_ok_while_prd_ok
   validation_missing_evidence_behavior: evidence_needed_next
   prd_review_missing_evidence_behavior: block_build_ready
   accepted_artifacts:
@@ -19,9 +25,11 @@ current_state_evidence:
     current_value: ok
     stale_value: stale
     stale_behavior: blocking_before_build_do_not_treat_PRD_as_current
-    unknown_behavior: disclose_and_verify_before_current_state_claim
+    unknown_behavior: block_build_ready
     integrity_check: recompute_against_source_revision_and_machine_artifacts_before_accepting_ok
     integrity_mismatch_behavior: treat_as_stale_or_unknown_and_block_build_ready
+  prd_ok_requires_accepted_machine_artifacts_ok: true
+  waived_or_missing_machine_behavior: block_build_ready
   source_revision:
     required: true
     shape: repos

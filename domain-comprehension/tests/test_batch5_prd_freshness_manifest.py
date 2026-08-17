@@ -95,7 +95,27 @@ def test_waived_machine_artifacts_block_prd_ok_under_first_pass_complete() -> No
         _artifact(data, artifact_id)["status"] = "waived"
     errors = validate_manifest(data)
     assert any(
-        "PRD status=ok is forbidden while required machine artifact(s) are waived" in error
+        "prd status=ok is forbidden while required machine artifact" in error
+        for error in errors
+    )
+    assert any(
+        "must have status=ok for FIRST_PASS_COMPLETE" in error for error in errors
+    )
+
+
+def test_waived_machine_artifacts_block_prd_ok_while_in_progress() -> None:
+    data = _manifest()
+    _artifact(data, "prd")["status"] = "ok"
+    for artifact_id in (
+        "api_event_schema",
+        "data_ownership_graph",
+        "dependency_graph_machine",
+        "capability_traceability",
+    ):
+        _artifact(data, artifact_id)["status"] = "waived"
+    errors = validate_manifest(data)
+    assert any(
+        "prd status=ok is forbidden while required machine artifact" in error
         for error in errors
     )
 

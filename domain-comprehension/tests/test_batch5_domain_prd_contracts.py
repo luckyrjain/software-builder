@@ -137,6 +137,10 @@ def test_prd_architect_has_current_state_ingestion_contract():
     assert current["validation_missing_evidence_behavior"] == "evidence_needed_next"
     assert current["prd_review_missing_evidence_behavior"] == "block_build_ready"
     assert "validation_behavior" not in current
+    assert "current_state_evidence_absent_when_required" in current["missing_evidence_means"]
+    assert current["prd_freshness"]["unknown_behavior"] == "block_build_ready"
+    assert current["prd_ok_requires_accepted_machine_artifacts_ok"] is True
+    assert current["waived_or_missing_machine_behavior"] == "block_build_ready"
     for artifact in (
         "PRD.md",
         "API_EVENT_SCHEMA.yaml",
@@ -172,9 +176,13 @@ def test_prd_review_missing_current_state_evidence_blocks_build_ready():
     gate = _text("prd-architect/workflow/gate.md")
     assert "Not Ready" in gate
     assert "required `current_state_evidence` is missing" in gate
+    assert "no ad-hoc" in gate
+    assert "current_state_evidence: object" in gate
     inputs = _text("prd-architect/workflow/inputs.md")
     assert "prd_review_missing_evidence_behavior: block_build_ready" in inputs
     assert "validation_missing_evidence_behavior: evidence_needed_next" in inputs
+    assert "missing_evidence_means" in inputs
+    assert "no ad-hoc independent-verification escape" in inputs
     specify = _text("prd-architect/workflow/specify.md")
     assert "Not Ready" in specify
 
@@ -231,10 +239,11 @@ def test_prd_workflow_carries_reviews_repairs_and_gates_new_contract_fields():
         "baseline, target, timeframe, and measurement source",
         "every engineering trigger was evaluated",
         "a required engineering-impact section fired but lacks its contract fields",
-        "complete enough for the claimed baseline",
-        "lacks required source-revision/baseline evidence needed to establish compatibility",
+        "every `accepted_artifacts` entry is present and eligible",
+        "Blocking Before Build",
         "existing-system path",
         "integrity",
+        "no “needed for the proposed change” discretion",
     ):
         assert token in gate
 
