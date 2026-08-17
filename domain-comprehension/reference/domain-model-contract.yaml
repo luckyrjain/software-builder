@@ -55,11 +55,11 @@ artifacts:
     schema_version: 1
     node_kinds: [service, datastore, table, entity, cache, index]
     edge_fields: [source, target, operation, owner, evidence, confidence]
-  dependency_graph:
+  dependency_graph_machine:
     path: DEPENDENCY_GRAPH.yaml
     schema_version: 1
     required_fields: [source, target, perspective, direction, interaction, criticality, evidence, confidence]
-  capability_code_ownership:
+  capability_traceability:
     path: CAPABILITY_TRACEABILITY.yaml
     schema_version: 1
     required_fields: [capability, repositories, code_locations, owner, evidence, confidence]
@@ -84,7 +84,7 @@ dependency_edges:
 
 stale_prd_detection:
   modes: [DELTA, ADD_REPO]
-  compare: [source_revision, api_event_schema, data_ownership_graph, dependency_graph, capability_code_ownership]
+  compare: [source_revision, api_event_schema, data_ownership_graph, dependency_graph_machine, capability_traceability]
   stale_when:
     - behavior_affecting_source_revision_changed
     - externally_observable_contract_changed
@@ -100,12 +100,12 @@ compatibility:
   source_revision_shape: {repos: [{repo: string, branch: string, commit_sha: string, observed_at: string}]}
   accepted_artifacts: [PRD.md, API_EVENT_SCHEMA.yaml, DATA_OWNERSHIP_GRAPH.yaml, DEPENDENCY_GRAPH.yaml, CAPABILITY_TRACEABILITY.yaml]
   prd_freshness:
-    source: manifest.artifacts[id=prd].status
+    source: domain_comprehension_manifest_prd_artifact_status
     handoff_required: true
     current_value: ok
     stale_value: stale
     stale_behavior: blocking_before_build_do_not_treat_PRD_as_current
-  evidence_status_values: [Observed, Inferred, Unknown, Conflicted, Not_Applicable]
+  evidence_status_values: [Observed, Inferred, Unknown, Conflicted]
   confidence_values: [HIGH, MEDIUM, LOW, UNKNOWN]
   preserve_ids: true
   future_state_mutation: forbidden
