@@ -6,8 +6,8 @@ In **Lite** depth, the Lite preferred section list in [depth.md](depth.md) guide
 not waive mandatory measurable success metrics, material `FR-* -> AC-* -> TR-*` traceability, or an
 engineering section whose trigger is required for correctness/safety/compatibility/operability.
 
-Full section × trigger matrix — including the engineering triggers (Success Metrics, Requirements
-Traceability, Assumption Register, Rollout / Rollback, Operational Readiness, Migration / Backward
+Full section × trigger matrix — including Success Metrics, Requirements Traceability, Assumption
+Register, and the engineering triggers (Rollout / Rollback, Operational Readiness, Migration / Backward
 Compatibility, API / Event / Schema Impact, Data / Privacy Impact, Cost Impact, Observability Requirements):
 [output-tables.md](output-tables.md) § Section triggers. Normative trigger definitions:
 [current-state-evidence-contract.yaml](current-state-evidence-contract.yaml).
