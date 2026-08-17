@@ -594,6 +594,8 @@ def validate_manifest(
         for key in ("edges_total", "edges_confirmed"):
             if key in runtime and not _plain_int(runtime[key]):
                 errors.append(f"runtime_validation.{key} must be an integer")
+            elif key in runtime and runtime[key] < 0:
+                errors.append(f"runtime_validation.{key} must be >= 0")
 
     map_file = str(engagement.get("map_file") or "") if isinstance(engagement, dict) else ""
 

@@ -107,6 +107,16 @@ def test_runtime_validation_boolean_count_rejected() -> None:
     assert any("runtime_validation.edges_total must be an integer" in e for e in errors)
 
 
+def test_runtime_validation_negative_rejected() -> None:
+    # Unlike evidence_summary's counters (see test_evidence_summary_negative_rejected), the
+    # runtime_validation.edges_total/edges_confirmed checks had no >= 0 guard, so a negative
+    # count silently validated clean.
+    data = _minimal_manifest()
+    data["runtime_validation"]["edges_confirmed"] = -1
+    errors = validate_manifest(data)
+    assert any("runtime_validation.edges_confirmed must be >= 0" in e for e in errors)
+
+
 def test_check_content_p2b_pending_skips_runtime_gate(tmp_path: Path) -> None:
     data = _minimal_manifest()
     (tmp_path / "EXEC_SUMMARY.md").write_text(
