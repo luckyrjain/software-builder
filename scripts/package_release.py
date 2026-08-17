@@ -24,23 +24,27 @@ import sys
 import tarfile
 from pathlib import Path
 
-_SCRIPTS_DIR = Path(__file__).resolve().parent
-if str(_SCRIPTS_DIR) not in sys.path:
-    sys.path.insert(0, str(_SCRIPTS_DIR))
-
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from reference_utils import sha256_file
-from release_info import MANIFEST_NAME, PACKAGE_NAME, git_source_sha, read_distribution_version
-from yaml_safety import YAML_SAFETY_ERRORS, read_schema_version
-
+# Imported exclusively via the `scripts.` package prefix (matching
+# release_contract.py/verify_release_bundle.py) rather than also inserting
+# scripts/ itself onto sys.path for a second, bare-name import path -- the
+# latter previously made release_info.py/yaml_safety.py/reference_utils.py
+# each load as two separate module objects in the same process
+# (`release_info` and `scripts.release_info`), which is wasted work with no
+# upside since every caller in this file already needs the `scripts.`-rooted
+# imports below anyway (host_adapter, manifest, schema, release_contract all
+# live under the scripts.registry/scripts package).
+from scripts.reference_utils import sha256_file
 from scripts.registry.host_adapter import supported_hosts
 from scripts.registry.manifest import skill_versions
 from scripts.registry.models import Registry
 from scripts.registry.schema import parse_registry
 from scripts.release_contract import required_provenance_fields
+from scripts.release_info import MANIFEST_NAME, PACKAGE_NAME, git_source_sha, read_distribution_version
+from scripts.yaml_safety import YAML_SAFETY_ERRORS, read_schema_version
 
 
 def _ensure_clean_worktree(root: Path) -> None:
@@ -351,15 +355,18 @@ def package_release(root: Path, output_dir: Path) -> tuple[Path, Path]:
     bundle_name = f"{PACKAGE_NAME}-{version}"
 
     tracked = _tracked_files(root)
-    # Parsed once and reused for both the tracked-input check and the manifest's
-    # skill_versions field, instead of re-parsing skills.yaml a second time.
+    # Parsed once and reused for the tracked-input check, the manifest's
+    # registry_schema_version field, and the manifest's skill_versions field,
+    # instead of re-parsing skills.yaml a second time via read_schema_version()
+    # -- parse_registry() already requires schema_version == 1 or raises, so
+    # registry.schema_version is exactly the value a second read would produce.
     registry = parse_registry(root / "skills.yaml")
     _ensure_manifest_inputs_tracked(root, tracked, registry)
     manifest_fields = {
         "schema_version": 1,
         "distribution_version": version,
         "source_sha": sha,
-        "registry_schema_version": read_schema_version(root / "skills.yaml"),
+        "registry_schema_version": registry.schema_version,
         "host_contract_schema_version": read_schema_version(root / "scripts" / "registry" / "host_contracts.yaml"),
         "supported_hosts": supported_hosts(root),
         "skill_versions": skill_versions(root, registry=registry),

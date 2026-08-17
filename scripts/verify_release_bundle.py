@@ -204,7 +204,18 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("archive", type=Path)
     args = parser.parse_args(argv)
 
-    errors = verify_release_bundle(args.archive)
+    try:
+        errors = verify_release_bundle(args.archive)
+    except (OSError, *YAML_SAFETY_ERRORS) as exc:
+        # verify_release_bundle() converts every expected failure mode (bad archive,
+        # malformed manifest, hash mismatch, ...) into an error string rather than
+        # raising, but it doesn't wrap every filesystem call after extraction (e.g.
+        # iterdir()/is_symlink() on a bundle member) -- catch the same exception
+        # classes package_release.py's and release_contract.py's mains already do,
+        # so an unexpected OS-level error still prints a clean CLI error instead of
+        # crashing with a raw traceback.
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
     if errors:
         for error in errors:
             print(error, file=sys.stderr)
