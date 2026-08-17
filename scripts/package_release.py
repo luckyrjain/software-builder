@@ -306,8 +306,14 @@ def package_release(root: Path, output_dir: Path) -> tuple[Path, Path]:
     # verify_release_bundle.py's field check -- a confusing failure disconnected from its actual
     # cause. Catching the drift here, at the point the two would diverge, fails closed immediately
     # with a message that names the actual mismatch.
+    #
+    # Loaded from root's own scripts/release_contract.yaml, not required_provenance_fields()'s
+    # CONTRACT_PATH default -- otherwise a caller that passes a root other than this script's own
+    # repo (e.g. --repo-root pointed at a different checkout) would silently validate that repo's
+    # manifest fields against *this* repo's contract instead of its own, exactly the drift
+    # validate_release_contract() already guards against for the same reason.
     declared_fields = set(manifest_fields) | {"files"}
-    contract_fields = required_provenance_fields()
+    contract_fields = required_provenance_fields(root / "scripts" / "release_contract.yaml")
     if declared_fields != contract_fields:
         raise ValueError(
             "release manifest fields "

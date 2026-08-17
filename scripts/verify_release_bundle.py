@@ -68,8 +68,16 @@ def verify_release_bundle(archive: Path) -> list[str]:
         if not isinstance(manifest, dict):
             return [f"error: {MANIFEST_NAME} must be a JSON object"]
 
+        # Read the contract the bundle itself embeds (scripts/release_contract.yaml is a
+        # regular tracked file, so every bundle ships its own copy) rather than falling
+        # back to required_provenance_fields()'s CONTRACT_PATH default -- otherwise
+        # verifying a bundle built from a different revision than whatever checkout this
+        # verifier happens to be running from (e.g. re-checking an older release's bundle
+        # from a fresh clone of main) would silently check it against the wrong,
+        # contemporaneous-with-neither contract instead of the bundle's own.
+        contract_path = bundle_root / "scripts" / "release_contract.yaml"
         try:
-            fields = required_provenance_fields()
+            fields = required_provenance_fields(contract_path)
         except (OSError, *YAML_SAFETY_ERRORS) as exc:
             return [f"error: release contract: {exc}"]
         missing_fields = sorted(fields - set(manifest))
@@ -100,7 +108,7 @@ def verify_release_bundle(archive: Path) -> list[str]:
             errors.append(f"error: {MANIFEST_NAME} source_sha is invalid: {source_sha!r}")
 
         try:
-            expected_schema_versions = compatibility_schema_versions()
+            expected_schema_versions = compatibility_schema_versions(contract_path)
         except (OSError, *YAML_SAFETY_ERRORS) as exc:
             errors.append(f"error: release contract: {exc}")
             expected_schema_versions = {}

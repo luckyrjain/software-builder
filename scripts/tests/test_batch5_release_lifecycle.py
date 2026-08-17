@@ -33,6 +33,38 @@ def _commit_all(root: Path) -> str:
     return subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()
 
 
+# package_release()/verify_release_bundle() read a repo's/bundle's *own*
+# scripts/release_contract.yaml (not this real repo's) for the manifest
+# field-set and schema-version compatibility checks, so any fixture repo that
+# calls package_release() needs one committed too -- mirrors this repo's own
+# scripts/release_contract.yaml just enough to satisfy those checks against
+# the minimal skills.yaml/host_contracts.yaml fixtures below.
+_MINIMAL_RELEASE_CONTRACT = """\
+schema_version: 1
+tag_pattern: '^v\\d+\\.\\d+\\.\\d+$'
+artifact_name_templates:
+  - "software-builder-{version}.tar.gz"
+compatibility:
+  registry_schema_version: 1
+  host_contract_schema_version: 1
+provenance:
+  required_fields:
+    - schema_version
+    - distribution_version
+    - source_sha
+    - registry_schema_version
+    - host_contract_schema_version
+    - supported_hosts
+    - skill_versions
+    - files
+"""
+
+
+def _write_minimal_release_contract(root: Path) -> None:
+    (root / "scripts").mkdir(parents=True, exist_ok=True)
+    (root / "scripts" / "release_contract.yaml").write_text(_MINIMAL_RELEASE_CONTRACT, encoding="utf-8")
+
+
 def _minimal_repo(tmp_path: Path) -> tuple[Path, str]:
     root = tmp_path / "repo"
     root.mkdir()
@@ -43,6 +75,7 @@ def _minimal_repo(tmp_path: Path) -> tuple[Path, str]:
     (root / "scripts" / "registry" / "host_contracts.yaml").write_text(
         "schema_version: 1\nhosts: {}\n", encoding="utf-8"
     )
+    _write_minimal_release_contract(root)
     (root / "README.md").write_text("# Fixture\n", encoding="utf-8")
     sha = _commit_all(root)
     return root, sha
@@ -128,6 +161,7 @@ def test_release_inputs_exclude_tracked_repo_dev_tooling(tmp_path: Path) -> None
     (root / "scripts" / "registry" / "host_contracts.yaml").write_text(
         "schema_version: 1\nhosts: {}\n", encoding="utf-8"
     )
+    _write_minimal_release_contract(root)
     (root / "README.md").write_text("# Fixture\n", encoding="utf-8")
     (root / ".gitignore").write_text("dist/\n", encoding="utf-8")
     (root / ".cursor" / "rules").mkdir(parents=True)

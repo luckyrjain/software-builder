@@ -34,7 +34,12 @@ def read_manifest_file(path: Path) -> dict[str, Any]:
         raise ManifestError(f"missing manifest: {path}")
     try:
         text = path.read_text(encoding="utf-8")
-    except OSError as exc:
+    except (OSError, UnicodeDecodeError) as exc:
+        # UnicodeDecodeError (a corrupted or non-UTF-8 manifest on disk) is not an
+        # OSError -- without catching it explicitly here too, it propagates past
+        # callers that only catch ManifestError (e.g. doctor.py's
+        # _installed_manifest, which treats a bad manifest as "can't determine
+        # install status" for that one skill), crashing the whole command instead.
         raise ManifestError(f"cannot read manifest: {exc}") from exc
     try:
         data = json.loads(text)

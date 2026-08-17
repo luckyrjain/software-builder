@@ -26,6 +26,29 @@ def _minimal_release_repo(tmp_path: Path) -> Path:
     (root / "scripts" / "registry" / "host_contracts.yaml").write_text(
         "schema_version: 1\nhosts: {}\n", encoding="utf-8"
     )
+    # package_release() validates its manifest's field set against root's own
+    # scripts/release_contract.yaml (not this real repo's), so this fixture needs
+    # a minimal one of its own too.
+    (root / "scripts" / "release_contract.yaml").write_text(
+        "schema_version: 1\n"
+        "tag_pattern: '^v\\d+\\.\\d+\\.\\d+$'\n"
+        "artifact_name_templates:\n"
+        '  - "software-builder-{version}.tar.gz"\n'
+        "compatibility:\n"
+        "  registry_schema_version: 1\n"
+        "  host_contract_schema_version: 1\n"
+        "provenance:\n"
+        "  required_fields:\n"
+        "    - schema_version\n"
+        "    - distribution_version\n"
+        "    - source_sha\n"
+        "    - registry_schema_version\n"
+        "    - host_contract_schema_version\n"
+        "    - supported_hosts\n"
+        "    - skill_versions\n"
+        "    - files\n",
+        encoding="utf-8",
+    )
     subprocess.run(["git", "add", "."], cwd=root, check=True)
     # -c commit.gpgsign=false: don't depend on the invoking machine's global
     # Git signing config (commit signing turned on would otherwise block this
