@@ -3,9 +3,14 @@
 artifact names, compatibility policy, and required provenance fields.
 
 `provenance.required_fields` is genuinely the single source of truth for what
-a release manifest must carry: package_release.py's manifest builder and
-verify_release_bundle.py's field check both call required_provenance_fields()
-here instead of hardcoding their own copy. `tag_pattern` and
+a release manifest must carry: package_release.py's manifest builder validates
+its (necessarily hardcoded, so it has concrete values to write) field set
+against required_provenance_fields() here immediately after building it, and
+verify_release_bundle.py's field check calls required_provenance_fields()
+directly -- so a field added here without also updating package_release.py's
+manifest_fields fails closed at build time with a message naming the actual
+mismatch, rather than surfacing later as a confusing verify-time failure.
+`tag_pattern` and
 `artifact_name_templates` are declarative policy checked here for
 well-formedness and consistency with VERSION, but -- unlike required_fields --
 nothing downstream derives its actual tag/filename strings from them yet;

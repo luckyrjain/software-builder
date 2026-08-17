@@ -38,6 +38,7 @@ from yaml_safety import YAML_SAFETY_ERRORS, read_schema_version
 
 from scripts.registry.host_adapter import supported_hosts
 from scripts.registry.manifest import skill_versions
+from scripts.release_contract import required_provenance_fields
 
 
 def _ensure_clean_worktree(root: Path) -> None:
@@ -297,6 +298,22 @@ def package_release(root: Path, output_dir: Path) -> tuple[Path, Path]:
         "supported_hosts": supported_hosts(root),
         "skill_versions": skill_versions(root),
     }
+    # required_provenance_fields() (release_contract.yaml's provenance.required_fields) is the
+    # single source of truth for what a release manifest must carry -- "files" is the one field
+    # _write_reproducible_archive() adds after this point, so it's included here explicitly.
+    # Without this check, adding a field to release_contract.yaml without also updating
+    # manifest_fields above would build an archive that only fails later, at
+    # verify_release_bundle.py's field check -- a confusing failure disconnected from its actual
+    # cause. Catching the drift here, at the point the two would diverge, fails closed immediately
+    # with a message that names the actual mismatch.
+    declared_fields = set(manifest_fields) | {"files"}
+    contract_fields = required_provenance_fields()
+    if declared_fields != contract_fields:
+        raise ValueError(
+            "release manifest fields "
+            f"{sorted(declared_fields)} do not match release contract provenance.required_fields "
+            f"{sorted(contract_fields)} -- update package_release.py's manifest_fields to match",
+        )
 
     archive_path = output_dir / f"{bundle_name}.tar.gz"
     file_hashes, manifest_bytes = _write_reproducible_archive(archive_path, bundle_name, tracked, manifest_fields)
