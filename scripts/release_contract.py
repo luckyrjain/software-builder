@@ -98,11 +98,16 @@ def validate_release_contract(root: Path = ROOT) -> list[str]:
         for template in templates:
             try:
                 template.format(version=version)
-            except (KeyError, IndexError, ValueError):
+            except (KeyError, IndexError, ValueError, AttributeError, TypeError):
                 # ValueError also covers a malformed format spec/conversion (e.g. a typo'd
                 # "{version:04d}" or "{version!z}") -- str.format() raises ValueError for
-                # those, not KeyError/IndexError, so omitting it let a contract-file typo
-                # crash this validator with a raw traceback instead of a clean error.
+                # those, not KeyError/IndexError. AttributeError and TypeError cover a
+                # typo'd dotted/subscript field (e.g. "{version.major}" raises
+                # AttributeError since version is a plain str; "{version[abc]}" raises
+                # TypeError for the same reason) -- str.format()'s field-name mini-language
+                # accepts that syntax and only fails once it tries to resolve it against the
+                # actual value passed in. Without every one of these, a contract-file typo
+                # crashes this validator with a raw traceback instead of a clean error.
                 errors.append(f"error: release contract: artifact_name_template {template!r} is malformed")
 
     try:

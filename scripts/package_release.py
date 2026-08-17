@@ -88,6 +88,19 @@ _EXCLUDED_PATH_COMPONENTS = {"__pycache__", ".pytest_cache", "node_modules", "di
 # the 100644/100755 blob modes _tracked_files() otherwise expects.
 _GITLINK_MODE = 0o160000
 
+# Git's tree-entry mode for a symlink. Checked directly against the index
+# (like _GITLINK_MODE above) rather than trusting abs_path.is_symlink() alone:
+# under `core.symlinks=false` (common on restricted filesystems and some
+# Windows setups without symlink privileges), Git checks out a tracked
+# symlink as an ordinary regular file containing the link target as literal
+# text, so is_symlink() is False and _ensure_clean_worktree's `git diff`
+# reports the tree as clean even though the on-disk content isn't the real
+# file content. Reading the mode from the index -- the same source of truth
+# the rest of this module already trusts for reproducibility -- catches that
+# case instead of silently packaging the target-path string as the file's
+# content.
+_SYMLINK_MODE = 0o120000
+
 
 def _is_release_excluded(rel: str) -> bool:
     """True if rel (posix path, relative to repo root) is repo-development
@@ -126,7 +139,11 @@ def _tracked_files(root: Path) -> list[tuple[str, Path, int]]:
 
     Raises ValueError if any tracked, non-excluded path is a symlink --
     release inputs must be plain file content, never a link that could point
-    outside the bundle. Raises ValueError if a tracked, non-excluded path is a
+    outside the bundle. Checked against the index mode (_SYMLINK_MODE) as
+    well as the filesystem (abs_path.is_symlink()): under
+    ``core.symlinks=false`` the filesystem check alone is blind (see
+    _SYMLINK_MODE), so both are required to actually enforce this. Raises
+    ValueError if a tracked, non-excluded path is a
     submodule reference (gitlink) -- silently dropping it (the alternative,
     since it's neither a symlink nor a regular file on disk) would produce a
     release that's missing content with no error at all. Raises ValueError if
@@ -169,6 +186,8 @@ def _tracked_files(root: Path) -> list[tuple[str, Path, int]]:
             raise ValueError(
                 f"release inputs must be regular files; found tracked submodule (gitlink): {rel}",
             )
+        if git_mode == _SYMLINK_MODE:
+            raise ValueError(f"release inputs must be regular files; found tracked symlink: {rel}")
         abs_path = root / rel
         if abs_path.is_symlink():
             raise ValueError(f"release inputs must be regular files; found tracked symlink: {rel}")
