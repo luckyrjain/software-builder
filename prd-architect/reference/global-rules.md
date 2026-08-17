@@ -104,17 +104,19 @@ relevant user behavior; comparable solutions. Prefer authoritative primary sourc
 When credible sources disagree, expose the disagreement. When research is unavailable, proceed with
 supplied facts and label external claims requiring verification.
 
-## Assumptions and open questions
+## Assumption Register and open questions
 
-For **Lite**, list assumptions concisely inside the PRD body.
+For **Lite**, a compact in-body subsection is acceptable. Consequential assumptions otherwise use a
+stable Assumption Register with the canonical schema in [output-tables.md](output-tables.md) §
+Assumption ledger:
 
-For **Standard/Rigorous**, consequential assumptions may use a table:
+| ID | Assumption | Evidence | Impact If Wrong | Validation | Owner | Status |
 
-| ID | Assumption | Evidence | Impact If Wrong | Validation |
+Status uses `OPEN | VALIDATED | INVALIDATED | ACCEPTED_RISK` from
+[current-state-evidence-contract.yaml](current-state-evidence-contract.yaml). Evidence is optional
+supporting context and must not turn an assumption into a fact.
 
-Evidence levels: Verified | Supported | Unverified | **Risky**
+A **Risky** or **OPEN** assumption affecting MVP viability must influence Build Readiness.
 
-A **Risky** assumption affecting MVP viability must influence Build Readiness.
-
-Every material unknown becomes either an explicit assumption or a classified open question — never
-generic TBD.
+Every material unknown becomes either an explicit assumption (with owner and status) or a classified
+open question — never generic TBD.

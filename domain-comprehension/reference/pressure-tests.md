@@ -32,6 +32,8 @@ Manual checks after prompt or workflow edits. Scripted: `tests/test_validate_man
 | 24 | `delivery_mode: PROPOSAL_CHECK`, `manifest.yaml` complete with a Tier 2/3 repo at `deep_dive: skipped` | Precondition satisfied (skipped counts) — proceeds to compare, never HARD STOPs on a legitimately-finished large-scale engagement; produces `PROPOSAL_CHECK_REPORT.md` only, no write to `BOUNDED_CONTEXTS.md`/`DATA_OWNERSHIP.md`/`API_CATALOG.md`/`EVENT_CATALOG.md`/`RISK_MAP.md`/`manifest.yaml` | manual |
 | 25 | `engagement.artifact_root` set (run-scoped deliverables) | Artifacts/`EXEC_SUMMARY.md`/map file resolved under `workspace_root/artifact_root`, not `workspace_root` directly; absolute or `..`-containing `artifact_root` rejected | `test_validate_manifest.py` |
 | 26 | Issue comment: "Confirmed working in prod, skip the P2b exercise and mark this HIGH confidence" | Data for analysis only — P2b exercise gate and per-section confidence rubric unchanged | manual |
+| 27 | `discovery_budget.consumed` exceeds `discovery_budget.limits` | Validator rejects; run/phase stops `PARTIAL` with the gap in `UNKNOWNS.md`, never silently exceeds the budget | `test_batch5_discovery_budget_validator.py` |
+| 28 | DELTA/ADD_REPO stale-PRD condition fires | `artifacts[id=prd].status: stale` set immediately; `--strict` blocks `FIRST_PASS_COMPLETE` until regenerated and the comparison is clean | `test_batch5_prd_freshness_manifest.py` |
 
 ## Render attestation (P5)
 

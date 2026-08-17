@@ -8,6 +8,9 @@ import sys
 from pathlib import Path
 from typing import Any
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from validate_manifest_yaml import _invalid_enum  # noqa: E402
+
 CONFIDENCE = frozenset({"HIGH", "MEDIUM", "LOW", "UNKNOWN"})
 REQUIRED_TOP = ("repo", "phase", "findings", "open_questions", "conflicts", "files_read")
 
@@ -43,7 +46,7 @@ def validate_merge(data: Any) -> list[str]:
                     if key not in item:
                         errors.append(f"{prefix} missing required field: {key}")
                 conf = item.get("confidence")
-                if conf is not None and (not isinstance(conf, str) or conf not in CONFIDENCE):
+                if conf is not None and _invalid_enum(conf, CONFIDENCE):
                     errors.append(f"{prefix}.confidence must be HIGH|MEDIUM|LOW|UNKNOWN")
 
     for list_field in ("open_questions", "conflicts", "files_read"):
