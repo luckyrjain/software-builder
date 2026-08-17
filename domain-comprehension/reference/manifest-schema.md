@@ -126,11 +126,15 @@ machine rows `waived` only while `engagement.status` remains `IN_PROGRESS`; waiv
 first-pass-complete and must not be treated as current-state handoff-ready. **PRD `ok` is forbidden
 while any required machine artifact is missing or non-`ok`**, regardless of engagement status
 (validator error: `artifact prd status=ok is forbidden while required machine artifact ...`).
-Machine artifacts marked `ok` must also parse as schema_version=1 YAML with a populated
-`source_revision.repos` list (each entry requires non-empty `repo`, `branch`, `commit_sha`, and
-`observed_at`; literal `unknown` is allowed) when `--workspace-root` is provided. Machine artifact
-paths must be files, not directories. Waivers must be disclosed in the human handoff/omissions rather
-than fabricating machine evidence.
+Machine artifacts marked `ok` must also parse as schema_version=1 (integer `1` only — not
+`true`/`1.0`) YAML with a populated `source_revision.repos` list (each entry requires non-empty
+`repo`, `branch`, `commit_sha`, and `observed_at`). Literal `unknown` in `repo` or `commit_sha` is
+not eligible for `status=ok` / current-state handoff. `FIRST_PASS_COMPLETE` requires
+`--workspace-root` so these content checks run. For required machine ids and `prd`, `path` must
+equal the Path column basename exactly. Machine artifact paths must be files, not directories.
+Waivers must be disclosed in the human handoff/omissions rather than fabricating machine evidence.
+`phases.p5.status=complete` is invalid unless `artifacts[id=prd].status=ok` (enforced even without
+`--strict`).
 
 Optional outputs include `E2E_FLOW.md`, Memory Bank export, Postman export, and runtime-only diagram
 supplements.

@@ -27,14 +27,16 @@ current_state_evidence:
     stale_behavior: blocking_before_build_do_not_treat_PRD_as_current
     unknown_behavior: block_build_ready
     integrity_check: recompute_against_source_revision_and_machine_artifacts_before_accepting_ok
-    integrity_mismatch_behavior: treat_as_stale_or_unknown_and_block_build_ready
+    integrity_mismatch_behavior: treat_as_stale_and_block_build_ready
   prd_ok_requires_accepted_machine_artifacts_ok: true
   waived_or_missing_machine_behavior: block_build_ready
   source_revision:
     required: true
     shape: repos
     repo_required_fields: [repo, branch, commit_sha, observed_at]
-    unknown_rule: preserve_unknown_field_do_not_substitute_local_state
+    repo_field_constraints: non_empty_string
+    build_ready_requires: no_unknown_in_repo_or_commit_sha
+    unknown_rule: preserve_unknown_field_do_not_substitute_local_state_not_handoff_eligible
   preserve_observed_state: true
   future_state_changes_must_be_explicit: true
   conflict_behavior: surface_conflict_and_reduce_confidence

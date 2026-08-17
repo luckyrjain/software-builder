@@ -75,8 +75,18 @@ REQUIRED_MACHINE_ARTIFACT_IDS = frozenset(
         "capability_traceability",
     }
 )
+# Canonical basenames under artifact_root (manifest-schema.md Path column).
+CANONICAL_ARTIFACT_PATHS = {
+    "prd": "PRD.md",
+    "api_event_schema": "API_EVENT_SCHEMA.yaml",
+    "data_ownership_graph": "DATA_OWNERSHIP_GRAPH.yaml",
+    "dependency_graph_machine": "DEPENDENCY_GRAPH.yaml",
+    "capability_traceability": "CAPABILITY_TRACEABILITY.yaml",
+}
 # Mirrors domain-model-contract.yaml / current-state-evidence-contract.yaml source_revision.
 SOURCE_REVISION_REPO_REQUIRED_FIELDS = ("repo", "branch", "commit_sha", "observed_at")
+# Fields that must be concrete for status=ok handoff (literal "unknown" is a recorded gap, not Ready).
+SOURCE_REVISION_HANDOFF_CONCRETE_FIELDS = frozenset({"repo", "commit_sha"})
 REPO_CLASSIFICATION = frozenset(
     {
         "application",
@@ -413,9 +423,15 @@ def _validate_source_revision_repos(repos: Any, artifact_id: str) -> list[str]:
         for field in SOURCE_REVISION_REPO_REQUIRED_FIELDS:
             value = entry.get(field)
             if not isinstance(value, str) or not value.strip():
+                errors.append(f"{prefix}.{field} must be a non-empty string")
+                continue
+            if (
+                field in SOURCE_REVISION_HANDOFF_CONCRETE_FIELDS
+                and value.strip().lower() == "unknown"
+            ):
                 errors.append(
-                    f"{prefix}.{field} must be a non-empty string "
-                    "(literal 'unknown' allowed when revision is unknown)"
+                    f"{prefix}.{field} must be a concrete value for status=ok "
+                    "(literal 'unknown' is not eligible for current-state handoff)"
                 )
     return errors
 
@@ -427,7 +443,8 @@ def _validate_machine_artifact_content(path: Path, artifact_id: str) -> list[str
         return [f"strict: {artifact_id}: {err}" for err in load_errors]
     if not isinstance(data, dict):
         return [f"strict: {artifact_id} must be a YAML mapping"]
-    if data.get("schema_version") != 1:
+    version = data.get("schema_version")
+    if not isinstance(version, int) or isinstance(version, bool) or version != 1:
         return [f"strict: {artifact_id} must have schema_version=1 for status=ok"]
     revision = data.get("source_revision")
     if not isinstance(revision, dict):
@@ -501,13 +518,20 @@ def _validate_artifact_list(items: Any, label: str, status_set: frozenset[str]) 
         elif (
             label == "artifacts"
             and isinstance(item_id, str)
-            and item_id in REQUIRED_MACHINE_ARTIFACT_IDS
+            and item_id in CANONICAL_ARTIFACT_PATHS
             and isinstance(item.get("path"), str)
-            and item["path"].endswith(("/", "\\"))
         ):
-            errors.append(
-                f"strict: machine artifact {item_id} path must be a file, not a directory: {item['path']}"
-            )
+            expected = CANONICAL_ARTIFACT_PATHS[item_id]
+            normalized = item["path"].replace("\\", "/").rstrip("/")
+            if PurePosixPath(normalized).name != expected:
+                errors.append(
+                    f"{prefix}.path must be exactly {expected!r} for artifact id {item_id!r} "
+                    f"(got {item['path']!r})"
+                )
+            if item_id in REQUIRED_MACHINE_ARTIFACT_IDS and item["path"].endswith(("/", "\\")):
+                errors.append(
+                    f"strict: machine artifact {item_id} path must be a file, not a directory: {item['path']}"
+                )
 
         phase = item.get("phase")
         if not isinstance(phase, str) or not phase.strip():
@@ -816,6 +840,14 @@ def validate_manifest(
             diagrams=data.get("diagrams"),
         )
     )
+
+    first_pass_complete = (
+        isinstance(engagement, dict) and engagement.get("status") == "FIRST_PASS_COMPLETE"
+    )
+    if first_pass_complete and workspace_root is None:
+        errors.append(
+            "strict: FIRST_PASS_COMPLETE requires --workspace-root to validate machine artifact content"
+        )
 
     runtime = data.get("runtime_validation")
     if not isinstance(runtime, dict):
