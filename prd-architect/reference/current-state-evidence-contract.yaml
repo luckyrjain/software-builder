@@ -10,7 +10,8 @@ current_state_evidence:
     - any_accepted_artifact_absent_or_ineligible
     - source_revision_incomplete
     - prd_freshness_stale_or_unknown_for_domain_comprehension_prd
-    - any_accepted_machine_artifact_waived_or_not_ok_while_prd_ok
+    - any_accepted_machine_artifact_waived_missing_or_not_ok
+    - material_conflict
   validation_missing_evidence_behavior: evidence_needed_next
   prd_review_missing_evidence_behavior: block_build_ready
   accepted_artifacts:
@@ -39,8 +40,12 @@ current_state_evidence:
     unknown_rule: preserve_unknown_field_do_not_substitute_local_state_not_handoff_eligible
   preserve_observed_state: true
   future_state_changes_must_be_explicit: true
-  conflict_behavior: surface_conflict_and_reduce_confidence
+  conflict_behavior: surface_conflict_and_block_build_ready
   stale_behavior: blocking_before_build_do_not_treat_as_current_disclosure_insufficient
+  greenfield_current_state_evidence:
+    value: {not_applicable: true}
+    counts_as_evidence_present: false
+    allowed_only_when: existing_system_false_AND_no_domain_handoff_artifacts
 
 success_metric_quality:
   required_fields: [metric, baseline, target, timeframe, measurement_source]
