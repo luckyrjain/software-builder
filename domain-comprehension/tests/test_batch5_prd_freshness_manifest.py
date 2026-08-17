@@ -108,7 +108,27 @@ def test_waived_machine_artifacts_block_prd_ok_under_first_pass_complete() -> No
         _artifact(data, artifact_id)["status"] = "waived"
     errors = validate_manifest(data)
     assert any(
-        "PRD status=ok is forbidden while required machine artifact(s) are waived" in error
+        "prd status=ok is forbidden while required machine artifact" in error
+        for error in errors
+    )
+    assert any(
+        "must have status=ok for FIRST_PASS_COMPLETE" in error for error in errors
+    )
+
+
+def test_waived_machine_artifacts_block_prd_ok_while_in_progress() -> None:
+    data = _manifest()
+    _artifact(data, "prd")["status"] = "ok"
+    for artifact_id in (
+        "api_event_schema",
+        "data_ownership_graph",
+        "dependency_graph_machine",
+        "capability_traceability",
+    ):
+        _artifact(data, artifact_id)["status"] = "waived"
+    errors = validate_manifest(data)
+    assert any(
+        "prd status=ok is forbidden while required machine artifact" in error
         for error in errors
     )
 
@@ -175,6 +195,67 @@ def test_machine_artifact_ok_rejects_hollow_source_revision_repos(tmp_path: Path
     errors = validate_manifest(data, workspace_root=tmp_path)
     assert any("source_revision.repos[0].repo must be a non-empty string" in error for error in errors)
     assert any("commit_sha must be a non-empty string" in error for error in errors)
+
+
+def test_machine_artifact_ok_rejects_bool_schema_version(tmp_path: Path) -> None:
+    data = _manifest()
+    machine = _artifact(data, "api_event_schema")
+    machine["status"] = "ok"
+    (tmp_path / "API_EVENT_SCHEMA.yaml").write_text(
+        "schema_version: true\nsource_revision:\n  repos:\n"
+        "    - {repo: demo, branch: main, commit_sha: abc, observed_at: '2026-08-17T00:00:00Z'}\n"
+        "records: []\n",
+        encoding="utf-8",
+    )
+    errors = validate_manifest(data, workspace_root=tmp_path)
+    assert any("must have schema_version=1 for status=ok" in error for error in errors)
+
+
+def test_machine_artifact_ok_rejects_float_schema_version(tmp_path: Path) -> None:
+    data = _manifest()
+    machine = _artifact(data, "api_event_schema")
+    machine["status"] = "ok"
+    (tmp_path / "API_EVENT_SCHEMA.yaml").write_text(
+        "schema_version: 1.0\nsource_revision:\n  repos:\n"
+        "    - {repo: demo, branch: main, commit_sha: abc, observed_at: '2026-08-17T00:00:00Z'}\n"
+        "records: []\n",
+        encoding="utf-8",
+    )
+    errors = validate_manifest(data, workspace_root=tmp_path)
+    assert any("must have schema_version=1 for status=ok" in error for error in errors)
+
+
+def test_machine_artifact_ok_rejects_unknown_commit_sha(tmp_path: Path) -> None:
+    data = _manifest()
+    machine = _artifact(data, "api_event_schema")
+    machine["status"] = "ok"
+    (tmp_path / "API_EVENT_SCHEMA.yaml").write_text(
+        "schema_version: 1\nsource_revision:\n  repos:\n"
+        "    - {repo: demo, branch: main, commit_sha: unknown, observed_at: '2026-08-17T00:00:00Z'}\n"
+        "records: []\n",
+        encoding="utf-8",
+    )
+    errors = validate_manifest(data, workspace_root=tmp_path)
+    assert any(
+        "commit_sha must be a concrete value for status=ok" in error for error in errors
+    )
+
+
+def test_first_pass_complete_requires_workspace_root() -> None:
+    data = _manifest()
+    data["engagement"]["status"] = "FIRST_PASS_COMPLETE"
+    _artifact(data, "prd")["status"] = "ok"
+    for artifact_id in (
+        "api_event_schema",
+        "data_ownership_graph",
+        "dependency_graph_machine",
+        "capability_traceability",
+    ):
+        _artifact(data, artifact_id)["status"] = "ok"
+    errors = validate_manifest(data)
+    assert any(
+        "FIRST_PASS_COMPLETE requires --workspace-root" in error for error in errors
+    )
 
 
 def test_machine_artifact_directory_path_rejected(tmp_path: Path) -> None:

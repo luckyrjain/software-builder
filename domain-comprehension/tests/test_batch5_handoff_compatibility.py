@@ -24,6 +24,8 @@ def test_domain_and_prd_share_source_revision_shape():
         "observed_at",
     ]
     assert producer["unknown_rule"] == consumer["unknown_rule"]
+    assert producer["build_ready_requires"] == consumer["build_ready_requires"]
+    assert producer["repo_field_constraints"] == consumer["repo_field_constraints"]
 
 
 def test_domain_and_prd_share_prd_freshness_values():
@@ -48,7 +50,7 @@ def test_prd_consumer_rejects_stale_domain_prd_as_current_state():
     assert freshness["current_value"] == "ok"
     assert freshness["stale_value"] == "stale"
     assert freshness["stale_behavior"] == "blocking_before_build_do_not_treat_PRD_as_current"
-    assert freshness["integrity_mismatch_behavior"] == "treat_as_stale_or_unknown_and_block_build_ready"
+    assert freshness["integrity_mismatch_behavior"] == "treat_as_stale_and_block_build_ready"
     assert current["stale_behavior"] == "blocking_before_build_do_not_treat_as_current_disclosure_insufficient"
 
 

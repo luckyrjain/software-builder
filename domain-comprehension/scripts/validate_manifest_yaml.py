@@ -75,8 +75,18 @@ REQUIRED_MACHINE_ARTIFACT_IDS = frozenset(
         "capability_traceability",
     }
 )
+# Canonical basenames under artifact_root (manifest-schema.md Path column).
+CANONICAL_ARTIFACT_PATHS = {
+    "prd": "PRD.md",
+    "api_event_schema": "API_EVENT_SCHEMA.yaml",
+    "data_ownership_graph": "DATA_OWNERSHIP_GRAPH.yaml",
+    "dependency_graph_machine": "DEPENDENCY_GRAPH.yaml",
+    "capability_traceability": "CAPABILITY_TRACEABILITY.yaml",
+}
 # Mirrors domain-model-contract.yaml / current-state-evidence-contract.yaml source_revision.
 SOURCE_REVISION_REPO_REQUIRED_FIELDS = ("repo", "branch", "commit_sha", "observed_at")
+# Fields that must be concrete for status=ok handoff (literal "unknown" is a recorded gap, not Ready).
+SOURCE_REVISION_HANDOFF_CONCRETE_FIELDS = frozenset({"repo", "commit_sha"})
 REPO_CLASSIFICATION = frozenset(
     {
         "application",
@@ -317,21 +327,51 @@ def _validate_discovery_budget(value: Any, *, required: bool = False) -> list[st
     return errors
 
 
-def _validate_strict_completion_artifacts(artifacts: Any) -> list[str]:
-    """FIRST_PASS_COMPLETE requires a current PRD plus required machine artifact rows.
+def _artifact_rows_by_id(artifacts: Any) -> dict[str, dict[str, Any]]:
+    by_id: dict[str, dict[str, Any]] = {}
+    if not isinstance(artifacts, list):
+        return by_id
+    for item in artifacts:
+        if isinstance(item, dict) and isinstance(item.get("id"), str):
+            by_id[item["id"]] = item
+    return by_id
 
-    Machine rows may be ``waived`` for COMPLIANCE_RETROFIT, but PRD ``ok`` is forbidden while
-    any required machine artifact is waived — there is then no integrity basis for current-state
-    handoff.
+
+def _validate_prd_ok_requires_machine_artifacts_ok(artifacts: Any) -> list[str]:
+    """PRD freshness ok is never eligible while required machine artifacts are non-ok."""
+    by_id = _artifact_rows_by_id(artifacts)
+    prd = by_id.get("prd")
+    if prd is None or prd.get("status") != "ok":
+        return []
+    errors: list[str] = []
+    for artifact_id in sorted(REQUIRED_MACHINE_ARTIFACT_IDS):
+        row = by_id.get(artifact_id)
+        if row is None:
+            errors.append(
+                "artifact prd status=ok is forbidden while required machine artifact "
+                f"{artifact_id} is missing (integrity basis missing)"
+            )
+            continue
+        status = row.get("status")
+        if status != "ok":
+            errors.append(
+                "artifact prd status=ok is forbidden while required machine artifact "
+                f"{artifact_id} status is {status!r} (integrity basis missing)"
+            )
+    return errors
+
+
+def _validate_strict_completion_artifacts(artifacts: Any) -> list[str]:
+    """FIRST_PASS_COMPLETE requires current PRD and required machine artifacts at status=ok.
+
+    COMPLIANCE_RETROFIT may keep machine rows ``waived`` only while ``engagement.status`` remains
+    ``IN_PROGRESS``; waived machines cannot claim first-pass completion or PRD freshness ``ok``.
     """
     errors: list[str] = []
     if not isinstance(artifacts, list):
         return ["strict: artifacts must be an array"]
 
-    by_id: dict[str, dict[str, Any]] = {}
-    for item in artifacts:
-        if isinstance(item, dict) and isinstance(item.get("id"), str):
-            by_id[item["id"]] = item
+    by_id = _artifact_rows_by_id(artifacts)
 
     prd = by_id.get("prd")
     if prd is None:
@@ -345,7 +385,6 @@ def _validate_strict_completion_artifacts(artifacts: Any) -> list[str]:
                 f"(got {prd.get('status')!r}; waived/stale/n_a are not allowed)"
             )
 
-    waived_machines: list[str] = []
     for artifact_id in sorted(REQUIRED_MACHINE_ARTIFACT_IDS):
         row = by_id.get(artifact_id)
         if row is None:
@@ -354,18 +393,12 @@ def _validate_strict_completion_artifacts(artifacts: Any) -> list[str]:
         if row.get("required") is not True:
             errors.append(f"strict: machine artifact {artifact_id} must have required=true")
         status = row.get("status")
-        if status not in ("ok", "waived"):
+        if status != "ok":
             errors.append(
-                f"strict: machine artifact {artifact_id} status must be ok or waived (got {status!r})"
+                f"strict: machine artifact {artifact_id} must have status=ok for FIRST_PASS_COMPLETE "
+                f"(got {status!r}; waived/stale/n_a are not allowed)"
             )
-        elif status == "waived":
-            waived_machines.append(artifact_id)
-
-    if waived_machines and prd is not None and prd.get("status") == "ok":
-        errors.append(
-            "strict: PRD status=ok is forbidden while required machine artifact(s) are waived "
-            f"({', '.join(waived_machines)}; integrity basis missing)"
-        )
+    errors.extend(_validate_prd_ok_requires_machine_artifacts_ok(artifacts))
     return errors
 
 
@@ -407,9 +440,15 @@ def _validate_source_revision_repos(repos: Any, artifact_id: str) -> list[str]:
         for field in SOURCE_REVISION_REPO_REQUIRED_FIELDS:
             value = entry.get(field)
             if not isinstance(value, str) or not value.strip():
+                errors.append(f"{prefix}.{field} must be a non-empty string")
+                continue
+            if (
+                field in SOURCE_REVISION_HANDOFF_CONCRETE_FIELDS
+                and value.strip().lower() == "unknown"
+            ):
                 errors.append(
-                    f"{prefix}.{field} must be a non-empty string "
-                    "(literal 'unknown' allowed when revision is unknown)"
+                    f"{prefix}.{field} must be a concrete value for status=ok "
+                    "(literal 'unknown' is not eligible for current-state handoff)"
                 )
     return errors
 
@@ -421,7 +460,8 @@ def _validate_machine_artifact_content(path: Path, artifact_id: str) -> list[str
         return [f"strict: {artifact_id}: {err}" for err in load_errors]
     if not isinstance(data, dict):
         return [f"strict: {artifact_id} must be a YAML mapping"]
-    if data.get("schema_version") != 1:
+    version = data.get("schema_version")
+    if not isinstance(version, int) or isinstance(version, bool) or version != 1:
         return [f"strict: {artifact_id} must have schema_version=1 for status=ok"]
     revision = data.get("source_revision")
     if not isinstance(revision, dict):
@@ -495,13 +535,20 @@ def _validate_artifact_list(items: Any, label: str, status_set: frozenset[str]) 
         elif (
             label == "artifacts"
             and isinstance(item_id, str)
-            and item_id in REQUIRED_MACHINE_ARTIFACT_IDS
+            and item_id in CANONICAL_ARTIFACT_PATHS
             and isinstance(item.get("path"), str)
-            and item["path"].endswith(("/", "\\"))
         ):
-            errors.append(
-                f"strict: machine artifact {item_id} path must be a file, not a directory: {item['path']}"
-            )
+            expected = CANONICAL_ARTIFACT_PATHS[item_id]
+            normalized = item["path"].replace("\\", "/").rstrip("/")
+            if PurePosixPath(normalized).name != expected:
+                errors.append(
+                    f"{prefix}.path must be exactly {expected!r} for artifact id {item_id!r} "
+                    f"(got {item['path']!r})"
+                )
+            if item_id in REQUIRED_MACHINE_ARTIFACT_IDS and item["path"].endswith(("/", "\\")):
+                errors.append(
+                    f"strict: machine artifact {item_id} path must be a file, not a directory: {item['path']}"
+                )
 
         phase = item.get("phase")
         if not isinstance(phase, str) or not phase.strip():
@@ -857,6 +904,7 @@ def validate_manifest(
     errors.extend(_validate_five_questions(data.get("five_questions")))
     errors.extend(_validate_repos(data.get("repos")))
     errors.extend(_validate_evidence_summary(data.get("evidence_summary")))
+    errors.extend(_validate_prd_ok_requires_machine_artifacts_ok(data.get("artifacts")))
     errors.extend(_validate_p5_prd_freshness(phases, data.get("artifacts")))
     errors.extend(
         _validate_first_pass_complete_readiness(
@@ -866,6 +914,14 @@ def validate_manifest(
             diagrams=data.get("diagrams"),
         )
     )
+
+    first_pass_complete = (
+        isinstance(engagement, dict) and engagement.get("status") == "FIRST_PASS_COMPLETE"
+    )
+    if first_pass_complete and workspace_root is None:
+        errors.append(
+            "strict: FIRST_PASS_COMPLETE requires --workspace-root to validate machine artifact content"
+        )
 
     runtime = data.get("runtime_validation")
     if not isinstance(runtime, dict):

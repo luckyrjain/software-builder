@@ -96,8 +96,8 @@ no `..`; absolute paths are invalid.
 
 `stale` is valid **only** for artifact id `prd`. It means the file still exists but DELTA/ADD_REPO evidence
 proved that it no longer represents current state. The validator therefore still checks that a stale PRD file
-exists on disk, while strict `FIRST_PASS_COMPLETE` rejects the stale status because required artifacts must be
-`ok`/`waived`. Other artifacts may not use `stale`.
+exists on disk, while `FIRST_PASS_COMPLETE` rejects stale PRD status because the PRD must be `ok` and
+the four machine artifacts must be `ok` (not merely `waived`). Other artifacts may not use `stale`.
 
 Required P5 artifacts for a completed FULL engagement are:
 
@@ -120,13 +120,21 @@ QUICK engagements may create the machine files as stubs without completing P5. C
 `engagement.status: FIRST_PASS_COMPLETE` always runs completion readiness checks (not only when
 `--strict` is passed): required non-machine artifact rows must be `ok`/`waived`, required diagrams
 `ok`/`waived`/`n_a`, phases `complete`/`skipped`, PRD must be `required=true` and `status=ok`, and
-the four machine artifacts must be present as `ok`/`waived`. COMPLIANCE_RETROFIT may waive machine
-rows where re-analysis would be required, but **PRD `ok` is forbidden while any required machine
-artifact is waived** (no integrity basis for current-state handoff). Machine artifacts marked `ok`
-must also parse as schema_version=1 YAML with a populated `source_revision.repos` list (each entry
-requires non-empty `repo`, `branch`, `commit_sha`, and `observed_at`; literal `unknown` is allowed)
-when `--workspace-root` is provided. Machine artifact paths must be files, not directories. Waivers must
-be disclosed in the human handoff/omissions rather than fabricating machine evidence.
+the four machine artifacts must be `status=ok` (validator error:
+`machine artifact <id> must have status=ok for FIRST_PASS_COMPLETE`). COMPLIANCE_RETROFIT may keep
+machine rows `waived` only while `engagement.status` remains `IN_PROGRESS`; waived machines are not
+first-pass-complete and must not be treated as current-state handoff-ready. **PRD `ok` is forbidden
+while any required machine artifact is missing or non-`ok`**, regardless of engagement status
+(validator error: `artifact prd status=ok is forbidden while required machine artifact ...`).
+Machine artifacts marked `ok` must also parse as schema_version=1 (integer `1` only — not
+`true`/`1.0`) YAML with a populated `source_revision.repos` list (each entry requires non-empty
+`repo`, `branch`, `commit_sha`, and `observed_at`). Literal `unknown` in `repo` or `commit_sha` is
+not eligible for `status=ok` / current-state handoff. `FIRST_PASS_COMPLETE` requires
+`--workspace-root` so these content checks run. For required machine ids and `prd`, `path` must
+equal the Path column basename exactly. Machine artifact paths must be files, not directories.
+Waivers must be disclosed in the human handoff/omissions rather than fabricating machine evidence.
+`phases.p5.status=complete` is invalid unless `artifacts[id=prd].status=ok` (enforced even without
+`--strict`).
 
 Optional outputs include `E2E_FLOW.md`, Memory Bank export, Postman export, and runtime-only diagram
 supplements.
@@ -164,8 +172,10 @@ understand status, and deep-dive status.
    leave the row `ok` while only disclosing staleness in prose. Regeneration restores `ok`.
 4. End each phase by updating phases/artifacts/diagrams/evidence/confidence and running validation.
 5. Skipped phases require a reason; optional artifacts become `n_a` or `waived` as appropriate.
-6. `FIRST_PASS_COMPLETE` requires manifest `--strict --check-content` plus `validate_prd.py`; all required
-   P5 artifacts must be `ok`/`waived`, and the PRD must satisfy its requirement/traceability contract.
+6. `FIRST_PASS_COMPLETE` requires manifest `--strict --check-content` plus `validate_prd.py`;
+   `artifacts[id=prd].status` must be `ok`, all four machine artifacts must be `status=ok` (not
+   `waived`), and the PRD must satisfy its requirement/traceability contract. Waived machines are
+   allowed only while `IN_PROGRESS` and are not current-state handoff-ready.
 7. `ADD_REPO` keeps affected phases in progress while merge conflicts remain open and must refresh affected
    machine artifacts before P5 freshness claims.
 8. RESUME/DELTA/ADD_REPO on a manifest whose `artifacts[]` predates the current template (missing an id the
