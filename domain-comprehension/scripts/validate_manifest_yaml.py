@@ -165,12 +165,23 @@ def _load_yaml(path: Path) -> tuple[Any, list[str]]:
     return data, []
 
 
+def _invalid_enum(value: Any, allowed: frozenset[str]) -> bool:
+    """True when ``value`` is not a string member of ``allowed``.
+
+    Centralizes the isinstance-before-membership-check pattern: ``value not in allowed`` raises
+    TypeError when ``value`` is an unhashable type (a hand-edited manifest.yaml can put a list or
+    mapping where a string enum is expected), so every enum check must route through here instead
+    of hand-rolling the guard at each call site.
+    """
+    return not isinstance(value, str) or value not in allowed
+
+
 def _validate_phase_entry(key: str, value: Any) -> list[str]:
     errors: list[str] = []
     if not isinstance(value, dict):
         return [f"phases.{key} must be an object"]
     status = value.get("status")
-    if not isinstance(status, str) or status not in PHASE_STATUS:
+    if _invalid_enum(status, PHASE_STATUS):
         errors.append(f"phases.{key}.status must be one of {sorted(PHASE_STATUS)}")
     if status == "skipped" and not value.get("skip_reason"):
         errors.append(f"phases.{key}.skip_reason required when status=skipped")
@@ -195,7 +206,7 @@ def _validate_discovery_budget(value: Any) -> list[str]:
 
     errors: list[str] = []
     profile = value.get("profile")
-    if not isinstance(profile, str) or profile not in DISCOVERY_BUDGET_PROFILES:
+    if _invalid_enum(profile, DISCOVERY_BUDGET_PROFILES):
         errors.append(
             f"discovery_budget.profile must be one of {sorted(DISCOVERY_BUDGET_PROFILES)}"
         )
@@ -266,7 +277,7 @@ def _validate_artifact_list(items: Any, label: str, status_set: frozenset[str]) 
             errors.append(f"{prefix}.phase unknown: {phase}")
 
         status = item.get("status")
-        if not isinstance(status, str) or status not in status_set:
+        if _invalid_enum(status, status_set):
             errors.append(f"{prefix}.status must be one of {sorted(status_set)}")
         if label == "artifacts":
             if not isinstance(item.get("required"), bool):
@@ -286,10 +297,10 @@ def _validate_five_questions(value: Any) -> list[str]:
             errors.append(f"five_questions.{key} must be an object")
             continue
         question_status = entry.get("status")
-        if not isinstance(question_status, str) or question_status not in QUESTION_STATUS:
+        if _invalid_enum(question_status, QUESTION_STATUS):
             errors.append(f"five_questions.{key}.status invalid")
         question_confidence = entry.get("confidence")
-        if not isinstance(question_confidence, str) or question_confidence not in CONFIDENCE:
+        if _invalid_enum(question_confidence, CONFIDENCE):
             errors.append(f"five_questions.{key}.confidence invalid")
     return errors
 
@@ -306,9 +317,7 @@ def _validate_repos(repos: Any) -> list[str]:
         if not isinstance(item.get("name"), str) or not str(item.get("name")).strip():
             errors.append(f"{prefix}.name must be a non-empty string")
         classification = item.get("classification")
-        if classification is not None and (
-            not isinstance(classification, str) or classification not in REPO_CLASSIFICATION
-        ):
+        if classification is not None and _invalid_enum(classification, REPO_CLASSIFICATION):
             errors.append(f"{prefix}.classification invalid: {classification}")
         for field, allowed in (
             ("inventory", REPO_INVENTORY),
@@ -316,9 +325,7 @@ def _validate_repos(repos: Any) -> list[str]:
             ("deep_dive", REPO_DEEP_DIVE),
         ):
             field_value = item.get(field)
-            if field_value is not None and (
-                not isinstance(field_value, str) or field_value not in allowed
-            ):
+            if field_value is not None and _invalid_enum(field_value, allowed):
                 errors.append(f"{prefix}.{field} invalid: {field_value}")
     return errors
 
@@ -524,7 +531,7 @@ def validate_manifest(
             errors.append(f"missing required top-level field: {key}")
 
     overall_confidence = data.get("overall_confidence")
-    if not isinstance(overall_confidence, str) or overall_confidence not in CONFIDENCE:
+    if _invalid_enum(overall_confidence, CONFIDENCE):
         errors.append("overall_confidence invalid")
 
     errors.extend(_validate_discovery_budget(data.get("discovery_budget")))
@@ -535,7 +542,7 @@ def validate_manifest(
             if key not in engagement:
                 errors.append(f"engagement missing field: {key}")
         engagement_status = engagement.get("status")
-        if not isinstance(engagement_status, str) or engagement_status not in ENGAGEMENT_STATUS:
+        if _invalid_enum(engagement_status, ENGAGEMENT_STATUS):
             errors.append("engagement.status invalid")
         map_error = _relative_path_error(engagement.get("map_file"), "engagement.map_file")
         if map_error:

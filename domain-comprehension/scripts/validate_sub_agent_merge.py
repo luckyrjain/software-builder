@@ -43,7 +43,7 @@ def validate_merge(data: Any) -> list[str]:
                     if key not in item:
                         errors.append(f"{prefix} missing required field: {key}")
                 conf = item.get("confidence")
-                if conf is not None and conf not in CONFIDENCE:
+                if conf is not None and (not isinstance(conf, str) or conf not in CONFIDENCE):
                     errors.append(f"{prefix}.confidence must be HIGH|MEDIUM|LOW|UNKNOWN")
 
     for list_field in ("open_questions", "conflicts", "files_read"):

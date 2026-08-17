@@ -31,3 +31,15 @@ def test_invalid_confidence():
     data["findings"][0]["confidence"] = "HIGHISH"
     errors = validate_merge(data)
     assert any("confidence" in e for e in errors)
+
+
+def test_unhashable_confidence_reports_error_instead_of_crashing():
+    """A malformed sub-agent merge payload can put a list/mapping where confidence expects a string.
+
+    validate_merge()'s job is to report that cleanly, not raise TypeError from `x not in
+    a_frozenset` — unhashable values must never reach a frozenset membership test.
+    """
+    data = json.loads(VALID.read_text(encoding="utf-8"))
+    data["findings"][0]["confidence"] = ["HIGH"]
+    errors = validate_merge(data)
+    assert any("confidence" in e for e in errors)
