@@ -238,7 +238,10 @@ def main(argv: list[str] | None = None) -> int:
             dest=dest,
             host=args.host,
         )
-    except (FileNotFoundError, ValueError) as exc:
+    except (OSError, ValueError) as exc:
+        # OSError (not just FileNotFoundError) so an I/O failure reading
+        # RELEASE-MANIFEST.json in _release_provenance() -- e.g. a permission error on
+        # an extracted bundle -- prints a clean error instead of a raw traceback.
         print(f"error: {exc}", file=sys.stderr)
         return 1
     return 0

@@ -8,13 +8,17 @@ from typing import Any
 
 from scripts.registry.composition_contracts import load_contracts
 from scripts.registry.frontmatter import load_skill_frontmatter
+from scripts.registry.models import Registry
 from scripts.registry.schema import parse_registry
+from scripts.release_info import SEMVER_RE as _CORE_SEMVER_RE
 from scripts.yaml_safety import YAML_SAFETY_ERRORS, load_unique_yaml_file
 from scripts.yaml_safety import require_mapping as _require_mapping
 
 ROOT = Path(__file__).resolve().parents[2]
 CONTRACTS_PATH = Path(__file__).resolve().parent / "platform_contracts.yaml"
-_CORE_SEMVER_RE = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$")
+# Bare MAJOR.MINOR.PATCH semver core (no prerelease/build metadata) -- shared with
+# scripts/release_info.py, which needs the exact same "is this a semver core" definition
+# for VERSION/distribution_version/source manifest fields, so the two never drift apart.
 _IDENTIFIER_RE = re.compile(r"^[0-9A-Za-z-]+$")
 _LEGACY_NUMERIC_VERSION_RE = re.compile(
     r"^skill_version:\s*([0-9]+\.[0-9]+)\s*(?:#.*)?$",
@@ -311,7 +315,7 @@ def build_manifest(root: Path = ROOT) -> dict[str, Any]:
     return manifest
 
 
-def skill_versions(root: Path = ROOT) -> dict[str, str]:
+def skill_versions(root: Path = ROOT, *, registry: Registry | None = None) -> dict[str, str]:
     """skill_id -> normalized semantic version, for every skill in skills.yaml.
 
     Lighter than build_manifest(): reads only skills.yaml and each skill's
@@ -319,8 +323,13 @@ def skill_versions(root: Path = ROOT) -> dict[str, str]:
     even for a repository that doesn't have platform_contracts.yaml /
     composition_contracts.yaml -- the full P1 platform-contract layer
     build_manifest() requires.
+
+    Pass `registry` when the caller already parsed skills.yaml (e.g. to also
+    tracked-check its skills) so this doesn't re-read and re-parse the same
+    file a second time; omitted, it parses skills.yaml itself as before.
     """
-    registry = parse_registry(root / "skills.yaml")
+    if registry is None:
+        registry = parse_registry(root / "skills.yaml")
     versions: dict[str, str] = {}
     for skill_id, entry in registry.skills.items():
         skill_md = root / entry.path / "SKILL.md"

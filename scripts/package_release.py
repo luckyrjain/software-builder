@@ -38,6 +38,7 @@ from yaml_safety import YAML_SAFETY_ERRORS, read_schema_version
 
 from scripts.registry.host_adapter import supported_hosts
 from scripts.registry.manifest import skill_versions
+from scripts.registry.models import Registry
 from scripts.registry.schema import parse_registry
 from scripts.release_contract import required_provenance_fields
 
@@ -78,19 +79,27 @@ def _ensure_clean_worktree(root: Path) -> None:
             raise ValueError(f"could not check Git working tree status: {result.stderr.strip()}")
 
 
-def _ensure_manifest_inputs_tracked(root: Path, tracked: list[tuple[str, Path, int]]) -> None:
+def _ensure_manifest_inputs_tracked(
+    root: Path, tracked: list[tuple[str, Path, int]], registry: Registry,
+) -> None:
     """Fail closed if a file the manifest's derived fields are read from isn't a tracked release input.
 
-    registry_schema_version/supported_hosts/skill_versions are read via read_schema_version(),
-    supported_hosts(), and skill_versions() straight off the working-tree filesystem -- skills.yaml,
-    host_contracts.yaml, and each registered skill's SKILL.md -- not from `tracked`. An entirely
-    untracked path (e.g. skills.yaml gains a new skill entry that gets committed before the skill's
-    own directory is `git add`ed) is invisible to _ensure_clean_worktree()'s `git diff` checks, which
-    only see *modifications* to already-tracked paths, never a wholly new untracked one. Left
-    unchecked, that lets RELEASE-MANIFEST.json's skill_versions/supported_hosts list a skill or host
-    with zero corresponding files in the archive _tracked_files() actually builds --
-    verify_release_bundle.py doesn't catch this either, since it only checks that those two fields
-    are well-typed, never re-derives them from the bundle's own bundled files.
+    distribution_version/registry_schema_version/supported_hosts/skill_versions/the provenance field
+    set are read via read_distribution_version(), read_schema_version(), supported_hosts(),
+    skill_versions(), and required_provenance_fields() straight off the working-tree filesystem --
+    VERSION, skills.yaml, host_contracts.yaml, release_contract.yaml, and each registered skill's
+    SKILL.md -- not from `tracked`. An entirely untracked path (e.g. skills.yaml gains a new skill
+    entry that gets committed before the skill's own directory is `git add`ed, or VERSION/
+    release_contract.yaml is edited after being `git rm --cached`d) is invisible to
+    _ensure_clean_worktree()'s `git diff` checks, which only see *modifications* to already-tracked
+    paths, never a wholly new untracked one. Left unchecked, that lets RELEASE-MANIFEST.json claim a
+    distribution_version/provenance field set with no corresponding file in the archive
+    _tracked_files() actually builds -- verify_release_bundle.py doesn't catch this either, since it
+    only checks the manifest's internal self-consistency, never re-derives these fields from the
+    bundle's own bundled files.
+
+    `registry` is skills.yaml already parsed by the caller (which also needs it for
+    skill_versions()) -- reused here instead of re-parsing the same file a second time.
     """
     tracked_rel = {rel for rel, _, _ in tracked}
 
@@ -102,9 +111,11 @@ def _ensure_manifest_inputs_tracked(root: Path, tracked: list[tuple[str, Path, i
                 "packaging a release",
             )
 
+    _require("VERSION", why="distribution_version")
+    _require("scripts/release_contract.yaml", why="provenance.required_fields")
     _require("skills.yaml", why="registry_schema_version/skill_versions")
     _require("scripts/registry/host_contracts.yaml", why="host_contract_schema_version/supported_hosts")
-    for skill_id, entry in parse_registry(root / "skills.yaml").skills.items():
+    for skill_id, entry in registry.skills.items():
         _require(f"{entry.path}/SKILL.md", why=f"skill_versions[{skill_id!r}]")
 
 
@@ -340,7 +351,10 @@ def package_release(root: Path, output_dir: Path) -> tuple[Path, Path]:
     bundle_name = f"{PACKAGE_NAME}-{version}"
 
     tracked = _tracked_files(root)
-    _ensure_manifest_inputs_tracked(root, tracked)
+    # Parsed once and reused for both the tracked-input check and the manifest's
+    # skill_versions field, instead of re-parsing skills.yaml a second time.
+    registry = parse_registry(root / "skills.yaml")
+    _ensure_manifest_inputs_tracked(root, tracked, registry)
     manifest_fields = {
         "schema_version": 1,
         "distribution_version": version,
@@ -348,7 +362,7 @@ def package_release(root: Path, output_dir: Path) -> tuple[Path, Path]:
         "registry_schema_version": read_schema_version(root / "skills.yaml"),
         "host_contract_schema_version": read_schema_version(root / "scripts" / "registry" / "host_contracts.yaml"),
         "supported_hosts": supported_hosts(root),
-        "skill_versions": skill_versions(root),
+        "skill_versions": skill_versions(root, registry=registry),
     }
     # required_provenance_fields() (release_contract.yaml's provenance.required_fields) is the
     # single source of truth for what a release manifest must carry -- "files" is the one field
