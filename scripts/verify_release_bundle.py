@@ -129,7 +129,15 @@ def verify_release_bundle(archive: Path) -> list[str]:
                 continue
             if rel == MANIFEST_NAME:
                 continue
-            actual_files[rel] = sha256_file(path)
+            try:
+                actual_files[rel] = sha256_file(path)
+            except OSError as exc:
+                # Every other failure mode in this function (extraction, manifest
+                # parsing, contract loading) is caught and turned into a clean error
+                # string rather than propagating -- an I/O error hashing one bundled
+                # file (disk/filesystem hiccup, permissions) shouldn't be the one path
+                # left to crash main() with a raw traceback instead of a CLI error.
+                errors.append(f"error: could not hash {rel}: {exc}")
 
         for rel, digest in sorted(files.items()):
             if not isinstance(rel, str) or not isinstance(digest, str):

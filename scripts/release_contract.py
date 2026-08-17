@@ -128,7 +128,11 @@ def validate_release_contract(root: Path = ROOT) -> list[str]:
         try:
             actual = read_schema_version(path)
         except (OSError, *YAML_SAFETY_ERRORS) as exc:
-            errors.append(f"error: release contract: {path}: {exc}")
+            # Don't also prefix {path} here: read_schema_version()'s ValueError and a
+            # missing-file OSError both already embed the path in str(exc), so adding
+            # it again produced doubled output, e.g. "... contract: X: X: schema_version
+            # must be an integer".
+            errors.append(f"error: release contract: {exc}")
             continue
         if actual != expected:
             errors.append(
