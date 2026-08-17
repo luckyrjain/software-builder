@@ -45,7 +45,7 @@ Skills reference these files by relative link from `SETUP.md` or `SKILL.md`. Do 
 | [shared/claude-code-setup.md](shared/claude-code-setup.md) | Claude Code install paths + MCP config location, mapped from the Cursor equivalents used throughout each skill's `SETUP.md` |
 | [shared/org-rollup-schema.md](shared/org-rollup-schema.md) | Normalized cross-repo rollup item shape — implemented by migration-program-manager (#8), cost-optimization-sprint-planner (#10), and weekly-squad-digest (#11) |
 | [shared/test-creation-principles.md](shared/test-creation-principles.md) | Test-first evidence, test-quality rules, refactor limits, and the shared report skeleton for unit/integration/contract/e2e/api-test-creator |
-| [shared/terminology-glossary.md](shared/terminology-glossary.md) | Platform vocabulary — skill, registry, capability, risk class, eval tiers, gates |
+| [shared/terminology-glossary.md](shared/terminology-glossary.md) | Platform implementation vocabulary — registry, capability, risk class, eval tiers; domain terms in [CONTEXT.md](../../CONTEXT.md) |
 | [shared/setup-freshness.md](shared/setup-freshness.md) | SETUP.md review ownership, last-reviewed dates, external-service inventory |
 
 Platform ADRs: [docs/adr/README.md](../adr/README.md).
