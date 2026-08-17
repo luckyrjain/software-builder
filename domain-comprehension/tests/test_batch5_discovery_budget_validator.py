@@ -80,6 +80,19 @@ def test_discovery_budget_rejects_consumption_over_limit() -> None:
     assert any("consumed.repositories exceeds configured limit" in error for error in errors)
 
 
+def test_discovery_budget_allows_consumption_exactly_at_limit() -> None:
+    """consumed == limit is a normal terminal state (stop_when: any_budget_limit_reached), not an error.
+
+    Locks in the `>` (not `>=`) boundary so a future edit can't silently start rejecting an
+    engagement that exactly exhausts its discovery budget.
+    """
+    data = _manifest()
+    data["discovery_budget"]["limits"]["repositories"] = 12
+    data["discovery_budget"]["consumed"]["repositories"] = 12
+    errors = validate_manifest(data)
+    assert not any("repositories exceeds configured limit" in error for error in errors)
+
+
 def test_discovery_budget_rejects_boolean_counter_values() -> None:
     data = _manifest()
     data["discovery_budget"]["limits"]["repositories"] = True

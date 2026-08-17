@@ -425,6 +425,20 @@ def _validate_p2b_runtime_gate(
     return errors
 
 
+def _is_table_separator_line(stripped: str) -> bool:
+    """True when ``stripped`` is a GFM table separator row (e.g. ``|---|:--:|``).
+
+    Splits on the same ``|`` cell boundaries the row/header parsing below uses (a plain
+    ``strip("|")`` alone leaves interior ``|`` characters in place for multi-column rows) and
+    requires every cell to be non-empty and made up solely of ``-``/``:``, so an empty/blank
+    line or a stray ``||`` doesn't false-positive as a separator.
+    """
+    if not stripped.startswith("|"):
+        return False
+    cells = [c.strip() for c in stripped.strip("|").split("|")]
+    return bool(cells) and all(cell and set(cell) <= {"-", ":"} for cell in cells)
+
+
 def _validate_merge_conflicts_gate(
     workspace_root: Path,
     *,
@@ -439,11 +453,12 @@ def _validate_merge_conflicts_gate(
     except OSError:
         return errors
 
+    lines = text.splitlines()
     in_section = False
     header_seen = False
     status_index: int | None = None
     has_open_conflict = False
-    for line in text.splitlines():
+    for idx, line in enumerate(lines):
         stripped = line.strip()
         if stripped.startswith("## "):
             in_section = stripped.lower().startswith(MERGE_CONFLICTS_HEADING)
@@ -462,22 +477,27 @@ def _validate_merge_conflicts_gate(
 
         cells = [c.strip() for c in stripped.strip("|").split("|")]
 
-        if not header_seen:
+        # A table header row is always immediately followed by a dash/colon separator row
+        # (required GFM table syntax). Detecting headers this way — rather than only via the
+        # header_seen flag — also catches a second table that starts right after the first
+        # table's last data row with no blank/prose line between them: without this lookahead,
+        # that adjacent header row would be silently read as a stray data row of the first
+        # table (checked against its column index) instead of starting a fresh one.
+        next_stripped = lines[idx + 1].strip() if idx + 1 < len(lines) else ""
+        if _is_table_separator_line(next_stripped):
             header_seen = True
             lowered = [c.lower() for c in cells]
             # A table without a Status column contributes no conflict rows, but must not end the
             # section: a later table under the same heading may still have its own Status column
             # and an open conflict. Leave status_index unset so this table's rows are skipped
-            # below, while the non-table-line branch above resets header_seen/status_index for
-            # whatever table (if any) comes next.
-            if "status" in lowered:
-                status_index = lowered.index("status")
+            # below.
+            status_index = lowered.index("status") if "status" in lowered else None
             continue
 
-        if set(stripped.strip("|").replace(" ", "")) <= {"-", ":"}:
+        if _is_table_separator_line(stripped):
             continue
 
-        if status_index is None or len(cells) <= status_index:
+        if not header_seen or status_index is None or len(cells) <= status_index:
             continue
 
         cell_value = cells[status_index].strip().strip("`*").strip()

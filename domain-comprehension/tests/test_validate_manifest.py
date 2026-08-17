@@ -391,6 +391,39 @@ def test_check_content_merge_conflict_status_less_first_table_then_open_second_t
     assert any("phases.p0 must not be complete" in e for e in errors)
 
 
+def test_check_content_merge_conflict_adjacent_tables_no_separator_line_detected(
+    tmp_path: Path,
+) -> None:
+    """Two tables back-to-back with no blank/prose line between them must each get their own header.
+
+    Regression guard: the previous fix for "second table under the same heading" only reset
+    header/column tracking when a *non-table* line separated the two tables. When the second
+    table's header row immediately follows the first table's last data row (a perfectly valid,
+    plausible Markdown layout), that reset never fired, so the second table's header row was read
+    as a stray data row of the first table and its own open-status row was checked against the
+    wrong column index.
+    """
+    data = _minimal_manifest()
+    data["phases"]["p0"]["status"] = "complete"
+    data["phases"]["p0"]["completed_at"] = "2026-07-29T00:00:00Z"
+    (tmp_path / "EXEC_SUMMARY.md").write_text(
+        "## Evidence summary\n## Engineering Leader Summary\n## Section confidences\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "RISK_MAP.md").write_text(
+        "## Merge Conflicts (ADD_REPO mode)\n\n"
+        "| New repo | Existing claim | New claim | Entity/Context/Path | Evidence (existing) | Evidence (new) | Confidence | Status |\n"
+        "|----------|-----------------|-----------|----------------------|----------------------|-----------------|------------|--------|\n"
+        "| svc-b | svc-a owns `users` table | svc-b owns `users` table | users table | svc-a/Repo.java:12 | svc-b/Repo.java:9 | HIGH | resolved |\n"
+        "| Status | New repo | Entity/Context/Path |\n"
+        "|--------|----------|----------------------|\n"
+        "| open | svc-c | orders table |\n",
+        encoding="utf-8",
+    )
+    errors = validate_manifest(data, workspace_root=tmp_path, check_content=True)
+    assert any("phases.p0 must not be complete" in e for e in errors)
+
+
 def _mark_api_tooling_ok(data: dict) -> None:
     for artifact in data["artifacts"]:
         if artifact["id"] == "api_tooling_export":

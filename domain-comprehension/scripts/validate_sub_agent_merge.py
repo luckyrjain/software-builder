@@ -24,34 +24,37 @@ def validate_merge(data: Any) -> list[str]:
             errors.append(f"missing required field: {key}")
 
     repo = data.get("repo")
-    if repo is not None and (not isinstance(repo, str) or not repo.strip()):
+    if not isinstance(repo, str) or not repo.strip():
         errors.append("repo must be a non-empty string")
 
     phase = data.get("phase")
-    if phase is not None and (not isinstance(phase, str) or not phase.strip()):
+    if not isinstance(phase, str) or not phase.strip():
         errors.append("phase must be a non-empty string")
 
     findings = data.get("findings")
-    if findings is not None:
-        if not isinstance(findings, list):
-            errors.append("findings must be an array")
-        else:
-            for index, item in enumerate(findings):
-                prefix = f"findings[{index}]"
-                if not isinstance(item, dict):
-                    errors.append(f"{prefix} must be an object")
-                    continue
-                for key in ("evidence", "conclusion", "confidence"):
-                    if key not in item:
-                        errors.append(f"{prefix} missing required field: {key}")
-                conf = item.get("confidence")
-                if conf is not None and _invalid_enum(conf, CONFIDENCE):
-                    errors.append(f"{prefix}.confidence must be HIGH|MEDIUM|LOW|UNKNOWN")
+    if not isinstance(findings, list):
+        errors.append("findings must be an array")
+    else:
+        for index, item in enumerate(findings):
+            prefix = f"findings[{index}]"
+            if not isinstance(item, dict):
+                errors.append(f"{prefix} must be an object")
+                continue
+            for key in ("evidence", "conclusion", "confidence"):
+                if key not in item:
+                    errors.append(f"{prefix} missing required field: {key}")
+            conf = item.get("confidence")
+            if _invalid_enum(conf, CONFIDENCE):
+                errors.append(f"{prefix}.confidence must be HIGH|MEDIUM|LOW|UNKNOWN")
 
     for list_field in ("open_questions", "conflicts", "files_read"):
         value = data.get(list_field)
-        if value is not None and not isinstance(value, list):
+        if not isinstance(value, list):
             errors.append(f"{list_field} must be an array")
+        else:
+            for index, item in enumerate(value):
+                if not isinstance(item, str):
+                    errors.append(f"{list_field}[{index}] must be a string")
 
     return errors
 
