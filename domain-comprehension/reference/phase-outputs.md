@@ -180,7 +180,7 @@ Enums: [implementation-status.md](implementation-status.md). Precedence: [eviden
 | Repo map table | `EXEC_SUMMARY.md` | classification + squad + tier + branch + SHA |
 | Evidence summary (final) | `EXEC_SUMMARY.md` + manifest | All counters populated |
 | Section confidences | `EXEC_SUMMARY.md` | Per major section |
-| `PROGRESS.md` | `FIRST_PASS_COMPLETE` or explicit PARTIAL reason | All checkpoints; impossible while manifest PRD status is `stale` |
+| `PROGRESS.md` | `FIRST_PASS_COMPLETE` or explicit PARTIAL reason | All checkpoints; `FIRST_PASS_COMPLETE` is impossible while manifest PRD status is `stale` — record the stale condition as the PARTIAL reason instead |
 | Per-repo Memory Bank | `<repo>/memory-bank/*.md` | When `memory_bank.export_mode: p5` — see [memory-bank-integration.md](memory-bank-integration.md) |
 | `manifest` `memory_bank_export` | `manifest.yaml` | `ok` \| `waived` \| `n_a` per export_mode |
 | Postman/curl export | `postman/*` | When `api_tooling.export_mode: p5` — see [api-tooling-integration.md](api-tooling-integration.md) |
