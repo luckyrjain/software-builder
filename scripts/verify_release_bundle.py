@@ -32,18 +32,43 @@ from scripts.release_contract import (
     load_contract,
     required_provenance_fields_from_contract,
 )
-from scripts.release_info import PACKAGE_NAME, RELEASE_MANIFEST_NAME, SEMVER_RE, SHA_RE
+from scripts.release_info import PACKAGE_NAME, RELEASE_MANIFEST_NAME, SEMVER_RE, SHA_RE, git_source_sha
 from scripts.yaml_safety import YAML_SAFETY_ERRORS, read_schema_version
 
 _HEX64_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
+# Generous headroom over this repo's actual bundle size (a few MB), but bounds how much disk
+# a maliciously crafted or corrupted archive (e.g. a small, highly compressible "decompression
+# bomb" member) can force this verifier to write before any content check ever runs --
+# filter="data" blocks unsafe member types/paths but has no size limit of its own.
+_MAX_EXTRACTED_BYTES = 500 * 1024 * 1024
+
+
 def _safe_extract(archive: Path, dest: Path) -> None:
     with tarfile.open(archive, "r:gz") as tar:
+        total_size = sum(member.size for member in tar.getmembers() if member.isfile())
+        if total_size > _MAX_EXTRACTED_BYTES:
+            raise ValueError(
+                f"release bundle declares {total_size:,} bytes of extracted content, over the "
+                f"{_MAX_EXTRACTED_BYTES:,} byte limit -- refusing to extract",
+            )
         tar.extractall(dest, filter="data")
 
 
-def verify_release_bundle(archive: Path) -> list[str]:
+def verify_release_bundle(archive: Path, *, repo_root: Path | None = None) -> list[str]:
+    """Verify archive against its own embedded manifest, plus (when repo_root is given) against
+    a live Git checkout's actual HEAD.
+
+    Every other provenance field has some ground truth inside the bundle itself to cross-check
+    against (VERSION, skills.yaml, host_contracts.yaml, ...), but source_sha does not -- a bundle
+    never contains a `.git`, so without an external repo to compare against, source_sha can only
+    be shape-checked, never verified. `repo_root` closes that gap for the one place it can
+    actually be closed: `.github/workflows/release.yml` runs this verifier in the same checkout
+    it just packaged, so it can pass `--repo-root .` to confirm the manifest's source_sha actually
+    matches that checkout's live `git rev-parse HEAD`, catching e.g. a manifest whose source_sha
+    was forged or built from a different/stale checkout than the one being verified.
+    """
     if not archive.is_file():
         return [f"error: release bundle not found: {archive}"]
 
@@ -51,7 +76,7 @@ def verify_release_bundle(archive: Path) -> list[str]:
         extract_dir = Path(tmp)
         try:
             _safe_extract(archive, extract_dir)
-        except (tarfile.TarError, OSError) as exc:
+        except (tarfile.TarError, OSError, ValueError) as exc:
             return [f"error: unsafe or unreadable release archive: {exc}"]
         except TypeError as exc:
             # tarfile.extractall()'s `filter=` keyword requires Python 3.8.17+/3.9.17+/
@@ -138,6 +163,17 @@ def verify_release_bundle(archive: Path) -> list[str]:
         source_sha = manifest.get("source_sha")
         if not isinstance(source_sha, str) or not SHA_RE.fullmatch(source_sha):
             errors.append(f"error: {RELEASE_MANIFEST_NAME} source_sha is invalid: {source_sha!r}")
+        elif repo_root is not None:
+            try:
+                actual_source_sha = git_source_sha(repo_root)
+            except ValueError as exc:
+                errors.append(f"error: could not verify source_sha against --repo-root: {exc}")
+            else:
+                if actual_source_sha != source_sha:
+                    errors.append(
+                        f"error: {RELEASE_MANIFEST_NAME} source_sha {source_sha!r} does not match "
+                        f"--repo-root's Git HEAD {actual_source_sha!r}",
+                    )
 
         try:
             expected_schema_versions = compatibility_schema_versions_from_contract(contract)
@@ -302,10 +338,17 @@ def verify_release_bundle(archive: Path) -> list[str]:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="verify_release_bundle")
     parser.add_argument("archive", type=Path)
+    parser.add_argument(
+        "--repo-root",
+        type=Path,
+        default=None,
+        help="Git checkout to verify the manifest's source_sha against (e.g. the checkout the "
+        "bundle was just packaged from). Omit to skip that one cross-check.",
+    )
     args = parser.parse_args(argv)
 
     try:
-        errors = verify_release_bundle(args.archive)
+        errors = verify_release_bundle(args.archive, repo_root=args.repo_root)
     except (OSError, *YAML_SAFETY_ERRORS) as exc:
         # verify_release_bundle() converts every expected failure mode (bad archive,
         # malformed manifest, hash mismatch, ...) into an error string rather than

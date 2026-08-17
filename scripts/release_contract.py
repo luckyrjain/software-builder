@@ -120,7 +120,10 @@ def validate_release_contract(root: Path = ROOT) -> list[str]:
 
     try:
         version = read_distribution_version(root)
-    except ValueError as exc:
+    except (OSError, ValueError) as exc:
+        # OSError (not just ValueError) so a VERSION file that exists but isn't readable
+        # (e.g. a permission error) prints a clean error instead of an uncaught traceback --
+        # read_distribution_version()'s read_text() call can raise either.
         return [f"error: release contract: {exc}"]
 
     tag_pattern = contract.get("tag_pattern")

@@ -95,7 +95,7 @@ def _ensure_clean_worktree(root: Path) -> None:
 
 
 def _ensure_manifest_inputs_tracked(
-    root: Path, tracked: list[tuple[str, Path, int]], registry: Registry,
+    root: Path, tracked: list[tuple[str, Path, int, str]], registry: Registry,
 ) -> None:
     """Fail closed if a file the manifest's derived fields are read from isn't a tracked release input.
 
@@ -116,7 +116,7 @@ def _ensure_manifest_inputs_tracked(
     `registry` is skills.yaml already parsed by the caller (which also needs it for
     skill_versions()) -- reused here instead of re-parsing the same file a second time.
     """
-    tracked_rel = {rel for rel, _, _ in tracked}
+    tracked_rel = {rel for rel, _, _, _ in tracked}
 
     def _require(rel: str, *, why: str) -> None:
         if rel not in tracked_rel:
@@ -212,10 +212,10 @@ def _is_release_excluded(rel: str) -> bool:
     return parts[0].startswith(".") and parts[0] != ".github"
 
 
-def _tracked_files(root: Path) -> list[tuple[str, Path, int]]:
+def _tracked_files(root: Path) -> list[tuple[str, Path, int, str]]:
     """Git-tracked regular release files under root, as (posix relative path,
-    absolute path, tar mode) -- excludes repo-development tooling per
-    _is_release_excluded (see there).
+    absolute path, tar mode, Git blob hash) -- excludes repo-development
+    tooling per _is_release_excluded (see there).
 
     The tar mode is read from Git's own index (``git ls-files -s``), not from
     the filesystem: a filesystem executable bit that has drifted from Git's
@@ -223,6 +223,17 @@ def _tracked_files(root: Path) -> list[tuple[str, Path, int]]:
     ``_ensure_clean_worktree`` diff check can't see the drift -- would
     otherwise make the archive depend on the machine it was built on instead
     of only on the Git tree, breaking reproducibility.
+
+    The blob hash is also read from the index (the ``<object>`` field of
+    ``git ls-files -s``) so ``_write_reproducible_archive`` can verify each
+    file's actual on-disk content against it at read time -- ``git diff
+    --quiet`` (``_ensure_clean_worktree``) cannot see a tracked file whose
+    content was edited under Git's ``assume-unchanged``/``skip-worktree``
+    index bits (both make Git skip comparing that path against the working
+    tree entirely), nor a file edited *after* that check ran but before this
+    file's own read. The index's recorded blob hash is unaffected by either:
+    it's Git's own record of what content that path is supposed to contain,
+    independent of whether Git is willing to detect a discrepancy via `diff`.
 
     Raises ValueError if any tracked, non-excluded path is a symlink --
     release inputs must be plain file content, never a link that could point
@@ -253,16 +264,17 @@ def _tracked_files(root: Path) -> list[tuple[str, Path, int]]:
         )
     except subprocess.CalledProcessError as exc:
         raise ValueError(f"could not list Git-tracked files: {exc.stderr.strip()}") from exc
-    entries: list[tuple[str, int]] = []
+    entries: list[tuple[str, int, str]] = []
     for raw_entry in result.stdout.split("\0"):
         if not raw_entry:
             continue
         meta, _, rel = raw_entry.partition("\t")
-        git_mode = int(meta.split(" ", 1)[0], 8)
-        entries.append((rel, git_mode))
+        mode_str, blob_sha, _stage = meta.split(" ")
+        git_mode = int(mode_str, 8)
+        entries.append((rel, git_mode, blob_sha))
 
-    files: list[tuple[str, Path, int]] = []
-    for rel, git_mode in sorted(entries, key=lambda item: item[0]):
+    files: list[tuple[str, Path, int, str]] = []
+    for rel, git_mode, blob_sha in sorted(entries, key=lambda item: item[0]):
         if _is_release_excluded(rel):
             continue
         if rel == RELEASE_MANIFEST_NAME:
@@ -292,7 +304,7 @@ def _tracked_files(root: Path) -> list[tuple[str, Path, int]]:
                 f"regular file on disk: {rel}",
             )
         mode = 0o755 if git_mode & 0o111 else 0o644
-        files.append((rel, abs_path, mode))
+        files.append((rel, abs_path, mode, blob_sha))
     return files
 
 
@@ -340,41 +352,58 @@ def _tar_info(arcname: str, *, size: int, mode: int) -> tarfile.TarInfo:
 
 
 class _HashingReader:
-    """Wrap a binary file object, updating `digest` with every chunk read.
+    """Wrap a binary file object, updating every digest in `digests` with each chunk read.
 
     tarfile.addfile() streams a member's content by calling .read(bufsize) on
     the given file object in a loop. Wrapping the handle here lets that one
     read pass -- the pass that copies file content into the archive -- also
-    compute the file's SHA-256, instead of reading every tracked file twice
-    (once whole, to hash, and again to stream into the tar).
+    compute the file's SHA-256 (for the manifest) and its Git blob hash (to
+    verify against the index, see _write_reproducible_archive), instead of
+    reading every tracked file multiple times.
     """
 
-    def __init__(self, fileobj, digest) -> None:
+    def __init__(self, fileobj, digests) -> None:
         self._fileobj = fileobj
-        self._digest = digest
+        self._digests = digests
 
     def read(self, size: int = -1) -> bytes:
         chunk = self._fileobj.read(size)
-        self._digest.update(chunk)
+        for digest in self._digests:
+            digest.update(chunk)
         return chunk
 
 
 def _write_reproducible_archive(
     archive_path: Path,
     bundle_name: str,
-    tracked: list[tuple[str, Path, int]],
+    tracked: list[tuple[str, Path, int, str]],
     manifest_fields: dict,
 ) -> tuple[dict[str, str], bytes]:
     """Write every tracked file plus RELEASE-MANIFEST.json into a reproducible
     archive, hashing each tracked file exactly once as it streams into the
     tar. Returns (file_hashes, manifest_bytes) so the caller can write the
     sibling .sha256/.files.sha256 assets without re-reading any file.
+
+    Also verifies each file's actual streamed bytes against the Git blob hash
+    recorded for it in the index (see _tracked_files) -- content drift that
+    happened after _ensure_clean_worktree()'s check ran (whether via Git's
+    assume-unchanged/skip-worktree bits, which make `git diff` blind to a
+    real content change, or a concurrent edit during this very build) is
+    caught here instead of silently shipping in the archive under a
+    source_sha that no longer actually matches its content.
     """
     file_hashes: dict[str, str] = {}
     with _atomic_write(archive_path) as raw:
-        # filename="" (not the default of raw.name) keeps the gzip header
-        # itself reproducible regardless of the output path chosen.
-        with gzip.GzipFile(filename="", mode="wb", fileobj=raw, mtime=0) as gz:
+        # filename="" (not the default of raw.name) keeps the gzip header itself
+        # reproducible regardless of the output path chosen; compresslevel is pinned
+        # explicitly (matching zlib's own default) so it's a fixed input rather than
+        # an implicit one. Byte-for-byte reproducibility of the *compressed* output
+        # additionally depends on the zlib version/build linked into the Python
+        # interpreter running this -- guaranteed identical on the same interpreter,
+        # not necessarily across different ones, even though this pins everything
+        # this module controls. The decompressed tar payload (and therefore every
+        # RELEASE-MANIFEST.json file hash) is unaffected either way.
+        with gzip.GzipFile(filename="", mode="wb", fileobj=raw, mtime=0, compresslevel=9) as gz:
             # format=USTAR_FORMAT (matching scripts/registry/generic_package.py's
             # existing reproducible-archive precedent): tarfile's default is PAX,
             # whose extended headers (needed for e.g. long paths) aren't
@@ -382,8 +411,12 @@ def _write_reproducible_archive(
             # pinned classic format is -- without this, "byte-for-byte
             # reproducible" would only hold on identical Python builds.
             with tarfile.open(fileobj=gz, mode="w", format=tarfile.USTAR_FORMAT) as tar:
-                for rel, abs_path, mode in tracked:
+                for rel, abs_path, mode, blob_sha in tracked:
                     digest = hashlib.sha256()
+                    # A Git blob hash is sha1("blob <size>\0<content>") -- or sha256 for a
+                    # repo using the newer object format, distinguishable by the recorded
+                    # blob_sha's length (40 hex chars vs. 64).
+                    blob_digest = hashlib.sha1() if len(blob_sha) == 40 else hashlib.sha256()
                     with abs_path.open("rb") as handle:
                         # Size comes from the already-open handle (os.fstat), not a
                         # separate abs_path.stat() call before opening -- otherwise a
@@ -396,8 +429,15 @@ def _write_reproducible_archive(
                         # guarantee. fstat() on the open fd reflects exactly the bytes
                         # the subsequent read loop will consume.
                         size = os.fstat(handle.fileno()).st_size
+                        blob_digest.update(f"blob {size}\0".encode("utf-8"))
                         info = _tar_info(f"{bundle_name}/{rel}", size=size, mode=mode)
-                        tar.addfile(info, _HashingReader(handle, digest))
+                        tar.addfile(info, _HashingReader(handle, [digest, blob_digest]))
+                    if blob_digest.hexdigest() != blob_sha:
+                        raise ValueError(
+                            f"release input content does not match Git's recorded blob for {rel} -- "
+                            "the on-disk content changed after Git's index was last updated (e.g. via "
+                            "assume-unchanged/skip-worktree, or a concurrent edit during packaging)",
+                        )
                     file_hashes[rel] = digest.hexdigest()
 
                 manifest = {**manifest_fields, "files": file_hashes}
@@ -440,7 +480,7 @@ def package_release(root: Path, output_dir: Path) -> tuple[Path, Path]:
         # bit being tampered with after packaging (chmod +x/-x then repacking), even
         # though _tracked_files() goes to considerable effort to derive that bit correctly
         # from Git's own index.
-        "executable_files": sorted(rel for rel, _, mode in tracked if mode == 0o755),
+        "executable_files": sorted(rel for rel, _, mode, _ in tracked if mode == 0o755),
     }
     # required_provenance_fields() (release_contract.yaml's provenance.required_fields) is the
     # single source of truth for what a release manifest must carry -- "files" is the one field

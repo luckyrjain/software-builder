@@ -73,7 +73,7 @@ jobs:
           RELEASE_TAG: ${{ steps.tag.outputs.name }}
         run: |
           VERSION="${RELEASE_TAG#v}"
-          python3 scripts/verify_release_bundle.py "dist/software-builder-${VERSION}.tar.gz"
+          python3 scripts/verify_release_bundle.py --repo-root . "dist/software-builder-${VERSION}.tar.gz"
 
       - name: Upload release assets
         env:

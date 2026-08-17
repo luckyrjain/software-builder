@@ -206,3 +206,15 @@ def test_release_provenance_prefers_live_git_over_stray_manifest(tmp_path: Path)
     version, sha = _release_provenance(repo)
     assert version == "0.0.0"
     assert sha != "f" * 40
+
+
+def test_release_provenance_fails_closed_with_neither_git_nor_manifest(tmp_path: Path) -> None:
+    # docs/RELEASE.md promises install.sh needs either a Git checkout or an extracted
+    # package_release.py bundle -- there is no third, degraded path. A plain copy of the
+    # tree with neither .git nor RELEASE-MANIFEST.json (e.g. GitHub's auto-generated
+    # "Source code (zip/tar.gz)" download) must fail closed, not silently degrade.
+    repo = tmp_path / "bare"
+    repo.mkdir()
+    (repo / "SKILL.md").write_text("# demo\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="missing distribution VERSION file"):
+        _release_provenance(repo)

@@ -31,7 +31,9 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         expected = read_distribution_version(args.repo_root)
-    except ValueError as exc:
+    except (OSError, ValueError) as exc:
+        # OSError (not just ValueError) so a VERSION file that exists but isn't readable
+        # (e.g. a permission error) prints a clean error instead of an uncaught traceback.
         print(f"error: {exc}", file=sys.stderr)
         return 1
     actual = match.group("version")

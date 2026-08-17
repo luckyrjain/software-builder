@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import os
 import subprocess
@@ -263,6 +264,21 @@ def test_release_inputs_reject_tracked_submodule(tmp_path: Path) -> None:
         package_release(root, output)
 
 
+def test_release_inputs_reject_content_drift_hidden_by_assume_unchanged(tmp_path: Path) -> None:
+    # `git diff --quiet` (_ensure_clean_worktree) is blind to a tracked file whose
+    # content changed while Git's assume-unchanged bit is set on it -- Git skips
+    # comparing that path against the working tree entirely. Only the Git-blob-hash
+    # verification _write_reproducible_archive does at read time actually catches this.
+    root, _ = _minimal_repo(tmp_path)
+    subprocess.run(["git", "update-index", "--assume-unchanged", "README.md"], cwd=root, check=True)
+    (root / "README.md").write_text("TAMPERED\n", encoding="utf-8")
+
+    output = tmp_path / "out"
+    output.mkdir()
+    with pytest.raises(ValueError, match="does not match Git's recorded blob"):
+        package_release(root, output)
+
+
 def test_release_inputs_exclude_tracked_repo_dev_tooling(tmp_path: Path) -> None:
     # git ls-files can't distinguish "untracked build noise" from "tracked
     # repo-development tooling" -- only the untracked half is naturally solved
@@ -358,6 +374,25 @@ def test_release_manifest_rejects_registered_but_untracked_skill(tmp_path: Path)
     output.mkdir()
     with pytest.raises(ValueError, match="ghost-skill/SKILL.md"):
         package_release(root, output)
+
+
+def test_package_release_and_verifier_agree_on_quoted_schema_version(tmp_path: Path) -> None:
+    # parse_registry() (scripts/registry/schema.py) has always coerced a quoted numeric
+    # schema_version (e.g. "1") the same as an unquoted one; yaml_safety.read_schema_version()
+    # (used by verify_release_bundle.py's bundled-skills.yaml cross-check) must accept the
+    # exact same values -- otherwise a bundle package_release.py just built successfully
+    # would immediately and spuriously fail its own independent verifier.
+    root, _ = _minimal_repo(tmp_path)
+    (root / "skills.yaml").write_text('schema_version: "1"\nskills: {}\n', encoding="utf-8")
+    _commit_all(root)
+
+    output = tmp_path / "out"
+    output.mkdir()
+    archive, _ = package_release(root, output)
+
+    from scripts.verify_release_bundle import verify_release_bundle
+
+    assert verify_release_bundle(archive) == []
 
 
 def test_release_bundle_is_byte_reproducible_for_same_git_tree(tmp_path: Path) -> None:
@@ -510,6 +545,68 @@ def test_release_bundle_verifier_rejects_executable_bit_tampering(tmp_path: Path
     assert any("executable file(s) not listed" in error for error in errors)
 
 
+def test_release_bundle_verifier_cross_checks_source_sha_against_repo_root(tmp_path: Path) -> None:
+    from scripts.verify_release_bundle import verify_release_bundle
+
+    root, _ = _minimal_repo(tmp_path)
+    output = tmp_path / "out"
+    output.mkdir()
+    archive, _ = package_release(root, output)
+
+    # source_sha genuinely matches root's HEAD -- repo_root cross-check adds no error.
+    assert verify_release_bundle(archive, repo_root=root) == []
+
+    def mutate(bundle_root: Path) -> None:
+        manifest_path = bundle_root / "RELEASE-MANIFEST.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["source_sha"] = "a" * 40
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    tampered = _extract_and_repack(archive, tmp_path, mutate)
+    errors = verify_release_bundle(tampered, repo_root=root)
+    assert any("does not match --repo-root's Git HEAD" in error for error in errors)
+
+
+def test_release_bundle_verifier_rejects_supported_hosts_tampering(tmp_path: Path) -> None:
+    from scripts.verify_release_bundle import verify_release_bundle
+
+    root, _ = _minimal_repo(tmp_path)
+    output = tmp_path / "out"
+    output.mkdir()
+    archive, _ = package_release(root, output)
+
+    def mutate(bundle_root: Path) -> None:
+        manifest_path = bundle_root / "RELEASE-MANIFEST.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["supported_hosts"] = ["fabricated-host"]
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    tampered = _extract_and_repack(archive, tmp_path, mutate)
+    errors = verify_release_bundle(tampered)
+    assert any(
+        "supported_hosts" in error and "does not match bundled host_contracts.yaml" in error for error in errors
+    )
+
+
+def test_release_bundle_verifier_rejects_skill_versions_tampering(tmp_path: Path) -> None:
+    from scripts.verify_release_bundle import verify_release_bundle
+
+    root, _ = _minimal_repo(tmp_path)
+    output = tmp_path / "out"
+    output.mkdir()
+    archive, _ = package_release(root, output)
+
+    def mutate(bundle_root: Path) -> None:
+        manifest_path = bundle_root / "RELEASE-MANIFEST.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["skill_versions"] = {"fabricated-skill": "9.9.9"}
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    tampered = _extract_and_repack(archive, tmp_path, mutate)
+    errors = verify_release_bundle(tampered)
+    assert any("skill_versions does not match bundled" in error for error in errors)
+
+
 def test_package_release_does_not_corrupt_prior_archive_on_build_failure(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -532,6 +629,29 @@ def test_package_release_does_not_corrupt_prior_archive_on_build_failure(
     # later failed rebuild untouched -- not truncated/overwritten by the failed
     # attempt's partial output.
     assert archive.read_bytes() == original_bytes
+
+
+def test_release_bundle_verifier_rejects_declared_size_over_cap(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # filter="data" blocks unsafe tar member types/paths but has no size limit of its
+    # own -- a small, highly compressible archive can still declare an arbitrarily large
+    # amount of content to extract (a "decompression bomb"). Monkeypatch the cap down to
+    # a tiny value so this test doesn't need to actually build a multi-hundred-MB archive
+    # to exercise the check.
+    from scripts import verify_release_bundle as verify_release_bundle_module
+
+    monkeypatch.setattr(verify_release_bundle_module, "_MAX_EXTRACTED_BYTES", 10)
+
+    archive = tmp_path / "huge.tar.gz"
+    with tarfile.open(archive, "w:gz") as tar:
+        info = tarfile.TarInfo("software-builder-1.0.0/big.bin")
+        data = b"x" * 1000
+        info.size = len(data)
+        tar.addfile(info, io.BytesIO(data))
+
+    errors = verify_release_bundle_module.verify_release_bundle(archive)
+    assert any("byte limit" in error for error in errors)
 
 
 def test_release_workflow_runs_contract_and_bundle_verification_before_upload() -> None:

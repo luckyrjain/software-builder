@@ -125,12 +125,24 @@ def read_schema_version(path: Path, *, raw: dict[str, Any] | None = None) -> int
     package_release.py also reads host_contracts.yaml's ``hosts`` key for
     supported_hosts()) so this doesn't re-read and re-parse the same file a
     second time; omitted, it loads and validates `path` itself as before.
+
+    Coerces a numeric string (e.g. ``schema_version: "1"``) the same way
+    scripts/registry/schema.py's parse_registry() already does for
+    skills.yaml -- otherwise a quoted schema_version that parse_registry()
+    (and package_release.py's manifest_fields, which reads
+    registry.schema_version from it) happily accepts would fail only here,
+    making a bundle package_release.py just built immediately fail its own
+    verify_release_bundle.py cross-check for no real reason.
     """
     if raw is None:
         raw = require_mapping(load_unique_yaml_file(path), str(path))
     value = raw.get("schema_version")
-    if not isinstance(value, int) or isinstance(value, bool):
+    if isinstance(value, bool) or not isinstance(value, (int, str)):
         raise ValueError(f"{path}: schema_version must be an integer")
+    try:
+        value = int(value)
+    except ValueError as exc:
+        raise ValueError(f"{path}: schema_version must be an integer") from exc
     return value
 
 
