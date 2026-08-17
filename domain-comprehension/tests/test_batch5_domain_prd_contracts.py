@@ -134,7 +134,9 @@ def test_prd_architect_has_current_state_ingestion_contract():
     assert contract["producer"] == "domain-comprehension"
     current = contract["current_state_evidence"]
     assert current["required_when"] == "existing_system_and_response_mode_PRD_or_Review"
-    assert current["validation_behavior"] == "missing_evidence_goes_to_evidence_needed_next"
+    assert current["validation_missing_evidence_behavior"] == "evidence_needed_next"
+    assert current["prd_review_missing_evidence_behavior"] == "block_build_ready"
+    assert "validation_behavior" not in current
     for artifact in (
         "PRD.md",
         "API_EVENT_SCHEMA.yaml",
@@ -160,6 +162,21 @@ def test_prd_architect_has_current_state_ingestion_contract():
         "observability_requirements",
     ):
         assert section in contract
+
+
+def test_prd_review_missing_current_state_evidence_blocks_build_ready():
+    contract = _yaml("prd-architect/reference/current-state-evidence-contract.yaml")
+    current = contract["current_state_evidence"]
+    assert current["prd_review_missing_evidence_behavior"] == "block_build_ready"
+    assert current["validation_missing_evidence_behavior"] == "evidence_needed_next"
+    gate = _text("prd-architect/workflow/gate.md")
+    assert "Not Ready" in gate
+    assert "required `current_state_evidence` is missing" in gate
+    inputs = _text("prd-architect/workflow/inputs.md")
+    assert "prd_review_missing_evidence_behavior: block_build_ready" in inputs
+    assert "validation_missing_evidence_behavior: evidence_needed_next" in inputs
+    specify = _text("prd-architect/workflow/specify.md")
+    assert "Not Ready" in specify
 
 
 def test_prd_workflow_carries_reviews_repairs_and_gates_new_contract_fields():

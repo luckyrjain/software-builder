@@ -4,7 +4,9 @@ consumer: prd-architect
 
 current_state_evidence:
   required_when: existing_system_and_response_mode_PRD_or_Review
-  validation_behavior: missing_evidence_goes_to_evidence_needed_next
+  # Mode-specific missing-evidence outcomes. Do not apply Validation's non-blocking path to PRD/Review.
+  validation_missing_evidence_behavior: evidence_needed_next
+  prd_review_missing_evidence_behavior: block_build_ready
   accepted_artifacts:
     - PRD.md
     - API_EVENT_SCHEMA.yaml

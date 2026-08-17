@@ -116,10 +116,16 @@ regeneration returns the row to `ok`. P5 marks the four machine artifacts `ok` o
 procedure in [machine-domain-model.md](machine-domain-model.md). Unrecoverable product intent or machine
 evidence stays `Unknown`; it is never guessed to satisfy completion.
 
-QUICK engagements may create the machine files as stubs without completing P5. Strict validation only
-requires all `required: true` artifact rows to be `ok`/`waived` when `engagement.status` is
-`FIRST_PASS_COMPLETE`. COMPLIANCE_RETROFIT may use `waived` where re-analysis would be required; the waiver
-must be disclosed in the human handoff/omissions rather than fabricating machine evidence.
+QUICK engagements may create the machine files as stubs without completing P5. Claiming
+`engagement.status: FIRST_PASS_COMPLETE` always runs completion readiness checks (not only when
+`--strict` is passed): required non-machine artifact rows must be `ok`/`waived`, required diagrams
+`ok`/`waived`/`n_a`, phases `complete`/`skipped`, PRD must be `required=true` and `status=ok`, and
+the four machine artifacts must be present as `ok`/`waived`. COMPLIANCE_RETROFIT may waive machine
+rows where re-analysis would be required, but **PRD `ok` is forbidden while any required machine
+artifact is waived** (no integrity basis for current-state handoff). Machine artifacts marked `ok`
+must also parse as schema_version=1 YAML with a non-empty `source_revision.repos` list when
+`--workspace-root` is provided. Waivers must be disclosed in the human handoff/omissions rather
+than fabricating machine evidence.
 
 Optional outputs include `E2E_FLOW.md`, Memory Bank export, Postman export, and runtime-only diagram
 supplements.

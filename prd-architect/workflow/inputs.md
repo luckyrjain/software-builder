@@ -76,8 +76,13 @@ required by [current-state-evidence-contract.yaml](../reference/current-state-ev
 - missing/unknown freshness — disclose the gap and verify freshness before any current-state claim.
 
 Missing artifacts or freshness metadata do not authorize invention: record the gap as an assumption/unknown and
-cap claims according to the source evidence. Validation mode may proceed with the gap surfaced under Evidence
-Needed Next; it must not silently promote stale/unknown evidence to current state.
+cap claims according to the source evidence. Mode-specific outcomes come from
+[current-state-evidence-contract.yaml](../reference/current-state-evidence-contract.yaml):
+
+- **Validation** (`validation_missing_evidence_behavior: evidence_needed_next`) may proceed with the gap
+  surfaced under Evidence Needed Next; it must not silently promote stale/unknown evidence to current state.
+- **PRD/Review** (`prd_review_missing_evidence_behavior: block_build_ready`) must keep Build Readiness
+  **Not Ready** until required current-state evidence is present and eligible.
 
 Preserve observed current state verbatim in meaning. Proposed future-state behavior must be identified as a
 proposal/change, never silently rewritten into the observed baseline. If source revisions conflict, the PRD
