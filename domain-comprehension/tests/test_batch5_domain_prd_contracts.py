@@ -138,9 +138,14 @@ def test_prd_architect_has_current_state_ingestion_contract():
     assert current["prd_review_missing_evidence_behavior"] == "block_build_ready"
     assert "validation_behavior" not in current
     assert "current_state_evidence_absent_when_required" in current["missing_evidence_means"]
+    assert "any_accepted_machine_artifact_waived_missing_or_not_ok" in current["missing_evidence_means"]
+    assert "material_conflict" in current["missing_evidence_means"]
     assert current["prd_freshness"]["unknown_behavior"] == "block_build_ready"
     assert current["prd_ok_requires_accepted_machine_artifacts_ok"] is True
     assert current["waived_or_missing_machine_behavior"] == "block_build_ready"
+    assert current["conflict_behavior"] == "surface_conflict_and_block_build_ready"
+    assert current["greenfield_current_state_evidence"]["counts_as_evidence_present"] is False
+    assert current["greenfield_current_state_evidence"]["value"] == {"not_applicable": True}
     for artifact in (
         "PRD.md",
         "API_EVENT_SCHEMA.yaml",
@@ -183,6 +188,8 @@ def test_prd_review_missing_current_state_evidence_blocks_build_ready():
     assert "validation_missing_evidence_behavior: evidence_needed_next" in inputs
     assert "missing_evidence_means" in inputs
     assert "no ad-hoc independent-verification escape" in inputs
+    assert "not_applicable" in inputs
+    assert "same five paths" in inputs or "those same five paths" in inputs
     specify = _text("prd-architect/workflow/specify.md")
     assert "Not Ready" in specify
 

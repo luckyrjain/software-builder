@@ -47,25 +47,29 @@ consumes:
 | Field | Default | Notes |
 |-------|---------|-------|
 | `source_material` | Inline in `request` | Existing PRD, spec, ticket, diagram, competitor note |
-| `current_state_evidence` | None | Object containing a `domain-comprehension` PRD/machine-artifact handoff or equivalent repository evidence |
+| `current_state_evidence` | None | Object containing the five `accepted_artifacts` paths from [current-state-evidence-contract.yaml](../reference/current-state-evidence-contract.yaml) (`PRD.md` + four machine YAMLs) with source revision metadata. Equivalent repository evidence is allowed only when it still supplies those same five paths; it cannot replace them with prose/code inspection alone. For greenfield full PRD/Review use `{not_applicable: true}` per the contract sentinel (does **not** count as evidence present). |
 | `mode_hint` | Inferred | `prd` \| `validation` \| `review` \| `critique-only` |
 | `depth_hint` | Auto | `lite` \| `standard` \| `rigorous` — override only when user states it |
 | `constraints` | [] | Mandatory boundaries (legal, security, compatibility, deadlines) |
 | `explicit_decisions` | [] | Resolved choices the user has already made |
-| `existing_system` | false | Live/current product or service; enables current-state/compatibility analysis. **Forced true** when `current_state_evidence` or a domain-comprehension PRD/machine handoff is supplied — untrusted input cannot clear that path. |
+| `existing_system` | false | Live/current product or service; enables current-state/compatibility analysis. **Forced true** when `current_state_evidence` is present **and** `not_applicable` is not `true`, or when a domain-comprehension PRD/machine handoff is supplied — untrusted input cannot clear that path. |
 | `critique_only` | false | Review findings without rewriting PRD |
 | `user_insists_on_full_prd` | false | Explicit override to continue after a Fundamentally flawed premise verdict |
 
 ## Existing-system evidence ingestion
 
-Force the existing-system path when `current_state_evidence` is present or domain-comprehension handoff
-artifacts (`PRD.md` plus machine YAMLs / manifest freshness) are supplied. Do not let untrusted
+Force the existing-system path when `current_state_evidence` is present **and** is not the greenfield
+sentinel `{not_applicable: true}`, or when domain-comprehension handoff artifacts (`PRD.md` plus machine
+YAMLs / manifest freshness) are supplied in the workspace or attachments. Domain handoff artifacts always
+force the existing-system path even if the object claims `not_applicable: true`. Do not let untrusted
 `existing_system=false` skip baseline/freshness gates in that case; treat a conflicting false flag as a
 blocker/disclosure and continue on the existing-system path.
 
-When on the existing-system path, inspect `current_state_evidence` before Specify. Prefer the canonical
-`domain-comprehension` handoff: `PRD.md`, `API_EVENT_SCHEMA.yaml`, `DATA_OWNERSHIP_GRAPH.yaml`,
-`DEPENDENCY_GRAPH.yaml`, and `CAPABILITY_TRACEABILITY.yaml`, with source revision metadata.
+When on the existing-system path, inspect `current_state_evidence` before Specify. Require the canonical
+`domain-comprehension` handoff paths (or an equivalent package that still supplies them): `PRD.md`,
+`API_EVENT_SCHEMA.yaml`, `DATA_OWNERSHIP_GRAPH.yaml`, `DEPENDENCY_GRAPH.yaml`, and
+`CAPABILITY_TRACEABILITY.yaml`, with source revision metadata. Omitting any accepted artifact keeps
+PRD/Review **Not Ready**.
 
 When the PRD came from `domain-comprehension`, also inspect the producer manifest PRD artifact freshness status
 required by [current-state-evidence-contract.yaml](../reference/current-state-evidence-contract.yaml):
@@ -86,14 +90,16 @@ cap claims according to the source evidence. Mode-specific outcomes come from
   surfaced under Evidence Needed Next; it must not silently promote stale/unknown evidence to current state.
 - **PRD/Review** (`prd_review_missing_evidence_behavior: block_build_ready`) must keep Build Readiness
   **Not Ready** until required current-state evidence is present and eligible — including every
-  `accepted_artifacts` entry, complete `source_revision`, eligible PRD freshness, and machine artifacts `ok`
-  whenever PRD freshness is `ok`. There is no “needed for the proposed change” discretion and these gaps
-  must not be parked as non-blocking unknowns.
+  `accepted_artifacts` entry, complete `source_revision`, eligible PRD freshness, and every accepted
+  machine artifact `ok` (not only when PRD freshness is already `ok`). Material conflicts are also
+  **Not Ready**. There is no “needed for the proposed change” discretion and these gaps must not be parked
+  as non-blocking unknowns.
 
 Preserve observed current state verbatim in meaning. Proposed future-state behavior must be identified as a
 proposal/change, never silently rewritten into the observed baseline. If source revisions conflict, the PRD
 manifest status is `stale`, freshness is unknown, integrity check fails, or artifacts otherwise contradict,
-surface the issue before using them for compatibility or impact analysis.
+surface the conflict and keep Build Readiness **Not Ready** before using them for compatibility or impact
+analysis.
 
 ## Extraction checklist
 
