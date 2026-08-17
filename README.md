@@ -261,6 +261,8 @@ uses `make lint-k8s-skill`. See [Makefile targets](docs/REPOSITORY.md#makefile-t
 
 | Document | What it covers |
 |----------|----------------|
+| [CONTEXT.md](CONTEXT.md) | Domain glossary — platform vocabulary (skills, hosts, composition, evidence doctrine) |
+| [CONTEXT-MAP.md](CONTEXT-MAP.md) | How platform and target-system contexts relate |
 | [docs/README.md](docs/README.md) | Full documentation index, skill file maps, routing, and design specs |
 | [docs/REPOSITORY.md](docs/REPOSITORY.md) | Repository layout, installer, Make targets, CI, contribution process, and MCP matrix |
 | [docs/skill-framework/README.md](docs/skill-framework/README.md) | Shared conventions for confidence, escalation, routing, phases, and outputs |
