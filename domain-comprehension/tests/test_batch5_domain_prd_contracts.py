@@ -73,7 +73,8 @@ def test_domain_workflow_operationalizes_budget_machine_outputs_and_stale_prd():
         "configured limits, and consumed counters",
         "stop discovery",
         "stale_prd_detection",
-        "Never silently retain a stale PRD",
+        "artifacts[id=prd].status: stale",
+        "Never leave a known-stale PRD as manifest `ok`",
     ):
         assert token.lower() in inputs.lower()
 
