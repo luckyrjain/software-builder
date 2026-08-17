@@ -23,31 +23,37 @@ def validate_merge(data: Any) -> list[str]:
         if key not in data:
             errors.append(f"missing required field: {key}")
 
+    # A key missing entirely is already reported by the REQUIRED_TOP loop above; the checks below
+    # only need to fire for a *present* value (including an explicit `null`) that fails its type
+    # check, so a single problem doesn't produce two error messages.
     repo = data.get("repo")
-    if not isinstance(repo, str) or not repo.strip():
+    if "repo" in data and (not isinstance(repo, str) or not repo.strip()):
         errors.append("repo must be a non-empty string")
 
     phase = data.get("phase")
-    if not isinstance(phase, str) or not phase.strip():
+    if "phase" in data and (not isinstance(phase, str) or not phase.strip()):
         errors.append("phase must be a non-empty string")
 
     findings = data.get("findings")
-    if not isinstance(findings, list):
-        errors.append("findings must be an array")
-    else:
-        for index, item in enumerate(findings):
-            prefix = f"findings[{index}]"
-            if not isinstance(item, dict):
-                errors.append(f"{prefix} must be an object")
-                continue
-            for key in ("evidence", "conclusion", "confidence"):
-                if key not in item:
-                    errors.append(f"{prefix} missing required field: {key}")
-            conf = item.get("confidence")
-            if _invalid_enum(conf, CONFIDENCE):
-                errors.append(f"{prefix}.confidence must be HIGH|MEDIUM|LOW|UNKNOWN")
+    if "findings" in data:
+        if not isinstance(findings, list):
+            errors.append("findings must be an array")
+        else:
+            for index, item in enumerate(findings):
+                prefix = f"findings[{index}]"
+                if not isinstance(item, dict):
+                    errors.append(f"{prefix} must be an object")
+                    continue
+                for key in ("evidence", "conclusion", "confidence"):
+                    if key not in item:
+                        errors.append(f"{prefix} missing required field: {key}")
+                conf = item.get("confidence")
+                if "confidence" in item and _invalid_enum(conf, CONFIDENCE):
+                    errors.append(f"{prefix}.confidence must be HIGH|MEDIUM|LOW|UNKNOWN")
 
     for list_field in ("open_questions", "conflicts", "files_read"):
+        if list_field not in data:
+            continue
         value = data.get(list_field)
         if not isinstance(value, list):
             errors.append(f"{list_field} must be an array")
