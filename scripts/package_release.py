@@ -38,6 +38,7 @@ from yaml_safety import YAML_SAFETY_ERRORS, read_schema_version
 
 from scripts.registry.host_adapter import supported_hosts
 from scripts.registry.manifest import skill_versions
+from scripts.registry.schema import parse_registry
 from scripts.release_contract import required_provenance_fields
 
 
@@ -77,13 +78,60 @@ def _ensure_clean_worktree(root: Path) -> None:
             raise ValueError(f"could not check Git working tree status: {result.stderr.strip()}")
 
 
+def _ensure_manifest_inputs_tracked(root: Path, tracked: list[tuple[str, Path, int]]) -> None:
+    """Fail closed if a file the manifest's derived fields are read from isn't a tracked release input.
+
+    registry_schema_version/supported_hosts/skill_versions are read via read_schema_version(),
+    supported_hosts(), and skill_versions() straight off the working-tree filesystem -- skills.yaml,
+    host_contracts.yaml, and each registered skill's SKILL.md -- not from `tracked`. An entirely
+    untracked path (e.g. skills.yaml gains a new skill entry that gets committed before the skill's
+    own directory is `git add`ed) is invisible to _ensure_clean_worktree()'s `git diff` checks, which
+    only see *modifications* to already-tracked paths, never a wholly new untracked one. Left
+    unchecked, that lets RELEASE-MANIFEST.json's skill_versions/supported_hosts list a skill or host
+    with zero corresponding files in the archive _tracked_files() actually builds --
+    verify_release_bundle.py doesn't catch this either, since it only checks that those two fields
+    are well-typed, never re-derives them from the bundle's own bundled files.
+    """
+    tracked_rel = {rel for rel, _, _ in tracked}
+
+    def _require(rel: str, *, why: str) -> None:
+        if rel not in tracked_rel:
+            raise ValueError(
+                f"release manifest depends on {rel} ({why}), but it is not a Git-tracked release "
+                "input -- commit it (or remove the skill/host it defines from the registry) before "
+                "packaging a release",
+            )
+
+    _require("skills.yaml", why="registry_schema_version/skill_versions")
+    _require("scripts/registry/host_contracts.yaml", why="host_contract_schema_version/supported_hosts")
+    for skill_id, entry in parse_registry(root / "skills.yaml").skills.items():
+        _require(f"{entry.path}/SKILL.md", why=f"skill_versions[{skill_id!r}]")
+
+
 # Path components that never belong in a release even if accidentally tracked
-# (build output, caches, generated per-host IDE rules) -- matches the
-# pre-reproducibility-rewrite collector's EXCLUDE_DIRS, which excluded these
-# at *any* depth, not just at the repo root (unlike the dotfile/dotdir rule
-# below, which -- matching that same prior collector -- only applies at the
-# top level).
-_EXCLUDED_PATH_COMPONENTS = {"__pycache__", ".pytest_cache", "node_modules", "dist", ".cursor", ".kiro"}
+# (build output, caches, generated per-host IDE rules, plugin manifests) --
+# matches the pre-reproducibility-rewrite collector's EXCLUDE_DIRS, which
+# excluded these at *any* depth, not just at the repo root (unlike the
+# dotfile/dotdir catch-all rule below, which -- matching that same prior
+# collector -- only applies at the top level).
+#
+# .agents/.claude-plugin/.codex-plugin/.gitignore are listed here (not left to
+# the top-level-only catch-all) so they're excluded at *any* depth too: a
+# per-skill nested .gitignore or .agents/ dir is exactly as much repo-dev
+# noise as a top-level one, and docs/RELEASE.md promises these four names
+# specifically "must never ship" without qualifying "only at the repo root".
+_EXCLUDED_PATH_COMPONENTS = {
+    "__pycache__",
+    ".pytest_cache",
+    "node_modules",
+    "dist",
+    ".cursor",
+    ".kiro",
+    ".agents",
+    ".claude-plugin",
+    ".codex-plugin",
+    ".gitignore",
+}
 
 # Git's tree-entry mode for a submodule reference (a "gitlink"), distinct from
 # the 100644/100755 blob modes _tracked_files() otherwise expects.
@@ -117,8 +165,11 @@ def _is_release_excluded(rel: str) -> bool:
     per-host IDE rules like ``.cursor/rules/*.mdc`` and ``.kiro/*`` (meant for
     developing *this* repo, not for someone installing a skill from a release
     bundle), ``.agents/``, ``.claude-plugin/``, ``.codex-plugin/``, and
-    ``.gitignore``. Restoring that rule keeps a release bundle scoped to
-    actual release content the way it always was.
+    ``.gitignore``. Restoring that rule -- and, for those last four names,
+    applying it at any depth via _EXCLUDED_PATH_COMPONENTS rather than only at
+    the top level -- keeps a release bundle scoped to actual release content
+    the way it always was, including for a per-skill nested copy of one of
+    these (e.g. a skill directory that carries its own .gitignore).
     """
     parts = Path(rel).parts
     if any(part in _EXCLUDED_PATH_COMPONENTS for part in parts):
@@ -289,6 +340,7 @@ def package_release(root: Path, output_dir: Path) -> tuple[Path, Path]:
     bundle_name = f"{PACKAGE_NAME}-{version}"
 
     tracked = _tracked_files(root)
+    _ensure_manifest_inputs_tracked(root, tracked)
     manifest_fields = {
         "schema_version": 1,
         "distribution_version": version,

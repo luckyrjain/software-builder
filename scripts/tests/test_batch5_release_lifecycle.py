@@ -170,12 +170,16 @@ def test_release_inputs_exclude_tracked_repo_dev_tooling(tmp_path: Path) -> None
     (root / ".kiro" / "steering.md").write_text("steering\n", encoding="utf-8")
     (root / ".github").mkdir()
     (root / ".github" / "keep-me.txt").write_text("kept\n", encoding="utf-8")
-    # Nested, not just top-level: a per-skill .cursor/.kiro dir buried under
-    # another directory must be excluded too, not only one sitting at the repo
-    # root -- the dotdir-name check alone (parts[0].startswith(".")) wouldn't
-    # catch this since parts[0] here is "some-skill", not ".cursor".
+    # Nested, not just top-level: a per-skill .cursor/.kiro/.gitignore buried
+    # under another directory must be excluded too, not only one sitting at
+    # the repo root -- the top-level-only dotdir catch-all
+    # (parts[0].startswith(".")) wouldn't catch this since parts[0] here is
+    # "some-skill", not ".cursor"/".gitignore", and (unlike .cursor/.kiro)
+    # .gitignore isn't excluded at any depth unless _EXCLUDED_PATH_COMPONENTS
+    # lists it explicitly.
     (root / "some-skill" / ".cursor" / "rules").mkdir(parents=True)
     (root / "some-skill" / ".cursor" / "rules" / "nested.mdc").write_text("rule\n", encoding="utf-8")
+    (root / "some-skill" / ".gitignore").write_text("build/\n", encoding="utf-8")
     _commit_all(root)
 
     output = tmp_path / "out"
@@ -188,6 +192,53 @@ def test_release_inputs_exclude_tracked_repo_dev_tooling(tmp_path: Path) -> None
     assert not any(name.endswith(".gitignore") for name in names)
     # .github is the one dotdir release bundles have always carried.
     assert any(name.endswith(".github/keep-me.txt") for name in names)
+    # Nested repo-dev tooling (checked above at the top level) is excluded under
+    # some-skill/ too, not only at the repo root.
+    assert not any("some-skill/.cursor/" in name for name in names)
+    assert not any(name.endswith("some-skill/.gitignore") for name in names)
+
+
+def test_release_manifest_rejects_registered_but_untracked_skill(tmp_path: Path) -> None:
+    # skill_versions() (scripts/registry/manifest.py) reads a registered skill's
+    # SKILL.md straight off the working-tree filesystem, like read_schema_version()
+    # does for skills.yaml/host_contracts.yaml -- none of them go through
+    # _tracked_files()'s git-tracked-only filter. _ensure_clean_worktree() only
+    # diffs already-tracked paths against HEAD, so it can't see a wholly new
+    # untracked path either. Without _ensure_manifest_inputs_tracked(), committing
+    # skills.yaml with a new skill entry before `git add`-ing that skill's own
+    # directory would silently produce a RELEASE-MANIFEST.json whose
+    # skill_versions names a skill with zero corresponding files in the archive.
+    root, _ = _minimal_repo(tmp_path)
+    skills_yaml = root / "skills.yaml"
+    skills_yaml.write_text(
+        "schema_version: 1\n"
+        "skills:\n"
+        "  ghost-skill:\n"
+        "    path: ghost-skill\n"
+        "    category: test\n"
+        "    invocation: ambient\n"
+        "    hosts:\n"
+        "      cursor: {discovery: manual}\n"
+        "      kiro: {discovery: manual}\n"
+        "    install:\n"
+        "      requires: []\n"
+        "    lint: {}\n"
+        "    risk_class: [read-only]\n",
+        encoding="utf-8",
+    )
+    _commit_all(root)
+
+    # ghost-skill/SKILL.md exists on disk but was never `git add`ed.
+    (root / "ghost-skill").mkdir()
+    (root / "ghost-skill" / "SKILL.md").write_text(
+        "---\nskill_version: 1.0.0\ndescription: ghost\n---\n# Ghost\n",
+        encoding="utf-8",
+    )
+
+    output = tmp_path / "out"
+    output.mkdir()
+    with pytest.raises(ValueError, match="ghost-skill/SKILL.md"):
+        package_release(root, output)
 
 
 def test_release_bundle_is_byte_reproducible_for_same_git_tree(tmp_path: Path) -> None:
