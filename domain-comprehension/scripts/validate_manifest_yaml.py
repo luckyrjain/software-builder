@@ -43,6 +43,38 @@ QUESTION_STATUS = frozenset({"DRAFT", "PARTIAL", "COMPLETE", "UNKNOWN"})
 CONFIDENCE = frozenset({"HIGH", "MEDIUM", "LOW", "UNKNOWN"})
 DISCOVERY_BUDGET_PROFILES = frozenset({"QUICK", "FULL", "DELTA", "ADD_REPO", "CUSTOM"})
 DISCOVERY_BUDGET_COUNTERS = ("repositories", "search_queries", "deep_file_reads")
+# Mirrors domain-model-contract.yaml discovery_budget.default_limits. Non-CUSTOM profiles must
+# persist exactly these ceilings so a FULL run cannot silently keep QUICK budgets.
+DISCOVERY_BUDGET_DEFAULT_LIMITS: dict[str, dict[str, int]] = {
+    "QUICK": {"repositories": 12, "search_queries": 80, "deep_file_reads": 60},
+    "FULL": {"repositories": 50, "search_queries": 400, "deep_file_reads": 300},
+    "DELTA": {"repositories": 20, "search_queries": 160, "deep_file_reads": 120},
+    "ADD_REPO": {"repositories": 20, "search_queries": 160, "deep_file_reads": 120},
+}
+DISCOVERY_BEARING_PHASES = frozenset(
+    {
+        "session_0",
+        "session_0b",
+        "p0",
+        "p0_25",
+        "p0_5",
+        "p1",
+        "p2",
+        "p2b",
+        "p3",
+        "p3b",
+        "p4",
+        "p5",
+    }
+)
+REQUIRED_MACHINE_ARTIFACT_IDS = frozenset(
+    {
+        "api_event_schema",
+        "data_ownership_graph",
+        "dependency_graph_machine",
+        "capability_traceability",
+    }
+)
 REPO_CLASSIFICATION = frozenset(
     {
         "application",
@@ -182,13 +214,29 @@ def _validate_phase_entry(key: str, value: Any) -> list[str]:
     return errors
 
 
-def _validate_discovery_budget(value: Any) -> list[str]:
-    """Validate optional schema-v2 discovery-budget machine state.
+def _discovery_budget_required(phases: Any, *, strict: bool) -> bool:
+    """Budget is required under --strict or once any discovery-bearing phase has started."""
+    if strict:
+        return True
+    if not isinstance(phases, dict):
+        return False
+    for key in DISCOVERY_BEARING_PHASES:
+        entry = phases.get(key)
+        if isinstance(entry, dict) and entry.get("status") in ("in_progress", "complete"):
+            return True
+    return False
 
-    The field is optional for backward compatibility with existing schema-v2 engagements. New runs
-    create it from the template; RESUME may backfill it before performing new discovery.
+
+def _validate_discovery_budget(value: Any, *, required: bool = False) -> list[str]:
+    """Validate schema-v2 discovery-budget machine state.
+
+    Absence is allowed only for untouched legacy schema-v2 engagements that have not started
+    discovery and are not under --strict. New runs create it from the template; RESUME must
+    backfill it before performing new discovery.
     """
     if value is None:
+        if required:
+            return ["discovery_budget is required once discovery has started or under --strict"]
         return []
     if not isinstance(value, dict):
         return ["discovery_budget must be an object"]
@@ -220,6 +268,19 @@ def _validate_discovery_budget(value: Any) -> list[str]:
             elif counter <= 0:
                 errors.append(f"discovery_budget.{label}.{key} must be > 0")
 
+    if isinstance(limits, dict) and profile in DISCOVERY_BUDGET_DEFAULT_LIMITS:
+        expected = DISCOVERY_BUDGET_DEFAULT_LIMITS[profile]
+        for key in DISCOVERY_BUDGET_COUNTERS:
+            limit = limits.get(key)
+            if (
+                isinstance(limit, int)
+                and not isinstance(limit, bool)
+                and limit != expected[key]
+            ):
+                errors.append(
+                    f"discovery_budget.limits.{key} must equal {expected[key]} for profile {profile}"
+                )
+
     if isinstance(limits, dict) and isinstance(consumed, dict):
         for key in DISCOVERY_BUDGET_COUNTERS:
             limit = limits.get(key)
@@ -234,6 +295,44 @@ def _validate_discovery_budget(value: Any) -> list[str]:
                 errors.append(
                     f"discovery_budget.consumed.{key} exceeds configured limit ({used} > {limit})"
                 )
+    return errors
+
+
+def _validate_strict_completion_artifacts(artifacts: Any) -> list[str]:
+    """FIRST_PASS_COMPLETE under --strict requires current PRD + machine artifact rows."""
+    errors: list[str] = []
+    if not isinstance(artifacts, list):
+        return ["strict: artifacts must be an array"]
+
+    by_id: dict[str, dict[str, Any]] = {}
+    for item in artifacts:
+        if isinstance(item, dict) and isinstance(item.get("id"), str):
+            by_id[item["id"]] = item
+
+    prd = by_id.get("prd")
+    if prd is None:
+        errors.append("strict: required artifact prd is missing")
+    else:
+        if prd.get("required") is not True:
+            errors.append("strict: artifact prd must have required=true")
+        if prd.get("status") != "ok":
+            errors.append(
+                f"strict: artifact prd must have status=ok for current-state completion "
+                f"(got {prd.get('status')!r}; waived/stale/n_a are not allowed)"
+            )
+
+    for artifact_id in sorted(REQUIRED_MACHINE_ARTIFACT_IDS):
+        row = by_id.get(artifact_id)
+        if row is None:
+            errors.append(f"strict: required machine artifact {artifact_id} is missing")
+            continue
+        if row.get("required") is not True:
+            errors.append(f"strict: machine artifact {artifact_id} must have required=true")
+        status = row.get("status")
+        if status not in ("ok", "waived"):
+            errors.append(
+                f"strict: machine artifact {artifact_id} status must be ok or waived (got {status!r})"
+            )
     return errors
 
 
@@ -516,7 +615,11 @@ def validate_manifest(
     if data.get("overall_confidence") not in CONFIDENCE:
         errors.append("overall_confidence invalid")
 
-    errors.extend(_validate_discovery_budget(data.get("discovery_budget")))
+    phases = data.get("phases")
+    budget_required = _discovery_budget_required(phases, strict=strict)
+    errors.extend(
+        _validate_discovery_budget(data.get("discovery_budget"), required=budget_required)
+    )
 
     engagement = data.get("engagement")
     if isinstance(engagement, dict):
@@ -536,7 +639,6 @@ def validate_manifest(
     else:
         errors.append("engagement must be an object")
 
-    phases = data.get("phases")
     if isinstance(phases, dict):
         for key in sorted(PHASE_KEYS - set(phases.keys())):
             errors.append(f"phases missing key: {key}")
@@ -591,9 +693,16 @@ def validate_manifest(
                         errors.append(f"artifact {kind} missing on disk: {rel} (status={status})")
 
             if strict and isinstance(engagement, dict) and engagement.get("status") == "FIRST_PASS_COMPLETE":
+                errors.extend(_validate_strict_completion_artifacts(data.get("artifacts")))
                 for item in data.get("artifacts") or []:
-                    if isinstance(item, dict) and item.get("required") and item.get("status") not in ("ok", "waived"):
-                        errors.append(f"strict: required artifact {item.get('id')} status={item.get('status')}")
+                    if not isinstance(item, dict):
+                        continue
+                    item_id = item.get("id")
+                    # PRD and machine artifacts have dedicated strict rules above.
+                    if item_id == "prd" or item_id in REQUIRED_MACHINE_ARTIFACT_IDS:
+                        continue
+                    if item.get("required") and item.get("status") not in ("ok", "waived"):
+                        errors.append(f"strict: required artifact {item_id} status={item.get('status')}")
                 for item in data.get("diagrams") or []:
                     if isinstance(item, dict) and item.get("required") and item.get("status") not in ("ok", "waived", "n_a"):
                         errors.append(f"strict: required diagram {item.get('id')} status={item.get('status')}")

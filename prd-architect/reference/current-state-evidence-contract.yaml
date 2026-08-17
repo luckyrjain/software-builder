@@ -18,6 +18,8 @@ current_state_evidence:
     stale_value: stale
     stale_behavior: blocking_before_build_do_not_treat_PRD_as_current
     unknown_behavior: disclose_and_verify_before_current_state_claim
+    integrity_check: recompute_against_source_revision_and_machine_artifacts_before_accepting_ok
+    integrity_mismatch_behavior: treat_as_stale_or_unknown_and_block_build_ready
   source_revision:
     required: true
     shape: repos
@@ -26,12 +28,12 @@ current_state_evidence:
   preserve_observed_state: true
   future_state_changes_must_be_explicit: true
   conflict_behavior: surface_conflict_and_reduce_confidence
-  stale_behavior: do_not_treat_as_current_without_disclosure
+  stale_behavior: blocking_before_build_do_not_treat_as_current_disclosure_insufficient
 
 success_metric_quality:
   required_fields: [metric, baseline, target, timeframe, measurement_source]
   reject_if: [not_measurable, no_target, no_measurement_source]
-  unknown_baseline_requires: [baseline_status_unknown, baseline_measurement_action]
+  when_baseline_is_unknown_require: [baseline_measurement_action]
 
 assumption_register:
   required_fields: [id, statement, impact, validation, owner, status]

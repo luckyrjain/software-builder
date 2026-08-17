@@ -108,13 +108,18 @@ supplied facts and label external claims requiring verification.
 
 For **Lite**, list assumptions concisely inside the PRD body.
 
-For **Standard/Rigorous**, consequential assumptions may use a table:
+For **Standard/Rigorous**, consequential assumptions use the canonical Assumption Register:
 
-| ID | Assumption | Evidence | Impact If Wrong | Validation |
+| ID | Assumption | Evidence | Impact If Wrong | Validation | Owner | Status |
+|---|---|---|---|---|---|---|
 
-Evidence levels: Verified | Supported | Unverified | **Risky**
+Required contract fields are `id`, `statement`, `impact`, `validation`, `owner`, and `status` from
+[current-state-evidence-contract.yaml](current-state-evidence-contract.yaml). Status uses
+`OPEN | VALIDATED | INVALIDATED | ACCEPTED_RISK`. Evidence is optional supporting context and must not turn an
+assumption into a fact.
 
-A **Risky** assumption affecting MVP viability must influence Build Readiness.
+An **OPEN** assumption that affects MVP viability (sometimes called "risky" in prose) must influence Build
+Readiness — "Risky" is not a Status enum value.
 
 Every material unknown becomes either an explicit assumption or a classified open question — never
 generic TBD.

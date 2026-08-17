@@ -103,6 +103,9 @@ Silently preserving a stale PRD as manifest `ok` is forbidden.
 ## prd-architect handoff
 
 Pass `PRD.md`, its manifest freshness status, the four machine artifacts, and source revision metadata. The
-consumer may propose a future state but must preserve the observed baseline and explicitly identify changes;
-a `stale` PRD must not be treated as current evidence without disclosure. Contract:
+consumer may propose a future state but must preserve the observed baseline and explicitly identify changes.
+A `stale` PRD must **not** be claimed or used as current-state baseline evidence — hand it off only as
+non-current/stale evidence. The consumer must keep Build Readiness **Not Ready** until the PRD is regenerated
+to manifest `ok` or independently re-verified current against source revisions. Disclosure alone does not make
+a stale PRD current. Contract:
 [../../prd-architect/reference/current-state-evidence-contract.yaml](../../prd-architect/reference/current-state-evidence-contract.yaml).

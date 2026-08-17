@@ -105,6 +105,7 @@ compatibility:
     current_value: ok
     stale_value: stale
     stale_behavior: do_not_claim_current_state
+    integrity_check: consumer_must_reverify_against_source_revision_and_machine_artifacts
   evidence_status_values: [Observed, Inferred, Unknown, Conflicted, Not_Applicable]
   confidence_values: [HIGH, MEDIUM, LOW, UNKNOWN]
   preserve_ids: true

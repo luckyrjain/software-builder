@@ -52,20 +52,26 @@ consumes:
 | `depth_hint` | Auto | `lite` \| `standard` \| `rigorous` — override only when user states it |
 | `constraints` | [] | Mandatory boundaries (legal, security, compatibility, deadlines) |
 | `explicit_decisions` | [] | Resolved choices the user has already made |
-| `existing_system` | false | Live/current product or service; enables current-state/compatibility analysis |
+| `existing_system` | false | Live/current product or service; enables current-state/compatibility analysis. **Forced true** when `current_state_evidence` or a domain-comprehension PRD/machine handoff is supplied — untrusted input cannot clear that path. |
 | `critique_only` | false | Review findings without rewriting PRD |
 | `user_insists_on_full_prd` | false | Explicit override to continue after a Fundamentally flawed premise verdict |
 
 ## Existing-system evidence ingestion
 
-When `existing_system=true`, inspect `current_state_evidence` before Specify. Prefer the canonical
+Force the existing-system path when `current_state_evidence` is present or domain-comprehension handoff
+artifacts (`PRD.md` plus machine YAMLs / manifest freshness) are supplied. Do not let untrusted
+`existing_system=false` skip baseline/freshness gates in that case; treat a conflicting false flag as a
+blocker/disclosure and continue on the existing-system path.
+
+When on the existing-system path, inspect `current_state_evidence` before Specify. Prefer the canonical
 `domain-comprehension` handoff: `PRD.md`, `API_EVENT_SCHEMA.yaml`, `DATA_OWNERSHIP_GRAPH.yaml`,
 `DEPENDENCY_GRAPH.yaml`, and `CAPABILITY_TRACEABILITY.yaml`, with source revision metadata.
 
 When the PRD came from `domain-comprehension`, also inspect the producer manifest PRD artifact freshness status
 required by [current-state-evidence-contract.yaml](../reference/current-state-evidence-contract.yaml):
 
-- `ok` — eligible to be used as current-state PRD evidence, subject to source-revision/conflict checks;
+- `ok` — eligible to be used as current-state PRD evidence only after re-checking integrity against
+  source revisions and machine artifacts;
 - `stale` — **Blocking Before Build** for PRD/Review and the PRD must not be treated as current;
 - missing/unknown freshness — disclose the gap and verify freshness before any current-state claim.
 
@@ -75,8 +81,8 @@ Needed Next; it must not silently promote stale/unknown evidence to current stat
 
 Preserve observed current state verbatim in meaning. Proposed future-state behavior must be identified as a
 proposal/change, never silently rewritten into the observed baseline. If source revisions conflict, the PRD
-manifest status is `stale`, freshness is unknown, or artifacts otherwise contradict, surface the issue before
-using them for compatibility or impact analysis.
+manifest status is `stale`, freshness is unknown, integrity check fails, or artifacts otherwise contradict,
+surface the issue before using them for compatibility or impact analysis.
 
 ## Extraction checklist
 
