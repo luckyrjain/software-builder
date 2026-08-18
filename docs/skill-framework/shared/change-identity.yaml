@@ -11,9 +11,10 @@ change_identity:
     - dependency_changes
     - config_changes
   schema_version_value: 1
-  sha_format: git_sha_40_or_64_hex
-  fingerprint_format: sha256_hex_64
+  sha_format: git_sha_40_or_64_lower_hex
+  fingerprint_format: sha256_lower_hex_64
   path_format: repository_relative_posix
+  nested_value_format: json_portable
 normalization:
   source: canonical_effective_patch
   include_generated_paths: true
