@@ -39,6 +39,7 @@ def test_change_identity_contract_has_required_fields():
     assert contract["normalization"]["include_generated_paths"] is True
     assert "commit_message" in contract["normalization"]["excluded_transport_metadata"]
     assert contract["freshness"]["content_change_invalidates_review"] is True
+    assert contract["freshness"]["content_neutral_base_update_requires_synced_merge_base"] is True
 
 
 def test_review_evidence_contract_is_portable_and_fail_closed():
@@ -80,6 +81,18 @@ def test_content_neutral_base_update_preserves_review_without_conflict_resolutio
     current = _identity(base_sha="d" * 40, head_sha="e" * 40, merge_base_sha="d" * 40)
     assert validator.validate_review_evidence(_evidence(), current_identity=current) == []
     errors = validator.validate_review_evidence(_evidence(), current_identity=current, conflict_resolution_occurred=True)
+    assert any("stale change_identity" in error for error in errors)
+
+
+def test_head_only_rewrite_invalidates_review_even_with_same_patch():
+    validator = _load_validator()
+    errors = validator.validate_review_evidence(_evidence(), current_identity=_identity(head_sha="d" * 40))
+    assert any("stale change_identity" in error for error in errors)
+
+
+def test_merge_base_only_change_invalidates_review_even_with_same_patch():
+    validator = _load_validator()
+    errors = validator.validate_review_evidence(_evidence(), current_identity=_identity(merge_base_sha="d" * 40))
     assert any("stale change_identity" in error for error in errors)
 
 
