@@ -7,8 +7,8 @@ import yaml
 
 _SHA_RE = re.compile(r"^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$")
 _FP_RE = re.compile(r"^[0-9a-fA-F]{64}$")
-_REQUIRED_IDENTITY = {"base_sha", "head_sha", "merge_base_sha", "normalized_diff_fingerprint", "changed_paths", "generated_paths", "dependency_changes", "config_changes"}
-_REQUIRED_EVIDENCE = {"change_identity", "requirements_ref", "review_mode", "inspection_status", "inspected_surfaces", "unable_to_inspect", "findings", "generated_at"}
+_REQUIRED_IDENTITY = {"schema_version", "base_sha", "head_sha", "merge_base_sha", "normalized_diff_fingerprint", "changed_paths", "generated_paths", "dependency_changes", "config_changes"}
+_REQUIRED_EVIDENCE = {"schema_version", "change_identity", "requirements_ref", "review_mode", "inspection_status", "inspected_surfaces", "unable_to_inspect", "findings", "generated_at"}
 _FINDING_BUCKETS = {"defect", "suggestion", "question"}
 _REVIEW_MODES = ["normal", "exhaustive"]
 _INSPECTION_STATUSES = ["complete", "partial", "unable"]
@@ -56,6 +56,10 @@ def _canonical_mapping_value(value: object) -> bool:
     return True
 
 
+def _valid_schema_version(value: object) -> bool:
+    return type(value) is int and value == 1
+
+
 def validate_change_identity(payload: object) -> list[str]:
     if not isinstance(payload, dict):
         return ["change_identity must be an object"]
@@ -63,6 +67,8 @@ def validate_change_identity(payload: object) -> list[str]:
     missing = sorted(_REQUIRED_IDENTITY - set(payload))
     if missing:
         errors.append(f"change_identity missing required fields: {', '.join(missing)}")
+    if "schema_version" in payload and not _valid_schema_version(payload.get("schema_version")):
+        errors.append("change_identity schema_version must be integer 1")
     for field in ("base_sha", "head_sha", "merge_base_sha"):
         value = payload.get(field)
         if field in payload and (not isinstance(value, str) or not _SHA_RE.fullmatch(value)):
@@ -104,6 +110,8 @@ def validate_review_evidence(
     missing = sorted(_REQUIRED_EVIDENCE - set(payload))
     if missing:
         errors.append(f"review_evidence missing required fields: {', '.join(missing)}")
+    if "schema_version" in payload and not _valid_schema_version(payload.get("schema_version")):
+        errors.append("review_evidence schema_version must be integer 1")
     identity = payload.get("change_identity")
     errors.extend(validate_change_identity(identity))
     if current_identity is not None:
@@ -171,12 +179,14 @@ def validate_contract_documents(root: Path = _ROOT) -> list[str]:
             errors.append(f"{name} contract unreadable: {exc}")
 
     change = docs.get("change identity")
-    if not isinstance(change, dict) or type(change.get("schema_version")) is not int or change.get("schema_version") != 1 or not isinstance(change.get("change_identity"), dict):
+    if not isinstance(change, dict) or not _valid_schema_version(change.get("schema_version")) or not isinstance(change.get("change_identity"), dict):
         errors.append("change identity contract must be schema_version 1 with change_identity object")
     else:
         identity_spec = change["change_identity"]
         if set(identity_spec.get("required_fields", [])) != _REQUIRED_IDENTITY:
             errors.append("change identity contract required fields drifted")
+        if identity_spec.get("schema_version_value") != 1:
+            errors.append("change identity contract payload schema version drifted")
         normalization = change.get("normalization")
         freshness = change.get("freshness")
         if (
@@ -197,12 +207,14 @@ def validate_contract_documents(root: Path = _ROOT) -> list[str]:
             errors.append("change identity contract freshness rules drifted")
 
     evidence = docs.get("review evidence")
-    if not isinstance(evidence, dict) or type(evidence.get("schema_version")) is not int or evidence.get("schema_version") != 1 or not isinstance(evidence.get("review_evidence"), dict):
+    if not isinstance(evidence, dict) or not _valid_schema_version(evidence.get("schema_version")) or not isinstance(evidence.get("review_evidence"), dict):
         errors.append("review evidence contract must be schema_version 1 with review_evidence object")
     else:
         spec = evidence["review_evidence"]
         if set(spec.get("required_fields", [])) != _REQUIRED_EVIDENCE:
             errors.append("review evidence contract required fields drifted")
+        if spec.get("schema_version_value") != 1:
+            errors.append("review evidence contract payload schema version drifted")
         if spec.get("requirements_ref_type") != "object_or_null":
             errors.append("review evidence contract requirements_ref_type drifted")
         if spec.get("review_modes") != _REVIEW_MODES:
