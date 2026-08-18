@@ -128,6 +128,17 @@ def test_unknown_finding_bucket_is_rejected():
     assert any("finding buckets" in error for error in errors)
 
 
+def test_finding_ids_are_disjoint_across_categories():
+    validator = _load_validator()
+    duplicate_id_findings = {
+        "defect": [{"id": "F-1", "category": "defect", "summary": "bug", "evidence": "line 1"}],
+        "suggestion": [{"id": "F-1", "category": "suggestion", "summary": "improve", "evidence": "line 2"}],
+        "question": [],
+    }
+    errors = validator.validate_review_evidence(_evidence(findings=duplicate_id_findings))
+    assert any("must be unique across all categories" in error for error in errors)
+
+
 def test_shared_review_contracts_are_documented_and_linted():
     readme = (ROOT / "docs/skill-framework/README.md").read_text(encoding="utf-8")
     assert "change-identity.yaml" in readme
