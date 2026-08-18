@@ -75,11 +75,27 @@ def test_review_evidence_contract_is_portable_and_fail_closed():
     assert evidence["rules"]["stale_change_identity_invalidates_envelope"] is True
 
 
+def test_fingerprint_is_deterministic_across_line_endings():
+    validator = _load_validator()
+    assert validator.normalized_diff_fingerprint("@@ x\r\n+value\r\n") == validator.normalized_diff_fingerprint("@@ x\n+value\n")
+    assert validator.normalized_diff_fingerprint("@@ x\n+value\n") != validator.normalized_diff_fingerprint("@@ x\n+other\n")
+
+
 def test_validator_rejects_malformed_identity_and_stale_evidence():
     validator = _load_validator()
     assert validator.validate_change_identity(_identity(head_sha=True))
     current = _identity(normalized_diff_fingerprint="d" * 64)
     errors = validator.validate_review_evidence(_evidence(), current_identity=current)
+    assert any("stale change_identity" in error for error in errors)
+
+
+def test_content_neutral_base_update_preserves_review_without_conflict_resolution():
+    validator = _load_validator()
+    current = _identity(base_sha="d" * 40, head_sha="e" * 40, merge_base_sha="d" * 40)
+    assert validator.validate_review_evidence(_evidence(), current_identity=current) == []
+    errors = validator.validate_review_evidence(
+        _evidence(), current_identity=current, conflict_resolution_occurred=True
+    )
     assert any("stale change_identity" in error for error in errors)
 
 
