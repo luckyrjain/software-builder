@@ -14,6 +14,11 @@ _REVIEW_MODES = ["normal", "exhaustive"]
 _INSPECTION_STATUSES = ["complete", "partial", "unable"]
 _UNABLE_FIELDS = ["surface", "reason", "mandatory"]
 _FINDING_FIELDS = ["id", "category", "summary", "evidence"]
+_IDENTITY_FORMATS = {
+    "sha_format": "git_sha_40_or_64_hex",
+    "fingerprint_format": "sha256_hex_64",
+    "path_format": "repository_relative_posix",
+}
 _EXCLUDED_TRANSPORT_METADATA = ["commit_message", "provider_diff_headers", "review_comment_text"]
 _ORDERING = {
     "changed_paths": "lexicographic",
@@ -218,6 +223,8 @@ def validate_contract_documents(root: Path = _ROOT) -> list[str]:
             errors.append("change identity contract required fields drifted")
         if identity_spec.get("schema_version_value") != 1:
             errors.append("change identity contract payload schema version drifted")
+        if any(identity_spec.get(key) != value for key, value in _IDENTITY_FORMATS.items()):
+            errors.append("change identity contract format declarations drifted")
         normalization = change.get("normalization")
         freshness = change.get("freshness")
         if (
