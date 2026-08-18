@@ -11,8 +11,8 @@ from pathlib import Path, PurePosixPath
 
 import yaml
 
-_SHA_RE = re.compile(r"^(?:[0-9a-f]{40}|[0-9a-f]{64})$")
-_FP_RE = re.compile(r"^[0-9a-f]{64}$")
+_SHA_RE = re.compile(r"^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$")
+_FP_RE = re.compile(r"^[0-9a-fA-F]{64}$")
 _MAX_NESTING_DEPTH = 32
 _REQUIRED_IDENTITY = {"schema_version", "base_sha", "head_sha", "merge_base_sha", "normalized_diff_fingerprint", "changed_paths", "generated_paths", "dependency_changes", "config_changes"}
 _REQUIRED_EVIDENCE = {"schema_version", "change_identity", "requirements_ref", "review_mode", "inspection_status", "inspected_surfaces", "unable_to_inspect", "findings", "generated_at"}
@@ -22,8 +22,8 @@ _INSPECTION_STATUSES = ["complete", "partial", "unable"]
 _UNABLE_FIELDS = ["surface", "reason", "mandatory"]
 _FINDING_FIELDS = ["id", "category", "summary", "evidence"]
 _IDENTITY_FORMATS = {
-    "sha_format": "git_sha_40_or_64_lower_hex",
-    "fingerprint_format": "sha256_lower_hex_64",
+    "sha_format": "git_sha_40_or_64_hex",
+    "fingerprint_format": "sha256_hex_64",
     "path_format": "repository_relative_posix",
     "nested_value_format": "json_portable",
     "nested_value_max_depth": _MAX_NESTING_DEPTH,
@@ -54,7 +54,7 @@ _FRESHNESS_RULES = {
     "content_change_invalidates_review": True,
     "generated_file_change_invalidates_review": True,
 }
-_EFFECTIVE_PATCH_FIELDS = ("normalized_diff_fingerprint", "changed_paths", "generated_paths", "dependency_changes", "config_changes")
+_EFFECTIVE_PATCH_FIELDS = ("changed_paths", "generated_paths", "dependency_changes", "config_changes")
 _ROOT = Path(__file__).resolve().parents[1]
 _UNSET = object()
 
@@ -138,6 +138,10 @@ def _json_equivalent(left: object, right: object) -> bool:
     return left_json is not None and right_json is not None and left_json == right_json
 
 
+def _same_hex(left: object, right: object) -> bool:
+    return isinstance(left, str) and isinstance(right, str) and left.lower() == right.lower()
+
+
 def _canonical_object_key(value: dict[str, object]) -> str:
     canonical = _canonical_json(value)
     if canonical is None:
@@ -178,10 +182,10 @@ def validate_change_identity(payload: object) -> list[str]:
     for field in ("base_sha", "head_sha", "merge_base_sha"):
         value = payload.get(field)
         if field in payload and (not isinstance(value, str) or not _SHA_RE.fullmatch(value)):
-            errors.append(f"{field} must be a lowercase 40- or 64-character Git SHA")
+            errors.append(f"{field} must be a 40- or 64-character Git SHA")
     fp = payload.get("normalized_diff_fingerprint")
     if "normalized_diff_fingerprint" in payload and (not isinstance(fp, str) or not _FP_RE.fullmatch(fp)):
-        errors.append("normalized_diff_fingerprint must be a lowercase 64-character SHA-256 hex value")
+        errors.append("normalized_diff_fingerprint must be a 64-character SHA-256 hex value")
     for field in ("changed_paths", "generated_paths"):
         value = payload.get(field)
         if field in payload:
@@ -207,6 +211,7 @@ def _effective_patch_unchanged(stored: object, current: object) -> bool:
     return (
         isinstance(stored, dict)
         and isinstance(current, dict)
+        and _same_hex(stored.get("normalized_diff_fingerprint"), current.get("normalized_diff_fingerprint"))
         and all(_json_equivalent(stored.get(k), current.get(k)) for k in _EFFECTIVE_PATCH_FIELDS)
     )
 
@@ -217,12 +222,12 @@ def _identity_fresh(stored: object, current: object, *, conflict_resolution_occu
     if not _effective_patch_unchanged(stored, current):
         return False
     sha_fields = ("base_sha", "head_sha", "merge_base_sha")
-    if all(stored.get(field) == current.get(field) for field in sha_fields):
+    if all(_same_hex(stored.get(field), current.get(field)) for field in sha_fields):
         return True
     return (
-        stored.get("base_sha") == stored.get("merge_base_sha")
-        and current.get("base_sha") == current.get("merge_base_sha")
-        and stored.get("base_sha") != current.get("base_sha")
+        _same_hex(stored.get("base_sha"), stored.get("merge_base_sha"))
+        and _same_hex(current.get("base_sha"), current.get("merge_base_sha"))
+        and not _same_hex(stored.get("base_sha"), current.get("base_sha"))
     )
 
 
