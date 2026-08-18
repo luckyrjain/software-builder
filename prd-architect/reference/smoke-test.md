@@ -12,8 +12,9 @@ Conventions: [smoke-test-conventions](../../docs/skill-framework/shared/smoke-te
 
 1. **Depth header** — `Depth: Lite — …` with a one-line reason.
 2. **Single coherent PRD** — no separate draft and no "reviewer comments" the reader must reconcile.
-3. **Triggered sections only** — Overview, Problem, Goals/Non-Goals, MVP, functional requirements,
-   key failure/edge cases, acceptance criteria, risks; no empty N/A blocks.
+3. **Triggered sections only** — Overview, Problem, Goals/Non-Goals, MVP, measurable Success Metrics,
+   functional requirements, key failure/edge cases, acceptance criteria, `FR-* -> AC-* -> TR-*`
+   Requirements Traceability, risks; no empty N/A blocks.
 4. **Product behavior, not implementation prescription** — admin authorization, enable/disable behavior,
    audit log, user-facing registration state; no database or framework choices unless constrained.
 5. **Build Readiness verdict** — exactly one of Ready / Ready With Non-Blocking Questions / Not Ready

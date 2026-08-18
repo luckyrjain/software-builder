@@ -152,6 +152,7 @@ E2E_FLOW_RUNTIME_HEADING = "runtime validation"
 MERGE_CONFLICTS_HEADING = "## merge conflicts"
 WINDOWS_ABSOLUTE = re.compile(r"^[A-Za-z]:[/\\]")
 DISTRIBUTED_ARTIFACT_IDS = frozenset({"memory_bank_export"})
+STALEABLE_ARTIFACT_IDS = frozenset({"prd"})
 
 
 def _relative_path_error(value: Any, label: str) -> str | None:
@@ -178,18 +179,21 @@ def _artifact_root_error(value: Any) -> str | None:
     return _relative_path_error(value, "engagement.artifact_root")
 
 
-def _resolve_effective_root(workspace_root: Path, engagement: Any) -> tuple[Path, list[str]]:
-    """Resolve where phase deliverables actually live."""
+def _resolve_effective_root(workspace_root: Path, engagement: Any) -> Path:
+    """Resolve where phase deliverables actually live.
+
+    Assumes ``engagement.artifact_root`` has already been validated by the caller (the engagement
+    block validates it once via ``_artifact_root_error`` before this runs), so this does not
+    re-validate or return errors of its own — an invalid or missing root just falls back to
+    ``workspace_root`` silently, avoiding a duplicate error message for one underlying defect.
+    """
     if not isinstance(engagement, dict):
-        return workspace_root, []
+        return workspace_root
     artifact_root = engagement.get("artifact_root")
-    if not artifact_root:
-        return workspace_root, []
-    error = _artifact_root_error(artifact_root)
-    if error:
-        return workspace_root, [error]
+    if not artifact_root or _artifact_root_error(artifact_root):
+        return workspace_root
     normalized = str(artifact_root).replace("\\", "/")
-    return workspace_root / Path(normalized), []
+    return workspace_root / Path(normalized)
 
 
 def _load_yaml(path: Path) -> tuple[Any, list[str]]:
@@ -209,12 +213,35 @@ def _load_yaml(path: Path) -> tuple[Any, list[str]]:
     return data, []
 
 
+def _invalid_enum(value: Any, allowed: frozenset[str]) -> bool:
+    """True when ``value`` is not a string member of ``allowed``.
+
+    Centralizes the isinstance-before-membership-check pattern: ``value not in allowed`` raises
+    TypeError when ``value`` is an unhashable type (a hand-edited manifest.yaml can put a list or
+    mapping where a string enum is expected), so every *string*-valued enum check must route
+    through here instead of hand-rolling the guard at each call site. ``schema_version`` is
+    int-valued, so it guards itself inline instead of through this helper.
+    """
+    return not isinstance(value, str) or value not in allowed
+
+
+def _plain_int(value: Any) -> bool:
+    """True when ``value`` is an ``int`` and not a ``bool``.
+
+    ``bool`` is a subclass of ``int`` in Python, so a bare ``isinstance(value, int)`` check
+    accepts ``True``/``False`` wherever an integer count or version is expected. Centralizes the
+    exclusion so every int-valued field check (``schema_version``, discovery-budget counters) uses
+    the same guard instead of re-deriving it at each call site.
+    """
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
 def _validate_phase_entry(key: str, value: Any) -> list[str]:
     errors: list[str] = []
     if not isinstance(value, dict):
         return [f"phases.{key} must be an object"]
     status = value.get("status")
-    if status not in PHASE_STATUS:
+    if _invalid_enum(status, PHASE_STATUS):
         errors.append(f"phases.{key}.status must be one of {sorted(PHASE_STATUS)}")
     if status == "skipped" and not value.get("skip_reason"):
         errors.append(f"phases.{key}.skip_reason required when status=skipped")
@@ -255,7 +282,7 @@ def _validate_discovery_budget(value: Any, *, required: bool = False) -> list[st
 
     errors: list[str] = []
     profile = value.get("profile")
-    if profile not in DISCOVERY_BUDGET_PROFILES:
+    if _invalid_enum(profile, DISCOVERY_BUDGET_PROFILES):
         errors.append(
             f"discovery_budget.profile must be one of {sorted(DISCOVERY_BUDGET_PROFILES)}"
         )
@@ -271,7 +298,7 @@ def _validate_discovery_budget(value: Any, *, required: bool = False) -> list[st
             continue
         for key in DISCOVERY_BUDGET_COUNTERS:
             counter = block.get(key)
-            if not isinstance(counter, int) or isinstance(counter, bool):
+            if not _plain_int(counter):
                 errors.append(f"discovery_budget.{label}.{key} must be an integer")
                 continue
             if allow_zero:
@@ -280,15 +307,11 @@ def _validate_discovery_budget(value: Any, *, required: bool = False) -> list[st
             elif counter <= 0:
                 errors.append(f"discovery_budget.{label}.{key} must be > 0")
 
-    if isinstance(limits, dict) and profile in DISCOVERY_BUDGET_DEFAULT_LIMITS:
+    if isinstance(limits, dict) and isinstance(profile, str) and profile in DISCOVERY_BUDGET_DEFAULT_LIMITS:
         expected = DISCOVERY_BUDGET_DEFAULT_LIMITS[profile]
         for key in DISCOVERY_BUDGET_COUNTERS:
             limit = limits.get(key)
-            if (
-                isinstance(limit, int)
-                and not isinstance(limit, bool)
-                and limit != expected[key]
-            ):
+            if _plain_int(limit) and limit != expected[key]:
                 errors.append(
                     f"discovery_budget.limits.{key} must equal {expected[key]} for profile {profile}"
                 )
@@ -297,13 +320,7 @@ def _validate_discovery_budget(value: Any, *, required: bool = False) -> list[st
         for key in DISCOVERY_BUDGET_COUNTERS:
             limit = limits.get(key)
             used = consumed.get(key)
-            if (
-                isinstance(limit, int)
-                and not isinstance(limit, bool)
-                and isinstance(used, int)
-                and not isinstance(used, bool)
-                and used > limit
-            ):
+            if _plain_int(limit) and _plain_int(used) and used > limit:
                 errors.append(
                     f"discovery_budget.consumed.{key} exceeds configured limit ({used} > {limit})"
                 )
@@ -540,13 +557,14 @@ def _validate_artifact_list(items: Any, label: str, status_set: frozenset[str]) 
             errors.append(f"{prefix}.phase unknown: {phase}")
 
         status = item.get("status")
-        if status not in status_set:
+        if _invalid_enum(status, status_set):
             errors.append(f"{prefix}.status must be one of {sorted(status_set)}")
         if label == "artifacts":
             if not isinstance(item.get("required"), bool):
                 errors.append(f"{prefix}.required must be a boolean")
-            if status == "stale" and item_id != "prd":
-                errors.append(f"{prefix}.status=stale is only valid for artifact id 'prd'")
+            if status == "stale" and _invalid_enum(item_id, STALEABLE_ARTIFACT_IDS):
+                allowed_ids = " or ".join(f"'{i}'" for i in sorted(STALEABLE_ARTIFACT_IDS))
+                errors.append(f"{prefix}.status=stale is only valid for artifact id {allowed_ids}")
     return errors
 
 
@@ -559,9 +577,11 @@ def _validate_five_questions(value: Any) -> list[str]:
         if not isinstance(entry, dict):
             errors.append(f"five_questions.{key} must be an object")
             continue
-        if entry.get("status") not in QUESTION_STATUS:
+        question_status = entry.get("status")
+        if _invalid_enum(question_status, QUESTION_STATUS):
             errors.append(f"five_questions.{key}.status invalid")
-        if entry.get("confidence") not in CONFIDENCE:
+        question_confidence = entry.get("confidence")
+        if _invalid_enum(question_confidence, CONFIDENCE):
             errors.append(f"five_questions.{key}.confidence invalid")
     return errors
 
@@ -578,7 +598,7 @@ def _validate_repos(repos: Any) -> list[str]:
         if not isinstance(item.get("name"), str) or not str(item.get("name")).strip():
             errors.append(f"{prefix}.name must be a non-empty string")
         classification = item.get("classification")
-        if classification is not None and classification not in REPO_CLASSIFICATION:
+        if classification is not None and _invalid_enum(classification, REPO_CLASSIFICATION):
             errors.append(f"{prefix}.classification invalid: {classification}")
         for field, allowed in (
             ("inventory", REPO_INVENTORY),
@@ -586,7 +606,7 @@ def _validate_repos(repos: Any) -> list[str]:
             ("deep_dive", REPO_DEEP_DIVE),
         ):
             field_value = item.get(field)
-            if field_value is not None and field_value not in allowed:
+            if field_value is not None and _invalid_enum(field_value, allowed):
                 errors.append(f"{prefix}.{field} invalid: {field_value}")
     return errors
 
@@ -603,7 +623,7 @@ def _validate_evidence_summary(value: Any) -> list[str]:
             if value.get(key) is not None and not isinstance(value.get(key), str):
                 errors.append("evidence_summary.last_updated must be a string")
             continue
-        if key in value and not isinstance(value[key], int):
+        if key in value and not _plain_int(value[key]):
             errors.append(f"evidence_summary.{key} must be an integer")
         elif key in value and value[key] < 0:
             errors.append(f"evidence_summary.{key} must be >= 0")
@@ -675,6 +695,20 @@ def _validate_p2b_runtime_gate(
     return errors
 
 
+def _is_table_separator_line(stripped: str) -> bool:
+    """True when ``stripped`` is a GFM table separator row (e.g. ``|---|:--:|``).
+
+    Splits on the same ``|`` cell boundaries the row/header parsing below uses (a plain
+    ``strip("|")`` alone leaves interior ``|`` characters in place for multi-column rows) and
+    requires every cell to be non-empty and made up solely of ``-``/``:``, so an empty/blank
+    line or a stray ``||`` doesn't false-positive as a separator.
+    """
+    if not stripped.startswith("|"):
+        return False
+    cells = [c.strip() for c in stripped.strip("|").split("|")]
+    return bool(cells) and all(cell and set(cell) <= {"-", ":"} for cell in cells)
+
+
 def _validate_merge_conflicts_gate(
     workspace_root: Path,
     *,
@@ -689,32 +723,70 @@ def _validate_merge_conflicts_gate(
     except OSError:
         return errors
 
+    lines = text.splitlines()
     in_section = False
     header_seen = False
     status_index: int | None = None
     has_open_conflict = False
-    for line in text.splitlines():
+    for idx, line in enumerate(lines):
         stripped = line.strip()
         if stripped.startswith("## "):
             in_section = stripped.lower().startswith(MERGE_CONFLICTS_HEADING)
             header_seen = False
             status_index = None
             continue
-        if not in_section or not stripped.startswith("|"):
+        if not in_section:
+            continue
+        if not stripped.startswith("|"):
+            # A non-table line ends the current table without ending the section (e.g. prose
+            # between two tables under the same heading). Reset so the next table's own header
+            # row is parsed fresh instead of being read as a data row against a stale column index.
+            header_seen = False
+            status_index = None
             continue
 
         cells = [c.strip() for c in stripped.strip("|").split("|")]
 
-        if not header_seen:
-            header_seen = True
+        # A table header row is always immediately followed by a dash/colon separator row
+        # (required GFM table syntax). Detecting headers this way — rather than only via the
+        # header_seen flag — also catches a second table that starts right after the first
+        # table's last data row with no blank/prose line between them: without this lookahead,
+        # that adjacent header row would be silently read as a stray data row of the first
+        # table (checked against its column index) instead of starting a fresh one.
+        next_stripped = lines[idx + 1].strip() if idx + 1 < len(lines) else ""
+        if _is_table_separator_line(next_stripped):
             lowered = [c.lower() for c in cells]
-            if "status" not in lowered:
-                in_section = False
+            candidate_status_index = lowered.index("status") if "status" in lowered else None
+            # An all-dash/colon placeholder or divider *data* row inside the current table has the
+            # same shape as a genuine GFM separator, so it would otherwise be misread as signaling
+            # that this row is a fresh header — silently dropping the already-established Status
+            # column (and this row's own status) for the table we are still inside. A genuine
+            # header row for this gate's tables always has a literal "Status" cell (that's what
+            # candidate_status_index just looked for); a coincidental placeholder row's cell text
+            # is ordinary data and won't contain that literal, so only trust the reclassification
+            # when either we don't already have a Status column tracked for the current table, or
+            # the candidate header row does have its own "Status" cell.
+            if candidate_status_index is not None or status_index is None:
+                header_seen = True
+                status_index = candidate_status_index
                 continue
-            status_index = lowered.index("status")
+
+        if _is_table_separator_line(stripped):
             continue
 
-        if set(stripped.strip("|").replace(" ", "")) <= {"-", ":"}:
+        if not header_seen:
+            # No confirmed header yet for the table we're in: either the lookahead above didn't
+            # fire (e.g. a missing separator row, or a malformed one like `|====|` that isn't
+            # made up purely of `-`/`:`), or this is simply the first pipe row of a fresh table.
+            # header_seen is only False immediately after entering the section or after a
+            # table-ending reset (see the non-table-line branch above and the `## ` branch), so
+            # there is no adjacent-table ambiguity here — unconditionally treat this row as the
+            # header, matching the pre-lookahead behavior. Without this fallback, a missing or
+            # mistyped GFM separator row would leave header_seen/status_index unset for the rest
+            # of the table, silently skipping every data row (including an open conflict).
+            header_seen = True
+            lowered = [c.lower() for c in cells]
+            status_index = lowered.index("status") if "status" in lowered else None
             continue
 
         if status_index is None or len(cells) <= status_index:
@@ -780,14 +852,15 @@ def validate_manifest(
     errors: list[str] = []
 
     schema_version = data.get("schema_version")
-    if schema_version not in SUPPORTED_SCHEMA_VERSIONS:
+    if not _plain_int(schema_version) or schema_version not in SUPPORTED_SCHEMA_VERSIONS:
         errors.append(f"schema_version must be one of {sorted(SUPPORTED_SCHEMA_VERSIONS)}")
 
     for key in REQUIRED_TOP:
         if key not in data:
             errors.append(f"missing required top-level field: {key}")
 
-    if data.get("overall_confidence") not in CONFIDENCE:
+    overall_confidence = data.get("overall_confidence")
+    if _invalid_enum(overall_confidence, CONFIDENCE):
         errors.append("overall_confidence invalid")
 
     phases = data.get("phases")
@@ -801,7 +874,8 @@ def validate_manifest(
         for key in REQUIRED_ENGAGEMENT:
             if key not in engagement:
                 errors.append(f"engagement missing field: {key}")
-        if engagement.get("status") not in ENGAGEMENT_STATUS:
+        engagement_status = engagement.get("status")
+        if _invalid_enum(engagement_status, ENGAGEMENT_STATUS):
             errors.append("engagement.status invalid")
         map_error = _relative_path_error(engagement.get("map_file"), "engagement.map_file")
         if map_error:
@@ -854,8 +928,10 @@ def validate_manifest(
         errors.append("runtime_validation must be an object")
     else:
         for key in ("edges_total", "edges_confirmed"):
-            if key in runtime and not isinstance(runtime[key], int):
+            if key in runtime and not _plain_int(runtime[key]):
                 errors.append(f"runtime_validation.{key} must be an integer")
+            elif key in runtime and runtime[key] < 0:
+                errors.append(f"runtime_validation.{key} must be >= 0")
 
     map_file = str(engagement.get("map_file") or "") if isinstance(engagement, dict) else ""
 
@@ -863,8 +939,7 @@ def validate_manifest(
         if not workspace_root.is_dir():
             errors.append(f"workspace_root not a directory: {workspace_root}")
         else:
-            effective_root, root_errors = _resolve_effective_root(workspace_root, engagement)
-            errors.extend(root_errors)
+            effective_root = _resolve_effective_root(workspace_root, engagement)
 
             for item in data.get("artifacts") or []:
                 if not isinstance(item, dict):
@@ -924,20 +999,33 @@ def validate_manifest(
     return errors
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Validate domain-comprehension manifest.yaml")
     parser.add_argument("manifest", type=Path, help="Path to manifest.yaml")
     parser.add_argument("--workspace-root", type=Path, default=None, help="Verify artifact paths exist under this directory")
-    parser.add_argument("--strict", action="store_true", help="Enforce FIRST_PASS_COMPLETE readiness rules")
+    parser.add_argument(
+        "--strict",
+        action="store_true",
+        help="Enforce FIRST_PASS_COMPLETE readiness rules (requires --workspace-root)",
+    )
     parser.add_argument(
         "--check-content",
         action="store_true",
         help="Verify EXEC_SUMMARY.md sections, P2b runtime validation gate, RISK_MAP.md merge-conflicts gate, and postman_collection.json validity (requires --workspace-root)",
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     if args.check_content and args.workspace_root is None:
         print("--check-content requires --workspace-root", file=sys.stderr)
+        return 1
+
+    if args.strict and args.workspace_root is None:
+        # The strict readiness checks (required artifacts ok/waived, stale-PRD block, phase
+        # completion) only run inside the `workspace_root is not None` branch of
+        # validate_manifest(). Without this guard, `--strict` silently degrades to a no-op —
+        # exit 0 — instead of enforcing FIRST_PASS_COMPLETE readiness, mirroring the existing
+        # --check-content guard above.
+        print("--strict requires --workspace-root", file=sys.stderr)
         return 1
 
     data, load_errors = _load_yaml(args.manifest)

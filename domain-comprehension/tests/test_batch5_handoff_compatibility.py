@@ -37,6 +37,7 @@ def test_domain_and_prd_share_prd_freshness_values():
     assert producer["handoff_required"] is True
     assert producer["current_value"] == consumer["current_value"] == "ok"
     assert producer["stale_value"] == consumer["stale_value"] == "stale"
+    assert producer["stale_behavior"] == consumer["stale_behavior"]
     assert "integrity_check" in producer
     assert "integrity_check" in consumer
 

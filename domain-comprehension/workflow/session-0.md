@@ -1,5 +1,5 @@
 ---
-workflow_version: 1.5
+workflow_version: 1.6
 phase: session-0
 produces:
   - domain_config_yaml
@@ -14,6 +14,7 @@ consumes:
   - workspace_root
   - domain_name
   - domain_config
+  - delivery_mode
   - discovery_budget
 ---
 

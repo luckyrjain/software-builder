@@ -23,5 +23,9 @@ verify by walkthrough.
 | 16 | `critique_only: true` on existing PRD | Break uses `source_material` as draft; Gate emits findings only — no repaired PRD |
 | 17 | Fundamentally flawed PRD mode request | Validate → Gate with Validation output unless user insists on full PRD |
 | 18 | Fundamentally flawed Review with either `critique_only` value | Validate → Gate unless `user_insists_on_full_prd`; explicit override runs the full repair pipeline |
+| 19 | `existing_system: true` PRD/Review with a `domain-comprehension` handoff whose manifest PRD artifact status is `stale` | Not Ready / Blocking Before Build — PRD not treated as current until freshness is independently verified or regenerated |
+| 20 | `existing_system: true` PRD/Review with `current_state_evidence` missing entirely | Evidence gap surfaced as blocker/unknown, not silently guessed; readiness capped accordingly |
+| 21 | Material functional requirement with no linked `AC-*`/`TR-*` | Traceability orphan is a Build Readiness blocker, not deferred to implementation |
+| 22 | Success metric with baseline genuinely unknown | Baseline marked Unknown with a required baseline measurement action — no invented number |
 
 Smoke invocation: [smoke-test.md](smoke-test.md).

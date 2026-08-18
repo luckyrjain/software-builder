@@ -62,6 +62,7 @@ Skip allowed when both MCP ❌ — document skip reason in header; record in `KN
 | Event catalog | `EVENT_CATALOG.md` | topic, schema, producer, consumers, implementation, exercise |
 | Machine API/event schema | `API_EVENT_SCHEMA.yaml` | source revision + stable API/event records with owner/direction/contract/evidence/confidence |
 | Error code catalog | `{map_file}` § Contracts | Code, message, HTTP status, repo, evidence |
+| Discovery budget checkpoint | root `manifest.yaml` + `PROGRESS.md` | Configured + consumed counters synchronized; PARTIAL if exhausted before gate |
 
 ---
 
@@ -74,6 +75,7 @@ Skip allowed when both MCP ❌ — document skip reason in header; record in `KN
 | Machine dependency graph (initial) | `DEPENDENCY_GRAPH.yaml` | focal perspective + source/target/direction/interaction/criticality/evidence/confidence |
 | Graph manifest | `.understand-anything/manifest.json` | Tier 0/1 entries ok or failed |
 | Metrics | `.understand-anything/metrics.csv` | Present or N/A with reason |
+| Discovery budget checkpoint | root `manifest.yaml` + `PROGRESS.md` | Configured + consumed counters synchronized; PARTIAL if exhausted before gate |
 
 ---
 
@@ -90,6 +92,7 @@ Skip allowed when both MCP ❌ — document skip reason in header; record in `KN
 | Ownership cards | `{map_file}` § Per-Repo Deep Dives | Owns / does-not-own per repo |
 | Smells (initial) | `RISK_MAP.md` § Architectural smells | Smell, location, severity, evidence |
 | Auth & Gateway | `{map_file}` § Per-Repo Deep Dives | Route-prefix → auth requirement, evidence |
+| Discovery budget checkpoint | root `manifest.yaml` + `PROGRESS.md` | Configured + consumed counters synchronized; PARTIAL if exhausted before gate |
 
 ---
 
@@ -106,6 +109,7 @@ Skip allowed when both MCP ❌ — document skip reason in header; record in `KN
 | Machine dependency graph (refined) | `DEPENDENCY_GRAPH.yaml` | sync/async boundaries + upstream/downstream semantics + evidence-backed criticality |
 | Sync/async boundaries | `{map_file}` § Flow | Boundary table |
 | Code/graph divergence | `{map_file}` § Flow | Classified edges |
+| Discovery budget checkpoint | root `manifest.yaml` + `PROGRESS.md` | Configured + consumed counters synchronized; PARTIAL if exhausted before gate |
 
 Diagrams: [required-diagrams.md](required-diagrams.md).
 
@@ -121,6 +125,7 @@ Diagrams: [required-diagrams.md](required-diagrams.md).
 | Machine dependency runtime reconciliation | `DEPENDENCY_GRAPH.yaml` | runtime-confirmed/divergent edges retain evidence/confidence; no telemetry-only intent invention |
 | Exercise updates | API/event catalogs + business flows | `runtime_confirmed` where applicable |
 | Datadog subgraphs | `.understand-anything/diagrams/datadog-service-deps.md` | Per entry service |
+| Discovery budget checkpoint | root `manifest.yaml` + `PROGRESS.md` | Configured + consumed counters synchronized; PARTIAL if exhausted before gate, waived when Datadog ❌ |
 
 ---
 
@@ -135,6 +140,7 @@ Diagrams: [required-diagrams.md](required-diagrams.md).
 | Capability traceability (refined) | `CAPABILITY_TRACEABILITY.yaml` | material capabilities mapped to all evidenced code locations |
 | Draft five questions | `EXEC_SUMMARY.md` | Updated through P3 |
 | Overall confidence | `EXEC_SUMMARY.md` + `manifest.overall_confidence` | Per [confidence-rubric.md](confidence-rubric.md) |
+| Discovery budget checkpoint | root `manifest.yaml` + `PROGRESS.md` | Configured + consumed counters synchronized; PARTIAL if exhausted before gate |
 
 Enums: [implementation-status.md](implementation-status.md). Precedence: [evidence-precedence.md](evidence-precedence.md).
 
@@ -180,7 +186,7 @@ Enums: [implementation-status.md](implementation-status.md). Precedence: [eviden
 | Repo map table | `EXEC_SUMMARY.md` | classification + squad + tier + branch + SHA |
 | Evidence summary (final) | `EXEC_SUMMARY.md` + manifest | All counters populated |
 | Section confidences | `EXEC_SUMMARY.md` | Per major section |
-| `PROGRESS.md` | `FIRST_PASS_COMPLETE` | All checkpoints; impossible while manifest PRD status is `stale` |
+| `PROGRESS.md` | `FIRST_PASS_COMPLETE` or explicit PARTIAL reason | All checkpoints; `FIRST_PASS_COMPLETE` is impossible while manifest PRD status is `stale` — record the stale condition as the PARTIAL reason instead |
 | Per-repo Memory Bank | `<repo>/memory-bank/*.md` | When `memory_bank.export_mode: p5` — see [memory-bank-integration.md](memory-bank-integration.md) |
 | `manifest` `memory_bank_export` | `manifest.yaml` | `ok` \| `waived` \| `n_a` per export_mode |
 | Postman/curl export | `postman/*` | When `api_tooling.export_mode: p5` — see [api-tooling-integration.md](api-tooling-integration.md) |

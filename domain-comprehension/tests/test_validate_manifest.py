@@ -10,7 +10,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from validate_manifest_yaml import validate_manifest  # noqa: E402
+from validate_manifest_yaml import main, validate_manifest  # noqa: E402
 
 pytest.importorskip("yaml")
 
@@ -76,6 +76,18 @@ def test_schema_version_one_rejected() -> None:
     assert any("schema_version" in e for e in errors)
 
 
+def test_schema_version_float_rejected() -> None:
+    # A bare `schema_version not in SUPPORTED_SCHEMA_VERSIONS` frozenset-membership check would
+    # silently accept 2.0 here, since Python's `2.0 == 2` and `hash(2.0) == hash(2)` make floats
+    # and ints interchangeable in a set lookup. Locks in the `_plain_int()` guard added in front
+    # of that check so a future refactor back to the bare membership test doesn't reopen it —
+    # same footgun _plain_int() guards against for the boolean-count fields below.
+    data = _minimal_manifest()
+    data["schema_version"] = 2.0
+    errors = validate_manifest(data)
+    assert any("schema_version" in e for e in errors)
+
+
 def test_invalid_repo_classification() -> None:
     data = _minimal_manifest()
     data["repos"] = [{"name": "foo", "classification": "ACTIVE"}]
@@ -88,6 +100,33 @@ def test_evidence_summary_negative_rejected() -> None:
     data["evidence_summary"]["files_inspected"] = -1
     errors = validate_manifest(data)
     assert any("files_inspected" in e for e in errors)
+
+
+def test_evidence_summary_boolean_count_rejected() -> None:
+    # bool is a subclass of int in Python, so a bare `isinstance(x, int)` check silently accepts
+    # `true`/`false` wherever a count is expected — same footgun _plain_int() guards against for
+    # schema_version and discovery_budget counters.
+    data = _minimal_manifest()
+    data["evidence_summary"]["files_inspected"] = True
+    errors = validate_manifest(data)
+    assert any("evidence_summary.files_inspected must be an integer" in e for e in errors)
+
+
+def test_runtime_validation_boolean_count_rejected() -> None:
+    data = _minimal_manifest()
+    data["runtime_validation"]["edges_total"] = False
+    errors = validate_manifest(data)
+    assert any("runtime_validation.edges_total must be an integer" in e for e in errors)
+
+
+def test_runtime_validation_negative_rejected() -> None:
+    # Unlike evidence_summary's counters (see test_evidence_summary_negative_rejected), the
+    # runtime_validation.edges_total/edges_confirmed checks had no >= 0 guard, so a negative
+    # count silently validated clean.
+    data = _minimal_manifest()
+    data["runtime_validation"]["edges_confirmed"] = -1
+    errors = validate_manifest(data)
+    assert any("runtime_validation.edges_confirmed must be >= 0" in e for e in errors)
 
 
 def test_check_content_p2b_pending_skips_runtime_gate(tmp_path: Path) -> None:
@@ -300,6 +339,187 @@ def test_check_content_merge_conflict_dash_evidence_not_mistaken_for_separator(t
     assert any("phases.p0 must not be complete" in e for e in errors)
 
 
+def test_check_content_merge_conflict_dash_placeholder_row_mid_table_still_detected(
+    tmp_path: Path,
+) -> None:
+    """An all-dash divider row *inside* a table must not be mistaken for a new header row.
+
+    Regression guard: the header-detection lookahead (a row is a header when the *next* line is
+    separator-shaped) previously fired on any data row immediately followed by an all-dash/colon
+    placeholder row, even when that placeholder row was itself just an ordinary data row within
+    the same table (not a genuine GFM separator pairing with a real header). That silently reset
+    status_index and dropped both the misclassified row's own status and every row after it.
+    """
+    data = _minimal_manifest()
+    data["phases"]["p0"]["status"] = "complete"
+    data["phases"]["p0"]["completed_at"] = "2026-07-29T00:00:00Z"
+    (tmp_path / "EXEC_SUMMARY.md").write_text(
+        "## Evidence summary\n## Engineering Leader Summary\n## Section confidences\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "RISK_MAP.md").write_text(
+        "## Merge Conflicts (ADD_REPO mode)\n\n"
+        "| Table | Status |\n"
+        "|---|---|\n"
+        "| orders table | open |\n"
+        "| - | - |\n"
+        "| payments table | open |\n",
+        encoding="utf-8",
+    )
+    errors = validate_manifest(data, workspace_root=tmp_path, check_content=True)
+    assert any("phases.p0 must not be complete" in e for e in errors)
+
+
+def test_check_content_merge_conflict_malformed_separator_row_still_detected(
+    tmp_path: Path,
+) -> None:
+    """A header row must still be recognized when the GFM separator row is malformed.
+
+    Regression guard: the lookahead-based header detection (a row is a header only when the
+    *next* line is a well-formed `-`/`:` separator) previously left header_seen/status_index
+    unset for the whole table when the separator row was mistyped (e.g. `|====|` instead of
+    `|----|`), silently dropping every data row in the table — including an open conflict.
+    """
+    data = _minimal_manifest()
+    data["phases"]["p0"]["status"] = "complete"
+    data["phases"]["p0"]["completed_at"] = "2026-07-29T00:00:00Z"
+    (tmp_path / "EXEC_SUMMARY.md").write_text(
+        "## Evidence summary\n## Engineering Leader Summary\n## Section confidences\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "RISK_MAP.md").write_text(
+        "## Merge Conflicts (ADD_REPO mode)\n\n"
+        "| ID | Status |\n"
+        "|====|========|\n"
+        "| 1 | Open |\n",
+        encoding="utf-8",
+    )
+    errors = validate_manifest(data, workspace_root=tmp_path, check_content=True)
+    assert any("phases.p0 must not be complete" in e for e in errors)
+
+
+def test_check_content_merge_conflict_missing_separator_row_still_detected(
+    tmp_path: Path,
+) -> None:
+    """A header row must still be recognized when the GFM separator row is missing entirely.
+
+    Same regression guard as the malformed-separator case above, but for a table that skips the
+    separator row altogether (a plausible hand-edit or an imperfect sub-agent merge of the table).
+    """
+    data = _minimal_manifest()
+    data["phases"]["p0"]["status"] = "complete"
+    data["phases"]["p0"]["completed_at"] = "2026-07-29T00:00:00Z"
+    (tmp_path / "EXEC_SUMMARY.md").write_text(
+        "## Evidence summary\n## Engineering Leader Summary\n## Section confidences\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "RISK_MAP.md").write_text(
+        "## Merge Conflicts (ADD_REPO mode)\n\n"
+        "| ID | Status |\n"
+        "| 1 | Open |\n",
+        encoding="utf-8",
+    )
+    errors = validate_manifest(data, workspace_root=tmp_path, check_content=True)
+    assert any("phases.p0 must not be complete" in e for e in errors)
+
+
+def test_check_content_merge_conflict_second_table_in_section_detected(tmp_path: Path) -> None:
+    """A second table under the same heading must get its own header row, not the first table's.
+
+    Without resetting header/column tracking between tables, the second table's header row is
+    read as a data row against the first table's column index, so an `open` status in a
+    differently-ordered second table can be missed entirely.
+    """
+    data = _minimal_manifest()
+    data["phases"]["p0"]["status"] = "complete"
+    data["phases"]["p0"]["completed_at"] = "2026-07-29T00:00:00Z"
+    (tmp_path / "EXEC_SUMMARY.md").write_text(
+        "## Evidence summary\n## Engineering Leader Summary\n## Section confidences\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "RISK_MAP.md").write_text(
+        "## Merge Conflicts (ADD_REPO mode)\n\n"
+        "First table already resolved:\n\n"
+        "| New repo | Existing claim | New claim | Entity/Context/Path | Evidence (existing) | Evidence (new) | Confidence | Status |\n"
+        "|----------|-----------------|-----------|----------------------|----------------------|-----------------|------------|--------|\n"
+        "| svc-b | svc-a owns `users` table | svc-b owns `users` table | users table | svc-a/Repo.java:12 | svc-b/Repo.java:9 | HIGH | resolved |\n"
+        "\n"
+        "Second table, columns in a different order, still open:\n\n"
+        "| Status | New repo | Entity/Context/Path |\n"
+        "|--------|----------|----------------------|\n"
+        "| open | svc-c | orders table |\n",
+        encoding="utf-8",
+    )
+    errors = validate_manifest(data, workspace_root=tmp_path, check_content=True)
+    assert any("phases.p0 must not be complete" in e for e in errors)
+
+
+def test_check_content_merge_conflict_status_less_first_table_then_open_second_table(
+    tmp_path: Path,
+) -> None:
+    """A Status-less table must not end the section; a later table's own conflict must still fire.
+
+    Regression guard for the branch that leaves ``status_index`` unset (rather than ending the
+    section) when a table's header has no Status column, so a summary table with no Status column
+    followed by a genuine conflicts table under the same heading is still checked.
+    """
+    data = _minimal_manifest()
+    data["phases"]["p0"]["status"] = "complete"
+    data["phases"]["p0"]["completed_at"] = "2026-07-29T00:00:00Z"
+    (tmp_path / "EXEC_SUMMARY.md").write_text(
+        "## Evidence summary\n## Engineering Leader Summary\n## Section confidences\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "RISK_MAP.md").write_text(
+        "## Merge Conflicts (ADD_REPO mode)\n\n"
+        "Summary (no Status column):\n\n"
+        "| New repo | Entity/Context/Path |\n"
+        "|----------|----------------------|\n"
+        "| svc-b | users table |\n"
+        "\n"
+        "Detail table, still open:\n\n"
+        "| New repo | Existing claim | New claim | Entity/Context/Path | Evidence (existing) | Evidence (new) | Confidence | Status |\n"
+        "|----------|-----------------|-----------|----------------------|----------------------|-----------------|------------|--------|\n"
+        "| svc-c | svc-a owns `orders` table | svc-c owns `orders` table | orders table | svc-a/Repo.java:20 | svc-c/Repo.java:5 | HIGH | open |\n",
+        encoding="utf-8",
+    )
+    errors = validate_manifest(data, workspace_root=tmp_path, check_content=True)
+    assert any("phases.p0 must not be complete" in e for e in errors)
+
+
+def test_check_content_merge_conflict_adjacent_tables_no_separator_line_detected(
+    tmp_path: Path,
+) -> None:
+    """Two tables back-to-back with no blank/prose line between them must each get their own header.
+
+    Regression guard: the previous fix for "second table under the same heading" only reset
+    header/column tracking when a *non-table* line separated the two tables. When the second
+    table's header row immediately follows the first table's last data row (a perfectly valid,
+    plausible Markdown layout), that reset never fired, so the second table's header row was read
+    as a stray data row of the first table and its own open-status row was checked against the
+    wrong column index.
+    """
+    data = _minimal_manifest()
+    data["phases"]["p0"]["status"] = "complete"
+    data["phases"]["p0"]["completed_at"] = "2026-07-29T00:00:00Z"
+    (tmp_path / "EXEC_SUMMARY.md").write_text(
+        "## Evidence summary\n## Engineering Leader Summary\n## Section confidences\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "RISK_MAP.md").write_text(
+        "## Merge Conflicts (ADD_REPO mode)\n\n"
+        "| New repo | Existing claim | New claim | Entity/Context/Path | Evidence (existing) | Evidence (new) | Confidence | Status |\n"
+        "|----------|-----------------|-----------|----------------------|----------------------|-----------------|------------|--------|\n"
+        "| svc-b | svc-a owns `users` table | svc-b owns `users` table | users table | svc-a/Repo.java:12 | svc-b/Repo.java:9 | HIGH | resolved |\n"
+        "| Status | New repo | Entity/Context/Path |\n"
+        "|--------|----------|----------------------|\n"
+        "| open | svc-c | orders table |\n",
+        encoding="utf-8",
+    )
+    errors = validate_manifest(data, workspace_root=tmp_path, check_content=True)
+    assert any("phases.p0 must not be complete" in e for e in errors)
+
+
 def _mark_api_tooling_ok(data: dict) -> None:
     for artifact in data["artifacts"]:
         if artifact["id"] == "api_tooling_export":
@@ -391,14 +611,29 @@ def test_artifact_root_absolute_path_rejected(tmp_path: Path) -> None:
     data = _minimal_manifest()
     data["engagement"]["artifact_root"] = "/etc/somewhere"
     errors = validate_manifest(data, workspace_root=tmp_path)
-    assert any("artifact_root must be a relative path" in e for e in errors)
+    matches = [e for e in errors if "artifact_root must be a relative path" in e]
+    assert len(matches) == 1, f"expected exactly one artifact_root error, got: {matches}"
 
 
 def test_artifact_root_parent_traversal_rejected(tmp_path: Path) -> None:
     data = _minimal_manifest()
     data["engagement"]["artifact_root"] = "../escape"
     errors = validate_manifest(data, workspace_root=tmp_path)
-    assert any("artifact_root must be a relative path" in e for e in errors)
+    matches = [e for e in errors if "artifact_root must be a relative path" in e]
+    assert len(matches) == 1, f"expected exactly one artifact_root error, got: {matches}"
+
+
+def test_artifact_root_invalid_type_reported_once_with_workspace_root(tmp_path: Path) -> None:
+    """A malformed artifact_root must be reported once, not once per internal resolver call.
+
+    _resolve_effective_root used to re-run _artifact_root_error and append a second, identical
+    error whenever workspace_root was supplied — regression guard for that duplication.
+    """
+    data = _minimal_manifest()
+    data["engagement"]["artifact_root"] = ["a", "b"]
+    errors = validate_manifest(data, workspace_root=tmp_path)
+    matches = [e for e in errors if "engagement.artifact_root must be a non-empty relative path" in e]
+    assert len(matches) == 1, f"expected exactly one artifact_root error, got: {matches}"
 
 
 def test_check_content_exec_summary_resolves_under_artifact_root(tmp_path: Path) -> None:
@@ -421,3 +656,45 @@ def test_check_content_exec_summary_resolves_under_artifact_root(tmp_path: Path)
     (run_dir / "EXEC_SUMMARY.md").unlink()
     errors_wrong_location = validate_manifest(data, workspace_root=tmp_path, check_content=True)
     assert any("EXEC_SUMMARY.md" in e for e in errors_wrong_location)
+
+
+def _write_manifest_file(tmp_path: Path, data: dict) -> Path:
+    import yaml
+
+    manifest_path = tmp_path / "manifest.yaml"
+    manifest_path.write_text(yaml.safe_dump(data), encoding="utf-8")
+    return manifest_path
+
+
+def test_cli_strict_without_workspace_root_errors_and_exits_1(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
+    """Regression guard for the --strict silently-no-oping-without---workspace-root fix.
+
+    --strict's readiness checks only run inside validate_manifest()'s workspace_root branch, so
+    the CLI must refuse to proceed with --strict and no --workspace-root instead of exiting 0.
+    """
+    manifest_path = _write_manifest_file(tmp_path, _minimal_manifest())
+    exit_code = main([str(manifest_path), "--strict"])
+    assert exit_code == 1
+    assert "--strict requires --workspace-root" in capsys.readouterr().err
+
+
+def test_cli_strict_with_workspace_root_runs_normally(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
+    """--strict plus --workspace-root must reach validate_manifest(), not the CLI guard.
+
+    Whether the underlying manifest itself is fully ready (all stub artifacts present on disk) is
+    covered elsewhere (test_strict_first_pass_incomplete etc.) — this only guards the CLI-level
+    `--strict requires --workspace-root` short-circuit from firing when --workspace-root IS given.
+    """
+    manifest_path = _write_manifest_file(tmp_path, _minimal_manifest())
+    exit_code = main([str(manifest_path), "--strict", "--workspace-root", str(tmp_path)])
+    assert "--strict requires --workspace-root" not in capsys.readouterr().err
+    assert exit_code == 1  # engagement.status is not FIRST_PASS_COMPLETE and stub artifacts are absent on disk
+
+
+def test_cli_check_content_without_workspace_root_errors_and_exits_1(
+    tmp_path: Path, capsys: pytest.CaptureFixture
+) -> None:
+    manifest_path = _write_manifest_file(tmp_path, _minimal_manifest())
+    exit_code = main([str(manifest_path), "--check-content"])
+    assert exit_code == 1
+    assert "--check-content requires --workspace-root" in capsys.readouterr().err

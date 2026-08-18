@@ -32,8 +32,8 @@ def test_domain_comprehension_exposes_executable_machine_contract():
     artifacts = contract["artifacts"]
     assert artifacts["api_event_schema"]["path"] == "API_EVENT_SCHEMA.yaml"
     assert artifacts["data_ownership_graph"]["path"] == "DATA_OWNERSHIP_GRAPH.yaml"
-    assert artifacts["dependency_graph"]["path"] == "DEPENDENCY_GRAPH.yaml"
-    assert artifacts["capability_code_ownership"]["path"] == "CAPABILITY_TRACEABILITY.yaml"
+    assert artifacts["dependency_graph_machine"]["path"] == "DEPENDENCY_GRAPH.yaml"
+    assert artifacts["capability_traceability"]["path"] == "CAPABILITY_TRACEABILITY.yaml"
 
     deps = contract["dependency_edges"]
     assert deps["direction"] == "upstream | downstream"

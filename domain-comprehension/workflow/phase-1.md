@@ -1,5 +1,5 @@
 ---
-workflow_version: 1.14
+workflow_version: 1.16
 phase: 1
 produces:
   - per_repo_deep_dives
@@ -9,6 +9,9 @@ produces:
   - domain_glossary
   - smells_initial
   - auth_gateway_table
+  - data_ownership_graph_initial
+  - capability_traceability_initial
+  - discovery_budget_checkpoint
 consumes:
   - inventory
   - contract_inventory
@@ -31,6 +34,19 @@ Manual deep reading and artifact synthesis for bounded contexts, data ownership,
 | Domain glossary | `DOMAIN_GLOSSARY.md` | Terms, definitions, evidence paths | Phase incomplete |
 | Smells (initial) | `RISK_MAP.md` § Architectural smells | Smell, location, severity, evidence | Phase incomplete — empty allowed with note |
 | Auth & Gateway | `{map_file}` § Per-Repo Deep Dives | Route-prefix → auth requirement, evidence | Phase incomplete — UNKNOWN allowed with reason |
+| Machine data ownership (initial) | `DATA_OWNERSHIP_GRAPH.yaml` | evidenced nodes/edges + owner/evidence/confidence | Phase incomplete in FULL mode |
+| Capability traceability (initial) | `CAPABILITY_TRACEABILITY.yaml` | capability → repos/code locations/owner/evidence/confidence | Phase incomplete in FULL mode |
+| Discovery budget checkpoint | root `manifest.yaml` + `PROGRESS.md` | Configured + consumed counters synchronized | Phase incomplete unless PARTIAL for budget exhaustion |
+
+## Machine-domain projection (required in FULL mode)
+
+Project this phase's data-ownership and bounded-context findings into the two machine artifacts per
+[machine-domain-model.md](../reference/machine-domain-model.md):
+
+- **`DATA_OWNERSHIP_GRAPH.yaml`** ([§ Data ownership projection](../reference/machine-domain-model.md#data-ownership-projection)) — one node per service/evidenced data asset, one edge per evidenced write/read/cache/migration/repository-method/runtime signal. `owner` is the authoritative writer, not merely a consumer; multiple evidenced writers stay visible.
+- **`CAPABILITY_TRACEABILITY.yaml`** ([§ Capability-to-code projection](../reference/machine-domain-model.md#capability-to-code-projection)) — map each material capability surfaced by this phase's bounded contexts/ownership cards to every evidenced repo and code location; do not pick one convenient owner for a multi-repo capability.
+
+Both are the **initial** pass — P3 refines them. QUICK keeps the Session 0 stubs as-is.
 
 ## Investigation recipes
 
@@ -81,6 +97,15 @@ Record per route-prefix: required headers, JWT vs signature vs none, environment
 **name**, and (once per repo, not per-prefix) whether Redis OTP usage was found. `UNKNOWN` with reason when
 no filter class is found for a prefix that clearly has protected routes (do not assume "no auth" from
 absence of evidence).
+
+## Discovery budget checkpoint (required)
+
+Before the checkpoint below, update root `manifest.yaml` `discovery_budget.consumed` (repositories,
+search_queries, deep_file_reads) to reflect what this phase's bounded-context/data-ownership/auth-gateway
+recipes actually spent and mirror the totals into `PROGRESS.md`. If any limit is reached before the deep
+dive is complete, stop, mark the engagement `PARTIAL`, and record the gap in `UNKNOWNS.md` — never silently
+exceed a configured limit. See
+[manifest-schema.md § discovery_budget](../reference/manifest-schema.md#discoverybudget).
 
 ## Checkpoint
 

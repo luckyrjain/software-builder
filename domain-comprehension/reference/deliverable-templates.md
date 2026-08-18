@@ -21,7 +21,7 @@ domain artifact templates there. Copy `manifest.yaml` to workspace root only. No
 | `API_EVENT_SCHEMA.yaml` | P0.25 → P5 machine API/event contract |
 | `DATA_OWNERSHIP_GRAPH.yaml` | P1/P3 → P5 machine ownership graph |
 | `DEPENDENCY_GRAPH.yaml` | P0.5/P2/P2b → P5 machine dependency semantics |
-| `CAPABILITY_TRACEABILITY.yaml` | P1 → P5 capability-to-code ownership |
+| `CAPABILITY_TRACEABILITY.yaml` | P1/P3 → P5 capability-to-code ownership |
 | `RISK_MAP.md` | P1, P4 |
 | `KNOWN_OMISSIONS.md` | Continuous |
 | `DOMAIN_GLOSSARY.md` | P1 |
