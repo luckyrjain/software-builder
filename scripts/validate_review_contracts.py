@@ -93,8 +93,26 @@ def _canonical_mapping_value(value: object) -> bool:
     return _portable_scalar(value)
 
 
+def _canonical_json(value: object) -> str | None:
+    if not _portable_value(value):
+        return None
+    try:
+        return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False)
+    except (TypeError, ValueError):
+        return None
+
+
+def _json_equivalent(left: object, right: object) -> bool:
+    left_json = _canonical_json(left)
+    right_json = _canonical_json(right)
+    return left_json is not None and right_json is not None and left_json == right_json
+
+
 def _canonical_object_key(value: dict[str, object]) -> str:
-    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False)
+    canonical = _canonical_json(value)
+    if canonical is None:
+        raise ValueError("object must be JSON-portable")
+    return canonical
 
 
 def _valid_schema_version(value: object) -> bool:
@@ -148,7 +166,11 @@ def validate_change_identity(payload: object) -> list[str]:
 
 
 def _effective_patch_unchanged(stored: object, current: object) -> bool:
-    return isinstance(stored, dict) and isinstance(current, dict) and all(stored.get(k) == current.get(k) for k in _EFFECTIVE_PATCH_FIELDS)
+    return (
+        isinstance(stored, dict)
+        and isinstance(current, dict)
+        and all(_json_equivalent(stored.get(k), current.get(k)) for k in _EFFECTIVE_PATCH_FIELDS)
+    )
 
 
 def _identity_fresh(stored: object, current: object, *, conflict_resolution_occurred: bool) -> bool:
@@ -197,7 +219,7 @@ def validate_review_evidence(
     if current_requirements_ref is not _UNSET:
         if current_requirements_ref is not None and (not isinstance(current_requirements_ref, dict) or not _portable_value(current_requirements_ref)):
             errors.append("current requirements_ref must be a JSON-portable object or null")
-        elif requirements_ref != current_requirements_ref:
+        elif not _json_equivalent(requirements_ref, current_requirements_ref):
             errors.append("stale requirements_ref: review evidence does not match current requirements surface")
     mode = payload.get("review_mode")
     if "review_mode" in payload and (not isinstance(mode, str) or mode not in _REVIEW_MODES):
