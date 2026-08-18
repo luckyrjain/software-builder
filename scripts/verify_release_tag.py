@@ -29,7 +29,13 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: tag must match vMAJOR.MINOR.PATCH, got {args.tag!r}", file=sys.stderr)
         return 1
 
-    expected = read_distribution_version(args.repo_root)
+    try:
+        expected = read_distribution_version(args.repo_root)
+    except (OSError, ValueError) as exc:
+        # OSError (not just ValueError) so a VERSION file that exists but isn't readable
+        # (e.g. a permission error) prints a clean error instead of an uncaught traceback.
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
     actual = match.group("version")
     if actual != expected:
         print(

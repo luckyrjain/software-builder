@@ -8,13 +8,17 @@ from typing import Any
 
 from scripts.registry.composition_contracts import load_contracts
 from scripts.registry.frontmatter import load_skill_frontmatter
+from scripts.registry.models import Registry
 from scripts.registry.schema import parse_registry
+from scripts.release_info import SEMVER_RE as _CORE_SEMVER_RE
 from scripts.yaml_safety import YAML_SAFETY_ERRORS, load_unique_yaml_file
 from scripts.yaml_safety import require_mapping as _require_mapping
 
 ROOT = Path(__file__).resolve().parents[2]
 CONTRACTS_PATH = Path(__file__).resolve().parent / "platform_contracts.yaml"
-_CORE_SEMVER_RE = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$")
+# Bare MAJOR.MINOR.PATCH semver core (no prerelease/build metadata) -- shared with
+# scripts/release_info.py, which needs the exact same "is this a semver core" definition
+# for VERSION/distribution_version/source manifest fields, so the two never drift apart.
 _IDENTIFIER_RE = re.compile(r"^[0-9A-Za-z-]+$")
 _LEGACY_NUMERIC_VERSION_RE = re.compile(
     r"^skill_version:\s*([0-9]+\.[0-9]+)\s*(?:#.*)?$",
@@ -176,6 +180,22 @@ def _load_platform_contracts(path: Path = CONTRACTS_PATH) -> dict[str, Any]:
     return raw
 
 
+def _resolve_skill_version(skill_id: str, skill_md: Path, frontmatter: dict[str, Any]) -> tuple[str, Any]:
+    """Normalized semantic version and the raw frontmatter value it came from.
+
+    Shared by _build_manifest() (which also needs the raw value, to tell a
+    legacy-numeric skill_version apart from a plain string for version_source)
+    and skill_versions() (which only needs the normalized string), so the two
+    never drift on how a skill's skill_version is read and normalized.
+    """
+    raw_version = frontmatter.get("skill_version")
+    try:
+        version = _normalize_version(_version_input(skill_md, raw_version))
+    except ValueError as exc:
+        raise ValueError(f"{skill_id}: {exc}") from exc
+    return version, raw_version
+
+
 def _build_manifest(root: Path) -> tuple[dict[str, Any], dict[str, Any]]:
     """Build the manifest and return it alongside the raw platform contracts
     mapping it was built from, so callers needing P1-only sections don't have
@@ -219,11 +239,7 @@ def _build_manifest(root: Path) -> tuple[dict[str, Any], dict[str, Any]]:
     for skill_id, entry in registry.skills.items():
         skill_md = root / entry.path / "SKILL.md"
         frontmatter = load_skill_frontmatter(skill_md)
-        raw_version = frontmatter.get("skill_version")
-        try:
-            version = _normalize_version(_version_input(skill_md, raw_version))
-        except ValueError as exc:
-            raise ValueError(f"{skill_id}: {exc}") from exc
+        version, raw_version = _resolve_skill_version(skill_id, skill_md, frontmatter)
         description = frontmatter.get("description")
         if not isinstance(description, str) or not description.strip():
             raise ValueError(f"{skill_id}: description must be a non-empty string")
@@ -297,6 +313,30 @@ def _build_manifest(root: Path) -> tuple[dict[str, Any], dict[str, Any]]:
 def build_manifest(root: Path = ROOT) -> dict[str, Any]:
     manifest, _platform = _build_manifest(root)
     return manifest
+
+
+def skill_versions(root: Path = ROOT, *, registry: Registry | None = None) -> dict[str, str]:
+    """skill_id -> normalized semantic version, for every skill in skills.yaml.
+
+    Lighter than build_manifest(): reads only skills.yaml and each skill's
+    SKILL.md frontmatter, so it stays usable (e.g. for release packaging)
+    even for a repository that doesn't have platform_contracts.yaml /
+    composition_contracts.yaml -- the full P1 platform-contract layer
+    build_manifest() requires.
+
+    Pass `registry` when the caller already parsed skills.yaml (e.g. to also
+    tracked-check its skills) so this doesn't re-read and re-parse the same
+    file a second time; omitted, it parses skills.yaml itself as before.
+    """
+    if registry is None:
+        registry = parse_registry(root / "skills.yaml")
+    versions: dict[str, str] = {}
+    for skill_id, entry in registry.skills.items():
+        skill_md = root / entry.path / "SKILL.md"
+        frontmatter = load_skill_frontmatter(skill_md)
+        version, _raw_version = _resolve_skill_version(skill_id, skill_md, frontmatter)
+        versions[skill_id] = version
+    return versions
 
 
 def validate_manifest(root: Path = ROOT) -> list[str]:
