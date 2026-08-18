@@ -1,0 +1,21 @@
+schema_version: 1
+review_evidence:
+  required_fields:
+    - change_identity
+    - requirements_ref
+    - review_mode
+    - inspection_status
+    - inspected_surfaces
+    - unable_to_inspect
+    - findings
+    - generated_at
+  review_modes: [normal, exhaustive]
+  inspection_status_values: [complete, partial, unable]
+  finding_categories: [defect, suggestion, question]
+  unable_to_inspect_required_fields: [surface, reason]
+  finding_required_fields: [id, category, summary, evidence]
+  rules:
+    questions_are_non_blocking_until_promoted: true
+    complete_forbidden_with_mandatory_unable_surface: true
+    stale_change_identity_invalidates_envelope: true
+    categories_are_disjoint: true
