@@ -1,10 +1,15 @@
 ---
-workflow_version: 1.8
+workflow_version: 1.10
 phase: 5
 produces:
   - final_five_questions
   - as_built_prd
   - prd_requirement_traceability
+  - api_event_schema_final
+  - data_ownership_graph_final
+  - dependency_graph_final
+  - capability_traceability_final
+  - stale_prd_status
   - overall_confidence_final
   - engineering_leader_summary
   - architecture_decisions
@@ -29,7 +34,8 @@ consumes:
 
 # Comprehension Phase P5 — Delivery and handoff
 
-Final evidence review, as-built PRD synthesis, section confidence calibration, and delivery checklist.
+Final evidence review, as-built PRD synthesis, machine-model reconciliation, section confidence calibration,
+and delivery checklist.
 
 ## Required outputs
 
@@ -38,13 +44,18 @@ Final evidence review, as-built PRD synthesis, section confidence calibration, a
 | Final five questions | `EXEC_SUMMARY.md` | COMPLETE or UNKNOWN each — no DRAFT allowed | Phase incomplete |
 | As-built PRD | `PRD.md` | Current-state scope, actors, capabilities, requirements/rules/NFRs, workflows, state, interfaces, data, dependencies, controls, operations, failures, constraints, risks/gaps, traceability, open product-intent questions | Phase incomplete |
 | PRD requirement traceability | `PRD.md` § Requirement traceability | Every `FR-*`, `BR-*`, `NFR-*` cites evidence and has confidence/status | Phase incomplete |
+| API/event machine schema | `API_EVENT_SCHEMA.yaml` | source revisions + stable API/event records with evidence/confidence | Phase incomplete in FULL |
+| Data ownership machine graph | `DATA_OWNERSHIP_GRAPH.yaml` | source revisions + evidenced nodes/edges/owner/confidence | Phase incomplete in FULL |
+| Dependency machine graph | `DEPENDENCY_GRAPH.yaml` | focal perspective + direction/interaction/criticality/evidence/confidence | Phase incomplete in FULL |
+| Capability traceability | `CAPABILITY_TRACEABILITY.yaml` | capability → repos/code locations/owner/evidence/confidence | Phase incomplete in FULL |
+| DELTA/ADD_REPO PRD freshness | root `manifest.yaml` PRD artifact row + `PROGRESS.md` | manifest `ok` after clean comparison/regeneration; `stale` immediately on stale condition + human reason/evidence | Phase incomplete if unchecked or stale |
 | Overall confidence | `EXEC_SUMMARY.md` | Question table + overall band | Phase incomplete |
 | Engineering leader summary | `EXEC_SUMMARY.md` § Engineering Leader Summary | Per [engineering-leader-summary.md](../reference/engineering-leader-summary.md) | Phase incomplete |
 | Architecture decisions | `ARCHITECTURE_DECISIONS.md` | ADRs or UNKNOWN | Phase incomplete |
 | Repo map table | `EXEC_SUMMARY.md` | classification + squad + tier + branch + SHA per repo | Phase incomplete |
 | Evidence summary (final) | `EXEC_SUMMARY.md` + manifest | All counters populated (non-zero where evidence exists) | Phase incomplete |
 | Section confidences | `EXEC_SUMMARY.md` | Per major section | Phase incomplete |
-| PROGRESS.md status | `PROGRESS.md` | `FIRST_PASS_COMPLETE` | Phase incomplete |
+| PROGRESS.md status | `PROGRESS.md` | `FIRST_PASS_COMPLETE` or explicit PARTIAL reason | Phase incomplete |
 
 ## As-built PRD synthesis
 
@@ -83,9 +94,24 @@ independent product-discovery pass that can drift from the domain artifacts.
    may exist only in prose without a corresponding traceability row.
 9. Apply the same safe-rendering and prompt-injection boundary as all other deliverables.
 
-A user who wants to turn this current-state baseline into a proposed/future-state specification should
-hand `PRD.md` plus the supporting evidence set to **prd-architect**. This phase itself does not author a
-build-readiness verdict for a proposed change.
+## Machine-domain reconciliation
+
+Run [machine-domain-model.md](../reference/machine-domain-model.md) before completion. In FULL mode, parse
+and reconcile all four machine artifacts against the narrative catalogs/graphs and current source revisions.
+Every populated machine record/edge/capability retains evidence and confidence; missing fields become UNKNOWN
+and contradictory fields have confidence capped at LOW (`confidence_aggregation.conflict_cap`) according to
+evidence precedence rather than being guessed.
+
+For DELTA/ADD_REPO, compare previous versus refreshed source revisions and machine projections using
+`stale_prd_detection` in [domain-model-contract.yaml](../reference/domain-model-contract.yaml). If any stale
+condition fires, set root `manifest.yaml` `artifacts[id=prd].status: stale` immediately and record the reason
+and evidence in `PROGRESS.md`. Update the affected PRD requirements/traceability and restore manifest `ok` only
+after a clean comparison; otherwise keep the phase/engagement incomplete. Never claim an unchecked or stale
+PRD is current, and never leave a known-stale PRD as manifest `ok`.
+
+The machine files plus `PRD.md` and its manifest freshness status form the current-state handoff to
+**prd-architect**. That skill may propose a future state, but it must preserve observed evidence and make every
+change explicit.
 
 ## Memory Bank export (optional)
 
@@ -140,6 +166,11 @@ findings into `EXEC_SUMMARY.md` and `{map_file}` in the same section structure a
 produced. Packets are working notes, not a second source of truth — once merged, the manifest's
 required-artifact checks (`EXEC_SUMMARY.md`, `{map_file}`) are what's authoritative, exactly as in a run
 that never used packets.
+
+## Post-action Jira paste
+
+Optional — on completion, offer the Jira summary paste (never post without explicit user confirmation) per
+[post-action-templates.md](../../docs/skill-framework/shared/post-action-templates.md) §3b.
 
 ## Definition of Done
 

@@ -1,10 +1,11 @@
 ---
-workflow_version: 1.9
+workflow_version: 1.10
 phase: 0
 produces:
   - inventory
   - config_surface_table
   - repo_relationship_table
+  - discovery_budget_checkpoint
 consumes:
   - domain_config_yaml
   - exec_summary_draft
@@ -47,6 +48,14 @@ datasource-specific pattern.
 
 Evidence types: HTTP client, shared table, queue, shared package import.
 
+## Discovery budget checkpoint (required)
+
+Before the checkpoint below, update root `manifest.yaml` `discovery_budget.consumed` (repositories,
+search_queries, deep_file_reads) to reflect what P0 actually spent and mirror the totals into
+`PROGRESS.md`. If any limit is reached before inventory is complete, stop, mark the engagement
+`PARTIAL`, and record the gap in `UNKNOWNS.md` — never silently exceed a configured limit. See
+[manifest-schema.md § discovery_budget](../reference/manifest-schema.md#discoverybudget).
+
 ## Existing Memory Banks (optional)
 
 When `memory_bank.consume_existing: true` and a repo has `memory-bank/*.md`:
@@ -72,6 +81,7 @@ Coordinator starts P0.25 contract grep on Tier 0/1 repos while inventory batches
 | Config surface table | `{map_file}` § Inventory | Key/env var, repo, purpose, prod-only flag | Phase incomplete |
 | Repo relationships table | `{map_file}` § Inventory | From repo, relationship type, to repo, evidence | Phase incomplete |
 | `manifest.repos[]` | `manifest.yaml` | name, branch, sha, tier, classification, inventory: complete | Phase incomplete |
+| Discovery budget checkpoint | root `manifest.yaml` + `PROGRESS.md` | Configured + consumed counters synchronized | Phase incomplete unless PARTIAL for budget exhaustion |
 
 ## Checkpoint
 

@@ -1,9 +1,10 @@
 """SKILL.md YAML frontmatter schema (v1).
 
 Platform facts live in skills.yaml; SKILL.md frontmatter is agent-discovery prose
-only -- except for explicit cross-check markers such as ``platform_contract`` and
-automation invocation guards. The detailed platform policy remains centralized;
-frontmatter only declares which contract a skill inherits.
+only -- except for explicit cross-check markers such as ``platform_contract``,
+automation invocation guards, and lifecycle metadata. The detailed platform
+policy remains centralized; frontmatter only declares which contract a skill
+inherits and, when applicable, its deprecation state.
 """
 
 from __future__ import annotations
@@ -21,6 +22,9 @@ ALLOWED_FRONTMATTER_KEYS = frozenset(
         "skill_version",
         "platform_contract",
         "disable-model-invocation",
+        "status",
+        "deprecated",
+        "deprecation",
     },
 )
 
@@ -31,7 +35,8 @@ def validate_skill_frontmatter_fields(skill_id: str, frontmatter: dict[str, Any]
     This shape validator accepts a missing ``platform_contract`` so isolated/minimal
     repositories can use the generic registry tooling without installing the P1
     platform layer. When that layer is installed, ``validate_p1_contracts`` requires
-    the marker on every registered skill.
+    the marker on every registered skill. Lifecycle field completeness and timing are
+    enforced by the operational-upkeep deprecation validators.
     """
     errors: list[str] = []
 
@@ -66,6 +71,15 @@ def validate_skill_frontmatter_fields(skill_id: str, frontmatter: dict[str, Any]
             errors.append(
                 f"error: {skill_id}: disable-model-invocation must be a boolean, got {type(disable).__name__}",
             )
+
+    if "status" in frontmatter and not isinstance(frontmatter["status"], str):
+        errors.append(f"error: {skill_id}: status must be a string")
+
+    if "deprecated" in frontmatter and not isinstance(frontmatter["deprecated"], bool):
+        errors.append(f"error: {skill_id}: deprecated must be a boolean")
+
+    if "deprecation" in frontmatter and not isinstance(frontmatter["deprecation"], dict):
+        errors.append(f"error: {skill_id}: deprecation must be a mapping")
 
     return errors
 

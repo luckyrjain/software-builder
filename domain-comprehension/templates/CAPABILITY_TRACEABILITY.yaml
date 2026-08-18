@@ -1,0 +1,5 @@
+schema_version: 1
+source_revision:
+  repos: []
+capabilities: []
+# Each capability records capability, repositories, code_locations, owner, evidence, confidence.

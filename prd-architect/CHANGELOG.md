@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+### Added
+
+- Existing-system current-state handoff contract compatible with `domain-comprehension` machine artifacts,
+  including multi-repo source revisions and preservation of observed state.
+- Engineering-verifiable PRD fields for measurable success metrics, stable assumption registers,
+  `FR-* -> AC-* -> TR-*` traceability, rollout/rollback, operational readiness, backward compatibility,
+  API/event/schema impact, data/privacy, cost, and observability.
+
+### Changed
+
+- Specify, Break, Repair, and Gate now carry the new metric/assumption/traceability/engineering-impact
+  fields through the complete route rather than treating them as template-only guidance.
+- Canonical section triggers, depth guidance, requirements format, output contract, and report templates
+  now use the same engineering-readiness rules.
+
 ### Fixed
 
 - Gate now escapes/fences untrusted Markdown structure, redacts sensitive excerpts, and reserves the
@@ -11,6 +26,9 @@
 - Phase input contracts now declare every required, optional, and conditional mapping explicitly.
 - Workflow lint now closes the field-type and phase-frontmatter vocabularies and reports malformed
   YAML mapping keys deterministically.
+- Existing-system path is forced when current-state/domain handoff evidence is present so untrusted
+  `existing_system=false` cannot skip freshness/baseline gates; Specify refuses stale PRD baselines;
+  assumption ledger and unknown-baseline metric fields align with the readiness contract.
 
 ## 1.1.0 — 2026-08-09
 

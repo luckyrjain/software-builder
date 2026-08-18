@@ -18,6 +18,10 @@ domain artifact templates there. Copy `manifest.yaml` to workspace root only. No
 | `STATE_MACHINE.md` | P2 |
 | `API_CATALOG.md` | P0.25 + P2b exercise status |
 | `EVENT_CATALOG.md` | P0.25 + P2b exercise status |
+| `API_EVENT_SCHEMA.yaml` | P0.25 → P5 machine API/event contract |
+| `DATA_OWNERSHIP_GRAPH.yaml` | P1/P3 → P5 machine ownership graph |
+| `DEPENDENCY_GRAPH.yaml` | P0.5/P2/P2b → P5 machine dependency semantics |
+| `CAPABILITY_TRACEABILITY.yaml` | P1/P3 → P5 capability-to-code ownership |
 | `RISK_MAP.md` | P1, P4 |
 | `KNOWN_OMISSIONS.md` | Continuous |
 | `DOMAIN_GLOSSARY.md` | P1 |
@@ -37,6 +41,12 @@ because it is a shared **squad-map** artifact rather than a domain-specific docu
 `PRD.md` follows [as-built-prd.md](as-built-prd.md): stable `FR-*`/`BR-*`/`NFR-*` IDs, evidence,
 confidence, and `Observed | Inferred | Unknown` status. Future-state specification belongs to
 **prd-architect**.
+
+The four YAML machine artifacts follow [domain-model-contract.yaml](domain-model-contract.yaml) and the
+phase-by-phase procedure in [machine-domain-model.md](machine-domain-model.md). Their `source_revision` must
+identify the analyzed repo revisions, and every populated record/edge/capability must retain evidence and
+confidence rather than converting unknowns into guessed values. These files are copied as stubs during
+Session 0 and completed by the owning phases.
 
 Export templates not copied at Session 0: [templates/memory-bank/](../templates/memory-bank/) and
 [templates/postman/](../templates/postman/).

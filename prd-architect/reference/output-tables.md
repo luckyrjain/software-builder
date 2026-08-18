@@ -12,7 +12,9 @@ emit time — never emit a header without `|---|---|`.
 | Users & Actors | Multiple actors or role-specific behavior |
 | Use Cases | Standard/Rigorous, or Lite with multiple workflows |
 | MVP Scope | PRD/Review Mode |
+| Success Metrics | PRD/Review Mode; each material metric must meet the measurable metric contract |
 | Functional Requirements | PRD/Review Mode |
+| Requirements Traceability | PRD/Review Mode when material functional requirements exist; `FR-* -> AC-* -> TR-*` |
 | Business Rules | Eligibility, limits, calculations, approvals, routing, policy |
 | NFRs | Reliability, performance, security, compatibility, availability, scale |
 | End-to-End Flow | Multiple steps, systems, actors, or meaningful branching |
@@ -25,24 +27,41 @@ emit time — never emit a header without `|---|---|`.
 | Failure Handling | Failures materially affect outcome |
 | Correctness & Reconciliation | Transactions, money, inventory, multi-writer, async consistency |
 | Security / Privacy / Abuse | Sensitive data, auth, exposure, fraud, misuse |
-| Operations / Observability | Monitoring, support, recovery or incident diagnosis matters |
+| Operational Readiness | Production change; ownership/support/recovery/capacity/dependency readiness matters |
+| Observability Requirements | Production change; define required metrics/logs/traces/alerts/dashboard/correlation |
 | Performance / Scale | Throughput, latency, capacity or volume matters |
 | SLOs | Reliability target materially affects product/contract |
 | Dependencies | External or cross-team dependencies |
-| Cost & Economics | Cost affects feasibility or product decision |
+| Cost Impact | New infrastructure, material traffic/storage growth, or paid dependency changes economics |
 | Experimentation | Problem/solution hypothesis remains unvalidated |
-| Rollout / Migration | Existing users, data or behavior changes |
-| Rollback / Kill Criteria | Failure can materially harm users/business |
-| Success Metrics | Standard/Rigorous; Lite when metric gates validation/launch |
-| Assumptions | Consequential assumptions exist; Lite uses in-body subsection |
+| Rollout / Rollback | Production/existing-system change where staged delivery or reversal materially affects risk |
+| Migration / Backward Compatibility | Existing system or API/event/schema/data/config/client behavior changes |
+| API / Event / Schema Impact | API, event, or schema contract changes |
+| Data / Privacy Impact | Personal/sensitive data, retention, or access changes |
+| Assumption Register | Consequential assumptions exist; Lite may use a compact in-body subsection |
 | Change Impact | Review Mode on an existing product/system |
 | Risks | Material risks exist |
 | Open Questions | Material unresolved decisions exist |
 
-## Assumption ledger (Standard/Rigorous)
-| ID | Assumption | Evidence | Impact If Wrong | Validation |
-|---|---|---|---|---|
-Evidence levels: Verified | Supported | Unverified | **Risky**
+## Success metrics
+| Metric | Baseline | Target | Timeframe | Measurement Source | Baseline Measurement Action |
+|---|---|---|---|---|---|
+Every material metric must populate `metric`, `baseline`, `target`, `timeframe`, and `measurement_source`.
+When Baseline is `Unknown`, Baseline Measurement Action is required and states how/when the baseline will be
+established; otherwise that cell may be left blank. Do not invent a baseline to avoid the measurement action.
+
+## Assumption ledger
+| ID | Assumption | Evidence | Impact If Wrong | Validation | Owner | Status |
+|---|---|---|---|---|---|---|
+Every consequential assumption must include the contract fields `id`, `statement`, `impact`, `validation`,
+`owner`, and `status`; Evidence is optional supporting context and must not turn an assumption into a fact.
+Status uses `OPEN | VALIDATED | INVALIDATED | ACCEPTED_RISK` from
+[current-state-evidence-contract.yaml](current-state-evidence-contract.yaml).
+
+## Requirements traceability
+| Requirement | Acceptance Criteria | Test Requirement | Evidence / Source |
+|---|---|---|---|
+Use one row per material `FR-*`; every row must link at least one `AC-*` and one `TR-*`.
 
 ## Adversarial Review Summary
 | Severity | Perspective | Finding | Scenario | Resolution |

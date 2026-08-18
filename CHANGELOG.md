@@ -1952,6 +1952,45 @@ _Pre-merge WIP on `feat/squad-map-skill` (internal v1.0–v1.5) is consolidated 
 
 ## domain-comprehension
 
+### Bounded discovery budgets, DELTA/ADD_REPO stale-PRD gate, and machine domain-model handoff (2026-08-17)
+
+- **Discovery budget** — repository/search-query/deep-file-read discovery is now bounded per delivery-mode
+  profile (`QUICK`/`FULL`/`DELTA`/`ADD_REPO`/`CUSTOM`), with defaults and the stop-on-exhaustion contract in
+  the new `reference/domain-model-contract.yaml`. `manifest.yaml` persists `discovery_budget.limits`/`.consumed`
+  (schema-v2, optional field for backward compatibility with pre-existing engagements); RESUME/DELTA/ADD_REPO
+  restore or backfill it rather than resetting counters. `validate_manifest_yaml.py` validates the block
+  whenever present (`_invalid_enum()` now centralizes the isinstance-before-membership-check pattern so a
+  hand-edited manifest with a list/mapping in an enum field is reported cleanly instead of raising `TypeError`
+  from `x not in a_frozenset`; the same guard was extended to `validate_sub_agent_merge.py`).
+- **DELTA/ADD_REPO stale-PRD detection** — new artifact status `stale` (PRD only; every other artifact id
+  rejects it) lets DELTA/ADD_REPO mark `artifacts[id=prd].status: stale` immediately when source revisions,
+  contracts, data ownership, dependency semantics, or capability ownership drift from the retained baseline,
+  blocking `--strict` `FIRST_PASS_COMPLETE` until the PRD is regenerated or the row explicitly stays `stale`.
+  The validator still requires the stale file to exist on disk.
+- **Machine domain-model artifacts** — four new P5 YAML deliverables (`API_EVENT_SCHEMA.yaml`,
+  `DATA_OWNERSHIP_GRAPH.yaml`, `DEPENDENCY_GRAPH.yaml`, `CAPABILITY_TRACEABILITY.yaml`), schema and phase
+  ownership in `reference/domain-model-contract.yaml` / `reference/machine-domain-model.md`, each carrying
+  `source_revision`, evidence, and confidence per record/edge/capability — deterministic current-state
+  handoff to **prd-architect** (own `CHANGELOG.md`: new `current-state-evidence-contract.yaml` plus
+  measurable success metrics, assumption register, and `FR-* -> AC-* -> TR-*` traceability) rather than
+  free-text only.
+- `SKILL.md` `skill_version: 1.0` → `1.1`. Tests: `tests/test_batch5_discovery_budget_validator.py`,
+  `tests/test_batch5_domain_prd_contracts.py`, `tests/test_batch5_handoff_compatibility.py`,
+  `tests/test_batch5_manifest_machine_artifacts.py`, `tests/test_batch5_prd_freshness_manifest.py`,
+  `tests/test_batch5_prd_freshness_workflow.py`.
+- **Round-2 review fix (same day):** `reference/phase-outputs.md`'s P5 table still required
+  `PROGRESS.md == FIRST_PASS_COMPLETE` only, contradicting `workflow/phase-5.md`'s identical row (same
+  batch) which accepts an explicit PARTIAL reason under the discovery-budget-exhaustion contract above —
+  reworded to accept both, scoped so the stale-PRD block applies only to `FIRST_PASS_COMPLETE` (PARTIAL,
+  with the stale condition as its reason, is the intended path). `workflow/session-0.md` gained its
+  discovery-budget-init step and output row above without a `workflow_version` bump, violating this
+  skill's own versioning rule; bumped (1.5 → 1.6) and logged in `workflow-changelog.md`. The `"prd"`-only
+  stale-status check is now a named `STALEABLE_ARTIFACT_IDS` constant routed through the existing
+  `_invalid_enum()` guard — an intermediate version of this same fix swapped in a raw frozenset-membership
+  test, which raised `TypeError` on a non-string artifact id instead of reporting a clean validation
+  error; caught and fixed within the same round, with a regression test added
+  (`test_stale_status_with_unhashable_artifact_id_does_not_crash`).
+
 ### Safe rendered-output boundary + injection-resistance golden evals (2026-08-10)
 
 - Surveyed for the repo-wide workflow-contract/safe-output rollout: **no `workflow-contract.yaml`** —

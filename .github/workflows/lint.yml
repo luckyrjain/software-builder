@@ -21,6 +21,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          # Batch 5 prompt-diff risk classification compares the PR base/head.
+          fetch-depth: 0
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
@@ -31,6 +33,24 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y shellcheck ripgrep
           python3 -m pip install --require-hashes -r requirements.lock
+
+      # operational_upkeep.py validate / deprecation_lifecycle / eval_tier_health
+      # enforcement all live in `make lint`'s validate-operational-upkeep
+      # target below (also the locally-reproducible entry point, and early
+      # enough in `lint`'s prerequisite chain to fail fast before the
+      # per-skill lint targets run), so this step only publishes.
+      - name: Publish prompt-system health
+        run: |
+          python3 scripts/operational_upkeep.py health --format markdown --revision "$GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Enforce prompt-diff risk and removal lifecycle
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          python3 scripts/deprecation_diff_guard.py --base "$BASE_SHA" --head "$HEAD_SHA" | tee -a "$GITHUB_STEP_SUMMARY"
+          python3 scripts/operational_upkeep.py classify-diff --base "$BASE_SHA" --head "$HEAD_SHA" | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: make lint
         env:

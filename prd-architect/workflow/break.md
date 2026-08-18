@@ -1,22 +1,22 @@
 ---
-workflow_version: 1.4
+workflow_version: 1.5
 phase: break
 produces: {scenarios: list, adversarial_findings: list}
 consumes:
   required: {source_material: content, risk_domains: list, depth: string, response_mode: string, critique_only: boolean}
-  optional: {}
+  optional: {current_state_evidence: object}
   conditional:
     full_prd:
-      required: {requirements_draft: object, mvp_scope: object, non_goals: list}
+      required: {requirements_draft: object, mvp_scope: object, non_goals: list, success_metrics: list, assumption_register: list, requirements_traceability: object, engineering_impact: object}
       optional: {}
     full_prd_override:
-      required: {requirements_draft: object, mvp_scope: object, non_goals: list}
+      required: {requirements_draft: object, mvp_scope: object, non_goals: list, success_metrics: list, assumption_register: list, requirements_traceability: object, engineering_impact: object}
       optional: {}
     flawed_review_override:
-      required: {requirements_draft: object, mvp_scope: object, non_goals: list}
+      required: {requirements_draft: object, mvp_scope: object, non_goals: list, success_metrics: list, assumption_register: list, requirements_traceability: object, engineering_impact: object}
       optional: {}
     full_review:
-      required: {requirements_draft: object, mvp_scope: object, non_goals: list}
+      required: {requirements_draft: object, mvp_scope: object, non_goals: list, success_metrics: list, assumption_register: list, requirements_traceability: object, engineering_impact: object}
       optional: {}
 ---
 
@@ -26,12 +26,18 @@ consumes:
 
 | Situation | Use as `requirements_draft` |
 |-----------|------------------------------|
-| After **Specify** | `requirements_draft` from Specify |
-| Fundamentally flawed Review + explicit full-PRD override | `requirements_draft` from Specify; the explicit override takes precedence over `critique_only` |
+| After **Specify** | `requirements_draft` plus success metrics, assumptions, traceability, engineering impact |
+| Fundamentally flawed Review + explicit full-PRD override | Specify outputs; the explicit override takes precedence over `critique_only` |
 | **Review** + `critique_only` (Specify skipped) | `source_material` (the supplied PRD/spec) |
-| **Review** after Specify | `requirements_draft` from Specify (may incorporate source PRD) |
+| **Review** after Specify | Specify outputs (may incorporate source PRD/current-state evidence) |
 
 Extract `non_goals` from the source PRD when Specify did not run.
+
+For full PRD/Review routes, adversarial review covers the complete draft contract, not only functional
+requirements. Challenge whether success metrics are measurable and game-resistant, assumptions are explicit
+and validated, `FR -> AC -> TR` links are complete, and engineering-impact triggers/sections are correct.
+For existing systems, compare proposed behavior with `current_state_evidence` and flag silent contract,
+ownership, compatibility, rollout, privacy, cost, or observability changes.
 
 ## Scenario simulation
 
@@ -67,6 +73,8 @@ Select relevant perspectives from [adversarial-review.md](../reference/adversari
 - **Legal / Compliance** — regulated or contractual obligations
 - **Operations / SRE** — async, integrations, background jobs, manual recovery, availability
 - **Risk / Fraud / Finance** — money movement, billing, financially exploitable behavior
+- **Compatibility** — API/event/schema/data/config/client consumers, migration sequencing, rollback safety
+- **Measurement** — metric baseline/target/source integrity, perverse incentives, missing telemetry
 
 ## Rigorous security-sensitive products
 
@@ -75,7 +83,8 @@ When `risk_domains` includes security-critical behavior, run the security checkl
 
 ## Output
 
-Classify each finding: Critical | High | Medium | Low.
+Classify each finding: Critical | High | Medium | Low. A finding must identify the affected requirement,
+metric, assumption, trace edge, or engineering-impact section when applicable.
 
 | Next phase | When |
 |------------|------|
