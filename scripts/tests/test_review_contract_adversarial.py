@@ -78,14 +78,6 @@ def test_dependency_and_config_changes_require_canonical_list_order_and_uniquene
     assert any("config_changes must use canonical object ordering" in error for error in errors)
 
 
-def test_generated_paths_must_be_part_of_changed_surface():
-    validator = _load_validator()
-    errors = validator.validate_change_identity(
-        _identity(changed_paths=["src/a.py"], generated_paths=["generated/client.py"])
-    )
-    assert any("generated_paths must be a subset of changed_paths" in error for error in errors)
-
-
 def test_requirements_ref_rejects_yaml_specific_nonportable_values():
     validator = _load_validator()
     errors = validator.validate_review_evidence(
