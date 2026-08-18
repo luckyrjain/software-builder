@@ -144,6 +144,18 @@ def test_unable_to_inspect_cannot_smuggle_unknown_fields():
     assert any("must contain exactly surface, reason, and mandatory" in error for error in errors)
 
 
+def test_change_identity_rejects_unknown_v1_fields():
+    validator = _load_validator()
+    errors = validator.validate_change_identity(_identity(provider_hint="github"))
+    assert any("unknown v1 fields" in error and "provider_hint" in error for error in errors)
+
+
+def test_review_evidence_rejects_unknown_v1_fields():
+    validator = _load_validator()
+    errors = validator.validate_review_evidence(_evidence(blocking=True))
+    assert any("unknown v1 fields" in error and "blocking" in error for error in errors)
+
+
 def test_repository_path_rejects_nul_byte():
     validator = _load_validator()
     errors = validator.validate_change_identity(_identity(changed_paths=["src/a.py\x00evil"]))
