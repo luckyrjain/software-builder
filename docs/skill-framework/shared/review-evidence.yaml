@@ -18,6 +18,7 @@ review_evidence:
   unable_to_inspect_required_fields: [surface, reason, mandatory]
   finding_required_fields: [id, category, summary, evidence]
   rules:
+    envelope_is_closed_v1: true
     questions_are_non_blocking_until_promoted: true
     complete_forbidden_with_mandatory_unable_surface: true
     unable_status_requires_unable_to_inspect_entry: true
