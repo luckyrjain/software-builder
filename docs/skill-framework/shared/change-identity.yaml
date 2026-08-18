@@ -33,4 +33,3 @@ freshness:
   conflict_resolution_invalidates_review: true
   content_change_invalidates_review: true
   generated_file_change_invalidates_review: true
-  generated_paths_must_be_subset_of_changed_paths: true
