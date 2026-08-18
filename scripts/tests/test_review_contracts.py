@@ -77,12 +77,18 @@ def test_content_neutral_base_update_preserves_review_without_conflict_resolutio
 def test_requirements_change_invalidates_review_even_when_patch_is_unchanged():
     validator = _load_validator()
     evidence = _evidence(requirements_ref={"id": "REQ-1", "revision": "1"})
-    errors = validator.validate_review_evidence(
-        evidence,
-        current_identity=_identity(),
-        current_requirements_ref={"id": "REQ-1", "revision": "2"},
-    )
+    errors = validator.validate_review_evidence(evidence, current_identity=_identity(), current_requirements_ref={"id": "REQ-1", "revision": "2"})
     assert any("stale requirements_ref" in error for error in errors)
+
+
+def test_identity_rejects_noncanonical_mapping_key_order_and_root_path():
+    validator = _load_validator()
+    errors = validator.validate_change_identity(_identity(
+        changed_paths=["."],
+        dependency_changes=[{"z": 1, "a": 2}],
+    ))
+    assert any("repository-relative POSIX paths" in error for error in errors)
+    assert any("recursively sorted string keys" in error for error in errors)
 
 
 def test_validator_rejects_complete_with_mandatory_unable_surface():
@@ -145,3 +151,16 @@ def test_contract_document_validator_rejects_enum_and_type_drift(tmp_path):
     errors = validator.validate_contract_documents(tmp_path)
     assert any("review modes" in error for error in errors)
     assert any("requirements_ref_type" in error for error in errors)
+
+
+def test_contract_document_validator_rejects_normalization_drift(tmp_path):
+    validator = _load_validator()
+    shared = tmp_path / "docs/skill-framework/shared"
+    shared.mkdir(parents=True)
+    change = _yaml("docs/skill-framework/shared/change-identity.yaml")
+    review = _yaml("docs/skill-framework/shared/review-evidence.yaml")
+    change["normalization"]["excluded_transport_metadata"] = ["commit_message"]
+    (shared / "change-identity.yaml").write_text(yaml.safe_dump(change), encoding="utf-8")
+    (shared / "review-evidence.yaml").write_text(yaml.safe_dump(review), encoding="utf-8")
+    errors = validator.validate_contract_documents(tmp_path)
+    assert any("normalization" in error for error in errors)
