@@ -97,6 +97,21 @@ def _effective_patch_unchanged(stored: object, current: object) -> bool:
     return isinstance(stored, dict) and isinstance(current, dict) and all(stored.get(k) == current.get(k) for k in _EFFECTIVE_PATCH_FIELDS)
 
 
+def _identity_fresh(stored: object, current: object, *, conflict_resolution_occurred: bool) -> bool:
+    if conflict_resolution_occurred or not isinstance(stored, dict) or not isinstance(current, dict):
+        return False
+    if not _effective_patch_unchanged(stored, current):
+        return False
+    sha_fields = ("base_sha", "head_sha", "merge_base_sha")
+    if all(stored.get(field) == current.get(field) for field in sha_fields):
+        return True
+    return (
+        stored.get("base_sha") == stored.get("merge_base_sha")
+        and current.get("base_sha") == current.get("merge_base_sha")
+        and stored.get("base_sha") != current.get("base_sha")
+    )
+
+
 def validate_review_evidence(
     payload: object,
     *,
@@ -117,8 +132,8 @@ def validate_review_evidence(
     if current_identity is not None:
         current_errors = validate_change_identity(current_identity)
         errors.extend(f"current {e}" for e in current_errors)
-        if not current_errors and (conflict_resolution_occurred or not _effective_patch_unchanged(identity, current_identity)):
-            errors.append("stale change_identity: review evidence does not match current effective patch")
+        if not current_errors and not _identity_fresh(identity, current_identity, conflict_resolution_occurred=conflict_resolution_occurred):
+            errors.append("stale change_identity: review evidence does not match the current change/base state")
     requirements_ref = payload.get("requirements_ref")
     if "requirements_ref" in payload and requirements_ref is not None and not isinstance(requirements_ref, dict):
         errors.append("requirements_ref must be an object or null")
@@ -199,6 +214,7 @@ def validate_contract_documents(root: Path = _ROOT) -> list[str]:
             errors.append("change identity contract normalization drifted")
         expected_freshness = {
             "unchanged_effective_patch_may_preserve_review": True,
+            "content_neutral_base_update_requires_synced_merge_base": True,
             "conflict_resolution_invalidates_review": True,
             "content_change_invalidates_review": True,
             "generated_file_change_invalidates_review": True,
