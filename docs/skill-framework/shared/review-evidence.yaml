@@ -19,4 +19,5 @@ review_evidence:
     questions_are_non_blocking_until_promoted: true
     complete_forbidden_with_mandatory_unable_surface: true
     stale_change_identity_invalidates_envelope: true
+    requirements_change_invalidates_envelope: true
     categories_are_disjoint: true
