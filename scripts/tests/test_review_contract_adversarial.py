@@ -168,6 +168,25 @@ def test_non_string_top_level_keys_fail_closed_without_throwing():
     assert any("unknown v1 fields" in error and "2" in error for error in evidence_errors)
 
 
+def test_recursive_requirements_ref_fails_closed_without_recursion_error():
+    validator = _load_validator()
+    recursive = {}
+    recursive["self"] = recursive
+    errors = validator.validate_review_evidence(_evidence(requirements_ref=recursive))
+    assert any("requirements_ref" in error and "JSON-portable" in error for error in errors)
+
+
+def test_overdeep_dependency_change_fails_closed():
+    validator = _load_validator()
+    nested = "leaf"
+    for _ in range(34):
+        nested = [nested]
+    errors = validator.validate_change_identity(
+        _identity(dependency_changes=[{"value": nested}])
+    )
+    assert any("32 nested levels" in error for error in errors)
+
+
 def test_repository_path_rejects_nul_byte():
     validator = _load_validator()
     errors = validator.validate_change_identity(_identity(changed_paths=["src/a.py\x00evil"]))
