@@ -1,6 +1,7 @@
 schema_version: 1
 review_evidence:
   required_fields:
+    - schema_version
     - change_identity
     - requirements_ref
     - review_mode
@@ -9,6 +10,7 @@ review_evidence:
     - unable_to_inspect
     - findings
     - generated_at
+  schema_version_value: 1
   requirements_ref_type: object_or_null
   review_modes: [normal, exhaustive]
   inspection_status_values: [complete, partial, unable]
