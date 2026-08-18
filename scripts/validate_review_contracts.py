@@ -29,6 +29,13 @@ _REQUIRED_RULES = {
     "requirements_change_invalidates_envelope": True,
     "categories_are_disjoint": True,
 }
+_FRESHNESS_RULES = {
+    "unchanged_effective_patch_may_preserve_review": True,
+    "content_neutral_base_update_requires_synced_merge_base": True,
+    "conflict_resolution_invalidates_review": True,
+    "content_change_invalidates_review": True,
+    "generated_file_change_invalidates_review": True,
+}
 _EFFECTIVE_PATCH_FIELDS = ("normalized_diff_fingerprint", "changed_paths", "generated_paths", "dependency_changes", "config_changes")
 _ROOT = Path(__file__).resolve().parents[1]
 _UNSET = object()
@@ -221,14 +228,7 @@ def validate_contract_documents(root: Path = _ROOT) -> list[str]:
             or normalization.get("ordering") != _ORDERING
         ):
             errors.append("change identity contract normalization drifted")
-        expected_freshness = {
-            "unchanged_effective_patch_may_preserve_review": True,
-            "content_neutral_base_update_requires_synced_merge_base": True,
-            "conflict_resolution_invalidates_review": True,
-            "content_change_invalidates_review": True,
-            "generated_file_change_invalidates_review": True,
-        }
-        if not isinstance(freshness, dict) or any(freshness.get(k) is not v for k, v in expected_freshness.items()):
+        if freshness != _FRESHNESS_RULES:
             errors.append("change identity contract freshness rules drifted")
 
     evidence = docs.get("review evidence")
@@ -252,8 +252,7 @@ def validate_contract_documents(root: Path = _ROOT) -> list[str]:
             errors.append("review evidence contract unable-to-inspect fields drifted")
         if spec.get("finding_required_fields") != _FINDING_FIELDS:
             errors.append("review evidence contract finding fields drifted")
-        rules = spec.get("rules")
-        if not isinstance(rules, dict) or any(rules.get(k) is not v for k, v in _REQUIRED_RULES.items()):
+        if spec.get("rules") != _REQUIRED_RULES:
             errors.append("review evidence contract rules drifted")
     return errors
 
