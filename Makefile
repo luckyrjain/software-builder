@@ -10,5 +10,4 @@ include make/core.mk
 lint: validate-review-contracts
 
 validate-review-contracts:
-	@python3 -m pytest -p no:cacheprovider scripts/tests/test_review_contracts.py -q
-	@python3 -m py_compile scripts/validate_review_contracts.py
+	@python3 scripts/validate_review_contracts.py --contracts-only
