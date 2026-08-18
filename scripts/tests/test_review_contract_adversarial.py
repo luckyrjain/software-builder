@@ -46,13 +46,19 @@ def _evidence(**overrides):
     return value
 
 
-def test_uppercase_sha_and_fingerprint_are_not_canonical():
+def test_uppercase_hex_is_accepted_and_case_only_identity_changes_stay_fresh():
     validator = _load_validator()
-    errors = validator.validate_change_identity(
-        _identity(base_sha="A" * 40, normalized_diff_fingerprint="C" * 64)
+    stored = _identity()
+    current = _identity(
+        base_sha="A" * 40,
+        head_sha="B" * 40,
+        merge_base_sha="A" * 40,
+        normalized_diff_fingerprint="C" * 64,
     )
-    assert any("lowercase" in error and "base_sha" in error for error in errors)
-    assert any("lowercase" in error and "normalized_diff_fingerprint" in error for error in errors)
+    assert validator.validate_change_identity(current) == []
+    assert validator.validate_review_evidence(
+        _evidence(change_identity=stored), current_identity=current
+    ) == []
 
 
 def test_dependency_and_config_changes_reject_nonportable_values():
