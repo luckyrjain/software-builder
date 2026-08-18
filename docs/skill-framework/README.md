@@ -98,4 +98,4 @@ A skill is framework-compliant when it passes the checklist in the design spec �
 
 | Item | Status | Notes |
 |------|--------|-------|
-| **Shared deterministic-artifact framework** | Deferred | Broader cross-skill validator library for manifest/graph/evidence remains deferred — see [2026-07-02-skills-roadmap-design.md](../superpowers/specs/2026-07-02-skills-roadmap-design.md). Batch 5.2A only introduces the narrower review identity/evidence contracts required by two consumers. |
+| **Approach B — shared deterministic-artifact framework** | Deferred | Broader cross-skill validator library for manifest/graph/evidence remains deferred — see [2026-07-02-skills-roadmap-design.md](../superpowers/specs/2026-07-02-skills-roadmap-design.md). Batch 5.2A only introduces the narrower review identity/evidence contracts required by two consumers. |
