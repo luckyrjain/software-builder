@@ -53,6 +53,7 @@ def test_review_evidence_contract_is_portable_and_fail_closed():
     assert evidence["finding_categories"] == ["defect", "suggestion", "question"]
     assert evidence["rules"]["questions_are_non_blocking_until_promoted"] is True
     assert evidence["rules"]["complete_forbidden_with_mandatory_unable_surface"] is True
+    assert evidence["rules"]["unable_status_requires_unable_to_inspect_entry"] is True
     assert evidence["rules"]["stale_change_identity_invalidates_envelope"] is True
     assert evidence["rules"]["requirements_change_invalidates_envelope"] is True
 
@@ -114,6 +115,12 @@ def test_validator_rejects_complete_with_mandatory_unable_surface():
     validator = _load_validator()
     errors = validator.validate_review_evidence(_evidence(unable_to_inspect=[{"surface": "direct_consumers", "reason": "provider unavailable", "mandatory": True}]))
     assert any("complete" in error and "mandatory" in error for error in errors)
+
+
+def test_unable_status_requires_named_unavailable_surface():
+    validator = _load_validator()
+    errors = validator.validate_review_evidence(_evidence(inspection_status="unable", inspected_surfaces=[], unable_to_inspect=[]))
+    assert any("requires at least one unable_to_inspect entry" in error for error in errors)
 
 
 def test_generated_path_difference_makes_identity_stale():
