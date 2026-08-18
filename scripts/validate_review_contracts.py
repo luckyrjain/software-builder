@@ -34,6 +34,7 @@ _ORDERING = {
     "config_changes": "canonical_object_order",
 }
 _REQUIRED_RULES = {
+    "envelope_is_closed_v1": True,
     "questions_are_non_blocking_until_promoted": True,
     "complete_forbidden_with_mandatory_unable_surface": True,
     "unable_status_requires_unable_to_inspect_entry": True,
@@ -135,6 +136,9 @@ def validate_change_identity(payload: object) -> list[str]:
     missing = sorted(_REQUIRED_IDENTITY - set(payload))
     if missing:
         errors.append(f"change_identity missing required fields: {', '.join(missing)}")
+    unknown = sorted(set(payload) - _REQUIRED_IDENTITY)
+    if unknown:
+        errors.append(f"change_identity contains unknown v1 fields: {', '.join(unknown)}")
     if "schema_version" in payload and not _valid_schema_version(payload.get("schema_version")):
         errors.append("change_identity schema_version must be integer 1")
     for field in ("base_sha", "head_sha", "merge_base_sha"):
@@ -201,6 +205,9 @@ def validate_review_evidence(
     missing = sorted(_REQUIRED_EVIDENCE - set(payload))
     if missing:
         errors.append(f"review_evidence missing required fields: {', '.join(missing)}")
+    unknown = sorted(set(payload) - _REQUIRED_EVIDENCE)
+    if unknown:
+        errors.append(f"review_evidence contains unknown v1 fields: {', '.join(unknown)}")
     if "schema_version" in payload and not _valid_schema_version(payload.get("schema_version")):
         errors.append("review_evidence schema_version must be integer 1")
     identity = payload.get("change_identity")
@@ -294,6 +301,8 @@ def validate_contract_documents(root: Path = _ROOT) -> list[str]:
             errors.append("change identity contract required fields drifted")
         if identity_spec.get("schema_version_value") != 1:
             errors.append("change identity contract payload schema version drifted")
+        if identity_spec.get("closed_v1") is not True:
+            errors.append("change identity contract closed_v1 drifted")
         if any(identity_spec.get(key) != value for key, value in _IDENTITY_FORMATS.items()):
             errors.append("change identity contract format declarations drifted")
         normalization = change.get("normalization")
