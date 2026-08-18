@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 import math
 import re
 from pathlib import Path, PurePosixPath
@@ -29,8 +30,8 @@ _EXCLUDED_TRANSPORT_METADATA = ["commit_message", "provider_diff_headers", "revi
 _ORDERING = {
     "changed_paths": "lexicographic",
     "generated_paths": "lexicographic",
-    "dependency_changes": "canonical_key_order",
-    "config_changes": "canonical_key_order",
+    "dependency_changes": "canonical_object_order",
+    "config_changes": "canonical_object_order",
 }
 _REQUIRED_RULES = {
     "questions_are_non_blocking_until_promoted": True,
@@ -49,6 +50,7 @@ _FRESHNESS_RULES = {
     "conflict_resolution_invalidates_review": True,
     "content_change_invalidates_review": True,
     "generated_file_change_invalidates_review": True,
+    "generated_paths_must_be_subset_of_changed_paths": True,
 }
 _EFFECTIVE_PATCH_FIELDS = ("normalized_diff_fingerprint", "changed_paths", "generated_paths", "dependency_changes", "config_changes")
 _ROOT = Path(__file__).resolve().parents[1]
@@ -92,6 +94,10 @@ def _canonical_mapping_value(value: object) -> bool:
     return _portable_scalar(value)
 
 
+def _canonical_object_key(value: dict[str, object]) -> str:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False)
+
+
 def _valid_schema_version(value: object) -> bool:
     return type(value) is int and value == 1
 
@@ -128,6 +134,11 @@ def validate_change_identity(payload: object) -> list[str]:
                 errors.append(f"{field} must be a list of canonical repository-relative POSIX paths")
             elif value != sorted(value) or len(value) != len(set(value)):
                 errors.append(f"{field} must be sorted and contain no duplicates")
+    changed_paths = payload.get("changed_paths")
+    generated_paths = payload.get("generated_paths")
+    if isinstance(changed_paths, list) and isinstance(generated_paths, list) and all(isinstance(x, str) for x in changed_paths + generated_paths):
+        if not set(generated_paths).issubset(changed_paths):
+            errors.append("generated_paths must be a subset of changed_paths")
     for field in ("dependency_changes", "config_changes"):
         value = payload.get(field)
         if field in payload:
@@ -135,6 +146,10 @@ def validate_change_identity(payload: object) -> list[str]:
                 errors.append(f"{field} must be a list of objects")
             elif not all(_canonical_mapping_value(x) for x in value):
                 errors.append(f"{field} objects must use recursively sorted string keys and JSON-portable finite scalar values")
+            else:
+                keys = [_canonical_object_key(x) for x in value]
+                if keys != sorted(keys) or len(keys) != len(set(keys)):
+                    errors.append(f"{field} must use canonical object ordering and contain no duplicate objects")
     return errors
 
 
