@@ -16,6 +16,7 @@ change_identity:
   fingerprint_format: sha256_lower_hex_64
   path_format: repository_relative_posix
   nested_value_format: json_portable
+  nested_value_max_depth: 32
 normalization:
   source: canonical_effective_patch
   include_generated_paths: true
