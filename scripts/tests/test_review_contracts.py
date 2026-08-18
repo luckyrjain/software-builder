@@ -103,3 +103,33 @@ def test_shared_review_contracts_are_documented_and_linted():
 def test_contract_documents_validate_cleanly():
     validator = _load_validator()
     assert validator.validate_contract_documents(ROOT) == []
+
+
+def test_contract_document_validator_rejects_bool_schema_and_rule_drift(tmp_path):
+    validator = _load_validator()
+    shared = tmp_path / "docs/skill-framework/shared"
+    shared.mkdir(parents=True)
+    change = _yaml("docs/skill-framework/shared/change-identity.yaml")
+    review = _yaml("docs/skill-framework/shared/review-evidence.yaml")
+    change["schema_version"] = True
+    review["review_evidence"]["rules"]["stale_change_identity_invalidates_envelope"] = False
+    (shared / "change-identity.yaml").write_text(yaml.safe_dump(change), encoding="utf-8")
+    (shared / "review-evidence.yaml").write_text(yaml.safe_dump(review), encoding="utf-8")
+    errors = validator.validate_contract_documents(tmp_path)
+    assert any("schema_version" in error for error in errors)
+    assert any("rules" in error for error in errors)
+
+
+def test_contract_document_validator_rejects_enum_and_type_drift(tmp_path):
+    validator = _load_validator()
+    shared = tmp_path / "docs/skill-framework/shared"
+    shared.mkdir(parents=True)
+    change = _yaml("docs/skill-framework/shared/change-identity.yaml")
+    review = _yaml("docs/skill-framework/shared/review-evidence.yaml")
+    review["review_evidence"]["review_modes"] = ["normal", "unbounded"]
+    review["review_evidence"]["requirements_ref_type"] = "string"
+    (shared / "change-identity.yaml").write_text(yaml.safe_dump(change), encoding="utf-8")
+    (shared / "review-evidence.yaml").write_text(yaml.safe_dump(review), encoding="utf-8")
+    errors = validator.validate_contract_documents(tmp_path)
+    assert any("review modes" in error for error in errors)
+    assert any("requirements_ref_type" in error for error in errors)
