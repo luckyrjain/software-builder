@@ -25,11 +25,12 @@ normalization:
   ordering:
     changed_paths: lexicographic
     generated_paths: lexicographic
-    dependency_changes: canonical_key_order
-    config_changes: canonical_key_order
+    dependency_changes: canonical_object_order
+    config_changes: canonical_object_order
 freshness:
   unchanged_effective_patch_may_preserve_review: true
   content_neutral_base_update_requires_synced_merge_base: true
   conflict_resolution_invalidates_review: true
   content_change_invalidates_review: true
   generated_file_change_invalidates_review: true
+  generated_paths_must_be_subset_of_changed_paths: true
