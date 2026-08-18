@@ -216,3 +216,17 @@ def test_contract_document_validator_rejects_unknown_unimplemented_rules(tmp_pat
     errors = validator.validate_contract_documents(tmp_path)
     assert any("freshness rules" in error for error in errors)
     assert any("rules drifted" in error for error in errors)
+
+
+def test_contract_document_validator_handles_malformed_required_fields_without_throwing(tmp_path):
+    validator = _load_validator()
+    shared = tmp_path / "docs/skill-framework/shared"
+    shared.mkdir(parents=True)
+    change = _yaml("docs/skill-framework/shared/change-identity.yaml")
+    review = _yaml("docs/skill-framework/shared/review-evidence.yaml")
+    change["change_identity"]["required_fields"] = [[]]
+    review["review_evidence"]["required_fields"] = {"bad": "shape"}
+    (shared / "change-identity.yaml").write_text(yaml.safe_dump(change), encoding="utf-8")
+    (shared / "review-evidence.yaml").write_text(yaml.safe_dump(review), encoding="utf-8")
+    errors = validator.validate_contract_documents(tmp_path)
+    assert any("required fields" in error for error in errors)
