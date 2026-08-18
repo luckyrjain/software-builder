@@ -129,6 +129,11 @@ def _required_fields_match(value: object, expected: set[str]) -> bool:
     )
 
 
+def _unknown_fields(payload: dict[object, object], expected: set[str]) -> list[str]:
+    unknown = [key for key in payload if not isinstance(key, str) or key not in expected]
+    return sorted(repr(key) for key in unknown)
+
+
 def validate_change_identity(payload: object) -> list[str]:
     if not isinstance(payload, dict):
         return ["change_identity must be an object"]
@@ -136,7 +141,7 @@ def validate_change_identity(payload: object) -> list[str]:
     missing = sorted(_REQUIRED_IDENTITY - set(payload))
     if missing:
         errors.append(f"change_identity missing required fields: {', '.join(missing)}")
-    unknown = sorted(set(payload) - _REQUIRED_IDENTITY)
+    unknown = _unknown_fields(payload, _REQUIRED_IDENTITY)
     if unknown:
         errors.append(f"change_identity contains unknown v1 fields: {', '.join(unknown)}")
     if "schema_version" in payload and not _valid_schema_version(payload.get("schema_version")):
@@ -205,7 +210,7 @@ def validate_review_evidence(
     missing = sorted(_REQUIRED_EVIDENCE - set(payload))
     if missing:
         errors.append(f"review_evidence missing required fields: {', '.join(missing)}")
-    unknown = sorted(set(payload) - _REQUIRED_EVIDENCE)
+    unknown = _unknown_fields(payload, _REQUIRED_EVIDENCE)
     if unknown:
         errors.append(f"review_evidence contains unknown v1 fields: {', '.join(unknown)}")
     if "schema_version" in payload and not _valid_schema_version(payload.get("schema_version")):
