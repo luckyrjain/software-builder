@@ -3,29 +3,23 @@
 
 from __future__ import annotations
 
+import argparse
 import hashlib
 import re
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
+
+import yaml
 
 _SHA_RE = re.compile(r"^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$")
 _FINGERPRINT_RE = re.compile(r"^[0-9a-fA-F]{64}$")
-_REQUIRED_IDENTITY = {
-    "base_sha", "head_sha", "merge_base_sha", "normalized_diff_fingerprint",
-    "changed_paths", "generated_paths", "dependency_changes", "config_changes",
-}
-_REQUIRED_EVIDENCE = {
-    "change_identity", "requirements_ref", "review_mode", "inspection_status",
-    "inspected_surfaces", "unable_to_inspect", "findings", "generated_at",
-}
+_REQUIRED_IDENTITY = {"base_sha", "head_sha", "merge_base_sha", "normalized_diff_fingerprint", "changed_paths", "generated_paths", "dependency_changes", "config_changes"}
+_REQUIRED_EVIDENCE = {"change_identity", "requirements_ref", "review_mode", "inspection_status", "inspected_surfaces", "unable_to_inspect", "findings", "generated_at"}
 _FINDING_BUCKETS = {"defect", "suggestion", "question"}
-_EFFECTIVE_PATCH_FIELDS = (
-    "normalized_diff_fingerprint", "changed_paths", "generated_paths",
-    "dependency_changes", "config_changes",
-)
+_EFFECTIVE_PATCH_FIELDS = ("normalized_diff_fingerprint", "changed_paths", "generated_paths", "dependency_changes", "config_changes")
+_ROOT = Path(__file__).resolve().parents[1]
 
 
 def normalized_diff_fingerprint(canonical_effective_patch: str) -> str:
-    """Hash provider-neutral canonical patch text with stable newline handling."""
     if not isinstance(canonical_effective_patch, str):
         raise TypeError("canonical_effective_patch must be a string")
     normalized = canonical_effective_patch.replace("\r\n", "\n").replace("\r", "\n")
@@ -72,12 +66,7 @@ def _effective_patch_unchanged(stored: object, current: object) -> bool:
     return all(stored.get(key) == current.get(key) for key in _EFFECTIVE_PATCH_FIELDS)
 
 
-def validate_review_evidence(
-    payload: object,
-    *,
-    current_identity: object | None = None,
-    conflict_resolution_occurred: bool = False,
-) -> list[str]:
+def validate_review_evidence(payload: object, *, current_identity: object | None = None, conflict_resolution_occurred: bool = False) -> list[str]:
     errors: list[str] = []
     if not isinstance(payload, dict):
         return ["review_evidence must be an object"]
@@ -132,3 +121,43 @@ def validate_review_evidence(
     if "generated_at" in payload and (not isinstance(generated_at, str) or not generated_at):
         errors.append("generated_at must be a non-empty string")
     return errors
+
+
+def validate_contract_documents(root: Path = _ROOT) -> list[str]:
+    errors: list[str] = []
+    paths = {
+        "change identity": root / "docs/skill-framework/shared/change-identity.yaml",
+        "review evidence": root / "docs/skill-framework/shared/review-evidence.yaml",
+    }
+    docs: dict[str, object] = {}
+    for name, path in paths.items():
+        try:
+            docs[name] = yaml.safe_load(path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, yaml.YAMLError) as exc:
+            errors.append(f"{name} contract unreadable: {exc}")
+    change = docs.get("change identity")
+    if not isinstance(change, dict) or change.get("schema_version") != 1 or not isinstance(change.get("change_identity"), dict):
+        errors.append("change identity contract must be schema_version 1 with change_identity object")
+    evidence = docs.get("review evidence")
+    if not isinstance(evidence, dict) or evidence.get("schema_version") != 1 or not isinstance(evidence.get("review_evidence"), dict):
+        errors.append("review evidence contract must be schema_version 1 with review_evidence object")
+    return errors
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--contracts-only", action="store_true", help="validate committed shared contract documents")
+    args = parser.parse_args(argv)
+    if not args.contracts_only:
+        parser.error("--contracts-only is required")
+    errors = validate_contract_documents()
+    for error in errors:
+        print(f"error: {error}")
+    if errors:
+        return 1
+    print("ok: shared review contracts")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
