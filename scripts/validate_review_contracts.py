@@ -166,6 +166,7 @@ def validate_review_evidence(
         if not isinstance(findings, dict) or set(findings) != _FINDING_BUCKETS:
             errors.append("finding buckets must be exactly defect, suggestion, and question")
         else:
+            finding_ids: set[str] = set()
             for bucket, items in findings.items():
                 if not isinstance(items, list):
                     errors.append(f"findings.{bucket} must be a list")
@@ -179,6 +180,11 @@ def validate_review_evidence(
                     for field in ("id", "summary", "evidence"):
                         if not isinstance(item.get(field), str) or not item[field]:
                             errors.append(f"findings.{bucket} entry {field} must be a non-empty string")
+                    finding_id = item.get("id")
+                    if isinstance(finding_id, str) and finding_id:
+                        if finding_id in finding_ids:
+                            errors.append(f"finding id {finding_id} must be unique across all categories")
+                        finding_ids.add(finding_id)
     if "generated_at" in payload and (not isinstance(payload.get("generated_at"), str) or not payload["generated_at"]):
         errors.append("generated_at must be a non-empty string")
     return errors
