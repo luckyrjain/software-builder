@@ -13,6 +13,7 @@ import yaml
 
 _SHA_RE = re.compile(r"^(?:[0-9a-f]{40}|[0-9a-f]{64})$")
 _FP_RE = re.compile(r"^[0-9a-f]{64}$")
+_MAX_NESTING_DEPTH = 32
 _REQUIRED_IDENTITY = {"schema_version", "base_sha", "head_sha", "merge_base_sha", "normalized_diff_fingerprint", "changed_paths", "generated_paths", "dependency_changes", "config_changes"}
 _REQUIRED_EVIDENCE = {"schema_version", "change_identity", "requirements_ref", "review_mode", "inspection_status", "inspected_surfaces", "unable_to_inspect", "findings", "generated_at"}
 _FINDING_BUCKETS = {"defect", "suggestion", "question"}
@@ -25,6 +26,7 @@ _IDENTITY_FORMATS = {
     "fingerprint_format": "sha256_lower_hex_64",
     "path_format": "repository_relative_posix",
     "nested_value_format": "json_portable",
+    "nested_value_max_depth": _MAX_NESTING_DEPTH,
 }
 _EXCLUDED_TRANSPORT_METADATA = ["commit_message", "provider_diff_headers", "review_comment_text"]
 _ORDERING = {
@@ -77,21 +79,48 @@ def _portable_scalar(value: object) -> bool:
     return type(value) is float and math.isfinite(value)
 
 
-def _portable_value(value: object) -> bool:
-    if isinstance(value, dict):
-        return all(isinstance(k, str) and _portable_value(v) for k, v in value.items())
-    if isinstance(value, list):
-        return all(_portable_value(item) for item in value)
-    return _portable_scalar(value)
+def _portable_value(value: object, *, _depth: int = 0, _seen: set[int] | None = None) -> bool:
+    if _depth > _MAX_NESTING_DEPTH:
+        return False
+    if not isinstance(value, (dict, list)):
+        return _portable_scalar(value)
+    seen = set() if _seen is None else _seen
+    marker = id(value)
+    if marker in seen:
+        return False
+    seen.add(marker)
+    try:
+        if isinstance(value, dict):
+            return all(
+                isinstance(k, str) and _portable_value(v, _depth=_depth + 1, _seen=seen)
+                for k, v in value.items()
+            )
+        return all(_portable_value(item, _depth=_depth + 1, _seen=seen) for item in value)
+    finally:
+        seen.remove(marker)
 
 
-def _canonical_mapping_value(value: object) -> bool:
-    if isinstance(value, dict):
-        keys = list(value)
-        return all(isinstance(k, str) for k in keys) and keys == sorted(keys) and all(_canonical_mapping_value(v) for v in value.values())
-    if isinstance(value, list):
-        return all(_canonical_mapping_value(item) for item in value)
-    return _portable_scalar(value)
+def _canonical_mapping_value(value: object, *, _depth: int = 0, _seen: set[int] | None = None) -> bool:
+    if _depth > _MAX_NESTING_DEPTH:
+        return False
+    if not isinstance(value, (dict, list)):
+        return _portable_scalar(value)
+    seen = set() if _seen is None else _seen
+    marker = id(value)
+    if marker in seen:
+        return False
+    seen.add(marker)
+    try:
+        if isinstance(value, dict):
+            keys = list(value)
+            return (
+                all(isinstance(k, str) for k in keys)
+                and keys == sorted(keys)
+                and all(_canonical_mapping_value(v, _depth=_depth + 1, _seen=seen) for v in value.values())
+            )
+        return all(_canonical_mapping_value(item, _depth=_depth + 1, _seen=seen) for item in value)
+    finally:
+        seen.remove(marker)
 
 
 def _canonical_json(value: object) -> str | None:
@@ -99,7 +128,7 @@ def _canonical_json(value: object) -> str | None:
         return None
     try:
         return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, RecursionError):
         return None
 
 
@@ -166,7 +195,7 @@ def validate_change_identity(payload: object) -> list[str]:
             if not isinstance(value, list) or not all(isinstance(x, dict) for x in value):
                 errors.append(f"{field} must be a list of objects")
             elif not all(_canonical_mapping_value(x) for x in value):
-                errors.append(f"{field} objects must use recursively sorted string keys and JSON-portable finite scalar values")
+                errors.append(f"{field} objects must use recursively sorted string keys, JSON-portable finite scalar values, and at most {_MAX_NESTING_DEPTH} nested levels")
             else:
                 keys = [_canonical_object_key(x) for x in value]
                 if keys != sorted(keys) or len(keys) != len(set(keys)):
@@ -227,10 +256,10 @@ def validate_review_evidence(
         if not isinstance(requirements_ref, dict):
             errors.append("requirements_ref must be an object or null")
         elif not _portable_value(requirements_ref):
-            errors.append("requirements_ref must contain only JSON-portable finite values with string object keys")
+            errors.append(f"requirements_ref must contain only JSON-portable finite values with string object keys and at most {_MAX_NESTING_DEPTH} nested levels")
     if current_requirements_ref is not _UNSET:
         if current_requirements_ref is not None and (not isinstance(current_requirements_ref, dict) or not _portable_value(current_requirements_ref)):
-            errors.append("current requirements_ref must be a JSON-portable object or null")
+            errors.append(f"current requirements_ref must be a JSON-portable object or null with at most {_MAX_NESTING_DEPTH} nested levels")
         elif not _json_equivalent(requirements_ref, current_requirements_ref):
             errors.append("stale requirements_ref: review evidence does not match current requirements surface")
     mode = payload.get("review_mode")
@@ -334,6 +363,8 @@ def validate_contract_documents(root: Path = _ROOT) -> list[str]:
             errors.append("review evidence contract payload schema version drifted")
         if spec.get("requirements_ref_type") != "object_or_null":
             errors.append("review evidence contract requirements_ref_type drifted")
+        if spec.get("nested_value_max_depth") != _MAX_NESTING_DEPTH:
+            errors.append("review evidence contract nested_value_max_depth drifted")
         if spec.get("review_modes") != _REVIEW_MODES:
             errors.append("review evidence contract review modes drifted")
         if spec.get("inspection_status_values") != _INSPECTION_STATUSES:
