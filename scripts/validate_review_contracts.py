@@ -28,6 +28,14 @@ _IDENTITY_FORMATS = {
     "nested_value_format": "json_portable",
     "nested_value_max_depth": _MAX_NESTING_DEPTH,
 }
+_CHANGE_DOC_FIELDS = {"schema_version", "change_identity", "normalization", "freshness"}
+_IDENTITY_SPEC_FIELDS = {"required_fields", "schema_version_value", "closed_v1", *_IDENTITY_FORMATS}
+_EVIDENCE_DOC_FIELDS = {"schema_version", "review_evidence"}
+_EVIDENCE_SPEC_FIELDS = {
+    "required_fields", "schema_version_value", "requirements_ref_type", "nested_value_max_depth",
+    "review_modes", "inspection_status_values", "finding_categories",
+    "unable_to_inspect_required_fields", "finding_required_fields", "rules",
+}
 _EXCLUDED_TRANSPORT_METADATA = ["commit_message", "provider_diff_headers", "review_comment_text"]
 _ORDERING = {
     "changed_paths": "lexicographic",
@@ -332,56 +340,70 @@ def validate_contract_documents(root: Path = _ROOT) -> list[str]:
             errors.append(f"{name} contract unreadable: {exc}")
 
     change = docs.get("change identity")
-    if not isinstance(change, dict) or not _valid_schema_version(change.get("schema_version")) or not isinstance(change.get("change_identity"), dict):
-        errors.append("change identity contract must be schema_version 1 with change_identity object")
+    if not isinstance(change, dict):
+        errors.append("change identity contract must be an object")
     else:
-        identity_spec = change["change_identity"]
-        if not _required_fields_match(identity_spec.get("required_fields"), _REQUIRED_IDENTITY):
-            errors.append("change identity contract required fields drifted")
-        if identity_spec.get("schema_version_value") != 1:
-            errors.append("change identity contract payload schema version drifted")
-        if identity_spec.get("closed_v1") is not True:
-            errors.append("change identity contract closed_v1 drifted")
-        if any(identity_spec.get(key) != value for key, value in _IDENTITY_FORMATS.items()):
-            errors.append("change identity contract format declarations drifted")
-        normalization = change.get("normalization")
-        freshness = change.get("freshness")
-        if (
-            not isinstance(normalization, dict)
-            or normalization.get("source") != "canonical_effective_patch"
-            or normalization.get("include_generated_paths") is not True
-            or normalization.get("excluded_transport_metadata") != _EXCLUDED_TRANSPORT_METADATA
-            or normalization.get("ordering") != _ORDERING
-        ):
-            errors.append("change identity contract normalization drifted")
-        if freshness != _FRESHNESS_RULES:
-            errors.append("change identity contract freshness rules drifted")
+        if set(change) != _CHANGE_DOC_FIELDS:
+            errors.append("change identity contract top-level fields drifted")
+        identity_spec = change.get("change_identity")
+        if not _valid_schema_version(change.get("schema_version")) or not isinstance(identity_spec, dict):
+            errors.append("change identity contract must be schema_version 1 with change_identity object")
+        else:
+            if set(identity_spec) != _IDENTITY_SPEC_FIELDS:
+                errors.append("change identity contract spec fields drifted")
+            if not _required_fields_match(identity_spec.get("required_fields"), _REQUIRED_IDENTITY):
+                errors.append("change identity contract required fields drifted")
+            if identity_spec.get("schema_version_value") != 1:
+                errors.append("change identity contract payload schema version drifted")
+            if identity_spec.get("closed_v1") is not True:
+                errors.append("change identity contract closed_v1 drifted")
+            if any(identity_spec.get(key) != value for key, value in _IDENTITY_FORMATS.items()):
+                errors.append("change identity contract format declarations drifted")
+            normalization = change.get("normalization")
+            freshness = change.get("freshness")
+            if (
+                not isinstance(normalization, dict)
+                or normalization.get("source") != "canonical_effective_patch"
+                or normalization.get("include_generated_paths") is not True
+                or normalization.get("excluded_transport_metadata") != _EXCLUDED_TRANSPORT_METADATA
+                or normalization.get("ordering") != _ORDERING
+            ):
+                errors.append("change identity contract normalization drifted")
+            if freshness != _FRESHNESS_RULES:
+                errors.append("change identity contract freshness rules drifted")
 
     evidence = docs.get("review evidence")
-    if not isinstance(evidence, dict) or not _valid_schema_version(evidence.get("schema_version")) or not isinstance(evidence.get("review_evidence"), dict):
-        errors.append("review evidence contract must be schema_version 1 with review_evidence object")
+    if not isinstance(evidence, dict):
+        errors.append("review evidence contract must be an object")
     else:
-        spec = evidence["review_evidence"]
-        if not _required_fields_match(spec.get("required_fields"), _REQUIRED_EVIDENCE):
-            errors.append("review evidence contract required fields drifted")
-        if spec.get("schema_version_value") != 1:
-            errors.append("review evidence contract payload schema version drifted")
-        if spec.get("requirements_ref_type") != "object_or_null":
-            errors.append("review evidence contract requirements_ref_type drifted")
-        if spec.get("nested_value_max_depth") != _MAX_NESTING_DEPTH:
-            errors.append("review evidence contract nested_value_max_depth drifted")
-        if spec.get("review_modes") != _REVIEW_MODES:
-            errors.append("review evidence contract review modes drifted")
-        if spec.get("inspection_status_values") != _INSPECTION_STATUSES:
-            errors.append("review evidence contract inspection statuses drifted")
-        if spec.get("finding_categories") != ["defect", "suggestion", "question"]:
-            errors.append("review evidence contract finding taxonomy drifted")
-        if spec.get("unable_to_inspect_required_fields") != _UNABLE_FIELDS:
-            errors.append("review evidence contract unable-to-inspect fields drifted")
-        if spec.get("finding_required_fields") != _FINDING_FIELDS:
-            errors.append("review evidence contract finding fields drifted")
-        if spec.get("rules") != _REQUIRED_RULES:
-            errors.append("review evidence contract rules drifted")
+        if set(evidence) != _EVIDENCE_DOC_FIELDS:
+            errors.append("review evidence contract top-level fields drifted")
+        spec = evidence.get("review_evidence")
+        if not _valid_schema_version(evidence.get("schema_version")) or not isinstance(spec, dict):
+            errors.append("review evidence contract must be schema_version 1 with review_evidence object")
+        else:
+            if set(spec) != _EVIDENCE_SPEC_FIELDS:
+                errors.append("review evidence contract spec fields drifted")
+            if not _required_fields_match(spec.get("required_fields"), _REQUIRED_EVIDENCE):
+                errors.append("review evidence contract required fields drifted")
+            if spec.get("schema_version_value") != 1:
+                errors.append("review evidence contract payload schema version drifted")
+            if spec.get("requirements_ref_type") != "object_or_null":
+                errors.append("review evidence contract requirements_ref_type drifted")
+            if spec.get("nested_value_max_depth") != _MAX_NESTING_DEPTH:
+                errors.append("review evidence contract nested_value_max_depth drifted")
+            if spec.get("review_modes") != _REVIEW_MODES:
+                errors.append("review evidence contract review modes drifted")
+            if spec.get("inspection_status_values") != _INSPECTION_STATUSES:
+                errors.append("review evidence contract inspection statuses drifted")
+            if spec.get("finding_categories") != ["defect", "suggestion", "question"]:
+                errors.append("review evidence contract finding taxonomy drifted")
+            if spec.get("unable_to_inspect_required_fields") != _UNABLE_FIELDS:
+                errors.append("review evidence contract unable-to-inspect fields drifted")
+            if spec.get("finding_required_fields") != _FINDING_FIELDS:
+                errors.append("review evidence contract finding fields drifted")
+            if spec.get("rules") != _REQUIRED_RULES:
+                errors.append("review evidence contract rules drifted")
     return errors
 
 
