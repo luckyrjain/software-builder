@@ -2,6 +2,8 @@
 
 Shared vocabulary for **software-builder** platform docs, `skills.yaml`, and behavioral evals. Prefer these terms consistently across skills and ADRs.
 
+**Domain language** (skill shapes, roles, evidence doctrine, separated decision concepts) lives in [CONTEXT.md](../../../CONTEXT.md) and [CONTEXT-MAP.md](../../../CONTEXT-MAP.md). **Target-system language** (bounded contexts, as-built PRD, squads) lives in [domain-comprehension/CONTEXT.md](../../../domain-comprehension/CONTEXT.md). This file covers **platform implementation vocabulary** — registry, capabilities, eval tiers, and schema field names.
+
 ## Core objects
 
 | Term | Definition |

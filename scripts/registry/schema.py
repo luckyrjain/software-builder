@@ -53,10 +53,23 @@ class RegistryParseError(ValueError):
         super().__init__("\n  ".join(errors))
 
 
+def _coerce_int(value: Any, *, label: str) -> int:
+    # bool is an int subclass and str is int()-coercible, so both need an explicit
+    # type check before int() -- anything else (None, a list, a mapping) makes bare
+    # int(value) raise TypeError, not ValueError, which callers here don't catch,
+    # crashing with a raw traceback instead of a clean registry-parse error.
+    if isinstance(value, bool) or not isinstance(value, (int, str)):
+        raise ValueError(f"{label} must be an integer")
+    try:
+        return int(value)
+    except ValueError as exc:
+        raise ValueError(f"{label} must be an integer") from exc
+
+
 def parse_registry(path: Path) -> Registry:
     raw = load_unique_yaml_file(path)
     root = _require_mapping(raw, "skills.yaml root")
-    schema_version = int(root.get("schema_version", 0))
+    schema_version = _coerce_int(root.get("schema_version", 0), label="schema_version")
     if schema_version != 1:
         raise ValueError(f"unsupported schema_version: {schema_version}")
 
@@ -119,7 +132,10 @@ def _parse_skill_entry(skill_id: str, entry_raw: Any) -> SkillEntry:
         ),
         install=InstallSpec(requires=[str(item) for item in requires]),
         lint=LintSpec(
-            skill_md_max_lines=int(lint_raw.get("skill_md_max_lines", 180)),
+            skill_md_max_lines=_coerce_int(
+                lint_raw.get("skill_md_max_lines", 180),
+                label=f"skills.{skill_id}.lint.skill_md_max_lines",
+            ),
             target=str(lint_raw.get("target", skill_id)),
         ),
         composition=composition,

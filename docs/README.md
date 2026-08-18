@@ -7,6 +7,9 @@ Human-readable guide to everything in the **software-builder** repository. Agent
 
 | Document | What it is |
 |----------|------------|
+| [../CONTEXT.md](../CONTEXT.md) | Domain glossary — platform vocabulary (skills, hosts, composition, evidence) |
+| [../CONTEXT-MAP.md](../CONTEXT-MAP.md) | Platform vs target-system context map |
+| [../domain-comprehension/CONTEXT.md](../domain-comprehension/CONTEXT.md) | Target-system vocabulary (bounded contexts, as-built PRD, squads) |
 | [../README.md](../README.md) | Install, invoke, and quick usage for all skills |
 | [REPOSITORY.md](REPOSITORY.md) | Repo layout, `Makefile`, `scripts/`, lint targets, git hooks |
 | [skill-framework/README.md](skill-framework/README.md) | Shared normative conventions every skill follows (confidence bands, escalation, routing, phase glossary, …) |

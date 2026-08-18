@@ -31,6 +31,7 @@ from scripts.registry.load import load_descriptions, load_registry
 from scripts.registry.manifest import validate_manifest
 from scripts.registry.p1_validation import validate_p1_contracts
 from scripts.registry.runtime_manifest import validate_runtime_manifest
+from scripts.release_contract import validate_release_contract
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -125,6 +126,10 @@ def _composition_runtime_path(root: Path) -> Path:
     return root / "scripts" / "registry" / "composition_runtime.yaml"
 
 
+def _release_contract_path(root: Path) -> Path:
+    return root / "scripts" / "release_contract.yaml"
+
+
 def _p1_layer_paths(root: Path) -> list[Path]:
     return [
         root / "scripts" / "registry" / "host_contracts.yaml",
@@ -170,6 +175,8 @@ def _validate_all(root: Path) -> list[str]:
     if any(path.is_file() for path in _p1_layer_paths(root)):
         errors.extend(validate_runtime_manifest(root))
     errors.extend(validate_host_portability(root))
+    if _release_contract_path(root).is_file():
+        errors.extend(validate_release_contract(root))
     return errors
 
 

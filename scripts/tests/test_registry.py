@@ -163,6 +163,7 @@ skills:
 """,
         encoding="utf-8",
     )
+    (tmp_path / "VERSION").write_text("0.0.0\n", encoding="utf-8")
 
     rendered = render_compatibility_matrix(tmp_path)
 

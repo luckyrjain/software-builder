@@ -27,6 +27,27 @@ def _contracts(root: Path) -> dict:
     )
 
 
+def supported_hosts(root: Path, *, contracts: dict | None = None) -> list[str]:
+    """Every host declared in host_contracts.yaml, sorted.
+
+    Pass `contracts` when the caller already parsed host_contracts.yaml (e.g.
+    package_release.py, which also needs its schema_version) so this doesn't
+    re-read and re-parse the same file a second time; omitted, it parses
+    host_contracts.yaml itself as before.
+    """
+    if contracts is None:
+        contracts = _contracts(root)
+    hosts = require_mapping(contracts.get("hosts"), "hosts")
+    # Every host key must be a string before sorting -- a non-string key (e.g. a bare
+    # numeric YAML key) makes sorted() raise TypeError comparing str to int, which
+    # isn't a ValueError/OSError callers here catch, crashing with a raw traceback
+    # instead of a clean error.
+    non_string_hosts = sorted(str(key) for key in hosts if not isinstance(key, str))
+    if non_string_hosts:
+        raise ValueError(f"hosts keys must be strings, got non-string key(s): {non_string_hosts}")
+    return sorted(hosts)
+
+
 def capability_support(root: Path, host: str, capability: str) -> str:
     if host not in HOSTS:
         raise ValueError(f"unknown host {host!r}")

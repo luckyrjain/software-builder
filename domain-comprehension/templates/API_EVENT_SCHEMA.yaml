@@ -1,0 +1,12 @@
+schema_version: 1
+source_revision:
+  repos: []
+records: []
+# Each record:
+# - id: stable identifier
+#   kind: api | event
+#   owner: service/repo
+#   direction: inbound | outbound
+#   contract: method+path or topic+schema
+#   evidence: repo/path:line-or-symbol
+#   confidence: HIGH | MEDIUM | LOW | UNKNOWN

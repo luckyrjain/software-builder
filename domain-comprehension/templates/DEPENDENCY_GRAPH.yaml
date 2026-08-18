@@ -1,0 +1,7 @@
+schema_version: 1
+source_revision:
+  repos: []
+perspective: null  # focal service/context for the whole run — set once here, not per edge
+edges: []
+# Each edge records source, target, direction (upstream|downstream),
+# interaction (synchronous|asynchronous), criticality, evidence, confidence.

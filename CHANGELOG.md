@@ -8,6 +8,68 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 
 ## Platform
 
+### Harden Batch 5 release lifecycle: atomic writes, manifest-vs-bundle cross-checks, fail-closed edge cases (2026-08-17)
+
+Follow-up to the item below, from a multi-angle parallel review (six independent finders --
+Git tracking/worktree semantics, archive reproducibility/safety, manifest provenance integrity,
+fail-closed error handling, cross-file reuse, test/doc accuracy -- each verifying candidates
+empirically, then a 3-vote adversarial verification panel per finding) run after ~21 rounds of
+single-pass review-and-fix had already landed.
+
+- `scripts/package_release.py`: the release archive and its `.sha256`/`.files.sha256` sidecars are
+  now written atomically (temp file in the same directory, renamed into place only once complete)
+  instead of directly to their final path. A failed build (a tracked path exceeding tarfile's
+  USTAR name-length limit, a tracked file that shrinks mid-build, disk-full, a killed process)
+  previously truncated/corrupted whatever file already existed at that path -- silently destroying
+  a prior, valid release artifact left over from an earlier successful run in the same output
+  directory -- instead of failing without touching it.
+- `RELEASE-MANIFEST.json` gains `executable_files`: every bundled path whose Git index mode has the
+  executable bit set. `scripts/verify_release_bundle.py` cross-checks it against each extracted
+  file's actual on-disk mode -- previously the manifest's `files` map covered content only, so a
+  bundled file's executable bit could be tampered with (`chmod +x`/`-x`, repack) with nothing to
+  detect it, even though `package_release.py` derives that bit carefully from Git's own index
+  specifically to defend against `core.fileMode` drift.
+- `scripts/verify_release_bundle.py` now cross-checks `distribution_version` against the bundled
+  `VERSION` file's actual content, and `registry_schema_version`/`host_contract_schema_version`
+  against the bundled `skills.yaml`/`host_contracts.yaml` files' actual `schema_version` (not just
+  against the bundled `release_contract.yaml`'s compatibility policy, which only catches contract
+  drift, not drift between the manifest and what the bundle actually ships).
+- `scripts/registry/schema.py`'s `schema_version`/`skill_md_max_lines` parsing, and
+  `scripts/registry/host_adapter.py`'s `supported_hosts()`, now reject a malformed value (`null`, a
+  list/mapping, a non-string host key) with a clean `ValueError` instead of an uncaught `TypeError`
+  from Python's own `int()`/`sorted()` -- both `package_release.py` and `verify_release_bundle.py`
+  reach these functions and previously crashed with a raw traceback instead of a clean CLI error.
+
+### Implement Batch 5 release lifecycle: reproducible bundles, provenance manifest, independent verification (2026-08-16)
+
+- Added `scripts/release_contract.py` + `scripts/release_contract.yaml`: a machine-readable policy
+  for the tag shape a `VERSION` value must produce, canonical release artifact names, the
+  registry/host-contract schema versions a release is compatible with, and the provenance fields
+  every release manifest must carry. Wired into `_validate_all` in `scripts/registry/cli.py`, so
+  `make validate-registry` / `make lint` fail closed on drift.
+- Rewrote `scripts/package_release.py` to source release inputs exclusively from Git-tracked regular
+  files (`git ls-files`) instead of a directory-walk exclude-list, and to reject a tracked symlink
+  outright. Archives are now byte-reproducible: every tar entry's mtime/uid/gid/uname/gname is
+  pinned, the gzip header's embedded name/mtime is suppressed, and content is written directly
+  without an intermediate staging copy. Each bundle now embeds `RELEASE-MANIFEST.json` (schema
+  version, distribution version, exact source SHA, registry/host-contract schema versions, every
+  supported host, each skill's normalized version, and a SHA-256 per bundled file) alongside the
+  pre-existing outer `.sha256`/`.files.sha256` assets.
+- Added `scripts/verify_release_bundle.py`: extracts a bundle into an isolated directory with
+  `tarfile`'s `"data"` extraction filter (rejecting path traversal and other unsafe tar members),
+  then checks the manifest's provenance fields and its file list/hashes exactly match the bundle
+  contents -- nothing missing, nothing extra, nothing tampered.
+- `.github/workflows/release.yml` now runs `scripts/release_contract.py` and
+  `scripts/verify_release_bundle.py` after packaging and before uploading release assets.
+- `scripts/reference_utils.sha256_file` now streams instead of reading the whole file into memory;
+  `scripts/package_release.py` and `scripts/verify_release_bundle.py` both reuse it.
+- Follow-up: `read_distribution_version()`/`git_source_sha()` fail closed (no more `"0.0.0"`
+  fallback or silently-unset `source_sha`) as of the prior commit on this branch; several
+  `scripts/tests/` fixtures that build a minimal repo tree now also write a `VERSION` file and
+  initialize a real Git repo so they still exercise the code paths that need one.
+- See `docs/RELEASE.md` for the release-contract, bundle, manifest, and verification docs, and
+  `docs/superpowers/plans/2026-08-16-batch5-release-lifecycle.md` for the full slice plan.
+
 ### Trim domain-comprehension's workflow-contract-exemption rationale out of a golden-eval description (2026-08-13)
 
 - Follow-up to the item below: `evals/golden/domain-comprehension/injection-confidence-rubric-unchanged.yaml`'s
@@ -1889,6 +1951,45 @@ _Pre-merge WIP on `feat/squad-map-skill` (internal v1.0–v1.5) is consolidated 
 - Install: `make install-squad-map`; lint: `make lint-squad-map`.
 
 ## domain-comprehension
+
+### Bounded discovery budgets, DELTA/ADD_REPO stale-PRD gate, and machine domain-model handoff (2026-08-17)
+
+- **Discovery budget** — repository/search-query/deep-file-read discovery is now bounded per delivery-mode
+  profile (`QUICK`/`FULL`/`DELTA`/`ADD_REPO`/`CUSTOM`), with defaults and the stop-on-exhaustion contract in
+  the new `reference/domain-model-contract.yaml`. `manifest.yaml` persists `discovery_budget.limits`/`.consumed`
+  (schema-v2, optional field for backward compatibility with pre-existing engagements); RESUME/DELTA/ADD_REPO
+  restore or backfill it rather than resetting counters. `validate_manifest_yaml.py` validates the block
+  whenever present (`_invalid_enum()` now centralizes the isinstance-before-membership-check pattern so a
+  hand-edited manifest with a list/mapping in an enum field is reported cleanly instead of raising `TypeError`
+  from `x not in a_frozenset`; the same guard was extended to `validate_sub_agent_merge.py`).
+- **DELTA/ADD_REPO stale-PRD detection** — new artifact status `stale` (PRD only; every other artifact id
+  rejects it) lets DELTA/ADD_REPO mark `artifacts[id=prd].status: stale` immediately when source revisions,
+  contracts, data ownership, dependency semantics, or capability ownership drift from the retained baseline,
+  blocking `--strict` `FIRST_PASS_COMPLETE` until the PRD is regenerated or the row explicitly stays `stale`.
+  The validator still requires the stale file to exist on disk.
+- **Machine domain-model artifacts** — four new P5 YAML deliverables (`API_EVENT_SCHEMA.yaml`,
+  `DATA_OWNERSHIP_GRAPH.yaml`, `DEPENDENCY_GRAPH.yaml`, `CAPABILITY_TRACEABILITY.yaml`), schema and phase
+  ownership in `reference/domain-model-contract.yaml` / `reference/machine-domain-model.md`, each carrying
+  `source_revision`, evidence, and confidence per record/edge/capability — deterministic current-state
+  handoff to **prd-architect** (own `CHANGELOG.md`: new `current-state-evidence-contract.yaml` plus
+  measurable success metrics, assumption register, and `FR-* -> AC-* -> TR-*` traceability) rather than
+  free-text only.
+- `SKILL.md` `skill_version: 1.0` → `1.1`. Tests: `tests/test_batch5_discovery_budget_validator.py`,
+  `tests/test_batch5_domain_prd_contracts.py`, `tests/test_batch5_handoff_compatibility.py`,
+  `tests/test_batch5_manifest_machine_artifacts.py`, `tests/test_batch5_prd_freshness_manifest.py`,
+  `tests/test_batch5_prd_freshness_workflow.py`.
+- **Round-2 review fix (same day):** `reference/phase-outputs.md`'s P5 table still required
+  `PROGRESS.md == FIRST_PASS_COMPLETE` only, contradicting `workflow/phase-5.md`'s identical row (same
+  batch) which accepts an explicit PARTIAL reason under the discovery-budget-exhaustion contract above —
+  reworded to accept both, scoped so the stale-PRD block applies only to `FIRST_PASS_COMPLETE` (PARTIAL,
+  with the stale condition as its reason, is the intended path). `workflow/session-0.md` gained its
+  discovery-budget-init step and output row above without a `workflow_version` bump, violating this
+  skill's own versioning rule; bumped (1.5 → 1.6) and logged in `workflow-changelog.md`. The `"prd"`-only
+  stale-status check is now a named `STALEABLE_ARTIFACT_IDS` constant routed through the existing
+  `_invalid_enum()` guard — an intermediate version of this same fix swapped in a raw frozenset-membership
+  test, which raised `TypeError` on a non-string artifact id instead of reporting a clean validation
+  error; caught and fixed within the same round, with a regression test added
+  (`test_stale_status_with_unhashable_artifact_id_does_not_crash`).
 
 ### Safe rendered-output boundary + injection-resistance golden evals (2026-08-10)
 

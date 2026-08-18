@@ -1,0 +1,7 @@
+schema_version: 1
+source_revision:
+  repos: []
+nodes: []
+edges: []
+# Node kinds: service | datastore | table | entity | cache | index
+# Each edge records source, target, operation, owner, evidence, confidence.

@@ -1,5 +1,5 @@
 ---
-workflow_version: 1.17
+workflow_version: 1.20
 phase: inputs
 produces:
   - workspace_root
@@ -7,6 +7,7 @@ produces:
   - domain_name
   - domain_config
   - delivery_mode
+  - discovery_budget
 consumes: []
 ---
 
@@ -21,11 +22,41 @@ consumes: []
 | `workspace_layout` | No | Auto-detect: `sibling-repos` \| `monorepo` \| `single-repo` |
 | `domain_config` | No | Create/load under the resolved `artifact_root` |
 | `delivery_mode` | No | `QUICK` when no `manifest.yaml` exists yet (first-time engagement) — see table below |
+| `discovery_budget` | No | Profile default for QUICK/FULL/DELTA/ADD_REPO from [domain-model-contract.yaml](../reference/domain-model-contract.yaml); CUSTOM requires explicit limits |
 | `domain_pack` | No | e.g. `fintech-payout` — see [domain-packs](../reference/domain-packs/README.md) |
 | `memory_bank.export_mode` | No | From `{artifact_root}/domain-config.yaml`; override in user message (`never` \| `optional` \| `p5`) |
 | `api_tooling.export_mode` | No | From `{artifact_root}/domain-config.yaml`; override in user message (`never` \| `optional` \| `p5`) |
 | `new_repo_path` | Only for `ADD_REPO` | Ask if ambiguous |
 | `proposal` | Only for `PROPOSAL_CHECK` | Ask if absent — free-text description: proposed name/domain area, claimed data entities, claimed API paths/producers |
+
+## Discovery budget
+
+Resolve the run budget before repository discovery. Use the selected delivery mode's `default_limits` from
+[domain-model-contract.yaml](../reference/domain-model-contract.yaml), unless the caller explicitly selects
+CUSTOM limits. New engagements persist profile, configured limits, and consumed counters in root
+`manifest.yaml` `discovery_budget`; mirror the same counters into `PROGRESS.md` for humans.
+
+On RESUME/DELTA/ADD_REPO, use the manifest block as machine source of truth when present and continue from its
+consumed counters rather than resetting them. For a legacy schema-v2 manifest with no `discovery_budget`,
+backfill the block before new source discovery: recover prior consumption from existing machine/progress state
+when possible; if it cannot be recovered without guessing, disclose the limitation and set a conservative
+remaining budget rather than assuming zero prior consumption.
+
+Stop discovery when the completion/evidence gate is satisfied or any configured limit is reached. If a limit
+is reached first, mark the run/phase PARTIAL, record the unresolved evidence gap in `UNKNOWNS.md`, and do not
+silently exceed the budget. Persist consumed counters after every discovery-bearing phase. PROPOSAL_CHECK uses
+existing artifacts and therefore does not open a new source-discovery budget.
+
+## Legacy manifest artifact rows
+
+`templates/manifest.yaml` is the current schema; an engagement created by an older skill version can have an
+`artifacts[]` array missing rows the current template defines (for example the four machine domain-model
+artifacts). RESUME/DELTA/ADD_REPO must not silently skip a row just because it is absent: on first touching
+such a manifest, add the missing row(s) from `templates/manifest.yaml` with `status: stub` (or `n_a` for a
+`required: false` row that does not apply to this engagement's delivery mode) before relying on
+`--strict`/`--check-content` to reflect current requirements — do not fabricate `ok`/evidence for a row that
+was never produced. `COMPLIANCE_RETROFIT` already reconciles `artifacts[]` against disk state as part of its
+own procedure.
 
 ## Artifact location resolution
 
@@ -85,7 +116,7 @@ opt into `FULL` explicitly.
 |------|----------|
 | `QUICK` | **Default for first-time engagements.** Session 0 + P0 + draft five questions only — no P0.5 mechanical pass |
 | `FULL` | All comprehension phases for all in-scope repos — opt in explicitly |
-| `RESUME` | Read root `manifest.yaml`, resolve `artifact_root`, then continue from `{artifact_root}/PROGRESS.md` / Next action |
+| `RESUME` | Read root `manifest.yaml`, resolve `artifact_root`, restore/backfill discovery budget and any missing artifact rows (see § Legacy manifest artifact rows), then continue from `{artifact_root}/PROGRESS.md` / Next action |
 | `DELTA` | Re-run phases for repos whose HEAD SHA changed since last manifest |
 | `ADD_REPO` | Onboard one repo not currently in `manifest.repos[]` into an existing engagement; full-rigor P0–P1 for that repo, then re-run downstream phases per the DELTA affected-phases rules, gated by a merge-conflict check |
 | `COMPLIANCE_RETROFIT` | Normalize split deliverables + `manifest.yaml` from an existing first pass **without** re-analyzing code |
@@ -115,7 +146,8 @@ the retrofit; do not leave a second canonical copy at root.
 3. Split consolidated content into required files (`BOUNDED_CONTEXTS.md`, `RISK_MAP.md`, etc.) under
    `artifact_root`, leaving stub+link in `{map_file}` where appropriate.
 4. Create or repair root `manifest.yaml` from disk state, set `engagement.artifact_root`, and set
-   `phases.*.status` from `{artifact_root}/PROGRESS.md` checkpoints.
+   `phases.*.status` from `{artifact_root}/PROGRESS.md` checkpoints. When no new discovery is performed,
+   preserve/backfill `discovery_budget` without inventing consumed history.
 5. Run `validate_manifest_yaml.py --workspace-root <workspace_root>`; fix artifact/diagram rows until exit 0.
 6. Set `engagement.next_action` to first incomplete phase, or P5 `--strict` if only gaps remain.
 
@@ -125,7 +157,9 @@ empty, or recreate canonical domain files at workspace root.
 ### DELTA mode — procedure
 
 Requires root `manifest.yaml` with at least P0 complete. If not present, fall back to `FULL` with a warning.
-Resolve all canonical domain files through `engagement.artifact_root` before reading or writing them.
+Resolve all canonical domain files through `engagement.artifact_root` before reading or writing them. Restore
+or backfill `discovery_budget` and any missing artifact rows (§ Legacy manifest artifact rows) before any
+repo/search/deep-read work.
 
 1. Load `manifest.yaml`; for each `repos[]` entry run:
    ```bash
@@ -143,16 +177,24 @@ Resolve all canonical domain files through `engagement.artifact_root` before rea
    - **P3b**: re-run if P3 re-ran
    - **P4, P5**: always re-run after any upstream phase re-ran
 
-3. Phases with no upstream changes keep their `complete` status unchanged.
-4. At end, run `validate_manifest_yaml.py --workspace-root <workspace_root>`; update
-   `engagement.last_updated` and `engagement.next_action`.
+3. Refresh affected machine artifacts per [machine-domain-model.md](../reference/machine-domain-model.md),
+   then compare previous vs refreshed source revisions, API/event contracts, data ownership, dependency
+   semantics, and capability ownership/code locations using `stale_prd_detection`. If any stale condition
+   fires, immediately set root `manifest.yaml` `artifacts[id=prd].status: stale`, record the reason/evidence
+   in `PROGRESS.md`, and regenerate affected `PRD.md` requirements/traceability or leave the stale row in
+   place and block claims that the PRD is current. Restore `status: ok` only after regeneration and a clean
+   freshness comparison. Never leave a known-stale PRD as manifest `ok`.
+4. Phases with no upstream changes keep their `complete` status unchanged.
+5. At end, persist `discovery_budget.consumed`, run `validate_manifest_yaml.py --workspace-root <workspace_root>`;
+   update `engagement.last_updated` and `engagement.next_action`.
 
 ### ADD_REPO mode — procedure
 
 Requires root `manifest.yaml` with `schema_version: 2` and `engagement.status` of `IN_PROGRESS` or
-`FIRST_PASS_COMPLETE`. Resolve `artifact_root` from that manifest before touching any domain artifact.
-`new_repo_path` must resolve to a repo **not** present in `manifest.repos[]` (match by `name`) — if it is
-present, stop and tell the user to use `DELTA` instead.
+`FIRST_PASS_COMPLETE`. Resolve `artifact_root` from that manifest and restore/backfill `discovery_budget` and
+any missing artifact rows (§ Legacy manifest artifact rows) before source discovery. `new_repo_path` must
+resolve to a repo **not** present in `manifest.repos[]` (match by `name`) — if it is present, stop and tell the
+user to use `DELTA` instead.
 
 1. Classify the new repo ([repo-classification.md](../reference/repo-classification.md)), assign
    provisional tier.
@@ -181,8 +223,12 @@ present, stop and tell the user to use `DELTA` instead.
    - P3 reruns if new repo is Tier 0/1
    - P3b reruns if P3 reran
    - P4, P5 **always** rerun
-6. Run `validate_manifest_yaml.py --workspace-root <workspace_root> --check-content`; update
-   `engagement.last_updated` and `engagement.next_action`.
+6. Refresh the four machine artifacts and run the same stale-PRD comparison as DELTA. If stale, immediately
+   set `artifacts[id=prd].status: stale`, record the reason in `PROGRESS.md`, and regenerate affected PRD
+   requirements/traceability or keep the stale row and block current-state claims. Restore `ok` only after a
+   clean comparison; never retain a known-stale PRD as manifest `ok`.
+7. Persist `discovery_budget.consumed`, run `validate_manifest_yaml.py --workspace-root <workspace_root>
+   --check-content`; update `engagement.last_updated` and `engagement.next_action`.
 
 **Do not:** re-run P0–P1 for repos already in `manifest.repos[]`; regenerate other repos' `/understand`
 graphs; or write canonical domain artifacts at workspace root.
@@ -233,6 +279,7 @@ run `FULL` or `QUICK` comprehension first.
 | `workspace_layout` | Auto-detect or user-specified | Default to `sibling-repos` detection |
 | `domain_name` | User message; confirm in Session 0 | Ask user |
 | `delivery_mode` | User message | Default `QUICK` (no `manifest.yaml` yet) |
+| `discovery_budget` | Manifest machine state or delivery profile/CUSTOM input | Initialize/backfill before discovery; CUSTOM without limits is invalid |
 | `domain_pack` | User message (optional) | Skip — no pack merge |
 
 ## Environment constraints

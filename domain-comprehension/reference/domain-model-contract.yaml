@@ -1,0 +1,114 @@
+schema_version: 1
+producer: domain-comprehension
+consumer: prd-architect
+state_semantics: current_state
+
+source_revision:
+  required: true
+  shape: repos
+  repo_required_fields: [repo, branch, commit_sha, observed_at]
+  repo_field_constraints: non_empty_string
+  build_ready_requires: no_unknown_in_repo_or_commit_sha
+  unknown_rule: preserve_unknown_field_do_not_substitute_local_state_not_handoff_eligible
+
+# Repository discovery is bounded and recorded per run. Defaults are ceilings,
+# not targets; stop earlier when the evidence/completion gates are satisfied.
+discovery_budget:
+  profile: QUICK | FULL | DELTA | ADD_REPO | CUSTOM
+  default_limits:
+    QUICK: {repositories: 12, search_queries: 80, deep_file_reads: 60}
+    FULL: {repositories: 50, search_queries: 400, deep_file_reads: 300}
+    DELTA: {repositories: 20, search_queries: 160, deep_file_reads: 120}
+    ADD_REPO: {repositories: 20, search_queries: 160, deep_file_reads: 120}
+  custom_requires_explicit_limits: true
+  limits:
+    repositories: integer
+    search_queries: integer
+    deep_file_reads: integer
+  consumed:
+    repositories: integer
+    search_queries: integer
+    deep_file_reads: integer
+  stop_when:
+    - completion_gate_satisfied
+    - all_required_questions_have_sufficient_evidence
+    - any_budget_limit_reached
+  exhausted_behavior: PARTIAL
+  exhausted_output: UNKNOWNS.md
+  forbidden_behavior: silently_exceed_budget
+
+# Confidence aggregation is deterministic: confidence is never averaged upward.
+# UNKNOWN < LOW < MEDIUM < HIGH; a parent takes the weakest material child.
+confidence_aggregation:
+  ordering: [UNKNOWN, LOW, MEDIUM, HIGH]
+  section_rule: minimum_material_claim
+  document_rule: minimum_required_section
+  conflict_cap: LOW
+  missing_required_evidence: UNKNOWN
+
+artifacts:
+  api_event_schema:
+    path: API_EVENT_SCHEMA.yaml
+    schema_version: 1
+    records: [api, event]
+    required_fields: [id, kind, owner, direction, contract, evidence, confidence]
+  data_ownership_graph:
+    path: DATA_OWNERSHIP_GRAPH.yaml
+    schema_version: 1
+    node_kinds: [service, datastore, table, entity, cache, index]
+    edge_fields: [source, target, operation, owner, evidence, confidence]
+  dependency_graph_machine:
+    path: DEPENDENCY_GRAPH.yaml
+    schema_version: 1
+    # required_fields mixes one file-level field (perspective, set once per run at the document root —
+    # see DEPENDENCY_GRAPH.yaml) with the seven per-edge fields; it is not the key set of each edge object.
+    # Single source of truth via YAML anchor — dependency_edges.required_fields below aliases this list
+    # instead of keeping a second hand-maintained copy in sync.
+    required_fields: &dependency_graph_required_fields [source, target, perspective, direction, interaction, criticality, evidence, confidence]
+  capability_traceability:
+    path: CAPABILITY_TRACEABILITY.yaml
+    schema_version: 1
+    required_fields: [capability, repositories, code_locations, owner, evidence, confidence]
+
+dependency_edges:
+  # perspective is set once per run as a file-level field (DEPENDENCY_GRAPH.yaml's top-level
+  # `perspective` key) — not a key repeated on every edge object. It is still listed in
+  # required_fields below because a complete artifact needs it populated exactly once; the other
+  # seven fields are the ones each edge object itself must carry.
+  perspective: focal_service_or_context
+  required_fields: *dependency_graph_required_fields
+  direction: upstream | downstream
+  interaction: synchronous | asynchronous
+  criticality:
+    values: [CRITICAL, HIGH, MEDIUM, LOW, UNKNOWN]
+    basis: user_impact_and_recovery_dependency
+  unknown_rule: if_direction_interaction_or_criticality_not_evidenced_use_UNKNOWN
+
+stale_prd_detection:
+  modes: [DELTA, ADD_REPO]
+  compare: [source_revision, api_event_schema, data_ownership_graph, dependency_graph_machine, capability_traceability]
+  stale_when:
+    - behavior_affecting_source_revision_changed
+    - externally_observable_contract_changed
+    - authoritative_data_owner_changed
+    - critical_dependency_semantics_changed
+    - capability_owner_or_code_location_changed
+  required_action: regenerate_or_mark_PRD_stale
+  forbidden_action: silently_keep_stale_PRD
+
+compatibility:
+  consumer: prd-architect
+  source_revision_required: true
+  source_revision_shape: {repos: [{repo: string, branch: string, commit_sha: string, observed_at: string}]}
+  accepted_artifacts: [PRD.md, API_EVENT_SCHEMA.yaml, DATA_OWNERSHIP_GRAPH.yaml, DEPENDENCY_GRAPH.yaml, CAPABILITY_TRACEABILITY.yaml]
+  prd_freshness:
+    source: domain_comprehension_manifest_prd_artifact_status
+    handoff_required: true
+    current_value: ok
+    stale_value: stale
+    stale_behavior: blocking_before_build_do_not_treat_PRD_as_current
+    integrity_check: consumer_must_reverify_against_source_revision_and_machine_artifacts
+  evidence_status_values: [Observed, Inferred, Unknown]
+  confidence_values: [HIGH, MEDIUM, LOW, UNKNOWN]
+  preserve_ids: true
+  future_state_mutation: forbidden
