@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import re
 from pathlib import PurePosixPath
 
@@ -17,6 +18,18 @@ _REQUIRED_EVIDENCE = {
     "inspected_surfaces", "unable_to_inspect", "findings", "generated_at",
 }
 _FINDING_BUCKETS = {"defect", "suggestion", "question"}
+_EFFECTIVE_PATCH_FIELDS = (
+    "normalized_diff_fingerprint", "changed_paths", "generated_paths",
+    "dependency_changes", "config_changes",
+)
+
+
+def normalized_diff_fingerprint(canonical_effective_patch: str) -> str:
+    """Hash provider-neutral canonical patch text with stable newline handling."""
+    if not isinstance(canonical_effective_patch, str):
+        raise TypeError("canonical_effective_patch must be a string")
+    normalized = canonical_effective_patch.replace("\r\n", "\n").replace("\r", "\n")
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
 
 def _valid_repo_path(value: object) -> bool:
@@ -53,17 +66,18 @@ def validate_change_identity(payload: object) -> list[str]:
     return errors
 
 
-def _identity_fresh(stored: object, current: object) -> bool:
+def _effective_patch_unchanged(stored: object, current: object) -> bool:
     if not isinstance(stored, dict) or not isinstance(current, dict):
         return False
-    keys = (
-        "base_sha", "head_sha", "merge_base_sha", "normalized_diff_fingerprint",
-        "changed_paths", "generated_paths", "dependency_changes", "config_changes",
-    )
-    return all(stored.get(key) == current.get(key) for key in keys)
+    return all(stored.get(key) == current.get(key) for key in _EFFECTIVE_PATCH_FIELDS)
 
 
-def validate_review_evidence(payload: object, *, current_identity: object | None = None) -> list[str]:
+def validate_review_evidence(
+    payload: object,
+    *,
+    current_identity: object | None = None,
+    conflict_resolution_occurred: bool = False,
+) -> list[str]:
     errors: list[str] = []
     if not isinstance(payload, dict):
         return ["review_evidence must be an object"]
@@ -75,8 +89,8 @@ def validate_review_evidence(payload: object, *, current_identity: object | None
     if current_identity is not None:
         current_errors = validate_change_identity(current_identity)
         errors.extend(f"current {error}" for error in current_errors)
-        if not current_errors and not _identity_fresh(identity, current_identity):
-            errors.append("stale change_identity: review evidence does not match current change")
+        if not current_errors and (conflict_resolution_occurred or not _effective_patch_unchanged(identity, current_identity)):
+            errors.append("stale change_identity: review evidence does not match current effective patch")
     mode = payload.get("review_mode")
     if "review_mode" in payload and (not isinstance(mode, str) or mode not in {"normal", "exhaustive"}):
         errors.append("review_mode must be normal or exhaustive")
