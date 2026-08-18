@@ -14,6 +14,13 @@ _REVIEW_MODES = ["normal", "exhaustive"]
 _INSPECTION_STATUSES = ["complete", "partial", "unable"]
 _UNABLE_FIELDS = ["surface", "reason", "mandatory"]
 _FINDING_FIELDS = ["id", "category", "summary", "evidence"]
+_EXCLUDED_TRANSPORT_METADATA = ["commit_message", "provider_diff_headers", "review_comment_text"]
+_ORDERING = {
+    "changed_paths": "lexicographic",
+    "generated_paths": "lexicographic",
+    "dependency_changes": "canonical_key_order",
+    "config_changes": "canonical_key_order",
+}
 _REQUIRED_RULES = {
     "questions_are_non_blocking_until_promoted": True,
     "complete_forbidden_with_mandatory_unable_surface": True,
@@ -37,7 +44,16 @@ def _valid_repo_path(value: object) -> bool:
     if not isinstance(value, str) or not value or "\\" in value:
         return False
     path = PurePosixPath(value)
-    return not path.is_absolute() and ".." not in path.parts and str(path) == value
+    return not path.is_absolute() and path != PurePosixPath(".") and ".." not in path.parts and str(path) == value
+
+
+def _canonical_mapping_value(value: object) -> bool:
+    if isinstance(value, dict):
+        keys = list(value)
+        return all(isinstance(k, str) for k in keys) and keys == sorted(keys) and all(_canonical_mapping_value(v) for v in value.values())
+    if isinstance(value, list):
+        return all(_canonical_mapping_value(item) for item in value)
+    return True
 
 
 def validate_change_identity(payload: object) -> list[str]:
@@ -63,8 +79,11 @@ def validate_change_identity(payload: object) -> list[str]:
                 errors.append(f"{field} must be sorted and contain no duplicates")
     for field in ("dependency_changes", "config_changes"):
         value = payload.get(field)
-        if field in payload and (not isinstance(value, list) or not all(isinstance(x, dict) for x in value)):
-            errors.append(f"{field} must be a list of objects")
+        if field in payload:
+            if not isinstance(value, list) or not all(isinstance(x, dict) for x in value):
+                errors.append(f"{field} must be a list of objects")
+            elif not all(_canonical_mapping_value(x) for x in value):
+                errors.append(f"{field} objects must use recursively sorted string keys")
     return errors
 
 
@@ -160,7 +179,13 @@ def validate_contract_documents(root: Path = _ROOT) -> list[str]:
             errors.append("change identity contract required fields drifted")
         normalization = change.get("normalization")
         freshness = change.get("freshness")
-        if not isinstance(normalization, dict) or normalization.get("source") != "canonical_effective_patch" or normalization.get("include_generated_paths") is not True:
+        if (
+            not isinstance(normalization, dict)
+            or normalization.get("source") != "canonical_effective_patch"
+            or normalization.get("include_generated_paths") is not True
+            or normalization.get("excluded_transport_metadata") != _EXCLUDED_TRANSPORT_METADATA
+            or normalization.get("ordering") != _ORDERING
+        ):
             errors.append("change identity contract normalization drifted")
         expected_freshness = {
             "unchanged_effective_patch_may_preserve_review": True,
