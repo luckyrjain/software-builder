@@ -24,6 +24,7 @@ _ORDERING = {
 _REQUIRED_RULES = {
     "questions_are_non_blocking_until_promoted": True,
     "complete_forbidden_with_mandatory_unable_surface": True,
+    "unable_status_requires_unable_to_inspect_entry": True,
     "stale_change_identity_invalidates_envelope": True,
     "requirements_change_invalidates_envelope": True,
     "categories_are_disjoint": True,
@@ -159,6 +160,8 @@ def validate_review_evidence(
             for item in unavailable:
                 if not isinstance(item, dict) or not isinstance(item.get("surface"), str) or not item.get("surface") or not isinstance(item.get("reason"), str) or not item.get("reason") or type(item.get("mandatory")) is not bool:
                     errors.append("unable_to_inspect entries require non-empty surface/reason strings and boolean mandatory")
+            if status == "unable" and not unavailable:
+                errors.append("inspection_status unable requires at least one unable_to_inspect entry")
             if status == "complete" and any(isinstance(item, dict) and item.get("mandatory") is True for item in unavailable):
                 errors.append("inspection_status complete is invalid with a mandatory unable-to-inspect surface")
     findings = payload.get("findings")
