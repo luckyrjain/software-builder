@@ -24,3 +24,6 @@ review_evidence:
     stale_change_identity_invalidates_envelope: true
     requirements_change_invalidates_envelope: true
     categories_are_disjoint: true
+    finding_entries_are_closed_v1: true
+    unable_entries_are_closed_v1: true
+    requirements_ref_is_json_portable: true
