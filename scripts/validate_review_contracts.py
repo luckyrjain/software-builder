@@ -18,10 +18,12 @@ _REQUIRED_RULES = {
     "questions_are_non_blocking_until_promoted": True,
     "complete_forbidden_with_mandatory_unable_surface": True,
     "stale_change_identity_invalidates_envelope": True,
+    "requirements_change_invalidates_envelope": True,
     "categories_are_disjoint": True,
 }
 _EFFECTIVE_PATCH_FIELDS = ("normalized_diff_fingerprint", "changed_paths", "generated_paths", "dependency_changes", "config_changes")
 _ROOT = Path(__file__).resolve().parents[1]
+_UNSET = object()
 
 
 def normalized_diff_fingerprint(canonical_effective_patch: str) -> str:
@@ -70,7 +72,13 @@ def _effective_patch_unchanged(stored: object, current: object) -> bool:
     return isinstance(stored, dict) and isinstance(current, dict) and all(stored.get(k) == current.get(k) for k in _EFFECTIVE_PATCH_FIELDS)
 
 
-def validate_review_evidence(payload: object, *, current_identity: object | None = None, conflict_resolution_occurred: bool = False) -> list[str]:
+def validate_review_evidence(
+    payload: object,
+    *,
+    current_identity: object | None = None,
+    current_requirements_ref: object = _UNSET,
+    conflict_resolution_occurred: bool = False,
+) -> list[str]:
     if not isinstance(payload, dict):
         return ["review_evidence must be an object"]
     errors: list[str] = []
@@ -87,6 +95,11 @@ def validate_review_evidence(payload: object, *, current_identity: object | None
     requirements_ref = payload.get("requirements_ref")
     if "requirements_ref" in payload and requirements_ref is not None and not isinstance(requirements_ref, dict):
         errors.append("requirements_ref must be an object or null")
+    if current_requirements_ref is not _UNSET:
+        if current_requirements_ref is not None and not isinstance(current_requirements_ref, dict):
+            errors.append("current requirements_ref must be an object or null")
+        elif requirements_ref != current_requirements_ref:
+            errors.append("stale requirements_ref: review evidence does not match current requirements surface")
     mode = payload.get("review_mode")
     if "review_mode" in payload and (not isinstance(mode, str) or mode not in _REVIEW_MODES):
         errors.append("review_mode must be normal or exhaustive")
