@@ -42,6 +42,8 @@ Skills reference these files by relative link from `SETUP.md` or `SKILL.md`. Do 
 | [shared/examples-conventions.md](shared/examples-conventions.md) | Required depth and format for each skill's `examples.md` |
 | [shared/phase-glossary.md](shared/phase-glossary.md) | Phase name mapping across registered skills' pipelines |
 | [shared/review-metadata-schema.md](shared/review-metadata-schema.md) | Normative metadata YAML — `review_metadata` (pr-review), `assessment_metadata` (rca, k8s); v2 analytics blocks |
+| [shared/change-identity.yaml](shared/change-identity.yaml) | Canonical change identity, normalized effective-patch fingerprint, generated-path participation, and review freshness rules shared by pr-review and loop-task-implementer |
+| [shared/review-evidence.yaml](shared/review-evidence.yaml) | Portable review evidence envelope with inspection completeness and defect/suggestion/question taxonomy |
 | [shared/claude-code-setup.md](shared/claude-code-setup.md) | Claude Code install paths + MCP config location, mapped from the Cursor equivalents used throughout each skill's `SETUP.md` |
 | [shared/org-rollup-schema.md](shared/org-rollup-schema.md) | Normalized cross-repo rollup item shape — implemented by migration-program-manager (#8), cost-optimization-sprint-planner (#10), and weekly-squad-digest (#11) |
 | [shared/test-creation-principles.md](shared/test-creation-principles.md) | Test-first evidence, test-quality rules, refactor limits, and the shared report skeleton for unit/integration/contract/e2e/api-test-creator |
@@ -85,6 +87,8 @@ A skill is framework-compliant when it passes the checklist in the design spec �
 | examples-conventions.md | Complete |
 | phase-glossary.md | Complete |
 | review-metadata-schema.md | Complete — v2 pr-review + assessment_metadata (rca, k8s) + repository_health dimensions |
+| change-identity.yaml | Complete — Batch 5.2A shared effective-patch identity and freshness contract |
+| review-evidence.yaml | Complete — Batch 5.2A portable review evidence envelope |
 | claude-code-setup.md | Complete |
 | org-rollup-schema.md | Complete — implemented by migration-program-manager (#8), cost-optimization-sprint-planner (#10), and weekly-squad-digest (#11), the last three items of the team-facing agents roadmap |
 | test-creation-principles.md | Complete — implemented by unit/integration/contract/e2e/api-test-creator, dispatched to by the test-writer router |
@@ -94,4 +98,4 @@ A skill is framework-compliant when it passes the checklist in the design spec �
 
 | Item | Status | Notes |
 |------|--------|-------|
-| **Approach B — shared deterministic-artifact framework** | Deferred | Cross-skill validator library for manifest/graph/evidence — see [2026-07-02-skills-roadmap-design.md](../superpowers/specs/2026-07-02-skills-roadmap-design.md). Per-skill validators remain canonical until a third consumer justifies extraction. |
+| **Shared deterministic-artifact framework** | Deferred | Broader cross-skill validator library for manifest/graph/evidence remains deferred — see [2026-07-02-skills-roadmap-design.md](../superpowers/specs/2026-07-02-skills-roadmap-design.md). Batch 5.2A only introduces the narrower review identity/evidence contracts required by two consumers. |
