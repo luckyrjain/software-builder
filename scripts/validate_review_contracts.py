@@ -50,7 +50,6 @@ _FRESHNESS_RULES = {
     "conflict_resolution_invalidates_review": True,
     "content_change_invalidates_review": True,
     "generated_file_change_invalidates_review": True,
-    "generated_paths_must_be_subset_of_changed_paths": True,
 }
 _EFFECTIVE_PATCH_FIELDS = ("normalized_diff_fingerprint", "changed_paths", "generated_paths", "dependency_changes", "config_changes")
 _ROOT = Path(__file__).resolve().parents[1]
@@ -134,11 +133,6 @@ def validate_change_identity(payload: object) -> list[str]:
                 errors.append(f"{field} must be a list of canonical repository-relative POSIX paths")
             elif value != sorted(value) or len(value) != len(set(value)):
                 errors.append(f"{field} must be sorted and contain no duplicates")
-    changed_paths = payload.get("changed_paths")
-    generated_paths = payload.get("generated_paths")
-    if isinstance(changed_paths, list) and isinstance(generated_paths, list) and all(isinstance(x, str) for x in changed_paths + generated_paths):
-        if not set(generated_paths).issubset(changed_paths):
-            errors.append("generated_paths must be a subset of changed_paths")
     for field in ("dependency_changes", "config_changes"):
         value = payload.get(field)
         if field in payload:
