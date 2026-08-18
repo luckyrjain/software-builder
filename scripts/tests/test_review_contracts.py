@@ -20,13 +20,13 @@ def _load_validator():
 
 
 def _identity(**overrides):
-    value = {"base_sha": "a" * 40, "head_sha": "b" * 40, "merge_base_sha": "a" * 40, "normalized_diff_fingerprint": "c" * 64, "changed_paths": ["src/a.py"], "generated_paths": [], "dependency_changes": [], "config_changes": []}
+    value = {"schema_version": 1, "base_sha": "a" * 40, "head_sha": "b" * 40, "merge_base_sha": "a" * 40, "normalized_diff_fingerprint": "c" * 64, "changed_paths": ["src/a.py"], "generated_paths": [], "dependency_changes": [], "config_changes": []}
     value.update(overrides)
     return value
 
 
 def _evidence(identity=None, **overrides):
-    value = {"change_identity": identity or _identity(), "requirements_ref": None, "review_mode": "normal", "inspection_status": "complete", "inspected_surfaces": ["diff"], "unable_to_inspect": [], "findings": {"defect": [], "suggestion": [], "question": []}, "generated_at": "2026-08-18T00:00:00Z"}
+    value = {"schema_version": 1, "change_identity": identity or _identity(), "requirements_ref": None, "review_mode": "normal", "inspection_status": "complete", "inspected_surfaces": ["diff"], "unable_to_inspect": [], "findings": {"defect": [], "suggestion": [], "question": []}, "generated_at": "2026-08-18T00:00:00Z"}
     value.update(overrides)
     return value
 
@@ -34,7 +34,8 @@ def _evidence(identity=None, **overrides):
 def test_change_identity_contract_has_required_fields():
     contract = _yaml("docs/skill-framework/shared/change-identity.yaml")
     assert contract["schema_version"] == 1
-    assert contract["change_identity"]["required_fields"] == ["base_sha", "head_sha", "merge_base_sha", "normalized_diff_fingerprint", "changed_paths", "generated_paths", "dependency_changes", "config_changes"]
+    assert contract["change_identity"]["required_fields"] == ["schema_version", "base_sha", "head_sha", "merge_base_sha", "normalized_diff_fingerprint", "changed_paths", "generated_paths", "dependency_changes", "config_changes"]
+    assert contract["change_identity"]["schema_version_value"] == 1
     assert contract["normalization"]["include_generated_paths"] is True
     assert "commit_message" in contract["normalization"]["excluded_transport_metadata"]
     assert contract["freshness"]["content_change_invalidates_review"] is True
@@ -44,6 +45,8 @@ def test_review_evidence_contract_is_portable_and_fail_closed():
     contract = _yaml("docs/skill-framework/shared/review-evidence.yaml")
     assert contract["schema_version"] == 1
     evidence = contract["review_evidence"]
+    assert evidence["required_fields"][0] == "schema_version"
+    assert evidence["schema_version_value"] == 1
     assert evidence["review_modes"] == ["normal", "exhaustive"]
     assert evidence["inspection_status_values"] == ["complete", "partial", "unable"]
     assert evidence["finding_categories"] == ["defect", "suggestion", "question"]
@@ -51,6 +54,12 @@ def test_review_evidence_contract_is_portable_and_fail_closed():
     assert evidence["rules"]["complete_forbidden_with_mandatory_unable_surface"] is True
     assert evidence["rules"]["stale_change_identity_invalidates_envelope"] is True
     assert evidence["rules"]["requirements_change_invalidates_envelope"] is True
+
+
+def test_payload_schema_versions_fail_closed():
+    validator = _load_validator()
+    assert any("schema_version" in error for error in validator.validate_change_identity(_identity(schema_version=True)))
+    assert any("schema_version" in error for error in validator.validate_review_evidence(_evidence(schema_version=2)))
 
 
 def test_fingerprint_is_deterministic_across_line_endings():
@@ -83,10 +92,7 @@ def test_requirements_change_invalidates_review_even_when_patch_is_unchanged():
 
 def test_identity_rejects_noncanonical_mapping_key_order_and_root_path():
     validator = _load_validator()
-    errors = validator.validate_change_identity(_identity(
-        changed_paths=["."],
-        dependency_changes=[{"z": 1, "a": 2}],
-    ))
+    errors = validator.validate_change_identity(_identity(changed_paths=["."], dependency_changes=[{"z": 1, "a": 2}]))
     assert any("repository-relative POSIX paths" in error for error in errors)
     assert any("recursively sorted string keys" in error for error in errors)
 
