@@ -86,6 +86,27 @@ def test_requirements_ref_rejects_yaml_specific_nonportable_values():
     assert any("requirements_ref" in error and "JSON-portable" in error for error in errors)
 
 
+def test_requirements_freshness_distinguishes_boolean_from_integer():
+    validator = _load_validator()
+    errors = validator.validate_review_evidence(
+        _evidence(requirements_ref={"revision": True}),
+        current_identity=_identity(),
+        current_requirements_ref={"revision": 1},
+    )
+    assert any("stale requirements_ref" in error for error in errors)
+
+
+def test_effective_patch_freshness_distinguishes_boolean_from_integer():
+    validator = _load_validator()
+    stored = _identity(config_changes=[{"enabled": True}])
+    current = _identity(config_changes=[{"enabled": 1}])
+    errors = validator.validate_review_evidence(
+        _evidence(change_identity=stored),
+        current_identity=current,
+    )
+    assert any("stale change_identity" in error for error in errors)
+
+
 def test_question_cannot_smuggle_blocking_extension_field():
     validator = _load_validator()
     findings = {
