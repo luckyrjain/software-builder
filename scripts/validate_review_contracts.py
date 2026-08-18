@@ -73,6 +73,15 @@ def _valid_schema_version(value: object) -> bool:
     return type(value) is int and value == 1
 
 
+def _required_fields_match(value: object, expected: set[str]) -> bool:
+    return (
+        isinstance(value, list)
+        and all(isinstance(item, str) for item in value)
+        and len(value) == len(expected)
+        and set(value) == expected
+    )
+
+
 def validate_change_identity(payload: object) -> list[str]:
     if not isinstance(payload, dict):
         return ["change_identity must be an object"]
@@ -219,7 +228,7 @@ def validate_contract_documents(root: Path = _ROOT) -> list[str]:
         errors.append("change identity contract must be schema_version 1 with change_identity object")
     else:
         identity_spec = change["change_identity"]
-        if set(identity_spec.get("required_fields", [])) != _REQUIRED_IDENTITY:
+        if not _required_fields_match(identity_spec.get("required_fields"), _REQUIRED_IDENTITY):
             errors.append("change identity contract required fields drifted")
         if identity_spec.get("schema_version_value") != 1:
             errors.append("change identity contract payload schema version drifted")
@@ -243,7 +252,7 @@ def validate_contract_documents(root: Path = _ROOT) -> list[str]:
         errors.append("review evidence contract must be schema_version 1 with review_evidence object")
     else:
         spec = evidence["review_evidence"]
-        if set(spec.get("required_fields", [])) != _REQUIRED_EVIDENCE:
+        if not _required_fields_match(spec.get("required_fields"), _REQUIRED_EVIDENCE):
             errors.append("review evidence contract required fields drifted")
         if spec.get("schema_version_value") != 1:
             errors.append("review evidence contract payload schema version drifted")
