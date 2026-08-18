@@ -11,6 +11,7 @@ change_identity:
     - dependency_changes
     - config_changes
   schema_version_value: 1
+  closed_v1: true
   sha_format: git_sha_40_or_64_lower_hex
   fingerprint_format: sha256_lower_hex_64
   path_format: repository_relative_posix
