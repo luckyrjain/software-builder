@@ -45,7 +45,13 @@ repository root, minus repo-development tooling that has nothing to do with inst
 `__pycache__`/`.pytest_cache`/`node_modules`/`dist` that ended up tracked) -- untracked files
 (caches, build output, local secrets) never enter a release, and a tracked symlink is rejected
 rather than silently dereferenced. Given the same Git tree, the resulting `.tar.gz` is
-byte-for-byte reproducible. The archive and its sidecar checksum files are written atomically
+byte-for-byte reproducible -- guaranteed within a single Python interpreter/zlib build (which is
+what `.github/workflows/release.yml`'s own verify step checks), not necessarily across different
+interpreters or zlib versions, since gzip compression output can vary there even though the
+decompressed tar payload and every `RELEASE-MANIFEST.json` file hash do not. A third party
+independently rebuilding a release on a different machine should compare the manifest's per-file
+SHA-256 digests (`scripts/verify_release_bundle.py`), not raw archive bytes, to confirm an
+untampered release. The archive and its sidecar checksum files are written atomically
 (built to a temp file, then renamed into place only once complete), so a failed build never
 corrupts or destroys a prior successful artifact left over in the same output directory.
 
