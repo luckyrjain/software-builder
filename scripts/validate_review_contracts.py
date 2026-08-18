@@ -10,6 +10,16 @@ _FP_RE = re.compile(r"^[0-9a-fA-F]{64}$")
 _REQUIRED_IDENTITY = {"base_sha", "head_sha", "merge_base_sha", "normalized_diff_fingerprint", "changed_paths", "generated_paths", "dependency_changes", "config_changes"}
 _REQUIRED_EVIDENCE = {"change_identity", "requirements_ref", "review_mode", "inspection_status", "inspected_surfaces", "unable_to_inspect", "findings", "generated_at"}
 _FINDING_BUCKETS = {"defect", "suggestion", "question"}
+_REVIEW_MODES = ["normal", "exhaustive"]
+_INSPECTION_STATUSES = ["complete", "partial", "unable"]
+_UNABLE_FIELDS = ["surface", "reason", "mandatory"]
+_FINDING_FIELDS = ["id", "category", "summary", "evidence"]
+_REQUIRED_RULES = {
+    "questions_are_non_blocking_until_promoted": True,
+    "complete_forbidden_with_mandatory_unable_surface": True,
+    "stale_change_identity_invalidates_envelope": True,
+    "categories_are_disjoint": True,
+}
 _EFFECTIVE_PATCH_FIELDS = ("normalized_diff_fingerprint", "changed_paths", "generated_paths", "dependency_changes", "config_changes")
 _ROOT = Path(__file__).resolve().parents[1]
 
@@ -18,7 +28,7 @@ def normalized_diff_fingerprint(canonical_effective_patch: str) -> str:
     if not isinstance(canonical_effective_patch, str):
         raise TypeError("canonical_effective_patch must be a string")
     normalized = canonical_effective_patch.replace("\r\n", "\n").replace("\r", "\n")
-    return hashlib.sha256(normalized.encode()).hexdigest()
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
 
 def _valid_repo_path(value: object) -> bool:
@@ -78,10 +88,10 @@ def validate_review_evidence(payload: object, *, current_identity: object | None
     if "requirements_ref" in payload and requirements_ref is not None and not isinstance(requirements_ref, dict):
         errors.append("requirements_ref must be an object or null")
     mode = payload.get("review_mode")
-    if "review_mode" in payload and (not isinstance(mode, str) or mode not in {"normal", "exhaustive"}):
+    if "review_mode" in payload and (not isinstance(mode, str) or mode not in _REVIEW_MODES):
         errors.append("review_mode must be normal or exhaustive")
     status = payload.get("inspection_status")
-    if "inspection_status" in payload and (not isinstance(status, str) or status not in {"complete", "partial", "unable"}):
+    if "inspection_status" in payload and (not isinstance(status, str) or status not in _INSPECTION_STATUSES):
         errors.append("inspection_status must be complete, partial, or unable")
     inspected = payload.get("inspected_surfaces")
     if "inspected_surfaces" in payload and (not isinstance(inspected, list) or not all(isinstance(x, str) and x for x in inspected)):
@@ -103,10 +113,12 @@ def validate_review_evidence(payload: object, *, current_identity: object | None
         else:
             for bucket, items in findings.items():
                 if not isinstance(items, list):
-                    errors.append(f"findings.{bucket} must be a list"); continue
+                    errors.append(f"findings.{bucket} must be a list")
+                    continue
                 for item in items:
                     if not isinstance(item, dict):
-                        errors.append(f"findings.{bucket} entries must be objects"); continue
+                        errors.append(f"findings.{bucket} entries must be objects")
+                        continue
                     if item.get("category") != bucket:
                         errors.append(f"findings.{bucket} entry category must equal {bucket}")
                     for field in ("id", "summary", "evidence"):
@@ -125,18 +137,49 @@ def validate_contract_documents(root: Path = _ROOT) -> list[str]:
             docs[name] = yaml.safe_load((root / rel).read_text(encoding="utf-8"))
         except (OSError, UnicodeDecodeError, yaml.YAMLError) as exc:
             errors.append(f"{name} contract unreadable: {exc}")
+
     change = docs.get("change identity")
     if not isinstance(change, dict) or type(change.get("schema_version")) is not int or change.get("schema_version") != 1 or not isinstance(change.get("change_identity"), dict):
         errors.append("change identity contract must be schema_version 1 with change_identity object")
-    elif set(change["change_identity"].get("required_fields", [])) != _REQUIRED_IDENTITY or change.get("normalization", {}).get("include_generated_paths") is not True:
-        errors.append("change identity contract required fields/normalization drifted")
+    else:
+        identity_spec = change["change_identity"]
+        if set(identity_spec.get("required_fields", [])) != _REQUIRED_IDENTITY:
+            errors.append("change identity contract required fields drifted")
+        normalization = change.get("normalization")
+        freshness = change.get("freshness")
+        if not isinstance(normalization, dict) or normalization.get("source") != "canonical_effective_patch" or normalization.get("include_generated_paths") is not True:
+            errors.append("change identity contract normalization drifted")
+        expected_freshness = {
+            "unchanged_effective_patch_may_preserve_review": True,
+            "conflict_resolution_invalidates_review": True,
+            "content_change_invalidates_review": True,
+            "generated_file_change_invalidates_review": True,
+        }
+        if not isinstance(freshness, dict) or any(freshness.get(k) is not v for k, v in expected_freshness.items()):
+            errors.append("change identity contract freshness rules drifted")
+
     evidence = docs.get("review evidence")
     if not isinstance(evidence, dict) or type(evidence.get("schema_version")) is not int or evidence.get("schema_version") != 1 or not isinstance(evidence.get("review_evidence"), dict):
         errors.append("review evidence contract must be schema_version 1 with review_evidence object")
     else:
         spec = evidence["review_evidence"]
-        if set(spec.get("required_fields", [])) != _REQUIRED_EVIDENCE or set(spec.get("finding_categories", [])) != _FINDING_BUCKETS or spec.get("unable_to_inspect_required_fields") != ["surface", "reason", "mandatory"]:
-            errors.append("review evidence contract required fields/taxonomy drifted")
+        if set(spec.get("required_fields", [])) != _REQUIRED_EVIDENCE:
+            errors.append("review evidence contract required fields drifted")
+        if spec.get("requirements_ref_type") != "object_or_null":
+            errors.append("review evidence contract requirements_ref_type drifted")
+        if spec.get("review_modes") != _REVIEW_MODES:
+            errors.append("review evidence contract review modes drifted")
+        if spec.get("inspection_status_values") != _INSPECTION_STATUSES:
+            errors.append("review evidence contract inspection statuses drifted")
+        if spec.get("finding_categories") != ["defect", "suggestion", "question"]:
+            errors.append("review evidence contract finding taxonomy drifted")
+        if spec.get("unable_to_inspect_required_fields") != _UNABLE_FIELDS:
+            errors.append("review evidence contract unable-to-inspect fields drifted")
+        if spec.get("finding_required_fields") != _FINDING_FIELDS:
+            errors.append("review evidence contract finding fields drifted")
+        rules = spec.get("rules")
+        if not isinstance(rules, dict) or any(rules.get(k) is not v for k, v in _REQUIRED_RULES.items()):
+            errors.append("review evidence contract rules drifted")
     return errors
 
 
