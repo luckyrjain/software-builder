@@ -12,6 +12,7 @@ review_evidence:
     - generated_at
   schema_version_value: 1
   requirements_ref_type: object_or_null
+  nested_value_max_depth: 32
   review_modes: [normal, exhaustive]
   inspection_status_values: [complete, partial, unable]
   finding_categories: [defect, suggestion, question]
