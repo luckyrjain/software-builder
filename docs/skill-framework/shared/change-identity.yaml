@@ -12,8 +12,8 @@ change_identity:
     - config_changes
   schema_version_value: 1
   closed_v1: true
-  sha_format: git_sha_40_or_64_lower_hex
-  fingerprint_format: sha256_lower_hex_64
+  sha_format: git_sha_40_or_64_hex
+  fingerprint_format: sha256_hex_64
   path_format: repository_relative_posix
   nested_value_format: json_portable
   nested_value_max_depth: 32
