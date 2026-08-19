@@ -54,3 +54,10 @@ def test_portable_id_and_evidence_policy_is_explicit():
     assert ids["suggestion"].startswith("PRS_dash_first12_sha256")
     assert ids["question"].startswith("PRQ_dash_first12_sha256")
     assert evidence["empty_evidence_forbidden"] is True
+
+
+def test_gate_blocks_mandatory_unavailable_even_when_partial():
+    gate = _text("pr-review/workflow/phase-2-3-gate.md")
+    assert "any** `review_evidence.unable_to_inspect[]` entry with `mandatory: true`" in gate.lower()
+    assert "partial` may reach phase 3 **only when every unavailable entry is non-mandatory" in gate.lower()
+    assert "mandatory unavailable coverage never" in gate.lower()
