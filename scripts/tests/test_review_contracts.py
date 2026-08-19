@@ -37,6 +37,7 @@ def test_change_identity_contract_has_required_fields():
     assert contract["change_identity"]["required_fields"] == ["schema_version", "base_sha", "head_sha", "merge_base_sha", "normalized_diff_fingerprint", "changed_paths", "generated_paths", "dependency_changes", "config_changes"]
     assert contract["change_identity"]["schema_version_value"] == 1
     assert contract["normalization"]["include_generated_paths"] is True
+    assert contract["normalization"]["generated_paths_subset_of_changed_paths"] is True
     assert "commit_message" in contract["normalization"]["excluded_transport_metadata"]
     assert contract["freshness"]["content_change_invalidates_review"] is True
     assert contract["freshness"]["content_neutral_base_update_requires_synced_merge_base"] is True
@@ -133,7 +134,17 @@ def test_unable_status_requires_named_unavailable_surface():
 
 def test_generated_path_difference_makes_identity_stale():
     validator = _load_validator()
-    errors = validator.validate_review_evidence(_evidence(_identity(generated_paths=["generated/client.py"])), current_identity=_identity(generated_paths=["generated/client_v2.py"]))
+    stored = _identity(
+        changed_paths=["generated/client.py", "src/a.py"],
+        generated_paths=["generated/client.py"],
+    )
+    current = _identity(
+        changed_paths=["generated/client_v2.py", "src/a.py"],
+        generated_paths=["generated/client_v2.py"],
+    )
+    assert validator.validate_change_identity(stored) == []
+    assert validator.validate_change_identity(current) == []
+    errors = validator.validate_review_evidence(_evidence(stored), current_identity=current)
     assert any("stale change_identity" in error for error in errors)
 
 
