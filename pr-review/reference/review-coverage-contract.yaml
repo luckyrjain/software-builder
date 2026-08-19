@@ -33,12 +33,13 @@ inspection_surfaces:
 inspection_status:
   values: [complete, partial, unable]
   complete_requires:
-    - every_triggered_surface_has_evidence_or_explicit_not_applicable
-    - no_mandatory_unable_to_inspect_entry
+    - every_triggered_surface_status_complete
+    - every_completed_surface_has_nonempty_evidence_sources
+    - no_triggered_surface_pending_unable_or_not_applicable
   partial_when:
-    - at_least_one_triggered_surface_cannot_be_inspected
+    - at_least_one_triggered_surface_status_unable_and_meaningful_review_evidence_exists
   unable_when:
-    - review_boundary_or_mandatory_primary_surface_cannot_be_inspected
+    - review_boundary_or_mandatory_primary_surface_cannot_be_inspected_enough_for_meaningful_review
 
 unable_to_inspect:
   machine_field: review_evidence.unable_to_inspect
