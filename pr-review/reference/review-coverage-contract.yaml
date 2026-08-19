@@ -58,6 +58,7 @@ finding_classification:
   prr_category_preservation: stable_PRR_id_plus_existing_review_metadata_not_extra_portable_fields
 
 change_identity:
+  produced_by: phase_1_2_coverage
   build_from:
     - base_sha
     - head_sha
@@ -71,7 +72,7 @@ change_identity:
   stale_identity_invalidates_review_evidence: true
 
 review_evidence:
-  produced_by: phase_2
+  produced_by: phase_2_evidence
   required_for: [posting, chat_only]
   bind_to_current_change_identity: true
   bind_to_requirements_ref: true
