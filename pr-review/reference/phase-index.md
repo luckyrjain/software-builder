@@ -16,11 +16,11 @@ actually executed and judged through the same finding pipeline.
 | **Phase 1** | `workflow/phase-1.md` | review boundary, `capability_profile`, baseline, CI, Jira AC |
 | **Phase 1→2 coverage** | `workflow/phase-1-2-coverage.md` + `reference/review-coverage-execution.md` §Phase 1→2 coverage | validated `change_identity`, `inspection_plan`, initial `unable_to_inspect` |
 | **Phase 2** | `workflow/phase-2.md` | findings, `review_metrics`, root-cause groups |
-| **Phase 2 coverage review** | `workflow/phase-2-coverage-review.md` + `reference/review-coverage-execution.md` §Coverage review | updated findings/metrics, finalized `inspection_plan`, `coverage_unable_to_inspect` |
-| **Phase 2 evidence** | `workflow/phase-2-evidence.md` + `reference/review-coverage-execution.md` §Phase 2 evidence | portable validated `review_evidence`, finalized `inspection_plan` |
+| **Phase 2 coverage review** | `workflow/phase-2-coverage-review.md` + `reference/review-coverage-execution.md` §Coverage review | updated findings/metrics, finalized `inspection_plan`, `coverage_unable_to_inspect`, typed `portable_suggestions`, typed `portable_questions` |
+| **Phase 2 evidence** | `workflow/phase-2-evidence.md` + `reference/review-coverage-execution.md` §Phase 2 evidence | portable validated `review_evidence` built only from typed defect/suggestion/question inputs, finalized `inspection_plan` |
 | **Phase 2→3 gate** | `workflow/phase-2-3-gate.md` | continue / skip posting / stop; consumes current `inspection_plan` + valid `review_evidence` |
 | **Phase 3–4** | `workflow/posting.md` | posted threads + summary note |
-| **Phase 5** | `workflow/phase-5.md` | executive summary (final) |
+| **Phase 5** | `workflow/phase-5.md` | executive summary (final), including coverage gaps when evidence is partial/unable |
 
 > **Note:** Phases 3 and 4 share a single workflow file (`posting.md`) rather than separate
 > `phase-3.md` / `phase-4.md` files. This is intentional — Phase 3 (confirmation gate) and Phase 4
