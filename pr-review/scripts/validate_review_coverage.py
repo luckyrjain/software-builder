@@ -2,7 +2,9 @@
 """Validate pr-review inspection coverage against the shared review evidence contracts."""
 from __future__ import annotations
 
+import hashlib
 import importlib.util
+import re
 from pathlib import Path
 from types import ModuleType
 
@@ -18,6 +20,7 @@ SURFACES = (
 )
 PLAN_FIELDS = {"triggered", "reason", "mandatory", "evidence_sources", "status"}
 PLAN_STATUSES = {"pending", "complete", "unable", "not_applicable"}
+_DEFECT_ID_RE = re.compile(r"^PRR-(?:[A-Z][A-Z0-9]*-)?\d{3}$")
 _UNSET = object()
 
 
@@ -29,6 +32,17 @@ def _load_shared_validator() -> ModuleType:
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def _normalize_summary(value: str) -> str:
+    """Canonical summary text used only for deterministic portable IDs."""
+    return " ".join(value.split())
+
+
+def _content_finding_id(category: str, summary: str, evidence: str) -> str:
+    prefix = {"suggestion": "PRS", "question": "PRQ"}[category]
+    canonical = f"{category}\0{_normalize_summary(summary)}\0{evidence}".encode("utf-8")
+    return f"{prefix}-{hashlib.sha256(canonical).hexdigest()[:12]}"
 
 
 def validate_inspection_plan(plan: object) -> list[str]:
@@ -87,6 +101,38 @@ def validate_inspection_plan(plan: object) -> list[str]:
     return errors
 
 
+def _validate_portable_finding_ids(review_evidence: dict[str, object]) -> list[str]:
+    errors: list[str] = []
+    findings = review_evidence.get("findings")
+    if not isinstance(findings, dict):
+        return errors
+
+    for bucket in ("defect", "suggestion", "question"):
+        items = findings.get(bucket)
+        if not isinstance(items, list):
+            continue
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            finding_id = item.get("id")
+            summary = item.get("summary")
+            evidence = item.get("evidence")
+            if not all(isinstance(value, str) and value for value in (finding_id, summary, evidence)):
+                continue
+            if bucket == "defect":
+                if not _DEFECT_ID_RE.fullmatch(finding_id):
+                    errors.append(
+                        f"findings.defect id {finding_id!r} must preserve PRR-<CAT>-NNN or legacy PRR-NNN"
+                    )
+                continue
+            expected = _content_finding_id(bucket, summary, evidence)
+            if finding_id != expected:
+                errors.append(
+                    f"findings.{bucket} id {finding_id!r} is not the deterministic content id; expected {expected!r}"
+                )
+    return errors
+
+
 def validate_review_coverage(
     inspection_plan: object,
     review_evidence: object,
@@ -107,6 +153,8 @@ def validate_review_coverage(
 
     if not isinstance(inspection_plan, dict) or not isinstance(review_evidence, dict):
         return errors
+
+    errors.extend(_validate_portable_finding_ids(review_evidence))
 
     inspected_raw = review_evidence.get("inspected_surfaces")
     if isinstance(inspected_raw, list) and all(isinstance(item, str) for item in inspected_raw):
