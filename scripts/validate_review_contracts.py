@@ -375,6 +375,7 @@ def validate_contract_documents(root: Path = _ROOT) -> list[str]:
                 not isinstance(normalization, dict)
                 or normalization.get("source") != "canonical_effective_patch"
                 or normalization.get("include_generated_paths") is not True
+                or normalization.get("generated_paths_subset_of_changed_paths") is not True
                 or normalization.get("excluded_transport_metadata") != _EXCLUDED_TRANSPORT_METADATA
                 or normalization.get("ordering") != _ORDERING
             ):
