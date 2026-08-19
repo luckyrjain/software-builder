@@ -25,8 +25,10 @@ review* (`reference/finding-pipeline.md` §10).
 
 **Coverage and portable evidence:** every review must follow
 `reference/review-coverage-contract.yaml`. The Phase 1→2 coverage step builds a current `change_identity`
-and `inspection_plan`; the Phase 2 evidence step records each triggered surface as inspected or
-`unable_to_inspect` and emits the final portable `review_evidence`. Never treat an uninspected
+and `inspection_plan`; after normal Phase 2 judgment, the mandatory Phase 2 coverage-review subphase executes
+any triggered cross-file/hidden-consumer/compatibility/readiness inspections not already evidenced and routes
+new candidates through the same finding pipeline. The Phase 2 evidence step then records each triggered surface
+as inspected or `unable_to_inspect` and emits the final portable `review_evidence`. Never treat an uninspected
 hidden-consumer, cross-file, schema/migration, rollout/rollback, test-quality, or dependency/config/IaC
 surface as clean. Use the shared `../docs/skill-framework/shared/change-identity.yaml` and
 `../docs/skill-framework/shared/review-evidence.yaml` contracts. Severity findings remain PRR-category
@@ -73,11 +75,14 @@ Phase index: **`reference/phase-index.md`** — one workflow file per step; refe
 branch/MR changed**.
 
 After Phase 1 gathering, run `workflow/phase-1-2-coverage.md` to build and validate the current change
-identity and six-surface inspection plan. After Phase 2 finding judgment, run
-`workflow/phase-2-evidence.md` to finalize the plan, populate `review_evidence.inspected_surfaces`, record
-every unavailable surface in `review_evidence.unable_to_inspect` with `{surface, reason, mandatory}`, and
-execute `pr-review/scripts/validate_review_coverage.py`. The Phase 2→3 gate consumes this validated state
-and must not claim a complete review when any triggered surface is unavailable or pending.
+identity and six-surface inspection plan. After normal Phase 2 finding judgment, run
+`workflow/phase-2-coverage-review.md` to execute every triggered coverage surface not already sufficiently
+inspected, pass any new candidate through the same finding pipeline, and regenerate combined grouping/metrics.
+Then run `workflow/phase-2-evidence.md` to finalize the plan, populate
+`review_evidence.inspected_surfaces`, record every unavailable surface in
+`review_evidence.unable_to_inspect` with `{surface, reason, mandatory}`, and execute
+`pr-review/scripts/validate_review_coverage.py`. The Phase 2→3 gate consumes this validated state and must not
+claim a complete review when any triggered surface is unavailable or pending.
 
 Report sections: [report-template.md](report-template.md).
 
@@ -94,7 +99,7 @@ Report sections: [report-template.md](report-template.md).
 - Use `reference/provider-adapters.md` for provider routing; prefer `/pr-review` over a provider-specific command.
 - Stop-search thresholds: `reference/severity-rubric.md` §Stop searching only
 - Phase 2→3 gate **blocked** → skip Phase 3–4, render Phase 5 chat summary (`workflow/phase-2-3-gate.md`)
-- Partial review paths: interrupted Phase 2, evidence validation partial/unable, Phase 3 cancel, Phase 4 partial-post (`workflow/phase-5.md`)
+- Partial review paths: interrupted Phase 2, coverage/evidence validation partial/unable, Phase 3 cancel, Phase 4 partial-post (`workflow/phase-5.md`)
 - Executive summary: `reference/executive-summary.md` · lifecycle modes: `reference/review-modes.md`
 - Smoke test (post-install / post-edit): [reference/smoke-test.md](reference/smoke-test.md)
 - Severity calibration: High certainty gate (step 7a) — impact + certainty for High; OUR for unconfirmed auth
@@ -122,11 +127,12 @@ severity-rubric calibration, stop-search thresholds, fast-path detection, untrus
 review-coverage-contract inspection completeness, current change-identity validation, hidden consumer and
 cross-file impact coverage when triggered, schema/migration compatibility, rollout/rollback, test quality,
 dependency/config/IaC coverage, unable_to_inspect annotation for every unavailable surface,
-validate_review_coverage clean before Phase 2→3]; blocked_conditions=[Phase 2→3 gate blocked, no valid target,
-stale/invalid change_identity or review_evidence, triggered inspection surface pending/unavailable while review
-is claimed complete, approve/merge/close/reopen requested]; partial_result_behavior=render Phase 5 chat summary
-from findings so far, mark review_evidence inspection_status partial or unable as applicable, and note
-skipped/unavailable surfaces per workflow/phase-5.md.
+coverage-review combined regrouping, validate_review_coverage clean before Phase 2→3];
+blocked_conditions=[Phase 2→3 gate blocked, no valid target, stale/invalid change_identity or review_evidence,
+triggered inspection surface pending/unavailable while review is claimed complete,
+approve/merge/close/reopen requested]; partial_result_behavior=render Phase 5 chat summary from findings so far,
+mark review_evidence inspection_status partial or unable as applicable, and note skipped/unavailable surfaces per
+workflow/phase-5.md.
 
 Routing: [skill-routing.md](../docs/skill-framework/shared/skill-routing.md) · shared conventions:
 [docs/skill-framework/README.md](../docs/skill-framework/README.md) · confidence
