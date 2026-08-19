@@ -28,7 +28,6 @@ def _load_shared_validator() -> ModuleType:
     candidates = (
         SKILL_ROOT / "docs/skill-framework/shared/review_contract_runtime.py",
         SKILL_ROOT.parent / "docs/skill-framework/shared/review_contract_runtime.py",
-        SKILL_ROOT.parent / "scripts/validate_review_contracts.py",
     )
     path = next((candidate for candidate in candidates if candidate.is_file()), None)
     if path is None:
