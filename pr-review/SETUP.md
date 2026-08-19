@@ -6,7 +6,7 @@
 | Field | Value |
 |-------|-------|
 | **Owner** | software-builder maintainers |
-| **Last reviewed** | 2026-08-09 |
+| **Last reviewed** | 2026-08-19 |
 | **Review cadence** | Quarterly — or when pinned MCP package versions change |
 | **External services** | GitLab MCP or GitHub App/MCP or gh, Jira MCP (optional) |
 
@@ -96,23 +96,33 @@ be slash-command-only.
 - **GitLab:** MR/diff/pipeline MCP flow, inline threads or general notes,
   `reference/gitlab-inline-comments.md`, and `scripts/diff-to-positions.py`.
 
+The tree below highlights the operator-facing workflow plus Batch 5.2B runtime files; use
+`reference/phase-index.md` and `reference/lazy-load-index.md` as the authoritative complete indexes.
+
 ```
 .cursor/skills/pr-review/
 ├── SKILL.md                    # thin orchestrator — workflow index + guardrails
 ├── workflow/
-│   ├── inputs.md               # MR resolution, list MRs
-│   ├── phase-0.md              # MCP capability detection
+│   ├── inputs.md               # PR/MR resolution, list reviews
+│   ├── phase-0.md              # provider/MCP capability detection
 │   ├── phase-1.md              # gather steps
-│   ├── phase-2.md              # review, dedupe, root-cause grouping
-│   ├── phase-2-3-gate.md       # re-run decision
+│   ├── phase-1-2-coverage.md   # change identity + six-surface inspection plan
+│   ├── phase-2.md              # core review, dedupe, root-cause grouping
+│   ├── phase-2-coverage-review.md # execute missing cross-file/consumer/compatibility coverage
+│   ├── phase-2-evidence.md     # portable review evidence + validator gate
+│   ├── phase-2-3-gate.md       # full-identity/requirements freshness + posting decision
 │   ├── posting.md              # Phase 3 confirm + Phase 4 post
-│   └── phase-5.md              # executive summary, Jira write-back
+│   └── phase-5.md              # executive summary + coverage gaps
+├── docs/
+│   └── skill-framework/shared/
+│       └── review_contract_runtime.py # portable installed identity/evidence validator
 ├── SETUP.md                    # this file
 ├── examples.md
 ├── examples/
 │   └── review-rules.yaml       # starter template for repos
 ├── scripts/
 │   ├── diff-to-positions.py         # helper for inline comment anchoring
+│   ├── validate_review_coverage.py  # Batch 5.2B coverage/evidence validator
 │   └── pr_review_policy_guards.py   # recommendation matrix + finding gates (pytest)
 ├── tests/
 │   ├── test_diff_to_positions.py
@@ -120,7 +130,10 @@ be slash-command-only.
 │   ├── test_pr_review_policy_guards.py
 │   └── fixtures/
 │       └── phase5-review-metadata.yaml
-└── reference/                  # lazy-loaded modules — full "when to load what" index: reference/lazy-load-index.md
+└── reference/                  # lazy-loaded modules — complete index: reference/lazy-load-index.md
+    ├── phase-index.md          # canonical workflow sequence
+    ├── review-coverage-contract.yaml
+    ├── review-coverage-execution.md
     ├── mcp-capabilities.md     # tool matrix per GitLab/Jira server
     ├── severity-rubric.md
     ├── review-checklist.md
@@ -383,9 +396,11 @@ supported PR or MR.
 For the full invocation table and edge cases, see [examples.md](examples.md).
 
 **`review and post …`** does **not** unconditionally skip the Phase 3 confirmation gate. It skips
-confirmation **only** when the posting mode is `full` or `summary-only`, the PR/MR is not a draft, and
-`review_metrics.review_complete` is not `false`. `general-only` always shows its ⚠️ warning and
-requires confirmation, and any draft or incomplete PR/MR review always requires confirmation.
+confirmation **only** when the posting mode is `full` or `summary-only`, the PR/MR is not a draft, the
+review is complete (`review_metrics.review_complete` is not `false`), and portable inspection coverage is
+`complete`. `general-only` always shows its ⚠️ warning and requires confirmation. Any draft, incomplete,
+or `review_evidence.inspection_status: partial|unable` review requires explicit confirmation; mandatory
+unavailable coverage is blocked before Phase 3 and cannot be posted.
 
 Phase 0 announces posting mode and workspace scope. Warnings when:
 - **`general-only`** — comments are general MR notes, not inline on the diff.
