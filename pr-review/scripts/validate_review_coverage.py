@@ -9,7 +9,7 @@ from pathlib import Path
 from types import ModuleType
 
 
-ROOT = Path(__file__).resolve().parents[2]
+SKILL_ROOT = Path(__file__).resolve().parents[1]
 SURFACES = (
     "cross_file_impact",
     "hidden_consumers",
@@ -26,8 +26,9 @@ _UNSET = object()
 
 def _load_shared_validator() -> ModuleType:
     candidates = (
-        ROOT / "docs/skill-framework/shared/review_contract_runtime.py",
-        ROOT / "scripts/validate_review_contracts.py",
+        SKILL_ROOT / "docs/skill-framework/shared/review_contract_runtime.py",
+        SKILL_ROOT.parent / "docs/skill-framework/shared/review_contract_runtime.py",
+        SKILL_ROOT.parent / "scripts/validate_review_contracts.py",
     )
     path = next((candidate for candidate in candidates if candidate.is_file()), None)
     if path is None:
