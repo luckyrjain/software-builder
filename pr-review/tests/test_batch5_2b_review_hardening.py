@@ -115,12 +115,12 @@ def test_coverage_execution_emits_shared_review_evidence_and_classifies_findings
         "inspection_status",
         "inspected_surfaces",
         "generated_at",
-        "stale/invalid envelope blocks posting",
+        "any validation error is a **gate blocker**",
         "contains exactly",
         "incremental and retrospective",
         "validate_review_coverage.py",
         "validate_review_coverage(...)",
-        "gate blocker",
+        "current `change_identity`",
     ):
         assert token.lower() in execution.lower()
 
