@@ -4,13 +4,17 @@
 only through `finding-pipeline.md`. Re-review skips Inputs and Phase 0 unless **MCP reconnected** or
 **target branch / MR target changed** (re-resolve in Inputs when the review target changes).
 
+For every non-listing review, Phase 1 and Phase 2 must also load
+`reference/review-coverage-execution.md`, which operationalizes the shared 5.2A change-identity and
+review-evidence contracts without duplicating detector logic.
+
 | Step | Read now | Produces |
 |------|----------|----------|
 | **Inputs** | `workflow/inputs.md` | `{ review_target, project_id?, merge_request_iid? }` |
 | **Phase 0** | `workflow/phase-0.md` | `posting_mode`, `jira_write_available` |
-| **Phase 1** | `workflow/phase-1.md` | review boundary, `capability_profile`, baseline, CI, Jira AC |
-| **Phase 2** | `workflow/phase-2.md` | findings, `review_metrics`, root-cause groups |
-| **Phase 2→3 gate** | `workflow/phase-2-3-gate.md` | continue / skip posting / stop |
+| **Phase 1** | `workflow/phase-1.md` + `reference/review-coverage-execution.md` §Phase 1 | review boundary, `capability_profile`, baseline, CI, Jira AC, `change_identity`, `inspection_plan`, initial `unable_to_inspect` |
+| **Phase 2** | `workflow/phase-2.md` + `reference/review-coverage-execution.md` §Phase 2 | findings, `review_metrics`, root-cause groups, portable `review_evidence` |
+| **Phase 2→3 gate** | `workflow/phase-2-3-gate.md` | continue / skip posting / stop; requires current valid `review_evidence` |
 | **Phase 3–4** | `workflow/posting.md` | posted threads + summary note |
 | **Phase 5** | `workflow/phase-5.md` | executive summary (final) |
 
