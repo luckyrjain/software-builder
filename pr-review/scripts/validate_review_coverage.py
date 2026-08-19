@@ -63,6 +63,18 @@ def _canonical_non_defect_evidence(category: str, evidence: str) -> bool:
     return parts == sorted(parts)
 
 
+def _identity_shas_changed(stored_identity: object, current_identity: object) -> bool:
+    """Detect a SHA transition that requires explicit conflict-resolution provenance."""
+    if not isinstance(stored_identity, dict) or not isinstance(current_identity, dict):
+        return False
+    for field in ("base_sha", "head_sha", "merge_base_sha"):
+        stored = stored_identity.get(field)
+        current = current_identity.get(field)
+        if isinstance(stored, str) and isinstance(current, str) and stored.lower() != current.lower():
+            return True
+    return False
+
+
 def validate_inspection_plan(plan: object) -> list[str]:
     if not isinstance(plan, dict):
         return ["inspection_plan must be an object"]
@@ -162,14 +174,27 @@ def validate_review_coverage(
     *,
     current_identity: object | None = None,
     current_requirements_ref: object = _UNSET,
-    conflict_resolution_occurred: bool = False,
+    conflict_resolution_occurred: bool | None = None,
 ) -> list[str]:
     """Validate final Phase-2 coverage plus the shared portable review envelope."""
     errors = validate_inspection_plan(inspection_plan)
     shared = _load_shared_validator()
 
+    stored_identity = review_evidence.get("change_identity") if isinstance(review_evidence, dict) else None
+    sha_transition = current_identity is not None and _identity_shas_changed(stored_identity, current_identity)
+    if conflict_resolution_occurred is not None and type(conflict_resolution_occurred) is not bool:
+        errors.append("conflict_resolution_occurred must be a boolean when provided")
+        conflict_for_shared = True
+    elif sha_transition and conflict_resolution_occurred is None:
+        errors.append(
+            "conflict_resolution_occurred must be established when change-identity SHAs change"
+        )
+        conflict_for_shared = True
+    else:
+        conflict_for_shared = bool(conflict_resolution_occurred)
+
     shared_kwargs: dict[str, object] = {
-        "conflict_resolution_occurred": conflict_resolution_occurred,
+        "conflict_resolution_occurred": conflict_for_shared,
     }
     if current_identity is not None:
         shared_kwargs["current_identity"] = current_identity
