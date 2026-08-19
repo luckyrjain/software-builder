@@ -1,0 +1,31 @@
+schema_version: 1
+review_evidence:
+  required_fields:
+    - schema_version
+    - change_identity
+    - requirements_ref
+    - review_mode
+    - inspection_status
+    - inspected_surfaces
+    - unable_to_inspect
+    - findings
+    - generated_at
+  schema_version_value: 1
+  requirements_ref_type: object_or_null
+  nested_value_max_depth: 32
+  review_modes: [normal, exhaustive]
+  inspection_status_values: [complete, partial, unable]
+  finding_categories: [defect, suggestion, question]
+  unable_to_inspect_required_fields: [surface, reason, mandatory]
+  finding_required_fields: [id, category, summary, evidence]
+  rules:
+    envelope_is_closed_v1: true
+    questions_are_non_blocking_until_promoted: true
+    complete_forbidden_with_mandatory_unable_surface: true
+    unable_status_requires_unable_to_inspect_entry: true
+    stale_change_identity_invalidates_envelope: true
+    requirements_change_invalidates_envelope: true
+    categories_are_disjoint: true
+    finding_entries_are_closed_v1: true
+    unable_entries_are_closed_v1: true
+    requirements_ref_is_json_portable: true

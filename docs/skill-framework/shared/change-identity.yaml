@@ -1,0 +1,38 @@
+schema_version: 1
+change_identity:
+  required_fields:
+    - schema_version
+    - base_sha
+    - head_sha
+    - merge_base_sha
+    - normalized_diff_fingerprint
+    - changed_paths
+    - generated_paths
+    - dependency_changes
+    - config_changes
+  schema_version_value: 1
+  closed_v1: true
+  sha_format: git_sha_40_or_64_hex
+  fingerprint_format: sha256_hex_64
+  path_format: repository_relative_posix
+  nested_value_format: json_portable
+  nested_value_max_depth: 32
+normalization:
+  source: canonical_effective_patch
+  include_generated_paths: true
+  generated_paths_subset_of_changed_paths: true
+  excluded_transport_metadata:
+    - commit_message
+    - provider_diff_headers
+    - review_comment_text
+  ordering:
+    changed_paths: lexicographic
+    generated_paths: lexicographic
+    dependency_changes: canonical_object_order
+    config_changes: canonical_object_order
+freshness:
+  unchanged_effective_patch_may_preserve_review: true
+  content_neutral_base_update_requires_synced_merge_base: true
+  conflict_resolution_invalidates_review: true
+  content_change_invalidates_review: true
+  generated_file_change_invalidates_review: true
