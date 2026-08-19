@@ -14,6 +14,8 @@ routes:
   posting:
     when: {posting_decision: post}
     phases: [inputs, "0", "1", "2", 2-3-gate, 3-4, "5"]
+    required_outputs: [review_evidence]
   chat_only:
     when: {posting_decision: skip}
     phases: [inputs, "0", "1", "2", 2-3-gate, "5"]
+    required_outputs: [review_evidence]
