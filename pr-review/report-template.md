@@ -9,18 +9,20 @@ reference files; follow [workflow/phase-5.md](workflow/phase-5.md).
 |-------|---------|-----------|------|
 | 1 | Re-review block | [comment-templates.md](reference/comment-templates.md) | Incremental only |
 | 2 | Review findings | [finding-pipeline.md](reference/finding-pipeline.md) | Always |
-| 3 | Not raised (suppressed) | [not-raised.md](reference/not-raised.md) | When suppressions or cluster merges |
-| 4 | Engineering improvements | [review-metrics.md](reference/review-metrics.md) §Repository maturity | When non-empty |
-| 5 | Positive observations | [positive-observations.md](reference/positive-observations.md) | When ≥2 apply |
-| 6 | Production risk | [production-risk.md](reference/production-risk.md) | Non-mechanical MRs |
-| 7 | Architectural summary | [architectural-summary.md](reference/architectural-summary.md) | Non-mechanical MRs |
-| 8 | Executive Summary | [executive-summary.md](reference/executive-summary.md), [gold-review-excerpt.md](reference/gold-review-excerpt.md) | Always (capstone) |
-| 9 | Conclusion | [executive-summary.md](reference/executive-summary.md#conclusion) | Always |
-| 10 | `review_metadata` YAML footer | [review-metrics.md](reference/review-metrics.md) | Always |
+| 3 | Coverage gaps | [workflow/phase-5.md](workflow/phase-5.md) §Coverage gaps | `review_evidence.inspection_status: partial|unable` or invalid finalized inspection state |
+| 4 | Not raised (suppressed) | [not-raised.md](reference/not-raised.md) | When suppressions or cluster merges |
+| 5 | Engineering improvements | [review-metrics.md](reference/review-metrics.md) §Repository maturity | When non-empty |
+| 6 | Positive observations | [positive-observations.md](reference/positive-observations.md) | When ≥2 apply |
+| 7 | Production risk | [production-risk.md](reference/production-risk.md) | Non-mechanical MRs |
+| 8 | Architectural summary | [architectural-summary.md](reference/architectural-summary.md) | Non-mechanical MRs |
+| 9 | Executive Summary | [executive-summary.md](reference/executive-summary.md), [gold-review-excerpt.md](reference/gold-review-excerpt.md) | Always (capstone) |
+| 10 | Conclusion | [executive-summary.md](reference/executive-summary.md#conclusion) | Always |
+| 11 | `review_metadata` YAML footer | [review-metrics.md](reference/review-metrics.md) | Always |
 
 ## Partial review
 
-When review stops early ([workflow/phase-5.md](workflow/phase-5.md) §Partial review):
+When review stops early or machine inspection coverage is incomplete
+([workflow/phase-5.md](workflow/phase-5.md) §Partial review):
 
 ```markdown
 ## Partial review — stopped during analysis
@@ -69,7 +71,22 @@ When review stops early ([workflow/phase-5.md](workflow/phase-5.md) §Partial re
 <findings emitted before stop — or "No actionable findings">
 ```
 
-Do **not** present partial output as a complete review.
+For Batch 5.2B inspection partial/unable output, use the same incomplete-review framing but render the
+Coverage gaps block immediately after Review findings and before Not raised:
+
+```markdown
+### Coverage gaps
+
+| Surface | Mandatory | Reason |
+|---------|-----------|--------|
+| `hidden_consumers` | Yes | repository consumer search unavailable |
+```
+
+Mandatory unavailable coverage means the review is not complete, cannot be presented as merge-ready, and does not
+enter provider posting. Non-mandatory partial coverage is capped below Approve and requires explicit posting
+confirmation. `inspection_status: unable` uses Confidence Low.
+
+Do **not** present partial or unable output as a complete review.
 
 ## Canvas hint
 
