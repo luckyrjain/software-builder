@@ -12,9 +12,12 @@ Read reference files **one at a time** when the active workflow phase says to �
 | Phase 1 — CI / merge train | [phase-1-gather.md](phase-1-gather.md) |
 | Phase 1 — repo rules | [review-rules.md](review-rules.md) (+ repo `review-rules.yaml` if present) |
 | Phase 1 — regulated paths (no YAML) | [domain-overrides.md](domain-overrides.md) |
+| Phase 1→2 coverage — identity + inspection plan | [review-coverage-contract.yaml](review-coverage-contract.yaml), [review-coverage-execution.md](review-coverage-execution.md) §Phase 1→2 coverage, shared [change-identity.yaml](../../docs/skill-framework/shared/change-identity.yaml) |
 | Phase 2 — review | Batch-load the full "Also load now" set at the top of `workflow/phase-2.md` (review-personas, finding-pipeline, finding-gates, finding-evidence-model, detection-vs-judgment, precedence, contextual-severity, severity-rubric, review-checklist, review-metrics, review-rules when applicable) **before emitting any finding** — not a trickle sequence; §16 architecture-lens and others load only when triggered |
 | Phase 2 — §16 triggered | [architecture-lens.md](architecture-lens.md) |
-| Phase 2→3 — incremental | [incremental-rerun.md](incremental-rerun.md) |
+| Phase 2 coverage review — systematic extra surfaces | [review-coverage-contract.yaml](review-coverage-contract.yaml), [review-coverage-execution.md](review-coverage-execution.md) §Coverage review, [finding-pipeline.md](finding-pipeline.md) |
+| Phase 2 evidence — portable envelope | [review-coverage-contract.yaml](review-coverage-contract.yaml), [review-coverage-execution.md](review-coverage-execution.md) §Phase 2 evidence, shared [review-evidence.yaml](../../docs/skill-framework/shared/review-evidence.yaml) |
+| Phase 2→3 — freshness / posting decision | `workflow/phase-2-3-gate.md`; [incremental-rerun.md](incremental-rerun.md) when incremental. Rebuild current identity/requirements before allowing posting. |
 | Phase 1 — provider adapter | [provider-adapters.md](provider-adapters.md); GitHub target also [mcp-capabilities.md](mcp-capabilities.md) |
 | Phase 3–4 — posting | [comment-templates.md](comment-templates.md); GitLab `full` also [gitlab-inline-comments.md](gitlab-inline-comments.md); GitHub `full` also [github-inline-comments.md](github-inline-comments.md) |
 | Phase 5 — closeout | [gold-review-excerpt.md](gold-review-excerpt.md) (format few-shot), [production-risk.md](production-risk.md), [architectural-summary.md](architectural-summary.md), [positive-observations.md](positive-observations.md), [not-raised.md](not-raised.md), [executive-summary.md](executive-summary.md), [report-template.md](../report-template.md) |
