@@ -68,9 +68,9 @@ finding_classification:
     suggestion: PRS_dash_first12_sha256_of_canonical_category_summary_evidence
     question: PRQ_dash_first12_sha256_of_canonical_category_summary_evidence
   portable_evidence_policy:
-    defect: primary_diff_anchor_then_remaining_evidence_refs_semicolon_joined_in_stable_order
-    suggestion: concrete_repo_path_or_review_source_refs_semicolon_joined_in_stable_order
-    question: concrete_source_refs_or_surface_reason_evidence_semicolon_joined_in_stable_order
+    defect: primary_diff_anchor_then_remaining_evidence_refs_semicolon_joined_in_stable_lexicographic_order
+    suggestion: concrete_repo_path_or_review_source_refs_semicolon_joined_in_stable_lexicographic_order
+    question: concrete_source_refs_semicolon_joined_in_stable_lexicographic_order_or_surface_then_reason_for_unavailable_inspection
     empty_evidence_forbidden: true
 
 change_identity:
