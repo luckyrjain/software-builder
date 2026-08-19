@@ -13,7 +13,7 @@ route_selection: {after_phase: 2-3-gate}
 routes:
   posting:
     when: {posting_decision: post}
-    phases: [inputs, "0", "1", 1-2-coverage, "2", 2-evidence, 2-3-gate, 3-4, "5"]
+    phases: [inputs, "0", "1", 1-2-coverage, "2", 2-coverage-review, 2-evidence, 2-3-gate, 3-4, "5"]
   chat_only:
     when: {posting_decision: skip}
-    phases: [inputs, "0", "1", 1-2-coverage, "2", 2-evidence, 2-3-gate, "5"]
+    phases: [inputs, "0", "1", 1-2-coverage, "2", 2-coverage-review, 2-evidence, 2-3-gate, "5"]
