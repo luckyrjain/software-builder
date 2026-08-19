@@ -35,7 +35,21 @@ def test_pr_review_has_machine_inspection_contract_for_batch5_2b_surfaces():
         assert "evidence" in surfaces[surface]
 
     assert contract["unable_to_inspect"]["machine_field"] == "review_evidence.unable_to_inspect"
-    assert contract["finding_classification"]["machine_buckets"] == ["defect", "suggestion", "question"]
+    classification = contract["finding_classification"]
+    assert classification["machine_buckets"] == ["defect", "suggestion", "question"]
+    assert classification["portable_entry_fields"] == ["id", "category", "summary", "evidence"]
+    assert classification["prr_metadata_outside_portable_entry"] is True
+
+
+def test_portable_review_mode_mapping_does_not_leak_lifecycle_modes():
+    contract = _yaml("pr-review/reference/review-coverage-contract.yaml")
+    mapping = contract["review_evidence"]["portable_review_mode_mapping"]
+    assert mapping["exhaustive_when"] == "user_requested_exhaustive_or_full_pass"
+    assert "retrospective" in mapping["normal_when"]
+    assert contract["review_evidence"]["lifecycle_metadata_outside_portable_review_mode"] == [
+        "incremental",
+        "retrospective",
+    ]
 
 
 def test_phase_index_wires_coverage_execution_into_phase1_and_phase2():
@@ -59,6 +73,7 @@ def test_coverage_execution_builds_identity_and_inspection_plan():
         "test quality",
         "dependency/config/IaC",
         "unable_to_inspect",
+        "do not substitute or guess",
     ):
         assert token.lower() in execution.lower()
 
@@ -74,6 +89,8 @@ def test_coverage_execution_emits_shared_review_evidence_and_classifies_findings
         "inspected_surfaces",
         "generated_at",
         "stale/invalid envelope blocks posting",
+        "contains exactly",
+        "incremental and retrospective are lifecycle metadata outside this closed v1 field",
     ):
         assert token.lower() in execution.lower()
 
