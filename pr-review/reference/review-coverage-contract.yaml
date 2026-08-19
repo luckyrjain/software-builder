@@ -53,6 +53,13 @@ finding_classification:
     defect: actionable_behavior_correctness_security_compatibility_or_operational_problem
     suggestion: non_blocking_improvement_with_no_proven_defect
     question: unresolved_information_request_non_blocking_until_promoted
+  typed_sources:
+    defect: findings
+    suggestion: portable_suggestions
+    question: portable_questions
+  non_defect_source_phase: phase_2_coverage_review
+  non_defect_pre_id_fields: [summary, evidence]
+  prose_only_without_concrete_evidence_is_not_portable: true
   severity_applies_to: defect
   prr_metadata_outside_portable_entry: true
   prr_category_preservation: stable_PRR_id_plus_existing_review_metadata_not_extra_portable_fields
@@ -85,7 +92,7 @@ review_evidence:
   required_for: [posting, chat_only]
   bind_to_current_change_identity: true
   bind_to_requirements_ref: true
-  findings_source: finding_pipeline_after_classification
+  findings_source: typed_defect_suggestion_question_inputs_after_classification
   closed_v1: true
   portable_review_mode_mapping:
     exhaustive_when: user_requested_exhaustive_or_full_pass
