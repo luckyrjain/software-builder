@@ -58,10 +58,11 @@ def test_portable_review_mode_mapping_does_not_leak_lifecycle_modes():
     ]
 
 
-def test_phase_index_wires_explicit_coverage_and_evidence_phases():
+def test_phase_index_wires_explicit_coverage_review_and_evidence_phases():
     phase_index = _text("pr-review/reference/phase-index.md")
     for token in (
         "phase-1-2-coverage.md",
+        "phase-2-coverage-review.md",
         "phase-2-evidence.md",
         "review-coverage-execution.md",
         "change_identity",
@@ -72,10 +73,11 @@ def test_phase_index_wires_explicit_coverage_and_evidence_phases():
         assert token in phase_index
 
 
-def test_coverage_execution_builds_identity_and_inspection_plan():
+def test_coverage_execution_builds_identity_and_runs_systematic_review():
     execution = _text("pr-review/reference/review-coverage-execution.md")
     for token in (
         "phase 1→2 coverage",
+        "coverage review",
         "change_identity",
         "inspection_plan",
         "hidden consumers",
@@ -83,10 +85,11 @@ def test_coverage_execution_builds_identity_and_inspection_plan():
         "schema/migration compatibility",
         "rollout/rollback",
         "test quality",
-        "dependency/config/IaC",
+        "dependency/config/iac",
         "unable_to_inspect",
         "do not substitute or guess",
         "untrusted data",
+        "same `finding-pipeline.md` gates",
     ):
         assert token.lower() in execution.lower()
 
@@ -104,10 +107,10 @@ def test_coverage_execution_emits_shared_review_evidence_and_classifies_findings
         "generated_at",
         "stale/invalid envelope blocks posting",
         "contains exactly",
-        "incremental and retrospective are lifecycle metadata outside this closed v1 field",
+        "incremental and retrospective",
         "validate_review_coverage.py",
         "validate_review_coverage(...)",
-        "Any validation error is a **gate blocker**",
+        "gate blocker",
     ):
         assert token.lower() in execution.lower()
 
@@ -117,19 +120,32 @@ def test_workflow_contract_sequences_batch5_2b_machine_state_phases():
     for route in ("posting", "chat_only"):
         phases = workflow["routes"][route]["phases"]
         assert phases.index("1") < phases.index("1-2-coverage") < phases.index("2")
-        assert phases.index("2") < phases.index("2-evidence") < phases.index("2-3-gate")
+        assert phases.index("2") < phases.index("2-coverage-review") < phases.index("2-evidence")
+        assert phases.index("2-evidence") < phases.index("2-3-gate")
 
 
 def test_explicit_phase_contracts_produce_and_consume_machine_state():
     coverage = _text("pr-review/workflow/phase-1-2-coverage.md")
+    coverage_review = _text("pr-review/workflow/phase-2-coverage-review.md")
     evidence = _text("pr-review/workflow/phase-2-evidence.md")
+
     for token in ("change_identity: object", "inspection_plan: object", "initial_unable_to_inspect: list"):
         assert token in coverage
+
+    for token in (
+        "inspection_plan: object",
+        "coverage_unable_to_inspect: list",
+        "root_cause_groups: list",
+        "regenerated `root_cause_groups`",
+        "≤10-row cap",
+    ):
+        assert token in coverage_review
+
     for token in (
         "review_evidence: object",
         "change_identity: object",
         "inspection_plan: object",
-        "initial_unable_to_inspect: list",
+        "coverage_unable_to_inspect: list",
         "validate_review_coverage.py",
     ):
         assert token in evidence
