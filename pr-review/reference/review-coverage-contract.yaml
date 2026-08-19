@@ -47,12 +47,14 @@ unable_to_inspect:
 
 finding_classification:
   machine_buckets: [defect, suggestion, question]
+  portable_entry_fields: [id, category, summary, evidence]
   rules:
     defect: actionable_behavior_correctness_security_compatibility_or_operational_problem
     suggestion: non_blocking_improvement_with_no_proven_defect
     question: unresolved_information_request_non_blocking_until_promoted
   severity_applies_to: defect
-  legacy_prr_category_codes: preserved_as_defect_subclassification
+  prr_metadata_outside_portable_entry: true
+  prr_category_preservation: stable_PRR_id_plus_existing_review_metadata_not_extra_portable_fields
 
 change_identity:
   build_from:
@@ -73,3 +75,8 @@ review_evidence:
   bind_to_current_change_identity: true
   bind_to_requirements_ref: true
   findings_source: finding_pipeline_after_classification
+  closed_v1: true
+  portable_review_mode_mapping:
+    exhaustive_when: user_requested_exhaustive_or_full_pass
+    normal_when: all_other_review_lifecycle_modes_including_first_incremental_and_retrospective
+  lifecycle_metadata_outside_portable_review_mode: [incremental, retrospective]
