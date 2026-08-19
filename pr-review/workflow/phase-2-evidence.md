@@ -1,9 +1,10 @@
 ---
-workflow_version: 1.2
+workflow_version: 1.3
 phase: 2-evidence
 produces:
   review_evidence: object
   inspection_plan: object
+  review_metrics: object
 consumes:
   required:
     change_identity: object
@@ -55,4 +56,10 @@ Any validation error blocks the Phase 2→3 posting path. Never make validation 
 an unavailable annotation, changing a mandatory flag, rewriting evidence text, or silently removing a typed
 suggestion/question whose evidence is valid.
 
-Pass the validated `review_evidence` and final `inspection_plan` to the Phase 2→3 gate.
+When final `review_evidence.inspection_status` is `partial` or `unable`, set
+`review_metrics.review_complete: false` before leaving this phase. This deliberately feeds the existing Phase 3
+incomplete-review confirmation gate: a partial review must never inherit the "review and post" auto-confirm path.
+Do not set the flag back to true here when inspection status is complete; preserve any earlier incomplete boundary
+(stop-search, pagination/file cap, or other Phase 2 reason).
+
+Pass the validated `review_evidence`, final `inspection_plan`, and updated `review_metrics` to the Phase 2→3 gate.
