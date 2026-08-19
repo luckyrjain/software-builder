@@ -38,6 +38,14 @@ def test_pr_review_has_machine_inspection_contract_for_batch5_2b_surfaces():
     classification = contract["finding_classification"]
     assert classification["machine_buckets"] == ["defect", "suggestion", "question"]
     assert classification["portable_entry_fields"] == ["id", "category", "summary", "evidence"]
+    assert classification["typed_sources"] == {
+        "defect": "findings",
+        "suggestion": "portable_suggestions",
+        "question": "portable_questions",
+    }
+    assert classification["non_defect_source_phase"] == "phase_2_coverage_review"
+    assert classification["non_defect_pre_id_fields"] == ["summary", "evidence"]
+    assert classification["prose_only_without_concrete_evidence_is_not_portable"] is True
     assert classification["prr_metadata_outside_portable_entry"] is True
 
     complete_requires = contract["inspection_status"]["complete_requires"]
@@ -68,6 +76,8 @@ def test_phase_index_wires_explicit_coverage_review_and_evidence_phases():
         "change_identity",
         "inspection_plan",
         "review_evidence",
+        "portable_suggestions",
+        "portable_questions",
         "unable_to_inspect",
     ):
         assert token in phase_index
@@ -135,6 +145,8 @@ def test_explicit_phase_contracts_produce_and_consume_machine_state():
     for token in (
         "inspection_plan: object",
         "coverage_unable_to_inspect: list",
+        "portable_suggestions: list",
+        "portable_questions: list",
         "root_cause_groups: list",
         "regenerated `root_cause_groups`",
         "≤10-row cap",
@@ -146,6 +158,8 @@ def test_explicit_phase_contracts_produce_and_consume_machine_state():
         "change_identity: object",
         "inspection_plan: object",
         "coverage_unable_to_inspect: list",
+        "portable_suggestions: list",
+        "portable_questions: list",
         "validate_review_coverage.py",
     ):
         assert token in evidence
