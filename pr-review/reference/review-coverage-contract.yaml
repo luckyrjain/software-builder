@@ -1,0 +1,75 @@
+schema_version: 1
+consumer: pr-review
+shared_contracts:
+  change_identity: ../../docs/skill-framework/shared/change-identity.yaml
+  review_evidence: ../../docs/skill-framework/shared/review-evidence.yaml
+
+inspection_surfaces:
+  cross_file_impact:
+    trigger: any_production_code_or_shared_contract_change
+    evidence: changed_files_plus_direct_callers_callees_and_shared_module_dependents
+    required_outcome: inspected_or_unable_to_inspect
+  hidden_consumers:
+    trigger: shared_library_api_event_schema_config_or_public_contract_change
+    evidence: import_graph_codeowners_contract_registry_or_repository_search
+    required_outcome: known_consumers_or_explicit_unknown
+  schema_migration_compatibility:
+    trigger: database_schema_migration_api_event_or_serialized_contract_change
+    evidence: rolling_deploy_backward_forward_compatibility_and_data_migration_analysis
+    required_outcome: compatible_or_finding_or_unable_to_inspect
+  rollout_rollback:
+    trigger: production_behavior_deploy_migration_feature_flag_or_infrastructure_change
+    evidence: rollout_order_abort_signal_rollback_mechanism_and_data_compatibility
+    required_outcome: adequate_or_finding_or_unable_to_inspect
+  test_quality:
+    trigger: production_logic_contract_migration_or_infrastructure_behavior_change
+    evidence: changed_tests_plus_negative_failure_regression_contract_and_integration_coverage
+    required_outcome: adequate_or_finding_or_unable_to_inspect
+  dependency_config_iac:
+    trigger: dependency_manifest_lockfile_runtime_config_ci_terraform_helm_kubernetes_or_docker_change
+    evidence: dependency_compatibility_config_defaults_security_deploy_and_iac_impact
+    required_outcome: inspected_or_finding_or_unable_to_inspect
+
+inspection_status:
+  values: [complete, partial, unable]
+  complete_requires:
+    - every_triggered_surface_has_evidence_or_explicit_not_applicable
+    - no_mandatory_unable_to_inspect_entry
+  partial_when:
+    - at_least_one_triggered_surface_cannot_be_inspected
+  unable_when:
+    - review_boundary_or_mandatory_primary_surface_cannot_be_inspected
+
+unable_to_inspect:
+  machine_field: review_evidence.unable_to_inspect
+  required_fields: [surface, reason, mandatory]
+  rule: never_silently_treat_uninspected_surface_as_clean
+
+finding_classification:
+  machine_buckets: [defect, suggestion, question]
+  rules:
+    defect: actionable_behavior_correctness_security_compatibility_or_operational_problem
+    suggestion: non_blocking_improvement_with_no_proven_defect
+    question: unresolved_information_request_non_blocking_until_promoted
+  severity_applies_to: defect
+  legacy_prr_category_codes: preserved_as_defect_subclassification
+
+change_identity:
+  build_from:
+    - base_sha
+    - head_sha
+    - merge_base_sha
+    - normalized_diff_fingerprint
+    - changed_paths
+    - generated_paths
+    - dependency_changes
+    - config_changes
+  validate_before_review: true
+  stale_identity_invalidates_review_evidence: true
+
+review_evidence:
+  produced_by: phase_2
+  required_for: [posting, chat_only]
+  bind_to_current_change_identity: true
+  bind_to_requirements_ref: true
+  findings_source: finding_pipeline_after_classification
