@@ -1,3 +1,4 @@
+import importlib.util
 from pathlib import Path
 
 import yaml
@@ -14,6 +15,14 @@ def _text(path: str) -> str:
 
 def _yaml(path: str):
     return yaml.safe_load(_text(path))
+
+
+def _load_module(path: Path, name: str):
+    spec = importlib.util.spec_from_file_location(name, path)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def test_skill_requires_coverage_review_before_evidence():
@@ -82,7 +91,7 @@ def test_phase5_renders_coverage_gaps_before_suppressed_items():
     assert output_order.index("**Coverage gaps**") < output_order.index("**Not raised (suppressed)**")
 
 
-def test_pr_review_install_package_vendors_runtime_review_validator(tmp_path, monkeypatch):
+def test_pr_review_install_package_executes_runtime_review_validator(tmp_path, monkeypatch):
     monkeypatch.setattr(
         packager,
         "_release_provenance",
@@ -95,7 +104,24 @@ def test_pr_review_install_package_vendors_runtime_review_validator(tmp_path, mo
         dest=dest,
         host="cursor",
     )
-    assert (dest / "docs/skill-framework/shared/review_contract_runtime.py").is_file()
-    loader = (dest / "pr-review/scripts/validate_review_coverage.py") if (dest / "pr-review").is_dir() else (dest / "scripts/validate_review_coverage.py")
+    runtime = dest / "docs/skill-framework/shared/review_contract_runtime.py"
+    loader = dest / "scripts/validate_review_coverage.py"
+    assert runtime.is_file()
     assert loader.is_file()
-    assert "review_contract_runtime.py" in loader.read_text(encoding="utf-8")
+
+    module = _load_module(loader, "installed_validate_review_coverage")
+    shared = module._load_shared_validator()
+    assert Path(shared.__file__).resolve() == runtime.resolve()
+
+    identity = {
+        "schema_version": 1,
+        "base_sha": "a" * 40,
+        "head_sha": "b" * 40,
+        "merge_base_sha": "a" * 40,
+        "normalized_diff_fingerprint": "c" * 64,
+        "changed_paths": ["src/a.py"],
+        "generated_paths": [],
+        "dependency_changes": [],
+        "config_changes": [],
+    }
+    assert shared.validate_change_identity(identity) == []
