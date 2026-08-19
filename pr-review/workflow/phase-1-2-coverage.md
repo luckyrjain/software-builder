@@ -1,5 +1,5 @@
 ---
-workflow_version: 1.0
+workflow_version: 1.1
 phase: 1-2-coverage
 produces:
   change_identity: object
@@ -22,7 +22,7 @@ consumes:
 Run immediately after Phase 1 and before Phase 2 for every non-listing review. This step is read-only.
 
 Load `../reference/review-coverage-contract.yaml` and
-`../reference/review-coverage-execution.md` §Phase 1.
+`../reference/review-coverage-execution.md` §Phase 1→2 coverage.
 
 Build the current shared `change_identity` from the normalized provider/Git state and canonical effective patch.
 Do not invent a base SHA, merge-base SHA, generated path, dependency/config delta, or fingerprint. If a required
@@ -40,4 +40,5 @@ When an evidence capability required for a triggered surface is already known un
 Before continuing, validate the shared change identity with `scripts/validate_review_contracts.py` semantics.
 Invalid identity blocks Phase 2.
 
-Pass `change_identity`, `inspection_plan`, and `initial_unable_to_inspect` to Phase 2.
+Pass `change_identity`, `inspection_plan`, and `initial_unable_to_inspect` forward to Phase 2 and the mandatory
+Phase 2 coverage-review subphase.
