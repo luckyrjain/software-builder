@@ -155,11 +155,13 @@ Build `review_evidence` per `../../docs/skill-framework/shared/review-evidence.y
 ### Machine validation before the Phase 2→3 gate
 
 Use `pr-review/scripts/validate_review_coverage.py` as the executable source of truth. Validate final
-`inspection_plan` and `review_evidence` with `validate_review_coverage(...)`, passing current `change_identity`
-and current requirements reference when one exists. The validator resolves the vendored
-`docs/skill-framework/shared/review_contract_runtime.py` in both source and installed layouts for shared 5.2A
-envelope/freshness semantics; repository CI parity-tests that runtime module against
-`scripts/validate_review_contracts.py`. It also enforces the six pr-review inspection surfaces.
+`inspection_plan` and `review_evidence` with `validate_review_coverage(...)`, passing current `change_identity`,
+current requirements reference when one exists, and `conflict_resolution_occurred=True` whenever merge/rebase
+conflict resolution occurred after the stored review evidence was produced. Conflict resolution always invalidates
+that evidence even if the normalized effective patch and other identity fields are otherwise freshness-compatible.
+The validator resolves the vendored `docs/skill-framework/shared/review_contract_runtime.py` in both source and
+installed layouts for shared 5.2A envelope/freshness semantics; repository CI parity-tests that runtime module
+against `scripts/validate_review_contracts.py`. It also enforces the six pr-review inspection surfaces.
 
 Any validation error is a **gate blocker**. Never make validation pass by weakening a trigger/mandatory flag,
 dropping an unavailable annotation, or rewriting evidence. Correct the underlying state; if evidence is not
