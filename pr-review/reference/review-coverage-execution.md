@@ -96,6 +96,30 @@ Map rich PRR output into the shared evidence taxonomy:
 Every portable finding entry is closed v1 and contains exactly `{id, category, summary, evidence}`; portable
 `category` is `defect`, `suggestion`, or `question`, not a PRR category code.
 
+### Deterministic portable IDs and evidence
+
+Portable entries must be reproducible for the same reviewed evidence:
+
+- **Defect ID:** preserve the existing stable `PRR-{CAT}-{NNN}` ID (or preserved legacy `PRR-NNN`).
+- **Suggestion ID:** `PRS-<12 lowercase hex>` where the suffix is the first 12 hex characters of SHA-256 over
+  canonical UTF-8 `suggestion\0<normalized-summary>\0<canonical-evidence>`.
+- **Question ID:** `PRQ-<12 lowercase hex>` using the same digest rule with category `question`.
+- Normalize summary for the digest by trimming leading/trailing whitespace and converting internal runs of
+  whitespace to one ASCII space. Do not lowercase or rewrite substantive text.
+- `canonical-evidence` is the exact portable evidence string defined below; therefore equivalent entries with the
+  same normalized summary and evidence receive the same content-derived ID across re-runs.
+
+Portable `evidence` is a non-empty string:
+
+- **Defect:** primary changed-line anchor first, then remaining evidence refs in stable lexicographic order,
+  joined with `; ` and deduplicated without changing the primary anchor.
+- **Suggestion:** concrete repository path/source refs in stable lexicographic order, joined with `; `.
+- **Question:** concrete source refs in stable order; when the question exists because an inspection capability
+  is unavailable, encode `surface:<surface>; reason:<reason>` after safe normalization/redaction.
+- Never emit `N/A`, an empty string, or invented evidence solely to satisfy the shared schema. If no concrete
+  evidence can support a suggestion/question, do not create a portable finding entry; retain the uncertainty in
+  the inspection/unavailable metadata instead.
+
 Build `review_evidence` per `../../docs/skill-framework/shared/review-evidence.yaml`:
 
 - `change_identity`: exact validated Phase 1→2 identity.
