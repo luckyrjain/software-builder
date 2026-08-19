@@ -201,6 +201,16 @@ def validate_change_identity(payload: object) -> list[str]:
                 errors.append(f"{field} must be a list of canonical repository-relative POSIX paths")
             elif value != sorted(value) or len(value) != len(set(value)):
                 errors.append(f"{field} must be sorted and contain no duplicates")
+    changed_paths = payload.get("changed_paths")
+    generated_paths = payload.get("generated_paths")
+    if (
+        isinstance(changed_paths, list)
+        and isinstance(generated_paths, list)
+        and all(_valid_repo_path(x) for x in changed_paths)
+        and all(_valid_repo_path(x) for x in generated_paths)
+        and not set(generated_paths).issubset(set(changed_paths))
+    ):
+        errors.append("generated_paths must be a subset of changed_paths")
     for field in ("dependency_changes", "config_changes"):
         value = payload.get(field)
         if field in payload:
