@@ -146,12 +146,15 @@ def validate_review_coverage(
     *,
     current_identity: object | None = None,
     current_requirements_ref: object = _UNSET,
+    conflict_resolution_occurred: bool = False,
 ) -> list[str]:
     """Validate final Phase-2 coverage plus the shared portable review envelope."""
     errors = validate_inspection_plan(inspection_plan)
     shared = _load_shared_validator()
 
-    shared_kwargs: dict[str, object] = {}
+    shared_kwargs: dict[str, object] = {
+        "conflict_resolution_occurred": conflict_resolution_occurred,
+    }
     if current_identity is not None:
         shared_kwargs["current_identity"] = current_identity
     if current_requirements_ref is not _UNSET:
