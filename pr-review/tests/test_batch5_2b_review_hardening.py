@@ -43,6 +43,8 @@ def test_pr_review_has_machine_inspection_contract_for_batch5_2b_surfaces():
     complete_requires = contract["inspection_status"]["complete_requires"]
     assert "every_triggered_surface_status_complete" in complete_requires
     assert "no_triggered_surface_pending_unable_or_not_applicable" in complete_requires
+    assert contract["change_identity"]["produced_by"] == "phase_1_2_coverage"
+    assert contract["review_evidence"]["produced_by"] == "phase_2_evidence"
 
 
 def test_portable_review_mode_mapping_does_not_leak_lifecycle_modes():
@@ -73,6 +75,7 @@ def test_phase_index_wires_explicit_coverage_and_evidence_phases():
 def test_coverage_execution_builds_identity_and_inspection_plan():
     execution = _text("pr-review/reference/review-coverage-execution.md")
     for token in (
+        "phase 1→2 coverage",
         "change_identity",
         "inspection_plan",
         "hidden consumers",
@@ -83,6 +86,7 @@ def test_coverage_execution_builds_identity_and_inspection_plan():
         "dependency/config/IaC",
         "unable_to_inspect",
         "do not substitute or guess",
+        "untrusted data",
     ):
         assert token.lower() in execution.lower()
 
@@ -90,6 +94,7 @@ def test_coverage_execution_builds_identity_and_inspection_plan():
 def test_coverage_execution_emits_shared_review_evidence_and_classifies_findings():
     execution = _text("pr-review/reference/review-coverage-execution.md")
     for token in (
+        "phase 2 evidence",
         "review_evidence",
         "defect",
         "suggestion",
