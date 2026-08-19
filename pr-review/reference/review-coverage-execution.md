@@ -87,9 +87,10 @@ Build `review_evidence` per `../../docs/skill-framework/shared/review-evidence.y
   Incremental and retrospective are lifecycle metadata outside this closed v1 field and must not be emitted as
   portable `review_mode` values.
 - `inspection_status`:
-  - `complete` only when all triggered surfaces are complete/not-applicable as appropriate and no mandatory
-    `unable_to_inspect` exists;
-  - `partial` when some triggered surface is unavailable but useful review evidence exists;
+  - `complete` only when every triggered surface is `complete`, each completed surface has non-empty
+    `evidence_sources`, and no triggered surface remains pending, unavailable, or not-applicable;
+  - `partial` when at least one triggered surface is `unable` but enough other evidence exists for a meaningful
+    review;
   - `unable` when the primary review boundary or another mandatory primary surface cannot be inspected enough
     to perform a meaningful review.
 - `inspected_surfaces`: stable names of completed triggered surfaces.
@@ -97,7 +98,19 @@ Build `review_evidence` per `../../docs/skill-framework/shared/review-evidence.y
 - `findings`: exactly `defect`, `suggestion`, and `question` buckets; every entry uses the closed v1 shape above.
 - `generated_at`: generation timestamp.
 
-Validate the envelope against the current change identity and requirements surface before the Phase 2→3 gate.
+### Machine validation before the Phase 2→3 gate
+
+Use `pr-review/scripts/validate_review_coverage.py` as the executable source of truth. Validate the final
+`inspection_plan` and `review_evidence` with `validate_review_coverage(...)`, passing the current
+`change_identity` and current requirements reference when one exists. The validator reuses
+`scripts/validate_review_contracts.py` for the shared 5.2A envelope/freshness rules and additionally enforces the
+six pr-review inspection surfaces.
+
+Any validation error is a **gate blocker**. Do not repair the machine state by weakening a trigger, changing a
+mandatory flag, dropping an `unable_to_inspect` entry, or changing `inspection_status` merely to make validation
+pass. Correct the underlying evidence/state. If the evidence cannot be obtained, preserve the unavailable surface
+and emit `partial` or `unable` as appropriate.
+
 A stale/invalid envelope blocks posting and caps the review as partial/unable rather than allowing an Approve-like
 recommendation.
 
