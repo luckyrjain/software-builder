@@ -135,3 +135,53 @@ def test_unknown_surface_fails_closed():
     plan["future_surface"] = plan["cross_file_impact"].copy()
     errors = validator.validate_review_coverage(plan, _evidence(), current_identity=_identity())
     assert any("unknown inspection surfaces" in error for error in errors)
+
+
+def test_duplicate_inspected_surfaces_fail_closed():
+    validator = _load_validator()
+    inspected = list(SURFACES) + [SURFACES[0]]
+    errors = validator.validate_review_coverage(
+        _plan(), _evidence(inspected=inspected), current_identity=_identity()
+    )
+    assert any("inspected_surfaces" in error and "duplicates" in error for error in errors)
+
+
+def test_duplicate_unable_annotations_for_same_surface_fail_closed():
+    validator = _load_validator()
+    plan = _plan()
+    plan["hidden_consumers"]["status"] = "unable"
+    plan["hidden_consumers"]["evidence_sources"] = []
+    unable = [
+        {"surface": "hidden_consumers", "reason": "search unavailable", "mandatory": True},
+        {"surface": "hidden_consumers", "reason": "graph unavailable", "mandatory": True},
+    ]
+    evidence = _evidence(
+        inspection_status="partial",
+        inspected=[surface for surface in SURFACES if surface != "hidden_consumers"],
+        unable=unable,
+    )
+    errors = validator.validate_review_coverage(plan, evidence, current_identity=_identity())
+    assert any("hidden_consumers" in error and "duplicate unable_to_inspect" in error for error in errors)
+
+
+def test_partial_status_requires_at_least_one_unable_triggered_surface():
+    validator = _load_validator()
+    errors = validator.validate_review_coverage(
+        _plan(), _evidence(inspection_status="partial"), current_identity=_identity()
+    )
+    assert any("inspection_status partial requires" in error for error in errors)
+
+
+def test_unable_status_requires_meaningful_unavailable_surface_alignment():
+    validator = _load_validator()
+    plan = _plan()
+    plan["hidden_consumers"]["status"] = "unable"
+    plan["hidden_consumers"]["evidence_sources"] = []
+    unable = [{"surface": "hidden_consumers", "reason": "search unavailable", "mandatory": True}]
+    evidence = _evidence(
+        inspection_status="unable",
+        inspected=[surface for surface in SURFACES if surface != "hidden_consumers"],
+        unable=unable,
+    )
+    errors = validator.validate_review_coverage(plan, evidence, current_identity=_identity())
+    assert any("inspection_status unable" in error and "primary" in error for error in errors)
