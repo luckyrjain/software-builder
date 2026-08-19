@@ -25,8 +25,15 @@ _UNSET = object()
 
 
 def _load_shared_validator() -> ModuleType:
-    path = ROOT / "scripts/validate_review_contracts.py"
-    spec = importlib.util.spec_from_file_location("shared_validate_review_contracts", path)
+    candidates = (
+        ROOT / "docs/skill-framework/shared/review_contract_runtime.py",
+        ROOT / "scripts/validate_review_contracts.py",
+    )
+    path = next((candidate for candidate in candidates if candidate.is_file()), None)
+    if path is None:
+        rendered = ", ".join(str(candidate) for candidate in candidates)
+        raise RuntimeError(f"unable to load shared review validator; checked: {rendered}")
+    spec = importlib.util.spec_from_file_location("shared_review_contract_runtime", path)
     if spec is None or spec.loader is None:
         raise RuntimeError(f"unable to load shared review validator: {path}")
     module = importlib.util.module_from_spec(spec)
@@ -241,8 +248,6 @@ def validate_review_coverage(
         if not triggered_complete:
             errors.append("inspection_status partial requires at least one completed triggered surface")
     elif evidence_status == "unable":
-        # `unable` is reserved for a review with no meaningful completed inspection surface. If useful
-        # triggered surfaces were completed, the correct portable state is `partial` plus annotations.
         if triggered_complete or inspected:
             errors.append(
                 "inspection_status unable is reserved for primary review failure with no meaningful inspected surfaces"
