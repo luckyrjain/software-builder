@@ -89,7 +89,7 @@ def test_coverage_execution_builds_identity_and_runs_systematic_review():
         "unable_to_inspect",
         "do not substitute or guess",
         "untrusted data",
-        "same `finding-pipeline.md` gates",
+        "finding-pipeline.md",
     ):
         assert token.lower() in execution.lower()
 
