@@ -111,6 +111,14 @@ def test_identity_rejects_noncanonical_mapping_key_order_and_root_path():
     assert any("recursively sorted string keys" in error for error in errors)
 
 
+def test_generated_paths_must_be_subset_of_changed_paths():
+    validator = _load_validator()
+    errors = validator.validate_change_identity(
+        _identity(changed_paths=["src/a.py"], generated_paths=["generated/unrelated_file.py"])
+    )
+    assert any("generated_paths must be a subset of changed_paths" in error for error in errors)
+
+
 def test_validator_rejects_complete_with_mandatory_unable_surface():
     validator = _load_validator()
     errors = validator.validate_review_evidence(_evidence(unable_to_inspect=[{"surface": "direct_consumers", "reason": "provider unavailable", "mandatory": True}]))
