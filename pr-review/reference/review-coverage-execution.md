@@ -77,21 +77,38 @@ inspection occurred. An unavailable surface ends `unable` and contributes exactl
 `{surface, reason, mandatory}` annotation. Carry initial unavailable entries forward, deduplicated by surface,
 unless the capability becomes available and the surface is completed.
 
+### Typed non-defect evidence handoff
+
+Before leaving Coverage review, classify evidence-backed non-defect output into two explicit lists:
+
+- `portable_suggestions`: non-blocking engineering improvements with concrete evidence.
+- `portable_questions`: unresolved information requests/uncertainties with concrete evidence.
+
+Each pre-ID entry is exactly `{summary, evidence}` with non-empty canonical strings. Deduplicate by normalized
+`(summary, evidence)`. Do not convert generic nits, praise, suppression counters, or evidence-free prose into a
+portable entry. Defects remain exclusively in `findings`. These typed lists are the sole machine sources for the
+portable suggestion/question buckets; Phase 2 evidence must not reconstruct them from rendered prose.
+
 Stop-search may prevent unrelated exploration, but it never suppresses completion of a triggered mandatory
-coverage surface. Produce updated findings/metrics, final `inspection_plan`, and `coverage_unable_to_inspect`.
+coverage surface. Produce updated findings/metrics, final `inspection_plan`, `coverage_unable_to_inspect`,
+`portable_suggestions`, and `portable_questions`.
 
 ## Phase 2 evidence — emit portable evidence
 
 Require every triggered inspection surface to already be finalized as `complete` or `unable`; never convert a
 triggered surface to `not_applicable` during evidence assembly.
 
-Map rich PRR output into the shared evidence taxonomy:
+Map typed review output into the shared evidence taxonomy:
 
-- `defect` — emitted actionable PRR finding. Preserve the stable `PRR-{CAT}-{NNN}` ID. Keep PRR category,
-  severity, confidence, blast radius, business impact, OEDR/OAR, and grouping in existing rich review metadata,
-  **not** as extra fields in portable v1.
-- `suggestion` — non-blocking engineering improvement with no proven defect.
-- `question` — unresolved information request/uncertainty; non-blocking until evidence promotes it to a defect.
+- `defect` — from `findings` only. Preserve the stable `PRR-{CAT}-{NNN}` ID. Keep PRR category, severity,
+  confidence, blast radius, business impact, OEDR/OAR, and grouping in existing rich review metadata, **not** as
+  extra fields in portable v1.
+- `suggestion` — from `portable_suggestions` only; derive its deterministic `PRS-*` ID here.
+- `question` — from `portable_questions` only; derive its deterministic `PRQ-*` ID here. Questions remain
+  non-blocking until evidence promotes them to a defect.
+
+Phase 2 evidence must not rediscover engineering improvements/questions from chat prose. If a non-defect item was
+not emitted as a typed `{summary, evidence}` entry by Coverage review, it is not a portable finding.
 
 Every portable finding entry is closed v1 and contains exactly `{id, category, summary, evidence}`; portable
 `category` is `defect`, `suggestion`, or `question`, not a PRR category code.
@@ -131,7 +148,8 @@ Build `review_evidence` per `../../docs/skill-framework/shared/review-evidence.y
   triggered surface could be completed because the primary review boundary/capability failed.
 - `inspected_surfaces`: stable names of completed triggered surfaces.
 - `unable_to_inspect`: the deduplicated `coverage_unable_to_inspect` records.
-- `findings`: exactly `defect`, `suggestion`, and `question` buckets with closed-v1 entries.
+- `findings`: exactly `defect`, `suggestion`, and `question` buckets with closed-v1 entries from the typed sources
+  above.
 - `generated_at`: generation timestamp.
 
 ### Machine validation before the Phase 2→3 gate
