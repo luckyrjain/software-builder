@@ -1,5 +1,5 @@
 ---
-workflow_version: 1.1
+workflow_version: 1.2
 phase: 1-2-coverage
 produces:
   change_identity: object
@@ -37,8 +37,11 @@ canonical coverage contract. A triggered surface starts `pending`; an untriggere
 When an evidence capability required for a triggered surface is already known unavailable, append
 `{surface, reason, mandatory}` to `initial_unable_to_inspect`; do not silently mark the surface clean.
 
-Before continuing, validate the shared change identity with `scripts/validate_review_contracts.py` semantics.
-Invalid identity blocks Phase 2.
+Before continuing, validate the shared change identity using the packaged
+`docs/skill-framework/shared/review_contract_runtime.py` → `validate_change_identity(...)`. This is the same
+portable runtime used by Phase 2 evidence and is available in both source and installed skill layouts. Repository
+CI parity-checks it against root `scripts/validate_review_contracts.py`; the live installed workflow must not depend
+on that repository-root script. Invalid identity blocks Phase 2.
 
 Pass `change_identity`, `inspection_plan`, and `initial_unable_to_inspect` forward to Phase 2 and the mandatory
 Phase 2 coverage-review subphase.
