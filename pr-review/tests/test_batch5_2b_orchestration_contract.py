@@ -61,3 +61,20 @@ def test_gate_blocks_mandatory_unavailable_even_when_partial():
     assert "any** `review_evidence.unable_to_inspect[]` entry with `mandatory: true`" in gate.lower()
     assert "partial` may reach phase 3 **only when every unavailable entry is non-mandatory" in gate.lower()
     assert "mandatory unavailable coverage never" in gate.lower()
+
+
+def test_phase5_consumes_and_renders_inspection_coverage():
+    phase5 = _text("pr-review/workflow/phase-5.md")
+    assert "review_evidence: object" in phase5
+    assert "inspection_plan: object" in phase5
+    assert "## Coverage gaps (Batch 5.2B)" in phase5
+    assert "Mandatory inspection unavailable" in phase5
+    assert "inspection_status: partial" in phase5
+    assert "inspection_status: unable" in phase5
+    assert "Recommendation capped — never ✅ Approve" in phase5
+
+
+def test_phase5_renders_coverage_gaps_before_suppressed_items():
+    phase5 = _text("pr-review/workflow/phase-5.md")
+    output_order = phase5.split("## Output order (end of review)", 1)[1]
+    assert output_order.index("**Coverage gaps**") < output_order.index("**Not raised (suppressed)**")
