@@ -2,6 +2,8 @@ from pathlib import Path
 
 import yaml
 
+from scripts import package_skill as packager
+
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -78,3 +80,22 @@ def test_phase5_renders_coverage_gaps_before_suppressed_items():
     phase5 = _text("pr-review/workflow/phase-5.md")
     output_order = phase5.split("## Output order (end of review)", 1)[1]
     assert output_order.index("**Coverage gaps**") < output_order.index("**Not raised (suppressed)**")
+
+
+def test_pr_review_install_package_vendors_runtime_review_validator(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        packager,
+        "_release_provenance",
+        lambda _root: ("0.0.0", "a" * 40),
+    )
+    dest = tmp_path / "pr-review-package"
+    packager.package_skill(
+        skill="pr-review",
+        repo_root=ROOT,
+        dest=dest,
+        host="cursor",
+    )
+    assert (dest / "docs/skill-framework/shared/review_contract_runtime.py").is_file()
+    loader = (dest / "pr-review/scripts/validate_review_coverage.py") if (dest / "pr-review").is_dir() else (dest / "scripts/validate_review_coverage.py")
+    assert loader.is_file()
+    assert "review_contract_runtime.py" in loader.read_text(encoding="utf-8")
