@@ -156,10 +156,10 @@ Build `review_evidence` per `../../docs/skill-framework/shared/review-evidence.y
 
 Use `pr-review/scripts/validate_review_coverage.py` as the executable source of truth. Validate final
 `inspection_plan` and `review_evidence` with `validate_review_coverage(...)`, passing current `change_identity`
-and current requirements reference when one exists. The validator uses the vendored
-`docs/skill-framework/shared/review_contract_runtime.py` for shared 5.2A envelope/freshness semantics; a source
-checkout may fall back to `scripts/validate_review_contracts.py`. It also enforces the six pr-review inspection
-surfaces.
+and current requirements reference when one exists. The validator resolves the vendored
+`docs/skill-framework/shared/review_contract_runtime.py` in both source and installed layouts for shared 5.2A
+envelope/freshness semantics; repository CI parity-tests that runtime module against
+`scripts/validate_review_contracts.py`. It also enforces the six pr-review inspection surfaces.
 
 Any validation error is a **gate blocker**. Never make validation pass by weakening a trigger/mandatory flag,
 dropping an unavailable annotation, or rewriting evidence. Correct the underlying state; if evidence is not
