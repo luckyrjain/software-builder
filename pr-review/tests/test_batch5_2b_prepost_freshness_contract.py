@@ -5,7 +5,8 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_phase2_to_3_rebuilds_full_identity_before_posting():
-    text = (ROOT / "pr-review/workflow/phase-2-3-gate.md").read_text(encoding="utf-8")
+    raw = (ROOT / "pr-review/workflow/phase-2-3-gate.md").read_text(encoding="utf-8")
+    text = " ".join(raw.split())
     for token in (
         "fresh read-only provider/Git snapshot",
         "current full `change_identity`",
