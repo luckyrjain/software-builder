@@ -9,7 +9,9 @@ After the review boundary, provider SHAs, changed-file reads, capability profile
 available:
 
 1. Build `change_identity` using the shared `../../docs/skill-framework/shared/change-identity.yaml` contract.
-   - `base_sha`, `head_sha`, and `merge_base_sha` come from the normalized provider state.
+   - `base_sha`, `head_sha`, and `merge_base_sha` come from the normalized provider state. If a required SHA
+     cannot be established from the provider or approved local Git context, do not substitute or guess it; mark
+     the identity unavailable and stop before Phase 2.
    - `changed_paths` is the canonical sorted changed-path list from the review boundary.
    - `generated_paths` contains only generated files that are also in `changed_paths`.
    - `dependency_changes` captures manifest/lockfile dependency deltas in canonical object order.
@@ -65,17 +67,25 @@ Run the existing finding pipeline for defect judgment/severity. Then map outputs
 taxonomy:
 
 - `defect` — emitted PRR finding that proves a correctness, security, compatibility, operational, AC, or other
-  actionable defect. Preserve the existing `PRR-{CAT}-{NNN}` ID/category as the defect's stable ID/subclass.
+  actionable defect. Preserve the existing `PRR-{CAT}-{NNN}` stable ID. Keep the rich PRR category, severity,
+  confidence, blast radius, business impact, OEDR/OAR, and grouping fields in the existing review table / review
+  metadata; **do not add them to the portable v1 finding object**.
 - `suggestion` — engineering improvement with no proven defect. Suggestions do not enter the severity gate.
 - `question` — unresolved information request or unverifiable uncertainty. Questions remain non-blocking until
   new evidence promotes them to a defect.
+
+Every portable finding entry is **closed v1** and contains exactly
+`{id, category, summary, evidence}`. `category` is the envelope bucket value (`defect`, `suggestion`, or
+`question`), not the PRR category code. The PRR category remains recoverable from the stable `PRR-{CAT}-{NNN}`
+ID and existing rich review metadata outside the portable envelope.
 
 Build `review_evidence` per `../../docs/skill-framework/shared/review-evidence.yaml`:
 
 - `change_identity`: exact validated Phase 1 identity.
 - `requirements_ref`: normalized Jira/MR requirements reference, or `null` when none exists.
-- `review_mode`: `normal` or `exhaustive` as required by the shared envelope; retrospective/incremental lifecycle
-  remains review metadata outside this v1 field.
+- `review_mode`: `exhaustive` only when the user requested exhaustive/full-pass behavior; otherwise `normal`.
+  Incremental and retrospective are lifecycle metadata outside this closed v1 field and must not be emitted as
+  portable `review_mode` values.
 - `inspection_status`:
   - `complete` only when all triggered surfaces are complete/not-applicable as appropriate and no mandatory
     `unable_to_inspect` exists;
@@ -84,7 +94,7 @@ Build `review_evidence` per `../../docs/skill-framework/shared/review-evidence.y
     to perform a meaningful review.
 - `inspected_surfaces`: stable names of completed triggered surfaces.
 - `unable_to_inspect`: all unavailable surface records; never silently drop one at rendering/posting time.
-- `findings`: exactly `defect`, `suggestion`, and `question` buckets.
+- `findings`: exactly `defect`, `suggestion`, and `question` buckets; every entry uses the closed v1 shape above.
 - `generated_at`: generation timestamp.
 
 Validate the envelope against the current change identity and requirements surface before the Phase 2→3 gate.
