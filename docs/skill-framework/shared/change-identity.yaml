@@ -20,6 +20,7 @@ change_identity:
 normalization:
   source: canonical_effective_patch
   include_generated_paths: true
+  generated_paths_subset_of_changed_paths: true
   excluded_transport_metadata:
     - commit_message
     - provider_diff_headers
