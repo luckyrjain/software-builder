@@ -109,3 +109,13 @@ def test_runtime_validator_matches_repo_validator_for_unable_and_requirements_er
         evidence,
         current_requirements_ref={"ticket": "ABC-2"},
     )
+
+
+def test_runtime_validator_matches_repo_validator_for_missing_fields():
+    repo, runtime = _validators()
+    evidence = _evidence()
+    del evidence["schema_version"]
+    del evidence["review_mode"]
+    del evidence["unable_to_inspect"]
+    del evidence["findings"]
+    assert runtime.validate_review_evidence(evidence) == repo.validate_review_evidence(evidence)
