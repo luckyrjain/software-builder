@@ -38,40 +38,63 @@ def test_pr_review_has_machine_inspection_contract_for_batch5_2b_surfaces():
     assert contract["finding_classification"]["machine_buckets"] == ["defect", "suggestion", "question"]
 
 
-def test_phase1_builds_change_identity_and_inspection_plan():
-    phase1 = _text("pr-review/workflow/phase-1.md")
+def test_phase_index_wires_coverage_execution_into_phase1_and_phase2():
+    phase_index = _text("pr-review/reference/phase-index.md")
+    assert "review-coverage-execution.md" in phase_index
+    assert "change_identity" in phase_index
+    assert "inspection_plan" in phase_index
+    assert "review_evidence" in phase_index
+    assert "unable_to_inspect" in phase_index
+
+
+def test_coverage_execution_builds_identity_and_inspection_plan():
+    execution = _text("pr-review/reference/review-coverage-execution.md")
     for token in (
         "change_identity",
         "inspection_plan",
-        "review-coverage-contract.yaml",
         "hidden consumers",
+        "cross-file impact",
+        "schema/migration compatibility",
+        "rollout/rollback",
+        "test quality",
         "dependency/config/IaC",
         "unable_to_inspect",
     ):
-        assert token.lower() in phase1.lower()
+        assert token.lower() in execution.lower()
 
 
-def test_phase2_emits_shared_review_evidence_and_classifies_findings():
-    phase2 = _text("pr-review/workflow/phase-2.md")
+def test_coverage_execution_emits_shared_review_evidence_and_classifies_findings():
+    execution = _text("pr-review/reference/review-coverage-execution.md")
     for token in (
         "review_evidence",
         "defect",
         "suggestion",
         "question",
-        "unable_to_inspect",
         "inspection_status",
-        "cross-file impact",
-        "schema/migration compatibility",
-        "hidden consumers",
-        "dependency/config/IaC",
+        "inspected_surfaces",
+        "generated_at",
+        "stale/invalid envelope blocks posting",
     ):
-        assert token.lower() in phase2.lower()
+        assert token.lower() in execution.lower()
 
 
 def test_workflow_contract_carries_batch5_2b_machine_state():
     workflow = _yaml("pr-review/workflow-contract.yaml")
     assert "review_evidence" in workflow["routes"]["posting"].get("required_outputs", [])
     assert "review_evidence" in workflow["routes"]["chat_only"].get("required_outputs", [])
+
+
+def test_phase2_to_3_gate_fails_closed_on_invalid_or_incomplete_evidence():
+    gate = _text("pr-review/workflow/phase-2-3-gate.md")
+    for token in (
+        "review_evidence",
+        "change_identity",
+        "mandatory: true",
+        "inspection_status: unable",
+        "posting_decision: skip",
+        "pending mandatory surface",
+    ):
+        assert token.lower() in gate.lower()
 
 
 def test_skill_definition_of_done_requires_complete_or_annotated_inspection():
@@ -81,3 +104,4 @@ def test_skill_definition_of_done_requires_complete_or_annotated_inspection():
     assert "change-identity.yaml" in skill
     assert "unable_to_inspect" in skill
     assert "hidden consumer" in skill.lower()
+    assert "dependency/config/IaC" in skill
