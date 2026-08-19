@@ -47,9 +47,12 @@ Set portable `review_mode: exhaustive` only for an explicit exhaustive/full-pass
 Incremental and retrospective lifecycle state stays outside this closed portable field.
 
 Build final `review_evidence`, then call
-`pr-review/scripts/validate_review_coverage.py` → `validate_review_coverage(...)` with the current identity and
-requirements reference when present. Any error blocks the Phase 2→3 posting path. Never make validation pass by
-weakening a trigger, dropping an unavailable annotation, changing a mandatory flag, rewriting evidence text, or
-silently removing a typed suggestion/question whose evidence is valid.
+`pr-review/scripts/validate_review_coverage.py` → `validate_review_coverage(...)` with the current identity,
+requirements reference when present, and `conflict_resolution_occurred=True` whenever the review cycle included
+merge/rebase conflict resolution after the prior evidence was produced. Conflict resolution invalidates prior
+review evidence even when the normalized effective patch and other identity fields are otherwise freshness-compatible.
+Any validation error blocks the Phase 2→3 posting path. Never make validation pass by weakening a trigger, dropping
+an unavailable annotation, changing a mandatory flag, rewriting evidence text, or silently removing a typed
+suggestion/question whose evidence is valid.
 
 Pass the validated `review_evidence` and final `inspection_plan` to the Phase 2→3 gate.
