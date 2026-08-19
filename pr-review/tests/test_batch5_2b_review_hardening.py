@@ -40,6 +40,10 @@ def test_pr_review_has_machine_inspection_contract_for_batch5_2b_surfaces():
     assert classification["portable_entry_fields"] == ["id", "category", "summary", "evidence"]
     assert classification["prr_metadata_outside_portable_entry"] is True
 
+    complete_requires = contract["inspection_status"]["complete_requires"]
+    assert "every_triggered_surface_status_complete" in complete_requires
+    assert "no_triggered_surface_pending_unable_or_not_applicable" in complete_requires
+
 
 def test_portable_review_mode_mapping_does_not_leak_lifecycle_modes():
     contract = _yaml("pr-review/reference/review-coverage-contract.yaml")
@@ -91,6 +95,9 @@ def test_coverage_execution_emits_shared_review_evidence_and_classifies_findings
         "stale/invalid envelope blocks posting",
         "contains exactly",
         "incremental and retrospective are lifecycle metadata outside this closed v1 field",
+        "validate_review_coverage.py",
+        "validate_review_coverage(...)",
+        "Any validation error is a **gate blocker**",
     ):
         assert token.lower() in execution.lower()
 
