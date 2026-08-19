@@ -1,5 +1,5 @@
 ---
-workflow_version: 1.6
+workflow_version: 1.7
 phase: 2-3-gate
 produces: {posting_decision: string}
 consumes:
@@ -8,6 +8,7 @@ consumes:
     review_metrics: object
     review_evidence: object
     change_identity: object
+    inspection_plan: object
     incremental_baseline: object
     head_sha: string
     posting_mode: string
@@ -17,24 +18,24 @@ consumes:
 
 # Phase 2 → 3 gate (re-run decision)
 
-**Read this file** immediately after Phase 2, before Phase 3. Evaluate **once** and branch; Phase 3 must
-not re-evaluate `head_sha`.
+**Read this file** immediately after Phase 2 evidence finalization, before Phase 3. Evaluate **once** and branch;
+Phase 3 must not re-evaluate `head_sha`.
 
-Before any posting decision, validate `review_evidence` against the **current** `change_identity` and current
-requirements surface using the shared contracts in
-`../reference/review-coverage-contract.yaml` and
-`../../docs/skill-framework/shared/review-evidence.yaml`.
+Before any posting decision, require the successful machine validation performed by
+`phase-2-evidence.md` using `pr-review/scripts/validate_review_coverage.py`. Re-check that the supplied
+`review_evidence` is bound to the **current** `change_identity` and current requirements surface; never accept a
+previous-run envelope merely because its findings still look relevant.
 
 **Fail closed:**
 
 - Invalid or stale `change_identity` / `review_evidence` → `posting_decision: skip`; render Phase 5 as
   partial/unable and state that review evidence is stale or invalid.
 - `review_evidence.inspection_status: unable` → `posting_decision: skip`.
-- `inspection_status: complete` while any `review_evidence.unable_to_inspect[]` entry has
-  `mandatory: true` → invalid envelope; `posting_decision: skip`.
+- `inspection_status: complete` while any `review_evidence.unable_to_inspect[]` entry exists, or while any
+  triggered `inspection_plan` surface is not `complete` → invalid coverage state; `posting_decision: skip`.
 - `inspection_status: partial` may proceed to chat output, but posting must not imply approval/readiness;
   require Phase 3 confirmation even when the normal recommendation matrix would otherwise auto-skip a prompt.
-- A pending mandatory surface in the Phase 1 `inspection_plan` is equivalent to unavailable evidence: do not
+- A pending mandatory surface in the finalized `inspection_plan` is equivalent to unavailable evidence: do not
   treat it as clean and do not post a complete review.
 
 When the gate **blocks posting** (invalid/stale evidence, mandatory unavailable surface, unchanged `head_sha`,
