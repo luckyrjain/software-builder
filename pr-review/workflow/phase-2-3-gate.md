@@ -1,5 +1,5 @@
 ---
-workflow_version: 1.9
+workflow_version: 2.0
 phase: 2-3-gate
 produces: {posting_decision: string}
 consumes:
@@ -31,11 +31,19 @@ current base/head/merge-base SHAs, normalized effective-patch fingerprint, chang
 changes, and config changes. Do not reuse the Phase 1 identity as the value labelled current. If the required
 provider/Git reads cannot establish the current identity, fail closed and skip posting.
 
-Re-run `validate_review_coverage(...)` against that freshly rebuilt current identity and the current requirements
-surface. Pass `conflict_resolution_occurred=True` when merge/rebase conflict resolution is known to have occurred
-after the stored evidence was produced. Only a zero-error result may proceed. This catches base/merge-base or
-effective-patch drift even when the source-branch `head_sha` itself did not change. Phase 4 still performs its
-existing per-write head-SHA revision gate to stop source changes that occur after this full-identity gate.
+When `review_evidence.requirements_ref` is non-null, also re-read the **same authoritative requirements source**
+(Jira/MR/PR requirement surface identified by that reference) at this gate and normalize the current
+`requirements_ref` again. Do not reuse the Phase 1/2 requirements object as proof that requirements are still
+current. If the authoritative source cannot be re-read or normalized, fail closed and skip posting. When stored
+`requirements_ref` is null, pass current requirements as null unless a newly discovered authoritative requirements
+surface now applies; a newly discovered/changed surface invalidates the prior evidence rather than being ignored.
+
+Re-run `validate_review_coverage(...)` against that freshly rebuilt current identity and freshly re-established
+current requirements reference. Pass `conflict_resolution_occurred=True` when merge/rebase conflict resolution is
+known to have occurred after the stored evidence was produced. Only a zero-error result may proceed. This catches
+base/merge-base, effective-patch, or requirements drift even when the source-branch `head_sha` itself did not
+change. Phase 4 still performs its existing per-write head-SHA revision gate to stop source changes that occur
+after this full-identity/requirements gate.
 
 **Fail closed:**
 
@@ -43,6 +51,8 @@ existing per-write head-SHA revision gate to stop source changes that occur afte
   partial/unable and state that review evidence is stale or invalid.
 - Current full identity cannot be rebuilt/validated → `posting_decision: skip`; never fall back to a head-only
   freshness claim at this gate.
+- Current non-null requirements surface cannot be re-read/normalized, or differs from the stored requirements
+  reference → `posting_decision: skip`; never post against requirements whose freshness cannot be established.
 - `review_evidence.inspection_status: unable` → `posting_decision: skip`.
 - **Any** `review_evidence.unable_to_inspect[]` entry with `mandatory: true` → `posting_decision: skip`,
   regardless of whether the envelope status is `partial` or `unable`. Mandatory unavailable coverage never
@@ -67,6 +77,7 @@ Compare current `diff_refs.head_sha` to the baseline `head_sha` from Phase 1 ste
 |-----------|-----------|
 | Invalid/stale `review_evidence` or `change_identity` | **Stop posting path** — Phase 5 partial/unable summary; explain evidence invalidation |
 | Current full change identity cannot be rebuilt | **Stop posting path** — Phase 5 partial/unable summary; explain freshness could not be established |
+| Current requirements surface cannot be re-established or changed | **Stop posting path** — Phase 5 partial/unable summary; explain requirements freshness failure |
 | Mandatory triggered inspection surface unavailable/pending | **Stop posting path** — Phase 5 partial/unable summary with `unable_to_inspect` |
 | Partial evidence with only non-mandatory unavailable surfaces | Phase 3 confirmation required; any post must state partial coverage and must not imply approval/readiness |
 | `head_sha` unchanged since prior review | **Stop posting path** — render chat summary + Phase 5 executive summary; **skip Phase 3 AND Phase 4**: *"No new commits since last review."* |
