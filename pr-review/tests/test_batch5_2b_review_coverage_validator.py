@@ -51,7 +51,7 @@ def _plan(*, status="complete", mandatory=True):
     }
 
 
-def _evidence(identity=None, *, inspection_status="complete", inspected=None, unable=None):
+def _evidence(identity=None, *, inspection_status="complete", inspected=None, unable=None, findings=None):
     return {
         "schema_version": 1,
         "change_identity": identity or _identity(),
@@ -60,7 +60,7 @@ def _evidence(identity=None, *, inspection_status="complete", inspected=None, un
         "inspection_status": inspection_status,
         "inspected_surfaces": list(SURFACES) if inspected is None else inspected,
         "unable_to_inspect": [] if unable is None else unable,
-        "findings": {"defect": [], "suggestion": [], "question": []},
+        "findings": findings or {"defect": [], "suggestion": [], "question": []},
         "generated_at": "2026-08-19T00:00:00Z",
     }
 
@@ -185,3 +185,41 @@ def test_unable_status_requires_meaningful_unavailable_surface_alignment():
     )
     errors = validator.validate_review_coverage(plan, evidence, current_identity=_identity())
     assert any("inspection_status unable" in error and "primary" in error for error in errors)
+
+
+def test_valid_content_derived_suggestion_and_question_ids_pass():
+    validator = _load_validator()
+    suggestion_summary = "  Add   consumer contract test "
+    suggestion_evidence = "src/a.py:12; tests/test_a.py:8"
+    question_summary = "Which consumer owns this event?"
+    question_evidence = "surface:hidden_consumers; reason:registry unavailable"
+    suggestion_id = validator._content_finding_id("suggestion", suggestion_summary, suggestion_evidence)
+    question_id = validator._content_finding_id("question", question_summary, question_evidence)
+    findings = {
+        "defect": [{"id": "PRR-API-001", "category": "defect", "summary": "Broken response", "evidence": "src/a.py:12"}],
+        "suggestion": [{"id": suggestion_id, "category": "suggestion", "summary": suggestion_summary, "evidence": suggestion_evidence}],
+        "question": [{"id": question_id, "category": "question", "summary": question_summary, "evidence": question_evidence}],
+    }
+    assert validator.validate_review_coverage(_plan(), _evidence(findings=findings), current_identity=_identity()) == []
+
+
+def test_forged_suggestion_id_fails_closed():
+    validator = _load_validator()
+    findings = {
+        "defect": [],
+        "suggestion": [{"id": "PRS-000000000000", "category": "suggestion", "summary": "Add test", "evidence": "src/a.py:12"}],
+        "question": [],
+    }
+    errors = validator.validate_review_coverage(_plan(), _evidence(findings=findings), current_identity=_identity())
+    assert any("deterministic content id" in error for error in errors)
+
+
+def test_non_prr_defect_id_fails_closed():
+    validator = _load_validator()
+    findings = {
+        "defect": [{"id": "DEF-001", "category": "defect", "summary": "Broken", "evidence": "src/a.py:12"}],
+        "suggestion": [],
+        "question": [],
+    }
+    errors = validator.validate_review_coverage(_plan(), _evidence(findings=findings), current_identity=_identity())
+    assert any("preserve PRR" in error for error in errors)
