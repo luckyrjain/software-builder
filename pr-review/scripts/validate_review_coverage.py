@@ -52,6 +52,17 @@ def _content_finding_id(category: str, summary: str, evidence: str) -> str:
     return f"{prefix}-{hashlib.sha256(canonical).hexdigest()[:12]}"
 
 
+def _canonical_non_defect_evidence(category: str, evidence: str) -> bool:
+    """Return whether suggestion/question evidence follows the stable-order contract."""
+    parts = evidence.split("; ")
+    if any(not part for part in parts) or len(parts) != len(set(parts)):
+        return False
+    if category == "question" and len(parts) == 2:
+        if parts[0].startswith("surface:") and parts[1].startswith("reason:"):
+            return True
+    return parts == sorted(parts)
+
+
 def validate_inspection_plan(plan: object) -> list[str]:
     if not isinstance(plan, dict):
         return ["inspection_plan must be an object"]
@@ -132,6 +143,11 @@ def _validate_portable_finding_ids(review_evidence: dict[str, object]) -> list[s
                         f"findings.defect id {finding_id!r} must preserve PRR-<CAT>-NNN or legacy PRR-NNN"
                     )
                 continue
+            if not _canonical_non_defect_evidence(bucket, evidence):
+                errors.append(
+                    f"findings.{bucket} evidence must use stable sorted unique refs"
+                    + (" or canonical surface/reason order" if bucket == "question" else "")
+                )
             expected = _content_finding_id(bucket, summary, evidence)
             if finding_id != expected:
                 errors.append(
