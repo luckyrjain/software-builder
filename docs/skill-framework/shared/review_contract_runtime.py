@@ -166,9 +166,9 @@ def validate_change_identity(payload: object) -> list[str]:
     unknown = sorted(repr(key) for key in payload if not isinstance(key, str) or key not in _REQUIRED_IDENTITY)
     if unknown:
         errors.append(f"change_identity contains unknown v1 fields: {', '.join(unknown)}")
-    if "schema_version" in payload and type(payload.get("schema_version")) is not int:
-        errors.append("change_identity schema_version must be integer 1")
-    elif payload.get("schema_version") != 1:
+    if "schema_version" in payload and (
+        type(payload.get("schema_version")) is not int or payload.get("schema_version") != 1
+    ):
         errors.append("change_identity schema_version must be integer 1")
     for field in ("base_sha", "head_sha", "merge_base_sha"):
         value = payload.get(field)
@@ -225,7 +225,9 @@ def validate_review_evidence(
     unknown = sorted(repr(key) for key in payload if not isinstance(key, str) or key not in _REQUIRED_EVIDENCE)
     if unknown:
         errors.append(f"review_evidence contains unknown v1 fields: {', '.join(unknown)}")
-    if payload.get("schema_version") != 1 or type(payload.get("schema_version")) is not int:
+    if "schema_version" in payload and (
+        type(payload.get("schema_version")) is not int or payload.get("schema_version") != 1
+    ):
         errors.append("review_evidence schema_version must be integer 1")
 
     identity = payload.get("change_identity")
@@ -259,67 +261,77 @@ def validate_review_evidence(
             errors.append("stale requirements_ref: review evidence does not match current requirements surface")
 
     mode = payload.get("review_mode")
-    if mode not in {"normal", "exhaustive"}:
+    if "review_mode" in payload and (
+        not isinstance(mode, str) or mode not in {"normal", "exhaustive"}
+    ):
         errors.append("review_mode must be normal or exhaustive")
     status = payload.get("inspection_status")
-    if status not in {"complete", "partial", "unable"}:
+    if "inspection_status" in payload and (
+        not isinstance(status, str) or status not in {"complete", "partial", "unable"}
+    ):
         errors.append("inspection_status must be complete, partial, or unable")
     inspected = payload.get("inspected_surfaces")
-    if not isinstance(inspected, list) or not all(isinstance(item, str) and item for item in inspected):
+    if "inspected_surfaces" in payload and (
+        not isinstance(inspected, list)
+        or not all(isinstance(item, str) and item for item in inspected)
+    ):
         errors.append("inspected_surfaces must be a list of non-empty strings")
 
     unavailable = payload.get("unable_to_inspect")
-    if not isinstance(unavailable, list):
-        errors.append("unable_to_inspect must be a list")
-    else:
-        for item in unavailable:
-            if not isinstance(item, dict) or set(item) != _UNABLE_FIELDS:
-                errors.append("unable_to_inspect entries must contain exactly surface, reason, and mandatory")
-                continue
-            if (
-                not isinstance(item.get("surface"), str)
-                or not item.get("surface")
-                or not isinstance(item.get("reason"), str)
-                or not item.get("reason")
-                or type(item.get("mandatory")) is not bool
+    if "unable_to_inspect" in payload:
+        if not isinstance(unavailable, list):
+            errors.append("unable_to_inspect must be a list")
+        else:
+            for item in unavailable:
+                if not isinstance(item, dict) or set(item) != _UNABLE_FIELDS:
+                    errors.append("unable_to_inspect entries must contain exactly surface, reason, and mandatory")
+                    continue
+                if (
+                    not isinstance(item.get("surface"), str)
+                    or not item.get("surface")
+                    or not isinstance(item.get("reason"), str)
+                    or not item.get("reason")
+                    or type(item.get("mandatory")) is not bool
+                ):
+                    errors.append("unable_to_inspect entries require non-empty surface/reason strings and boolean mandatory")
+            if status == "unable" and not unavailable:
+                errors.append("inspection_status unable requires at least one unable_to_inspect entry")
+            if status == "complete" and any(
+                isinstance(item, dict) and item.get("mandatory") is True for item in unavailable
             ):
-                errors.append("unable_to_inspect entries require non-empty surface/reason strings and boolean mandatory")
-        if status == "unable" and not unavailable:
-            errors.append("inspection_status unable requires at least one unable_to_inspect entry")
-        if status == "complete" and any(
-            isinstance(item, dict) and item.get("mandatory") is True for item in unavailable
-        ):
-            errors.append("inspection_status complete is invalid with a mandatory unable-to-inspect surface")
+                errors.append("inspection_status complete is invalid with a mandatory unable-to-inspect surface")
 
     findings = payload.get("findings")
-    if not isinstance(findings, dict) or set(findings) != _FINDING_BUCKETS:
-        errors.append("finding buckets must be exactly defect, suggestion, and question")
-    else:
-        ids: set[str] = set()
-        for bucket, items in findings.items():
-            if not isinstance(items, list):
-                errors.append(f"findings.{bucket} must be a list")
-                continue
-            for item in items:
-                if not isinstance(item, dict):
-                    errors.append(f"findings.{bucket} entries must be objects")
+    if "findings" in payload:
+        if not isinstance(findings, dict) or set(findings) != _FINDING_BUCKETS:
+            errors.append("finding buckets must be exactly defect, suggestion, and question")
+        else:
+            ids: set[str] = set()
+            for bucket, items in findings.items():
+                if not isinstance(items, list):
+                    errors.append(f"findings.{bucket} must be a list")
                     continue
-                if set(item) != _FINDING_FIELDS:
-                    errors.append(
-                        f"findings.{bucket} entries must contain exactly id, category, summary, and evidence"
-                    )
-                if item.get("category") != bucket:
-                    errors.append(f"findings.{bucket} entry category must equal {bucket}")
-                for field in ("id", "summary", "evidence"):
-                    if not isinstance(item.get(field), str) or not item.get(field):
-                        errors.append(f"findings.{bucket} entry {field} must be a non-empty string")
-                finding_id = item.get("id")
-                if isinstance(finding_id, str) and finding_id:
-                    if finding_id in ids:
-                        errors.append(f"finding id {finding_id} must be unique across all categories")
-                    ids.add(finding_id)
+                for item in items:
+                    if not isinstance(item, dict):
+                        errors.append(f"findings.{bucket} entries must be objects")
+                        continue
+                    if set(item) != _FINDING_FIELDS:
+                        errors.append(
+                            f"findings.{bucket} entries must contain exactly id, category, summary, and evidence"
+                        )
+                    if item.get("category") != bucket:
+                        errors.append(f"findings.{bucket} entry category must equal {bucket}")
+                    for field in ("id", "summary", "evidence"):
+                        if not isinstance(item.get(field), str) or not item.get(field):
+                            errors.append(f"findings.{bucket} entry {field} must be a non-empty string")
+                    finding_id = item.get("id")
+                    if isinstance(finding_id, str) and finding_id:
+                        if finding_id in ids:
+                            errors.append(f"finding id {finding_id} must be unique across all categories")
+                        ids.add(finding_id)
 
-    generated_at = payload.get("generated_at")
-    if not isinstance(generated_at, str) or not generated_at:
+    if "generated_at" in payload and (
+        not isinstance(payload.get("generated_at"), str) or not payload.get("generated_at")
+    ):
         errors.append("generated_at must be a non-empty string")
     return errors
