@@ -56,13 +56,18 @@ def test_portable_review_mode_mapping_does_not_leak_lifecycle_modes():
     ]
 
 
-def test_phase_index_wires_coverage_execution_into_phase1_and_phase2():
+def test_phase_index_wires_explicit_coverage_and_evidence_phases():
     phase_index = _text("pr-review/reference/phase-index.md")
-    assert "review-coverage-execution.md" in phase_index
-    assert "change_identity" in phase_index
-    assert "inspection_plan" in phase_index
-    assert "review_evidence" in phase_index
-    assert "unable_to_inspect" in phase_index
+    for token in (
+        "phase-1-2-coverage.md",
+        "phase-2-evidence.md",
+        "review-coverage-execution.md",
+        "change_identity",
+        "inspection_plan",
+        "review_evidence",
+        "unable_to_inspect",
+    ):
+        assert token in phase_index
 
 
 def test_coverage_execution_builds_identity_and_inspection_plan():
@@ -102,10 +107,27 @@ def test_coverage_execution_emits_shared_review_evidence_and_classifies_findings
         assert token.lower() in execution.lower()
 
 
-def test_workflow_contract_carries_batch5_2b_machine_state():
+def test_workflow_contract_sequences_batch5_2b_machine_state_phases():
     workflow = _yaml("pr-review/workflow-contract.yaml")
-    assert "review_evidence" in workflow["routes"]["posting"].get("required_outputs", [])
-    assert "review_evidence" in workflow["routes"]["chat_only"].get("required_outputs", [])
+    for route in ("posting", "chat_only"):
+        phases = workflow["routes"][route]["phases"]
+        assert phases.index("1") < phases.index("1-2-coverage") < phases.index("2")
+        assert phases.index("2") < phases.index("2-evidence") < phases.index("2-3-gate")
+
+
+def test_explicit_phase_contracts_produce_and_consume_machine_state():
+    coverage = _text("pr-review/workflow/phase-1-2-coverage.md")
+    evidence = _text("pr-review/workflow/phase-2-evidence.md")
+    for token in ("change_identity: object", "inspection_plan: object", "initial_unable_to_inspect: list"):
+        assert token in coverage
+    for token in (
+        "review_evidence: object",
+        "change_identity: object",
+        "inspection_plan: object",
+        "initial_unable_to_inspect: list",
+        "validate_review_coverage.py",
+    ):
+        assert token in evidence
 
 
 def test_phase2_to_3_gate_fails_closed_on_invalid_or_incomplete_evidence():
@@ -113,7 +135,7 @@ def test_phase2_to_3_gate_fails_closed_on_invalid_or_incomplete_evidence():
     for token in (
         "review_evidence",
         "change_identity",
-        "mandatory: true",
+        "inspection_plan: object",
         "inspection_status: unable",
         "posting_decision: skip",
         "pending mandatory surface",
@@ -129,3 +151,4 @@ def test_skill_definition_of_done_requires_complete_or_annotated_inspection():
     assert "unable_to_inspect" in skill
     assert "hidden consumer" in skill.lower()
     assert "dependency/config/IaC" in skill
+    assert "validate_review_coverage" in skill
