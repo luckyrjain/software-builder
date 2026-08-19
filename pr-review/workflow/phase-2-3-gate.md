@@ -1,5 +1,5 @@
 ---
-workflow_version: 1.7
+workflow_version: 1.8
 phase: 2-3-gate
 produces: {posting_decision: string}
 consumes:
@@ -31,10 +31,14 @@ previous-run envelope merely because its findings still look relevant.
 - Invalid or stale `change_identity` / `review_evidence` → `posting_decision: skip`; render Phase 5 as
   partial/unable and state that review evidence is stale or invalid.
 - `review_evidence.inspection_status: unable` → `posting_decision: skip`.
+- **Any** `review_evidence.unable_to_inspect[]` entry with `mandatory: true` → `posting_decision: skip`,
+  regardless of whether the envelope status is `partial` or `unable`. Mandatory unavailable coverage never
+  reaches Phase 3/4.
 - `inspection_status: complete` while any `review_evidence.unable_to_inspect[]` entry exists, or while any
   triggered `inspection_plan` surface is not `complete` → invalid coverage state; `posting_decision: skip`.
-- `inspection_status: partial` may proceed to chat output, but posting must not imply approval/readiness;
-  require Phase 3 confirmation even when the normal recommendation matrix would otherwise auto-skip a prompt.
+- `inspection_status: partial` may reach Phase 3 **only when every unavailable entry is non-mandatory**. Posting
+  must not imply approval/readiness and always requires explicit Phase 3 confirmation even when the normal
+  recommendation matrix would otherwise auto-skip a prompt.
 - A pending mandatory surface in the finalized `inspection_plan` is equivalent to unavailable evidence: do not
   treat it as clean and do not post a complete review.
 
@@ -49,6 +53,7 @@ Compare current `diff_refs.head_sha` to the baseline `head_sha` from Phase 1 ste
 |-----------|-----------|
 | Invalid/stale `review_evidence` or `change_identity` | **Stop posting path** — Phase 5 partial/unable summary; explain evidence invalidation |
 | Mandatory triggered inspection surface unavailable/pending | **Stop posting path** — Phase 5 partial/unable summary with `unable_to_inspect` |
+| Partial evidence with only non-mandatory unavailable surfaces | Phase 3 confirmation required; any post must state partial coverage and must not imply approval/readiness |
 | `head_sha` unchanged since prior review | **Stop posting path** — render chat summary + Phase 5 executive summary; **skip Phase 3 AND Phase 4**: *"No new commits since last review."* |
 | New commits, new findings | Phase 3 → post **re-review summary**; inline threads only for new `file:line` not in prior threads/summary |
 | New commits, no new findings | Phase 3 → post short re-review summary — prior issues resolved or unchanged |
