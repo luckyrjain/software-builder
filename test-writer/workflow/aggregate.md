@@ -1,5 +1,5 @@
 ---
-workflow_version: 1.0
+workflow_version: 1.1
 phase: aggregate
 produces:
   - orchestration_status
@@ -29,6 +29,22 @@ and its raw report or an explicit blocked reason. An unaccounted planned level i
 
 The router **must not report COMPLETE** when any planned level is `PARTIAL`, `BLOCKED`, missing, or still
 waiting on a required answer.
+
+## Portable `skill_result` mapping
+
+`orchestration_status` is internal bookkeeping and does not extend the universal status vocabulary.
+When emitting the canonical result envelope from
+[runtime-contract.md](../../docs/skill-framework/shared/runtime-contract.md):
+
+| `orchestration_status` | `skill_result.status` |
+|------------------------|-----------------------|
+| `COMPLETE` | `SUCCESS` |
+| `PARTIAL` | `PARTIAL` |
+| `BLOCKED` | `BLOCKED` |
+
+Never emit `COMPLETE` as `skill_result.status`; it is not a portable runtime status. If execution itself
+fails before a valid aggregate can be produced, use the inherited runtime contract's `FAILED` semantics
+rather than inventing another orchestration state.
 
 ## Output shape
 
