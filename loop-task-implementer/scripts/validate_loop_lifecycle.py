@@ -204,9 +204,9 @@ def validate_lifecycle_state(state: object) -> list[str]:
     if "conflict_resolution_occurred" not in workspace:
         errors.append("workspace.conflict_resolution_occurred must be present as boolean or null")
     conflict = workspace.get("conflict_resolution_occurred")
-    provenance = workspace.get("conflict_resolution_provenance")
-    if conflict not in (True, False, None):
+    if conflict is not None and type(conflict) is not bool:
         errors.append("conflict_resolution_occurred must be boolean or null")
+    provenance = workspace.get("conflict_resolution_provenance")
     if conflict is True and (not isinstance(provenance, str) or not provenance.strip()):
         errors.append("conflict_resolution_occurred=true requires conflict_resolution_provenance")
 
