@@ -36,13 +36,13 @@ should match the version of the latest entry below that names that file.
 - Child dispatch now advances framework-owned `execution_context` per the inherited recursion contract
   instead of copying it unchanged. Ordinary caller fields still pass through unchanged, while each
   sibling derives its own child context from the same parent and a rejected recursion guard blocks only
-  that planned level.
+  that planned level. Inputs also explicitly excludes `execution_context` from ordinary pass-through.
 - Multi-level contract tests now assert semantics case-insensitively and cover hint precedence, the
   fixed-vocabulary metadata boundary, portable status mapping, and mixed-outcome precedence.
 
 ### Versioned workflow files
 
-- `workflow/inputs.md` → 2.2
+- `workflow/inputs.md` → 2.3
 - `workflow/classify.md` → 2.4
 - `workflow/delegate.md` → 2.3
 - `workflow/aggregate.md` → 1.3
