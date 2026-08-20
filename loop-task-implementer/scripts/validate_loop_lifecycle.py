@@ -115,6 +115,23 @@ def validate_lifecycle_state(state: object) -> list[str]:
     ci = _mapping(state.get("ci"))
     readiness = _mapping(state.get("merge_readiness"))
 
+    if "requirements_ref" not in task:
+        errors.append("task.requirements_ref must be present as an object or null")
+    requirements_ref = task.get("requirements_ref", _UNSET)
+
+    third_party = workspace.get("third_party_change_detected", _UNSET)
+    if type(third_party) is not bool:
+        errors.append("workspace.third_party_change_detected must be an explicit boolean")
+
+    if "conflict_resolution_occurred" not in workspace:
+        errors.append("workspace.conflict_resolution_occurred must be present as boolean or null")
+    conflict = workspace.get("conflict_resolution_occurred")
+    provenance = workspace.get("conflict_resolution_provenance")
+    if conflict not in (True, False, None):
+        errors.append("conflict_resolution_occurred must be boolean or null")
+    if conflict is True and (not isinstance(provenance, str) or not provenance.strip()):
+        errors.append("conflict_resolution_occurred=true requires conflict_resolution_provenance")
+
     current_identity = workspace.get("change_identity")
     shared = _load_shared_runtime()
     identity_errors = shared.validate_change_identity(current_identity)
@@ -125,14 +142,6 @@ def validate_lifecycle_state(state: object) -> list[str]:
         if not _same_hex(current_identity.get("head_sha"), current_head):
             errors.append("workspace.change_identity.head_sha must equal workspace.current_head_commit")
 
-    conflict = workspace.get("conflict_resolution_occurred")
-    provenance = workspace.get("conflict_resolution_provenance")
-    if conflict not in (True, False, None):
-        errors.append("conflict_resolution_occurred must be boolean or null")
-    if conflict is True and (not isinstance(provenance, str) or not provenance.strip()):
-        errors.append("conflict_resolution_occurred=true requires conflict_resolution_provenance")
-
-    requirements_ref = task.get("requirements_ref", _UNSET)
     lens_a = _mapping(review.get("lens_a"))
     lens_b = _mapping(review.get("lens_b"))
     if not identity_errors:
@@ -163,7 +172,7 @@ def validate_lifecycle_state(state: object) -> list[str]:
         if a_identity != b_identity:
             errors.append("both CLEAN lenses must reference the same reviewed_change_identity")
 
-    if workspace.get("third_party_change_detected") is True:
+    if third_party is True:
         errors.append("third_party_change_detected blocks lifecycle readiness until re-baselined and re-reviewed")
 
     if ci.get("required_checks_green") is True:
@@ -179,8 +188,8 @@ def validate_lifecycle_state(state: object) -> list[str]:
             errors.append("ready cannot be true until both review lenses are CLEAN")
         if ci.get("required_checks_green") is not True:
             errors.append("ready cannot be true until required checks are green")
-        if workspace.get("third_party_change_detected") is True:
-            errors.append("ready cannot be true while third_party_change_detected")
+        if third_party is not False:
+            errors.append("ready cannot be true unless third_party_change_detected is explicitly false")
         if errors and not any(error.startswith("ready cannot be true") for error in errors):
             errors.append("ready cannot be true while lifecycle validation has errors")
 
