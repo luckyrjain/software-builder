@@ -1,5 +1,5 @@
 ---
-workflow_version: 2.3
+workflow_version: 2.4
 phase: classify
 produces:
   - test_plan
@@ -66,6 +66,17 @@ test_plan:
     unit: explicit_request     # explicit_request | level_hint | clarification
     integration: explicit_request
 ```
+
+When more than one source supports the **same planned level**, choose one deterministic `signal_source`
+using this precedence: `explicit_request` > `clarification` > `level_hint`. Examples:
+
+- request explicitly names unit and `level_hint: unit` → `signal_source.unit: explicit_request`;
+- generic request + `level_hint: unit` → `signal_source.unit: level_hint`;
+- ambiguous request resolved by the caller to unit, with no explicit unit signal in the original request →
+  `signal_source.unit: clarification`.
+
+This precedence records the strongest caller-visible provenance without changing `test_plan.levels` or
+allowing a hint to narrow explicit breadth.
 
 Do **not** copy or quote raw caller text into `test_plan` metadata. The original `request` remains the
 specialists' unchanged input; orchestration metadata is fixed-vocabulary so it cannot become a second
