@@ -40,6 +40,21 @@ def _identity_shas_changed(stored: object, current: object) -> bool:
     return False
 
 
+def _clean_evidence_semantic_errors(name: str, evidence: dict[str, object]) -> list[str]:
+    errors: list[str] = []
+    if evidence.get("inspection_status") != "complete":
+        errors.append(f"{name} CLEAN requires review_evidence.inspection_status=complete")
+    unavailable = evidence.get("unable_to_inspect")
+    if isinstance(unavailable, list) and unavailable:
+        errors.append(f"{name} CLEAN requires no unable_to_inspect surfaces")
+    findings = evidence.get("findings")
+    if isinstance(findings, dict):
+        defects = findings.get("defect")
+        if isinstance(defects, list) and defects:
+            errors.append(f"{name} CLEAN requires zero defect findings")
+    return errors
+
+
 def _lens_errors(
     name: str,
     lens: dict[str, object],
@@ -60,6 +75,8 @@ def _lens_errors(
     if not isinstance(evidence, dict):
         errors.append(f"{name} CLEAN requires review_evidence")
         return errors
+
+    errors.extend(_clean_evidence_semantic_errors(name, evidence))
 
     if not isinstance(reviewed_identity, dict):
         errors.append(f"{name} CLEAN requires reviewed_change_identity")
