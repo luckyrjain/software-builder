@@ -3,6 +3,36 @@
 All notable changes to the test-writer skill. Per-file `workflow_version` in `workflow/*.md` frontmatter
 should match the version of the latest entry below that names that file.
 
+## [2.2.0] — 2026-08-20
+
+### Added
+
+- **Multi-level orchestration** — test-writer can now build an ordered, de-duplicated `test_plan` for
+  two or more explicitly requested complementary test surfaces and dispatch each existing specialist in
+  a fresh context. A single explicitly named level still routes directly to that specialist.
+- New `workflow/aggregate.md` keeps each specialist report verbatim while deriving only orchestration
+  completion state (`COMPLETE`, `PARTIAL`, `BLOCKED`) and fails closed when a planned level is missing,
+  blocked, unanswered, or incomplete.
+- Shared routing now distinguishes complementary breadth from competing interpretations: named unit +
+  integration coverage routes through test-writer; an ambiguous phrase such as "test the payment flow"
+  still asks once rather than running every plausible level.
+
+### Hardened
+
+- `level_hint` is a resolved signal, not an instruction to discard other explicitly requested
+  complementary levels. Conflicting signals for one surface ask once instead of silently narrowing scope.
+- `test_plan` metadata is fixed-vocabulary (`levels` + `signal_source`) and never copies raw caller text,
+  preventing untrusted request content from becoming a second unescaped orchestration render path.
+- Multi-level contract tests now assert semantics case-insensitively and cover hint precedence plus the
+  fixed-vocabulary metadata boundary.
+
+### Versioned workflow files
+
+- `workflow/inputs.md` → 2.2
+- `workflow/classify.md` → 2.3
+- `workflow/delegate.md` → 2.1
+- `workflow/aggregate.md` → 1.0
+
 ## [2.1.1] — 2026-08-10
 
 ### Fixed
