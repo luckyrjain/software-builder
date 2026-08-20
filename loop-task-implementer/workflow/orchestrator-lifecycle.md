@@ -1,5 +1,5 @@
 ---
-workflow_version: 1.1
+workflow_version: 1.2
 phase: orchestrator-lifecycle
 produces:
   change_identity: object
@@ -28,11 +28,13 @@ Before every reviewer dispatch, adjudication, CI observation, and completion act
 
 ## After each Reviewer returns
 
-Apply `workflow/reviewer-evidence.md` before recording that lens as `CLEAN`. The Orchestrator—not the Reviewer—binds the result to the exact supplied current `change_identity`, normalizes the closed shared `review_evidence` v1 envelope, validates it with the packaged shared runtime, and persists both `reviewed_change_identity` and `review_evidence` in official lens state.
+First perform the normal Orchestrator adjudication against the reviewer report and persist the rich audit result. **Then** apply `workflow/reviewer-evidence.md` to the adjudicated lens outcome before recording that lens as lifecycle `CLEAN`. The Orchestrator—not the Reviewer—binds the result to the exact supplied current `change_identity`, normalizes the closed shared `review_evidence` v1 envelope, validates it with the packaged shared runtime, and persists both `reviewed_change_identity` and `review_evidence` in official lens state.
+
+Portable classification is post-adjudication: accepted/open blocking findings become `defect`; evidence-backed non-blocking improvements become `suggestion`; unresolved evidence requests become `question`. A `PROPOSED_BLOCKING` item adjudicated `REJECTED` remains in the rich audit trail but is not a portable defect and does not require a redundant reviewer rerun merely to clear a rejected proposal.
 
 A lifecycle-clean lens requires all of the following:
 
-- lens status `CLEAN`;
+- lens status `CLEAN` after adjudication;
 - `review_evidence.inspection_status: complete`;
 - no `unable_to_inspect` entries;
 - zero `findings.defect` entries;
