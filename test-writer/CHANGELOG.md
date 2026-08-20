@@ -33,6 +33,10 @@ should match the version of the latest entry below that names that file.
   deterministic precedence (`FAILED` > `BLOCKED` > `ESCALATED` > `PARTIAL` > `COMPLETE`).
 - `unfinished_levels` is now a declared Aggregate output and is derived deterministically in plan order
   from every non-`COMPLETE` or missing planned level, including terminal `FAILED`/`ESCALATED` outcomes.
+- Child dispatch now advances framework-owned `execution_context` per the inherited recursion contract
+  instead of copying it unchanged. Ordinary caller fields still pass through unchanged, while each
+  sibling derives its own child context from the same parent and a rejected recursion guard blocks only
+  that planned level.
 - Multi-level contract tests now assert semantics case-insensitively and cover hint precedence, the
   fixed-vocabulary metadata boundary, portable status mapping, and mixed-outcome precedence.
 
@@ -40,7 +44,7 @@ should match the version of the latest entry below that names that file.
 
 - `workflow/inputs.md` → 2.2
 - `workflow/classify.md` → 2.4
-- `workflow/delegate.md` → 2.2
+- `workflow/delegate.md` → 2.3
 - `workflow/aggregate.md` → 1.3
 
 ## [2.1.1] — 2026-08-10
