@@ -25,6 +25,9 @@ consumes:
 
 Reject an unknown planned level rather than silently skipping it. Record an unknown planned level as
 `BLOCKED` with an explicit fixed-vocabulary `blocked_reason` rather than fabricating a specialist report.
+If the host lacks the planned specialist's invoke capability, record that level as `BLOCKED` with
+`blocked_reason: child_invoke_unavailable`; never silently drop it or treat an unavailable child as
+successful.
 
 ## 2. Dispatch independently
 
@@ -89,8 +92,8 @@ state it would normally inspect; do not convert the earlier report into new call
 
 ## 3. Preserve per-level reports and status
 
-Record outputs as `level_reports`, keyed by planned level. For a child that ran, store its canonical
-`skill_result` status and raw specialist report verbatim; preserve blockers, artifacts, confidence,
+Record outputs as `level_reports`, keyed by planned level. For a child that ran, store the complete
+canonical `skill_result` envelope verbatim alongside the raw specialist report; preserve blockers, artifacts, confidence,
 evidence status, write-guard details, and recommended next skill. The child `skill_result` is the
 authority for the child's outcome; the router may only apply the documented portable status alias and
 must not rewrite a child `BLOCKED`, `FAILED`, or `ESCALATED` result. Do not derive status from a report
@@ -116,6 +119,7 @@ specialist's authoritative outcome.
 level_reports:
   unit:
     dispatch_status: COMPLETE | PARTIAL | BLOCKED | FAILED | ESCALATED
+    skill_result: <verbatim canonical child skill_result envelope>
     report: <verbatim specialist report when dispatched>
   integration:
     dispatch_status: BLOCKED

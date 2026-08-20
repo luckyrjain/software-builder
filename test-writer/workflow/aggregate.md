@@ -13,8 +13,9 @@ consumes:
 # Aggregate — report orchestration state without rewriting specialist evidence
 
 Aggregation is a bookkeeping gate, not a new test verdict. Every dispatched entry in `level_reports`
-keeps the specialist's report **verbatim**. Do not summarize a specialist into a stronger or weaker
-status, and do not fabricate a report for a planned child that never ran.
+keeps both the complete child `skill_result` envelope and specialist report **verbatim**. Do not
+summarize a specialist into a stronger or weaker status, and do not fabricate a report for a planned
+child that never ran.
 
 ## Account for every planned level
 
@@ -23,6 +24,9 @@ and exactly one evidence form appropriate to its lifecycle:
 
 - a verbatim specialist `report` when the child was dispatched; or
 - an explicit fixed-vocabulary `blocked_reason` when it was blocked before dispatch.
+
+Dispatched entries must also carry `skill_result`, unchanged from the child. Pre-dispatch blocked entries
+have no child `skill_result` because no child ran.
 
 A pre-dispatch `BLOCKED` entry with neither a report nor a blocked reason is a lifecycle error. A child
 that never ran must not contain a fabricated specialist report. Every `level_reports` entry must contain
@@ -83,6 +87,7 @@ unfinished_levels: [integration]
 level_reports:
   unit:
     dispatch_status: COMPLETE
+    skill_result: <verbatim canonical child skill_result envelope>
     report: <verbatim UNIT_TEST_REPORT.md>
   integration:
     dispatch_status: BLOCKED

@@ -78,6 +78,8 @@ def _validate_creator_parity(
         errors.append("error: creator_parity.degraded_status must be BLOCKED")
     if parity.get("interactive_gate_policy") != "specialist-only":
         errors.append("error: creator_parity.interactive_gate_policy must be specialist-only")
+    if parity.get("router_gate_policy") != "classification-only":
+        errors.append("error: creator_parity.router_gate_policy must be classification-only")
 
     output_contract = parity.get("output_contract")
     if not isinstance(output_contract, dict):

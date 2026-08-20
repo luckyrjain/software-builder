@@ -94,6 +94,7 @@ creator_parity:
   child_authority: skill_result
   degraded_status: BLOCKED
   interactive_gate_policy: specialist-only
+  router_gate_policy: classification-only
   output_contract:
     artifact: test_suite
     fields: [tests, framework, target_path]

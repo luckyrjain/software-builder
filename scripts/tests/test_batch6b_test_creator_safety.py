@@ -229,6 +229,73 @@ def test_guard_fails_closed_for_a_hardlinked_planned_output(tmp_path: Path) -> N
     assert "hard link" in result.reason.lower()
 
 
+def test_guard_blocks_a_staged_overlap(tmp_path: Path) -> None:
+    from scripts.test_creator_write_guard import check_write_safety
+
+    repo = _git_repo(tmp_path)
+    path = repo / "staged_test.py"
+    path.write_text("committed\n", encoding="utf-8")
+    _run("add", "staged_test.py", cwd=repo)
+    _run(
+        "-c",
+        "user.name=Batch 6B",
+        "-c",
+        "user.email=batch6b@example.invalid",
+        "commit",
+        "-qm",
+        "staged fixture",
+        cwd=repo,
+    )
+    path.write_text("staged user change\n", encoding="utf-8")
+    _run("add", "staged_test.py", cwd=repo)
+
+    result = check_write_safety(repo, ["staged_test.py"])
+
+    assert result.status == "BLOCKED"
+    assert result.dirty_paths_before == ("staged_test.py",)
+    assert result.conflicting_paths == ("staged_test.py",)
+
+
+def test_guard_blocks_both_sides_of_a_rename_overlap(tmp_path: Path) -> None:
+    from scripts.test_creator_write_guard import check_write_safety
+
+    repo = _git_repo(tmp_path)
+    old = repo / "old_test.py"
+    old.write_text("test\n", encoding="utf-8")
+    _run("add", "old_test.py", cwd=repo)
+    _run(
+        "-c",
+        "user.name=Batch 6B",
+        "-c",
+        "user.email=batch6b@example.invalid",
+        "commit",
+        "-qm",
+        "rename fixture",
+        cwd=repo,
+    )
+    _run("mv", "old_test.py", "new_test.py", cwd=repo)
+
+    result = check_write_safety(repo, ["old_test.py", "new_test.py"])
+
+    assert result.status == "BLOCKED"
+    assert result.conflicting_paths == ("new_test.py", "old_test.py")
+    assert result.dirty_paths_before == ("new_test.py", "old_test.py")
+
+
+def test_guard_blocks_untracked_output_with_a_newline_in_its_name(tmp_path: Path) -> None:
+    from scripts.test_creator_write_guard import check_write_safety
+
+    repo = _git_repo(tmp_path)
+    filename = "user\nowned_test.py"
+    (repo / filename).write_text("user output\n", encoding="utf-8")
+
+    result = check_write_safety(repo, [filename])
+
+    assert result.status == "BLOCKED"
+    assert result.dirty_paths_before == (filename,)
+    assert result.conflicting_paths == (filename,)
+
+
 def test_guard_results_match_the_documented_write_evidence_schema(tmp_path: Path) -> None:
     from scripts.test_creator_write_guard import check_write_safety
 
@@ -309,6 +376,7 @@ def test_composition_contract_declares_creator_parity_requirements() -> None:
     assert parity["child_authority"] == "skill_result"
     assert parity["degraded_status"] == "BLOCKED"
     assert parity["interactive_gate_policy"] == "specialist-only"
+    assert parity["router_gate_policy"] == "classification-only"
     required = set(parity["forwarded_fields"])
     for creator in [*CREATOR_ROOTS, "test-writer"]:
         consumed = set(contracts["skills"][creator]["consume_fields"]["implementation_task"])
@@ -330,6 +398,10 @@ def test_router_handoff_preserves_common_inputs_and_child_authority() -> None:
         assert field in delegate
     assert "byte-for-byte" in inputs
     assert "must not rewrite a child `BLOCKED`, `FAILED`, or `ESCALATED` result" in delegate
+    assert "complete" in delegate
+    assert "`skill_result` envelope" in delegate
+    aggregate = (ROOT / "test-writer" / "workflow" / "aggregate.md").read_text(encoding="utf-8")
+    assert "Dispatched entries must also carry `skill_result`" in aggregate
     assert "Do not add a router-level write or interactive gate" in (
         ROOT / "test-writer" / "SKILL.md"
     ).read_text(encoding="utf-8")

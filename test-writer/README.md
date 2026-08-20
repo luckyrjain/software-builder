@@ -52,9 +52,10 @@ More scenarios: [examples.md](examples.md).
 
 ## What you get
 
-The canonical `test_orchestration_result` contains an ordered `test_plan`, one per-level report or
-fixed-vocabulary pre-dispatch `blocked_reason`, ordered `unfinished_levels`, and internal orchestration
-status `COMPLETE`, `PARTIAL`, `BLOCKED`, `FAILED`, or `ESCALATED`. Composed callers provide a typed
+The canonical `test_orchestration_result` contains an ordered `test_plan`, one per-level verbatim child
+`skill_result` plus report when dispatched (or a fixed-vocabulary pre-dispatch `blocked_reason`), ordered
+`unfinished_levels`, and internal orchestration status `COMPLETE`, `PARTIAL`, `BLOCKED`, `FAILED`, or
+`ESCALATED`. Composed callers provide a typed
 `implementation_task` containing the child request, repository root, target, and acceptance context.
 `unfinished_levels` is empty only when every planned specialist completed successfully; otherwise it
 names each non-`COMPLETE` or missing planned level in `test_plan` order. In the canonical runtime envelope,
