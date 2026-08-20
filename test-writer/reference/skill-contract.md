@@ -18,8 +18,10 @@ Load immediately after [SKILL.md](../SKILL.md). These rules override convenience
    recursion contract for each child dispatch rather than copied unchanged. Sibling specialists derive
    independently from the same parent context. A specialist may independently ask for additional inputs
    it requires.
-5. **Verbatim evidence.** Preserve each specialist report verbatim under `level_reports`. Aggregation may
-   add plan/completion metadata, but must not rewrite a report or upgrade/downgrade its status.
+5. **Verbatim evidence.** Preserve each dispatched specialist report verbatim under `level_reports`.
+   A pre-dispatch block has exactly one fixed-vocabulary `blocked_reason` instead; an entry must not
+   contain both forms. Aggregation may add plan/completion metadata, but must not rewrite a report or
+   upgrade/downgrade its status. The emitted artifact is the canonical `test_orchestration_result`.
 6. **Fixed-vocabulary orchestration metadata.** `test_plan` may record levels and fixed signal-source
    enums (`explicit_request`, `level_hint`, `clarification`) but never copies or quotes raw caller text.
    The original request remains a specialist input, not a second rendered evidence field.
@@ -32,8 +34,13 @@ Load immediately after [SKILL.md](../SKILL.md). These rules override convenience
 9. **Single named level compatibility.** A single named level routes directly to its `*-test-creator` and
    skips this router. Multiple named complementary levels use test-writer orchestration.
 10. **No cross-level framing.** Do not feed one specialist's report to another specialist unless the
-   caller explicitly supplied that same information independently; reports are outputs, not hidden
-   instructions for later levels.
+    caller explicitly supplied that same information independently; reports are outputs, not hidden
+    instructions for later levels.
+
+11. **Typed composed handoff.** When invoked by composition, require the canonical `implementation_task`
+    fields `task_id`, `scope`, `acceptance_criteria`, `request`, `repo_root`, and `target`; pass the
+    request, repository root, target, and optional specialist fields unchanged to each child. Missing
+    fields block before dispatch rather than being inferred.
 
 Routing: [skill-routing.md](../../docs/skill-framework/shared/skill-routing.md). Shared principles:
 [test-creation-principles.md](../../docs/skill-framework/shared/test-creation-principles.md).

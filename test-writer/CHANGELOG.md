@@ -40,12 +40,16 @@ should match the version of the latest entry below that names that file.
 - Multi-level contract tests now assert semantics case-insensitively and cover hint precedence, the
   fixed-vocabulary metadata boundary, portable status mapping, and mixed-outcome precedence.
 
+- Composed invocation now uses a typed `implementation_task` handoff, and test-writer emits the
+  canonical `test_orchestration_result` artifact rather than claiming ownership of specialist
+  `test_suite` artifacts. Pre-dispatch blocks and dispatched child reports are distinguished explicitly.
+
 ### Versioned workflow files
 
-- `workflow/inputs.md` → 2.3
+- `workflow/inputs.md` → 2.4
 - `workflow/classify.md` → 2.4
-- `workflow/delegate.md` → 2.3
-- `workflow/aggregate.md` → 1.3
+- `workflow/delegate.md` → 2.5
+- `workflow/aggregate.md` → 1.5
 
 ## [2.1.1] — 2026-08-10
 

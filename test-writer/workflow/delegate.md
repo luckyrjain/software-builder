@@ -1,10 +1,11 @@
 ---
-workflow_version: 2.4
+workflow_version: 2.5
 phase: delegate
 produces:
   - level_reports
 consumes:
   - test_plan
+  - implementation_task
   - request
   - repo_root
   - execution_context
@@ -27,10 +28,32 @@ Reject an unknown planned level rather than silently skipping it. Record an unkn
 
 ## 2. Dispatch independently
 
-For each planned level in `test_plan.levels`, dispatch a **fresh specialist context**. Pass `repo_root`
-and ordinary caller inputs unchanged, including target/run flags/budgets/output hints and level-specific
-fields such as `role` or `journeys`. The router does not translate, default, or pre-answer
+For each planned level in `test_plan.levels`, dispatch a **fresh specialist context** using the
+canonical handoff envelope below. The typed `implementation_task` and ordinary caller inputs remain
+unchanged, including target/run flags/budgets/output hints and level-specific fields such as `role` or
+`journeys`. Inputs unchanged means the router does not translate, default, or pre-answer
 specialist-owned inputs.
+
+### Canonical handoff envelope
+
+```yaml
+handoff:
+  target_skill: <specialist skill id>
+  reason: execute the planned <level> test surface
+  inputs:
+    implementation_task: <unchanged typed scope envelope>
+    request: <unchanged request>
+    repo_root: <unchanged repo_root>
+    target: <unchanged target>
+    specialist_inputs: <unchanged optional specialist fields>
+  evidence_refs: []
+  assumptions: []
+  unresolved: []
+  execution_context: <fresh child context>
+```
+
+The executable handoff guard is:
+`python3 -m scripts.registry.cli check-handoff <target_skill> --depth <parent.depth> --visited <comma-separated parent.visited_skills>`.
 
 `execution_context` is the required exception to unchanged pass-through. Before each child dispatch,
 apply the inherited recursion protection in
@@ -41,7 +64,11 @@ human-readable reason in the enclosing canonical result blockers. Do not invent 
 a child that never ran.
 
 Otherwise derive a fresh child context from the parent context: preserve the same invocation id, set
-`parent_skill` to `test-writer`, add `test-writer` to the visited-skill history, and increment depth once.
+`parent_skill` to `test-writer`, set `child_skill` to the selected specialist, add both `test-writer`
+and the child skill to the visited-skill history, and set `depth` to `parent.depth + 1`. Increment depth once.
+If there is no
+root execution context, the direct host supplies a stable invocation id, `parent: null`, an empty
+`visited_skills` list, and depth `0`; test-writer must not invent the repository path or invocation id.
 
 Each planned specialist gets its own child context derived from the same parent context. One sibling's
 dispatch must not increase another sibling's depth or leak sibling-specific visited state. Do not mutate
@@ -56,9 +83,11 @@ state it would normally inspect; do not convert the earlier report into new call
 
 ## 3. Preserve per-level reports and status
 
-Record outputs as `level_reports`, keyed by planned level. For a child that ran, store its raw specialist
-report verbatim; only orchestration metadata may sit beside it. For a child blocked before dispatch, store
-an explicit fixed-vocabulary `blocked_reason` instead of a fake report.
+Record outputs as `level_reports`, keyed by planned level. For a child that ran, store its canonical
+`skill_result` status and raw specialist report verbatim; preserve blockers, artifacts, confidence,
+evidence status, and recommended next skill. Do not derive status from a report heading or from files
+written. For a child blocked before dispatch, store an explicit fixed-vocabulary `blocked_reason`
+instead of a fake report.
 
 Use the specialist's canonical `skill_result.status` as the authoritative dispatch result. Preserve the
 portable status losslessly instead of inventing a narrower local vocabulary:

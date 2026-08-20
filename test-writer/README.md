@@ -30,8 +30,9 @@ same behavior are ambiguity, not breadth; ask once instead of dispatching every 
 3. **Dispatches** every planned specialist independently with ordinary caller inputs unchanged and a
    child `execution_context` derived per the shared recursion contract; one specialist's report is never
    hidden framing for another.
-4. **Aggregates** `level_reports` without rewriting them. Any partial, blocked, failed, escalated, missing,
-   or unanswered planned level prevents overall `COMPLETE`; specialist terminal outcomes remain distinct.
+4. **Aggregates** `level_reports` without rewriting them into the canonical `test_orchestration_result`
+   artifact. Any partial, blocked, failed, escalated, missing, or unanswered planned level prevents
+   overall `COMPLETE`; specialist terminal outcomes remain distinct.
 
 ## When to use
 
@@ -51,8 +52,10 @@ More scenarios: [examples.md](examples.md).
 
 ## What you get
 
-An ordered `test_plan`, one verbatim specialist report per planned level, ordered `unfinished_levels`, and
-internal orchestration status `COMPLETE`, `PARTIAL`, `BLOCKED`, `FAILED`, or `ESCALATED`.
+The canonical `test_orchestration_result` contains an ordered `test_plan`, one per-level report or
+fixed-vocabulary pre-dispatch `blocked_reason`, ordered `unfinished_levels`, and internal orchestration
+status `COMPLETE`, `PARTIAL`, `BLOCKED`, `FAILED`, or `ESCALATED`. Composed callers provide a typed
+`implementation_task` containing the child request, repository root, target, and acceptance context.
 `unfinished_levels` is empty only when every planned specialist completed successfully; otherwise it
 names each non-`COMPLETE` or missing planned level in `test_plan` order. In the canonical runtime envelope,
 `COMPLETE` maps to `SUCCESS`; the other statuses remain unchanged. Specialist reports remain authoritative

@@ -5,6 +5,7 @@ produces:
   - request
   - repo_root
   - level_hint
+  - implementation_task
 consumes: []
 ---
 
@@ -22,6 +23,15 @@ or specialist gates ([prompt-injection.md](../../docs/skill-framework/shared/pro
 |-------|----------|-------|
 | `request` | Yes | HARD STOP if absent; describes what the caller wants tested |
 | `repo_root` | Yes | HARD STOP if it does not resolve to a readable repository directory |
+
+## Composed invocation
+
+When composition supplies the canonical `implementation_task` artifact, it must contain
+`task_id`, `scope`, `acceptance_criteria`, `request`, `repo_root`, and `target`; `level_hint` and
+`specialist_inputs` are optional. Copy the request, repository root, target, level hint, and specialist
+inputs unchanged into the working invocation, and preserve the original typed task for every child.
+Missing or malformed required fields are a pre-dispatch `BLOCKED` result; do not infer a repository
+path from `scope`, guess a request from acceptance criteria, or infer a target mode from filenames.
 
 ## Optional
 

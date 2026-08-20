@@ -1,0 +1,38 @@
+schema_version: 1
+skill: test-writer
+case_id: golden-test-writer-multilevel-failed
+tier: 3
+description: >-
+  A failed integration specialist result remains FAILED and its report is preserved; aggregation does not
+  upgrade the plan to COMPLETE or collapse the authoritative child outcome into BLOCKED.
+recorded_output:
+  test_plan:
+    levels: [unit, integration]
+    signal_source:
+      unit: explicit_request
+      integration: explicit_request
+  orchestration_status: FAILED
+  unfinished_levels: [integration]
+  level_reports:
+    unit:
+      dispatch_status: COMPLETE
+      report: "UNIT_TEST_REPORT: pricing rule boundary cases covered"
+    integration:
+      dispatch_status: FAILED
+      report: "INTEGRATION_TEST_REPORT: database fixture startup failed"
+assertions:
+  - type: field_equals
+    path: orchestration_status
+    value: FAILED
+  - type: forbid_field_value
+    path: orchestration_status
+    value: COMPLETE
+  - type: field_equals
+    path: unfinished_levels
+    value: [integration]
+  - type: field_equals
+    path: level_reports.integration.dispatch_status
+    value: FAILED
+  - type: require_pattern
+    path: level_reports.integration.report
+    pattern: "database fixture startup failed"

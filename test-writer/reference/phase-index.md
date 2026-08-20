@@ -5,10 +5,10 @@
 
 | Step | Read now | Produces |
 |------|----------|----------|
-| **Inputs** | [workflow/inputs.md](../workflow/inputs.md) | `request`, `repo_root`, `level_hint` |
+| **Inputs** | [workflow/inputs.md](../workflow/inputs.md) | `request`, `repo_root`, `level_hint`, typed `implementation_task` |
 | **Classify** | [workflow/classify.md](../workflow/classify.md) | ordered, de-duplicated `test_plan` |
 | **Delegate** | [workflow/delegate.md](../workflow/delegate.md) | per-level `level_reports` |
-| **Aggregate** | [workflow/aggregate.md](../workflow/aggregate.md) | `orchestration_status`, ordered `unfinished_levels`, and verbatim `level_reports` (`COMPLETE` / `PARTIAL` / `BLOCKED` / `FAILED` / `ESCALATED`) |
+| **Aggregate** | [workflow/aggregate.md](../workflow/aggregate.md) | canonical `test_orchestration_result`: `orchestration_status` (`COMPLETE` / `PARTIAL` / `BLOCKED` / `FAILED` / `ESCALATED`), ordered `unfinished_levels`, and per-level `report` or `blocked_reason` |
 
 Reference loads: [lazy-load-index.md](lazy-load-index.md).
 

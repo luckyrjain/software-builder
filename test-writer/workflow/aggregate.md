@@ -1,5 +1,5 @@
 ---
-workflow_version: 1.4
+workflow_version: 1.5
 phase: aggregate
 produces:
   - orchestration_status
@@ -25,7 +25,9 @@ and exactly one evidence form appropriate to its lifecycle:
 - an explicit fixed-vocabulary `blocked_reason` when it was blocked before dispatch.
 
 A pre-dispatch `BLOCKED` entry with neither a report nor a blocked reason is a lifecycle error. A child
-that never ran must not contain a fabricated specialist report.
+that never ran must not contain a fabricated specialist report. Every `level_reports` entry must contain
+exactly one of `report` or `blocked_reason`; it must not contain both. A dispatched child that returns canonical
+`BLOCKED` still has a verbatim `report`; only a pre-dispatch guard rejection uses `blocked_reason`.
 
 Derive `unfinished_levels` in the same stable order as `test_plan.levels`: include every planned level
 whose `dispatch_status` is not `COMPLETE`, plus any planned level missing a valid report/status or

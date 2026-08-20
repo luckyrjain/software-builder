@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import yaml
+
 
 ROOT = Path(__file__).resolve().parents[2]
 SKILL = ROOT / "test-writer"
@@ -7,6 +9,10 @@ SKILL = ROOT / "test-writer"
 
 def _read(path: str) -> str:
     return (SKILL / path).read_text(encoding="utf-8")
+
+
+def _load_yaml(path: Path) -> dict:
+    return yaml.safe_load(path.read_text(encoding="utf-8"))
 
 
 def test_skill_routes_one_or_more_complementary_test_levels():
@@ -216,3 +222,92 @@ def test_shared_router_sends_complementary_levels_to_test_writer_but_one_level_d
         "test-writer to build and execute the multi-level plan",
     ):
         assert token in routing
+
+
+def test_registry_declares_a_distinct_orchestration_result_contract():
+    contracts = _load_yaml(ROOT / "scripts" / "registry" / "composition_contracts.yaml")
+    runtime = _load_yaml(ROOT / "scripts" / "registry" / "composition_runtime.yaml")
+    assert "test_orchestration_result" in contracts["artifact_types"]
+    assert contracts["artifact_schemas"]["test_orchestration_result"]["fields"] == [
+        "test_plan",
+        "orchestration_status",
+        "unfinished_levels",
+        "level_reports",
+    ]
+    test_writer = contracts["skills"]["test-writer"]
+    assert test_writer["produces"] == ["test_orchestration_result"]
+    assert test_writer["produce_fields"]["test_orchestration_result"] == [
+        "test_plan",
+        "orchestration_status",
+        "unfinished_levels",
+        "level_reports",
+    ]
+    assert "test-writer" not in runtime["artifact_ownership"]["test_suite"]["owners"]
+    assert runtime["artifact_ownership"]["test_orchestration_result"] == {
+        "mode": "canonical",
+        "owners": ["test-writer"],
+    }
+
+
+def test_typed_implementation_task_carries_the_child_invocation_fields():
+    contracts = _load_yaml(ROOT / "scripts" / "registry" / "composition_contracts.yaml")
+    fields = contracts["artifact_schemas"]["implementation_task"]["fields"]
+    for field in ("request", "repo_root", "target", "level_hint", "specialist_inputs"):
+        assert field in fields
+    for skill in (
+        "test-writer",
+        "unit-test-creator",
+        "integration-test-creator",
+        "contract-test-creator",
+        "e2e-test-creator",
+        "api-test-creator",
+    ):
+        assert contracts["skills"][skill]["consumes"] == ["implementation_task"]
+        required = contracts["skills"][skill]["consume_fields"]["implementation_task"]
+        for field in ("task_id", "scope", "acceptance_criteria", "request", "repo_root", "target"):
+            assert field in required
+
+
+def test_delegate_documents_a_canonical_child_handoff_and_child_context_history():
+    text = _read("workflow/delegate.md").lower()
+    for token in (
+        "canonical handoff envelope",
+        "target_skill",
+        "evidence_refs",
+        "assumptions",
+        "unresolved",
+        "implementation_task",
+        "visited_skills",
+        "child_skill",
+        "parent.depth + 1",
+        "check-handoff",
+    ):
+        assert token in text
+
+
+def test_definition_of_done_matches_blocked_pre_dispatch_artifacts():
+    skill = _read("SKILL.md").lower()
+    aggregate = _read("workflow/aggregate.md").lower()
+    assert "one level_reports entry per planned level" in skill
+    assert "report or blocked_reason" in skill
+    assert "blocked_reason" in aggregate
+    assert "must not contain both" in aggregate
+
+
+def test_changelog_versions_match_the_workflow_frontmatter():
+    changelog = _read("CHANGELOG.md")
+    assert "`workflow/inputs.md` → 2.4" in changelog
+    assert "`workflow/delegate.md` → 2.5" in changelog
+    assert "`workflow/aggregate.md` → 1.5" in changelog
+
+
+def test_multilevel_lifecycle_golden_cases_cover_completion_failure_and_ambiguity():
+    from scripts.evals.golden import load_golden_fixtures
+
+    cases = {case.case_id: case for case in load_golden_fixtures(ROOT / "evals" / "golden")}
+    for case_id in (
+        "golden-test-writer-multilevel-complete",
+        "golden-test-writer-multilevel-failed",
+        "golden-test-writer-ambiguous-no-dispatch",
+    ):
+        assert case_id in cases

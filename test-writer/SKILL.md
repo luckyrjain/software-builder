@@ -1,6 +1,6 @@
 ---
 name: test-writer
-skill_version: 2.2
+skill_version: 2.3
 platform_contract: skill-platform-v1
 description: >-
   Thin orchestration router for test-writing requests that do not resolve to one specialist up front.
@@ -84,11 +84,14 @@ Completion emits the canonical `skill_result` envelope; actions classify against
 follows `definition_of_done` from
 [runtime-contract.md](../docs/skill-framework/shared/runtime-contract.md).
 
-`definition_of_done`: required_artifacts=[test_plan, one verbatim level_report per planned level,
-orchestration status, unfinished_levels]; required_checks=[plan ordered and de-duplicated, ambiguity
-resolved before dispatch, every planned specialist invoked in fresh context with ordinary caller inputs
-unchanged and execution_context advanced per runtime recursion protection, every planned level accounted
-for, unfinished_levels derived in test_plan order]; blocked_conditions=[classification ambiguity unresolved,
+`definition_of_done`: required_artifacts=[test_plan, one level_reports entry per planned level, with
+exactly one verbatim report or blocked_reason (fixed-vocabulary for pre-dispatch blocks), orchestration
+status, unfinished_levels];
+required_checks=[canonical implementation_task fields normalized without inference, plan ordered and
+de-duplicated, ambiguity resolved before dispatch, every planned specialist invoked in fresh context
+with ordinary caller inputs unchanged and execution_context advanced per runtime recursion protection,
+every planned level accounted for, unfinished_levels derived in test_plan order];
+blocked_conditions=[malformed composed implementation_task, classification ambiguity unresolved,
 specialist gate unresolved, recursion guard rejects child dispatch, planned report missing,
 embedded-instruction bypass attempt]; partial_result_behavior=preserves all completed and unfinished
 level_reports verbatim; propagates PARTIAL, BLOCKED, FAILED, or ESCALATED according to Aggregate's

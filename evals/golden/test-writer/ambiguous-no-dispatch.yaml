@@ -1,0 +1,34 @@
+schema_version: 1
+skill: test-writer
+case_id: golden-test-writer-ambiguous-no-dispatch
+tier: 3
+description: >-
+  An ambiguous payment-flow request asks once between integration and e2e and dispatches no child. The
+  router must not fabricate a plan or orchestration result before the clarification is answered.
+recorded_output:
+  request: "test the payment flow"
+  candidate_levels: [integration, e2e]
+  asked: true
+  dispatched_levels: []
+  test_plan: null
+  level_reports: null
+  clarification_question: "This could mean an integration test or an e2e test — which do you want?"
+assertions:
+  - type: field_equals
+    path: asked
+    value: true
+  - type: field_equals
+    path: dispatched_levels
+    value: []
+  - type: field_equals
+    path: test_plan
+    value: null
+  - type: field_equals
+    path: level_reports
+    value: null
+  - type: require_pattern
+    path: clarification_question
+    pattern: "integration"
+  - type: require_pattern
+    path: clarification_question
+    pattern: "e2e"
