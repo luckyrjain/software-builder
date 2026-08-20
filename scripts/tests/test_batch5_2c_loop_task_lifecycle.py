@@ -34,16 +34,16 @@ def test_state_schema_carries_shared_identity_and_lens_evidence():
         assert "reviewed_change_identity" in data["review"][lens]
 
 
-def test_reviewer_emits_shared_review_evidence():
-    text = (SKILL / "workflow/reviewer.md").read_text(encoding="utf-8")
+def test_reviewer_evidence_adapter_emits_shared_review_evidence():
+    text = (SKILL / "workflow/reviewer-evidence.md").read_text(encoding="utf-8")
     assert "review_evidence" in text
     assert "change_identity" in text
     assert "docs/skill-framework/shared/review-evidence.yaml" in text
     assert "defect" in text and "suggestion" in text and "question" in text
 
 
-def test_orchestrator_revalidates_lifecycle_before_ready_or_merge():
-    text = (SKILL / "workflow/orchestrator.md").read_text(encoding="utf-8")
+def test_lifecycle_gate_revalidates_before_ready_or_merge():
+    text = (SKILL / "workflow/lifecycle-gate.md").read_text(encoding="utf-8")
     required = (
         "validate_loop_lifecycle.py",
         "current `change_identity`",
