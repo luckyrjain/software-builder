@@ -21,10 +21,10 @@ SHA or ad-hoc diff fingerprint alone.
 3. **Rebuilds and validates the current change identity** from base/head/merge-base, normalized
    effective patch, generated paths, dependency changes, and config changes.
 4. **Dispatches two fresh Reviewer sessions** — Lens A (Safety and State), Lens B (Contracts and
-   Operations) — each blind to the other's verdict and to the Builder's narrative. The Orchestrator
-   converts each result into validated portable `review_evidence` for that exact current identity.
+   Operations) — each blind to the other's verdict and to the Builder's narrative.
 5. **Adjudicates** every proposed finding as `ACCEPTED` / `REJECTED` / `NEEDS_EVIDENCE` /
-   `CONTESTED`, using repository evidence, not persuasion.
+   `CONTESTED`, using repository evidence, not persuasion, then converts each adjudicated lens result
+   into validated portable `review_evidence` for that exact current identity.
 6. **Remediates** accepted findings via fresh Builder dispatch, then reruns any lens invalidated by
    content, conflict-resolution, requirements, or unresolved third-party branch changes.
 7. **Verifies authoritative checks and lifecycle readiness** for the exact current head. READY,
