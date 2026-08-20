@@ -12,10 +12,13 @@ should match the version of the latest entry below that names that file.
   a fresh context. A single explicitly named level still routes directly to that specialist.
 - New `workflow/aggregate.md` keeps each specialist report verbatim while deriving only orchestration
   completion state (`COMPLETE`, `PARTIAL`, `BLOCKED`) and fails closed when a planned level is missing,
-  blocked, unanswered, or incomplete.
+  blocked, unanswered, or incomplete. Internal `COMPLETE` maps to portable `skill_result.status: SUCCESS`;
+  it is never emitted as a new runtime status.
 - Shared routing now distinguishes complementary breadth from competing interpretations: named unit +
   integration coverage routes through test-writer; an ambiguous phrase such as "test the payment flow"
   still asks once rather than running every plausible level.
+- Added a golden injection fixture for the successful multi-level-plan path, proving malicious caller text
+  remains absent from rendered orchestration metadata while genuine unit + integration signals survive.
 
 ### Hardened
 
@@ -23,15 +26,15 @@ should match the version of the latest entry below that names that file.
   complementary levels. Conflicting signals for one surface ask once instead of silently narrowing scope.
 - `test_plan` metadata is fixed-vocabulary (`levels` + `signal_source`) and never copies raw caller text,
   preventing untrusted request content from becoming a second unescaped orchestration render path.
-- Multi-level contract tests now assert semantics case-insensitively and cover hint precedence plus the
-  fixed-vocabulary metadata boundary.
+- Multi-level contract tests now assert semantics case-insensitively and cover hint precedence, the
+  fixed-vocabulary metadata boundary, and the portable status mapping.
 
 ### Versioned workflow files
 
 - `workflow/inputs.md` → 2.2
 - `workflow/classify.md` → 2.3
 - `workflow/delegate.md` → 2.1
-- `workflow/aggregate.md` → 1.0
+- `workflow/aggregate.md` → 1.1
 
 ## [2.1.1] — 2026-08-10
 
@@ -127,9 +130,9 @@ should match the version of the latest entry below that names that file.
 - `workflow/report.md` — `TEST_WRITER_REPORT.md` rendering rules; never upgrades a status, always
   surfaces production-bug findings plainly.
 - `scripts/detect-test-framework.sh` + `scripts/test-framework-markers.sh` — marker-file detection across
-  pytest, unittest, Jest, Vitest, Mocha, Go `testing`, JUnit 4/5, RSpec, Minitest, xUnit/NUnit/MSTest, and
-  `cargo test`; `tests/test_detect_test_framework.py` pytest suite plus fixture repos under
-  `tests/fixtures/test-framework-detect/`.
+  pytest, unittest, Jest, Vitest, Mocha, Go `testing`, JUnit 4/5, RSpec, Minitest,
+  xUnit/NUnit/MSTest, and `cargo test`; `tests/test_detect_test_framework.py` pytest suite plus fixture
+  repos under `tests/fixtures/test-framework-detect/`.
 - `reference/{skill-contract,phase-index,lazy-load-index,gate-policy,test-quality-checklist,
   framework-detection,report-format,smoke-test,pressure-tests}.md`.
 - Shared framework compliance (prompt-injection, skill-routing, cross-skill-escalation, examples
