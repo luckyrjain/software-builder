@@ -87,6 +87,32 @@ def test_pre_ready_state_rejects_unclean_lens_and_non_green_ci():
     assert any("required checks must be green" in error for error in errors)
 
 
+def test_clean_lens_rejects_partial_or_unable_inspection_evidence():
+    state = _state()
+    evidence = state["review"]["lens_a"]["review_evidence"]
+    evidence["inspection_status"] = "partial"
+    evidence["unable_to_inspect"] = [
+        {"surface": "one-hop consumer", "reason": "consumer repository unavailable", "mandatory": False}
+    ]
+    errors = _load().validate_lifecycle_state(state)
+    assert any("CLEAN requires review_evidence.inspection_status=complete" in error for error in errors)
+    assert any("CLEAN requires no unable_to_inspect surfaces" in error for error in errors)
+
+
+def test_clean_lens_rejects_proposed_blocking_defect_evidence():
+    state = _state()
+    state["review"]["lens_a"]["review_evidence"]["findings"]["defect"] = [
+        {
+            "id": "AUTHZ-001",
+            "category": "defect",
+            "summary": "Authorization bypass",
+            "evidence": "src/a.py:10",
+        }
+    ]
+    errors = _load().validate_lifecycle_state(state)
+    assert any("lens_a CLEAN requires zero defect findings" in error for error in errors)
+
+
 def test_pre_ready_state_rejects_existing_completion_policy_blockers():
     state = _state()
     state["merge_readiness"]["acceptance_criteria_complete"] = False
