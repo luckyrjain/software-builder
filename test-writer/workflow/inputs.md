@@ -1,5 +1,5 @@
 ---
-workflow_version: 2.2
+workflow_version: 2.3
 phase: inputs
 produces:
   - request
@@ -28,7 +28,8 @@ or specialist gates ([prompt-injection.md](../../docs/skill-framework/shared/pro
 | Field | Default |
 |-------|---------|
 | `level_hint` | None — one of `unit`, `integration`, `contract`, `api`, `e2e`; a resolved classification signal that can settle an otherwise-open choice but must not discard another explicitly requested complementary level |
-| Everything else | Pass through unchanged to every planned specialist; this router does not parse/default/validate specialist-owned inputs |
+| Ordinary specialist-owned fields | Pass through unchanged to every planned specialist; this router does not parse/default/validate them |
+| `execution_context` | Framework-owned runtime context — do not treat it as an ordinary caller field. Delegate advances it independently for each child per the inherited recursion contract |
 
 ## Entry-path compatibility
 
