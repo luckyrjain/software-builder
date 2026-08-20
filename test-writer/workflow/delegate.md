@@ -1,5 +1,5 @@
 ---
-workflow_version: 2.3
+workflow_version: 2.4
 phase: delegate
 produces:
   - level_reports
@@ -22,7 +22,8 @@ consumes:
 | `api` | **api-test-creator** |
 | `e2e` | **e2e-test-creator** |
 
-Reject an unknown planned level rather than silently skipping it.
+Reject an unknown planned level rather than silently skipping it. Record an unknown planned level as
+`BLOCKED` with an explicit fixed-vocabulary `blocked_reason` rather than fabricating a specialist report.
 
 ## 2. Dispatch independently
 
@@ -34,7 +35,11 @@ specialist-owned inputs.
 `execution_context` is the required exception to unchanged pass-through. Before each child dispatch,
 apply the inherited recursion protection in
 [runtime-contract.md §8](../../docs/skill-framework/shared/runtime-contract.md#8-recursion-protection).
-If the handoff guard rejects the child, record that planned level as `BLOCKED` and do not dispatch it.
+If the handoff guard rejects the child, do not dispatch it. Record that planned level with
+`dispatch_status: BLOCKED` and `blocked_reason: recursion_guard_rejected`, while preserving the guard's
+human-readable reason in the enclosing canonical result blockers. Do not invent a specialist `report` for
+a child that never ran.
+
 Otherwise derive a fresh child context from the parent context: preserve the same invocation id, set
 `parent_skill` to `test-writer`, add `test-writer` to the visited-skill history, and increment depth once.
 
@@ -51,8 +56,9 @@ state it would normally inspect; do not convert the earlier report into new call
 
 ## 3. Preserve per-level reports and status
 
-Record outputs as `level_reports`, keyed by planned level. The raw specialist report is stored verbatim;
-only orchestration metadata may sit beside it.
+Record outputs as `level_reports`, keyed by planned level. For a child that ran, store its raw specialist
+report verbatim; only orchestration metadata may sit beside it. For a child blocked before dispatch, store
+an explicit fixed-vocabulary `blocked_reason` instead of a fake report.
 
 Use the specialist's canonical `skill_result.status` as the authoritative dispatch result. Preserve the
 portable status losslessly instead of inventing a narrower local vocabulary:
@@ -73,16 +79,16 @@ specialist's authoritative outcome.
 level_reports:
   unit:
     dispatch_status: COMPLETE | PARTIAL | BLOCKED | FAILED | ESCALATED
-    report: <verbatim specialist report>
+    report: <verbatim specialist report when dispatched>
   integration:
-    dispatch_status: COMPLETE | PARTIAL | BLOCKED | FAILED | ESCALATED
-    report: <verbatim specialist report>
+    dispatch_status: BLOCKED
+    blocked_reason: recursion_guard_rejected
 ```
 
-If a specialist asks a required question or hits its own HARD STOP, preserve that result and stop that
-level as `BLOCKED`/`PARTIAL`; never answer on the specialist's behalf. If the specialist returns `FAILED`
+If a specialist asks a required question or hits its own HARD STOP after dispatch, preserve its result and
+report as `BLOCKED`/`PARTIAL`; never answer on the specialist's behalf. If the specialist returns `FAILED`
 or `ESCALATED`, preserve that result exactly and let Aggregate propagate it according to its precedence
 rules.
 
 Proceed to Aggregate after every planned level has either produced a report/status or been explicitly
-recorded as blocked. Do not silently drop an unfinished level.
+recorded as blocked with a reason. Do not silently drop an unfinished level.
