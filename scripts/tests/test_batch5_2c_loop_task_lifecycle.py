@@ -97,8 +97,12 @@ def test_lifecycle_gate_revalidates_before_ready_or_merge():
         "current `change_identity`",
         "conflict_resolution_occurred",
         "third_party_change_detected",
+        "security_sensitive_needs_evidence_unresolved",
+        "NOT_ISOLATED",
+        "isolation exception",
         "required checks",
         "current head",
+        "explicit `null`",
     ):
         assert token in text
 
