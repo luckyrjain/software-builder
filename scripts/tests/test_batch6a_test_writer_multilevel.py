@@ -49,12 +49,14 @@ def test_level_hint_cannot_silently_collapse_explicit_multilevel_breadth():
     assert "silently collapse caller-requested breadth" in text
 
 
-def test_phase_index_matches_level_hint_precedence():
+def test_phase_index_matches_level_hint_precedence_and_status_contract():
     text = _read("reference/phase-index.md").lower()
     assert "generic/ambiguous request + `level_hint: integration`" in text
     assert "one-level integration plan" in text
     assert "explicit unit + integration request + `level_hint: unit`" in text
     assert "preserves both complementary levels" in text
+    for status in ("`complete`", "`partial`", "`blocked`", "`failed`", "`escalated`"):
+        assert status in text
 
 
 def test_plan_metadata_never_copies_raw_caller_signal():
