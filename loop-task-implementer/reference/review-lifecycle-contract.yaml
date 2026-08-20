@@ -1,0 +1,47 @@
+schema_version: 1
+consumer: loop-task-implementer
+shared_contracts:
+  change_identity: ../../docs/skill-framework/shared/change-identity.yaml
+  review_evidence: ../../docs/skill-framework/shared/review-evidence.yaml
+
+state_binding:
+  current_change_identity: workspace.change_identity
+  conflict_resolution_occurred: workspace.conflict_resolution_occurred
+  conflict_resolution_provenance: workspace.conflict_resolution_provenance
+  third_party_change_detected: workspace.third_party_change_detected
+  lens_a_review_evidence: review.lens_a.review_evidence
+  lens_b_review_evidence: review.lens_b.review_evidence
+  ci_commit: ci.commit
+  ci_required_checks_green: ci.required_checks_green
+
+review_rules:
+  - both_lenses_must_validate_against_current_change_identity
+  - both_lenses_must_be_clean_for_same_change_identity
+  - content_change_invalidates_both_lenses
+  - manual_conflict_resolution_invalidates_both_lenses
+  - sha_transition_requires_explicit_conflict_resolution_provenance
+  - unresolved_third_party_branch_change_invalidates_readiness
+  - stale_requirements_ref_invalidates_review_evidence
+
+completion_requires:
+  - current_change_identity_valid
+  - lens_a_evidence_fresh
+  - lens_b_evidence_fresh
+  - both_lenses_clean_for_same_change_identity
+  - authoritative_ci_green_for_current_head
+  - no_unresolved_third_party_branch_change
+
+fail_closed:
+  - missing_or_invalid_current_change_identity
+  - missing_lens_review_evidence_for_clean_lens
+  - lens_evidence_not_fresh_for_current_identity
+  - identity_sha_transition_with_unknown_conflict_provenance
+  - conflict_resolution_occurred_after_review
+  - third_party_change_detected
+  - ci_commit_not_current_head
+  - required_checks_not_green
+
+ready_semantics:
+  ready_true_only_when_all_completion_requirements_hold: true
+  complete_or_merge_requires_revalidation_immediately_before_action: true
+  builder_or_reviewer_claims_are_not_authoritative: true
