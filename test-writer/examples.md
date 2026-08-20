@@ -35,8 +35,8 @@ test_plan:
 
 3. Delegate — invokes **unit-test-creator** and **integration-test-creator** in fresh specialist contexts,
    passing the caller's fields unchanged. The unit report is not injected into the integration prompt.
-4. Aggregate — preserves both reports verbatim under `level_reports` and reports `COMPLETE` only if both
-   specialist workflows complete.
+4. Aggregate — preserves both reports verbatim under `level_reports` and reports internal `COMPLETE` only
+   if both specialists return canonical `SUCCESS`; the emitted runtime `skill_result.status` is `SUCCESS`.
 
 ## Scenario: ambiguous request, ask once
 
@@ -87,6 +87,31 @@ level_reports:
 ```
 
 The completed unit report is preserved; test-writer must not report overall `COMPLETE`.
+
+## Scenario: specialist failure propagates
+
+Unit returns canonical `SUCCESS`, but integration-test-creator attempts execution and returns canonical
+`FAILED`.
+
+```yaml
+orchestration_status: FAILED
+level_reports:
+  unit:
+    dispatch_status: COMPLETE
+    report: <verbatim UNIT_TEST_REPORT.md>
+  integration:
+    dispatch_status: FAILED
+    report: <verbatim specialist failed report>
+```
+
+The canonical test-writer `skill_result.status` is `FAILED`; failure is not collapsed to `BLOCKED` or
+`PARTIAL`.
+
+## Scenario: specialist escalation propagates
+
+If a planned specialist returns canonical `ESCALATED` and no planned level is failed or blocked,
+test-writer records `dispatch_status: ESCALATED`, aggregates `ESCALATED`, and preserves the specialist's
+recommended next owner/handoff verbatim.
 
 ## Scenario: no clear level
 
