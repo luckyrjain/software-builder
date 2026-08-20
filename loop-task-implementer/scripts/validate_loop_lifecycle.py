@@ -55,6 +55,23 @@ def _clean_evidence_semantic_errors(name: str, evidence: dict[str, object]) -> l
     return errors
 
 
+def _isolation_errors(name: str, lens: dict[str, object]) -> list[str]:
+    status = lens.get("isolation_status")
+    exception = lens.get("isolation_exception_authorized")
+    provenance = lens.get("isolation_exception_provenance")
+    if status == "ISOLATED":
+        if exception is True:
+            return [f"{name} isolation exception must not be authorized when isolation_status=ISOLATED"]
+        return []
+    if status != "NOT_ISOLATED":
+        return [f"{name}.isolation_status must be ISOLATED or NOT_ISOLATED before lifecycle readiness"]
+    if exception is not True:
+        return [f"{name} NOT_ISOLATED blocks lifecycle readiness without explicit human isolation exception"]
+    if not isinstance(provenance, str) or not provenance.strip():
+        return [f"{name} isolation exception requires non-empty human authorization provenance"]
+    return []
+
+
 def _lens_errors(
     name: str,
     lens: dict[str, object],
@@ -77,6 +94,7 @@ def _lens_errors(
         return errors
 
     errors.extend(_clean_evidence_semantic_errors(name, evidence))
+    errors.extend(_isolation_errors(name, lens))
 
     if not isinstance(reviewed_identity, dict):
         errors.append(f"{name} CLEAN requires reviewed_change_identity")
@@ -98,8 +116,6 @@ def _lens_errors(
                 )
             conflict_for_shared = conflict_resolution_occurred
     else:
-        # A conflict that happened before this evidence was produced is historical context,
-        # not a reason to invalidate evidence already bound to the current identity.
         conflict_for_shared = False
 
     kwargs: dict[str, object] = {
@@ -114,7 +130,6 @@ def _lens_errors(
 
 
 def _merge_policy_errors(readiness: dict[str, object]) -> list[str]:
-    """Validate the pre-existing repository completion gates, not just review freshness."""
     errors: list[str] = []
     if readiness.get("acceptance_criteria_complete") is not True:
         errors.append("acceptance criteria must be complete before lifecycle readiness")
@@ -122,6 +137,10 @@ def _merge_policy_errors(readiness: dict[str, object]) -> list[str]:
     blockers = readiness.get("accepted_blocking_findings_open")
     if type(blockers) is not int or blockers != 0:
         errors.append("accepted_blocking_findings_open must be integer 0 before lifecycle readiness")
+
+    unresolved = readiness.get("security_sensitive_needs_evidence_unresolved")
+    if type(unresolved) is not int or unresolved != 0:
+        errors.append("security_sensitive_needs_evidence_unresolved must be integer 0 before lifecycle readiness")
 
     if readiness.get("required_approvals_present") is not True:
         errors.append("required approvals must be satisfied before lifecycle readiness")
