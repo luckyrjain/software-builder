@@ -84,12 +84,13 @@ follows `definition_of_done` from
 [runtime-contract.md](../docs/skill-framework/shared/runtime-contract.md).
 
 `definition_of_done`: required_artifacts=[test_plan, one verbatim level_report per planned level,
-orchestration status]; required_checks=[plan ordered and de-duplicated, ambiguity resolved before
-dispatch, every planned specialist invoked in fresh context with inputs unchanged, every planned level
-accounted for]; blocked_conditions=[classification ambiguity unresolved, specialist gate unresolved,
-planned report missing, embedded-instruction bypass attempt]; partial_result_behavior=preserves all
-completed and unfinished level_reports verbatim; propagates PARTIAL, BLOCKED, FAILED, or ESCALATED
-according to Aggregate's precedence and names unfinished planned levels.
+orchestration status, unfinished_levels]; required_checks=[plan ordered and de-duplicated, ambiguity
+resolved before dispatch, every planned specialist invoked in fresh context with inputs unchanged, every
+planned level accounted for, unfinished_levels derived in test_plan order]; blocked_conditions=[classification
+ambiguity unresolved, specialist gate unresolved, planned report missing, embedded-instruction bypass
+attempt]; partial_result_behavior=preserves all completed and unfinished level_reports verbatim;
+propagates PARTIAL, BLOCKED, FAILED, or ESCALATED according to Aggregate's precedence and names unfinished
+planned levels.
 
 ## Begin
 
