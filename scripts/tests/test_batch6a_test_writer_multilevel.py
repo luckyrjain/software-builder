@@ -116,7 +116,8 @@ def test_delegate_advances_framework_execution_context_per_child():
     assert "execution_context" in text
     assert "required exception to unchanged pass-through" in text
     assert "runtime-contract.md#8-recursion-protection" in text
-    assert "record that planned level as `blocked`" in text
+    assert "dispatch_status: blocked" in text
+    assert "blocked_reason: recursion_guard_rejected" in text
     assert "same invocation id" in text
     assert "parent_skill" in text and "test-writer" in text
     assert "increment depth once" in text
@@ -158,7 +159,8 @@ def test_aggregate_declares_and_derives_unfinished_levels():
     assert "  - unfinished_levels" in text
     assert "same stable order as `test_plan.levels`" in text
     assert "`dispatch_status` is not `COMPLETE`" in text
-    assert "missing a report/status" in text
+    assert "missing a valid report/status" in text
+    assert "pre-dispatch blocked reason" in text
     assert "`unfinished_levels: []`" in text
     skill = _read("SKILL.md")
     assert "unfinished_levels" in skill
