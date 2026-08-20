@@ -30,8 +30,10 @@ def test_packaged_loop_validator_loads_only_vendored_shared_runtime(tmp_path: Pa
 
     runtime = dest / "docs/skill-framework/shared/review_contract_runtime.py"
     validator_path = dest / "scripts/validate_loop_lifecycle.py"
+    manifest = dest / ".software-builder-manifest.json"
     assert runtime.is_file()
     assert validator_path.is_file()
+    assert manifest.is_file()
 
     validator = _load(validator_path, "installed_loop_lifecycle")
     shared = validator._load_shared_runtime()
@@ -50,5 +52,15 @@ def test_packaged_loop_validator_loads_only_vendored_shared_runtime(tmp_path: Pa
     ) == []
 
     runtime.unlink()
+
+    # Even a source-looking parent must not become executable policy for an
+    # installed package whose manifest proves it should be self-contained.
+    (tmp_path / "skills.yaml").write_text("schema_version: 1\n", encoding="utf-8")
+    (tmp_path / "scripts").mkdir()
+    (tmp_path / "scripts/package_skill.py").write_text("# marker\n", encoding="utf-8")
+    fake_runtime = tmp_path / "docs/skill-framework/shared/review_contract_runtime.py"
+    fake_runtime.parent.mkdir(parents=True)
+    fake_runtime.write_text("raise RuntimeError('must not load parent runtime')\n", encoding="utf-8")
+
     with pytest.raises(RuntimeError, match="packaged shared review runtime"):
         validator._load_shared_runtime()
