@@ -52,6 +52,7 @@ def _lens_errors(
     *,
     current_requirements_ref: object = _UNSET,
     conflict_resolution_occurred: bool | None,
+    conflict_resolution_provenance: object,
 ) -> list[str]:
     errors: list[str] = []
     status = lens.get("status")
@@ -74,16 +75,22 @@ def _lens_errors(
         evidence.get("change_identity") if isinstance(evidence, dict) else None,
         current_identity,
     )
-    if conflict_resolution_occurred is not None and type(conflict_resolution_occurred) is not bool:
-        errors.append("conflict_resolution_occurred must be boolean or null")
-        conflict_for_shared = True
-    elif sha_transition and conflict_resolution_occurred is None:
-        errors.append(
-            f"{name} cannot establish freshness: conflict_resolution_occurred is unknown after identity SHA transition"
-        )
-        conflict_for_shared = True
+    if sha_transition:
+        if type(conflict_resolution_occurred) is not bool:
+            errors.append(
+                f"{name} cannot establish freshness: conflict_resolution_occurred is unknown after identity SHA transition"
+            )
+            conflict_for_shared = True
+        else:
+            if not isinstance(conflict_resolution_provenance, str) or not conflict_resolution_provenance.strip():
+                errors.append(
+                    f"{name} cannot establish freshness: identity SHA transition requires conflict_resolution_provenance"
+                )
+            conflict_for_shared = conflict_resolution_occurred
     else:
-        conflict_for_shared = bool(conflict_resolution_occurred)
+        # A conflict that happened before this evidence was produced is historical context,
+        # not a reason to invalidate evidence already bound to the current identity.
+        conflict_for_shared = False
 
     kwargs: dict[str, object] = {
         "current_identity": current_identity,
@@ -120,7 +127,9 @@ def validate_lifecycle_state(state: object) -> list[str]:
 
     conflict = workspace.get("conflict_resolution_occurred")
     provenance = workspace.get("conflict_resolution_provenance")
-    if conflict is True and not isinstance(provenance, str):
+    if conflict not in (True, False, None):
+        errors.append("conflict_resolution_occurred must be boolean or null")
+    if conflict is True and (not isinstance(provenance, str) or not provenance.strip()):
         errors.append("conflict_resolution_occurred=true requires conflict_resolution_provenance")
 
     requirements_ref = task.get("requirements_ref", _UNSET)
@@ -133,7 +142,8 @@ def validate_lifecycle_state(state: object) -> list[str]:
                 lens_a,
                 current_identity,
                 current_requirements_ref=requirements_ref,
-                conflict_resolution_occurred=conflict if conflict in (True, False, None) else conflict,
+                conflict_resolution_occurred=conflict,
+                conflict_resolution_provenance=provenance,
             )
         )
         errors.extend(
@@ -142,7 +152,8 @@ def validate_lifecycle_state(state: object) -> list[str]:
                 lens_b,
                 current_identity,
                 current_requirements_ref=requirements_ref,
-                conflict_resolution_occurred=conflict if conflict in (True, False, None) else conflict,
+                conflict_resolution_occurred=conflict,
+                conflict_resolution_provenance=provenance,
             )
         )
 
