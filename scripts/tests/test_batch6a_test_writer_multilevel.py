@@ -63,6 +63,7 @@ def test_phase_index_matches_level_hint_precedence_and_status_contract():
     assert "one-level integration plan" in text
     assert "explicit unit + integration request + `level_hint: unit`" in text
     assert "preserves both complementary levels" in text
+    assert "`unfinished_levels`" in text
     for status in ("`complete`", "`partial`", "`blocked`", "`failed`", "`escalated`"):
         assert status in text
 
@@ -115,6 +116,18 @@ def test_aggregate_preserves_raw_reports_and_blocks_incomplete_plan():
         "must not report COMPLETE",
     ):
         assert token in text
+
+
+def test_aggregate_declares_and_derives_unfinished_levels():
+    text = _read("workflow/aggregate.md")
+    assert "  - unfinished_levels" in text
+    assert "same stable order as `test_plan.levels`" in text
+    assert "`dispatch_status` is not `COMPLETE`" in text
+    assert "missing a report/status" in text
+    assert "`unfinished_levels: []`" in text
+    skill = _read("SKILL.md")
+    assert "unfinished_levels" in skill
+    assert "unfinished_levels derived in test_plan order" in skill
 
 
 def test_aggregate_preserves_full_fixed_vocabulary_test_plan():
