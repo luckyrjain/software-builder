@@ -34,7 +34,9 @@ test_plan:
 ```
 
 3. Delegate — invokes **unit-test-creator** and **integration-test-creator** in fresh specialist contexts,
-   passing the caller's fields unchanged. The unit report is not injected into the integration prompt.
+   passing ordinary caller fields unchanged. For each child, test-writer independently advances the
+   framework-owned `execution_context` from the same parent per runtime recursion protection. The unit
+   report is not injected into the integration prompt.
 4. Aggregate — preserves both reports verbatim under `level_reports` and reports internal `COMPLETE` only
    if both specialists return canonical `SUCCESS`; the emitted runtime `skill_result.status` is `SUCCESS`.
 
@@ -58,10 +60,20 @@ No specialist dispatch occurs until the caller resolves the ambiguity.
 **Agent:**
 1. Inputs → Classify — `level_hint: contract` creates a one-level plan with
    `signal_source.contract: level_hint`.
-2. Delegate — dispatches **contract-test-creator** with caller inputs unchanged.
+2. Delegate — dispatches **contract-test-creator** with ordinary caller inputs unchanged and a child
+   `execution_context` advanced from the parent.
 3. If contract-test-creator requires `role: consumer | provider`, that specialist asks; test-writer does
    not pre-answer the gate.
 4. Aggregate reflects the specialist's actual status without rewriting its report.
+
+## Scenario: recursion guard blocks one planned child
+
+The parent context permits unit but rejects an integration handoff because the recursion guard would
+revisit a visited skill or exceed the allowed depth.
+
+**Agent:** test-writer does not dispatch the rejected child. It records integration as `BLOCKED`, keeps any
+completed unit report, and lets Aggregate include integration in `unfinished_levels`. Sibling contexts are
+derived independently, so a unit dispatch never increments integration's starting depth.
 
 ## Scenario: incomplete planned level blocks completion
 
