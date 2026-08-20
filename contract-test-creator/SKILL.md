@@ -1,6 +1,6 @@
 ---
 name: contract-test-creator
-skill_version: 1.0
+skill_version: 1.1
 platform_contract: skill-platform-v1
 description: >-
   Generates consumer-driven contract tests (Pact-style) verifying a consumer and provider agree on an
@@ -119,6 +119,10 @@ Routing: [skill-routing.md](../docs/skill-framework/shared/skill-routing.md) · 
 [prompt-injection.md](../docs/skill-framework/shared/prompt-injection.md).
 
 ## Begin
+
+Use the canonical [test-creator common workflow](../docs/skill-framework/shared/test-creator-common-workflow.md)
+and [write-safety contract](../docs/skill-framework/shared/test-creator-write-safety.md); this skill adds
+only contract-level deltas.
 
 1. Read [reference/skill-contract.md](reference/skill-contract.md).
 2. Read [workflow/inputs.md](workflow/inputs.md) — resolve `target` (including `role`), `repo_root`,

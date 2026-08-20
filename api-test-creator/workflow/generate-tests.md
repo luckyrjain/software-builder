@@ -1,5 +1,5 @@
 ---
-workflow_version: 1.0
+workflow_version: 1.1
 phase: generate_tests
 produces:
   - test_files_written
@@ -10,6 +10,10 @@ consumes:
 ---
 
 # Generate tests
+
+Follow the shared [test-creator common workflow](../../docs/skill-framework/shared/test-creator-common-workflow.md)
+and run the [test-creator write-safety contract](../../docs/skill-framework/shared/test-creator-write-safety.md)
+before any collection, environment, report, or coverage-state write. The API-specific rules below are deltas only.
 
 For every `NEW` item in `target_list`, write requests that satisfy
 [reference/test-quality-deltas.md](../reference/test-quality-deltas.md) (on top of the shared

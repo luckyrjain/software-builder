@@ -5,6 +5,10 @@
 router that dispatches to them. Each skill's own `reference/skill-contract.md` links here and states
 only its level-specific deltas — do not duplicate these rules inline per skill.
 
+The canonical phase ordering is [test-creator-common-workflow.md](test-creator-common-workflow.md),
+and every write follows [test-creator-write-safety.md](test-creator-write-safety.md). Those documents
+own cross-level behavior; this file owns quality and reporting principles.
+
 **Reference bar:** `unit-test-creator/reference/skill-contract.md` (shortest, cleanest delta example).
 
 ## 1. Test-first evidence
@@ -101,7 +105,9 @@ skill's own `reference/report-format.md` may add level-specific statuses on top 
 concept this section already names.
 
 **Write authority boundary:** every skill in this family writes or modifies test files (and, for
-api-test-creator, the Postman collection/environment file) in the working tree — nothing more.
+api-test-creator, the Postman collection/environment file) in the working tree — nothing more. Every
+such batch is preflighted by the shared write guard; a dirty overlap is a fail-closed `BLOCKED` result,
+not permission to overwrite.
 None of them commits, pushes, or opens a pull/merge request itself. The report's `## Next step`
 line may say "Ready to open as an MR" — that is a suggestion for the caller (human or host agent)
 to act on, never something this skill does on its own.

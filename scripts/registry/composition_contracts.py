@@ -24,6 +24,74 @@ class CompositionContract:
 # satisfies a producer lookup.
 _UNKNOWN_CONTRACT = CompositionContract([], [], "read-only", {}, {})
 
+_TEST_CREATOR_SKILLS = [
+    "unit-test-creator",
+    "integration-test-creator",
+    "contract-test-creator",
+    "e2e-test-creator",
+    "api-test-creator",
+]
+_TEST_CREATOR_FORWARDED_FIELDS = [
+    "request",
+    "repo_root",
+    "target",
+    "test_framework_hint",
+    "run_tests",
+    "max_files_per_run",
+    "deadline",
+    "session_token_budget",
+    "output_dir",
+    "specialist_inputs",
+]
+
+
+def _validate_creator_parity(
+    contracts_path: Path,
+    registry: Registry,
+    artifact_schemas: dict[str, list[str]],
+) -> list[str]:
+    """Validate the explicit five-creator composition boundary."""
+
+    present_skills = [skill_id for skill_id in _TEST_CREATOR_SKILLS if skill_id in registry.skills]
+    # Small registry fixtures used by generic registry tests may intentionally
+    # contain none of the test-creator family. Their minimal contract catalogs
+    # should not be forced to carry an unrelated family contract.
+    if not present_skills:
+        return []
+
+    raw = load_unique_yaml_file(contracts_path)
+    parity = raw.get("creator_parity") if isinstance(raw, dict) else None
+    if not isinstance(parity, dict):
+        return ["error: composition contracts missing creator_parity"]
+
+    errors: list[str] = []
+    if parity.get("skills") != _TEST_CREATOR_SKILLS:
+        errors.append("error: creator_parity.skills must list the five test creators in canonical order")
+    if parity.get("forwarded_fields") != _TEST_CREATOR_FORWARDED_FIELDS:
+        errors.append("error: creator_parity.forwarded_fields do not match the canonical pass-through set")
+    if parity.get("framework_owned_fields") != ["execution_context"]:
+        errors.append("error: creator_parity.framework_owned_fields must be [execution_context]")
+    if parity.get("child_authority") != "skill_result":
+        errors.append("error: creator_parity.child_authority must preserve skill_result")
+    if parity.get("degraded_status") != "BLOCKED":
+        errors.append("error: creator_parity.degraded_status must be BLOCKED")
+    if parity.get("interactive_gate_policy") != "specialist-only":
+        errors.append("error: creator_parity.interactive_gate_policy must be specialist-only")
+
+    output_contract = parity.get("output_contract")
+    if not isinstance(output_contract, dict):
+        errors.append("error: creator_parity.output_contract must be a mapping")
+    else:
+        if output_contract.get("artifact") != "test_suite":
+            errors.append("error: creator_parity.output_contract.artifact must be test_suite")
+        if output_contract.get("fields") != artifact_schemas.get("test_suite"):
+            errors.append("error: creator_parity.output_contract.fields must match test_suite schema")
+
+    for skill_id in _TEST_CREATOR_SKILLS:
+        if skill_id not in registry.skills:
+            errors.append(f"error: creator_parity references unknown skill {skill_id!r}")
+    return errors
+
 
 def _parse_field_map(
     raw: object,
@@ -228,6 +296,12 @@ def validate_composition_contracts(
         _artifact_types, artifact_schemas, authority_levels, contracts = load_contracts(resolved_path)
     except YAML_SAFETY_ERRORS as exc:
         return [f"error: composition contracts: {exc}"]
+
+    try:
+        parity_errors = _validate_creator_parity(resolved_path, registry, artifact_schemas)
+    except (YAML_SAFETY_ERRORS, ValueError) as exc:
+        return [f"error: composition creator parity: {exc}"]
+    errors.extend(parity_errors)
 
     missing = sorted(set(registry.skills.keys()) - set(contracts.keys()))
     if missing:

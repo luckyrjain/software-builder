@@ -43,6 +43,8 @@ def _init_fixture_repo(repo: Path) -> None:
 def isolated_repo(tmp_path: Path) -> Path:
     repo = tmp_path / "software-builder"
     shutil.copytree(ROOT / "unit-test-creator", repo / "unit-test-creator")
+    (repo / "scripts").mkdir(parents=True)
+    shutil.copy2(ROOT / "scripts" / "test_creator_write_guard.py", repo / "scripts" / "test_creator_write_guard.py")
     shutil.copytree(ROOT / "docs" / "skill-framework", repo / "docs" / "skill-framework")
     specs = ROOT / "docs" / "superpowers" / "specs"
     if specs.is_dir():

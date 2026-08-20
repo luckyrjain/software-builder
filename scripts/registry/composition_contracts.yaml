@@ -52,6 +52,12 @@ artifact_schemas:
       - target
       - level_hint
       - specialist_inputs
+      - test_framework_hint
+      - run_tests
+      - max_files_per_run
+      - deadline
+      - session_token_budget
+      - output_dir
   implementation_pr:
     fields: [pr_url, head_sha, task_id]
   digest_report:
@@ -62,6 +68,35 @@ artifact_schemas:
     fields: [test_plan, orchestration_status, unfinished_levels, level_reports]
   prd_report:
     fields: [title, build_readiness, depth, response_mode]
+
+# The five leaf creators share one composition boundary. These fields are
+# intentionally explicit: specialist_inputs remains opaque to the router, but
+# it must still be forwarded byte-for-byte rather than normalized or dropped.
+creator_parity:
+  skills:
+    - unit-test-creator
+    - integration-test-creator
+    - contract-test-creator
+    - e2e-test-creator
+    - api-test-creator
+  forwarded_fields:
+    - request
+    - repo_root
+    - target
+    - test_framework_hint
+    - run_tests
+    - max_files_per_run
+    - deadline
+    - session_token_budget
+    - output_dir
+    - specialist_inputs
+  framework_owned_fields: [execution_context]
+  child_authority: skill_result
+  degraded_status: BLOCKED
+  interactive_gate_policy: specialist-only
+  output_contract:
+    artifact: test_suite
+    fields: [tests, framework, target_path]
 
 write_authority_levels:
   read-only: 0
@@ -182,6 +217,8 @@ skills:
   unit-test-creator:
     produces: [test_suite]
     consumes: [implementation_task]
+    produce_fields:
+      test_suite: [tests, framework, target_path]
     consume_fields:
       implementation_task: [task_id, scope, acceptance_criteria, request, repo_root, target]
     write_authority: repository-write
@@ -189,6 +226,8 @@ skills:
   integration-test-creator:
     produces: [test_suite]
     consumes: [implementation_task]
+    produce_fields:
+      test_suite: [tests, framework, target_path]
     consume_fields:
       implementation_task: [task_id, scope, acceptance_criteria, request, repo_root, target]
     write_authority: repository-write
@@ -196,6 +235,8 @@ skills:
   contract-test-creator:
     produces: [test_suite]
     consumes: [implementation_task]
+    produce_fields:
+      test_suite: [tests, framework, target_path]
     consume_fields:
       implementation_task: [task_id, scope, acceptance_criteria, request, repo_root, target]
     write_authority: repository-write
@@ -203,6 +244,8 @@ skills:
   e2e-test-creator:
     produces: [test_suite]
     consumes: [implementation_task]
+    produce_fields:
+      test_suite: [tests, framework, target_path]
     consume_fields:
       implementation_task: [task_id, scope, acceptance_criteria, request, repo_root, target]
     write_authority: repository-write
@@ -210,6 +253,8 @@ skills:
   api-test-creator:
     produces: [test_suite]
     consumes: [implementation_task]
+    produce_fields:
+      test_suite: [tests, framework, target_path]
     consume_fields:
       implementation_task: [task_id, scope, acceptance_criteria, request, repo_root, target]
     write_authority: repository-write

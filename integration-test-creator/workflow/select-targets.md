@@ -1,5 +1,5 @@
 ---
-workflow_version: 1.0
+workflow_version: 1.1
 phase: select_targets
 produces:
   - target_list
@@ -10,6 +10,9 @@ consumes:
 ---
 
 # Select targets
+
+Follow the canonical [test-creator common workflow](../../docs/skill-framework/shared/test-creator-common-workflow.md)
+for shared bounded-selection behavior; the rules below are integration-level selection deltas.
 
 Turn `target` into a concrete, bounded `target_list` of seams (a component boundary against one real
 adjacent dependency) to write tests for.

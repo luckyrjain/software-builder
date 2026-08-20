@@ -1,5 +1,5 @@
 ---
-workflow_version: 1.0
+workflow_version: 1.1
 phase: report
 produces:
   - CONTRACT_TEST_REPORT.md
@@ -10,6 +10,10 @@ consumes:
 ---
 
 # Report
+
+Apply the shared [test-creator common workflow](../../docs/skill-framework/shared/test-creator-common-workflow.md)
+and [write-safety contract](../../docs/skill-framework/shared/test-creator-write-safety.md) before writing
+the report or optional coverage state. Preserve the guard result in the report.
 
 Render `CONTRACT_TEST_REPORT.md` at `output_dir` per
 [reference/report-format.md](../reference/report-format.md).

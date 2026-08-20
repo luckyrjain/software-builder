@@ -3,6 +3,24 @@
 All notable changes to the integration-test-creator skill. Per-file `workflow_version` in
 `workflow/*.md` frontmatter should match the version of the latest entry below that names that file.
 
+## [1.1.0] — 2026-08-20
+
+### Hardened
+
+- `workflow/generate-tests.md` and `workflow/report.md` now use the canonical shared workflow and
+  fail-closed repository write guard, preserving dirty-path evidence and blocked outcomes.
+- The installed bundle includes the shared executable guard so direct integration-creator runs do not
+  depend on the target repository containing this project's `scripts` package.
+
+### Versioned workflow files
+
+- `workflow/inputs.md` → 1.1
+- `workflow/detect-conventions.md` → 1.1
+- `workflow/select-targets.md` → 1.1
+- `workflow/generate-tests.md` → 1.1
+- `workflow/verify-and-iterate.md` → 1.1
+- `workflow/report.md` → 1.1
+
 ## [1.0.1] — 2026-08-10
 
 ### Added

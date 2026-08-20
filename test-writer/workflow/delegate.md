@@ -1,5 +1,5 @@
 ---
-workflow_version: 2.5
+workflow_version: 2.6
 phase: delegate
 produces:
   - level_reports
@@ -45,6 +45,12 @@ handoff:
     request: <unchanged request>
     repo_root: <unchanged repo_root>
     target: <unchanged target>
+    test_framework_hint: <unchanged, including explicit null>
+    run_tests: <unchanged, including explicit false>
+    max_files_per_run: <unchanged, including explicit zero>
+    deadline: <unchanged, including explicit null>
+    session_token_budget: <unchanged, including explicit null>
+    output_dir: <unchanged, including explicit null>
     specialist_inputs: <unchanged optional specialist fields>
   evidence_refs: []
   assumptions: []
@@ -85,9 +91,11 @@ state it would normally inspect; do not convert the earlier report into new call
 
 Record outputs as `level_reports`, keyed by planned level. For a child that ran, store its canonical
 `skill_result` status and raw specialist report verbatim; preserve blockers, artifacts, confidence,
-evidence status, and recommended next skill. Do not derive status from a report heading or from files
-written. For a child blocked before dispatch, store an explicit fixed-vocabulary `blocked_reason`
-instead of a fake report.
+evidence status, write-guard details, and recommended next skill. The child `skill_result` is the
+authority for the child's outcome; the router may only apply the documented portable status alias and
+must not rewrite a child `BLOCKED`, `FAILED`, or `ESCALATED` result. Do not derive status from a report
+heading or from files written. For a child blocked before dispatch, store an explicit fixed-vocabulary
+`blocked_reason` instead of a fake report.
 
 Use the specialist's canonical `skill_result.status` as the authoritative dispatch result. Preserve the
 portable status losslessly instead of inventing a narrower local vocabulary:

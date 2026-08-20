@@ -1,6 +1,6 @@
 ---
 name: test-writer
-skill_version: 2.3
+skill_version: 2.4
 platform_contract: skill-platform-v1
 description: >-
   Thin orchestration router for test-writing requests that do not resolve to one specialist up front.
@@ -98,6 +98,10 @@ level_reports verbatim; propagates PARTIAL, BLOCKED, FAILED, or ESCALATED accord
 precedence and names unfinished planned levels.
 
 ## Begin
+
+The five child creators use the canonical [test-creator common workflow](../docs/skill-framework/shared/test-creator-common-workflow.md),
+[write-safety contract](../docs/skill-framework/shared/test-creator-write-safety.md), and composition
+parity rules. Do not add a router-level write or interactive gate.
 
 1. Read [reference/skill-contract.md](reference/skill-contract.md).
 2. Read [workflow/inputs.md](workflow/inputs.md).

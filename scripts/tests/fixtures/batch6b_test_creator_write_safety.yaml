@@ -1,0 +1,48 @@
+creators:
+  - unit-test-creator
+  - integration-test-creator
+  - contract-test-creator
+  - e2e-test-creator
+  - api-test-creator
+
+scenarios:
+  - id: clean_repository
+    kind: clean
+    planned_file: tests/generated/example_test.py
+    expected:
+      allowed: true
+      status: ALLOWED
+      conflicts: []
+      dirty_paths: []
+  - id: unrelated_dirty_file
+    kind: tracked_dirty
+    dirty_file: notes/local.md
+    planned_file: tests/generated/example_test.py
+    expected:
+      allowed: true
+      status: ALLOWED
+      conflicts: []
+      dirty_paths:
+        - notes/local.md
+  - id: overlapping_dirty_file
+    kind: tracked_dirty
+    dirty_file: tests/generated/example_test.py
+    planned_file: tests/generated/example_test.py
+    expected:
+      allowed: false
+      status: BLOCKED
+      conflicts:
+        - tests/generated/example_test.py
+      dirty_paths:
+        - tests/generated/example_test.py
+  - id: untracked_output_collision
+    kind: untracked
+    dirty_file: tests/generated/example_test.py
+    planned_file: tests/generated/example_test.py
+    expected:
+      allowed: false
+      status: BLOCKED
+      conflicts:
+        - tests/generated/example_test.py
+      dirty_paths:
+        - tests/generated/example_test.py

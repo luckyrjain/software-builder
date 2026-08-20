@@ -14,6 +14,14 @@ _SCRIPTS_DIR = Path(__file__).resolve().parent
 if str(_SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS_DIR))
 
+_TEST_CREATOR_SKILLS = {
+    "unit-test-creator",
+    "integration-test-creator",
+    "contract-test-creator",
+    "e2e-test-creator",
+    "api-test-creator",
+}
+
 from reference_utils import (
     MANIFEST_NAME,
     copytree_ignore,
@@ -202,6 +210,23 @@ def package_skill(
         dest,
         ignore=copytree_ignore(skill_src),
     )
+
+    # The five creators share one executable write guard. Keep its source
+    # canonical in the repository and inject the exact same file into each
+    # self-contained installed bundle; source-tree adapters are replaced here
+    # so standalone installs never depend on this repository's Python package.
+    if skill in _TEST_CREATOR_SKILLS:
+        guard_src = repo_root / "scripts" / "test_creator_write_guard.py"
+        if not guard_src.is_file():
+            # Keep packaging older extracted/fixture trees useful while the
+            # current packager still guarantees that the installed bundle gets
+            # the canonical implementation.
+            guard_src = _SCRIPTS_DIR / "test_creator_write_guard.py"
+        if not guard_src.is_file():
+            raise FileNotFoundError(f"shared test-creator write guard missing: {guard_src}")
+        guard_dest = dest / "scripts" / "test_creator_write_guard.py"
+        guard_dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(guard_src, guard_dest)
 
     seed_files = collect_markdown_files(dest)
     framework_files: list[str] = []
