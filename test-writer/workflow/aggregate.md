@@ -1,8 +1,9 @@
 ---
-workflow_version: 1.2
+workflow_version: 1.3
 phase: aggregate
 produces:
   - orchestration_status
+  - unfinished_levels
   - level_reports
 consumes:
   - test_plan
@@ -18,6 +19,11 @@ specialist's report **verbatim**. Do not summarize a specialist into a stronger 
 
 Compare `test_plan.levels` to `level_reports`. Every planned level must have an explicit dispatch status
 and its raw report or an explicit blocked reason. An unaccounted planned level is a lifecycle error.
+
+Derive `unfinished_levels` in the same stable order as `test_plan.levels`: include every planned level
+whose `dispatch_status` is not `COMPLETE`, plus any planned level missing a report/status. A fully
+successful plan therefore has `unfinished_levels: []`; `PARTIAL`, `BLOCKED`, `FAILED`, and `ESCALATED`
+levels remain named even though some of those outcomes are terminal.
 
 ## Overall status
 
