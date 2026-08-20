@@ -22,8 +22,10 @@ Load immediately after [SKILL.md](../SKILL.md). These rules override convenience
    The original request remains a specialist input, not a second rendered evidence field.
 7. **Hint is non-destructive.** A `level_hint` may resolve an otherwise-open choice but cannot silently
    discard another explicitly requested complementary level. Conflicting signals for one surface ask once.
-8. **Fail closed.** A planned level that is missing, blocked, unanswered, or incomplete prevents overall
-   `COMPLETE`. Preserve completed reports and return `PARTIAL` or `BLOCKED` with the unfinished levels.
+8. **Fail closed and preserve terminal semantics.** A planned level that is missing, blocked, unanswered,
+   failed, escalated, or incomplete prevents overall `COMPLETE`. Preserve completed and unfinished reports
+   and propagate `PARTIAL`, `BLOCKED`, `FAILED`, or `ESCALATED` according to Aggregate's documented
+   precedence; never collapse a specialist `FAILED`/`ESCALATED` into a weaker local state.
 9. **Single named level compatibility.** A single named level routes directly to its `*-test-creator` and
    skips this router. Multiple named complementary levels use test-writer orchestration.
 10. **No cross-level framing.** Do not feed one specialist's report to another specialist unless the
