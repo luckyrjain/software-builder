@@ -1,5 +1,5 @@
 ---
-workflow_version: 2.2
+workflow_version: 2.3
 phase: delegate
 produces:
   - level_reports
@@ -7,6 +7,7 @@ consumes:
   - test_plan
   - request
   - repo_root
+  - execution_context
 ---
 
 # Delegate — execute the test plan
@@ -26,8 +27,20 @@ Reject an unknown planned level rather than silently skipping it.
 ## 2. Dispatch independently
 
 For each planned level in `test_plan.levels`, dispatch a **fresh specialist context**. Pass `repo_root`
-and caller inputs unchanged, including target/run flags/budgets/output hints and level-specific fields such
-as `role` or `journeys`. The router does not translate, default, or pre-answer specialist inputs.
+and ordinary caller inputs unchanged, including target/run flags/budgets/output hints and level-specific
+fields such as `role` or `journeys`. The router does not translate, default, or pre-answer
+specialist-owned inputs.
+
+`execution_context` is the required exception to unchanged pass-through. Before each child dispatch,
+apply the inherited recursion protection in
+[runtime-contract.md §8](../../docs/skill-framework/shared/runtime-contract.md#8-recursion-protection).
+If the handoff guard rejects the child, record that planned level as `BLOCKED` and do not dispatch it.
+Otherwise derive a fresh child context from the parent context: preserve the same invocation id, set
+`parent_skill` to `test-writer`, add `test-writer` to the visited-skill history, and increment depth once.
+
+Each planned specialist gets its own child context derived from the same parent context. One sibling's
+dispatch must not increase another sibling's depth or leak sibling-specific visited state. Do not mutate
+any other caller-supplied field while advancing this framework-owned context.
 
 Specialists may run sequentially when shared repository writes require serialization. Fresh context means
 independent instructions/evidence, not necessarily concurrent execution.
