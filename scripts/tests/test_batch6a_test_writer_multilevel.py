@@ -74,3 +74,15 @@ def test_phase_and_lazy_load_indexes_include_multilevel_aggregate_phase():
     assert "workflow/aggregate.md" in phase
     assert "workflow/aggregate.md" in lazy
     assert phase.index("Classify") < phase.index("Delegate") < phase.index("Aggregate")
+
+
+def test_shared_router_sends_complementary_levels_to_test_writer_but_one_level_direct():
+    routing = (ROOT / "docs/skill-framework/shared/skill-routing.md").read_text(encoding="utf-8")
+    for token in (
+        "two or more complementary test levels explicitly requested",
+        "two or more explicitly named complementary levels",
+        "one explicitly named level",
+        "that matching `*-test-creator` directly",
+        "test-writer to build and execute the multi-level plan",
+    ):
+        assert token in routing
