@@ -1,7 +1,7 @@
 # Per-task shared state schema
 # The Orchestrator is the only role that mutates the official state.
 
-workflow_version: "1.1"
+workflow_version: "1.2"
 
 task:
   task_id: null
@@ -60,6 +60,7 @@ review:
     completed_at: null
     report_ref: null
     isolation_primitive_used: null  # SUBAGENT | FRESH_SESSION | WORKTREE | SEQUENTIAL_SIMULATION
+    isolation_status: null  # ISOLATED | NOT_ISOLATED
   lens_b:
     status: NOT_RUN
     reviewed_head_commit: null
@@ -69,6 +70,7 @@ review:
     completed_at: null
     report_ref: null
     isolation_primitive_used: null  # SUBAGENT | FRESH_SESSION | WORKTREE | SEQUENTIAL_SIMULATION
+    isolation_status: null  # ISOLATED | NOT_ISOLATED
 
 findings:
   # keyed by stable finding ID
@@ -144,6 +146,7 @@ merge_readiness:
   lens_a_clean_for_current_fingerprint: false
   lens_b_clean_for_current_fingerprint: false
   accepted_blocking_findings_open: 0
+  security_sensitive_needs_evidence_open: 0
   required_checks_green: false
   ci_green_for_current_head: false
   required_approvals_present: false
