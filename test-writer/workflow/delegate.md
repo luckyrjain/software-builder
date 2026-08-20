@@ -1,44 +1,58 @@
 ---
-workflow_version: 2.0
+workflow_version: 2.1
 phase: delegate
 produces:
-  - dispatched_report
+  - level_reports
 consumes:
-  - level
+  - test_plan
   - request
   - repo_root
 ---
 
-# Delegate — dispatch and relay
+# Delegate — execute the test plan
 
-## 1. Invoke the matching skill
+## 1. Resolve each planned specialist
 
-| `level` | Invoke |
-|---------|--------|
+| level | specialist |
+|-------|------------|
 | `unit` | **unit-test-creator** |
 | `integration` | **integration-test-creator** |
 | `contract` | **contract-test-creator** |
-| `e2e` | **e2e-test-creator** |
 | `api` | **api-test-creator** |
+| `e2e` | **e2e-test-creator** |
 
-Pass `repo_root` and every other field the caller supplied (`target`, `run_tests`,
-`max_files_per_run`, `deadline`, `session_token_budget`, `output_dir`, and — for `contract` — `role`;
-for `e2e` — `journeys`) through **unchanged**. This router does not translate, rename, or add fields; the
-dispatched skill's own [workflow/inputs.md](../../unit-test-creator/workflow/inputs.md)-equivalent owns
-parsing and validation, including its own HARD STOPs (e.g. `contract-test-creator` asking for `role` if
-absent — that gate belongs to it, not to this router).
+Reject an unknown planned level rather than silently skipping it.
 
-## 2. Relay the report verbatim
+## 2. Dispatch independently
 
-The dispatched skill produces its own report (`UNIT_TEST_REPORT.md`, `INTEGRATION_TEST_REPORT.md`,
-`CONTRACT_TEST_REPORT.md`, `E2E_TEST_REPORT.md`, or `API_TEST_REPORT.md`) per
-[test-creation-principles.md §4](../../docs/skill-framework/shared/test-creation-principles.md#4-reporting-format-shared-skeleton).
-This router does not reformat, summarize, or re-derive a status from it — relay it as-is. If the
-dispatched skill's own report contains a production-bug finding, its own suggested next skill
-(loop-task-implementer / pr-review) applies unchanged; this router adds nothing on top.
+For each planned level in `test_plan.levels`, dispatch a **fresh specialist context**. Pass `repo_root`
+and caller inputs unchanged, including target/run flags/budgets/output hints and level-specific fields such
+as `role` or `journeys`. The router does not translate, default, or pre-answer specialist inputs.
 
-## 3. Dispatched skill hits its own gate
+Specialists may run sequentially when shared repository writes require serialization. Fresh context means
+independent instructions/evidence, not necessarily concurrent execution.
 
-If the dispatched skill asks a question of its own (ambiguous framework, missing role, no journeys,
-etc.), that question is relayed as-is too — this router never pre-answers a gate that belongs to the
-skill it dispatched to.
+**Do not feed one specialist's report** into a later specialist as hidden framing. If a prior specialist
+changed the repository, give the later specialist the same caller request plus the current repository
+state it would normally inspect; do not convert the earlier report into new caller requirements.
+
+## 3. Preserve per-level reports
+
+Record outputs as `level_reports`, keyed by planned level. The raw specialist report is stored verbatim;
+only orchestration metadata may sit beside it.
+
+```yaml
+level_reports:
+  unit:
+    dispatch_status: COMPLETE | BLOCKED | PARTIAL
+    report: <verbatim specialist report>
+  integration:
+    dispatch_status: COMPLETE | BLOCKED | PARTIAL
+    report: <verbatim specialist report>
+```
+
+If a specialist asks a required question or hits its own HARD STOP, preserve that result and stop that
+level as `BLOCKED`/`PARTIAL`; never answer on the specialist's behalf.
+
+Proceed to Aggregate after every planned level has either produced a report/status or been explicitly
+recorded as blocked. Do not silently drop an unfinished level.
