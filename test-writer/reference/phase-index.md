@@ -6,8 +6,9 @@
 | Step | Read now | Produces |
 |------|----------|----------|
 | **Inputs** | [workflow/inputs.md](../workflow/inputs.md) | `request`, `repo_root`, `level_hint` |
-| **Classify** | [workflow/classify.md](../workflow/classify.md) | `level` (`unit`\|`integration`\|`contract`\|`e2e`) |
-| **Delegate** | [workflow/delegate.md](../workflow/delegate.md) | `dispatched_report` (relayed verbatim) |
+| **Classify** | [workflow/classify.md](../workflow/classify.md) | ordered, de-duplicated `test_plan` |
+| **Delegate** | [workflow/delegate.md](../workflow/delegate.md) | per-level `level_reports` |
+| **Aggregate** | [workflow/aggregate.md](../workflow/aggregate.md) | `COMPLETE` / `PARTIAL` / `BLOCKED` orchestration status + verbatim reports |
 
 Reference loads: [lazy-load-index.md](lazy-load-index.md).
 
@@ -15,8 +16,9 @@ Reference loads: [lazy-load-index.md](lazy-load-index.md).
 
 | Caller sends | Phases |
 |---------------|--------|
-| `request: "write tests for MR !123"`, level not stated | Inputs → Classify (asks if ambiguous) → Delegate |
-| `request: ...`, `level_hint: integration` | Inputs → Classify (no asking, hint resolves) → Delegate |
-| Request matches no level keywords | Inputs → Classify asks directly, no Delegate yet |
-| Request already names a level explicitly | Should route directly to that `*-test-creator` skill — see [SKILL.md § When to use / NOT to use](../SKILL.md#when-to-use-not-to-use) |
+| `unit and integration tests for the change` | Inputs → Classify (both are complementary) → Delegate both → Aggregate |
+| `test the payment flow` | Inputs → Classify asks whether integration or e2e; no Delegate until resolved |
+| `request: ...`, `level_hint: integration` | Inputs → Classify one-level plan → Delegate → Aggregate |
+| Request matches no level signal | Inputs → Classify asks once, no Delegate yet |
+| One level explicitly named at top level | Route directly to that `*-test-creator`; preserve single-level compatibility |
 | `request` or `repo_root` missing | Inputs HARD STOP — ask, no further phase runs |
