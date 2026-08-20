@@ -3,6 +3,16 @@
 Prompt and workflow changes are versioned here. Per-phase `workflow_version` in workflow frontmatter
 should match the latest entry when that file is edited.
 
+## v1.12 — 2026-08-19
+
+Batch 5.2B review-coverage and evidence hardening:
+
+- systematic cross-file, hidden-consumer, schema/migration compatibility, rollout/rollback, test-quality, and dependency/config/IaC inspection planning
+- portable shared `change_identity` / `review_evidence` integration with explicit `unable_to_inspect` machine state
+- executable coverage validation, deterministic defect/suggestion/question evidence mapping, and installed-runtime validator parity
+- fail-closed freshness for generated files, conflict resolution, full pre-post change identity, and requirements drift
+- partial/unable coverage now caps readiness, forces explicit posting confirmation, and renders user-visible coverage gaps
+
 ## v1.11 — 2026-08-12
 
 PR #111 review remediation:

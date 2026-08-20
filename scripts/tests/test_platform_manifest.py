@@ -150,7 +150,7 @@ def test_platform_contracts_reject_non_scalar_schema_version(tmp_path: Path) -> 
 def test_manifest_marks_explicit_version_sources() -> None:
     skills = build_manifest(ROOT)["skills"]
     assert skills["pr-review"]["version_source"] == "skill_frontmatter_legacy_numeric"
-    assert skills["pr-review"]["version"] == "1.0.0"
+    assert skills["pr-review"]["version"] == "1.1.0"
     assert skills["incident-rca"]["version_source"] == "skill_frontmatter"
     assert skills["incident-rca"]["version"] == "2.0.0"
 

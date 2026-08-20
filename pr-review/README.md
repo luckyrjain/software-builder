@@ -9,14 +9,20 @@ Server, GitLab.com, or self-hosted GitLab review.
 1. **Resolves the target PR/MR** from a URL, number plus repository, or the current branch's open review.
 2. **Loads context** — review metadata, paginated diff, CI/check status, linked Jira ticket and acceptance
    criteria when available.
-3. **Reviews changed files only** through a phased workflow: capability detection → boundary → checklist →
-   finding pipeline (detect, evidence, severity, value filter).
-4. **Outputs a full review in chat** — severity table, executive summary, merge recommendation.
-5. **Optionally posts comments** — GitLab threads/summary notes or GitHub RIGHT-side inline comments/issue
-   summaries when the provider write capability is configured and you confirm posting.
+3. **Reviews the changed diff as the finding boundary**, then performs bounded cross-file/consumer,
+   compatibility, rollout, test-quality, and dependency/config/IaC inspections when triggered. Findings still
+   require valid changed-line anchors; contextual consumer/caller reads support impact evidence rather than
+   expanding the inline finding boundary.
+4. **Emits machine review evidence** bound to the current change identity, including explicit
+   `unable_to_inspect` coverage when a required surface cannot be verified.
+5. **Outputs a full review in chat** — severity table, coverage gaps when applicable, executive summary, and
+   merge recommendation.
+6. **Optionally posts comments** — GitLab threads/summary notes or GitHub RIGHT-side inline comments/issue
+   summaries when the provider write capability is configured and posting gates pass.
 
 Supports **incremental re-review** after new commits: dedupes prior findings, regression-checks resolved
-threads, and emits a structured re-review note with `review_metadata` YAML.
+threads, validates freshness against the current change/requirements state, and emits a structured re-review note
+with `review_metadata` YAML.
 
 ## When to use
 
@@ -72,6 +78,7 @@ Full shape: [reference/gold-review-excerpt.md](reference/gold-review-excerpt.md)
 - Business impact column on Code blockers (High/Critical only) · ~4–5 High max via certainty gate
 - Code blockers → Decision gates → Technical vs Process blockers
 - Not raised (suppressed) + Positive observations sections
+- Explicit **Coverage gaps** when triggered review surfaces cannot be inspected
 - Security score **Needs attention** when app-level auth gap (not Clear)
 - Architecture lens (§16) when structural change triggers
 - **Review modes** — Pre-merge · Incremental · Post-merge retrospective (`reference/review-modes.md`)
@@ -84,10 +91,16 @@ Full shape: [reference/gold-review-excerpt.md](reference/gold-review-excerpt.md)
 | Inputs | Resolve provider-neutral target |
 | 0 | Detect posting mode from provider capabilities |
 | 1 | PR/MR metadata, diff boundary, CI/checks, Jira AC |
-| 2 | Review, finding pipeline, stop-search cap |
-| 2→3 gate | Skip posting if nits-only or zero findings |
-| 3–4 | User confirmation, post threads + summary |
-| 5 | Executive summary, optional Jira comment |
+| 1→2 coverage | Build current change identity and six-surface inspection plan |
+| 2 | Core review, finding pipeline, stop-search cap |
+| 2 coverage review | Execute missing cross-file/consumer/compatibility/readiness inspections and regroup findings |
+| 2 evidence | Emit/validate portable review evidence and project partial coverage into incomplete-review state |
+| 2→3 gate | Rebuild current identity/requirements; fail closed on stale/invalid or mandatory-unavailable evidence |
+| 3–4 | Explicit confirmation when required, then guarded provider comments/summary |
+| 5 | Executive summary, coverage gaps, optional Jira comment |
+
+Partial/unavailable coverage never implies merge readiness. Mandatory unavailable coverage blocks provider posting;
+non-mandatory partial coverage requires explicit confirmation and is capped below Approve.
 
 Agent entry point: [SKILL.md](SKILL.md). Install and MCP: [SETUP.md](SETUP.md).
 
@@ -99,4 +112,4 @@ checklist dimensions, or set default focus areas. Starter template:
 
 ## Quality checks
 
-From repo root: `make lint-pr-review` (pytest + `diff-to-positions.py` compile check).
+From repo root: `make lint-pr-review` (workflow/contract checks, validator tests, pytest, and helper compile checks).

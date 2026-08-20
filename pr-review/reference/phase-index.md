@@ -4,34 +4,47 @@
 only through `finding-pipeline.md`. Re-review skips Inputs and Phase 0 unless **MCP reconnected** or
 **target branch / MR target changed** (re-resolve in Inputs when the review target changes).
 
+Batch 5.2B adds narrow machine-state phases around the existing review phase. They load
+`reference/review-coverage-execution.md`; Phase 1 and the normal Phase 2 remain focused on gathering and core
+finding judgment, while the coverage-review subphase guarantees the extra Batch 5 inspection surfaces are
+actually executed and judged through the same finding pipeline.
+
 | Step | Read now | Produces |
 |------|----------|----------|
 | **Inputs** | `workflow/inputs.md` | `{ review_target, project_id?, merge_request_iid? }` |
 | **Phase 0** | `workflow/phase-0.md` | `posting_mode`, `jira_write_available` |
 | **Phase 1** | `workflow/phase-1.md` | review boundary, `capability_profile`, baseline, CI, Jira AC |
+| **Phase 1→2 coverage** | `workflow/phase-1-2-coverage.md` + `reference/review-coverage-execution.md` §Phase 1→2 coverage | validated `change_identity`, `inspection_plan`, initial `unable_to_inspect` |
 | **Phase 2** | `workflow/phase-2.md` | findings, `review_metrics`, root-cause groups |
-| **Phase 2→3 gate** | `workflow/phase-2-3-gate.md` | continue / skip posting / stop |
-| **Phase 3–4** | `workflow/posting.md` | posted threads + summary note |
-| **Phase 5** | `workflow/phase-5.md` | executive summary (final) |
+| **Phase 2 coverage review** | `workflow/phase-2-coverage-review.md` + `reference/review-coverage-execution.md` §Coverage review | updated findings/metrics, finalized `inspection_plan`, `coverage_unable_to_inspect`, typed `portable_suggestions`, typed `portable_questions` |
+| **Phase 2 evidence** | `workflow/phase-2-evidence.md` + `reference/review-coverage-execution.md` §Phase 2 evidence | portable validated `review_evidence`, finalized `inspection_plan`, updated `review_metrics` (`review_complete: false` for partial/unable coverage) |
+| **Phase 2→3 gate** | `workflow/phase-2-3-gate.md` | fresh full change-identity + requirements revalidation, then continue / skip posting / stop; fails closed when freshness cannot be established |
+| **Phase 3–4** | `workflow/posting.md` | posted threads + summary note; per-write source-head revision guard remains active after the full pre-post freshness gate |
+| **Phase 5** | `workflow/phase-5.md` | executive summary (final), including coverage gaps when evidence is partial/unable |
 
 > **Note:** Phases 3 and 4 share a single workflow file (`posting.md`) rather than separate
 > `phase-3.md` / `phase-4.md` files. This is intentional — Phase 3 (confirmation gate) and Phase 4
 > (post comments) are tightly coupled: both depend on `posting_mode` and execute as a single
 > confirm-then-post sequence. Splitting would force artificial state passing between files with no
-> independent utility. The 2→3 gate is separate because it has distinct stop/skip semantics.
+> independent utility. The 2→3 gate is separate because it has distinct stop/skip and freshness semantics.
 
 Reference loads: [lazy-load-index.md](lazy-load-index.md). Report layout: [report-template.md](../report-template.md). Quick paths:
 
 | Scenario | Phases |
 |----------|--------|
-| First review | Inputs → 0 → 1 → 2 → 2→3 gate → 3–4 → 5 |
-| Re-review | 1 → 2 → **2→3 gate** → 3–4 → 5 *(Inputs + Phase 0 if MCP reconnected or target branch/MR changed)* |
-| Partial review (stop mid Phase 2) | 1 → 2 *(partial)* → 5 — skip 3–4 unless user asks to post |
+| First review | Inputs → 0 → 1 → 1→2 coverage → 2 → 2 coverage review → 2 evidence → 2→3 full freshness gate → 3–4 → 5 |
+| Re-review | 1 → 1→2 coverage → 2 → 2 coverage review → 2 evidence → **2→3 full freshness gate** → 3–4 → 5 *(Inputs + Phase 0 if MCP reconnected or target branch/MR changed)* |
+| Partial review (stop mid Phase 2) | 1 → 1→2 coverage → 2 *(partial)* → 2 coverage review → 2 evidence → 2→3 gate → 5, unless only non-mandatory coverage is unavailable and the user explicitly confirms a partial provider post |
 | Phase 3 cancel before Phase 4 | … → 3 confirm → user cancel → 5 chat-only |
 | List PRs/MRs only | Inputs → stop |
 | Draft PR/MR | Full path; draft gate in `workflow/posting.md` |
 | Persona review (SRE, Security, …) | Same path; persona in Phase 2 |
-| Post-merge audit | User confirms on `state: merged` → `review_mode: retrospective` — full path; see [review-modes.md](review-modes.md) |
+| Post-merge audit | User confirms on `state: merged` → lifecycle `review_mode: retrospective`; portable evidence maps to `normal` unless exhaustive was explicitly requested — see [review-modes.md](review-modes.md) |
+
+Before Phase 3 is allowed, the 2→3 gate must freshly rebuild the full current change identity and re-establish the
+current authoritative requirements surface. A content-neutral base/merge-base change, effective-patch drift,
+conflict resolution, requirements drift, or inability to prove freshness invalidates prior review evidence. Phase 4
+then rechecks source head immediately before each write to stop races after the full pre-post gate.
 
 Tool routing: GitHub PR or GitLab MR → `/pr-review`; local diff (including security-only) → the host's
 local diff/code-review workflow (no registered skill owns local-only diff review). See
