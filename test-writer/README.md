@@ -13,8 +13,9 @@ the existing specialist skills:
 | E2E — full user journey through a real browser UI | [e2e-test-creator](../e2e-test-creator/) |
 
 It has no detection or generation logic of its own. It builds an ordered, de-duplicated `test_plan`,
-dispatches each planned specialist in a fresh context with caller inputs unchanged, preserves every
-specialist report verbatim, and derives only orchestration completion state around those reports.
+dispatches each planned specialist in a fresh context with ordinary caller inputs unchanged, advances the
+framework-owned `execution_context` independently for each child, preserves every specialist report
+verbatim, and derives only orchestration completion state around those reports.
 
 **Single-level compatibility:** if the caller already names one level, invoke that `*-test-creator`
 directly. **Multi-level breadth:** if the caller explicitly asks for complementary surfaces such as unit
@@ -26,8 +27,9 @@ same behavior are ambiguity, not breadth; ask once instead of dispatching every 
 1. **Classifies** caller intent using [reference/level-classification.md](reference/level-classification.md)
    without inspecting implementation code to manufacture a level.
 2. **Plans** one or more complementary levels in stable, de-duplicated order. Real ambiguity asks once.
-3. **Dispatches** every planned specialist independently with caller inputs unchanged; one specialist's
-   report is never hidden framing for another.
+3. **Dispatches** every planned specialist independently with ordinary caller inputs unchanged and a
+   child `execution_context` derived per the shared recursion contract; one specialist's report is never
+   hidden framing for another.
 4. **Aggregates** `level_reports` without rewriting them. Any partial, blocked, failed, escalated, missing,
    or unanswered planned level prevents overall `COMPLETE`; specialist terminal outcomes remain distinct.
 
