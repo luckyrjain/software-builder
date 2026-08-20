@@ -1,5 +1,5 @@
 ---
-workflow_version: 1.0
+workflow_version: 1.1
 phase: orchestrator-lifecycle
 produces:
   change_identity: object
@@ -36,7 +36,10 @@ A lifecycle-clean lens requires all of the following:
 - `review_evidence.inspection_status: complete`;
 - no `unable_to_inspect` entries;
 - zero `findings.defect` entries;
-- fresh evidence for the current `change_identity` and current `requirements_ref`.
+- fresh evidence for the current `change_identity` and current `requirements_ref`;
+- `isolation_status: ISOLATED`, unless a human explicitly accepted degraded isolation in the current authorized context. Preserve the actual `NOT_ISOLATED` status and record that exception separately as `isolation_exception_authorized: true` plus non-empty `isolation_exception_provenance`; never relabel the review as isolated.
+
+For every security-sensitive `NEEDS_EVIDENCE` item from the legacy Orchestrator rules, populate `merge_readiness.security_sensitive_needs_evidence_unresolved`. It must be integer `0` before readiness. A human residual-risk acceptance resolves the item only when the decision/provenance is recorded in official escalation/adjudication state; do not silently decrement the counter.
 
 If content changes, requirements change, a third-party change is accepted into the task, or conflict resolution occurs after a lens produced evidence, invalidate the affected lens evidence and rerun it. A conflict that happened **before** a rerun does not permanently poison new evidence already bound to the current identity.
 
@@ -55,7 +58,7 @@ Required CI is authoritative only when `ci.required_checks_green: true` and `ci.
 
 Before setting task status `READY`, before setting `COMPLETE`, and immediately before any authorized merge/completion action:
 
-1. refresh current `change_identity`, current `requirements_ref`, branch-actor/third-party state, approvals/threads/integration state, and required CI;
+1. refresh current `change_identity`, current `requirements_ref`, branch-actor/third-party state, reviewer isolation/exception state, unresolved security-sensitive evidence, approvals/threads/integration state, and required CI;
 2. populate the existing merge-readiness gates from authoritative repository state;
 3. run `loop-task-implementer/scripts/validate_loop_lifecycle.py` against the official state;
 4. require **zero validation errors**.
@@ -64,6 +67,8 @@ The validator must prove, independent of the current `ready` flag:
 
 - acceptance criteria complete;
 - Lens A and Lens B lifecycle-clean for the same current identity;
+- reviewer isolation gate satisfied or explicit human exception recorded with provenance;
+- zero unresolved security-sensitive `NEEDS_EVIDENCE` items;
 - no accepted blocking finding open;
 - required approvals satisfied;
 - zero blocking review threads;
@@ -75,4 +80,4 @@ The validator must prove, independent of the current `ready` flag:
 
 Only after this zero-error gate may the Orchestrator set `merge_readiness.ready: true` or task status `READY`/`COMPLETE`.
 
-Verified readiness is separate from merge authority. If `autonomous_merge_authorized` or `allowed_actions.merge` is false, stop at verified readiness and report the exact human action required. If merge is authorized, rerun the lifecycle validator immediately before the merge write; a head/base/requirements/approval/thread/CI change after the previous validation blocks the write.
+Verified readiness is separate from merge authority. If `autonomous_merge_authorized` or `allowed_actions.merge` is false, stop at verified readiness and report the exact human action required. If merge is authorized, rerun the lifecycle validator immediately before the merge write; a head/base/requirements/approval/thread/isolation/evidence/CI change after the previous validation blocks the write.
