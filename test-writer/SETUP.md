@@ -42,16 +42,18 @@ Cursor/Kiro at `test-writer/SKILL.md` without an install step.
 
 | Requirement | Notes |
 |-------------|-------|
+| Repository read access | Required to validate that `repo_root` resolves to a readable repository scope; test-writer does not inspect source code to classify the level |
 | unit-test-creator, integration-test-creator, contract-test-creator, e2e-test-creator, and api-test-creator all installed | `make install-test-writer` chains all five automatically; see each skill's own `SETUP.md` for its own prerequisites |
 
-No MCP, no repository access, and no execution capability of its own — every real prerequisite belongs
-to whichever skill this router dispatches to.
+No MCP or test-execution capability is required by test-writer itself. Beyond the repository-read scope
+check above, framework detection, source inspection, test generation, test execution, and write
+capabilities belong to the specialists it dispatches.
 
 ## Config
 
 No config file. `request`, `repo_root`, and an optional `level_hint` are passed at invocation time — see
-[workflow/inputs.md](workflow/inputs.md). Every other field is passed through unchanged to the dispatched
-skill.
+[workflow/inputs.md](workflow/inputs.md). Every other field is passed through unchanged to every planned
+specialist.
 
 ## Framework links
 
@@ -71,6 +73,7 @@ After install, run the invocation in [reference/smoke-test.md](reference/smoke-t
 | Symptom | Fix |
 |---------|-----|
 | test-writer prints its own framework-detection or target-selection output | Bug — this router has no detection/generation logic; check nothing in `workflow/delegate.md` re-implements a dispatched skill's own phase |
-| Classify never asks, even on a genuinely ambiguous request | Check [reference/level-classification.md](reference/level-classification.md)'s "unambiguous defaults" section wasn't extended past its two listed cases |
-| Report looks different from what the dispatched skill would produce standalone | Regression in relay behavior — check [workflow/delegate.md](workflow/delegate.md) §2 |
+| Classify never asks, even on a genuinely ambiguous request | Check [reference/level-classification.md](reference/level-classification.md)'s ambiguity rules; do not invent an unlisted default |
+| Only one specialist runs for an explicitly complementary multi-level request | Check Classify/Delegate for stale single-dispatch logic or destructive `level_hint` handling |
+| Report looks different from what the dispatched skill would produce standalone | Regression in relay behavior — check [workflow/delegate.md](workflow/delegate.md) §§2–3 |
 | "Command not found" / skill has nothing to dispatch to | Re-run `make install-test-writer` — it should chain all five dispatch-target installs; see Prerequisites above |
