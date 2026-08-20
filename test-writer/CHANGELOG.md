@@ -26,6 +26,8 @@ should match the version of the latest entry below that names that file.
   complementary levels. Conflicting signals for one surface ask once instead of silently narrowing scope.
 - `test_plan` metadata is fixed-vocabulary (`levels` + `signal_source`) and never copies raw caller text,
   preventing untrusted request content from becoming a second unescaped orchestration render path.
+- When multiple sources support the same planned level, `signal_source` now uses deterministic provenance
+  precedence (`explicit_request` > `clarification` > `level_hint`) without changing plan breadth.
 - Delegated canonical statuses are preserved explicitly: specialist `SUCCESS` becomes internal
   `COMPLETE`; `PARTIAL`, `BLOCKED`, `FAILED`, and `ESCALATED` remain distinct. Mixed outcomes use
   deterministic precedence (`FAILED` > `BLOCKED` > `ESCALATED` > `PARTIAL` > `COMPLETE`).
@@ -35,7 +37,7 @@ should match the version of the latest entry below that names that file.
 ### Versioned workflow files
 
 - `workflow/inputs.md` → 2.2
-- `workflow/classify.md` → 2.3
+- `workflow/classify.md` → 2.4
 - `workflow/delegate.md` → 2.2
 - `workflow/aggregate.md` → 1.2
 
