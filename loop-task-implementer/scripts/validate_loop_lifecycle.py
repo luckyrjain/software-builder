@@ -11,10 +11,35 @@ SKILL_ROOT = Path(__file__).resolve().parents[1]
 _UNSET = object()
 
 
+def _shared_runtime_path() -> Path:
+    """Resolve the shared runtime for installed packages or this source repository.
+
+    Installed packages must use their vendored runtime. A source checkout may use the
+    repository-level shared runtime only when the surrounding tree proves it is the
+    software-builder development layout; this avoids accepting an arbitrary sibling
+    ``docs`` tree as executable lifecycle policy.
+    """
+    vendored = SKILL_ROOT / "docs/skill-framework/shared/review_contract_runtime.py"
+    if vendored.is_file():
+        return vendored
+
+    repo_root = SKILL_ROOT.parent
+    source_runtime = repo_root / "docs/skill-framework/shared/review_contract_runtime.py"
+    source_markers = (
+        repo_root / "skills.yaml",
+        repo_root / "scripts/package_skill.py",
+    )
+    if all(marker.is_file() for marker in source_markers) and source_runtime.is_file():
+        return source_runtime
+
+    raise RuntimeError(
+        "unable to load packaged shared review runtime or verified source-checkout runtime: "
+        f"{vendored}"
+    )
+
+
 def _load_shared_runtime() -> ModuleType:
-    path = SKILL_ROOT / "docs/skill-framework/shared/review_contract_runtime.py"
-    if not path.is_file():
-        raise RuntimeError(f"unable to load packaged shared review runtime: {path}")
+    path = _shared_runtime_path()
     spec = importlib.util.spec_from_file_location("loop_shared_review_contract_runtime", path)
     if spec is None or spec.loader is None:
         raise RuntimeError(f"unable to load packaged shared review runtime: {path}")
