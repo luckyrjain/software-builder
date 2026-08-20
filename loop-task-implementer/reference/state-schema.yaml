@@ -1,12 +1,13 @@
 # Per-task shared state schema
 # The Orchestrator is the only role that mutates the official state.
 
-workflow_version: "1.0"
+workflow_version: "1.3"
 
 task:
   task_id: null
   title: null
   description_ref: null
+  requirements_ref: null
   acceptance_criteria: []
   dependencies: []
   status: NOT_STARTED  # NOT_STARTED | BUILDING | REVIEWING | VALIDATING | READY | COMPLETE | ESCALATED
@@ -36,6 +37,9 @@ workspace:
   reviewed_head_commit: null
   diff_fingerprint: null
   normalized_diff_fingerprint: null
+  change_identity: null
+  conflict_resolution_occurred: null  # true | false | null(unknown)
+  conflict_resolution_provenance: null
   changed_files: 0
   changed_lines: 0
   last_branch_actor: null
@@ -51,37 +55,29 @@ review:
     status: NOT_RUN  # NOT_RUN | CLEAN | FINDINGS
     reviewed_head_commit: null
     reviewed_diff_fingerprint: null
+    reviewed_change_identity: null
+    review_evidence: null
     completed_at: null
     report_ref: null
     isolation_primitive_used: null  # SUBAGENT | FRESH_SESSION | WORKTREE | SEQUENTIAL_SIMULATION
+    isolation_status: null  # ISOLATED | NOT_ISOLATED
+    isolation_exception_authorized: false
+    isolation_exception_provenance: null
   lens_b:
     status: NOT_RUN
     reviewed_head_commit: null
     reviewed_diff_fingerprint: null
+    reviewed_change_identity: null
+    review_evidence: null
     completed_at: null
     report_ref: null
     isolation_primitive_used: null  # SUBAGENT | FRESH_SESSION | WORKTREE | SEQUENTIAL_SIMULATION
+    isolation_status: null  # ISOLATED | NOT_ISOLATED
+    isolation_exception_authorized: false
+    isolation_exception_provenance: null
 
 findings:
-  # keyed by stable finding ID
   items: {}
-  # Example:
-  # AUTHZ-001:
-  #   source_lens: LENS_A
-  #   proposed_class: PROPOSED_BLOCKING
-  #   adjudication: ACCEPTED  # ACCEPTED | REJECTED | NEEDS_EVIDENCE | CONTESTED
-  #   status: OPEN            # OPEN | FIXED | REBUTTED | BLOCKED | CLOSED
-  #   first_seen_head: null
-  #   last_seen_head: null
-  #   evidence_refs: []
-  #   adjudication_rationale: null
-  #   fix_attempt_count: 0
-  #   rebuttal_attempt_count: 0
-  #   contested_round_count: 0
-  #   head_history: []
-  #   timestamps:
-  #     created_at: null
-  #     updated_at: null
 
 adjudication:
   rebuttal_log: []
@@ -90,15 +86,6 @@ adjudication:
 
 checks:
   authoritative:
-    # Each item must identify exact commit and source.
-    # - name:
-    #   source: CI | ORCHESTRATOR | REVIEWER
-    #   commit:
-    #   command_or_job:
-    #   status: PASS | FAIL | PENDING | SKIPPED
-    #   started_at:
-    #   completed_at:
-    #   evidence_ref:
     items: []
   builder_advisory: []
 
@@ -129,13 +116,20 @@ budgets:
 
 merge_readiness:
   acceptance_criteria_complete: false
+  current_change_identity_valid: false
+  lens_a_evidence_fresh: false
+  lens_b_evidence_fresh: false
+  both_lenses_clean_for_same_change_identity: false
   lens_a_clean_for_current_fingerprint: false
   lens_b_clean_for_current_fingerprint: false
   accepted_blocking_findings_open: 0
+  security_sensitive_needs_evidence_unresolved: 0
   required_checks_green: false
+  ci_green_for_current_head: false
   required_approvals_present: false
   blocking_threads_open: 0
   integration_state_valid: false
+  unresolved_third_party_branch_change: false
   circuit_breaker_active: false
   ready: false
 

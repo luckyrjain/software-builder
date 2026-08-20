@@ -1256,6 +1256,40 @@ single-pass review-and-fix had already landed.
 
 ## loop-task-implementer
 
+### Batch 5.2C — lifecycle freshness hardening (2026-08-20)
+
+- Bumped `skill_version: 1.0 → 1.1`. Bound Lens A/Lens B approvals and completion readiness to the
+  shared `change_identity` / `review_evidence` contracts (from Batch 5.2A) instead of a head SHA or
+  ad-hoc diff fingerprint alone — a matching head SHA is no longer sufficient proof that review
+  evidence is current.
+- New mandatory `workflow/orchestrator-lifecycle.md` overlay, `workflow/reviewer-evidence.md`
+  (binds each adjudicated lens result to the exact current change identity and normalizes it into a
+  portable `review_evidence` envelope — accepted/open findings become `defect`, rejected proposals stay
+  in the audit trail but are not portable defects), and `workflow/lifecycle-gate.md` (revalidation run
+  immediately before `READY`, `COMPLETE`, or any authorized merge/write).
+- New `reference/review-lifecycle-contract.yaml` and `scripts/validate_loop_lifecycle.py` — a
+  fail-closed validator that requires, on the same current identity: both lenses CLEAN with complete,
+  defect-free, fresh evidence; `isolation_status` honestly `ISOLATED` or a recorded `NOT_ISOLATED` human
+  exception with non-empty provenance; zero unresolved security-sensitive `NEEDS_EVIDENCE`; no
+  unresolved third-party branch change; and authoritative CI green for the exact current head (green CI
+  for an older commit does not satisfy readiness). An identity SHA transition with unknown
+  conflict-resolution status/provenance fails closed rather than assuming `false`. The installed package
+  loads only its vendored `docs/skill-framework/shared/review_contract_runtime.py` — never falls back to
+  an unrelated parent checkout.
+- `reference/state-schema.yaml` (`workflow_version` 1.0 → 1.3) gained `task.requirements_ref`,
+  `workspace.change_identity`/`conflict_resolution_occurred`/`conflict_resolution_provenance`, per-lens
+  `review_evidence`/`reviewed_change_identity`/`isolation_status`/`isolation_exception_authorized`/
+  `isolation_exception_provenance`, and new `merge_readiness` freshness/isolation/third-party fields.
+- `report-template.md` now renders the machine lifecycle state explicitly (change identity, requirements
+  evidence, per-lens evidence freshness/isolation, lifecycle gate result, merge authority) instead of a
+  diff fingerprint alone.
+- 26 new tests: `scripts/tests/test_batch5_2c_lifecycle_validator.py` (fail-closed paths — unclean lens,
+  partial/unable inspection, open defects, isolation exceptions, unknown conflict provenance after SHA
+  transition, stale-head CI, unresolved third-party changes), `test_batch5_2c_loop_task_lifecycle.py`
+  (contract/schema/doc wiring), and `test_batch5_2c_install_portability.py` (packaged validator loads
+  only its vendored shared runtime, never a source-checkout fallback once a manifest proves it's an
+  installed package).
+
 ### Safe-output wiring (2026-08-10)
 
 - No `workflow-contract.yaml` for this skill — Orchestrator/Builder/Reviewer are isolated roles

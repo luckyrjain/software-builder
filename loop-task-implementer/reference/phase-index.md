@@ -1,32 +1,45 @@
 # Phase index
 
-**One `workflow/` file per role** — never bulk-load role prompts into one context. Each file declares
-`workflow_version`, `phase`, `produces`, and `consumes`.
+Role isolation remains the primary execution model. Batch 5.2C adds explicit lifecycle adapters around the role loop so shared review identity/evidence is machine-validated without merging Builder/Reviewer contexts.
 
-This skill's "phases" are roles, not sequential stages — Builder and Reviewer each run in a fresh,
-isolated context per dispatch, and the Orchestrator alone persists state across the whole task.
-
-| Role | Read now | Produces |
-|------|----------|----------|
-| **Orchestrator** | [workflow/orchestrator.md](../workflow/orchestrator.md) | task state, dispatch packages, adjudication verdicts, completion report |
+| Context | Read now | Produces |
+|---------|----------|----------|
+| **Orchestrator** | [workflow/orchestrator.md](../workflow/orchestrator.md) + mandatory [workflow/orchestrator-lifecycle.md](../workflow/orchestrator-lifecycle.md) | task state, current `change_identity`, dispatch packages, adjudication verdicts, completion report |
 | **Builder** | [workflow/builder.md](../workflow/builder.md) | implementation diff, pull request, builder report |
 | **Reviewer** | [workflow/reviewer.md](../workflow/reviewer.md) | reviewer report, lens verdict |
+| **Reviewer evidence adapter** | [workflow/reviewer-evidence.md](../workflow/reviewer-evidence.md), after Orchestrator adjudication | portable `review_evidence`, `reviewed_change_identity` for the adjudicated lens result |
+| **Lifecycle gate** | [workflow/lifecycle-gate.md](../workflow/lifecycle-gate.md) | zero-error lifecycle validation before READY/COMPLETE/merge |
 
-Reference loads: [lazy-load-index.md](lazy-load-index.md).
+Reference loads: [lazy-load-index.md](lazy-load-index.md) · [review-lifecycle-contract.yaml](review-lifecycle-contract.yaml).
 
 ## Execution order
 
 ```
-Orchestrator: discover policy → select task
+Orchestrator + lifecycle overlay: discover policy → select task
   → dispatch Builder (fresh context)
-  → verify branch/diff
-  → dispatch Reviewer Lens A (fresh context) → adjudicate
-  → dispatch Reviewer Lens B (fresh context) → adjudicate
+  → rebuild/validate current shared change_identity + current requirements_ref
+  → dispatch Reviewer Lens A (fresh context)
+  → adjudicate Lens A proposed findings
+  → normalize/validate Lens A review_evidence from adjudicated result
+  → dispatch Reviewer Lens B (fresh context)
+  → adjudicate Lens B proposed findings
+  → normalize/validate Lens B review_evidence from adjudicated result
   → dispatch Builder remediation for accepted findings (fresh context)
-  → rerun affected lenses
-  → verify authoritative checks
-  → complete repository action when authorized
+  → any content/conflict/requirements/third-party branch change invalidates affected review evidence
+  → rerun invalidated lenses
+  → verify authoritative checks for exact current head
+  → refresh approvals/threads/integration/circuit-breaker state
+  → run lifecycle gate against fresh current identity + requirements
+  → set READY only on zero errors
+  → complete repository action only when separately authorized
+  → rerun lifecycle gate immediately before merge/completion write
   → verify result → select next eligible task
 ```
+
+Portable classification after adjudication:
+
+- `defect` = accepted blocking findings that remain open for the reviewed identity; a rejected proposal is not a portable defect.
+- `suggestion` = evidence-backed non-blocking improvements.
+- `question` = unresolved evidence requests such as `NEEDS_EVIDENCE`; security-sensitive questions remain separately gated by `security_sensitive_needs_evidence_unresolved`.
 
 Full workflow diagram: [SKILL.md § Workflow](../SKILL.md#workflow).
