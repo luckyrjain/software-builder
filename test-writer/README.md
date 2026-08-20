@@ -49,8 +49,10 @@ More scenarios: [examples.md](examples.md).
 
 ## What you get
 
-An ordered `test_plan`, one verbatim specialist report per planned level, and internal orchestration status
-`COMPLETE`, `PARTIAL`, `BLOCKED`, `FAILED`, or `ESCALATED`. In the canonical runtime envelope,
+An ordered `test_plan`, one verbatim specialist report per planned level, ordered `unfinished_levels`, and
+internal orchestration status `COMPLETE`, `PARTIAL`, `BLOCKED`, `FAILED`, or `ESCALATED`.
+`unfinished_levels` is empty only when every planned specialist completed successfully; otherwise it
+names each non-`COMPLETE` or missing planned level in `test_plan` order. In the canonical runtime envelope,
 `COMPLETE` maps to `SUCCESS`; the other statuses remain unchanged. Specialist reports remain authoritative
 for their own test surface. Shared report rules:
 [test-creation-principles.md §4](../docs/skill-framework/shared/test-creation-principles.md#4-reporting-format-shared-skeleton).
