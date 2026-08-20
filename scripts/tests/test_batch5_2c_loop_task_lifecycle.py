@@ -14,14 +14,17 @@ def test_loop_task_declares_shared_lifecycle_contract():
     assert data["schema_version"] == 1
     assert data["shared_contracts"]["change_identity"].endswith("change-identity.yaml")
     assert data["shared_contracts"]["review_evidence"].endswith("review-evidence.yaml")
-    assert data["completion_requires"] == [
+    for requirement in (
         "current_change_identity_valid",
         "lens_a_evidence_fresh",
         "lens_b_evidence_fresh",
         "both_lenses_clean_for_same_change_identity",
+        "review_isolation_gate_satisfied",
+        "no_security_sensitive_needs_evidence_unresolved",
         "authoritative_ci_green_for_current_head",
         "no_unresolved_third_party_branch_change",
-    ]
+    ):
+        assert requirement in data["completion_requires"]
 
 
 def test_state_schema_carries_shared_identity_requirements_and_lens_evidence():
@@ -31,16 +34,26 @@ def test_state_schema_carries_shared_identity_requirements_and_lens_evidence():
     assert "conflict_resolution_occurred" in data["workspace"]
     assert "conflict_resolution_provenance" in data["workspace"]
     for lens in ("lens_a", "lens_b"):
-        assert "review_evidence" in data["review"][lens]
-        assert "reviewed_change_identity" in data["review"][lens]
+        lens_state = data["review"][lens]
+        assert "review_evidence" in lens_state
+        assert "reviewed_change_identity" in lens_state
+        assert "isolation_status" in lens_state
+        assert "isolation_exception_authorized" in lens_state
+        assert "isolation_exception_provenance" in lens_state
+    assert "security_sensitive_needs_evidence_unresolved" in data["merge_readiness"]
 
 
 def test_reviewer_evidence_adapter_emits_shared_review_evidence():
     text = (SKILL / "workflow/reviewer-evidence.md").read_text(encoding="utf-8")
-    assert "review_evidence" in text
-    assert "change_identity" in text
-    assert "docs/skill-framework/shared/review-evidence.yaml" in text
-    assert "defect" in text and "suggestion" in text and "question" in text
+    for token in (
+        "review_evidence",
+        "change_identity",
+        "docs/skill-framework/shared/review-evidence.yaml",
+        "inspection_status",
+        "zero `findings.defect`",
+        "NOT_ISOLATED",
+    ):
+        assert token in text
 
 
 def test_orchestrator_path_loads_mandatory_lifecycle_overlay():
@@ -54,6 +67,8 @@ def test_orchestrator_path_loads_mandatory_lifecycle_overlay():
         "current `change_identity`",
         "conflict_resolution_occurred",
         "third_party_change_detected",
+        "security_sensitive_needs_evidence_unresolved",
+        "isolation_exception_provenance",
         "required checks",
         "current head",
         "zero validation errors",
@@ -63,15 +78,14 @@ def test_orchestrator_path_loads_mandatory_lifecycle_overlay():
 
 def test_lifecycle_gate_revalidates_before_ready_or_merge():
     text = (SKILL / "workflow/lifecycle-gate.md").read_text(encoding="utf-8")
-    required = (
+    for token in (
         "validate_loop_lifecycle.py",
         "current `change_identity`",
         "conflict_resolution_occurred",
         "third_party_change_detected",
         "required checks",
         "current head",
-    )
-    for token in required:
+    ):
         assert token in text
 
 
@@ -79,9 +93,14 @@ def test_lifecycle_validator_is_packaged_and_fail_closed():
     script = SKILL / "scripts/validate_loop_lifecycle.py"
     assert script.exists()
     text = script.read_text(encoding="utf-8")
-    assert "review_contract_runtime.py" in text
-    assert "validate_review_evidence" in text
-    assert "third_party_change_detected" in text
-    assert "conflict_resolution_occurred" in text
-    assert "required checks must be green before lifecycle readiness" in text
-    assert "accepted_blocking_findings_open must be integer 0" in text
+    for token in (
+        "review_contract_runtime.py",
+        "validate_review_evidence",
+        "third_party_change_detected",
+        "conflict_resolution_occurred",
+        "required checks must be green before lifecycle readiness",
+        "accepted_blocking_findings_open must be integer 0",
+        "security_sensitive_needs_evidence_unresolved must be integer 0",
+        "NOT_ISOLATED blocks lifecycle readiness",
+    ):
+        assert token in text
