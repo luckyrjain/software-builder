@@ -8,6 +8,7 @@ from types import ModuleType
 
 
 SKILL_ROOT = Path(__file__).resolve().parents[1]
+_INSTALL_MANIFEST = ".software-builder-manifest.json"
 _UNSET = object()
 
 
@@ -22,6 +23,11 @@ def _shared_runtime_path() -> Path:
     vendored = SKILL_ROOT / "docs/skill-framework/shared/review_contract_runtime.py"
     if vendored.is_file():
         return vendored
+
+    # package_skill always writes this manifest into an installed skill. Once it
+    # is present, never search outside the package for executable lifecycle policy.
+    if (SKILL_ROOT / _INSTALL_MANIFEST).is_file():
+        raise RuntimeError(f"unable to load packaged shared review runtime: {vendored}")
 
     repo_root = SKILL_ROOT.parent
     source_runtime = repo_root / "docs/skill-framework/shared/review_contract_runtime.py"
