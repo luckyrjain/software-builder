@@ -49,6 +49,14 @@ def test_level_hint_cannot_silently_collapse_explicit_multilevel_breadth():
     assert "silently collapse caller-requested breadth" in text
 
 
+def test_phase_index_matches_level_hint_precedence():
+    text = _read("reference/phase-index.md").lower()
+    assert "generic/ambiguous request + `level_hint: integration`" in text
+    assert "one-level integration plan" in text
+    assert "explicit unit + integration request + `level_hint: unit`" in text
+    assert "preserves both complementary levels" in text
+
+
 def test_plan_metadata_never_copies_raw_caller_signal():
     text = _read("workflow/classify.md").lower()
     assert "signal_source" in text
@@ -97,6 +105,15 @@ def test_aggregate_preserves_raw_reports_and_blocks_incomplete_plan():
         "must not report COMPLETE",
     ):
         assert token in text
+
+
+def test_aggregate_preserves_full_fixed_vocabulary_test_plan():
+    text = _read("workflow/aggregate.md")
+    assert "signal_source:" in text
+    assert "unit: explicit_request" in text
+    assert "integration: explicit_request" in text
+    assert "must not drop or rewrite" in text
+    assert "fixed-vocabulary `signal_source` provenance" in text
 
 
 def test_aggregate_maps_internal_statuses_to_portable_runtime_statuses():
