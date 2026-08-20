@@ -1,5 +1,5 @@
 ---
-workflow_version: 1.0
+workflow_version: 1.1
 phase: reviewer-evidence
 produces:
   review_evidence: object
@@ -44,8 +44,14 @@ Construct a closed portable `review_evidence` v1 envelope:
 - `generated_at`: the actual completion timestamp for this reviewer pass.
 
 Portable finding entries contain exactly `{id, category, summary, evidence}`. Keep rich severity, adjudication,
-fix history, and reviewer-specific metadata in the loop state outside the closed portable entry.
+fix history, isolation state, and reviewer-specific metadata in the loop state outside the closed portable entry.
 
 Validate the envelope with the packaged shared `docs/skill-framework/shared/review_contract_runtime.py` before the
-Orchestrator records the lens result. A `CLEAN` lens with invalid or stale `review_evidence` is not CLEAN for lifecycle
-purposes and must not advance readiness.
+Orchestrator records the lens result. A lens may be persisted as lifecycle `CLEAN` only when the envelope itself is
+valid and fresh **and** `inspection_status` is `complete`, `unable_to_inspect` is empty, and `findings.defect` is empty.
+A reviewer-supplied `CLEAN` label never overrides partial/unavailable coverage or an evidence-backed proposed blocker.
+
+Persist the actual review-isolation result separately in official lens state. `NOT_ISOLATED` remains `NOT_ISOLATED`;
+if an authorized human accepts degraded isolation, record the exception and its provenance separately rather than
+rewriting the reviewer state. Security-sensitive `NEEDS_EVIDENCE` findings likewise remain visible in adjudication
+state until resolved or explicitly accepted by an authorized human under the Orchestrator policy.
