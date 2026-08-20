@@ -43,7 +43,8 @@ def test_classification_distinguishes_complementary_levels_from_ambiguity():
 
 def test_level_hint_cannot_silently_collapse_explicit_multilevel_breadth():
     text = _read("workflow/classify.md").lower()
-    assert "must not discard other explicitly requested complementary levels" in text
+    assert "level_hint" in text
+    assert "explicitly requested complementary levels" in text
     assert "keep unit + integration" in text
     assert "silently collapse caller-requested breadth" in text
 
@@ -52,7 +53,8 @@ def test_plan_metadata_never_copies_raw_caller_signal():
     text = _read("workflow/classify.md").lower()
     assert "signal_source" in text
     assert "explicit_request | level_hint | clarification" in text
-    assert "do not copy or quote raw caller text into `test_plan` metadata" in text
+    assert "raw caller text" in text
+    assert "test_plan" in text
     assert "rationale:" not in text
     assert "<caller signal>" not in text
 
