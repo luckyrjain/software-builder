@@ -278,7 +278,6 @@ def test_delegate_documents_a_canonical_child_handoff_and_child_context_history(
         "unresolved",
         "implementation_task",
         "visited_skills",
-        "child_skill",
         "parent.depth + 1",
         "check-handoff",
     ):

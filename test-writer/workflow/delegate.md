@@ -64,8 +64,8 @@ human-readable reason in the enclosing canonical result blockers. Do not invent 
 a child that never ran.
 
 Otherwise derive a fresh child context from the parent context: preserve the same invocation id, set
-`parent_skill` to `test-writer`, set `child_skill` to the selected specialist, add both `test-writer`
-and the child skill to the visited-skill history, and set `depth` to `parent.depth + 1`. Increment depth once.
+`parent_skill` to `test-writer`, add `test-writer` to the visited-skill history, and set `depth` to
+`parent.depth + 1`. Increment depth once.
 If there is no
 root execution context, the direct host supplies a stable invocation id, `parent: null`, an empty
 `visited_skills` list, and depth `0`; test-writer must not invent the repository path or invocation id.
