@@ -144,6 +144,14 @@ def test_isolation_exception_without_provenance_fails_closed():
     assert any("isolation exception requires non-empty human authorization provenance" in error for error in errors)
 
 
+def test_isolation_exception_authorized_requires_explicit_boolean():
+    for value in (0, 1, "yes", None):
+        state = _state()
+        state["review"]["lens_a"]["isolation_exception_authorized"] = value
+        errors = _load().validate_lifecycle_state(state)
+        assert any("isolation_exception_authorized must be an explicit boolean" in error for error in errors)
+
+
 def test_security_sensitive_needs_evidence_must_be_resolved_before_readiness():
     state = _state()
     state["merge_readiness"]["security_sensitive_needs_evidence_unresolved"] = 1
