@@ -8,7 +8,9 @@ own homework.
 Platform-neutral by design: works the same way whether the active agent is Cursor, ChatGPT/Codex,
 Claude Code, Kiro, or another repository-capable agent. No Datadog/GitLab/Jira MCP dependency.
 
-Core principle: **claims are advisory; repository evidence is authoritative.**
+Core principle: **claims are advisory; repository evidence is authoritative.** Review and completion
+freshness are bound to the shared `change_identity` / `review_evidence` contracts rather than a head
+SHA or ad-hoc diff fingerprint alone.
 
 ## What it does
 
@@ -16,21 +18,24 @@ Core principle: **claims are advisory; repository evidence is authoritative.**
    autonomous merge is authorized (defaults to `false`).
 2. **Selects one eligible task** and dispatches a fresh **Builder** session to implement it, add
    tests, and open/update a pull request.
-3. **Independently verifies** the resulting branch/PR — never trusts the Builder's self-report.
-4. **Dispatches two fresh Reviewer sessions** against the same diff — Lens A (Safety and State),
-   Lens B (Contracts and Operations) — each blind to the other's verdict and to the Builder's
-   narrative.
+3. **Rebuilds and validates the current change identity** from base/head/merge-base, normalized
+   effective patch, generated paths, dependency changes, and config changes.
+4. **Dispatches two fresh Reviewer sessions** — Lens A (Safety and State), Lens B (Contracts and
+   Operations) — each blind to the other's verdict and to the Builder's narrative. The Orchestrator
+   converts each result into validated portable `review_evidence` for that exact current identity.
 5. **Adjudicates** every proposed finding as `ACCEPTED` / `REJECTED` / `NEEDS_EVIDENCE` /
    `CONTESTED`, using repository evidence, not persuasion.
-6. **Remediates** accepted findings via fresh Builder dispatch, then reruns affected lenses.
-7. **Verifies authoritative checks** (CI for the exact commit first, always) and completes the
-   repository action only when explicitly authorized — otherwise stops and reports the exact human
-   action required.
+6. **Remediates** accepted findings via fresh Builder dispatch, then reruns any lens invalidated by
+   content, conflict-resolution, requirements, or unresolved third-party branch changes.
+7. **Verifies authoritative checks and lifecycle readiness** for the exact current head. READY,
+   COMPLETE, or an authorized merge requires both lenses CLEAN with complete defect-free evidence,
+   current requirements, all existing merge-policy gates satisfied, and a zero-error lifecycle
+   validation immediately before the action.
 8. **Moves to the next eligible task**, repeating until the queue is empty or a circuit breaker
    fires.
 
 **Read-only boundary for Reviewers:** inspect, run checks, use disposable worktrees — never commit,
-push, edit the PR, or merge.
+push, edit the PR, merge, or self-certify lifecycle readiness.
 
 ## When to use
 
@@ -58,9 +63,10 @@ A completion report per task — see [report-template.md](report-template.md):
 
 > **Task:** `TASK-42` — `org/repo`
 > **Branch / PR:** `task-42-rate-limit-fix` — `https://.../pull/128`
-> **Lens A:** CLEAN · **Lens B:** CLEAN
-> **Accepted findings:** 1 — `AUTHZ-001: FIXED`
-> **Authoritative checks:** `ci/build: PASS (a1b2c3d)`
+> **Head commit:** `a1b2c3d...` · **change identity:** validated
+> **Lens A:** CLEAN · **Lens B:** CLEAN · **review evidence:** fresh for same identity
+> **Authoritative checks:** `ci/build: PASS (a1b2c3d...)`
+> **Lifecycle gate:** PASS
 > **Completion state:** `HUMAN_ACTION_REQUIRED` — autonomous merge not authorized; approve and merge manually
 
 ## Install
