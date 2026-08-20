@@ -101,6 +101,19 @@ def test_delegate_executes_each_planned_level_without_cross_level_mutation():
         assert token in text
 
 
+def test_delegate_advances_framework_execution_context_per_child():
+    text = _read("workflow/delegate.md").lower()
+    assert "execution_context" in text
+    assert "required exception to unchanged pass-through" in text
+    assert "runtime-contract.md#8-recursion-protection" in text
+    assert "record that planned level as `blocked`" in text
+    assert "same invocation id" in text
+    assert "parent_skill" in text and "test-writer" in text
+    assert "increment depth once" in text
+    assert "same parent context" in text
+    assert "one sibling's dispatch must not increase another sibling's depth" in text
+
+
 def test_delegate_preserves_all_portable_specialist_statuses():
     text = _read("workflow/delegate.md")
     for mapping in (
