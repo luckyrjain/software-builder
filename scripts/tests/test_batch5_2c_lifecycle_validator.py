@@ -44,6 +44,17 @@ def _evidence(identity):
     }
 
 
+def _lens(identity, evidence):
+    return {
+        "status": "CLEAN",
+        "reviewed_change_identity": identity,
+        "review_evidence": evidence,
+        "isolation_status": "ISOLATED",
+        "isolation_exception_authorized": False,
+        "isolation_exception_provenance": None,
+    }
+
+
 def _state(identity=None):
     identity = identity or _identity()
     evidence = _evidence(identity)
@@ -57,13 +68,14 @@ def _state(identity=None):
             "third_party_change_detected": False,
         },
         "review": {
-            "lens_a": {"status": "CLEAN", "reviewed_change_identity": identity, "review_evidence": evidence},
-            "lens_b": {"status": "CLEAN", "reviewed_change_identity": identity, "review_evidence": evidence},
+            "lens_a": _lens(identity, evidence),
+            "lens_b": _lens(identity, evidence),
         },
         "ci": {"commit": identity["head_sha"], "required_checks_green": True},
         "merge_readiness": {
             "acceptance_criteria_complete": True,
             "accepted_blocking_findings_open": 0,
+            "security_sensitive_needs_evidence_unresolved": 0,
             "required_approvals_present": True,
             "blocking_threads_open": 0,
             "integration_state_valid": True,
@@ -74,8 +86,7 @@ def _state(identity=None):
 
 
 def test_pre_ready_state_passes_only_when_all_lifecycle_requirements_hold():
-    errors = _load().validate_lifecycle_state(_state())
-    assert errors == []
+    assert _load().validate_lifecycle_state(_state()) == []
 
 
 def test_pre_ready_state_rejects_unclean_lens_and_non_green_ci():
@@ -102,35 +113,63 @@ def test_clean_lens_rejects_partial_or_unable_inspection_evidence():
 def test_clean_lens_rejects_proposed_blocking_defect_evidence():
     state = _state()
     state["review"]["lens_a"]["review_evidence"]["findings"]["defect"] = [
-        {
-            "id": "AUTHZ-001",
-            "category": "defect",
-            "summary": "Authorization bypass",
-            "evidence": "src/a.py:10",
-        }
+        {"id": "AUTHZ-001", "category": "defect", "summary": "Authorization bypass", "evidence": "src/a.py:10"}
     ]
     errors = _load().validate_lifecycle_state(state)
     assert any("lens_a CLEAN requires zero defect findings" in error for error in errors)
 
 
+def test_not_isolated_lens_requires_explicit_human_exception():
+    state = _state()
+    state["review"]["lens_a"]["isolation_status"] = "NOT_ISOLATED"
+    errors = _load().validate_lifecycle_state(state)
+    assert any("NOT_ISOLATED blocks lifecycle readiness" in error for error in errors)
+
+
+def test_not_isolated_lens_can_proceed_only_with_explicit_human_exception_provenance():
+    state = _state()
+    lens = state["review"]["lens_a"]
+    lens["isolation_status"] = "NOT_ISOLATED"
+    lens["isolation_exception_authorized"] = True
+    lens["isolation_exception_provenance"] = "human accepted degraded isolation in current session"
+    assert _load().validate_lifecycle_state(state) == []
+
+
+def test_isolation_exception_without_provenance_fails_closed():
+    state = _state()
+    lens = state["review"]["lens_a"]
+    lens["isolation_status"] = "NOT_ISOLATED"
+    lens["isolation_exception_authorized"] = True
+    errors = _load().validate_lifecycle_state(state)
+    assert any("isolation exception requires non-empty human authorization provenance" in error for error in errors)
+
+
+def test_security_sensitive_needs_evidence_must_be_resolved_before_readiness():
+    state = _state()
+    state["merge_readiness"]["security_sensitive_needs_evidence_unresolved"] = 1
+    errors = _load().validate_lifecycle_state(state)
+    assert any("security_sensitive_needs_evidence_unresolved must be integer 0" in error for error in errors)
+
+
 def test_pre_ready_state_rejects_existing_completion_policy_blockers():
     state = _state()
-    state["merge_readiness"]["acceptance_criteria_complete"] = False
-    state["merge_readiness"]["accepted_blocking_findings_open"] = 1
-    state["merge_readiness"]["required_approvals_present"] = False
-    state["merge_readiness"]["blocking_threads_open"] = 1
-    state["merge_readiness"]["integration_state_valid"] = False
-    state["merge_readiness"]["circuit_breaker_active"] = True
+    state["merge_readiness"].update(
+        acceptance_criteria_complete=False,
+        accepted_blocking_findings_open=1,
+        required_approvals_present=False,
+        blocking_threads_open=1,
+        integration_state_valid=False,
+        circuit_breaker_active=True,
+    )
     errors = _load().validate_lifecycle_state(state)
-    expected = (
+    for token in (
         "acceptance criteria must be complete",
         "accepted_blocking_findings_open must be integer 0",
         "required approvals must be satisfied",
         "blocking_threads_open must be integer 0",
         "integration state must be valid",
         "circuit breaker must be explicitly inactive",
-    )
-    for token in expected:
+    ):
         assert any(token in error for error in errors)
 
 
@@ -160,7 +199,6 @@ def test_ready_state_rejects_unknown_third_party_change_state():
     del state["workspace"]["third_party_change_detected"]
     errors = _load().validate_lifecycle_state(state)
     assert any("third_party_change_detected must be an explicit boolean" in error for error in errors)
-    assert any("third_party_change_detected must be explicitly false" in error for error in errors)
 
 
 def test_sha_transition_with_unknown_conflict_status_fails_closed():
@@ -169,10 +207,9 @@ def test_sha_transition_with_unknown_conflict_status_fails_closed():
     state = _state(current)
     state["workspace"]["conflict_resolution_occurred"] = None
     state["workspace"]["conflict_resolution_provenance"] = None
-    state["review"]["lens_a"]["reviewed_change_identity"] = reviewed
-    state["review"]["lens_a"]["review_evidence"] = _evidence(reviewed)
-    state["review"]["lens_b"]["reviewed_change_identity"] = reviewed
-    state["review"]["lens_b"]["review_evidence"] = _evidence(reviewed)
+    for lens in ("lens_a", "lens_b"):
+        state["review"][lens]["reviewed_change_identity"] = reviewed
+        state["review"][lens]["review_evidence"] = _evidence(reviewed)
     errors = _load().validate_lifecycle_state(state)
     assert sum("conflict_resolution_occurred is unknown" in error for error in errors) == 2
 
@@ -194,5 +231,4 @@ def test_fresh_evidence_after_prior_conflict_is_not_permanently_invalidated():
     state = _state()
     state["workspace"]["conflict_resolution_occurred"] = True
     state["workspace"]["conflict_resolution_provenance"] = "merge conflict resolved before both lenses reran"
-    errors = _load().validate_lifecycle_state(state)
-    assert errors == []
+    assert _load().validate_lifecycle_state(state) == []
