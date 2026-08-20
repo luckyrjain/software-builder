@@ -49,6 +49,14 @@ def test_level_hint_cannot_silently_collapse_explicit_multilevel_breadth():
     assert "silently collapse caller-requested breadth" in text
 
 
+def test_signal_source_precedence_is_deterministic():
+    text = _read("workflow/classify.md").lower()
+    assert "`explicit_request` > `clarification` > `level_hint`" in text
+    assert "request explicitly names unit and `level_hint: unit`" in text
+    assert "`signal_source.unit: explicit_request`" in text
+    assert "without changing `test_plan.levels`" in text
+
+
 def test_phase_index_matches_level_hint_precedence_and_status_contract():
     text = _read("reference/phase-index.md").lower()
     assert "generic/ambiguous request + `level_hint: integration`" in text
