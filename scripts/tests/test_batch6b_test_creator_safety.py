@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -81,29 +83,45 @@ def _prepare_scenario(repo: Path, scenario: dict[str, object]) -> None:
         raise AssertionError(f"unknown fixture kind: {kind}")
 
 
+def _run_creator_guard(creator: str, repo: Path, planned_file: str) -> dict[str, object]:
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / creator / "scripts" / "test_creator_write_guard.py"),
+            "--repo-root",
+            str(repo),
+            "--planned-file",
+            planned_file,
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert completed.returncode in (0, 2), completed.stderr
+    return json.loads(completed.stdout)
+
+
 @pytest.mark.parametrize("creator", CREATOR_ROOTS)
 def test_all_creators_share_the_behavioral_write_safety_matrix(
     tmp_path: Path,
     creator: str,
 ) -> None:
-    from scripts.test_creator_write_guard import check_write_safety
-
     fixture = yaml.safe_load(FIXTURE.read_text(encoding="utf-8"))
     assert creator in fixture["creators"]
     for scenario in fixture["scenarios"]:
         repo = _git_repo(tmp_path / scenario["id"] / creator)
         _prepare_scenario(repo, scenario)
-        result = check_write_safety(repo, [scenario["planned_file"]])
+        result = _run_creator_guard(creator, repo, scenario["planned_file"])
         expected = scenario["expected"]
-        assert result.allowed is expected["allowed"], scenario["id"]
-        assert result.status == expected["status"], scenario["id"]
-        assert list(result.conflicting_paths) == expected["conflicts"], scenario["id"]
-        assert list(result.dirty_paths) == expected["dirty_paths"], scenario["id"]
-        assert result.status_snapshot == tuple(result.status_snapshot)
+        assert result["allowed"] is expected["allowed"], scenario["id"]
+        assert result["status"] == expected["status"], scenario["id"]
+        assert result["conflicting_paths"] == expected["conflicts"], scenario["id"]
+        assert result["dirty_paths"] == expected["dirty_paths"], scenario["id"]
+        assert result["status_snapshot"] == sorted(result["status_snapshot"])
         if scenario["kind"] == "clean":
-            assert result.status_snapshot == ()
+            assert result["status_snapshot"] == []
         else:
-            assert result.status_snapshot
+            assert result["status_snapshot"]
 
 
 def test_guard_fails_closed_for_paths_outside_the_repository(tmp_path: Path) -> None:
