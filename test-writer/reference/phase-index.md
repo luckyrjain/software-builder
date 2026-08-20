@@ -18,7 +18,8 @@ Reference loads: [lazy-load-index.md](lazy-load-index.md).
 |---------------|--------|
 | `unit and integration tests for the change` | Inputs → Classify (both are complementary) → Delegate both → Aggregate |
 | `test the payment flow` | Inputs → Classify asks whether integration or e2e; no Delegate until resolved |
-| `request: ...`, `level_hint: integration` | Inputs → Classify one-level plan → Delegate → Aggregate |
+| Generic/ambiguous request + `level_hint: integration` | Inputs → Classify one-level integration plan → Delegate → Aggregate |
+| Explicit unit + integration request + `level_hint: unit` | Inputs → Classify preserves both complementary levels → Delegate both → Aggregate |
 | Request matches no level signal | Inputs → Classify asks once, no Delegate yet |
 | One level explicitly named at top level | Route directly to that `*-test-creator`; preserve single-level compatibility |
 | `request` or `repo_root` missing | Inputs HARD STOP — ask, no further phase runs |
