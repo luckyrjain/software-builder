@@ -88,6 +88,16 @@ def test_plan_metadata_never_copies_raw_caller_signal():
     assert "<caller signal>" not in text
 
 
+def test_inputs_exempts_framework_execution_context_from_ordinary_pass_through():
+    text = _read("workflow/inputs.md").lower()
+    assert "ordinary specialist-owned fields" in text
+    assert "`execution_context`" in text
+    assert "framework-owned runtime context" in text
+    assert "do not treat it as an ordinary caller field" in text
+    assert "delegate advances it independently for each child" in text
+    assert "| everything else |" not in text
+
+
 def test_delegate_executes_each_planned_level_without_cross_level_mutation():
     text = _read("workflow/delegate.md").lower()
     for token in (
