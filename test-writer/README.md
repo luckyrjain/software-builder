@@ -28,8 +28,8 @@ same behavior are ambiguity, not breadth; ask once instead of dispatching every 
 2. **Plans** one or more complementary levels in stable, de-duplicated order. Real ambiguity asks once.
 3. **Dispatches** every planned specialist independently with caller inputs unchanged; one specialist's
    report is never hidden framing for another.
-4. **Aggregates** `level_reports` without rewriting them. Any blocked, partial, missing, or unanswered
-   planned level prevents overall `COMPLETE`.
+4. **Aggregates** `level_reports` without rewriting them. Any partial, blocked, failed, escalated, missing,
+   or unanswered planned level prevents overall `COMPLETE`; specialist terminal outcomes remain distinct.
 
 ## When to use
 
@@ -49,9 +49,11 @@ More scenarios: [examples.md](examples.md).
 
 ## What you get
 
-An ordered `test_plan`, one verbatim specialist report per planned level, and orchestration status
-`COMPLETE`, `PARTIAL`, or `BLOCKED`. Specialist reports remain authoritative for their own test surface.
-Shared report rules: [test-creation-principles.md §4](../docs/skill-framework/shared/test-creation-principles.md#4-reporting-format-shared-skeleton).
+An ordered `test_plan`, one verbatim specialist report per planned level, and internal orchestration status
+`COMPLETE`, `PARTIAL`, `BLOCKED`, `FAILED`, or `ESCALATED`. In the canonical runtime envelope,
+`COMPLETE` maps to `SUCCESS`; the other statuses remain unchanged. Specialist reports remain authoritative
+for their own test surface. Shared report rules:
+[test-creation-principles.md §4](../docs/skill-framework/shared/test-creation-principles.md#4-reporting-format-shared-skeleton).
 
 ## Install
 
