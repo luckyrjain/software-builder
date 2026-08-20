@@ -59,22 +59,20 @@ def _lens_errors(
     evidence = lens.get("review_evidence")
     reviewed_identity = lens.get("reviewed_change_identity")
 
-    if status == "CLEAN" and not isinstance(evidence, dict):
-        errors.append(f"{name} CLEAN requires review_evidence")
-        return errors
     if status != "CLEAN":
+        errors.append(f"{name} must be CLEAN before lifecycle readiness")
+        return errors
+    if not isinstance(evidence, dict):
+        errors.append(f"{name} CLEAN requires review_evidence")
         return errors
 
     if not isinstance(reviewed_identity, dict):
         errors.append(f"{name} CLEAN requires reviewed_change_identity")
-    elif isinstance(evidence, dict) and evidence.get("change_identity") != reviewed_identity:
+    elif evidence.get("change_identity") != reviewed_identity:
         errors.append(f"{name} reviewed_change_identity must equal review_evidence.change_identity")
 
     shared = _load_shared_runtime()
-    sha_transition = _identity_shas_changed(
-        evidence.get("change_identity") if isinstance(evidence, dict) else None,
-        current_identity,
-    )
+    sha_transition = _identity_shas_changed(evidence.get("change_identity"), current_identity)
     if sha_transition:
         if type(conflict_resolution_occurred) is not bool:
             errors.append(
@@ -103,8 +101,32 @@ def _lens_errors(
     return errors
 
 
+def _merge_policy_errors(readiness: dict[str, object]) -> list[str]:
+    """Validate the pre-existing repository completion gates, not just review freshness."""
+    errors: list[str] = []
+    if readiness.get("acceptance_criteria_complete") is not True:
+        errors.append("acceptance criteria must be complete before lifecycle readiness")
+
+    blockers = readiness.get("accepted_blocking_findings_open")
+    if type(blockers) is not int or blockers != 0:
+        errors.append("accepted_blocking_findings_open must be integer 0 before lifecycle readiness")
+
+    if readiness.get("required_approvals_present") is not True:
+        errors.append("required approvals must be satisfied before lifecycle readiness")
+
+    threads = readiness.get("blocking_threads_open")
+    if type(threads) is not int or threads != 0:
+        errors.append("blocking_threads_open must be integer 0 before lifecycle readiness")
+
+    if readiness.get("integration_state_valid") is not True:
+        errors.append("integration state must be valid before lifecycle readiness")
+    if readiness.get("circuit_breaker_active") is not False:
+        errors.append("circuit breaker must be explicitly inactive before lifecycle readiness")
+    return errors
+
+
 def validate_lifecycle_state(state: object) -> list[str]:
-    """Validate the official loop state before READY, COMPLETE, or merge."""
+    """Validate eligibility for READY, COMPLETE, or merge from official loop state."""
     if not isinstance(state, dict):
         return ["lifecycle state must be an object"]
 
@@ -141,6 +163,8 @@ def validate_lifecycle_state(state: object) -> list[str]:
     if isinstance(current_identity, dict) and isinstance(current_head, str):
         if not _same_hex(current_identity.get("head_sha"), current_head):
             errors.append("workspace.change_identity.head_sha must equal workspace.current_head_commit")
+    elif not isinstance(current_head, str):
+        errors.append("workspace.current_head_commit must be present for lifecycle readiness")
 
     lens_a = _mapping(review.get("lens_a"))
     lens_b = _mapping(review.get("lens_b"))
@@ -174,23 +198,15 @@ def validate_lifecycle_state(state: object) -> list[str]:
 
     if third_party is True:
         errors.append("third_party_change_detected blocks lifecycle readiness until re-baselined and re-reviewed")
+    elif third_party is not False:
+        errors.append("third_party_change_detected must be explicitly false before lifecycle readiness")
 
-    if ci.get("required_checks_green") is True:
+    if ci.get("required_checks_green") is not True:
+        errors.append("required checks must be green before lifecycle readiness")
+    else:
         ci_commit = ci.get("commit")
         if not _same_hex(ci_commit, current_head):
             errors.append("required checks are not authoritative for current head: ci.commit must equal current_head_commit")
 
-    ready = readiness.get("ready") is True or task.get("status") in {"READY", "COMPLETE"}
-    if ready:
-        if identity_errors:
-            errors.append("ready cannot be true with invalid current change_identity")
-        if lens_a.get("status") != "CLEAN" or lens_b.get("status") != "CLEAN":
-            errors.append("ready cannot be true until both review lenses are CLEAN")
-        if ci.get("required_checks_green") is not True:
-            errors.append("ready cannot be true until required checks are green")
-        if third_party is not False:
-            errors.append("ready cannot be true unless third_party_change_detected is explicitly false")
-        if errors and not any(error.startswith("ready cannot be true") for error in errors):
-            errors.append("ready cannot be true while lifecycle validation has errors")
-
+    errors.extend(_merge_policy_errors(readiness))
     return errors
