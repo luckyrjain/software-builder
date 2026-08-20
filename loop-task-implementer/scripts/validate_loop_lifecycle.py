@@ -12,17 +12,12 @@ _UNSET = object()
 
 
 def _load_shared_runtime() -> ModuleType:
-    candidates = (
-        SKILL_ROOT / "docs/skill-framework/shared/review_contract_runtime.py",
-        SKILL_ROOT.parent / "docs/skill-framework/shared/review_contract_runtime.py",
-    )
-    path = next((candidate for candidate in candidates if candidate.is_file()), None)
-    if path is None:
-        checked = ", ".join(str(candidate) for candidate in candidates)
-        raise RuntimeError(f"unable to load shared review runtime; checked: {checked}")
+    path = SKILL_ROOT / "docs/skill-framework/shared/review_contract_runtime.py"
+    if not path.is_file():
+        raise RuntimeError(f"unable to load packaged shared review runtime: {path}")
     spec = importlib.util.spec_from_file_location("loop_shared_review_contract_runtime", path)
     if spec is None or spec.loader is None:
-        raise RuntimeError(f"unable to load shared review runtime: {path}")
+        raise RuntimeError(f"unable to load packaged shared review runtime: {path}")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
