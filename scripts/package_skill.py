@@ -181,6 +181,16 @@ def write_manifest(
     manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
+def _shared_script(repo_root: Path, filename: str, description: str) -> Path:
+    """Find a shared runtime script in the checkout or packager's source tree."""
+
+    candidates = (repo_root / "scripts" / filename, _SCRIPTS_DIR / filename)
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    raise FileNotFoundError(f"{description} missing: {candidates[0]}")
+
+
 def package_skill(
     *,
     skill: str,
@@ -210,22 +220,15 @@ def package_skill(
     # self-contained installed bundle; source-tree adapters are replaced here
     # so standalone installs never depend on this repository's Python package.
     if skill in TEST_CREATOR_SKILL_SET:
-        guard_src = repo_root / "scripts" / "test_creator_write_guard.py"
-        helper_src = repo_root / "scripts" / "git_paths.py"
-        if not guard_src.is_file():
-            # Keep packaging older extracted/fixture trees useful while the
-            # current packager still guarantees that the installed bundle gets
-            # the canonical implementation.
-            guard_src = _SCRIPTS_DIR / "test_creator_write_guard.py"
-        if not guard_src.is_file():
-            raise FileNotFoundError(f"shared test-creator write guard missing: {guard_src}")
+        guard_src = _shared_script(
+            repo_root,
+            "test_creator_write_guard.py",
+            "shared test-creator write guard",
+        )
+        helper_src = _shared_script(repo_root, "git_paths.py", "shared Git path helper")
         guard_dest = dest / "scripts" / "test_creator_write_guard.py"
         guard_dest.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(guard_src, guard_dest)
-        if not helper_src.is_file():
-            helper_src = _SCRIPTS_DIR / "git_paths.py"
-        if not helper_src.is_file():
-            raise FileNotFoundError(f"shared Git path helper missing: {helper_src}")
         shutil.copy2(helper_src, dest / "scripts" / "git_paths.py")
 
     seed_files = collect_markdown_files(dest)

@@ -13,18 +13,30 @@ import json
 import os
 import subprocess
 from dataclasses import asdict, dataclass
+from functools import lru_cache
 from pathlib import Path
 from typing import Iterable
 
+_TRACKED_PATHS_IMPORT_ERROR: str | None = None
 try:
     from scripts.git_paths import tracked_relative_paths
-except ModuleNotFoundError:
+except ModuleNotFoundError as package_error:
+    if package_error.name not in {"scripts", "scripts.git_paths"}:
+        raise
     import sys
 
     helper_dir = str(Path(__file__).resolve().parent)
     if helper_dir not in sys.path:
         sys.path.insert(0, helper_dir)
-    from git_paths import tracked_relative_paths
+    try:
+        from git_paths import tracked_relative_paths
+    except ModuleNotFoundError as local_error:
+        if local_error.name != "git_paths":
+            raise
+        tracked_relative_paths = None
+        _TRACKED_PATHS_IMPORT_ERROR = (
+            f"shared Git path helper unavailable: {local_error} (package import: {package_error})"
+        )
 
 
 @dataclass(frozen=True)
@@ -109,6 +121,7 @@ def _normalise_planned_paths(
     return tuple(sorted(normalised)), None
 
 
+@lru_cache(maxsize=128)
 def _git_top_level(repo_root: Path) -> tuple[Path | None, str | None]:
     try:
         completed = subprocess.run(
@@ -176,22 +189,22 @@ def _git_status(repo_root: Path) -> tuple[tuple[str, ...], tuple[str, ...], str 
             return (), snapshot, "git status returned an unparseable porcelain record"
         code = record[:2]
         path = _status_path_relative_to_repo(repo_root, git_top_level, record[3:])
-        if path is None:
-            return (), snapshot, "git status returned a path outside repo_root"
-        paths.add(path)
+        if path is not None:
+            paths.add(path)
         if b"R" in code or b"C" in code:
             index += 1
             if index >= len(records) or not records[index]:
                 return (), snapshot, "git status returned an incomplete rename/copy record"
             renamed_path = _status_path_relative_to_repo(repo_root, git_top_level, records[index])
-            if renamed_path is None:
-                return (), snapshot, "git status returned a renamed path outside repo_root"
-            paths.add(renamed_path)
+            if renamed_path is not None:
+                paths.add(renamed_path)
         index += 1
     return tuple(sorted(paths)), snapshot, None
 
 
 def _tracked_paths(repo_root: Path, planned_paths: Iterable[str]) -> tuple[set[str], str | None]:
+    if tracked_relative_paths is None:
+        return set(), _TRACKED_PATHS_IMPORT_ERROR or "shared Git path helper unavailable"
     return tracked_relative_paths(repo_root, planned_paths)
 
 

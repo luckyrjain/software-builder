@@ -24,3 +24,13 @@ def test_tracked_symlink_remains_lexical_and_is_rejected_only_if_packaged(tmp_pa
     assert target not in tracked
     with pytest.raises(ValueError, match="refuses symlink"):
         _is_safe_file(tmp_path.resolve(), link)
+
+
+def test_tracked_path_escape_is_rejected(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(
+        "scripts.registry.generic_package.tracked_relative_paths",
+        lambda root: ({"../outside.txt"}, None),
+    )
+
+    with pytest.raises(ValueError, match="tracked path escapes repository"):
+        _tracked_files(tmp_path)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import tarfile
@@ -160,6 +161,67 @@ def test_all_creator_guards_normalise_git_status_paths_for_nested_repo_root(
     assert result["status"] == "BLOCKED"
     assert result["dirty_paths_before"] == ["generated_test.py"]
     assert result["conflicting_paths"] == ["generated_test.py"]
+
+
+@pytest.mark.parametrize("creator", CREATOR_ROOTS)
+def test_all_creator_guards_ignore_dirty_sibling_paths_in_a_monorepo(
+    tmp_path: Path,
+    creator: str,
+) -> None:
+    repo = _git_repo(tmp_path)
+    nested = repo / "services" / "orders"
+    sibling = repo / "services" / "payments"
+    nested.mkdir(parents=True)
+    sibling.mkdir(parents=True)
+    dirty = sibling / "existing_test.py"
+    dirty.write_text("committed\n", encoding="utf-8")
+    _run("add", "services/payments/existing_test.py", cwd=repo)
+    _run(
+        "-c",
+        "user.name=Batch 6B",
+        "-c",
+        "user.email=batch6b@example.invalid",
+        "commit",
+        "-qm",
+        "sibling fixture",
+        cwd=repo,
+    )
+    dirty.write_text("unrelated user change\n", encoding="utf-8")
+
+    result = _run_creator_guard(creator, nested, "generated_test.py")
+
+    assert result["allowed"] is True
+    assert result["dirty_paths_before"] == []
+    assert result["conflicting_paths"] == []
+    assert result["status_snapshot"] == [" M services/payments/existing_test.py"]
+
+
+def test_guard_fails_closed_when_the_shared_helper_is_missing(tmp_path: Path) -> None:
+    repo = _git_repo(tmp_path / "repo")
+    standalone = tmp_path / "standalone_guard.py"
+    standalone.write_bytes((ROOT / "scripts" / "test_creator_write_guard.py").read_bytes())
+    environment = {key: value for key, value in os.environ.items() if key != "PYTHONPATH"}
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(standalone),
+            "--repo-root",
+            str(repo),
+            "--planned-file",
+            "generated_test.py",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        cwd=tmp_path,
+        env=environment,
+    )
+
+    assert completed.returncode == 2
+    result = json.loads(completed.stdout)
+    assert result["status"] == "BLOCKED"
+    assert "shared Git path helper unavailable" in result["reason"]
 
 
 def test_guard_fails_closed_when_git_status_cannot_be_read(tmp_path: Path) -> None:

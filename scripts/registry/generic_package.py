@@ -85,7 +85,17 @@ def _tracked_files(root: Path) -> set[Path]:
     relative_paths, error = tracked_relative_paths(root)
     if error:
         raise ValueError(f"generic package requires a readable Git index: {error}")
-    return {root / rel for rel in relative_paths}
+    root = root.resolve()
+    tracked: set[Path] = set()
+    for rel in relative_paths:
+        path = root / rel
+        try:
+            resolved = path.resolve(strict=False)
+            resolved.relative_to(root)
+        except (OSError, RuntimeError, ValueError) as exc:
+            raise ValueError(f"generic package tracked path escapes repository: {rel}") from exc
+        tracked.add(path)
+    return tracked
 
 
 def _validate_output_path(root: Path, output: Path) -> None:
