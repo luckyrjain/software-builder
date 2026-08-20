@@ -112,9 +112,12 @@ artifact_ownership:
   digest_report:
     mode: shared
     owners: [new-hire-guide, release-readiness-checker, weekly-squad-digest]
+  test_orchestration_result:
+    mode: canonical
+    owners: [test-writer]
   test_suite:
     mode: shared
-    owners: [unit-test-creator, integration-test-creator, contract-test-creator, e2e-test-creator, api-test-creator, test-writer]
+    owners: [unit-test-creator, integration-test-creator, contract-test-creator, e2e-test-creator, api-test-creator]
   prd_report:
     mode: canonical
     owners: [prd-architect]

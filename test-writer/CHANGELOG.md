@@ -3,6 +3,64 @@
 All notable changes to the test-writer skill. Per-file `workflow_version` in `workflow/*.md` frontmatter
 should match the version of the latest entry below that names that file.
 
+## [2.3.0] — 2026-08-20
+
+### Hardened
+
+- Composed invocation now uses a typed `implementation_task` handoff, and test-writer emits the
+  canonical `test_orchestration_result` artifact rather than claiming ownership of specialist
+  `test_suite` artifacts. Pre-dispatch blocks and dispatched child reports are distinguished explicitly.
+
+### Versioned workflow files
+
+- `workflow/inputs.md` → 2.4
+- `workflow/delegate.md` → 2.5
+- `workflow/aggregate.md` → 1.5
+
+## [2.2.0] — 2026-08-20
+
+### Added
+
+- **Multi-level orchestration** — test-writer can now build an ordered, de-duplicated `test_plan` for
+  two or more explicitly requested complementary test surfaces and dispatch each existing specialist in
+  a fresh context. A single explicitly named level still routes directly to that specialist.
+- New `workflow/aggregate.md` keeps each specialist report verbatim while deriving orchestration
+  completion state (`COMPLETE`, `PARTIAL`, `BLOCKED`, `FAILED`, `ESCALATED`) and fails closed when a
+  planned level is missing, blocked, unanswered, or incomplete. Internal `COMPLETE` maps to portable
+  `skill_result.status: SUCCESS`; the other portable specialist outcomes are propagated losslessly.
+- Shared routing now distinguishes complementary breadth from competing interpretations: named unit +
+  integration coverage routes through test-writer; an ambiguous phrase such as "test the payment flow"
+  still asks once rather than running every plausible level.
+- Added a golden injection fixture for the successful multi-level-plan path, proving malicious caller text
+  remains absent from rendered orchestration metadata while genuine unit + integration signals survive.
+
+### Hardened
+
+- `level_hint` is a resolved signal, not an instruction to discard other explicitly requested
+  complementary levels. Conflicting signals for one surface ask once instead of silently narrowing scope.
+- `test_plan` metadata is fixed-vocabulary (`levels` + `signal_source`) and never copies raw caller text,
+  preventing untrusted request content from becoming a second unescaped orchestration render path.
+- When multiple sources support the same planned level, `signal_source` now uses deterministic provenance
+  precedence (`explicit_request` > `clarification` > `level_hint`) without changing plan breadth.
+- Delegated canonical statuses are preserved explicitly: specialist `SUCCESS` becomes internal
+  `COMPLETE`; `PARTIAL`, `BLOCKED`, `FAILED`, and `ESCALATED` remain distinct. Mixed outcomes use
+  deterministic precedence (`FAILED` > `BLOCKED` > `ESCALATED` > `PARTIAL` > `COMPLETE`).
+- `unfinished_levels` is now a declared Aggregate output and is derived deterministically in plan order
+  from every non-`COMPLETE` or missing planned level, including terminal `FAILED`/`ESCALATED` outcomes.
+- Child dispatch now advances framework-owned `execution_context` per the inherited recursion contract
+  instead of copying it unchanged. Ordinary caller fields still pass through unchanged, while each
+  sibling derives its own child context from the same parent and a rejected recursion guard blocks only
+  that planned level. Inputs also explicitly excludes `execution_context` from ordinary pass-through.
+- Multi-level contract tests now assert semantics case-insensitively and cover hint precedence, the
+  fixed-vocabulary metadata boundary, portable status mapping, and mixed-outcome precedence.
+
+### Versioned workflow files
+
+- `workflow/inputs.md` → 2.3
+- `workflow/classify.md` → 2.4
+- `workflow/delegate.md` → 2.3
+- `workflow/aggregate.md` → 1.3
+
 ## [2.1.1] — 2026-08-10
 
 ### Fixed
@@ -97,9 +155,9 @@ should match the version of the latest entry below that names that file.
 - `workflow/report.md` — `TEST_WRITER_REPORT.md` rendering rules; never upgrades a status, always
   surfaces production-bug findings plainly.
 - `scripts/detect-test-framework.sh` + `scripts/test-framework-markers.sh` — marker-file detection across
-  pytest, unittest, Jest, Vitest, Mocha, Go `testing`, JUnit 4/5, RSpec, Minitest, xUnit/NUnit/MSTest, and
-  `cargo test`; `tests/test_detect_test_framework.py` pytest suite plus fixture repos under
-  `tests/fixtures/test-framework-detect/`.
+  pytest, unittest, Jest, Vitest, Mocha, Go `testing`, JUnit 4/5, RSpec/Minitest,
+  xUnit/NUnit/MSTest, and `cargo test`; `tests/test_detect_test_framework.py` pytest suite plus fixture
+  repos under `tests/fixtures/test-framework-detect/`.
 - `reference/{skill-contract,phase-index,lazy-load-index,gate-policy,test-quality-checklist,
   framework-detection,report-format,smoke-test,pressure-tests}.md`.
 - Shared framework compliance (prompt-injection, skill-routing, cross-skill-escalation, examples

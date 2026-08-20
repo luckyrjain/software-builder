@@ -34,6 +34,10 @@ def test_golden_fixtures_load() -> None:
     assert ("loop-task-implementer", "golden-cancellation-stops-before-merge") in case_ids
     assert ("loop-task-implementer", "golden-merge-forcing-injection-blocked") in case_ids
     assert ("test-writer", "golden-injection-ask-gate-not-bypassed") in case_ids
+    assert ("test-writer", "golden-injection-plan-metadata-fixed-vocabulary") in case_ids
+    assert ("test-writer", "golden-test-writer-multilevel-complete") in case_ids
+    assert ("test-writer", "golden-test-writer-multilevel-failed") in case_ids
+    assert ("test-writer", "golden-test-writer-ambiguous-no-dispatch") in case_ids
     assert ("mysql-to-postgres-sql", "golden-injection-scan-gate-not-bypassed") in case_ids
     assert ("mysql-to-postgres-sql", "golden-injection-inert-service-migration-report") in case_ids
     assert ("api-test-creator", "golden-injection-status-not-upgraded") in case_ids
@@ -62,7 +66,7 @@ def test_golden_fixtures_load() -> None:
     # tripping load_golden_fixtures' own malformed-fixture error. It won't catch a delete+add that
     # happens to net to the same count, but it catches the much more common single accidental
     # deletion or duplication. Bump this number when you intentionally add or remove a fixture.
-    assert len(cases) == 50
+    assert len(cases) == 54
 
 
 def test_golden_cases_pass_on_repository() -> None:

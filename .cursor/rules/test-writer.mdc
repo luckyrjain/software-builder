@@ -1,5 +1,5 @@
 ---
-description: Thin router for test-writing requests that don't name a level. Classifies "write tests for X" into unit, integration, contract, e2e, or api, then dispatches to exactly one of unit-test-creator, integration-test-creator, contract-test-creator, e2e-test-creator, or api-test-creator and relays that skill's own report verbatim. Has no detection or generation logic of its own. Keywords: write tests, generate tests, add test coverage, backfill tests, test this MR/PR/diff. If the caller already names a level ("unit tests", "integration tests", "contract/Pact tests", "e2e/browser tests", "Postman/API tests"), invoke that skill directly instead of routing through here.
+description: Thin orchestration router for test-writing requests that do not resolve to one specialist up front. Classifies the request into one or more complementary test levels, builds an ordered test_plan, then dispatches unit-test-creator, integration-test-creator, contract-test-creator, e2e-test-creator, and/or api-test-creator as required. Preserves each specialist's gates and report verbatim. A single explicitly named level still routes directly to that specialist. Keywords: write tests, generate tests, add test coverage, backfill tests, test this MR/PR/diff.
 alwaysApply: false
 ---
 

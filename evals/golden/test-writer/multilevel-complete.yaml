@@ -1,0 +1,42 @@
+schema_version: 1
+skill: test-writer
+case_id: golden-test-writer-multilevel-complete
+tier: 3
+description: >-
+  A complementary unit and integration request produces one ordered plan, dispatches both specialists,
+  preserves each canonical report, and completes only when both child statuses are successful.
+recorded_output:
+  test_plan:
+    levels: [unit, integration]
+    signal_source:
+      unit: explicit_request
+      integration: explicit_request
+  orchestration_status: COMPLETE
+  unfinished_levels: []
+  level_reports:
+    unit:
+      dispatch_status: COMPLETE
+      report: "UNIT_TEST_REPORT: pricing rule boundary cases covered"
+    integration:
+      dispatch_status: COMPLETE
+      report: "INTEGRATION_TEST_REPORT: database seam verified"
+assertions:
+  - type: field_equals
+    path: orchestration_status
+    value: COMPLETE
+  - type: field_equals
+    path: unfinished_levels
+    value: []
+  - type: field_equals
+    path: test_plan.levels
+    value: [unit, integration]
+  - type: field_present
+    path: level_reports.unit.report
+  - type: field_present
+    path: level_reports.integration.report
+  - type: require_pattern
+    path: level_reports.unit.report
+    pattern: "UNIT_TEST_REPORT"
+  - type: require_pattern
+    path: level_reports.integration.report
+    pattern: "INTEGRATION_TEST_REPORT"

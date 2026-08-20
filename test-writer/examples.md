@@ -6,91 +6,133 @@ Conventions: [examples-conventions.md](../docs/skill-framework/shared/examples-c
 
 | # | User says | Resolves to | Notes |
 |---|-----------|-------------|-------|
-| 1 | "Write tests for MR !123" | test-writer classifies → dispatches | Level not stated |
-| 2 | "Add unit tests for `src/utils/slugify.py`" | **unit-test-creator** directly | Level named — skip the router |
-| 3 | "Write an integration test against the real payments DB" | **integration-test-creator** directly | Level named |
-| 4 | "Write a Pact contract test for the billing consumer" | **contract-test-creator** directly | Level named |
-| 5 | "Write an e2e test for the checkout journey" | **e2e-test-creator** directly | Level named |
-| 6 | "Write a Postman/API test for `POST /api/orders`" | **api-test-creator** directly | Level named |
-| 7 | "Test the payment flow" (no level stated) | test-writer, Classify asks | Ambiguous — integration vs. e2e |
-| 8 | "Review the tests on MR !482 for quality" | **pr-review**, not test-writer | Reviewing existing tests, not writing new ones |
-| 9 | "Implement the refund feature" | **loop-task-implementer**, not test-writer | Production feature, not tests |
+| 1 | "Write tests for MR !123" | test-writer classifies/plans | Level not stated |
+| 2 | "Add unit tests for `src/utils/slugify.py`" | **unit-test-creator** directly | Single level named — skip router |
+| 3 | "Write an integration test against the real payments DB" | **integration-test-creator** directly | Single level named |
+| 4 | "Write a Pact contract test for the billing consumer" | **contract-test-creator** directly | Single level named |
+| 5 | "Write an e2e test for the checkout journey" | **e2e-test-creator** directly | Single level named |
+| 6 | "Write a Postman/API test for `POST /api/orders`" | **api-test-creator** directly | Single level named |
+| 7 | "Unit tests for pricing rules and integration tests for the DB seam" | test-writer plans unit + integration | Complementary surfaces |
+| 8 | "Test the payment flow" | test-writer asks | Ambiguous integration vs. e2e; ambiguity is not breadth |
+| 9 | "Review the tests on MR !482 for quality" | **pr-review** | Existing-test review, not creation |
+| 10 | "Implement the refund feature" | **loop-task-implementer** | Production implementation |
 
-## Scenario: unambiguous classification, straight dispatch
+## Scenario: complementary multi-level plan
 
-**User:** "Write unit tests for the new `apply_discount` function" (level not explicitly named, but the
-keyword "unit" is present)
+**User:** "Write unit tests for the pricing rules and integration tests for the repository/DB seam."
 
 **Agent:**
-1. Inputs — `request`, `repo_root` resolved
-2. Classify — "unit" keyword match, unambiguous
+1. Inputs — resolves request and `repo_root`.
+2. Classify — two explicit, complementary surfaces; creates an ordered, de-duplicated plan.
 
-**Expected fragments:**
-
+```yaml
+test_plan:
+  levels: [unit, integration]
+  signal_source:
+    unit: explicit_request
+    integration: explicit_request
 ```
-level: unit → dispatching to unit-test-creator
-```
 
-3. Delegate — invokes **unit-test-creator** with `repo_root` unchanged; relays its
-   `UNIT_TEST_REPORT.md` verbatim, including its own `apply_discount: WRITTEN_PASSING` status line.
+3. Delegate — invokes **unit-test-creator** and **integration-test-creator** in fresh specialist contexts,
+   passing ordinary caller fields unchanged. For each child, test-writer independently advances the
+   framework-owned `execution_context` from the same parent per runtime recursion protection. The unit
+   report is not injected into the integration prompt.
+4. Aggregate — preserves both reports verbatim under `level_reports` and reports internal `COMPLETE` only
+   if both specialists return canonical `SUCCESS`; the emitted runtime `skill_result.status` is `SUCCESS`.
 
 ## Scenario: ambiguous request, ask once
 
-**User:** "Test the payment flow end to end... well, make sure the pieces talk to each other correctly"
+**User:** "Test the payment flow."
 
-**Agent:**
-1. Inputs → Classify — matches both "integration" (pieces talk to each other) and "e2e" (end to end)
-   language
+**Agent:** Classify sees alternative interpretations of the same surface rather than complementary work.
 
-**Expected fragments:**
-
-```
-This could mean an integration test (the payment-processing seam against a real dependency) or an e2e
-test (the full checkout journey through the UI) — which do you want?
+```text
+This could mean an integration test of the payment-processing seam against a real dependency or an e2e
+browser journey through checkout. Which surface do you want?
 ```
 
-2. Caller answers "integration" → Delegate dispatches to **integration-test-creator**, no further asking
+No specialist dispatch occurs until the caller resolves the ambiguity.
 
-## Scenario: level_hint resolves without asking
+## Scenario: level_hint resolves a one-level plan
 
 **User:** "Add test coverage for the billing API", `level_hint: contract`
 
 **Agent:**
-1. Inputs → Classify — `level_hint: contract` resolves directly, no question asked
-2. Delegate — dispatches to **contract-test-creator**, which then asks its own required question
-   (`role: consumer | provider`) since that wasn't supplied — relayed as-is, test-writer doesn't
-   pre-answer it.
+1. Inputs → Classify — `level_hint: contract` creates a one-level plan with
+   `signal_source.contract: level_hint`.
+2. Delegate — dispatches **contract-test-creator** with ordinary caller inputs unchanged and a child
+   `execution_context` advanced from the parent.
+3. If contract-test-creator requires `role: consumer | provider`, that specialist asks; test-writer does
+   not pre-answer the gate.
+4. Aggregate reflects the specialist's actual status without rewriting its report.
 
-**Expected fragments:**
+## Scenario: recursion guard blocks one planned child
 
+The parent context permits unit but rejects an integration handoff because the recursion guard would
+revisit a visited skill or exceed the allowed depth.
+
+**Agent:** test-writer does not dispatch the rejected child. It records integration as `BLOCKED`, keeps any
+completed unit report, and lets Aggregate include integration in `unfinished_levels`. Sibling contexts are
+derived independently, so a unit dispatch never increments integration's starting depth.
+
+## Scenario: incomplete planned level blocks completion
+
+**User:** "Add unit and integration coverage for the charge handler."
+
+Unit generation completes, but integration-test-creator cannot reach the required real dependency.
+
+```yaml
+test_plan:
+  levels: [unit, integration]
+  signal_source:
+    unit: explicit_request
+    integration: explicit_request
+orchestration_status: BLOCKED
+unfinished_levels: [integration]
+level_reports:
+  unit:
+    dispatch_status: COMPLETE
+    report: <verbatim UNIT_TEST_REPORT.md>
+  integration:
+    dispatch_status: BLOCKED
+    report: <verbatim specialist blocked report>
 ```
-level: contract (from level_hint) → dispatching to contract-test-creator
+
+The completed unit report is preserved; test-writer must not report overall `COMPLETE`.
+
+## Scenario: specialist failure propagates
+
+Unit returns canonical `SUCCESS`, but integration-test-creator attempts execution and returns canonical
+`FAILED`.
+
+```yaml
+orchestration_status: FAILED
+level_reports:
+  unit:
+    dispatch_status: COMPLETE
+    report: <verbatim UNIT_TEST_REPORT.md>
+  integration:
+    dispatch_status: FAILED
+    report: <verbatim specialist failed report>
 ```
 
-```
-contract-test-creator: is this the consumer side or the provider side of the interaction?
-```
+The canonical test-writer `skill_result.status` is `FAILED`; failure is not collapsed to `BLOCKED` or
+`PARTIAL`.
 
-## Scenario: degraded path — no clear level at all
+## Scenario: specialist escalation propagates
 
-**User:** "Just make sure this doesn't break"
+If a planned specialist returns canonical `ESCALATED` and no planned level is failed or blocked,
+test-writer records `dispatch_status: ESCALATED`, aggregates `ESCALATED`, and preserves the specialist's
+recommended next owner/handoff verbatim.
 
-**Agent:** Classify finds zero keyword matches.
+## Scenario: no clear level
 
-**Expected fragments:**
+**User:** "Just make sure this doesn't break."
 
-```
-Which kind of test do you want — unit (isolated, mocked), integration (a real dependency), contract
-(Pact-style consumer/provider agreement), e2e (browser user journey), or api (black-box Postman/Newman
-request/response suite)?
-```
+Classify has no caller-visible level signal and asks once. It does not inspect code to decide that unit is
+the easiest default.
 
-No dispatch happens until the caller answers.
+## Scenario: production-bug handoff
 
-## Scenario: cross-skill handoff (relayed from the dispatched skill)
-
-**User (after test-writer's relayed report shows a production-bug finding):** "Fix the bug it found"
-
-**Agent:** The finding and its suggested next skill came from the dispatched skill's own report
-unchanged — test-writer hands off exactly as that skill's report already said (typically
-**loop-task-implementer**), adding nothing of its own.
+If a specialist report contains a production-bug finding, test-writer preserves that report and its own
+suggested next skill unchanged. It does not reinterpret the finding or silently fix production code.
