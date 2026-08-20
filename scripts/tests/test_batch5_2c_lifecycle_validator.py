@@ -48,7 +48,7 @@ def _state(identity=None):
     identity = identity or _identity()
     evidence = _evidence(identity)
     return {
-        "task": {"status": "READY"},
+        "task": {"status": "READY", "requirements_ref": None},
         "workspace": {
             "current_head_commit": identity["head_sha"],
             "change_identity": identity,
@@ -82,6 +82,21 @@ def test_ready_state_rejects_unresolved_third_party_branch_change():
     state["workspace"]["third_party_change_detected"] = True
     errors = _load().validate_lifecycle_state(state)
     assert any("third_party_change_detected blocks lifecycle readiness" in error for error in errors)
+
+
+def test_ready_state_rejects_missing_requirements_ref_state():
+    state = _state()
+    del state["task"]["requirements_ref"]
+    errors = _load().validate_lifecycle_state(state)
+    assert any("task.requirements_ref must be present" in error for error in errors)
+
+
+def test_ready_state_rejects_unknown_third_party_change_state():
+    state = _state()
+    del state["workspace"]["third_party_change_detected"]
+    errors = _load().validate_lifecycle_state(state)
+    assert any("third_party_change_detected must be an explicit boolean" in error for error in errors)
+    assert any("ready cannot be true unless third_party_change_detected is explicitly false" in error for error in errors)
 
 
 def test_sha_transition_with_unknown_conflict_status_fails_closed():
