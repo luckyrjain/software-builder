@@ -1,42 +1,47 @@
 # test-writer
 
-**A router, not a generator.** When a caller asks to "write tests" without saying what kind, test-writer
-classifies the request into one of five levels and dispatches to the matching specialist skill:
+**A router/orchestrator, not a generator.** When a caller asks to write tests without one already-resolved
+specialist, test-writer classifies the request into one or more complementary test levels and dispatches
+the existing specialist skills:
 
 | Level | Skill |
 |-------|-------|
 | Unit — isolated, fast, every external dependency mocked | [unit-test-creator](../unit-test-creator/) |
 | Integration — the real seam to one real adjacent dependency | [integration-test-creator](../integration-test-creator/) |
 | Contract — consumer-driven contract agreement (Pact-style) | [contract-test-creator](../contract-test-creator/) |
-| E2E — full user journey through a real browser UI | [e2e-test-creator](../e2e-test-creator/) |
 | API — black-box Postman/Newman request/response assertions against a real running API | [api-test-creator](../api-test-creator/) |
+| E2E — full user journey through a real browser UI | [e2e-test-creator](../e2e-test-creator/) |
 
-Mirrors the composition pattern of `who-owns-x-bot` and `release-readiness-checker`: test-writer has no
-detection or generation logic of its own — it classifies, dispatches, and relays the dispatched skill's
-own report verbatim.
+It has no detection or generation logic of its own. It builds an ordered, de-duplicated `test_plan`,
+dispatches each planned specialist in a fresh context with caller inputs unchanged, preserves every
+specialist report verbatim, and derives only orchestration completion state around those reports.
 
-**If you already know the level**, invoke that `*-test-creator` skill directly ("write unit tests for
-X") — this router exists for the "just write tests" case where the level isn't stated yet.
+**Single-level compatibility:** if the caller already names one level, invoke that `*-test-creator`
+directly. **Multi-level breadth:** if the caller explicitly asks for complementary surfaces such as unit
++ integration or API + e2e, use test-writer to coordinate them. Multiple possible interpretations of the
+same behavior are ambiguity, not breadth; ask once instead of dispatching every candidate.
 
 ## What it does
 
-1. **Classifies** the request against [reference/level-classification.md](reference/level-classification.md)
-   — the same trigger phrases [skill-routing.md](../docs/skill-framework/shared/skill-routing.md) uses to
-   route callers directly. Asks once, listing the real candidates, whenever the request is genuinely
-   ambiguous between levels or matches none — never guesses.
-2. **Dispatches** to exactly one of the five skills, passing every input field through unchanged.
-3. **Relays** that skill's report verbatim — no reformatting, no re-summarizing.
+1. **Classifies** caller intent using [reference/level-classification.md](reference/level-classification.md)
+   without inspecting implementation code to manufacture a level.
+2. **Plans** one or more complementary levels in stable, de-duplicated order. Real ambiguity asks once.
+3. **Dispatches** every planned specialist independently with caller inputs unchanged; one specialist's
+   report is never hidden framing for another.
+4. **Aggregates** `level_reports` without rewriting them. Any blocked, partial, missing, or unanswered
+   planned level prevents overall `COMPLETE`.
 
 ## When to use
 
-"Write tests for MR !123", "add test coverage for `<file>`" — level not stated. Not for reviewing
-existing test quality (**pr-review**) or implementing the production feature itself
-(**loop-task-implementer**). Full routing table: [SKILL.md](SKILL.md#when-to-use-not-to-use).
+Use for generic or multi-level test-writing requests such as "write tests for MR !123" or "add unit and
+integration coverage for this change". Do not use for reviewing existing test quality (**pr-review**) or
+implementing the production feature itself (**loop-task-implementer**). A top-level request naming one
+level should go directly to its specialist.
 
 ## Invocation examples
 
-```
-request: "write tests for the payments module", repo_root: .
+```text
+request: "unit tests for pricing rules and integration tests for the DB seam", repo_root: .
 request: "test the payment flow", repo_root: .    # ambiguous — asks integration vs. e2e
 ```
 
@@ -44,9 +49,9 @@ More scenarios: [examples.md](examples.md).
 
 ## What you get
 
-Whatever the dispatched skill produces — `UNIT_TEST_REPORT.md`, `INTEGRATION_TEST_REPORT.md`,
-`CONTRACT_TEST_REPORT.md`, `E2E_TEST_REPORT.md`, or `API_TEST_REPORT.md` — relayed unchanged. Shared
-report shape: [test-creation-principles.md §4](../docs/skill-framework/shared/test-creation-principles.md).
+An ordered `test_plan`, one verbatim specialist report per planned level, and orchestration status
+`COMPLETE`, `PARTIAL`, or `BLOCKED`. Specialist reports remain authoritative for their own test surface.
+Shared report rules: [test-creation-principles.md §4](../docs/skill-framework/shared/test-creation-principles.md#4-reporting-format-shared-skeleton).
 
 ## Install
 
@@ -55,16 +60,14 @@ cd software-builder
 make install-test-writer
 ```
 
-Chains all five dispatch targets (`install-unit-test-creator`, `install-integration-test-creator`,
-`install-contract-test-creator`, `install-e2e-test-creator`, `install-api-test-creator`) automatically —
-the router has no detection or generation logic of its own and is useless without them.
+Installation chains all five specialist skills automatically. test-writer itself still contains no test
+generation/detection implementation.
 
 ## Related skills
 
-- **unit-test-creator**, **integration-test-creator**, **contract-test-creator**, **e2e-test-creator**,
-  **api-test-creator** — the five dispatch targets; each is fully usable standalone without this router
-- **pr-review** — reviews existing test quality; test-writer only routes to *writing* new tests
-- **loop-task-implementer** — implements production features/fixes; dispatched skills hand production-bug
-  findings to it rather than fixing them themselves
+- **unit-test-creator**, **integration-test-creator**, **contract-test-creator**, **api-test-creator**,
+  **e2e-test-creator** — independently authoritative test specialists
+- **pr-review** — reviews existing test quality
+- **loop-task-implementer** — implements production features/fixes and handles production-bug handoffs
 
 Agent instructions: [SKILL.md](SKILL.md).
