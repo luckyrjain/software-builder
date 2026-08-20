@@ -201,6 +201,14 @@ def test_ready_state_rejects_unknown_third_party_change_state():
     assert any("third_party_change_detected must be an explicit boolean" in error for error in errors)
 
 
+def test_conflict_status_rejects_integer_boolean_aliases():
+    for value in (0, 1):
+        state = _state()
+        state["workspace"]["conflict_resolution_occurred"] = value
+        errors = _load().validate_lifecycle_state(state)
+        assert any("conflict_resolution_occurred must be boolean or null" in error for error in errors)
+
+
 def test_sha_transition_with_unknown_conflict_status_fails_closed():
     reviewed = _identity()
     current = _identity(base="d" * 40, merge_base="d" * 40)
