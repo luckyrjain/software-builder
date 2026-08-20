@@ -1,5 +1,5 @@
 ---
-workflow_version: 1.1
+workflow_version: 1.2
 phase: lifecycle-gate
 produces:
   lifecycle_validation: object
@@ -32,14 +32,21 @@ transition was conflict-free. Unknown status or missing provenance fails closed;
 occurred before a lens was rerun does not permanently poison fresh evidence already bound to the current identity;
 only evidence that predates the conflict/identity transition is invalidated.
 
-Refresh the authoritative requirements surface when one exists. Then run
-`loop-task-implementer/scripts/validate_loop_lifecycle.py` against the official state with the freshly rebuilt current
-`change_identity`. Only a zero-error result may set readiness or permit completion.
+Refresh the authoritative requirements surface and persist it as `task.requirements_ref`: the normalized requirements
+object when one exists, otherwise explicit `null`. A missing requirements field is not equivalent to no requirements.
+Then run `loop-task-implementer/scripts/validate_loop_lifecycle.py` against the official state with the freshly rebuilt
+current `change_identity`. Only a zero-error result may set readiness or permit completion.
 
 The validator must prove all of the following on the same current change:
 
 - Lens A and Lens B are CLEAN and each has valid shared `review_evidence` bound to the current `change_identity`.
 - Both lenses reviewed the same shared identity; a content change or conflict resolution after a lens review invalidates that evidence until the lens reruns.
+- Each lens satisfies the review-isolation gate. Preserve a real `NOT_ISOLATED` result; it blocks readiness unless an
+  authorized human exception is recorded separately with non-empty provenance. Never relabel degraded review as
+  `ISOLATED` merely because the residual risk was accepted.
+- `merge_readiness.security_sensitive_needs_evidence_unresolved` is integer `0`; authentication, authorization,
+  secrets/credential, and trust-boundary evidence gaps must be resolved or explicitly accepted with recorded human
+  decision provenance before lifecycle readiness.
 - `third_party_change_detected` is false. Any unrecognized branch update blocks readiness until the Orchestrator
   re-baselines the state and reruns every invalidated lens.
 - Authoritative required checks are green for the exact current head: `ci.commit` equals the current head and
