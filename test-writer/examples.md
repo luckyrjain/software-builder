@@ -28,6 +28,9 @@ Conventions: [examples-conventions.md](../docs/skill-framework/shared/examples-c
 ```yaml
 test_plan:
   levels: [unit, integration]
+  signal_source:
+    unit: explicit_request
+    integration: explicit_request
 ```
 
 3. Delegate — invokes **unit-test-creator** and **integration-test-creator** in fresh specialist contexts,
@@ -53,7 +56,8 @@ No specialist dispatch occurs until the caller resolves the ambiguity.
 **User:** "Add test coverage for the billing API", `level_hint: contract`
 
 **Agent:**
-1. Inputs → Classify — `level_hint: contract` creates a one-level plan.
+1. Inputs → Classify — `level_hint: contract` creates a one-level plan with
+   `signal_source.contract: level_hint`.
 2. Delegate — dispatches **contract-test-creator** with caller inputs unchanged.
 3. If contract-test-creator requires `role: consumer | provider`, that specialist asks; test-writer does
    not pre-answer the gate.
@@ -66,6 +70,11 @@ No specialist dispatch occurs until the caller resolves the ambiguity.
 Unit generation completes, but integration-test-creator cannot reach the required real dependency.
 
 ```yaml
+test_plan:
+  levels: [unit, integration]
+  signal_source:
+    unit: explicit_request
+    integration: explicit_request
 orchestration_status: BLOCKED
 unfinished_levels: [integration]
 level_reports:
