@@ -1,30 +1,32 @@
 # Phase index
 
-**One `workflow/` file per role** — never bulk-load role prompts into one context. Each file declares
-`workflow_version`, `phase`, `produces`, and `consumes`.
+Role isolation remains the primary execution model. Batch 5.2C adds two explicit lifecycle adapters around the role loop so shared review identity/evidence is machine-validated without merging Builder/Reviewer contexts.
 
-This skill's "phases" are roles, not sequential stages — Builder and Reviewer each run in a fresh,
-isolated context per dispatch, and the Orchestrator alone persists state across the whole task.
-
-| Role | Read now | Produces |
-|------|----------|----------|
+| Context | Read now | Produces |
+|---------|----------|----------|
 | **Orchestrator** | [workflow/orchestrator.md](../workflow/orchestrator.md) | task state, dispatch packages, adjudication verdicts, completion report |
 | **Builder** | [workflow/builder.md](../workflow/builder.md) | implementation diff, pull request, builder report |
 | **Reviewer** | [workflow/reviewer.md](../workflow/reviewer.md) | reviewer report, lens verdict |
+| **Reviewer evidence adapter** | [workflow/reviewer-evidence.md](../workflow/reviewer-evidence.md) | portable `review_evidence`, `reviewed_change_identity` for the returned lens |
+| **Lifecycle gate** | [workflow/lifecycle-gate.md](../workflow/lifecycle-gate.md) | lifecycle validation before READY/COMPLETE/merge |
 
-Reference loads: [lazy-load-index.md](lazy-load-index.md).
+Reference loads: [lazy-load-index.md](lazy-load-index.md) · [review-lifecycle-contract.yaml](review-lifecycle-contract.yaml).
 
 ## Execution order
 
 ```
 Orchestrator: discover policy → select task
   → dispatch Builder (fresh context)
-  → verify branch/diff
-  → dispatch Reviewer Lens A (fresh context) → adjudicate
-  → dispatch Reviewer Lens B (fresh context) → adjudicate
+  → rebuild/validate current shared change_identity
+  → dispatch Reviewer Lens A (fresh context)
+  → normalize/validate Lens A review_evidence → adjudicate
+  → dispatch Reviewer Lens B (fresh context)
+  → normalize/validate Lens B review_evidence → adjudicate
   → dispatch Builder remediation for accepted findings (fresh context)
-  → rerun affected lenses
-  → verify authoritative checks
+  → any content/conflict/third-party branch change invalidates affected review evidence
+  → rerun invalidated lenses
+  → verify authoritative checks for exact current head
+  → run lifecycle gate against fresh current identity + requirements
   → complete repository action when authorized
   → verify result → select next eligible task
 ```
