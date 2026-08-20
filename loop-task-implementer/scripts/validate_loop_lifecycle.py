@@ -84,13 +84,15 @@ def _isolation_errors(name: str, lens: dict[str, object]) -> list[str]:
     status = lens.get("isolation_status")
     exception = lens.get("isolation_exception_authorized")
     provenance = lens.get("isolation_exception_provenance")
+    if type(exception) is not bool:
+        return [f"{name}.isolation_exception_authorized must be an explicit boolean"]
     if status == "ISOLATED":
-        if exception is True:
+        if exception:
             return [f"{name} isolation exception must not be authorized when isolation_status=ISOLATED"]
         return []
     if status != "NOT_ISOLATED":
         return [f"{name}.isolation_status must be ISOLATED or NOT_ISOLATED before lifecycle readiness"]
-    if exception is not True:
+    if not exception:
         return [f"{name} NOT_ISOLATED blocks lifecycle readiness without explicit human isolation exception"]
     if not isinstance(provenance, str) or not provenance.strip():
         return [f"{name} isolation exception requires non-empty human authorization provenance"]
