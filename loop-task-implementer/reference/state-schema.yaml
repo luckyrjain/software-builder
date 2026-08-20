@@ -1,7 +1,7 @@
 # Per-task shared state schema
 # The Orchestrator is the only role that mutates the official state.
 
-workflow_version: "1.0"
+workflow_version: "1.1"
 
 task:
   task_id: null
@@ -36,6 +36,9 @@ workspace:
   reviewed_head_commit: null
   diff_fingerprint: null
   normalized_diff_fingerprint: null
+  change_identity: null
+  conflict_resolution_occurred: null  # true | false | null(unknown)
+  conflict_resolution_provenance: null
   changed_files: 0
   changed_lines: 0
   last_branch_actor: null
@@ -51,6 +54,8 @@ review:
     status: NOT_RUN  # NOT_RUN | CLEAN | FINDINGS
     reviewed_head_commit: null
     reviewed_diff_fingerprint: null
+    reviewed_change_identity: null
+    review_evidence: null
     completed_at: null
     report_ref: null
     isolation_primitive_used: null  # SUBAGENT | FRESH_SESSION | WORKTREE | SEQUENTIAL_SIMULATION
@@ -58,6 +63,8 @@ review:
     status: NOT_RUN
     reviewed_head_commit: null
     reviewed_diff_fingerprint: null
+    reviewed_change_identity: null
+    review_evidence: null
     completed_at: null
     report_ref: null
     isolation_primitive_used: null  # SUBAGENT | FRESH_SESSION | WORKTREE | SEQUENTIAL_SIMULATION
@@ -129,13 +136,19 @@ budgets:
 
 merge_readiness:
   acceptance_criteria_complete: false
+  current_change_identity_valid: false
+  lens_a_evidence_fresh: false
+  lens_b_evidence_fresh: false
+  both_lenses_clean_for_same_change_identity: false
   lens_a_clean_for_current_fingerprint: false
   lens_b_clean_for_current_fingerprint: false
   accepted_blocking_findings_open: 0
   required_checks_green: false
+  ci_green_for_current_head: false
   required_approvals_present: false
   blocking_threads_open: 0
   integration_state_valid: false
+  unresolved_third_party_branch_change: false
   circuit_breaker_active: false
   ready: false
 
