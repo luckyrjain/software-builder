@@ -43,17 +43,31 @@ def test_state_schema_carries_shared_identity_requirements_and_lens_evidence():
     assert "security_sensitive_needs_evidence_unresolved" in data["merge_readiness"]
 
 
-def test_reviewer_evidence_adapter_emits_shared_review_evidence():
+def test_reviewer_evidence_adapter_emits_shared_review_evidence_after_adjudication():
     text = (SKILL / "workflow/reviewer-evidence.md").read_text(encoding="utf-8")
     for token in (
+        "adjudication_verdicts",
+        "after the Orchestrator adjudicates",
+        "accepted blocking findings that remain open",
+        "REJECTED",
         "review_evidence",
         "change_identity",
         "docs/skill-framework/shared/review-evidence.yaml",
         "inspection_status",
-        "zero `findings.defect`",
+        "findings.defect` is empty",
         "NOT_ISOLATED",
     ):
         assert token in text
+
+
+def test_phase_order_adjudicates_before_portable_evidence():
+    phase = (SKILL / "reference/phase-index.md").read_text(encoding="utf-8")
+    assert phase.index("adjudicate Lens A proposed findings") < phase.index(
+        "normalize/validate Lens A review_evidence"
+    )
+    assert phase.index("adjudicate Lens B proposed findings") < phase.index(
+        "normalize/validate Lens B review_evidence"
+    )
 
 
 def test_orchestrator_path_loads_mandatory_lifecycle_overlay():
