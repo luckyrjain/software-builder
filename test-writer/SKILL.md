@@ -1,6 +1,6 @@
 ---
 name: test-writer
-skill_version: 2.1
+skill_version: 2.2
 platform_contract: skill-platform-v1
 description: >-
   Thin orchestration router for test-writing requests that do not resolve to one specialist up front.
@@ -63,8 +63,8 @@ Inputs
 - Do not inspect code to invent a level, detect frameworks, generate tests, or run test commands itself.
 - Each planned level runs in a fresh specialist context. Do not feed one specialist's report into another
   as framing or silently mutate caller inputs between levels.
-- Preserve each specialist report verbatim in `level_reports`; orchestration may add only plan/status
-  metadata around those reports.
+- Preserve each specialist report verbatim in `level_reports`; orchestration may add only fixed-vocabulary
+  plan/status metadata around those reports. Never copy raw caller text into rendered orchestration metadata.
 - Fail closed: the orchestration must not report `COMPLETE` while a planned level is blocked, unanswered,
   missing, or otherwise incomplete.
 
