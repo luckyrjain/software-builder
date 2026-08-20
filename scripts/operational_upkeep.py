@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from scripts.git_paths import tracked_relative_paths
 from scripts.yaml_safety import FRONTMATTER_RE, load_unique_yaml, load_unique_yaml_file
 
 POLICY_PATH = ROOT / "scripts" / "operational_upkeep.yaml"
@@ -40,20 +41,13 @@ def _git_revision(root: Path) -> str:
 
 def _tracked_relative_files(root: Path) -> list[Path]:
     """Return tracked regular files so health output depends on repository state, not local debris."""
-    try:
-        output = subprocess.check_output(
-            ["git", "ls-files", "-z"], cwd=root, stderr=subprocess.DEVNULL
-        )
-    except (OSError, subprocess.CalledProcessError) as exc:
-        raise RuntimeError("prompt-system health requires a Git worktree") from exc
-    tracked: list[Path] = []
-    for raw in output.split(b"\0"):
-        if not raw:
-            continue
-        rel = Path(raw.decode("utf-8", errors="strict"))
-        if (root / rel).is_file():
-            tracked.append(rel)
-    return sorted(tracked, key=lambda path: path.as_posix())
+    tracked, error = tracked_relative_paths(root)
+    if error:
+        raise RuntimeError(f"prompt-system health requires a Git worktree: {error}")
+    return sorted(
+        (Path(rel) for rel in tracked if (root / rel).is_file()),
+        key=lambda path: path.as_posix(),
+    )
 
 
 def _matches(path: str, pattern: str) -> bool:

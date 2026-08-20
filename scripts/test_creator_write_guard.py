@@ -16,6 +16,16 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Iterable
 
+try:
+    from scripts.git_paths import tracked_relative_paths
+except ModuleNotFoundError:
+    import sys
+
+    helper_dir = str(Path(__file__).resolve().parent)
+    if helper_dir not in sys.path:
+        sys.path.insert(0, helper_dir)
+    from git_paths import tracked_relative_paths
+
 
 @dataclass(frozen=True)
 class WriteGuardResult:
@@ -99,7 +109,40 @@ def _normalise_planned_paths(
     return tuple(sorted(normalised)), None
 
 
+def _git_top_level(repo_root: Path) -> tuple[Path | None, str | None]:
+    try:
+        completed = subprocess.run(
+            ["git", "-C", str(repo_root), "rev-parse", "--show-toplevel"],
+            capture_output=True,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        return None, f"git rev-parse failed: {exc}"
+    if completed.returncode != 0:
+        detail = os.fsdecode(completed.stderr or completed.stdout).strip()
+        return None, f"git rev-parse failed: {detail or 'unknown error'}"
+    try:
+        return Path(os.fsdecode(completed.stdout).strip()).resolve(strict=True), None
+    except (OSError, RuntimeError) as exc:
+        return None, f"git top-level cannot be resolved: {exc}"
+
+
+def _status_path_relative_to_repo(
+    repo_root: Path,
+    git_top_level: Path,
+    raw_path: bytes,
+) -> str | None:
+    try:
+        absolute = git_top_level / os.fsdecode(raw_path)
+        return absolute.relative_to(repo_root).as_posix()
+    except (OSError, ValueError):
+        return None
+
+
 def _git_status(repo_root: Path) -> tuple[tuple[str, ...], tuple[str, ...], str | None]:
+    git_top_level, top_level_error = _git_top_level(repo_root)
+    if top_level_error or git_top_level is None:
+        return (), (), f"git status failed: {top_level_error or 'git top-level cannot be resolved'}"
     try:
         completed = subprocess.run(
             [
@@ -132,29 +175,24 @@ def _git_status(repo_root: Path) -> tuple[tuple[str, ...], tuple[str, ...], str 
         if len(record) < 4 or record[2:3] != b" ":
             return (), snapshot, "git status returned an unparseable porcelain record"
         code = record[:2]
-        paths.add(os.fsdecode(record[3:]))
+        path = _status_path_relative_to_repo(repo_root, git_top_level, record[3:])
+        if path is None:
+            return (), snapshot, "git status returned a path outside repo_root"
+        paths.add(path)
         if b"R" in code or b"C" in code:
             index += 1
             if index >= len(records) or not records[index]:
                 return (), snapshot, "git status returned an incomplete rename/copy record"
-            paths.add(os.fsdecode(records[index]))
+            renamed_path = _status_path_relative_to_repo(repo_root, git_top_level, records[index])
+            if renamed_path is None:
+                return (), snapshot, "git status returned a renamed path outside repo_root"
+            paths.add(renamed_path)
         index += 1
     return tuple(sorted(paths)), snapshot, None
 
 
-def _tracked_paths(repo_root: Path) -> tuple[set[str], str | None]:
-    try:
-        completed = subprocess.run(
-            ["git", "-C", str(repo_root), "ls-files", "--cached", "-z", "--", "."],
-            capture_output=True,
-            check=False,
-        )
-    except (OSError, subprocess.SubprocessError) as exc:
-        return set(), f"git ls-files failed: {exc}"
-    if completed.returncode != 0:
-        detail = os.fsdecode(completed.stderr or completed.stdout).strip()
-        return set(), f"git ls-files failed: {detail or 'unknown error'}"
-    return {os.fsdecode(path) for path in completed.stdout.split(b"\0") if path}, None
+def _tracked_paths(repo_root: Path, planned_paths: Iterable[str]) -> tuple[set[str], str | None]:
+    return tracked_relative_paths(repo_root, planned_paths)
 
 
 def check_write_safety(repo_root: Path, planned_paths: Iterable[str | Path]) -> WriteGuardResult:
@@ -177,7 +215,7 @@ def check_write_safety(repo_root: Path, planned_paths: Iterable[str | Path]) -> 
     if status_error:
         return _blocked(planned_paths=normalised, status_snapshot=status_snapshot, reason=status_error)
 
-    tracked_paths, tracked_error = _tracked_paths(resolved_root)
+    tracked_paths, tracked_error = _tracked_paths(resolved_root, normalised)
     if tracked_error:
         return _blocked(
             planned_paths=normalised,

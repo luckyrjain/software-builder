@@ -11,16 +11,11 @@ from pathlib import Path
 import pytest
 import yaml
 
+from scripts.test_creator_catalog import TEST_CREATOR_SKILLS
 
 ROOT = Path(__file__).resolve().parents[2]
 FIXTURE = ROOT / "scripts" / "tests" / "fixtures" / "batch6b_test_creator_write_safety.yaml"
-CREATOR_ROOTS = [
-    "unit-test-creator",
-    "integration-test-creator",
-    "contract-test-creator",
-    "e2e-test-creator",
-    "api-test-creator",
-]
+CREATOR_ROOTS = list(TEST_CREATOR_SKILLS)
 COMMON_PHASES = (
     "workflow/inputs.md",
     "workflow/detect-conventions.md",
@@ -134,6 +129,37 @@ def test_guard_fails_closed_for_paths_outside_the_repository(tmp_path: Path) -> 
     assert result.allowed is False
     assert result.status == "BLOCKED"
     assert "outside repository" in result.reason.lower()
+
+
+@pytest.mark.parametrize("creator", CREATOR_ROOTS)
+def test_all_creator_guards_normalise_git_status_paths_for_nested_repo_root(
+    tmp_path: Path,
+    creator: str,
+) -> None:
+    repo = _git_repo(tmp_path)
+    nested = repo / "services" / "orders"
+    nested.mkdir(parents=True)
+    target = nested / "generated_test.py"
+    target.write_text("committed\n", encoding="utf-8")
+    _run("add", "services/orders/generated_test.py", cwd=repo)
+    _run(
+        "-c",
+        "user.name=Batch 6B",
+        "-c",
+        "user.email=batch6b@example.invalid",
+        "commit",
+        "-qm",
+        "nested target fixture",
+        cwd=repo,
+    )
+    target.write_text("user change\n", encoding="utf-8")
+
+    result = _run_creator_guard(creator, nested, "generated_test.py")
+
+    assert result["allowed"] is False
+    assert result["status"] == "BLOCKED"
+    assert result["dirty_paths_before"] == ["generated_test.py"]
+    assert result["conflicting_paths"] == ["generated_test.py"]
 
 
 def test_guard_fails_closed_when_git_status_cannot_be_read(tmp_path: Path) -> None:
@@ -327,6 +353,28 @@ def test_generic_bundle_contains_a_runnable_guard_for_each_creator(tmp_path: Pat
             "tests/generated/example_test.py",
         )
         assert result["allowed"] is True, creator
+    assert (packaged_root / "scripts" / "git_paths.py").is_file()
+
+
+@pytest.mark.parametrize("creator", CREATOR_ROOTS)
+def test_creator_guard_adapters_are_safe_to_import(creator: str) -> None:
+    adapter = ROOT / creator / "scripts" / "test_creator_write_guard.py"
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            (
+                "import importlib.util, sys; "
+                "spec = importlib.util.spec_from_file_location('adapter_probe', sys.argv[1]); "
+                "module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)"
+            ),
+            str(adapter),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert completed.returncode == 0, completed.stderr
 
 
 def _run_creator_guard_from_root(script: Path, repo: Path, planned_file: str) -> dict[str, object]:
@@ -439,3 +487,6 @@ def test_each_installed_creator_bundle_contains_the_same_guard(tmp_path: Path, c
     packaged = destination / "scripts" / "test_creator_write_guard.py"
     canonical = ROOT / "scripts" / "test_creator_write_guard.py"
     assert packaged.read_bytes() == canonical.read_bytes()
+    assert (destination / "scripts" / "git_paths.py").read_bytes() == (
+        ROOT / "scripts" / "git_paths.py"
+    ).read_bytes()

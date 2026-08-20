@@ -4,11 +4,11 @@ import argparse
 import gzip
 import io
 import re
-import subprocess
 import sys
 import tarfile
 from pathlib import Path
 
+from scripts.git_paths import tracked_relative_paths
 from scripts.registry.schema import parse_registry
 
 PACKAGE_ROOT = "software-builder"
@@ -82,26 +82,10 @@ def _is_safe_file(root: Path, path: Path) -> bool:
 
 def _tracked_files(root: Path) -> set[Path]:
     """Return lexical Git-tracked paths; arbitrary working-tree files are never package inputs."""
-    result = subprocess.run(
-        ["git", "-C", str(root), "ls-files", "-z", "--cached"],
-        capture_output=True,
-        check=False,
-    )
-    if result.returncode != 0:
-        stderr = result.stderr.decode("utf-8", errors="replace").strip()
-        raise ValueError(f"generic package requires a readable Git index: {stderr or 'git ls-files failed'}")
-    tracked: set[Path] = set()
-    for raw in result.stdout.split(b"\0"):
-        if not raw:
-            continue
-        rel = raw.decode("utf-8", errors="strict")
-        path = root / rel
-        try:
-            path.relative_to(root)
-        except ValueError as exc:
-            raise ValueError(f"generic package tracked path escapes repository: {rel}") from exc
-        tracked.add(path)
-    return tracked
+    relative_paths, error = tracked_relative_paths(root)
+    if error:
+        raise ValueError(f"generic package requires a readable Git index: {error}")
+    return {root / rel for rel in relative_paths}
 
 
 def _validate_output_path(root: Path, output: Path) -> None:
@@ -258,11 +242,14 @@ def _package_files(root: Path) -> list[Path]:
         candidates.add(license_path)
 
     # Test-creator source adapters resolve the canonical guard at the generic
-    # bundle root. Keep that one executable runtime dependency in the portable
-    # archive; the rest of the repository's development scripts remain out.
+    # bundle root. Keep the guard and its small executable path helper in the
+    # portable archive; the rest of the repository's development scripts remain out.
     guard_path = (root / "scripts" / "test_creator_write_guard.py").resolve()
     if guard_path in tracked_regular and guard_path.is_file():
         candidates.add(guard_path)
+    git_paths_path = (root / "scripts" / "git_paths.py").resolve()
+    if git_paths_path in tracked_regular and git_paths_path.is_file():
+        candidates.add(git_paths_path)
 
     framework = (root / "docs" / "skill-framework").resolve()
     if not framework.is_dir():
