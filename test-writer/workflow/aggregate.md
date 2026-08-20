@@ -1,5 +1,5 @@
 ---
-workflow_version: 1.1
+workflow_version: 1.2
 phase: aggregate
 produces:
   - orchestration_status
@@ -21,14 +21,20 @@ and its raw report or an explicit blocked reason. An unaccounted planned level i
 
 ## Overall status
 
-- `COMPLETE` — every planned level completed its own workflow and produced its report.
-- `PARTIAL` — at least one planned level produced useful partial output but did not complete, while no
-  stronger blocking condition requires `BLOCKED`.
-- `BLOCKED` — a planned level cannot proceed because of an unresolved required input, HARD STOP,
-  unavailable required capability, unknown level, or missing report/status.
+Derive one internal `orchestration_status` using this precedence, highest first:
 
-The router **must not report COMPLETE** when any planned level is `PARTIAL`, `BLOCKED`, missing, or still
-waiting on a required answer.
+1. `FAILED` — at least one planned specialist returned canonical `FAILED`.
+2. `BLOCKED` — no failure, and at least one planned level is blocked by an unresolved required input,
+   HARD STOP, unavailable required capability, unknown level, or missing report/status.
+3. `ESCALATED` — no failure/blocker, and at least one planned specialist returned canonical `ESCALATED`.
+4. `PARTIAL` — no stronger condition, and at least one planned level produced useful partial output but
+   did not complete.
+5. `COMPLETE` — every planned level completed its own workflow with canonical `SUCCESS` and produced its
+   report.
+
+The router **must not report COMPLETE** when any planned level is `PARTIAL`, `BLOCKED`, `FAILED`,
+`ESCALATED`, missing, or still waiting on a required answer. Preserve every completed/unfinished report
+regardless of the aggregate status.
 
 ## Portable `skill_result` mapping
 
@@ -41,17 +47,19 @@ When emitting the canonical result envelope from
 | `COMPLETE` | `SUCCESS` |
 | `PARTIAL` | `PARTIAL` |
 | `BLOCKED` | `BLOCKED` |
+| `FAILED` | `FAILED` |
+| `ESCALATED` | `ESCALATED` |
 
-Never emit `COMPLETE` as `skill_result.status`; it is not a portable runtime status. If execution itself
-fails before a valid aggregate can be produced, use the inherited runtime contract's `FAILED` semantics
-rather than inventing another orchestration state.
+Never emit `COMPLETE` as `skill_result.status`; it is not a portable runtime status. `FAILED` and
+`ESCALATED` are propagated rather than collapsed into another state, so the aggregate never hides a
+specialist's authoritative outcome.
 
 ## Output shape
 
 ```yaml
 test_plan:
   levels: [unit, integration]
-orchestration_status: COMPLETE | PARTIAL | BLOCKED
+orchestration_status: COMPLETE | PARTIAL | BLOCKED | FAILED | ESCALATED
 unfinished_levels: []
 level_reports:
   unit:
