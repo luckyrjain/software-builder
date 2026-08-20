@@ -59,16 +59,22 @@ specialist's authoritative outcome.
 ```yaml
 test_plan:
   levels: [unit, integration]
+  signal_source:
+    unit: explicit_request
+    integration: explicit_request
 orchestration_status: COMPLETE | PARTIAL | BLOCKED | FAILED | ESCALATED
 unfinished_levels: []
 level_reports:
   unit:
-    dispatch_status: COMPLETE
+    dispatch_status: COMPLETE | PARTIAL | BLOCKED | FAILED | ESCALATED
     report: <verbatim UNIT_TEST_REPORT.md>
   integration:
-    dispatch_status: COMPLETE
+    dispatch_status: COMPLETE | PARTIAL | BLOCKED | FAILED | ESCALATED
     report: <verbatim INTEGRATION_TEST_REPORT.md>
 ```
+
+`test_plan` is carried through unchanged from Classify; aggregation must not drop or rewrite its
+fixed-vocabulary `signal_source` provenance.
 
 When the plan contains one level because test-writer was already invoked as the entry point, this shape
 still works unchanged. Normal top-level single named level requests should continue to bypass test-writer
