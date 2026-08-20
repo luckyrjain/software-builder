@@ -31,6 +31,8 @@ should match the version of the latest entry below that names that file.
 - Delegated canonical statuses are preserved explicitly: specialist `SUCCESS` becomes internal
   `COMPLETE`; `PARTIAL`, `BLOCKED`, `FAILED`, and `ESCALATED` remain distinct. Mixed outcomes use
   deterministic precedence (`FAILED` > `BLOCKED` > `ESCALATED` > `PARTIAL` > `COMPLETE`).
+- `unfinished_levels` is now a declared Aggregate output and is derived deterministically in plan order
+  from every non-`COMPLETE` or missing planned level, including terminal `FAILED`/`ESCALATED` outcomes.
 - Multi-level contract tests now assert semantics case-insensitively and cover hint precedence, the
   fixed-vocabulary metadata boundary, portable status mapping, and mixed-outcome precedence.
 
@@ -39,7 +41,7 @@ should match the version of the latest entry below that names that file.
 - `workflow/inputs.md` → 2.2
 - `workflow/classify.md` → 2.4
 - `workflow/delegate.md` → 2.2
-- `workflow/aggregate.md` → 1.2
+- `workflow/aggregate.md` → 1.3
 
 ## [2.1.1] — 2026-08-10
 
