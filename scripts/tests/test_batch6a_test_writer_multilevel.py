@@ -86,6 +86,15 @@ def test_aggregate_preserves_raw_reports_and_blocks_incomplete_plan():
         assert token in text
 
 
+def test_aggregate_maps_internal_complete_to_portable_success():
+    text = _read("workflow/aggregate.md")
+    assert "Portable `skill_result` mapping" in text
+    assert "| `COMPLETE` | `SUCCESS` |" in text
+    assert "| `PARTIAL` | `PARTIAL` |" in text
+    assert "| `BLOCKED` | `BLOCKED` |" in text
+    assert "Never emit `COMPLETE` as `skill_result.status`" in text
+
+
 def test_phase_and_lazy_load_indexes_include_multilevel_aggregate_phase():
     phase = _read("reference/phase-index.md")
     lazy = _read("reference/lazy-load-index.md")
