@@ -220,7 +220,7 @@ skills:
     produce_fields:
       test_suite: [tests, framework, target_path]
     consume_fields:
-      implementation_task: [task_id, scope, acceptance_criteria, request, repo_root, target]
+      implementation_task: [task_id, scope, acceptance_criteria, request, repo_root, target, test_framework_hint, run_tests, max_files_per_run, deadline, session_token_budget, output_dir, specialist_inputs]
     write_authority: repository-write
 
   integration-test-creator:
@@ -229,7 +229,7 @@ skills:
     produce_fields:
       test_suite: [tests, framework, target_path]
     consume_fields:
-      implementation_task: [task_id, scope, acceptance_criteria, request, repo_root, target]
+      implementation_task: [task_id, scope, acceptance_criteria, request, repo_root, target, test_framework_hint, run_tests, max_files_per_run, deadline, session_token_budget, output_dir, specialist_inputs]
     write_authority: repository-write
 
   contract-test-creator:
@@ -238,7 +238,7 @@ skills:
     produce_fields:
       test_suite: [tests, framework, target_path]
     consume_fields:
-      implementation_task: [task_id, scope, acceptance_criteria, request, repo_root, target]
+      implementation_task: [task_id, scope, acceptance_criteria, request, repo_root, target, test_framework_hint, run_tests, max_files_per_run, deadline, session_token_budget, output_dir, specialist_inputs]
     write_authority: repository-write
 
   e2e-test-creator:
@@ -247,7 +247,7 @@ skills:
     produce_fields:
       test_suite: [tests, framework, target_path]
     consume_fields:
-      implementation_task: [task_id, scope, acceptance_criteria, request, repo_root, target]
+      implementation_task: [task_id, scope, acceptance_criteria, request, repo_root, target, test_framework_hint, run_tests, max_files_per_run, deadline, session_token_budget, output_dir, specialist_inputs]
     write_authority: repository-write
 
   api-test-creator:
@@ -256,7 +256,7 @@ skills:
     produce_fields:
       test_suite: [tests, framework, target_path]
     consume_fields:
-      implementation_task: [task_id, scope, acceptance_criteria, request, repo_root, target]
+      implementation_task: [task_id, scope, acceptance_criteria, request, repo_root, target, test_framework_hint, run_tests, max_files_per_run, deadline, session_token_budget, output_dir, specialist_inputs]
     write_authority: repository-write
 
   test-writer:
@@ -265,7 +265,7 @@ skills:
     produce_fields:
       test_orchestration_result: [test_plan, orchestration_status, unfinished_levels, level_reports]
     consume_fields:
-      implementation_task: [task_id, scope, acceptance_criteria, request, repo_root, target]
+      implementation_task: [task_id, scope, acceptance_criteria, request, repo_root, target, test_framework_hint, run_tests, max_files_per_run, deadline, session_token_budget, output_dir, specialist_inputs]
     write_authority: read-only
 
   prd-architect:

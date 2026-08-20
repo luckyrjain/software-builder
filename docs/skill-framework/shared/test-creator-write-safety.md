@@ -49,7 +49,9 @@ the batch. Dirty paths outside the planned set are reported and left exactly
 as found. A planned path that is tracked-but-dirty, staged, renamed, or an
 existing untracked output is a conflict; the entire primary batch fails
 closed. Existing clean tracked files may be modified only when explicitly in
-the plan. Ignored or symlinked existing outputs are also treated as unsafe.
+the plan. Hard-linked outputs are also rejected because a normal path write
+could mutate another user-visible inode outside the repository. Ignored or
+symlinked existing outputs are unsafe as well.
 
 ## Report evidence
 

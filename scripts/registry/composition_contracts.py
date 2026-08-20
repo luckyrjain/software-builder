@@ -49,6 +49,7 @@ def _validate_creator_parity(
     contracts_path: Path,
     registry: Registry,
     artifact_schemas: dict[str, list[str]],
+    contracts: dict[str, CompositionContract],
 ) -> list[str]:
     """Validate the explicit five-creator composition boundary."""
 
@@ -90,6 +91,23 @@ def _validate_creator_parity(
     for skill_id in _TEST_CREATOR_SKILLS:
         if skill_id not in registry.skills:
             errors.append(f"error: creator_parity references unknown skill {skill_id!r}")
+
+    required_task_fields = {
+        "task_id",
+        "scope",
+        "acceptance_criteria",
+        *_TEST_CREATOR_FORWARDED_FIELDS,
+    }
+    for skill_id in ["test-writer", *_TEST_CREATOR_SKILLS]:
+        if skill_id not in contracts:
+            continue
+        consumed = set(contracts[skill_id].consume_fields.get("implementation_task", []))
+        missing = sorted(required_task_fields - consumed)
+        if missing:
+            errors.append(
+                f"error: {skill_id}: implementation_task consume_fields missing forwarded fields: "
+                + ", ".join(missing),
+            )
     return errors
 
 
@@ -298,7 +316,7 @@ def validate_composition_contracts(
         return [f"error: composition contracts: {exc}"]
 
     try:
-        parity_errors = _validate_creator_parity(resolved_path, registry, artifact_schemas)
+        parity_errors = _validate_creator_parity(resolved_path, registry, artifact_schemas, contracts)
     except (YAML_SAFETY_ERRORS, ValueError) as exc:
         return [f"error: composition creator parity: {exc}"]
     errors.extend(parity_errors)

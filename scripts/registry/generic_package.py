@@ -257,6 +257,13 @@ def _package_files(root: Path) -> list[Path]:
     if license_path in tracked_regular and license_path.is_file():
         candidates.add(license_path)
 
+    # Test-creator source adapters resolve the canonical guard at the generic
+    # bundle root. Keep that one executable runtime dependency in the portable
+    # archive; the rest of the repository's development scripts remain out.
+    guard_path = (root / "scripts" / "test_creator_write_guard.py").resolve()
+    if guard_path in tracked_regular and guard_path.is_file():
+        candidates.add(guard_path)
+
     framework = (root / "docs" / "skill-framework").resolve()
     if not framework.is_dir():
         raise ValueError("generic package requires docs/skill-framework")

@@ -24,30 +24,36 @@ class WriteGuardResult:
     allowed: bool
     status: str
     planned_paths: tuple[str, ...]
-    dirty_paths: tuple[str, ...]
+    dirty_paths_before: tuple[str, ...]
     status_snapshot: tuple[str, ...]
     conflicting_paths: tuple[str, ...]
+    writes_started: bool
     reason: str
 
     def to_dict(self) -> dict[str, object]:
-        return asdict(self)
+        payload = asdict(self)
+        for field in ("planned_paths", "dirty_paths_before", "status_snapshot", "conflicting_paths"):
+            payload[field] = list(payload[field])
+        return payload
 
 
 def _blocked(
     *,
     planned_paths: Iterable[str] = (),
-    dirty_paths: Iterable[str] = (),
+    dirty_paths_before: Iterable[str] = (),
     status_snapshot: Iterable[str] = (),
     conflicting_paths: Iterable[str] = (),
+    writes_started: bool = False,
     reason: str,
 ) -> WriteGuardResult:
     return WriteGuardResult(
         allowed=False,
         status="BLOCKED",
         planned_paths=tuple(sorted(set(planned_paths))),
-        dirty_paths=tuple(sorted(set(dirty_paths))),
+        dirty_paths_before=tuple(sorted(set(dirty_paths_before))),
         status_snapshot=tuple(status_snapshot),
         conflicting_paths=tuple(sorted(set(conflicting_paths))),
+        writes_started=writes_started,
         reason=reason,
     )
 
@@ -94,57 +100,61 @@ def _normalise_planned_paths(
 
 
 def _git_status(repo_root: Path) -> tuple[tuple[str, ...], tuple[str, ...], str | None]:
-    completed = subprocess.run(
-        [
-            "git",
-            "-C",
-            str(repo_root),
-            "status",
-            "--porcelain=v1",
-            "--untracked-files=all",
-            "-z",
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    try:
+        completed = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(repo_root),
+                "status",
+                "--porcelain=v1",
+                "--untracked-files=all",
+                "-z",
+            ],
+            capture_output=True,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        return (), (), f"git status failed: {exc}"
     if completed.returncode != 0:
-        detail = (completed.stderr or completed.stdout).strip()
+        detail = os.fsdecode(completed.stderr or completed.stdout).strip()
         return (), (), f"git status failed: {detail or 'unknown error'}"
 
     paths: set[str] = set()
-    records = completed.stdout.split("\0")
-    snapshot = tuple(record for record in records if record)
+    records = completed.stdout.split(b"\0")
+    snapshot = tuple(os.fsdecode(record) for record in records if record)
     index = 0
     while index < len(records):
         record = records[index]
         if not record:
             index += 1
             continue
-        if len(record) < 4 or record[2] != " ":
+        if len(record) < 4 or record[2:3] != b" ":
             return (), snapshot, "git status returned an unparseable porcelain record"
         code = record[:2]
-        paths.add(record[3:])
-        if "R" in code or "C" in code:
+        paths.add(os.fsdecode(record[3:]))
+        if b"R" in code or b"C" in code:
             index += 1
             if index >= len(records) or not records[index]:
                 return (), snapshot, "git status returned an incomplete rename/copy record"
-            paths.add(records[index])
+            paths.add(os.fsdecode(records[index]))
         index += 1
     return tuple(sorted(paths)), snapshot, None
 
 
 def _tracked_paths(repo_root: Path) -> tuple[set[str], str | None]:
-    completed = subprocess.run(
-        ["git", "-C", str(repo_root), "ls-files", "--cached", "--", "."],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    try:
+        completed = subprocess.run(
+            ["git", "-C", str(repo_root), "ls-files", "--cached", "-z", "--", "."],
+            capture_output=True,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        return set(), f"git ls-files failed: {exc}"
     if completed.returncode != 0:
-        detail = (completed.stderr or completed.stdout).strip()
+        detail = os.fsdecode(completed.stderr or completed.stdout).strip()
         return set(), f"git ls-files failed: {detail or 'unknown error'}"
-    return {line for line in completed.stdout.splitlines() if line}, None
+    return {os.fsdecode(path) for path in completed.stdout.split(b"\0") if path}, None
 
 
 def check_write_safety(repo_root: Path, planned_paths: Iterable[str | Path]) -> WriteGuardResult:
@@ -171,7 +181,7 @@ def check_write_safety(repo_root: Path, planned_paths: Iterable[str | Path]) -> 
     if tracked_error:
         return _blocked(
             planned_paths=normalised,
-            dirty_paths=dirty_paths,
+            dirty_paths_before=dirty_paths,
             status_snapshot=status_snapshot,
             reason=tracked_error,
         )
@@ -188,23 +198,29 @@ def check_write_safety(repo_root: Path, planned_paths: Iterable[str | Path]) -> 
             conflicts.add(planned)
         if candidate.is_dir():
             conflicts.add(planned)
+        if candidate.exists() and candidate.is_file() and candidate.stat().st_nlink > 1:
+            conflicts.add(planned)
 
     if conflicts:
         return _blocked(
             planned_paths=normalised,
-            dirty_paths=dirty_paths,
+            dirty_paths_before=dirty_paths,
             status_snapshot=status_snapshot,
             conflicting_paths=conflicts,
-            reason="planned write overlaps existing dirty or untracked paths: " + ", ".join(sorted(conflicts)),
+            reason=(
+                "planned write overlaps existing dirty, untracked, or hard link paths: "
+                + ", ".join(sorted(conflicts))
+            ),
         )
 
     return WriteGuardResult(
         allowed=True,
         status="ALLOWED",
         planned_paths=normalised,
-        dirty_paths=dirty_paths,
+        dirty_paths_before=dirty_paths,
         status_snapshot=status_snapshot,
         conflicting_paths=(),
+        writes_started=False,
         reason="pre-write repository state is safe",
     )
 

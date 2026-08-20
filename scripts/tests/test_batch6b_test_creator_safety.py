@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+import tarfile
 from pathlib import Path
 
 import pytest
@@ -116,8 +117,9 @@ def test_all_creators_share_the_behavioral_write_safety_matrix(
         assert result["allowed"] is expected["allowed"], scenario["id"]
         assert result["status"] == expected["status"], scenario["id"]
         assert result["conflicting_paths"] == expected["conflicts"], scenario["id"]
-        assert result["dirty_paths"] == expected["dirty_paths"], scenario["id"]
+        assert result["dirty_paths_before"] == expected["dirty_paths"], scenario["id"]
         assert result["status_snapshot"] == sorted(result["status_snapshot"])
+        assert result["writes_started"] is False
         if scenario["kind"] == "clean":
             assert result["status_snapshot"] == []
         else:
@@ -140,6 +142,26 @@ def test_guard_fails_closed_when_git_status_cannot_be_read(tmp_path: Path) -> No
     result = check_write_safety(tmp_path, ["tests/generated/example_test.py"])
     assert result.allowed is False
     assert result.status == "BLOCKED"
+    assert "git status" in result.reason.lower()
+
+
+def test_guard_returns_structured_blocked_result_when_git_is_unavailable(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import scripts.test_creator_write_guard as guard
+
+    repo = _git_repo(tmp_path)
+
+    def missing_git(*args: object, **kwargs: object) -> None:
+        raise FileNotFoundError("git")
+
+    monkeypatch.setattr(guard.subprocess, "run", missing_git)
+    result = guard.check_write_safety(repo, ["tests/generated/example_test.py"])
+
+    assert result.status == "BLOCKED"
+    assert result.writes_started is False
+    assert result.to_dict()["status_snapshot"] == []
     assert "git status" in result.reason.lower()
 
 
@@ -175,8 +197,80 @@ def test_guard_fails_closed_for_an_existing_ignored_output(tmp_path: Path) -> No
     result = check_write_safety(repo, ["ignored-output.py"])
     assert result.allowed is False
     assert result.status == "BLOCKED"
-    assert result.dirty_paths == ()
+    assert result.dirty_paths_before == ()
     assert result.conflicting_paths == ("ignored-output.py",)
+
+
+def test_guard_fails_closed_for_a_hardlinked_planned_output(tmp_path: Path) -> None:
+    from scripts.test_creator_write_guard import check_write_safety
+
+    repo = _git_repo(tmp_path)
+    planned = repo / "generated_test.py"
+    planned.write_text("tracked source\n", encoding="utf-8")
+    _run("add", "generated_test.py", cwd=repo)
+    _run(
+        "-c",
+        "user.name=Batch 6B",
+        "-c",
+        "user.email=batch6b@example.invalid",
+        "commit",
+        "-qm",
+        "tracked output",
+        cwd=repo,
+    )
+    external = tmp_path / "external-user-file.py"
+    external.hardlink_to(planned)
+
+    result = check_write_safety(repo, ["generated_test.py"])
+
+    assert result.allowed is False
+    assert result.status == "BLOCKED"
+    assert result.conflicting_paths == ("generated_test.py",)
+    assert "hard link" in result.reason.lower()
+
+
+def test_guard_results_match_the_documented_write_evidence_schema(tmp_path: Path) -> None:
+    from scripts.test_creator_write_guard import check_write_safety
+
+    result = check_write_safety(_git_repo(tmp_path), ["tests/generated/example_test.py"])
+    payload = result.to_dict()
+
+    assert payload["status"] == "ALLOWED"
+    assert payload["dirty_paths_before"] == []
+    assert payload["status_snapshot"] == []
+    assert payload["conflicting_paths"] == []
+    assert payload["writes_started"] is False
+
+
+def test_generic_bundle_contains_a_runnable_guard_for_each_creator(tmp_path: Path) -> None:
+    from scripts.registry.generic_package import build_generic_package
+
+    archive_path = tmp_path / "software-builder.tar.gz"
+    build_generic_package(ROOT, archive_path)
+    extract_root = tmp_path / "extract"
+    with tarfile.open(archive_path, "r:gz") as archive:
+        archive.extractall(extract_root, filter="data")
+
+    packaged_root = extract_root / "software-builder"
+    for creator in CREATOR_ROOTS:
+        repo = _git_repo(tmp_path / "fixtures" / creator)
+        result = _run_creator_guard_from_root(
+            packaged_root / creator / "scripts" / "test_creator_write_guard.py",
+            repo,
+            "tests/generated/example_test.py",
+        )
+        assert result["allowed"] is True, creator
+
+
+def _run_creator_guard_from_root(script: Path, repo: Path, planned_file: str) -> dict[str, object]:
+    completed = subprocess.run(
+        [sys.executable, str(script), "--repo-root", str(repo), "--planned-file", planned_file],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert completed.returncode in (0, 2), completed.stderr
+    return json.loads(completed.stdout)
 
 
 def test_creator_workflows_reference_one_canonical_guard_and_report_contract() -> None:
@@ -215,6 +309,10 @@ def test_composition_contract_declares_creator_parity_requirements() -> None:
     assert parity["child_authority"] == "skill_result"
     assert parity["degraded_status"] == "BLOCKED"
     assert parity["interactive_gate_policy"] == "specialist-only"
+    required = set(parity["forwarded_fields"])
+    for creator in [*CREATOR_ROOTS, "test-writer"]:
+        consumed = set(contracts["skills"][creator]["consume_fields"]["implementation_task"])
+        assert required <= consumed, creator
 
 
 def test_router_handoff_preserves_common_inputs_and_child_authority() -> None:
