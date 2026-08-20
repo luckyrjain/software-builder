@@ -84,7 +84,7 @@ def test_ready_state_rejects_unresolved_third_party_branch_change():
     assert any("third_party_change_detected blocks lifecycle readiness" in error for error in errors)
 
 
-def test_sha_transition_requires_conflict_resolution_provenance():
+def test_sha_transition_with_unknown_conflict_status_fails_closed():
     reviewed = _identity()
     current = _identity(base="d" * 40, merge_base="d" * 40)
     state = _state(current)
@@ -96,3 +96,24 @@ def test_sha_transition_requires_conflict_resolution_provenance():
     state["review"]["lens_b"]["review_evidence"] = _evidence(reviewed)
     errors = _load().validate_lifecycle_state(state)
     assert sum("conflict_resolution_occurred is unknown" in error for error in errors) == 2
+
+
+def test_sha_transition_requires_provenance_even_when_no_conflict_occurred():
+    reviewed = _identity()
+    current = _identity(base="d" * 40, merge_base="d" * 40)
+    state = _state(current)
+    state["workspace"]["conflict_resolution_occurred"] = False
+    state["workspace"]["conflict_resolution_provenance"] = None
+    for lens in ("lens_a", "lens_b"):
+        state["review"][lens]["reviewed_change_identity"] = reviewed
+        state["review"][lens]["review_evidence"] = _evidence(reviewed)
+    errors = _load().validate_lifecycle_state(state)
+    assert sum("identity SHA transition requires conflict_resolution_provenance" in error for error in errors) == 2
+
+
+def test_fresh_evidence_after_prior_conflict_is_not_permanently_invalidated():
+    state = _state()
+    state["workspace"]["conflict_resolution_occurred"] = True
+    state["workspace"]["conflict_resolution_provenance"] = "merge conflict resolved before both lenses reran"
+    errors = _load().validate_lifecycle_state(state)
+    assert errors == []
