@@ -111,7 +111,9 @@ def test_delegate_advances_framework_execution_context_per_child():
     assert "parent_skill" in text and "test-writer" in text
     assert "increment depth once" in text
     assert "same parent context" in text
-    assert "one sibling's dispatch must not increase another sibling's depth" in text
+    assert "one sibling's" in text
+    assert "must not increase another sibling's depth" in text
+    assert "sibling-specific visited state" in text
 
 
 def test_delegate_preserves_all_portable_specialist_statuses():
