@@ -1,5 +1,5 @@
 ---
-workflow_version: 1.3
+workflow_version: 1.4
 phase: aggregate
 produces:
   - orchestration_status
@@ -12,18 +12,25 @@ consumes:
 
 # Aggregate — report orchestration state without rewriting specialist evidence
 
-Aggregation is a bookkeeping gate, not a new test verdict. Every entry in `level_reports` keeps the
-specialist's report **verbatim**. Do not summarize a specialist into a stronger or weaker status.
+Aggregation is a bookkeeping gate, not a new test verdict. Every dispatched entry in `level_reports`
+keeps the specialist's report **verbatim**. Do not summarize a specialist into a stronger or weaker
+status, and do not fabricate a report for a planned child that never ran.
 
 ## Account for every planned level
 
 Compare `test_plan.levels` to `level_reports`. Every planned level must have an explicit dispatch status
-and its raw report or an explicit blocked reason. An unaccounted planned level is a lifecycle error.
+and exactly one evidence form appropriate to its lifecycle:
+
+- a verbatim specialist `report` when the child was dispatched; or
+- an explicit fixed-vocabulary `blocked_reason` when it was blocked before dispatch.
+
+A pre-dispatch `BLOCKED` entry with neither a report nor a blocked reason is a lifecycle error. A child
+that never ran must not contain a fabricated specialist report.
 
 Derive `unfinished_levels` in the same stable order as `test_plan.levels`: include every planned level
-whose `dispatch_status` is not `COMPLETE`, plus any planned level missing a report/status. A fully
-successful plan therefore has `unfinished_levels: []`; `PARTIAL`, `BLOCKED`, `FAILED`, and `ESCALATED`
-levels remain named even though some of those outcomes are terminal.
+whose `dispatch_status` is not `COMPLETE`, plus any planned level missing a valid report/status or
+pre-dispatch blocked reason. A fully successful plan therefore has `unfinished_levels: []`; `PARTIAL`,
+`BLOCKED`, `FAILED`, and `ESCALATED` levels remain named even though some of those outcomes are terminal.
 
 ## Overall status
 
@@ -31,7 +38,8 @@ Derive one internal `orchestration_status` using this precedence, highest first:
 
 1. `FAILED` — at least one planned specialist returned canonical `FAILED`.
 2. `BLOCKED` — no failure, and at least one planned level is blocked by an unresolved required input,
-   HARD STOP, unavailable required capability, unknown level, or missing report/status.
+   HARD STOP, unavailable required capability, recursion guard, unknown level, or missing/invalid
+   report/status evidence.
 3. `ESCALATED` — no failure/blocker, and at least one planned specialist returned canonical `ESCALATED`.
 4. `PARTIAL` — no stronger condition, and at least one planned level produced useful partial output but
    did not complete.
@@ -40,7 +48,7 @@ Derive one internal `orchestration_status` using this precedence, highest first:
 
 The router **must not report COMPLETE** when any planned level is `PARTIAL`, `BLOCKED`, `FAILED`,
 `ESCALATED`, missing, or still waiting on a required answer. Preserve every completed/unfinished report
-regardless of the aggregate status.
+or pre-dispatch blocked reason regardless of the aggregate status.
 
 ## Portable `skill_result` mapping
 
@@ -68,15 +76,15 @@ test_plan:
   signal_source:
     unit: explicit_request
     integration: explicit_request
-orchestration_status: COMPLETE | PARTIAL | BLOCKED | FAILED | ESCALATED
-unfinished_levels: []
+orchestration_status: BLOCKED
+unfinished_levels: [integration]
 level_reports:
   unit:
-    dispatch_status: COMPLETE | PARTIAL | BLOCKED | FAILED | ESCALATED
+    dispatch_status: COMPLETE
     report: <verbatim UNIT_TEST_REPORT.md>
   integration:
-    dispatch_status: COMPLETE | PARTIAL | BLOCKED | FAILED | ESCALATED
-    report: <verbatim INTEGRATION_TEST_REPORT.md>
+    dispatch_status: BLOCKED
+    blocked_reason: recursion_guard_rejected
 ```
 
 `test_plan` is carried through unchanged from Classify; aggregation must not drop or rewrite its
