@@ -48,7 +48,7 @@ def _state(identity=None):
     identity = identity or _identity()
     evidence = _evidence(identity)
     return {
-        "task": {"status": "READY", "requirements_ref": None},
+        "task": {"status": "VALIDATING", "requirements_ref": None},
         "workspace": {
             "current_head_commit": identity["head_sha"],
             "change_identity": identity,
@@ -61,13 +61,51 @@ def _state(identity=None):
             "lens_b": {"status": "CLEAN", "reviewed_change_identity": identity, "review_evidence": evidence},
         },
         "ci": {"commit": identity["head_sha"], "required_checks_green": True},
-        "merge_readiness": {"ready": True},
+        "merge_readiness": {
+            "acceptance_criteria_complete": True,
+            "accepted_blocking_findings_open": 0,
+            "required_approvals_present": True,
+            "blocking_threads_open": 0,
+            "integration_state_valid": True,
+            "circuit_breaker_active": False,
+            "ready": False,
+        },
     }
 
 
-def test_ready_state_passes_when_both_lenses_and_ci_match_current_identity():
+def test_pre_ready_state_passes_only_when_all_lifecycle_requirements_hold():
     errors = _load().validate_lifecycle_state(_state())
     assert errors == []
+
+
+def test_pre_ready_state_rejects_unclean_lens_and_non_green_ci():
+    state = _state()
+    state["review"]["lens_a"]["status"] = "NOT_RUN"
+    state["ci"]["required_checks_green"] = False
+    errors = _load().validate_lifecycle_state(state)
+    assert any("lens_a must be CLEAN" in error for error in errors)
+    assert any("required checks must be green" in error for error in errors)
+
+
+def test_pre_ready_state_rejects_existing_completion_policy_blockers():
+    state = _state()
+    state["merge_readiness"]["acceptance_criteria_complete"] = False
+    state["merge_readiness"]["accepted_blocking_findings_open"] = 1
+    state["merge_readiness"]["required_approvals_present"] = False
+    state["merge_readiness"]["blocking_threads_open"] = 1
+    state["merge_readiness"]["integration_state_valid"] = False
+    state["merge_readiness"]["circuit_breaker_active"] = True
+    errors = _load().validate_lifecycle_state(state)
+    expected = (
+        "acceptance criteria must be complete",
+        "accepted_blocking_findings_open must be integer 0",
+        "required approvals must be satisfied",
+        "blocking_threads_open must be integer 0",
+        "integration state must be valid",
+        "circuit breaker must be explicitly inactive",
+    )
+    for token in expected:
+        assert any(token in error for error in errors)
 
 
 def test_ready_state_rejects_ci_green_for_old_head():
@@ -96,7 +134,7 @@ def test_ready_state_rejects_unknown_third_party_change_state():
     del state["workspace"]["third_party_change_detected"]
     errors = _load().validate_lifecycle_state(state)
     assert any("third_party_change_detected must be an explicit boolean" in error for error in errors)
-    assert any("ready cannot be true unless third_party_change_detected is explicitly false" in error for error in errors)
+    assert any("third_party_change_detected must be explicitly false" in error for error in errors)
 
 
 def test_sha_transition_with_unknown_conflict_status_fails_closed():
