@@ -68,6 +68,16 @@ def test_phase_index_matches_level_hint_precedence_and_status_contract():
         assert status in text
 
 
+def test_smoke_test_exercises_multilevel_orchestration_not_legacy_single_dispatch():
+    text = _read("reference/smoke-test.md").lower()
+    assert "unit tests for the pricing rules and integration tests for the payments db seam" in text
+    assert "one dispatch per planned level" in text
+    assert "unit-test-creator and integration-test-creator" in text
+    assert "unfinished_levels" in text
+    assert "never more than one per request" not in text
+    assert "exactly one dispatch" not in text
+
+
 def test_plan_metadata_never_copies_raw_caller_signal():
     text = _read("workflow/classify.md").lower()
     assert "signal_source" in text
