@@ -12,9 +12,12 @@ Load immediately after [SKILL.md](../SKILL.md). These rules override convenience
 3. **Specialist authority stays local.** For each planned level, invoke each specialist in a fresh
    context. Its own input validation, HARD STOPs, generation rules, verification status, findings, and
    next-step authority remain authoritative for that level.
-4. **Unchanged pass-through.** Every caller-supplied field reaches each specialist exactly as supplied.
-   Do not translate, rename, default, or mutate fields between levels. A specialist may independently ask
-   for additional inputs it requires.
+4. **Unchanged ordinary pass-through; framework context advances.** Every ordinary caller-supplied field
+   reaches each specialist exactly as supplied. Do not translate, rename, default, or mutate those fields
+   between levels. `execution_context` is framework-owned and must be advanced per the inherited runtime
+   recursion contract for each child dispatch rather than copied unchanged. Sibling specialists derive
+   independently from the same parent context. A specialist may independently ask for additional inputs
+   it requires.
 5. **Verbatim evidence.** Preserve each specialist report verbatim under `level_reports`. Aggregation may
    add plan/completion metadata, but must not rewrite a report or upgrade/downgrade its status.
 6. **Fixed-vocabulary orchestration metadata.** `test_plan` may record levels and fixed signal-source
