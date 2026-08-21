@@ -25,6 +25,10 @@ def load_canonical_manifest(root: Path = ROOT) -> dict[str, Any]:
     )
     if raw.get("schema_version") != 1:
         raise ValueError("canonical manifest.schema_version must be 1")
+    if not isinstance(raw.get("contracts"), dict):
+        raise ValueError("canonical manifest.contracts must be a mapping")
+    if not isinstance(raw.get("skills"), dict):
+        raise ValueError("canonical manifest.skills must be a mapping")
     return raw
 
 
@@ -121,4 +125,3 @@ def render_legacy_projection(root: Path, section: str) -> str:
     contracts = _mapping(manifest.get("contracts"), "canonical manifest.contracts")
     value = _mapping(contracts.get(section), f"contracts.{section}")
     return yaml.safe_dump(value, sort_keys=False, default_flow_style=False, allow_unicode=True)
-

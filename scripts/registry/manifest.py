@@ -37,6 +37,10 @@ def _version_input(skill_md: Path, raw_version: Any) -> Any:
 def _normalize_version(raw: Any) -> str:
     if raw is None or raw == "" or isinstance(raw, bool):
         raise ValueError("skill_version is mandatory")
+    if isinstance(raw, float):
+        raise ValueError(
+            "invalid skill_version; expected semantic version string or integer major"
+        )
     if isinstance(raw, int):
         value = f"{raw}.0.0"
     else:
