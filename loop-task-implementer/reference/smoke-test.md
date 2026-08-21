@@ -41,12 +41,13 @@ Example: `Use loop-task-implementer to implement issue 42, review it deeply, fix
    `review_generation`; old exception fields are cleared before a rerun.
 8. **Authoritative current-head CI** — required CI is green and `ci.commit` equals
    `workspace.current_head_commit`; an older green pipeline does not count.
-9. **Executable lifecycle gate** — resolve the actual skill root (source or installed), serialize the
-   official state as JSON, and run
-   `python <skill_root>/scripts/validate_loop_lifecycle.py --state <state.json>`. Only exit code `0`
-   establishes verified readiness; exit `1` is lifecycle errors and exit `2` is fail-closed
-   input/runtime inability. Running from an installed skill while the current working directory is the
-   target repo must still reach the packaged validator.
+9. **Executable lifecycle gate** — resolve the actual skill root (source or installed), select a Python 3
+   interpreter (`python3` on the supported Unix/macOS setup or the host's configured equivalent), serialize
+   the official state as JSON, and run
+   `python3 "<skill_root>/scripts/validate_loop_lifecycle.py" --state "<state.json>"` on Unix/macOS.
+   Only exit code `0` establishes verified readiness; exit `1` is lifecycle errors and exit `2` is
+   fail-closed input/runtime inability. Missing interpreter/validator also blocks. Running from an installed
+   skill while the current working directory is the target repo must still reach the packaged validator.
 10. **Completion response** — final report follows [report-template.md](../report-template.md): current
     identity/freshness, both lens generation/evidence/isolation states, third-party check, authoritative
     current-head checks, lifecycle gate result, merge authority, completion state, and any exact human
@@ -74,8 +75,8 @@ in addition to the legacy reviewer/remediation cases.
   CI all describe the same current change/head.
 - Every CLEAN lens has a positive integer `review_generation`; any degraded-isolation exception matches
   both that lens's exact `reviewed_change_identity` and current `review_generation`.
-- The lifecycle validator was actually executed from the resolved skill root and returned exit `0` for
-  the official state immediately before verified readiness/completion.
+- The lifecycle validator was actually executed from the resolved skill root with a Python 3 interpreter
+  and returned exit `0` for the official state immediately before verified readiness/completion.
 - No merge occurred without explicit authorization.
 - Reviewer sessions performed zero commits/pushes/PR edits.
 - Every accepted finding has a `FIXED` / `REBUTTED` / `BLOCKED` response with evidence.
