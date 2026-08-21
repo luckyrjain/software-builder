@@ -277,7 +277,7 @@ def _git_top_level(
 
 
 def _repository_filter_drivers(
-    repo_root: Path,
+    root: Path,
     git_env: dict[str, str],
     git_executable: str,
 ) -> tuple[set[str], str | None]:
@@ -286,7 +286,7 @@ def _repository_filter_drivers(
     if tracked_relative_paths is None:
         return set(), _TRACKED_PATHS_IMPORT_ERROR or "shared Git path helper unavailable"
     tracked, tracked_error = tracked_relative_paths(
-        repo_root,
+        root,
         env=git_env,
         git_executable=git_executable,
     )
@@ -298,7 +298,7 @@ def _repository_filter_drivers(
     path_input = b"".join(os.fsencode(path) + b"\0" for path in sorted(tracked))
     try:
         completed = subprocess.run(
-            [git_executable, "-C", str(repo_root), "check-attr", "-z", "--stdin", "filter"],
+            [git_executable, "-C", str(root), "check-attr", "-z", "--stdin", "filter"],
             input=path_input,
             capture_output=True,
             check=False,
@@ -357,8 +357,6 @@ def _git_status(
                 "--untracked-files=all",
                 "--ignore-submodules=all",
                 "-z",
-                "--",
-                ".",
             ],
             capture_output=True,
             check=False,
@@ -445,13 +443,28 @@ def check_write_safety(repo_root: Path, planned_paths: Iterable[str | Path]) -> 
     if git_executable_error or git_executable is None:
         return _blocked(planned_paths=normalised, reason=git_executable_error or "trusted git unavailable")
 
+    git_top_level, top_level_error = _git_top_level(resolved_root, base_git_env, git_executable)
+    if top_level_error or git_top_level is None:
+        return _blocked(
+            planned_paths=normalised,
+            reason=f"git status failed: {top_level_error or 'git top-level cannot be resolved'}",
+        )
+
+    # Status intentionally captures the full enclosing worktree snapshot even
+    # when repo_root is nested, while conflicts are normalized back to
+    # repo_root. Neutralize filters for every tracked path status may inspect so
+    # an out-of-scope sibling cannot gain execution merely by being included in
+    # that evidence snapshot.
     filter_drivers, filter_error = _repository_filter_drivers(
-        resolved_root,
+        git_top_level,
         base_git_env,
         git_executable,
     )
     if filter_error:
-        return _blocked(planned_paths=normalised, reason=filter_error)
+        return _blocked(
+            planned_paths=normalised,
+            reason=f"git status preparation failed: {filter_error}",
+        )
     git_env = _git_environment(resolved_root, filter_drivers)
 
     dirty_paths, status_snapshot, status_error = _git_status(resolved_root, git_env, git_executable)
