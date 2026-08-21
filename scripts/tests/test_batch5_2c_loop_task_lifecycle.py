@@ -83,8 +83,11 @@ def test_reviewer_evidence_adapter_emits_shared_review_evidence_after_adjudicati
         assert token in text
 
 
-def test_phase_order_adjudicates_before_portable_evidence_and_remediates_a_before_b():
+def test_phase_order_increments_generation_before_adjudication_and_remediates_a_before_b():
     phase = (SKILL / "reference/phase-index.md").read_text(encoding="utf-8")
+    assert phase.index("increment Lens A review_generation") < phase.index(
+        "adjudicate Lens A proposed findings"
+    )
     assert phase.index("adjudicate Lens A proposed findings") < phase.index(
         "normalize/validate Lens A review_evidence"
     )
@@ -94,9 +97,13 @@ def test_phase_order_adjudicates_before_portable_evidence_and_remediates_a_befor
     assert phase.index("if Lens A has accepted findings: dispatch Builder remediation") < phase.index(
         "dispatch Reviewer Lens B"
     )
+    assert phase.index("increment Lens B review_generation") < phase.index(
+        "adjudicate Lens B proposed findings"
+    )
     assert phase.index("adjudicate Lens B proposed findings") < phase.index(
         "normalize/validate Lens B review_evidence"
     )
+    assert "each returned rerun increments that lens generation" in phase
 
 
 def test_report_template_keeps_human_provenance_out_of_inline_code():
