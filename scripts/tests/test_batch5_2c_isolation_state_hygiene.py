@@ -28,9 +28,9 @@ def test_isolated_review_rejects_stale_exception_provenance():
             "isolation_exception_authorized": False,
             "isolation_exception_provenance": "stale authorization from an earlier review",
             "isolation_exception_change_identity": None,
-            "isolation_exception_review_generated_at": None,
+            "isolation_exception_review_generation": None,
+            "review_generation": 2,
             "reviewed_change_identity": _identity(),
-            "review_evidence": {"generated_at": "2026-08-21T00:00:00Z"},
         },
     )
 
@@ -45,18 +45,17 @@ def test_isolated_review_rejects_stale_exception_review_generation():
             "isolation_exception_authorized": False,
             "isolation_exception_provenance": None,
             "isolation_exception_change_identity": None,
-            "isolation_exception_review_generated_at": "2026-08-20T00:00:00Z",
+            "isolation_exception_review_generation": 1,
+            "review_generation": 2,
             "reviewed_change_identity": _identity(),
-            "review_evidence": {"generated_at": "2026-08-21T00:00:00Z"},
         },
     )
 
-    assert any("must not retain isolation_exception_review_generated_at" in error for error in errors)
+    assert any("must not retain isolation_exception_review_generation" in error for error in errors)
 
 
 def test_not_isolated_exception_is_bound_to_current_review_generation():
     identity = _identity()
-    current_generation = "2026-08-21T01:00:00Z"
     errors = _load()._isolation_errors(
         "lens_a",
         {
@@ -64,9 +63,9 @@ def test_not_isolated_exception_is_bound_to_current_review_generation():
             "isolation_exception_authorized": True,
             "isolation_exception_provenance": "human accepted this degraded review",
             "isolation_exception_change_identity": identity,
-            "isolation_exception_review_generated_at": current_generation,
+            "isolation_exception_review_generation": 2,
+            "review_generation": 2,
             "reviewed_change_identity": identity,
-            "review_evidence": {"generated_at": current_generation},
         },
     )
 
@@ -82,10 +81,10 @@ def test_same_identity_rerun_rejects_exception_from_earlier_review_generation():
             "isolation_exception_authorized": True,
             "isolation_exception_provenance": "human accepted the earlier degraded review",
             "isolation_exception_change_identity": identity,
-            "isolation_exception_review_generated_at": "2026-08-21T01:00:00Z",
+            "isolation_exception_review_generation": 1,
+            "review_generation": 2,
             "reviewed_change_identity": identity,
-            "review_evidence": {"generated_at": "2026-08-21T02:00:00Z"},
         },
     )
 
-    assert any("must be bound to the current review_evidence.generated_at" in error for error in errors)
+    assert any("must be bound to the current review_generation" in error for error in errors)
