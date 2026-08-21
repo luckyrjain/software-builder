@@ -59,17 +59,17 @@ worktree evidence while conflict paths are normalized back to `repo_root`;
 unrelated sibling changes therefore remain visible without blocking the
 creator.
 
-Before any Git command, the guard finds the nearest enclosing Git worktree
-boundary using only filesystem `.git` markers, removes PATH entries that
+Before any Git command, the guard finds the **outermost enclosing Git worktree
+boundary** visible through filesystem `.git` markers, removes PATH entries that
 resolve inside that boundary, resolves a Git executable from the remaining
 search directories, and pins every guard/helper subprocess to that absolute
 executable. If no Git binary can be resolved outside the enclosing worktree,
-the guard blocks. This prevents a checked-in or generated `git` shim from
-executing merely because a repo-local `bin`, virtual environment, sibling tool
-directory, or other monorepo-controlled directory appears on PATH. The same
-rule applies when `repo_root` itself is only one nested service in a larger
-worktree. The sanitized PATH is also inherited by Git in case an internal
-helper lookup occurs.
+the guard blocks. Using the outermost boundary is deliberate: when `repo_root`
+is an initialized submodule or other nested repository, a `git` shim in its
+enclosing superproject is still repository-controlled and must not become the
+trusted executable. The same rule applies when `repo_root` is only one nested
+service in a larger worktree. The sanitized PATH is also inherited by Git in
+case an internal helper lookup occurs.
 
 Its Git subprocesses remove repository-selection/index overrides, `GIT_EXEC_PATH`,
 and all `GIT_TRACE*` settings, ignore user/system Git config, disable configured
@@ -98,17 +98,18 @@ a normal nested scope.
 
 The pre-write check therefore cannot be redirected to another repository,
 execute an ambient fsmonitor or repository clean-filter program, resolve Git
-from the target/enclosing worktree, create an ambient trace file, refresh Git
-index metadata, hide staged state through replace objects, or silently write
-through a parent scope into nested Git metadata while it is deciding.
-Filter-driver names are resolved with `git check-attr` over Git-tracked paths in
-the enclosing worktree before status; if that attribute read cannot be parsed,
-the guard fails closed. This top-level filter discovery is deliberate: status
-retains sibling evidence, so every path it may inspect must have executable
-filters neutralized even when that sibling lies outside nested `repo_root`.
-Because the guard disables executable filters, a filtered path that Git can only
-reconcile by executing its filter may be reported conservatively as dirty; an
-overlap still blocks rather than running repository code.
+from the target/enclosing worktree or an enclosing superproject, create an
+ambient trace file, refresh Git index metadata, hide staged state through
+replace objects, or silently write through a parent scope into nested Git
+metadata while it is deciding. Filter-driver names are resolved with
+`git check-attr` over Git-tracked paths in the enclosing worktree before status;
+if that attribute read cannot be parsed, the guard fails closed. This top-level
+filter discovery is deliberate: status retains sibling evidence, so every path
+it may inspect must have executable filters neutralized even when that sibling
+lies outside nested `repo_root`. Because the guard disables executable filters,
+a filtered path that Git can only reconcile by executing its filter may be
+reported conservatively as dirty; an overlap still blocks rather than running
+repository code.
 
 Dirty paths outside the planned set are reported and left exactly as found.
 Only paths inside `repo_root` participate in write conflicts. A planned path
