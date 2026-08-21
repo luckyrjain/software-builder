@@ -27,6 +27,8 @@ def test_windows_reserved_device_component_is_unsafe() -> None:
         "lpt9.out",
         "COM¹",
         "LPT³.txt",
+        "CONIN$",
+        "conout$.txt",
     ):
         assert guard._windows_path_component_is_unsafe(component), component
 
