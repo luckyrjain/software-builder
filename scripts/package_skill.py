@@ -184,10 +184,22 @@ def write_manifest(
 def _shared_script(repo_root: Path, filename: str, description: str) -> Path:
     """Find a shared runtime script in the selected source repository."""
 
-    candidate = repo_root / "scripts" / filename
-    if candidate.is_file():
-        return candidate
-    raise FileNotFoundError(f"{description} missing: {candidate}")
+    selected_root = repo_root.resolve(strict=True)
+    candidate = selected_root / "scripts" / filename
+    if not candidate.is_file():
+        raise FileNotFoundError(f"{description} missing: {candidate}")
+    try:
+        resolved = candidate.resolve(strict=True)
+        resolved.relative_to(selected_root)
+    except ValueError as exc:
+        raise ValueError(
+            f"{description} resolves outside selected source repository: {candidate} -> {resolved}",
+        ) from exc
+    except (OSError, RuntimeError) as exc:
+        raise FileNotFoundError(f"{description} cannot be resolved safely: {candidate}: {exc}") from exc
+    if not resolved.is_file():
+        raise FileNotFoundError(f"{description} is not a file: {candidate}")
+    return candidate
 
 
 def package_skill(
