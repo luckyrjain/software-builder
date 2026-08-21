@@ -262,10 +262,29 @@ def _is_git_metadata_component(part: str) -> bool:
     return normalised.casefold() == ".git"
 
 
-def _windows_path_component_is_unsafe(part: str) -> bool:
-    """Return whether a Windows path component can address an NTFS alternate stream."""
+_WINDOWS_RESERVED_DEVICE_BASENAMES = {
+    "con",
+    "prn",
+    "aux",
+    "nul",
+    *(f"com{digit}" for digit in "123456789"),
+    *(f"lpt{digit}" for digit in "123456789"),
+    "com¹",
+    "com²",
+    "com³",
+    "lpt¹",
+    "lpt²",
+    "lpt³",
+}
 
-    return ":" in part
+
+def _windows_path_component_is_unsafe(part: str) -> bool:
+    """Reject Win32 aliases, device names, and alternate-stream syntax."""
+
+    if ":" in part or part.rstrip(" .") != part:
+        return True
+    basename = part.split(".", 1)[0].casefold()
+    return basename in _WINDOWS_RESERVED_DEVICE_BASENAMES
 
 
 def _looks_like_bare_git_repository(path: Path) -> bool:
@@ -302,7 +321,7 @@ def _normalise_planned_paths(
                 _windows_path_component_is_unsafe(part) for part in lexical_relative.parts
             ):
                 return (), (
-                    f"planned path {raw!r} uses a Windows alternate data stream; refusing to write"
+                    f"planned path {raw!r} uses an unsafe Windows path component; refusing to write"
                 )
             if any(_is_git_metadata_component(part) for part in lexical_relative.parts):
                 return (), f"planned path {raw!r} targets Git metadata; refusing to write"
@@ -328,7 +347,7 @@ def _normalise_planned_paths(
             _windows_path_component_is_unsafe(part) for part in relative.parts
         ):
             return (), (
-                f"planned path {raw!r} uses a Windows alternate data stream; refusing to write"
+                f"planned path {raw!r} uses an unsafe Windows path component; refusing to write"
             )
         if any(_is_git_metadata_component(part) for part in relative.parts):
             return (), f"planned path {raw!r} targets Git metadata; refusing to write"
