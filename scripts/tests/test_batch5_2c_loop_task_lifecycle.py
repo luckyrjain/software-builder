@@ -58,9 +58,14 @@ def test_state_schema_carries_shared_identity_requirements_and_lens_evidence():
 
 
 def test_lifecycle_workflow_versions_track_behavior_changes():
-    for name in ("orchestrator-lifecycle.md", "reviewer-evidence.md", "lifecycle-gate.md"):
+    expected = {
+        "orchestrator-lifecycle.md": "1.6",
+        "reviewer-evidence.md": "1.5",
+        "lifecycle-gate.md": "1.6",
+    }
+    for name, version in expected.items():
         text = (SKILL / "workflow" / name).read_text(encoding="utf-8")
-        assert "workflow_version: 1.5" in text
+        assert f"workflow_version: {version}" in text
 
 
 def test_reviewer_evidence_adapter_emits_shared_review_evidence_after_adjudication():
@@ -131,6 +136,7 @@ def test_orchestrator_path_loads_mandatory_lifecycle_overlay():
     assert "orchestrator-lifecycle.md" in phase
     for token in (
         "validate_loop_lifecycle.py",
+        "python3",
         "<skill_root>/scripts/validate_loop_lifecycle.py",
         "do not assume the current working directory",
         "--state",
@@ -154,6 +160,7 @@ def test_lifecycle_gate_revalidates_before_ready_or_merge():
     text = (SKILL / "workflow/lifecycle-gate.md").read_text(encoding="utf-8")
     for token in (
         "validate_loop_lifecycle.py",
+        "python3",
         "<skill_root>/scripts/validate_loop_lifecycle.py",
         "current working directory",
         "--state",
