@@ -13,6 +13,7 @@ from scripts.registry.canonical_manifest import (
     validate_canonical_manifest,
 )
 from scripts.registry.composition_contracts import load_contracts
+from scripts.registry.frontmatter import load_skill_frontmatter
 from scripts.registry.models import Registry
 from scripts.registry.schema import parse_registry
 from scripts.yaml_safety import YAML_SAFETY_ERRORS, load_unique_yaml_file, require_mapping
@@ -35,9 +36,9 @@ def _version_input(skill_md: Path, raw_version: Any) -> Any:
 
 
 def _normalize_version(raw: Any) -> str:
-    if raw is None or raw == "" or isinstance(raw, bool):
+    if raw is None or raw == "":
         raise ValueError("skill_version is mandatory")
-    if isinstance(raw, float):
+    if isinstance(raw, bool) or isinstance(raw, float):
         raise ValueError(
             "invalid skill_version; expected semantic version string or integer major"
         )
@@ -143,8 +144,20 @@ def build_manifest(root: Path = ROOT) -> dict[str, Any]:
 
 
 def skill_versions(root: Path = ROOT, *, registry: Registry | None = None) -> dict[str, str]:
-    del registry
-    canonical = load_canonical_manifest(root)
+    try:
+        canonical = load_canonical_manifest(root)
+    except ValueError as exc:
+        if "canonical manifest.contracts" not in str(exc):
+            raise
+        legacy_registry = registry or parse_registry(root / "skills.yaml")
+        versions: dict[str, str] = {}
+        for skill_id, entry in legacy_registry.skills.items():
+            skill_md = root / entry.path / "SKILL.md"
+            frontmatter = load_skill_frontmatter(skill_md)
+            versions[skill_id] = _normalize_version(
+                _version_input(skill_md, frontmatter.get("skill_version"))
+            )
+        return versions
     skills = require_mapping(canonical.get("skills"), "canonical manifest.skills")
     return {
         skill_id: _normalize_version(require_mapping(entry, f"skills.{skill_id}")["version"])
