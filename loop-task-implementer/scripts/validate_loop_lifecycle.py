@@ -94,7 +94,11 @@ def _isolation_errors(name: str, lens: dict[str, object]) -> list[str]:
     exception = lens.get("isolation_exception_authorized")
     provenance = lens.get("isolation_exception_provenance")
     exception_identity = lens.get("isolation_exception_change_identity")
+    exception_generation = lens.get("isolation_exception_review_generated_at")
     reviewed_identity = lens.get("reviewed_change_identity")
+    evidence = lens.get("review_evidence")
+    review_generation = evidence.get("generated_at") if isinstance(evidence, dict) else None
+
     if type(exception) is not bool:
         return [f"{name}.isolation_exception_authorized must be an explicit boolean"]
     if status == "ISOLATED":
@@ -105,6 +109,8 @@ def _isolation_errors(name: str, lens: dict[str, object]) -> list[str]:
             errors.append(f"{name} isolated review must not retain isolation_exception_provenance")
         if exception_identity is not None:
             errors.append(f"{name} isolated review must not retain isolation_exception_change_identity")
+        if exception_generation is not None:
+            errors.append(f"{name} isolated review must not retain isolation_exception_review_generated_at")
         return errors
     if status != "NOT_ISOLATED":
         return [f"{name}.isolation_status must be ISOLATED or NOT_ISOLATED before lifecycle readiness"]
@@ -116,6 +122,14 @@ def _isolation_errors(name: str, lens: dict[str, object]) -> list[str]:
     if not isinstance(exception_identity, dict) or exception_identity != reviewed_identity:
         errors.append(
             f"{name} isolation exception must be bound to the current reviewed_change_identity"
+        )
+    if (
+        not isinstance(exception_generation, str)
+        or not exception_generation.strip()
+        or exception_generation != review_generation
+    ):
+        errors.append(
+            f"{name} isolation exception must be bound to the current review_evidence.generated_at"
         )
     return errors
 
