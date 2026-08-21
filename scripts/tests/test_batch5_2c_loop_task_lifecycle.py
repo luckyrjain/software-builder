@@ -12,8 +12,9 @@ def test_loop_task_declares_shared_lifecycle_contract():
     assert contract.exists()
     data = yaml.safe_load(contract.read_text(encoding="utf-8"))
     assert data["schema_version"] == 1
-    assert data["shared_contracts"]["change_identity"].endswith("change-identity.yaml")
-    assert data["shared_contracts"]["review_evidence"].endswith("review-evidence.yaml")
+    assert data["shared_contract_path_base"] == "package_or_repository_root"
+    assert data["shared_contracts"]["change_identity"] == "docs/skill-framework/shared/change-identity.yaml"
+    assert data["shared_contracts"]["review_evidence"] == "docs/skill-framework/shared/review-evidence.yaml"
     for requirement in (
         "current_change_identity_valid",
         "lens_a_evidence_fresh",
@@ -32,6 +33,7 @@ def test_loop_task_declares_shared_lifecycle_contract():
 
 def test_state_schema_carries_shared_identity_requirements_and_lens_evidence():
     data = yaml.safe_load((SKILL / "reference/state-schema.yaml").read_text(encoding="utf-8"))
+    assert data["workflow_version"] == "1.4"
     assert "requirements_ref" in data["task"]
     assert "change_identity" in data["workspace"]
     assert "conflict_resolution_occurred" in data["workspace"]
@@ -49,6 +51,12 @@ def test_state_schema_carries_shared_identity_requirements_and_lens_evidence():
     assert "security_sensitive_needs_evidence_unresolved" in data["merge_readiness"]
 
 
+def test_lifecycle_workflow_versions_match_state_contract_generation():
+    for name in ("orchestrator-lifecycle.md", "reviewer-evidence.md", "lifecycle-gate.md"):
+        text = (SKILL / "workflow" / name).read_text(encoding="utf-8")
+        assert "workflow_version: 1.4" in text
+
+
 def test_reviewer_evidence_adapter_emits_shared_review_evidence_after_adjudication():
     text = (SKILL / "workflow/reviewer-evidence.md").read_text(encoding="utf-8")
     for token in (
@@ -58,7 +66,7 @@ def test_reviewer_evidence_adapter_emits_shared_review_evidence_after_adjudicati
         "REJECTED",
         "review_evidence",
         "change_identity",
-        "docs/skill-framework/shared/review-evidence.yaml",
+        "../../docs/skill-framework/shared/review-evidence.yaml",
         "inspection_status",
         "findings.defect` is empty",
         "NOT_ISOLATED",
@@ -87,6 +95,17 @@ def test_report_template_keeps_human_provenance_out_of_inline_code():
     report = (SKILL / "report-template.md").read_text(encoding="utf-8")
     assert "provenance: <escaped/redacted provenance>" in report
     assert "`<provenance>`" not in report
+    assert "identity head `<isolation_exception_change_identity.head_sha>`" in report
+    assert "identity `<isolation_exception_change_identity>`" not in report
+
+
+def test_escalation_machine_state_requires_dynamic_outer_fence():
+    report = (SKILL / "report-template.md").read_text(encoding="utf-8")
+    assert "max(3, longest_run + 1)" in report
+    assert "Do **not** use a fixed triple-backtick fence for this block" in report
+    assert "<DYNAMIC_FENCE>yaml" in report
+    assert "requirements_ref:" in report
+    assert "change_identity:" in report
 
 
 def test_orchestrator_path_loads_mandatory_lifecycle_overlay():
