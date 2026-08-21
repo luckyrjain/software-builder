@@ -2,7 +2,11 @@
 """Fail-closed lifecycle validation for loop-task-implementer state."""
 from __future__ import annotations
 
+import argparse
 import importlib.util
+import json
+import math
+import sys
 from pathlib import Path
 from types import ModuleType
 
@@ -13,31 +17,17 @@ _UNSET = object()
 
 
 def _shared_runtime_path() -> Path:
-    """Resolve the shared runtime for installed packages or this source repository.
-
-    Installed packages must use their vendored runtime. A source checkout may use the
-    repository-level shared runtime only when the surrounding tree proves it is the
-    software-builder development layout; this avoids accepting an arbitrary sibling
-    ``docs`` tree as executable lifecycle policy.
-    """
+    """Resolve the shared runtime for installed packages or this source repository."""
     vendored = SKILL_ROOT / "docs/skill-framework/shared/review_contract_runtime.py"
     if vendored.is_file():
         return vendored
-
-    # package_skill always writes this manifest into an installed skill. Once it
-    # is present, never search outside the package for executable lifecycle policy.
     if (SKILL_ROOT / _INSTALL_MANIFEST).is_file():
         raise RuntimeError(f"unable to load packaged shared review runtime: {vendored}")
-
     repo_root = SKILL_ROOT.parent
     source_runtime = repo_root / "docs/skill-framework/shared/review_contract_runtime.py"
-    source_markers = (
-        repo_root / "skills.yaml",
-        repo_root / "scripts/package_skill.py",
-    )
+    source_markers = (repo_root / "skills.yaml", repo_root / "scripts/package_skill.py")
     if all(marker.is_file() for marker in source_markers) and source_runtime.is_file():
         return source_runtime
-
     raise RuntimeError(
         "unable to load packaged shared review runtime or verified source-checkout runtime: "
         f"{vendored}"
@@ -65,10 +55,10 @@ def _same_hex(left: object, right: object) -> bool:
 def _identity_shas_changed(stored: object, current: object) -> bool:
     if not isinstance(stored, dict) or not isinstance(current, dict):
         return False
-    for field in ("base_sha", "head_sha", "merge_base_sha"):
-        if not _same_hex(stored.get(field), current.get(field)):
-            return True
-    return False
+    return any(
+        not _same_hex(stored.get(field), current.get(field))
+        for field in ("base_sha", "head_sha", "merge_base_sha")
+    )
 
 
 def _clean_evidence_semantic_errors(name: str, evidence: dict[str, object]) -> list[str]:
@@ -90,19 +80,42 @@ def _isolation_errors(name: str, lens: dict[str, object]) -> list[str]:
     status = lens.get("isolation_status")
     exception = lens.get("isolation_exception_authorized")
     provenance = lens.get("isolation_exception_provenance")
+    exception_identity = lens.get("isolation_exception_change_identity")
+    exception_generation = lens.get("isolation_exception_review_generation")
+    reviewed_identity = lens.get("reviewed_change_identity")
+    review_generation = lens.get("review_generation")
+
     if type(exception) is not bool:
         return [f"{name}.isolation_exception_authorized must be an explicit boolean"]
     if status == "ISOLATED":
+        errors: list[str] = []
         if exception:
-            return [f"{name} isolation exception must not be authorized when isolation_status=ISOLATED"]
-        return []
+            errors.append(
+                f"{name} isolation exception must not be authorized when isolation_status=ISOLATED"
+            )
+        if provenance is not None:
+            errors.append(f"{name} isolated review must not retain isolation_exception_provenance")
+        if exception_identity is not None:
+            errors.append(f"{name} isolated review must not retain isolation_exception_change_identity")
+        if exception_generation is not None:
+            errors.append(
+                f"{name} isolated review must not retain isolation_exception_review_generation"
+            )
+        return errors
     if status != "NOT_ISOLATED":
         return [f"{name}.isolation_status must be ISOLATED or NOT_ISOLATED before lifecycle readiness"]
     if not exception:
-        return [f"{name} NOT_ISOLATED blocks lifecycle readiness without explicit human isolation exception"]
+        return [
+            f"{name} NOT_ISOLATED blocks lifecycle readiness without explicit human isolation exception"
+        ]
+    errors = []
     if not isinstance(provenance, str) or not provenance.strip():
-        return [f"{name} isolation exception requires non-empty human authorization provenance"]
-    return []
+        errors.append(f"{name} isolation exception requires non-empty human authorization provenance")
+    if not isinstance(exception_identity, dict) or exception_identity != reviewed_identity:
+        errors.append(f"{name} isolation exception must be bound to the current reviewed_change_identity")
+    if type(exception_generation) is not int or exception_generation != review_generation:
+        errors.append(f"{name} isolation exception must be bound to the current review_generation")
+    return errors
 
 
 def _lens_errors(
@@ -118,6 +131,8 @@ def _lens_errors(
     status = lens.get("status")
     evidence = lens.get("review_evidence")
     reviewed_identity = lens.get("reviewed_change_identity")
+    review_generation = lens.get("review_generation")
+    evidence_generation = lens.get("review_evidence_generation")
 
     if status != "CLEAN":
         errors.append(f"{name} must be CLEAN before lifecycle readiness")
@@ -125,6 +140,13 @@ def _lens_errors(
     if not isinstance(evidence, dict):
         errors.append(f"{name} CLEAN requires review_evidence")
         return errors
+    if type(review_generation) is not int or review_generation < 1:
+        errors.append(f"{name}.review_generation must be a positive integer for CLEAN lifecycle evidence")
+    if type(evidence_generation) is not int or evidence_generation != review_generation:
+        errors.append(
+            f"{name}.review_evidence_generation must equal the current review_generation "
+            "for CLEAN lifecycle evidence"
+        )
 
     errors.extend(_clean_evidence_semantic_errors(name, evidence))
     errors.extend(_isolation_errors(name, lens))
@@ -139,13 +161,15 @@ def _lens_errors(
     if sha_transition:
         if type(conflict_resolution_occurred) is not bool:
             errors.append(
-                f"{name} cannot establish freshness: conflict_resolution_occurred is unknown after identity SHA transition"
+                f"{name} cannot establish freshness: conflict_resolution_occurred is unknown "
+                "after identity SHA transition"
             )
             conflict_for_shared = True
         else:
             if not isinstance(conflict_resolution_provenance, str) or not conflict_resolution_provenance.strip():
                 errors.append(
-                    f"{name} cannot establish freshness: identity SHA transition requires conflict_resolution_provenance"
+                    f"{name} cannot establish freshness: identity SHA transition requires "
+                    "conflict_resolution_provenance"
                 )
             conflict_for_shared = conflict_resolution_occurred
     else:
@@ -157,8 +181,7 @@ def _lens_errors(
     }
     if current_requirements_ref is not _UNSET:
         kwargs["current_requirements_ref"] = current_requirements_ref
-    shared_errors = shared.validate_review_evidence(evidence, **kwargs)
-    errors.extend(f"{name}: {error}" for error in shared_errors)
+    errors.extend(f"{name}: {error}" for error in shared.validate_review_evidence(evidence, **kwargs))
     return errors
 
 
@@ -166,22 +189,17 @@ def _merge_policy_errors(readiness: dict[str, object]) -> list[str]:
     errors: list[str] = []
     if readiness.get("acceptance_criteria_complete") is not True:
         errors.append("acceptance criteria must be complete before lifecycle readiness")
-
     blockers = readiness.get("accepted_blocking_findings_open")
     if type(blockers) is not int or blockers != 0:
         errors.append("accepted_blocking_findings_open must be integer 0 before lifecycle readiness")
-
     unresolved = readiness.get("security_sensitive_needs_evidence_unresolved")
     if type(unresolved) is not int or unresolved != 0:
         errors.append("security_sensitive_needs_evidence_unresolved must be integer 0 before lifecycle readiness")
-
     if readiness.get("required_approvals_present") is not True:
         errors.append("required approvals must be satisfied before lifecycle readiness")
-
     threads = readiness.get("blocking_threads_open")
     if type(threads) is not int or threads != 0:
         errors.append("blocking_threads_open must be integer 0 before lifecycle readiness")
-
     if readiness.get("integration_state_valid") is not True:
         errors.append("integration state must be valid before lifecycle readiness")
     if readiness.get("circuit_breaker_active") is not False:
@@ -230,6 +248,15 @@ def validate_lifecycle_state(state: object) -> list[str]:
     elif not isinstance(current_head, str):
         errors.append("workspace.current_head_commit must be present for lifecycle readiness")
 
+    third_party_checked_head = workspace.get("third_party_change_checked_head")
+    if not isinstance(third_party_checked_head, str):
+        errors.append("workspace.third_party_change_checked_head must be present for lifecycle readiness")
+    elif not _same_hex(third_party_checked_head, current_head):
+        errors.append(
+            "third-party branch-change evidence is stale: third_party_change_checked_head "
+            "must equal current_head_commit"
+        )
+
     lens_a = _mapping(review.get("lens_a"))
     lens_b = _mapping(review.get("lens_b"))
     if not identity_errors:
@@ -255,9 +282,7 @@ def validate_lifecycle_state(state: object) -> list[str]:
         )
 
     if lens_a.get("status") == "CLEAN" and lens_b.get("status") == "CLEAN":
-        a_identity = lens_a.get("reviewed_change_identity")
-        b_identity = lens_b.get("reviewed_change_identity")
-        if a_identity != b_identity:
+        if lens_a.get("reviewed_change_identity") != lens_b.get("reviewed_change_identity"):
             errors.append("both CLEAN lenses must reference the same reviewed_change_identity")
 
     if third_party is True:
@@ -267,10 +292,74 @@ def validate_lifecycle_state(state: object) -> list[str]:
 
     if ci.get("required_checks_green") is not True:
         errors.append("required checks must be green before lifecycle readiness")
-    else:
-        ci_commit = ci.get("commit")
-        if not _same_hex(ci_commit, current_head):
-            errors.append("required checks are not authoritative for current head: ci.commit must equal current_head_commit")
+    elif not _same_hex(ci.get("commit"), current_head):
+        errors.append(
+            "required checks are not authoritative for current head: "
+            "ci.commit must equal current_head_commit"
+        )
 
     errors.extend(_merge_policy_errors(readiness))
     return errors
+
+
+def _reject_duplicate_object_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    result: dict[str, object] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"duplicate JSON object key: {key!r}")
+        result[key] = value
+    return result
+
+
+def _reject_nonfinite_json(value: str) -> object:
+    raise ValueError(f"non-finite JSON value is not allowed: {value}")
+
+
+def _parse_finite_float(value: str) -> float:
+    parsed = float(value)
+    if not math.isfinite(parsed):
+        raise ValueError(f"JSON floating-point value is out of finite range: {value}")
+    return parsed
+
+
+def _read_state(path: str) -> object:
+    raw = sys.stdin.read() if path == "-" else Path(path).read_text(encoding="utf-8")
+    return json.loads(
+        raw,
+        object_pairs_hook=_reject_duplicate_object_keys,
+        parse_constant=_reject_nonfinite_json,
+        parse_float=_parse_finite_float,
+    )
+
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Fail-closed READY/COMPLETE lifecycle validation for loop-task-implementer state"
+    )
+    parser.add_argument(
+        "--state",
+        required=True,
+        help="Path to the official lifecycle state serialized as JSON, or '-' to read JSON from stdin",
+    )
+    return parser.parse_args(argv)
+
+
+def main(argv: list[str] | None = None) -> int:
+    try:
+        args = parse_args(argv)
+        errors = validate_lifecycle_state(_read_state(args.state))
+    except SystemExit as exc:
+        print(f"lifecycle validation failed closed: validation runtime exited ({exc.code})", file=sys.stderr)
+        return 2
+    except Exception as exc:
+        print(f"lifecycle validation failed closed: {exc}", file=sys.stderr)
+        return 2
+    if errors:
+        for error in errors:
+            print(error, file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

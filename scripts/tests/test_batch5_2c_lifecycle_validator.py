@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import importlib.util
+import json
+import subprocess
+import sys
 from pathlib import Path
 
 
@@ -44,14 +47,18 @@ def _evidence(identity):
     }
 
 
-def _lens(identity, evidence):
+def _lens(identity, evidence, *, generation=1):
     return {
         "status": "CLEAN",
+        "review_generation": generation,
+        "review_evidence_generation": generation,
         "reviewed_change_identity": identity,
         "review_evidence": evidence,
         "isolation_status": "ISOLATED",
         "isolation_exception_authorized": False,
         "isolation_exception_provenance": None,
+        "isolation_exception_change_identity": None,
+        "isolation_exception_review_generation": None,
     }
 
 
@@ -66,6 +73,7 @@ def _state(identity=None):
             "conflict_resolution_occurred": False,
             "conflict_resolution_provenance": "provider history confirms conflict-free transition",
             "third_party_change_detected": False,
+            "third_party_change_checked_head": identity["head_sha"],
         },
         "review": {
             "lens_a": _lens(identity, evidence),
@@ -89,6 +97,31 @@ def test_pre_ready_state_passes_only_when_all_lifecycle_requirements_hold():
     assert _load().validate_lifecycle_state(_state()) == []
 
 
+def test_clean_lens_requires_positive_integer_review_generation():
+    for value in (0, -1, True, "1", None):
+        state = _state()
+        state["review"]["lens_a"]["review_generation"] = value
+        errors = _load().validate_lifecycle_state(state)
+        assert any("review_generation must be a positive integer" in error for error in errors)
+
+
+def test_clean_lens_requires_evidence_from_current_review_generation():
+    state = _state()
+    state["review"]["lens_a"]["review_generation"] = 2
+    # Simulates crash/resume after generation advanced but before new evidence was persisted.
+    assert state["review"]["lens_a"]["review_evidence_generation"] == 1
+    errors = _load().validate_lifecycle_state(state)
+    assert any("review_evidence_generation must equal the current review_generation" in error for error in errors)
+
+
+def test_clean_lens_rejects_missing_or_boolean_evidence_generation():
+    for value in (None, True, "1"):
+        state = _state()
+        state["review"]["lens_a"]["review_evidence_generation"] = value
+        errors = _load().validate_lifecycle_state(state)
+        assert any("review_evidence_generation must equal the current review_generation" in error for error in errors)
+
+
 def test_pre_ready_state_rejects_unclean_lens_and_non_green_ci():
     state = _state()
     state["review"]["lens_a"]["status"] = "NOT_RUN"
@@ -110,7 +143,7 @@ def test_clean_lens_rejects_partial_or_unable_inspection_evidence():
     assert any("CLEAN requires no unable_to_inspect surfaces" in error for error in errors)
 
 
-def test_clean_lens_rejects_proposed_blocking_defect_evidence():
+def test_clean_lens_rejects_defect_evidence():
     state = _state()
     state["review"]["lens_a"]["review_evidence"]["findings"]["defect"] = [
         {"id": "AUTHZ-001", "category": "defect", "summary": "Authorization bypass", "evidence": "src/a.py:10"}
@@ -126,12 +159,14 @@ def test_not_isolated_lens_requires_explicit_human_exception():
     assert any("NOT_ISOLATED blocks lifecycle readiness" in error for error in errors)
 
 
-def test_not_isolated_lens_can_proceed_only_with_explicit_human_exception_provenance():
+def test_not_isolated_lens_can_proceed_with_current_exception():
     state = _state()
     lens = state["review"]["lens_a"]
     lens["isolation_status"] = "NOT_ISOLATED"
     lens["isolation_exception_authorized"] = True
     lens["isolation_exception_provenance"] = "human accepted degraded isolation in current session"
+    lens["isolation_exception_change_identity"] = lens["reviewed_change_identity"]
+    lens["isolation_exception_review_generation"] = lens["review_generation"]
     assert _load().validate_lifecycle_state(state) == []
 
 
@@ -140,8 +175,10 @@ def test_isolation_exception_without_provenance_fails_closed():
     lens = state["review"]["lens_a"]
     lens["isolation_status"] = "NOT_ISOLATED"
     lens["isolation_exception_authorized"] = True
+    lens["isolation_exception_change_identity"] = lens["reviewed_change_identity"]
+    lens["isolation_exception_review_generation"] = lens["review_generation"]
     errors = _load().validate_lifecycle_state(state)
-    assert any("isolation exception requires non-empty human authorization provenance" in error for error in errors)
+    assert any("requires non-empty human authorization provenance" in error for error in errors)
 
 
 def test_isolation_exception_authorized_requires_explicit_boolean():
@@ -152,6 +189,32 @@ def test_isolation_exception_authorized_requires_explicit_boolean():
         assert any("isolation_exception_authorized must be an explicit boolean" in error for error in errors)
 
 
+def test_isolation_exception_is_bound_to_reviewed_identity():
+    state = _state()
+    lens = state["review"]["lens_a"]
+    lens["isolation_status"] = "NOT_ISOLATED"
+    lens["isolation_exception_authorized"] = True
+    lens["isolation_exception_provenance"] = "human accepted degraded isolation for an earlier review"
+    lens["isolation_exception_change_identity"] = _identity(head="d" * 40)
+    lens["isolation_exception_review_generation"] = lens["review_generation"]
+    errors = _load().validate_lifecycle_state(state)
+    assert any("must be bound to the current reviewed_change_identity" in error for error in errors)
+
+
+def test_same_identity_rerun_rejects_exception_from_prior_generation():
+    state = _state()
+    lens = state["review"]["lens_a"]
+    lens["review_generation"] = 2
+    lens["review_evidence_generation"] = 2
+    lens["isolation_status"] = "NOT_ISOLATED"
+    lens["isolation_exception_authorized"] = True
+    lens["isolation_exception_provenance"] = "human accepted degraded isolation for generation 1"
+    lens["isolation_exception_change_identity"] = lens["reviewed_change_identity"]
+    lens["isolation_exception_review_generation"] = 1
+    errors = _load().validate_lifecycle_state(state)
+    assert any("isolation exception must be bound to the current review_generation" in error for error in errors)
+
+
 def test_security_sensitive_needs_evidence_must_be_resolved_before_readiness():
     state = _state()
     state["merge_readiness"]["security_sensitive_needs_evidence_unresolved"] = 1
@@ -159,7 +222,7 @@ def test_security_sensitive_needs_evidence_must_be_resolved_before_readiness():
     assert any("security_sensitive_needs_evidence_unresolved must be integer 0" in error for error in errors)
 
 
-def test_pre_ready_state_rejects_existing_completion_policy_blockers():
+def test_existing_completion_policy_blockers_fail():
     state = _state()
     state["merge_readiness"].update(
         acceptance_criteria_complete=False,
@@ -188,11 +251,15 @@ def test_ready_state_rejects_ci_green_for_old_head():
     assert any("ci.commit must equal current_head_commit" in error for error in errors)
 
 
-def test_ready_state_rejects_unresolved_third_party_branch_change():
+def test_ready_state_rejects_unresolved_or_unknown_third_party_state():
     state = _state()
     state["workspace"]["third_party_change_detected"] = True
     errors = _load().validate_lifecycle_state(state)
     assert any("third_party_change_detected blocks lifecycle readiness" in error for error in errors)
+    state = _state()
+    del state["workspace"]["third_party_change_detected"]
+    errors = _load().validate_lifecycle_state(state)
+    assert any("third_party_change_detected must be an explicit boolean" in error for error in errors)
 
 
 def test_ready_state_rejects_missing_requirements_ref_state():
@@ -202,11 +269,15 @@ def test_ready_state_rejects_missing_requirements_ref_state():
     assert any("task.requirements_ref must be present" in error for error in errors)
 
 
-def test_ready_state_rejects_unknown_third_party_change_state():
+def test_third_party_check_must_be_bound_to_current_head():
     state = _state()
-    del state["workspace"]["third_party_change_detected"]
+    state["workspace"]["third_party_change_checked_head"] = "d" * 40
     errors = _load().validate_lifecycle_state(state)
-    assert any("third_party_change_detected must be an explicit boolean" in error for error in errors)
+    assert any("third-party branch-change evidence is stale" in error for error in errors)
+    state = _state()
+    del state["workspace"]["third_party_change_checked_head"]
+    errors = _load().validate_lifecycle_state(state)
+    assert any("third_party_change_checked_head must be present" in error for error in errors)
 
 
 def test_conflict_status_rejects_integer_boolean_aliases():
@@ -248,3 +319,54 @@ def test_fresh_evidence_after_prior_conflict_is_not_permanently_invalidated():
     state["workspace"]["conflict_resolution_occurred"] = True
     state["workspace"]["conflict_resolution_provenance"] = "merge conflict resolved before both lenses reran"
     assert _load().validate_lifecycle_state(state) == []
+
+
+def test_cli_returns_zero_only_for_valid_state(tmp_path: Path):
+    state_path = tmp_path / "state.json"
+    state_path.write_text(json.dumps(_state()), encoding="utf-8")
+    result = subprocess.run([sys.executable, str(SCRIPT), "--state", str(state_path)], cwd=ROOT, capture_output=True, text=True, check=False)
+    assert result.returncode == 0, result.stderr
+
+
+def test_cli_returns_one_for_invalid_lifecycle_state(tmp_path: Path):
+    state = _state()
+    state["ci"]["required_checks_green"] = False
+    state_path = tmp_path / "state.json"
+    state_path.write_text(json.dumps(state), encoding="utf-8")
+    result = subprocess.run([sys.executable, str(SCRIPT), "--state", str(state_path)], cwd=ROOT, capture_output=True, text=True, check=False)
+    assert result.returncode == 1
+    assert "required checks must be green" in result.stderr
+
+
+def test_cli_fails_closed_on_malformed_state(tmp_path: Path):
+    state_path = tmp_path / "state.json"
+    state_path.write_text("{not-json", encoding="utf-8")
+    result = subprocess.run([sys.executable, str(SCRIPT), "--state", str(state_path)], cwd=ROOT, capture_output=True, text=True, check=False)
+    assert result.returncode == 2
+    assert "failed closed" in result.stderr
+
+
+def test_main_classifies_unexpected_runtime_failure_as_fail_closed(tmp_path: Path, monkeypatch, capsys):
+    module = _load()
+    state_path = tmp_path / "state.json"
+    state_path.write_text(json.dumps(_state()), encoding="utf-8")
+
+    def incompatible_runtime(_state):
+        raise TypeError("runtime contract incompatible")
+
+    monkeypatch.setattr(module, "validate_lifecycle_state", incompatible_runtime)
+    assert module.main(["--state", str(state_path)]) == 2
+    assert "lifecycle validation failed closed: runtime contract incompatible" in capsys.readouterr().err
+
+
+def test_main_prevents_runtime_system_exit_zero_from_bypassing_validation(tmp_path: Path, monkeypatch, capsys):
+    module = _load()
+    state_path = tmp_path / "state.json"
+    state_path.write_text(json.dumps(_state()), encoding="utf-8")
+
+    def runtime_exit_zero(_state):
+        raise SystemExit(0)
+
+    monkeypatch.setattr(module, "validate_lifecycle_state", runtime_exit_zero)
+    assert module.main(["--state", str(state_path)]) == 2
+    assert "lifecycle validation failed closed: validation runtime exited (0)" in capsys.readouterr().err
