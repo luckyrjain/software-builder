@@ -1,5 +1,5 @@
 ---
-workflow_version: 1.3
+workflow_version: 1.4
 phase: orchestrator-lifecycle
 produces:
   change_identity: object
