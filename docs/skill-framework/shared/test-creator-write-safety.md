@@ -58,13 +58,17 @@ worktree evidence while conflict paths are normalized back to `repo_root`;
 unrelated sibling changes therefore remain visible without blocking the
 creator.
 
-Before any Git command, the guard removes PATH entries that resolve inside
-`repo_root`, resolves a Git executable from the remaining search directories,
-and pins every guard/helper subprocess to that absolute executable. If no Git
-binary can be resolved outside `repo_root`, the guard blocks. This prevents a
-checked-in or generated `git` shim from executing merely because a repo-local
-`bin`, virtual environment, or other directory appears on PATH; the sanitized
-PATH is also inherited by Git in case an internal helper lookup occurs.
+Before any Git command, the guard finds the nearest enclosing Git worktree
+boundary using only filesystem `.git` markers, removes PATH entries that
+resolve inside that boundary, resolves a Git executable from the remaining
+search directories, and pins every guard/helper subprocess to that absolute
+executable. If no Git binary can be resolved outside the enclosing worktree,
+the guard blocks. This prevents a checked-in or generated `git` shim from
+executing merely because a repo-local `bin`, virtual environment, sibling tool
+directory, or other monorepo-controlled directory appears on PATH. The same
+rule applies when `repo_root` itself is only one nested service in a larger
+worktree. The sanitized PATH is also inherited by Git in case an internal
+helper lookup occurs.
 
 Its Git subprocesses remove repository-selection/index overrides, `GIT_EXEC_PATH`,
 and all `GIT_TRACE*` settings, ignore user/system Git config, disable configured
@@ -74,8 +78,8 @@ and set `GIT_OPTIONAL_LOCKS=0`. Status does not recurse into submodules, so a
 submodule's local Git configuration cannot execute during the parent repository
 check. The pre-write check therefore cannot be redirected to another repository,
 execute an ambient fsmonitor or repository clean-filter program, resolve Git
-from the target repository, create an ambient trace file, or refresh Git index
-metadata while it is deciding. Filter-driver names are resolved with
+from the target/enclosing worktree, create an ambient trace file, or refresh Git
+index metadata while it is deciding. Filter-driver names are resolved with
 `git check-attr` over Git-tracked paths in the enclosing worktree before status;
 if that attribute read cannot be parsed, the guard fails closed. This top-level
 filter discovery is deliberate: status retains sibling evidence, so every path
