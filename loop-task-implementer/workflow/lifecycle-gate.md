@@ -1,5 +1,5 @@
 ---
-workflow_version: 1.5
+workflow_version: 1.6
 phase: lifecycle-gate
 produces:
   lifecycle_validation: object
@@ -47,16 +47,19 @@ stale.
 
 Resolve `skill_root` to the directory containing this skill's `SKILL.md`, independent of the current working directory.
 In the software-builder source checkout that is `<repo_root>/loop-task-implementer`; in an installed package it is the
-installed `loop-task-implementer` directory. Serialize the official state as JSON and run:
+installed `loop-task-implementer` directory. Invoke the validator with a Python 3 interpreter available on the host
+(`python3` on the supported Unix/macOS setup, or the host's configured equivalent) and serialize the official state as
+JSON. On the repository's documented setup the command is:
 
 ```text
-python <skill_root>/scripts/validate_loop_lifecycle.py --state <state.json>
+python3 "<skill_root>/scripts/validate_loop_lifecycle.py" --state "<state.json>"
 ```
 
-Do not substitute the source-only relative path `loop-task-implementer/scripts/...` unless the current working directory
-has actually been verified to be the software-builder repository root. Use `--state -` to supply the JSON on stdin. Only
-process exit code `0` may set readiness or permit completion. Exit code `1` reports lifecycle validation errors; exit code
-`2` means the state/runtime could not be validated and therefore fails closed.
+Use `--state -` to supply the JSON on stdin when avoiding a temporary state path. Do not substitute the source-only
+relative path `loop-task-implementer/scripts/...` unless the current working directory has actually been verified to be
+the software-builder repository root. Do not treat failure to locate a Python 3 interpreter or validator path as a pass.
+Only process exit code `0` may set readiness or permit completion. Exit code `1` reports lifecycle validation errors;
+exit code `2` means the state/runtime could not be validated and therefore fails closed.
 
 The validator must prove all of the following on the same current change:
 
