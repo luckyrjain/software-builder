@@ -17,10 +17,10 @@ level contract:
 
 It must never write production code, reset/clean/stash user changes, commit,
 push, or open a pull request. A path outside `repo_root`, a Git metadata path,
-a path crossing into a nested Git repository or gitlink, an unreadable Git
-state, an index-protected target whose worktree drift Git may hide
-(`assume-unchanged` or `skip-worktree`), a symlinked target, or an empty write
-plan is unsafe and fails closed.
+a path crossing into a nested Git repository, bare repository, or gitlink, an
+unreadable Git state, an index-protected target whose worktree drift Git may
+hide (`assume-unchanged` or `skip-worktree`), a symlinked target, or an empty
+write plan is unsafe and fails closed.
 
 ## Pre-write protocol
 
@@ -78,8 +78,9 @@ in the enclosing Git top-level before status, ignore external attributes files,
 and set `GIT_OPTIONAL_LOCKS=0`. Status does not recurse into submodules, so a
 submodule's local Git configuration cannot execute during the parent repository
 check. Separately, every planned path is checked for nested filesystem `.git`
-markers and for parent-index gitlinks (`160000` mode), so the write plan cannot
-cross into an initialized, deinitialized, or otherwise nested child repository.
+markers, Git's bare-repository metadata shape (`HEAD`, `objects/`, and `refs/`),
+and parent-index gitlinks (`160000` mode), so the write plan cannot cross into
+an initialized, deinitialized, bare, or otherwise nested child repository.
 Selecting an initialized child repository that has its own readable Git
 worktree as `repo_root` remains valid. A deinitialized gitlink directory has no
 independent Git worktree; if Git would resolve that directory back to the
@@ -89,8 +90,8 @@ a normal nested scope.
 The pre-write check therefore cannot be redirected to another repository,
 execute an ambient fsmonitor or repository clean-filter program, resolve Git
 from the target/enclosing worktree, create an ambient trace file, refresh Git
-index metadata, or silently write through a parent scope into a nested Git
-repository while it is deciding. Filter-driver names are resolved with
+index metadata, or silently write through a parent scope into nested Git
+metadata while it is deciding. Filter-driver names are resolved with
 `git check-attr` over Git-tracked paths in the enclosing worktree before status;
 if that attribute read cannot be parsed, the guard fails closed. This top-level
 filter discovery is deliberate: status retains sibling evidence, so every path
@@ -107,7 +108,7 @@ index-protected with `assume-unchanged`/`skip-worktree` is a conflict; the entir
 primary batch fails closed. Existing clean tracked files may be modified only
 when explicitly in the plan. Hard-linked outputs are also rejected because a
 normal path write could mutate another user-visible inode outside the
-repository. Ignored or symlinked existing outputs, nested Git repository
+repository. Ignored or symlinked existing outputs, nested or bare Git repository
 boundaries, and Git metadata paths are unsafe as well.
 
 ## Structured result evidence
