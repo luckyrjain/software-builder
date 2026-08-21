@@ -39,11 +39,11 @@ A lifecycle-clean lens requires all of the following:
 - no `unable_to_inspect` entries;
 - zero `findings.defect` entries;
 - fresh evidence for the current `change_identity` and current `requirements_ref`;
-- `isolation_status: ISOLATED`, unless a human explicitly accepted degraded isolation in the current authorized context. Preserve the actual `NOT_ISOLATED` status and record that exception separately as `isolation_exception_authorized: true` plus non-empty `isolation_exception_provenance`; never relabel the review as isolated. Bind that exception to this exact reviewed identity in `isolation_exception_change_identity`. An exception from another review identity is stale and must not carry forward.
+- `isolation_status: ISOLATED`, unless a human explicitly accepted degraded isolation in the current authorized context. Preserve the actual `NOT_ISOLATED` status and record that exception separately as `isolation_exception_authorized: true` plus non-empty `isolation_exception_provenance`; never relabel the review as isolated. Bind that exception both to this exact reviewed identity in `isolation_exception_change_identity` and to this exact review-evidence generation in `isolation_exception_review_generated_at = review_evidence.generated_at`. An exception from another identity or an earlier review generation is stale and must not carry forward.
 
 For every security-sensitive `NEEDS_EVIDENCE` item from the legacy Orchestrator rules, populate `merge_readiness.security_sensitive_needs_evidence_unresolved`. It must be integer `0` before readiness. A human residual-risk acceptance resolves the item only when the decision/provenance is recorded in official escalation/adjudication state; do not silently decrement the counter.
 
-If content changes, requirements change, a third-party change is accepted into the task, or conflict resolution occurs after a lens produced evidence, invalidate the affected lens evidence and rerun it. Clear any isolation exception fields associated with invalidated lens evidence; a new `NOT_ISOLATED` review requires a new exception bound to the new `reviewed_change_identity`. A conflict that happened **before** a rerun does not permanently poison new evidence already bound to the current identity.
+If content changes, requirements change, a third-party change is accepted into the task, conflict resolution occurs after a lens produced evidence, **or a lens reruns on the same unchanged identity**, invalidate/replace that lens evidence and clear all associated isolation-exception fields. A new `NOT_ISOLATED` review requires a new exception bound to its `reviewed_change_identity` and `review_evidence.generated_at`. A conflict that happened **before** a rerun does not permanently poison new evidence already bound to the current identity.
 
 ## Base/merge-base transitions
 
@@ -60,7 +60,7 @@ Required CI is authoritative only when `ci.required_checks_green: true` and `ci.
 
 Before setting task status `READY`, before setting `COMPLETE`, and immediately before any authorized merge/completion action:
 
-1. refresh current `change_identity`, current `requirements_ref`, branch-actor/third-party state plus `third_party_change_checked_head`, reviewer isolation/exception state, unresolved security-sensitive evidence, approvals/threads/integration state, and required CI;
+1. refresh current `change_identity`, current `requirements_ref`, branch-actor/third-party state plus `third_party_change_checked_head`, reviewer isolation/exception state including each exception's review-generation binding, unresolved security-sensitive evidence, approvals/threads/integration state, and required CI;
 2. populate the existing merge-readiness gates from authoritative repository state;
 3. resolve `skill_root` to the directory containing this skill's `SKILL.md`, then serialize the official state as JSON and run `python <skill_root>/scripts/validate_loop_lifecycle.py --state <state.json>` (or pass `--state -` and provide the JSON on stdin); do not assume the current working directory is the software-builder source checkout;
 4. require process exit code `0`. Exit `1` means lifecycle validation errors; exit `2` means the input/runtime could not be validated and therefore fails closed.
@@ -69,7 +69,7 @@ The validator must prove, independent of the current `ready` flag:
 
 - acceptance criteria complete;
 - Lens A and Lens B lifecycle-clean for the same current identity;
-- reviewer isolation gate satisfied or explicit human exception recorded with provenance and bound to the same reviewed identity;
+- reviewer isolation gate satisfied or explicit human exception recorded with provenance and bound to the same reviewed identity **and current review generation**;
 - zero unresolved security-sensitive `NEEDS_EVIDENCE` items;
 - no accepted blocking finding open;
 - required approvals satisfied;
