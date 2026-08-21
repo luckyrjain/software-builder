@@ -29,10 +29,12 @@ Before the first write in a phase, and again before every later write batch:
    from a target path or resolve a different root in a later phase.
 2. Finish the write plan before touching the working tree. Include every test,
    collection, environment, report, and state path that this batch may write.
-3. Run the shared executable guard from the repository root:
+3. Run the shared executable guard from the repository root in Python isolated
+   mode so `PYTHONPATH`, the current working directory, and user site packages
+   cannot shadow modules before the safety check starts:
 
    ```bash
-   python3 "<installed creator package>/scripts/test_creator_write_guard.py" \
+   python3 -I "<installed creator package>/scripts/test_creator_write_guard.py" \
      --repo-root "$repo_root" \
      --planned-file "<each planned path>"
    ```
