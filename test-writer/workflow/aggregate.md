@@ -1,5 +1,5 @@
 ---
-workflow_version: 1.5
+workflow_version: 1.6
 phase: aggregate
 produces:
   - orchestration_status
