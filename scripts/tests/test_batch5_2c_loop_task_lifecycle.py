@@ -29,11 +29,13 @@ def test_loop_task_declares_shared_lifecycle_contract():
     assert "third_party_change_checked_head" in data["state_binding"]
     assert "lens_a_isolation_exception_change_identity" in data["state_binding"]
     assert "lens_b_isolation_exception_change_identity" in data["state_binding"]
+    assert "lens_a_isolation_exception_review_generated_at" in data["state_binding"]
+    assert "lens_b_isolation_exception_review_generated_at" in data["state_binding"]
 
 
 def test_state_schema_carries_shared_identity_requirements_and_lens_evidence():
     data = yaml.safe_load((SKILL / "reference/state-schema.yaml").read_text(encoding="utf-8"))
-    assert data["workflow_version"] == "1.4"
+    assert data["workflow_version"] == "1.5"
     assert "requirements_ref" in data["task"]
     assert "change_identity" in data["workspace"]
     assert "conflict_resolution_occurred" in data["workspace"]
@@ -48,18 +50,14 @@ def test_state_schema_carries_shared_identity_requirements_and_lens_evidence():
         assert "isolation_exception_authorized" in lens_state
         assert "isolation_exception_provenance" in lens_state
         assert "isolation_exception_change_identity" in lens_state
+        assert "isolation_exception_review_generated_at" in lens_state
     assert "security_sensitive_needs_evidence_unresolved" in data["merge_readiness"]
 
 
 def test_lifecycle_workflow_versions_track_behavior_changes():
-    expected = {
-        "orchestrator-lifecycle.md": "1.5",
-        "reviewer-evidence.md": "1.4",
-        "lifecycle-gate.md": "1.5",
-    }
-    for name, version in expected.items():
+    for name in ("orchestrator-lifecycle.md", "reviewer-evidence.md", "lifecycle-gate.md"):
         text = (SKILL / "workflow" / name).read_text(encoding="utf-8")
-        assert f"workflow_version: {version}" in text
+        assert "workflow_version: 1.5" in text
 
 
 def test_reviewer_evidence_adapter_emits_shared_review_evidence_after_adjudication():
@@ -76,6 +74,7 @@ def test_reviewer_evidence_adapter_emits_shared_review_evidence_after_adjudicati
         "findings.defect` is empty",
         "NOT_ISOLATED",
         "isolation_exception_change_identity",
+        "isolation_exception_review_generated_at",
     ):
         assert token in text
 
@@ -131,6 +130,7 @@ def test_orchestrator_path_loads_mandatory_lifecycle_overlay():
         "security_sensitive_needs_evidence_unresolved",
         "isolation_exception_provenance",
         "isolation_exception_change_identity",
+        "isolation_exception_review_generated_at",
         "required checks",
         "current head",
         "exit code `0`",
@@ -153,6 +153,7 @@ def test_lifecycle_gate_revalidates_before_ready_or_merge():
         "NOT_ISOLATED",
         "authorized human exception",
         "isolation_exception_change_identity",
+        "isolation_exception_review_generated_at",
         "required checks",
         "current head",
         "explicit `null`",
@@ -172,6 +173,7 @@ def test_lifecycle_validator_is_packaged_and_fail_closed():
         "third_party_change_checked_head",
         "conflict_resolution_occurred",
         "isolation_exception_change_identity",
+        "isolation_exception_review_generated_at",
         "required checks must be green before lifecycle readiness",
         "accepted_blocking_findings_open must be integer 0",
         "security_sensitive_needs_evidence_unresolved must be integer 0",
