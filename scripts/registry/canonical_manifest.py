@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
 from typing import Any
 
@@ -15,12 +14,27 @@ ROOT = Path(__file__).resolve().parents[2]
 CANONICAL_PATH = ROOT / "skills.yaml"
 REQUIRED_CONTRACTS = {"platform", "composition_runtime", "composition"}
 ALLOWED_TYPES = {"leaf", "router", "orchestrator", "trigger"}
-SEMVER_RE = re.compile(
-    r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)"
-    r"(?:-(?:0|[1-9]\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)"
-    r"(?:\.(?:0|[1-9]\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*)?"
-    r"(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$"
-)
+
+
+def is_semver(value: str) -> bool:
+    """Validate SemVer components without a backtracking regex."""
+    if not isinstance(value, str) or len(value) > 256:
+        return False
+    if value.count("+") > 1:
+        return False
+    core_and_prerelease, _, build = value.partition("+")
+    if build and any(not part or not all(char.isalnum() or char == "-" for char in part) for part in build.split(".")):
+        return False
+    core, separator, prerelease = core_and_prerelease.partition("-")
+    core_parts = core.split(".")
+    if len(core_parts) != 3 or any(not part.isdigit() or (len(part) > 1 and part[0] == "0") for part in core_parts):
+        return False
+    if not separator:
+        return True
+    identifiers = prerelease.split(".")
+    if any(not identifier or not all(char.isalnum() or char == "-" for char in identifier) for identifier in identifiers):
+        return False
+    return all(not identifier.isdigit() or len(identifier) == 1 or identifier[0] != "0" for identifier in identifiers)
 
 
 def load_canonical_manifest(root: Path = ROOT) -> dict[str, Any]:
@@ -101,7 +115,7 @@ def validate_canonical_manifest(root: Path = ROOT) -> list[str]:
                     + ", ".join(sorted(missing_fields)),
                 )
             version = skill.get("version")
-            if not isinstance(version, str) or not SEMVER_RE.fullmatch(version):
+            if not isinstance(version, str) or not is_semver(version):
                 errors.append(f"error: {skill_id}: version must be semantic version")
             skill_type = skill.get("type")
             if skill_type not in ALLOWED_TYPES:

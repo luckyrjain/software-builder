@@ -43,6 +43,15 @@ def test_runtime_validation_defaults_to_canonical_manifest(monkeypatch: pytest.M
     assert validate_composition_runtime(registry, contracts_path=CONTRACTS) == []
 
 
+def test_cli_does_not_fallback_to_projection_for_malformed_canonical_manifest(tmp_path: Path) -> None:
+    from scripts.registry.cli import _composition_runtime_path
+
+    (tmp_path / "skills.yaml").write_text("schema_version: [", encoding="utf-8")
+
+    with pytest.raises(yaml.YAMLError):
+        _composition_runtime_path(tmp_path)
+
+
 def test_missing_skill_type_fails_closed(tmp_path: Path) -> None:
     registry = load_registry(ROOT)
     data = _runtime()

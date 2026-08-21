@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from scripts.registry.canonical_manifest import (
-    SEMVER_RE,
+    is_semver,
     load_canonical_manifest,
     validate_canonical_manifest,
 )
@@ -50,7 +50,7 @@ def _normalize_version(raw: Any) -> str:
             value += ".0.0"
         elif re.fullmatch(r"\d+\.\d+", value):
             value += ".0"
-    if not SEMVER_RE.fullmatch(value):
+    if not is_semver(value):
         raise ValueError(f"invalid skill_version {raw!r}; expected semantic version string or integer major")
     return value
 

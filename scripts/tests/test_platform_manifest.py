@@ -125,6 +125,8 @@ def test_skill_versions_are_normalized_to_semver() -> None:
         _normalize_version("01.2.3")
     with pytest.raises(ValueError, match="semantic version"):
         _normalize_version("1.2.3-01")
+    with pytest.raises(ValueError, match="semantic version"):
+        _normalize_version("0.0.0-0." + ("aa." * 40) + "!")
 
 
 def test_platform_contracts_reject_duplicate_canonical_values(tmp_path: Path) -> None:
