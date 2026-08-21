@@ -67,10 +67,16 @@ def test_reviewer_evidence_adapter_emits_shared_review_evidence_after_adjudicati
         assert token in text
 
 
-def test_phase_order_adjudicates_before_portable_evidence():
+def test_phase_order_adjudicates_before_portable_evidence_and_remediates_a_before_b():
     phase = (SKILL / "reference/phase-index.md").read_text(encoding="utf-8")
     assert phase.index("adjudicate Lens A proposed findings") < phase.index(
         "normalize/validate Lens A review_evidence"
+    )
+    assert phase.index("normalize/validate Lens A review_evidence") < phase.index(
+        "if Lens A has accepted findings: dispatch Builder remediation"
+    )
+    assert phase.index("if Lens A has accepted findings: dispatch Builder remediation") < phase.index(
+        "dispatch Reviewer Lens B"
     )
     assert phase.index("adjudicate Lens B proposed findings") < phase.index(
         "normalize/validate Lens B review_evidence"
