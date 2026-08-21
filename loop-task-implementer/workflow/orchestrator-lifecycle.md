@@ -1,5 +1,5 @@
 ---
-workflow_version: 1.5
+workflow_version: 1.6
 phase: orchestrator-lifecycle
 produces:
   change_identity: object
@@ -63,8 +63,8 @@ Before setting task status `READY`, before setting `COMPLETE`, and immediately b
 
 1. refresh current `change_identity`, current `requirements_ref`, branch-actor/third-party state plus `third_party_change_checked_head`, reviewer generation/isolation/exception state, unresolved security-sensitive evidence, approvals/threads/integration state, and required CI;
 2. populate the existing merge-readiness gates from authoritative repository state;
-3. resolve `skill_root` to the directory containing this skill's `SKILL.md`, then serialize the official state as JSON and run `python <skill_root>/scripts/validate_loop_lifecycle.py --state <state.json>` (or pass `--state -` and provide the JSON on stdin); do not assume the current working directory is the software-builder source checkout;
-4. require process exit code `0`. Exit `1` means lifecycle validation errors; exit `2` means the input/runtime could not be validated and therefore fails closed.
+3. resolve `skill_root` to the directory containing this skill's `SKILL.md`, select a Python 3 interpreter available on the host (`python3` on the supported Unix/macOS setup, or the configured equivalent elsewhere), serialize the official state as JSON, and run `python3 "<skill_root>/scripts/validate_loop_lifecycle.py" --state "<state.json>"` on the documented Unix/macOS setup (or pass `--state -` and provide JSON on stdin); do not assume the current working directory is the software-builder source checkout;
+4. require process exit code `0`. Failure to locate a Python 3 interpreter or validator is a fail-closed inability to validate, not a pass. Exit `1` means lifecycle validation errors; exit `2` means the input/runtime could not be validated and therefore fails closed.
 
 The validator must prove, independent of the current `ready` flag:
 
