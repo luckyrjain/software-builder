@@ -165,6 +165,58 @@ def test_guard_does_not_execute_repository_clean_filter(tmp_path: Path) -> None:
     assert not marker.exists(), "guard Git commands executed repository clean filter"
 
 
+def test_guard_does_not_recurse_into_submodule_filters(tmp_path: Path) -> None:
+    source_root = tmp_path / "submodule-source-parent"
+    source_root.mkdir()
+    source = _committed_repo(source_root)
+    (source / "tracked.txt").write_text("fixture\n", encoding="utf-8")
+    subprocess.run(["git", "add", "tracked.txt"], cwd=source, check=True)
+    subprocess.run(["git", "-c", "commit.gpgsign=false", "commit", "-qm", "tracked"], cwd=source, check=True)
+
+    super_root = tmp_path / "super-parent"
+    super_root.mkdir()
+    repo = _committed_repo(super_root)
+    subprocess.run(
+        ["git", "-c", "protocol.file.allow=always", "submodule", "add", str(source), "modules/child"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(["git", "add", ".gitmodules", "modules/child"], cwd=repo, check=True)
+    subprocess.run(["git", "-c", "commit.gpgsign=false", "commit", "-qm", "submodule"], cwd=repo, check=True)
+
+    child = repo / "modules" / "child"
+    subprocess.run(["git", "config", "user.email", "review@example.invalid"], cwd=child, check=True)
+    subprocess.run(["git", "config", "user.name", "Final Review"], cwd=child, check=True)
+    (child / ".gitattributes").write_text("tracked.txt filter=review-evil\n", encoding="utf-8")
+    subprocess.run(["git", "add", ".gitattributes"], cwd=child, check=True)
+    subprocess.run(["git", "-c", "commit.gpgsign=false", "commit", "-qm", "attributes"], cwd=child, check=True)
+    subprocess.run(["git", "add", "modules/child"], cwd=repo, check=True)
+    subprocess.run(["git", "-c", "commit.gpgsign=false", "commit", "-qm", "advance submodule"], cwd=repo, check=True)
+
+    marker = tmp_path / "submodule-filter-executed"
+    hook = tmp_path / "submodule-filter.py"
+    hook.write_text(
+        "#!/usr/bin/env python3\n"
+        "import sys\n"
+        "from pathlib import Path\n"
+        f"Path({str(marker)!r}).write_text('executed\\n', encoding='utf-8')\n"
+        "sys.stdout.buffer.write(sys.stdin.buffer.read())\n",
+        encoding="utf-8",
+    )
+    hook.chmod(0o755)
+    subprocess.run(["git", "config", "filter.review-evil.clean", str(hook)], cwd=child, check=True)
+    tracked = child / "tracked.txt"
+    stat = tracked.stat()
+    os.utime(tracked, ns=(stat.st_atime_ns, stat.st_mtime_ns + 2_000_000_000))
+
+    result = check_write_safety(repo, ["generated_test.py"])
+
+    assert result.status == "ALLOWED"
+    assert not marker.exists(), "guard recursed into submodule and executed its clean filter"
+
+
 def test_guard_evidence_stays_structured_not_verbatim_markdown() -> None:
     shared = (
         ROOT / "docs" / "skill-framework" / "shared" / "test-creator-write-safety.md"
