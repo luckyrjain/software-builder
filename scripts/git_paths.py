@@ -140,13 +140,16 @@ def protected_index_relative_paths(
 
 def gitlink_relative_paths(
     root: Path,
-    paths: Iterable[str],
+    paths: Iterable[str] | None = None,
     *,
     env: Mapping[str, str] | None = None,
     git_executable: str = "git",
 ) -> tuple[set[str], str | None]:
-    """Return requested index paths stored as Git gitlinks (mode ``160000``).
+    """Return index paths stored as Git gitlinks (mode ``160000``).
 
+    ``paths`` may restrict the query; ``None`` enumerates all gitlinks. Full
+    enumeration is useful when a caller must compare using repository case
+    semantics instead of Git's case-sensitive literal pathspec matching.
     Gitlinks remain in the parent index even when a submodule is deinitialized,
     so filesystem ``.git`` markers alone are insufficient for deciding whether
     a planned write would cross into another repository boundary.
