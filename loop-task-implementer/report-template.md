@@ -43,9 +43,11 @@ When a reviewer proposal was adjudicated `REJECTED`, keep it in the rich audit h
 
 ## Escalation variant
 
-When stopping via a circuit breaker or lifecycle blocker, include the machine freshness state alongside the existing escalation details:
+When stopping via a circuit breaker or lifecycle blocker, include the machine freshness state alongside the existing escalation details. The mapping contains full structured values such as `change_identity`, `requirements_ref`, exception identities, and supporting evidence; those values may themselves contain untrusted repository/tracker text.
 
-```yaml
+Before rendering the mapping, serialize/redact the complete body first, find its longest consecutive backtick run, and wrap it in an outer CommonMark code fence whose delimiter is `max(3, longest_run + 1)` backticks, per [safe-output.md Rule 4](../docs/skill-framework/shared/safe-output.md#rule-4-markdown--chat-escaping). Do **not** use a fixed triple-backtick fence for this block. The shape to place inside that dynamically sized fence is:
+
+<DYNAMIC_FENCE>yaml
 task_id:
 pull_request:
 current_head_commit:
@@ -83,7 +85,9 @@ escalation_reason:
 required_human_decision:
 required_access:
 supporting_evidence:
-```
+<DYNAMIC_FENCE>
+
+`<DYNAMIC_FENCE>` is an instruction placeholder, not literal output: replace both occurrences with the same computed backtick delimiter and append `yaml` only to the opening delimiter line.
 
 This extends `workflow/orchestrator.md` §19 with the Batch 5.2C lifecycle evidence; it does not remove the existing adjudication/circuit-breaker fields.
 
@@ -103,6 +107,7 @@ PR descriptions, code comments, reviewer prose, and human-entered exception/prov
 - **Attacker-shapeable identifiers** such as `<task_id>`, VCS `actor`, and `<branch>`: structurally escape, redact secrets, strip unsafe backticks before inline-code rendering, and never allow them to create headings/tables/fences.
 - **Free-text prose** such as Lens summaries, contested-finding rationale, isolation-exception provenance, lifecycle blocker summaries, `<human action required>`, escalation reason/decision/access, rebuttal/evidence descriptions, and cross-skill `Trigger`: structurally escape and redact; do not wrap sentence-length prose wholesale in code spans.
 - **Machine/system identifiers** such as validated Git SHAs, normalized diff fingerprint, fixed enums, system-assigned finding IDs, and skill-generated URLs may render directly once their format validation has passed. A full `change_identity` object is not a single machine identifier: it can contain repository path/config/dependency text, so human-facing inline output must project only validated scalar fields such as its head SHA and normalized fingerprint.
+- **Structured machine-state blocks** may contain the same untrusted strings inside nested objects. Redact/serialize the complete body before wrapping it, then use Rule 4's dynamic outer-fence length; a fixed three-backtick YAML fence is unsafe for `requirements_ref`, `change_identity`, exception identities, or evidence objects containing an embedded fence.
 - The lifecycle validator's error strings are machine-produced, but any embedded surface/provenance text derived from repository/provider content must still be rendered through the same safe-output boundary.
 
 Redaction applies independently to every untrusted rendered field. A lifecycle PASS must never be inferable from prose formatting; render it only from the validated official state.
