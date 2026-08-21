@@ -322,7 +322,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         state = _read_state(args.state)
         errors = validate_lifecycle_state(state)
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError, RuntimeError, ValueError) as exc:
+    except Exception as exc:
+        # Any ordinary input/runtime failure means lifecycle validity could not be established.
         print(f"lifecycle validation failed closed: {exc}", file=sys.stderr)
         return 2
 
