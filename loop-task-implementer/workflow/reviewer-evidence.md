@@ -1,5 +1,5 @@
 ---
-workflow_version: 1.4
+workflow_version: 1.5
 phase: reviewer-evidence
 produces:
   review_evidence: object
@@ -38,10 +38,10 @@ Construct a closed portable `review_evidence` v1 envelope:
 - `findings.defect`: **accepted blocking findings that remain open** after adjudication, preserving their stable finding IDs. A reviewer `PROPOSED_BLOCKING` item adjudicated `REJECTED` is not a portable defect.
 - `findings.suggestion`: evidence-backed non-blocking improvements.
 - `findings.question`: unresolved evidence requests, including adjudicated `NEEDS_EVIDENCE` items; security-sensitive unresolved questions remain separately counted in `merge_readiness.security_sensitive_needs_evidence_unresolved`.
-- `generated_at`: actual completion timestamp for this post-adjudication evidence pass.
+- `generated_at`: actual completion timestamp for this post-adjudication evidence pass. Treat this value as the review-generation binding used by any degraded-isolation exception for this lens.
 
 Portable finding entries contain exactly `{id, category, summary, evidence}`. Keep rich severity, original reviewer class, adjudication rationale, fix history, isolation state, and reviewer-specific metadata outside the closed portable entry. Do not erase rejected proposals from the rich audit trail; exclude them only from the portable `defect` bucket after the Orchestrator has rejected them with recorded rationale.
 
 Validate the envelope with the packaged shared `docs/skill-framework/shared/review_contract_runtime.py`. A lens may be persisted as lifecycle `CLEAN` only when the envelope is valid and fresh, `inspection_status` is `complete`, `unable_to_inspect` is empty, and `findings.defect` is empty. Thus an accepted blocker requires remediation/rereview, while a correctly rejected false positive does not force a redundant reviewer rerun merely to remove a rejected proposal from portable evidence.
 
-Persist the actual review-isolation result separately in official lens state. `NOT_ISOLATED` remains `NOT_ISOLATED`; if an authorized human accepts degraded isolation, record the exception and provenance separately rather than rewriting the reviewer state, and bind that authorization to this exact `reviewed_change_identity` in `isolation_exception_change_identity`. Clear prior isolation-exception fields whenever the lens evidence is invalidated or a new review identity is produced, so acceptance for an older review cannot silently carry forward. Security-sensitive `NEEDS_EVIDENCE` findings likewise remain visible in adjudication state until resolved or explicitly accepted by an authorized human under the Orchestrator policy.
+Persist the actual review-isolation result separately in official lens state. `NOT_ISOLATED` remains `NOT_ISOLATED`; if an authorized human accepts degraded isolation, record the exception and provenance separately rather than rewriting the reviewer state. Bind that authorization both to this exact `reviewed_change_identity` in `isolation_exception_change_identity` **and** to this exact evidence generation by copying `review_evidence.generated_at` into `isolation_exception_review_generated_at`. Clear all prior isolation-exception fields whenever the lens evidence is invalidated or rerun, even when the code identity is unchanged; a same-head rerun is a new review generation and needs a new explicit human exception if it remains `NOT_ISOLATED`. Security-sensitive `NEEDS_EVIDENCE` findings likewise remain visible in adjudication state until resolved or explicitly accepted by an authorized human under the Orchestrator policy.
