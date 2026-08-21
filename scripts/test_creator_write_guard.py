@@ -113,16 +113,17 @@ def _path_is_within(path: Path, root: Path) -> bool:
 
 
 def _filesystem_git_boundary(repo_root: Path) -> Path:
-    """Best-effort enclosing worktree root without executing repository code."""
+    """Best-effort outermost enclosing worktree root without executing repository code."""
 
+    boundary = repo_root
     for candidate in (repo_root, *repo_root.parents):
         marker = candidate / ".git"
         try:
             if marker.exists() or marker.is_symlink():
-                return candidate.resolve(strict=True)
+                boundary = candidate.resolve(strict=True)
         except (OSError, RuntimeError):
             continue
-    return repo_root
+    return boundary
 
 
 def _git_environment(execution_boundary: Path, filter_drivers: Iterable[str] = ()) -> dict[str, str]:
