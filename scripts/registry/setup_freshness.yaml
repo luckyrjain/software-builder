@@ -33,7 +33,7 @@ skills:
   mysql-to-postgres-sql:
     external_services: None (local scan scripts and domain packs)
   loop-task-implementer:
-    external_services: GitLab MCP, CI provider (repo-specific)
+    external_services: Git provider/API, CI provider (both repo-specific; no fixed MCP)
   backlog-runner:
     external_services: Jira or GitHub Issues API, loop-task-implementer
   weekly-squad-digest:
