@@ -143,7 +143,13 @@ def _validate_skill_frontmatter_shape(root: Path, registry: Registry) -> list[st
             if not isinstance(description, str) or not description.strip():
                 errors.append(f"error: {skill_id}: description must be a non-empty string")
 
-        errors.extend(validate_skill_frontmatter_fields(skill_id, frontmatter))
+        errors.extend(
+            validate_skill_frontmatter_fields(
+                skill_id,
+                frontmatter,
+                require_legacy_platform_fields=False,
+            )
+        )
         errors.extend(
             f"error: {skill_id}: {msg}"
             for msg in automation_only_guard_errors(entry.invocation, frontmatter)

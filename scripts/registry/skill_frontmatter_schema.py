@@ -24,7 +24,12 @@ ALLOWED_FRONTMATTER_KEYS = frozenset(
 )
 
 
-def validate_skill_frontmatter_fields(skill_id: str, frontmatter: dict[str, Any]) -> list[str]:
+def validate_skill_frontmatter_fields(
+    skill_id: str,
+    frontmatter: dict[str, Any],
+    *,
+    require_legacy_platform_fields: bool = True,
+) -> list[str]:
     errors: list[str] = []
     for key in frontmatter:
         if key not in ALLOWED_FRONTMATTER_KEYS:
@@ -36,7 +41,7 @@ def validate_skill_frontmatter_fields(skill_id: str, frontmatter: dict[str, Any]
             f"got {frontmatter['platform_contract']!r}",
         )
 
-    if "skill_version" not in frontmatter:
+    if require_legacy_platform_fields and "skill_version" not in frontmatter:
         errors.append(f"error: {skill_id}: skill_version is mandatory")
     else:
         version = frontmatter["skill_version"]
@@ -68,4 +73,3 @@ def automation_only_guard_errors(invocation: str, frontmatter: dict[str, Any]) -
     if disable == automation_only:
         return []
     return [f"disable-model-invocation={disable} but invocation={invocation!r}"]
-
