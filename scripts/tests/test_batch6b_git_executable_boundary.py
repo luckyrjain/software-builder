@@ -97,3 +97,28 @@ def test_selected_submodule_rejects_git_shim_from_superproject(
 
     assert result.status == "ALLOWED"
     assert not marker.exists(), "guard executed git shim controlled by enclosing superproject"
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX executable shim regression")
+def test_linked_worktree_rejects_git_shim_from_original_checkout(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo = _repo(tmp_path)
+    linked = tmp_path / "linked-worktree"
+    subprocess.run(
+        ["git", "worktree", "add", "-q", "-b", "review-linked", str(linked)],
+        cwd=repo,
+        check=True,
+    )
+
+    real_git = shutil.which("git")
+    assert real_git is not None
+    marker = tmp_path / "original-checkout-git-executed"
+    bin_dir = _install_git_shim(repo, marker, real_git)
+    monkeypatch.setenv("PATH", str(bin_dir) + os.pathsep + os.environ.get("PATH", ""))
+
+    result = check_write_safety(linked, ["generated_test.py"])
+
+    assert result.status == "ALLOWED"
+    assert not marker.exists(), "guard executed git shim controlled by original checkout"
