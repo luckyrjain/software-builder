@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import importlib.util
+import json
+import subprocess
+import sys
 from pathlib import Path
 
 
@@ -52,6 +55,7 @@ def _lens(identity, evidence):
         "isolation_status": "ISOLATED",
         "isolation_exception_authorized": False,
         "isolation_exception_provenance": None,
+        "isolation_exception_change_identity": None,
     }
 
 
@@ -66,6 +70,7 @@ def _state(identity=None):
             "conflict_resolution_occurred": False,
             "conflict_resolution_provenance": "provider history confirms conflict-free transition",
             "third_party_change_detected": False,
+            "third_party_change_checked_head": identity["head_sha"],
         },
         "review": {
             "lens_a": _lens(identity, evidence),
@@ -132,6 +137,7 @@ def test_not_isolated_lens_can_proceed_only_with_explicit_human_exception_proven
     lens["isolation_status"] = "NOT_ISOLATED"
     lens["isolation_exception_authorized"] = True
     lens["isolation_exception_provenance"] = "human accepted degraded isolation in current session"
+    lens["isolation_exception_change_identity"] = lens["reviewed_change_identity"]
     assert _load().validate_lifecycle_state(state) == []
 
 
@@ -140,6 +146,7 @@ def test_isolation_exception_without_provenance_fails_closed():
     lens = state["review"]["lens_a"]
     lens["isolation_status"] = "NOT_ISOLATED"
     lens["isolation_exception_authorized"] = True
+    lens["isolation_exception_change_identity"] = lens["reviewed_change_identity"]
     errors = _load().validate_lifecycle_state(state)
     assert any("isolation exception requires non-empty human authorization provenance" in error for error in errors)
 
@@ -150,6 +157,17 @@ def test_isolation_exception_authorized_requires_explicit_boolean():
         state["review"]["lens_a"]["isolation_exception_authorized"] = value
         errors = _load().validate_lifecycle_state(state)
         assert any("isolation_exception_authorized must be an explicit boolean" in error for error in errors)
+
+
+def test_isolation_exception_is_bound_to_the_reviewed_change_identity():
+    state = _state()
+    lens = state["review"]["lens_a"]
+    lens["isolation_status"] = "NOT_ISOLATED"
+    lens["isolation_exception_authorized"] = True
+    lens["isolation_exception_provenance"] = "human accepted degraded isolation for an earlier review"
+    lens["isolation_exception_change_identity"] = _identity(head="d" * 40)
+    errors = _load().validate_lifecycle_state(state)
+    assert any("isolation exception must be bound to the current reviewed_change_identity" in error for error in errors)
 
 
 def test_security_sensitive_needs_evidence_must_be_resolved_before_readiness():
@@ -209,6 +227,20 @@ def test_ready_state_rejects_unknown_third_party_change_state():
     assert any("third_party_change_detected must be an explicit boolean" in error for error in errors)
 
 
+def test_ready_state_rejects_third_party_check_not_bound_to_current_head():
+    state = _state()
+    state["workspace"]["third_party_change_checked_head"] = "d" * 40
+    errors = _load().validate_lifecycle_state(state)
+    assert any("third-party branch-change evidence is stale" in error for error in errors)
+
+
+def test_ready_state_rejects_missing_third_party_checked_head():
+    state = _state()
+    del state["workspace"]["third_party_change_checked_head"]
+    errors = _load().validate_lifecycle_state(state)
+    assert any("third_party_change_checked_head must be present" in error for error in errors)
+
+
 def test_conflict_status_rejects_integer_boolean_aliases():
     for value in (0, 1):
         state = _state()
@@ -248,3 +280,46 @@ def test_fresh_evidence_after_prior_conflict_is_not_permanently_invalidated():
     state["workspace"]["conflict_resolution_occurred"] = True
     state["workspace"]["conflict_resolution_provenance"] = "merge conflict resolved before both lenses reran"
     assert _load().validate_lifecycle_state(state) == []
+
+
+def test_cli_returns_zero_only_for_valid_state(tmp_path: Path):
+    state_path = tmp_path / "state.json"
+    state_path.write_text(json.dumps(_state()), encoding="utf-8")
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), "--state", str(state_path)],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_cli_returns_nonzero_for_invalid_state(tmp_path: Path):
+    state = _state()
+    state["ci"]["required_checks_green"] = False
+    state_path = tmp_path / "state.json"
+    state_path.write_text(json.dumps(state), encoding="utf-8")
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), "--state", str(state_path)],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 1
+    assert "required checks must be green" in result.stderr
+
+
+def test_cli_fails_closed_on_malformed_state(tmp_path: Path):
+    state_path = tmp_path / "state.json"
+    state_path.write_text("{not-json", encoding="utf-8")
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), "--state", str(state_path)],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 2
+    assert "failed closed" in result.stderr
