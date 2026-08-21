@@ -5,7 +5,7 @@
 | Field | Value |
 |-------|-------|
 | **Owner** | software-builder maintainers |
-| **Last reviewed** | 2026-08-20 |
+| **Last reviewed** | 2026-08-21 |
 | **Review cadence** | Quarterly — or when lifecycle/shared review contracts change |
 | **External services** | GitLab MCP, CI provider (repo-specific) |
 
@@ -25,7 +25,8 @@ must require an explicit ask.
 1. `git clone` this repo, then `make install-loop-task-implementer` (or `bash scripts/install.sh loop-task-implementer`).
 2. Restart your agent / start a new session so the skill reloads.
 3. Confirm the host can isolate roles — native subagents, fresh sessions, or worktrees. Sequential role
-   simulation is a fallback and may require explicit human risk acceptance for security-sensitive review.
+   simulation is a fallback; whenever the resulting lens is recorded `NOT_ISOLATED`, lifecycle readiness
+   requires an explicit human exception with provenance bound to that exact reviewed change identity.
 4. Confirm repository read/write capabilities required by the authorized action and visibility of required CI.
 5. Say: "Use loop-task-implementer to implement `<task>` and open a PR."
 
@@ -70,9 +71,10 @@ parent checkout.
 - Repository access appropriate to the authorized actions. Reviewer contexts remain read-only.
 - Visibility of authoritative required CI/checks for the exact current head. Without it, the workflow may
   implement/review but cannot reach verified readiness.
-- An isolation primitive suitable for the change. For `NOT_ISOLATED` security-sensitive review, lifecycle
-  readiness blocks unless an authorized human explicitly accepts the degraded isolation and the provenance is
-  recorded separately; never relabel the pass as isolated.
+- An isolation primitive suitable for the change. Any lens recorded `NOT_ISOLATED` blocks lifecycle
+  readiness unless an authorized human explicitly accepts the degraded isolation with non-empty provenance
+  bound to that exact `reviewed_change_identity`; never relabel the pass as isolated or reuse an exception
+  from an earlier identity.
 - Explicit merge authorization before any merge. Verified readiness and merge authority are separate gates.
 
 ## 2. Install the skill
@@ -149,7 +151,7 @@ must invalidate evidence when appropriate rather than reuse stale approvals.
 | CLEAN lens has `partial`/`unable` evidence | Invalid lifecycle state: CLEAN requires complete inspection, no unavailable surfaces, and zero portable defects. |
 | Review stays stale after a clean base transition | Record explicit conflict-resolution boolean **and provenance** for the SHA transition; unknown provenance fails closed. |
 | Fresh post-conflict rerun remains blocked | Do not apply a historic conflict flag to evidence already produced against the current post-conflict identity. |
-| `NOT_ISOLATED` review appears as `ISOLATED` after human acceptance | Bug: preserve `NOT_ISOLATED`; record `isolation_exception_authorized` and provenance separately. |
+| `NOT_ISOLATED` review appears as `ISOLATED` after human acceptance | Bug: preserve `NOT_ISOLATED`; record `isolation_exception_authorized`, non-empty provenance, and `isolation_exception_change_identity` separately. |
 | CI is green but lifecycle refuses readiness | Confirm `ci.commit` exactly equals `workspace.current_head_commit` and all legacy approval/thread/integration/circuit-breaker gates are satisfied. |
 | Installed validator cannot find shared runtime | Reinstall/package the skill; the vendored `docs/skill-framework/shared/review_contract_runtime.py` is mandatory and no parent fallback is allowed. |
 | Run merges without explicit authorization | Treat as a bug. A zero-error lifecycle gate establishes readiness only; merge authority remains a separate explicit grant. |
