@@ -26,7 +26,8 @@ must require an explicit ask.
 2. Restart your agent / start a new session so the skill reloads.
 3. Confirm the host can isolate roles — native subagents, fresh sessions, or worktrees. Sequential role
    simulation is a fallback; whenever the resulting lens is recorded `NOT_ISOLATED`, lifecycle readiness
-   requires an explicit human exception with provenance bound to that exact reviewed change identity.
+   requires an explicit human exception with provenance bound to that exact reviewed change identity and
+   the lens's current positive integer `review_generation`.
 4. Confirm repository read/write capabilities required by the authorized action and visibility of required CI.
 5. Say: "Use loop-task-implementer to implement `<task>` and open a PR."
 
@@ -73,8 +74,8 @@ parent checkout.
   implement/review but cannot reach verified readiness.
 - An isolation primitive suitable for the change. Any lens recorded `NOT_ISOLATED` blocks lifecycle
   readiness unless an authorized human explicitly accepts the degraded isolation with non-empty provenance
-  bound to that exact `reviewed_change_identity`; never relabel the pass as isolated or reuse an exception
-  from an earlier identity.
+  bound to that exact `reviewed_change_identity` and current `review_generation`; never relabel the pass as
+  isolated or reuse an exception from an earlier identity or reviewer generation.
 - Explicit merge authorization before any merge. Verified readiness and merge authority are separate gates.
 
 ## 2. Install the skill
@@ -113,10 +114,10 @@ Invoke with natural language; there is no slash command. Examples:
 Full scenarios: [examples.md](examples.md).
 
 The Orchestrator must load [workflow/orchestrator-lifecycle.md](workflow/orchestrator-lifecycle.md) with its
-normal role prompt. After each reviewer returns it adjudicates first, then runs the
-[reviewer-evidence adapter](workflow/reviewer-evidence.md). Before `READY`, `COMPLETE`, and immediately before
-an authorized merge/write, it refreshes current identity/requirements/repository gates and runs the
-[lifecycle gate](workflow/lifecycle-gate.md).
+normal role prompt. After each reviewer returns it increments that lens's `review_generation`, adjudicates,
+then runs the [reviewer-evidence adapter](workflow/reviewer-evidence.md). Before `READY`, `COMPLETE`, and
+immediately before an authorized merge/write, it refreshes current identity/requirements/repository gates
+and runs the [lifecycle gate](workflow/lifecycle-gate.md).
 
 ## 5. Tuning
 
@@ -137,10 +138,11 @@ This skill follows the shared framework conventions:
 ## Smoke test
 
 After install, run [reference/smoke-test.md](reference/smoke-test.md) against a small repo. A correct run must
-build a current `change_identity`, perform isolated reviewer lenses, adjudicate findings, create portable
-`review_evidence`, attach authoritative CI to the exact current head, and produce **zero lifecycle validation
-errors** before claiming verified readiness. A manual conflict/rebase, requirements change, or third-party push
-must invalidate evidence when appropriate rather than reuse stale approvals.
+build a current `change_identity`, perform isolated reviewer lenses with positive integer `review_generation`
+values, adjudicate findings, create portable `review_evidence`, attach authoritative CI to the exact current
+head, and produce **zero lifecycle validation errors** before claiming verified readiness. A manual
+conflict/rebase, requirements change, third-party push, or reviewer rerun must invalidate/refresh evidence and
+exception bindings when appropriate rather than reuse stale approvals.
 
 ## Troubleshooting
 
@@ -148,10 +150,11 @@ must invalidate evidence when appropriate rather than reuse stale approvals.
 |---------|-----|
 | Reviewer sees Builder PR narrative/commit framing | Rebuild the neutral review package; see `workflow/orchestrator.md` §6. |
 | Rejected reviewer false-positive still blocks lifecycle as a defect | Adjudication must happen before `reviewer-evidence.md`; rejected proposals stay in rich audit state but not `findings.defect`. |
-| CLEAN lens has `partial`/`unable` evidence | Invalid lifecycle state: CLEAN requires complete inspection, no unavailable surfaces, and zero portable defects. |
+| CLEAN lens has `partial`/`unable` evidence | Invalid lifecycle state: CLEAN requires complete inspection, no unavailable surfaces, zero portable defects, and positive integer `review_generation`. |
 | Review stays stale after a clean base transition | Record explicit conflict-resolution boolean **and provenance** for the SHA transition; unknown provenance fails closed. |
 | Fresh post-conflict rerun remains blocked | Do not apply a historic conflict flag to evidence already produced against the current post-conflict identity. |
-| `NOT_ISOLATED` review appears as `ISOLATED` after human acceptance | Bug: preserve `NOT_ISOLATED`; record `isolation_exception_authorized`, non-empty provenance, and `isolation_exception_change_identity` separately. |
+| `NOT_ISOLATED` review appears as `ISOLATED` after human acceptance | Bug: preserve `NOT_ISOLATED`; record `isolation_exception_authorized`, non-empty provenance, `isolation_exception_change_identity`, and `isolation_exception_review_generation` separately. |
+| Same-head reviewer rerun reuses an older isolation waiver | Bug: increment `review_generation`, clear the old exception fields, and require a new human exception if the rerun remains `NOT_ISOLATED`. |
 | CI is green but lifecycle refuses readiness | Confirm `ci.commit` exactly equals `workspace.current_head_commit` and all legacy approval/thread/integration/circuit-breaker gates are satisfied. |
 | Installed validator cannot find shared runtime | Reinstall/package the skill; the vendored `docs/skill-framework/shared/review_contract_runtime.py` is mandatory and no parent fallback is allowed. |
 | Run merges without explicit authorization | Treat as a bug. A zero-error lifecycle gate establishes readiness only; merge authority remains a separate explicit grant. |
