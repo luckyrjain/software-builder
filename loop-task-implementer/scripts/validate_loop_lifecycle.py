@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
+import math
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -314,12 +315,20 @@ def _reject_nonfinite_json(value: str) -> object:
     raise ValueError(f"non-finite JSON value is not allowed: {value}")
 
 
+def _parse_finite_float(value: str) -> float:
+    parsed = float(value)
+    if not math.isfinite(parsed):
+        raise ValueError(f"JSON floating-point value is out of finite range: {value}")
+    return parsed
+
+
 def _read_state(path: str) -> object:
     raw = sys.stdin.read() if path == "-" else Path(path).read_text(encoding="utf-8")
     return json.loads(
         raw,
         object_pairs_hook=_reject_duplicate_object_keys,
         parse_constant=_reject_nonfinite_json,
+        parse_float=_parse_finite_float,
     )
 
 
