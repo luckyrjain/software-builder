@@ -20,10 +20,31 @@ from scripts.yaml_safety import YAML_SAFETY_ERRORS, load_unique_yaml_file, requi
 ROOT = Path(__file__).resolve().parents[2]
 CONTRACTS_PATH = ROOT / "skills.yaml"
 SEMVER_RE = re.compile(r"^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$")
+LEGACY_NUMERIC_VERSION_RE = re.compile(
+    r"^skill_version:\s*([0-9]+\.[0-9]+)\s*(?:#.*)?$", re.MULTILINE
+)
+
+
+def _version_input(skill_md: Path, raw_version: Any) -> Any:
+    if not isinstance(raw_version, float):
+        return raw_version
+    match = LEGACY_NUMERIC_VERSION_RE.search(skill_md.read_text(encoding="utf-8"))
+    if not match:
+        raise ValueError("legacy numeric skill_version could not be recovered")
+    return match.group(1)
 
 
 def _normalize_version(raw: Any) -> str:
-    value = str(raw).strip()
+    if raw is None or raw == "" or isinstance(raw, bool):
+        raise ValueError(f"invalid skill version {raw!r}")
+    if isinstance(raw, int):
+        value = f"{raw}.0.0"
+    else:
+        value = str(raw).strip()
+        if re.fullmatch(r"\d+", value):
+            value += ".0.0"
+        elif re.fullmatch(r"\d+\.\d+", value):
+            value += ".0"
     if not SEMVER_RE.fullmatch(value):
         raise ValueError(f"invalid skill version {raw!r}")
     return value

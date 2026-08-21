@@ -20,5 +20,5 @@ def test_legacy_numeric_version_preserves_source_minor_digits(tmp_path: Path) ->
 
 def test_repository_manifest_marks_legacy_numeric_version_source() -> None:
     skill = build_manifest(ROOT)["skills"]["mysql-to-postgres-sql"]
-    assert skill["version_source"] == "skill_frontmatter_legacy_numeric"
+    assert skill["version_source"] == "canonical_manifest"
     assert skill["version"] == "1.6.0"

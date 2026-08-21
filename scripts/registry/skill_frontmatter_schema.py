@@ -10,6 +10,10 @@ from typing import Any
 
 from scripts.registry.schema import AUTOMATION_ONLY_INVOCATION
 
+# Retained as a compatibility symbol for downstream validators; it is no longer
+# emitted into SKILL.md because the canonical manifest owns platform metadata.
+PLATFORM_CONTRACT = "skill-platform-v1"
+
 ALLOWED_FRONTMATTER_KEYS = frozenset(
     {
         "name",
@@ -52,4 +56,3 @@ def automation_only_guard_errors(invocation: str, frontmatter: dict[str, Any]) -
     if disable == automation_only:
         return []
     return [f"disable-model-invocation={disable} but invocation={invocation!r}"]
-
