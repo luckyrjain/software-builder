@@ -1,7 +1,7 @@
 # Per-task shared state schema
 # The Orchestrator is the only role that mutates the official state.
 
-workflow_version: "1.4"
+workflow_version: "1.5"
 
 task:
   task_id: null
@@ -65,6 +65,7 @@ review:
     isolation_exception_authorized: false
     isolation_exception_provenance: null
     isolation_exception_change_identity: null
+    isolation_exception_review_generated_at: null
   lens_b:
     status: NOT_RUN
     reviewed_head_commit: null
@@ -78,6 +79,7 @@ review:
     isolation_exception_authorized: false
     isolation_exception_provenance: null
     isolation_exception_change_identity: null
+    isolation_exception_review_generated_at: null
 
 findings:
   items: {}
