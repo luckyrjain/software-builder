@@ -83,6 +83,12 @@ def test_phase_order_adjudicates_before_portable_evidence_and_remediates_a_befor
     )
 
 
+def test_report_template_keeps_human_provenance_out_of_inline_code():
+    report = (SKILL / "report-template.md").read_text(encoding="utf-8")
+    assert "provenance: <escaped/redacted provenance>" in report
+    assert "`<provenance>`" not in report
+
+
 def test_orchestrator_path_loads_mandatory_lifecycle_overlay():
     lazy = (SKILL / "reference/lazy-load-index.md").read_text(encoding="utf-8")
     phase = (SKILL / "reference/phase-index.md").read_text(encoding="utf-8")
