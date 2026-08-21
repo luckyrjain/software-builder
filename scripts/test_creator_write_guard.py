@@ -54,6 +54,7 @@ _GIT_REPOSITORY_OVERRIDE_ENV = {
     "GIT_GRAFT_FILE",
     "GIT_INDEX_FILE",
     "GIT_INTERNAL_SUPER_PREFIX",
+    "GIT_NO_REPLACE_OBJECTS",
     "GIT_OBJECT_DIRECTORY",
     "GIT_OPTIONAL_LOCKS",
     "GIT_PREFIX",
@@ -180,6 +181,7 @@ def _git_environment(execution_boundary: Path, filter_drivers: Iterable[str] = (
 
     environment["GIT_CONFIG_GLOBAL"] = os.devnull
     environment["GIT_CONFIG_NOSYSTEM"] = "1"
+    environment["GIT_NO_REPLACE_OBJECTS"] = "1"
     environment["GIT_OPTIONAL_LOCKS"] = "0"
     environment["GIT_CONFIG_COUNT"] = str(len(config_entries))
     for index, (key, value) in enumerate(config_entries):
