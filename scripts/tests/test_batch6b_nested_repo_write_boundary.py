@@ -72,6 +72,14 @@ def test_guard_rejects_deinitialized_submodule_as_repo_root(tmp_path: Path) -> N
     assert "nested git repository" in result.reason.lower()
 
 
+def test_guard_rejects_case_variant_of_deinitialized_gitlink(tmp_path: Path) -> None:
+    repo = _repo_with_submodule(tmp_path)
+    _deinit_submodule(repo)
+    subprocess.run(["git", "config", "core.ignorecase", "true"], cwd=repo, check=True)
+
+    _assert_nested_repo_block(repo, "MODULES/CHILD/generated_test.py")
+
+
 def test_guard_rejects_new_file_inside_unregistered_nested_repo(tmp_path: Path) -> None:
     repo = _init_repo(tmp_path / "repo")
     _init_repo(repo / "vendor" / "nested")
