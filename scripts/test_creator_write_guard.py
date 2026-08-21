@@ -99,8 +99,8 @@ def _blocked(
     )
 
 
-def _git_environment() -> dict[str, str]:
-    """Return a read-only Git environment isolated from ambient overrides."""
+def _git_environment(filter_drivers: Iterable[str] = ()) -> dict[str, str]:
+    """Return a read-only Git environment isolated from ambient executable config."""
 
     environment = dict(os.environ)
     for key in list(environment):
@@ -113,17 +113,30 @@ def _git_environment() -> dict[str, str]:
             environment.pop(key, None)
 
     # Ignore ambient user/system Git configuration so HOME/XDG or explicit
-    # config-file overrides cannot inject hooks/filters into this safety read.
-    # Keep repository-local config available for normal index/worktree rules,
-    # but override fsmonitor because even `git status`/`git ls-files` may
-    # execute a configured fsmonitor program. Optional locks are disabled so
-    # status cannot refresh .git/index metadata during a pre-write check.
+    # config-file overrides cannot inject executable behavior into this safety
+    # read. Keep repository-local config available for ordinary index/worktree
+    # rules, but override the options that can launch helper processes. Optional
+    # locks are disabled so status cannot refresh .git/index metadata.
+    config_entries: list[tuple[str, str]] = [
+        ("core.fsmonitor", "false"),
+        ("core.attributesFile", os.devnull),
+    ]
+    for driver in sorted(set(filter_drivers)):
+        config_entries.extend(
+            [
+                (f"filter.{driver}.clean", ""),
+                (f"filter.{driver}.process", ""),
+                (f"filter.{driver}.required", "false"),
+            ],
+        )
+
     environment["GIT_CONFIG_GLOBAL"] = os.devnull
     environment["GIT_CONFIG_NOSYSTEM"] = "1"
     environment["GIT_OPTIONAL_LOCKS"] = "0"
-    environment["GIT_CONFIG_COUNT"] = "1"
-    environment["GIT_CONFIG_KEY_0"] = "core.fsmonitor"
-    environment["GIT_CONFIG_VALUE_0"] = "false"
+    environment["GIT_CONFIG_COUNT"] = str(len(config_entries))
+    for index, (key, value) in enumerate(config_entries):
+        environment[f"GIT_CONFIG_KEY_{index}"] = key
+        environment[f"GIT_CONFIG_VALUE_{index}"] = value
     return environment
 
 
@@ -201,6 +214,51 @@ def _git_top_level(
     return top_level, None
 
 
+def _repository_filter_drivers(
+    repo_root: Path,
+    git_env: dict[str, str],
+) -> tuple[set[str], str | None]:
+    """Resolve filter attributes without running the configured filter commands."""
+
+    if tracked_relative_paths is None:
+        return set(), _TRACKED_PATHS_IMPORT_ERROR or "shared Git path helper unavailable"
+    tracked, tracked_error = tracked_relative_paths(repo_root, env=git_env)
+    if tracked_error:
+        return set(), tracked_error
+    if not tracked:
+        return set(), None
+
+    path_input = b"".join(os.fsencode(path) + b"\0" for path in sorted(tracked))
+    try:
+        completed = subprocess.run(
+            ["git", "-C", str(repo_root), "check-attr", "-z", "--stdin", "filter"],
+            input=path_input,
+            capture_output=True,
+            check=False,
+            env=git_env,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        return set(), f"git check-attr failed: {exc}"
+    if completed.returncode != 0:
+        detail = os.fsdecode(completed.stderr or completed.stdout).strip()
+        return set(), f"git check-attr failed: {detail or 'unknown error'}"
+
+    records = completed.stdout.split(b"\0")
+    if records and records[-1] == b"":
+        records.pop()
+    if len(records) % 3 != 0:
+        return set(), "git check-attr returned an unparseable filter record"
+
+    drivers: set[str] = set()
+    for index in range(0, len(records), 3):
+        _path, attribute, value = records[index : index + 3]
+        if attribute != b"filter":
+            return set(), "git check-attr returned an unexpected attribute record"
+        if value not in {b"unspecified", b"unset"}:
+            drivers.add(os.fsdecode(value))
+    return drivers, None
+
+
 def _status_path_relative_to_repo(
     repo_root: Path,
     git_top_level: Path,
@@ -229,6 +287,7 @@ def _git_status(
                 "status",
                 "--porcelain=v1",
                 "--untracked-files=all",
+                "--ignore-submodules=all",
                 "-z",
             ],
             capture_output=True,
@@ -300,7 +359,12 @@ def check_write_safety(repo_root: Path, planned_paths: Iterable[str | Path]) -> 
     if path_error:
         return _blocked(reason=path_error)
 
-    git_env = _git_environment()
+    base_git_env = _git_environment()
+    filter_drivers, filter_error = _repository_filter_drivers(resolved_root, base_git_env)
+    if filter_error:
+        return _blocked(planned_paths=normalised, reason=filter_error)
+    git_env = _git_environment(filter_drivers)
+
     dirty_paths, status_snapshot, status_error = _git_status(resolved_root, git_env)
     if status_error:
         return _blocked(planned_paths=normalised, status_snapshot=status_snapshot, reason=status_error)
