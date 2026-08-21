@@ -16,7 +16,7 @@ consumes:
 
 # Orchestrator lifecycle overlay
 
-This file is a **mandatory normative overlay** for `workflow/orchestrator.md`. Load it with the Orchestrator from task initialization through completion. Where the legacy Orchestrator text speaks only about `head_commit`, `diff_fingerprint`, or fingerprint-bound lens approvals, this overlay is authoritative for lifecycle freshness and readiness.
+This file is a **mandatory normative overlay** for `workflow/orchestrator.md`. Load it with the Orchestrator from task initialization through completion. For lifecycle freshness, readiness, and completion semantics, this overlay is authoritative wherever it conflicts with legacy Orchestrator text — including change-identity freshness, review-isolation exceptions, and the separation of verified readiness from merge authority. Legacy instructions that do not conflict with this overlay remain in force.
 
 ## After Builder result verification
 
