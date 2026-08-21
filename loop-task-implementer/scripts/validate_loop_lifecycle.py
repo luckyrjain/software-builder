@@ -318,13 +318,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = parse_args(argv)
     try:
+        args = parse_args(argv)
         state = _read_state(args.state)
         errors = validate_lifecycle_state(state)
     except SystemExit as exc:
-        # A runtime/import must never be able to turn failed validation into exit 0.
-        print(f"lifecycle validation failed closed: validation runtime exited ({exc.code})", file=sys.stderr)
+        # Argument handling or an imported runtime must never turn incomplete validation into exit 0.
+        print(
+            f"lifecycle validation failed closed: validation exited before completion ({exc.code})",
+            file=sys.stderr,
+        )
         return 2
     except Exception as exc:
         # Any ordinary input/runtime failure means lifecycle validity could not be established.
