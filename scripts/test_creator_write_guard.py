@@ -285,7 +285,7 @@ def _windows_path_component_is_unsafe(part: str) -> bool:
 
     if ":" in part or part.rstrip(" .") != part:
         return True
-    basename = part.split(".", 1)[0].casefold()
+    basename = part.split(".", 1)[0].rstrip(" ").casefold()
     return basename in _WINDOWS_RESERVED_DEVICE_BASENAMES
 
 
