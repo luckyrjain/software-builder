@@ -75,12 +75,16 @@ Its Git subprocesses remove repository-selection/index overrides, `GIT_EXEC_PATH
 and all `GIT_TRACE*` settings, ignore user/system Git config, disable configured
 `core.fsmonitor`, neutralize clean/process filter drivers for every tracked path
 in the enclosing Git top-level before status, ignore external attributes files,
-and set `GIT_OPTIONAL_LOCKS=0`. Status does not recurse into submodules, so a
-submodule's local Git configuration cannot execute during the parent repository
-check. Separately, every planned path is checked for nested filesystem `.git`
-markers, Git's bare-repository metadata shape (`HEAD`, `objects/`, and `refs/`),
-and parent-index gitlinks (`160000` mode), so the write plan cannot cross into
-an initialized, deinitialized, bare, or otherwise nested child repository.
+force `GIT_NO_REPLACE_OBJECTS=1`, and set `GIT_OPTIONAL_LOCKS=0`. Disabling
+replace-object rewriting prevents repository-local `refs/replace` from changing
+how `HEAD` or trees are resolved and thereby hiding a staged target from the
+status snapshot. Status does not recurse into submodules, so a submodule's local
+Git configuration cannot execute during the parent repository check.
+
+Separately, every planned path is checked for nested filesystem `.git` markers,
+Git's bare-repository metadata shape (`HEAD`, `objects/`, and `refs/`), and
+parent-index gitlinks (`160000` mode), so the write plan cannot cross into an
+initialized, deinitialized, bare, or otherwise nested child repository.
 Gitlinks are enumerated rather than queried only through literal planned
 pathspecs, and boundary comparison follows the repository's parsed
 `core.ignorecase` setting. This keeps deinitialized-submodule protection intact
@@ -95,16 +99,16 @@ a normal nested scope.
 The pre-write check therefore cannot be redirected to another repository,
 execute an ambient fsmonitor or repository clean-filter program, resolve Git
 from the target/enclosing worktree, create an ambient trace file, refresh Git
-index metadata, or silently write through a parent scope into nested Git
-metadata while it is deciding. Filter-driver names are resolved with
-`git check-attr` over Git-tracked paths in the enclosing worktree before status;
-if that attribute read cannot be parsed, the guard fails closed. This top-level
-filter discovery is deliberate: status retains sibling evidence, so every path
-it may inspect must have executable filters neutralized even when that sibling
-lies outside nested `repo_root`. Because the guard disables executable filters,
-a filtered path that Git can only reconcile by executing its filter may be
-reported conservatively as dirty; an overlap still blocks rather than running
-repository code.
+index metadata, hide staged state through replace objects, or silently write
+through a parent scope into nested Git metadata while it is deciding.
+Filter-driver names are resolved with `git check-attr` over Git-tracked paths in
+the enclosing worktree before status; if that attribute read cannot be parsed,
+the guard fails closed. This top-level filter discovery is deliberate: status
+retains sibling evidence, so every path it may inspect must have executable
+filters neutralized even when that sibling lies outside nested `repo_root`.
+Because the guard disables executable filters, a filtered path that Git can only
+reconcile by executing its filter may be reported conservatively as dirty; an
+overlap still blocks rather than running repository code.
 
 Dirty paths outside the planned set are reported and left exactly as found.
 Only paths inside `repo_root` participate in write conflicts. A planned path
