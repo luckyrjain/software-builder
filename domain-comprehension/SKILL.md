@@ -1,7 +1,5 @@
 ---
 name: domain-comprehension
-skill_version: 1.1
-platform_contract: skill-platform-v1
 description: >-
   Build a verifiable, evidence-backed representation of a business domain and an
   as-built PRD for the in-scope service(s) and/or domain. Executable source code
@@ -152,3 +150,4 @@ UNKNOWNS.md/KNOWN_OMISSIONS.md.
 1. [workflow/inputs.md](workflow/inputs.md) — resolve mode, domain, workspace, artifact root, discovery budget.
 2. Existing `manifest.yaml` → resume/retrofit; otherwise Session 0; then Session 0b via squad-map.
 3. Execute P0 → P5; P5 emits the evidence-backed PRD plus required machine model artifacts.
+

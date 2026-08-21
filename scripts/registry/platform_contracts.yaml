@@ -1,130 +1,245 @@
 schema_version: 1
-
-# Cross-skill evidence semantics. Skills may add domain-specific detail, but
-# every portable claim uses this envelope so orchestrators can distinguish
-# observation from inference and retain provenance instead of flattening it.
 evidence:
-  statuses: [OBSERVED, INFERRED, UNKNOWN, CONFLICTED, NOT_APPLICABLE]
-  required_fields: [claim, status, provenance, limitations]
+  statuses:
+  - OBSERVED
+  - INFERRED
+  - UNKNOWN
+  - CONFLICTED
+  - NOT_APPLICABLE
+  required_fields:
+  - claim
+  - status
+  - provenance
+  - limitations
   insufficient_evidence_status: UNKNOWN
   conflicting_evidence_status: CONFLICTED
-
-# Cross-skill completion semantics. The artifact list is populated from the
-# producer/consumer contracts in composition_contracts.yaml.
 completion:
-  statuses: [SUCCESS, PARTIAL, BLOCKED, FAILED, ESCALATED]
-  required_fields: [status, evidence_status, blockers, artifacts, recommended_next_skill]
-
-# Universal Definition of Done. Every skill declares these four fields instead
-# of leaving "done" to vague prose; orchestrators can check them mechanically
-# before treating a handoff's result as final.
+  statuses:
+  - SUCCESS
+  - PARTIAL
+  - BLOCKED
+  - FAILED
+  - ESCALATED
+  required_fields:
+  - status
+  - evidence_status
+  - blockers
+  - artifacts
+  - recommended_next_skill
 definition_of_done:
-  required_fields: [required_artifacts, required_checks, blocked_conditions, partial_result_behavior]
-
-# Portable result envelope used by orchestrators and host adapters.
+  required_fields:
+  - required_artifacts
+  - required_checks
+  - blocked_conditions
+  - partial_result_behavior
 result_envelope:
   required_fields:
-    - skill
-    - version
-    - status
-    - confidence
-    - source_revision
-    - evidence_status
-    - artifacts
-    - blockers
-    - recommended_next_skill
-  confidence_values: [HIGH, MEDIUM, LOW, UNKNOWN]
-
-# Resolve information before asking the caller to repeat or manually retrieve it.
+  - skill
+  - version
+  - status
+  - confidence
+  - source_revision
+  - evidence_status
+  - artifacts
+  - blockers
+  - recommended_next_skill
+  confidence_values:
+  - HIGH
+  - MEDIUM
+  - LOW
+  - UNKNOWN
 input_resolution:
   order:
-    - supplied_facts
-    - retrievable_authoritative_context
-    - safe_reversible_defaults
-    - focused_question
+  - supplied_facts
+  - retrievable_authoritative_context
+  - safe_reversible_defaults
+  - focused_question
   forbid_reasking_retrievable: true
   optional_context_degrades: true
-
-# Default source precedence. A skill may document a domain-specific override.
 source_precedence:
-  - runtime_authoritative_state
-  - executable_code_config_contracts
-  - tests_and_executable_examples
-  - version_controlled_technical_docs
-  - tickets_and_design_docs
-  - human_prose_and_comments
-
+- runtime_authoritative_state
+- executable_code_config_contracts
+- tests_and_executable_examples
+- version_controlled_technical_docs
+- tickets_and_design_docs
+- human_prose_and_comments
 freshness:
-  observation_fields: [observed_at, source_revision, source_environment]
-  repository_fields: [repo, branch, commit_sha]
+  observation_fields:
+  - observed_at
+  - source_revision
+  - source_environment
+  repository_fields:
+  - repo
+  - branch
+  - commit_sha
   unknown_freshness_lowers_confidence: true
-
 handoff:
-  required_fields: [target_skill, reason, inputs, evidence_refs, assumptions, unresolved]
-
+  required_fields:
+  - target_skill
+  - reason
+  - inputs
+  - evidence_refs
+  - assumptions
+  - unresolved
 execution_context:
-  required_fields: [invocation_id, parent_skill, visited_skills, depth]
+  required_fields:
+  - invocation_id
+  - parent_skill
+  - visited_skills
+  - depth
   default_max_depth: 3
   block_revisit_by_default: true
-
 state_semantics:
-  values: [current_state, proposed_state, desired_state, transitional_state]
-
+  values:
+  - current_state
+  - proposed_state
+  - desired_state
+  - transitional_state
 artifact_ownership:
   canonical_producer_owns_write: true
   consumers_may_derive: true
   consumers_may_silently_rewrite: false
-
-# Minimum authorization required for an action class. A skill may always be
-# stricter than this table; it may never be looser.
 action_gates:
   read_only: none
   local_reversible_write: explicit_task_authorization
   remote_non_destructive_write: explicit_task_authorization
   destructive_or_high_impact: explicit_action_authorization
-
-# Explicit per-skill permission envelope. This is deliberately separate from
-# capabilities: capabilities say what a host can provide; permissions say what
-# the skill is authorized to do when those capabilities exist.
 permission_schema:
-  required_fields: [repository, external_actions, unattended, merge]
-  repository_values: [read, write]
-  external_action_values: [none, read, write]
-
+  required_fields:
+  - repository
+  - external_actions
+  - unattended
+  - merge
+  repository_values:
+  - read
+  - write
+  external_action_values:
+  - none
+  - read
+  - write
 skill_permissions:
-  pr-review: {repository: read, external_actions: write, unattended: false, merge: false}
-  pr-gatekeeper: {repository: read, external_actions: write, unattended: true, merge: false}
-  k8s-overprovisioning-datadog: {repository: read, external_actions: read, unattended: false, merge: false}
-  incident-rca: {repository: read, external_actions: read, unattended: false, merge: false}
-  incident-triage-agent: {repository: read, external_actions: write, unattended: true, merge: false}
-  domain-comprehension: {repository: read, external_actions: read, unattended: false, merge: false}
-  squad-map: {repository: read, external_actions: read, unattended: false, merge: false}
-  who-owns-x-bot: {repository: read, external_actions: write, unattended: true, merge: false}
-  new-hire-guide: {repository: read, external_actions: read, unattended: false, merge: false}
-  release-readiness-checker: {repository: read, external_actions: read, unattended: false, merge: false}
-  migration-program-manager: {repository: read, external_actions: none, unattended: false, merge: false}
-  cost-optimization-sprint-planner: {repository: read, external_actions: none, unattended: false, merge: false}
-  mysql-to-postgres-sql: {repository: write, external_actions: read, unattended: false, merge: false}
-  loop-task-implementer: {repository: write, external_actions: write, unattended: false, merge: true}
-  backlog-runner: {repository: write, external_actions: write, unattended: true, merge: true}
-  weekly-squad-digest: {repository: read, external_actions: write, unattended: true, merge: false}
-  unit-test-creator: {repository: write, external_actions: none, unattended: false, merge: false}
-  integration-test-creator: {repository: write, external_actions: read, unattended: false, merge: false}
-  contract-test-creator: {repository: write, external_actions: none, unattended: false, merge: false}
-  e2e-test-creator: {repository: write, external_actions: read, unattended: false, merge: false}
-  api-test-creator: {repository: write, external_actions: read, unattended: false, merge: false}
-  prd-architect: {repository: read, external_actions: none, unattended: false, merge: false}
-  test-writer: {repository: read, external_actions: none, unattended: false, merge: false}
-
-# Skill topology is intentionally separate from skills.yaml catalogue data.
-# This file classifies behavior; it does not define installation or discovery.
+  pr-review:
+    repository: read
+    external_actions: write
+    unattended: false
+    merge: false
+  pr-gatekeeper:
+    repository: read
+    external_actions: write
+    unattended: true
+    merge: false
+  k8s-overprovisioning-datadog:
+    repository: read
+    external_actions: read
+    unattended: false
+    merge: false
+  incident-rca:
+    repository: read
+    external_actions: read
+    unattended: false
+    merge: false
+  incident-triage-agent:
+    repository: read
+    external_actions: write
+    unattended: true
+    merge: false
+  domain-comprehension:
+    repository: read
+    external_actions: read
+    unattended: false
+    merge: false
+  squad-map:
+    repository: read
+    external_actions: read
+    unattended: false
+    merge: false
+  who-owns-x-bot:
+    repository: read
+    external_actions: write
+    unattended: true
+    merge: false
+  new-hire-guide:
+    repository: read
+    external_actions: read
+    unattended: false
+    merge: false
+  release-readiness-checker:
+    repository: read
+    external_actions: read
+    unattended: false
+    merge: false
+  migration-program-manager:
+    repository: read
+    external_actions: none
+    unattended: false
+    merge: false
+  cost-optimization-sprint-planner:
+    repository: read
+    external_actions: none
+    unattended: false
+    merge: false
+  mysql-to-postgres-sql:
+    repository: write
+    external_actions: read
+    unattended: false
+    merge: false
+  loop-task-implementer:
+    repository: write
+    external_actions: write
+    unattended: false
+    merge: true
+  backlog-runner:
+    repository: write
+    external_actions: write
+    unattended: true
+    merge: true
+  weekly-squad-digest:
+    repository: read
+    external_actions: write
+    unattended: true
+    merge: false
+  unit-test-creator:
+    repository: write
+    external_actions: none
+    unattended: false
+    merge: false
+  integration-test-creator:
+    repository: write
+    external_actions: read
+    unattended: false
+    merge: false
+  contract-test-creator:
+    repository: write
+    external_actions: none
+    unattended: false
+    merge: false
+  e2e-test-creator:
+    repository: write
+    external_actions: read
+    unattended: false
+    merge: false
+  api-test-creator:
+    repository: write
+    external_actions: read
+    unattended: false
+    merge: false
+  prd-architect:
+    repository: read
+    external_actions: none
+    unattended: false
+    merge: false
+  test-writer:
+    repository: read
+    external_actions: none
+    unattended: false
+    merge: false
 skill_types:
   pr-review: leaf
   pr-gatekeeper: trigger
   k8s-overprovisioning-datadog: leaf
   incident-rca: leaf
   incident-triage-agent: trigger
-  domain-comprehension: leaf
+  domain-comprehension: orchestrator
   squad-map: leaf
   who-owns-x-bot: router
   new-hire-guide: orchestrator

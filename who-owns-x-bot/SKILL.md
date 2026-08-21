@@ -1,7 +1,5 @@
 ---
 name: who-owns-x-bot
-skill_version: 1.0
-platform_contract: skill-platform-v1
 description: >-
   Single-shot "who owns X" answer formatted for a Slack slash command or other automated,
   no-follow-up caller. Delegates the actual ownership lookup entirely to squad-map; this skill only
@@ -115,3 +113,4 @@ Routing: [skill-routing.md](../docs/skill-framework/shared/skill-routing.md) · 
 1. Read [workflow/inputs.md](workflow/inputs.md) — resolve `query`, `workspace_root`.
 2. [workflow/lookup.md](workflow/lookup.md) — delegate to squad-map, format per
    [reference/slack-format.md](reference/slack-format.md), reply.
+

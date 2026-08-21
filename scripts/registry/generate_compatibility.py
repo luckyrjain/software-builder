@@ -9,7 +9,7 @@ from scripts.release_info import read_distribution_version
 
 HEADER = """# Compatibility matrix
 
-<!-- GENERATED from skills.yaml + capability_catalog.yaml + composition_contracts.yaml — do not edit; run make generate -->
+<!-- GENERATED from canonical skills.yaml + capability_catalog.yaml — do not edit; run make generate -->
 
 Distribution version: **{version}**
 
@@ -21,7 +21,7 @@ Distribution version: **{version}**
 def render_compatibility_matrix(root: Path) -> str:
     registry = load_registry(root)
     capabilities = load_catalog(root / "scripts/registry/capability_catalog.yaml")
-    _, _, _, contracts = load_contracts(root / "scripts/registry/composition_contracts.yaml")
+    _, _, _, contracts = load_contracts(root / "skills.yaml")
     version = read_distribution_version(root)
 
     lines = [HEADER.format(version=version).rstrip()]
@@ -52,3 +52,4 @@ def render_compatibility_matrix(root: Path) -> str:
             f"{required} | {write_authority} |",
         )
     return "\n".join(lines) + "\n"
+

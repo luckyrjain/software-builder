@@ -1,7 +1,5 @@
 ---
 name: api-test-creator
-skill_version: 1.1
-platform_contract: skill-platform-v1
 description: >-
   Generates black-box API test suites (Postman collections, run via Newman) against a real, reachable
   running API instance. Detects the repo's existing Postman/Newman tooling and collection file(s), writes
@@ -138,3 +136,4 @@ only API-level deltas.
    other optional fields.
 3. Proceed phase by phase per [reference/phase-index.md](reference/phase-index.md), consulting
    [reference/gate-policy.md](reference/gate-policy.md) whenever a phase hits a non-happy-path branch.
+

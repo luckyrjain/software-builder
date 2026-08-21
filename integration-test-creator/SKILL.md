@@ -1,7 +1,5 @@
 ---
 name: integration-test-creator
-skill_version: 1.1
-platform_contract: skill-platform-v1
 description: >-
   Generates integration tests that exercise the real seam between a component and one real adjacent
   dependency (database, queue, cache, internal service) — never a mock of that dependency. Detects the
@@ -129,3 +127,4 @@ only integration-level deltas.
    other optional fields.
 3. Proceed phase by phase per [reference/phase-index.md](reference/phase-index.md), consulting
    [reference/gate-policy.md](reference/gate-policy.md) whenever a phase hits a non-happy-path branch.
+

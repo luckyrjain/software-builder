@@ -1,7 +1,5 @@
 ---
 name: migration-program-manager
-skill_version: 1.0
-platform_contract: skill-platform-v1
 description: >-
   Org-wide rollup of mysql-to-postgres-sql's MIGRATION_STATUS.yaml across many workspaces, joined to
   squad-map's SQUAD_MAP.md for ownership, ranked by staleness and blocked-gate count per squad.
@@ -129,3 +127,4 @@ Routing: [skill-routing.md](../docs/skill-framework/shared/skill-routing.md) · 
 2. [workflow/run-rollup.md](workflow/run-rollup.md) — run
    [scripts/aggregate_migration_status.py](scripts/aggregate_migration_status.py), build
    [reference/report-format.md](reference/report-format.md).
+

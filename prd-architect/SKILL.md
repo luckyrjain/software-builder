@@ -1,7 +1,5 @@
 ---
 name: prd-architect
-skill_version: 1.2
-platform_contract: skill-platform-v1
 description: >-
   Use when rough product ideas, feature proposals, workflows, existing PRDs, or build/no-build questions
   need a validated PRD, gap review, or readiness assessment. Keywords: PRD, product requirements, should
@@ -139,3 +137,4 @@ Build Readiness: Not Ready, preserving classified findings/blockers unless the u
    [reference/phase-index.md](reference/phase-index.md) for the active `response_mode`.
 5. Emit per [reference/output-contract.md](reference/output-contract.md) and the matching template in
    [report-template.md](report-template.md).
+

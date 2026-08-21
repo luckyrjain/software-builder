@@ -1,7 +1,5 @@
 ---
 name: contract-test-creator
-skill_version: 1.1
-platform_contract: skill-platform-v1
 description: >-
   Generates consumer-driven contract tests (Pact-style) verifying a consumer and provider agree on an
   interaction shape. Detects the repo's Pact tooling (pact-js, pact-python, Pact JVM, pact-go, Ruby pact)
@@ -129,3 +127,4 @@ only contract-level deltas.
    `run_tests`, and the other optional fields.
 3. Proceed phase by phase per [reference/phase-index.md](reference/phase-index.md), consulting
    [reference/gate-policy.md](reference/gate-policy.md) whenever a phase hits a non-happy-path branch.
+

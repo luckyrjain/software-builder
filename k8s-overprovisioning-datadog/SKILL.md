@@ -1,7 +1,5 @@
 ---
 name: k8s-overprovisioning-datadog
-skill_version: 1.0
-platform_contract: skill-platform-v1
 description: >-
   Use when the user asks whether a Kubernetes deployment or service is overprovisioned, right-sized,
   underprovisioned, or ready for resource optimization using Kubernetes or observability MCP data.
@@ -105,3 +103,4 @@ Routing: [skill-routing.md](../docs/skill-framework/shared/skill-routing.md) · 
 [prompt-injection.md](../docs/skill-framework/shared/prompt-injection.md) · rendered deliverables follow
 [safe-output.md](../docs/skill-framework/shared/safe-output.md) — see
 [render/markdown.md § Safe rendered-output boundary](render/markdown.md#safe-rendered-output-boundary)
+

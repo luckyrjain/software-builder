@@ -1,7 +1,5 @@
 ---
 name: cost-optimization-sprint-planner
-skill_version: 1.0
-platform_contract: skill-platform-v1
 description: >-
   Org-wide cost/waste sweep composing k8s-overprovisioning-datadog once per in-scope deployment, ranked
   by monthly_savings_total descending and grouped by squad. Optional namespace-ranking pre-filter before
@@ -141,3 +139,4 @@ Routing: [skill-routing.md](../docs/skill-framework/shared/skill-routing.md) · 
 2. [workflow/run-sweep.md](workflow/run-sweep.md) — pre-filter, loop, join, rank, render per
    [reference/gate-policy.md](reference/gate-policy.md) and
    [reference/sweep-policy.md](reference/sweep-policy.md).
+

@@ -1,7 +1,5 @@
 ---
 name: test-writer
-skill_version: 2.4
-platform_contract: skill-platform-v1
 description: >-
   Thin orchestration router for test-writing requests that do not resolve to one specialist up front.
   Classifies the request into one or more complementary test levels, builds an ordered test_plan, then
@@ -110,3 +108,4 @@ parity rules. Do not add a router-level write or interactive gate.
 3. Apply [workflow/classify.md](workflow/classify.md) to create `test_plan` or ask once.
 4. Apply [workflow/delegate.md](workflow/delegate.md) for each planned level.
 5. Apply [workflow/aggregate.md](workflow/aggregate.md) before reporting completion.
+

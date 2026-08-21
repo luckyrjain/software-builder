@@ -1,7 +1,5 @@
 ---
 name: weekly-squad-digest
-skill_version: 1.0
-platform_contract: skill-platform-v1
 description: >-
   Scheduled digest combining migration-program-manager's and cost-optimization-sprint-planner's own
   rollup JSON outputs into one squad-grouped report — never re-runs either aggregator, never re-derives
@@ -122,3 +120,4 @@ Routing: [skill-routing.md](../docs/skill-framework/shared/skill-routing.md) · 
 1. Read [workflow/inputs.md](workflow/inputs.md) — resolve `rollup_manifest`, `staleness_warning_days`.
 2. [workflow/run-digest.md](workflow/run-digest.md) — read, group, flag staleness, render per
    [reference/report-format.md](reference/report-format.md).
+

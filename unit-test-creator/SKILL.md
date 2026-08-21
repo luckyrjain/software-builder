@@ -1,7 +1,5 @@
 ---
 name: unit-test-creator
-skill_version: 1.1
-platform_contract: skill-platform-v1
 description: >-
   Generates isolated, fast unit tests — function/class-level, every external dependency mocked or
   stubbed — for a target repository. Detects the repo's own test framework (pytest, Jest/Vitest/Mocha,
@@ -131,3 +129,4 @@ only unit-level deltas.
    other optional fields.
 3. Proceed phase by phase per [reference/phase-index.md](reference/phase-index.md), consulting
    [reference/gate-policy.md](reference/gate-policy.md) whenever a phase hits a non-happy-path branch.
+

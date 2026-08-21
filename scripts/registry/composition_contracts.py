@@ -5,11 +5,28 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from scripts.registry.canonical_manifest import load_canonical_manifest
 from scripts.registry.models import Registry
 from scripts.test_creator_catalog import TEST_CREATOR_SKILLS
 from scripts.yaml_safety import YAML_SAFETY_ERRORS, load_unique_yaml_file
 
-CONTRACTS_PATH = Path(__file__).resolve().parent / "composition_contracts.yaml"
+ROOT = Path(__file__).resolve().parents[2]
+CONTRACTS_PATH = ROOT / "skills.yaml"
+LEGACY_CONTRACTS_PATH = Path(__file__).resolve().parent / "composition_contracts.yaml"
+
+
+def _load_contract_document(path: Path | None = None) -> dict[str, object]:
+    if path is None or path.name == "skills.yaml":
+        manifest_root = path.parent if path is not None else ROOT
+        manifest = load_canonical_manifest(manifest_root)
+        contracts = manifest["contracts"]
+        if not isinstance(contracts, dict) or not isinstance(contracts.get("composition"), dict):
+            raise ValueError("canonical manifest contracts.composition must be a mapping")
+        return contracts["composition"]
+    raw = load_unique_yaml_file(path)
+    if not isinstance(raw, dict):
+        raise ValueError(f"{path}: root must be a mapping")
+    return raw
 
 
 @dataclass(frozen=True)
@@ -54,7 +71,7 @@ def _validate_creator_parity(
     if not present_skills:
         return []
 
-    raw = load_unique_yaml_file(contracts_path)
+    raw = _load_contract_document(contracts_path)
     parity = raw.get("creator_parity") if isinstance(raw, dict) else None
     if not isinstance(parity, dict):
         return ["error: composition contracts missing creator_parity"]
@@ -139,9 +156,7 @@ def load_contracts(
     path: Path | None = None,
 ) -> tuple[set[str], dict[str, list[str]], dict[str, int], dict[str, CompositionContract]]:
     contracts_path = path or CONTRACTS_PATH
-    raw = load_unique_yaml_file(contracts_path)
-    if not isinstance(raw, dict):
-        raise ValueError(f"{contracts_path}: root must be a mapping")
+    raw = _load_contract_document(path)
 
     artifact_types = raw.get("artifact_types", [])
     if not isinstance(artifact_types, list):
@@ -395,3 +410,4 @@ def validate_composition_contracts(
             )
 
     return errors
+

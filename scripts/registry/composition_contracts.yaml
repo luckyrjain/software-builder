@@ -1,279 +1,495 @@
-# Composition contracts for cross-skill graph validation (#19 v2).
-# Artifact types are shared handoff envelopes; write_authority is the maximum external write surface.
-
 artifact_types:
-  - mr_context
-  - mr_review_report
-  - rca_report
-  - k8s_rightsizing_report
-  - squad_map
-  - ownership_lookup
-  - migration_status_rollup
-  - cost_sweep_rollup
-  - implementation_task
-  - implementation_pr
-  - digest_report
-  - test_suite
-  - test_orchestration_result
-  - prd_report
-
-# Field-level contracts for producer/consumer schema matching (#19 v2 follow-up).
-#
-# mr_context is this repo's reference InvocationEnvelope (#52) — see
-# docs/skill-framework/shared/invocation-envelope.md. Its field set was extended here to match
-# what release-readiness-checker's workflow/run-check.md already documents passing to pr-review
-# (review_mode/audit_type/expected_head_sha were real, in-use fields the schema hadn't caught up
-# to yet); this is a data-only change enforced by the existing _validate_declared_fields /
-# _validate_invoke_schema_matching machinery in composition_contracts.py, not new validator code.
+- mr_context
+- mr_review_report
+- rca_report
+- k8s_rightsizing_report
+- squad_map
+- ownership_lookup
+- migration_status_rollup
+- cost_sweep_rollup
+- implementation_task
+- implementation_pr
+- digest_report
+- test_suite
+- test_orchestration_result
+- prd_report
 artifact_schemas:
   mr_context:
-    fields: [project, merge_request_iid, head_sha, posting_policy, review_mode, audit_type, expected_head_sha]
+    fields:
+    - project
+    - merge_request_iid
+    - head_sha
+    - posting_policy
+    - review_mode
+    - audit_type
+    - expected_head_sha
   mr_review_report:
-    fields: [review_metadata, posted, head_sha, posting_mode]
+    fields:
+    - review_metadata
+    - posted
+    - head_sha
+    - posting_mode
   rca_report:
-    fields: [assessment_metadata, root_cause, confidence]
+    fields:
+    - assessment_metadata
+    - root_cause
+    - confidence
   k8s_rightsizing_report:
-    fields: [assessment_metadata, recommendations]
+    fields:
+    - assessment_metadata
+    - recommendations
   squad_map:
-    fields: [squads, generated_at]
+    fields:
+    - squads
+    - generated_at
   ownership_lookup:
-    fields: [query, squad, confidence]
+    fields:
+    - query
+    - squad
+    - confidence
   migration_status_rollup:
-    fields: [items, generated_at, source_revision]
+    fields:
+    - items
+    - generated_at
+    - source_revision
   cost_sweep_rollup:
-    fields: [items, generated_at, source_revision]
+    fields:
+    - items
+    - generated_at
+    - source_revision
   implementation_task:
     fields:
-      - task_id
-      - scope
-      - acceptance_criteria
-      - request
-      - repo_root
-      - target
-      - level_hint
-      - specialist_inputs
-      - test_framework_hint
-      - run_tests
-      - max_files_per_run
-      - deadline
-      - session_token_budget
-      - output_dir
-  implementation_pr:
-    fields: [pr_url, head_sha, task_id]
-  digest_report:
-    fields: [sections, generated_at, source_revisions]
-  test_suite:
-    fields: [tests, framework, target_path]
-  test_orchestration_result:
-    fields: [test_plan, orchestration_status, unfinished_levels, level_reports]
-  prd_report:
-    fields: [title, build_readiness, depth, response_mode]
-
-# The five leaf creators share one composition boundary. These fields are
-# intentionally explicit: specialist_inputs remains opaque to the router, but
-# it must still be forwarded byte-for-byte rather than normalized or dropped.
-creator_parity:
-  skills:
-    - unit-test-creator
-    - integration-test-creator
-    - contract-test-creator
-    - e2e-test-creator
-    - api-test-creator
-  forwarded_fields:
+    - task_id
+    - scope
+    - acceptance_criteria
     - request
     - repo_root
     - target
+    - level_hint
+    - specialist_inputs
     - test_framework_hint
     - run_tests
     - max_files_per_run
     - deadline
     - session_token_budget
     - output_dir
-    - specialist_inputs
-  framework_owned_fields: [execution_context]
+  implementation_pr:
+    fields:
+    - pr_url
+    - head_sha
+    - task_id
+  digest_report:
+    fields:
+    - sections
+    - generated_at
+    - source_revisions
+  test_suite:
+    fields:
+    - tests
+    - framework
+    - target_path
+  test_orchestration_result:
+    fields:
+    - test_plan
+    - orchestration_status
+    - unfinished_levels
+    - level_reports
+  prd_report:
+    fields:
+    - title
+    - build_readiness
+    - depth
+    - response_mode
+creator_parity:
+  skills:
+  - unit-test-creator
+  - integration-test-creator
+  - contract-test-creator
+  - e2e-test-creator
+  - api-test-creator
+  forwarded_fields:
+  - request
+  - repo_root
+  - target
+  - test_framework_hint
+  - run_tests
+  - max_files_per_run
+  - deadline
+  - session_token_budget
+  - output_dir
+  - specialist_inputs
+  framework_owned_fields:
+  - execution_context
   child_authority: skill_result
   degraded_status: BLOCKED
   interactive_gate_policy: specialist-only
   router_gate_policy: classification-only
   output_contract:
     artifact: test_suite
-    fields: [tests, framework, target_path]
-
+    fields:
+    - tests
+    - framework
+    - target_path
 write_authority_levels:
   read-only: 0
   comment: 1
   repository-write: 2
   automation-unattended: 3
-
 skills:
   pr-review:
-    produces: [mr_review_report]
-    consumes: [mr_context]
+    produces:
+    - mr_review_report
+    consumes:
+    - mr_context
     produce_fields:
-      mr_review_report: [review_metadata, posted, head_sha, posting_mode]
+      mr_review_report:
+      - review_metadata
+      - posted
+      - head_sha
+      - posting_mode
     consume_fields:
-      mr_context: [project, merge_request_iid, head_sha]
+      mr_context:
+      - project
+      - merge_request_iid
+      - head_sha
     write_authority: comment
-
   pr-gatekeeper:
-    produces: [mr_review_report]
-    consumes: [mr_context]
+    produces:
+    - mr_review_report
+    consumes:
+    - mr_context
     produce_fields:
-      mr_review_report: [review_metadata, posted, head_sha]
+      mr_review_report:
+      - review_metadata
+      - posted
+      - head_sha
     consume_fields:
-      mr_context: [project, merge_request_iid, head_sha]
+      mr_context:
+      - project
+      - merge_request_iid
+      - head_sha
     write_authority: comment
-
   k8s-overprovisioning-datadog:
-    produces: [k8s_rightsizing_report]
-    consumes: [mr_context]
+    produces:
+    - k8s_rightsizing_report
+    consumes:
+    - mr_context
     write_authority: read-only
-
   incident-rca:
-    produces: [rca_report]
-    consumes: [mr_context]
+    produces:
+    - rca_report
+    consumes:
+    - mr_context
     write_authority: read-only
-
   incident-triage-agent:
-    produces: [rca_report, ownership_lookup]
-    consumes: [mr_context]
+    produces:
+    - rca_report
+    - ownership_lookup
+    consumes:
+    - mr_context
     produce_fields:
-      rca_report: [assessment_metadata, root_cause, confidence]
-      ownership_lookup: [query, squad, confidence]
+      rca_report:
+      - assessment_metadata
+      - root_cause
+      - confidence
+      ownership_lookup:
+      - query
+      - squad
+      - confidence
     consume_fields:
-      mr_context: [project, head_sha]
+      mr_context:
+      - project
+      - head_sha
     write_authority: read-only
-
   domain-comprehension:
-    produces: [squad_map]
-    consumes: [mr_context]
+    produces:
+    - squad_map
+    consumes:
+    - mr_context
     write_authority: read-only
-
   squad-map:
-    produces: [squad_map, ownership_lookup]
-    consumes: [mr_context]
+    produces:
+    - squad_map
+    - ownership_lookup
+    consumes:
+    - mr_context
     write_authority: read-only
-
   who-owns-x-bot:
-    produces: [ownership_lookup]
-    consumes: [mr_context]
+    produces:
+    - ownership_lookup
+    consumes:
+    - mr_context
     write_authority: read-only
-
   new-hire-guide:
-    produces: [digest_report]
-    consumes: [mr_context]
+    produces:
+    - digest_report
+    consumes:
+    - mr_context
     write_authority: read-only
-
   release-readiness-checker:
-    produces: [digest_report]
-    consumes: [mr_context, mr_review_report, k8s_rightsizing_report, rca_report]
+    produces:
+    - digest_report
+    consumes:
+    - mr_context
+    - mr_review_report
+    - k8s_rightsizing_report
+    - rca_report
     produce_fields:
-      digest_report: [sections, generated_at, source_revisions]
+      digest_report:
+      - sections
+      - generated_at
+      - source_revisions
     consume_fields:
-      mr_context: [project, merge_request_iid, head_sha, posting_policy, review_mode, audit_type, expected_head_sha]
-      mr_review_report: [review_metadata, posted]
-      k8s_rightsizing_report: [assessment_metadata, recommendations]
-      rca_report: [assessment_metadata, root_cause, confidence]
+      mr_context:
+      - project
+      - merge_request_iid
+      - head_sha
+      - posting_policy
+      - review_mode
+      - audit_type
+      - expected_head_sha
+      mr_review_report:
+      - review_metadata
+      - posted
+      k8s_rightsizing_report:
+      - assessment_metadata
+      - recommendations
+      rca_report:
+      - assessment_metadata
+      - root_cause
+      - confidence
     write_authority: read-only
-
   migration-program-manager:
-    produces: [migration_status_rollup]
+    produces:
+    - migration_status_rollup
     consumes: []
     produce_fields:
-      migration_status_rollup: [items, generated_at, source_revision]
+      migration_status_rollup:
+      - items
+      - generated_at
+      - source_revision
     write_authority: read-only
-
   cost-optimization-sprint-planner:
-    produces: [cost_sweep_rollup]
+    produces:
+    - cost_sweep_rollup
     consumes: []
     produce_fields:
-      cost_sweep_rollup: [items, generated_at, source_revision]
+      cost_sweep_rollup:
+      - items
+      - generated_at
+      - source_revision
     write_authority: read-only
-
   mysql-to-postgres-sql:
-    produces: [implementation_pr]
-    consumes: [implementation_task]
+    produces:
+    - implementation_pr
+    consumes:
+    - implementation_task
     write_authority: repository-write
-
   loop-task-implementer:
-    produces: [implementation_pr]
-    consumes: [implementation_task, prd_report]
+    produces:
+    - implementation_pr
+    consumes:
+    - implementation_task
+    - prd_report
     write_authority: repository-write
-
   backlog-runner:
-    produces: [implementation_pr]
-    consumes: [implementation_task]
+    produces:
+    - implementation_pr
+    consumes:
+    - implementation_task
     write_authority: read-only
-
   weekly-squad-digest:
-    produces: [digest_report]
-    consumes: [migration_status_rollup, cost_sweep_rollup]
+    produces:
+    - digest_report
+    consumes:
+    - migration_status_rollup
+    - cost_sweep_rollup
     produce_fields:
-      digest_report: [sections, generated_at, source_revisions]
+      digest_report:
+      - sections
+      - generated_at
+      - source_revisions
     consume_fields:
-      migration_status_rollup: [items, generated_at, source_revision]
-      cost_sweep_rollup: [items, generated_at, source_revision]
+      migration_status_rollup:
+      - items
+      - generated_at
+      - source_revision
+      cost_sweep_rollup:
+      - items
+      - generated_at
+      - source_revision
     write_authority: read-only
-
   unit-test-creator:
-    produces: [test_suite]
-    consumes: [implementation_task]
+    produces:
+    - test_suite
+    consumes:
+    - implementation_task
     produce_fields:
-      test_suite: [tests, framework, target_path]
+      test_suite:
+      - tests
+      - framework
+      - target_path
     consume_fields:
-      implementation_task: [task_id, scope, acceptance_criteria, request, repo_root, target, test_framework_hint, run_tests, max_files_per_run, deadline, session_token_budget, output_dir, specialist_inputs]
+      implementation_task:
+      - task_id
+      - scope
+      - acceptance_criteria
+      - request
+      - repo_root
+      - target
+      - test_framework_hint
+      - run_tests
+      - max_files_per_run
+      - deadline
+      - session_token_budget
+      - output_dir
+      - specialist_inputs
     write_authority: repository-write
-
   integration-test-creator:
-    produces: [test_suite]
-    consumes: [implementation_task]
+    produces:
+    - test_suite
+    consumes:
+    - implementation_task
     produce_fields:
-      test_suite: [tests, framework, target_path]
+      test_suite:
+      - tests
+      - framework
+      - target_path
     consume_fields:
-      implementation_task: [task_id, scope, acceptance_criteria, request, repo_root, target, test_framework_hint, run_tests, max_files_per_run, deadline, session_token_budget, output_dir, specialist_inputs]
+      implementation_task:
+      - task_id
+      - scope
+      - acceptance_criteria
+      - request
+      - repo_root
+      - target
+      - test_framework_hint
+      - run_tests
+      - max_files_per_run
+      - deadline
+      - session_token_budget
+      - output_dir
+      - specialist_inputs
     write_authority: repository-write
-
   contract-test-creator:
-    produces: [test_suite]
-    consumes: [implementation_task]
+    produces:
+    - test_suite
+    consumes:
+    - implementation_task
     produce_fields:
-      test_suite: [tests, framework, target_path]
+      test_suite:
+      - tests
+      - framework
+      - target_path
     consume_fields:
-      implementation_task: [task_id, scope, acceptance_criteria, request, repo_root, target, test_framework_hint, run_tests, max_files_per_run, deadline, session_token_budget, output_dir, specialist_inputs]
+      implementation_task:
+      - task_id
+      - scope
+      - acceptance_criteria
+      - request
+      - repo_root
+      - target
+      - test_framework_hint
+      - run_tests
+      - max_files_per_run
+      - deadline
+      - session_token_budget
+      - output_dir
+      - specialist_inputs
     write_authority: repository-write
-
   e2e-test-creator:
-    produces: [test_suite]
-    consumes: [implementation_task]
+    produces:
+    - test_suite
+    consumes:
+    - implementation_task
     produce_fields:
-      test_suite: [tests, framework, target_path]
+      test_suite:
+      - tests
+      - framework
+      - target_path
     consume_fields:
-      implementation_task: [task_id, scope, acceptance_criteria, request, repo_root, target, test_framework_hint, run_tests, max_files_per_run, deadline, session_token_budget, output_dir, specialist_inputs]
+      implementation_task:
+      - task_id
+      - scope
+      - acceptance_criteria
+      - request
+      - repo_root
+      - target
+      - test_framework_hint
+      - run_tests
+      - max_files_per_run
+      - deadline
+      - session_token_budget
+      - output_dir
+      - specialist_inputs
     write_authority: repository-write
-
   api-test-creator:
-    produces: [test_suite]
-    consumes: [implementation_task]
+    produces:
+    - test_suite
+    consumes:
+    - implementation_task
     produce_fields:
-      test_suite: [tests, framework, target_path]
+      test_suite:
+      - tests
+      - framework
+      - target_path
     consume_fields:
-      implementation_task: [task_id, scope, acceptance_criteria, request, repo_root, target, test_framework_hint, run_tests, max_files_per_run, deadline, session_token_budget, output_dir, specialist_inputs]
+      implementation_task:
+      - task_id
+      - scope
+      - acceptance_criteria
+      - request
+      - repo_root
+      - target
+      - test_framework_hint
+      - run_tests
+      - max_files_per_run
+      - deadline
+      - session_token_budget
+      - output_dir
+      - specialist_inputs
     write_authority: repository-write
-
   test-writer:
-    produces: [test_orchestration_result]
-    consumes: [implementation_task]
+    produces:
+    - test_orchestration_result
+    consumes:
+    - implementation_task
     produce_fields:
-      test_orchestration_result: [test_plan, orchestration_status, unfinished_levels, level_reports]
+      test_orchestration_result:
+      - test_plan
+      - orchestration_status
+      - unfinished_levels
+      - level_reports
     consume_fields:
-      implementation_task: [task_id, scope, acceptance_criteria, request, repo_root, target, test_framework_hint, run_tests, max_files_per_run, deadline, session_token_budget, output_dir, specialist_inputs]
+      implementation_task:
+      - task_id
+      - scope
+      - acceptance_criteria
+      - request
+      - repo_root
+      - target
+      - test_framework_hint
+      - run_tests
+      - max_files_per_run
+      - deadline
+      - session_token_budget
+      - output_dir
+      - specialist_inputs
     write_authority: read-only
-
   prd-architect:
-    produces: [prd_report]
-    consumes: [implementation_task]
+    produces:
+    - prd_report
+    consumes:
+    - implementation_task
     produce_fields:
-      prd_report: [title, build_readiness, depth, response_mode]
+      prd_report:
+      - title
+      - build_readiness
+      - depth
+      - response_mode
     consume_fields:
-      implementation_task: [task_id, scope, acceptance_criteria]
+      implementation_task:
+      - task_id
+      - scope
+      - acceptance_criteria
     write_authority: read-only

@@ -1,7 +1,5 @@
 ---
 name: squad-map
-skill_version: 1.0
-platform_contract: skill-platform-v1
 description: >-
   Maps repos to org squads (GitLab group hierarchy) and runtime squads (Datadog
   service team tags). Produces SQUAD_MAP.md with confidence and conflict flags.
@@ -136,3 +134,4 @@ Routing: [skill-routing.md](../docs/skill-framework/shared/skill-routing.md) · 
 
 1. Read [workflow/inputs.md](workflow/inputs.md) — resolve workspace, repos, config.
 2. Phase 0 → Phase 1 per [reference/phase-index.md](reference/phase-index.md).
+

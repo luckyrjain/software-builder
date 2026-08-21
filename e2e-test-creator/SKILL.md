@@ -1,7 +1,5 @@
 ---
 name: e2e-test-creator
-skill_version: 1.1
-platform_contract: skill-platform-v1
 description: >-
   Generates full user-journey end-to-end tests through a real browser UI using Playwright, Cypress, or
   Selenium/WebDriver. Detects the repo's browser test tooling and layout convention, infers journeys from
@@ -129,3 +127,4 @@ only E2E-level deltas.
    other optional fields.
 3. Proceed phase by phase per [reference/phase-index.md](reference/phase-index.md), consulting
    [reference/gate-policy.md](reference/gate-policy.md) whenever a phase hits a non-happy-path branch.
+

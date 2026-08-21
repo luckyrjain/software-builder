@@ -1,7 +1,5 @@
 ---
 name: loop-task-implementer
-skill_version: 1.2
-platform_contract: skill-platform-v1
 description: >-
   Use when autonomously implementing one or more software tasks through isolated build,
   evidence-based review, remediation, validation, pull-request, and completion workflows across
@@ -165,3 +163,4 @@ Full matrix: [cross-skill-escalation.md](../docs/skill-framework/shared/cross-sk
 ## Post-actions
 
 None beyond the PR itself — no Jira/Slack/canvas write-back. See [post-action-templates.md](../docs/skill-framework/shared/post-action-templates.md).
+

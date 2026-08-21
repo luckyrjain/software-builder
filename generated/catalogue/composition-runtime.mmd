@@ -20,7 +20,7 @@ graph TD
   squad-map["squad-map<br/>leaf"]
   test-writer["test-writer<br/>router"]
   unit-test-creator["unit-test-creator<br/>leaf"]
-  weekly-squad-digest["weekly-squad-digest<br/>orchestrator"]
+  weekly-squad-digest["weekly-squad-digest<br/>trigger"]
   who-owns-x-bot["who-owns-x-bot<br/>router"]
   backlog-runner -->|requires| loop-task-implementer
   backlog-runner ==>|handoff| loop-task-implementer
@@ -92,3 +92,4 @@ graph TD
   prd-architect -->|prd_report| loop-task-implementer
   incident-rca -->|rca_report| release-readiness-checker
   incident-triage-agent -->|rca_report| release-readiness-checker
+

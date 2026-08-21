@@ -1,7 +1,5 @@
 ---
 name: release-readiness-checker
-skill_version: 1.0
-platform_contract: skill-platform-v1
 description: >-
   Release go/no-go report composing pr-review (MRs merged since last release, never posts), k8s-
   overprovisioning-datadog (per-service rightsizing verdict), and incident-rca (per-service open-incident
@@ -131,3 +129,4 @@ Routing: [skill-routing.md](../docs/skill-framework/shared/skill-routing.md) · 
 2. [workflow/run-check.md](workflow/run-check.md) — resolve MR ranges, run all three skills per entry,
    apply [reference/gate-policy.md](reference/gate-policy.md), build
    [reference/report-format.md](reference/report-format.md).
+

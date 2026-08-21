@@ -57,7 +57,7 @@ def _collect_outputs(root: Path) -> dict[Path, str]:
         registry,
     )
     compatibility_catalog = root / "scripts" / "registry" / "capability_catalog.yaml"
-    composition_contracts = root / "scripts" / "registry" / "composition_contracts.yaml"
+    composition_contracts = root / "skills.yaml"
     if compatibility_catalog.is_file() and composition_contracts.is_file():
         outputs[root / "generated" / "catalogue" / "compatibility-matrix.md"] = (
             render_compatibility_matrix(root)
@@ -119,11 +119,11 @@ def _capability_families_path(root: Path) -> Path:
 
 
 def _platform_contracts_path(root: Path) -> Path:
-    return root / "scripts" / "registry" / "platform_contracts.yaml"
+    return root / "skills.yaml"
 
 
 def _composition_runtime_path(root: Path) -> Path:
-    return root / "scripts" / "registry" / "composition_runtime.yaml"
+    return root / "skills.yaml"
 
 
 def _release_contract_path(root: Path) -> Path:
@@ -160,7 +160,7 @@ def _validate_for_generate(root: Path) -> list[str]:
             validate_composition_runtime(
                 load_registry(root),
                 runtime_path=_composition_runtime_path(root),
-                contracts_path=root / "scripts" / "registry" / "composition_contracts.yaml",
+                contracts_path=root / "skills.yaml",
             )
         )
     return errors
@@ -317,3 +317,4 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+

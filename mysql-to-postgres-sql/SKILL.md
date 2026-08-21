@@ -1,7 +1,5 @@
 ---
 name: mysql-to-postgres-sql
-skill_version: 1.6
-platform_contract: skill-platform-v1
 description: >-
   Rewrites MySQL-native SQL and datasource/driver config for PostgreSQL during
   org-wide MySQL scrub. Covers TIMESTAMPDIFF, DATE_FORMAT, DATE_ADD, IFNULL,
@@ -172,3 +170,4 @@ scan, shadow mismatch]; partial_result_behavior=records per-gate status in MIGRA
 Routing: [skill-routing.md](../docs/skill-framework/shared/skill-routing.md) · shared conventions:
 [docs/skill-framework/README.md](../docs/skill-framework/README.md) · prompt injection
 [prompt-injection.md](../docs/skill-framework/shared/prompt-injection.md).
+

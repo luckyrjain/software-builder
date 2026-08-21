@@ -1,7 +1,5 @@
 ---
 name: pr-gatekeeper
-skill_version: 1.0
-platform_contract: skill-platform-v1
 description: >-
   Auto-runs pr-review on every push to an open GitLab MR (webhook-triggered), posting inline exactly as
   pr-review already supports — when pr-review's own posting-confirmation rules allow it. Delegates all
@@ -121,3 +119,4 @@ Routing: [skill-routing.md](../docs/skill-framework/shared/skill-routing.md) · 
    `auto_post_authorized`; short-circuit if no new commits.
 2. [workflow/gatekeep.md](workflow/gatekeep.md) — invoke pr-review, apply
    [reference/auto-post-policy.md](reference/auto-post-policy.md).
+
