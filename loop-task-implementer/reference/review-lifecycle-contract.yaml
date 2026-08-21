@@ -1,8 +1,9 @@
 schema_version: 1
 consumer: loop-task-implementer
+shared_contract_path_base: package_or_repository_root
 shared_contracts:
-  change_identity: ../../docs/skill-framework/shared/change-identity.yaml
-  review_evidence: ../../docs/skill-framework/shared/review-evidence.yaml
+  change_identity: docs/skill-framework/shared/change-identity.yaml
+  review_evidence: docs/skill-framework/shared/review-evidence.yaml
 
 state_binding:
   current_change_identity: workspace.change_identity
@@ -10,10 +11,19 @@ state_binding:
   conflict_resolution_occurred: workspace.conflict_resolution_occurred
   conflict_resolution_provenance: workspace.conflict_resolution_provenance
   third_party_change_detected: workspace.third_party_change_detected
+  third_party_change_checked_head: workspace.third_party_change_checked_head
   lens_a_review_evidence: review.lens_a.review_evidence
   lens_b_review_evidence: review.lens_b.review_evidence
+  lens_a_review_generation: review.lens_a.review_generation
+  lens_b_review_generation: review.lens_b.review_generation
+  lens_a_review_evidence_generation: review.lens_a.review_evidence_generation
+  lens_b_review_evidence_generation: review.lens_b.review_evidence_generation
   lens_a_isolation_status: review.lens_a.isolation_status
   lens_b_isolation_status: review.lens_b.isolation_status
+  lens_a_isolation_exception_change_identity: review.lens_a.isolation_exception_change_identity
+  lens_b_isolation_exception_change_identity: review.lens_b.isolation_exception_change_identity
+  lens_a_isolation_exception_review_generation: review.lens_a.isolation_exception_review_generation
+  lens_b_isolation_exception_review_generation: review.lens_b.isolation_exception_review_generation
   security_sensitive_needs_evidence_unresolved: merge_readiness.security_sensitive_needs_evidence_unresolved
   ci_commit: ci.commit
   ci_required_checks_green: ci.required_checks_green
@@ -21,13 +31,18 @@ state_binding:
 review_rules:
   - both_lenses_must_validate_against_current_change_identity
   - both_lenses_must_be_clean_for_same_change_identity
+  - clean_lens_requires_positive_integer_review_generation
+  - clean_lens_review_evidence_generation_must_equal_review_generation
   - clean_lens_requires_complete_inspection_no_unavailable_surfaces_and_zero_defects
   - review_isolation_must_be_isolated_or_have_explicit_human_exception_with_provenance
+  - isolation_exception_must_be_bound_to_the_reviewed_change_identity
+  - isolation_exception_must_be_bound_to_the_current_lens_review_generation
   - security_sensitive_needs_evidence_must_be_resolved_or_explicitly_human_accepted_before_readiness
   - content_change_invalidates_both_lenses
   - manual_conflict_resolution_invalidates_evidence_that_predates_the_conflict
   - fresh_evidence_produced_after_conflict_resolution_may_validate_against_the_current_identity
   - any_sha_transition_requires_explicit_conflict_resolution_provenance_for_true_or_false
+  - third_party_change_check_must_be_bound_to_current_head
   - unresolved_third_party_branch_change_invalidates_readiness
   - stale_requirements_ref_invalidates_review_evidence
 
@@ -51,17 +66,23 @@ fail_closed:
   - missing_or_invalid_current_change_identity
   - missing_current_requirements_ref_state
   - missing_lens_review_evidence_for_clean_lens
+  - clean_lens_with_invalid_review_generation
+  - clean_lens_with_missing_or_stale_review_evidence_generation
   - clean_lens_with_partial_unable_or_defect_evidence
   - lens_evidence_not_fresh_for_current_identity
   - identity_sha_transition_with_unknown_conflict_status_or_provenance
   - conflict_resolution_occurred_after_review
   - review_not_isolated_without_explicit_human_exception
   - isolation_exception_missing_human_authorization_provenance
+  - isolation_exception_not_bound_to_current_reviewed_identity
+  - isolation_exception_not_bound_to_current_lens_review_generation
   - security_sensitive_needs_evidence_unresolved
   - third_party_change_state_unknown_or_detected
+  - third_party_change_check_missing_or_stale_for_current_head
   - ci_commit_not_current_head
   - required_checks_not_green
   - existing_merge_policy_gate_unsatisfied
+  - lifecycle_validator_input_unreadable_or_invalid
 
 ready_semantics:
   validator_zero_errors_means_eligible_for_ready_independent_of_current_ready_flag: true
