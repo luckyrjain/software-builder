@@ -513,8 +513,8 @@ lint-incident-rca:
 	$(call require_ref_files,incident-rca/reference,phase-index lazy-load-index smoke-test mcp-capabilities)
 	$(call require_setup_links_framework,incident-rca)
 	$(call require_cross_skill_escalation,incident-rca)
-	@grep -q 'skill_version' incident-rca/SKILL.md || \
-		{ echo "error: incident-rca SKILL.md must use skill_version (not schema_version)" >&2; exit 1; }
+	@python3 -c "from pathlib import Path; import yaml; data = yaml.safe_load(Path('skills.yaml').read_text(encoding='utf-8')); assert data['skills']['incident-rca']['entrypoint'] == 'SKILL.md'" || \
+		{ echo "error: canonical manifest must own incident-rca entrypoint metadata" >&2; exit 1; }
 	@grep -q 'dependency_chain' incident-rca/reference/evidence-schema.md || \
 		{ echo "error: evidence-schema.md must document dependency_chain" >&2; exit 1; }
 	@grep -q 'Body content' incident-rca/report-template.md || \
