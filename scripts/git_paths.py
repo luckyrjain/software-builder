@@ -136,3 +136,42 @@ def protected_index_relative_paths(
         if tag == b"S" or tag.islower():
             protected.add(os.fsdecode(record[2:]))
     return protected, None
+
+
+def gitlink_relative_paths(
+    root: Path,
+    paths: Iterable[str],
+    *,
+    env: Mapping[str, str] | None = None,
+    git_executable: str = "git",
+) -> tuple[set[str], str | None]:
+    """Return requested index paths stored as Git gitlinks (mode ``160000``).
+
+    Gitlinks remain in the parent index even when a submodule is deinitialized,
+    so filesystem ``.git`` markers alone are insufficient for deciding whether
+    a planned write would cross into another repository boundary.
+    """
+
+    records, error = _ls_files_records(
+        root,
+        options=["--cached", "--stage"],
+        paths=paths,
+        env=env,
+        git_executable=git_executable,
+    )
+    if error:
+        return set(), error
+
+    gitlinks: set[str] = set()
+    for record in records:
+        try:
+            header, raw_path = record.split(b"\t", 1)
+        except ValueError:
+            return set(), "git ls-files returned an unparseable stage record"
+        fields = header.split()
+        if len(fields) != 3:
+            return set(), "git ls-files returned an unparseable stage record"
+        mode, _object_id, _stage = fields
+        if mode == b"160000":
+            gitlinks.add(os.fsdecode(raw_path))
+    return gitlinks, None
