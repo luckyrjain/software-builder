@@ -15,19 +15,28 @@ def test_unknown_key_rejected():
     assert any("unknown" in e for e in errors)
 
 
-def test_skill_version_accepts_float():
+def test_canonical_frontmatter_does_not_require_legacy_skill_version():
     assert not validate_skill_frontmatter_fields(
-        "api-test-creator",
-        {"name": "api-test-creator", "description": "ok", "skill_version": 1.0},
-    )
-
-
-def test_skill_version_is_mandatory():
-    errors = validate_skill_frontmatter_fields(
         "api-test-creator",
         {"name": "api-test-creator", "description": "ok"},
     )
+
+
+def test_legacy_frontmatter_requires_explicit_compatibility_mode():
+    errors = validate_skill_frontmatter_fields(
+        "api-test-creator",
+        {"name": "api-test-creator", "description": "ok"},
+        require_legacy_platform_fields=True,
+    )
     assert any("skill_version is mandatory" in e for e in errors)
+
+
+def test_legacy_frontmatter_is_rejected_by_canonical_schema():
+    errors = validate_skill_frontmatter_fields(
+        "api-test-creator",
+        {"name": "api-test-creator", "description": "ok", "skill_version": 1.0},
+    )
+    assert any("unknown" in e and "skill_version" in e for e in errors)
 
 
 def test_disable_model_invocation_must_be_bool():

@@ -15,7 +15,12 @@ ROOT = Path(__file__).resolve().parents[2]
 CANONICAL_PATH = ROOT / "skills.yaml"
 REQUIRED_CONTRACTS = {"platform", "composition_runtime", "composition"}
 ALLOWED_TYPES = {"leaf", "router", "orchestrator", "trigger"}
-SEMVER_RE = re.compile(r"^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$")
+SEMVER_RE = re.compile(
+    r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)"
+    r"(?:-(?:0|[1-9]\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)"
+    r"(?:\.(?:0|[1-9]\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*)?"
+    r"(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$"
+)
 
 
 def load_canonical_manifest(root: Path = ROOT) -> dict[str, Any]:
@@ -32,6 +37,7 @@ def load_canonical_manifest(root: Path = ROOT) -> dict[str, Any]:
         raise ValueError("canonical manifest.schema_version must be an integer") from exc
     if schema_version != 1:
         raise ValueError("canonical manifest.schema_version must be 1")
+    raw["schema_version"] = schema_version
     if not isinstance(raw.get("contracts"), dict):
         raise ValueError("canonical manifest.contracts must be a mapping")
     if not isinstance(raw.get("skills"), dict):
@@ -126,6 +132,10 @@ def validate_canonical_manifest(root: Path = ROOT) -> list[str]:
             hosts = skill.get("supported_hosts")
             if not isinstance(hosts, list) or not hosts or not all(isinstance(item, str) for item in hosts):
                 errors.append(f"error: {skill_id}: supported_hosts must be a non-empty list")
+            elif skill_id in registry.skills:
+                registry_hosts = {"cursor", "claude", "kiro"}
+                if set(hosts) != registry_hosts:
+                    errors.append(f"error: {skill_id}: supported host projection drift")
             if skill.get("entrypoint") != "SKILL.md":
                 errors.append(f"error: {skill_id}: entrypoint must be SKILL.md")
             entrypoint_dir = (root / str(skill.get("path", skill_id))).resolve()

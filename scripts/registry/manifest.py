@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from scripts.registry.canonical_manifest import (
+    SEMVER_RE,
     load_canonical_manifest,
     validate_canonical_manifest,
 )
@@ -20,7 +21,6 @@ from scripts.yaml_safety import YAML_SAFETY_ERRORS, load_unique_yaml_file, requi
 
 ROOT = Path(__file__).resolve().parents[2]
 CONTRACTS_PATH = ROOT / "skills.yaml"
-SEMVER_RE = re.compile(r"^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$")
 LEGACY_NUMERIC_VERSION_RE = re.compile(
     r"^skill_version:\s*([0-9]+\.[0-9]+)\s*(?:#.*)?$", re.MULTILINE
 )

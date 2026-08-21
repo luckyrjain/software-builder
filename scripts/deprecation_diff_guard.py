@@ -49,6 +49,21 @@ def _frontmatter(text: str | None) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
+def _contract_at_ref(
+    root: Path,
+    ref: str,
+    section: str,
+    legacy_path: str,
+) -> dict[str, Any]:
+    raw = _mapping(_git_text(root, ref, "skills.yaml"))
+    if "contracts" not in raw:
+        return _mapping(_git_text(root, ref, legacy_path))
+    contracts = raw.get("contracts")
+    if not isinstance(contracts, dict) or not isinstance(contracts.get(section), dict):
+        raise ValueError(f"canonical manifest contracts.{section} must be a mapping")
+    return contracts[section]
+
+
 def governed_items(root: Path, ref: str) -> tuple[dict[str, dict[str, Any]], dict[str, Any]]:
     """Return durable identities plus the revision's lifecycle configuration."""
     upkeep = _mapping(_git_text(root, ref, POLICY_PATH))
@@ -64,7 +79,9 @@ def governed_items(root: Path, ref: str) -> tuple[dict[str, dict[str, Any]], dic
             metadata = _frontmatter(_git_text(root, ref, f"{skill_path}/SKILL.md"))
             items[f"skill:{skill_id}"] = metadata
 
-    composition = _mapping(_git_text(root, ref, "scripts/registry/composition_contracts.yaml"))
+    composition = _contract_at_ref(
+        root, ref, "composition", "scripts/registry/composition_contracts.yaml"
+    )
     schemas = composition.get("artifact_schemas", {})
     if isinstance(schemas, dict):
         for schema_id, spec in schemas.items():

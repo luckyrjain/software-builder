@@ -77,6 +77,9 @@ def parse_registry(path: Path) -> Registry:
     skills: dict[str, SkillEntry] = {}
     errors: list[str] = []
     for skill_id, entry_raw in skills_raw.items():
+        if not isinstance(skill_id, str):
+            errors.append(f"skills.{skill_id!r}: skill id must be a string")
+            continue
         try:
             skills[skill_id] = _parse_skill_entry(skill_id, entry_raw)
         except ValueError as exc:

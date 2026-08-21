@@ -25,10 +25,12 @@ def test_canonical_manifest_has_contracts_and_full_skill_metadata():
     required = {
         "version",
         "type",
+        "authority",
         "permissions",
         "supported_hosts",
         "entrypoint",
         "output_contract",
+        "dependencies",
     }
     for skill in manifest["skills"].values():
         assert required <= set(skill)
@@ -81,6 +83,28 @@ def test_canonical_manifest_rejects_skill_metadata_drift(tmp_path: Path):
     errors = validate_canonical_manifest(root)
 
     assert any("pr-review" in error and "authority" in error for error in errors)
+
+
+def test_canonical_manifest_rejects_output_and_host_projection_drift(tmp_path: Path):
+    root = _copy_manifest_fixture(tmp_path)
+    manifest = yaml.safe_load((root / "skills.yaml").read_text())
+    manifest["skills"]["pr-review"]["output_contract"]["produces"] = ["rca_report"]
+    manifest["skills"]["pr-review"]["supported_hosts"] = ["cursor"]
+    (root / "skills.yaml").write_text(yaml.safe_dump(manifest, sort_keys=False))
+
+    errors = validate_canonical_manifest(root)
+
+    assert any("pr-review" in error and "output contract artifact" in error for error in errors)
+    assert any("pr-review" in error and "supported host" in error for error in errors)
+
+
+def test_canonical_manifest_normalizes_quoted_schema_version(tmp_path: Path):
+    root = _copy_manifest_fixture(tmp_path)
+    manifest = yaml.safe_load((root / "skills.yaml").read_text())
+    manifest["schema_version"] = "1"
+    (root / "skills.yaml").write_text(yaml.safe_dump(manifest, sort_keys=False))
+
+    assert load_canonical_manifest(root)["schema_version"] == 1
 
 
 def test_skill_frontmatter_contains_discovery_metadata_only():

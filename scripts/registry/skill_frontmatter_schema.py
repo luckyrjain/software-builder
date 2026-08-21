@@ -6,45 +6,45 @@ from typing import Any
 
 from scripts.registry.schema import AUTOMATION_ONLY_INVOCATION
 
-# Compatibility symbol retained for downstream validators. The actual skill files
-# no longer carry this marker; canonical_manifest.py rejects any such duplication.
+# Compatibility symbol retained for explicit legacy-fixture validation only.
 PLATFORM_CONTRACT = "skill-platform-v1"
 
 ALLOWED_FRONTMATTER_KEYS = frozenset(
     {
         "name",
         "description",
-        "skill_version",
-        "platform_contract",
         "disable-model-invocation",
         "status",
         "deprecated",
         "deprecation",
     },
 )
+LEGACY_FRONTMATTER_KEYS = frozenset({"skill_version", "platform_contract"})
 
 
 def validate_skill_frontmatter_fields(
     skill_id: str,
     frontmatter: dict[str, Any],
     *,
-    require_legacy_platform_fields: bool = True,
+    require_legacy_platform_fields: bool = False,
 ) -> list[str]:
     errors: list[str] = []
+    allowed_keys = ALLOWED_FRONTMATTER_KEYS | (
+        LEGACY_FRONTMATTER_KEYS if require_legacy_platform_fields else set()
+    )
     for key in frontmatter:
-        if key not in ALLOWED_FRONTMATTER_KEYS:
+        if key not in allowed_keys:
             errors.append(f"error: {skill_id}: unknown SKILL.md frontmatter key {key!r}")
 
-    if "platform_contract" in frontmatter and frontmatter["platform_contract"] != PLATFORM_CONTRACT:
+    if require_legacy_platform_fields and "platform_contract" in frontmatter and frontmatter["platform_contract"] != PLATFORM_CONTRACT:
         errors.append(
             f"error: {skill_id}: platform_contract must be {PLATFORM_CONTRACT!r}, "
             f"got {frontmatter['platform_contract']!r}",
         )
 
-    if "skill_version" not in frontmatter:
-        if require_legacy_platform_fields:
-            errors.append(f"error: {skill_id}: skill_version is mandatory")
-    else:
+    if require_legacy_platform_fields and "skill_version" not in frontmatter:
+        errors.append(f"error: {skill_id}: skill_version is mandatory")
+    elif require_legacy_platform_fields and "skill_version" in frontmatter:
         version = frontmatter["skill_version"]
         if isinstance(version, bool) or not isinstance(version, (int, float, str)):
             errors.append(

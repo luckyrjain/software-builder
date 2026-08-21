@@ -137,11 +137,15 @@ def _platform_contracts_path(root: Path) -> Path:
 
 
 def _composition_runtime_path(root: Path) -> Path:
+    raw: object = None
     try:
-        load_canonical_manifest(root)
-    except (OSError, ValueError, yaml.YAMLError):
-        pass
-    else:
+        raw = load_unique_yaml_file(root / "skills.yaml")
+    except (OSError, yaml.YAMLError):
+        raw = None
+    if isinstance(raw, dict) and "contracts" in raw:
+        # Once a repository opts into the canonical manifest shape, a malformed
+        # canonical contract must fail closed rather than being silently
+        # replaced by a stale compatibility projection.
         return root / "skills.yaml"
     return root / "scripts" / "registry" / "composition_runtime.yaml"
 

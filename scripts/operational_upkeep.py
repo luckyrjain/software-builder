@@ -15,6 +15,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from scripts.git_paths import tracked_relative_paths
+from scripts.registry.canonical_manifest import load_canonical_manifest
 from scripts.yaml_safety import FRONTMATTER_RE, load_unique_yaml, load_unique_yaml_file
 
 POLICY_PATH = ROOT / "scripts" / "operational_upkeep.yaml"
@@ -192,6 +193,17 @@ def _deprecation_candidates(root: Path, skill_paths: Iterable[str]) -> Iterable[
                 yield from _nested_mappings(_yaml_mapping(path), rel)
 
 
+def _canonical_contract(root: Path, section: str, legacy_path: str) -> dict[str, Any]:
+    raw = load_unique_yaml_file(root / "skills.yaml")
+    if not isinstance(raw, dict) or "contracts" not in raw:
+        return _yaml_mapping(root / legacy_path)
+    manifest = load_canonical_manifest(root)
+    contracts = manifest.get("contracts")
+    if not isinstance(contracts, dict) or not isinstance(contracts.get(section), dict):
+        raise ValueError(f"canonical manifest contracts.{section} must be a mapping")
+    return contracts[section]
+
+
 def _registered_skills(root: Path) -> dict[str, Any]:
     skills = _yaml_mapping(root / "skills.yaml").get("skills", {})
     return skills if isinstance(skills, dict) else {}
@@ -318,8 +330,12 @@ def build_health_report(root: Path = ROOT, revision: str | None = None) -> dict[
     skills_file = _yaml_mapping(root / "skills.yaml")
     skills = skills_file.get("skills", {})
     skills = skills if isinstance(skills, dict) else {}
-    composition = _yaml_mapping(root / "scripts" / "registry" / "composition_contracts.yaml")
-    runtime = _yaml_mapping(root / "scripts" / "registry" / "composition_runtime.yaml")
+    composition = _canonical_contract(
+        root, "composition", "scripts/registry/composition_contracts.yaml"
+    )
+    runtime = _canonical_contract(
+        root, "composition_runtime", "scripts/registry/composition_runtime.yaml"
+    )
     eval_contracts = _yaml_mapping(root / "scripts" / "registry" / "eval_contracts.yaml")
     eval_tier_health = build_eval_tier_health(root)
     tracked_files = _tracked_relative_files(root)
