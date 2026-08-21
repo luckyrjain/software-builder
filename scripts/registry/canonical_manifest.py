@@ -23,7 +23,14 @@ def load_canonical_manifest(root: Path = ROOT) -> dict[str, Any]:
         load_unique_yaml_file(root / "skills.yaml"),
         "canonical manifest",
     )
-    if raw.get("schema_version") != 1:
+    schema_version = raw.get("schema_version")
+    if isinstance(schema_version, bool) or not isinstance(schema_version, (int, str)):
+        raise ValueError("canonical manifest.schema_version must be an integer")
+    try:
+        schema_version = int(schema_version)
+    except ValueError as exc:
+        raise ValueError("canonical manifest.schema_version must be an integer") from exc
+    if schema_version != 1:
         raise ValueError("canonical manifest.schema_version must be 1")
     if not isinstance(raw.get("contracts"), dict):
         raise ValueError("canonical manifest.contracts must be a mapping")
