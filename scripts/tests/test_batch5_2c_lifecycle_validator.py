@@ -336,3 +336,18 @@ def test_main_classifies_unexpected_runtime_failure_as_fail_closed(tmp_path: Pat
     monkeypatch.setattr(module, "validate_lifecycle_state", incompatible_runtime)
     assert module.main(["--state", str(state_path)]) == 2
     assert "lifecycle validation failed closed: runtime contract incompatible" in capsys.readouterr().err
+
+
+def test_main_prevents_runtime_system_exit_zero_from_bypassing_validation(
+    tmp_path: Path, monkeypatch, capsys
+):
+    module = _load()
+    state_path = tmp_path / "state.json"
+    state_path.write_text(json.dumps(_state()), encoding="utf-8")
+
+    def runtime_exit_zero(_state):
+        raise SystemExit(0)
+
+    monkeypatch.setattr(module, "validate_lifecycle_state", runtime_exit_zero)
+    assert module.main(["--state", str(state_path)]) == 2
+    assert "lifecycle validation failed closed: validation runtime exited (0)" in capsys.readouterr().err
