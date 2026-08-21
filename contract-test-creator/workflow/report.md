@@ -13,7 +13,9 @@ consumes:
 
 Apply the shared [test-creator common workflow](../../docs/skill-framework/shared/test-creator-common-workflow.md)
 and [write-safety contract](../../docs/skill-framework/shared/test-creator-write-safety.md) before writing
-the report or optional coverage state. Preserve the guard result in the report.
+the report or optional coverage state. Preserve the raw guard result in the canonical `skill_result`;
+keep the rendered report aligned to its report-format contract and
+[safe-output.md](../../docs/skill-framework/shared/safe-output.md). Do not paste `status_snapshot` or `reason` verbatim into Markdown.
 
 Render `CONTRACT_TEST_REPORT.md` at `output_dir` per
 [reference/report-format.md](../reference/report-format.md).
