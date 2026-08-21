@@ -26,7 +26,7 @@ Conventions: [examples-conventions](../docs/skill-framework/shared/examples-conv
 4. Dispatches Lens A in a fresh context. On return, increments Lens A `review_generation` to `1`, adjudicates the result, then creates valid defect-free portable `review_evidence` for the current identity.
 5. Dispatches Lens B against the same current identity. On return, increments Lens B `review_generation` to `1`, adjudicates, and creates valid defect-free portable evidence.
 6. Refreshes required approvals/threads/integration state, verifies authoritative CI is green for the exact current head, and refreshes the third-party check for that same head.
-7. Resolves the actual skill root and runs `python <skill_root>/scripts/validate_loop_lifecycle.py --state <state.json>`; exit `0` establishes verified readiness.
+7. Resolves the actual skill root, selects a Python 3 interpreter, and on Unix/macOS runs `python3 "<skill_root>/scripts/validate_loop_lifecycle.py" --state "<state.json>"`; exit `0` establishes verified readiness.
 8. Stops at verified readiness because autonomous merge is not authorized and reports the exact human action.
 
 **Expected fragments:**
@@ -50,7 +50,7 @@ Completion state: HUMAN_ACTION_REQUIRED — approve and merge PR #128 manually
 4. Builder responds `FIXED` with a regression test. The new content changes `change_identity`, so Lens A generation-1 evidence is invalidated and any isolation exception is cleared.
 5. Dispatches Lens B generation `1` against the remediated current identity; Lens B is CLEAN and portable evidence is normalized.
 6. Reruns the invalidated Lens A against that same current identity; Lens A becomes generation `2` and returns CLEAN. Any degraded-isolation waiver would have to be newly authorized for generation `2`.
-7. Refreshes current-head repository gates/CI and runs the lifecycle validator. Only exit `0` permits verified readiness.
+7. Refreshes current-head repository gates/CI and runs the lifecycle validator with the resolved skill-root Python 3 command. Only exit `0` permits verified readiness.
 
 **Expected fragments:**
 
@@ -121,7 +121,7 @@ Completion state: HUMAN_ACTION_REQUIRED — verify CI manually before merging PR
 **User:** "Take this PR through independent review and remediation — it's a big one, might need a deeper look."
 
 **Agent:**
-1. The Orchestrator measures the current diff at 55 files, above the configured 40-file hard stop.
+1. The Orchestrator measures the current diff at 55 files, above the configured 40-file hard stop, and the user has not explicitly authorized a larger review.
 2. It does **not** claim both loop-task-implementer lenses are clean and does not run to verified readiness on a knowingly oversized partial review.
 3. It stops and asks to split the task/change, or—when the existing MR specifically needs a deeper external review—hands the MR to **pr-review** without representing that handoff as lifecycle approval.
 
