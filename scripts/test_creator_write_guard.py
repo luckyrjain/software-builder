@@ -289,6 +289,8 @@ def _git_status(
                 "--untracked-files=all",
                 "--ignore-submodules=all",
                 "-z",
+                "--",
+                ".",
             ],
             capture_output=True,
             check=False,
