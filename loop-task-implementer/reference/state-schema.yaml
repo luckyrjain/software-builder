@@ -54,6 +54,7 @@ review:
   max_dirty_reviews: 3
   lens_a:
     status: NOT_RUN  # NOT_RUN | CLEAN | FINDINGS
+    review_generation: 0  # increment exactly once for every returned Lens A reviewer result
     reviewed_head_commit: null
     reviewed_diff_fingerprint: null
     reviewed_change_identity: null
@@ -65,9 +66,10 @@ review:
     isolation_exception_authorized: false
     isolation_exception_provenance: null
     isolation_exception_change_identity: null
-    isolation_exception_review_generated_at: null
+    isolation_exception_review_generation: null
   lens_b:
     status: NOT_RUN
+    review_generation: 0  # increment exactly once for every returned Lens B reviewer result
     reviewed_head_commit: null
     reviewed_diff_fingerprint: null
     reviewed_change_identity: null
@@ -79,7 +81,7 @@ review:
     isolation_exception_authorized: false
     isolation_exception_provenance: null
     isolation_exception_change_identity: null
-    isolation_exception_review_generated_at: null
+    isolation_exception_review_generation: null
 
 findings:
   items: {}
