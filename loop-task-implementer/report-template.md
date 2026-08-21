@@ -8,25 +8,26 @@ The Orchestrator reports this after every task, whether it completes, stops at v
 **Head commit:** `<head_commit>`
 **Change identity:** VALID | INVALID — fingerprint `<normalized_diff_fingerprint>`; base/head/merge-base `<base_sha>/<head_sha>/<merge_base_sha>`
 **Requirements evidence:** CURRENT | STALE | UNAVAILABLE | NONE
+**Third-party branch check:** CLEAR | DETECTED | STALE | UNKNOWN — checked head `<third_party_change_checked_head>`
 
 **Lens A (Safety and State):** CLEAN | FINDINGS — <summary>
 - evidence freshness: FRESH | STALE | INVALID
 - inspection: complete | partial | unable
 - isolation: ISOLATED | NOT_ISOLATED
-- isolation exception: none | AUTHORIZED (`<provenance>`)
+- isolation exception: none | AUTHORIZED (`<provenance>`, identity `<isolation_exception_change_identity>`)
 
 **Lens B (Contracts and Operations):** CLEAN | FINDINGS — <summary>
 - evidence freshness: FRESH | STALE | INVALID
 - inspection: complete | partial | unable
 - isolation: ISOLATED | NOT_ISOLATED
-- isolation exception: none | AUTHORIZED (`<provenance>`)
+- isolation exception: none | AUTHORIZED (`<provenance>`, identity `<isolation_exception_change_identity>`)
 
 **Accepted findings:** `<count>` — `<one line per finding: id, status>`
 **Security-sensitive NEEDS_EVIDENCE unresolved:** `<count>`
 **Contested findings:** `<count>` — <one line per finding: id, reason>
 
 **Authoritative checks:** `<name>: PASS|FAIL|PENDING (commit <sha>)` — one row per required check
-**Lifecycle gate:** PASS | BLOCKED — `<zero errors | compact blocker summary>`
+**Lifecycle gate:** PASS | BLOCKED — `<exit 0 | compact blocker summary>`
 **Merge authority:** AUTHORIZED | NOT_AUTHORIZED
 
 **Completion state:** NONE | MERGED | HUMAN_ACTION_REQUIRED — matches `completion.repository_action`
@@ -36,9 +37,9 @@ in [reference/state-schema.yaml](reference/state-schema.yaml) exactly. `HUMAN_AC
 **Human action required:** <exact action, or "none">
 ```
 
-A `Lifecycle gate: PASS` means `validate_loop_lifecycle.py` returned zero errors for the freshly rebuilt current identity/requirements and current repository gates. It does **not** grant merge authority. Conversely, do not render a stale lens or old-head CI as fresh merely because the task was previously READY.
+A `Lifecycle gate: PASS` means `validate_loop_lifecycle.py --state ...` exited `0` for the freshly rebuilt current identity/requirements and current repository gates. It does **not** grant merge authority. Conversely, do not render a stale lens, stale third-party check, old-head CI, or exception bound to another review identity as current merely because the task was previously READY.
 
-When a reviewer proposal was adjudicated `REJECTED`, keep it in the rich audit history but do not list it as an accepted portable defect. When a `NOT_ISOLATED` review is accepted by an authorized human, keep the actual isolation status `NOT_ISOLATED` and render the separate exception/provenance; never rewrite history to `ISOLATED`.
+When a reviewer proposal was adjudicated `REJECTED`, keep it in the rich audit history but do not list it as an accepted portable defect. When a `NOT_ISOLATED` review is accepted by an authorized human, keep the actual isolation status `NOT_ISOLATED` and render the separate exception/provenance plus the reviewed identity it authorizes; never rewrite history to `ISOLATED` or reuse the exception for a later identity.
 
 ## Escalation variant
 
@@ -53,18 +54,21 @@ requirements_ref:
 conflict_resolution_occurred:
 conflict_resolution_provenance:
 third_party_change_detected:
+third_party_change_checked_head:
 lens_a:
   status:
   evidence_freshness:
   isolation_status:
   isolation_exception_authorized:
   isolation_exception_provenance:
+  isolation_exception_change_identity:
 lens_b:
   status:
   evidence_freshness:
   isolation_status:
   isolation_exception_authorized:
   isolation_exception_provenance:
+  isolation_exception_change_identity:
 security_sensitive_needs_evidence_unresolved:
 dirty_review_count:
 review_run_count:
