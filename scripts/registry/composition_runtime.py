@@ -83,9 +83,9 @@ def validate_composition_runtime(
     runtime_path: Path | None = None,
     contracts_path: Path | None = None,
 ) -> list[str]:
-    resolved = runtime_path or RUNTIME_PATH
+    resolved = runtime_path or CANONICAL_RUNTIME_PATH
     try:
-        raw = load_composition_runtime(resolved)
+        raw = load_composition_runtime(runtime_path)
         artifact_types, _schemas, _levels, contracts = load_contracts(contracts_path)
     except _LOAD_ERRORS as exc:
         return [f"error: composition runtime: {exc}"]
@@ -271,5 +271,4 @@ def render_dependency_graph(
                 if producer != consumer:
                     lines.append(f"  {producer} -->|{artifact}| {consumer}")
     return "\n".join(lines) + "\n"
-
 

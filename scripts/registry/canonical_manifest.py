@@ -63,6 +63,9 @@ def validate_canonical_manifest(root: Path = ROOT) -> list[str]:
             "contracts.platform.skill_permissions",
         )
         composition_skills = _mapping(composition.get("skills"), "contracts.composition.skills")
+        from scripts.registry.schema import parse_registry
+
+        registry = parse_registry(root / "skills.yaml")
 
         if set(skills) != set(platform_types):
             errors.append("error: canonical skill/type coverage drift")
@@ -81,6 +84,7 @@ def validate_canonical_manifest(root: Path = ROOT) -> list[str]:
             "supported_hosts",
             "entrypoint",
             "output_contract",
+            "dependencies",
         }
         for skill_id, skill_raw in skills.items():
             skill = _mapping(skill_raw, f"skills.{skill_id}")
@@ -103,15 +107,36 @@ def validate_canonical_manifest(root: Path = ROOT) -> list[str]:
             permissions = _mapping(skill.get("permissions"), f"skills.{skill_id}.permissions")
             if platform_permissions.get(skill_id) != permissions:
                 errors.append(f"error: {skill_id}: permission projection drift")
+            composition_entry = _mapping(
+                composition_skills.get(skill_id),
+                f"contracts.composition.skills.{skill_id}",
+            )
+            if composition_entry.get("write_authority") != skill.get("authority"):
+                errors.append(f"error: {skill_id}: authority projection drift")
+            output_contract = _mapping(skill.get("output_contract"), f"skills.{skill_id}.output_contract")
+            if output_contract.get("produces") != composition_entry.get("produces", []):
+                errors.append(f"error: {skill_id}: output contract artifact projection drift")
+            if output_contract.get("produce_fields", {}) != composition_entry.get("produce_fields", {}):
+                errors.append(f"error: {skill_id}: output contract field projection drift")
+            dependencies = skill.get("dependencies")
+            if not isinstance(dependencies, list) or not all(isinstance(item, str) for item in dependencies):
+                errors.append(f"error: {skill_id}: dependencies must be a list of strings")
+            elif skill_id in registry.skills and dependencies != registry.skills[skill_id].install.requires:
+                errors.append(f"error: {skill_id}: dependency projection drift")
             hosts = skill.get("supported_hosts")
             if not isinstance(hosts, list) or not hosts or not all(isinstance(item, str) for item in hosts):
                 errors.append(f"error: {skill_id}: supported_hosts must be a non-empty list")
             if skill.get("entrypoint") != "SKILL.md":
                 errors.append(f"error: {skill_id}: entrypoint must be SKILL.md")
-            if not isinstance(skill.get("output_contract"), dict):
-                errors.append(f"error: {skill_id}: output_contract must be a mapping")
-
-            entrypoint = root / str(skill.get("path", skill_id)) / str(skill.get("entrypoint", "SKILL.md"))
+            entrypoint_dir = (root / str(skill.get("path", skill_id))).resolve()
+            try:
+                entrypoint_dir.relative_to(root.resolve())
+            except ValueError:
+                errors.append(f"error: {skill_id}: path escapes repository root")
+                continue
+            if skill.get("path", skill_id) != skill_id:
+                errors.append(f"error: {skill_id}: path must match skill id")
+            entrypoint = entrypoint_dir / "SKILL.md"
             if not entrypoint.is_file():
                 errors.append(f"error: {skill_id}: missing entrypoint {entrypoint}")
             else:

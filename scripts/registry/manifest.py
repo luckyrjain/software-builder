@@ -114,13 +114,13 @@ def _build_manifest(root: Path) -> tuple[dict[str, Any], dict[str, Any]]:
         skill["name"] = skill_id
         skill["version"] = _normalize_version(skill["version"])
         skill["version_source"] = str(raw.get("version_source", "canonical_manifest"))
-        skill["authority"] = artifact.write_authority
+        skill["authority"] = str(raw["authority"])
         skill["composition"] = {
             "invokes": list(entry.composition.invokes),
             "escalation_targets": list(entry.composition.escalation_targets),
             "mode": entry.composition.mode,
         }
-        skill["dependencies"] = list(entry.install.requires)
+        skill["dependencies"] = list(raw["dependencies"])
         skill["artifacts"] = {
             "produces": list(artifact.produces),
             "consumes": list(artifact.consumes),
@@ -144,11 +144,11 @@ def build_manifest(root: Path = ROOT) -> dict[str, Any]:
 
 
 def skill_versions(root: Path = ROOT, *, registry: Registry | None = None) -> dict[str, str]:
-    try:
-        canonical = load_canonical_manifest(root)
-    except ValueError as exc:
-        if "canonical manifest.contracts" not in str(exc):
-            raise
+    raw = require_mapping(
+        load_unique_yaml_file(root / "skills.yaml"),
+        "skills.yaml root",
+    )
+    if "contracts" not in raw:
         legacy_registry = registry or parse_registry(root / "skills.yaml")
         versions: dict[str, str] = {}
         for skill_id, entry in legacy_registry.skills.items():
@@ -158,6 +158,7 @@ def skill_versions(root: Path = ROOT, *, registry: Registry | None = None) -> di
                 _version_input(skill_md, frontmatter.get("skill_version"))
             )
         return versions
+    canonical = load_canonical_manifest(root)
     skills = require_mapping(canonical.get("skills"), "canonical manifest.skills")
     return {
         skill_id: _normalize_version(require_mapping(entry, f"skills.{skill_id}")["version"])

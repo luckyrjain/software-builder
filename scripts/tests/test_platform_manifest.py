@@ -164,3 +164,15 @@ def test_manifest_rejects_missing_skill_version() -> None:
 
 def test_repository_platform_manifest_validates() -> None:
     assert validate_manifest(ROOT) == []
+
+
+def test_skill_versions_does_not_hide_malformed_canonical_contracts(tmp_path: Path) -> None:
+    (tmp_path / "skills.yaml").write_text(
+        "schema_version: 1\ncontracts: []\nskills: {}\n",
+        encoding="utf-8",
+    )
+
+    from scripts.registry.manifest import skill_versions
+
+    with pytest.raises(ValueError, match="canonical manifest.contracts"):
+        skill_versions(tmp_path)

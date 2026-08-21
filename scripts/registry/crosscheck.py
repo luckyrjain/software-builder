@@ -40,7 +40,9 @@ def _validate_skill_path(root: Path, skill_id: str, entry_path: str) -> list[str
         )
     resolved_skill_md = (root / entry_path / "SKILL.md").resolve()
     root_resolved = root.resolve()
-    if not str(resolved_skill_md).startswith(str(root_resolved)):
+    try:
+        resolved_skill_md.relative_to(root_resolved)
+    except ValueError:
         errors.append(f"error: {skill_id}: path escapes repository root")
     return errors
 
