@@ -45,6 +45,7 @@ def isolated_repo(tmp_path: Path) -> Path:
     shutil.copytree(ROOT / "unit-test-creator", repo / "unit-test-creator")
     (repo / "scripts").mkdir(parents=True)
     shutil.copy2(ROOT / "scripts" / "test_creator_write_guard.py", repo / "scripts" / "test_creator_write_guard.py")
+    shutil.copy2(ROOT / "scripts" / "git_paths.py", repo / "scripts" / "git_paths.py")
     shutil.copytree(ROOT / "docs" / "skill-framework", repo / "docs" / "skill-framework")
     specs = ROOT / "docs" / "superpowers" / "specs"
     if specs.is_dir():

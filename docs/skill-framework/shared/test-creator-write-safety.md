@@ -16,8 +16,10 @@ level contract:
 - the level report and optional coverage-state file.
 
 It must never write production code, reset/clean/stash user changes, commit,
-push, or open a pull request. A path outside `repo_root`, an unreadable Git
-state, a symlinked target, or an empty write plan is unsafe and fails closed.
+push, or open a pull request. A path outside `repo_root`, a Git metadata path,
+an unreadable Git state, an index-protected target whose worktree drift Git may
+hide (`assume-unchanged` or `skip-worktree`), a symlinked target, or an empty
+write plan is unsafe and fails closed.
 
 ## Pre-write protocol
 
@@ -39,19 +41,25 @@ Before the first write in a phase, and again before every later write batch:
    unreadable result means no primary artifact write may start.
 5. If the primary batch is blocked, preserve the result as the child
    `skill_result` and return degraded `BLOCKED` behavior. Do not ask a new
-   question to work around the guard. A report may be written only as a
-   separate report-only batch after a fresh successful guard check proves that
-   the report/state paths themselves are safe.
+   question to work around the guard. Later report and optional coverage-state
+   writes are separate batches: run a fresh report-only guard and write the
+   report first, then run a fresh state-only guard before writing optional
+   coverage state. A blocked or failed state batch must not suppress a safe
+   report. A level contract that says the report is "always produced" means it
+   is always attempted subject to this same fail-closed report-only guard.
 
 The guard is shipped identically in every creator package and captures
-`git status --porcelain=v1 --untracked-files=all` before
-the batch. Dirty paths outside the planned set are reported and left exactly
-as found. A planned path that is tracked-but-dirty, staged, renamed, or an
-existing untracked output is a conflict; the entire primary batch fails
-closed. Existing clean tracked files may be modified only when explicitly in
-the plan. Hard-linked outputs are also rejected because a normal path write
-could mutate another user-visible inode outside the repository. Ignored or
-symlinked existing outputs are unsafe as well.
+`git status --porcelain=v1 --untracked-files=all` before the batch. Git commands
+run with inherited repository-selection/index overrides removed so process
+environment cannot redirect the check to another repository. Dirty paths
+outside the planned set are reported and left exactly as found. A planned path
+that is tracked-but-dirty, staged, renamed, an existing untracked output, or
+index-protected with `assume-unchanged`/`skip-worktree` is a conflict; the
+entire primary batch fails closed. Existing clean tracked files may be modified
+only when explicitly in the plan. Hard-linked outputs are also rejected
+because a normal path write could mutate another user-visible inode outside the
+repository. Ignored or symlinked existing outputs and Git metadata paths are
+unsafe as well.
 
 ## Report evidence
 
@@ -64,14 +72,17 @@ write_guard:
   dirty_paths_before: []
   status_snapshot: []
   conflicting_paths: []
-  writes_started: true | false
+  writes_started: false
   reason: <verbatim guard reason>
 ```
 
-`writes_started` is `false` for a blocked primary batch. A creator must never
-call a blocked run `WRITTEN_PASSING`, and must not claim an unverified test
-passed. The guard's conflict paths and reason are preserved verbatim rather
-than summarized away.
+The guard is a pre-write decision only, so its raw `writes_started` field is
+always `false`; creators record any actual artifact writes separately in their
+result/report status. A creator must never mutate this captured guard result to
+claim that writes later started. A blocked primary batch must never be called
+`WRITTEN_PASSING`, and no creator may claim an unverified test passed. The
+guard's conflict paths and reason are preserved verbatim rather than summarized
+away.
 
 ## Composition and interaction rule
 

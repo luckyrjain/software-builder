@@ -182,13 +182,12 @@ def write_manifest(
 
 
 def _shared_script(repo_root: Path, filename: str, description: str) -> Path:
-    """Find a shared runtime script in the checkout or packager's source tree."""
+    """Find a shared runtime script in the selected source repository."""
 
-    candidates = (repo_root / "scripts" / filename, _SCRIPTS_DIR / filename)
-    for candidate in candidates:
-        if candidate.is_file():
-            return candidate
-    raise FileNotFoundError(f"{description} missing: {candidates[0]}")
+    candidate = repo_root / "scripts" / filename
+    if candidate.is_file():
+        return candidate
+    raise FileNotFoundError(f"{description} missing: {candidate}")
 
 
 def package_skill(

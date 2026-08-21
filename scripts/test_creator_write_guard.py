@@ -1,42 +1,58 @@
 """Fail-closed pre-write guard shared by the five test-creator skills.
 
-The skills are prompt-driven, so this module deliberately has no write API.  It
-only answers whether a caller may begin a planned write batch.  Callers must
-run it again before a later batch because repository state can change while a
-run is in progress.
+The skills are prompt-driven, so this module deliberately has no write API. It
+only answers whether a caller may begin a planned write batch. Callers must run
+it again before a later batch because repository state can change while a run
+is in progress.
 """
 
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import os
 import subprocess
 from dataclasses import asdict, dataclass
-from functools import lru_cache
 from pathlib import Path
 from typing import Iterable
 
 _TRACKED_PATHS_IMPORT_ERROR: str | None = None
+tracked_relative_paths = None
+protected_index_relative_paths = None
 try:
-    from scripts.git_paths import tracked_relative_paths
-except ModuleNotFoundError as package_error:
-    if package_error.name not in {"scripts", "scripts.git_paths"}:
-        raise
-    import sys
+    helper_path = Path(__file__).resolve().with_name("git_paths.py")
+    if not helper_path.is_file():
+        raise FileNotFoundError(helper_path)
+    spec = importlib.util.spec_from_file_location("_test_creator_git_paths", helper_path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"cannot load {helper_path}")
+    helper_module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(helper_module)
+    tracked_relative_paths = helper_module.tracked_relative_paths
+    protected_index_relative_paths = helper_module.protected_index_relative_paths
+except Exception as exc:  # fail closed if the shipped helper cannot be loaded
+    _TRACKED_PATHS_IMPORT_ERROR = f"shared Git path helper unavailable: {exc}"
 
-    helper_dir = str(Path(__file__).resolve().parent)
-    if helper_dir not in sys.path:
-        sys.path.insert(0, helper_dir)
-    try:
-        from git_paths import tracked_relative_paths
-    except ModuleNotFoundError as local_error:
-        if local_error.name != "git_paths":
-            raise
-        tracked_relative_paths = None
-        _TRACKED_PATHS_IMPORT_ERROR = (
-            f"shared Git path helper unavailable: {local_error} (package import: {package_error})"
-        )
+
+_GIT_REPOSITORY_OVERRIDE_ENV = {
+    "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+    "GIT_CEILING_DIRECTORIES",
+    "GIT_COMMON_DIR",
+    "GIT_CONFIG",
+    "GIT_CONFIG_COUNT",
+    "GIT_CONFIG_PARAMETERS",
+    "GIT_DIR",
+    "GIT_DISCOVERY_ACROSS_FILESYSTEM",
+    "GIT_GRAFT_FILE",
+    "GIT_INDEX_FILE",
+    "GIT_INTERNAL_SUPER_PREFIX",
+    "GIT_OBJECT_DIRECTORY",
+    "GIT_PREFIX",
+    "GIT_REPLACE_REF_BASE",
+    "GIT_SHALLOW_FILE",
+    "GIT_WORK_TREE",
+}
 
 
 @dataclass(frozen=True)
@@ -65,7 +81,6 @@ def _blocked(
     dirty_paths_before: Iterable[str] = (),
     status_snapshot: Iterable[str] = (),
     conflicting_paths: Iterable[str] = (),
-    writes_started: bool = False,
     reason: str,
 ) -> WriteGuardResult:
     return WriteGuardResult(
@@ -75,9 +90,23 @@ def _blocked(
         dirty_paths_before=tuple(sorted(set(dirty_paths_before))),
         status_snapshot=tuple(status_snapshot),
         conflicting_paths=tuple(sorted(set(conflicting_paths))),
-        writes_started=writes_started,
+        writes_started=False,
         reason=reason,
     )
+
+
+def _git_environment() -> dict[str, str]:
+    """Return process env without variables that can redirect Git elsewhere."""
+
+    environment = dict(os.environ)
+    for key in list(environment):
+        if (
+            key in _GIT_REPOSITORY_OVERRIDE_ENV
+            or key.startswith("GIT_CONFIG_KEY_")
+            or key.startswith("GIT_CONFIG_VALUE_")
+        ):
+            environment.pop(key, None)
+    return environment
 
 
 def _normalise_repo_root(repo_root: Path) -> tuple[Path | None, str | None]:
@@ -88,6 +117,11 @@ def _normalise_repo_root(repo_root: Path) -> tuple[Path | None, str | None]:
     if not resolved.is_dir():
         return None, "repo_root is not a directory"
     return resolved, None
+
+
+def _is_git_metadata_component(part: str) -> bool:
+    normalised = part.rstrip(" .") if os.name == "nt" else part
+    return normalised.casefold() == ".git"
 
 
 def _normalise_planned_paths(
@@ -106,6 +140,8 @@ def _normalise_planned_paths(
         try:
             lexical = Path(os.path.abspath(str(candidate if candidate.is_absolute() else repo_root / candidate)))
             lexical_relative = lexical.relative_to(repo_root)
+            if any(_is_git_metadata_component(part) for part in lexical_relative.parts):
+                return (), f"planned path {raw!r} targets Git metadata; refusing to write"
             current = repo_root
             for part in lexical_relative.parts:
                 current /= part
@@ -117,17 +153,22 @@ def _normalise_planned_paths(
             return (), f"planned path {raw!r} is outside repository or cannot be resolved: {exc}"
         if not relative.parts:
             return (), "planned write set cannot contain the repository root"
+        if any(_is_git_metadata_component(part) for part in relative.parts):
+            return (), f"planned path {raw!r} targets Git metadata; refusing to write"
         normalised.add(relative.as_posix())
     return tuple(sorted(normalised)), None
 
 
-@lru_cache(maxsize=128)
-def _git_top_level(repo_root: Path) -> tuple[Path | None, str | None]:
+def _git_top_level(
+    repo_root: Path,
+    git_env: dict[str, str],
+) -> tuple[Path | None, str | None]:
     try:
         completed = subprocess.run(
             ["git", "-C", str(repo_root), "rev-parse", "--show-toplevel"],
             capture_output=True,
             check=False,
+            env=git_env,
         )
     except (OSError, subprocess.SubprocessError) as exc:
         return None, f"git rev-parse failed: {exc}"
@@ -135,9 +176,11 @@ def _git_top_level(repo_root: Path) -> tuple[Path | None, str | None]:
         detail = os.fsdecode(completed.stderr or completed.stdout).strip()
         return None, f"git rev-parse failed: {detail or 'unknown error'}"
     try:
-        return Path(os.fsdecode(completed.stdout).strip()).resolve(strict=True), None
-    except (OSError, RuntimeError) as exc:
-        return None, f"git top-level cannot be resolved: {exc}"
+        top_level = Path(os.fsdecode(completed.stdout).strip()).resolve(strict=True)
+        repo_root.relative_to(top_level)
+    except (OSError, RuntimeError, ValueError) as exc:
+        return None, f"git top-level cannot contain repo_root: {exc}"
+    return top_level, None
 
 
 def _status_path_relative_to_repo(
@@ -152,8 +195,11 @@ def _status_path_relative_to_repo(
         return None
 
 
-def _git_status(repo_root: Path) -> tuple[tuple[str, ...], tuple[str, ...], str | None]:
-    git_top_level, top_level_error = _git_top_level(repo_root)
+def _git_status(
+    repo_root: Path,
+    git_env: dict[str, str],
+) -> tuple[tuple[str, ...], tuple[str, ...], str | None]:
+    git_top_level, top_level_error = _git_top_level(repo_root, git_env)
     if top_level_error or git_top_level is None:
         return (), (), f"git status failed: {top_level_error or 'git top-level cannot be resolved'}"
     try:
@@ -169,6 +215,7 @@ def _git_status(repo_root: Path) -> tuple[tuple[str, ...], tuple[str, ...], str 
             ],
             capture_output=True,
             check=False,
+            env=git_env,
         )
     except (OSError, subprocess.SubprocessError) as exc:
         return (), (), f"git status failed: {exc}"
@@ -202,18 +249,29 @@ def _git_status(repo_root: Path) -> tuple[tuple[str, ...], tuple[str, ...], str 
     return tuple(sorted(paths)), snapshot, None
 
 
-def _tracked_paths(repo_root: Path, planned_paths: Iterable[str]) -> tuple[set[str], str | None]:
-    if tracked_relative_paths is None:
-        return set(), _TRACKED_PATHS_IMPORT_ERROR or "shared Git path helper unavailable"
-    return tracked_relative_paths(repo_root, planned_paths)
+def _tracked_paths(
+    repo_root: Path,
+    planned_paths: Iterable[str],
+    git_env: dict[str, str],
+) -> tuple[set[str], set[str], str | None]:
+    if tracked_relative_paths is None or protected_index_relative_paths is None:
+        return set(), set(), _TRACKED_PATHS_IMPORT_ERROR or "shared Git path helper unavailable"
+    tracked, tracked_error = tracked_relative_paths(repo_root, planned_paths, env=git_env)
+    if tracked_error:
+        return set(), set(), tracked_error
+    protected, protected_error = protected_index_relative_paths(repo_root, planned_paths, env=git_env)
+    if protected_error:
+        return set(), set(), protected_error
+    return tracked, protected, None
 
 
 def check_write_safety(repo_root: Path, planned_paths: Iterable[str | Path]) -> WriteGuardResult:
     """Capture current Git state and decide whether ``planned_paths`` are safe.
 
     A clean tracked target may be modified because it is part of the declared
-    plan.  Any dirty target, existing untracked target, or unsafe path blocks
-    the whole batch.  Dirty paths outside the plan are reported but allowed.
+    plan. Any dirty target, existing untracked target, Git index-protected
+    target, or unsafe path blocks the whole batch. Dirty paths outside the plan
+    are reported but allowed.
     """
 
     resolved_root, root_error = _normalise_repo_root(repo_root)
@@ -224,17 +282,31 @@ def check_write_safety(repo_root: Path, planned_paths: Iterable[str | Path]) -> 
     if path_error:
         return _blocked(reason=path_error)
 
-    dirty_paths, status_snapshot, status_error = _git_status(resolved_root)
+    git_env = _git_environment()
+    dirty_paths, status_snapshot, status_error = _git_status(resolved_root, git_env)
     if status_error:
         return _blocked(planned_paths=normalised, status_snapshot=status_snapshot, reason=status_error)
 
-    tracked_paths, tracked_error = _tracked_paths(resolved_root, normalised)
+    tracked_paths, protected_paths, tracked_error = _tracked_paths(resolved_root, normalised, git_env)
     if tracked_error:
         return _blocked(
             planned_paths=normalised,
             dirty_paths_before=dirty_paths,
             status_snapshot=status_snapshot,
             reason=tracked_error,
+        )
+
+    protected_conflicts = set(normalised) & protected_paths
+    if protected_conflicts:
+        return _blocked(
+            planned_paths=normalised,
+            dirty_paths_before=dirty_paths,
+            status_snapshot=status_snapshot,
+            conflicting_paths=protected_conflicts,
+            reason=(
+                "planned write includes Git index-protected path(s) whose worktree drift may be hidden "
+                "from status: " + ", ".join(sorted(protected_conflicts))
+            ),
         )
 
     conflicts = {
@@ -259,7 +331,7 @@ def check_write_safety(repo_root: Path, planned_paths: Iterable[str | Path]) -> 
             status_snapshot=status_snapshot,
             conflicting_paths=conflicts,
             reason=(
-                "planned write overlaps existing dirty, untracked, or hard link paths: "
+                "planned write overlaps existing dirty, untracked, directory, or hard link paths: "
                 + ", ".join(sorted(conflicts))
             ),
         )
