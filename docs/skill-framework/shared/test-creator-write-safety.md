@@ -51,9 +51,12 @@ Before the first write in a phase, and again before every later write batch:
    is always attempted subject to this same fail-closed report-only guard.
 
 The guard is shipped identically in every creator package and captures
-`git status --porcelain=v1 --untracked-files=all` before the batch. Git commands
-run with inherited repository-selection/index overrides removed so process
-environment cannot redirect the check to another repository.
+`git status --porcelain=v1 --untracked-files=all` before the batch. Its Git
+subprocesses remove repository-selection/index overrides and all `GIT_TRACE*`
+settings, ignore user/system Git config, disable configured `core.fsmonitor`,
+and set `GIT_OPTIONAL_LOCKS=0`. The pre-write check therefore cannot be
+redirected to another repository, execute an ambient fsmonitor program, create
+an ambient trace file, or refresh Git index metadata while it is deciding.
 Dirty paths outside the planned set are reported and left exactly as found.
 A planned path that is tracked-but-dirty, staged, renamed, an existing untracked
 output, or index-protected with `assume-unchanged`/`skip-worktree` is a conflict;
@@ -63,7 +66,7 @@ rejected because a normal path write could mutate another user-visible inode
 outside the repository. Ignored or symlinked existing outputs and Git metadata
 paths are unsafe as well.
 
-## Report evidence
+## Structured result evidence
 
 Every result records the guard result for each attempted batch:
 
@@ -78,13 +81,20 @@ write_guard:
   reason: <verbatim guard reason>
 ```
 
+This exact object belongs in the canonical `skill_result`. Its
+`status_snapshot`, conflict paths, and `reason` can contain repository-controlled
+filenames or Git text and are therefore untrusted render data: they **must not be
+rendered verbatim** into Markdown. If a human-facing report summarizes guard
+evidence, apply [safe-output.md](safe-output.md) and render only safely escaped
+fields; do not mutate the structured object merely to make it safe for display.
+
 The guard is a pre-write decision only, so its raw `writes_started` field is
 always `false`; creators record any actual artifact writes separately in their
 result/report status. A creator must never mutate this captured guard result to
 claim that writes later started. A blocked primary batch must never be called
 `WRITTEN_PASSING`, and no creator may claim an unverified test passed. The
-guard's conflict paths and reason are preserved verbatim rather than summarized
-away.
+guard's conflict paths and reason stay exact in structured `skill_result`
+evidence rather than being summarized away.
 
 ## Composition and interaction rule
 
