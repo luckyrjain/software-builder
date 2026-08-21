@@ -217,6 +217,38 @@ def test_guard_does_not_recurse_into_submodule_filters(tmp_path: Path) -> None:
     assert not marker.exists(), "guard recursed into submodule and executed its clean filter"
 
 
+def test_nested_repo_root_does_not_scan_sibling_filter(tmp_path: Path) -> None:
+    repo = _committed_repo(tmp_path)
+    project = repo / "project"
+    project.mkdir()
+    (project / "tracked.py").write_text("fixture\n", encoding="utf-8")
+    sibling = repo / "outside.txt"
+    sibling.write_text("fixture\n", encoding="utf-8")
+    (repo / ".gitattributes").write_text("outside.txt filter=review-evil\n", encoding="utf-8")
+    subprocess.run(["git", "add", "."], cwd=repo, check=True)
+    subprocess.run(["git", "-c", "commit.gpgsign=false", "commit", "-qm", "nested root"], cwd=repo, check=True)
+
+    marker = tmp_path / "sibling-filter-executed"
+    hook = tmp_path / "sibling-filter.py"
+    hook.write_text(
+        "#!/usr/bin/env python3\n"
+        "import sys\n"
+        "from pathlib import Path\n"
+        f"Path({str(marker)!r}).write_text('executed\\n', encoding='utf-8')\n"
+        "sys.stdout.buffer.write(sys.stdin.buffer.read())\n",
+        encoding="utf-8",
+    )
+    hook.chmod(0o755)
+    subprocess.run(["git", "config", "filter.review-evil.clean", str(hook)], cwd=repo, check=True)
+    stat = sibling.stat()
+    os.utime(sibling, ns=(stat.st_atime_ns, stat.st_mtime_ns + 2_000_000_000))
+
+    result = check_write_safety(project, ["generated_test.py"])
+
+    assert result.status == "ALLOWED"
+    assert not marker.exists(), "nested guard scanned sibling outside repo_root"
+
+
 def test_guard_evidence_stays_structured_not_verbatim_markdown() -> None:
     shared = (
         ROOT / "docs" / "skill-framework" / "shared" / "test-creator-write-safety.md"
