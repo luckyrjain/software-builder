@@ -109,7 +109,20 @@ def _path_is_within(path: Path, root: Path) -> bool:
         return False
 
 
-def _git_environment(repo_root: Path, filter_drivers: Iterable[str] = ()) -> dict[str, str]:
+def _filesystem_git_boundary(repo_root: Path) -> Path:
+    """Best-effort enclosing worktree root without executing repository code."""
+
+    for candidate in (repo_root, *repo_root.parents):
+        marker = candidate / ".git"
+        try:
+            if marker.exists() or marker.is_symlink():
+                return candidate.resolve(strict=True)
+        except (OSError, RuntimeError):
+            continue
+    return repo_root
+
+
+def _git_environment(execution_boundary: Path, filter_drivers: Iterable[str] = ()) -> dict[str, str]:
     """Return a read-only Git environment isolated from repo-controlled execution."""
 
     environment = dict(os.environ)
@@ -122,7 +135,7 @@ def _git_environment(repo_root: Path, filter_drivers: Iterable[str] = ()) -> dic
         ):
             environment.pop(key, None)
 
-    # Remove PATH entries that resolve inside the target repository. Git itself
+    # Remove PATH entries that resolve inside the enclosing worktree. Git itself
     # is later pinned to an absolute executable found in the remaining search
     # path, and this sanitized PATH also protects against an accidental helper
     # subprocess resolving back into repository-controlled binaries.
@@ -137,7 +150,7 @@ def _git_environment(repo_root: Path, filter_drivers: Iterable[str] = ()) -> dic
             resolved_entry = candidate.resolve(strict=False)
         except (OSError, RuntimeError):
             continue
-        if _path_is_within(resolved_entry, repo_root):
+        if _path_is_within(resolved_entry, execution_boundary):
             continue
         safe_path_entries.append(str(resolved_entry))
     if safe_path_entries:
@@ -173,8 +186,11 @@ def _git_environment(repo_root: Path, filter_drivers: Iterable[str] = ()) -> dic
     return environment
 
 
-def _resolve_git_executable(repo_root: Path, git_env: dict[str, str]) -> tuple[str | None, str | None]:
-    """Resolve an executable Git binary from search directories outside repo_root."""
+def _resolve_git_executable(
+    execution_boundary: Path,
+    git_env: dict[str, str],
+) -> tuple[str | None, str | None]:
+    """Resolve an executable Git binary from search directories outside the worktree."""
 
     raw_path = git_env.get("PATH", os.defpath)
     cwd = Path.cwd()
@@ -186,7 +202,7 @@ def _resolve_git_executable(repo_root: Path, git_env: dict[str, str]) -> tuple[s
             directory = directory.resolve(strict=False)
         except (OSError, RuntimeError):
             continue
-        if _path_is_within(directory, repo_root):
+        if _path_is_within(directory, execution_boundary):
             continue
         executable = shutil.which(str(directory / "git"))
         if executable is None:
@@ -195,10 +211,10 @@ def _resolve_git_executable(repo_root: Path, git_env: dict[str, str]) -> tuple[s
             resolved = Path(executable).resolve(strict=True)
         except (OSError, RuntimeError):
             continue
-        if _path_is_within(resolved, repo_root):
+        if _path_is_within(resolved, execution_boundary):
             continue
         return str(resolved), None
-    return None, "trusted git executable not found outside repo_root"
+    return None, "trusted git executable not found outside enclosing worktree"
 
 
 def _normalise_repo_root(repo_root: Path) -> tuple[Path | None, str | None]:
@@ -438,8 +454,9 @@ def check_write_safety(repo_root: Path, planned_paths: Iterable[str | Path]) -> 
     if path_error:
         return _blocked(reason=path_error)
 
-    base_git_env = _git_environment(resolved_root)
-    git_executable, git_executable_error = _resolve_git_executable(resolved_root, base_git_env)
+    execution_boundary = _filesystem_git_boundary(resolved_root)
+    base_git_env = _git_environment(execution_boundary)
+    git_executable, git_executable_error = _resolve_git_executable(execution_boundary, base_git_env)
     if git_executable_error or git_executable is None:
         return _blocked(planned_paths=normalised, reason=git_executable_error or "trusted git unavailable")
 
@@ -465,7 +482,7 @@ def check_write_safety(repo_root: Path, planned_paths: Iterable[str | Path]) -> 
             planned_paths=normalised,
             reason=f"git status preparation failed: {filter_error}",
         )
-    git_env = _git_environment(resolved_root, filter_drivers)
+    git_env = _git_environment(execution_boundary, filter_drivers)
 
     dirty_paths, status_snapshot, status_error = _git_status(resolved_root, git_env, git_executable)
     if status_error:
