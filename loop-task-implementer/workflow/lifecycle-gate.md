@@ -38,10 +38,11 @@ Refresh branch-actor/third-party-change state and persist the exact inspected he
 `workspace.third_party_change_checked_head`; `third_party_change_detected: false` is acceptable only when that checked
 head equals `workspace.current_head_commit`.
 
-For any `NOT_ISOLATED` lens that relies on an authorized human exception, require both non-empty authorization provenance
-and `isolation_exception_change_identity` exactly equal to that lens's `reviewed_change_identity`. Clear the exception
-when the lens is invalidated or rerun; an exception accepted for an earlier review identity is not portable authorization
-for a later change.
+For any `NOT_ISOLATED` lens that relies on an authorized human exception, require non-empty authorization provenance,
+`isolation_exception_change_identity` exactly equal to that lens's `reviewed_change_identity`, and
+`isolation_exception_review_generated_at` exactly equal to that lens's current `review_evidence.generated_at`. Clear all
+exception fields whenever the lens is invalidated or rerun, even when the code identity is unchanged; a same-head rerun
+is a new review generation and old degraded-isolation authorization is stale.
 
 Resolve `skill_root` to the directory containing this skill's `SKILL.md`, independent of the current working directory.
 In the software-builder source checkout that is `<repo_root>/loop-task-implementer`; in an installed package it is the
@@ -61,8 +62,9 @@ The validator must prove all of the following on the same current change:
 - Lens A and Lens B are CLEAN and each has valid shared `review_evidence` bound to the current `change_identity`.
 - Both lenses reviewed the same shared identity; a content change or conflict resolution after a lens review invalidates that evidence until the lens reruns.
 - Each lens satisfies the review-isolation gate. Preserve a real `NOT_ISOLATED` result; it blocks readiness unless an
-  authorized human exception is recorded separately with non-empty provenance and bound to the exact reviewed identity.
-  Never relabel degraded review as `ISOLATED` merely because the residual risk was accepted.
+  authorized human exception is recorded separately with non-empty provenance and bound to the exact reviewed identity
+  **and current review-evidence generation**. Never relabel degraded review as `ISOLATED` merely because the residual risk
+  was accepted.
 - `merge_readiness.security_sensitive_needs_evidence_unresolved` is integer `0`; authentication, authorization,
   secrets/credential, and trust-boundary evidence gaps must be resolved or explicitly accepted with recorded human
   decision provenance before lifecycle readiness.
@@ -75,9 +77,9 @@ The validator must prove all of the following on the same current change:
   outstanding under the existing completion policy.
 
 A prior CLEAN lens, a matching head SHA alone, green required checks for an older commit, stale third-party-check state,
-or a human exception bound to an older review is insufficient. If the current identity or requirements cannot be
-re-established, if conflict status/provenance is unknown after a SHA transition, or if the validator cannot run, stop and
-escalate rather than setting `ready: true`.
+or a human exception bound to an older identity/review generation is insufficient. If the current identity or requirements
+cannot be re-established, if conflict status/provenance is unknown after a SHA transition, or if the validator cannot run,
+stop and escalate rather than setting `ready: true`.
 
 Record the validation errors/evidence in official Orchestrator state. `ready: true`, `COMPLETE`, or merge is forbidden
 while any lifecycle error exists.
