@@ -322,6 +322,10 @@ def main(argv: list[str] | None = None) -> int:
     try:
         state = _read_state(args.state)
         errors = validate_lifecycle_state(state)
+    except SystemExit as exc:
+        # A runtime/import must never be able to turn failed validation into exit 0.
+        print(f"lifecycle validation failed closed: validation runtime exited ({exc.code})", file=sys.stderr)
+        return 2
     except Exception as exc:
         # Any ordinary input/runtime failure means lifecycle validity could not be established.
         print(f"lifecycle validation failed closed: {exc}", file=sys.stderr)
