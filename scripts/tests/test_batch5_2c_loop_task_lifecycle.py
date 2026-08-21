@@ -60,7 +60,7 @@ def test_state_schema_carries_shared_identity_requirements_and_lens_evidence():
 def test_lifecycle_workflow_versions_track_behavior_changes():
     expected = {
         "orchestrator-lifecycle.md": "1.6",
-        "reviewer-evidence.md": "1.5",
+        "reviewer-evidence.md": "1.6",
         "lifecycle-gate.md": "1.6",
     }
     for name, version in expected.items():
@@ -73,6 +73,8 @@ def test_reviewer_evidence_adapter_emits_shared_review_evidence_after_adjudicati
     for token in (
         "adjudication_verdicts",
         "after the Orchestrator adjudicates",
+        "already have incremented",
+        "does **not** increment the generation",
         "accepted blocking findings that remain open",
         "REJECTED",
         "review_evidence",
