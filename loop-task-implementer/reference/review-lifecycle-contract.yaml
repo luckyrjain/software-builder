@@ -16,6 +16,8 @@ state_binding:
   lens_b_review_evidence: review.lens_b.review_evidence
   lens_a_review_generation: review.lens_a.review_generation
   lens_b_review_generation: review.lens_b.review_generation
+  lens_a_review_evidence_generation: review.lens_a.review_evidence_generation
+  lens_b_review_evidence_generation: review.lens_b.review_evidence_generation
   lens_a_isolation_status: review.lens_a.isolation_status
   lens_b_isolation_status: review.lens_b.isolation_status
   lens_a_isolation_exception_change_identity: review.lens_a.isolation_exception_change_identity
@@ -30,6 +32,7 @@ review_rules:
   - both_lenses_must_validate_against_current_change_identity
   - both_lenses_must_be_clean_for_same_change_identity
   - clean_lens_requires_positive_integer_review_generation
+  - clean_lens_review_evidence_generation_must_equal_review_generation
   - clean_lens_requires_complete_inspection_no_unavailable_surfaces_and_zero_defects
   - review_isolation_must_be_isolated_or_have_explicit_human_exception_with_provenance
   - isolation_exception_must_be_bound_to_the_reviewed_change_identity
@@ -64,6 +67,7 @@ fail_closed:
   - missing_current_requirements_ref_state
   - missing_lens_review_evidence_for_clean_lens
   - clean_lens_with_invalid_review_generation
+  - clean_lens_with_missing_or_stale_review_evidence_generation
   - clean_lens_with_partial_unable_or_defect_evidence
   - lens_evidence_not_fresh_for_current_identity
   - identity_sha_transition_with_unknown_conflict_status_or_provenance
