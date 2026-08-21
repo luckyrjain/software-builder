@@ -21,6 +21,7 @@ from typing import Iterable
 _TRACKED_PATHS_IMPORT_ERROR: str | None = None
 tracked_relative_paths = None
 protected_index_relative_paths = None
+gitlink_relative_paths = None
 try:
     helper_path = Path(__file__).resolve().with_name("git_paths.py")
     if not helper_path.is_file():
@@ -32,6 +33,7 @@ try:
     spec.loader.exec_module(helper_module)
     tracked_relative_paths = helper_module.tracked_relative_paths
     protected_index_relative_paths = helper_module.protected_index_relative_paths
+    gitlink_relative_paths = helper_module.gitlink_relative_paths
 except Exception as exc:  # fail closed if the shipped helper cannot be loaded
     _TRACKED_PATHS_IMPORT_ERROR = f"shared Git path helper unavailable: {exc}"
 
@@ -255,6 +257,9 @@ def _normalise_planned_paths(
                 current /= part
                 if current.is_symlink():
                     return (), f"planned path {raw!r} traverses a symlink; refusing to write"
+                nested_git_marker = current / ".git"
+                if nested_git_marker.exists() or nested_git_marker.is_symlink():
+                    return (), f"planned path {raw!r} crosses a nested Git repository boundary"
             resolved = lexical.resolve(strict=False)
             relative = resolved.relative_to(repo_root)
         except (OSError, RuntimeError, ValueError) as exc:
@@ -265,6 +270,15 @@ def _normalise_planned_paths(
             return (), f"planned path {raw!r} targets Git metadata; refusing to write"
         normalised.add(relative.as_posix())
     return tuple(sorted(normalised)), None
+
+
+def _planned_path_prefixes(planned_paths: Iterable[str]) -> tuple[str, ...]:
+    prefixes: set[str] = set()
+    for planned in planned_paths:
+        parts = planned.split("/")
+        for index in range(1, len(parts) + 1):
+            prefixes.add("/".join(parts[:index]))
+    return tuple(sorted(prefixes))
 
 
 def _git_top_level(
@@ -465,6 +479,38 @@ def check_write_safety(repo_root: Path, planned_paths: Iterable[str | Path]) -> 
         return _blocked(
             planned_paths=normalised,
             reason=f"git status failed: {top_level_error or 'git top-level cannot be resolved'}",
+        )
+
+    if gitlink_relative_paths is None:
+        return _blocked(
+            planned_paths=normalised,
+            reason=_TRACKED_PATHS_IMPORT_ERROR or "shared Git path helper unavailable",
+        )
+    gitlinks, gitlink_error = gitlink_relative_paths(
+        resolved_root,
+        _planned_path_prefixes(normalised),
+        env=base_git_env,
+        git_executable=git_executable,
+    )
+    if gitlink_error:
+        return _blocked(
+            planned_paths=normalised,
+            reason=f"nested Git repository check failed: {gitlink_error}",
+        )
+    gitlink_conflicts = {
+        planned
+        for planned in normalised
+        for gitlink in gitlinks
+        if planned == gitlink or planned.startswith(f"{gitlink}/")
+    }
+    if gitlink_conflicts:
+        return _blocked(
+            planned_paths=normalised,
+            conflicting_paths=gitlink_conflicts,
+            reason=(
+                "planned write crosses a nested Git repository gitlink: "
+                + ", ".join(sorted(gitlinks))
+            ),
         )
 
     # Status intentionally captures the full enclosing worktree snapshot even
