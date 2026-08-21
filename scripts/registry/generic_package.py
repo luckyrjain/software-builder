@@ -10,6 +10,7 @@ from pathlib import Path
 
 from scripts.git_paths import tracked_relative_paths
 from scripts.registry.schema import parse_registry
+from scripts.test_creator_catalog import TEST_CREATOR_SKILL_SET
 
 PACKAGE_ROOT = "software-builder"
 EXCLUDED_PARTS = {
@@ -252,14 +253,18 @@ def _package_files(root: Path) -> list[Path]:
         candidates.add(license_path)
 
     # Test-creator source adapters resolve the canonical guard at the generic
-    # bundle root. Keep the guard and its small executable path helper in the
-    # portable archive; the rest of the repository's development scripts remain out.
-    guard_path = (root / "scripts" / "test_creator_write_guard.py").resolve()
-    if guard_path in tracked_regular and guard_path.is_file():
-        candidates.add(guard_path)
-    git_paths_path = (root / "scripts" / "git_paths.py").resolve()
-    if git_paths_path in tracked_regular and git_paths_path.is_file():
-        candidates.add(git_paths_path)
+    # bundle root. If any creator is registered, both runtime files are hard
+    # dependencies: silently omitting either would build a portable archive
+    # whose creators fail only after installation.
+    if TEST_CREATOR_SKILL_SET & set(registry.skills):
+        for runtime_path in (
+            (root / "scripts" / "test_creator_write_guard.py").resolve(),
+            (root / "scripts" / "git_paths.py").resolve(),
+        ):
+            if runtime_path not in tracked_regular or not runtime_path.is_file():
+                rel = runtime_path.relative_to(root)
+                raise ValueError(f"generic package requires tracked test-creator runtime: {rel}")
+            candidates.add(runtime_path)
 
     framework = (root / "docs" / "skill-framework").resolve()
     if not framework.is_dir():
