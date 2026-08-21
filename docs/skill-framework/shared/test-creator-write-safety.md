@@ -55,21 +55,31 @@ The guard is shipped identically in every creator package and captures
 before the batch. The final `-- .` is part of the safety boundary: when
 `repo_root` is a nested directory inside a larger Git worktree, status must not
 scan siblings outside the declared root merely to discard their paths later.
-Its Git subprocesses remove repository-selection/index overrides and all
-`GIT_TRACE*` settings, ignore user/system Git config, disable configured
+
+Before any Git command, the guard removes PATH entries that resolve inside
+`repo_root`, resolves a Git executable from the remaining search directories,
+and pins every guard/helper subprocess to that absolute executable. If no Git
+binary can be resolved outside `repo_root`, the guard blocks. This prevents a
+checked-in or generated `git` shim from executing merely because a repo-local
+`bin`, virtual environment, or other directory appears on PATH; the sanitized
+PATH is also inherited by Git in case an internal helper lookup occurs.
+
+Its Git subprocesses remove repository-selection/index overrides, `GIT_EXEC_PATH`,
+and all `GIT_TRACE*` settings, ignore user/system Git config, disable configured
 `core.fsmonitor`, neutralize repository-declared clean/process filter drivers
 before status, ignore external attributes files, and set `GIT_OPTIONAL_LOCKS=0`.
 Status does not recurse into submodules, so a submodule's local Git
 configuration cannot execute during the parent repository check. The pre-write
 check therefore cannot be redirected to another repository, execute an ambient
 fsmonitor or repository clean-filter program, scan an out-of-scope sibling for
-filter execution, create an ambient trace file, or refresh Git index metadata
-while it is deciding. Filter-driver names are resolved with `git check-attr`
-over Git-tracked paths inside `repo_root` before status; if that attribute read
-cannot be parsed, the guard fails closed. Because the guard deliberately
-disables executable filters, a filtered path that Git can only reconcile by
-executing its filter may be reported conservatively as dirty; an overlap still
-blocks rather than running repository code.
+filter execution, resolve Git from the target repository, create an ambient
+trace file, or refresh Git index metadata while it is deciding. Filter-driver
+names are resolved with `git check-attr` over Git-tracked paths inside
+`repo_root` before status; if that attribute read cannot be parsed, the guard
+fails closed. Because the guard deliberately disables executable filters, a
+filtered path that Git can only reconcile by executing its filter may be
+reported conservatively as dirty; an overlap still blocks rather than running
+repository code.
 
 Dirty paths outside the planned set but inside `repo_root` are reported and
 left exactly as found. A planned path that is tracked-but-dirty, staged,
