@@ -51,10 +51,15 @@ def test_state_schema_carries_shared_identity_requirements_and_lens_evidence():
     assert "security_sensitive_needs_evidence_unresolved" in data["merge_readiness"]
 
 
-def test_lifecycle_workflow_versions_match_state_contract_generation():
-    for name in ("orchestrator-lifecycle.md", "reviewer-evidence.md", "lifecycle-gate.md"):
+def test_lifecycle_workflow_versions_track_behavior_changes():
+    expected = {
+        "orchestrator-lifecycle.md": "1.5",
+        "reviewer-evidence.md": "1.4",
+        "lifecycle-gate.md": "1.5",
+    }
+    for name, version in expected.items():
         text = (SKILL / "workflow" / name).read_text(encoding="utf-8")
-        assert "workflow_version: 1.4" in text
+        assert f"workflow_version: {version}" in text
 
 
 def test_reviewer_evidence_adapter_emits_shared_review_evidence_after_adjudication():
@@ -116,6 +121,8 @@ def test_orchestrator_path_loads_mandatory_lifecycle_overlay():
     assert "orchestrator-lifecycle.md" in phase
     for token in (
         "validate_loop_lifecycle.py",
+        "<skill_root>/scripts/validate_loop_lifecycle.py",
+        "do not assume the current working directory",
         "--state",
         "current `change_identity`",
         "conflict_resolution_occurred",
@@ -135,6 +142,8 @@ def test_lifecycle_gate_revalidates_before_ready_or_merge():
     text = (SKILL / "workflow/lifecycle-gate.md").read_text(encoding="utf-8")
     for token in (
         "validate_loop_lifecycle.py",
+        "<skill_root>/scripts/validate_loop_lifecycle.py",
+        "current working directory",
         "--state",
         "current `change_identity`",
         "conflict_resolution_occurred",
