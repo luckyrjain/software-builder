@@ -234,6 +234,20 @@ def _is_git_metadata_component(part: str) -> bool:
     return normalised.casefold() == ".git"
 
 
+def _looks_like_bare_git_repository(path: Path) -> bool:
+    """Recognize Git's bare-repository metadata layout without executing it."""
+
+    try:
+        return (
+            path.is_dir()
+            and (path / "HEAD").is_file()
+            and (path / "objects").is_dir()
+            and (path / "refs").is_dir()
+        )
+    except OSError:
+        return False
+
+
 def _normalise_planned_paths(
     repo_root: Path,
     planned_paths: Iterable[str | Path],
@@ -258,7 +272,11 @@ def _normalise_planned_paths(
                 if current.is_symlink():
                     return (), f"planned path {raw!r} traverses a symlink; refusing to write"
                 nested_git_marker = current / ".git"
-                if nested_git_marker.exists() or nested_git_marker.is_symlink():
+                if (
+                    nested_git_marker.exists()
+                    or nested_git_marker.is_symlink()
+                    or _looks_like_bare_git_repository(current)
+                ):
                     return (), f"planned path {raw!r} crosses a nested Git repository boundary"
             resolved = lexical.resolve(strict=False)
             relative = resolved.relative_to(repo_root)
