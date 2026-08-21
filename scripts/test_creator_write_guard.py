@@ -41,13 +41,17 @@ _GIT_REPOSITORY_OVERRIDE_ENV = {
     "GIT_COMMON_DIR",
     "GIT_CONFIG",
     "GIT_CONFIG_COUNT",
+    "GIT_CONFIG_GLOBAL",
+    "GIT_CONFIG_NOSYSTEM",
     "GIT_CONFIG_PARAMETERS",
+    "GIT_CONFIG_SYSTEM",
     "GIT_DIR",
     "GIT_DISCOVERY_ACROSS_FILESYSTEM",
     "GIT_GRAFT_FILE",
     "GIT_INDEX_FILE",
     "GIT_INTERNAL_SUPER_PREFIX",
     "GIT_OBJECT_DIRECTORY",
+    "GIT_OPTIONAL_LOCKS",
     "GIT_PREFIX",
     "GIT_REPLACE_REF_BASE",
     "GIT_SHALLOW_FILE",
@@ -96,7 +100,7 @@ def _blocked(
 
 
 def _git_environment() -> dict[str, str]:
-    """Return process env without variables that can redirect Git elsewhere."""
+    """Return a read-only Git environment isolated from ambient overrides."""
 
     environment = dict(os.environ)
     for key in list(environment):
@@ -104,8 +108,22 @@ def _git_environment() -> dict[str, str]:
             key in _GIT_REPOSITORY_OVERRIDE_ENV
             or key.startswith("GIT_CONFIG_KEY_")
             or key.startswith("GIT_CONFIG_VALUE_")
+            or key.startswith("GIT_TRACE")
         ):
             environment.pop(key, None)
+
+    # Ignore ambient user/system Git configuration so HOME/XDG or explicit
+    # config-file overrides cannot inject hooks/filters into this safety read.
+    # Keep repository-local config available for normal index/worktree rules,
+    # but override fsmonitor because even `git status`/`git ls-files` may
+    # execute a configured fsmonitor program. Optional locks are disabled so
+    # status cannot refresh .git/index metadata during a pre-write check.
+    environment["GIT_CONFIG_GLOBAL"] = os.devnull
+    environment["GIT_CONFIG_NOSYSTEM"] = "1"
+    environment["GIT_OPTIONAL_LOCKS"] = "0"
+    environment["GIT_CONFIG_COUNT"] = "1"
+    environment["GIT_CONFIG_KEY_0"] = "core.fsmonitor"
+    environment["GIT_CONFIG_VALUE_0"] = "false"
     return environment
 
 
