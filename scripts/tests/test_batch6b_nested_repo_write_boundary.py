@@ -34,6 +34,16 @@ def _repo_with_submodule(tmp_path: Path) -> Path:
     return repo
 
 
+def _deinit_submodule(repo: Path) -> None:
+    subprocess.run(
+        ["git", "submodule", "deinit", "-f", "--", "modules/child"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+
 def _assert_nested_repo_block(repo: Path, planned: str = "modules/child/generated_test.py") -> None:
     result = check_write_safety(repo, [planned])
 
@@ -47,15 +57,19 @@ def test_guard_rejects_new_file_inside_initialized_submodule(tmp_path: Path) -> 
 
 def test_guard_rejects_new_file_inside_deinitialized_submodule(tmp_path: Path) -> None:
     repo = _repo_with_submodule(tmp_path)
-    subprocess.run(
-        ["git", "submodule", "deinit", "-f", "--", "modules/child"],
-        cwd=repo,
-        check=True,
-        capture_output=True,
-        text=True,
-    )
+    _deinit_submodule(repo)
 
     _assert_nested_repo_block(repo)
+
+
+def test_guard_rejects_deinitialized_submodule_as_repo_root(tmp_path: Path) -> None:
+    repo = _repo_with_submodule(tmp_path)
+    _deinit_submodule(repo)
+
+    result = check_write_safety(repo / "modules" / "child", ["generated_test.py"])
+
+    assert result.status == "BLOCKED"
+    assert "nested git repository" in result.reason.lower()
 
 
 def test_guard_rejects_new_file_inside_unregistered_nested_repo(tmp_path: Path) -> None:
