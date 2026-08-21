@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
 import pytest
 
 from scripts.registry import generic_package
+from scripts.test_creator_write_guard import check_write_safety
 
 ROOT = Path(__file__).resolve().parents[2]
 COMMON_WORKFLOW = ROOT / "docs" / "skill-framework" / "shared" / "test-creator-common-workflow.md"
@@ -57,3 +59,42 @@ def test_generic_package_requires_test_creator_runtime(
 
     with pytest.raises(ValueError, match="test-creator runtime"):
         generic_package._package_files(ROOT)
+
+
+@pytest.mark.parametrize("config_source", ["explicit_global", "home_global"])
+def test_guard_does_not_execute_ambient_global_git_config(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    config_source: str,
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+    (repo / "README.md").write_text("fixture\n", encoding="utf-8")
+    subprocess.run(["git", "add", "README.md"], cwd=repo, check=True)
+
+    marker = tmp_path / "fsmonitor-executed"
+    hook = tmp_path / "fsmonitor.py"
+    hook.write_text(
+        "#!/usr/bin/env python3\n"
+        "from pathlib import Path\n"
+        f"Path({str(marker)!r}).write_text('executed\\n', encoding='utf-8')\n",
+        encoding="utf-8",
+    )
+    hook.chmod(0o755)
+    config = tmp_path / "ambient.gitconfig"
+    config.write_text(f"[core]\n\tfsmonitor = {hook}\n", encoding="utf-8")
+
+    monkeypatch.delenv("GIT_CONFIG_GLOBAL", raising=False)
+    if config_source == "explicit_global":
+        monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(config))
+    else:
+        home = tmp_path / "home"
+        home.mkdir()
+        (home / ".gitconfig").write_text(config.read_text(encoding="utf-8"), encoding="utf-8")
+        monkeypatch.setenv("HOME", str(home))
+
+    result = check_write_safety(repo, ["generated_test.py"])
+
+    assert result.status == "ALLOWED"
+    assert not marker.exists(), "guard Git commands executed ambient core.fsmonitor"
