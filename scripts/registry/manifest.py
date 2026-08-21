@@ -36,7 +36,7 @@ def _version_input(skill_md: Path, raw_version: Any) -> Any:
 
 def _normalize_version(raw: Any) -> str:
     if raw is None or raw == "" or isinstance(raw, bool):
-        raise ValueError(f"invalid skill version {raw!r}")
+        raise ValueError("skill_version is mandatory")
     if isinstance(raw, int):
         value = f"{raw}.0.0"
     else:
@@ -46,7 +46,7 @@ def _normalize_version(raw: Any) -> str:
         elif re.fullmatch(r"\d+\.\d+", value):
             value += ".0"
     if not SEMVER_RE.fullmatch(value):
-        raise ValueError(f"invalid skill version {raw!r}")
+        raise ValueError(f"invalid skill_version {raw!r}; expected semantic version string or integer major")
     return value
 
 
@@ -55,8 +55,39 @@ def _load_platform_contracts(path: Path | None = None) -> dict[str, Any]:
         root = path.parent if path is not None else ROOT
         manifest = load_canonical_manifest(root)
         contracts = require_mapping(manifest.get("contracts"), "canonical manifest.contracts")
-        return require_mapping(contracts.get("platform"), "contracts.platform")
-    return require_mapping(load_unique_yaml_file(path), "platform contracts")
+        raw = require_mapping(contracts.get("platform"), "contracts.platform")
+    else:
+        raw = require_mapping(load_unique_yaml_file(path), "platform contracts")
+
+    schema_version = raw.get("schema_version")
+    if isinstance(schema_version, bool) or not isinstance(schema_version, (int, str)):
+        raise ValueError("platform contracts.schema_version must be an integer")
+    try:
+        if int(schema_version) != 1:
+            raise ValueError("platform contracts: unsupported schema_version")
+    except ValueError as exc:
+        raise ValueError("platform contracts.schema_version must be an integer") from exc
+
+    def exact(value: Any, expected: set[str], label: str) -> None:
+        if not isinstance(value, list) or set(value) != expected or len(value) != len(expected):
+            raise ValueError(f"{label} must define each canonical value exactly once")
+
+    evidence = require_mapping(raw.get("evidence"), "platform contracts.evidence")
+    exact(evidence.get("statuses"), {"OBSERVED", "INFERRED", "UNKNOWN", "CONFLICTED", "NOT_APPLICABLE"}, "platform contracts.evidence.statuses")
+    exact(evidence.get("required_fields"), {"claim", "status", "provenance", "limitations"}, "platform contracts.evidence.required_fields")
+    completion = require_mapping(raw.get("completion"), "platform contracts.completion")
+    exact(completion.get("statuses"), {"SUCCESS", "PARTIAL", "BLOCKED", "FAILED", "ESCALATED"}, "platform contracts.completion.statuses")
+    exact(completion.get("required_fields"), {"status", "evidence_status", "blockers", "artifacts", "recommended_next_skill"}, "platform contracts.completion.required_fields")
+    dod = require_mapping(raw.get("definition_of_done"), "platform contracts.definition_of_done")
+    exact(dod.get("required_fields"), {"required_artifacts", "required_checks", "blocked_conditions", "partial_result_behavior"}, "platform contracts.definition_of_done.required_fields")
+    gates = require_mapping(raw.get("action_gates"), "platform contracts.action_gates")
+    expected_gates = {"read_only": "none", "local_reversible_write": "explicit_task_authorization", "remote_non_destructive_write": "explicit_task_authorization", "destructive_or_high_impact": "explicit_action_authorization"}
+    if {str(k): str(v) for k, v in gates.items()} != expected_gates:
+        raise ValueError("platform contracts.action_gates must define the canonical authorization policy")
+    skill_types = require_mapping(raw.get("skill_types"), "platform contracts.skill_types")
+    if set(map(str, skill_types.values())) - {"leaf", "router", "orchestrator", "trigger"}:
+        raise ValueError("platform contracts.skill_types has invalid types")
+    return raw
 
 
 def _build_manifest(root: Path) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -77,8 +108,14 @@ def _build_manifest(root: Path) -> tuple[dict[str, Any], dict[str, Any]]:
         skill = dict(raw)
         skill["name"] = skill_id
         skill["version"] = _normalize_version(skill["version"])
-        skill["version_source"] = "canonical_manifest"
+        skill["version_source"] = str(raw.get("version_source", "canonical_manifest"))
         skill["authority"] = artifact.write_authority
+        skill["composition"] = {
+            "invokes": list(entry.composition.invokes),
+            "escalation_targets": list(entry.composition.escalation_targets),
+            "mode": entry.composition.mode,
+        }
+        skill["dependencies"] = list(entry.install.requires)
         skill["artifacts"] = {
             "produces": list(artifact.produces),
             "consumes": list(artifact.consumes),
@@ -135,4 +172,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-

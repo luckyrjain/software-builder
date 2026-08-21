@@ -8,6 +8,7 @@ from pathlib import Path
 import yaml
 
 from scripts.registry.backfill_capabilities import cmd_backfill
+from scripts.registry.canonical_manifest import load_canonical_manifest
 from scripts.registry.capability_family_sync import validate_capability_families
 from scripts.registry.capability_sync import validate_capability_catalog_sync
 from scripts.registry.composition import render_composition_mermaid
@@ -119,11 +120,11 @@ def _capability_families_path(root: Path) -> Path:
 
 
 def _platform_contracts_path(root: Path) -> Path:
-    return root / "skills.yaml"
+    return root / "scripts" / "registry" / "platform_contracts.yaml"
 
 
 def _composition_runtime_path(root: Path) -> Path:
-    return root / "skills.yaml"
+    return root / "scripts" / "registry" / "composition_runtime.yaml"
 
 
 def _release_contract_path(root: Path) -> Path:
@@ -151,7 +152,11 @@ def _validate_for_generate(root: Path) -> list[str]:
                 families_path=_capability_families_path(root),
             )
         )
-    if _platform_contracts_path(root).is_file():
+    try:
+        load_canonical_manifest(root)
+    except (OSError, ValueError, yaml.YAMLError):
+        pass
+    else:
         errors.extend(validate_manifest(root))
     if any(path.is_file() for path in _p1_layer_paths(root)):
         errors.extend(validate_p1_contracts(root))
@@ -317,4 +322,3 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-

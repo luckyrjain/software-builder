@@ -1,6 +1,6 @@
 # Compatibility matrix
 
-<!-- GENERATED from canonical skills.yaml + capability_catalog.yaml — do not edit; run make generate -->
+<!-- GENERATED from skills.yaml + capability_catalog.yaml (canonical manifest) — do not edit; run make generate -->
 
 Distribution version: **1.4.0**
 

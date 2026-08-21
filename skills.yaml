@@ -1000,6 +1000,7 @@ skills:
         - head_sha
         - posting_mode
     dependencies: []
+    version_source: skill_frontmatter_legacy_numeric
   pr-gatekeeper:
     path: pr-gatekeeper
     category: review
@@ -1057,6 +1058,7 @@ skills:
         - head_sha
     dependencies:
     - pr-review
+    version_source: skill_frontmatter_legacy_numeric
   k8s-overprovisioning-datadog:
     path: k8s-overprovisioning-datadog
     category: platform
@@ -1120,6 +1122,7 @@ skills:
       - k8s_rightsizing_report
       produce_fields: {}
     dependencies: []
+    version_source: skill_frontmatter_legacy_numeric
   incident-rca:
     path: incident-rca
     category: incident
@@ -1174,6 +1177,7 @@ skills:
       - rca_report
       produce_fields: {}
     dependencies: []
+    version_source: skill_frontmatter
   incident-triage-agent:
     path: incident-triage-agent
     category: incident
@@ -1239,6 +1243,7 @@ skills:
     dependencies:
     - incident-rca
     - squad-map
+    version_source: skill_frontmatter_legacy_numeric
   domain-comprehension:
     path: domain-comprehension
     category: architecture
@@ -1294,6 +1299,7 @@ skills:
       produce_fields: {}
     dependencies:
     - squad-map
+    version_source: skill_frontmatter_legacy_numeric
   squad-map:
     path: squad-map
     category: architecture
@@ -1344,6 +1350,7 @@ skills:
       - ownership_lookup
       produce_fields: {}
     dependencies: []
+    version_source: skill_frontmatter_legacy_numeric
   who-owns-x-bot:
     path: who-owns-x-bot
     category: architecture
@@ -1388,6 +1395,7 @@ skills:
       produce_fields: {}
     dependencies:
     - squad-map
+    version_source: skill_frontmatter_legacy_numeric
   new-hire-guide:
     path: new-hire-guide
     category: architecture
@@ -1436,6 +1444,7 @@ skills:
     dependencies:
     - domain-comprehension
     - squad-map
+    version_source: skill_frontmatter_legacy_numeric
   release-readiness-checker:
     path: release-readiness-checker
     category: release
@@ -1508,6 +1517,7 @@ skills:
     - pr-review
     - k8s-overprovisioning-datadog
     - incident-rca
+    version_source: skill_frontmatter_legacy_numeric
   migration-program-manager:
     path: migration-program-manager
     category: migration
@@ -1564,6 +1574,7 @@ skills:
     dependencies:
     - mysql-to-postgres-sql
     - squad-map
+    version_source: skill_frontmatter_legacy_numeric
   cost-optimization-sprint-planner:
     path: cost-optimization-sprint-planner
     category: platform
@@ -1614,6 +1625,7 @@ skills:
     dependencies:
     - k8s-overprovisioning-datadog
     - squad-map
+    version_source: skill_frontmatter_legacy_numeric
   mysql-to-postgres-sql:
     path: mysql-to-postgres-sql
     category: migration
@@ -1659,6 +1671,7 @@ skills:
       - implementation_pr
       produce_fields: {}
     dependencies: []
+    version_source: skill_frontmatter_legacy_numeric
   loop-task-implementer:
     path: loop-task-implementer
     category: automation
@@ -1708,6 +1721,7 @@ skills:
       - implementation_pr
       produce_fields: {}
     dependencies: []
+    version_source: skill_frontmatter_legacy_numeric
   backlog-runner:
     path: backlog-runner
     category: automation
@@ -1754,6 +1768,7 @@ skills:
       produce_fields: {}
     dependencies:
     - loop-task-implementer
+    version_source: skill_frontmatter_legacy_numeric
   weekly-squad-digest:
     path: weekly-squad-digest
     category: migration
@@ -1812,6 +1827,7 @@ skills:
     dependencies:
     - migration-program-manager
     - cost-optimization-sprint-planner
+    version_source: skill_frontmatter_legacy_numeric
   unit-test-creator:
     path: unit-test-creator
     category: testing
@@ -1861,6 +1877,7 @@ skills:
         - framework
         - target_path
     dependencies: []
+    version_source: skill_frontmatter_legacy_numeric
   integration-test-creator:
     path: integration-test-creator
     category: testing
@@ -1914,6 +1931,7 @@ skills:
         - framework
         - target_path
     dependencies: []
+    version_source: skill_frontmatter_legacy_numeric
   contract-test-creator:
     path: contract-test-creator
     category: testing
@@ -1963,6 +1981,7 @@ skills:
         - framework
         - target_path
     dependencies: []
+    version_source: skill_frontmatter_legacy_numeric
   e2e-test-creator:
     path: e2e-test-creator
     category: testing
@@ -2016,6 +2035,7 @@ skills:
         - framework
         - target_path
     dependencies: []
+    version_source: skill_frontmatter_legacy_numeric
   api-test-creator:
     path: api-test-creator
     category: testing
@@ -2069,6 +2089,7 @@ skills:
         - framework
         - target_path
     dependencies: []
+    version_source: skill_frontmatter_legacy_numeric
   prd-architect:
     path: prd-architect
     category: product
@@ -2120,6 +2141,7 @@ skills:
         - depth
         - response_mode
     dependencies: []
+    version_source: skill_frontmatter_legacy_numeric
   test-writer:
     path: test-writer
     category: product
@@ -2197,4 +2219,4 @@ skills:
     - contract-test-creator
     - e2e-test-creator
     - api-test-creator
-
+    version_source: skill_frontmatter_legacy_numeric

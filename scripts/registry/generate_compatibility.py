@@ -9,7 +9,7 @@ from scripts.release_info import read_distribution_version
 
 HEADER = """# Compatibility matrix
 
-<!-- GENERATED from canonical skills.yaml + capability_catalog.yaml — do not edit; run make generate -->
+<!-- GENERATED from skills.yaml + capability_catalog.yaml (canonical manifest) — do not edit; run make generate -->
 
 Distribution version: **{version}**
 
@@ -52,4 +52,3 @@ def render_compatibility_matrix(root: Path) -> str:
             f"{required} | {write_authority} |",
         )
     return "\n".join(lines) + "\n"
-

@@ -8,8 +8,8 @@ from scripts.registry.models import Registry
 from scripts.yaml_safety import YAML_SAFETY_ERRORS, load_unique_yaml_file
 
 ROOT = Path(__file__).resolve().parents[2]
-RUNTIME_PATH = ROOT / "skills.yaml"
-LEGACY_RUNTIME_PATH = Path(__file__).resolve().parent / "composition_runtime.yaml"
+RUNTIME_PATH = Path(__file__).resolve().parent / "composition_runtime.yaml"
+CANONICAL_RUNTIME_PATH = ROOT / "skills.yaml"
 _ALLOWED_TYPES = {"leaf", "router", "orchestrator", "trigger"}
 _ALLOWED_OWNERSHIP_MODES = {"canonical", "shared", "external"}
 _LOAD_ERRORS = (OSError, ValueError) + YAML_SAFETY_ERRORS
@@ -41,7 +41,7 @@ def _report_id_coverage(
 
 
 def load_composition_runtime(path: Path | None = None) -> dict[str, object]:
-    resolved = path or RUNTIME_PATH
+    resolved = path or CANONICAL_RUNTIME_PATH
     if path is None or path.name == "skills.yaml":
         manifest_root = path.parent if path is not None else ROOT
         manifest = load_canonical_manifest(manifest_root)
@@ -271,4 +271,5 @@ def render_dependency_graph(
                 if producer != consumer:
                     lines.append(f"  {producer} -->|{artifact}| {consumer}")
     return "\n".join(lines) + "\n"
+
 
