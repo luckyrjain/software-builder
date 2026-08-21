@@ -51,10 +51,12 @@ Before the first write in a phase, and again before every later write batch:
    is always attempted subject to this same fail-closed report-only guard.
 
 The guard is shipped identically in every creator package and captures
-`git status --porcelain=v1 --untracked-files=all --ignore-submodules=all -- .`
-before the batch. The final `-- .` is part of the safety boundary: when
-`repo_root` is a nested directory inside a larger Git worktree, status must not
-scan siblings outside the declared root merely to discard their paths later.
+`git status --porcelain=v1 --untracked-files=all --ignore-submodules=all`
+before the batch. When `repo_root` is a nested directory inside a larger Git
+worktree, the raw `status_snapshot` intentionally preserves the full enclosing
+worktree evidence while conflict paths are normalized back to `repo_root`;
+unrelated sibling changes therefore remain visible without blocking the
+creator.
 
 Before any Git command, the guard removes PATH entries that resolve inside
 `repo_root`, resolves a Git executable from the remaining search directories,
@@ -66,29 +68,32 @@ PATH is also inherited by Git in case an internal helper lookup occurs.
 
 Its Git subprocesses remove repository-selection/index overrides, `GIT_EXEC_PATH`,
 and all `GIT_TRACE*` settings, ignore user/system Git config, disable configured
-`core.fsmonitor`, neutralize repository-declared clean/process filter drivers
-before status, ignore external attributes files, and set `GIT_OPTIONAL_LOCKS=0`.
-Status does not recurse into submodules, so a submodule's local Git
-configuration cannot execute during the parent repository check. The pre-write
-check therefore cannot be redirected to another repository, execute an ambient
-fsmonitor or repository clean-filter program, scan an out-of-scope sibling for
-filter execution, resolve Git from the target repository, create an ambient
-trace file, or refresh Git index metadata while it is deciding. Filter-driver
-names are resolved with `git check-attr` over Git-tracked paths inside
-`repo_root` before status; if that attribute read cannot be parsed, the guard
-fails closed. Because the guard deliberately disables executable filters, a
-filtered path that Git can only reconcile by executing its filter may be
+`core.fsmonitor`, neutralize clean/process filter drivers for every tracked path
+in the enclosing Git top-level before status, ignore external attributes files,
+and set `GIT_OPTIONAL_LOCKS=0`. Status does not recurse into submodules, so a
+submodule's local Git configuration cannot execute during the parent repository
+check. The pre-write check therefore cannot be redirected to another repository,
+execute an ambient fsmonitor or repository clean-filter program, resolve Git
+from the target repository, create an ambient trace file, or refresh Git index
+metadata while it is deciding. Filter-driver names are resolved with
+`git check-attr` over Git-tracked paths in the enclosing worktree before status;
+if that attribute read cannot be parsed, the guard fails closed. This top-level
+filter discovery is deliberate: status retains sibling evidence, so every path
+it may inspect must have executable filters neutralized even when that sibling
+lies outside nested `repo_root`. Because the guard disables executable filters,
+a filtered path that Git can only reconcile by executing its filter may be
 reported conservatively as dirty; an overlap still blocks rather than running
 repository code.
 
-Dirty paths outside the planned set but inside `repo_root` are reported and
-left exactly as found. A planned path that is tracked-but-dirty, staged,
-renamed, an existing untracked output, or index-protected with
-`assume-unchanged`/`skip-worktree` is a conflict; the entire primary batch fails
-closed. Existing clean tracked files may be modified only when explicitly in
-the plan. Hard-linked outputs are also rejected because a normal path write
-could mutate another user-visible inode outside the repository. Ignored or
-symlinked existing outputs and Git metadata paths are unsafe as well.
+Dirty paths outside the planned set are reported and left exactly as found.
+Only paths inside `repo_root` participate in write conflicts. A planned path
+that is tracked-but-dirty, staged, renamed, an existing untracked output, or
+index-protected with `assume-unchanged`/`skip-worktree` is a conflict; the entire
+primary batch fails closed. Existing clean tracked files may be modified only
+when explicitly in the plan. Hard-linked outputs are also rejected because a
+normal path write could mutate another user-visible inode outside the
+repository. Ignored or symlinked existing outputs and Git metadata paths are
+unsafe as well.
 
 ## Structured result evidence
 
