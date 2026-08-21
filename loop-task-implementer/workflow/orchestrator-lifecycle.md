@@ -1,5 +1,5 @@
 ---
-workflow_version: 1.2
+workflow_version: 1.3
 phase: orchestrator-lifecycle
 produces:
   change_identity: object
@@ -24,7 +24,7 @@ Rebuild the current shared `change_identity` from a fresh provider/Git snapshot 
 
 Normalize the current authoritative task/issue requirements surface into `task.requirements_ref` (object or explicit `null`). A missing field is not equivalent to no requirements.
 
-Before every reviewer dispatch, adjudication, CI observation, and completion action, re-read the branch head and classify any third-party branch update. `workspace.third_party_change_detected` must be an explicit boolean. An unresolved third-party change invalidates lifecycle readiness and any evidence that predates the new content.
+Before every reviewer dispatch, adjudication, CI observation, and completion action, re-read the branch head and classify any third-party branch update. `workspace.third_party_change_detected` must be an explicit boolean produced by that refresh, and persist the exact head inspected as `workspace.third_party_change_checked_head`. A missing check head, or a check head different from `workspace.current_head_commit`, is stale evidence and blocks readiness even when `third_party_change_detected` still says `false`. An unresolved third-party change invalidates lifecycle readiness and any evidence that predates the new content.
 
 ## After each Reviewer returns
 
@@ -39,11 +39,11 @@ A lifecycle-clean lens requires all of the following:
 - no `unable_to_inspect` entries;
 - zero `findings.defect` entries;
 - fresh evidence for the current `change_identity` and current `requirements_ref`;
-- `isolation_status: ISOLATED`, unless a human explicitly accepted degraded isolation in the current authorized context. Preserve the actual `NOT_ISOLATED` status and record that exception separately as `isolation_exception_authorized: true` plus non-empty `isolation_exception_provenance`; never relabel the review as isolated.
+- `isolation_status: ISOLATED`, unless a human explicitly accepted degraded isolation in the current authorized context. Preserve the actual `NOT_ISOLATED` status and record that exception separately as `isolation_exception_authorized: true` plus non-empty `isolation_exception_provenance`; never relabel the review as isolated. Bind that exception to this exact reviewed identity in `isolation_exception_change_identity`. An exception from another review identity is stale and must not carry forward.
 
 For every security-sensitive `NEEDS_EVIDENCE` item from the legacy Orchestrator rules, populate `merge_readiness.security_sensitive_needs_evidence_unresolved`. It must be integer `0` before readiness. A human residual-risk acceptance resolves the item only when the decision/provenance is recorded in official escalation/adjudication state; do not silently decrement the counter.
 
-If content changes, requirements change, a third-party change is accepted into the task, or conflict resolution occurs after a lens produced evidence, invalidate the affected lens evidence and rerun it. A conflict that happened **before** a rerun does not permanently poison new evidence already bound to the current identity.
+If content changes, requirements change, a third-party change is accepted into the task, or conflict resolution occurs after a lens produced evidence, invalidate the affected lens evidence and rerun it. Clear any isolation exception fields associated with invalidated lens evidence; a new `NOT_ISOLATED` review requires a new exception bound to the new `reviewed_change_identity`. A conflict that happened **before** a rerun does not permanently poison new evidence already bound to the current identity.
 
 ## Base/merge-base transitions
 
@@ -60,23 +60,23 @@ Required CI is authoritative only when `ci.required_checks_green: true` and `ci.
 
 Before setting task status `READY`, before setting `COMPLETE`, and immediately before any authorized merge/completion action:
 
-1. refresh current `change_identity`, current `requirements_ref`, branch-actor/third-party state, reviewer isolation/exception state, unresolved security-sensitive evidence, approvals/threads/integration state, and required CI;
+1. refresh current `change_identity`, current `requirements_ref`, branch-actor/third-party state plus `third_party_change_checked_head`, reviewer isolation/exception state, unresolved security-sensitive evidence, approvals/threads/integration state, and required CI;
 2. populate the existing merge-readiness gates from authoritative repository state;
-3. run `loop-task-implementer/scripts/validate_loop_lifecycle.py` against the official state;
-4. require **zero validation errors**.
+3. serialize the official state as JSON and run `python loop-task-implementer/scripts/validate_loop_lifecycle.py --state <state.json>` (or pass `--state -` and provide the JSON on stdin);
+4. require process exit code `0`. Exit `1` means lifecycle validation errors; exit `2` means the input/runtime could not be validated and therefore fails closed.
 
 The validator must prove, independent of the current `ready` flag:
 
 - acceptance criteria complete;
 - Lens A and Lens B lifecycle-clean for the same current identity;
-- reviewer isolation gate satisfied or explicit human exception recorded with provenance;
+- reviewer isolation gate satisfied or explicit human exception recorded with provenance and bound to the same reviewed identity;
 - zero unresolved security-sensitive `NEEDS_EVIDENCE` items;
 - no accepted blocking finding open;
 - required approvals satisfied;
 - zero blocking review threads;
 - valid integration state;
 - circuit breaker explicitly inactive;
-- `third_party_change_detected: false`;
+- `third_party_change_detected: false` from a refresh bound to the exact current head;
 - required checks green for the exact current head;
 - current identity/requirements freshness, including conflict provenance when SHAs transitioned.
 
