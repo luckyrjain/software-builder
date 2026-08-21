@@ -53,15 +53,15 @@ Before the first write in a phase, and again before every later write batch:
 The guard is shipped identically in every creator package and captures
 `git status --porcelain=v1 --untracked-files=all` before the batch. Git commands
 run with inherited repository-selection/index overrides removed so process
-environment cannot redirect the check to another repository. Dirty paths
-outside the planned set are reported and left exactly as found. A planned path
-that is tracked-but-dirty, staged, renamed, an existing untracked output, or
-index-protected with `assume-unchanged`/`skip-worktree` is a conflict; the
-entire primary batch fails closed. Existing clean tracked files may be modified
-only when explicitly in the plan. Hard-linked outputs are also rejected
-because a normal path write could mutate another user-visible inode outside the
-repository. Ignored or symlinked existing outputs and Git metadata paths are
-unsafe as well.
+environment cannot redirect the check to another repository.
+Dirty paths outside the planned set are reported and left exactly as found.
+A planned path that is tracked-but-dirty, staged, renamed, an existing untracked
+output, or index-protected with `assume-unchanged`/`skip-worktree` is a conflict;
+the entire primary batch fails closed. Existing clean tracked files may be
+modified only when explicitly in the plan. Hard-linked outputs are also
+rejected because a normal path write could mutate another user-visible inode
+outside the repository. Ignored or symlinked existing outputs and Git metadata
+paths are unsafe as well.
 
 ## Report evidence
 
