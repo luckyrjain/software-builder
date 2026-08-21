@@ -20,7 +20,9 @@ push, or open a pull request. A path outside `repo_root`, a Git metadata path,
 a path crossing into a nested Git repository, bare repository, or gitlink, an
 unreadable Git state, an index-protected target whose worktree drift Git may
 hide (`assume-unchanged` or `skip-worktree`), a symlinked target, or an empty
-write plan is unsafe and fails closed.
+write plan is unsafe and fails closed. On Windows, any planned path component
+containing `:` is also unsafe because NTFS can interpret it as alternate data
+stream syntax rather than as an independent file path.
 
 ## Pre-write protocol
 
@@ -84,17 +86,18 @@ Git configuration cannot execute during the parent repository check.
 Separately, every planned path is checked for nested filesystem `.git` markers,
 Git's bare-repository metadata shape (`HEAD`, `objects/`, and `refs/`), and
 parent-index gitlinks (`160000` mode), so the write plan cannot cross into an
-initialized, deinitialized, bare, or otherwise nested child repository.
-Gitlinks are enumerated rather than queried only through literal planned
-pathspecs, and boundary comparison follows the repository's parsed
-`core.ignorecase` setting. This keeps deinitialized-submodule protection intact
-on case-insensitive repositories even when caller path casing differs from the
-index spelling. If the case setting cannot be read or parsed, the guard fails
-closed. Selecting an initialized child repository that has its own readable Git
-worktree as `repo_root` remains valid. A deinitialized gitlink directory has no
-independent Git worktree; if Git would resolve that directory back to the
-parent repository, the guard blocks that `repo_root` rather than treating it as
-a normal nested scope.
+initialized, deinitialized, bare, or otherwise nested child repository. On
+Windows the same path pass rejects NTFS alternate-data-stream syntax before any
+filesystem or Git-state decision is trusted. Gitlinks are enumerated rather than
+queried only through literal planned pathspecs, and boundary comparison follows
+the repository's parsed `core.ignorecase` setting. This keeps deinitialized-
+submodule protection intact on case-insensitive repositories even when caller
+path casing differs from the index spelling. If the case setting cannot be read
+or parsed, the guard fails closed. Selecting an initialized child repository
+that has its own readable Git worktree as `repo_root` remains valid. A
+deinitialized gitlink directory has no independent Git worktree; if Git would
+resolve that directory back to the parent repository, the guard blocks that
+`repo_root` rather than treating it as a normal nested scope.
 
 The pre-write check therefore cannot be redirected to another repository,
 execute an ambient fsmonitor or repository clean-filter program, resolve Git
@@ -119,7 +122,8 @@ primary batch fails closed. Existing clean tracked files may be modified only
 when explicitly in the plan. Hard-linked outputs are also rejected because a
 normal path write could mutate another user-visible inode outside the
 repository. Ignored or symlinked existing outputs, nested or bare Git repository
-boundaries, and Git metadata paths are unsafe as well.
+boundaries, Git metadata paths, and Windows alternate-data-stream paths are
+unsafe as well.
 
 ## Structured result evidence
 
