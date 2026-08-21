@@ -112,6 +112,21 @@ def _path_is_within(path: Path, root: Path) -> bool:
         return False
 
 
+def _path_is_inside_git_worktree(path: Path) -> bool:
+    """Return whether ``path`` is controlled by any filesystem Git worktree."""
+
+    for candidate in (path, *path.parents):
+        marker = candidate / ".git"
+        try:
+            if marker.exists() or marker.is_symlink():
+                return True
+        except (OSError, RuntimeError):
+            # A PATH candidate whose ownership cannot be established safely is
+            # not eligible to provide the trusted Git executable.
+            return True
+    return False
+
+
 def _filesystem_git_boundary(repo_root: Path) -> Path:
     """Best-effort outermost enclosing worktree root without executing repository code."""
 
@@ -139,10 +154,11 @@ def _git_environment(execution_boundary: Path, filter_drivers: Iterable[str] = (
         ):
             environment.pop(key, None)
 
-    # Remove PATH entries that resolve inside the enclosing worktree. Git itself
-    # is later pinned to an absolute executable found in the remaining search
-    # path, and this sanitized PATH also protects against an accidental helper
-    # subprocess resolving back into repository-controlled binaries.
+    # Remove PATH entries that resolve inside the selected/enclosing worktree or
+    # any other Git worktree. Git itself is later pinned to an absolute
+    # executable found in the remaining search path, and this sanitized PATH
+    # also protects an internal helper lookup from disjoint linked-worktree or
+    # original-checkout shims.
     raw_path = environment.get("PATH", os.defpath)
     safe_path_entries: list[str] = []
     cwd = Path.cwd()
@@ -154,7 +170,10 @@ def _git_environment(execution_boundary: Path, filter_drivers: Iterable[str] = (
             resolved_entry = candidate.resolve(strict=False)
         except (OSError, RuntimeError):
             continue
-        if _path_is_within(resolved_entry, execution_boundary):
+        if (
+            _path_is_within(resolved_entry, execution_boundary)
+            or _path_is_inside_git_worktree(resolved_entry)
+        ):
             continue
         safe_path_entries.append(str(resolved_entry))
     if safe_path_entries:
@@ -195,7 +214,7 @@ def _resolve_git_executable(
     execution_boundary: Path,
     git_env: dict[str, str],
 ) -> tuple[str | None, str | None]:
-    """Resolve an executable Git binary from search directories outside the worktree."""
+    """Resolve a Git binary that is not controlled by any Git worktree."""
 
     raw_path = git_env.get("PATH", os.defpath)
     cwd = Path.cwd()
@@ -207,7 +226,10 @@ def _resolve_git_executable(
             directory = directory.resolve(strict=False)
         except (OSError, RuntimeError):
             continue
-        if _path_is_within(directory, execution_boundary):
+        if (
+            _path_is_within(directory, execution_boundary)
+            or _path_is_inside_git_worktree(directory)
+        ):
             continue
         executable = shutil.which(str(directory / "git"))
         if executable is None:
@@ -216,10 +238,13 @@ def _resolve_git_executable(
             resolved = Path(executable).resolve(strict=True)
         except (OSError, RuntimeError):
             continue
-        if _path_is_within(resolved, execution_boundary):
+        if (
+            _path_is_within(resolved, execution_boundary)
+            or _path_is_inside_git_worktree(resolved)
+        ):
             continue
         return str(resolved), None
-    return None, "trusted git executable not found outside enclosing worktree"
+    return None, "trusted git executable not found outside Git worktrees"
 
 
 def _normalise_repo_root(repo_root: Path) -> tuple[Path | None, str | None]:
