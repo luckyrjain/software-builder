@@ -101,6 +101,8 @@ def _isolation_errors(name: str, lens: dict[str, object]) -> list[str]:
         errors: list[str] = []
         if exception:
             errors.append(f"{name} isolation exception must not be authorized when isolation_status=ISOLATED")
+        if provenance is not None:
+            errors.append(f"{name} isolated review must not retain isolation_exception_provenance")
         if exception_identity is not None:
             errors.append(f"{name} isolated review must not retain isolation_exception_change_identity")
         return errors
