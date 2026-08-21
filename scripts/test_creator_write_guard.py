@@ -267,6 +267,8 @@ _WINDOWS_RESERVED_DEVICE_BASENAMES = {
     "prn",
     "aux",
     "nul",
+    "conin$",
+    "conout$",
     *(f"com{digit}" for digit in "123456789"),
     *(f"lpt{digit}" for digit in "123456789"),
     "com¹",
