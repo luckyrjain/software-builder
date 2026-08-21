@@ -12,6 +12,7 @@ import argparse
 import importlib.util
 import json
 import os
+import shutil
 import subprocess
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -47,6 +48,7 @@ _GIT_REPOSITORY_OVERRIDE_ENV = {
     "GIT_CONFIG_SYSTEM",
     "GIT_DIR",
     "GIT_DISCOVERY_ACROSS_FILESYSTEM",
+    "GIT_EXEC_PATH",
     "GIT_GRAFT_FILE",
     "GIT_INDEX_FILE",
     "GIT_INTERNAL_SUPER_PREFIX",
@@ -99,8 +101,16 @@ def _blocked(
     )
 
 
-def _git_environment(filter_drivers: Iterable[str] = ()) -> dict[str, str]:
-    """Return a read-only Git environment isolated from ambient executable config."""
+def _path_is_within(path: Path, root: Path) -> bool:
+    try:
+        path.relative_to(root)
+        return True
+    except ValueError:
+        return False
+
+
+def _git_environment(repo_root: Path, filter_drivers: Iterable[str] = ()) -> dict[str, str]:
+    """Return a read-only Git environment isolated from repo-controlled execution."""
 
     environment = dict(os.environ)
     for key in list(environment):
@@ -111,6 +121,29 @@ def _git_environment(filter_drivers: Iterable[str] = ()) -> dict[str, str]:
             or key.startswith("GIT_TRACE")
         ):
             environment.pop(key, None)
+
+    # Remove PATH entries that resolve inside the target repository. Git itself
+    # is later pinned to an absolute executable found in the remaining search
+    # path, and this sanitized PATH also protects against an accidental helper
+    # subprocess resolving back into repository-controlled binaries.
+    raw_path = environment.get("PATH", os.defpath)
+    safe_path_entries: list[str] = []
+    cwd = Path.cwd()
+    for entry in raw_path.split(os.pathsep):
+        candidate = Path(entry) if entry else cwd
+        if not candidate.is_absolute():
+            candidate = cwd / candidate
+        try:
+            resolved_entry = candidate.resolve(strict=False)
+        except (OSError, RuntimeError):
+            continue
+        if _path_is_within(resolved_entry, repo_root):
+            continue
+        safe_path_entries.append(str(resolved_entry))
+    if safe_path_entries:
+        environment["PATH"] = os.pathsep.join(safe_path_entries)
+    else:
+        environment.pop("PATH", None)
 
     # Ignore ambient user/system Git configuration so HOME/XDG or explicit
     # config-file overrides cannot inject executable behavior into this safety
@@ -138,6 +171,34 @@ def _git_environment(filter_drivers: Iterable[str] = ()) -> dict[str, str]:
         environment[f"GIT_CONFIG_KEY_{index}"] = key
         environment[f"GIT_CONFIG_VALUE_{index}"] = value
     return environment
+
+
+def _resolve_git_executable(repo_root: Path, git_env: dict[str, str]) -> tuple[str | None, str | None]:
+    """Resolve an executable Git binary from search directories outside repo_root."""
+
+    raw_path = git_env.get("PATH", os.defpath)
+    cwd = Path.cwd()
+    for entry in raw_path.split(os.pathsep):
+        directory = Path(entry) if entry else cwd
+        if not directory.is_absolute():
+            directory = cwd / directory
+        try:
+            directory = directory.resolve(strict=False)
+        except (OSError, RuntimeError):
+            continue
+        if _path_is_within(directory, repo_root):
+            continue
+        executable = shutil.which(str(directory / "git"))
+        if executable is None:
+            continue
+        try:
+            resolved = Path(executable).resolve(strict=True)
+        except (OSError, RuntimeError):
+            continue
+        if _path_is_within(resolved, repo_root):
+            continue
+        return str(resolved), None
+    return None, "trusted git executable not found outside repo_root"
 
 
 def _normalise_repo_root(repo_root: Path) -> tuple[Path | None, str | None]:
@@ -193,10 +254,11 @@ def _normalise_planned_paths(
 def _git_top_level(
     repo_root: Path,
     git_env: dict[str, str],
+    git_executable: str,
 ) -> tuple[Path | None, str | None]:
     try:
         completed = subprocess.run(
-            ["git", "-C", str(repo_root), "rev-parse", "--show-toplevel"],
+            [git_executable, "-C", str(repo_root), "rev-parse", "--show-toplevel"],
             capture_output=True,
             check=False,
             env=git_env,
@@ -217,12 +279,17 @@ def _git_top_level(
 def _repository_filter_drivers(
     repo_root: Path,
     git_env: dict[str, str],
+    git_executable: str,
 ) -> tuple[set[str], str | None]:
     """Resolve filter attributes without running the configured filter commands."""
 
     if tracked_relative_paths is None:
         return set(), _TRACKED_PATHS_IMPORT_ERROR or "shared Git path helper unavailable"
-    tracked, tracked_error = tracked_relative_paths(repo_root, env=git_env)
+    tracked, tracked_error = tracked_relative_paths(
+        repo_root,
+        env=git_env,
+        git_executable=git_executable,
+    )
     if tracked_error:
         return set(), tracked_error
     if not tracked:
@@ -231,7 +298,7 @@ def _repository_filter_drivers(
     path_input = b"".join(os.fsencode(path) + b"\0" for path in sorted(tracked))
     try:
         completed = subprocess.run(
-            ["git", "-C", str(repo_root), "check-attr", "-z", "--stdin", "filter"],
+            [git_executable, "-C", str(repo_root), "check-attr", "-z", "--stdin", "filter"],
             input=path_input,
             capture_output=True,
             check=False,
@@ -274,14 +341,15 @@ def _status_path_relative_to_repo(
 def _git_status(
     repo_root: Path,
     git_env: dict[str, str],
+    git_executable: str,
 ) -> tuple[tuple[str, ...], tuple[str, ...], str | None]:
-    git_top_level, top_level_error = _git_top_level(repo_root, git_env)
+    git_top_level, top_level_error = _git_top_level(repo_root, git_env, git_executable)
     if top_level_error or git_top_level is None:
         return (), (), f"git status failed: {top_level_error or 'git top-level cannot be resolved'}"
     try:
         completed = subprocess.run(
             [
-                "git",
+                git_executable,
                 "-C",
                 str(repo_root),
                 "status",
@@ -332,13 +400,24 @@ def _tracked_paths(
     repo_root: Path,
     planned_paths: Iterable[str],
     git_env: dict[str, str],
+    git_executable: str,
 ) -> tuple[set[str], set[str], str | None]:
     if tracked_relative_paths is None or protected_index_relative_paths is None:
         return set(), set(), _TRACKED_PATHS_IMPORT_ERROR or "shared Git path helper unavailable"
-    tracked, tracked_error = tracked_relative_paths(repo_root, planned_paths, env=git_env)
+    tracked, tracked_error = tracked_relative_paths(
+        repo_root,
+        planned_paths,
+        env=git_env,
+        git_executable=git_executable,
+    )
     if tracked_error:
         return set(), set(), tracked_error
-    protected, protected_error = protected_index_relative_paths(repo_root, planned_paths, env=git_env)
+    protected, protected_error = protected_index_relative_paths(
+        repo_root,
+        planned_paths,
+        env=git_env,
+        git_executable=git_executable,
+    )
     if protected_error:
         return set(), set(), protected_error
     return tracked, protected, None
@@ -361,17 +440,30 @@ def check_write_safety(repo_root: Path, planned_paths: Iterable[str | Path]) -> 
     if path_error:
         return _blocked(reason=path_error)
 
-    base_git_env = _git_environment()
-    filter_drivers, filter_error = _repository_filter_drivers(resolved_root, base_git_env)
+    base_git_env = _git_environment(resolved_root)
+    git_executable, git_executable_error = _resolve_git_executable(resolved_root, base_git_env)
+    if git_executable_error or git_executable is None:
+        return _blocked(planned_paths=normalised, reason=git_executable_error or "trusted git unavailable")
+
+    filter_drivers, filter_error = _repository_filter_drivers(
+        resolved_root,
+        base_git_env,
+        git_executable,
+    )
     if filter_error:
         return _blocked(planned_paths=normalised, reason=filter_error)
-    git_env = _git_environment(filter_drivers)
+    git_env = _git_environment(resolved_root, filter_drivers)
 
-    dirty_paths, status_snapshot, status_error = _git_status(resolved_root, git_env)
+    dirty_paths, status_snapshot, status_error = _git_status(resolved_root, git_env, git_executable)
     if status_error:
         return _blocked(planned_paths=normalised, status_snapshot=status_snapshot, reason=status_error)
 
-    tracked_paths, protected_paths, tracked_error = _tracked_paths(resolved_root, normalised, git_env)
+    tracked_paths, protected_paths, tracked_error = _tracked_paths(
+        resolved_root,
+        normalised,
+        git_env,
+        git_executable,
+    )
     if tracked_error:
         return _blocked(
             planned_paths=normalised,
