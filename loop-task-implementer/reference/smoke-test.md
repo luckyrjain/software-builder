@@ -14,71 +14,32 @@ Example: `Use loop-task-implementer to implement issue 42, review it deeply, fix
 
 ## A correct minimal run contains
 
-1. **Policy discovery** — Orchestrator states default/protected branch, required checks, required
-   approvals, and whether autonomous merge is authorized (default `false` unless explicitly granted).
-2. **Fresh Builder dispatch** — a new/updated branch and pull request exist; Builder report includes
-   `head_commit` and `changed_files`.
-3. **Current change identity** — after independently verifying the Builder result, the Orchestrator
-   rebuilds and validates the shared `change_identity` from the current base/head/merge-base, normalized
-   effective patch, generated paths, dependency changes, and config changes. A legacy
-   `diff_fingerprint` alone is not enough.
-4. **Current requirements + branch-change state** — `task.requirements_ref` is an object or explicit
-   `null`; `workspace.third_party_change_detected` is an explicit boolean from a fresh check and
-   `workspace.third_party_change_checked_head` equals the exact current head.
-5. **Two isolated Reviewer lenses** — Lens A (Safety and State) and Lens B (Contracts and Operations)
-   each run in a fresh context and return a `lens_verdict` of `CLEAN` or `FINDINGS`. Increment that lens's
-   positive integer `review_generation` exactly once for every returned reviewer result, even when the code
-   identity is unchanged, and record the actual isolation status rather than assuming it.
-6. **Adjudication before portable evidence** — each proposed finding is marked `ACCEPTED` / `REJECTED`
-   / `NEEDS_EVIDENCE` / `CONTESTED` with rationale, then each lens is normalized into shared
-   `review_evidence` bound to its exact `reviewed_change_identity`. Lifecycle `CLEAN` requires a positive
-   integer `review_generation`, complete inspection, no unavailable surfaces, and zero portable defects.
-7. **Freshness reruns** — any content, requirements, conflict-resolution, or accepted third-party
-   branch change invalidates affected evidence; rerun every invalidated lens until both are clean for
-   the same current identity. Any reviewer rerun increments that lens's `review_generation`, even on the
-   same unchanged identity. A degraded-isolation exception, when used, is explicit, has non-empty
-   provenance, and is bound to both the exact `reviewed_change_identity` and that lens's current
-   `review_generation`; old exception fields are cleared before a rerun.
-8. **Authoritative current-head CI** — required CI is green and `ci.commit` equals
-   `workspace.current_head_commit`; an older green pipeline does not count.
-9. **Executable lifecycle gate** — resolve the actual skill root (source or installed), select a Python 3
-   interpreter (`python3` on the supported Unix/macOS setup or the host's configured equivalent), serialize
-   the official state as JSON, and run
-   `python3 "<skill_root>/scripts/validate_loop_lifecycle.py" --state "<state.json>"` on Unix/macOS.
-   Only exit code `0` establishes verified readiness; exit `1` is lifecycle errors and exit `2` is
-   fail-closed input/runtime inability. Missing interpreter/validator also blocks. Running from an installed
-   skill while the current working directory is the target repo must still reach the packaged validator.
-10. **Completion response** — final report follows [report-template.md](../report-template.md): current
-    identity/freshness, both lens generation/evidence/isolation states, third-party check, authoritative
-    current-head checks, lifecycle gate result, merge authority, completion state, and any exact human
-    action required.
-11. **No unauthorized merge** — when `autonomous_merge_authorized` or merge action authority is false,
-    the run stops at verified readiness rather than merging.
+1. **Policy discovery** — Orchestrator states default/protected branch, required checks, required approvals, and whether autonomous merge is authorized (default `false` unless explicitly granted).
+2. **Fresh Builder dispatch** — a new/updated branch and pull request exist; Builder report includes `head_commit` and `changed_files`.
+3. **Current change identity** — Orchestrator independently rebuilds/validates the shared `change_identity`; a legacy fingerprint alone is insufficient.
+4. **Current requirements + branch state** — `task.requirements_ref` is object or explicit `null`; third-party state is an explicit boolean checked at the exact current head.
+5. **Two Reviewer generations** — each returned lens result increments that lens's positive integer `review_generation` exactly once and clears prior isolation-exception fields. Do **not** advance `review_evidence_generation` yet; any prior evidence is intentionally stale while adjudication is incomplete.
+6. **Adjudication before portable evidence** — adjudicate the returned result, normalize/validate its portable `review_evidence`, then persist `review_evidence_generation = review_generation` only with that newly validated evidence. Lifecycle `CLEAN` requires equality, complete inspection, no unavailable surfaces, and zero portable defects.
+7. **Freshness reruns** — content/requirements/conflict/accepted-third-party changes invalidate affected evidence. Same-head reviewer reruns also increment `review_generation`; until their new evidence is validated, old `review_evidence_generation` must remain stale. A degraded-isolation exception is bound to the exact current identity and generation.
+8. **Crash/resume fail-closed check** — simulate stopping after `review_generation` increments but before new evidence persists. The old CLEAN evidence must not satisfy readiness because `review_evidence_generation != review_generation`.
+9. **Authoritative current-head CI** — required CI is green and `ci.commit` equals `workspace.current_head_commit`.
+10. **Executable lifecycle gate** — resolve actual skill root, use Python 3 (`python3` on Unix/macOS), and run `python3 "<skill_root>/scripts/validate_loop_lifecycle.py" --state "<state.json>"`. Only exit `0` establishes readiness; missing interpreter/validator or runtime/input inability blocks.
+11. **Completion response** — report current identity, both lens review/evidence-generation states, isolation state, third-party check, current-head CI, lifecycle result, merge authority, and exact human action.
+12. **No unauthorized merge** — without explicit merge authority, stop at verified readiness.
 
 ## Degraded path
 
-When the host agent has no subagent/worktree/fresh-session primitive, role simulation falls back to
-sequential context resets (`SKILL.md` § Platform behavior). Preserve the actual resulting
-`isolation_status`; if a lens is `NOT_ISOLATED`, readiness remains blocked unless an authorized human
-exception with non-empty provenance is recorded and bound to the exact `reviewed_change_identity` and
-that lens's current positive integer `review_generation`.
+When the host has no true isolation primitive, sequential context resets are a fallback. Preserve actual `isolation_status`; a `NOT_ISOLATED` lens needs explicit human acceptance with provenance bound to exact `reviewed_change_identity` and current `review_generation`.
 
 ## Deep edge cases
 
-See [pressure-tests.md](pressure-tests.md) for same-head reviewer reruns, stale-head CI, stale third-party
-checks, exception reuse, validator fail-closed behavior, conflict transitions, and report-rendering attacks
-in addition to the legacy reviewer/remediation cases.
+See [pressure-tests.md](pressure-tests.md) for same-head reruns, crash/resume between reviewer return and evidence persistence, stale-head CI, stale third-party checks, exception reuse, validator fail-closed behavior, conflict transitions, and rendering attacks.
 
 ## Pass criteria
 
-- `change_identity`, requirements, both lens evidence envelopes/generations, branch-change evidence, and
-  CI all describe the same current change/head.
-- Every CLEAN lens has a positive integer `review_generation`; any degraded-isolation exception matches
-  both that lens's exact `reviewed_change_identity` and current `review_generation`.
-- The lifecycle validator was actually executed from the resolved skill root with a Python 3 interpreter
-  and returned exit `0` for the official state immediately before verified readiness/completion.
-- No merge occurred without explicit authorization.
-- Reviewer sessions performed zero commits/pushes/PR edits.
-- Every accepted finding has a `FIXED` / `REBUTTED` / `BLOCKED` response with evidence.
-- No stale review, isolation exception, third-party check, requirements surface, or old-head CI was
-  reused to claim readiness.
+- `change_identity`, requirements, both lens evidence envelopes, branch-change evidence, and CI describe the same current change/head.
+- Every CLEAN lens has positive integer `review_generation` and `review_evidence_generation == review_generation`.
+- A reviewer generation advanced without current-generation evidence remains lifecycle-blocked.
+- Any degraded-isolation exception matches the exact `reviewed_change_identity` and current `review_generation`.
+- The lifecycle validator was actually executed from resolved skill root with Python 3 and returned exit `0` immediately before readiness/completion.
+- No merge occurred without explicit authorization; reviewers performed no repository writes; accepted findings have evidence-backed resolution.
