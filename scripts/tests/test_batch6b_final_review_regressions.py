@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -247,6 +248,33 @@ def test_nested_repo_root_does_not_scan_sibling_filter(tmp_path: Path) -> None:
 
     assert result.status == "ALLOWED"
     assert not marker.exists(), "nested guard scanned sibling outside repo_root"
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX executable shim regression")
+def test_guard_does_not_execute_repo_local_git_from_path(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo = _committed_repo(tmp_path)
+    real_git = shutil.which("git")
+    assert real_git is not None
+    marker = tmp_path / "repo-git-executed"
+    bin_dir = repo / "bin"
+    bin_dir.mkdir()
+    shim = bin_dir / "git"
+    shim.write_text(
+        "#!/bin/sh\n"
+        f"printf executed > {str(marker)!r}\n"
+        f"exec {real_git!r} \"$@\"\n",
+        encoding="utf-8",
+    )
+    shim.chmod(0o755)
+    monkeypatch.setenv("PATH", str(bin_dir) + os.pathsep + os.environ.get("PATH", ""))
+
+    result = check_write_safety(repo, ["generated_test.py"])
+
+    assert result.status == "ALLOWED"
+    assert not marker.exists(), "guard executed repo-local git from PATH"
 
 
 def test_guard_evidence_stays_structured_not_verbatim_markdown() -> None:
