@@ -1,5 +1,5 @@
 ---
-workflow_version: 1.2
+workflow_version: 1.3
 phase: reviewer-evidence
 produces:
   review_evidence: object
@@ -40,4 +40,4 @@ Portable finding entries contain exactly `{id, category, summary, evidence}`. Ke
 
 Validate the envelope with the packaged shared `docs/skill-framework/shared/review_contract_runtime.py`. A lens may be persisted as lifecycle `CLEAN` only when the envelope is valid and fresh, `inspection_status` is `complete`, `unable_to_inspect` is empty, and `findings.defect` is empty. Thus an accepted blocker requires remediation/rereview, while a correctly rejected false positive does not force a redundant reviewer rerun merely to remove a rejected proposal from portable evidence.
 
-Persist the actual review-isolation result separately in official lens state. `NOT_ISOLATED` remains `NOT_ISOLATED`; if an authorized human accepts degraded isolation, record the exception and provenance separately rather than rewriting the reviewer state. Security-sensitive `NEEDS_EVIDENCE` findings likewise remain visible in adjudication state until resolved or explicitly accepted by an authorized human under the Orchestrator policy.
+Persist the actual review-isolation result separately in official lens state. `NOT_ISOLATED` remains `NOT_ISOLATED`; if an authorized human accepts degraded isolation, record the exception and provenance separately rather than rewriting the reviewer state, and bind that authorization to this exact `reviewed_change_identity` in `isolation_exception_change_identity`. Clear prior isolation-exception fields whenever the lens evidence is invalidated or a new review identity is produced, so acceptance for an older review cannot silently carry forward. Security-sensitive `NEEDS_EVIDENCE` findings likewise remain visible in adjudication state until resolved or explicitly accepted by an authorized human under the Orchestrator policy.
