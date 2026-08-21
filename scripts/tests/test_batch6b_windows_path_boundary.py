@@ -15,6 +15,19 @@ def test_windows_trailing_space_or_period_component_is_unsafe() -> None:
     assert not guard._windows_path_component_is_unsafe(".tracked.py")
 
 
+def test_windows_reserved_character_component_is_unsafe() -> None:
+    for component in (
+        'bad"name.py',
+        "bad*name.py",
+        "bad<name.py",
+        "bad>name.py",
+        "bad?name.py",
+        "bad|name.py",
+        "bad\x01name.py",
+    ):
+        assert guard._windows_path_component_is_unsafe(component), component
+
+
 def test_windows_reserved_device_component_is_unsafe() -> None:
     for component in (
         "CON",
