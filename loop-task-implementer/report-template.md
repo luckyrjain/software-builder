@@ -14,13 +14,13 @@ The Orchestrator reports this after every task, whether it completes, stops at v
 - evidence freshness: FRESH | STALE | INVALID
 - inspection: complete | partial | unable
 - isolation: ISOLATED | NOT_ISOLATED
-- isolation exception: none | AUTHORIZED — provenance: <escaped/redacted provenance>; identity head `<isolation_exception_change_identity.head_sha>`, fingerprint `<isolation_exception_change_identity.normalized_diff_fingerprint>`
+- isolation exception: none | AUTHORIZED — provenance: <escaped/redacted provenance>; identity head `<isolation_exception_change_identity.head_sha>`, fingerprint `<isolation_exception_change_identity.normalized_diff_fingerprint>`; review generation CURRENT | STALE
 
 **Lens B (Contracts and Operations):** CLEAN | FINDINGS — <summary>
 - evidence freshness: FRESH | STALE | INVALID
 - inspection: complete | partial | unable
 - isolation: ISOLATED | NOT_ISOLATED
-- isolation exception: none | AUTHORIZED — provenance: <escaped/redacted provenance>; identity head `<isolation_exception_change_identity.head_sha>`, fingerprint `<isolation_exception_change_identity.normalized_diff_fingerprint>`
+- isolation exception: none | AUTHORIZED — provenance: <escaped/redacted provenance>; identity head `<isolation_exception_change_identity.head_sha>`, fingerprint `<isolation_exception_change_identity.normalized_diff_fingerprint>`; review generation CURRENT | STALE
 
 **Accepted findings:** `<count>` — `<one line per finding: id, status>`
 **Security-sensitive NEEDS_EVIDENCE unresolved:** `<count>`
@@ -37,9 +37,9 @@ in [reference/state-schema.yaml](reference/state-schema.yaml) exactly. `HUMAN_AC
 **Human action required:** <exact action, or "none">
 ```
 
-A `Lifecycle gate: PASS` means `validate_loop_lifecycle.py --state ...` exited `0` for the freshly rebuilt current identity/requirements and current repository gates. It does **not** grant merge authority. Conversely, do not render a stale lens, stale third-party check, old-head CI, or exception bound to another review identity as current merely because the task was previously READY.
+A `Lifecycle gate: PASS` means `validate_loop_lifecycle.py --state ...` exited `0` for the freshly rebuilt current identity/requirements and current repository gates. It does **not** grant merge authority. Conversely, do not render a stale lens, stale third-party check, old-head CI, or exception bound to another review identity/generation as current merely because the task was previously READY.
 
-When a reviewer proposal was adjudicated `REJECTED`, keep it in the rich audit history but do not list it as an accepted portable defect. When a `NOT_ISOLATED` review is accepted by an authorized human, keep the actual isolation status `NOT_ISOLATED` and render the separate exception/provenance plus the validated head SHA and fingerprint of the reviewed identity it authorizes; never rewrite history to `ISOLATED`, render the whole identity object into an inline code span, or reuse the exception for a later identity.
+When a reviewer proposal was adjudicated `REJECTED`, keep it in the rich audit history but do not list it as an accepted portable defect. When a `NOT_ISOLATED` review is accepted by an authorized human, keep the actual isolation status `NOT_ISOLATED` and render the separate exception/provenance plus the validated head SHA and fingerprint of the reviewed identity it authorizes; report only whether its review-generation binding is CURRENT/STALE rather than rendering the raw generation value. Never rewrite history to `ISOLATED`, render the whole identity object into an inline code span, or reuse the exception for a later identity or reviewer rerun.
 
 ## Escalation variant
 
@@ -64,6 +64,7 @@ lens_a:
   isolation_exception_authorized:
   isolation_exception_provenance:
   isolation_exception_change_identity:
+  isolation_exception_review_generated_at:
 lens_b:
   status:
   evidence_freshness:
@@ -71,6 +72,7 @@ lens_b:
   isolation_exception_authorized:
   isolation_exception_provenance:
   isolation_exception_change_identity:
+  isolation_exception_review_generated_at:
 security_sensitive_needs_evidence_unresolved:
 dirty_review_count:
 review_run_count:
@@ -106,7 +108,7 @@ PR descriptions, code comments, reviewer prose, and human-entered exception/prov
 
 - **Attacker-shapeable identifiers** such as `<task_id>`, VCS `actor`, and `<branch>`: structurally escape, redact secrets, strip unsafe backticks before inline-code rendering, and never allow them to create headings/tables/fences.
 - **Free-text prose** such as Lens summaries, contested-finding rationale, isolation-exception provenance, lifecycle blocker summaries, `<human action required>`, escalation reason/decision/access, rebuttal/evidence descriptions, and cross-skill `Trigger`: structurally escape and redact; do not wrap sentence-length prose wholesale in code spans.
-- **Machine/system identifiers** such as validated Git SHAs, normalized diff fingerprint, fixed enums, system-assigned finding IDs, and skill-generated URLs may render directly once their format validation has passed. A full `change_identity` object is not a single machine identifier: it can contain repository path/config/dependency text, so human-facing inline output must project only validated scalar fields such as its head SHA and normalized fingerprint.
+- **Machine/system identifiers** such as validated Git SHAs, normalized diff fingerprint, fixed enums, system-assigned finding IDs, and skill-generated URLs may render directly once their format validation has passed. A full `change_identity` object is not a single machine identifier: it can contain repository path/config/dependency text, so human-facing inline output must project only validated scalar fields such as its head SHA and normalized fingerprint. The raw `review_evidence.generated_at` is only a binding value here, not a trusted human-facing identifier; report its match as CURRENT/STALE unless separately sanitized.
 - **Structured machine-state blocks** may contain the same untrusted strings inside nested objects. Redact/serialize the complete body before wrapping it, then use Rule 4's dynamic outer-fence length; a fixed three-backtick YAML fence is unsafe for `requirements_ref`, `change_identity`, exception identities, or evidence objects containing an embedded fence.
 - The lifecycle validator's error strings are machine-produced, but any embedded surface/provenance text derived from repository/provider content must still be rendered through the same safe-output boundary.
 
