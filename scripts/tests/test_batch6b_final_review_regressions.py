@@ -136,6 +136,35 @@ def test_guard_does_not_refresh_git_index_metadata(tmp_path: Path) -> None:
     assert index.read_bytes() == before, "read-only guard refreshed .git/index metadata"
 
 
+def test_guard_does_not_execute_repository_clean_filter(tmp_path: Path) -> None:
+    repo = _committed_repo(tmp_path)
+    attributes = repo / ".gitattributes"
+    attributes.write_text("README.md filter=review-evil\n", encoding="utf-8")
+    subprocess.run(["git", "add", ".gitattributes"], cwd=repo, check=True)
+    subprocess.run(["git", "-c", "commit.gpgsign=false", "commit", "-qm", "attributes"], cwd=repo, check=True)
+
+    marker = tmp_path / "clean-filter-executed"
+    hook = tmp_path / "clean-filter.py"
+    hook.write_text(
+        "#!/usr/bin/env python3\n"
+        "import sys\n"
+        "from pathlib import Path\n"
+        f"Path({str(marker)!r}).write_text('executed\\n', encoding='utf-8')\n"
+        "sys.stdout.buffer.write(sys.stdin.buffer.read())\n",
+        encoding="utf-8",
+    )
+    hook.chmod(0o755)
+    subprocess.run(["git", "config", "filter.review-evil.clean", str(hook)], cwd=repo, check=True)
+
+    tracked = repo / "README.md"
+    stat = tracked.stat()
+    os.utime(tracked, ns=(stat.st_atime_ns, stat.st_mtime_ns + 2_000_000_000))
+    result = check_write_safety(repo, ["generated_test.py"])
+
+    assert result.status == "ALLOWED"
+    assert not marker.exists(), "guard Git commands executed repository clean filter"
+
+
 def test_guard_evidence_stays_structured_not_verbatim_markdown() -> None:
     shared = (
         ROOT / "docs" / "skill-framework" / "shared" / "test-creator-write-safety.md"
