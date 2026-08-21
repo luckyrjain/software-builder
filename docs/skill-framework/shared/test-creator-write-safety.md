@@ -83,8 +83,7 @@ write_guard:
 
 This exact object belongs in the canonical `skill_result`. Its
 `status_snapshot`, conflict paths, and `reason` can contain repository-controlled
-filenames or Git text and are therefore untrusted render data: they **must not be
-rendered verbatim** into Markdown. If a human-facing report summarizes guard
+filenames or Git text and are therefore untrusted render data: they must not be rendered verbatim into Markdown. If a human-facing report summarizes guard
 evidence, apply [safe-output.md](safe-output.md) and render only safely escaped
 fields; do not mutate the structured object merely to make it safe for display.
 
