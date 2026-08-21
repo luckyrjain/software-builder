@@ -1,8 +1,9 @@
 schema_version: 1
 consumer: loop-task-implementer
+shared_contract_path_base: package_or_repository_root
 shared_contracts:
-  change_identity: ../../docs/skill-framework/shared/change-identity.yaml
-  review_evidence: ../../docs/skill-framework/shared/review-evidence.yaml
+  change_identity: docs/skill-framework/shared/change-identity.yaml
+  review_evidence: docs/skill-framework/shared/review-evidence.yaml
 
 state_binding:
   current_change_identity: workspace.change_identity
