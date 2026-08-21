@@ -81,7 +81,12 @@ check. Separately, every planned path is checked for nested filesystem `.git`
 markers, Git's bare-repository metadata shape (`HEAD`, `objects/`, and `refs/`),
 and parent-index gitlinks (`160000` mode), so the write plan cannot cross into
 an initialized, deinitialized, bare, or otherwise nested child repository.
-Selecting an initialized child repository that has its own readable Git
+Gitlinks are enumerated rather than queried only through literal planned
+pathspecs, and boundary comparison follows the repository's parsed
+`core.ignorecase` setting. This keeps deinitialized-submodule protection intact
+on case-insensitive repositories even when caller path casing differs from the
+index spelling. If the case setting cannot be read or parsed, the guard fails
+closed. Selecting an initialized child repository that has its own readable Git
 worktree as `repo_root` remains valid. A deinitialized gitlink directory has no
 independent Git worktree; if Git would resolve that directory back to the
 parent repository, the guard blocks that `repo_root` rather than treating it as
