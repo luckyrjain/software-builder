@@ -60,16 +60,16 @@ unrelated sibling changes therefore remain visible without blocking the
 creator.
 
 Before any Git command, the guard finds the **outermost enclosing Git worktree
-boundary** visible through filesystem `.git` markers, removes PATH entries that
-resolve inside that boundary, resolves a Git executable from the remaining
-search directories, and pins every guard/helper subprocess to that absolute
-executable. If no Git binary can be resolved outside the enclosing worktree,
-the guard blocks. Using the outermost boundary is deliberate: when `repo_root`
-is an initialized submodule or other nested repository, a `git` shim in its
-enclosing superproject is still repository-controlled and must not become the
-trusted executable. The same rule applies when `repo_root` is only one nested
-service in a larger worktree. The sanitized PATH is also inherited by Git in
-case an internal helper lookup occurs.
+boundary** visible through filesystem `.git` markers. It also rejects every
+PATH directory and resolved Git executable whose own filesystem ancestry
+contains any `.git` worktree marker, even when that worktree is disjoint from
+the selected repository. This matters for linked worktrees: an original
+checkout must not be able to provide the trusted `git` binary merely because
+its `tools` or `bin` directory appears on PATH. The guard then resolves Git from
+the remaining non-worktree search directories and pins every guard/helper
+subprocess to that absolute executable. If no such Git binary can be resolved,
+the guard blocks. The sanitized PATH is inherited by Git as well, so internal
+helper lookup follows the same provenance boundary.
 
 Its Git subprocesses remove repository-selection/index overrides, `GIT_EXEC_PATH`,
 and all `GIT_TRACE*` settings, ignore user/system Git config, disable configured
@@ -98,10 +98,10 @@ a normal nested scope.
 
 The pre-write check therefore cannot be redirected to another repository,
 execute an ambient fsmonitor or repository clean-filter program, resolve Git
-from the target/enclosing worktree or an enclosing superproject, create an
-ambient trace file, refresh Git index metadata, hide staged state through
-replace objects, or silently write through a parent scope into nested Git
-metadata while it is deciding. Filter-driver names are resolved with
+from the target/enclosing worktree, a superproject, or a disjoint linked-worktree
+checkout, create an ambient trace file, refresh Git index metadata, hide staged
+state through replace objects, or silently write through a parent scope into
+nested Git metadata while it is deciding. Filter-driver names are resolved with
 `git check-attr` over Git-tracked paths in the enclosing worktree before status;
 if that attribute read cannot be parsed, the guard fails closed. This top-level
 filter discovery is deliberate: status retains sibling evidence, so every path
