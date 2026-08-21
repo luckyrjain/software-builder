@@ -92,9 +92,11 @@ unfinished_levels: [integration]
 level_reports:
   unit:
     dispatch_status: COMPLETE
+    skill_result: <verbatim canonical unit skill_result envelope>
     report: <verbatim UNIT_TEST_REPORT.md>
   integration:
     dispatch_status: BLOCKED
+    skill_result: <verbatim canonical integration skill_result envelope>
     report: <verbatim specialist blocked report>
 ```
 
@@ -110,9 +112,11 @@ orchestration_status: FAILED
 level_reports:
   unit:
     dispatch_status: COMPLETE
+    skill_result: <verbatim canonical unit skill_result envelope>
     report: <verbatim UNIT_TEST_REPORT.md>
   integration:
     dispatch_status: FAILED
+    skill_result: <verbatim canonical integration skill_result envelope>
     report: <verbatim specialist failed report>
 ```
 

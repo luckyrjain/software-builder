@@ -1,5 +1,5 @@
 ---
-workflow_version: 1.0
+workflow_version: 1.1
 phase: inputs
 produces:
   - target
@@ -14,6 +14,9 @@ consumes: []
 ---
 
 # Inputs — parse from the invocation
+
+Follow the canonical [test-creator common workflow](../../docs/skill-framework/shared/test-creator-common-workflow.md)
+for shared input and pass-through invariants; this file keeps only contract-level input requirements.
 
 **Read this file** before Detect conventions. **Ask before Detect conventions** if `target`, `repo_root`,
 or `target.role` is missing or malformed — a human is present for this flow, so ask rather than guess a

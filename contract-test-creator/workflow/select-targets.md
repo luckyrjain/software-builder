@@ -1,5 +1,5 @@
 ---
-workflow_version: 1.0
+workflow_version: 1.1
 phase: select_targets
 produces:
   - target_list
@@ -9,6 +9,9 @@ consumes:
 ---
 
 # Select targets
+
+Follow the canonical [test-creator common workflow](../../docs/skill-framework/shared/test-creator-common-workflow.md)
+for shared bounded-selection behavior; the rules below are contract-level selection deltas.
 
 Turn `target` into a concrete, bounded `target_list` of interactions to write consumer or provider
 verification tests for — the same `target.role` resolved at Inputs applies to every item in the list; a

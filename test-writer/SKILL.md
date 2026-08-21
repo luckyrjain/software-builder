@@ -1,6 +1,6 @@
 ---
 name: test-writer
-skill_version: 2.3
+skill_version: 2.4
 platform_contract: skill-platform-v1
 description: >-
   Thin orchestration router for test-writing requests that do not resolve to one specialist up front.
@@ -64,8 +64,9 @@ Inputs
 - Each planned level runs in a fresh specialist context. Ordinary caller inputs remain unchanged, while
   framework-owned `execution_context` is advanced independently for each child per the inherited runtime
   recursion contract. Do not feed one specialist's report into another as framing.
-- Preserve each specialist report verbatim in `level_reports`; orchestration may add only fixed-vocabulary
-  plan/status metadata around those reports. Never copy raw caller text into rendered orchestration metadata.
+- Preserve each specialist's complete `skill_result` envelope and report verbatim in `level_reports`;
+  orchestration may add only fixed-vocabulary plan/status metadata around them. Never copy raw caller
+  text into rendered orchestration metadata.
 - Fail closed: the orchestration must not report `COMPLETE` while a planned level is partial, blocked,
   failed, escalated, unanswered, missing, or otherwise incomplete. Preserve terminal specialist semantics.
 
@@ -85,8 +86,9 @@ follows `definition_of_done` from
 [runtime-contract.md](../docs/skill-framework/shared/runtime-contract.md).
 
 `definition_of_done`: required_artifacts=[test_plan, one level_reports entry per planned level, with
-exactly one verbatim report or blocked_reason (fixed-vocabulary for pre-dispatch blocks), orchestration
-status, unfinished_levels];
+verbatim child skill_result plus report when dispatched or one fixed-vocabulary blocked_reason before
+dispatch (each entry has exactly one report or blocked_reason evidence form), orchestration status,
+unfinished_levels];
 required_checks=[canonical implementation_task fields normalized without inference, plan ordered and
 de-duplicated, ambiguity resolved before dispatch, every planned specialist invoked in fresh context
 with ordinary caller inputs unchanged and execution_context advanced per runtime recursion protection,
@@ -98,6 +100,10 @@ level_reports verbatim; propagates PARTIAL, BLOCKED, FAILED, or ESCALATED accord
 precedence and names unfinished planned levels.
 
 ## Begin
+
+The five child creators use the canonical [test-creator common workflow](../docs/skill-framework/shared/test-creator-common-workflow.md),
+[write-safety contract](../docs/skill-framework/shared/test-creator-write-safety.md), and composition
+parity rules. Do not add a router-level write or interactive gate.
 
 1. Read [reference/skill-contract.md](reference/skill-contract.md).
 2. Read [workflow/inputs.md](workflow/inputs.md).

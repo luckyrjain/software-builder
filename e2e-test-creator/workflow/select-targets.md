@@ -1,5 +1,5 @@
 ---
-workflow_version: 1.0
+workflow_version: 1.1
 phase: select_targets
 produces:
   - target_list
@@ -9,6 +9,9 @@ consumes:
 ---
 
 # Select targets
+
+Follow the canonical [test-creator common workflow](../../docs/skill-framework/shared/test-creator-common-workflow.md)
+for shared bounded-selection behavior; the rules below are E2E-level selection deltas.
 
 Turn `target` into a concrete, bounded `target_list` of **journeys** to write tests for — not files. A
 journey is a named user flow ("user logs in and views their dashboard", "user completes checkout"), each

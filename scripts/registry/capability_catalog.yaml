@@ -239,6 +239,12 @@ skills:
         enables: routed e2e generation
       - name: api-test-creator.invoke
         enables: routed API-test generation
+    degraded_modes:
+      unit-test-creator.invoke: requested unit level is recorded as BLOCKED with child_invoke_unavailable; other planned levels remain accounted for
+      integration-test-creator.invoke: requested integration level is recorded as BLOCKED with child_invoke_unavailable; other planned levels remain accounted for
+      contract-test-creator.invoke: requested contract level is recorded as BLOCKED with child_invoke_unavailable; other planned levels remain accounted for
+      e2e-test-creator.invoke: requested e2e level is recorded as BLOCKED with child_invoke_unavailable; other planned levels remain accounted for
+      api-test-creator.invoke: requested API level is recorded as BLOCKED with child_invoke_unavailable; other planned levels remain accounted for
 
   prd-architect:
     required: [host.report.write]

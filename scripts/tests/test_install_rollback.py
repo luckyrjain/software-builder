@@ -125,6 +125,9 @@ def test_package_skill_writes_manifest(tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     shutil.copytree(ROOT / "unit-test-creator", repo / "unit-test-creator")
     shutil.copytree(ROOT / "docs" / "skill-framework", repo / "docs" / "skill-framework")
+    (repo / "scripts").mkdir(parents=True)
+    shutil.copy2(ROOT / "scripts" / "test_creator_write_guard.py", repo / "scripts" / "test_creator_write_guard.py")
+    shutil.copy2(ROOT / "scripts" / "git_paths.py", repo / "scripts" / "git_paths.py")
     (repo / "VERSION").write_text("0.0.0\n", encoding="utf-8")
     subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
     subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo, check=True)

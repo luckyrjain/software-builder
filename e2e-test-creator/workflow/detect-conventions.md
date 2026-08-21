@@ -1,5 +1,5 @@
 ---
-workflow_version: 1.0
+workflow_version: 1.1
 phase: detect_conventions
 produces:
   - test_framework
@@ -12,6 +12,9 @@ consumes:
 ---
 
 # Detect conventions
+
+Follow the canonical [test-creator common workflow](../../docs/skill-framework/shared/test-creator-common-workflow.md)
+for shared detection behavior; the rules below are E2E-level detection deltas.
 
 Run [scripts/detect-e2e-tooling.sh](../scripts/detect-e2e-tooling.sh) against `repo_root` before selecting
 or writing anything. Full marker-file table and confidence rules:

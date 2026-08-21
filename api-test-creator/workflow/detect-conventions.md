@@ -1,5 +1,5 @@
 ---
-workflow_version: 1.0
+workflow_version: 1.1
 phase: detect_conventions
 produces:
   - collection_path
@@ -12,6 +12,9 @@ consumes:
 ---
 
 # Detect conventions
+
+Follow the canonical [test-creator common workflow](../../docs/skill-framework/shared/test-creator-common-workflow.md)
+for shared detection behavior; the rules below are API-level detection deltas.
 
 Run [scripts/detect-postman-tooling.sh](../scripts/detect-postman-tooling.sh) against `repo_root` (or the
 target's own scoped directory in a monorepo) before selecting or writing anything. Full marker table and

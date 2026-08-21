@@ -14,6 +14,8 @@ _SCRIPTS_DIR = Path(__file__).resolve().parent
 if str(_SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS_DIR))
 
+from test_creator_catalog import TEST_CREATOR_SKILL_SET
+
 from reference_utils import (
     MANIFEST_NAME,
     copytree_ignore,
@@ -179,6 +181,27 @@ def write_manifest(
     manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
+def _shared_script(repo_root: Path, filename: str, description: str) -> Path:
+    """Find a shared runtime script in the selected source repository."""
+
+    selected_root = repo_root.resolve(strict=True)
+    candidate = selected_root / "scripts" / filename
+    if not candidate.is_file():
+        raise FileNotFoundError(f"{description} missing: {candidate}")
+    try:
+        resolved = candidate.resolve(strict=True)
+        resolved.relative_to(selected_root)
+    except ValueError as exc:
+        raise ValueError(
+            f"{description} resolves outside selected source repository: {candidate} -> {resolved}",
+        ) from exc
+    except (OSError, RuntimeError) as exc:
+        raise FileNotFoundError(f"{description} cannot be resolved safely: {candidate}: {exc}") from exc
+    if not resolved.is_file():
+        raise FileNotFoundError(f"{description} is not a file: {candidate}")
+    return candidate
+
+
 def package_skill(
     *,
     skill: str,
@@ -202,6 +225,22 @@ def package_skill(
         dest,
         ignore=copytree_ignore(skill_src),
     )
+
+    # The five creators share one executable write guard. Keep its source
+    # canonical in the repository and inject the exact same file into each
+    # self-contained installed bundle; source-tree adapters are replaced here
+    # so standalone installs never depend on this repository's Python package.
+    if skill in TEST_CREATOR_SKILL_SET:
+        guard_src = _shared_script(
+            repo_root,
+            "test_creator_write_guard.py",
+            "shared test-creator write guard",
+        )
+        helper_src = _shared_script(repo_root, "git_paths.py", "shared Git path helper")
+        guard_dest = dest / "scripts" / "test_creator_write_guard.py"
+        guard_dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(guard_src, guard_dest)
+        shutil.copy2(helper_src, dest / "scripts" / "git_paths.py")
 
     seed_files = collect_markdown_files(dest)
     framework_files: list[str] = []

@@ -3,6 +3,21 @@
 All notable changes to the test-writer skill. Per-file `workflow_version` in `workflow/*.md` frontmatter
 should match the version of the latest entry below that names that file.
 
+## [2.4.0] — 2026-08-20
+
+### Hardened
+
+- The child handoff lists every ordinary pass-through field explicitly, preserves falsey values and
+  opaque `specialist_inputs`, and keeps `execution_context` as the only framework-owned exception.
+- Child `skill_result` authority, write-guard evidence, degraded `BLOCKED` behavior, compatible
+  `test_suite` output, and the no-router-interactive-gate rule are now explicit composition contracts.
+
+### Versioned workflow files
+
+- `workflow/inputs.md` → 2.5
+- `workflow/delegate.md` → 2.6
+- `workflow/aggregate.md` → 1.6
+
 ## [2.3.0] — 2026-08-20
 
 ### Hardened

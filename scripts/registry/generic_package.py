@@ -4,12 +4,13 @@ import argparse
 import gzip
 import io
 import re
-import subprocess
 import sys
 import tarfile
 from pathlib import Path
 
+from scripts.git_paths import tracked_relative_paths
 from scripts.registry.schema import parse_registry
+from scripts.test_creator_catalog import TEST_CREATOR_SKILL_SET
 
 PACKAGE_ROOT = "software-builder"
 EXCLUDED_PARTS = {
@@ -82,23 +83,17 @@ def _is_safe_file(root: Path, path: Path) -> bool:
 
 def _tracked_files(root: Path) -> set[Path]:
     """Return lexical Git-tracked paths; arbitrary working-tree files are never package inputs."""
-    result = subprocess.run(
-        ["git", "-C", str(root), "ls-files", "-z", "--cached"],
-        capture_output=True,
-        check=False,
-    )
-    if result.returncode != 0:
-        stderr = result.stderr.decode("utf-8", errors="replace").strip()
-        raise ValueError(f"generic package requires a readable Git index: {stderr or 'git ls-files failed'}")
+    relative_paths, error = tracked_relative_paths(root)
+    if error:
+        raise ValueError(f"generic package requires a readable Git index: {error}")
+    root = root.resolve()
     tracked: set[Path] = set()
-    for raw in result.stdout.split(b"\0"):
-        if not raw:
-            continue
-        rel = raw.decode("utf-8", errors="strict")
+    for rel in relative_paths:
         path = root / rel
         try:
-            path.relative_to(root)
-        except ValueError as exc:
+            resolved = path.resolve(strict=False)
+            resolved.relative_to(root)
+        except (OSError, RuntimeError, ValueError) as exc:
             raise ValueError(f"generic package tracked path escapes repository: {rel}") from exc
         tracked.add(path)
     return tracked
@@ -256,6 +251,20 @@ def _package_files(root: Path) -> list[Path]:
     license_path = (root / "LICENSE").resolve()
     if license_path in tracked_regular and license_path.is_file():
         candidates.add(license_path)
+
+    # Test-creator source adapters resolve the canonical guard at the generic
+    # bundle root. If any creator is registered, both runtime files are hard
+    # dependencies: silently omitting either would build a portable archive
+    # whose creators fail only after installation.
+    if TEST_CREATOR_SKILL_SET & set(registry.skills):
+        for runtime_path in (
+            (root / "scripts" / "test_creator_write_guard.py").resolve(),
+            (root / "scripts" / "git_paths.py").resolve(),
+        ):
+            if runtime_path not in tracked_regular or not runtime_path.is_file():
+                rel = runtime_path.relative_to(root)
+                raise ValueError(f"generic package requires tracked test-creator runtime: {rel}")
+            candidates.add(runtime_path)
 
     framework = (root / "docs" / "skill-framework").resolve()
     if not framework.is_dir():

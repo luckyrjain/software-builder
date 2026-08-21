@@ -264,7 +264,21 @@ def test_typed_implementation_task_carries_the_child_invocation_fields():
     ):
         assert contracts["skills"][skill]["consumes"] == ["implementation_task"]
         required = contracts["skills"][skill]["consume_fields"]["implementation_task"]
-        for field in ("task_id", "scope", "acceptance_criteria", "request", "repo_root", "target"):
+        for field in (
+            "task_id",
+            "scope",
+            "acceptance_criteria",
+            "request",
+            "repo_root",
+            "target",
+            "test_framework_hint",
+            "run_tests",
+            "max_files_per_run",
+            "deadline",
+            "session_token_budget",
+            "output_dir",
+            "specialist_inputs",
+        ):
             assert field in required
 
 

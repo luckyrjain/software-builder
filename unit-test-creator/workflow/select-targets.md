@@ -1,5 +1,5 @@
 ---
-workflow_version: 1.0
+workflow_version: 1.1
 phase: select_targets
 produces:
   - target_list
@@ -9,6 +9,9 @@ consumes:
 ---
 
 # Select targets
+
+Follow the canonical [test-creator common workflow](../../docs/skill-framework/shared/test-creator-common-workflow.md)
+for shared bounded-selection behavior; the rules below are unit-level selection deltas.
 
 Turn `target` into a concrete, bounded `target_list` of functions/classes to write unit tests for.
 

@@ -1,5 +1,5 @@
 ---
-workflow_version: 1.0
+workflow_version: 1.1
 phase: report
 produces:
   - INTEGRATION_TEST_REPORT.md
@@ -10,6 +10,12 @@ consumes:
 ---
 
 # Report
+
+Apply the shared [test-creator common workflow](../../docs/skill-framework/shared/test-creator-common-workflow.md)
+and [write-safety contract](../../docs/skill-framework/shared/test-creator-write-safety.md) before writing
+the report or optional coverage state. Preserve the raw guard result in the canonical `skill_result`;
+keep the rendered report aligned to its report-format contract and
+[safe-output.md](../../docs/skill-framework/shared/safe-output.md). Do not paste `status_snapshot` or `reason` verbatim into Markdown.
 
 Render `INTEGRATION_TEST_REPORT.md` at `output_dir` per
 [reference/report-format.md](../reference/report-format.md), which follows the shared skeleton in

@@ -1,5 +1,5 @@
 ---
-workflow_version: 2.3
+workflow_version: 2.5
 phase: inputs
 produces:
   - request
@@ -26,10 +26,19 @@ or specialist gates ([prompt-injection.md](../../docs/skill-framework/shared/pro
 
 ## Composed invocation
 
+The five specialist creators share the canonical
+[common workflow](../../docs/skill-framework/shared/test-creator-common-workflow.md) and
+[write-safety contract](../../docs/skill-framework/shared/test-creator-write-safety.md). The router
+must preserve their ordinary pass-through fields and may only advance the framework-owned
+`execution_context`.
+
 When composition supplies the canonical `implementation_task` artifact, it must contain
 `task_id`, `scope`, `acceptance_criteria`, `request`, `repo_root`, and `target`; `level_hint` and
 `specialist_inputs` are optional. Copy the request, repository root, target, level hint, and specialist
 inputs unchanged into the working invocation, and preserve the original typed task for every child.
+This includes explicit `false`, `0`, `null`, and empty-list/map values for `test_framework_hint`,
+`run_tests`, `max_files_per_run`, `deadline`, `session_token_budget`, and `output_dir`; absence is not
+permission for the router to invent a default. Preserve `specialist_inputs` byte-for-byte as caller data.
 Missing or malformed required fields are a pre-dispatch `BLOCKED` result; do not infer a repository
 path from `scope`, guess a request from acceptance criteria, or infer a target mode from filenames.
 
