@@ -1,5 +1,5 @@
 ---
-workflow_version: 1.3
+workflow_version: 1.4
 phase: lifecycle-gate
 produces:
   lifecycle_validation: object
