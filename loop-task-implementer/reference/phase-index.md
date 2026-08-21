@@ -21,13 +21,13 @@ Orchestrator + lifecycle overlay: discover policy → select task
   → dispatch Reviewer Lens A (fresh context)
   → adjudicate Lens A proposed findings
   → normalize/validate Lens A review_evidence from adjudicated result
-  → if Lens A has accepted findings: dispatch Builder remediation, rebuild identity, rerun invalidated Lens A until lifecycle-clean
-  → dispatch Reviewer Lens B (fresh context)
+  → if Lens A has accepted findings: dispatch Builder remediation, rebuild current identity, invalidate stale lens evidence
+  → dispatch Reviewer Lens B (fresh context) against the current identity
   → adjudicate Lens B proposed findings
   → normalize/validate Lens B review_evidence from adjudicated result
-  → if Lens B has accepted findings: dispatch Builder remediation, rebuild identity, rerun every invalidated lens
-  → any later content/conflict/requirements/third-party branch change invalidates affected review evidence
-  → rerun invalidated lenses
+  → if Lens B has accepted findings: dispatch Builder remediation and rebuild current identity
+  → any content/conflict/requirements/third-party branch change invalidates affected review evidence
+  → rerun every invalidated lens until both are lifecycle-clean for the same current identity
   → verify authoritative checks for exact current head
   → refresh approvals/threads/integration/circuit-breaker state
   → refresh third-party branch-change evidence for the exact current head
