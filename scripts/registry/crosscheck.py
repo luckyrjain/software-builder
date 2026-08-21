@@ -125,6 +125,8 @@ def _validate_invoke_skill_references(registry: Registry) -> list[str]:
 def _validate_skill_frontmatter_shape(root: Path, registry: Registry) -> list[str]:
     """Per-skill SKILL.md frontmatter checks against the registry."""
     errors: list[str] = []
+    raw_manifest = load_unique_yaml_file(root / "skills.yaml")
+    legacy_manifest = not (isinstance(raw_manifest, dict) and "contracts" in raw_manifest)
     for skill_id, entry in registry.skills.items():
         skill_md = root / entry.path / "SKILL.md"
         try:
@@ -149,7 +151,7 @@ def _validate_skill_frontmatter_shape(root: Path, registry: Registry) -> list[st
             validate_skill_frontmatter_fields(
                 skill_id,
                 frontmatter,
-                require_legacy_platform_fields=False,
+                require_legacy_platform_fields=legacy_manifest,
             )
         )
         errors.extend(
