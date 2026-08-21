@@ -7,7 +7,7 @@
 | **Owner** | software-builder maintainers |
 | **Last reviewed** | 2026-08-21 |
 | **Review cadence** | Quarterly — or when lifecycle/shared review contracts change |
-| **External services** | GitLab MCP, CI provider (repo-specific) |
+| **External services** | Git provider/API, CI provider (both repo-specific; no fixed MCP) |
 
 See [setup-freshness.md](../docs/skill-framework/shared/setup-freshness.md) for the shared contract.
 Platform-neutral autonomous task-implementation skill: isolated build → adjudicated independent review →
