@@ -77,3 +77,11 @@ def test_guard_rejects_new_file_inside_unregistered_nested_repo(tmp_path: Path) 
     _init_repo(repo / "vendor" / "nested")
 
     _assert_nested_repo_block(repo, "vendor/nested/generated_test.py")
+
+
+def test_guard_rejects_new_file_inside_nested_bare_repo(tmp_path: Path) -> None:
+    repo = _init_repo(tmp_path / "repo")
+    bare = repo / "vendor.git"
+    subprocess.run(["git", "init", "--bare", "-q", str(bare)], check=True)
+
+    _assert_nested_repo_block(repo, "vendor.git/generated_test.py")
