@@ -46,8 +46,9 @@ def _ls_files_records(
     options: list[str],
     paths: Iterable[str] | None = None,
     env: Mapping[str, str] | None = None,
+    git_executable: str = "git",
 ) -> tuple[list[bytes], str | None]:
-    command_prefix = ["git", "-C", str(root), "ls-files", *options, "-z"]
+    command_prefix = [git_executable, "-C", str(root), "ls-files", *options, "-z"]
     chunks = _pathspec_chunks(command_prefix, paths)
     if chunks == []:
         return [], None
@@ -78,13 +79,16 @@ def tracked_relative_paths(
     paths: Iterable[str] | None = None,
     *,
     env: Mapping[str, str] | None = None,
+    git_executable: str = "git",
 ) -> tuple[set[str], str | None]:
     """Return tracked paths relative to ``root``.
 
     ``git -C`` makes ``ls-files`` emit paths relative to the supplied working
     directory, which is important when ``root`` is a nested project inside a
     larger worktree. NUL delimiters preserve filenames containing whitespace
-    or newlines.
+    or newlines. ``git_executable`` lets security-sensitive callers pin an
+    already-resolved Git binary while ordinary callers keep the historical
+    PATH-based default.
     """
 
     records, error = _ls_files_records(
@@ -92,6 +96,7 @@ def tracked_relative_paths(
         options=["--cached"],
         paths=paths,
         env=env,
+        git_executable=git_executable,
     )
     if error:
         return set(), error
@@ -103,6 +108,7 @@ def protected_index_relative_paths(
     paths: Iterable[str],
     *,
     env: Mapping[str, str] | None = None,
+    git_executable: str = "git",
 ) -> tuple[set[str], str | None]:
     """Return planned paths whose index flags can hide worktree drift.
 
@@ -117,6 +123,7 @@ def protected_index_relative_paths(
         options=["--cached", "-v"],
         paths=paths,
         env=env,
+        git_executable=git_executable,
     )
     if error:
         return set(), error
