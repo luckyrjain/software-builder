@@ -262,6 +262,9 @@ def _is_git_metadata_component(part: str) -> bool:
     return normalised.casefold() == ".git"
 
 
+_WINDOWS_RESERVED_FILENAME_CHARS = frozenset(
+    {chr(value) for value in range(32)} | {'"', "*", ":", "<", ">", "?", "|", "/", "\\"}
+)
 _WINDOWS_RESERVED_DEVICE_BASENAMES = {
     "con",
     "prn",
@@ -281,9 +284,9 @@ _WINDOWS_RESERVED_DEVICE_BASENAMES = {
 
 
 def _windows_path_component_is_unsafe(part: str) -> bool:
-    """Reject Win32 aliases, device names, and alternate-stream syntax."""
+    """Reject Win32 reserved characters, aliases, devices, and stream syntax."""
 
-    if ":" in part or part.rstrip(" .") != part:
+    if part.rstrip(" .") != part or _WINDOWS_RESERVED_FILENAME_CHARS.intersection(part):
         return True
     basename = part.split(".", 1)[0].rstrip(" ").casefold()
     return basename in _WINDOWS_RESERVED_DEVICE_BASENAMES
