@@ -290,15 +290,6 @@ def _normalise_planned_paths(
     return tuple(sorted(normalised)), None
 
 
-def _planned_path_prefixes(planned_paths: Iterable[str]) -> tuple[str, ...]:
-    prefixes: set[str] = set()
-    for planned in planned_paths:
-        parts = planned.split("/")
-        for index in range(1, len(parts) + 1):
-            prefixes.add("/".join(parts[:index]))
-    return tuple(sorted(prefixes))
-
-
 def _git_top_level(
     repo_root: Path,
     git_env: dict[str, str],
@@ -322,6 +313,41 @@ def _git_top_level(
     except (OSError, RuntimeError, ValueError) as exc:
         return None, f"git top-level cannot contain repo_root: {exc}"
     return top_level, None
+
+
+def _git_paths_ignore_case(
+    git_top_level: Path,
+    git_env: dict[str, str],
+    git_executable: str,
+) -> tuple[bool | None, str | None]:
+    """Read Git's repository case semantics without trusting literal pathspec matching."""
+
+    try:
+        completed = subprocess.run(
+            [git_executable, "-C", str(git_top_level), "config", "--bool", "--get", "core.ignorecase"],
+            capture_output=True,
+            check=False,
+            env=git_env,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        return None, f"git core.ignorecase read failed: {exc}"
+    if completed.returncode == 1:
+        return False, None
+    if completed.returncode != 0:
+        detail = os.fsdecode(completed.stderr or completed.stdout).strip()
+        return None, f"git core.ignorecase read failed: {detail or 'unknown error'}"
+    value = os.fsdecode(completed.stdout).strip().lower()
+    if value == "true":
+        return True, None
+    if value == "false":
+        return False, None
+    return None, f"git core.ignorecase returned an unparseable value: {value!r}"
+
+
+def _git_path_at_or_below(path: str, boundary: str, *, ignore_case: bool) -> bool:
+    path_key = path.casefold() if ignore_case else path
+    boundary_key = boundary.casefold() if ignore_case else boundary
+    return path_key == boundary_key or path_key.startswith(f"{boundary_key}/")
 
 
 def _repository_filter_drivers(
@@ -499,38 +525,21 @@ def check_write_safety(repo_root: Path, planned_paths: Iterable[str | Path]) -> 
             reason=f"git status failed: {top_level_error or 'git top-level cannot be resolved'}",
         )
 
+    ignore_case, ignore_case_error = _git_paths_ignore_case(git_top_level, base_git_env, git_executable)
+    if ignore_case_error or ignore_case is None:
+        return _blocked(
+            planned_paths=normalised,
+            reason=ignore_case_error or "git path case semantics cannot be determined",
+        )
+
     if gitlink_relative_paths is None:
         return _blocked(
             planned_paths=normalised,
             reason=_TRACKED_PATHS_IMPORT_ERROR or "shared Git path helper unavailable",
         )
-
-    root_relative = resolved_root.relative_to(git_top_level)
-    if root_relative.parts:
-        root_relative_posix = root_relative.as_posix()
-        root_gitlinks, root_gitlink_error = gitlink_relative_paths(
-            git_top_level,
-            _planned_path_prefixes((root_relative_posix,)),
-            env=base_git_env,
-            git_executable=git_executable,
-        )
-        if root_gitlink_error:
-            return _blocked(
-                planned_paths=normalised,
-                reason=f"nested Git repository check failed: {root_gitlink_error}",
-            )
-        if any(
-            root_relative_posix == gitlink or root_relative_posix.startswith(f"{gitlink}/")
-            for gitlink in root_gitlinks
-        ):
-            return _blocked(
-                planned_paths=normalised,
-                reason="repo_root is inside a nested Git repository gitlink without its own Git worktree",
-            )
-
     gitlinks, gitlink_error = gitlink_relative_paths(
-        resolved_root,
-        _planned_path_prefixes(normalised),
+        git_top_level,
+        None,
         env=base_git_env,
         git_executable=git_executable,
     )
@@ -539,19 +548,34 @@ def check_write_safety(repo_root: Path, planned_paths: Iterable[str | Path]) -> 
             planned_paths=normalised,
             reason=f"nested Git repository check failed: {gitlink_error}",
         )
-    gitlink_conflicts = {
-        planned
-        for planned in normalised
-        for gitlink in gitlinks
-        if planned == gitlink or planned.startswith(f"{gitlink}/")
-    }
+
+    root_relative = resolved_root.relative_to(git_top_level)
+    if root_relative.parts:
+        root_relative_posix = root_relative.as_posix()
+        if any(
+            _git_path_at_or_below(root_relative_posix, gitlink, ignore_case=ignore_case)
+            for gitlink in gitlinks
+        ):
+            return _blocked(
+                planned_paths=normalised,
+                reason="repo_root is inside a nested Git repository gitlink without its own Git worktree",
+            )
+
+    gitlink_conflicts: set[str] = set()
+    for planned in normalised:
+        planned_top_level = (resolved_root / planned).relative_to(git_top_level).as_posix()
+        if any(
+            _git_path_at_or_below(planned_top_level, gitlink, ignore_case=ignore_case)
+            for gitlink in gitlinks
+        ):
+            gitlink_conflicts.add(planned)
     if gitlink_conflicts:
         return _blocked(
             planned_paths=normalised,
             conflicting_paths=gitlink_conflicts,
             reason=(
                 "planned write crosses a nested Git repository gitlink: "
-                + ", ".join(sorted(gitlinks))
+                + ", ".join(sorted(gitlink_conflicts))
             ),
         )
 
