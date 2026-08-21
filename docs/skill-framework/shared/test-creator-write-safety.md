@@ -80,8 +80,11 @@ submodule's local Git configuration cannot execute during the parent repository
 check. Separately, every planned path is checked for nested filesystem `.git`
 markers and for parent-index gitlinks (`160000` mode), so the write plan cannot
 cross into an initialized, deinitialized, or otherwise nested child repository.
-Selecting that child repository itself as `repo_root` remains valid; the block
-applies only when a parent-scoped plan crosses a nested repository boundary.
+Selecting an initialized child repository that has its own readable Git
+worktree as `repo_root` remains valid. A deinitialized gitlink directory has no
+independent Git worktree; if Git would resolve that directory back to the
+parent repository, the guard blocks that `repo_root` rather than treating it as
+a normal nested scope.
 
 The pre-write check therefore cannot be redirected to another repository,
 execute an ambient fsmonitor or repository clean-filter program, resolve Git
