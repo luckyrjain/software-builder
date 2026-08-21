@@ -16,6 +16,7 @@ should match the version of the latest entry below that names that file.
 
 - `workflow/inputs.md` → 2.5
 - `workflow/delegate.md` → 2.6
+- `workflow/aggregate.md` → 1.6
 
 ## [2.3.0] — 2026-08-20
 
