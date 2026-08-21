@@ -1,5 +1,5 @@
 ---
-workflow_version: 1.6
+workflow_version: 1.7
 phase: reviewer-evidence
 produces:
   review_evidence: object
@@ -18,7 +18,7 @@ consumes:
 
 Run after the independent reviewer returns **and after the Orchestrator adjudicates that lens's proposed findings**, before the Orchestrator records the lens as lifecycle CLEAN. This step is read-only with respect to repository state; only the Orchestrator may persist the resulting official state.
 
-Before adjudication, the Orchestrator must already have incremented that returned lens's positive-integer `review_generation` exactly once and cleared all prior isolation-exception fields, even when the code identity is unchanged. This adapter does **not** increment the generation; it consumes the already-current generation and fails closed if it is not a positive integer. That keeps generation mutation in one owner/timing point rather than letting post-adjudication normalization create a second review generation.
+Before adjudication, the Orchestrator must already have incremented that returned lens's positive-integer `review_generation` exactly once and cleared all prior isolation-exception fields, even when the code identity is unchanged. The pre-existing `review_evidence_generation` is intentionally left unchanged at that moment, so it no longer matches the new `review_generation` and lifecycle readiness fails closed while adjudication/evidence normalization is incomplete. This adapter does **not** increment the review generation; it consumes the already-current generation.
 
 Load [review-lifecycle-contract.yaml](../reference/review-lifecycle-contract.yaml),
 [change-identity.yaml](../../docs/skill-framework/shared/change-identity.yaml), and
@@ -40,10 +40,10 @@ Construct a closed portable `review_evidence` v1 envelope:
 - `findings.defect`: **accepted blocking findings that remain open** after adjudication, preserving their stable finding IDs. A reviewer `PROPOSED_BLOCKING` item adjudicated `REJECTED` is not a portable defect.
 - `findings.suggestion`: evidence-backed non-blocking improvements.
 - `findings.question`: unresolved evidence requests, including adjudicated `NEEDS_EVIDENCE` items; security-sensitive unresolved questions remain separately counted in `merge_readiness.security_sensitive_needs_evidence_unresolved`.
-- `generated_at`: actual completion timestamp for this post-adjudication evidence pass. It remains evidence metadata; degraded-isolation authorization is bound to the separate integer lens generation, not to this free-form timestamp string.
+- `generated_at`: actual completion timestamp for this post-adjudication evidence pass. It remains evidence metadata; lifecycle generation binding uses the separate integer state fields.
 
 Portable finding entries contain exactly `{id, category, summary, evidence}`. Keep rich severity, original reviewer class, adjudication rationale, fix history, isolation state, and reviewer-specific metadata outside the closed portable entry. Do not erase rejected proposals from the rich audit trail; exclude them only from the portable `defect` bucket after the Orchestrator has rejected them with recorded rationale.
 
-Validate the envelope with the packaged shared `docs/skill-framework/shared/review_contract_runtime.py`. A lens may be persisted as lifecycle `CLEAN` only when the already-current `review_generation` is a positive integer, the envelope is valid and fresh, `inspection_status` is `complete`, `unable_to_inspect` is empty, and `findings.defect` is empty. Thus an accepted blocker requires remediation/rereview, while a correctly rejected false positive does not force a redundant reviewer rerun merely to remove a rejected proposal from portable evidence.
+Validate the envelope with the packaged shared `docs/skill-framework/shared/review_contract_runtime.py`. When the Orchestrator persists this adjudicated evidence, persist `review_evidence_generation` **at the same time** with the exact current `review_generation`. A lens may be persisted as lifecycle `CLEAN` only when the current `review_generation` is a positive integer, `review_evidence_generation == review_generation`, the envelope is valid and fresh, `inspection_status` is `complete`, `unable_to_inspect` is empty, and `findings.defect` is empty. Never advance `review_evidence_generation` before new evidence has actually been validated and persisted.
 
 Persist the actual review-isolation result separately in official lens state. `NOT_ISOLATED` remains `NOT_ISOLATED`; if an authorized human accepts degraded isolation, record the exception and provenance separately rather than rewriting the reviewer state. Bind that authorization both to this exact `reviewed_change_identity` in `isolation_exception_change_identity` **and** to the lens's exact current integer `review_generation` in `isolation_exception_review_generation`. Because the Orchestrator cleared prior exception fields before adjudicating this returned generation, an exception for an earlier identity or same-head reviewer generation cannot silently carry forward. Security-sensitive `NEEDS_EVIDENCE` findings likewise remain visible in adjudication state until resolved or explicitly accepted by an authorized human under the Orchestrator policy.
