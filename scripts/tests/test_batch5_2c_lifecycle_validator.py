@@ -47,16 +47,17 @@ def _evidence(identity):
     }
 
 
-def _lens(identity, evidence):
+def _lens(identity, evidence, *, generation=1):
     return {
         "status": "CLEAN",
+        "review_generation": generation,
         "reviewed_change_identity": identity,
         "review_evidence": evidence,
         "isolation_status": "ISOLATED",
         "isolation_exception_authorized": False,
         "isolation_exception_provenance": None,
         "isolation_exception_change_identity": None,
-        "isolation_exception_review_generated_at": None,
+        "isolation_exception_review_generation": None,
     }
 
 
@@ -93,6 +94,14 @@ def _state(identity=None):
 
 def test_pre_ready_state_passes_only_when_all_lifecycle_requirements_hold():
     assert _load().validate_lifecycle_state(_state()) == []
+
+
+def test_clean_lens_requires_positive_integer_review_generation():
+    for value in (0, -1, True, "1", None):
+        state = _state()
+        state["review"]["lens_a"]["review_generation"] = value
+        errors = _load().validate_lifecycle_state(state)
+        assert any("review_generation must be a positive integer" in error for error in errors)
 
 
 def test_pre_ready_state_rejects_unclean_lens_and_non_green_ci():
@@ -139,7 +148,7 @@ def test_not_isolated_lens_can_proceed_only_with_explicit_human_exception_proven
     lens["isolation_exception_authorized"] = True
     lens["isolation_exception_provenance"] = "human accepted degraded isolation in current session"
     lens["isolation_exception_change_identity"] = lens["reviewed_change_identity"]
-    lens["isolation_exception_review_generated_at"] = lens["review_evidence"]["generated_at"]
+    lens["isolation_exception_review_generation"] = lens["review_generation"]
     assert _load().validate_lifecycle_state(state) == []
 
 
@@ -149,7 +158,7 @@ def test_isolation_exception_without_provenance_fails_closed():
     lens["isolation_status"] = "NOT_ISOLATED"
     lens["isolation_exception_authorized"] = True
     lens["isolation_exception_change_identity"] = lens["reviewed_change_identity"]
-    lens["isolation_exception_review_generated_at"] = lens["review_evidence"]["generated_at"]
+    lens["isolation_exception_review_generation"] = lens["review_generation"]
     errors = _load().validate_lifecycle_state(state)
     assert any("isolation exception requires non-empty human authorization provenance" in error for error in errors)
 
@@ -169,9 +178,22 @@ def test_isolation_exception_is_bound_to_the_reviewed_change_identity():
     lens["isolation_exception_authorized"] = True
     lens["isolation_exception_provenance"] = "human accepted degraded isolation for an earlier review"
     lens["isolation_exception_change_identity"] = _identity(head="d" * 40)
-    lens["isolation_exception_review_generated_at"] = lens["review_evidence"]["generated_at"]
+    lens["isolation_exception_review_generation"] = lens["review_generation"]
     errors = _load().validate_lifecycle_state(state)
     assert any("isolation exception must be bound to the current reviewed_change_identity" in error for error in errors)
+
+
+def test_same_identity_rerun_rejects_exception_from_prior_review_generation():
+    state = _state()
+    lens = state["review"]["lens_a"]
+    lens["review_generation"] = 2
+    lens["isolation_status"] = "NOT_ISOLATED"
+    lens["isolation_exception_authorized"] = True
+    lens["isolation_exception_provenance"] = "human accepted degraded isolation for generation 1"
+    lens["isolation_exception_change_identity"] = lens["reviewed_change_identity"]
+    lens["isolation_exception_review_generation"] = 1
+    errors = _load().validate_lifecycle_state(state)
+    assert any("isolation exception must be bound to the current review_generation" in error for error in errors)
 
 
 def test_security_sensitive_needs_evidence_must_be_resolved_before_readiness():
