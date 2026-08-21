@@ -323,3 +323,16 @@ def test_cli_fails_closed_on_malformed_state(tmp_path: Path):
     )
     assert result.returncode == 2
     assert "failed closed" in result.stderr
+
+
+def test_main_classifies_unexpected_runtime_failure_as_fail_closed(tmp_path: Path, monkeypatch, capsys):
+    module = _load()
+    state_path = tmp_path / "state.json"
+    state_path.write_text(json.dumps(_state()), encoding="utf-8")
+
+    def incompatible_runtime(_state):
+        raise TypeError("runtime contract incompatible")
+
+    monkeypatch.setattr(module, "validate_lifecycle_state", incompatible_runtime)
+    assert module.main(["--state", str(state_path)]) == 2
+    assert "lifecycle validation failed closed: runtime contract incompatible" in capsys.readouterr().err
