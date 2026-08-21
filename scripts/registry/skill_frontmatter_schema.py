@@ -41,8 +41,9 @@ def validate_skill_frontmatter_fields(
             f"got {frontmatter['platform_contract']!r}",
         )
 
-    if require_legacy_platform_fields and "skill_version" not in frontmatter:
-        errors.append(f"error: {skill_id}: skill_version is mandatory")
+    if "skill_version" not in frontmatter:
+        if require_legacy_platform_fields:
+            errors.append(f"error: {skill_id}: skill_version is mandatory")
     else:
         version = frontmatter["skill_version"]
         if isinstance(version, bool) or not isinstance(version, (int, float, str)):
