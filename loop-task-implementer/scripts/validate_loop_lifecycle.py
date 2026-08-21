@@ -324,10 +324,7 @@ def main(argv: list[str] | None = None) -> int:
         errors = validate_lifecycle_state(state)
     except SystemExit as exc:
         # Argument handling or an imported runtime must never turn incomplete validation into exit 0.
-        print(
-            f"lifecycle validation failed closed: validation exited before completion ({exc.code})",
-            file=sys.stderr,
-        )
+        print(f"lifecycle validation failed closed: validation runtime exited ({exc.code})", file=sys.stderr)
         return 2
     except Exception as exc:
         # Any ordinary input/runtime failure means lifecycle validity could not be established.
