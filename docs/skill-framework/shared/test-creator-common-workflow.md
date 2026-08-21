@@ -19,9 +19,10 @@ layouts, detection rules, and gates.
 5. **Verify and iterate** — run the observed command when capability and
    environment permit; preserve real expected/actual evidence and use shared
    status vocabulary.
-6. **Report** — emit the level report using the shared skeleton, preserve the
-   raw guard result and child authority, then optionally update coverage state
-   only after a fresh report-only guard check.
+6. **Report** — run a fresh report-only guard and emit the level report when
+   allowed; preserve the raw guard result in the canonical `skill_result` and
+   child authority. Before an optional coverage-state write, run a separate
+   fresh state-only guard and write state only when that batch is allowed.
 
 ## Parity invariants
 
@@ -33,8 +34,9 @@ layouts, detection rules, and gates.
 - All creators produce the compatible `test_suite` shape
   (`tests`, `framework`, `target_path`) plus level-specific details inside
   their own report/artifact files.
-- Missing capability, unsafe repository state, and unavailable verification
-  produce a degraded `BLOCKED` or level-specific blocked status; they never
-  become a passing result.
+- Missing required write capability or unsafe repository state produces a
+  degraded `BLOCKED` result. When verification is unavailable after a safe
+  write, written targets remain `UNVERIFIED` (or retain the specialist's
+  documented environment-gate status); they never become a passing result.
 - No common phase may add an interactive question. Only a specialist's
   documented level-specific gate may ask the caller for missing information.
