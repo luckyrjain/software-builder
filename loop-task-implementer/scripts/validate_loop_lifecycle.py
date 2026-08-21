@@ -2,7 +2,10 @@
 """Fail-closed lifecycle validation for loop-task-implementer state."""
 from __future__ import annotations
 
+import argparse
 import importlib.util
+import json
+import sys
 from pathlib import Path
 from types import ModuleType
 
@@ -90,19 +93,29 @@ def _isolation_errors(name: str, lens: dict[str, object]) -> list[str]:
     status = lens.get("isolation_status")
     exception = lens.get("isolation_exception_authorized")
     provenance = lens.get("isolation_exception_provenance")
+    exception_identity = lens.get("isolation_exception_change_identity")
+    reviewed_identity = lens.get("reviewed_change_identity")
     if type(exception) is not bool:
         return [f"{name}.isolation_exception_authorized must be an explicit boolean"]
     if status == "ISOLATED":
+        errors: list[str] = []
         if exception:
-            return [f"{name} isolation exception must not be authorized when isolation_status=ISOLATED"]
-        return []
+            errors.append(f"{name} isolation exception must not be authorized when isolation_status=ISOLATED")
+        if exception_identity is not None:
+            errors.append(f"{name} isolated review must not retain isolation_exception_change_identity")
+        return errors
     if status != "NOT_ISOLATED":
         return [f"{name}.isolation_status must be ISOLATED or NOT_ISOLATED before lifecycle readiness"]
     if not exception:
         return [f"{name} NOT_ISOLATED blocks lifecycle readiness without explicit human isolation exception"]
+    errors = []
     if not isinstance(provenance, str) or not provenance.strip():
-        return [f"{name} isolation exception requires non-empty human authorization provenance"]
-    return []
+        errors.append(f"{name} isolation exception requires non-empty human authorization provenance")
+    if not isinstance(exception_identity, dict) or exception_identity != reviewed_identity:
+        errors.append(
+            f"{name} isolation exception must be bound to the current reviewed_change_identity"
+        )
+    return errors
 
 
 def _lens_errors(
@@ -230,6 +243,14 @@ def validate_lifecycle_state(state: object) -> list[str]:
     elif not isinstance(current_head, str):
         errors.append("workspace.current_head_commit must be present for lifecycle readiness")
 
+    third_party_checked_head = workspace.get("third_party_change_checked_head")
+    if not isinstance(third_party_checked_head, str):
+        errors.append("workspace.third_party_change_checked_head must be present for lifecycle readiness")
+    elif not _same_hex(third_party_checked_head, current_head):
+        errors.append(
+            "third-party branch-change evidence is stale: third_party_change_checked_head must equal current_head_commit"
+        )
+
     lens_a = _mapping(review.get("lens_a"))
     lens_b = _mapping(review.get("lens_b"))
     if not identity_errors:
@@ -274,3 +295,43 @@ def validate_lifecycle_state(state: object) -> list[str]:
 
     errors.extend(_merge_policy_errors(readiness))
     return errors
+
+
+def _read_state(path: str) -> object:
+    if path == "-":
+        raw = sys.stdin.read()
+    else:
+        raw = Path(path).read_text(encoding="utf-8")
+    return json.loads(raw)
+
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Fail-closed READY/COMPLETE lifecycle validation for loop-task-implementer state"
+    )
+    parser.add_argument(
+        "--state",
+        required=True,
+        help="Path to the official lifecycle state serialized as JSON, or '-' to read JSON from stdin",
+    )
+    return parser.parse_args(argv)
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = parse_args(argv)
+    try:
+        state = _read_state(args.state)
+        errors = validate_lifecycle_state(state)
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, RuntimeError, ValueError) as exc:
+        print(f"lifecycle validation failed closed: {exc}", file=sys.stderr)
+        return 2
+
+    if errors:
+        for error in errors:
+            print(error, file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
