@@ -21,9 +21,10 @@ a path crossing into a nested Git repository, bare repository, or gitlink, an
 unreadable Git state, an index-protected target whose worktree drift Git may
 hide (`assume-unchanged` or `skip-worktree`), a symlinked target, or an empty
 write plan is unsafe and fails closed. On Windows, path components using NTFS
-alternate-stream syntax, ending in an ASCII space or period, or using a
-reserved DOS device basename such as `NUL`/`COM1` are unsafe because Win32 can
-resolve them to a different namespace object than the literal planned path.
+alternate-stream syntax, ending in an ASCII space or period, or resolving after
+Win32 stem-space normalization to a reserved DOS device basename such as
+`NUL`/`COM1`/`CONIN$` are unsafe because Win32 can resolve them to a different
+namespace object than the literal planned path.
 
 ## Pre-write protocol
 
@@ -89,17 +90,17 @@ Git's bare-repository metadata shape (`HEAD`, `objects/`, and `refs/`), and
 parent-index gitlinks (`160000` mode), so the write plan cannot cross into an
 initialized, deinitialized, bare, or otherwise nested child repository. On
 Windows the same path pass rejects Win32 namespace aliases: NTFS alternate data
-streams, trailing ASCII space/period components, and reserved DOS device
-basenames. Gitlinks are enumerated rather than queried only through literal
-planned pathspecs, and boundary comparison follows the repository's parsed
-`core.ignorecase` setting. This keeps deinitialized-submodule protection intact
-on case-insensitive repositories even when caller path casing differs from the
-index spelling. If the case setting cannot be read or parsed, the guard fails
-closed. Selecting an initialized child repository that has its own readable Git
-worktree as `repo_root` remains valid. A deinitialized gitlink directory has no
-independent Git worktree; if Git would resolve that directory back to the
-parent repository, the guard blocks that `repo_root` rather than treating it as
-a normal nested scope.
+streams, trailing ASCII space/period components, and DOS device names after the
+stem normalization Win32 applies before an extension. Gitlinks are enumerated
+rather than queried only through literal planned pathspecs, and boundary
+comparison follows the repository's parsed `core.ignorecase` setting. This keeps
+deinitialized-submodule protection intact on case-insensitive repositories even
+when caller path casing differs from the index spelling. If the case setting
+cannot be read or parsed, the guard fails closed. Selecting an initialized child
+repository that has its own readable Git worktree as `repo_root` remains valid.
+A deinitialized gitlink directory has no independent Git worktree; if Git would
+resolve that directory back to the parent repository, the guard blocks that
+`repo_root` rather than treating it as a normal nested scope.
 
 The pre-write check therefore cannot be redirected to another repository,
 execute an ambient fsmonitor or repository clean-filter program, resolve Git
