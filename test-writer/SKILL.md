@@ -108,4 +108,3 @@ parity rules. Do not add a router-level write or interactive gate.
 3. Apply [workflow/classify.md](workflow/classify.md) to create `test_plan` or ask once.
 4. Apply [workflow/delegate.md](workflow/delegate.md) for each planned level.
 5. Apply [workflow/aggregate.md](workflow/aggregate.md) before reporting completion.
-

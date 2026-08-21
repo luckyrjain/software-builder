@@ -150,4 +150,3 @@ UNKNOWNS.md/KNOWN_OMISSIONS.md.
 1. [workflow/inputs.md](workflow/inputs.md) — resolve mode, domain, workspace, artifact root, discovery budget.
 2. Existing `manifest.yaml` → resume/retrofit; otherwise Session 0; then Session 0b via squad-map.
 3. Execute P0 → P5; P5 emits the evidence-backed PRD plus required machine model artifacts.
-

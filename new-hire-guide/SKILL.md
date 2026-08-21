@@ -127,4 +127,3 @@ Routing: [skill-routing.md](../docs/skill-framework/shared/skill-routing.md) · 
 1. Read [workflow/inputs.md](workflow/inputs.md) — resolve `new_hire`, `workspace_root`, `delivery_mode`.
 2. [workflow/run-tour.md](workflow/run-tour.md) — resolve repos, invoke squad-map/domain-comprehension
    (unscoped), curate [reference/tour-format.md](reference/tour-format.md) from the full output.
-

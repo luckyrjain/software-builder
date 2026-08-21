@@ -137,4 +137,3 @@ Build Readiness: Not Ready, preserving classified findings/blockers unless the u
    [reference/phase-index.md](reference/phase-index.md) for the active `response_mode`.
 5. Emit per [reference/output-contract.md](reference/output-contract.md) and the matching template in
    [report-template.md](report-template.md).
-

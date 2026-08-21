@@ -134,4 +134,3 @@ Routing: [skill-routing.md](../docs/skill-framework/shared/skill-routing.md) · 
 
 1. Read [workflow/inputs.md](workflow/inputs.md) — resolve workspace, repos, config.
 2. Phase 0 → Phase 1 per [reference/phase-index.md](reference/phase-index.md).
-

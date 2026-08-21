@@ -120,4 +120,3 @@ Routing: [skill-routing.md](../docs/skill-framework/shared/skill-routing.md) · 
 1. Read [workflow/inputs.md](workflow/inputs.md) — resolve `rollup_manifest`, `staleness_warning_days`.
 2. [workflow/run-digest.md](workflow/run-digest.md) — read, group, flag staleness, render per
    [reference/report-format.md](reference/report-format.md).
-

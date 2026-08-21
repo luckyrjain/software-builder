@@ -103,4 +103,3 @@ Routing: [skill-routing.md](../docs/skill-framework/shared/skill-routing.md) · 
 [prompt-injection.md](../docs/skill-framework/shared/prompt-injection.md) · rendered deliverables follow
 [safe-output.md](../docs/skill-framework/shared/safe-output.md) — see
 [render/markdown.md § Safe rendered-output boundary](render/markdown.md#safe-rendered-output-boundary)
-

@@ -29,4 +29,3 @@ Distribution version: **1.4.0**
 | `unit-test-creator` | ambient | rule | yes | manual | host.repository.read_write | repository-write |
 | `weekly-squad-digest` | automation-only | rule | yes | manual | scheduler.cron.trigger | read-only |
 | `who-owns-x-bot` | automation-only | rule | yes | manual | slack.slash_command.receive | read-only |
-

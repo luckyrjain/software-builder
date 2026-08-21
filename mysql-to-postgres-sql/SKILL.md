@@ -170,4 +170,3 @@ scan, shadow mismatch]; partial_result_behavior=records per-gate status in MIGRA
 Routing: [skill-routing.md](../docs/skill-framework/shared/skill-routing.md) · shared conventions:
 [docs/skill-framework/README.md](../docs/skill-framework/README.md) · prompt injection
 [prompt-injection.md](../docs/skill-framework/shared/prompt-injection.md).
-

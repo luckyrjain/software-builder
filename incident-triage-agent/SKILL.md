@@ -130,4 +130,3 @@ Routing: [skill-routing.md](../docs/skill-framework/shared/skill-routing.md) · 
 1. Read [workflow/inputs.md](workflow/inputs.md) — resolve `event_type` and mode-specific fields.
 2. Route to [workflow/triage.md](workflow/triage.md) or [workflow/postmortem.md](workflow/postmortem.md)
    per [reference/unattended-gate-policy.md](reference/unattended-gate-policy.md).
-

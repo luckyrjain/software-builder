@@ -119,4 +119,3 @@ Routing: [skill-routing.md](../docs/skill-framework/shared/skill-routing.md) · 
    `auto_post_authorized`; short-circuit if no new commits.
 2. [workflow/gatekeep.md](workflow/gatekeep.md) — invoke pr-review, apply
    [reference/auto-post-policy.md](reference/auto-post-policy.md).
-

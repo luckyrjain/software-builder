@@ -163,4 +163,3 @@ Full matrix: [cross-skill-escalation.md](../docs/skill-framework/shared/cross-sk
 ## Post-actions
 
 None beyond the PR itself — no Jira/Slack/canvas write-back. See [post-action-templates.md](../docs/skill-framework/shared/post-action-templates.md).
-
