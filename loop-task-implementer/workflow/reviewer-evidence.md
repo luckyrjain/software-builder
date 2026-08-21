@@ -1,5 +1,5 @@
 ---
-workflow_version: 1.3
+workflow_version: 1.4
 phase: reviewer-evidence
 produces:
   review_evidence: object
