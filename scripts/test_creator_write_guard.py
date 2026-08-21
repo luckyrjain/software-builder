@@ -262,6 +262,12 @@ def _is_git_metadata_component(part: str) -> bool:
     return normalised.casefold() == ".git"
 
 
+def _windows_path_component_is_unsafe(part: str) -> bool:
+    """Return whether a Windows path component can address an NTFS alternate stream."""
+
+    return ":" in part
+
+
 def _looks_like_bare_git_repository(path: Path) -> bool:
     """Recognize Git's bare-repository metadata layout without executing it."""
 
@@ -292,6 +298,12 @@ def _normalise_planned_paths(
         try:
             lexical = Path(os.path.abspath(str(candidate if candidate.is_absolute() else repo_root / candidate)))
             lexical_relative = lexical.relative_to(repo_root)
+            if os.name == "nt" and any(
+                _windows_path_component_is_unsafe(part) for part in lexical_relative.parts
+            ):
+                return (), (
+                    f"planned path {raw!r} uses a Windows alternate data stream; refusing to write"
+                )
             if any(_is_git_metadata_component(part) for part in lexical_relative.parts):
                 return (), f"planned path {raw!r} targets Git metadata; refusing to write"
             current = repo_root
@@ -312,6 +324,12 @@ def _normalise_planned_paths(
             return (), f"planned path {raw!r} is outside repository or cannot be resolved: {exc}"
         if not relative.parts:
             return (), "planned write set cannot contain the repository root"
+        if os.name == "nt" and any(
+            _windows_path_component_is_unsafe(part) for part in relative.parts
+        ):
+            return (), (
+                f"planned path {raw!r} uses a Windows alternate data stream; refusing to write"
+            )
         if any(_is_git_metadata_component(part) for part in relative.parts):
             return (), f"planned path {raw!r} targets Git metadata; refusing to write"
         normalised.add(relative.as_posix())
