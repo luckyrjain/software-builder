@@ -486,6 +486,30 @@ def check_write_safety(repo_root: Path, planned_paths: Iterable[str | Path]) -> 
             planned_paths=normalised,
             reason=_TRACKED_PATHS_IMPORT_ERROR or "shared Git path helper unavailable",
         )
+
+    root_relative = resolved_root.relative_to(git_top_level)
+    if root_relative.parts:
+        root_relative_posix = root_relative.as_posix()
+        root_gitlinks, root_gitlink_error = gitlink_relative_paths(
+            git_top_level,
+            _planned_path_prefixes((root_relative_posix,)),
+            env=base_git_env,
+            git_executable=git_executable,
+        )
+        if root_gitlink_error:
+            return _blocked(
+                planned_paths=normalised,
+                reason=f"nested Git repository check failed: {root_gitlink_error}",
+            )
+        if any(
+            root_relative_posix == gitlink or root_relative_posix.startswith(f"{gitlink}/")
+            for gitlink in root_gitlinks
+        ):
+            return _blocked(
+                planned_paths=normalised,
+                reason="repo_root is inside a nested Git repository gitlink without its own Git worktree",
+            )
+
     gitlinks, gitlink_error = gitlink_relative_paths(
         resolved_root,
         _planned_path_prefixes(normalised),
