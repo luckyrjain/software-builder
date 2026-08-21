@@ -26,16 +26,19 @@ Example: `Use loop-task-implementer to implement issue 42, review it deeply, fix
    `null`; `workspace.third_party_change_detected` is an explicit boolean from a fresh check and
    `workspace.third_party_change_checked_head` equals the exact current head.
 5. **Two isolated Reviewer lenses** — Lens A (Safety and State) and Lens B (Contracts and Operations)
-   each run in a fresh context and return a `lens_verdict` of `CLEAN` or `FINDINGS`. Record the actual
-   isolation status rather than assuming it.
+   each run in a fresh context and return a `lens_verdict` of `CLEAN` or `FINDINGS`. Increment that lens's
+   positive integer `review_generation` exactly once for every returned reviewer result, even when the code
+   identity is unchanged, and record the actual isolation status rather than assuming it.
 6. **Adjudication before portable evidence** — each proposed finding is marked `ACCEPTED` / `REJECTED`
    / `NEEDS_EVIDENCE` / `CONTESTED` with rationale, then each lens is normalized into shared
-   `review_evidence` bound to its exact `reviewed_change_identity`. Lifecycle `CLEAN` requires complete
-   inspection, no unavailable surfaces, and zero portable defects.
+   `review_evidence` bound to its exact `reviewed_change_identity`. Lifecycle `CLEAN` requires a positive
+   integer `review_generation`, complete inspection, no unavailable surfaces, and zero portable defects.
 7. **Freshness reruns** — any content, requirements, conflict-resolution, or accepted third-party
    branch change invalidates affected evidence; rerun every invalidated lens until both are clean for
-   the same current identity. A degraded-isolation exception, when used, is explicit, has non-empty
-   provenance, and is bound to that exact reviewed identity.
+   the same current identity. Any reviewer rerun increments that lens's `review_generation`, even on the
+   same unchanged identity. A degraded-isolation exception, when used, is explicit, has non-empty
+   provenance, and is bound to both the exact `reviewed_change_identity` and that lens's current
+   `review_generation`; old exception fields are cleared before a rerun.
 8. **Authoritative current-head CI** — required CI is green and `ci.commit` equals
    `workspace.current_head_commit`; an older green pipeline does not count.
 9. **Executable lifecycle gate** — resolve the actual skill root (source or installed), serialize the
@@ -45,8 +48,9 @@ Example: `Use loop-task-implementer to implement issue 42, review it deeply, fix
    input/runtime inability. Running from an installed skill while the current working directory is the
    target repo must still reach the packaged validator.
 10. **Completion response** — final report follows [report-template.md](../report-template.md): current
-    identity/freshness, both lens evidence/isolation states, third-party check, authoritative current-head
-    checks, lifecycle gate result, merge authority, completion state, and any exact human action required.
+    identity/freshness, both lens generation/evidence/isolation states, third-party check, authoritative
+    current-head checks, lifecycle gate result, merge authority, completion state, and any exact human
+    action required.
 11. **No unauthorized merge** — when `autonomous_merge_authorized` or merge action authority is false,
     the run stops at verified readiness rather than merging.
 
@@ -55,18 +59,21 @@ Example: `Use loop-task-implementer to implement issue 42, review it deeply, fix
 When the host agent has no subagent/worktree/fresh-session primitive, role simulation falls back to
 sequential context resets (`SKILL.md` § Platform behavior). Preserve the actual resulting
 `isolation_status`; if a lens is `NOT_ISOLATED`, readiness remains blocked unless an authorized human
-exception with non-empty provenance is recorded and bound to the exact `reviewed_change_identity`.
+exception with non-empty provenance is recorded and bound to the exact `reviewed_change_identity` and
+that lens's current positive integer `review_generation`.
 
 ## Deep edge cases
 
-See [pressure-tests.md](pressure-tests.md) for stale-head CI, stale third-party checks, exception reuse,
-validator fail-closed behavior, conflict transitions, and report-rendering attacks in addition to the
-legacy reviewer/remediation cases.
+See [pressure-tests.md](pressure-tests.md) for same-head reviewer reruns, stale-head CI, stale third-party
+checks, exception reuse, validator fail-closed behavior, conflict transitions, and report-rendering attacks
+in addition to the legacy reviewer/remediation cases.
 
 ## Pass criteria
 
-- `change_identity`, requirements, both lens evidence envelopes, branch-change evidence, and CI all
-  describe the same current change/head.
+- `change_identity`, requirements, both lens evidence envelopes/generations, branch-change evidence, and
+  CI all describe the same current change/head.
+- Every CLEAN lens has a positive integer `review_generation`; any degraded-isolation exception matches
+  both that lens's exact `reviewed_change_identity` and current `review_generation`.
 - The lifecycle validator was actually executed from the resolved skill root and returned exit `0` for
   the official state immediately before verified readiness/completion.
 - No merge occurred without explicit authorization.
