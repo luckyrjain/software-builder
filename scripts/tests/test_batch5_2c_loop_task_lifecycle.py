@@ -27,10 +27,12 @@ def test_loop_task_declares_shared_lifecycle_contract():
     ):
         assert requirement in data["completion_requires"]
     assert "third_party_change_checked_head" in data["state_binding"]
+    assert "lens_a_review_generation" in data["state_binding"]
+    assert "lens_b_review_generation" in data["state_binding"]
     assert "lens_a_isolation_exception_change_identity" in data["state_binding"]
     assert "lens_b_isolation_exception_change_identity" in data["state_binding"]
-    assert "lens_a_isolation_exception_review_generated_at" in data["state_binding"]
-    assert "lens_b_isolation_exception_review_generated_at" in data["state_binding"]
+    assert "lens_a_isolation_exception_review_generation" in data["state_binding"]
+    assert "lens_b_isolation_exception_review_generation" in data["state_binding"]
 
 
 def test_state_schema_carries_shared_identity_requirements_and_lens_evidence():
@@ -44,13 +46,14 @@ def test_state_schema_carries_shared_identity_requirements_and_lens_evidence():
     assert data["workspace"]["third_party_change_detected"] is None
     for lens in ("lens_a", "lens_b"):
         lens_state = data["review"][lens]
+        assert lens_state["review_generation"] == 0
         assert "review_evidence" in lens_state
         assert "reviewed_change_identity" in lens_state
         assert "isolation_status" in lens_state
         assert "isolation_exception_authorized" in lens_state
         assert "isolation_exception_provenance" in lens_state
         assert "isolation_exception_change_identity" in lens_state
-        assert "isolation_exception_review_generated_at" in lens_state
+        assert "isolation_exception_review_generation" in lens_state
     assert "security_sensitive_needs_evidence_unresolved" in data["merge_readiness"]
 
 
@@ -72,9 +75,10 @@ def test_reviewer_evidence_adapter_emits_shared_review_evidence_after_adjudicati
         "../../docs/skill-framework/shared/review-evidence.yaml",
         "inspection_status",
         "findings.defect` is empty",
+        "review_generation",
         "NOT_ISOLATED",
         "isolation_exception_change_identity",
-        "isolation_exception_review_generated_at",
+        "isolation_exception_review_generation",
     ):
         assert token in text
 
@@ -128,9 +132,10 @@ def test_orchestrator_path_loads_mandatory_lifecycle_overlay():
         "third_party_change_detected",
         "third_party_change_checked_head",
         "security_sensitive_needs_evidence_unresolved",
+        "review_generation",
         "isolation_exception_provenance",
         "isolation_exception_change_identity",
-        "isolation_exception_review_generated_at",
+        "isolation_exception_review_generation",
         "required checks",
         "current head",
         "exit code `0`",
@@ -150,10 +155,11 @@ def test_lifecycle_gate_revalidates_before_ready_or_merge():
         "third_party_change_detected",
         "third_party_change_checked_head",
         "security_sensitive_needs_evidence_unresolved",
+        "review_generation",
         "NOT_ISOLATED",
         "authorized human exception",
         "isolation_exception_change_identity",
-        "isolation_exception_review_generated_at",
+        "isolation_exception_review_generation",
         "required checks",
         "current head",
         "explicit `null`",
@@ -172,8 +178,9 @@ def test_lifecycle_validator_is_packaged_and_fail_closed():
         "third_party_change_detected",
         "third_party_change_checked_head",
         "conflict_resolution_occurred",
+        "review_generation",
         "isolation_exception_change_identity",
-        "isolation_exception_review_generated_at",
+        "isolation_exception_review_generation",
         "required checks must be green before lifecycle readiness",
         "accepted_blocking_findings_open must be integer 0",
         "security_sensitive_needs_evidence_unresolved must be integer 0",
