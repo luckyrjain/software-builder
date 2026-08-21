@@ -1,7 +1,7 @@
 # Per-task shared state schema
 # The Orchestrator is the only role that mutates the official state.
 
-workflow_version: "1.5"
+workflow_version: "1.6"
 
 task:
   task_id: null
@@ -55,6 +55,7 @@ review:
   lens_a:
     status: NOT_RUN  # NOT_RUN | CLEAN | FINDINGS
     review_generation: 0  # increment exactly once for every returned Lens A reviewer result
+    review_evidence_generation: null  # set to review_generation only when current evidence is persisted
     reviewed_head_commit: null
     reviewed_diff_fingerprint: null
     reviewed_change_identity: null
@@ -70,6 +71,7 @@ review:
   lens_b:
     status: NOT_RUN
     review_generation: 0  # increment exactly once for every returned Lens B reviewer result
+    review_evidence_generation: null  # set to review_generation only when current evidence is persisted
     reviewed_head_commit: null
     reviewed_diff_fingerprint: null
     reviewed_change_identity: null
