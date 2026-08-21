@@ -23,7 +23,8 @@ def _run(raw: str, tmp_path: Path) -> subprocess.CompletedProcess[str]:
 
 
 def test_cli_rejects_duplicate_json_object_keys(tmp_path: Path):
-    result = _run('{"ci":{"required_checks_green":false,"required_checks_green":true}}', tmp_path)
+    raw = '{"ci":{"required_checks_green":false,"required_checks_green":true}}'
+    result = _run(raw, tmp_path)
 
     assert result.returncode == 2
     assert "duplicate JSON object key" in result.stderr
