@@ -14,13 +14,13 @@ The Orchestrator reports this after every task, whether it completes, stops at v
 - evidence freshness: FRESH | STALE | INVALID
 - inspection: complete | partial | unable
 - isolation: ISOLATED | NOT_ISOLATED
-- isolation exception: none | AUTHORIZED (`<provenance>`, identity `<isolation_exception_change_identity>`)
+- isolation exception: none | AUTHORIZED — provenance: <escaped/redacted provenance>; identity `<isolation_exception_change_identity>`
 
 **Lens B (Contracts and Operations):** CLEAN | FINDINGS — <summary>
 - evidence freshness: FRESH | STALE | INVALID
 - inspection: complete | partial | unable
 - isolation: ISOLATED | NOT_ISOLATED
-- isolation exception: none | AUTHORIZED (`<provenance>`, identity `<isolation_exception_change_identity>`)
+- isolation exception: none | AUTHORIZED — provenance: <escaped/redacted provenance>; identity `<isolation_exception_change_identity>`
 
 **Accepted findings:** `<count>` — `<one line per finding: id, status>`
 **Security-sensitive NEEDS_EVIDENCE unresolved:** `<count>`
