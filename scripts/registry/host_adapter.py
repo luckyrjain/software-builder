@@ -90,5 +90,5 @@ def validate_host_adapter_interface(root: Path) -> list[str]:
                 if value not in SUPPORT:
                     errors.append(f"error: hosts.{host}.support.{capability}: invalid value {value!r}")
         return errors
-    except (OSError, ValueError) as exc:
+    except (OSError, TypeError, ValueError) as exc:
         return [f"error: host adapter interface: {exc}"]

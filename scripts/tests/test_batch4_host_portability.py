@@ -40,6 +40,19 @@ def test_host_adapter_interface_covers_canonical_hosts() -> None:
         capability_support(ROOT, "codex", "unknown-capability")
 
 
+def test_host_adapter_interface_rejects_mixed_type_host_keys(tmp_path: Path) -> None:
+    registry_dir = tmp_path / "scripts" / "registry"
+    registry_dir.mkdir(parents=True)
+    (registry_dir / "host_contracts.yaml").write_text(
+        "schema_version: 1\ncapability_families: []\nallowed_support: []\nhosts:\n  1: {}\n  cursor: {}\n",
+        encoding="utf-8",
+    )
+
+    errors = validate_host_adapter_interface(tmp_path)
+
+    assert errors and errors[0].startswith("error: host adapter interface:")
+
+
 def test_host_branch_detector_rejects_directives_not_neutral_host_lists() -> None:
     assert HOST_BRANCH_RE.search("If running on Cursor, load .cursor/rules.")
     assert HOST_BRANCH_RE.search("On Claude Code: use the plugin adapter.")
