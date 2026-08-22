@@ -986,8 +986,11 @@ skills:
       unattended: false
       merge: false
     supported_hosts:
+    - chatgpt
     - claude
+    - codex
     - cursor
+    - generic
     - kiro
     entrypoint: SKILL.md
     output_contract:
@@ -1044,8 +1047,11 @@ skills:
       unattended: true
       merge: false
     supported_hosts:
+    - chatgpt
     - claude
+    - codex
     - cursor
+    - generic
     - kiro
     entrypoint: SKILL.md
     output_contract:
@@ -1113,8 +1119,11 @@ skills:
       unattended: false
       merge: false
     supported_hosts:
+    - chatgpt
     - claude
+    - codex
     - cursor
+    - generic
     - kiro
     entrypoint: SKILL.md
     output_contract:
@@ -1168,8 +1177,11 @@ skills:
       unattended: false
       merge: false
     supported_hosts:
+    - chatgpt
     - claude
+    - codex
     - cursor
+    - generic
     - kiro
     entrypoint: SKILL.md
     output_contract:
@@ -1223,8 +1235,11 @@ skills:
       unattended: true
       merge: false
     supported_hosts:
+    - chatgpt
     - claude
+    - codex
     - cursor
+    - generic
     - kiro
     entrypoint: SKILL.md
     output_contract:
@@ -1289,8 +1304,11 @@ skills:
       unattended: false
       merge: false
     supported_hosts:
+    - chatgpt
     - claude
+    - codex
     - cursor
+    - generic
     - kiro
     entrypoint: SKILL.md
     output_contract:
@@ -1340,8 +1358,11 @@ skills:
       unattended: false
       merge: false
     supported_hosts:
+    - chatgpt
     - claude
+    - codex
     - cursor
+    - generic
     - kiro
     entrypoint: SKILL.md
     output_contract:
@@ -1385,8 +1406,11 @@ skills:
       unattended: true
       merge: false
     supported_hosts:
+    - chatgpt
     - claude
+    - codex
     - cursor
+    - generic
     - kiro
     entrypoint: SKILL.md
     output_contract:
@@ -1433,8 +1457,11 @@ skills:
       unattended: false
       merge: false
     supported_hosts:
+    - chatgpt
     - claude
+    - codex
     - cursor
+    - generic
     - kiro
     entrypoint: SKILL.md
     output_contract:
@@ -1501,8 +1528,11 @@ skills:
       unattended: false
       merge: false
     supported_hosts:
+    - chatgpt
     - claude
+    - codex
     - cursor
+    - generic
     - kiro
     entrypoint: SKILL.md
     output_contract:
@@ -1559,8 +1589,11 @@ skills:
       unattended: false
       merge: false
     supported_hosts:
+    - chatgpt
     - claude
+    - codex
     - cursor
+    - generic
     - kiro
     entrypoint: SKILL.md
     output_contract:
@@ -1610,8 +1643,11 @@ skills:
       unattended: false
       merge: false
     supported_hosts:
+    - chatgpt
     - claude
+    - codex
     - cursor
+    - generic
     - kiro
     entrypoint: SKILL.md
     output_contract:
@@ -1662,8 +1698,11 @@ skills:
       unattended: false
       merge: false
     supported_hosts:
+    - chatgpt
     - claude
+    - codex
     - cursor
+    - generic
     - kiro
     entrypoint: SKILL.md
     output_contract:
@@ -1712,8 +1751,11 @@ skills:
       unattended: false
       merge: true
     supported_hosts:
+    - chatgpt
     - claude
+    - codex
     - cursor
+    - generic
     - kiro
     entrypoint: SKILL.md
     output_contract:
@@ -1758,8 +1800,11 @@ skills:
       unattended: true
       merge: true
     supported_hosts:
+    - chatgpt
     - claude
+    - codex
     - cursor
+    - generic
     - kiro
     entrypoint: SKILL.md
     output_contract:
@@ -1812,8 +1857,11 @@ skills:
       unattended: true
       merge: false
     supported_hosts:
+    - chatgpt
     - claude
+    - codex
     - cursor
+    - generic
     - kiro
     entrypoint: SKILL.md
     output_contract:
@@ -1864,8 +1912,11 @@ skills:
       unattended: false
       merge: false
     supported_hosts:
+    - chatgpt
     - claude
+    - codex
     - cursor
+    - generic
     - kiro
     entrypoint: SKILL.md
     output_contract:
@@ -1918,8 +1969,11 @@ skills:
       unattended: false
       merge: false
     supported_hosts:
+    - chatgpt
     - claude
+    - codex
     - cursor
+    - generic
     - kiro
     entrypoint: SKILL.md
     output_contract:
@@ -1968,8 +2022,11 @@ skills:
       unattended: false
       merge: false
     supported_hosts:
+    - chatgpt
     - claude
+    - codex
     - cursor
+    - generic
     - kiro
     entrypoint: SKILL.md
     output_contract:
@@ -2022,8 +2079,11 @@ skills:
       unattended: false
       merge: false
     supported_hosts:
+    - chatgpt
     - claude
+    - codex
     - cursor
+    - generic
     - kiro
     entrypoint: SKILL.md
     output_contract:
@@ -2076,8 +2136,11 @@ skills:
       unattended: false
       merge: false
     supported_hosts:
+    - chatgpt
     - claude
+    - codex
     - cursor
+    - generic
     - kiro
     entrypoint: SKILL.md
     output_contract:
@@ -2127,8 +2190,11 @@ skills:
       unattended: false
       merge: false
     supported_hosts:
+    - chatgpt
     - claude
+    - codex
     - cursor
+    - generic
     - kiro
     entrypoint: SKILL.md
     output_contract:
@@ -2200,8 +2266,11 @@ skills:
       unattended: false
       merge: false
     supported_hosts:
+    - chatgpt
     - claude
+    - codex
     - cursor
+    - generic
     - kiro
     entrypoint: SKILL.md
     output_contract:

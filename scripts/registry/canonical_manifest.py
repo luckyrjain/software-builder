@@ -8,6 +8,7 @@ from typing import Any
 import yaml
 
 from scripts.registry.frontmatter import load_skill_frontmatter
+from scripts.registry.host_adapter import HOSTS
 from scripts.yaml_safety import load_unique_yaml_file, require_mapping
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -99,6 +100,8 @@ def validate_canonical_manifest(root: Path = ROOT) -> list[str]:
         required = {
             "version",
             "type",
+            "category",
+            "invocation",
             "authority",
             "permissions",
             "supported_hosts",
@@ -147,7 +150,7 @@ def validate_canonical_manifest(root: Path = ROOT) -> list[str]:
             if not isinstance(hosts, list) or not hosts or not all(isinstance(item, str) for item in hosts):
                 errors.append(f"error: {skill_id}: supported_hosts must be a non-empty list")
             elif skill_id in registry.skills:
-                registry_hosts = {"cursor", "claude", "kiro"}
+                registry_hosts = HOSTS
                 if set(hosts) != registry_hosts:
                     errors.append(f"error: {skill_id}: supported host projection drift")
             if skill.get("entrypoint") != "SKILL.md":

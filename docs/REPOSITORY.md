@@ -162,7 +162,9 @@ python3 -m scripts.registry explain pr-review
 
 `list` prints one deterministic row per registered skill. `explain <skill>` prints the skill's
 version, type, invocation mode, authority, permissions, supported hosts, entrypoint, output contract,
-and install dependencies. Unknown skill IDs fail with a non-zero exit status.
+and install dependencies. The matrix's host support envelope is a host-wide capability summary;
+skill host declarations identify the surfaces where the canonical skill is published. Unknown skill
+IDs fail with a non-zero exit status.
 
 To install for only one editor, pass `--agent cursor` (Cursor only) or `--agent claude-user` (Claude
 Code only, installs to `~/.claude/skills/`) — or use the `install-claude*` Makefile targets below for
