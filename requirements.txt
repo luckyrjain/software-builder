@@ -5,7 +5,9 @@
 # run resolves identical versions. Bump a version here, then regenerate requirements.lock
 # in the same PR.
 pytest>=9.1.1
+packaging>=26.3
 PyYAML>=6.0.3
 ruamel.yaml>=0.19.1
 sqlglot>=30.17.0
 zizmor>=1.29.0
+

@@ -7,9 +7,40 @@ import re
 import sys
 from pathlib import Path
 
-REQUIREMENT_NAME_RE = re.compile(r"^([A-Za-z0-9][A-Za-z0-9._-]*)\s*>=")
-LOCK_NAME_RE = re.compile(r"^([A-Za-z0-9][A-Za-z0-9._-]*)==")
+from packaging.markers import Variable, default_environment
+from packaging.requirements import InvalidRequirement, Requirement
+from packaging.version import InvalidVersion, Version
+
+LOCK_ENTRY_RE = re.compile(r"^([A-Za-z0-9][A-Za-z0-9._-]*)==([^\s\\]+)$")
 DIRECT_LOCK_MARKER = "# via -r requirements.txt"
+# Match the Linux x86_64 / CPython 3.12 environment used by CI's uv compile.
+LOCK_TARGET_ENVIRONMENT = {
+    **default_environment(),
+    "implementation_name": "cpython",
+    "implementation_version": "3.12.0",
+    "os_name": "posix",
+    "platform_machine": "x86_64",
+    "platform_python_implementation": "CPython",
+    "platform_release": "",
+    "platform_system": "Linux",
+    "platform_version": "",
+    "python_version": "3.12",
+    "python_full_version": "3.12.0",
+    "sys_platform": "linux",
+}
+SUPPORTED_MARKER_VARIABLES = frozenset(
+    {
+        "implementation_name",
+        "implementation_version",
+        "os_name",
+        "platform_machine",
+        "platform_python_implementation",
+        "platform_system",
+        "python_full_version",
+        "python_version",
+        "sys_platform",
+    }
+)
 
 
 def _normalize(name: str) -> str:
@@ -19,32 +50,146 @@ def _normalize(name: str) -> str:
 
 
 def package_names_from_requirements(path: Path) -> set[str]:
-    names: set[str] = set()
+    return set(requirements_from_file(path))
+
+
+def _strip_inline_comment(line: str) -> str:
+    quote: str | None = None
+    escaped = False
+    for index, character in enumerate(line):
+        if quote is not None:
+            if escaped:
+                escaped = False
+            elif character == "\\":
+                escaped = True
+            elif character == quote:
+                quote = None
+        elif character in {"'", '"'}:
+            quote = character
+        elif character == "#" and (index == 0 or line[index - 1].isspace()):
+            return line[:index].strip()
+    return line.strip()
+
+
+def _marker_variables(marker: object) -> set[str]:
+    variables: set[str] = set()
+
+    def visit(node: object) -> None:
+        if isinstance(node, Variable):
+            variables.add(str(node))
+        elif isinstance(node, (list, tuple)):
+            for child in node:
+                visit(child)
+
+    visit(getattr(marker, "_markers", ()))
+    return variables
+
+
+def requirements_from_file(path: Path) -> dict[str, list[Requirement]]:
+    requirements: dict[str, list[Requirement]] = {}
     for line in path.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
+        line = _strip_inline_comment(line)
         if not line or line.startswith("#"):
             continue
-        match = REQUIREMENT_NAME_RE.match(line)
-        if not match:
-            raise ValueError(f"unsupported requirements.txt entry: {line}")
-        names.add(_normalize(match.group(1)))
-    return names
+        try:
+            requirement = Requirement(line)
+        except InvalidRequirement as exc:
+            raise ValueError(f"unsupported requirements.txt entry: {line}") from exc
+        if requirement.marker is not None:
+            unsupported = sorted(
+                _marker_variables(requirement.marker) - SUPPORTED_MARKER_VARIABLES
+            )
+            if unsupported:
+                raise ValueError(
+                    "unsupported lock target marker variable(s): "
+                    + ", ".join(unsupported)
+                )
+            if not requirement.marker.evaluate(LOCK_TARGET_ENVIRONMENT):
+                continue
+        name = _normalize(requirement.name)
+        requirements.setdefault(name, []).append(requirement)
+    return requirements
+
+
+def direct_locked_versions_from_lock(path: Path) -> dict[str, str]:
+    versions: dict[str, str] = {}
+    current: tuple[str, str] | None = None
+    via_block = False
+    for line in path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        head = line.strip().rstrip("\\").strip()
+        match = LOCK_ENTRY_RE.match(head)
+        if match:
+            current = (_normalize(match.group(1)), match.group(2))
+            via_block = False
+            continue
+        if current is None:
+            continue
+        if stripped.startswith("--hash="):
+            continue
+        if stripped == DIRECT_LOCK_MARKER:
+            name, version = current
+            if name in versions:
+                raise ValueError(f"duplicate direct lock entry: {name}")
+            versions[name] = version
+            current = None
+            via_block = False
+        elif stripped == "# via":
+            via_block = True
+        elif via_block:
+            if stripped == "#   -r requirements.txt":
+                name, version = current
+                if name in versions:
+                    raise ValueError(f"duplicate direct lock entry: {name}")
+                versions[name] = version
+                current = None
+                via_block = False
+            elif not stripped.startswith("#   "):
+                current = None
+                via_block = False
+        else:
+            current = None
+    return versions
 
 
 def direct_package_names_from_lock(path: Path) -> set[str]:
-    names: set[str] = set()
-    current: str | None = None
-    for line in path.read_text(encoding="utf-8").splitlines():
-        head = line.strip().rstrip("\\").strip()
-        match = LOCK_NAME_RE.match(head)
-        if match:
-            current = _normalize(match.group(1))
-        if DIRECT_LOCK_MARKER in line and current is not None:
-            names.add(current)
-    return names
+    return set(direct_locked_versions_from_lock(path))
 
 
-def main() -> int:
+def unsatisfied_locked_requirements(
+    requirements_path: Path, lockfile_path: Path
+) -> list[str]:
+    requirements = requirements_from_file(requirements_path)
+    locked_versions = direct_locked_versions_from_lock(lockfile_path)
+    errors: list[str] = []
+    for name, requirement_group in sorted(requirements.items()):
+        version_text = locked_versions.get(name)
+        if version_text is None:
+            continue
+        arbitrary_equality_matches = any(
+            "===" in str(requirement.specifier)
+            and requirement.specifier.contains(version_text)
+            for requirement in requirement_group
+        )
+        for requirement in requirement_group:
+            if not requirement.specifier:
+                if arbitrary_equality_matches:
+                    continue
+                try:
+                    Version(version_text)
+                except InvalidVersion:
+                    errors.append(
+                        f"{name}=={version_text} is not a valid package version"
+                    )
+                continue
+            if not requirement.specifier.contains(version_text):
+                errors.append(
+                    f"{name}=={version_text} does not satisfy {requirement}"
+                )
+    return errors
+
+
+def _main_impl() -> int:
     repo_root = Path(__file__).resolve().parents[1]
     requirements = repo_root / "requirements.txt"
     lockfile = repo_root / "requirements.lock"
@@ -76,9 +221,33 @@ def main() -> int:
         )
         return 1
 
-    print("ok: requirements.txt and direct requirements.lock entries match")
+    unsatisfied = unsatisfied_locked_requirements(requirements, lockfile)
+    if unsatisfied:
+        print(
+            "error: requirements.lock has pinned versions outside requirements.txt constraints:\n"
+            + "\n".join(f"  - {entry}" for entry in unsatisfied),
+            file=sys.stderr,
+        )
+        print(
+            "hint: regenerate with "
+            "`uv pip compile requirements.txt --generate-hashes "
+            "--python-version 3.12 -o requirements.lock`",
+            file=sys.stderr,
+        )
+        return 1
+
+    print("ok: requirements.txt constraints and direct requirements.lock entries match")
     return 0
+
+
+def main() -> int:
+    try:
+        return _main_impl()
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
 
 
 if __name__ == "__main__":
     sys.exit(main())
+
