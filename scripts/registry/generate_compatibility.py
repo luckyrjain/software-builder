@@ -84,7 +84,7 @@ def _cell(value: object) -> str:
         codepoint = ord(char)
         if char == "\\":
             escaped.append("\\\\")
-        elif char in {"|", "`", "[", "]", "(", ")"}:
+        elif char in {"|", "`", "[", "]", "(", ")", "<", ">"}:
             escaped.append("\\" + char)
         elif codepoint < 0x20 or codepoint == 0x7F:
             escaped.append(f"\\x{codepoint:02x}")
