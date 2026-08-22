@@ -33,8 +33,8 @@ DB connection limit 200, 500GB storage capacity.
 2. Analyze — projects average RPS to ~1,770 at horizon end, peak RPS ~4,070; CPU/memory scaled linearly
    from baseline; DB connections projected to ~140 (well under the 200 limit); storage growth projected
    from the data-volume trend to ~340GB (under 500GB capacity); replica requirement projected to 10 —
-   bare-minimum 8.14 (4,070 ÷ 500) rounded up to 9, then the stated 20% headroom margin applied on top
-   and rounded up again — (under no known ceiling, since `current_baseline` states current count, not a
+   bare-minimum 8.14 (4,070 ÷ 500), the stated 20% headroom margin applied on top (8.14 × 1.2 = 9.768),
+   rounded up once to 10 — (under no known ceiling, since `current_baseline` states current count, not a
    hard cap) — no evidence gaps recorded
 3. Report — no section exceeds or sits near a known ceiling, no gaps → Headroom `Sufficient`
 
@@ -129,5 +129,5 @@ against what's actually deployed right now?"
 running matches `current_baseline` or is itself rightsized. Per
 [SKILL.md § Cross-skill escalation](SKILL.md#cross-skill-escalation), routes to
 **k8s-overprovisioning-datadog** directly, handing it `payments-api` as the service to check against live
-metrics — the forecast's projected targets (9 replicas at horizon end) are offered as context, not
+metrics — the forecast's projected targets (10 replicas at horizon end) are offered as context, not
 re-derived by the other skill.
