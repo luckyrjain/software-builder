@@ -23,12 +23,12 @@ new ownership logic. It:
    **triage mode**; **incident-resolved** (alert/incident closed) → **postmortem mode**.
 2. Delegates root-cause investigation entirely to **incident-rca**, and ownership resolution entirely to
    **squad-map** — exactly the pairing already anticipated in
-   [cross-skill-escalation.md](../../docs/skill-framework/shared/cross-skill-escalation.md)'s reverse-escalation
+   [cross-skill-escalation.md](../../skill-framework/shared/cross-skill-escalation.md)'s reverse-escalation
    row ("squad-map resolves the owning team for an incident | incident-rca resumes with squad context
    (e.g. paging, ownership-scoped evidence)").
 3. Handles what neither skill solves alone: **both are designed for interactive use and stop to ask a
    human at multiple points** — a webhook trigger has no human to answer any of them. This skill's one
-   piece of new logic, [reference/unattended-gate-policy.md](../../incident-triage-agent/reference/unattended-gate-policy.md),
+   piece of new logic, [reference/unattended-gate-policy.md](../../../incident-triage-agent/reference/unattended-gate-policy.md),
    enumerates every such gate in both incident-rca and squad-map and gives each a deterministic answer —
    modeled on `pr-gatekeeper/reference/auto-post-policy.md`'s pattern, which needed three review rounds to
    reach exhaustive gate coverage; this skill's policy is written exhaustive from the start using that
@@ -61,7 +61,7 @@ original contribution is the owner substitution plus the earlier full incident w
   `pr-gatekeeper` resolved pr-review's analogous Jira/Slack offers).
 - No auto-widening of scope on ambiguous runtime evidence (multi-site Datadog, sparse signal, symptom-only
   discovery) beyond the single deterministic answer defined per gate — see
-  [reference/unattended-gate-policy.md](../../incident-triage-agent/reference/unattended-gate-policy.md).
+  [reference/unattended-gate-policy.md](../../../incident-triage-agent/reference/unattended-gate-policy.md).
 - No paging-system incident *creation* or *escalation* — this skill only reads a page/incident-resolved
   event and produces a doc; it never pages anyone or changes incident state.
 
@@ -105,7 +105,7 @@ alert-parsing logic itself.
   gates (vague prompt, timezone confirm, window-width confirm, symptom-only org-wide discovery) can fire.
 - Given a runtime-evidence-dependent gate incident-rca cannot avoid by well-formed input (multi-site
   Datadog ambiguity, sparse signal, no observability MCP at all) → the skill answers deterministically per
-  [reference/unattended-gate-policy.md](../../incident-triage-agent/reference/unattended-gate-policy.md)
+  [reference/unattended-gate-policy.md](../../../incident-triage-agent/reference/unattended-gate-policy.md)
   and still produces a doc (never hangs, never fabricates confidence beyond what incident-rca itself
   would assert).
 - Given squad-map cannot resolve an owner (HARD STOP on missing config, or UNKNOWN result) → the skill

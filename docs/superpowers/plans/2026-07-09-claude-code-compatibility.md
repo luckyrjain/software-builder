@@ -326,8 +326,8 @@ JSON block. Those plugins don't exist in Claude Code; use the documented non-GUI
 | Cursor GUI plugin | Skill / section with the alternative | Claude Code path |
 |--------------------|----------------------------------------|-------------------|
 | GitLab plugin / official Duo MCP | [pr-review/SETUP.md § GitLab — full inline posting](../../../pr-review/SETUP.md#3-configure-mcp-servers-cursormcpjson) (`@zereight/mcp-gitlab`) | `claude mcp add-json gitlab '<json>' -s project` using that same server |
-| GitHub MCP plugin | [k8s-overprovisioning-datadog/SETUP.md § Git provider MCP](../../../k8s-overprovisioning-datadog/SETUP.md#5-git-provider-mcp-gitlab-or-github-optional) | Configure the official GitHub MCP server (`command`/`args` per its docs) via `claude mcp add-json github '<json>'` instead of the Cursor plugin installer |
-| Datadog plugin | [k8s-overprovisioning-datadog/SETUP.md § Enable Datadog MCP](../../../k8s-overprovisioning-datadog/SETUP.md#2-enable-datadog-mcp) | Install the `datadog` Claude Code plugin (marketplace) and run its `ddsetup` skill — same `ddsetup`/`ddconfig`/`ddtoolsets` skill names this repo's docs already reference work unchanged in Claude Code |
+| GitHub MCP plugin | [k8s-overprovisioning-datadog/SETUP.md § Git provider MCP](../../../k8s-overprovisioning-datadog/SETUP.md#6-git-provider-mcp-gitlab-or-github-optional) | Configure the official GitHub MCP server (`command`/`args` per its docs) via `claude mcp add-json github '<json>'` instead of the Cursor plugin installer |
+| Datadog plugin | [k8s-overprovisioning-datadog/SETUP.md § Enable Datadog MCP](../../../k8s-overprovisioning-datadog/SETUP.md#3-enable-datadog-mcp-fallback-and-historical-telemetry) | Install the `datadog` Claude Code plugin (marketplace) and run its `ddsetup` skill — same `ddsetup`/`ddconfig`/`ddtoolsets` skill names this repo's docs already reference work unchanged in Claude Code |
 
 ## 4. Verify
 
@@ -385,7 +385,7 @@ make lint-framework
 Expected: ends with `lint-framework: ok`. (This step will still show failures related to Task 4's
 `SETUP.md` links until Task 4 lands — rerun after Task 4 for a clean pass; for now confirm no new
 failures beyond what already existed before this task, and specifically that
-`docs/skill-framework/shared/claude-code-setup.md` existence/non-empty check passes.)
+`../../skill-framework/shared/claude-code-setup.md` existence/non-empty check passes.)
 
 - [ ] **Step 5: Commit**
 
@@ -421,12 +421,12 @@ Install: `bash scripts/install.sh --agent claude-user pr-review` (or `claude-pro
 your repo). MCP servers: reuse the same JSON snippets from § 3 below, placed in `.mcp.json` / via
 `claude mcp add-json` instead of `~/.cursor/mcp.json` — the GitLab plugin / Duo MCP path in § 3 is
 Cursor-GUI-only, so use the `@zereight/mcp-gitlab` inline-posting entry instead. Full mapping:
-[claude-code-setup.md](../docs/skill-framework/shared/claude-code-setup.md).
+[claude-code-setup.md](../../skill-framework/shared/claude-code-setup.md).
 ```
 
 - [ ] **Step 2: `k8s-overprovisioning-datadog/SETUP.md`**
 
-After line 22 (`Workflow modules live under \`workflow/\` — the top-level [SKILL.md](SKILL.md) is a
+After line 22 (`Workflow modules live under \`workflow/\` — the top-level [SKILL.md](../../../k8s-overprovisioning-datadog/SKILL.md) is a
 thin orchestrator (~42 lines).`), insert:
 
 ```markdown
@@ -435,8 +435,8 @@ thin orchestrator (~42 lines).`), insert:
 
 Install: `bash scripts/install.sh --agent claude-user k8s-overprovisioning-datadog`. Datadog MCP:
 install the `datadog` Claude Code plugin and run its `ddsetup` skill instead of the Cursor Datadog
-plugin (§ 2). GitLab/GitHub MCP (§ 5): same JSON entries, via `claude mcp add-json` instead of
-`~/.cursor/mcp.json`. Full mapping: [claude-code-setup.md](../docs/skill-framework/shared/claude-code-setup.md).
+plugin (§ 2). GitLab/GitHub MCP (§ 6): same JSON entries, via `claude mcp add-json` instead of
+`~/.cursor/mcp.json`. Full mapping: [claude-code-setup.md](../../skill-framework/shared/claude-code-setup.md).
 ```
 
 - [ ] **Step 3: `incident-rca/SETUP.md`**
@@ -455,7 +455,7 @@ make install-claude-incident-rca
 
 MCP servers (§ below): same JSON entries, via `.mcp.json` / `claude mcp add-json` instead of
 `~/.cursor/mcp.json`. Datadog: use the `datadog` Claude Code plugin's `ddsetup` skill instead of the
-Cursor Datadog plugin. Full mapping: [claude-code-setup.md](../docs/skill-framework/shared/claude-code-setup.md).
+Cursor Datadog plugin. Full mapping: [claude-code-setup.md](../../skill-framework/shared/claude-code-setup.md).
 ```
 
 - [ ] **Step 4: `domain-comprehension/SETUP.md`**
@@ -472,7 +472,7 @@ make install-claude-domain-comprehension
 ```
 
 No restart needed — a new Claude Code session picks it up. See
-[claude-code-setup.md](../docs/skill-framework/shared/claude-code-setup.md) for MCP config location
+[claude-code-setup.md](../../skill-framework/shared/claude-code-setup.md) for MCP config location
 differences (this skill's optional GitLab/Datadog enrichments use the same server entries).
 ```
 
@@ -490,7 +490,7 @@ make install-claude-squad-map
 ```
 
 No restart needed — a new Claude Code session picks it up. See
-[claude-code-setup.md](../docs/skill-framework/shared/claude-code-setup.md) for MCP config location
+[claude-code-setup.md](../../skill-framework/shared/claude-code-setup.md) for MCP config location
 differences (GitLab/Datadog server entries are unchanged).
 ```
 
@@ -508,7 +508,7 @@ make install-claude-mysql-to-postgres-sql
 ```
 
 No restart needed — a new Claude Code session picks it up. This skill has no required MCP servers;
-see [claude-code-setup.md](../docs/skill-framework/shared/claude-code-setup.md) if you wire the
+see [claude-code-setup.md](../../skill-framework/shared/claude-code-setup.md) if you wire the
 optional post-cutover Datadog check.
 ```
 
@@ -569,7 +569,7 @@ make install-claude-mysql-to-postgres-sql
 
 Or `bash scripts/install.sh --agent claude-user [skill]`, or `--agent claude-project --target-dir
 <repo>` to install into one project's `.claude/skills/`. Details:
-[docs/skill-framework/shared/claude-code-setup.md](docs/skill-framework/shared/claude-code-setup.md).
+[docs/skill-framework/shared/claude-code-setup.md](../../skill-framework/shared/claude-code-setup.md).
 ```
 
 - [ ] **Step 2: `docs/REPOSITORY.md` — Install section**
@@ -583,7 +583,7 @@ Insert immediately after it:
 For Claude Code, use `--agent claude-user` (installs to `~/.claude/skills/` instead of
 `~/.cursor/skills/`) or the `install-claude*` Makefile targets below. No restart needed — a new
 Claude Code session picks up installed skills. See
-[docs/skill-framework/shared/claude-code-setup.md](skill-framework/shared/claude-code-setup.md).
+[docs/skill-framework/shared/claude-code-setup.md](../../skill-framework/shared/claude-code-setup.md).
 ```
 
 - [ ] **Step 3: `docs/REPOSITORY.md` — Makefile targets table**

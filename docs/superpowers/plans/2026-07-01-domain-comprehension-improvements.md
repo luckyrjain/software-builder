@@ -155,7 +155,7 @@ One `explore` agent, multi-repo grep across Tier 0/1 repos.
 
 ## Checkpoint
 
-[phase-completion-gate.md](../reference/phase-completion-gate.md) · [phase-outputs.md § P0.25](../reference/phase-outputs.md#p025--contracts)
+[phase-completion-gate.md](../../../domain-comprehension/reference/phase-completion-gate.md) · [phase-outputs.md § P0.25](../../../domain-comprehension/reference/phase-outputs.md#p025-contracts)
 ```
 
 - [ ] **Step 3: Verify (passing tests)**
@@ -309,7 +309,7 @@ Write to `{map_file}` § Fraud & Compliance. One row per control:
 
 ## Checkpoint
 
-[phase-completion-gate.md](../reference/phase-completion-gate.md) · [phase-outputs.md § P3b](../reference/phase-outputs.md#p3b--adversarial)
+[phase-completion-gate.md](../../../domain-comprehension/reference/phase-completion-gate.md) · [phase-outputs.md § P3b](../../../domain-comprehension/reference/phase-outputs.md#p3b-adversarial)
 ```
 
 - [ ] **Step 3: Verify (passing tests)**
