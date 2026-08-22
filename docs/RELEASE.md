@@ -62,7 +62,7 @@ Each bundle embeds `RELEASE-MANIFEST.json` at its root with:
 - `registry_schema_version` and `host_contract_schema_version` -- the schema versions the bundle is
   compatible with.
 - `supported_hosts` -- every host declared in `scripts/registry/host_contracts.yaml`.
-- `skill_versions` -- each skill's normalized `skill_version` from its `SKILL.md` frontmatter.
+- `skill_versions` -- each skill's normalized version from the canonical `skills.yaml` manifest.
 - `executable_files` -- every bundled path that must be executable (its Git index mode had the
   executable bit set).
 - `files` -- a SHA-256 digest for every other file in the bundle.
@@ -80,7 +80,7 @@ extra, nothing tampered. Every summary field is also cross-checked against the b
 source (`distribution_version` against the bundled `VERSION`, `registry_schema_version`/
 `host_contract_schema_version` against the bundled `skills.yaml`/`host_contracts.yaml` and the
 bundled `scripts/release_contract.yaml`'s compatibility policy, `supported_hosts`/`skill_versions`
-against the bundled `host_contracts.yaml`/`skills.yaml`+`SKILL.md`), not just checked for being
+against the bundled `host_contracts.yaml` and canonical `skills.yaml` entries), not just checked for being
 well-typed -- a manifest that fabricates or drifts on any of those fields, even with every
 individual file hash still matching, is rejected.
 

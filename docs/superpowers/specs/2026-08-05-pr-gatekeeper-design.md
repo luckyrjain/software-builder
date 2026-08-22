@@ -25,7 +25,7 @@ on every push to an MR automatically, without a human remembering to ask.
    literal human chat reply at several points, not only its Phase 3 posting confirmation** — the early
    200-file cap warning and pagination-cap ask in Phase 1 Gather, the baseline-staleness offer in
    incremental re-review, and Phase 3 itself (see
-   [reference/auto-post-policy.md](../../pr-gatekeeper/reference/auto-post-policy.md)) — correctly so,
+   [reference/auto-post-policy.md](../../../pr-gatekeeper/reference/auto-post-policy.md)) — correctly so,
    for interactive use. A webhook has no chat turn to supply any of them. pr-gatekeeper's entire job is
    answering each of these deterministically (never expanding scope on its own judgment) and, for Phase 3
    specifically, deciding whether pr-review's own existing "review and post" skip condition already
@@ -68,7 +68,7 @@ team that wired up the webhook) is a human who, at **integration setup time**, d
 this project should auto-post — this is a standing, upfront authorization, not a live per-push
 confirmation, and is the same shape as loop-task-implementer's `autonomous_merge_authorized` flag
 (explicit upfront grant, never synthesized by the agent itself, never inferred from repo-file prose). See
-[SETUP.md](../../pr-gatekeeper/SETUP.md) § Config for where this is set.
+[SETUP.md](../../../pr-gatekeeper/SETUP.md) § Config for where this is set.
 
 When `auto_post_authorized` is true for the project **and** pr-review's own conditions for the skip are
 independently met (`full`/`summary-only` posting mode, MR not a draft), pr-gatekeeper supplies "review

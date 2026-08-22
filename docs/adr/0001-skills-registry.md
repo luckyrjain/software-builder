@@ -5,18 +5,29 @@
 
 ## Context
 
-Twenty-two portable skills lived in sibling directories with install edges scattered across the `Makefile`, generated adapters duplicated routing prose, and no single place to answer “what skills exist, how are they invoked, and what do they require?”
+Twenty-three portable skills lived in sibling directories with install edges scattered across the
+`Makefile`, generated adapters duplicated routing prose, and no single place to answer “what skills
+exist, how are they invoked, and what do they require?”
 
 ## Decision
 
-- Add root `skills.yaml` as the **canonical platform registry** for install dependency edges, host discovery metadata, invocation mode, composition graph facts, and capability contracts.
-- Keep agent-facing policy and workflow prose in each skill’s `SKILL.md`; the registry holds machine-checkable platform facts only.
+- Add root `skills.yaml` as the **versioned canonical manifest** for skill entries and machine-checkable
+  platform, artifact, and composition contracts. The manifest is identified by
+  `manifest_kind: canonical` and `schema_version`.
+- Keep agent-facing policy and workflow prose in each skill’s `SKILL.md`; its frontmatter owns
+  discovery-facing identity and lifecycle markers, while the canonical manifest owns versions and
+  platform metadata. `skill_version` and `platform_contract` are legacy frontmatter fields and are
+  rejected for the canonical repository.
 - Generate thin `.cursor/rules/*.mdc` and `.kiro/steering/*` adapters from the registry (`make generate`).
-- Gate merges with `make validate-registry` and `make generate-check`.
+- Generate `scripts/registry/platform_contracts.yaml`, `composition_contracts.yaml`, and
+  `composition_runtime.yaml` as projections; they are not independent authoring surfaces.
+- Gate merges with `make validate-registry` and `make generate --check`.
 
 ## Consequences
 
-- **Positive:** One source of truth for install allowlists, composition validation, and generated discovery wrappers.
+- **Positive:** One source of truth for versions, install allowlists, artifact schemas, composition
+  validation, and generated discovery wrappers.
 - **Positive:** Registry-driven installer can default to “install all registered skills” safely.
 - **Negative:** Skill authors must update `skills.yaml` when install edges or invocation mode change; drift fails CI.
-- **Follow-ups:** Capabilities backfill (#18), composition contracts v2 (#19), compatibility matrix generation (#17).
+- **Follow-ups:** Keep generated projections synchronized and evolve the manifest with an explicit
+  schema-version migration when the contract shape changes.

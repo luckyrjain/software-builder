@@ -1064,7 +1064,7 @@ Add a new section immediately before `## Phase 4 exit`:
 ## Causal graph artifact (required)
 
 After ranking (CLI or manual), write the machine-checkable causal graph per
-[causal-graph-schema.md](../reference/causal-graph-schema.md) and validate it:
+[causal-graph-schema.md](../../../incident-rca/reference/causal-graph-schema.md) and validate it:
 
 ```bash
 scratchpad="${CURSOR_SCRATCHPAD:-${TMPDIR:-/tmp}}"
@@ -1075,9 +1075,9 @@ python3 incident-rca/scripts/validate_causal_graph.py \
 
 Fix every reported `CG-*` violation before Phase 5 — the validator enforces acyclicity, evidence-backed
 edges, score arithmetic, confidence caps, and the no-best-guess-primary rule
-([evidence-quality.md](../reference/evidence-quality.md)). If Python or PyYAML is unavailable, state that
+([evidence-quality.md](../../../incident-rca/reference/evidence-quality.md)). If Python or PyYAML is unavailable, state that
 in **Gaps** ("causal graph not machine-validated") and verify the CG checks by hand against
-[causal-graph-schema.md](../reference/causal-graph-schema.md) §Invariants.
+[causal-graph-schema.md](../../../incident-rca/reference/causal-graph-schema.md) §Invariants.
 ````
 
 - [ ] **Step 2: phase-5.md**
@@ -1088,22 +1088,22 @@ In the "Merge logic" numbered list, add a new first item (renumber the rest):
 
 ```markdown
 1. **Causal-graph gate** — confirm the Phase 4 causal-graph artifact validated cleanly
-   ([causal-graph-schema.md](../reference/causal-graph-schema.md)). Unvalidated or failing → return to
+   ([causal-graph-schema.md](../../../incident-rca/reference/causal-graph-schema.md)). Unvalidated or failing → return to
    Phase 4; render only with a Gaps note when validation was impossible (no Python/PyYAML).
    The report's **Causal graph** section must mirror the validated artifact's nodes and edges.
 ```
 
 - [ ] **Step 3: lazy-load-index.md**
 
-Phase 4 row: append `; [causal-graph-schema.md](causal-graph-schema.md) when writing the causal-graph artifact`.
-Phase 5 row: append `, [causal-graph-schema.md](causal-graph-schema.md) (gate)`.
+Phase 4 row: append `; [causal-graph-schema.md](../../../incident-rca/reference/causal-graph-schema.md) when writing the causal-graph artifact`.
+Phase 5 row: append `, [causal-graph-schema.md](../../../incident-rca/reference/causal-graph-schema.md) (gate)`.
 
 - [ ] **Step 4: SKILL.md pointer**
 
 In the `## Report schema (mandatory section order)` section, item `7. Causal graph (acyclic)` — change to:
 
 ```markdown
-7. Causal graph (acyclic — validated artifact: [causal-graph-schema.md](reference/causal-graph-schema.md))
+7. Causal graph (acyclic — validated artifact: [causal-graph-schema.md](../../../incident-rca/reference/causal-graph-schema.md))
 ```
 
 Check line count stays ≤ 180: `wc -l incident-rca/SKILL.md`.

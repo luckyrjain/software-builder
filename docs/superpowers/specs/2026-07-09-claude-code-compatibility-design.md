@@ -8,11 +8,14 @@ distributed as **Cursor Agent Skills** only: `scripts/install.sh` copies each sk
 `~/.cursor/skills/`, and every `SETUP.md` gives Cursor-specific install paths, GUI steps ("Cursor
 Settings → MCP → Add"), and `~/.cursor/mcp.json` instructions.
 
-The `SKILL.md` files themselves (`name` + `description` + optional `skill_version` frontmatter,
+The `SKILL.md` files themselves (`name` + `description` frontmatter,
 Markdown body) are already directly compatible with Claude Code's skill format — Claude Code
 discovers skills the same way (frontmatter `description` for auto-invocation, `/<skill-name>` for
 explicit invocation). Confirmed by grep: no skill sets `disable-model-invocation` (a Cursor-only
 frontmatter field), so there's no active frontmatter incompatibility to reconcile.
+
+Skill versions and platform metadata are owned by the canonical versioned `skills.yaml` manifest,
+not by `SKILL.md` frontmatter.
 
 The gap is **distribution and setup docs**, not skill content:
 

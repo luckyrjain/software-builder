@@ -9,7 +9,7 @@ software-builder/
 ├── README.md                 # Top-level install + usage (start here)
 ├── CHANGELOG.md              # Per-skill change history
 ├── Makefile                  # install + lint targets
-├── skills.yaml               # Platform skill registry (install deps, hosts, lint metadata)
+├── skills.yaml               # Versioned canonical manifest (skills + platform/composition contracts)
 ├── generated/catalogue/      # Generated install-dependency graph (Mermaid)
 ├── docs/
 │   ├── README.md             # Documentation index (this tree)
@@ -152,8 +152,11 @@ adding a new skill directory needs no script change to be picked up.
 
 ## Registry discovery
 
-The registry CLI reads the canonical `skills.yaml` manifest and exposes the same metadata used by
-validation and generated documentation:
+The registry CLI reads the versioned canonical `skills.yaml` manifest and exposes the same metadata
+used by validation and generated documentation. The standalone files under `scripts/registry/`
+(`platform_contracts.yaml`, `composition_contracts.yaml`, and `composition_runtime.yaml`) are
+generated projections; update `skills.yaml` and run `make generate` rather than editing those files
+directly:
 
 ```bash
 python3 -m scripts.registry list
