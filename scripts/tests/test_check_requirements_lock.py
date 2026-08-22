@@ -150,3 +150,33 @@ def test_duplicate_direct_lock_entries_are_rejected(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="duplicate direct lock entry: demo"):
         direct_package_names_from_lock(lockfile)
 
+
+def test_inline_comments_and_linux_markers_are_supported(tmp_path: Path) -> None:
+    requirements = tmp_path / "requirements.txt"
+    lockfile = tmp_path / "requirements.lock"
+    requirements.write_text(
+        "demo>=1  # kept for the checker\n"
+        "linux-only>=2; sys_platform == 'linux'\n"
+        "windows-only>=2; sys_platform == 'win32'\n",
+        encoding="utf-8",
+    )
+    lockfile.write_text(
+        "demo==1 \\\n    # via -r requirements.txt\n"
+        "linux-only==2 \\\n    # via -r requirements.txt\n",
+        encoding="utf-8",
+    )
+
+    assert package_names_from_requirements(requirements) == {"demo", "linux-only"}
+    assert unsatisfied_locked_requirements(requirements, lockfile) == []
+
+
+def test_malformed_lock_entry_cannot_reuse_prior_parser_state(tmp_path: Path) -> None:
+    lockfile = tmp_path / "requirements.lock"
+    lockfile.write_text(
+        "first==1 \\\n    # via pytest\n"
+        "demo==2 garbage \\\n    # via -r requirements.txt\n",
+        encoding="utf-8",
+    )
+
+    assert direct_package_names_from_lock(lockfile) == set()
+

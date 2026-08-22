@@ -10,13 +10,22 @@ from pathlib import Path
 from packaging.markers import default_environment
 from packaging.requirements import InvalidRequirement, Requirement
 
-LOCK_ENTRY_RE = re.compile(r"^([A-Za-z0-9][A-Za-z0-9._-]*)==([^\s\\]+)")
+LOCK_ENTRY_RE = re.compile(r"^([A-Za-z0-9][A-Za-z0-9._-]*)==([^\s\\]+)$")
 DIRECT_LOCK_MARKER = "# via -r requirements.txt"
-LOCK_TARGET_ENVIRONMENT = default_environment()
-LOCK_TARGET_ENVIRONMENT.update(
-    python_version="3.12",
-    python_full_version="3.12.0",
-)
+LOCK_TARGET_ENVIRONMENT = {
+    **default_environment(),
+    "implementation_name": "cpython",
+    "implementation_version": "3.12.0",
+    "os_name": "posix",
+    "platform_machine": "x86_64",
+    "platform_python_implementation": "CPython",
+    "platform_release": "",
+    "platform_system": "Linux",
+    "platform_version": "",
+    "python_version": "3.12",
+    "python_full_version": "3.12.0",
+    "sys_platform": "linux",
+}
 
 
 def _normalize(name: str) -> str:
@@ -32,7 +41,7 @@ def package_names_from_requirements(path: Path) -> set[str]:
 def requirements_from_file(path: Path) -> dict[str, list[Requirement]]:
     requirements: dict[str, list[Requirement]] = {}
     for line in path.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
+        line = re.split(r"\s+#", line, maxsplit=1)[0].strip()
         if not line or line.startswith("#"):
             continue
         try:
@@ -53,23 +62,28 @@ def direct_locked_versions_from_lock(path: Path) -> dict[str, str]:
     current: tuple[str, str] | None = None
     via_block = False
     for line in path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
         head = line.strip().rstrip("\\").strip()
         match = LOCK_ENTRY_RE.match(head)
         if match:
             current = (_normalize(match.group(1)), match.group(2))
             via_block = False
-        if line.strip() == DIRECT_LOCK_MARKER and current is not None:
+            continue
+        if current is None:
+            continue
+        if stripped.startswith("--hash="):
+            continue
+        if stripped == DIRECT_LOCK_MARKER:
             name, version = current
             if name in versions:
                 raise ValueError(f"duplicate direct lock entry: {name}")
             versions[name] = version
             current = None
             via_block = False
-        elif current is not None and line.strip() == "# via":
+        elif stripped == "# via":
             via_block = True
         elif via_block:
-            stripped = line.strip()
-            if stripped == "#   -r requirements.txt" and current is not None:
+            if stripped == "#   -r requirements.txt":
                 name, version = current
                 if name in versions:
                     raise ValueError(f"duplicate direct lock entry: {name}")
@@ -79,6 +93,8 @@ def direct_locked_versions_from_lock(path: Path) -> dict[str, str]:
             elif not stripped.startswith("#   "):
                 current = None
                 via_block = False
+        else:
+            current = None
     return versions
 
 
