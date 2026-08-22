@@ -180,3 +180,14 @@ def test_malformed_lock_entry_cannot_reuse_prior_parser_state(tmp_path: Path) ->
 
     assert direct_package_names_from_lock(lockfile) == set()
 
+
+def test_unknown_platform_marker_is_rejected_fail_closed(tmp_path: Path) -> None:
+    requirements = tmp_path / "requirements.txt"
+    requirements.write_text(
+        "demo>=1; platform_release == 'known-kernel'\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="platform_release"):
+        package_names_from_requirements(requirements)
+

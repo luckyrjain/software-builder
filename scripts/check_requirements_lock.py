@@ -12,6 +12,10 @@ from packaging.requirements import InvalidRequirement, Requirement
 
 LOCK_ENTRY_RE = re.compile(r"^([A-Za-z0-9][A-Za-z0-9._-]*)==([^\s\\]+)$")
 DIRECT_LOCK_MARKER = "# via -r requirements.txt"
+# These values are not fixed by the lock-generation command, so evaluating them
+# locally would make validation depend on an unknown build-host kernel.
+UNSUPPORTED_MARKER_VARIABLES = ("platform_release", "platform_version")
+# Match the Linux x86_64 / CPython 3.12 environment used by CI's uv compile.
 LOCK_TARGET_ENVIRONMENT = {
     **default_environment(),
     "implementation_name": "cpython",
@@ -48,10 +52,20 @@ def requirements_from_file(path: Path) -> dict[str, list[Requirement]]:
             requirement = Requirement(line)
         except InvalidRequirement as exc:
             raise ValueError(f"unsupported requirements.txt entry: {line}") from exc
-        if requirement.marker is not None and not requirement.marker.evaluate(
-            LOCK_TARGET_ENVIRONMENT
-        ):
-            continue
+        if requirement.marker is not None:
+            marker_text = str(requirement.marker)
+            unsupported = [
+                name
+                for name in UNSUPPORTED_MARKER_VARIABLES
+                if re.search(rf"\b{re.escape(name)}\b", marker_text)
+            ]
+            if unsupported:
+                raise ValueError(
+                    "unsupported lock target marker variable(s): "
+                    + ", ".join(unsupported)
+                )
+            if not requirement.marker.evaluate(LOCK_TARGET_ENVIRONMENT):
+                continue
         name = _normalize(requirement.name)
         requirements.setdefault(name, []).append(requirement)
     return requirements
