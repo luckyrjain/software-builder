@@ -63,6 +63,27 @@ def capability_support(root: Path, host: str, capability: str) -> str:
     return str(value)
 
 
+def validate_host_adapter_identities(root: Path) -> list[str]:
+    """Check adapter names against the checked-in host-parity contract."""
+    expected_path = root / "evals" / "host-parity" / "expected.yaml"
+    if not expected_path.is_file():
+        return []
+    try:
+        contracts = _contracts(root)
+        host_map = require_mapping(contracts.get("hosts"), "hosts")
+        expected = require_mapping(load_unique_yaml_file(expected_path), "host parity expected")
+        snapshots = require_mapping(expected.get("hosts"), "host parity expected hosts")
+        errors: list[str] = []
+        for host in sorted(HOSTS):
+            actual = require_mapping(host_map.get(host), f"hosts.{host}")
+            snapshot = require_mapping(snapshots.get(host), f"host parity expected hosts.{host}")
+            if actual.get("adapter") != snapshot.get("adapter"):
+                errors.append(f"error: {host}: adapter identity drift")
+        return errors
+    except (OSError, TypeError, ValueError) as exc:
+        return [f"error: host adapter identity: {exc}"]
+
+
 def validate_host_adapter_interface(root: Path) -> list[str]:
     try:
         contracts = _contracts(root)

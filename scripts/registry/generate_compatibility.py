@@ -3,7 +3,11 @@ from __future__ import annotations
 from pathlib import Path
 
 from scripts.registry.backfill_capabilities import load_catalog
-from scripts.registry.canonical_manifest import load_canonical_manifest, validate_canonical_manifest
+from scripts.registry.canonical_manifest import (
+    MANIFEST_KIND,
+    load_canonical_manifest,
+    validate_canonical_manifest,
+)
 from scripts.registry.composition_contracts import load_contracts
 from scripts.registry.host_adapter import HOSTS, validate_host_adapter_interface
 from scripts.registry.load import load_registry
@@ -21,9 +25,11 @@ Distribution version: **{version}**
 """
 
 
-def _host_profiles(root: Path) -> tuple[dict[str, str], dict[str, str], str]:
+def _host_profiles(root: Path, *, canonical: bool) -> tuple[dict[str, str], dict[str, str], str]:
     path = root / "scripts/registry/host_contracts.yaml"
     if not path.is_file():
+        if canonical:
+            raise ValueError("host contracts required for canonical compatibility output")
         surfaces = {host: "unsupported" for host in HOSTS}
         profiles = {host: "unsupported" for host in HOSTS}
         return surfaces, profiles, "legacy: unknown"
@@ -61,13 +67,7 @@ def _load_optional_canonical_manifest(root: Path) -> dict | None:
         return None
     raw = require_mapping(load_unique_yaml_file(path), "skills.yaml root")
     skills = raw.get("skills")
-    canonical_marker = "contracts" in raw
-    if isinstance(skills, dict):
-        canonical_marker = canonical_marker or any(
-            isinstance(skill, dict)
-            and {"version", "type", "authority", "supported_hosts"} & set(skill)
-            for skill in skills.values()
-        )
+    canonical_marker = raw.get("manifest_kind") == MANIFEST_KIND
     if not canonical_marker:
         return None
     errors = validate_canonical_manifest(root)
@@ -78,13 +78,18 @@ def _load_optional_canonical_manifest(root: Path) -> dict | None:
 
 def _cell(value: object) -> str:
     """Escape dynamic values so generated Markdown cannot change its table shape."""
-    return (
-        str(value)
-        .replace("\\", "\\\\")
-        .replace("|", "\\|")
-        .replace("\r", "\\r")
-        .replace("\n", "\\n")
-    )
+    escaped: list[str] = []
+    for char in str(value):
+        codepoint = ord(char)
+        if char == "\\":
+            escaped.append("\\\\")
+        elif char in {"|", "`"}:
+            escaped.append("\\" + char)
+        elif codepoint < 0x20 or codepoint == 0x7F:
+            escaped.append(f"\\x{codepoint:02x}")
+        else:
+            escaped.append(char)
+    return "".join(escaped)
 
 
 def render_compatibility_matrix(root: Path) -> str:
@@ -92,8 +97,8 @@ def render_compatibility_matrix(root: Path) -> str:
     capabilities = load_catalog(root / "scripts/registry/capability_catalog.yaml")
     _, _, _, contracts = load_contracts(root / "skills.yaml")
     version = read_distribution_version(root)
-    host_surfaces, host_profiles, support_profile = _host_profiles(root)
     manifest = _load_optional_canonical_manifest(root)
+    host_surfaces, host_profiles, support_profile = _host_profiles(root, canonical=manifest is not None)
 
     lines = [HEADER.format(version=version).rstrip()]
     for skill_id, entry in sorted(registry.skills.items()):

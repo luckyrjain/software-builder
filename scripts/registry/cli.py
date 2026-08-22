@@ -32,7 +32,7 @@ from scripts.registry.generate_docs import (
 from scripts.registry.generate_kiro import generate_kiro_steering
 from scripts.registry.generic_package import build_generic_package
 from scripts.registry.host_portability import validate_host_portability
-from scripts.registry.host_adapter import validate_host_adapter_interface
+from scripts.registry.host_adapter import validate_host_adapter_identities, validate_host_adapter_interface
 from scripts.registry.load import load_descriptions, load_registry
 from scripts.registry.manifest import validate_manifest
 from scripts.registry.p1_validation import validate_p1_contracts
@@ -176,6 +176,7 @@ def _validate_for_generate(root: Path) -> list[str]:
     host_contracts = root / "scripts" / "registry" / "host_contracts.yaml"
     if host_contracts.is_file():
         errors.extend(validate_host_adapter_interface(root))
+        errors.extend(validate_host_adapter_identities(root))
     if _capability_catalog_path(root).is_file():
         errors.extend(validate_capability_catalog_sync(root))
     if _capability_catalog_path(root).is_file() and _capability_families_path(root).is_file():
@@ -318,7 +319,7 @@ def cmd_explain(root: Path, skill_id: str) -> int:
 
 def _validated_canonical_manifest(root: Path) -> dict:
     raw = load_unique_yaml_file(root / "skills.yaml")
-    if not isinstance(raw, dict) or "contracts" not in raw:
+    if not isinstance(raw, dict) or raw.get("manifest_kind") != "canonical":
         raise ValueError("canonical manifest required for this command")
     errors = validate_canonical_manifest(root)
     if errors:
@@ -328,14 +329,18 @@ def _validated_canonical_manifest(root: Path) -> dict:
 
 def _display_text(value: object) -> str:
     """Keep untrusted manifest text on one terminal line."""
-    return (
-        str(value)
-        .replace("\\", "\\\\")
-        .replace("|", "\\|")
-        .replace("\r", "\\r")
-        .replace("\n", "\\n")
-        .replace("\t", "\\t")
-    )
+    escaped: list[str] = []
+    for char in str(value):
+        codepoint = ord(char)
+        if char == "\\":
+            escaped.append("\\\\")
+        elif char == "|":
+            escaped.append("\\|")
+        elif codepoint < 0x20 or codepoint == 0x7F:
+            escaped.append(f"\\x{codepoint:02x}")
+        else:
+            escaped.append(char)
+    return "".join(escaped)
 
 
 def main(argv: list[str] | None = None) -> int:

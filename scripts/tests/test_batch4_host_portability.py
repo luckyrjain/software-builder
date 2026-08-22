@@ -16,7 +16,12 @@ from scripts.registry.generic_package import (
     _validate_output_path,
     build_generic_package,
 )
-from scripts.registry.host_adapter import HOSTS, capability_support, validate_host_adapter_interface
+from scripts.registry.host_adapter import (
+    HOSTS,
+    capability_support,
+    validate_host_adapter_identities,
+    validate_host_adapter_interface,
+)
 from scripts.registry.host_portability import (
     HOST_BRANCH_RE,
     _claude_marketplace_errors,
@@ -32,6 +37,7 @@ ROOT = Path(__file__).resolve().parents[2]
 def test_host_adapter_interface_covers_canonical_hosts() -> None:
     assert HOSTS == {"cursor", "claude", "codex", "chatgpt", "kiro", "generic"}
     assert validate_host_adapter_interface(ROOT) == []
+    assert validate_host_adapter_identities(ROOT) == []
     assert capability_support(ROOT, "codex", "scm") == "full"
     assert capability_support(ROOT, "chatgpt", "terminal") == "unsupported"
     with pytest.raises(ValueError):

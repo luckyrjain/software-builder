@@ -5,8 +5,14 @@ from __future__ import annotations
 import subprocess
 import sys
 
+import pytest
+
 from scripts.registry import cli
-from scripts.registry.generate_compatibility import render_compatibility_matrix
+from scripts.registry.generate_compatibility import (
+    _cell,
+    _host_profiles,
+    render_compatibility_matrix,
+)
 
 
 def _run_cli(*args: str) -> subprocess.CompletedProcess[str]:
@@ -69,3 +75,14 @@ def test_compatibility_matrix_covers_all_hosts_and_support_levels() -> None:
     assert "full" in matrix
     assert "degraded" in matrix
     assert "unsupported" in matrix
+
+
+def test_dynamic_output_escapes_terminal_and_markdown_controls() -> None:
+    assert "\x1b" not in cli._display_text("\x1b[31mRED")
+    assert "\\x1b" in cli._display_text("\x1b[31mRED")
+    assert _cell("skill`|name\n") == "skill\\`\\|name\\x0a"
+
+
+def test_canonical_output_requires_host_contracts(tmp_path) -> None:
+    with pytest.raises(ValueError, match="host contracts required"):
+        _host_profiles(tmp_path, canonical=True)

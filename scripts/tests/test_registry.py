@@ -120,6 +120,7 @@ skills:
     path: demo
     category: testing
     invocation: ambient
+    version: legacy-extra-metadata
     hosts:
       cursor: {discovery: rule}
       claude: {install: true}
@@ -179,7 +180,7 @@ def test_compatibility_generator_rejects_malformed_canonical_manifest(tmp_path: 
     from scripts.registry.generate_compatibility import _load_optional_canonical_manifest
 
     (tmp_path / "skills.yaml").write_text(
-        "schema_version: 1\ncontracts: {}\nskills: {}\n",
+        "schema_version: 1\nmanifest_kind: canonical\ncontracts: {}\nskills: {}\n",
         encoding="utf-8",
     )
 
