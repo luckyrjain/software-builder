@@ -1,0 +1,9 @@
+---
+description: Use when a database schema, migration, or query needs review for indexing, locking, transactions, migration safety, query plans, replication, and partitioning. Keywords: database review, schema review, migration review, index review, query plan, locking, partitioning. Not for the MySQL-to-Postgres rewrite itself (mysql-to-postgres-sql), a general MR review (pr-review), or capacity forecasting (capacity-planner).
+alwaysApply: false
+---
+
+<!-- GENERATED from skills.yaml + SKILL.md — do not edit; run make generate -->
+
+Invoke the database-review skill. Read `database-review/SKILL.md` and follow it.
+Phase index: `database-review/reference/phase-index.md` when present under the skill directory.

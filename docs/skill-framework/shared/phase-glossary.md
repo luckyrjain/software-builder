@@ -205,6 +205,22 @@ migration-program-manager's mapping draws between "aggregation over already-comp
 Analyze" and "re-deriving a value another skill already computed," which this skill deliberately never
 does.
 
+### architecture-review, system-design, api-design-review, database-review, security-review, performance-review, capacity-planner, observability-review, deployment-risk-review, dependency-upgrade-review, tech-debt-assessor mapping
+
+All eleven of these skills share one linear 3-phase pipeline (no branching `workflow-contract.yaml`) —
+same mapping applies to each, only the produced report filename and domain-specific Analyze checks
+differ (see each skill's own `SKILL.md`/`reference/phase-index.md`):
+
+| Phase | File | Canonical |
+|-------|------|-----------|
+| Inputs | `workflow/inputs.md` | Detect (partial) — parse required/optional inputs, untrusted-content guard |
+| Analyze | `workflow/analyze.md` | Gather + Analyze — the skill's own domain checks over the supplied material |
+| Report | `workflow/report.md` | Rank/Validate + Report — fixed-precedence verdict derivation, build the markdown deliverable |
+
+No separate Correlate step — each skill evaluates one supplied artifact (a PRD, a design, an API spec, a
+schema, code, a demand series, a release description, a dependency bump, or a debt backlog) rather than
+correlating across multiple live data sources the way incident-rca/k8s do.
+
 ## 5. Cross-skill analogies
 
 | Concept | pr-review | incident-rca | k8s | domain-comprehension | squad-map | mysql-to-postgres-sql |

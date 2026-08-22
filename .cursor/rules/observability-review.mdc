@@ -1,0 +1,9 @@
+---
+description: Use when a service's metrics, logs, tracing, dashboards, alerts, SLOs, and correlation IDs need evaluation for coverage and gaps. Keywords: observability review, SLO review, alert coverage, tracing coverage, correlation ID, dashboard review. Not for investigating a live incident (incident-rca) or assessing deployment risk for a specific release (deployment-risk-review).
+alwaysApply: false
+---
+
+<!-- GENERATED from skills.yaml + SKILL.md — do not edit; run make generate -->
+
+Invoke the observability-review skill. Read `observability-review/SKILL.md` and follow it.
+Phase index: `observability-review/reference/phase-index.md` when present under the skill directory.

@@ -69,6 +69,17 @@ artifact_runtime:
   - test_suite
   - test_orchestration_result
   - prd_report
+  - architecture_review_report
+  - system_design_spec
+  - api_design_review_report
+  - database_review_report
+  - security_review_report
+  - performance_review_report
+  - capacity_plan
+  - observability_review_report
+  - deployment_risk_report
+  - dependency_upgrade_report
+  - tech_debt_assessment
   artifact_schema_versions:
     mr_review_report: 1
     rca_report: 1
@@ -82,6 +93,17 @@ artifact_runtime:
     test_suite: 1
     test_orchestration_result: 1
     prd_report: 1
+    architecture_review_report: 1
+    system_design_spec: 1
+    api_design_review_report: 1
+    database_review_report: 1
+    security_review_report: 1
+    performance_review_report: 1
+    capacity_plan: 1
+    observability_review_report: 1
+    deployment_risk_report: 1
+    dependency_upgrade_report: 1
+    tech_debt_assessment: 1
   state_semantics:
     mr_review_report: current_state
     rca_report: current_state
@@ -95,6 +117,17 @@ artifact_runtime:
     test_suite: proposed_state
     test_orchestration_result: proposed_state
     prd_report: proposed_state
+    architecture_review_report: proposed_state
+    system_design_spec: proposed_state
+    api_design_review_report: current_state
+    database_review_report: current_state
+    security_review_report: current_state
+    performance_review_report: current_state
+    capacity_plan: desired_state
+    observability_review_report: current_state
+    deployment_risk_report: proposed_state
+    dependency_upgrade_report: proposed_state
+    tech_debt_assessment: current_state
   payload_types:
     mr_review_report:
       review_metadata: mapping
@@ -145,6 +178,61 @@ artifact_runtime:
       build_readiness: string
       depth: string
       response_mode: string
+    architecture_review_report:
+      title: string
+      architecture_decision: string
+      risk_tier: string
+      confidence: string
+    system_design_spec:
+      title: string
+      components: list
+      design_readiness: string
+      confidence: string
+    api_design_review_report:
+      title: string
+      verdict: string
+      risk_tier: string
+      confidence: string
+    database_review_report:
+      title: string
+      verdict: string
+      risk_tier: string
+      confidence: string
+    security_review_report:
+      title: string
+      verdict: string
+      risk_tier: string
+      confidence: string
+    performance_review_report:
+      title: string
+      verdict: string
+      risk_tier: string
+      confidence: string
+    capacity_plan:
+      title: string
+      headroom_status: string
+      horizon: string
+      confidence: string
+    observability_review_report:
+      title: string
+      verdict: string
+      coverage_tier: string
+      confidence: string
+    deployment_risk_report:
+      title: string
+      blast_radius: string
+      risk_tier: string
+      deployment_confidence: string
+    dependency_upgrade_report:
+      title: string
+      verdict: string
+      risk_tier: string
+      cve_count: string
+    tech_debt_assessment:
+      title: string
+      priority_score: string
+      risk_tier: string
+      confidence: string
   required_sections:
     skill_result:
       required_fields:
@@ -364,6 +452,61 @@ skill_permissions:
     external_actions: none
     unattended: false
     merge: false
+  architecture-review:
+    repository: read
+    external_actions: none
+    unattended: false
+    merge: false
+  system-design:
+    repository: read
+    external_actions: none
+    unattended: false
+    merge: false
+  api-design-review:
+    repository: read
+    external_actions: none
+    unattended: false
+    merge: false
+  database-review:
+    repository: read
+    external_actions: none
+    unattended: false
+    merge: false
+  security-review:
+    repository: read
+    external_actions: none
+    unattended: false
+    merge: false
+  performance-review:
+    repository: read
+    external_actions: none
+    unattended: false
+    merge: false
+  capacity-planner:
+    repository: read
+    external_actions: none
+    unattended: false
+    merge: false
+  observability-review:
+    repository: read
+    external_actions: none
+    unattended: false
+    merge: false
+  deployment-risk-review:
+    repository: read
+    external_actions: none
+    unattended: false
+    merge: false
+  dependency-upgrade-review:
+    repository: read
+    external_actions: none
+    unattended: false
+    merge: false
+  tech-debt-assessor:
+    repository: read
+    external_actions: none
+    unattended: false
+    merge: false
 skill_types:
   pr-review: leaf
   pr-gatekeeper: trigger
@@ -388,3 +531,14 @@ skill_types:
   api-test-creator: leaf
   prd-architect: leaf
   test-writer: router
+  architecture-review: leaf
+  system-design: leaf
+  api-design-review: leaf
+  database-review: leaf
+  security-review: leaf
+  performance-review: leaf
+  capacity-planner: leaf
+  observability-review: leaf
+  deployment-risk-review: leaf
+  dependency-upgrade-review: leaf
+  tech-debt-assessor: leaf

@@ -1,4 +1,4 @@
-.PHONY: install install-pr-review install-pr-gatekeeper install-k8s-overprovisioning install-incident-rca install-incident-rca-deps install-incident-triage-agent install-domain-comprehension install-squad-map install-who-owns-x-bot install-new-hire-guide install-release-readiness-checker install-migration-program-manager install-cost-optimization-sprint-planner install-mysql-to-postgres-sql install-loop-task-implementer install-backlog-runner install-weekly-squad-digest install-unit-test-creator install-integration-test-creator install-contract-test-creator install-e2e-test-creator install-api-test-creator install-test-writer install-prd-architect install-claude install-claude-pr-review install-claude-pr-gatekeeper install-claude-k8s-overprovisioning install-claude-incident-rca install-claude-incident-triage-agent install-claude-domain-comprehension install-claude-squad-map install-claude-who-owns-x-bot install-claude-new-hire-guide install-claude-release-readiness-checker install-claude-migration-program-manager install-claude-cost-optimization-sprint-planner install-claude-mysql-to-postgres-sql install-claude-loop-task-implementer install-claude-backlog-runner install-claude-weekly-squad-digest install-claude-unit-test-creator install-claude-integration-test-creator install-claude-contract-test-creator install-claude-e2e-test-creator install-claude-api-test-creator install-claude-prd-architect install-claude-test-writer lint lint-framework lint-pr-review lint-pr-gatekeeper lint-k8s-skill lint-k8s lint-incident-rca lint-incident-triage-agent lint-domain-comprehension lint-squad-map lint-who-owns-x-bot lint-new-hire-guide lint-release-readiness-checker lint-migration-program-manager lint-cost-optimization-sprint-planner lint-mysql-to-postgres-sql lint-loop-task-implementer lint-backlog-runner lint-weekly-squad-digest lint-unit-test-creator lint-integration-test-creator lint-contract-test-creator lint-e2e-test-creator lint-api-test-creator lint-test-writer setup-hooks setup validate-registry validate-operational-upkeep generate generate-check verify-github-ruleset kubesense-errors
+.PHONY: install install-pr-review install-pr-gatekeeper install-k8s-overprovisioning install-incident-rca install-incident-rca-deps install-incident-triage-agent install-domain-comprehension install-squad-map install-who-owns-x-bot install-new-hire-guide install-release-readiness-checker install-migration-program-manager install-cost-optimization-sprint-planner install-mysql-to-postgres-sql install-loop-task-implementer install-backlog-runner install-weekly-squad-digest install-unit-test-creator install-integration-test-creator install-contract-test-creator install-e2e-test-creator install-api-test-creator install-test-writer install-prd-architect install-architecture-review install-system-design install-api-design-review install-database-review install-security-review install-performance-review install-capacity-planner install-observability-review install-deployment-risk-review install-dependency-upgrade-review install-tech-debt-assessor install-claude install-claude-pr-review install-claude-pr-gatekeeper install-claude-k8s-overprovisioning install-claude-incident-rca install-claude-incident-triage-agent install-claude-domain-comprehension install-claude-squad-map install-claude-who-owns-x-bot install-claude-new-hire-guide install-claude-release-readiness-checker install-claude-migration-program-manager install-claude-cost-optimization-sprint-planner install-claude-mysql-to-postgres-sql install-claude-loop-task-implementer install-claude-backlog-runner install-claude-weekly-squad-digest install-claude-unit-test-creator install-claude-integration-test-creator install-claude-contract-test-creator install-claude-e2e-test-creator install-claude-api-test-creator install-claude-prd-architect install-claude-test-writer install-claude-architecture-review install-claude-system-design install-claude-api-design-review install-claude-database-review install-claude-security-review install-claude-performance-review install-claude-capacity-planner install-claude-observability-review install-claude-deployment-risk-review install-claude-dependency-upgrade-review install-claude-tech-debt-assessor lint lint-framework lint-pr-review lint-pr-gatekeeper lint-k8s-skill lint-k8s lint-incident-rca lint-incident-triage-agent lint-domain-comprehension lint-squad-map lint-who-owns-x-bot lint-new-hire-guide lint-release-readiness-checker lint-migration-program-manager lint-cost-optimization-sprint-planner lint-mysql-to-postgres-sql lint-loop-task-implementer lint-backlog-runner lint-weekly-squad-digest lint-unit-test-creator lint-integration-test-creator lint-contract-test-creator lint-e2e-test-creator lint-api-test-creator lint-test-writer lint-architecture-review lint-system-design lint-api-design-review lint-database-review lint-security-review lint-performance-review lint-capacity-planner lint-observability-review lint-deployment-risk-review lint-dependency-upgrade-review lint-tech-debt-assessor setup-hooks setup validate-registry validate-operational-upkeep generate generate-check verify-github-ruleset kubesense-errors
 
 install:
 	bash scripts/install.sh
@@ -146,6 +146,72 @@ install-claude-prd-architect:
 
 install-claude-test-writer: install-claude-unit-test-creator install-claude-integration-test-creator install-claude-contract-test-creator install-claude-e2e-test-creator install-claude-api-test-creator
 	bash scripts/install.sh --agent claude-user test-writer
+
+install-architecture-review:
+	bash scripts/install.sh architecture-review
+
+install-system-design:
+	bash scripts/install.sh system-design
+
+install-api-design-review:
+	bash scripts/install.sh api-design-review
+
+install-database-review:
+	bash scripts/install.sh database-review
+
+install-security-review:
+	bash scripts/install.sh security-review
+
+install-performance-review:
+	bash scripts/install.sh performance-review
+
+install-capacity-planner:
+	bash scripts/install.sh capacity-planner
+
+install-observability-review:
+	bash scripts/install.sh observability-review
+
+install-deployment-risk-review:
+	bash scripts/install.sh deployment-risk-review
+
+install-dependency-upgrade-review:
+	bash scripts/install.sh dependency-upgrade-review
+
+install-tech-debt-assessor:
+	bash scripts/install.sh tech-debt-assessor
+
+install-claude-architecture-review:
+	bash scripts/install.sh --agent claude-user architecture-review
+
+install-claude-system-design:
+	bash scripts/install.sh --agent claude-user system-design
+
+install-claude-api-design-review:
+	bash scripts/install.sh --agent claude-user api-design-review
+
+install-claude-database-review:
+	bash scripts/install.sh --agent claude-user database-review
+
+install-claude-security-review:
+	bash scripts/install.sh --agent claude-user security-review
+
+install-claude-performance-review:
+	bash scripts/install.sh --agent claude-user performance-review
+
+install-claude-capacity-planner:
+	bash scripts/install.sh --agent claude-user capacity-planner
+
+install-claude-observability-review:
+	bash scripts/install.sh --agent claude-user observability-review
+
+install-claude-deployment-risk-review:
+	bash scripts/install.sh --agent claude-user deployment-risk-review
+
+install-claude-dependency-upgrade-review:
+	bash scripts/install.sh --agent claude-user dependency-upgrade-review
+
+install-claude-tech-debt-assessor:
+	bash scripts/install.sh --agent claude-user tech-debt-assessor
 
 setup:
 	@echo "setup: installing Python dev dependencies (requirements.lock)"
@@ -314,7 +380,7 @@ define require_safe_output_link
 		{ echo "error: $(1)/SKILL.md must link to shared safe-output" >&2; exit 1; }
 endef
 
-lint: validate-registry backfill-capabilities-check generate-check validate-evals validate-operational-upkeep lint-framework lint-pr-review lint-pr-gatekeeper lint-k8s-skill lint-incident-rca lint-incident-triage-agent lint-domain-comprehension lint-squad-map lint-who-owns-x-bot lint-new-hire-guide lint-release-readiness-checker lint-migration-program-manager lint-cost-optimization-sprint-planner lint-mysql-to-postgres-sql lint-loop-task-implementer lint-backlog-runner lint-weekly-squad-digest lint-unit-test-creator lint-integration-test-creator lint-contract-test-creator lint-e2e-test-creator lint-api-test-creator lint-test-writer lint-prd-architect lint-requirements-lock lint-actions-pinning lint-actions-security verify-install verify-install-all
+lint: validate-registry backfill-capabilities-check generate-check validate-evals validate-operational-upkeep lint-framework lint-pr-review lint-pr-gatekeeper lint-k8s-skill lint-incident-rca lint-incident-triage-agent lint-domain-comprehension lint-squad-map lint-who-owns-x-bot lint-new-hire-guide lint-release-readiness-checker lint-migration-program-manager lint-cost-optimization-sprint-planner lint-mysql-to-postgres-sql lint-loop-task-implementer lint-backlog-runner lint-weekly-squad-digest lint-unit-test-creator lint-integration-test-creator lint-contract-test-creator lint-e2e-test-creator lint-api-test-creator lint-test-writer lint-prd-architect lint-architecture-review lint-system-design lint-api-design-review lint-database-review lint-security-review lint-performance-review lint-capacity-planner lint-observability-review lint-deployment-risk-review lint-dependency-upgrade-review lint-tech-debt-assessor lint-requirements-lock lint-actions-pinning lint-actions-security verify-install verify-install-all
 	@for f in scripts/*.sh; do \
 		echo "shellcheck $$f"; \
 		if command -v shellcheck >/dev/null 2>&1; then \
@@ -1178,6 +1244,292 @@ lint-prd-architect:
 	@echo "lint-prd-architect: dangling markdown links"
 	$(call check_dangling_links,prd-architect/*.md prd-architect/reference/*.md prd-architect/workflow/*.md)
 
+lint-architecture-review:
+	@echo "lint-architecture-review: SKILL.md line count (<= 180)"
+	$(call check_skill_md_length,architecture-review,180,keep orchestrator thin; detail in workflow/)
+	@echo "lint-architecture-review: disable-model-invocation NOT set (ambiently invocable)"
+	$(call forbid_disable_model_invocation,architecture-review)
+	@echo "  ok"
+	@echo "lint-architecture-review: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
+	$(call check_workflow_frontmatter,architecture-review)
+	@echo "lint-architecture-review: dangling markdown links"
+	$(call check_dangling_links,architecture-review/*.md architecture-review/reference/*.md architecture-review/workflow/*.md)
+	@echo "lint-architecture-review: required reference files"
+	$(call require_ref_files,architecture-review/reference,phase-index lazy-load-index report-format smoke-test pressure-tests)
+	@grep -q 'pressure-tests' architecture-review/reference/smoke-test.md || \
+		{ echo "error: architecture-review/reference/smoke-test.md must link to pressure-tests.md" >&2; exit 1; }
+	@grep -q '## Invocation' architecture-review/examples.md || \
+		{ echo "error: architecture-review/examples.md must have Invocation section" >&2; exit 1; }
+	$(call require_setup_links_framework,architecture-review)
+	$(call require_cross_skill_escalation,architecture-review)
+	$(call require_safe_output_link,architecture-review)
+	@grep -q 'docs/skill-framework/shared/prompt-injection.md' architecture-review/reference/report-format.md && \
+	 grep -q 'docs/skill-framework/shared/safe-output.md' architecture-review/reference/report-format.md && \
+	 grep -qiE 'escape|fence|backtick' architecture-review/reference/report-format.md && \
+	 grep -qi 'redact' architecture-review/reference/report-format.md || \
+		{ echo "error: architecture-review/reference/report-format.md must sanitize untrusted rendered fields per prompt-injection and safe-output" >&2; exit 1; }
+	@echo "  ok (framework refs)"
+
+lint-system-design:
+	@echo "lint-system-design: SKILL.md line count (<= 180)"
+	$(call check_skill_md_length,system-design,180,keep orchestrator thin; detail in workflow/)
+	@echo "lint-system-design: disable-model-invocation NOT set (ambiently invocable)"
+	$(call forbid_disable_model_invocation,system-design)
+	@echo "  ok"
+	@echo "lint-system-design: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
+	$(call check_workflow_frontmatter,system-design)
+	@echo "lint-system-design: dangling markdown links"
+	$(call check_dangling_links,system-design/*.md system-design/reference/*.md system-design/workflow/*.md)
+	@echo "lint-system-design: required reference files"
+	$(call require_ref_files,system-design/reference,phase-index lazy-load-index report-format smoke-test pressure-tests)
+	@grep -q 'pressure-tests' system-design/reference/smoke-test.md || \
+		{ echo "error: system-design/reference/smoke-test.md must link to pressure-tests.md" >&2; exit 1; }
+	@grep -q '## Invocation' system-design/examples.md || \
+		{ echo "error: system-design/examples.md must have Invocation section" >&2; exit 1; }
+	$(call require_setup_links_framework,system-design)
+	$(call require_cross_skill_escalation,system-design)
+	$(call require_safe_output_link,system-design)
+	@grep -q 'docs/skill-framework/shared/prompt-injection.md' system-design/reference/report-format.md && \
+	 grep -q 'docs/skill-framework/shared/safe-output.md' system-design/reference/report-format.md && \
+	 grep -qiE 'escape|fence|backtick' system-design/reference/report-format.md && \
+	 grep -qi 'redact' system-design/reference/report-format.md || \
+		{ echo "error: system-design/reference/report-format.md must sanitize untrusted rendered fields per prompt-injection and safe-output" >&2; exit 1; }
+	@echo "  ok (framework refs)"
+
+lint-api-design-review:
+	@echo "lint-api-design-review: SKILL.md line count (<= 180)"
+	$(call check_skill_md_length,api-design-review,180,keep orchestrator thin; detail in workflow/)
+	@echo "lint-api-design-review: disable-model-invocation NOT set (ambiently invocable)"
+	$(call forbid_disable_model_invocation,api-design-review)
+	@echo "  ok"
+	@echo "lint-api-design-review: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
+	$(call check_workflow_frontmatter,api-design-review)
+	@echo "lint-api-design-review: dangling markdown links"
+	$(call check_dangling_links,api-design-review/*.md api-design-review/reference/*.md api-design-review/workflow/*.md)
+	@echo "lint-api-design-review: required reference files"
+	$(call require_ref_files,api-design-review/reference,phase-index lazy-load-index report-format smoke-test pressure-tests)
+	@grep -q 'pressure-tests' api-design-review/reference/smoke-test.md || \
+		{ echo "error: api-design-review/reference/smoke-test.md must link to pressure-tests.md" >&2; exit 1; }
+	@grep -q '## Invocation' api-design-review/examples.md || \
+		{ echo "error: api-design-review/examples.md must have Invocation section" >&2; exit 1; }
+	$(call require_setup_links_framework,api-design-review)
+	$(call require_cross_skill_escalation,api-design-review)
+	$(call require_safe_output_link,api-design-review)
+	@grep -q 'docs/skill-framework/shared/prompt-injection.md' api-design-review/reference/report-format.md && \
+	 grep -q 'docs/skill-framework/shared/safe-output.md' api-design-review/reference/report-format.md && \
+	 grep -qiE 'escape|fence|backtick' api-design-review/reference/report-format.md && \
+	 grep -qi 'redact' api-design-review/reference/report-format.md || \
+		{ echo "error: api-design-review/reference/report-format.md must sanitize untrusted rendered fields per prompt-injection and safe-output" >&2; exit 1; }
+	@echo "  ok (framework refs)"
+
+lint-database-review:
+	@echo "lint-database-review: SKILL.md line count (<= 180)"
+	$(call check_skill_md_length,database-review,180,keep orchestrator thin; detail in workflow/)
+	@echo "lint-database-review: disable-model-invocation NOT set (ambiently invocable)"
+	$(call forbid_disable_model_invocation,database-review)
+	@echo "  ok"
+	@echo "lint-database-review: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
+	$(call check_workflow_frontmatter,database-review)
+	@echo "lint-database-review: dangling markdown links"
+	$(call check_dangling_links,database-review/*.md database-review/reference/*.md database-review/workflow/*.md)
+	@echo "lint-database-review: required reference files"
+	$(call require_ref_files,database-review/reference,phase-index lazy-load-index report-format smoke-test pressure-tests)
+	@grep -q 'pressure-tests' database-review/reference/smoke-test.md || \
+		{ echo "error: database-review/reference/smoke-test.md must link to pressure-tests.md" >&2; exit 1; }
+	@grep -q '## Invocation' database-review/examples.md || \
+		{ echo "error: database-review/examples.md must have Invocation section" >&2; exit 1; }
+	$(call require_setup_links_framework,database-review)
+	$(call require_cross_skill_escalation,database-review)
+	$(call require_safe_output_link,database-review)
+	@grep -q 'docs/skill-framework/shared/prompt-injection.md' database-review/reference/report-format.md && \
+	 grep -q 'docs/skill-framework/shared/safe-output.md' database-review/reference/report-format.md && \
+	 grep -qiE 'escape|fence|backtick' database-review/reference/report-format.md && \
+	 grep -qi 'redact' database-review/reference/report-format.md || \
+		{ echo "error: database-review/reference/report-format.md must sanitize untrusted rendered fields per prompt-injection and safe-output" >&2; exit 1; }
+	@echo "  ok (framework refs)"
+
+lint-security-review:
+	@echo "lint-security-review: SKILL.md line count (<= 180)"
+	$(call check_skill_md_length,security-review,180,keep orchestrator thin; detail in workflow/)
+	@echo "lint-security-review: disable-model-invocation NOT set (ambiently invocable)"
+	$(call forbid_disable_model_invocation,security-review)
+	@echo "  ok"
+	@echo "lint-security-review: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
+	$(call check_workflow_frontmatter,security-review)
+	@echo "lint-security-review: dangling markdown links"
+	$(call check_dangling_links,security-review/*.md security-review/reference/*.md security-review/workflow/*.md)
+	@echo "lint-security-review: required reference files"
+	$(call require_ref_files,security-review/reference,phase-index lazy-load-index report-format smoke-test pressure-tests)
+	@grep -q 'pressure-tests' security-review/reference/smoke-test.md || \
+		{ echo "error: security-review/reference/smoke-test.md must link to pressure-tests.md" >&2; exit 1; }
+	@grep -q '## Invocation' security-review/examples.md || \
+		{ echo "error: security-review/examples.md must have Invocation section" >&2; exit 1; }
+	$(call require_setup_links_framework,security-review)
+	$(call require_cross_skill_escalation,security-review)
+	$(call require_safe_output_link,security-review)
+	@grep -q 'docs/skill-framework/shared/prompt-injection.md' security-review/reference/report-format.md && \
+	 grep -q 'docs/skill-framework/shared/safe-output.md' security-review/reference/report-format.md && \
+	 grep -qiE 'escape|fence|backtick' security-review/reference/report-format.md && \
+	 grep -qi 'redact' security-review/reference/report-format.md || \
+		{ echo "error: security-review/reference/report-format.md must sanitize untrusted rendered fields per prompt-injection and safe-output" >&2; exit 1; }
+	@echo "  ok (framework refs)"
+
+lint-performance-review:
+	@echo "lint-performance-review: SKILL.md line count (<= 180)"
+	$(call check_skill_md_length,performance-review,180,keep orchestrator thin; detail in workflow/)
+	@echo "lint-performance-review: disable-model-invocation NOT set (ambiently invocable)"
+	$(call forbid_disable_model_invocation,performance-review)
+	@echo "  ok"
+	@echo "lint-performance-review: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
+	$(call check_workflow_frontmatter,performance-review)
+	@echo "lint-performance-review: dangling markdown links"
+	$(call check_dangling_links,performance-review/*.md performance-review/reference/*.md performance-review/workflow/*.md)
+	@echo "lint-performance-review: required reference files"
+	$(call require_ref_files,performance-review/reference,phase-index lazy-load-index report-format smoke-test pressure-tests)
+	@grep -q 'pressure-tests' performance-review/reference/smoke-test.md || \
+		{ echo "error: performance-review/reference/smoke-test.md must link to pressure-tests.md" >&2; exit 1; }
+	@grep -q '## Invocation' performance-review/examples.md || \
+		{ echo "error: performance-review/examples.md must have Invocation section" >&2; exit 1; }
+	$(call require_setup_links_framework,performance-review)
+	$(call require_cross_skill_escalation,performance-review)
+	$(call require_safe_output_link,performance-review)
+	@grep -q 'docs/skill-framework/shared/prompt-injection.md' performance-review/reference/report-format.md && \
+	 grep -q 'docs/skill-framework/shared/safe-output.md' performance-review/reference/report-format.md && \
+	 grep -qiE 'escape|fence|backtick' performance-review/reference/report-format.md && \
+	 grep -qi 'redact' performance-review/reference/report-format.md || \
+		{ echo "error: performance-review/reference/report-format.md must sanitize untrusted rendered fields per prompt-injection and safe-output" >&2; exit 1; }
+	@echo "  ok (framework refs)"
+
+lint-capacity-planner:
+	@echo "lint-capacity-planner: SKILL.md line count (<= 180)"
+	$(call check_skill_md_length,capacity-planner,180,keep orchestrator thin; detail in workflow/)
+	@echo "lint-capacity-planner: disable-model-invocation NOT set (ambiently invocable)"
+	$(call forbid_disable_model_invocation,capacity-planner)
+	@echo "  ok"
+	@echo "lint-capacity-planner: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
+	$(call check_workflow_frontmatter,capacity-planner)
+	@echo "lint-capacity-planner: dangling markdown links"
+	$(call check_dangling_links,capacity-planner/*.md capacity-planner/reference/*.md capacity-planner/workflow/*.md)
+	@echo "lint-capacity-planner: required reference files"
+	$(call require_ref_files,capacity-planner/reference,phase-index lazy-load-index report-format smoke-test pressure-tests)
+	@grep -q 'pressure-tests' capacity-planner/reference/smoke-test.md || \
+		{ echo "error: capacity-planner/reference/smoke-test.md must link to pressure-tests.md" >&2; exit 1; }
+	@grep -q '## Invocation' capacity-planner/examples.md || \
+		{ echo "error: capacity-planner/examples.md must have Invocation section" >&2; exit 1; }
+	$(call require_setup_links_framework,capacity-planner)
+	$(call require_cross_skill_escalation,capacity-planner)
+	$(call require_safe_output_link,capacity-planner)
+	@grep -q 'docs/skill-framework/shared/prompt-injection.md' capacity-planner/reference/report-format.md && \
+	 grep -q 'docs/skill-framework/shared/safe-output.md' capacity-planner/reference/report-format.md && \
+	 grep -qiE 'escape|fence|backtick' capacity-planner/reference/report-format.md && \
+	 grep -qi 'redact' capacity-planner/reference/report-format.md || \
+		{ echo "error: capacity-planner/reference/report-format.md must sanitize untrusted rendered fields per prompt-injection and safe-output" >&2; exit 1; }
+	@echo "  ok (framework refs)"
+
+lint-observability-review:
+	@echo "lint-observability-review: SKILL.md line count (<= 180)"
+	$(call check_skill_md_length,observability-review,180,keep orchestrator thin; detail in workflow/)
+	@echo "lint-observability-review: disable-model-invocation NOT set (ambiently invocable)"
+	$(call forbid_disable_model_invocation,observability-review)
+	@echo "  ok"
+	@echo "lint-observability-review: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
+	$(call check_workflow_frontmatter,observability-review)
+	@echo "lint-observability-review: dangling markdown links"
+	$(call check_dangling_links,observability-review/*.md observability-review/reference/*.md observability-review/workflow/*.md)
+	@echo "lint-observability-review: required reference files"
+	$(call require_ref_files,observability-review/reference,phase-index lazy-load-index report-format smoke-test pressure-tests)
+	@grep -q 'pressure-tests' observability-review/reference/smoke-test.md || \
+		{ echo "error: observability-review/reference/smoke-test.md must link to pressure-tests.md" >&2; exit 1; }
+	@grep -q '## Invocation' observability-review/examples.md || \
+		{ echo "error: observability-review/examples.md must have Invocation section" >&2; exit 1; }
+	$(call require_setup_links_framework,observability-review)
+	$(call require_cross_skill_escalation,observability-review)
+	$(call require_safe_output_link,observability-review)
+	@grep -q 'docs/skill-framework/shared/prompt-injection.md' observability-review/reference/report-format.md && \
+	 grep -q 'docs/skill-framework/shared/safe-output.md' observability-review/reference/report-format.md && \
+	 grep -qiE 'escape|fence|backtick' observability-review/reference/report-format.md && \
+	 grep -qi 'redact' observability-review/reference/report-format.md || \
+		{ echo "error: observability-review/reference/report-format.md must sanitize untrusted rendered fields per prompt-injection and safe-output" >&2; exit 1; }
+	@echo "  ok (framework refs)"
+
+lint-deployment-risk-review:
+	@echo "lint-deployment-risk-review: SKILL.md line count (<= 180)"
+	$(call check_skill_md_length,deployment-risk-review,180,keep orchestrator thin; detail in workflow/)
+	@echo "lint-deployment-risk-review: disable-model-invocation NOT set (ambiently invocable)"
+	$(call forbid_disable_model_invocation,deployment-risk-review)
+	@echo "  ok"
+	@echo "lint-deployment-risk-review: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
+	$(call check_workflow_frontmatter,deployment-risk-review)
+	@echo "lint-deployment-risk-review: dangling markdown links"
+	$(call check_dangling_links,deployment-risk-review/*.md deployment-risk-review/reference/*.md deployment-risk-review/workflow/*.md)
+	@echo "lint-deployment-risk-review: required reference files"
+	$(call require_ref_files,deployment-risk-review/reference,phase-index lazy-load-index report-format smoke-test pressure-tests)
+	@grep -q 'pressure-tests' deployment-risk-review/reference/smoke-test.md || \
+		{ echo "error: deployment-risk-review/reference/smoke-test.md must link to pressure-tests.md" >&2; exit 1; }
+	@grep -q '## Invocation' deployment-risk-review/examples.md || \
+		{ echo "error: deployment-risk-review/examples.md must have Invocation section" >&2; exit 1; }
+	$(call require_setup_links_framework,deployment-risk-review)
+	$(call require_cross_skill_escalation,deployment-risk-review)
+	$(call require_safe_output_link,deployment-risk-review)
+	@grep -q 'docs/skill-framework/shared/prompt-injection.md' deployment-risk-review/reference/report-format.md && \
+	 grep -q 'docs/skill-framework/shared/safe-output.md' deployment-risk-review/reference/report-format.md && \
+	 grep -qiE 'escape|fence|backtick' deployment-risk-review/reference/report-format.md && \
+	 grep -qi 'redact' deployment-risk-review/reference/report-format.md || \
+		{ echo "error: deployment-risk-review/reference/report-format.md must sanitize untrusted rendered fields per prompt-injection and safe-output" >&2; exit 1; }
+	@echo "  ok (framework refs)"
+
+lint-dependency-upgrade-review:
+	@echo "lint-dependency-upgrade-review: SKILL.md line count (<= 180)"
+	$(call check_skill_md_length,dependency-upgrade-review,180,keep orchestrator thin; detail in workflow/)
+	@echo "lint-dependency-upgrade-review: disable-model-invocation NOT set (ambiently invocable)"
+	$(call forbid_disable_model_invocation,dependency-upgrade-review)
+	@echo "  ok"
+	@echo "lint-dependency-upgrade-review: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
+	$(call check_workflow_frontmatter,dependency-upgrade-review)
+	@echo "lint-dependency-upgrade-review: dangling markdown links"
+	$(call check_dangling_links,dependency-upgrade-review/*.md dependency-upgrade-review/reference/*.md dependency-upgrade-review/workflow/*.md)
+	@echo "lint-dependency-upgrade-review: required reference files"
+	$(call require_ref_files,dependency-upgrade-review/reference,phase-index lazy-load-index report-format smoke-test pressure-tests)
+	@grep -q 'pressure-tests' dependency-upgrade-review/reference/smoke-test.md || \
+		{ echo "error: dependency-upgrade-review/reference/smoke-test.md must link to pressure-tests.md" >&2; exit 1; }
+	@grep -q '## Invocation' dependency-upgrade-review/examples.md || \
+		{ echo "error: dependency-upgrade-review/examples.md must have Invocation section" >&2; exit 1; }
+	$(call require_setup_links_framework,dependency-upgrade-review)
+	$(call require_cross_skill_escalation,dependency-upgrade-review)
+	$(call require_safe_output_link,dependency-upgrade-review)
+	@grep -q 'docs/skill-framework/shared/prompt-injection.md' dependency-upgrade-review/reference/report-format.md && \
+	 grep -q 'docs/skill-framework/shared/safe-output.md' dependency-upgrade-review/reference/report-format.md && \
+	 grep -qiE 'escape|fence|backtick' dependency-upgrade-review/reference/report-format.md && \
+	 grep -qi 'redact' dependency-upgrade-review/reference/report-format.md || \
+		{ echo "error: dependency-upgrade-review/reference/report-format.md must sanitize untrusted rendered fields per prompt-injection and safe-output" >&2; exit 1; }
+	@echo "  ok (framework refs)"
+
+lint-tech-debt-assessor:
+	@echo "lint-tech-debt-assessor: SKILL.md line count (<= 180)"
+	$(call check_skill_md_length,tech-debt-assessor,180,keep orchestrator thin; detail in workflow/)
+	@echo "lint-tech-debt-assessor: disable-model-invocation NOT set (ambiently invocable)"
+	$(call forbid_disable_model_invocation,tech-debt-assessor)
+	@echo "  ok"
+	@echo "lint-tech-debt-assessor: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
+	$(call check_workflow_frontmatter,tech-debt-assessor)
+	@echo "lint-tech-debt-assessor: dangling markdown links"
+	$(call check_dangling_links,tech-debt-assessor/*.md tech-debt-assessor/reference/*.md tech-debt-assessor/workflow/*.md)
+	@echo "lint-tech-debt-assessor: required reference files"
+	$(call require_ref_files,tech-debt-assessor/reference,phase-index lazy-load-index report-format smoke-test pressure-tests)
+	@grep -q 'pressure-tests' tech-debt-assessor/reference/smoke-test.md || \
+		{ echo "error: tech-debt-assessor/reference/smoke-test.md must link to pressure-tests.md" >&2; exit 1; }
+	@grep -q '## Invocation' tech-debt-assessor/examples.md || \
+		{ echo "error: tech-debt-assessor/examples.md must have Invocation section" >&2; exit 1; }
+	$(call require_setup_links_framework,tech-debt-assessor)
+	$(call require_cross_skill_escalation,tech-debt-assessor)
+	$(call require_safe_output_link,tech-debt-assessor)
+	@grep -q 'docs/skill-framework/shared/prompt-injection.md' tech-debt-assessor/reference/report-format.md && \
+	 grep -q 'docs/skill-framework/shared/safe-output.md' tech-debt-assessor/reference/report-format.md && \
+	 grep -qiE 'escape|fence|backtick' tech-debt-assessor/reference/report-format.md && \
+	 grep -qi 'redact' tech-debt-assessor/reference/report-format.md || \
+		{ echo "error: tech-debt-assessor/reference/report-format.md must sanitize untrusted rendered fields per prompt-injection and safe-output" >&2; exit 1; }
+	@echo "  ok (framework refs)"
+
 lint-framework:
 	@echo "lint-framework: shared docs present"
 	@test -f docs/skill-framework/README.md
@@ -1203,7 +1555,7 @@ lint-framework:
 	@grep -q '^## 1\. Required sections' docs/skill-framework/shared/examples-conventions.md
 	@grep -q '^## 2\. Scenario format' docs/skill-framework/shared/examples-conventions.md
 	@grep -q '^## 5\. Anti-patterns' docs/skill-framework/shared/examples-conventions.md
-	@for skill in pr-review pr-gatekeeper incident-rca incident-triage-agent k8s-overprovisioning-datadog domain-comprehension squad-map who-owns-x-bot new-hire-guide release-readiness-checker migration-program-manager mysql-to-postgres-sql loop-task-implementer backlog-runner cost-optimization-sprint-planner weekly-squad-digest prd-architect test-writer unit-test-creator integration-test-creator contract-test-creator e2e-test-creator api-test-creator; do \
+	@for skill in pr-review pr-gatekeeper incident-rca incident-triage-agent k8s-overprovisioning-datadog domain-comprehension squad-map who-owns-x-bot new-hire-guide release-readiness-checker migration-program-manager mysql-to-postgres-sql loop-task-implementer backlog-runner cost-optimization-sprint-planner weekly-squad-digest prd-architect test-writer unit-test-creator integration-test-creator contract-test-creator e2e-test-creator api-test-creator architecture-review system-design api-design-review database-review security-review performance-review capacity-planner observability-review deployment-risk-review dependency-upgrade-review tech-debt-assessor; do \
 		test -f $$skill/examples.md || \
 			{ echo "error: missing $$skill/examples.md (examples-conventions)" >&2; exit 1; }; \
 		grep -q '## Invocation' $$skill/examples.md || \
@@ -1252,7 +1604,7 @@ lint-framework:
 	done; \
 	if [ "$$fail" -ne 0 ]; then exit 1; fi
 	@grep -q '| Complete |' docs/skill-framework/README.md
-	@for skill in pr-review pr-gatekeeper incident-rca incident-triage-agent k8s-overprovisioning-datadog domain-comprehension squad-map who-owns-x-bot new-hire-guide release-readiness-checker migration-program-manager mysql-to-postgres-sql loop-task-implementer backlog-runner cost-optimization-sprint-planner weekly-squad-digest prd-architect test-writer unit-test-creator integration-test-creator contract-test-creator e2e-test-creator api-test-creator; do \
+	@for skill in pr-review pr-gatekeeper incident-rca incident-triage-agent k8s-overprovisioning-datadog domain-comprehension squad-map who-owns-x-bot new-hire-guide release-readiness-checker migration-program-manager mysql-to-postgres-sql loop-task-implementer backlog-runner cost-optimization-sprint-planner weekly-squad-digest prd-architect test-writer unit-test-creator integration-test-creator contract-test-creator e2e-test-creator api-test-creator architecture-review system-design api-design-review database-review security-review performance-review capacity-planner observability-review deployment-risk-review dependency-upgrade-review tech-debt-assessor; do \
 		grep -q 'skill-framework' $$skill/SETUP.md || \
 			{ echo "error: $$skill/SETUP.md must link to docs/skill-framework" >&2; exit 1; }; \
 		grep -q 'docs/skill-framework/shared/skill-routing.md' $$skill/SKILL.md || \
@@ -1284,7 +1636,18 @@ lint-framework:
 		"integration-test-creator:workflow/inputs.md" \
 		"contract-test-creator:workflow/inputs.md" \
 		"e2e-test-creator:workflow/inputs.md" \
-		"api-test-creator:workflow/inputs.md"; do \
+		"api-test-creator:workflow/inputs.md" \
+		"architecture-review:workflow/inputs.md" \
+		"system-design:workflow/inputs.md" \
+		"api-design-review:workflow/inputs.md" \
+		"database-review:workflow/inputs.md" \
+		"security-review:workflow/inputs.md" \
+		"performance-review:workflow/inputs.md" \
+		"capacity-planner:workflow/inputs.md" \
+		"observability-review:workflow/inputs.md" \
+		"deployment-risk-review:workflow/inputs.md" \
+		"dependency-upgrade-review:workflow/inputs.md" \
+		"tech-debt-assessor:workflow/inputs.md"; do \
 		skill=$${pair%%:*}; file=$${pair#*:}; \
 		if ! grep -qiE 'untrusted|prompt-injection' $$skill/$$file; then \
 			echo "error: $$skill/$$file must declare untrusted-content guard" >&2; fail=1; \
@@ -1301,7 +1664,7 @@ lint-framework:
 	@echo "lint-framework: all SETUP.md links ok"
 	@echo "lint-framework: cross-agent discovery files (.cursor/rules + .kiro/steering)"
 	@fail=0; \
-	for skill in pr-review pr-gatekeeper incident-rca incident-triage-agent k8s-overprovisioning-datadog domain-comprehension squad-map who-owns-x-bot new-hire-guide release-readiness-checker migration-program-manager mysql-to-postgres-sql loop-task-implementer backlog-runner cost-optimization-sprint-planner weekly-squad-digest prd-architect test-writer unit-test-creator integration-test-creator contract-test-creator e2e-test-creator api-test-creator; do \
+	for skill in pr-review pr-gatekeeper incident-rca incident-triage-agent k8s-overprovisioning-datadog domain-comprehension squad-map who-owns-x-bot new-hire-guide release-readiness-checker migration-program-manager mysql-to-postgres-sql loop-task-implementer backlog-runner cost-optimization-sprint-planner weekly-squad-digest prd-architect test-writer unit-test-creator integration-test-creator contract-test-creator e2e-test-creator api-test-creator architecture-review system-design api-design-review database-review security-review performance-review capacity-planner observability-review deployment-risk-review dependency-upgrade-review tech-debt-assessor; do \
 		test -f .cursor/rules/$$skill.mdc || \
 			{ echo "  missing .cursor/rules/$$skill.mdc" >&2; fail=1; }; \
 		test -f .kiro/steering/$$skill.md || \

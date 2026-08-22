@@ -23,6 +23,17 @@ skill_types:
   api-test-creator: leaf
   prd-architect: leaf
   test-writer: router
+  architecture-review: leaf
+  system-design: leaf
+  api-design-review: leaf
+  database-review: leaf
+  security-review: leaf
+  performance-review: leaf
+  capacity-planner: leaf
+  observability-review: leaf
+  deployment-risk-review: leaf
+  dependency-upgrade-review: leaf
+  tech-debt-assessor: leaf
 handoff_schema:
   required_fields:
   - target_skill
@@ -162,3 +173,47 @@ artifact_ownership:
     mode: canonical
     owners:
     - prd-architect
+  architecture_review_report:
+    mode: canonical
+    owners:
+    - architecture-review
+  system_design_spec:
+    mode: canonical
+    owners:
+    - system-design
+  api_design_review_report:
+    mode: canonical
+    owners:
+    - api-design-review
+  database_review_report:
+    mode: canonical
+    owners:
+    - database-review
+  security_review_report:
+    mode: canonical
+    owners:
+    - security-review
+  performance_review_report:
+    mode: canonical
+    owners:
+    - performance-review
+  capacity_plan:
+    mode: canonical
+    owners:
+    - capacity-planner
+  observability_review_report:
+    mode: canonical
+    owners:
+    - observability-review
+  deployment_risk_report:
+    mode: canonical
+    owners:
+    - deployment-risk-review
+  dependency_upgrade_report:
+    mode: canonical
+    owners:
+    - dependency-upgrade-review
+  tech_debt_assessment:
+    mode: canonical
+    owners:
+    - tech-debt-assessor

@@ -13,6 +13,17 @@ artifact_types:
 - test_suite
 - test_orchestration_result
 - prd_report
+- architecture_review_report
+- system_design_spec
+- api_design_review_report
+- database_review_report
+- security_review_report
+- performance_review_report
+- capacity_plan
+- observability_review_report
+- deployment_risk_report
+- dependency_upgrade_report
+- tech_debt_assessment
 artifact_schemas:
   mr_context:
     fields:
@@ -100,6 +111,72 @@ artifact_schemas:
     - build_readiness
     - depth
     - response_mode
+  architecture_review_report:
+    fields:
+    - title
+    - architecture_decision
+    - risk_tier
+    - confidence
+  system_design_spec:
+    fields:
+    - title
+    - components
+    - design_readiness
+    - confidence
+  api_design_review_report:
+    fields:
+    - title
+    - verdict
+    - risk_tier
+    - confidence
+  database_review_report:
+    fields:
+    - title
+    - verdict
+    - risk_tier
+    - confidence
+  security_review_report:
+    fields:
+    - title
+    - verdict
+    - risk_tier
+    - confidence
+  performance_review_report:
+    fields:
+    - title
+    - verdict
+    - risk_tier
+    - confidence
+  capacity_plan:
+    fields:
+    - title
+    - headroom_status
+    - horizon
+    - confidence
+  observability_review_report:
+    fields:
+    - title
+    - verdict
+    - coverage_tier
+    - confidence
+  deployment_risk_report:
+    fields:
+    - title
+    - blast_radius
+    - risk_tier
+    - deployment_confidence
+  dependency_upgrade_report:
+    fields:
+    - title
+    - verdict
+    - risk_tier
+    - cve_count
+  tech_debt_assessment:
+    fields:
+    - title
+    - priority_score
+    - risk_tier
+    - confidence
 creator_parity:
   skills:
   - unit-test-creator
@@ -492,4 +569,135 @@ skills:
       - task_id
       - scope
       - acceptance_criteria
+    write_authority: read-only
+  architecture-review:
+    produces:
+    - architecture_review_report
+    consumes:
+    - prd_report
+    produce_fields:
+      architecture_review_report:
+      - title
+      - architecture_decision
+      - risk_tier
+      - confidence
+    consume_fields:
+      prd_report:
+      - title
+      - build_readiness
+    write_authority: read-only
+  system-design:
+    produces:
+    - system_design_spec
+    consumes:
+    - architecture_review_report
+    produce_fields:
+      system_design_spec:
+      - title
+      - components
+      - design_readiness
+      - confidence
+    consume_fields:
+      architecture_review_report:
+      - title
+      - architecture_decision
+    write_authority: read-only
+  api-design-review:
+    produces:
+    - api_design_review_report
+    consumes: []
+    produce_fields:
+      api_design_review_report:
+      - title
+      - verdict
+      - risk_tier
+      - confidence
+    write_authority: read-only
+  database-review:
+    produces:
+    - database_review_report
+    consumes: []
+    produce_fields:
+      database_review_report:
+      - title
+      - verdict
+      - risk_tier
+      - confidence
+    write_authority: read-only
+  security-review:
+    produces:
+    - security_review_report
+    consumes: []
+    produce_fields:
+      security_review_report:
+      - title
+      - verdict
+      - risk_tier
+      - confidence
+    write_authority: read-only
+  performance-review:
+    produces:
+    - performance_review_report
+    consumes: []
+    produce_fields:
+      performance_review_report:
+      - title
+      - verdict
+      - risk_tier
+      - confidence
+    write_authority: read-only
+  capacity-planner:
+    produces:
+    - capacity_plan
+    consumes: []
+    produce_fields:
+      capacity_plan:
+      - title
+      - headroom_status
+      - horizon
+      - confidence
+    write_authority: read-only
+  observability-review:
+    produces:
+    - observability_review_report
+    consumes: []
+    produce_fields:
+      observability_review_report:
+      - title
+      - verdict
+      - coverage_tier
+      - confidence
+    write_authority: read-only
+  deployment-risk-review:
+    produces:
+    - deployment_risk_report
+    consumes: []
+    produce_fields:
+      deployment_risk_report:
+      - title
+      - blast_radius
+      - risk_tier
+      - deployment_confidence
+    write_authority: read-only
+  dependency-upgrade-review:
+    produces:
+    - dependency_upgrade_report
+    consumes: []
+    produce_fields:
+      dependency_upgrade_report:
+      - title
+      - verdict
+      - risk_tier
+      - cve_count
+    write_authority: read-only
+  tech-debt-assessor:
+    produces:
+    - tech_debt_assessment
+    consumes: []
+    produce_fields:
+      tech_debt_assessment:
+      - title
+      - priority_score
+      - risk_tier
+      - confidence
     write_authority: read-only

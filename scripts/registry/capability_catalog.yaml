@@ -249,3 +249,37 @@ skills:
   prd-architect:
     required: [host.report.write]
     optional: []
+
+  architecture-review:
+    required: [host.report.write]
+    optional: []
+  system-design:
+    required: [host.report.write]
+    optional: []
+  api-design-review:
+    required: [host.report.write]
+    optional: []
+  database-review:
+    required: [host.report.write]
+    optional: []
+  security-review:
+    required: [host.report.write]
+    optional: []
+  performance-review:
+    required: [host.report.write]
+    optional: []
+  capacity-planner:
+    required: [host.report.write]
+    optional: []
+  observability-review:
+    required: [host.report.write]
+    optional: []
+  deployment-risk-review:
+    required: [host.report.write]
+    optional: []
+  dependency-upgrade-review:
+    required: [host.report.write]
+    optional: []
+  tech-debt-assessor:
+    required: [host.report.write]
+    optional: []

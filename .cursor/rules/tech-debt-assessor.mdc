@@ -1,0 +1,9 @@
+---
+description: Use when a backlog of tech debt items needs ranking by business impact, engineering drag, operational risk, and effort. Keywords: tech debt, debt prioritization, debt backlog, engineering drag, refactor prioritization. Not for planning a specific migration program (migration-program-manager, which this skill can escalate to) or a cost/rightsizing sweep (cost-optimization-sprint-planner).
+alwaysApply: false
+---
+
+<!-- GENERATED from skills.yaml + SKILL.md — do not edit; run make generate -->
+
+Invoke the tech-debt-assessor skill. Read `tech-debt-assessor/SKILL.md` and follow it.
+Phase index: `tech-debt-assessor/reference/phase-index.md` when present under the skill directory.

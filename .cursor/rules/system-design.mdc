@@ -1,0 +1,9 @@
+---
+description: Use when an approved architecture decision or PRD needs to become an implementation-oriented design: components, APIs, events, data model, state machines, consistency, retries, idempotency, capacity, failure strategy, observability, rollout. Keywords: system design, technical design doc, component design, data model, state machine, rollout plan. Not for deciding whether the architecture itself is sound (architecture-review), reviewing an existing API's contract (api-design-review), or writing the PRD (prd-architect).
+alwaysApply: false
+---
+
+<!-- GENERATED from skills.yaml + SKILL.md — do not edit; run make generate -->
+
+Invoke the system-design skill. Read `system-design/SKILL.md` and follow it.
+Phase index: `system-design/reference/phase-index.md` when present under the skill directory.

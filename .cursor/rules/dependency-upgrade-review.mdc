@@ -1,0 +1,9 @@
+---
+description: Use when a framework or library upgrade needs review: breaking changes, CVEs, API differences, transitive dependency impact, and rollout risk. Keywords: dependency upgrade, version bump review, CVE review, breaking change, transitive dependency. Not for a dedicated deep security audit (security-review, which this skill escalates to for exploitable CVEs) or the MySQL-to-Postgres migration itself (mysql-to-postgres-sql).
+alwaysApply: false
+---
+
+<!-- GENERATED from skills.yaml + SKILL.md — do not edit; run make generate -->
+
+Invoke the dependency-upgrade-review skill. Read `dependency-upgrade-review/SKILL.md` and follow it.
+Phase index: `dependency-upgrade-review/reference/phase-index.md` when present under the skill directory.

@@ -8,6 +8,18 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 
 ## Platform
 
+### Add architecture, design, and specialized review skills (2026-08-22)
+
+- Added 11 new framework-compliant skills filling the gap between `prd-architect` and implementation:
+  `architecture-review`, `system-design`, `api-design-review`, `database-review`, `security-review`,
+  `performance-review`, `capacity-planner`, `observability-review`, `deployment-risk-review`,
+  `dependency-upgrade-review`, and `tech-debt-assessor`.
+- Each is a single-linear-pipeline (Inputs → Analyze → Report) leaf skill producing its own durable
+  report artifact, registered in the canonical manifest (`skills.yaml`), wired into
+  `docs/skill-framework/shared/{skill-routing,cross-skill-escalation,prompt-injection,phase-glossary,
+  smoke-test-conventions}.md`, and passing `make lint-<skill>` and `make lint-framework`.
+- `pr-review` gained `security-review` as a new escalation target for security-sensitive findings.
+
 ### Consolidate runtime contracts into the canonical manifest (2026-08-22)
 
 - skills.yaml is now the versioned canonical manifest for skill versions, platform contracts,

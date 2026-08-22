@@ -73,6 +73,17 @@ contracts:
       - test_suite
       - test_orchestration_result
       - prd_report
+      - architecture_review_report
+      - system_design_spec
+      - api_design_review_report
+      - database_review_report
+      - security_review_report
+      - performance_review_report
+      - capacity_plan
+      - observability_review_report
+      - deployment_risk_report
+      - dependency_upgrade_report
+      - tech_debt_assessment
       artifact_schema_versions:
         mr_review_report: 1
         rca_report: 1
@@ -86,6 +97,17 @@ contracts:
         test_suite: 1
         test_orchestration_result: 1
         prd_report: 1
+        architecture_review_report: 1
+        system_design_spec: 1
+        api_design_review_report: 1
+        database_review_report: 1
+        security_review_report: 1
+        performance_review_report: 1
+        capacity_plan: 1
+        observability_review_report: 1
+        deployment_risk_report: 1
+        dependency_upgrade_report: 1
+        tech_debt_assessment: 1
       state_semantics:
         mr_review_report: current_state
         rca_report: current_state
@@ -99,6 +121,17 @@ contracts:
         test_suite: proposed_state
         test_orchestration_result: proposed_state
         prd_report: proposed_state
+        architecture_review_report: proposed_state
+        system_design_spec: proposed_state
+        api_design_review_report: current_state
+        database_review_report: current_state
+        security_review_report: current_state
+        performance_review_report: current_state
+        capacity_plan: desired_state
+        observability_review_report: current_state
+        deployment_risk_report: proposed_state
+        dependency_upgrade_report: proposed_state
+        tech_debt_assessment: current_state
       payload_types:
         mr_review_report:
           review_metadata: mapping
@@ -149,6 +182,61 @@ contracts:
           build_readiness: string
           depth: string
           response_mode: string
+        architecture_review_report:
+          title: string
+          architecture_decision: string
+          risk_tier: string
+          confidence: string
+        system_design_spec:
+          title: string
+          components: list
+          design_readiness: string
+          confidence: string
+        api_design_review_report:
+          title: string
+          verdict: string
+          risk_tier: string
+          confidence: string
+        database_review_report:
+          title: string
+          verdict: string
+          risk_tier: string
+          confidence: string
+        security_review_report:
+          title: string
+          verdict: string
+          risk_tier: string
+          confidence: string
+        performance_review_report:
+          title: string
+          verdict: string
+          risk_tier: string
+          confidence: string
+        capacity_plan:
+          title: string
+          headroom_status: string
+          horizon: string
+          confidence: string
+        observability_review_report:
+          title: string
+          verdict: string
+          coverage_tier: string
+          confidence: string
+        deployment_risk_report:
+          title: string
+          blast_radius: string
+          risk_tier: string
+          deployment_confidence: string
+        dependency_upgrade_report:
+          title: string
+          verdict: string
+          risk_tier: string
+          cve_count: string
+        tech_debt_assessment:
+          title: string
+          priority_score: string
+          risk_tier: string
+          confidence: string
       required_sections:
         skill_result:
           required_fields:
@@ -368,6 +456,61 @@ contracts:
         external_actions: none
         unattended: false
         merge: false
+      architecture-review:
+        repository: read
+        external_actions: none
+        unattended: false
+        merge: false
+      system-design:
+        repository: read
+        external_actions: none
+        unattended: false
+        merge: false
+      api-design-review:
+        repository: read
+        external_actions: none
+        unattended: false
+        merge: false
+      database-review:
+        repository: read
+        external_actions: none
+        unattended: false
+        merge: false
+      security-review:
+        repository: read
+        external_actions: none
+        unattended: false
+        merge: false
+      performance-review:
+        repository: read
+        external_actions: none
+        unattended: false
+        merge: false
+      capacity-planner:
+        repository: read
+        external_actions: none
+        unattended: false
+        merge: false
+      observability-review:
+        repository: read
+        external_actions: none
+        unattended: false
+        merge: false
+      deployment-risk-review:
+        repository: read
+        external_actions: none
+        unattended: false
+        merge: false
+      dependency-upgrade-review:
+        repository: read
+        external_actions: none
+        unattended: false
+        merge: false
+      tech-debt-assessor:
+        repository: read
+        external_actions: none
+        unattended: false
+        merge: false
     skill_types:
       pr-review: leaf
       pr-gatekeeper: trigger
@@ -392,6 +535,17 @@ contracts:
       api-test-creator: leaf
       prd-architect: leaf
       test-writer: router
+      architecture-review: leaf
+      system-design: leaf
+      api-design-review: leaf
+      database-review: leaf
+      security-review: leaf
+      performance-review: leaf
+      capacity-planner: leaf
+      observability-review: leaf
+      deployment-risk-review: leaf
+      dependency-upgrade-review: leaf
+      tech-debt-assessor: leaf
   composition_runtime:
     schema_version: 1
     skill_types:
@@ -418,6 +572,17 @@ contracts:
       api-test-creator: leaf
       prd-architect: leaf
       test-writer: router
+      architecture-review: leaf
+      system-design: leaf
+      api-design-review: leaf
+      database-review: leaf
+      security-review: leaf
+      performance-review: leaf
+      capacity-planner: leaf
+      observability-review: leaf
+      deployment-risk-review: leaf
+      dependency-upgrade-review: leaf
+      tech-debt-assessor: leaf
     handoff_schema:
       required_fields:
       - target_skill
@@ -557,6 +722,50 @@ contracts:
         mode: canonical
         owners:
         - prd-architect
+      architecture_review_report:
+        mode: canonical
+        owners:
+        - architecture-review
+      system_design_spec:
+        mode: canonical
+        owners:
+        - system-design
+      api_design_review_report:
+        mode: canonical
+        owners:
+        - api-design-review
+      database_review_report:
+        mode: canonical
+        owners:
+        - database-review
+      security_review_report:
+        mode: canonical
+        owners:
+        - security-review
+      performance_review_report:
+        mode: canonical
+        owners:
+        - performance-review
+      capacity_plan:
+        mode: canonical
+        owners:
+        - capacity-planner
+      observability_review_report:
+        mode: canonical
+        owners:
+        - observability-review
+      deployment_risk_report:
+        mode: canonical
+        owners:
+        - deployment-risk-review
+      dependency_upgrade_report:
+        mode: canonical
+        owners:
+        - dependency-upgrade-review
+      tech_debt_assessment:
+        mode: canonical
+        owners:
+        - tech-debt-assessor
   composition:
     artifact_types:
     - mr_context
@@ -573,6 +782,17 @@ contracts:
     - test_suite
     - test_orchestration_result
     - prd_report
+    - architecture_review_report
+    - system_design_spec
+    - api_design_review_report
+    - database_review_report
+    - security_review_report
+    - performance_review_report
+    - capacity_plan
+    - observability_review_report
+    - deployment_risk_report
+    - dependency_upgrade_report
+    - tech_debt_assessment
     artifact_schemas:
       mr_context:
         fields:
@@ -660,6 +880,72 @@ contracts:
         - build_readiness
         - depth
         - response_mode
+      architecture_review_report:
+        fields:
+        - title
+        - architecture_decision
+        - risk_tier
+        - confidence
+      system_design_spec:
+        fields:
+        - title
+        - components
+        - design_readiness
+        - confidence
+      api_design_review_report:
+        fields:
+        - title
+        - verdict
+        - risk_tier
+        - confidence
+      database_review_report:
+        fields:
+        - title
+        - verdict
+        - risk_tier
+        - confidence
+      security_review_report:
+        fields:
+        - title
+        - verdict
+        - risk_tier
+        - confidence
+      performance_review_report:
+        fields:
+        - title
+        - verdict
+        - risk_tier
+        - confidence
+      capacity_plan:
+        fields:
+        - title
+        - headroom_status
+        - horizon
+        - confidence
+      observability_review_report:
+        fields:
+        - title
+        - verdict
+        - coverage_tier
+        - confidence
+      deployment_risk_report:
+        fields:
+        - title
+        - blast_radius
+        - risk_tier
+        - deployment_confidence
+      dependency_upgrade_report:
+        fields:
+        - title
+        - verdict
+        - risk_tier
+        - cve_count
+      tech_debt_assessment:
+        fields:
+        - title
+        - priority_score
+        - risk_tier
+        - confidence
     creator_parity:
       skills:
       - unit-test-creator
@@ -1053,6 +1339,137 @@ contracts:
           - scope
           - acceptance_criteria
         write_authority: read-only
+      architecture-review:
+        produces:
+        - architecture_review_report
+        consumes:
+        - prd_report
+        produce_fields:
+          architecture_review_report:
+          - title
+          - architecture_decision
+          - risk_tier
+          - confidence
+        consume_fields:
+          prd_report:
+          - title
+          - build_readiness
+        write_authority: read-only
+      system-design:
+        produces:
+        - system_design_spec
+        consumes:
+        - architecture_review_report
+        produce_fields:
+          system_design_spec:
+          - title
+          - components
+          - design_readiness
+          - confidence
+        consume_fields:
+          architecture_review_report:
+          - title
+          - architecture_decision
+        write_authority: read-only
+      api-design-review:
+        produces:
+        - api_design_review_report
+        consumes: []
+        produce_fields:
+          api_design_review_report:
+          - title
+          - verdict
+          - risk_tier
+          - confidence
+        write_authority: read-only
+      database-review:
+        produces:
+        - database_review_report
+        consumes: []
+        produce_fields:
+          database_review_report:
+          - title
+          - verdict
+          - risk_tier
+          - confidence
+        write_authority: read-only
+      security-review:
+        produces:
+        - security_review_report
+        consumes: []
+        produce_fields:
+          security_review_report:
+          - title
+          - verdict
+          - risk_tier
+          - confidence
+        write_authority: read-only
+      performance-review:
+        produces:
+        - performance_review_report
+        consumes: []
+        produce_fields:
+          performance_review_report:
+          - title
+          - verdict
+          - risk_tier
+          - confidence
+        write_authority: read-only
+      capacity-planner:
+        produces:
+        - capacity_plan
+        consumes: []
+        produce_fields:
+          capacity_plan:
+          - title
+          - headroom_status
+          - horizon
+          - confidence
+        write_authority: read-only
+      observability-review:
+        produces:
+        - observability_review_report
+        consumes: []
+        produce_fields:
+          observability_review_report:
+          - title
+          - verdict
+          - coverage_tier
+          - confidence
+        write_authority: read-only
+      deployment-risk-review:
+        produces:
+        - deployment_risk_report
+        consumes: []
+        produce_fields:
+          deployment_risk_report:
+          - title
+          - blast_radius
+          - risk_tier
+          - deployment_confidence
+        write_authority: read-only
+      dependency-upgrade-review:
+        produces:
+        - dependency_upgrade_report
+        consumes: []
+        produce_fields:
+          dependency_upgrade_report:
+          - title
+          - verdict
+          - risk_tier
+          - cve_count
+        write_authority: read-only
+      tech-debt-assessor:
+        produces:
+        - tech_debt_assessment
+        consumes: []
+        produce_fields:
+          tech_debt_assessment:
+          - title
+          - priority_score
+          - risk_tier
+          - confidence
+        write_authority: read-only
 skills:
   pr-review:
     path: pr-review
@@ -1071,6 +1488,7 @@ skills:
       escalation_targets:
       - incident-rca
       - k8s-overprovisioning-datadog
+      - security-review
     capabilities:
       required: []
       optional: []
@@ -2420,4 +2838,594 @@ skills:
     - contract-test-creator
     - e2e-test-creator
     - api-test-creator
+    version_source: skill_frontmatter_legacy_numeric
+  architecture-review:
+    path: architecture-review
+    category: review
+    invocation: ambient
+    hosts:
+      cursor:
+        discovery: rule
+      claude:
+        install: true
+      kiro:
+        discovery: manual
+    install:
+      requires: []
+    composition:
+      escalation_targets:
+      - system-design
+      - security-review
+      - loop-task-implementer
+      - domain-comprehension
+    capabilities:
+      required:
+      - host.report.write
+      optional: []
+    lint:
+      skill_md_max_lines: 180
+      target: architecture-review
+    risk_class:
+    - read-only
+    version: 1.0.0
+    type: leaf
+    authority: read-only
+    permissions:
+      repository: read
+      external_actions: none
+      unattended: false
+      merge: false
+    supported_hosts:
+    - chatgpt
+    - claude
+    - codex
+    - cursor
+    - generic
+    - kiro
+    entrypoint: SKILL.md
+    output_contract:
+      produces:
+      - architecture_review_report
+      produce_fields:
+        architecture_review_report:
+        - title
+        - architecture_decision
+        - risk_tier
+        - confidence
+    dependencies: []
+    version_source: skill_frontmatter_legacy_numeric
+  system-design:
+    path: system-design
+    category: architecture
+    invocation: ambient
+    hosts:
+      cursor:
+        discovery: rule
+      claude:
+        install: true
+      kiro:
+        discovery: manual
+    install:
+      requires: []
+    composition:
+      escalation_targets:
+      - api-design-review
+      - database-review
+      - observability-review
+      - loop-task-implementer
+    capabilities:
+      required:
+      - host.report.write
+      optional: []
+    lint:
+      skill_md_max_lines: 180
+      target: system-design
+    risk_class:
+    - read-only
+    version: 1.0.0
+    type: leaf
+    authority: read-only
+    permissions:
+      repository: read
+      external_actions: none
+      unattended: false
+      merge: false
+    supported_hosts:
+    - chatgpt
+    - claude
+    - codex
+    - cursor
+    - generic
+    - kiro
+    entrypoint: SKILL.md
+    output_contract:
+      produces:
+      - system_design_spec
+      produce_fields:
+        system_design_spec:
+        - title
+        - components
+        - design_readiness
+        - confidence
+    dependencies: []
+    version_source: skill_frontmatter_legacy_numeric
+  api-design-review:
+    path: api-design-review
+    category: review
+    invocation: ambient
+    hosts:
+      cursor:
+        discovery: rule
+      claude:
+        install: true
+      kiro:
+        discovery: manual
+    install:
+      requires: []
+    composition:
+      escalation_targets:
+      - security-review
+      - pr-review
+      - system-design
+    capabilities:
+      required:
+      - host.report.write
+      optional: []
+    lint:
+      skill_md_max_lines: 180
+      target: api-design-review
+    risk_class:
+    - read-only
+    version: 1.0.0
+    type: leaf
+    authority: read-only
+    permissions:
+      repository: read
+      external_actions: none
+      unattended: false
+      merge: false
+    supported_hosts:
+    - chatgpt
+    - claude
+    - codex
+    - cursor
+    - generic
+    - kiro
+    entrypoint: SKILL.md
+    output_contract:
+      produces:
+      - api_design_review_report
+      produce_fields:
+        api_design_review_report:
+        - title
+        - verdict
+        - risk_tier
+        - confidence
+    dependencies: []
+    version_source: skill_frontmatter_legacy_numeric
+  database-review:
+    path: database-review
+    category: review
+    invocation: ambient
+    hosts:
+      cursor:
+        discovery: rule
+      claude:
+        install: true
+      kiro:
+        discovery: manual
+    install:
+      requires: []
+    composition:
+      escalation_targets:
+      - performance-review
+      - mysql-to-postgres-sql
+      - pr-review
+    capabilities:
+      required:
+      - host.report.write
+      optional: []
+    lint:
+      skill_md_max_lines: 180
+      target: database-review
+    risk_class:
+    - read-only
+    version: 1.0.0
+    type: leaf
+    authority: read-only
+    permissions:
+      repository: read
+      external_actions: none
+      unattended: false
+      merge: false
+    supported_hosts:
+    - chatgpt
+    - claude
+    - codex
+    - cursor
+    - generic
+    - kiro
+    entrypoint: SKILL.md
+    output_contract:
+      produces:
+      - database_review_report
+      produce_fields:
+        database_review_report:
+        - title
+        - verdict
+        - risk_tier
+        - confidence
+    dependencies: []
+    version_source: skill_frontmatter_legacy_numeric
+  security-review:
+    path: security-review
+    category: review
+    invocation: ambient
+    hosts:
+      cursor:
+        discovery: rule
+      claude:
+        install: true
+      kiro:
+        discovery: manual
+    install:
+      requires: []
+    composition:
+      escalation_targets:
+      - dependency-upgrade-review
+      - pr-review
+    capabilities:
+      required:
+      - host.report.write
+      optional: []
+    lint:
+      skill_md_max_lines: 180
+      target: security-review
+    risk_class:
+    - read-only
+    version: 1.0.0
+    type: leaf
+    authority: read-only
+    permissions:
+      repository: read
+      external_actions: none
+      unattended: false
+      merge: false
+    supported_hosts:
+    - chatgpt
+    - claude
+    - codex
+    - cursor
+    - generic
+    - kiro
+    entrypoint: SKILL.md
+    output_contract:
+      produces:
+      - security_review_report
+      produce_fields:
+        security_review_report:
+        - title
+        - verdict
+        - risk_tier
+        - confidence
+    dependencies: []
+    version_source: skill_frontmatter_legacy_numeric
+  performance-review:
+    path: performance-review
+    category: review
+    invocation: ambient
+    hosts:
+      cursor:
+        discovery: rule
+      claude:
+        install: true
+      kiro:
+        discovery: manual
+    install:
+      requires: []
+    composition:
+      escalation_targets:
+      - capacity-planner
+      - database-review
+      - pr-review
+    capabilities:
+      required:
+      - host.report.write
+      optional: []
+    lint:
+      skill_md_max_lines: 180
+      target: performance-review
+    risk_class:
+    - read-only
+    version: 1.0.0
+    type: leaf
+    authority: read-only
+    permissions:
+      repository: read
+      external_actions: none
+      unattended: false
+      merge: false
+    supported_hosts:
+    - chatgpt
+    - claude
+    - codex
+    - cursor
+    - generic
+    - kiro
+    entrypoint: SKILL.md
+    output_contract:
+      produces:
+      - performance_review_report
+      produce_fields:
+        performance_review_report:
+        - title
+        - verdict
+        - risk_tier
+        - confidence
+    dependencies: []
+    version_source: skill_frontmatter_legacy_numeric
+  capacity-planner:
+    path: capacity-planner
+    category: platform
+    invocation: ambient
+    hosts:
+      cursor:
+        discovery: rule
+      claude:
+        install: true
+      kiro:
+        discovery: manual
+    install:
+      requires: []
+    composition:
+      escalation_targets:
+      - k8s-overprovisioning-datadog
+      - cost-optimization-sprint-planner
+    capabilities:
+      required:
+      - host.report.write
+      optional: []
+    lint:
+      skill_md_max_lines: 180
+      target: capacity-planner
+    risk_class:
+    - read-only
+    version: 1.0.0
+    type: leaf
+    authority: read-only
+    permissions:
+      repository: read
+      external_actions: none
+      unattended: false
+      merge: false
+    supported_hosts:
+    - chatgpt
+    - claude
+    - codex
+    - cursor
+    - generic
+    - kiro
+    entrypoint: SKILL.md
+    output_contract:
+      produces:
+      - capacity_plan
+      produce_fields:
+        capacity_plan:
+        - title
+        - headroom_status
+        - horizon
+        - confidence
+    dependencies: []
+    version_source: skill_frontmatter_legacy_numeric
+  observability-review:
+    path: observability-review
+    category: review
+    invocation: ambient
+    hosts:
+      cursor:
+        discovery: rule
+      claude:
+        install: true
+      kiro:
+        discovery: manual
+    install:
+      requires: []
+    composition:
+      escalation_targets:
+      - incident-rca
+      - deployment-risk-review
+    capabilities:
+      required:
+      - host.report.write
+      optional: []
+    lint:
+      skill_md_max_lines: 180
+      target: observability-review
+    risk_class:
+    - read-only
+    version: 1.0.0
+    type: leaf
+    authority: read-only
+    permissions:
+      repository: read
+      external_actions: none
+      unattended: false
+      merge: false
+    supported_hosts:
+    - chatgpt
+    - claude
+    - codex
+    - cursor
+    - generic
+    - kiro
+    entrypoint: SKILL.md
+    output_contract:
+      produces:
+      - observability_review_report
+      produce_fields:
+        observability_review_report:
+        - title
+        - verdict
+        - coverage_tier
+        - confidence
+    dependencies: []
+    version_source: skill_frontmatter_legacy_numeric
+  deployment-risk-review:
+    path: deployment-risk-review
+    category: review
+    invocation: ambient
+    hosts:
+      cursor:
+        discovery: rule
+      claude:
+        install: true
+      kiro:
+        discovery: manual
+    install:
+      requires: []
+    composition:
+      escalation_targets:
+      - release-readiness-checker
+      - incident-triage-agent
+    capabilities:
+      required:
+      - host.report.write
+      optional: []
+    lint:
+      skill_md_max_lines: 180
+      target: deployment-risk-review
+    risk_class:
+    - read-only
+    version: 1.0.0
+    type: leaf
+    authority: read-only
+    permissions:
+      repository: read
+      external_actions: none
+      unattended: false
+      merge: false
+    supported_hosts:
+    - chatgpt
+    - claude
+    - codex
+    - cursor
+    - generic
+    - kiro
+    entrypoint: SKILL.md
+    output_contract:
+      produces:
+      - deployment_risk_report
+      produce_fields:
+        deployment_risk_report:
+        - title
+        - blast_radius
+        - risk_tier
+        - deployment_confidence
+    dependencies: []
+    version_source: skill_frontmatter_legacy_numeric
+  dependency-upgrade-review:
+    path: dependency-upgrade-review
+    category: review
+    invocation: ambient
+    hosts:
+      cursor:
+        discovery: rule
+      claude:
+        install: true
+      kiro:
+        discovery: manual
+    install:
+      requires: []
+    composition:
+      escalation_targets:
+      - security-review
+      - pr-review
+    capabilities:
+      required:
+      - host.report.write
+      optional: []
+    lint:
+      skill_md_max_lines: 180
+      target: dependency-upgrade-review
+    risk_class:
+    - read-only
+    version: 1.0.0
+    type: leaf
+    authority: read-only
+    permissions:
+      repository: read
+      external_actions: none
+      unattended: false
+      merge: false
+    supported_hosts:
+    - chatgpt
+    - claude
+    - codex
+    - cursor
+    - generic
+    - kiro
+    entrypoint: SKILL.md
+    output_contract:
+      produces:
+      - dependency_upgrade_report
+      produce_fields:
+        dependency_upgrade_report:
+        - title
+        - verdict
+        - risk_tier
+        - cve_count
+    dependencies: []
+    version_source: skill_frontmatter_legacy_numeric
+  tech-debt-assessor:
+    path: tech-debt-assessor
+    category: platform
+    invocation: ambient
+    hosts:
+      cursor:
+        discovery: rule
+      claude:
+        install: true
+      kiro:
+        discovery: manual
+    install:
+      requires: []
+    composition:
+      escalation_targets:
+      - migration-program-manager
+      - cost-optimization-sprint-planner
+    capabilities:
+      required:
+      - host.report.write
+      optional: []
+    lint:
+      skill_md_max_lines: 180
+      target: tech-debt-assessor
+    risk_class:
+    - read-only
+    version: 1.0.0
+    type: leaf
+    authority: read-only
+    permissions:
+      repository: read
+      external_actions: none
+      unattended: false
+      merge: false
+    supported_hosts:
+    - chatgpt
+    - claude
+    - codex
+    - cursor
+    - generic
+    - kiro
+    entrypoint: SKILL.md
+    output_contract:
+      produces:
+      - tech_debt_assessment
+      produce_fields:
+        tech_debt_assessment:
+        - title
+        - priority_score
+        - risk_tier
+        - confidence
+    dependencies: []
     version_source: skill_frontmatter_legacy_numeric

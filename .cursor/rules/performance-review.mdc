@@ -1,0 +1,9 @@
+---
+description: Use when code, a query, or a service needs review for algorithmic complexity, database behavior, N+1 queries, caching, memory, concurrency, connection pools, and downstream fanout. Keywords: performance review, N+1, slow query, cache design, concurrency review, connection pool sizing. Not for turning demand into capacity numbers (capacity-planner) or reviewing schema/index design directly (database-review).
+alwaysApply: false
+---
+
+<!-- GENERATED from skills.yaml + SKILL.md — do not edit; run make generate -->
+
+Invoke the performance-review skill. Read `performance-review/SKILL.md` and follow it.
+Phase index: `performance-review/reference/phase-index.md` when present under the skill directory.

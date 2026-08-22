@@ -1,0 +1,9 @@
+---
+description: Use when a REST, GraphQL, gRPC, or async-event API design or contract needs review for compatibility, pagination, idempotency, error semantics, versioning, authorization, and rate limiting. Keywords: API design review, API contract review, breaking change, API versioning, pagination design. Not for a full merge-request code review (pr-review), database schema review (database-review), or implementation-level system design (system-design).
+alwaysApply: false
+---
+
+<!-- GENERATED from skills.yaml + SKILL.md — do not edit; run make generate -->
+
+Invoke the api-design-review skill. Read `api-design-review/SKILL.md` and follow it.
+Phase index: `api-design-review/reference/phase-index.md` when present under the skill directory.
