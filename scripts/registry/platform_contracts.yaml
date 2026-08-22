@@ -180,59 +180,40 @@ artifact_runtime:
       response_mode: string
     architecture_review_report:
       title: string
-      architecture_decision: string
-      risk_tier: string
-      confidence: string
+      decision: string
     system_design_spec:
       title: string
+      readiness: string
       components: list
-      design_readiness: string
-      confidence: string
     api_design_review_report:
       title: string
       verdict: string
-      risk_tier: string
-      confidence: string
     database_review_report:
       title: string
       verdict: string
-      risk_tier: string
-      confidence: string
     security_review_report:
       title: string
       verdict: string
-      risk_tier: string
-      confidence: string
     performance_review_report:
       title: string
       verdict: string
-      risk_tier: string
-      confidence: string
     capacity_plan:
       title: string
-      headroom_status: string
-      horizon: string
-      confidence: string
+      headroom: string
     observability_review_report:
       title: string
-      verdict: string
-      coverage_tier: string
-      confidence: string
+      coverage: string
     deployment_risk_report:
       title: string
-      blast_radius: string
-      risk_tier: string
+      risk: string
       deployment_confidence: string
     dependency_upgrade_report:
       title: string
       verdict: string
-      risk_tier: string
-      cve_count: string
     tech_debt_assessment:
       title: string
       priority_score: string
-      risk_tier: string
-      confidence: string
+      priority: string
   required_sections:
     skill_result:
       required_fields:

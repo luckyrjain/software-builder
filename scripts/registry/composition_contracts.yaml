@@ -114,69 +114,50 @@ artifact_schemas:
   architecture_review_report:
     fields:
     - title
-    - architecture_decision
-    - risk_tier
-    - confidence
+    - decision
   system_design_spec:
     fields:
     - title
+    - readiness
     - components
-    - design_readiness
-    - confidence
   api_design_review_report:
     fields:
     - title
     - verdict
-    - risk_tier
-    - confidence
   database_review_report:
     fields:
     - title
     - verdict
-    - risk_tier
-    - confidence
   security_review_report:
     fields:
     - title
     - verdict
-    - risk_tier
-    - confidence
   performance_review_report:
     fields:
     - title
     - verdict
-    - risk_tier
-    - confidence
   capacity_plan:
     fields:
     - title
-    - headroom_status
-    - horizon
-    - confidence
+    - headroom
   observability_review_report:
     fields:
     - title
-    - verdict
-    - coverage_tier
-    - confidence
+    - coverage
   deployment_risk_report:
     fields:
     - title
-    - blast_radius
-    - risk_tier
+    - risk
     - deployment_confidence
   dependency_upgrade_report:
     fields:
     - title
     - verdict
-    - risk_tier
-    - cve_count
   tech_debt_assessment:
     fields:
     - title
     - priority_score
-    - risk_tier
-    - confidence
+    - priority
 creator_parity:
   skills:
   - unit-test-creator
@@ -578,9 +559,7 @@ skills:
     produce_fields:
       architecture_review_report:
       - title
-      - architecture_decision
-      - risk_tier
-      - confidence
+      - decision
     consume_fields:
       prd_report:
       - title
@@ -594,13 +573,12 @@ skills:
     produce_fields:
       system_design_spec:
       - title
+      - readiness
       - components
-      - design_readiness
-      - confidence
     consume_fields:
       architecture_review_report:
       - title
-      - architecture_decision
+      - decision
     write_authority: read-only
   api-design-review:
     produces:
@@ -610,8 +588,6 @@ skills:
       api_design_review_report:
       - title
       - verdict
-      - risk_tier
-      - confidence
     write_authority: read-only
   database-review:
     produces:
@@ -621,8 +597,6 @@ skills:
       database_review_report:
       - title
       - verdict
-      - risk_tier
-      - confidence
     write_authority: read-only
   security-review:
     produces:
@@ -632,8 +606,6 @@ skills:
       security_review_report:
       - title
       - verdict
-      - risk_tier
-      - confidence
     write_authority: read-only
   performance-review:
     produces:
@@ -643,8 +615,6 @@ skills:
       performance_review_report:
       - title
       - verdict
-      - risk_tier
-      - confidence
     write_authority: read-only
   capacity-planner:
     produces:
@@ -653,9 +623,7 @@ skills:
     produce_fields:
       capacity_plan:
       - title
-      - headroom_status
-      - horizon
-      - confidence
+      - headroom
     write_authority: read-only
   observability-review:
     produces:
@@ -664,9 +632,7 @@ skills:
     produce_fields:
       observability_review_report:
       - title
-      - verdict
-      - coverage_tier
-      - confidence
+      - coverage
     write_authority: read-only
   deployment-risk-review:
     produces:
@@ -675,8 +641,7 @@ skills:
     produce_fields:
       deployment_risk_report:
       - title
-      - blast_radius
-      - risk_tier
+      - risk
       - deployment_confidence
     write_authority: read-only
   dependency-upgrade-review:
@@ -687,8 +652,6 @@ skills:
       dependency_upgrade_report:
       - title
       - verdict
-      - risk_tier
-      - cve_count
     write_authority: read-only
   tech-debt-assessor:
     produces:
@@ -698,6 +661,5 @@ skills:
       tech_debt_assessment:
       - title
       - priority_score
-      - risk_tier
-      - confidence
+      - priority
     write_authority: read-only
