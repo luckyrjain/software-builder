@@ -52,8 +52,9 @@ operational risk ÷ effort`
 | `Dead feature-flag branch (payments)` | 1 | 1 | 1 | 1 | 1.0 | Won't-fix now |
 ```
 
-Note: the auth item is `Now` via the `business_impact = 5` override even though its computed score
-(15.0) alone would only reach `Next`; the logging item reaches `Now` purely on computed score.
+Note: both `Now` verdicts are override-driven, not computed-score-driven — the auth item via the
+`business_impact = 5` override and the logging item via the `operational_risk = 5` override; both
+items' computed scores (15.0 each) would otherwise only reach `Next` (`8 <= priority_score < 20`).
 
 ---
 

@@ -32,8 +32,9 @@ DB connection limit 200, 500GB storage capacity.
    from the trend (~4%/month), `peak_avg_ratio` derived from the data (2.3:1)
 2. Analyze — projects average RPS to ~1,770 at horizon end, peak RPS ~4,070; CPU/memory scaled linearly
    from baseline; DB connections projected to ~140 (well under the 200 limit); storage growth projected
-   from the data-volume trend to ~340GB (under 500GB capacity); replica requirement projected to 9 with
-   a 20% headroom margin (under no known ceiling, since `current_baseline` states current count, not a
+   from the data-volume trend to ~340GB (under 500GB capacity); replica requirement projected to 10 —
+   bare-minimum 8.14 (4,070 ÷ 500) rounded up to 9, then the stated 20% headroom margin applied on top
+   and rounded up again — (under no known ceiling, since `current_baseline` states current count, not a
    hard cap) — no evidence gaps recorded
 3. Report — no section exceeds or sits near a known ceiling, no gaps → Headroom `Sufficient`
 
@@ -48,7 +49,7 @@ DB connection limit 200, 500GB storage capacity.
 
 | Component | Current replicas | Projected replicas | Basis |
 |-----------|-------------------|----------------------|-------|
-| `payments-api` | 6 | 9 | Projected peak RPS (4,070) ÷ per-replica capacity (500 RPS), 20% headroom margin applied |
+| `payments-api` | 6 | 10 | Projected peak RPS (4,070) ÷ per-replica capacity (500 RPS), 20% headroom margin applied |
 
 ## Database
 
@@ -64,7 +65,7 @@ DB connection limit 200, 500GB storage capacity.
 **Caller:** Same demand series, but `current_baseline` states a hard replica ceiling of 8 (infrastructure
 budget cap for the quarter).
 
-**Agent:** Analyze projects 9 replicas needed at horizon end against a stated ceiling of 8 — a proven
+**Agent:** Analyze projects 10 replicas needed at horizon end against a stated ceiling of 8 — a proven
 shortfall. Report derives Headroom `Insufficient` (precedence winner over any other section's state).
 
 **Expected fragment:**
@@ -72,14 +73,14 @@ shortfall. Report derives Headroom `Insufficient` (precedence winner over any ot
 ```
 **Headroom: Insufficient**
 
-> Insufficient — projected replica requirement (9) exceeds the stated replica ceiling (8) within the
+> Insufficient — projected replica requirement (10) exceeds the stated replica ceiling (8) within the
 > 6-month horizon.
 
 ## Replica requirements
 
 | Component | Current replicas | Projected replicas | Basis |
 |-----------|-------------------|----------------------|-------|
-| `payments-api` | 6 | 9 (ceiling: 8) | Projected peak RPS (4,070) ÷ per-replica capacity (500 RPS), 20% headroom margin applied |
+| `payments-api` | 6 | 10 (ceiling: 8) | Projected peak RPS (4,070) ÷ per-replica capacity (500 RPS), 20% headroom margin applied |
 ```
 
 ---
