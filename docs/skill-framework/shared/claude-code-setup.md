@@ -2,9 +2,10 @@
 
 **Normative.** How to install and configure any skill in this repo for **Claude Code**. Every skill
 installs for Claude Code by default alongside Cursor — this doc also covers installing for one editor
-only. `SKILL.md` frontmatter (`name` + `description` + optional `skill_version`) is
+only. `SKILL.md` frontmatter (`name` + `description`) is
 already Claude Code-compatible — both editors discover skills the same way, by `description` for
-auto-invocation and `/<skill-name>` for explicit invocation. This doc covers the two things that
+auto-invocation and `/<skill-name>` for explicit invocation. The canonical skill version and
+platform metadata come from the versioned root `skills.yaml` manifest. This doc covers the two things that
 differ: **where skills install to** and **where MCP servers are configured**.
 
 ## 1. Install paths

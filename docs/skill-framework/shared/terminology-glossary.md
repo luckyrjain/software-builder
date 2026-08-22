@@ -9,12 +9,12 @@ Shared vocabulary for **software-builder** platform docs, `skills.yaml`, and beh
 | Term | Definition |
 |------|------------|
 | **Skill** | A portable agent workflow package: `SKILL.md`, `workflow/`, `reference/`, optional scripts. Identified by directory name and registry id (e.g. `pr-review`). |
-| **Registry** | Root `skills.yaml` — canonical list of skills plus install edges, hosts, invocation mode, composition, and capabilities. |
+| **Registry / canonical manifest** | Root `skills.yaml` — versioned canonical manifest for skills, platform contracts, composition contracts, install edges, hosts, invocation mode, permissions, capabilities, and artifact schemas. |
 | **Framework** | `docs/skill-framework/` shared normative reference library vendored into installed packages. |
 | **Capability** | A named external tool or API contract a skill may call, declared under `capabilities` in `skills.yaml` as globally required, optional/degraded, or a complete alternative `any_of` path. |
-| **Composition** | How skills invoke or escalate to each other. `skills.yaml` holds `invokes` and `escalation_targets`; `scripts/registry/composition_contracts.yaml` holds per-skill `produces` / `consumes` / `write_authority` contracts validated at registry lint time. |
-| **Invocation envelope** | The typed field shape a wrapper skill hands to a child skill (exact scope, interaction policy, allowed actions, expected SHA, source revisions) — see [invocation-envelope.md](invocation-envelope.md) (#52). `mr_context` in `composition_contracts.yaml` is the reference implementation. |
-| **Result envelope** | The typed field shape a skill returns (`review_metadata` / `assessment_metadata`) — see [review-metadata-schema.md](review-metadata-schema.md) §8. |
+| **Composition** | How skills invoke or escalate to each other. The canonical `skills.yaml` manifest owns `contracts.composition`, including per-skill `produces` / `consumes` / `write_authority` contracts. `scripts/registry/composition_contracts.yaml` and `composition_runtime.yaml` are generated projections. |
+| **Invocation envelope** | The typed field shape a wrapper skill hands to a child skill (exact scope, interaction policy, allowed actions, expected SHA, source revisions) — see [invocation-envelope.md](invocation-envelope.md) (#52). `mr_context` in the canonical manifest's composition contract is the reference implementation. |
+| **Result envelope** | The canonical durable result shape described in [runtime-contract.md](runtime-contract.md). `review_metadata` and `assessment_metadata` are payload fields for specific artifacts, not competing envelope definitions. |
 
 ## Invocation and risk
 

@@ -44,7 +44,10 @@ A result that relies on evidence whose relevant revision or observation time is 
 
 ## 4. Evidence conflicts
 
-Use the portable evidence states from `platform_contracts.yaml`:
+Use the portable evidence states from the canonical manifest's
+`contracts.platform` section in `skills.yaml`. `scripts/registry/platform_contracts.yaml`
+is a generated projection for consumers that need the standalone view; it is not an
+independent authoring surface.
 
 - `OBSERVED`
 - `INFERRED`
@@ -108,10 +111,12 @@ The registry validates this envelope and the payload schema with:
 python3 -m scripts.registry validate-artifact <artifact_type> <result.json> --producer-skill <trusted_skill_id>
 ```
 
-The producer identity is supplied by the trusted runtime boundary and must match
-`skill_result.skill`; it is not inferred from the submitted document. Producer
-minor/patch versions remain readable within the same major version while the
-explicit artifact schema version controls payload compatibility.
+The `--producer-skill` value is caller context. A host that needs authenticated producer
+identity must inject that value from its trusted execution context; the JSON document and
+the CLI argument alone do not authenticate one another. The validator checks that the
+context and document agree, but does not create an attestation mechanism. Producer
+minor/patch versions remain readable within the same major version while the explicit
+artifact schema version controls payload compatibility.
 
 Human-readable reports may render this differently, but must preserve the semantics. Internal phase names, lens names, or implementation-only control markers should not leak into user-facing output unless they help the user act.
 
@@ -155,7 +160,10 @@ A non-zero exit means the handoff is blocked; print the reason and return contro
 
 ## 9. Artifact ownership and state semantics
 
-The producer declared in `composition_contracts.yaml` owns the canonical artifact. Consumers may read, cite, or derive a new artifact; they must not silently rewrite another skill's canonical artifact.
+The producer declared in the canonical manifest's `contracts.composition` section owns the
+canonical artifact. Consumers may read, cite, or derive a new artifact; they must not silently
+rewrite another skill's canonical artifact. `scripts/registry/composition_contracts.yaml` is the
+generated projection of that ownership data.
 
 Durable artifacts declare one state semantic:
 
@@ -172,7 +180,9 @@ User-facing completion answers should make four things clear without exposing in
 
 ## 11. Action authorization gates
 
-Every action a skill takes falls into exactly one `action_gates` tier from `platform_contracts.yaml`, which sets the minimum authorization the action requires (a skill may always require more, never less):
+Every action a skill takes falls into exactly one `action_gates` tier from the canonical
+manifest's `contracts.platform` section, which sets the minimum authorization the action
+requires (a skill may always require more, never less):
 
 | Tier | Examples | Minimum authorization |
 |------|----------|------------------------|
@@ -185,7 +195,8 @@ Classify each action a skill can take against this table instead of inventing sk
 
 ## 12. Definition of Done
 
-Every skill declares, for its own output, the `definition_of_done` fields from `platform_contracts.yaml`:
+Every skill declares, for its own output, the `definition_of_done` fields from the canonical
+manifest's `contracts.platform` section:
 
 - `required_artifacts` — what must exist for the result to count as complete.
 - `required_checks` — what must have been verified (tests, validators, re-reads).

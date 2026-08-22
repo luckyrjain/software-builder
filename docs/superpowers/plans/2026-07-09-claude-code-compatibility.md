@@ -270,7 +270,7 @@ git commit -m "feat(makefile): add install-claude targets"
 # Claude Code setup
 
 **Normative.** How to install and configure any skill in this repo for **Claude Code**, as an
-alternative to Cursor. `SKILL.md` frontmatter (`name` + `description` + optional `skill_version`) is
+alternative to Cursor. `SKILL.md` frontmatter (`name` + `description`) is
 already Claude Code-compatible — both editors discover skills the same way, by `description` for
 auto-invocation and `/<skill-name>` for explicit invocation. This doc covers the two things that
 differ: **where skills install to** and **where MCP servers are configured**.

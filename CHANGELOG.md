@@ -8,6 +8,17 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 
 ## Platform
 
+### Consolidate runtime contracts into the canonical manifest (2026-08-22)
+
+- skills.yaml is now the versioned canonical manifest for skill versions, platform contracts,
+  artifact runtime rules, and composition contracts.
+- platform_contracts.yaml, composition_contracts.yaml, and composition_runtime.yaml remain
+  generated projections for compatibility and inspection; they are no longer independent sources.
+- Canonical durable artifact results now have one documented envelope covering producer identity,
+  provenance, freshness, definition of done, authority, schema version, state semantics, and payload.
+- Canonical skill SKILL.md frontmatter no longer carries skill_version or platform_contract.
+
+
 ### Add registry discovery commands and host support profiles (2026-08-22)
 
 - Added `python3 -m scripts.registry list` and `explain <skill>` for deterministic registry
