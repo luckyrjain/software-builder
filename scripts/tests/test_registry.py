@@ -169,7 +169,7 @@ skills:
     rendered = render_compatibility_matrix(tmp_path)
 
     assert (
-        "host.repository.read AND (path A: provider.a.read OR path B: provider.b.read)"
+        "host.repository.read AND \\(path A: provider.a.read OR path B: provider.b.read\\)"
         in rendered
     )
     demo_row = next(line for line in rendered.splitlines() if "| demo |" in line)

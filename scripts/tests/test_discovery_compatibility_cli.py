@@ -69,8 +69,8 @@ def test_compatibility_matrix_covers_all_hosts_and_support_levels() -> None:
     assert "Generic" in header
     assert "support envelope" in header
     pr_review = next(line for line in matrix.splitlines() if "| pr-review |" in line)
-    assert "codex_plugin (full/degraded)" in pr_review
-    assert "codex_plugin_portable_package (full/degraded/unsupported)" in pr_review
+    assert "codex_plugin \\(full/degraded\\)" in pr_review
+    assert "codex_plugin_portable_package \\(full/degraded/unsupported\\)" in pr_review
     assert "unsupported | unsupported" not in pr_review
     assert "full" in matrix
     assert "degraded" in matrix
@@ -80,7 +80,7 @@ def test_compatibility_matrix_covers_all_hosts_and_support_levels() -> None:
 def test_dynamic_output_escapes_terminal_and_markdown_controls() -> None:
     assert "\x1b" not in cli._display_text("\x1b[31mRED")
     assert "\\x1b" in cli._display_text("\x1b[31mRED")
-    assert _cell("skill`|name\n") == "skill\\`\\|name\\x0a"
+    assert _cell("skill`|[name](url)\n") == "skill\\`\\|\\[name\\]\\(url\\)\\x0a"
 
 
 def test_canonical_output_requires_host_contracts(tmp_path) -> None:
