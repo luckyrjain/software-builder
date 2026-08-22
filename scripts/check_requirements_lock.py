@@ -13,9 +13,6 @@ from packaging.version import InvalidVersion, Version
 
 LOCK_ENTRY_RE = re.compile(r"^([A-Za-z0-9][A-Za-z0-9._-]*)==([^\s\\]+)$")
 DIRECT_LOCK_MARKER = "# via -r requirements.txt"
-# These values are not fixed by the lock-generation command, so evaluating them
-# locally would make validation depend on an unknown build-host kernel.
-UNSUPPORTED_MARKER_VARIABLES = ("platform_release", "platform_version")
 # Match the Linux x86_64 / CPython 3.12 environment used by CI's uv compile.
 LOCK_TARGET_ENVIRONMENT = {
     **default_environment(),
@@ -31,6 +28,19 @@ LOCK_TARGET_ENVIRONMENT = {
     "python_full_version": "3.12.0",
     "sys_platform": "linux",
 }
+SUPPORTED_MARKER_VARIABLES = frozenset(
+    {
+        "implementation_name",
+        "implementation_version",
+        "os_name",
+        "platform_machine",
+        "platform_python_implementation",
+        "platform_system",
+        "python_full_version",
+        "python_version",
+        "sys_platform",
+    }
+)
 
 
 def _normalize(name: str) -> str:
@@ -86,11 +96,9 @@ def requirements_from_file(path: Path) -> dict[str, list[Requirement]]:
         except InvalidRequirement as exc:
             raise ValueError(f"unsupported requirements.txt entry: {line}") from exc
         if requirement.marker is not None:
-            unsupported = [
-                name
-                for name in UNSUPPORTED_MARKER_VARIABLES
-                if name in _marker_variables(requirement.marker)
-            ]
+            unsupported = sorted(
+                _marker_variables(requirement.marker) - SUPPORTED_MARKER_VARIABLES
+            )
             if unsupported:
                 raise ValueError(
                     "unsupported lock target marker variable(s): "

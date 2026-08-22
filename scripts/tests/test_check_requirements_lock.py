@@ -192,6 +192,17 @@ def test_unknown_platform_marker_is_rejected_fail_closed(tmp_path: Path) -> None
         package_names_from_requirements(requirements)
 
 
+def test_unknown_marker_variable_is_rejected_fail_closed(tmp_path: Path) -> None:
+    requirements = tmp_path / "requirements.txt"
+    requirements.write_text(
+        "demo>=1; dependency_groups == 'dev'\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="dependency_groups"):
+        package_names_from_requirements(requirements)
+
+
 def test_comment_stripping_respects_quoted_marker_values(tmp_path: Path) -> None:
     requirements = tmp_path / "requirements.txt"
     lockfile = tmp_path / "requirements.lock"
