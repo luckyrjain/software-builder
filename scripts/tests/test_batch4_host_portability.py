@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import shutil
 import subprocess
 import tarfile
 from pathlib import Path, PurePosixPath
@@ -57,6 +58,23 @@ def test_host_adapter_interface_rejects_mixed_type_host_keys(tmp_path: Path) -> 
     errors = validate_host_adapter_interface(tmp_path)
 
     assert errors and errors[0].startswith("error: host adapter interface:")
+
+
+def test_host_adapter_identity_rejects_extra_parity_keys(tmp_path: Path) -> None:
+    registry_dir = tmp_path / "scripts" / "registry"
+    registry_dir.mkdir(parents=True)
+    shutil.copy2(ROOT / "scripts/registry/host_contracts.yaml", registry_dir / "host_contracts.yaml")
+    parity_dir = tmp_path / "evals" / "host-parity"
+    parity_dir.mkdir(parents=True)
+    expected = ROOT / "evals/host-parity/expected.yaml"
+    (parity_dir / "expected.yaml").write_text(
+        expected.read_text(encoding="utf-8") + "  1: {adapter: evil}\n",
+        encoding="utf-8",
+    )
+
+    errors = validate_host_adapter_identities(tmp_path)
+
+    assert any("keys must be strings" in error for error in errors)
 
 
 def test_host_branch_detector_rejects_directives_not_neutral_host_lists() -> None:
