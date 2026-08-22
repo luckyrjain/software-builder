@@ -150,6 +150,20 @@ bash scripts/install.sh test-writer
 With no arguments, `install.sh` discovers every `*/SKILL.md` under the repo root and installs each —
 adding a new skill directory needs no script change to be picked up.
 
+## Registry discovery
+
+The registry CLI reads the canonical `skills.yaml` manifest and exposes the same metadata used by
+validation and generated documentation:
+
+```bash
+python3 -m scripts.registry list
+python3 -m scripts.registry explain pr-review
+```
+
+`list` prints one deterministic row per registered skill. `explain <skill>` prints the skill's
+version, type, invocation mode, authority, permissions, supported hosts, entrypoint, output contract,
+and install dependencies. Unknown skill IDs fail with a non-zero exit status.
+
 To install for only one editor, pass `--agent cursor` (Cursor only) or `--agent claude-user` (Claude
 Code only, installs to `~/.claude/skills/`) — or use the `install-claude*` Makefile targets below for
 the Claude-Code-only form. Kiro and ChatGPT/Codex aren't wired into this script (Kiro needs no install

@@ -3,9 +3,12 @@ from __future__ import annotations
 from pathlib import Path
 
 from scripts.registry.backfill_capabilities import load_catalog
+from scripts.registry.canonical_manifest import load_canonical_manifest
 from scripts.registry.composition_contracts import load_contracts
+from scripts.registry.host_adapter import HOSTS
 from scripts.registry.load import load_registry
 from scripts.release_info import read_distribution_version
+from scripts.yaml_safety import load_unique_yaml_file, require_mapping
 
 HEADER = """# Compatibility matrix
 
@@ -13,9 +16,33 @@ HEADER = """# Compatibility matrix
 
 Distribution version: **{version}**
 
-| Skill | Invocation | Cursor | Claude | Kiro | Required capabilities | Write authority |
-|-------|------------|--------|--------|------|----------------------|-----------------|
+| Skill | Invocation | Cursor | Claude | Codex | ChatGPT | Kiro | Generic | Support profile | Required capabilities | Write authority |
+|-------|------------|--------|--------|-------|---------|------|---------|-----------------|----------------------|-----------------|
 """
+
+
+def _host_profiles(root: Path) -> tuple[dict[str, str], dict[str, str], str]:
+    path = root / "scripts/registry/host_contracts.yaml"
+    if not path.is_file():
+        surfaces = {host: "unsupported" for host in HOSTS}
+        profiles = {host: "unsupported" for host in HOSTS}
+        return surfaces, profiles, "legacy: unknown"
+
+    raw = require_mapping(load_unique_yaml_file(path), "host contracts")
+    hosts = require_mapping(raw.get("hosts"), "host contracts.hosts")
+    surfaces: dict[str, str] = {}
+    profiles: dict[str, str] = {}
+    profile_lines: list[str] = []
+    order = {"full": 0, "degraded": 1, "unsupported": 2}
+    for host in sorted(HOSTS):
+        config = require_mapping(hosts.get(host), f"host contracts.hosts.{host}")
+        support = require_mapping(config.get("support"), f"host contracts.hosts.{host}.support")
+        levels = sorted({str(value) for value in support.values()}, key=lambda value: order.get(value, 99))
+        surfaces[host] = str(config.get("adapter", host))
+        profile = "/".join(levels)
+        profiles[host] = profile
+        profile_lines.append(f"{host}: {profile}")
+    return surfaces, profiles, "; ".join(profile_lines)
 
 
 def render_compatibility_matrix(root: Path) -> str:
@@ -23,6 +50,11 @@ def render_compatibility_matrix(root: Path) -> str:
     capabilities = load_catalog(root / "scripts/registry/capability_catalog.yaml")
     _, _, _, contracts = load_contracts(root / "skills.yaml")
     version = read_distribution_version(root)
+    host_surfaces, host_profiles, support_profile = _host_profiles(root)
+    try:
+        manifest = load_canonical_manifest(root)
+    except (FileNotFoundError, OSError, ValueError):
+        manifest = None
 
     lines = [HEADER.format(version=version).rstrip()]
     for skill_id, entry in sorted(registry.skills.items()):
@@ -46,9 +78,25 @@ def render_compatibility_matrix(root: Path) -> str:
         else:
             required = global_required or alternative_required or "—"
         write_authority = contract.write_authority if contract else "—"
+        canonical_skill = manifest.get("skills", {}).get(skill_id) if manifest else None
+        supported_hosts = (
+            set(canonical_skill.get("supported_hosts", []))
+            if isinstance(canonical_skill, dict)
+            else {"cursor", "claude", "kiro"}
+        )
+
+        def host_cell(host: str, surface: str) -> str:
+            if host not in supported_hosts:
+                return "unsupported"
+            return f"{surface} ({host_profiles.get(host, 'unknown')})"
+
         lines.append(
-            f"| `{skill_id}` | {entry.invocation} | {entry.hosts.cursor.discovery} | "
-            f"{'yes' if entry.hosts.claude.install else 'no'} | {entry.hosts.kiro.discovery} | "
-            f"{required} | {write_authority} |",
+            f"| `{skill_id}` | {entry.invocation} | {host_cell('cursor', entry.hosts.cursor.discovery)} | "
+            f"{host_cell('claude', 'yes' if entry.hosts.claude.install else 'no')} | "
+            f"{host_cell('codex', host_surfaces['codex'])} | "
+            f"{host_cell('chatgpt', host_surfaces['chatgpt'])} | "
+            f"{host_cell('kiro', entry.hosts.kiro.discovery)} | "
+            f"{host_cell('generic', host_surfaces['generic'])} | "
+            f"{support_profile} | {required} | {write_authority} |",
         )
     return "\n".join(lines) + "\n"

@@ -267,11 +267,59 @@ def cmd_check_handoff(root: Path, target_skill: str, visited_skills: list[str], 
     return 1
 
 
+def cmd_list(root: Path) -> int:
+    manifest = load_canonical_manifest(root)
+    registry = load_registry(root)
+    print("Skill | Version | Type | Category | Invocation | Authority")
+    print("----- | ------- | ---- | -------- | ---------- | ---------")
+    for skill_id, entry in sorted(registry.skills.items()):
+        skill = manifest["skills"].get(skill_id)
+        if not isinstance(skill, dict):
+            raise ValueError(f"canonical manifest missing skill {skill_id!r}")
+        print(
+            f"{skill_id} | {skill['version']} | {skill['type']} | {entry.category} | "
+            f"{entry.invocation} | {skill['authority']}"
+        )
+    return 0
+
+
+def cmd_explain(root: Path, skill_id: str) -> int:
+    manifest = load_canonical_manifest(root)
+    registry = load_registry(root)
+    skill = manifest["skills"].get(skill_id)
+    entry = registry.skills.get(skill_id)
+    if not isinstance(skill, dict) or entry is None:
+        print(f"error: unknown skill {skill_id!r}", file=sys.stderr)
+        return 1
+
+    print(f"Skill: {skill_id}")
+    print(f"Version: {skill['version']}")
+    print(f"Type: {skill['type']}")
+    print(f"Category: {entry.category}")
+    print(f"Invocation: {entry.invocation}")
+    print(f"Authority: {skill['authority']}")
+    print(f"Permissions: {yaml.safe_dump(skill['permissions'], default_flow_style=True).strip()}")
+    print(f"Supported hosts: {', '.join(skill['supported_hosts'])}")
+    print(f"Entrypoint: {skill['entrypoint']}")
+    print(f"Output contract: {yaml.safe_dump(skill['output_contract'], default_flow_style=True).strip()}")
+    dependencies = skill["dependencies"] or []
+    print(f"Dependencies: {', '.join(dependencies) if dependencies else 'none'}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="scripts.registry")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     subparsers.add_parser("validate", help="validate skills.yaml, capabilities and platform contracts")
+
+    subparsers.add_parser("list", help="list registered skills and their canonical metadata")
+
+    explain_parser = subparsers.add_parser(
+        "explain",
+        help="explain one skill's canonical metadata and runtime contract",
+    )
+    explain_parser.add_argument("skill_id", help="registered skill identifier")
 
     generate_parser = subparsers.add_parser("generate", help="generate adapters and derived docs")
     generate_parser.add_argument(
@@ -321,6 +369,10 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.command == "validate":
         return _run_command(lambda: cmd_validate(ROOT))
+    if args.command == "list":
+        return _run_command(lambda: cmd_list(ROOT))
+    if args.command == "explain":
+        return _run_command(lambda: cmd_explain(ROOT, args.skill_id))
     if args.command == "generate":
         return _run_command(lambda: cmd_generate(ROOT, check_only=args.check))
     if args.command == "package-generic":
