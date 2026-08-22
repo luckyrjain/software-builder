@@ -8,12 +8,19 @@ from typing import Any
 import yaml
 
 from scripts.registry.frontmatter import load_skill_frontmatter
+from scripts.registry.host_adapter import HOSTS
 from scripts.yaml_safety import load_unique_yaml_file, require_mapping
 
 ROOT = Path(__file__).resolve().parents[2]
 CANONICAL_PATH = ROOT / "skills.yaml"
 REQUIRED_CONTRACTS = {"platform", "composition_runtime", "composition"}
+MANIFEST_KIND = "canonical"
 ALLOWED_TYPES = {"leaf", "router", "orchestrator", "trigger"}
+
+
+def has_canonical_manifest_shape(raw: object) -> bool:
+    """Return whether a skills.yaml claims the reserved canonical shape."""
+    return isinstance(raw, dict) and ("manifest_kind" in raw or "contracts" in raw)
 
 
 def is_semver(value: str) -> bool:
@@ -51,6 +58,8 @@ def load_canonical_manifest(root: Path = ROOT) -> dict[str, Any]:
         raise ValueError("canonical manifest.schema_version must be an integer") from exc
     if schema_version != 1:
         raise ValueError("canonical manifest.schema_version must be 1")
+    if raw.get("manifest_kind") != MANIFEST_KIND:
+        raise ValueError(f"canonical manifest.manifest_kind must be {MANIFEST_KIND!r}")
     raw["schema_version"] = schema_version
     if not isinstance(raw.get("contracts"), dict):
         raise ValueError("canonical manifest.contracts must be a mapping")
@@ -99,6 +108,8 @@ def validate_canonical_manifest(root: Path = ROOT) -> list[str]:
         required = {
             "version",
             "type",
+            "category",
+            "invocation",
             "authority",
             "permissions",
             "supported_hosts",
@@ -120,6 +131,10 @@ def validate_canonical_manifest(root: Path = ROOT) -> list[str]:
             skill_type = skill.get("type")
             if skill_type not in ALLOWED_TYPES:
                 errors.append(f"error: {skill_id}: invalid type {skill_type!r}")
+            for field in ("category", "invocation"):
+                value = skill.get(field)
+                if not isinstance(value, str) or not value.strip():
+                    errors.append(f"error: {skill_id}: {field} must be a non-empty string")
             if platform_types.get(skill_id) != skill_type:
                 errors.append(f"error: {skill_id}: platform type projection drift")
             if runtime_types.get(skill_id) != skill_type:
@@ -146,8 +161,10 @@ def validate_canonical_manifest(root: Path = ROOT) -> list[str]:
             hosts = skill.get("supported_hosts")
             if not isinstance(hosts, list) or not hosts or not all(isinstance(item, str) for item in hosts):
                 errors.append(f"error: {skill_id}: supported_hosts must be a non-empty list")
+            elif len(hosts) != len(set(hosts)):
+                errors.append(f"error: {skill_id}: supported_hosts must not contain duplicates")
             elif skill_id in registry.skills:
-                registry_hosts = {"cursor", "claude", "kiro"}
+                registry_hosts = HOSTS
                 if set(hosts) != registry_hosts:
                     errors.append(f"error: {skill_id}: supported host projection drift")
             if skill.get("entrypoint") != "SKILL.md":

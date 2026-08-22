@@ -174,7 +174,7 @@ def test_repository_platform_manifest_validates() -> None:
 
 def test_skill_versions_does_not_hide_malformed_canonical_contracts(tmp_path: Path) -> None:
     (tmp_path / "skills.yaml").write_text(
-        "schema_version: 1\ncontracts: []\nskills: {}\n",
+        "schema_version: 1\nmanifest_kind: canonical\ncontracts: []\nskills: {}\n",
         encoding="utf-8",
     )
 

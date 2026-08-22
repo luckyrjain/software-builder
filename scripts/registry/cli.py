@@ -8,7 +8,12 @@ from pathlib import Path
 import yaml
 
 from scripts.registry.backfill_capabilities import cmd_backfill
-from scripts.registry.canonical_manifest import load_canonical_manifest, render_legacy_projection
+from scripts.registry.canonical_manifest import (
+    has_canonical_manifest_shape,
+    load_canonical_manifest,
+    render_legacy_projection,
+    validate_canonical_manifest,
+)
 from scripts.registry.capability_family_sync import validate_capability_families
 from scripts.registry.capability_sync import validate_capability_catalog_sync
 from scripts.registry.composition import render_composition_mermaid
@@ -28,6 +33,7 @@ from scripts.registry.generate_docs import (
 from scripts.registry.generate_kiro import generate_kiro_steering
 from scripts.registry.generic_package import build_generic_package
 from scripts.registry.host_portability import validate_host_portability
+from scripts.registry.host_adapter import validate_host_adapter_identities, validate_host_adapter_interface
 from scripts.registry.load import load_descriptions, load_registry
 from scripts.registry.manifest import validate_manifest
 from scripts.registry.p1_validation import validate_p1_contracts
@@ -144,7 +150,7 @@ def _composition_runtime_path(root: Path) -> Path:
         return root / "scripts" / "registry" / "composition_runtime.yaml"
     except (OSError, yaml.YAMLError):
         raise
-    if isinstance(raw, dict) and "contracts" in raw:
+    if has_canonical_manifest_shape(raw):
         # Once a repository opts into the canonical manifest shape, a malformed
         # canonical contract must fail closed rather than being silently
         # replaced by a stale compatibility projection.
@@ -168,6 +174,10 @@ def _p1_layer_paths(root: Path) -> list[Path]:
 
 def _validate_for_generate(root: Path) -> list[str]:
     errors = validate_registry(root)
+    host_contracts = root / "scripts" / "registry" / "host_contracts.yaml"
+    if host_contracts.is_file():
+        errors.extend(validate_host_adapter_interface(root))
+        errors.extend(validate_host_adapter_identities(root))
     if _capability_catalog_path(root).is_file():
         errors.extend(validate_capability_catalog_sync(root))
     if _capability_catalog_path(root).is_file() and _capability_families_path(root).is_file():
@@ -178,7 +188,7 @@ def _validate_for_generate(root: Path) -> list[str]:
             )
         )
     raw_manifest = load_unique_yaml_file(root / "skills.yaml")
-    if isinstance(raw_manifest, dict) and "contracts" in raw_manifest:
+    if has_canonical_manifest_shape(raw_manifest):
         errors.extend(validate_manifest(root))
     if any(path.is_file() for path in _p1_layer_paths(root)):
         errors.extend(validate_p1_contracts(root))
@@ -267,11 +277,86 @@ def cmd_check_handoff(root: Path, target_skill: str, visited_skills: list[str], 
     return 1
 
 
+def cmd_list(root: Path) -> int:
+    manifest = _validated_canonical_manifest(root)
+    registry = load_registry(root)
+    print("Skill | Version | Type | Category | Invocation | Authority")
+    print("----- | ------- | ---- | -------- | ---------- | ---------")
+    for skill_id, entry in sorted(registry.skills.items()):
+        skill = manifest["skills"].get(skill_id)
+        if not isinstance(skill, dict):
+            raise ValueError(f"canonical manifest missing skill {skill_id!r}")
+        print(
+            f"{_display_text(skill_id)} | {_display_text(skill['version'])} | "
+            f"{_display_text(skill['type'])} | {_display_text(skill['category'])} | "
+            f"{_display_text(skill['invocation'])} | {_display_text(skill['authority'])}"
+        )
+    return 0
+
+
+def cmd_explain(root: Path, skill_id: str) -> int:
+    manifest = _validated_canonical_manifest(root)
+    registry = load_registry(root)
+    skill = manifest["skills"].get(skill_id)
+    entry = registry.skills.get(skill_id)
+    if not isinstance(skill, dict) or entry is None:
+        print(f"error: unknown skill {skill_id!r}", file=sys.stderr)
+        return 1
+
+    print(f"Skill: {_display_text(skill_id)}")
+    print(f"Version: {_display_text(skill['version'])}")
+    print(f"Type: {_display_text(skill['type'])}")
+    print(f"Category: {_display_text(skill['category'])}")
+    print(f"Invocation: {_display_text(skill['invocation'])}")
+    print(f"Authority: {_display_text(skill['authority'])}")
+    print(f"Permissions: {_display_text(yaml.safe_dump(skill['permissions'], default_flow_style=True).strip())}")
+    print(f"Supported hosts: {_display_text(', '.join(skill['supported_hosts']))}")
+    print(f"Entrypoint: {_display_text(skill['entrypoint'])}")
+    print(f"Output contract: {_display_text(yaml.safe_dump(skill['output_contract'], default_flow_style=True).strip())}")
+    dependencies = skill["dependencies"] or []
+    print(f"Dependencies: {_display_text(', '.join(dependencies) if dependencies else 'none')}")
+    return 0
+
+
+def _validated_canonical_manifest(root: Path) -> dict:
+    raw = load_unique_yaml_file(root / "skills.yaml")
+    if not isinstance(raw, dict) or raw.get("manifest_kind") != "canonical":
+        raise ValueError("canonical manifest required for this command")
+    errors = validate_canonical_manifest(root)
+    if errors:
+        raise ValueError("\n".join(errors))
+    return load_canonical_manifest(root)
+
+
+def _display_text(value: object) -> str:
+    """Keep untrusted manifest text on one terminal line."""
+    escaped: list[str] = []
+    for char in str(value):
+        codepoint = ord(char)
+        if char == "\\":
+            escaped.append("\\\\")
+        elif char == "|":
+            escaped.append("\\|")
+        elif codepoint < 0x20 or codepoint == 0x7F:
+            escaped.append(f"\\x{codepoint:02x}")
+        else:
+            escaped.append(char)
+    return "".join(escaped)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="scripts.registry")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     subparsers.add_parser("validate", help="validate skills.yaml, capabilities and platform contracts")
+
+    subparsers.add_parser("list", help="list registered skills and their canonical metadata")
+
+    explain_parser = subparsers.add_parser(
+        "explain",
+        help="explain one skill's canonical metadata and runtime contract",
+    )
+    explain_parser.add_argument("skill_id", help="registered skill identifier")
 
     generate_parser = subparsers.add_parser("generate", help="generate adapters and derived docs")
     generate_parser.add_argument(
@@ -321,6 +406,10 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.command == "validate":
         return _run_command(lambda: cmd_validate(ROOT))
+    if args.command == "list":
+        return _run_command(lambda: cmd_list(ROOT))
+    if args.command == "explain":
+        return _run_command(lambda: cmd_explain(ROOT, args.skill_id))
     if args.command == "generate":
         return _run_command(lambda: cmd_generate(ROOT, check_only=args.check))
     if args.command == "package-generic":

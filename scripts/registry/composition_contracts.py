@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from scripts.registry.canonical_manifest import load_canonical_manifest
+from scripts.registry.canonical_manifest import has_canonical_manifest_shape, load_canonical_manifest
 from scripts.registry.models import Registry
 from scripts.test_creator_catalog import TEST_CREATOR_SKILLS
 from scripts.yaml_safety import YAML_SAFETY_ERRORS, load_unique_yaml_file
@@ -20,7 +20,7 @@ def _load_contract_document(path: Path | None = None) -> dict[str, object]:
     if path is None or path.name == "skills.yaml":
         manifest_root = path.parent if path is not None else ROOT
         raw_manifest = load_unique_yaml_file(manifest_root / "skills.yaml")
-        if isinstance(raw_manifest, dict) and "contracts" in raw_manifest:
+        if has_canonical_manifest_shape(raw_manifest):
             manifest = load_canonical_manifest(manifest_root)
             contracts = manifest["contracts"]
             if not isinstance(contracts, dict) or not isinstance(contracts.get("composition"), dict):
@@ -419,4 +419,3 @@ def validate_composition_contracts(
             )
 
     return errors
-

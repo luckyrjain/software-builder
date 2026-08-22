@@ -120,6 +120,7 @@ skills:
     path: demo
     category: testing
     invocation: ambient
+    version: legacy-extra-metadata
     hosts:
       cursor: {discovery: rule}
       claude: {install: true}
@@ -168,9 +169,23 @@ skills:
     rendered = render_compatibility_matrix(tmp_path)
 
     assert (
-        "host.repository.read AND (path A: provider.a.read OR path B: provider.b.read)"
+        "host.repository.read AND \\(path A: provider.a.read OR path B: provider.b.read\\)"
         in rendered
     )
+    demo_row = next(line for line in rendered.splitlines() if "| demo |" in line)
+    assert "| rule | yes | unsupported | unsupported | manual | unsupported |" in demo_row
+
+
+def test_compatibility_generator_rejects_malformed_canonical_manifest(tmp_path: Path) -> None:
+    from scripts.registry.generate_compatibility import _load_optional_canonical_manifest
+
+    (tmp_path / "skills.yaml").write_text(
+        "schema_version: 1\nmanifest_kind: canonical\ncontracts: {}\nskills: {}\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="canonical manifest missing contracts"):
+        _load_optional_canonical_manifest(tmp_path)
 
 
 def test_crosscheck_rejects_empty_description(tmp_path: Path) -> None:

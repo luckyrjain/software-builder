@@ -63,6 +63,38 @@ def capability_support(root: Path, host: str, capability: str) -> str:
     return str(value)
 
 
+def validate_host_adapter_identities(root: Path) -> list[str]:
+    """Check adapter names against the checked-in host-parity contract."""
+    expected_path = root / "evals" / "host-parity" / "expected.yaml"
+    if not expected_path.is_file():
+        return ["error: host parity expected contract missing"]
+    try:
+        contracts = _contracts(root)
+        host_map = require_mapping(contracts.get("hosts"), "hosts")
+        expected = require_mapping(load_unique_yaml_file(expected_path), "host parity expected")
+        snapshots = require_mapping(expected.get("hosts"), "host parity expected hosts")
+        errors: list[str] = []
+        if expected.get("schema_version") != 1:
+            errors.append("error: host parity expected schema_version must be 1")
+        for label, mapping in (("hosts", host_map), ("host parity expected hosts", snapshots)):
+            if any(not isinstance(key, str) for key in mapping):
+                errors.append(f"error: {label} keys must be strings")
+        if set(key for key in host_map if isinstance(key, str)) != HOSTS:
+            errors.append("error: host contract coverage drift")
+        if set(key for key in snapshots if isinstance(key, str)) != HOSTS:
+            errors.append("error: host parity snapshot coverage drift")
+        if errors:
+            return errors
+        for host in sorted(HOSTS):
+            actual = require_mapping(host_map.get(host), f"hosts.{host}")
+            snapshot = require_mapping(snapshots.get(host), f"host parity expected hosts.{host}")
+            if actual.get("adapter") != snapshot.get("adapter"):
+                errors.append(f"error: {host}: adapter identity drift")
+        return errors
+    except (OSError, TypeError, ValueError) as exc:
+        return [f"error: host adapter identity: {exc}"]
+
+
 def validate_host_adapter_interface(root: Path) -> list[str]:
     try:
         contracts = _contracts(root)
@@ -90,5 +122,5 @@ def validate_host_adapter_interface(root: Path) -> list[str]:
                 if value not in SUPPORT:
                     errors.append(f"error: hosts.{host}.support.{capability}: invalid value {value!r}")
         return errors
-    except (OSError, ValueError) as exc:
+    except (OSError, TypeError, ValueError) as exc:
         return [f"error: host adapter interface: {exc}"]

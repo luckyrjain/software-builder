@@ -6,6 +6,7 @@ from pathlib import Path
 from scripts.registry.backfill_capabilities import validate_capabilities_present
 from scripts.registry.composition import validate_composition_graph
 from scripts.registry.frontmatter import load_skill_frontmatter
+from scripts.registry.canonical_manifest import has_canonical_manifest_shape
 from scripts.registry.graph import detect_cycles
 from scripts.registry.install_targets_sync import validate_install_targets
 from scripts.registry.models import Registry
@@ -126,7 +127,7 @@ def _validate_skill_frontmatter_shape(root: Path, registry: Registry) -> list[st
     """Per-skill SKILL.md frontmatter checks against the registry."""
     errors: list[str] = []
     raw_manifest = load_unique_yaml_file(root / "skills.yaml")
-    legacy_manifest = not (isinstance(raw_manifest, dict) and "contracts" in raw_manifest)
+    legacy_manifest = not has_canonical_manifest_shape(raw_manifest)
     for skill_id, entry in registry.skills.items():
         skill_md = root / entry.path / "SKILL.md"
         try:

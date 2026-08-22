@@ -25,6 +25,8 @@ def test_canonical_manifest_has_contracts_and_full_skill_metadata():
     required = {
         "version",
         "type",
+        "category",
+        "invocation",
         "authority",
         "permissions",
         "supported_hosts",

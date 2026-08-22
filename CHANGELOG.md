@@ -8,6 +8,13 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 
 ## Platform
 
+### Add registry discovery commands and host support profiles (2026-08-22)
+
+- Added `python3 -m scripts.registry list` and `explain <skill>` for deterministic registry
+  discovery from the canonical manifest.
+- Expanded the generated compatibility matrix with Codex, ChatGPT, Generic, and explicit host
+  support profiles.
+
 ### Harden Batch 5 release lifecycle: atomic writes, manifest-vs-bundle cross-checks, fail-closed edge cases (2026-08-17)
 
 Follow-up to the item below, from a multi-angle parallel review (six independent finders --

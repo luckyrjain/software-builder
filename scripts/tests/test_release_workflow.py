@@ -23,15 +23,15 @@ def test_compatibility_matrix_lists_all_skills() -> None:
     registry = parse_registry(ROOT / "skills.yaml")
     assert "GENERATED from skills.yaml" in text
     for skill_id in registry.skills:
-        assert f"`{skill_id}`" in text
+        assert f"| {skill_id} |" in text
 
 
 def test_compatibility_matrix_distinguishes_all_required_from_any_of_paths() -> None:
     from scripts.registry.generate_compatibility import render_compatibility_matrix
 
     text = render_compatibility_matrix(ROOT)
-    loop_task_row = next(line for line in text.splitlines() if "`loop-task-implementer`" in line)
-    pr_review_row = next(line for line in text.splitlines() if "`pr-review`" in line)
+    loop_task_row = next(line for line in text.splitlines() if "| loop-task-implementer |" in line)
+    pr_review_row = next(line for line in text.splitlines() if "| pr-review |" in line)
 
     assert "host.repository.read_write, host.role.isolation, host.ci.status" in loop_task_row
     assert "host.repository.read_write OR host.role.isolation" not in loop_task_row
