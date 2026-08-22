@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from scripts.registry.canonical_manifest import (
+    has_canonical_manifest_shape,
     is_semver,
     load_canonical_manifest,
     validate_canonical_manifest,
@@ -148,7 +149,7 @@ def skill_versions(root: Path = ROOT, *, registry: Registry | None = None) -> di
         load_unique_yaml_file(root / "skills.yaml"),
         "skills.yaml root",
     )
-    if "contracts" not in raw:
+    if not has_canonical_manifest_shape(raw):
         legacy_registry = registry or parse_registry(root / "skills.yaml")
         versions: dict[str, str] = {}
         for skill_id, entry in legacy_registry.skills.items():

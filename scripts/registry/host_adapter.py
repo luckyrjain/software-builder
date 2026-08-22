@@ -67,7 +67,7 @@ def validate_host_adapter_identities(root: Path) -> list[str]:
     """Check adapter names against the checked-in host-parity contract."""
     expected_path = root / "evals" / "host-parity" / "expected.yaml"
     if not expected_path.is_file():
-        return []
+        return ["error: host parity expected contract missing"]
     try:
         contracts = _contracts(root)
         host_map = require_mapping(contracts.get("hosts"), "hosts")

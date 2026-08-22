@@ -68,7 +68,7 @@ def test_compatibility_matrix_covers_all_hosts_and_support_levels() -> None:
     assert "Kiro" in header
     assert "Generic" in header
     assert "support envelope" in header
-    pr_review = next(line for line in matrix.splitlines() if "`pr-review`" in line)
+    pr_review = next(line for line in matrix.splitlines() if "| pr-review |" in line)
     assert "codex_plugin (full/degraded)" in pr_review
     assert "codex_plugin_portable_package (full/degraded/unsupported)" in pr_review
     assert "unsupported | unsupported" not in pr_review

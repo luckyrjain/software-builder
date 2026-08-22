@@ -195,7 +195,9 @@ def _deprecation_candidates(root: Path, skill_paths: Iterable[str]) -> Iterable[
 
 def _canonical_contract(root: Path, section: str, legacy_path: str) -> dict[str, Any]:
     raw = load_unique_yaml_file(root / "skills.yaml")
-    if not isinstance(raw, dict) or "contracts" not in raw:
+    from scripts.registry.canonical_manifest import has_canonical_manifest_shape
+
+    if not has_canonical_manifest_shape(raw):
         return _yaml_mapping(root / legacy_path)
     manifest = load_canonical_manifest(root)
     contracts = manifest.get("contracts")

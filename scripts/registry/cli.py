@@ -9,6 +9,7 @@ import yaml
 
 from scripts.registry.backfill_capabilities import cmd_backfill
 from scripts.registry.canonical_manifest import (
+    has_canonical_manifest_shape,
     load_canonical_manifest,
     render_legacy_projection,
     validate_canonical_manifest,
@@ -149,7 +150,7 @@ def _composition_runtime_path(root: Path) -> Path:
         return root / "scripts" / "registry" / "composition_runtime.yaml"
     except (OSError, yaml.YAMLError):
         raise
-    if isinstance(raw, dict) and "contracts" in raw:
+    if has_canonical_manifest_shape(raw):
         # Once a repository opts into the canonical manifest shape, a malformed
         # canonical contract must fail closed rather than being silently
         # replaced by a stale compatibility projection.
@@ -187,7 +188,7 @@ def _validate_for_generate(root: Path) -> list[str]:
             )
         )
     raw_manifest = load_unique_yaml_file(root / "skills.yaml")
-    if isinstance(raw_manifest, dict) and "contracts" in raw_manifest:
+    if has_canonical_manifest_shape(raw_manifest):
         errors.extend(validate_manifest(root))
     if any(path.is_file() for path in _p1_layer_paths(root)):
         errors.extend(validate_p1_contracts(root))

@@ -172,7 +172,7 @@ skills:
         "host.repository.read AND (path A: provider.a.read OR path B: provider.b.read)"
         in rendered
     )
-    demo_row = next(line for line in rendered.splitlines() if "`demo`" in line)
+    demo_row = next(line for line in rendered.splitlines() if "| demo |" in line)
     assert "| rule | yes | unsupported | unsupported | manual | unsupported |" in demo_row
 
 

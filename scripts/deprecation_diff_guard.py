@@ -56,7 +56,9 @@ def _contract_at_ref(
     legacy_path: str,
 ) -> dict[str, Any]:
     raw = _mapping(_git_text(root, ref, "skills.yaml"))
-    if "contracts" not in raw:
+    from scripts.registry.canonical_manifest import has_canonical_manifest_shape
+
+    if not has_canonical_manifest_shape(raw):
         return _mapping(_git_text(root, ref, legacy_path))
     contracts = raw.get("contracts")
     if not isinstance(contracts, dict) or not isinstance(contracts.get(section), dict):

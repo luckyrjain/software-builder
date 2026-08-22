@@ -18,6 +18,11 @@ MANIFEST_KIND = "canonical"
 ALLOWED_TYPES = {"leaf", "router", "orchestrator", "trigger"}
 
 
+def has_canonical_manifest_shape(raw: object) -> bool:
+    """Return whether a skills.yaml claims the reserved canonical shape."""
+    return isinstance(raw, dict) and ("manifest_kind" in raw or "contracts" in raw)
+
+
 def is_semver(value: str) -> bool:
     """Validate SemVer components without a backtracking regex."""
     if not isinstance(value, str) or len(value) > 256:
@@ -156,6 +161,8 @@ def validate_canonical_manifest(root: Path = ROOT) -> list[str]:
             hosts = skill.get("supported_hosts")
             if not isinstance(hosts, list) or not hosts or not all(isinstance(item, str) for item in hosts):
                 errors.append(f"error: {skill_id}: supported_hosts must be a non-empty list")
+            elif len(hosts) != len(set(hosts)):
+                errors.append(f"error: {skill_id}: supported_hosts must not contain duplicates")
             elif skill_id in registry.skills:
                 registry_hosts = HOSTS
                 if set(hosts) != registry_hosts:

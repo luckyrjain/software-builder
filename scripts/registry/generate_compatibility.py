@@ -5,6 +5,7 @@ from pathlib import Path
 from scripts.registry.backfill_capabilities import load_catalog
 from scripts.registry.canonical_manifest import (
     MANIFEST_KIND,
+    has_canonical_manifest_shape,
     load_canonical_manifest,
     validate_canonical_manifest,
 )
@@ -67,7 +68,7 @@ def _load_optional_canonical_manifest(root: Path) -> dict | None:
         return None
     raw = require_mapping(load_unique_yaml_file(path), "skills.yaml root")
     skills = raw.get("skills")
-    canonical_marker = raw.get("manifest_kind") == MANIFEST_KIND
+    canonical_marker = has_canonical_manifest_shape(raw)
     if not canonical_marker:
         return None
     errors = validate_canonical_manifest(root)
@@ -137,7 +138,7 @@ def render_compatibility_matrix(root: Path) -> str:
             return f"{surface} ({host_profiles.get(host, 'unknown')})"
 
         lines.append(
-            f"| `{_cell(skill_id)}` | {_cell(entry.invocation)} | "
+            f"| {_cell(skill_id)} | {_cell(entry.invocation)} | "
             f"{_cell(host_cell('cursor', entry.hosts.cursor.discovery))} | "
             f"{_cell(host_cell('claude', 'yes' if entry.hosts.claude.install else 'no'))} | "
             f"{_cell(host_cell('codex', host_surfaces['codex']))} | "
