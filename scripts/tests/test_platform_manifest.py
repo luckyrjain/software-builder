@@ -30,7 +30,7 @@ action_gates:
   remote_non_destructive_write: explicit_task_authorization
   destructive_or_high_impact: explicit_action_authorization
 definition_of_done:
-  required_fields: [required_artifacts, required_checks, blocked_conditions, partial_result_behavior]
+  required_fields: [required_artifacts, required_checks, completed_checks, blocked_conditions, partial_result_behavior]
 skill_types:
   demo: leaf
 """
@@ -75,6 +75,7 @@ def test_manifest_exposes_shared_contracts() -> None:
     assert set(contracts["definition_of_done"]["required_fields"]) == {
         "required_artifacts",
         "required_checks",
+        "completed_checks",
         "blocked_conditions",
         "partial_result_behavior",
     }

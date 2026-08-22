@@ -68,20 +68,50 @@ A skill must not report `SUCCESS` when a required verification step is missing.
 
 ## 6. Result envelope
 
-Machine-consumable skill results use:
+Machine-consumable durable artifact results use the canonical manifest-backed envelope:
 
 ```yaml
 skill_result:
   skill: <registered skill id>
-  version: <normalized semantic version>
+  version: <exact semantic version registered for the skill>
   status: SUCCESS|PARTIAL|BLOCKED|FAILED|ESCALATED
   confidence: HIGH|MEDIUM|LOW|UNKNOWN
-  source_revision: <revision or null>
+  source_revision: <revision, UNKNOWN, or null>
   evidence_status: OBSERVED|INFERRED|UNKNOWN|CONFLICTED|NOT_APPLICABLE
-  artifacts: []
+  artifacts: [<known artifact ids>]
   blockers: []
   recommended_next_skill: <registered skill id or null>
+  artifact_schema_version: <version declared for the artifact>
+  state_semantic: current_state|proposed_state|desired_state|transitional_state
+provenance:
+  source_revision: <revision, UNKNOWN, or null>
+  sources: []
+freshness:
+  observed_at: <ISO-8601 timestamp, UNKNOWN, or null>
+  source_revision: <revision, UNKNOWN, or null>
+  source_environment: <environment, UNKNOWN, or null>
+definition_of_done:
+  required_artifacts: []
+  required_checks: []
+  completed_checks: []
+  blocked_conditions: []
+  partial_result_behavior: <bounded fallback behavior>
+authority:
+  write_authority: <declared composition authority>
+  canonical_owner: <declared artifact owner>
+payload: <producer-declared artifact-schema fields>
 ```
+
+The registry validates this envelope and the payload schema with:
+
+```bash
+python3 -m scripts.registry validate-artifact <artifact_type> <result.json> --producer-skill <trusted_skill_id>
+```
+
+The producer identity is supplied by the trusted runtime boundary and must match
+`skill_result.skill`; it is not inferred from the submitted document. Producer
+minor/patch versions remain readable within the same major version while the
+explicit artifact schema version controls payload compatibility.
 
 Human-readable reports may render this differently, but must preserve the semantics. Internal phase names, lens names, or implementation-only control markers should not leak into user-facing output unless they help the user act.
 
@@ -159,6 +189,7 @@ Every skill declares, for its own output, the `definition_of_done` fields from `
 
 - `required_artifacts` — what must exist for the result to count as complete.
 - `required_checks` — what must have been verified (tests, validators, re-reads).
+- `completed_checks` — the checks actually completed for this result; `SUCCESS` requires all required checks.
 - `blocked_conditions` — the specific states that force a `BLOCKED` status instead of `SUCCESS`/`PARTIAL`.
 - `partial_result_behavior` — what a skill reports and preserves when only some of its work could complete.
 

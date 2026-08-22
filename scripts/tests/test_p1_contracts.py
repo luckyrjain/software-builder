@@ -35,6 +35,8 @@ def test_p1_portable_contract_sets_are_complete() -> None:
         "artifacts",
         "blockers",
         "recommended_next_skill",
+        "artifact_schema_version",
+        "state_semantic",
     }
     assert HANDOFF_FIELDS == {
         "target_skill",

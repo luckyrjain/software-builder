@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from collections.abc import Callable
 from pathlib import Path
@@ -8,6 +9,7 @@ from pathlib import Path
 import yaml
 
 from scripts.registry.backfill_capabilities import cmd_backfill
+from scripts.registry.artifact_contracts import validate_artifact_result
 from scripts.registry.canonical_manifest import (
     has_canonical_manifest_shape,
     load_canonical_manifest,
@@ -125,7 +127,7 @@ def _check_outputs(root: Path, outputs: dict[Path, str]) -> list[str]:
 def _run_command(action: Callable[[], int]) -> int:
     try:
         return action()
-    except (OSError, ValueError, yaml.YAMLError) as exc:
+    except (OSError, TypeError, ValueError, yaml.YAMLError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
 
@@ -277,6 +279,38 @@ def cmd_check_handoff(root: Path, target_skill: str, visited_skills: list[str], 
     return 1
 
 
+def cmd_validate_artifact(
+    root: Path,
+    artifact_type: str,
+    result_path: Path,
+    producer_skill: str,
+) -> int:
+    """Validate one JSON durable-artifact result at the runtime boundary."""
+    def reject_constant(value: str) -> object:
+        raise ValueError(f"invalid JSON constant {value!r}")
+
+    def unique_pairs(pairs: list[tuple[str, object]]) -> dict[str, object]:
+        result: dict[str, object] = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError(f"duplicate JSON object key {key!r}")
+            result[key] = value
+        return result
+
+    payload = json.loads(
+        result_path.read_text(encoding="utf-8"),
+        object_pairs_hook=unique_pairs,
+        parse_constant=reject_constant,
+    )
+    errors = validate_artifact_result(root, artifact_type, payload, producer_skill=producer_skill)
+    if errors:
+        for error in errors:
+            print(error, file=sys.stderr)
+        return 1
+    print(f"ok: durable artifact {artifact_type!r} validates")
+    return 0
+
+
 def cmd_list(root: Path) -> int:
     manifest = _validated_canonical_manifest(root)
     registry = load_registry(root)
@@ -403,6 +437,18 @@ def main(argv: list[str] | None = None) -> int:
         help="comma-separated execution_context.visited_skills (e.g. release-readiness-checker,pr-review)",
     )
 
+    artifact_parser = subparsers.add_parser(
+        "validate-artifact",
+        help="validate one JSON durable-artifact result against the canonical runtime contract",
+    )
+    artifact_parser.add_argument("artifact_type", help="artifact type declared in skills.yaml")
+    artifact_parser.add_argument("result_json", type=Path, help="JSON file containing the artifact result")
+    artifact_parser.add_argument(
+        "--producer-skill",
+        required=True,
+        help="trusted runtime identity of the producer; must match skill_result.skill",
+    )
+
     args = parser.parse_args(argv)
     if args.command == "validate":
         return _run_command(lambda: cmd_validate(ROOT))
@@ -425,6 +471,16 @@ def main(argv: list[str] | None = None) -> int:
         visited = [skill_id for skill_id in args.visited.split(",") if skill_id]
         return _run_command(
             lambda: cmd_check_handoff(ROOT, args.target_skill, visited, args.depth)
+        )
+    if args.command == "validate-artifact":
+        result_path = args.result_json if args.result_json.is_absolute() else ROOT / args.result_json
+        return _run_command(
+            lambda: cmd_validate_artifact(
+                ROOT,
+                args.artifact_type,
+                result_path.resolve(),
+                args.producer_skill,
+            )
         )
 
     print(f"error: unknown command {args.command!r}", file=sys.stderr)

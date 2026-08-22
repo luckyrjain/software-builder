@@ -27,21 +27,42 @@ def is_semver(value: str) -> bool:
     """Validate SemVer components without a backtracking regex."""
     if not isinstance(value, str) or len(value) > 256:
         return False
+    def valid_identifier(identifier: str) -> bool:
+        return bool(identifier) and all(
+            ("0" <= char <= "9")
+            or ("A" <= char <= "Z")
+            or ("a" <= char <= "z")
+            or char == "-"
+            for char in identifier
+        )
+
     if value.count("+") > 1:
         return False
     core_and_prerelease, _, build = value.partition("+")
-    if build and any(not part or not all(char.isalnum() or char == "-" for char in part) for part in build.split(".")):
+    if value.endswith("+") or (
+        build and any(not valid_identifier(part) for part in build.split("."))
+    ):
         return False
     core, separator, prerelease = core_and_prerelease.partition("-")
     core_parts = core.split(".")
-    if len(core_parts) != 3 or any(not part.isdigit() or (len(part) > 1 and part[0] == "0") for part in core_parts):
+    if len(core_parts) != 3 or any(
+        not part
+        or not all("0" <= char <= "9" for char in part)
+        or (len(part) > 1 and part[0] == "0")
+        for part in core_parts
+    ):
         return False
     if not separator:
         return True
     identifiers = prerelease.split(".")
-    if any(not identifier or not all(char.isalnum() or char == "-" for char in identifier) for identifier in identifiers):
+    if any(not valid_identifier(identifier) for identifier in identifiers):
         return False
-    return all(not identifier.isdigit() or len(identifier) == 1 or identifier[0] != "0" for identifier in identifiers)
+    return all(
+        not all("0" <= char <= "9" for char in identifier)
+        or len(identifier) == 1
+        or identifier[0] != "0"
+        for identifier in identifiers
+    )
 
 
 def load_canonical_manifest(root: Path = ROOT) -> dict[str, Any]:
@@ -85,6 +106,11 @@ def validate_canonical_manifest(root: Path = ROOT) -> list[str]:
         platform = _mapping(contracts.get("platform"), "contracts.platform")
         runtime = _mapping(contracts.get("composition_runtime"), "contracts.composition_runtime")
         composition = _mapping(contracts.get("composition"), "contracts.composition")
+        artifact_runtime = platform.get("artifact_runtime")
+        if not isinstance(artifact_runtime, dict):
+            errors.append("error: canonical manifest missing contracts.platform.artifact_runtime")
+        elif artifact_runtime.get("schema_version") != 1:
+            errors.append("error: canonical manifest artifact_runtime.schema_version must be 1")
         platform_types = _mapping(platform.get("skill_types"), "contracts.platform.skill_types")
         runtime_types = _mapping(runtime.get("skill_types"), "contracts.composition_runtime.skill_types")
         platform_permissions = _mapping(

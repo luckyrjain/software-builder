@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from scripts.registry.artifact_contracts import validate_artifact_contracts
 from scripts.registry.canonical_manifest import load_canonical_manifest
 from scripts.registry.frontmatter import load_skill_frontmatter
 from scripts.registry.models import Registry
@@ -10,7 +11,7 @@ from scripts.registry.schema import parse_registry
 from scripts.yaml_safety import YAML_SAFETY_ERRORS, load_unique_yaml_file, require_mapping
 
 RUNTIME_DOCS = {"runtime-contract.md", "host-adapter-contract.md", "eval-contract.md"}
-RESULT_FIELDS = {"skill", "version", "status", "confidence", "source_revision", "evidence_status", "artifacts", "blockers", "recommended_next_skill"}
+RESULT_FIELDS = {"skill", "version", "status", "confidence", "source_revision", "evidence_status", "artifacts", "blockers", "recommended_next_skill", "artifact_schema_version", "state_semantic"}
 HANDOFF_FIELDS = {"target_skill", "reason", "inputs", "evidence_refs", "assumptions", "unresolved"}
 EXECUTION_FIELDS = {"invocation_id", "parent_skill", "visited_skills", "depth"}
 STATE_VALUES = {"current_state", "proposed_state", "desired_state", "transitional_state"}
@@ -118,6 +119,7 @@ def validate_p1_contracts(root: Path) -> list[str]:
         if platform.get("source_precedence") != ["runtime_authoritative_state", "executable_code_config_contracts", "tests_and_executable_examples", "version_controlled_technical_docs", "tickets_and_design_docs", "human_prose_and_comments"]:
             errors.append("error: P1 source precedence drift")
         errors.extend(_validate_permissions(registry, platform))
+        errors.extend(validate_artifact_contracts(root))
 
         hosts = require_mapping(load_unique_yaml_file(root / "scripts/registry/host_contracts.yaml"), "host contracts")
         _require_v1(hosts, "host contracts")
@@ -151,4 +153,3 @@ def validate_p1_contracts(root: Path) -> list[str]:
         return errors
     except (OSError, ValueError, *YAML_SAFETY_ERRORS) as exc:
         return [f"error: P1 platform contracts: {exc}"]
-
