@@ -7,8 +7,9 @@ import re
 import sys
 from pathlib import Path
 
-from packaging.markers import default_environment
+from packaging.markers import Variable, default_environment
 from packaging.requirements import InvalidRequirement, Requirement
+from packaging.version import InvalidVersion, Version
 
 LOCK_ENTRY_RE = re.compile(r"^([A-Za-z0-9][A-Za-z0-9._-]*)==([^\s\\]+)$")
 DIRECT_LOCK_MARKER = "# via -r requirements.txt"
@@ -42,10 +43,42 @@ def package_names_from_requirements(path: Path) -> set[str]:
     return set(requirements_from_file(path))
 
 
+def _strip_inline_comment(line: str) -> str:
+    quote: str | None = None
+    escaped = False
+    for index, character in enumerate(line):
+        if quote is not None:
+            if escaped:
+                escaped = False
+            elif character == "\\":
+                escaped = True
+            elif character == quote:
+                quote = None
+        elif character in {"'", '"'}:
+            quote = character
+        elif character == "#" and (index == 0 or line[index - 1].isspace()):
+            return line[:index].strip()
+    return line.strip()
+
+
+def _marker_variables(marker: object) -> set[str]:
+    variables: set[str] = set()
+
+    def visit(node: object) -> None:
+        if isinstance(node, Variable):
+            variables.add(str(node))
+        elif isinstance(node, (list, tuple)):
+            for child in node:
+                visit(child)
+
+    visit(getattr(marker, "_markers", ()))
+    return variables
+
+
 def requirements_from_file(path: Path) -> dict[str, list[Requirement]]:
     requirements: dict[str, list[Requirement]] = {}
     for line in path.read_text(encoding="utf-8").splitlines():
-        line = re.split(r"\s+#", line, maxsplit=1)[0].strip()
+        line = _strip_inline_comment(line)
         if not line or line.startswith("#"):
             continue
         try:
@@ -53,11 +86,10 @@ def requirements_from_file(path: Path) -> dict[str, list[Requirement]]:
         except InvalidRequirement as exc:
             raise ValueError(f"unsupported requirements.txt entry: {line}") from exc
         if requirement.marker is not None:
-            marker_text = str(requirement.marker)
             unsupported = [
                 name
                 for name in UNSUPPORTED_MARKER_VARIABLES
-                if re.search(rf"\b{re.escape(name)}\b", marker_text)
+                if name in _marker_variables(requirement.marker)
             ]
             if unsupported:
                 raise ValueError(
@@ -126,7 +158,22 @@ def unsatisfied_locked_requirements(
         version_text = locked_versions.get(name)
         if version_text is None:
             continue
+        arbitrary_equality_matches = any(
+            "===" in str(requirement.specifier)
+            and requirement.specifier.contains(version_text)
+            for requirement in requirement_group
+        )
         for requirement in requirement_group:
+            if not requirement.specifier:
+                if arbitrary_equality_matches:
+                    continue
+                try:
+                    Version(version_text)
+                except InvalidVersion:
+                    errors.append(
+                        f"{name}=={version_text} is not a valid package version"
+                    )
+                continue
             if not requirement.specifier.contains(version_text):
                 errors.append(
                     f"{name}=={version_text} does not satisfy {requirement}"

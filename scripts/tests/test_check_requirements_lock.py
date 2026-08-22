@@ -191,3 +191,33 @@ def test_unknown_platform_marker_is_rejected_fail_closed(tmp_path: Path) -> None
     with pytest.raises(ValueError, match="platform_release"):
         package_names_from_requirements(requirements)
 
+
+def test_comment_stripping_respects_quoted_marker_values(tmp_path: Path) -> None:
+    requirements = tmp_path / "requirements.txt"
+    lockfile = tmp_path / "requirements.lock"
+    requirements.write_text(
+        'demo>=1; python_version != "3.12 # literal"\n',
+        encoding="utf-8",
+    )
+    lockfile.write_text(
+        "demo==1 \\\n    # via -r requirements.txt\n",
+        encoding="utf-8",
+    )
+
+    assert package_names_from_requirements(requirements) == {"demo"}
+    assert unsatisfied_locked_requirements(requirements, lockfile) == []
+
+
+def test_unconstrained_requirement_rejects_invalid_lock_version(tmp_path: Path) -> None:
+    requirements = tmp_path / "requirements.txt"
+    lockfile = tmp_path / "requirements.lock"
+    requirements.write_text("demo\n", encoding="utf-8")
+    lockfile.write_text(
+        "demo==not-a-version \\\n    # via -r requirements.txt\n",
+        encoding="utf-8",
+    )
+
+    assert unsatisfied_locked_requirements(requirements, lockfile) == [
+        "demo==not-a-version is not a valid package version"
+    ]
+
