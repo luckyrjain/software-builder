@@ -70,11 +70,83 @@ def test_multiline_uv_provenance_marks_direct_entry(tmp_path: Path) -> None:
         """packaging==26.3 \\
     --hash=sha256:example
     # via
-    #   -r requirements.txt
     #   pytest
+    #   -r requirements.txt
 """,
         encoding="utf-8",
     )
 
     assert direct_package_names_from_lock(lockfile) == {"packaging"}
+
+
+def test_duplicate_constraints_and_lock_target_markers_are_supported(
+    tmp_path: Path,
+) -> None:
+    requirements = tmp_path / "requirements.txt"
+    lockfile = tmp_path / "requirements.lock"
+    requirements.write_text(
+        "demo>=1\ndemo<3\n"
+        "active>=2; python_version >= '3.12'\n"
+        "inactive>=99; python_version < '3.12'\n",
+        encoding="utf-8",
+    )
+    lockfile.write_text(
+        "active==2 \\\n    # via -r requirements.txt\n"
+        "demo==2.0 \\\n    # via -r requirements.txt\n",
+        encoding="utf-8",
+    )
+
+    assert package_names_from_requirements(requirements) == {"active", "demo"}
+    assert unsatisfied_locked_requirements(requirements, lockfile) == []
+
+
+def test_arbitrary_equality_uses_pep440_specifier_semantics(tmp_path: Path) -> None:
+    requirements = tmp_path / "requirements.txt"
+    lockfile = tmp_path / "requirements.lock"
+    requirements.write_text("demo===legacy\n", encoding="utf-8")
+    lockfile.write_text(
+        "demo==legacy \\\n    # via -r requirements.txt\n",
+        encoding="utf-8",
+    )
+
+    assert unsatisfied_locked_requirements(requirements, lockfile) == []
+
+
+def test_cli_rejects_unsatisfied_version_with_error_output(tmp_path: Path) -> None:
+    script = tmp_path / "scripts" / "check_requirements_lock.py"
+    script.parent.mkdir()
+    script.write_text(
+        (ROOT / "scripts" / "check_requirements_lock.py").read_text(
+            encoding="utf-8"
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "requirements.txt").write_text("demo>=2\n", encoding="utf-8")
+    (tmp_path / "requirements.lock").write_text(
+        "demo==1 \\\n    # via -r requirements.txt\n",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [sys.executable, str(script)],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 1
+    assert "does not satisfy demo>=2" in result.stderr
+
+
+def test_duplicate_direct_lock_entries_are_rejected(tmp_path: Path) -> None:
+    lockfile = tmp_path / "requirements.lock"
+    lockfile.write_text(
+        "demo==1 \\\n    # via -r requirements.txt\n"
+        "demo==1 \\\n    # via -r requirements.txt\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="duplicate direct lock entry: demo"):
+        direct_package_names_from_lock(lockfile)
 
