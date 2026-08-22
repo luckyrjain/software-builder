@@ -34,6 +34,7 @@ contracts:
       required_fields:
       - required_artifacts
       - required_checks
+      - completed_checks
       - blocked_conditions
       - partial_result_behavior
     result_envelope:
@@ -47,11 +48,141 @@ contracts:
       - artifacts
       - blockers
       - recommended_next_skill
+      - artifact_schema_version
+      - state_semantic
       confidence_values:
       - HIGH
       - MEDIUM
       - LOW
       - UNKNOWN
+    artifact_runtime:
+      schema_version: 1
+      external_input_artifacts:
+      - mr_context
+      - implementation_task
+      durable_artifacts:
+      - mr_review_report
+      - rca_report
+      - k8s_rightsizing_report
+      - squad_map
+      - ownership_lookup
+      - migration_status_rollup
+      - cost_sweep_rollup
+      - implementation_pr
+      - digest_report
+      - test_suite
+      - test_orchestration_result
+      - prd_report
+      artifact_schema_versions:
+        mr_review_report: 1
+        rca_report: 1
+        k8s_rightsizing_report: 1
+        squad_map: 1
+        ownership_lookup: 1
+        migration_status_rollup: 1
+        cost_sweep_rollup: 1
+        implementation_pr: 1
+        digest_report: 1
+        test_suite: 1
+        test_orchestration_result: 1
+        prd_report: 1
+      state_semantics:
+        mr_review_report: current_state
+        rca_report: current_state
+        k8s_rightsizing_report: proposed_state
+        squad_map: current_state
+        ownership_lookup: current_state
+        migration_status_rollup: current_state
+        cost_sweep_rollup: current_state
+        implementation_pr: proposed_state
+        digest_report: current_state
+        test_suite: proposed_state
+        test_orchestration_result: proposed_state
+        prd_report: proposed_state
+      payload_types:
+        mr_review_report:
+          review_metadata: mapping
+          posted: boolean
+          head_sha: string
+          posting_mode: string
+        rca_report:
+          assessment_metadata: mapping
+          root_cause: string
+          confidence: string
+        k8s_rightsizing_report:
+          assessment_metadata: mapping
+          recommendations: list
+        squad_map:
+          squads: list
+          generated_at: string
+        ownership_lookup:
+          query: string
+          squad: string
+          confidence: string
+        migration_status_rollup:
+          items: list
+          generated_at: string
+          source_revision: string
+        cost_sweep_rollup:
+          items: list
+          generated_at: string
+          source_revision: string
+        implementation_pr:
+          pr_url: string
+          head_sha: string
+          task_id: string
+        digest_report:
+          sections: list
+          generated_at: string
+          source_revisions: list
+        test_suite:
+          tests: list
+          framework: string
+          target_path: string
+        test_orchestration_result:
+          test_plan: list
+          orchestration_status: string
+          unfinished_levels: list
+          level_reports: list
+        prd_report:
+          title: string
+          build_readiness: string
+          depth: string
+          response_mode: string
+      required_sections:
+        skill_result:
+          required_fields:
+          - skill
+          - version
+          - status
+          - confidence
+          - source_revision
+          - evidence_status
+          - artifacts
+          - blockers
+          - recommended_next_skill
+          - artifact_schema_version
+          - state_semantic
+        provenance:
+          required_fields:
+          - source_revision
+          - sources
+        freshness:
+          required_fields:
+          - observed_at
+          - source_revision
+          - source_environment
+        definition_of_done:
+          required_fields:
+          - required_artifacts
+          - required_checks
+          - completed_checks
+          - blocked_conditions
+          - partial_result_behavior
+        authority:
+          required_fields:
+          - write_authority
+          - canonical_owner
     input_resolution:
       order:
       - supplied_facts

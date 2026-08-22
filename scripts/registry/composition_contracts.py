@@ -196,7 +196,11 @@ def load_contracts(
     levels_raw = raw.get("write_authority_levels", {})
     if not isinstance(levels_raw, dict):
         raise ValueError(f"{contracts_path}: write_authority_levels must be a mapping")
-    levels = {str(key): int(value) for key, value in levels_raw.items()}
+    levels: dict[str, int] = {}
+    for key, value in levels_raw.items():
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise ValueError(f"{contracts_path}: write_authority_levels.{key} must be an integer")
+        levels[str(key)] = value
 
     skills_raw = raw.get("skills", {})
     if not isinstance(skills_raw, dict):
@@ -209,8 +213,14 @@ def load_contracts(
         authority = str(entry.get("write_authority", ""))
         if authority not in levels:
             raise ValueError(f"{contracts_path}: skills.{skill_id}.write_authority invalid: {authority!r}")
-        produces = [str(item) for item in entry.get("produces", [])]
-        consumes = [str(item) for item in entry.get("consumes", [])]
+        produces_raw = entry.get("produces", [])
+        consumes_raw = entry.get("consumes", [])
+        if not isinstance(produces_raw, list) or not all(isinstance(item, str) for item in produces_raw):
+            raise ValueError(f"{contracts_path}: skills.{skill_id}.produces must be a list of strings")
+        if not isinstance(consumes_raw, list) or not all(isinstance(item, str) for item in consumes_raw):
+            raise ValueError(f"{contracts_path}: skills.{skill_id}.consumes must be a list of strings")
+        produces = list(produces_raw)
+        consumes = list(consumes_raw)
         produce_fields = _parse_field_map(
             entry.get("produce_fields"),
             contracts_path=contracts_path,

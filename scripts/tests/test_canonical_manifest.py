@@ -4,6 +4,7 @@ from pathlib import Path
 import yaml
 
 from scripts.registry.canonical_manifest import (
+    is_semver,
     load_canonical_manifest,
     render_legacy_projection,
     validate_canonical_manifest,
@@ -12,6 +13,13 @@ from scripts.registry.frontmatter import load_skill_frontmatter
 
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+def test_semver_rejects_empty_prerelease_and_build_identifiers():
+    assert not is_semver("1.2.3-")
+    assert not is_semver("1.2.3+")
+    assert not is_semver("1.2.3-é")
+    assert not is_semver("١.٢.٣")
 
 
 def test_canonical_manifest_has_contracts_and_full_skill_metadata():
@@ -85,6 +93,17 @@ def test_canonical_manifest_rejects_skill_metadata_drift(tmp_path: Path):
     errors = validate_canonical_manifest(root)
 
     assert any("pr-review" in error and "authority" in error for error in errors)
+
+
+def test_canonical_manifest_requires_versioned_artifact_runtime_contract(tmp_path: Path):
+    root = _copy_manifest_fixture(tmp_path)
+    manifest = yaml.safe_load((root / "skills.yaml").read_text())
+    del manifest["contracts"]["platform"]["artifact_runtime"]
+    (root / "skills.yaml").write_text(yaml.safe_dump(manifest, sort_keys=False))
+
+    errors = validate_canonical_manifest(root)
+
+    assert any("artifact_runtime" in error for error in errors)
 
 
 def test_canonical_manifest_rejects_output_and_host_projection_drift(tmp_path: Path):

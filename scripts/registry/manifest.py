@@ -85,7 +85,7 @@ def _load_platform_contracts(path: Path | None = None) -> dict[str, Any]:
     exact(completion.get("statuses"), {"SUCCESS", "PARTIAL", "BLOCKED", "FAILED", "ESCALATED"}, "platform contracts.completion.statuses")
     exact(completion.get("required_fields"), {"status", "evidence_status", "blockers", "artifacts", "recommended_next_skill"}, "platform contracts.completion.required_fields")
     dod = require_mapping(raw.get("definition_of_done"), "platform contracts.definition_of_done")
-    exact(dod.get("required_fields"), {"required_artifacts", "required_checks", "blocked_conditions", "partial_result_behavior"}, "platform contracts.definition_of_done.required_fields")
+    exact(dod.get("required_fields"), {"required_artifacts", "required_checks", "completed_checks", "blocked_conditions", "partial_result_behavior"}, "platform contracts.definition_of_done.required_fields")
     gates = require_mapping(raw.get("action_gates"), "platform contracts.action_gates")
     expected_gates = {"read_only": "none", "local_reversible_write": "explicit_task_authorization", "remote_non_destructive_write": "explicit_task_authorization", "destructive_or_high_impact": "explicit_action_authorization"}
     if {str(k): str(v) for k, v in gates.items()} != expected_gates:

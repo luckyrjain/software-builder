@@ -8,6 +8,7 @@ from scripts.yaml_safety import YAML_SAFETY_ERRORS
 
 P1_CONTRACT_KEYS = (
     "result_envelope",
+    "artifact_runtime",
     "input_resolution",
     "source_precedence",
     "freshness",
