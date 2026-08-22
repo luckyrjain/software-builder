@@ -24,3 +24,14 @@ cases:
   - {skill: api-test-creator, prompt: "Write API tests for the REST payment endpoints.", expected_status: selected, expected_owner: api-test-creator}
   - {skill: prd-architect, prompt: "Review this PRD and improve the product requirements document for build readiness.", expected_status: selected, expected_owner: prd-architect}
   - {skill: test-writer, prompt: "Write tests for this change; the test level is not specified.", expected_status: selected, expected_owner: test-writer}
+  - {skill: architecture-review, prompt: "Architecture review for the new payments platform before we start building.", expected_status: selected, expected_owner: architecture-review}
+  - {skill: system-design, prompt: "Write the system design for the new payments platform's order service.", expected_status: selected, expected_owner: system-design}
+  - {skill: api-design-review, prompt: "API design review for the new /orders endpoint before we build it.", expected_status: selected, expected_owner: api-design-review}
+  - {skill: database-review, prompt: "Database review of the new orders schema migration.", expected_status: selected, expected_owner: database-review}
+  - {skill: security-review, prompt: "Security review of the new auth middleware.", expected_status: selected, expected_owner: security-review}
+  - {skill: performance-review, prompt: "Performance review of the checkout service's hot path.", expected_status: selected, expected_owner: performance-review}
+  - {skill: capacity-planner, prompt: "Capacity planning for the checkout service ahead of Black Friday.", expected_status: selected, expected_owner: capacity-planner}
+  - {skill: observability-review, prompt: "Observability review of the payments service's alerting setup.", expected_status: selected, expected_owner: observability-review}
+  - {skill: deployment-risk-review, prompt: "Deployment risk assessment for tomorrow's payments release.", expected_status: selected, expected_owner: deployment-risk-review}
+  - {skill: dependency-upgrade-review, prompt: "Dependency upgrade review for bumping Django from 4.2 to 5.0.", expected_status: selected, expected_owner: dependency-upgrade-review}
+  - {skill: tech-debt-assessor, prompt: "Rank this tech debt backlog by priority.", expected_status: selected, expected_owner: tech-debt-assessor}

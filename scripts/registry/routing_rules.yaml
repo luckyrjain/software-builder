@@ -84,7 +84,7 @@ routes:
       - '\b(PRD|product requirements?|requirements document|build readiness)\b'
   architecture-review:
     patterns:
-      - '\b(architecture review|ADR|architecture decision record|design review)\b'
+      - '\b(architecture review|ADR|architecture decision record|architecture design review)\b'
   system-design:
     patterns:
       - '\b(system design|technical design doc|component design|data model design)\b'

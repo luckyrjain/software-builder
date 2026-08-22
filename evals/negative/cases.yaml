@@ -24,3 +24,14 @@ cases:
   - {skill: api-test-creator, prompt: "Write contract tests for the payments provider API using consumer-driven contracts.", expected_status: selected, expected_owner: contract-test-creator, forbidden_owner: api-test-creator}
   - {skill: prd-architect, prompt: "Understand the existing payments service and its current-state domain and bounded contexts.", expected_status: selected, expected_owner: domain-comprehension, forbidden_owner: prd-architect}
   - {skill: test-writer, prompt: "Review this PRD and improve the product requirements document for build readiness.", expected_status: selected, expected_owner: prd-architect, forbidden_owner: test-writer}
+  - {skill: architecture-review, prompt: "Write a PRD for the new payments platform.", expected_status: selected, expected_owner: prd-architect, forbidden_owner: architecture-review}
+  - {skill: system-design, prompt: "API contract review for the new /orders endpoint.", expected_status: selected, expected_owner: api-design-review, forbidden_owner: system-design}
+  - {skill: api-design-review, prompt: "Review this pull request for correctness and regressions.", expected_status: selected, expected_owner: pr-review, forbidden_owner: api-design-review}
+  - {skill: database-review, prompt: "Migrate this MySQL query to PostgreSQL dialect.", expected_status: selected, expected_owner: mysql-to-postgres-sql, forbidden_owner: database-review}
+  - {skill: security-review, prompt: "Review this pull request for correctness and regressions.", expected_status: selected, expected_owner: pr-review, forbidden_owner: security-review}
+  - {skill: performance-review, prompt: "Schema review of the new orders migration.", expected_status: selected, expected_owner: database-review, forbidden_owner: performance-review}
+  - {skill: capacity-planner, prompt: "Is this Kubernetes deployment overprovisioned? Check the CPU and memory requests.", expected_status: selected, expected_owner: k8s-overprovisioning-datadog, forbidden_owner: capacity-planner}
+  - {skill: observability-review, prompt: "Run an RCA for the production incident and identify the root cause.", expected_status: selected, expected_owner: incident-rca, forbidden_owner: observability-review}
+  - {skill: deployment-risk-review, prompt: "Is this release ready to ship? Give me a go/no-go.", expected_status: selected, expected_owner: release-readiness-checker, forbidden_owner: deployment-risk-review}
+  - {skill: dependency-upgrade-review, prompt: "Security review of the auth flow for CVE exposure.", expected_status: selected, expected_owner: security-review, forbidden_owner: dependency-upgrade-review}
+  - {skill: tech-debt-assessor, prompt: "What's our migration program status across all workspaces?", expected_status: selected, expected_owner: migration-program-manager, forbidden_owner: tech-debt-assessor}

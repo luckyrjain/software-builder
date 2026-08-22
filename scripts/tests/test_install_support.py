@@ -35,7 +35,7 @@ def test_list_includes_registered_skill() -> None:
 
     ids = registry_skill_ids(ROOT)
     assert "unit-test-creator" in ids
-    assert len(ids) == 23
+    assert len(ids) == 34
 
 
 def test_check_rejects_unknown_skill() -> None:

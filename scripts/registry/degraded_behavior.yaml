@@ -27,3 +27,14 @@ skills:
   api-test-creator: {missing_capability: host.repository.read_write, available_capabilities: [], behavior: BLOCKED}
   prd-architect: {missing_capability: host.report.write, available_capabilities: [], behavior: BLOCKED}
   test-writer: {missing_capability: host.repository.read, available_capabilities: [], behavior: BLOCKED}
+  architecture-review: {missing_capability: host.report.write, available_capabilities: [], behavior: BLOCKED}
+  system-design: {missing_capability: host.report.write, available_capabilities: [], behavior: BLOCKED}
+  api-design-review: {missing_capability: host.report.write, available_capabilities: [], behavior: BLOCKED}
+  database-review: {missing_capability: host.report.write, available_capabilities: [], behavior: BLOCKED}
+  security-review: {missing_capability: host.report.write, available_capabilities: [], behavior: BLOCKED}
+  performance-review: {missing_capability: host.report.write, available_capabilities: [], behavior: BLOCKED}
+  capacity-planner: {missing_capability: host.report.write, available_capabilities: [], behavior: BLOCKED}
+  observability-review: {missing_capability: host.report.write, available_capabilities: [], behavior: BLOCKED}
+  deployment-risk-review: {missing_capability: host.report.write, available_capabilities: [], behavior: BLOCKED}
+  dependency-upgrade-review: {missing_capability: host.report.write, available_capabilities: [], behavior: BLOCKED}
+  tech-debt-assessor: {missing_capability: host.report.write, available_capabilities: [], behavior: BLOCKED}
