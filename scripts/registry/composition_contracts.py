@@ -5,11 +5,34 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from scripts.registry.canonical_manifest import load_canonical_manifest
 from scripts.registry.models import Registry
 from scripts.test_creator_catalog import TEST_CREATOR_SKILLS
 from scripts.yaml_safety import YAML_SAFETY_ERRORS, load_unique_yaml_file
 
+ROOT = Path(__file__).resolve().parents[2]
 CONTRACTS_PATH = Path(__file__).resolve().parent / "composition_contracts.yaml"
+CANONICAL_CONTRACTS_PATH = ROOT / "skills.yaml"
+DEFAULT_CONTRACTS_PATH = CONTRACTS_PATH
+
+
+def _load_contract_document(path: Path | None = None) -> dict[str, object]:
+    if path is None or path.name == "skills.yaml":
+        manifest_root = path.parent if path is not None else ROOT
+        raw_manifest = load_unique_yaml_file(manifest_root / "skills.yaml")
+        if isinstance(raw_manifest, dict) and "contracts" in raw_manifest:
+            manifest = load_canonical_manifest(manifest_root)
+            contracts = manifest["contracts"]
+            if not isinstance(contracts, dict) or not isinstance(contracts.get("composition"), dict):
+                raise ValueError("canonical manifest contracts.composition must be a mapping")
+            return contracts["composition"]
+        legacy = manifest_root / "scripts" / "registry" / "composition_contracts.yaml"
+        if legacy.is_file():
+            path = legacy
+    raw = load_unique_yaml_file(path)
+    if not isinstance(raw, dict):
+        raise ValueError(f"{path}: root must be a mapping")
+    return raw
 
 
 @dataclass(frozen=True)
@@ -54,7 +77,7 @@ def _validate_creator_parity(
     if not present_skills:
         return []
 
-    raw = load_unique_yaml_file(contracts_path)
+    raw = _load_contract_document(contracts_path)
     parity = raw.get("creator_parity") if isinstance(raw, dict) else None
     if not isinstance(parity, dict):
         return ["error: composition contracts missing creator_parity"]
@@ -138,10 +161,11 @@ def _parse_field_map(
 def load_contracts(
     path: Path | None = None,
 ) -> tuple[set[str], dict[str, list[str]], dict[str, int], dict[str, CompositionContract]]:
-    contracts_path = path or CONTRACTS_PATH
-    raw = load_unique_yaml_file(contracts_path)
-    if not isinstance(raw, dict):
-        raise ValueError(f"{contracts_path}: root must be a mapping")
+    resolved_path = path
+    if resolved_path is None and CONTRACTS_PATH != DEFAULT_CONTRACTS_PATH:
+        resolved_path = CONTRACTS_PATH
+    contracts_path = resolved_path or CANONICAL_CONTRACTS_PATH
+    raw = _load_contract_document(resolved_path)
 
     artifact_types = raw.get("artifact_types", [])
     if not isinstance(artifact_types, list):
@@ -312,7 +336,7 @@ def validate_composition_contracts(
     contracts_path: Path | None = None,
 ) -> list[str]:
     errors: list[str] = []
-    resolved_path = contracts_path or CONTRACTS_PATH
+    resolved_path = contracts_path or (CONTRACTS_PATH if CONTRACTS_PATH != DEFAULT_CONTRACTS_PATH else CANONICAL_CONTRACTS_PATH)
     try:
         _artifact_types, artifact_schemas, authority_levels, contracts = load_contracts(resolved_path)
     except YAML_SAFETY_ERRORS as exc:
@@ -395,3 +419,4 @@ def validate_composition_contracts(
             )
 
     return errors
+

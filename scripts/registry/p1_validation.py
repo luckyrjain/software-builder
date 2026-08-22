@@ -3,10 +3,10 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from scripts.registry.canonical_manifest import load_canonical_manifest
 from scripts.registry.frontmatter import load_skill_frontmatter
 from scripts.registry.models import Registry
 from scripts.registry.schema import parse_registry
-from scripts.registry.skill_frontmatter_schema import PLATFORM_CONTRACT
 from scripts.yaml_safety import YAML_SAFETY_ERRORS, load_unique_yaml_file, require_mapping
 
 RUNTIME_DOCS = {"runtime-contract.md", "host-adapter-contract.md", "eval-contract.md"}
@@ -37,15 +37,13 @@ def _require_v1(data: dict[str, Any], label: str) -> None:
 
 
 def _validate_platform_markers(root: Path, registry: Registry) -> list[str]:
-    """Every skill in a P1-enabled repository must visibly declare the contract it inherits."""
+    """Ensure platform metadata is not duplicated in SKILL.md frontmatter."""
     errors: list[str] = []
     for skill_id, entry in sorted(registry.skills.items()):
         frontmatter = load_skill_frontmatter(root / entry.path / "SKILL.md")
-        actual = frontmatter.get("platform_contract")
-        if actual != PLATFORM_CONTRACT:
-            errors.append(
-                f"error: {skill_id}: platform_contract must be {PLATFORM_CONTRACT!r}, got {actual!r}",
-            )
+        for key in ("skill_version", "platform_contract"):
+            if key in frontmatter:
+                errors.append(f"error: {skill_id}: legacy {key} remains in frontmatter")
     return errors
 
 
@@ -97,7 +95,9 @@ def validate_p1_contracts(root: Path) -> list[str]:
     try:
         errors: list[str] = []
         registry = parse_registry(root / "skills.yaml")
-        platform = require_mapping(load_unique_yaml_file(root / "scripts/registry/platform_contracts.yaml"), "platform contracts")
+        canonical = load_canonical_manifest(root)
+        canonical_contracts = require_mapping(canonical.get("contracts"), "canonical manifest.contracts")
+        platform = require_mapping(canonical_contracts.get("platform"), "contracts.platform")
         _require_v1(platform, "platform contracts")
         errors.extend(_validate_platform_markers(root, registry))
         result = require_mapping(platform.get("result_envelope"), "result_envelope")
@@ -151,3 +151,4 @@ def validate_p1_contracts(root: Path) -> list[str]:
         return errors
     except (OSError, ValueError, *YAML_SAFETY_ERRORS) as exc:
         return [f"error: P1 platform contracts: {exc}"]
+

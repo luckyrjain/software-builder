@@ -1,5 +1,4 @@
 schema_version: 1
-
 skill_types:
   pr-review: leaf
   pr-gatekeeper: trigger
@@ -16,7 +15,7 @@ skill_types:
   mysql-to-postgres-sql: leaf
   loop-task-implementer: orchestrator
   backlog-runner: trigger
-  weekly-squad-digest: orchestrator
+  weekly-squad-digest: trigger
   unit-test-creator: leaf
   integration-test-creator: leaf
   contract-test-creator: leaf
@@ -24,100 +23,142 @@ skill_types:
   api-test-creator: leaf
   prd-architect: leaf
   test-writer: router
-
 handoff_schema:
   required_fields:
-    - target_skill
-    - reason
-    - inputs
-    - evidence_refs
-    - assumptions
-    - unresolved
-    - execution_context
+  - target_skill
+  - reason
+  - inputs
+  - evidence_refs
+  - assumptions
+  - unresolved
+  - execution_context
   execution_context_fields:
-    - invocation_id
-    - parent_skill
-    - visited_skills
-    - depth
-
+  - invocation_id
+  - parent_skill
+  - visited_skills
+  - depth
 handoffs:
   pr-gatekeeper:
-    pr-review: [mr_context]
+    pr-review:
+    - mr_context
   incident-triage-agent:
-    incident-rca: [mr_context]
-    squad-map: [mr_context]
+    incident-rca:
+    - mr_context
+    squad-map:
+    - mr_context
   domain-comprehension:
-    squad-map: [mr_context]
+    squad-map:
+    - mr_context
   who-owns-x-bot:
-    squad-map: [mr_context]
+    squad-map:
+    - mr_context
   new-hire-guide:
-    domain-comprehension: [mr_context]
-    squad-map: [mr_context]
+    domain-comprehension:
+    - mr_context
+    squad-map:
+    - mr_context
   release-readiness-checker:
-    pr-review: [mr_context]
-    k8s-overprovisioning-datadog: [mr_context]
-    incident-rca: [mr_context]
+    pr-review:
+    - mr_context
+    k8s-overprovisioning-datadog:
+    - mr_context
+    incident-rca:
+    - mr_context
   cost-optimization-sprint-planner:
-    k8s-overprovisioning-datadog: [mr_context]
-    squad-map: [mr_context]
+    k8s-overprovisioning-datadog:
+    - mr_context
+    squad-map:
+    - mr_context
   backlog-runner:
-    loop-task-implementer: [implementation_task]
+    loop-task-implementer:
+    - implementation_task
   test-writer:
-    unit-test-creator: [implementation_task]
-    integration-test-creator: [implementation_task]
-    contract-test-creator: [implementation_task]
-    e2e-test-creator: [implementation_task]
-    api-test-creator: [implementation_task]
-
+    unit-test-creator:
+    - implementation_task
+    integration-test-creator:
+    - implementation_task
+    contract-test-creator:
+    - implementation_task
+    e2e-test-creator:
+    - implementation_task
+    api-test-creator:
+    - implementation_task
 recursion_guard:
   default_max_depth: 3
   block_revisit_by_default: true
-  types_requiring_context: [router, orchestrator, trigger]
-
+  types_requiring_context:
+  - router
+  - orchestrator
+  - trigger
 artifact_ownership:
   mr_context:
     mode: external
     owners: []
   mr_review_report:
     mode: canonical
-    owners: [pr-review]
-    delegates: [pr-gatekeeper]
+    owners:
+    - pr-review
+    delegates:
+    - pr-gatekeeper
   rca_report:
     mode: canonical
-    owners: [incident-rca]
-    delegates: [incident-triage-agent]
+    owners:
+    - incident-rca
+    delegates:
+    - incident-triage-agent
   k8s_rightsizing_report:
     mode: canonical
-    owners: [k8s-overprovisioning-datadog]
+    owners:
+    - k8s-overprovisioning-datadog
   squad_map:
     mode: canonical
-    owners: [squad-map]
-    delegates: [domain-comprehension]
+    owners:
+    - squad-map
+    delegates:
+    - domain-comprehension
   ownership_lookup:
     mode: canonical
-    owners: [squad-map]
-    delegates: [incident-triage-agent, who-owns-x-bot]
+    owners:
+    - squad-map
+    delegates:
+    - incident-triage-agent
+    - who-owns-x-bot
   migration_status_rollup:
     mode: canonical
-    owners: [migration-program-manager]
+    owners:
+    - migration-program-manager
   cost_sweep_rollup:
     mode: canonical
-    owners: [cost-optimization-sprint-planner]
+    owners:
+    - cost-optimization-sprint-planner
   implementation_task:
     mode: external
     owners: []
   implementation_pr:
     mode: shared
-    owners: [mysql-to-postgres-sql, loop-task-implementer, backlog-runner]
+    owners:
+    - mysql-to-postgres-sql
+    - loop-task-implementer
+    - backlog-runner
   digest_report:
     mode: shared
-    owners: [new-hire-guide, release-readiness-checker, weekly-squad-digest]
+    owners:
+    - new-hire-guide
+    - release-readiness-checker
+    - weekly-squad-digest
   test_orchestration_result:
     mode: canonical
-    owners: [test-writer]
+    owners:
+    - test-writer
   test_suite:
     mode: shared
-    owners: [unit-test-creator, integration-test-creator, contract-test-creator, e2e-test-creator, api-test-creator]
+    owners:
+    - unit-test-creator
+    - integration-test-creator
+    - contract-test-creator
+    - e2e-test-creator
+    - api-test-creator
   prd_report:
     mode: canonical
-    owners: [prd-architect]
+    owners:
+    - prd-architect

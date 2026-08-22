@@ -121,6 +121,12 @@ def test_skill_versions_are_normalized_to_semver() -> None:
         _normalize_version(1.10)
     with pytest.raises(ValueError, match="semantic version string or integer major"):
         _normalize_version(True)
+    with pytest.raises(ValueError, match="semantic version"):
+        _normalize_version("01.2.3")
+    with pytest.raises(ValueError, match="semantic version"):
+        _normalize_version("1.2.3-01")
+    with pytest.raises(ValueError, match="semantic version"):
+        _normalize_version("0.0.0-0." + ("aa." * 40) + "!")
 
 
 def test_platform_contracts_reject_duplicate_canonical_values(tmp_path: Path) -> None:
@@ -164,3 +170,25 @@ def test_manifest_rejects_missing_skill_version() -> None:
 
 def test_repository_platform_manifest_validates() -> None:
     assert validate_manifest(ROOT) == []
+
+
+def test_skill_versions_does_not_hide_malformed_canonical_contracts(tmp_path: Path) -> None:
+    (tmp_path / "skills.yaml").write_text(
+        "schema_version: 1\ncontracts: []\nskills: {}\n",
+        encoding="utf-8",
+    )
+
+    from scripts.registry.manifest import skill_versions
+
+    with pytest.raises(ValueError, match="canonical manifest.contracts"):
+        skill_versions(tmp_path)
+
+
+def test_registry_rejects_non_string_skill_ids(tmp_path: Path) -> None:
+    (tmp_path / "skills.yaml").write_text(
+        "schema_version: 1\nskills:\n  123: {}\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="skill id must be a string"):
+        parse_registry(tmp_path / "skills.yaml")

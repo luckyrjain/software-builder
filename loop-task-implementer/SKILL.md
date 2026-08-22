@@ -1,7 +1,5 @@
 ---
 name: loop-task-implementer
-skill_version: 1.2
-platform_contract: skill-platform-v1
 description: >-
   Use when autonomously implementing one or more software tasks through isolated build,
   evidence-based review, remediation, validation, pull-request, and completion workflows across

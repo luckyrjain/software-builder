@@ -23,7 +23,9 @@ def test_skill_frontmatter_accepts_valid_deprecation_metadata() -> None:
         },
     }
 
-    assert validate_skill_frontmatter_fields("legacy-skill", frontmatter) == []
+    assert validate_skill_frontmatter_fields(
+        "legacy-skill", frontmatter, require_legacy_platform_fields=True
+    ) == []
     assert validate_deprecation_item(
         frontmatter,
         "legacy-skill/SKILL.md",
@@ -41,6 +43,8 @@ def test_skill_frontmatter_rejects_malformed_lifecycle_field_shapes() -> None:
         "deprecation": [],
     }
 
-    errors = validate_skill_frontmatter_fields("legacy-skill", frontmatter)
+    errors = validate_skill_frontmatter_fields(
+        "legacy-skill", frontmatter, require_legacy_platform_fields=True
+    )
     assert any("deprecated must be a boolean" in error for error in errors)
     assert any("deprecation must be a mapping" in error for error in errors)

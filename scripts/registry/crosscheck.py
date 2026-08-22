@@ -16,7 +16,7 @@ from scripts.registry.skill_frontmatter_schema import (
     automation_only_guard_errors,
     validate_skill_frontmatter_fields,
 )
-from scripts.yaml_safety import YAML_SAFETY_ERRORS
+from scripts.yaml_safety import YAML_SAFETY_ERRORS, load_unique_yaml_file
 
 _SKILL_ID_RE = re.compile(r"^[a-z0-9-]+$")
 _GENERATED_MARKER = "GENERATED from skills.yaml"
@@ -40,7 +40,9 @@ def _validate_skill_path(root: Path, skill_id: str, entry_path: str) -> list[str
         )
     resolved_skill_md = (root / entry_path / "SKILL.md").resolve()
     root_resolved = root.resolve()
-    if not str(resolved_skill_md).startswith(str(root_resolved)):
+    try:
+        resolved_skill_md.relative_to(root_resolved)
+    except ValueError:
         errors.append(f"error: {skill_id}: path escapes repository root")
     return errors
 
@@ -123,6 +125,8 @@ def _validate_invoke_skill_references(registry: Registry) -> list[str]:
 def _validate_skill_frontmatter_shape(root: Path, registry: Registry) -> list[str]:
     """Per-skill SKILL.md frontmatter checks against the registry."""
     errors: list[str] = []
+    raw_manifest = load_unique_yaml_file(root / "skills.yaml")
+    legacy_manifest = not (isinstance(raw_manifest, dict) and "contracts" in raw_manifest)
     for skill_id, entry in registry.skills.items():
         skill_md = root / entry.path / "SKILL.md"
         try:
@@ -143,7 +147,13 @@ def _validate_skill_frontmatter_shape(root: Path, registry: Registry) -> list[st
             if not isinstance(description, str) or not description.strip():
                 errors.append(f"error: {skill_id}: description must be a non-empty string")
 
-        errors.extend(validate_skill_frontmatter_fields(skill_id, frontmatter))
+        errors.extend(
+            validate_skill_frontmatter_fields(
+                skill_id,
+                frontmatter,
+                require_legacy_platform_fields=legacy_manifest,
+            )
+        )
         errors.extend(
             f"error: {skill_id}: {msg}"
             for msg in automation_only_guard_errors(entry.invocation, frontmatter)

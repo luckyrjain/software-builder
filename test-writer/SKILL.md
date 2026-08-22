@@ -1,7 +1,5 @@
 ---
 name: test-writer
-skill_version: 2.4
-platform_contract: skill-platform-v1
 description: >-
   Thin orchestration router for test-writing requests that do not resolve to one specialist up front.
   Classifies the request into one or more complementary test levels, builds an ordered test_plan, then

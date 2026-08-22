@@ -2,11 +2,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from scripts.registry.canonical_manifest import load_canonical_manifest
 from scripts.registry.composition_contracts import load_contracts
 from scripts.registry.models import Registry
 from scripts.yaml_safety import YAML_SAFETY_ERRORS, load_unique_yaml_file
 
+ROOT = Path(__file__).resolve().parents[2]
 RUNTIME_PATH = Path(__file__).resolve().parent / "composition_runtime.yaml"
+CANONICAL_RUNTIME_PATH = ROOT / "skills.yaml"
 _ALLOWED_TYPES = {"leaf", "router", "orchestrator", "trigger"}
 _ALLOWED_OWNERSHIP_MODES = {"canonical", "shared", "external"}
 _LOAD_ERRORS = (OSError, ValueError) + YAML_SAFETY_ERRORS
@@ -38,10 +41,16 @@ def _report_id_coverage(
 
 
 def load_composition_runtime(path: Path | None = None) -> dict[str, object]:
-    resolved = path or RUNTIME_PATH
-    raw = load_unique_yaml_file(resolved)
+    resolved = path or CANONICAL_RUNTIME_PATH
+    if path is None or path.name == "skills.yaml":
+        manifest_root = path.parent if path is not None else ROOT
+        manifest = load_canonical_manifest(manifest_root)
+        contracts = manifest.get("contracts")
+        raw = contracts.get("composition_runtime") if isinstance(contracts, dict) else None
+    else:
+        raw = load_unique_yaml_file(resolved)
     if not isinstance(raw, dict):
-        raise ValueError(f"{resolved}: root must be a mapping")
+        raise ValueError(f"{resolved}: composition_runtime must be a mapping")
     if raw.get("schema_version") != 1:
         raise ValueError(f"{resolved}: schema_version must be 1")
     return raw
@@ -74,9 +83,9 @@ def validate_composition_runtime(
     runtime_path: Path | None = None,
     contracts_path: Path | None = None,
 ) -> list[str]:
-    resolved = runtime_path or RUNTIME_PATH
+    resolved = runtime_path or CANONICAL_RUNTIME_PATH
     try:
-        raw = load_composition_runtime(resolved)
+        raw = load_composition_runtime(runtime_path)
         artifact_types, _schemas, _levels, contracts = load_contracts(contracts_path)
     except _LOAD_ERRORS as exc:
         return [f"error: composition runtime: {exc}"]
@@ -262,3 +271,4 @@ def render_dependency_graph(
                 if producer != consumer:
                     lines.append(f"  {producer} -->|{artifact}| {consumer}")
     return "\n".join(lines) + "\n"
+

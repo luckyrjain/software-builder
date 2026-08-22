@@ -1,7 +1,5 @@
 ---
 name: squad-map
-skill_version: 1.0
-platform_contract: skill-platform-v1
 description: >-
   Maps repos to org squads (GitLab group hierarchy) and runtime squads (Datadog
   service team tags). Produces SQUAD_MAP.md with confidence and conflict flags.

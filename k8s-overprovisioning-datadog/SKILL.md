@@ -1,7 +1,5 @@
 ---
 name: k8s-overprovisioning-datadog
-skill_version: 1.0
-platform_contract: skill-platform-v1
 description: >-
   Use when the user asks whether a Kubernetes deployment or service is overprovisioned, right-sized,
   underprovisioned, or ready for resource optimization using Kubernetes or observability MCP data.

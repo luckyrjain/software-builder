@@ -1,7 +1,5 @@
 ---
 name: backlog-runner
-skill_version: 1.0
-platform_contract: skill-platform-v1
 description: >-
   Scheduled queue-management wrapper around loop-task-implementer — pulls N tickets from a Jira/GitHub
   Issues query, works through them in dependency order overnight, opens a PR per task, never auto-merges.

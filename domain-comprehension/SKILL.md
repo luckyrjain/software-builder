@@ -1,7 +1,5 @@
 ---
 name: domain-comprehension
-skill_version: 1.1
-platform_contract: skill-platform-v1
 description: >-
   Build a verifiable, evidence-backed representation of a business domain and an
   as-built PRD for the in-scope service(s) and/or domain. Executable source code

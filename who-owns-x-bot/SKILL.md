@@ -1,7 +1,5 @@
 ---
 name: who-owns-x-bot
-skill_version: 1.0
-platform_contract: skill-platform-v1
 description: >-
   Single-shot "who owns X" answer formatted for a Slack slash command or other automated,
   no-follow-up caller. Delegates the actual ownership lookup entirely to squad-map; this skill only

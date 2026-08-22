@@ -8,6 +8,7 @@ from pathlib import Path
 import yaml
 
 from scripts.registry.backfill_capabilities import cmd_backfill
+from scripts.registry.canonical_manifest import load_canonical_manifest, render_legacy_projection
 from scripts.registry.capability_family_sync import validate_capability_families
 from scripts.registry.capability_sync import validate_capability_catalog_sync
 from scripts.registry.composition import render_composition_mermaid
@@ -32,6 +33,7 @@ from scripts.registry.manifest import validate_manifest
 from scripts.registry.p1_validation import validate_p1_contracts
 from scripts.registry.runtime_manifest import validate_runtime_manifest
 from scripts.release_contract import validate_release_contract
+from scripts.yaml_safety import load_unique_yaml_file
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -57,11 +59,23 @@ def _collect_outputs(root: Path) -> dict[Path, str]:
         registry,
     )
     compatibility_catalog = root / "scripts" / "registry" / "capability_catalog.yaml"
-    composition_contracts = root / "scripts" / "registry" / "composition_contracts.yaml"
+    composition_contracts = root / "skills.yaml"
     if compatibility_catalog.is_file() and composition_contracts.is_file():
         outputs[root / "generated" / "catalogue" / "compatibility-matrix.md"] = (
             render_compatibility_matrix(root)
         )
+    try:
+        load_canonical_manifest(root)
+    except (OSError, ValueError, yaml.YAMLError):
+        pass
+    else:
+        projection_paths = {
+            "platform": root / "scripts" / "registry" / "platform_contracts.yaml",
+            "composition_runtime": root / "scripts" / "registry" / "composition_runtime.yaml",
+            "composition": root / "scripts" / "registry" / "composition_contracts.yaml",
+        }
+        for section, path in projection_paths.items():
+            outputs[path] = render_legacy_projection(root, section)
     composition_runtime = _composition_runtime_path(root)
     if composition_runtime.is_file() and composition_contracts.is_file():
         outputs[root / "generated" / "catalogue" / "composition-runtime.mmd"] = render_dependency_graph(
@@ -123,6 +137,18 @@ def _platform_contracts_path(root: Path) -> Path:
 
 
 def _composition_runtime_path(root: Path) -> Path:
+    manifest_path = root / "skills.yaml"
+    try:
+        raw = load_unique_yaml_file(manifest_path)
+    except FileNotFoundError:
+        return root / "scripts" / "registry" / "composition_runtime.yaml"
+    except (OSError, yaml.YAMLError):
+        raise
+    if isinstance(raw, dict) and "contracts" in raw:
+        # Once a repository opts into the canonical manifest shape, a malformed
+        # canonical contract must fail closed rather than being silently
+        # replaced by a stale compatibility projection.
+        return root / "skills.yaml"
     return root / "scripts" / "registry" / "composition_runtime.yaml"
 
 
@@ -151,7 +177,8 @@ def _validate_for_generate(root: Path) -> list[str]:
                 families_path=_capability_families_path(root),
             )
         )
-    if _platform_contracts_path(root).is_file():
+    raw_manifest = load_unique_yaml_file(root / "skills.yaml")
+    if isinstance(raw_manifest, dict) and "contracts" in raw_manifest:
         errors.extend(validate_manifest(root))
     if any(path.is_file() for path in _p1_layer_paths(root)):
         errors.extend(validate_p1_contracts(root))
@@ -160,7 +187,7 @@ def _validate_for_generate(root: Path) -> list[str]:
             validate_composition_runtime(
                 load_registry(root),
                 runtime_path=_composition_runtime_path(root),
-                contracts_path=root / "scripts" / "registry" / "composition_contracts.yaml",
+                contracts_path=root / "skills.yaml",
             )
         )
     return errors

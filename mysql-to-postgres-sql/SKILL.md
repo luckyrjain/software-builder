@@ -1,7 +1,5 @@
 ---
 name: mysql-to-postgres-sql
-skill_version: 1.6
-platform_contract: skill-platform-v1
 description: >-
   Rewrites MySQL-native SQL and datasource/driver config for PostgreSQL during
   org-wide MySQL scrub. Covers TIMESTAMPDIFF, DATE_FORMAT, DATE_ADD, IFNULL,
