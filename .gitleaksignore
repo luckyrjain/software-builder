@@ -1,0 +1,22 @@
+# Known false positives: gitleaks default config <https://github.com/gitleaks/gitleaks/blob/v8.24.3/config/gitleaks.toml>
+# scans full commit history (`git log -p`), so a credential-shaped string that was later
+# swapped for a safe placeholder (see the fix commit that touches these same files) still
+# shows up in the *historical* diffs that first introduced it and gets re-flagged every run.
+#
+# These fingerprints all come from evals/golden/*/golden-injection.yaml — Tier-3 prompt-injection
+# eval fixtures whose entire purpose is to embed a credential-shaped string in a *raw* field so the
+# assertions can prove the skill's report-rendering redacts it (never a real, live credential).
+# Each finding below was manually reviewed against its commit and confirmed synthetic before being
+# added here; do not add an entry without doing the same review.
+#
+# Fingerprint format: <commit-sha>:<file>:<rule-id>:<start-line>
+312518efa6a97e40e31935e115639eafc2177d57:evals/golden/api-design-review/golden-injection.yaml:aws-access-token:31
+094f74335abc60dab768f92777283759e1e03d26:evals/golden/database-review/golden-injection.yaml:aws-access-token:31
+6236a541273e8a1f6d08af1e51d35fb2f7fdd034:evals/golden/security-review/golden-injection.yaml:aws-access-token:26
+6236a541273e8a1f6d08af1e51d35fb2f7fdd034:evals/golden/capacity-planner/golden-injection.yaml:aws-access-token:30
+6236a541273e8a1f6d08af1e51d35fb2f7fdd034:evals/golden/performance-review/golden-injection.yaml:aws-access-token:31
+6236a541273e8a1f6d08af1e51d35fb2f7fdd034:evals/golden/dependency-upgrade-review/golden-injection.yaml:aws-access-token:31
+6236a541273e8a1f6d08af1e51d35fb2f7fdd034:evals/golden/deployment-risk-review/golden-injection.yaml:generic-api-key:23
+7abacf39fc1e79b08d52d09981602d6dd48dc7db:evals/golden/architecture-review/golden-injection.yaml:aws-access-token:30
+6236a541273e8a1f6d08af1e51d35fb2f7fdd034:evals/golden/tech-debt-assessor/golden-injection.yaml:aws-access-token:34
+6236a541273e8a1f6d08af1e51d35fb2f7fdd034:evals/golden/tech-debt-assessor/golden-injection.yaml:generic-api-key:29
