@@ -6,11 +6,11 @@ Conventions: [examples-conventions](../docs/skill-framework/shared/examples-conv
 
 | # | Caller sends | Behavior |
 |---|--------------|----------|
-| 1 | `service_name: checkout-service` + material for all six categories, every check clean | Inputs → Analyze → Report → **Coverage: Adequate** |
+| 1 | `service_name: checkout-service` + material for all seven categories, every check clean | Inputs → Analyze → Report → **Coverage: Adequate** |
 | 2 | Same, but the top-level dashboard is missing the saturation signal, otherwise clean | Coverage: **Partial gaps** |
 | 3 | Tracing material shows the `checkout-service` → `payments-service` hop has no span on the receiving side | Coverage: **Critical gaps** (proven — hop instrumented on one side only) |
 | 4 | An SLO is defined with a target and window, but no alert rule anywhere references it | Coverage: **Critical gaps** (SLO not tied to an alert) |
-| 5 | `observability_material` supplied only for Metrics and Dashboards — nothing for Logs, Tracing, Alerts, SLOs | Coverage: **Unknown — insufficient input** — four sections `Unknown`, never upgraded to `Adequate` |
+| 5 | `observability_material` supplied only for Metrics and Dashboards — nothing for Logs, Tracing, Alerts, SLOs, Correlation IDs | Coverage: **Unknown — insufficient input** — five sections `Unknown`, never upgraded to `Adequate` |
 | 6 | `service_name` missing | Inputs **HARD STOP** — ask, no Analyze |
 | 7 | `observability_material` absent entirely | Inputs **HARD STOP** — ask, no Analyze |
 | 8 | Alert rules supplied, thresholds reasonable, but none has a runbook/owner field | Alerts § Runbook = No, other Alerts checks clean → Coverage: **Partial gaps** (not Critical — no proven severe gap) |
@@ -22,15 +22,16 @@ Conventions: [examples-conventions](../docs/skill-framework/shared/examples-conv
 
 ### Scenario: Full coverage, happy path
 
-**Caller:** `service_name: checkout-service`, `observability_material` covering all six categories —
+**Caller:** `service_name: checkout-service`, `observability_material` covering all seven categories —
 golden-signal metrics for every critical-path component, structured logs carrying `trace_id`, spans on
 both sides of every critical-path hop with a documented 10% sampling rate, a top-level health dashboard
-showing all four golden signals with drill-down, symptom-mapped alerts with runbook links, and one SLO
-(99.9% availability, 30-day window) wired to a burn-rate alert.
+showing all four golden signals with drill-down, symptom-mapped alerts with runbook links, one SLO
+(99.9% availability, 30-day window) wired to a burn-rate alert, and a correlation ID propagated across
+every critical-path hop.
 
 **Agent:**
 
-1. Inputs — `service_name` and all six categories of `observability_material` parsed; `critical_path`
+1. Inputs — `service_name` and all seven categories of `observability_material` parsed; `critical_path`
    inferred from the tracing config (`checkout-service` → `payments-service` → `ledger-service`).
 2. Analyze — all seven checks pass clean across every component/hop.
 3. Report — no `Critical gaps`, `Partial gaps`, or `Unknown` findings → **Adequate**.
