@@ -96,6 +96,7 @@ verdict — never just the bare state.>
 | Peak:average ratio | <value> | <derived from demand_data \| caller-supplied \| default 2:1 — state which> |
 | Seasonality | <accounted for / not present in data / Unknown> | <basis> |
 | Per-replica capacity | <value> | <derived from current_baseline \| caller-supplied \| Unknown — state gap> |
+| Headroom margin | <value> | <caller-supplied \| default 20% — state which> |
 
 ## Notes
 

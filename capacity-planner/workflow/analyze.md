@@ -17,6 +17,7 @@ consumes:
   - current_baseline
   - growth_rate
   - peak_avg_ratio
+  - headroom_margin
 ---
 
 # Analyze — turn demand + growth into capacity requirements
@@ -73,8 +74,9 @@ derived from.
 ## Replica requirements
 
 - Derive projected replica count from projected peak RPS ÷ per-replica capacity (from `current_baseline`
-  if supplied, otherwise flagged as an evidence gap), with a stated headroom margin applied on top of the
-  bare-minimum figure — name the margin explicitly in `assumptions_used`.
+  if supplied, otherwise flagged as an evidence gap), with a headroom margin applied on top of the
+  bare-minimum figure — `headroom_margin` if the caller supplied one, otherwise this skill's default of
+  20% — name the margin explicitly in `assumptions_used`, tagged caller-supplied or default.
 - Compare the projected replica count against `current_baseline`'s known replica ceiling, if any, to
   determine whether this section proves a shortfall (feeds `Insufficient`), is thin (feeds `Marginal`),
   or is comfortable (feeds `Sufficient`) — see [reference/report-format.md](../reference/report-format.md)

@@ -7,6 +7,7 @@ produces:
   - current_baseline
   - growth_rate
   - peak_avg_ratio
+  - headroom_margin
 consumes: []
 ---
 
@@ -42,6 +43,7 @@ to the same structural escaping/fencing as the other untrusted fields before ren
 | `current_baseline` | Unknown — Analyze proceeds without a known ceiling to score against; Headroom is still derived from the forecast's own targets, with the missing baseline named as a gap in Notes |
 | `growth_rate` | Derived from `demand_data`'s own trend if a clean trend is present; if no clean trend is derivable and none is supplied, recorded as an evidence gap feeding `Unknown — insufficient historical data` |
 | `peak_avg_ratio` | Derived from `demand_data` if a clean peak/average pattern is present; otherwise a conservative default of 2:1, always stated as an assumption, never silently assumed |
+| `headroom_margin` | Not derivable from `demand_data`; caller-supplied if given, otherwise a conservative default of 20% applied on top of the bare-minimum replica requirement, always stated as an assumption, never silently assumed |
 
 ## Normalization
 

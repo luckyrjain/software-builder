@@ -30,7 +30,8 @@ latency, 500GB storage capacity.
 **Agent:**
 
 1. Inputs — `demand_data`, `forecast_horizon`, `current_baseline` all present; `growth_rate` derived
-   from the trend (~4%/month), `peak_avg_ratio` derived from the data (2.3:1)
+   from the trend (~4%/month), `peak_avg_ratio` derived from the data (2.3:1); no `headroom_margin`
+   supplied, so this skill's default of 20% applies
 2. Analyze — projects average RPS to ~1,770 at horizon end, peak RPS ~4,070; concurrency derived from
    peak RPS × the stated 50ms average request latency (current: 3,220 peak RPS × 0.05s ≈ 161; projected:
    4,070 × 0.05s ≈ 204); CPU/memory scaled linearly from baseline; DB connections projected from
@@ -38,9 +39,9 @@ latency, 500GB storage capacity.
    connections ÷ 161 current concurrency ≈ 0.56), giving ~114 projected connections (well under the 200
    limit); storage growth projected from the data-volume trend to ~340GB (under 500GB capacity); replica
    requirement projected to 10 — bare-minimum 8.14 (4,070 ÷ per-replica capacity of 500 RPS, stated in
-   `current_baseline`), the stated 20% headroom margin applied on top (8.14 × 1.2 = 9.768), rounded up
-   once to 10 — (under no known ceiling, since `current_baseline` states current replica count, not a hard
-   cap) — no evidence gaps recorded
+   `current_baseline`), the skill's default 20% headroom margin applied on top since the caller supplied
+   no `headroom_margin` (8.14 × 1.2 = 9.768), rounded up once to 10 — (under no known ceiling, since
+   `current_baseline` states current replica count, not a hard cap) — no evidence gaps recorded
 3. Report — no section exceeds or sits near a known ceiling, no gaps → Headroom `Sufficient`
 
 **Expected fragment:**
@@ -54,7 +55,7 @@ latency, 500GB storage capacity.
 
 | Component | Current replicas | Projected replicas | Basis |
 |-----------|-------------------|----------------------|-------|
-| `payments-api` | 6 | 10 | Projected peak RPS (4,070) ÷ per-replica capacity (500 RPS, stated in current_baseline), 20% headroom margin applied |
+| `payments-api` | 6 | 10 | Projected peak RPS (4,070) ÷ per-replica capacity (500 RPS, stated in current_baseline), 20% headroom margin applied (skill default — no headroom_margin supplied) |
 
 ## Database
 
@@ -85,7 +86,7 @@ shortfall. Report derives Headroom `Insufficient` (precedence winner over any ot
 
 | Component | Current replicas | Projected replicas | Basis |
 |-----------|-------------------|----------------------|-------|
-| `payments-api` | 6 | 10 (ceiling: 8) | Projected peak RPS (4,070) ÷ per-replica capacity (500 RPS, stated in current_baseline), 20% headroom margin applied |
+| `payments-api` | 6 | 10 (ceiling: 8) | Projected peak RPS (4,070) ÷ per-replica capacity (500 RPS, stated in current_baseline), 20% headroom margin applied (skill default — no headroom_margin supplied) |
 ```
 
 ---

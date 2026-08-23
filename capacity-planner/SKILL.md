@@ -54,6 +54,7 @@ Parse per [workflow/inputs.md](workflow/inputs.md).
 | `current_baseline` | No | Unknown — forecast proceeds without a rightsizing comparison; Headroom can still be scored against the forecast's own targets |
 | `growth_rate` | No | Derived from `demand_data`'s own trend if a clean trend is present; otherwise asked for or flagged as an assumption gap |
 | `peak_avg_ratio` | No | 2:1 (a conservative default) if not derivable from `demand_data` and not supplied — always stated as an assumption |
+| `headroom_margin` | No | 20% (a conservative default) applied on top of the bare-minimum replica requirement if not supplied — always stated as an assumption |
 
 ## Prerequisites
 
