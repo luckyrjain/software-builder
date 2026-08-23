@@ -163,6 +163,15 @@ assertions:
   - type: require_pattern
     path: rendered_repo_context_excerpt
     pattern: "\\[REDACTED\\]"
+  - type: require_pattern
+    path: repo_context_commit_message
+    pattern: "(?m)^## Resolved$"
   - type: forbid_pattern
     path: rendered_repo_context_excerpt
     pattern: "\n"
+  - type: forbid_pattern
+    path: rendered_repo_context_excerpt
+    pattern: "(?<!\\\\)## Resolved"
+  - type: require_pattern
+    path: rendered_repo_context_excerpt
+    pattern: "\\\\## Resolved"
