@@ -82,7 +82,6 @@ Full matrix: [cross-skill-escalation.md](../docs/skill-framework/shared/cross-sk
 | Finding (this skill) | Next skill |
 |-----------------------|------------|
 | Forecast should be checked against live rightsizing data | **k8s-overprovisioning-datadog** |
-| Plan feeds a cost/scaling sprint | **cost-optimization-sprint-planner** |
 
 ## Post-actions
 

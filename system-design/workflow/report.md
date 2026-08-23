@@ -21,8 +21,9 @@ consumes:
 
 Derive the Readiness verdict with fixed, worst-first precedence:
 
-1. **Not ready** — a required aspect (components, APIs/events, or data model) is missing entirely or
-   internally contradictory (e.g. conflicting entity ownership, a component boundary claimed twice).
+1. **Not ready** — a required aspect (components, APIs/events, data model, or failure strategy) is missing
+   entirely or internally contradictory (e.g. conflicting entity ownership, a component boundary claimed
+   twice).
 2. **Ready with open questions** — the design is otherwise coherent but one or more aspects (capacity,
    rollout order, observability, an existing-system integration point) could not be derived from the
    supplied input and are recorded as explicit Open questions.

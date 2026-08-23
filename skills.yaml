@@ -188,7 +188,6 @@ contracts:
         system_design_spec:
           title: string
           readiness: string
-          components: list
         api_design_review_report:
           title: string
           verdict: string
@@ -216,8 +215,7 @@ contracts:
           verdict: string
         tech_debt_assessment:
           title: string
-          priority_score: string
-          priority: string
+          items: list
       required_sections:
         skill_result:
           required_fields:
@@ -869,7 +867,6 @@ contracts:
         fields:
         - title
         - readiness
-        - components
       api_design_review_report:
         fields:
         - title
@@ -906,8 +903,7 @@ contracts:
       tech_debt_assessment:
         fields:
         - title
-        - priority_score
-        - priority
+        - items
     creator_parity:
       skills:
       - unit-test-creator
@@ -1324,7 +1320,6 @@ contracts:
           system_design_spec:
           - title
           - readiness
-          - components
         consume_fields:
           architecture_review_report:
           - title
@@ -1410,8 +1405,7 @@ contracts:
         produce_fields:
           tech_debt_assessment:
           - title
-          - priority_score
-          - priority
+          - items
         write_authority: read-only
 skills:
   pr-review:
@@ -2853,7 +2847,6 @@ skills:
         system_design_spec:
         - title
         - readiness
-        - components
     dependencies: []
     version_source: skill_frontmatter_legacy_numeric
   api-design-review:
@@ -3316,7 +3309,6 @@ skills:
       produce_fields:
         tech_debt_assessment:
         - title
-        - priority_score
-        - priority
+        - items
     dependencies: []
     version_source: skill_frontmatter_legacy_numeric

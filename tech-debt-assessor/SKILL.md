@@ -29,8 +29,6 @@ Routing table: [skill-routing.md](../docs/skill-framework/shared/skill-routing.m
 |-----|-----|
 | Ranking a backlog of tech-debt items by impact/drag/risk/effort | Planning execution of a specific, already-decided migration → **migration-program-manager** |
 | "What tech debt should we tackle this quarter?" | An org-wide cost/rightsizing sweep → **cost-optimization-sprint-planner** |
-| Turning vague "this code is bad" complaints into a scored, ranked list | A single MR/code review → **pr-review** |
-| Deciding relative priority across many debt items | Root-causing a live incident → **incident-rca** |
 
 ## Deliverable
 

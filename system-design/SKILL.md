@@ -44,8 +44,8 @@ Rollout plan. Structure: [reference/report-format.md](reference/report-format.md
 
 | Input | Required | Default |
 |-------|----------|---------|
-| Architecture decision (from architecture-review) or PRD text | **Yes — HARD STOP if absent** | Ask for the decision/PRD content per the input_resolution convention (facts supplied → retrievable context → safe default → focused question) |
-| Existing-system context | No | Analyzed as available; absence is noted, not blocking |
+| `architecture_decision_or_prd` | **Yes — HARD STOP if absent** | Architecture decision (from architecture-review) or PRD text; ask for it per the input_resolution convention (facts supplied → retrievable context → safe default → focused question) |
+| `existing_system_context` | No | Analyzed as available; absence is noted, not blocking |
 
 Details: [workflow/inputs.md](workflow/inputs.md).
 
@@ -77,7 +77,6 @@ Full matrix: [cross-skill-escalation.md](../docs/skill-framework/shared/cross-sk
 | API surface defined and needs contract review | **api-design-review** |
 | Data model defined and needs schema review | **database-review** |
 | Design ready and needs an observability plan review | **observability-review** |
-| Design ready to build | **loop-task-implementer** |
 
 ## Post-actions
 

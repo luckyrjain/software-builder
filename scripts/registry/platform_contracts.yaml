@@ -184,7 +184,6 @@ artifact_runtime:
     system_design_spec:
       title: string
       readiness: string
-      components: list
     api_design_review_report:
       title: string
       verdict: string
@@ -212,8 +211,7 @@ artifact_runtime:
       verdict: string
     tech_debt_assessment:
       title: string
-      priority_score: string
-      priority: string
+      items: list
   required_sections:
     skill_result:
       required_fields:

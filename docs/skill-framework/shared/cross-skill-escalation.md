@@ -92,6 +92,7 @@ know about — don't treat it as a "you may want to" row the way every other row
 | Performance finding means the service needs re-forecasted capacity | performance-review → capacity-planner | Service + finding | "Forecast capacity for `{service}` — {finding} found during performance review" |
 | Capacity forecast should be checked against live rightsizing data | capacity-planner → k8s-overprovisioning-datadog | Service + forecast | "Assess rightsizing for `{deployment}` in `{env}` against forecasted capacity" |
 | Observability gap directly explains slow incident detection | observability-review → incident-rca | Service + gap | "RCA for `{service}` `{window}` — observability gap may have delayed detection" |
+| Gaps found ahead of an upcoming release | observability-review → deployment-risk-review | Service + gap list + release date | "Assess deployment risk for `{service}` — observability gaps found ahead of release" |
 | Caller wants the full multi-repo release go/no-go sweep, not one change | deployment-risk-review → release-readiness-checker | Release manifest | "Is this release ready to ship?" |
 | Deploy already happened and something broke | deployment-risk-review → incident-triage-agent | Service + change | "Triage `{service}` — deploy-related incident after {change}" |
 | A "Now" priority debt item is really a multi-service migration | tech-debt-assessor → migration-program-manager | Debt item + affected repos | "Plan migration for `{item}` across `{repos}`" |

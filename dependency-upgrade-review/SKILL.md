@@ -28,7 +28,6 @@ Routing table: [skill-routing.md](../docs/skill-framework/shared/skill-routing.m
 | Use | Not |
 |-----|-----|
 | "Review this dependency upgrade — breaking changes, CVEs, rollout risk" | A dedicated deep security audit of an exploitable CVE → **security-review** |
-| "Should we bump `<library>` from `<v1>` to `<v2>`?" | Reviewing a whole PR/MR the bump happens to be part of → **pr-review** |
 | "What breaks if we upgrade `<framework>` `<v1>`→`<v2>`?" | The MySQL-to-Postgres migration itself → **mysql-to-postgres-sql** |
 | Transitive dependency conflict / new transitive CVE check for a planned bump | — |
 
@@ -76,7 +75,6 @@ Full matrix: [cross-skill-escalation.md](../docs/skill-framework/shared/cross-sk
 | Finding (this skill) | Next skill |
 |-----------------------|------------|
 | A CVE looks exploitable in this codebase's actual usage | **security-review** |
-| This upgrade is part of a larger MR under review | **pr-review** |
 
 ## Post-actions
 

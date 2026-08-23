@@ -16,7 +16,7 @@ Conventions: [examples-conventions](../docs/skill-framework/shared/examples-conv
 | 8 | "Review this existing API's versioning and pagination design" | Wrong-skill — route to **api-design-review** |
 | 9 | "Write me the PRD for this feature first" | Wrong-skill — route to **prd-architect** |
 
-## Scenario: Clean happy path
+### Scenario: Clean happy path
 
 **Caller:** "Architecture decision approved for Order Service (from architecture-review). Owns order
 lifecycle; exposes `POST /orders`; publishes `order.created`/`order.paid`; Postgres-backed; expected peak
@@ -50,7 +50,7 @@ lifecycle; exposes `POST /orders`; publishes `order.created`/`order.paid`; Postg
 | Peak RPS | 500 | Stated in architecture decision |
 ```
 
-## Scenario: Worst state — contradictory data model
+### Scenario: Worst state — contradictory data model
 
 **Caller:** "Architecture decision for Order Service: `order-service` owns the `Order` entity for writes;
 separately, `billing-service` owns `Order` status updates for refunds."
@@ -74,7 +74,7 @@ separately, `billing-service` owns `Order` status updates for refunds."
 | `Order` | — | — | **Contradiction: claimed by both `order-service` and `billing-service` — must be resolved before this design is implementable** |
 ```
 
-## Scenario: Ready with open questions — multi-finding
+### Scenario: Ready with open questions — multi-finding
 
 **Caller:** "Architecture decision for Notification Service: owns notification dispatch, exposes
 `POST /notifications`, publishes `notification.sent`. No traffic numbers given. No mention of what happens
@@ -111,7 +111,7 @@ if the downstream SMS provider is unavailable, and no metrics/alerting mentioned
 | — | Open question — no metrics/alerting stated in the supplied input |
 ```
 
-## Scenario: Degraded path — no existing-system context
+### Scenario: Degraded path — no existing-system context
 
 **Caller:** "Architecture decision for a new Search Service replacing the legacy search module — but I
 don't have details on the legacy module handy."
@@ -138,7 +138,7 @@ don't have details on the legacy module handy."
 | — | Open question — no `existing_system_context` supplied; migration order from the legacy search module cannot be derived without it |
 ```
 
-## Scenario: Cross-skill handoff — API surface ready for contract review
+### Scenario: Cross-skill handoff — API surface ready for contract review
 
 **Caller:** "Architecture decision approved for Checkout API — design it." (Full decision; API surface
 comes out fully defined: `POST /checkout`, `GET /checkout/{id}`, pagination and versioning intentionally

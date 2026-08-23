@@ -30,7 +30,6 @@ Routing table: [skill-routing.md](../docs/skill-framework/shared/skill-routing.m
 |-----|-----|
 | Code, a query, or a service needs a performance-regression verdict | Turning demand/growth into forward capacity numbers → **capacity-planner** |
 | N+1 patterns, cache correctness, memory, concurrency, connection pools, or fanout are in question | Reviewing schema/index design directly → **database-review** |
-| Profiling/metrics excerpts need to be evaluated against the code that produced them | A broad MR review that isn't performance-focused → **pr-review** |
 
 ## Deliverable
 
@@ -76,8 +75,6 @@ Full matrix: [cross-skill-escalation.md](../docs/skill-framework/shared/cross-sk
 | Finding (this skill) | Next skill |
 |-----------------------|------------|
 | Findings mean the service needs re-forecasted capacity | **capacity-planner** |
-| Root cause is schema/index design, not code | **database-review** |
-| Reviewing one MR broadly, not performance-focused | **pr-review** |
 
 ## Post-actions
 

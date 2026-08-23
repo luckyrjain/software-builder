@@ -16,7 +16,7 @@ Conventions: [examples-conventions](../docs/skill-framework/shared/examples-conv
 | 8 | "This MR also bumps `pytest` from `7.0` to `8.0` — is that part fine?" inside a broader MR-review request | This skill reviews the bump in isolation; offers the **pr-review** handoff for the MR as a whole per Cross-skill escalation |
 | 9 | "Migrate our MySQL schema to Postgres" | Wrong skill — not a version-bump review → **mysql-to-postgres-sql** directly |
 
-## Scenario: Clean happy path
+### Scenario: Clean happy path
 
 **Caller:** "Review upgrading `lodash` from `4.17.15` to `4.17.21`" with changelog text (patch-level fixes
 only, no removed APIs) and a manifest excerpt showing no transitive pin changes.
@@ -47,7 +47,7 @@ only, no removed APIs) and a manifest excerpt showing no transitive pin changes.
 Both CVEs affect only `current_version` and are resolved by this upgrade — not a blocker.
 ```
 
-## Scenario: Worst-state blocker
+### Scenario: Worst-state blocker
 
 **Caller:** "Should we bump `express` from `4.18.0` to `5.0.0`?" with changelog text stating several
 middleware helper methods were removed with no replacement documented, and a manifest excerpt.
@@ -75,7 +75,7 @@ middleware helper methods were removed with no replacement documented, and a man
 | `res.sendfile()` and related legacy helpers removed | `"removed with no direct replacement" — changelog_text` | Every caller using the removed helpers must be rewritten before upgrade is safe |
 ```
 
-## Scenario: Evidence-gap multi-finding
+### Scenario: Evidence-gap multi-finding
 
 **Caller:** "Review the `requests` `2.28.0`→`2.31.0` bump" — no changelog text and no manifest excerpt
 supplied, caller wants a quick read anyway.
@@ -115,7 +115,7 @@ Two required checks could not run: breaking-change/API-difference analysis (no `
 transitive-dependency impact (no `manifest_excerpt`). Verdict reflects the evidence gap, not a clean pass.
 ```
 
-## Scenario: Degraded path — evidence gap on a single check
+### Scenario: Degraded path — evidence gap on a single check
 
 **Caller:** "Bump `openssl` from `1.1.1t` to `3.0.9`" with changelog text supplied but no manifest
 excerpt.
@@ -143,7 +143,7 @@ excerpt.
 mitigated, but the transitive-dependency check could not run without a manifest/lockfile excerpt.
 ```
 
-## Scenario: Cross-skill handoff
+### Scenario: Cross-skill handoff
 
 **Caller:** "Review upgrading `jackson-databind` from `2.9.0` to `2.15.0`" with changelog and manifest
 text; the changelog describes a known deserialization CVE affecting `2.9.0`, and the caller adds "we use

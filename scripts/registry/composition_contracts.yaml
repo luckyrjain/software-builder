@@ -119,7 +119,6 @@ artifact_schemas:
     fields:
     - title
     - readiness
-    - components
   api_design_review_report:
     fields:
     - title
@@ -156,8 +155,7 @@ artifact_schemas:
   tech_debt_assessment:
     fields:
     - title
-    - priority_score
-    - priority
+    - items
 creator_parity:
   skills:
   - unit-test-creator
@@ -574,7 +572,6 @@ skills:
       system_design_spec:
       - title
       - readiness
-      - components
     consume_fields:
       architecture_review_report:
       - title
@@ -660,6 +657,5 @@ skills:
     produce_fields:
       tech_debt_assessment:
       - title
-      - priority_score
-      - priority
+      - items
     write_authority: read-only

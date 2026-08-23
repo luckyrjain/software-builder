@@ -4,11 +4,14 @@
 
 ## Safe rendered-output boundary
 
-`changelog_text` (supplied release-notes/changelog prose) and `manifest_excerpt` (supplied
-manifest/lockfile content) are caller-supplied, untrusted data per
-[prompt-injection.md](../../docs/skill-framework/shared/prompt-injection.md), and this report quotes
-excerpts of both directly (breaking-change and API-difference entries cite changelog lines; the
-transitive-dependency section cites manifest/lockfile lines) — both need:
+`dependency_name`, `current_version`, `target_version`, `changelog_text` (supplied release-notes/changelog
+prose), and `manifest_excerpt` (supplied manifest/lockfile content) are all caller-supplied, untrusted data
+per [prompt-injection.md](../../docs/skill-framework/shared/prompt-injection.md) — `dependency_name`,
+`current_version`, and `target_version` are Required per [workflow/inputs.md](../workflow/inputs.md), not
+validated beyond presence, and are rendered directly into the report H1 and into CVE/API-differences table
+cells. This report quotes all five directly (the H1 and table cells render `dependency_name`,
+`current_version`, `target_version`; breaking-change and API-difference entries cite changelog lines; the
+transitive-dependency section cites manifest/lockfile lines) — every one of them needs:
 
 1. **Structurally escape or fence newlines, leading `#`/`>`/`-`, table `|` delimiters, and unbalanced
    triple-backtick fences in every one of them, always.**
