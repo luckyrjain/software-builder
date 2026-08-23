@@ -106,9 +106,9 @@ definitions file and a dashboard JSON export — no logs, tracing, alerts, or SL
 
 1. Inputs — Metrics and Dashboards categories have material; Logs, Tracing, Alerts, SLOs, and Correlation
    IDs do not.
-2. Analyze — Metrics and Dashboards checks run normally (both come back clean in this example); the four
+2. Analyze — Metrics and Dashboards checks run normally (both come back clean in this example); the five
    uncovered categories are recorded `Unknown` throughout, not guessed.
-3. Report — no `Critical gaps` proven, but four categories are wholly unassessed → **Unknown — insufficient
+3. Report — no `Critical gaps` proven, but five categories are wholly unassessed → **Unknown — insufficient
    input** outranks `Partial gaps`/`Adequate` per the fixed precedence.
 
 **Expected fragment:**
@@ -118,7 +118,7 @@ definitions file and a dashboard JSON export — no logs, tracing, alerts, or SL
 
 **Coverage: Unknown — insufficient input**
 
-> `Unknown — insufficient input — no material supplied for Logs, Tracing, Alerts, or SLOs; see those sections.`
+> `Unknown — insufficient input — no material supplied for Logs, Tracing, Alerts, SLOs, or Correlation IDs; see those sections.`
 
 ## Logs
 

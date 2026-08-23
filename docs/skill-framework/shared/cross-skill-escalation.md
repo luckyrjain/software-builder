@@ -81,6 +81,8 @@ know about — don't treat it as a "you may want to" row the way every other row
 | PRD needs an architecture decision before implementation | prd-architect → architecture-review | Final PRD | "Architecture review for `{feature}` before implementation" |
 | Architecture decision approved, needs implementation-level design | architecture-review → system-design | Architecture decision + PRD | "Design the implementation for `{feature}` per the approved architecture decision" |
 | Architecture decision approved and ready to build | architecture-review → loop-task-implementer | Architecture decision | "Implement `{feature}` per the approved architecture decision" |
+| A specific security/trust-boundary concern needs a deep audit | architecture-review → security-review | Architecture decision + trust-boundary concern | "Security review of `{concern}` — trust-boundary concern found during architecture review" |
+| The PRD itself has gaps, not the architecture | architecture-review → prd-architect | PRD gap found during architecture review | "Revise the PRD for `{feature}` — architecture review found `{gap}`" |
 | System design defines an API surface needing contract review | system-design → api-design-review | API surface from design spec | "Review the API design for `{feature}`" |
 | System design defines a data model needing schema review | system-design → database-review | Data model from design spec | "Review the database schema for `{feature}`" |
 | System design ready, needs an observability plan review | system-design → observability-review | Observability plan from design spec | "Review observability coverage for `{feature}`" |

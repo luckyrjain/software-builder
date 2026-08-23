@@ -99,11 +99,12 @@ of proposal text, config, or schema) must be redacted for PII/secrets before ren
 - Every required check appears in the report even when clean/"none found" — never silently omitted; use
   literal "None found" or "Open question" rows rather than dropping a section.
 - Verdict derivation is fixed, worst-first:
-  - **Not ready** — a required aspect (components, APIs/events, data model, or failure strategy) is
-    missing or internally contradictory in the supplied input.
+  - **Not ready** — a required aspect (components, APIs/events, or data model) is missing or internally
+    contradictory in the supplied input.
   - **Ready with open questions** — the design is coherent but one or more aspects (e.g. capacity,
-    rollout order, an existing-system integration point) could not be derived from the supplied input and
-    is recorded as an explicit "Open question."
+    failure strategy, rollout order, an existing-system integration point) could not be derived from the
+    supplied input and is recorded as an explicit "Open question." A missing failure strategy is a gap to
+    close, not a contradiction — it never by itself triggers "Not ready."
   - **Ready to implement** — every section has a concrete answer, no open questions remain.
 - An evidence gap (an aspect that can't be checked from the supplied input) is recorded as an explicit
   "Open question" row — never silently merged into "Ready to implement" and never fabricated into a
