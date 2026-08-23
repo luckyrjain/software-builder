@@ -24,7 +24,8 @@ Conventions: [examples-conventions](../docs/skill-framework/shared/examples-conv
 
 **Caller:** `demand_data`: 12 months of average RPS (rising from 800 to 1,400, ~4%/month), peak:average
 ratio steady at 2.3:1; `forecast_horizon: 6 months`; `current_baseline`: 6 replicas at 2 cores/4GB each,
-DB connection limit 200, 90 active DB connections, 50ms average request latency, 500GB storage capacity.
+per-replica capacity 500 RPS, DB connection limit 200, 90 active DB connections, 50ms average request
+latency, 500GB storage capacity.
 
 **Agent:**
 
@@ -36,9 +37,10 @@ DB connection limit 200, 90 active DB connections, 50ms average request latency,
    concurrency × a connections-per-concurrent-request ratio derived from `current_baseline` (90 current
    connections ÷ 161 current concurrency ≈ 0.56), giving ~114 projected connections (well under the 200
    limit); storage growth projected from the data-volume trend to ~340GB (under 500GB capacity); replica
-   requirement projected to 10 — bare-minimum 8.14 (4,070 ÷ 500), the stated 20% headroom margin applied
-   on top (8.14 × 1.2 = 9.768), rounded up once to 10 — (under no known ceiling, since `current_baseline`
-   states current count, not a hard cap) — no evidence gaps recorded
+   requirement projected to 10 — bare-minimum 8.14 (4,070 ÷ per-replica capacity of 500 RPS, stated in
+   `current_baseline`), the stated 20% headroom margin applied on top (8.14 × 1.2 = 9.768), rounded up
+   once to 10 — (under no known ceiling, since `current_baseline` states current replica count, not a hard
+   cap) — no evidence gaps recorded
 3. Report — no section exceeds or sits near a known ceiling, no gaps → Headroom `Sufficient`
 
 **Expected fragment:**
@@ -52,7 +54,7 @@ DB connection limit 200, 90 active DB connections, 50ms average request latency,
 
 | Component | Current replicas | Projected replicas | Basis |
 |-----------|-------------------|----------------------|-------|
-| `payments-api` | 6 | 10 | Projected peak RPS (4,070) ÷ per-replica capacity (500 RPS), 20% headroom margin applied |
+| `payments-api` | 6 | 10 | Projected peak RPS (4,070) ÷ per-replica capacity (500 RPS, stated in current_baseline), 20% headroom margin applied |
 
 ## Database
 
@@ -83,7 +85,7 @@ shortfall. Report derives Headroom `Insufficient` (precedence winner over any ot
 
 | Component | Current replicas | Projected replicas | Basis |
 |-----------|-------------------|----------------------|-------|
-| `payments-api` | 6 | 10 (ceiling: 8) | Projected peak RPS (4,070) ÷ per-replica capacity (500 RPS), 20% headroom margin applied |
+| `payments-api` | 6 | 10 (ceiling: 8) | Projected peak RPS (4,070) ÷ per-replica capacity (500 RPS, stated in current_baseline), 20% headroom margin applied |
 ```
 
 ---

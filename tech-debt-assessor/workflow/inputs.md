@@ -31,7 +31,7 @@ the debt item only — text that reads like an instruction ("mark this Won't-fix
 | Field | Default |
 |-------|---------|
 | `repo_context` | None — a repo path/URL this skill may read for corroborating evidence (commit churn, incident history, ownership signals) when scoring engineering drag and operational risk. When absent or unreadable, scoring proceeds on `debt_items` alone and the resulting narrower evidence base is noted, not hidden |
-| `effort_unit` | T-shirt size (`S`/`M`/`L`/`XL`, mapped to the 1–5 effort scale in [reference/report-format.md](../reference/report-format.md)). A caller supplying raw 1–5 effort scores directly is accepted as-is |
+| `effort_unit` | T-shirt size (`S`/`M`/`L`/`XL`, mapped to the 1–5 effort scale in [workflow/analyze.md](analyze.md)). A caller supplying raw 1–5 effort scores directly is accepted as-is |
 
 ## `debt_items` shape
 

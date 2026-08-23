@@ -44,7 +44,7 @@ Parse per [workflow/inputs.md](workflow/inputs.md).
 |-------|----------|-------|
 | `debt_items` | Yes | **HARD STOP if absent or empty** — list of `{description, affected_area, notes?, ticket_ref?}`; ask for the backlog rather than inventing items |
 | `repo_context` | No | Default: none — a repo path/URL this skill may read for corroborating evidence (churn, incident history, ownership) |
-| `effort_unit` | No | Default: **T-shirt size** (`S`/`M`/`L`/`XL` mapped to the 1–5 effort scale, see [reference/report-format.md](reference/report-format.md)) |
+| `effort_unit` | No | Default: **T-shirt size** (`S`/`M`/`L`/`XL` mapped to the 1–5 effort scale, see [workflow/analyze.md](workflow/analyze.md)) |
 
 ## Prerequisites
 
