@@ -37,7 +37,7 @@ Routing table: [skill-routing.md](../docs/skill-framework/shared/skill-routing.m
 ## Deliverable
 
 **`SECURITY_REVIEW_REPORT.md`** — spec: [reference/report-format.md](reference/report-format.md).
-A bold verdict line (Pass / Pass with findings / Fail — Critical/High findings present / Blocked — insufficient access) followed by one section per
+A bold verdict line (Pass / Pass with findings / Blocked — insufficient access / Fail — Critical/High findings present) followed by one section per
 security category, each populated or explicitly marked clean/not-applicable — never silently
 omitted.
 

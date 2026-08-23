@@ -70,15 +70,17 @@ No evidence gaps — all five checks assessed from supplied inputs.
 2. Analyze — dropping a column via backfill is irreversible (no down-migration path); rollback
    complexity records "None stated — evidence gap" since the field is genuinely absent, not just
    defaulted past a real plan.
-3. Report — irreversible migration + no rollback plan at all matches the `Critical` trigger; stated
-   first in the precedence order, so the verdict is `Critical` regardless of any other finding.
+3. Report — the absent `rollback_plan` is an evidence gap, not a confirmed "no rollback plan" —
+   the `Critical` trigger requires the latter. An unresolved evidence gap on Rollback complexity
+   instead floors the verdict at `High` per the precedence order, even though the migration itself
+   is irreversible.
 
 **Expected fragment:**
 
 ```markdown
 # Deployment Risk Review — drop orders.legacy_id backfill
 
-**Risk: Critical**
+**Risk: High**
 
 ## Migration risk
 
@@ -98,8 +100,9 @@ No evidence gaps — all five checks assessed from supplied inputs.
 
 **deployment_confidence: LOW**
 
-Rollback complexity is an evidence gap; irreversible migration + no rollback plan triggers
-`Critical` per the fixed precedence order.
+Rollback complexity is an evidence gap on an irreversible migration; the gap floors the verdict at
+`High` per the fixed precedence order — it does not escalate to `Critical`, which requires a
+confirmed absence of a rollback plan rather than an unresolved gap.
 ```
 
 ### Scenario: Multi-finding High verdict

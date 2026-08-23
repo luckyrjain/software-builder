@@ -40,20 +40,27 @@ request latency, 500GB storage capacity.
    connections ÷ 161 current concurrency ≈ 0.56), giving ~114 projected connections (well under the 200
    limit); queue throughput projected from `demand_data`'s own queue metrics scaled by the ~4%/month
    growth trend to ~152 msgs/sec at horizon end (no queue throughput ceiling stated in `current_baseline`,
-   so no ceiling check applies, but the projection is complete — not a gap); storage growth projected from
-   the data-volume trend to ~340GB (under 500GB capacity); replica
+   so no ceiling check applies, but the projection is complete — not a gap); storage — `demand_data`
+   contains no data-volume trend (only average RPS and queue-throughput series), so storage growth cannot
+   be projected from request volume; recorded as an explicit evidence gap in `evidence_gaps` rather than
+   derived from RPS; replica
    requirement projected to 10 — bare-minimum 8.14 (4,070 ÷ per-replica capacity of 500 RPS, stated in
    `current_baseline`), the skill's default 20% headroom margin applied on top since the caller supplied
    no `headroom_margin` (8.14 × 1.2 = 9.768), rounded up once to 10 — (under no known ceiling, since
-   `current_baseline` states current replica count, not a hard cap) — no evidence gaps recorded
-3. Report — no section exceeds or sits near a known ceiling, no gaps → Headroom `Sufficient`
+   `current_baseline` states current replica count, not a hard cap) — one evidence gap recorded (storage)
+3. Report — every other section has a usable projection and none exceeds a known ceiling, but the storage
+   evidence gap is real and unresolved → Headroom `Unknown — insufficient historical data`
 
 **Expected fragment:**
 
 ```
 # Capacity plan — payments-api, 6 months
 
-**Headroom: Sufficient**
+**Headroom: Unknown — insufficient historical data**
+
+> Unknown — insufficient historical data: every other section projects cleanly within known ceilings, but
+> demand_data contains no data-volume trend, so storage growth cannot be projected; this evidence gap is
+> unresolved and is not folded into Sufficient.
 
 ## Replica requirements
 
@@ -66,6 +73,12 @@ request latency, 500GB storage capacity.
 | Metric | Current | Projected | Basis |
 |--------|---------|-----------|-------|
 | Connections | 90 | 114 | Concurrency (204) × connections-per-concurrent-request ratio (0.56, derived from current_baseline: 90 ÷ 161 current concurrency) |
+
+## Storage
+
+| Metric | Current | Projected | Basis |
+|--------|---------|-----------|-------|
+| Storage volume | Unknown | Unknown | No data-volume trend present in demand_data (only RPS and queue-throughput series supplied); cannot be derived from request volume |
 ```
 
 ---
