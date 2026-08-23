@@ -1,6 +1,6 @@
 # Cross-skill escalation (shared)
 
-**Normative.** Symmetric escalation matrix for pr-review, pr-gatekeeper, incident-rca, incident-triage-agent, k8s-overprovisioning-datadog, domain-comprehension, squad-map, who-owns-x-bot, new-hire-guide, release-readiness-checker, mysql-to-postgres-sql, loop-task-implementer, backlog-runner, migration-program-manager, cost-optimization-sprint-planner, weekly-squad-digest, prd-architect, test-writer, unit-test-creator, integration-test-creator, contract-test-creator, e2e-test-creator, and api-test-creator.
+**Normative.** Symmetric escalation matrix for pr-review, pr-gatekeeper, incident-rca, incident-triage-agent, k8s-overprovisioning-datadog, domain-comprehension, squad-map, who-owns-x-bot, new-hire-guide, release-readiness-checker, mysql-to-postgres-sql, loop-task-implementer, backlog-runner, migration-program-manager, cost-optimization-sprint-planner, weekly-squad-digest, prd-architect, test-writer, unit-test-creator, integration-test-creator, contract-test-creator, e2e-test-creator, api-test-creator, architecture-review, system-design, api-design-review, database-review, security-review, performance-review, capacity-planner, observability-review, deployment-risk-review, dependency-upgrade-review, and tech-debt-assessor.
 
 **Consumers:** `SKILL.md` in each skill (link here; keep ≤10 skill-specific rows max).
 
@@ -78,6 +78,31 @@ know about — don't treat it as a "you may want to" row the way every other row
 | PRD security finding needs review of existing code on an MR | prd-architect → pr-review | MR !IID + finding | "Review MR !{iid} for `{finding}` flagged during PRD review" |
 | Task needs a PRD before implementation | loop-task-implementer → prd-architect | Task description + constraints | "Write an implementation-ready PRD for task `{task_id}`" |
 | Domain map suggests a new product initiative | domain-comprehension → prd-architect | Bounded context + problem statement | "Write a PRD for `{initiative}` based on domain-comprehension findings" |
+| PRD needs an architecture decision before implementation | prd-architect → architecture-review | Final PRD | "Architecture review for `{feature}` before implementation" |
+| Architecture decision approved, needs implementation-level design | architecture-review → system-design | Architecture decision + PRD | "Design the implementation for `{feature}` per the approved architecture decision" |
+| Architecture decision approved and ready to build | architecture-review → loop-task-implementer | Architecture decision | "Implement `{feature}` per the approved architecture decision" |
+| A specific security/trust-boundary concern needs a deep audit | architecture-review → security-review | Architecture decision + trust-boundary concern | "Security review of `{concern}` — trust-boundary concern found during architecture review" |
+| The PRD itself has gaps, not the architecture | architecture-review → prd-architect | PRD gap found during architecture review | "Revise the PRD for `{feature}` — architecture review found `{gap}`" |
+| System design defines an API surface needing contract review | system-design → api-design-review | API surface from design spec | "Review the API design for `{feature}`" |
+| System design defines a data model needing schema review | system-design → database-review | Data model from design spec | "Review the database schema for `{feature}`" |
+| System design ready, needs an observability plan review | system-design → observability-review | Observability plan from design spec | "Review observability coverage for `{feature}`" |
+| API design finding looks exploitable | api-design-review → security-review | Endpoint + authorization gap | "Security review of `{endpoint}` — authorization gap found in API design review" |
+| Reviewing one already-merged MR's API change, not a standalone design | api-design-review → pr-review | MR !IID + API design findings | "Review MR !{iid} for the API design change found during API design review" |
+| The API's underlying data model needs review | api-design-review → database-review | Data model/schema from API spec | "Review the database schema for `{feature}` — flagged during API design review" |
+| Review request is actually a MySQL→Postgres dialect migration, not a general schema review | database-review → mysql-to-postgres-sql | Schema/query findings + service path | "Scan/rewrite MySQL dialect in `{service}` — flagged as a PG migration during schema review" |
+| Reviewing one MR's migration, not a standalone schema review | database-review → pr-review | MR !IID + schema/migration findings | "Review MR !{iid} for the schema/migration change found during database review" |
+| Database review finding suggests a broader performance problem | database-review → performance-review | Query/index finding | "Performance review of `{service}` — {finding} found in database review" |
+| Security-sensitive finding on an MR under review | pr-review → security-review | MR !IID + finding | "Security review of `{finding}` flagged on MR !{iid}" |
+| Vulnerable dependency is the root cause of a security finding | security-review → dependency-upgrade-review | Dependency + CVE | "Review upgrade path for `{dependency}` — CVE `{cve_id}` found during security review" |
+| Upgrade CVE looks exploitable in this codebase's actual usage | dependency-upgrade-review → security-review | Dependency + CVE | "Security review of `{dependency}` usage — CVE `{cve_id}` may be exploitable" |
+| Performance finding means the service needs re-forecasted capacity | performance-review → capacity-planner | Service + finding | "Forecast capacity for `{service}` — {finding} found during performance review" |
+| Capacity forecast should be checked against live rightsizing data | capacity-planner → k8s-overprovisioning-datadog | Service + forecast | "Assess rightsizing for `{deployment}` in `{env}` against forecasted capacity" |
+| Observability gap directly explains slow incident detection | observability-review → incident-rca | Service + gap | "RCA for `{service}` `{window}` — observability gap may have delayed detection" |
+| Gaps found ahead of an upcoming release | observability-review → deployment-risk-review | Service + gap list + release date | "Assess deployment risk for `{service}` — observability gaps found ahead of release" |
+| Caller wants the full multi-repo release go/no-go sweep, not one change | deployment-risk-review → release-readiness-checker | Release manifest | "Is this release ready to ship?" |
+| Deploy already happened and something broke | deployment-risk-review → incident-triage-agent | Service + change | "Triage `{service}` — deploy-related incident after {change}" |
+| A "Now" priority debt item is really a multi-service migration | tech-debt-assessor → migration-program-manager | Debt item + affected repos | "Plan migration for `{item}` across `{repos}`" |
+| A "Now" priority debt item is really a resource/cost problem | tech-debt-assessor → cost-optimization-sprint-planner | Debt item + affected services | "Cost sweep for `{services}` — {item} flagged as a resource problem" |
 
 Skill-specific rows in each `SKILL.md` MUST be a subset of this table plus local deltas only.
 
@@ -160,7 +185,7 @@ When `MYSQL_TO_PG_SQL_REWRITES.md` exists in the workspace deliverable directory
 | E2E / browser user-journey tests | e2e-test-creator directly |
 | Black-box API tests — Postman/Newman, no browser | api-test-creator directly |
 | Live rollback / kubectl apply | Out of scope — human operator |
-| Security-only deep review | pr-review with security persona |
+| Security-only deep review | security-review |
 | Cost/billing investigation across services | Canvas + appropriate skill; not auto-routed |
 
 See each skill's **when NOT to use** table in `SKILL.md`.

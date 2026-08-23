@@ -1,7 +1,21 @@
 graph TD
+  api-design-review -.->|escalates| security-review
+  api-design-review -.->|escalates| pr-review
+  api-design-review -.->|escalates| database-review
+  architecture-review -.->|escalates| system-design
+  architecture-review -.->|escalates| security-review
+  architecture-review -.->|escalates| loop-task-implementer
+  architecture-review -.->|escalates| prd-architect
   backlog-runner -->|invokes| loop-task-implementer
+  capacity-planner -.->|escalates| k8s-overprovisioning-datadog
   cost-optimization-sprint-planner -->|invokes| k8s-overprovisioning-datadog
   cost-optimization-sprint-planner -->|invokes| squad-map
+  database-review -.->|escalates| performance-review
+  database-review -.->|escalates| mysql-to-postgres-sql
+  database-review -.->|escalates| pr-review
+  dependency-upgrade-review -.->|escalates| security-review
+  deployment-risk-review -.->|escalates| release-readiness-checker
+  deployment-risk-review -.->|escalates| incident-triage-agent
   domain-comprehension -->|invokes| squad-map
   incident-rca -.->|escalates| pr-review
   incident-rca -.->|escalates| k8s-overprovisioning-datadog
@@ -17,10 +31,14 @@ graph TD
   migration-program-manager -.->|escalates| pr-review
   new-hire-guide -->|invokes| domain-comprehension
   new-hire-guide -->|invokes| squad-map
+  observability-review -.->|escalates| incident-rca
+  observability-review -.->|escalates| deployment-risk-review
+  performance-review -.->|escalates| capacity-planner
   pr-gatekeeper -->|invokes| pr-review
   pr-gatekeeper -.->|escalates| pr-review
   pr-review -.->|escalates| incident-rca
   pr-review -.->|escalates| k8s-overprovisioning-datadog
+  pr-review -.->|escalates| security-review
   prd-architect -.->|escalates| loop-task-implementer
   prd-architect -.->|escalates| domain-comprehension
   prd-architect -.->|escalates| test-writer
@@ -31,6 +49,12 @@ graph TD
   release-readiness-checker -.->|escalates| pr-review
   release-readiness-checker -.->|escalates| k8s-overprovisioning-datadog
   release-readiness-checker -.->|escalates| incident-rca
+  security-review -.->|escalates| dependency-upgrade-review
+  system-design -.->|escalates| api-design-review
+  system-design -.->|escalates| database-review
+  system-design -.->|escalates| observability-review
+  tech-debt-assessor -.->|escalates| migration-program-manager
+  tech-debt-assessor -.->|escalates| cost-optimization-sprint-planner
   test-writer -->|invokes| unit-test-creator
   test-writer -->|invokes| integration-test-creator
   test-writer -->|invokes| contract-test-creator

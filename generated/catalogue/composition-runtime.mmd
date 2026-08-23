@@ -1,8 +1,14 @@
 graph TD
+  api-design-review["api-design-review<br/>leaf"]
   api-test-creator["api-test-creator<br/>leaf"]
+  architecture-review["architecture-review<br/>leaf"]
   backlog-runner["backlog-runner<br/>trigger"]
+  capacity-planner["capacity-planner<br/>leaf"]
   contract-test-creator["contract-test-creator<br/>leaf"]
   cost-optimization-sprint-planner["cost-optimization-sprint-planner<br/>orchestrator"]
+  database-review["database-review<br/>leaf"]
+  dependency-upgrade-review["dependency-upgrade-review<br/>leaf"]
+  deployment-risk-review["deployment-risk-review<br/>leaf"]
   domain-comprehension["domain-comprehension<br/>orchestrator"]
   e2e-test-creator["e2e-test-creator<br/>leaf"]
   incident-rca["incident-rca<br/>leaf"]
@@ -13,21 +19,40 @@ graph TD
   migration-program-manager["migration-program-manager<br/>orchestrator"]
   mysql-to-postgres-sql["mysql-to-postgres-sql<br/>leaf"]
   new-hire-guide["new-hire-guide<br/>orchestrator"]
+  observability-review["observability-review<br/>leaf"]
+  performance-review["performance-review<br/>leaf"]
   pr-gatekeeper["pr-gatekeeper<br/>trigger"]
   pr-review["pr-review<br/>leaf"]
   prd-architect["prd-architect<br/>leaf"]
   release-readiness-checker["release-readiness-checker<br/>orchestrator"]
+  security-review["security-review<br/>leaf"]
   squad-map["squad-map<br/>leaf"]
+  system-design["system-design<br/>leaf"]
+  tech-debt-assessor["tech-debt-assessor<br/>leaf"]
   test-writer["test-writer<br/>router"]
   unit-test-creator["unit-test-creator<br/>leaf"]
   weekly-squad-digest["weekly-squad-digest<br/>trigger"]
   who-owns-x-bot["who-owns-x-bot<br/>router"]
+  api-design-review -.->|escalates| database-review
+  api-design-review -.->|escalates| pr-review
+  api-design-review -.->|escalates| security-review
+  architecture-review -.->|escalates| loop-task-implementer
+  architecture-review -.->|escalates| prd-architect
+  architecture-review -.->|escalates| security-review
+  architecture-review -.->|escalates| system-design
   backlog-runner -->|requires| loop-task-implementer
   backlog-runner ==>|handoff| loop-task-implementer
+  capacity-planner -.->|escalates| k8s-overprovisioning-datadog
   cost-optimization-sprint-planner -->|requires| k8s-overprovisioning-datadog
   cost-optimization-sprint-planner -->|requires| squad-map
   cost-optimization-sprint-planner ==>|handoff| k8s-overprovisioning-datadog
   cost-optimization-sprint-planner ==>|handoff| squad-map
+  database-review -.->|escalates| mysql-to-postgres-sql
+  database-review -.->|escalates| performance-review
+  database-review -.->|escalates| pr-review
+  dependency-upgrade-review -.->|escalates| security-review
+  deployment-risk-review -.->|escalates| incident-triage-agent
+  deployment-risk-review -.->|escalates| release-readiness-checker
   domain-comprehension -->|requires| squad-map
   domain-comprehension ==>|handoff| squad-map
   incident-rca -.->|escalates| k8s-overprovisioning-datadog
@@ -50,11 +75,15 @@ graph TD
   new-hire-guide -->|requires| squad-map
   new-hire-guide ==>|handoff| domain-comprehension
   new-hire-guide ==>|handoff| squad-map
+  observability-review -.->|escalates| deployment-risk-review
+  observability-review -.->|escalates| incident-rca
+  performance-review -.->|escalates| capacity-planner
   pr-gatekeeper -->|requires| pr-review
   pr-gatekeeper ==>|handoff| pr-review
   pr-gatekeeper -.->|escalates| pr-review
   pr-review -.->|escalates| incident-rca
   pr-review -.->|escalates| k8s-overprovisioning-datadog
+  pr-review -.->|escalates| security-review
   prd-architect -.->|escalates| domain-comprehension
   prd-architect -.->|escalates| loop-task-implementer
   prd-architect -.->|escalates| pr-review
@@ -68,6 +97,12 @@ graph TD
   release-readiness-checker -.->|escalates| incident-rca
   release-readiness-checker -.->|escalates| k8s-overprovisioning-datadog
   release-readiness-checker -.->|escalates| pr-review
+  security-review -.->|escalates| dependency-upgrade-review
+  system-design -.->|escalates| api-design-review
+  system-design -.->|escalates| database-review
+  system-design -.->|escalates| observability-review
+  tech-debt-assessor -.->|escalates| cost-optimization-sprint-planner
+  tech-debt-assessor -.->|escalates| migration-program-manager
   test-writer -->|requires| api-test-creator
   test-writer -->|requires| contract-test-creator
   test-writer -->|requires| e2e-test-creator
@@ -84,11 +119,13 @@ graph TD
   weekly-squad-digest -.->|escalates| migration-program-manager
   who-owns-x-bot -->|requires| squad-map
   who-owns-x-bot ==>|handoff| squad-map
+  architecture-review -->|architecture_review_report| system-design
   cost-optimization-sprint-planner -->|cost_sweep_rollup| weekly-squad-digest
   k8s-overprovisioning-datadog -->|k8s_rightsizing_report| release-readiness-checker
   migration-program-manager -->|migration_status_rollup| weekly-squad-digest
   pr-gatekeeper -->|mr_review_report| release-readiness-checker
   pr-review -->|mr_review_report| release-readiness-checker
+  prd-architect -->|prd_report| architecture-review
   prd-architect -->|prd_report| loop-task-implementer
   incident-rca -->|rca_report| release-readiness-checker
   incident-triage-agent -->|rca_report| release-readiness-checker

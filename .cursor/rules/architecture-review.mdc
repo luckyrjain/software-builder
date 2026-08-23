@@ -1,0 +1,9 @@
+---
+description: Use when a PRD, proposed design, or architecture diagram needs a validated architecture decision before implementation begins — risks, scale limits, failure modes, security posture, operability, and alternatives considered. Keywords: architecture review, ADR, architecture decision record, design review, should we build it this way, scale limits, failure modes. Not for authoring the PRD itself (prd-architect), implementation-level component/API/data-model design (system-design), or reviewing an already-merged PR's code (pr-review).
+alwaysApply: false
+---
+
+<!-- GENERATED from skills.yaml + SKILL.md — do not edit; run make generate -->
+
+Invoke the architecture-review skill. Read `architecture-review/SKILL.md` and follow it.
+Phase index: `architecture-review/reference/phase-index.md` when present under the skill directory.

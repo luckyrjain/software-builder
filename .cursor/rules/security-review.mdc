@@ -1,0 +1,9 @@
+---
+description: Use for a dedicated security review: authentication, authorization, secrets handling, injection, SSRF, tenant isolation, data leakage, cryptography, and dependency exposure. Keywords: security review, authN, authZ, injection, SSRF, tenant isolation, secrets, cryptography review. Not for a general code-quality MR review (pr-review, which escalates here for security-sensitive findings), or a dependency-upgrade CVE sweep (dependency-upgrade-review).
+alwaysApply: false
+---
+
+<!-- GENERATED from skills.yaml + SKILL.md — do not edit; run make generate -->
+
+Invoke the security-review skill. Read `security-review/SKILL.md` and follow it.
+Phase index: `security-review/reference/phase-index.md` when present under the skill directory.

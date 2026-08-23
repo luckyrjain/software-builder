@@ -84,6 +84,17 @@ Maintainer pressure scenarios: [pressure-tests.md](pressure-tests.md).
 | contract-test-creator | `target: {mode: diff/backfill, role: consumer/provider, ...}`, `repo_root: <path>` | Detected Pact tooling + role announced, before any interaction is selected |
 | e2e-test-creator | `target: {mode: diff/backfill, journeys: [...] }`, `repo_root: <path>` | Detected browser tooling announced, before any journey is selected |
 | api-test-creator | `target: {mode: diff/backfill, ...}`, `repo_root: <path>` | Detected Postman/Newman tooling + collection announced, before any endpoint is selected |
+| architecture-review | `Architecture review for <feature>` + proposal/design text | Inputs parsed, before Analyze starts |
+| system-design | `Design the implementation for <feature>` + architecture decision/PRD text | Inputs parsed, before Analyze starts |
+| api-design-review | `Review the API design for <feature>` + API spec/contract text | Inputs parsed, before Analyze starts |
+| database-review | `Review this schema/migration` + schema/DDL text | Inputs parsed, before Analyze starts |
+| security-review | `Security review of <target>` + code/config/design content | Inputs parsed, before Analyze starts |
+| performance-review | `Performance review of <target>` + code/query content | Inputs parsed, before Analyze starts |
+| capacity-planner | `Forecast capacity for <service>` + historical demand data | Inputs parsed, before Analyze starts |
+| observability-review | `Observability review for <service>` + metrics/logs/dashboard/alert config | Inputs parsed, before Analyze starts |
+| deployment-risk-review | `Deployment risk review for <change>` + release/change description | Inputs parsed, before Analyze starts |
+| dependency-upgrade-review | `Review upgrading <dependency> from <current> to <target>` | Inputs parsed, before Analyze starts |
+| tech-debt-assessor | `Rank this tech debt backlog` + debt-item list | Inputs parsed, before Analyze starts |
 
 ## 4. Output checklist template
 
@@ -136,6 +147,18 @@ A correct minimal output should contain:
 | contract-test-creator | `make lint-contract-test-creator` (includes pytest + shellcheck) |
 | e2e-test-creator | `make lint-e2e-test-creator` (includes pytest + shellcheck) |
 | api-test-creator | `make lint-api-test-creator` (includes pytest + shellcheck) |
+| prd-architect | `make lint-prd-architect` |
+| architecture-review | `make lint-architecture-review` |
+| system-design | `make lint-system-design` |
+| api-design-review | `make lint-api-design-review` |
+| database-review | `make lint-database-review` |
+| security-review | `make lint-security-review` |
+| performance-review | `make lint-performance-review` |
+| capacity-planner | `make lint-capacity-planner` |
+| observability-review | `make lint-observability-review` |
+| deployment-risk-review | `make lint-deployment-risk-review` |
+| dependency-upgrade-review | `make lint-dependency-upgrade-review` |
+| tech-debt-assessor | `make lint-tech-debt-assessor` |
 | Framework | `make lint-framework` |
 | All | `make lint` |
 

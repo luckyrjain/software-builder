@@ -52,3 +52,25 @@ skills:
     external_services: Newman CLI + reachable API base URL
   prd-architect:
     external_services: Optional web search for material unknowns (generalized queries only)
+  architecture-review:
+    external_services: None — reads supplied PRD/design content and repository only
+  system-design:
+    external_services: None — reads supplied architecture decision/PRD content and repository only
+  api-design-review:
+    external_services: None — reads supplied API design/contract content and repository only
+  database-review:
+    external_services: None — reads supplied schema/migration content and repository only
+  security-review:
+    external_services: None — reads supplied code/design content and repository only
+  performance-review:
+    external_services: None — reads supplied code/query content and repository only
+  capacity-planner:
+    external_services: None — reads supplied historical demand data only
+  observability-review:
+    external_services: None — reads supplied metrics/logs/dashboard/alert configuration and repository only
+  deployment-risk-review:
+    external_services: None — reads supplied release/change content and repository only
+  dependency-upgrade-review:
+    external_services: None — reads supplied dependency manifest/changelog content and repository only
+  tech-debt-assessor:
+    external_services: None — reads repository content and supplied backlog data only

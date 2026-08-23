@@ -1,0 +1,9 @@
+---
+description: Use when a specific release or change needs a risk assessment before shipping: blast radius, migration risk, rollback complexity, dependency risk, traffic risk, and confidence. Keywords: deployment risk, release risk, blast radius, rollback plan, go/no-go. Not for the composed multi-repo release go/no-go sweep (release-readiness-checker) or investigating an incident that already happened (incident-triage-agent).
+alwaysApply: false
+---
+
+<!-- GENERATED from skills.yaml + SKILL.md — do not edit; run make generate -->
+
+Invoke the deployment-risk-review skill. Read `deployment-risk-review/SKILL.md` and follow it.
+Phase index: `deployment-risk-review/reference/phase-index.md` when present under the skill directory.

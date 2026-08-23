@@ -2,7 +2,7 @@
 
 [![Lint](https://github.com/luckyrjain/software-builder/actions/workflows/lint.yml/badge.svg)](https://github.com/luckyrjain/software-builder/actions/workflows/lint.yml)
 <!-- skills-count:start -->
-![Skills](https://img.shields.io/badge/skills-23-blue)
+![Skills](https://img.shields.io/badge/skills-34-blue)
 <!-- skills-count:end -->
 
 Portable, evidence-driven agent skills for software delivery: code review, incident response,
@@ -206,6 +206,25 @@ routes to skills in another category.
 | [who-owns-x-bot](who-owns-x-bot/) | `/who-owns <name>` | Returns one Slack-ready ownership answer by delegating to `squad-map` | [README](who-owns-x-bot/README.md) · [SETUP](who-owns-x-bot/SETUP.md) |
 | [new-hire-guide](new-hire-guide/) | “Onboard `<name>` to `<squad>`” | Builds a squad-scoped onboarding tour from ownership and domain evidence | [README](new-hire-guide/README.md) · [SETUP](new-hire-guide/SETUP.md) |
 
+### Architecture and specialized design review
+
+Fills the gap between `prd-architect` and implementation: architecture decisions, implementation-oriented
+design, and dedicated single-domain reviews.
+
+| Skill | Invoke | What it does | Docs |
+|-------|--------|--------------|------|
+| [architecture-review](architecture-review/) | “Architecture review for `<feature>`” | Architecture decision, risks, scale limits, failure modes, security, operability, alternatives | [README](architecture-review/README.md) · [SETUP](architecture-review/SETUP.md) |
+| [system-design](system-design/) | “Design the implementation for `<feature>`” | Components, APIs, events, data model, state machines, consistency, retries, capacity, rollout | [README](system-design/README.md) · [SETUP](system-design/SETUP.md) |
+| [api-design-review](api-design-review/) | “Review the API design for `<feature>`” | REST/GraphQL/gRPC/async-event review: compatibility, pagination, idempotency, versioning, authZ | [README](api-design-review/README.md) · [SETUP](api-design-review/SETUP.md) |
+| [database-review](database-review/) | “Review this schema/migration” | Schema, indexing, locking, transactions, migrations, query plans, replication, partitioning | [README](database-review/README.md) · [SETUP](database-review/SETUP.md) |
+| [security-review](security-review/) | “Security review of `<target>`” | Dedicated authN/authZ, secrets, injection, SSRF, tenant isolation, crypto, dependency exposure | [README](security-review/README.md) · [SETUP](security-review/SETUP.md) |
+| [performance-review](performance-review/) | “Performance review of `<target>`” | Algorithmic complexity, DB behavior, N+1, cache, memory, concurrency, connection pools, fanout | [README](performance-review/README.md) · [SETUP](performance-review/SETUP.md) |
+| [capacity-planner](capacity-planner/) | “Forecast capacity for `<service>`” | Turns historical demand into RPS/CPU/memory/DB/queue/storage/replica requirements | [README](capacity-planner/README.md) · [SETUP](capacity-planner/SETUP.md) |
+| [observability-review](observability-review/) | “Observability review for `<service>`” | Evaluates metrics, logs, tracing, dashboards, alerts, SLOs, correlation IDs for coverage gaps | [README](observability-review/README.md) · [SETUP](observability-review/SETUP.md) |
+| [deployment-risk-review](deployment-risk-review/) | “Deployment risk review for `<change>`” | Blast radius, migration risk, rollback complexity, dependency risk, traffic risk, confidence | [README](deployment-risk-review/README.md) · [SETUP](deployment-risk-review/SETUP.md) |
+| [dependency-upgrade-review](dependency-upgrade-review/) | “Review upgrading `<dependency>` to `<version>`” | Breaking changes, CVEs, API differences, transitive dependencies, rollout risk | [README](dependency-upgrade-review/README.md) · [SETUP](dependency-upgrade-review/SETUP.md) |
+| [tech-debt-assessor](tech-debt-assessor/) | “Rank this tech debt backlog” | Ranks debt by business impact × engineering drag × operational risk ÷ effort | [README](tech-debt-assessor/README.md) · [SETUP](tech-debt-assessor/SETUP.md) |
+
 ### Infrastructure and cost
 
 | Skill | Invoke | What it does | Docs |
@@ -238,6 +257,7 @@ MCP is **skill-specific**, not a prerequisite for installing or browsing the rep
 | `k8s-overprovisioning-datadog` | At least one sufficient evidence source: read-only Kubernetes MCP or Datadog |
 | `cost-optimization-sprint-planner` | Datadog for its namespace pre-filter; then inherits the Kubernetes skill's per-deployment routing |
 | `backlog-runner` | Jira or GitHub Issues access |
+| `prd-architect`, `architecture-review`, `system-design`, `api-design-review`, `database-review`, `security-review`, `performance-review`, `capacity-planner`, `observability-review`, `deployment-risk-review`, `dependency-upgrade-review`, `tech-debt-assessor` | No MCP; analysis and report-drafting skills that read supplied content (and, at most, read-only repository access) |
 | Composed skills | Inherit the capabilities of the skills they call |
 
 Read the selected skill's `SETUP.md` before its first real run. The complete required/optional matrix

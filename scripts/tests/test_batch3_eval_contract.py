@@ -26,7 +26,7 @@ def test_batch3_all_registered_skills_execute_five_scenarios() -> None:
         for result in results
         if result.skill in registry.skills and result.case_id.startswith("scenario-")
     ]
-    assert len(scenario_results) == len(registry.skills) * len(REQUIRED_DIMENSIONS) == 115
+    assert len(scenario_results) == len(registry.skills) * len(REQUIRED_DIMENSIONS) == 170
     assert {result.case_id for result in scenario_results} == {
         f"scenario-{dimension}" for dimension in REQUIRED_DIMENSIONS
     }

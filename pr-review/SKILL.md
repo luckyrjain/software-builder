@@ -112,6 +112,7 @@ Full matrix: [cross-skill-escalation.md](../docs/skill-framework/shared/cross-sk
 | Critical security / bad deploy in prod | **incident-rca** |
 | K8s/infra perf regression in MR | **k8s-overprovisioning-datadog** |
 | Resource-down MR merged | **k8s-overprovisioning-datadog** + **incident-rca** if outage |
+| Security-sensitive finding (authN/authZ, secrets, injection, SSRF, tenant isolation, crypto) needing a dedicated deep audit | **security-review** |
 
 ## Framework
 

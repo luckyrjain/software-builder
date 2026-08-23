@@ -1,0 +1,9 @@
+---
+description: Use when historical demand data needs to become forward-looking capacity requirements: RPS, concurrency, CPU, memory, DB, queue, storage, and replica counts. Keywords: capacity planning, capacity forecast, scaling requirements, replica count, headroom. Not for reviewing current resource rightsizing against live metrics (k8s-overprovisioning-datadog) or a performance code review (performance-review).
+alwaysApply: false
+---
+
+<!-- GENERATED from skills.yaml + SKILL.md — do not edit; run make generate -->
+
+Invoke the capacity-planner skill. Read `capacity-planner/SKILL.md` and follow it.
+Phase index: `capacity-planner/reference/phase-index.md` when present under the skill directory.

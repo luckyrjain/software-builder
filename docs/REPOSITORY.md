@@ -50,10 +50,16 @@ Each skill directory follows the same pattern:
 <!-- registry-skills-table:start -->
 | Skill | Category | Invocation | Install requires | Lint target |
 |-------|----------|------------|------------------|-------------|
+| `api-design-review` | review | ambient | — | `make lint-api-design-review` |
 | `api-test-creator` | testing | ambient | — | `make lint-api-test-creator` |
+| `architecture-review` | review | ambient | — | `make lint-architecture-review` |
 | `backlog-runner` | automation | automation-only | loop-task-implementer | `make lint-backlog-runner` |
+| `capacity-planner` | platform | ambient | — | `make lint-capacity-planner` |
 | `contract-test-creator` | testing | ambient | — | `make lint-contract-test-creator` |
 | `cost-optimization-sprint-planner` | platform | ambient | k8s-overprovisioning-datadog, squad-map | `make lint-cost-optimization-sprint-planner` |
+| `database-review` | review | ambient | — | `make lint-database-review` |
+| `dependency-upgrade-review` | review | ambient | — | `make lint-dependency-upgrade-review` |
+| `deployment-risk-review` | review | ambient | — | `make lint-deployment-risk-review` |
 | `domain-comprehension` | architecture | ambient | squad-map | `make lint-domain-comprehension` |
 | `e2e-test-creator` | testing | ambient | — | `make lint-e2e-test-creator` |
 | `incident-rca` | incident | ambient | — | `make lint-incident-rca` |
@@ -64,11 +70,16 @@ Each skill directory follows the same pattern:
 | `migration-program-manager` | migration | ambient | mysql-to-postgres-sql, squad-map | `make lint-migration-program-manager` |
 | `mysql-to-postgres-sql` | migration | ambient | — | `make lint-mysql-to-postgres-sql` |
 | `new-hire-guide` | architecture | ambient | domain-comprehension, squad-map | `make lint-new-hire-guide` |
+| `observability-review` | review | ambient | — | `make lint-observability-review` |
+| `performance-review` | review | ambient | — | `make lint-performance-review` |
 | `pr-gatekeeper` | review | automation-only | pr-review | `make lint-pr-gatekeeper` |
 | `pr-review` | review | ambient | — | `make lint-pr-review` |
 | `prd-architect` | product | ambient | — | `make lint-prd-architect` |
 | `release-readiness-checker` | release | ambient | pr-review, k8s-overprovisioning-datadog, incident-rca | `make lint-release-readiness-checker` |
+| `security-review` | review | ambient | — | `make lint-security-review` |
 | `squad-map` | architecture | ambient | — | `make lint-squad-map` |
+| `system-design` | architecture | ambient | — | `make lint-system-design` |
+| `tech-debt-assessor` | platform | ambient | — | `make lint-tech-debt-assessor` |
 | `test-writer` | product | ambient | unit-test-creator, integration-test-creator, contract-test-creator, e2e-test-creator, api-test-creator | `make lint-test-writer` |
 | `unit-test-creator` | testing | ambient | — | `make lint-unit-test-creator` |
 | `weekly-squad-digest` | migration | automation-only | migration-program-manager, cost-optimization-sprint-planner | `make lint-weekly-squad-digest` |
@@ -487,5 +498,7 @@ These improve discoverability but cannot be changed from a PR:
 | weekly-squad-digest | None — no MCP calls at all, pure file aggregation | Requires migration-program-manager and cost-optimization-sprint-planner each already run at least once |
 | test-writer | None — router only, dispatches to the skills below | Requires at least one of the four dispatch targets installed and configured |
 | unit-test-creator, integration-test-creator, contract-test-creator, e2e-test-creator, api-test-creator | None — use the host agent's own repo read/write access | Host's test-runner/browser/API access (set `run_tests: false` to draft without executing) |
+| prd-architect | None — analysis and drafting skill, no MCP, no repository access | Web search for material unknowns (generalized queries only) |
+| architecture-review, system-design, api-design-review, database-review, security-review, performance-review, capacity-planner, observability-review, deployment-risk-review, dependency-upgrade-review, tech-debt-assessor | None — read-only repository access at most; each reads supplied PRD/design/code/config/data content, no MCP required | None |
 
 Per-skill setup: see each skill's `SETUP.md`.

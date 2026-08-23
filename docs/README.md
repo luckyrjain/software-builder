@@ -47,6 +47,18 @@ Each skill is a self-contained directory copied to `~/.cursor/skills/<name>/` on
 | **contract-test-creator** | [contract-test-creator/README.md](../contract-test-creator/README.md) | [contract-test-creator/SKILL.md](../contract-test-creator/SKILL.md) | [contract-test-creator/SETUP.md](../contract-test-creator/SETUP.md) |
 | **e2e-test-creator** | [e2e-test-creator/README.md](../e2e-test-creator/README.md) | [e2e-test-creator/SKILL.md](../e2e-test-creator/SKILL.md) | [e2e-test-creator/SETUP.md](../e2e-test-creator/SETUP.md) |
 | **api-test-creator** | [api-test-creator/README.md](../api-test-creator/README.md) | [api-test-creator/SKILL.md](../api-test-creator/SKILL.md) | [api-test-creator/SETUP.md](../api-test-creator/SETUP.md) |
+| **prd-architect** | [prd-architect/README.md](../prd-architect/README.md) | [prd-architect/SKILL.md](../prd-architect/SKILL.md) | [prd-architect/SETUP.md](../prd-architect/SETUP.md) |
+| **architecture-review** | [architecture-review/README.md](../architecture-review/README.md) | [architecture-review/SKILL.md](../architecture-review/SKILL.md) | [architecture-review/SETUP.md](../architecture-review/SETUP.md) |
+| **system-design** | [system-design/README.md](../system-design/README.md) | [system-design/SKILL.md](../system-design/SKILL.md) | [system-design/SETUP.md](../system-design/SETUP.md) |
+| **api-design-review** | [api-design-review/README.md](../api-design-review/README.md) | [api-design-review/SKILL.md](../api-design-review/SKILL.md) | [api-design-review/SETUP.md](../api-design-review/SETUP.md) |
+| **database-review** | [database-review/README.md](../database-review/README.md) | [database-review/SKILL.md](../database-review/SKILL.md) | [database-review/SETUP.md](../database-review/SETUP.md) |
+| **security-review** | [security-review/README.md](../security-review/README.md) | [security-review/SKILL.md](../security-review/SKILL.md) | [security-review/SETUP.md](../security-review/SETUP.md) |
+| **performance-review** | [performance-review/README.md](../performance-review/README.md) | [performance-review/SKILL.md](../performance-review/SKILL.md) | [performance-review/SETUP.md](../performance-review/SETUP.md) |
+| **capacity-planner** | [capacity-planner/README.md](../capacity-planner/README.md) | [capacity-planner/SKILL.md](../capacity-planner/SKILL.md) | [capacity-planner/SETUP.md](../capacity-planner/SETUP.md) |
+| **observability-review** | [observability-review/README.md](../observability-review/README.md) | [observability-review/SKILL.md](../observability-review/SKILL.md) | [observability-review/SETUP.md](../observability-review/SETUP.md) |
+| **deployment-risk-review** | [deployment-risk-review/README.md](../deployment-risk-review/README.md) | [deployment-risk-review/SKILL.md](../deployment-risk-review/SKILL.md) | [deployment-risk-review/SETUP.md](../deployment-risk-review/SETUP.md) |
+| **dependency-upgrade-review** | [dependency-upgrade-review/README.md](../dependency-upgrade-review/README.md) | [dependency-upgrade-review/SKILL.md](../dependency-upgrade-review/SKILL.md) | [dependency-upgrade-review/SETUP.md](../dependency-upgrade-review/SETUP.md) |
+| **tech-debt-assessor** | [tech-debt-assessor/README.md](../tech-debt-assessor/README.md) | [tech-debt-assessor/SKILL.md](../tech-debt-assessor/SKILL.md) | [tech-debt-assessor/SETUP.md](../tech-debt-assessor/SETUP.md) |
 
 A one-line "invoke / does" summary of every skill is in root [README.md § Skills](../README.md#skills) —
 not repeated here to avoid two independently-maintained copies drifting apart.
@@ -100,6 +112,24 @@ Skills reference each other when a finding belongs in another workflow:
 | integration-test-creator | Caller wants a consumer/provider agreement, not a live integration test | contract-test-creator |
 | integration-test-creator / contract-test-creator | Caller wants a standalone black-box HTTP suite | api-test-creator |
 | api-test-creator | Caller wants a consumer/provider interaction agreement, not a standalone suite | contract-test-creator |
+| prd-architect | PRD needs an architecture decision before implementation | architecture-review |
+| architecture-review | Decision approved, needs implementation-level design | system-design |
+| architecture-review | Decision approved and ready to build | loop-task-implementer |
+| system-design | API surface defined, needs contract review | api-design-review |
+| system-design | Data model defined, needs schema review | database-review |
+| system-design | Design ready, needs an observability plan review | observability-review |
+| api-design-review | Authorization gap looks exploitable | security-review |
+| database-review | Finding suggests a broader performance problem | performance-review |
+| pr-review | Security-sensitive finding on the reviewed MR | security-review |
+| security-review | Vulnerable dependency is the root cause | dependency-upgrade-review |
+| dependency-upgrade-review | CVE looks exploitable in this codebase's actual usage | security-review |
+| performance-review | Finding means the service needs re-forecasted capacity | capacity-planner |
+| capacity-planner | Forecast should be checked against live rightsizing data | k8s-overprovisioning-datadog |
+| observability-review | Gap directly explains slow incident detection | incident-rca |
+| deployment-risk-review | Caller wants the full multi-repo release go/no-go sweep, not one change | release-readiness-checker |
+| deployment-risk-review | Deploy already happened and something broke | incident-triage-agent |
+| tech-debt-assessor | A top-priority item is really a multi-service migration | migration-program-manager |
+| tech-debt-assessor | A top-priority item is really a resource/cost problem | cost-optimization-sprint-planner |
 
 Full symmetric matrix (forward + reverse escalations):
 [docs/skill-framework/shared/cross-skill-escalation.md](skill-framework/shared/cross-skill-escalation.md).

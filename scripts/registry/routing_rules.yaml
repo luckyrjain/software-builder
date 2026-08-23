@@ -82,6 +82,39 @@ routes:
   prd-architect:
     patterns:
       - '\b(PRD|product requirements?|requirements document|build readiness)\b'
+  architecture-review:
+    patterns:
+      - '\b(architecture review|ADR|architecture decision record|architecture design review)\b'
+  system-design:
+    patterns:
+      - '\b(system design|technical design doc|component design|data model design)\b'
+  api-design-review:
+    patterns:
+      - '\b(API design review|API contract review|API versioning review)\b'
+  database-review:
+    patterns:
+      - '\b(database review|schema review|migration review|query plan review)\b'
+  security-review:
+    patterns:
+      - '\b(security review|authN|authZ|SSRF|tenant isolation review|cryptography review)\b'
+  performance-review:
+    patterns:
+      - '\b(performance review|N\+1|slow query review|concurrency review)\b'
+  capacity-planner:
+    patterns:
+      - '\b(capacity plan(?:ning)?|capacity forecast|scaling requirements)\b'
+  observability-review:
+    patterns:
+      - '\b(observability review|SLO review|alert coverage|tracing coverage)\b'
+  deployment-risk-review:
+    patterns:
+      - '\b(deployment risk|release risk|blast radius)\b'
+  dependency-upgrade-review:
+    patterns:
+      - '\b(dependency upgrade review|version bump review|CVE review)\b'
+  tech-debt-assessor:
+    patterns:
+      - '\b(tech(?:nical)? debt (?:assess|priorit|rank)|debt backlog)\b'
   test-writer:
     patterns:
       - '\b(write|generate|add)\b\s+(tests?|test coverage)\b(?!.*\b(unit|integration|contract|e2e|end[- ]to[- ]end|API|HTTP|REST)\b)'

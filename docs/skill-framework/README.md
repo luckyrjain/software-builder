@@ -5,7 +5,10 @@ Normative conventions for **pr-review**, **pr-gatekeeper**, **incident-rca**, **
 **mysql-to-postgres-sql**, **loop-task-implementer**, **backlog-runner**, **new-hire-guide**,
 **release-readiness-checker**, **migration-program-manager**, **cost-optimization-sprint-planner**,
 **weekly-squad-digest**, **test-writer**, **unit-test-creator**, **integration-test-creator**,
-**contract-test-creator**, **e2e-test-creator**, **api-test-creator**, and **prd-architect**.
+**contract-test-creator**, **e2e-test-creator**, **api-test-creator**, **prd-architect**,
+**architecture-review**, **system-design**, **api-design-review**, **database-review**,
+**security-review**, **performance-review**, **capacity-planner**, **observability-review**,
+**deployment-risk-review**, **dependency-upgrade-review**, and **tech-debt-assessor**.
 
 `test-writer` is a thin router (like `who-owns-x-bot`/`release-readiness-checker`) that classifies a
 test-writing request by level and dispatches to exactly one of `unit-test-creator`,

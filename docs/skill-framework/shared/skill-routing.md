@@ -38,7 +38,18 @@ When adding a new skill, add it here first; then each existing skill only needs 
 | Local uncommitted diff, review unstaged | **Host local diff/code-review workflow** — no registered skill owns local-only diff review | pr-review |
 | Required provider/capability unavailable or unauthorized | Follow **mcp-error-handling.md** and the skill's declared degraded mode; do not route to an unregistered setup skill | all registered skills |
 | Live rollback, kubectl apply, deploy, restart pods | **Out of scope** — accountable operator or explicitly authorized host workflow | all skills |
-| Security-only deep review (no MR) | **pr-review** with security persona | — |
+| Security-only deep review (no MR) | **security-review** | pr-review (general code-quality review, which escalates here for security-sensitive findings) |
+| Architecture review, ADR, architecture decision record, design review, "should we build it this way", scale limits, failure modes, proposed design + diagram | **architecture-review** | prd-architect (PRD authoring), system-design (implementation-level design), pr-review (already-merged code) |
+| System design, technical design doc, component design, data model, state machine, rollout plan, implementation-oriented design | **system-design** | architecture-review (whether the architecture is sound), api-design-review (an existing API's contract), prd-architect (the PRD itself) |
+| API design review, API contract review, breaking change (API), API versioning, pagination design | **api-design-review** | pr-review (full MR review), database-review (schema), system-design (whole-system design) |
+| Database review, schema review, migration review, index review, query plan, locking, partitioning | **database-review** | mysql-to-postgres-sql (dialect rewrite), pr-review (general MR review), capacity-planner (forecasting) |
+| Security review, authN, authZ, injection, SSRF, tenant isolation, secrets, cryptography review | **security-review** | pr-review (general code-quality review, which escalates here for security-sensitive findings), dependency-upgrade-review (CVE sweep) |
+| Performance review, N+1, slow query, cache design, concurrency review, connection pool sizing | **performance-review** | capacity-planner (turning demand into capacity numbers), database-review (schema/index design directly) |
+| Capacity planning, capacity forecast, scaling requirements, replica count, headroom | **capacity-planner** | k8s-overprovisioning-datadog (current rightsizing against live metrics), performance-review (code review) |
+| Observability review, SLO review, alert coverage, tracing coverage, correlation ID, dashboard review | **observability-review** | incident-rca (investigating a live incident), deployment-risk-review (risk for a specific release) |
+| Deployment risk, release risk, blast radius, rollback plan, go/no-go for one change | **deployment-risk-review** | release-readiness-checker (multi-repo release sweep), incident-triage-agent (an incident that already happened) |
+| Dependency upgrade, version bump review, CVE review, breaking change (library), transitive dependency | **dependency-upgrade-review** | security-review (a dedicated deep security audit), mysql-to-postgres-sql (the MySQL-to-Postgres migration itself) |
+| Tech debt, debt prioritization, debt backlog, engineering drag, refactor prioritization | **tech-debt-assessor** | migration-program-manager (planning a specific migration program), cost-optimization-sprint-planner (cost/rightsizing sweep) |
 
 ## Disambiguation rules
 
@@ -62,6 +73,7 @@ When adding a new skill, add it here first; then each existing skill only needs 
 18. **Scheduled combined squad digest, no human turn available** → weekly-squad-digest; **a fresh single-source rollup, interactive** → migration-program-manager / cost-optimization-sprint-planner directly
 19. **Test creation routing:** one explicitly named level (unit, integration, contract, e2e, or api) → that matching `*-test-creator` directly; **two or more explicitly named complementary levels** → test-writer to build and execute the multi-level plan; level unspecified → test-writer; several levels that are only competing interpretations of one behavior → test-writer asks once rather than dispatching all candidates; **review existing test quality** → pr-review; **implement production behavior** → loop-task-implementer.
 20. **Product spec / PRD / requirements doc** → prd-architect; **"should we build X?" without an authoritative PRD** → prd-architect Validation Mode; **existing PRD + gaps/readiness** → prd-architect Review Mode; **"implement the PRD"** → loop-task-implementer directly; **"map the domain / bounded contexts"** → domain-comprehension directly
+21. **PRD/proposal + "is this the right architecture?"** → architecture-review (decision, risks, scale limits, alternatives); **approved architecture + "design the implementation"** → system-design (components, APIs, data model) directly; **an existing API/schema's own contract** → api-design-review / database-review directly, not architecture-review or system-design; **a specific security/authZ/crypto concern** → security-review directly, not architecture-review's general security-posture section
 
 ## Ambiguous requests — ask
 
