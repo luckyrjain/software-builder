@@ -33,16 +33,15 @@ graph TD
   unit-test-creator["unit-test-creator<br/>leaf"]
   weekly-squad-digest["weekly-squad-digest<br/>trigger"]
   who-owns-x-bot["who-owns-x-bot<br/>router"]
+  api-design-review -.->|escalates| database-review
   api-design-review -.->|escalates| pr-review
   api-design-review -.->|escalates| security-review
-  api-design-review -.->|escalates| system-design
-  architecture-review -.->|escalates| domain-comprehension
   architecture-review -.->|escalates| loop-task-implementer
+  architecture-review -.->|escalates| prd-architect
   architecture-review -.->|escalates| security-review
   architecture-review -.->|escalates| system-design
   backlog-runner -->|requires| loop-task-implementer
   backlog-runner ==>|handoff| loop-task-implementer
-  capacity-planner -.->|escalates| cost-optimization-sprint-planner
   capacity-planner -.->|escalates| k8s-overprovisioning-datadog
   cost-optimization-sprint-planner -->|requires| k8s-overprovisioning-datadog
   cost-optimization-sprint-planner -->|requires| squad-map
@@ -51,7 +50,6 @@ graph TD
   database-review -.->|escalates| mysql-to-postgres-sql
   database-review -.->|escalates| performance-review
   database-review -.->|escalates| pr-review
-  dependency-upgrade-review -.->|escalates| pr-review
   dependency-upgrade-review -.->|escalates| security-review
   deployment-risk-review -.->|escalates| incident-triage-agent
   deployment-risk-review -.->|escalates| release-readiness-checker
@@ -80,8 +78,6 @@ graph TD
   observability-review -.->|escalates| deployment-risk-review
   observability-review -.->|escalates| incident-rca
   performance-review -.->|escalates| capacity-planner
-  performance-review -.->|escalates| database-review
-  performance-review -.->|escalates| pr-review
   pr-gatekeeper -->|requires| pr-review
   pr-gatekeeper ==>|handoff| pr-review
   pr-gatekeeper -.->|escalates| pr-review
@@ -102,10 +98,8 @@ graph TD
   release-readiness-checker -.->|escalates| k8s-overprovisioning-datadog
   release-readiness-checker -.->|escalates| pr-review
   security-review -.->|escalates| dependency-upgrade-review
-  security-review -.->|escalates| pr-review
   system-design -.->|escalates| api-design-review
   system-design -.->|escalates| database-review
-  system-design -.->|escalates| loop-task-implementer
   system-design -.->|escalates| observability-review
   tech-debt-assessor -.->|escalates| cost-optimization-sprint-planner
   tech-debt-assessor -.->|escalates| migration-program-manager

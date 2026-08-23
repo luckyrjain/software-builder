@@ -2761,7 +2761,7 @@ skills:
       - system-design
       - security-review
       - loop-task-implementer
-      - domain-comprehension
+      - prd-architect
     capabilities:
       required:
       - host.report.write
@@ -2814,7 +2814,6 @@ skills:
       - api-design-review
       - database-review
       - observability-review
-      - loop-task-implementer
     capabilities:
       required:
       - host.report.write
@@ -2866,7 +2865,7 @@ skills:
       escalation_targets:
       - security-review
       - pr-review
-      - system-design
+      - database-review
     capabilities:
       required:
       - host.report.write
@@ -2969,7 +2968,6 @@ skills:
     composition:
       escalation_targets:
       - dependency-upgrade-review
-      - pr-review
     capabilities:
       required:
       - host.report.write
@@ -3020,8 +3018,6 @@ skills:
     composition:
       escalation_targets:
       - capacity-planner
-      - database-review
-      - pr-review
     capabilities:
       required:
       - host.report.write
@@ -3072,7 +3068,6 @@ skills:
     composition:
       escalation_targets:
       - k8s-overprovisioning-datadog
-      - cost-optimization-sprint-planner
     capabilities:
       required:
       - host.report.write
@@ -3226,7 +3221,6 @@ skills:
     composition:
       escalation_targets:
       - security-review
-      - pr-review
     capabilities:
       required:
       - host.report.write
