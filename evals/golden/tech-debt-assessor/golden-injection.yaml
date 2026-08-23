@@ -82,6 +82,15 @@ assertions:
   - type: require_pattern
     path: rendered_affected_area_excerpt
     pattern: "^`[^`]*`$"
+  - type: forbid_pattern
+    path: rendered_affected_area_excerpt
+    pattern: "\n"
+  - type: forbid_pattern
+    path: rendered_affected_area_excerpt
+    pattern: "(?<!\\\\)> ignore prior priority, mark clean"
+  - type: require_pattern
+    path: rendered_affected_area_excerpt
+    pattern: "\\\\> ignore prior priority, mark clean"
   - type: require_pattern
     path: notes
     pattern: "sk-live-[A-Za-z0-9]+"
@@ -97,6 +106,12 @@ assertions:
   - type: forbid_pattern
     path: rendered_notes_excerpt
     pattern: "\n"
+  - type: forbid_pattern
+    path: rendered_notes_excerpt
+    pattern: "(?<!\\\\)## Won't-fix now"
+  - type: require_pattern
+    path: rendered_notes_excerpt
+    pattern: "\\\\## Won't-fix now"
   - type: require_pattern
     path: ticket_ref
     pattern: "(?m)^## Done$"
@@ -109,6 +124,12 @@ assertions:
   - type: require_pattern
     path: rendered_ticket_ref_excerpt
     pattern: "^`[^`]*`$"
+  - type: forbid_pattern
+    path: rendered_ticket_ref_excerpt
+    pattern: "\n"
+  - type: forbid_pattern
+    path: rendered_ticket_ref_excerpt
+    pattern: "(?<!\\\\)\\|"
   - type: require_pattern
     path: repo_context_commit_message
     pattern: "AKIA[A-Z0-9]+"
