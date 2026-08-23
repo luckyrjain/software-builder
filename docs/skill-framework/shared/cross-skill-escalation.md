@@ -87,6 +87,8 @@ know about — don't treat it as a "you may want to" row the way every other row
 | System design defines a data model needing schema review | system-design → database-review | Data model from design spec | "Review the database schema for `{feature}`" |
 | System design ready, needs an observability plan review | system-design → observability-review | Observability plan from design spec | "Review observability coverage for `{feature}`" |
 | API design finding looks exploitable | api-design-review → security-review | Endpoint + authorization gap | "Security review of `{endpoint}` — authorization gap found in API design review" |
+| Reviewing one already-merged MR's API change, not a standalone design | api-design-review → pr-review | MR !IID + API design findings | "Review MR !{iid} for the API design change found during API design review" |
+| The API's underlying data model needs review | api-design-review → database-review | Data model/schema from API spec | "Review the database schema for `{feature}` — flagged during API design review" |
 | Review request is actually a MySQL→Postgres dialect migration, not a general schema review | database-review → mysql-to-postgres-sql | Schema/query findings + service path | "Scan/rewrite MySQL dialect in `{service}` — flagged as a PG migration during schema review" |
 | Reviewing one MR's migration, not a standalone schema review | database-review → pr-review | MR !IID + schema/migration findings | "Review MR !{iid} for the schema/migration change found during database review" |
 | Database review finding suggests a broader performance problem | database-review → performance-review | Query/index finding | "Performance review of `{service}` — {finding} found in database review" |

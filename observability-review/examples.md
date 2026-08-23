@@ -152,8 +152,11 @@ material actually supports) and not silently dropped from the table.
 | `payments-service to ledger-service` | Unknown | No tracing material supplied for this hop |
 ```
 
-Coverage verdict is at least `Unknown — insufficient input` from this hop alone (no `Critical gaps` proven
-elsewhere in this example).
+Coverage verdict is at least `Partial gaps` from this hop alone: Tracing has some material (hop 1 assessed
+clean), so it does not satisfy [workflow/report.md § Report](workflow/report.md)'s `Unknown — insufficient
+input` tier, which requires every check in the category to be `Unknown`; a single gapped hop inside an
+otherwise-assessed category falls to `Partial gaps` instead (no `Critical gaps` proven elsewhere in this
+example).
 
 ---
 

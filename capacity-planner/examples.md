@@ -88,6 +88,38 @@ shortfall. Report derives Headroom `Insufficient` (precedence winner over any ot
 
 ---
 
+### Scenario: Thin headroom — Marginal
+
+**Caller:** Same demand series as the clean happy-path scenario, but `current_baseline` states a DB
+connection limit of 125 (no stated replica ceiling).
+
+**Agent:**
+
+1. Inputs — `demand_data`, `forecast_horizon`, `current_baseline` all present; `growth_rate` and
+   `peak_avg_ratio` derived from the trend as in the happy-path scenario
+2. Analyze — same projections as the happy-path scenario (replica requirement 10, projected DB
+   connections ~114); 114 projected connections against a stated limit of 125 is 91% utilization — within
+   10% of the known ceiling, though it does not exceed it; no other section proves or nears a shortfall
+3. Report — no section exceeds a known ceiling, but the DB dimension sits within 10% of its stated limit
+   → Headroom `Marginal` (thin headroom, no known ceiling exceeded)
+
+**Expected fragment:**
+
+```
+**Headroom: Marginal**
+
+> Marginal — projected DB connections (114) sit within 10% of the stated connection limit (125); no
+> known ceiling is exceeded, but headroom is thin.
+
+## Database
+
+| Metric | Current | Projected | Basis |
+|--------|---------|-----------|-------|
+| Connections | 90 | 114 (limit: 125) | Concurrency (204) × connections-per-concurrent-request ratio (0.56, derived from current_baseline: 90 ÷ 161 current concurrency) |
+```
+
+---
+
 ### Scenario: Evidence gap — Unknown
 
 **Caller:** `demand_data`: only 6 weeks of usage numbers with no clear upward or downward pattern

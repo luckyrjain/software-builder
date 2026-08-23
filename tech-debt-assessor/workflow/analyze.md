@@ -10,6 +10,7 @@ produces:
 consumes:
   - debt_items
   - repo_context
+  - effort_unit
 ---
 
 # Analyze — score each debt item on four dimensions
