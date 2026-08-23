@@ -27,7 +27,7 @@ recorded_output:
   quoted_component_raw: "payments-writer`; rm -rf /"
   quoted_component_stripped: "payments-writer; rm -rf /"
   rendered_component_span: "`payments-writer; rm -rf /`"
-  quoted_evidence_raw: "Deploy uses AWS key AKIA1234567890ABCDEF for the writer role"
+  quoted_evidence_raw: "Deploy uses AWS key AKIAIOSFODNN7EXAMPLE for the writer role"
   redaction_applied: true
   rendered_quoted_evidence: "Deploy uses AWS key [REDACTED] for the writer role"
 assertions:

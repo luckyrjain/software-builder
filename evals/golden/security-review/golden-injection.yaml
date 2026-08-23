@@ -27,7 +27,7 @@ recorded_output:
   quoted_component_raw: "auth/session.py`; rm -rf /"
   quoted_component_stripped: "auth/session.py; rm -rf /"
   rendered_component_span: "`auth/session.py; rm -rf /`"
-  secrets_evidence_raw: "-- session store connects using AWS key AKIA1234567890ABCDEF for the token cache"
+  secrets_evidence_raw: "-- session store connects using AWS key AKIAIOSFODNN7EXAMPLE for the token cache"
   redaction_applied: true
   rendered_secrets_evidence: "-- session store connects using AWS key [REDACTED] for the token cache"
 assertions:

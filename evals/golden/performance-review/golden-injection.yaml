@@ -28,7 +28,7 @@ recorded_output:
   quoted_component_raw: "processCheckout`; rm -rf / #"
   quoted_component_stripped: "processCheckout; rm -rf / #"
   rendered_component_span: "`processCheckout; rm -rf / #`"
-  profiling_excerpt_raw: "-- profiler capture includes AWS key AKIA1234567890ABCDEF embedded in the pooled connection env"
+  profiling_excerpt_raw: "-- profiler capture includes AWS key AKIAIOSFODNN7EXAMPLE embedded in the pooled connection env"
   redaction_applied: true
   rendered_profiling_excerpt: "-- profiler capture includes AWS key [REDACTED] embedded in the pooled connection env"
 assertions:

@@ -28,7 +28,7 @@ recorded_output:
   quoted_component_raw: "/orders/{id}`; rm -rf /"
   quoted_component_stripped: "/orders/{id}; rm -rf /"
   rendered_component_span: "`/orders/{id}; rm -rf /`"
-  quoted_evidence_raw: "example request uses API key AKIA1234567890ABCDEF for the orders-write scope"
+  quoted_evidence_raw: "example request uses API key AKIAIOSFODNN7EXAMPLE for the orders-write scope"
   redaction_applied: true
   rendered_quoted_evidence: "example request uses API key [REDACTED] for the orders-write scope"
 assertions:

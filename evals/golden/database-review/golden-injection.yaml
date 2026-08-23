@@ -28,7 +28,7 @@ recorded_output:
   quoted_component_raw: "orders_writer`; DROP TABLE users; --"
   quoted_component_stripped: "orders_writer; DROP TABLE users; --"
   rendered_component_span: "`orders_writer; DROP TABLE users; --`"
-  quoted_evidence_raw: "-- migration deploy uses AWS key AKIA1234567890ABCDEF for the backfill role"
+  quoted_evidence_raw: "-- migration deploy uses AWS key AKIAIOSFODNN7EXAMPLE for the backfill role"
   redaction_applied: true
   rendered_quoted_evidence: "-- migration deploy uses AWS key [REDACTED] for the backfill role"
 assertions:

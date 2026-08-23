@@ -27,7 +27,7 @@ recorded_output:
   component_name_raw: "checkout-api`; DROP TABLE replicas; --"
   component_name_stripped: "checkout-api; DROP TABLE replicas; --"
   rendered_component_span: "`checkout-api; DROP TABLE replicas; --`"
-  baseline_excerpt_raw: "current_baseline note: backfill role authenticates with AWS key AKIA1234567890ABCDEF"
+  baseline_excerpt_raw: "current_baseline note: backfill role authenticates with AWS key AKIAIOSFODNN7EXAMPLE"
   redaction_applied: true
   rendered_baseline_excerpt: "current_baseline note: backfill role authenticates with AWS key [REDACTED]"
 assertions:

