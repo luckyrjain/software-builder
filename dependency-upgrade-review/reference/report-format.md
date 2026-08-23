@@ -68,8 +68,12 @@ boundary above where used.>
 
 ## Notes
 
-<Any evidence gap not already captured above (no `changelog_text`, no `manifest_excerpt`, an
-advisory source that couldn't be reached) — stated explicitly, never silently absorbed into the verdict.>
+<Any evidence gap not already captured above (no `changelog_text`, no `manifest_excerpt`) — stated
+explicitly, never silently absorbed into the verdict. Always also disclose the standing CVE caveat: CVE
+findings are reasoned from the model's training-time knowledge of public advisories, not a live database
+(this skill has no CVE/advisory MCP or external lookup), and may miss advisories disclosed after the
+training cutoff or for very recent releases. This caveat is a standing disclosure, not an evidence gap,
+and does not by itself pull the verdict to `Blocked — insufficient info`.>
 ```
 
 ## Rules
@@ -82,13 +86,18 @@ advisory source that couldn't be reached) — stated explicitly, never silently 
     fix, or a CVE affecting `target_version` with no further fix available.
   - `Blocked — insufficient info` — an **evidence gap**, not a proven blocker and not verified-safe
     either: no `changelog_text` and the breaking-change/API-difference checks can't be completed from
-    version numbers alone, or no `manifest_excerpt` and the transitive-dependency check can't be run, or
-    an advisory source was unreachable. Never folded into `Do not upgrade yet` (that would fabricate a
-    finding no check actually made) or into `Safe to upgrade` (that would hide a real gap).
+    version numbers alone, or no `manifest_excerpt` and the transitive-dependency check can't be run. The
+    CVE check's standing training-cutoff caveat (this skill reasons from the model's training-time
+    knowledge, not a live advisory source — see [workflow/analyze.md](../workflow/analyze.md)) is always
+    disclosed but is not itself an evidence gap and does not on its own trigger this state. Never folded
+    into `Do not upgrade yet` (that would fabricate a finding no check actually made) or into `Safe to
+    upgrade` (that would hide a real gap).
   - `Upgrade with mitigations` — breaking changes, CVEs, or transitive conflicts found, but each has a
     stated caller-side fix or mitigation and none is a proven `Do not upgrade yet` blocker.
   - `Safe to upgrade` — none of the above; every check ran and found nothing blocking.
 - **An evidence gap is its own verdict state, never silently merged into a pass or a fail.** A check that
-  could not run (missing `changelog_text`, missing `manifest_excerpt`, unreachable advisory data) is
-  recorded as "Unknown" in its section and pulls the verdict to `Blocked — insufficient info` unless a
-  `Do not upgrade yet` condition is already present elsewhere (worst-first precedence still wins).
+  could not run (missing `changelog_text`, missing `manifest_excerpt`) is recorded as "Unknown" in its
+  section and pulls the verdict to `Blocked — insufficient info` unless a `Do not upgrade yet` condition is
+  already present elsewhere (worst-first precedence still wins). The CVE check's training-cutoff caveat is
+  always disclosed in Notes but is a standing limitation, not an evidence gap, and does not by itself pull
+  the verdict.

@@ -33,11 +33,16 @@ than asserting "no breaking changes" from silence.
 
 ## 2. CVEs
 
-Identify CVEs affecting `current_version`, `target_version`, or both. For each: which version(s) it
-affects, the version it's fixed in (if known), and severity. A CVE affecting only `current_version` and
-already fixed in `target_version` is not a blocker — it's a reason to upgrade, and is recorded as such. A
-CVE affecting `target_version` with no fix available yet is a proven blocker. If advisory data isn't
-reachable, record the gap explicitly rather than reporting "no CVEs found."
+Identify CVEs affecting `current_version`, `target_version`, or both. This skill has no live CVE/advisory
+database lookup (see Prerequisites) — CVEs are reasoned from the model's training-time knowledge of public
+advisories for the package/version pair, not fetched from a reachable-or-unreachable external source. For
+each: which version(s) it affects, the version it's fixed in (if known), and severity. A CVE affecting only
+`current_version` and already fixed in `target_version` is not a blocker — it's a reason to upgrade, and is
+recorded as such. A CVE affecting `target_version` with no fix available yet is a proven blocker. Report
+"no CVEs found" when reasoning turns up none, but always disclose in the report's Notes that CVE findings
+reflect training-cutoff knowledge and may miss advisories disclosed after that cutoff or for very recent
+releases — this caveat is a standing disclosure, not an evidence gap, and on its own never blocks the
+verdict (unlike a missing `changelog_text` or `manifest_excerpt`).
 
 ## 3. API differences
 

@@ -53,7 +53,7 @@ Parse per [workflow/inputs.md](workflow/inputs.md).
 
 | Requirement | Notes |
 |-------------|-------|
-| Read-only repository access | No MCP required — analysis and report-drafting skill |
+| Read-only repository access | No MCP required — analysis and report-drafting skill; CVE findings are reasoned from the model's training-time knowledge of public advisories, not a live/reachable advisory database |
 
 Smoke test: [reference/smoke-test.md](reference/smoke-test.md).
 
@@ -91,9 +91,11 @@ Completion emits the canonical `skill_result` envelope; actions classify against
 diff between `current_version` and `target_version`, CVE check covering both versions, API-difference
 review, transitive dependency impact, rollout risk assessment]; blocked_conditions=[`dependency_name`,
 `current_version`, or `target_version` absent — HARD STOP]; partial_result_behavior=a required check that
-can't be completed (no changelog text, no manifest excerpt, no reachable advisory data) lands as an
-explicit "Unknown" gap in the corresponding report section, never silently dropped or folded into
-Safe-to-upgrade.
+can't be completed (no changelog text, no manifest excerpt) lands as an explicit "Unknown" gap in the
+corresponding report section, never silently dropped or folded into Safe-to-upgrade. The CVE check has no
+live advisory source to be reachable or unreachable — it reasons from the model's training-time knowledge
+of public advisories, and that training-cutoff bound is always disclosed in the report's Notes as a
+standing caveat rather than as a conditional evidence gap.
 
 Routing: [skill-routing.md](../docs/skill-framework/shared/skill-routing.md) · shared conventions:
 [docs/skill-framework/README.md](../docs/skill-framework/README.md) · confidence
