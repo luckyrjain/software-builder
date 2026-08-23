@@ -498,5 +498,7 @@ These improve discoverability but cannot be changed from a PR:
 | weekly-squad-digest | None — no MCP calls at all, pure file aggregation | Requires migration-program-manager and cost-optimization-sprint-planner each already run at least once |
 | test-writer | None — router only, dispatches to the skills below | Requires at least one of the four dispatch targets installed and configured |
 | unit-test-creator, integration-test-creator, contract-test-creator, e2e-test-creator, api-test-creator | None — use the host agent's own repo read/write access | Host's test-runner/browser/API access (set `run_tests: false` to draft without executing) |
+| prd-architect | None — analysis and drafting skill, no MCP, no repository access | Web search for material unknowns (generalized queries only) |
+| architecture-review, system-design, api-design-review, database-review, security-review, performance-review, capacity-planner, observability-review, deployment-risk-review, dependency-upgrade-review, tech-debt-assessor | None — read-only repository access at most; each reads supplied PRD/design/code/config/data content, no MCP required | None |
 
 Per-skill setup: see each skill's `SETUP.md`.

@@ -257,6 +257,7 @@ MCP is **skill-specific**, not a prerequisite for installing or browsing the rep
 | `k8s-overprovisioning-datadog` | At least one sufficient evidence source: read-only Kubernetes MCP or Datadog |
 | `cost-optimization-sprint-planner` | Datadog for its namespace pre-filter; then inherits the Kubernetes skill's per-deployment routing |
 | `backlog-runner` | Jira or GitHub Issues access |
+| `prd-architect`, `architecture-review`, `system-design`, `api-design-review`, `database-review`, `security-review`, `performance-review`, `capacity-planner`, `observability-review`, `deployment-risk-review`, `dependency-upgrade-review`, `tech-debt-assessor` | No MCP; analysis and report-drafting skills that read supplied content (and, at most, read-only repository access) |
 | Composed skills | Inherit the capabilities of the skills they call |
 
 Read the selected skill's `SETUP.md` before its first real run. The complete required/optional matrix
