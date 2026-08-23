@@ -15,7 +15,7 @@ Conventions: [examples-conventions](../docs/skill-framework/shared/examples-conv
 | 7 | "How many replicas do we need to handle 3x traffic growth?" | **Wrong skill** → capacity-planner directly (this skill reviews code/query/service content, not forward demand forecasting) |
 | 8 | "Review this migration's index strategy" | **Wrong skill** → database-review directly (schema/index design is out of scope here) |
 | 9 | "Review this whole MR" (broad code-quality ask, not performance-focused) | **Wrong skill** → pr-review directly |
-| 10 | A `Fail — regression risk` finding traces to an unindexed high-cardinality query the service now depends on more heavily | Report includes the finding; Cross-skill escalation offered → **capacity-planner** (re-forecast) and **database-review** (root-cause the index) as follow-ups |
+| 10 | A `Fail — regression risk` finding traces to an unindexed high-cardinality query the service now depends on more heavily | Report includes the finding; Cross-skill escalation offered → **capacity-planner** (re-forecast) as a follow-up |
 
 ---
 

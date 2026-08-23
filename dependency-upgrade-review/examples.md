@@ -13,7 +13,7 @@ Conventions: [examples-conventions](../docs/skill-framework/shared/examples-conv
 | 5 | "Review a dependency upgrade" with no dependency name or versions given | Inputs phase HARD STOPs and asks for `dependency_name`, `current_version`, `target_version` — no Analyze |
 | 6 | "Bump `openssl` from `1.1.1t` to `3.0.9`" with changelog text but no manifest excerpt | Inputs → Analyze → Report; breaking-change/API-diff checks run from changelog text, transitive-dependency check records an explicit Unknown gap |
 | 7 | "Review upgrading `jackson-databind` `2.9.0`→`2.15.0`" with changelog and manifest text describing a known deserialization CVE affecting `2.9.0`, fixed by `2.15.0`, and the caller asks whether it's exploitable in their own code paths | Inputs → Analyze → Report flags the CVE; offers the **security-review** handoff per Cross-skill escalation |
-| 8 | "This MR also bumps `pytest` from `7.0` to `8.0` — is that part fine?" inside a broader MR-review request | This skill reviews the bump in isolation; offers the **pr-review** handoff for the MR as a whole per Cross-skill escalation |
+| 8 | "This MR also bumps `pytest` from `7.0` to `8.0` — is that part fine?" inside a broader MR-review request | This skill reviews the bump in isolation; the rest of the MR is out of scope and is left to **pr-review** |
 | 9 | "Migrate our MySQL schema to Postgres" | Wrong skill — not a version-bump review → **mysql-to-postgres-sql** directly |
 
 ### Scenario: Clean happy path

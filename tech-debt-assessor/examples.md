@@ -98,8 +98,8 @@ with no known vulnerabilities, just annoying to maintain", affected_area: "inter
 
 1. Inputs — 1 item parsed
 2. Analyze — business_impact 2 (internal tool, no customer/revenue path), engineering_drag 3
-   (touched occasionally, minor friction), operational_risk 1 (no incident history), effort 3 (M/L).
-   Score = (2×3×1)/3 = 2.0
+   (touched occasionally, minor friction), operational_risk 1 (no incident history), effort 2 (M).
+   Score = (2×3×1)/2 = 3.0
 3. Report — `Later` band
 
 **Expected fragment:**
@@ -109,7 +109,7 @@ with no known vulnerabilities, just annoying to maintain", affected_area: "inter
 
 | Item | Business impact | Engineering drag | Operational risk | Effort | Priority score | Priority |
 |------|------------------|-------------------|--------------------|--------|-----------------|----------|
-| `Outdated charting library (internal-tools)` | 2 | 3 | 1 | 3 | 2.0 | Later |
+| `Outdated charting library (internal-tools)` | 2 | 3 | 1 | 2 | 3.0 | Later |
 ```
 
 ---
@@ -122,7 +122,7 @@ affected_area: "payments"}]` — no `notes`, no `ticket_ref`, no `repo_context` 
 **Agent:**
 
 1. Inputs — 1 item parsed; description is thin (no specifics on frequency, failure mode, or history)
-2. Analyze — business_impact 3 (payments-adjacent, but no concrete exposure cited), effort 3 (M);
+2. Analyze — business_impact 3 (payments-adjacent, but no concrete exposure cited), effort 2 (M);
    engineering_drag and operational_risk cannot be scored — no churn/incident signal available and no
    corroborating `repo_context` was supplied to check. Both recorded `Unknown` rather than guessed.
 3. Report — `priority_score: Unknown`, item never enters the Now/Next/Later/Won't-fix-now ladder
@@ -134,7 +134,7 @@ affected_area: "payments"}]` — no `notes`, no `ticket_ref`, no `repo_context` 
 
 | Item | Business impact | Engineering drag | Operational risk | Effort | Priority score | Priority |
 |------|------------------|-------------------|--------------------|--------|-----------------|----------|
-| `Payment retry logic refactor (payments)` | 3 | Unknown | Unknown | 3 | Unknown | Unknown — insufficient evidence |
+| `Payment retry logic refactor (payments)` | 3 | Unknown | Unknown | 2 | Unknown | Unknown — insufficient evidence |
 
 ## Notes
 

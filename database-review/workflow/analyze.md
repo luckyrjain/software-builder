@@ -32,10 +32,14 @@ relationship is implied, denormalization that isn't justified by an access patte
 
 ## 2. Indexing
 
-Cross-reference `schema`'s existing indexes against `queries` and `migration_script`'s DDL changes:
-missing indexes behind a hot `WHERE`/`JOIN`/`ORDER BY` clause, redundant indexes (one is a strict prefix
-of another), wrong column order in a composite index relative to the query's filter/sort pattern,
-indexes added that no supplied query actually uses.
+Cross-reference whichever of `schema`'s existing indexes and `migration_script`'s DDL changes are
+supplied against `queries`: missing indexes behind a hot `WHERE`/`JOIN`/`ORDER BY` clause, redundant
+indexes (one is a strict prefix of another), wrong column order in a composite index relative to the
+query's filter/sort pattern, indexes added that no supplied query actually uses. `queries` is the only
+input this dimension strictly needs — with only `queries` supplied (no `schema`/`migration_script`),
+still flag hot clauses with no evident supporting index in whatever DDL is available; the
+redundant-index, column-order, and unused-added-index checks simply don't apply rather than being a
+separate evidence gap.
 
 ## 3. Locking
 
