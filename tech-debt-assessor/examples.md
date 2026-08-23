@@ -13,7 +13,7 @@ Conventions: [examples-conventions](../docs/skill-framework/shared/examples-conv
 | 5 | A backlog with one item scoring in the `Later` band (`priority_score` ≈ 5) | Report derives `Later` |
 | 6 | `debt_items` absent or an empty list | Inputs HARD STOP — ask for the backlog, no Analyze |
 | 7 | An item whose description is too vague to score engineering drag or operational risk | Analyze records `Unknown` for that dimension → Report shows `Priority: Unknown — insufficient evidence`, not a guessed score |
-| 8 | "Is checkout-api overprovisioned?" | **Wrong skill** → cost-optimization-sprint-planner directly |
+| 8 | "Is checkout-api overprovisioned?" | **Wrong skill** → k8s-overprovisioning-datadog directly |
 | 9 | "Plan the migration off the legacy billing service" | **Wrong skill** → migration-program-manager directly |
 | 10 | A "Now" item's description reveals it's actually a multi-service migration, not a fixable debt item | Report flags it in Notes; caller offered handoff to **migration-program-manager** |
 

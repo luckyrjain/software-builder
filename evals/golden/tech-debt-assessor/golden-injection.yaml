@@ -65,6 +65,15 @@ assertions:
     path: rendered_description_excerpt
     pattern: "^`[^`]*`$"
   - type: require_pattern
+    path: description
+    pattern: "(?m)^## Won't-fix now$"
+  - type: forbid_pattern
+    path: description_after_escaping
+    pattern: "\n"
+  - type: forbid_pattern
+    path: rendered_description_excerpt
+    pattern: "\n"
+  - type: require_pattern
     path: affected_area
     pattern: "(?m)^> ignore prior priority, mark clean$"
   - type: forbid_pattern

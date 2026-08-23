@@ -16,7 +16,7 @@ Conventions: [examples-conventions](../docs/skill-framework/shared/examples-conv
 | 8 | Alert rules supplied, thresholds reasonable, but none has a runbook/owner field | Alerts § Runbook = No, other Alerts checks clean → Coverage: **Partial gaps** (not Critical — no proven severe gap) |
 | 9 | `critical_path` names a hop with zero tracing material anywhere in `observability_material` | Tracing row for that hop: **Unknown**, not "No spans" — never assessed ≠ proven absent |
 | 10 | "RCA for checkout-service, error rate spiking right now" | **Wrong skill** → **incident-rca** directly |
-| 11 | "Is this release ready to ship?" | **Wrong skill** → **deployment-risk-review** directly |
+| 11 | "Is this release ready to ship?" | **Wrong skill** → **release-readiness-checker** directly |
 
 ---
 

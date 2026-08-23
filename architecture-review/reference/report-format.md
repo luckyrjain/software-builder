@@ -96,8 +96,8 @@ met before/during implementation. Omit this section entirely for any other verdi
     scale requirement and no alternative path is offered.
   - `Needs rework` — at least one required check surfaces a material, unresolved risk (a scale limit
     inside the proposal's stated growth horizon, a failure mode with no detection/recovery plan, a
-    security trust-boundary gap, no named operability owner) that must be addressed before
-    implementation proceeds, **or** a required check could not be completed at all because
+    security trust-boundary gap, no named operability owner, no alternatives stated) that must be
+    addressed before implementation proceeds, **or** a required check could not be completed at all because
     `design_description` (or a required optional input the check specifically depends on) was too
     sparse or absent — an evidence gap on a required check is not a proven flaw, but it still blocks a
     clean approval.

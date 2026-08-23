@@ -23,9 +23,10 @@ Conventions: [examples-conventions](../docs/skill-framework/shared/examples-conv
 ### Scenario: Clean happy-path forecast
 
 **Caller:** `demand_data`: 12 months of average RPS (rising from 800 to 1,400, ~4%/month), peak:average
-ratio steady at 2.3:1; `forecast_horizon: 6 months`; `current_baseline`: 6 replicas at 2 cores/4GB each,
-per-replica capacity 500 RPS, DB connection limit 200, 90 active DB connections, 50ms average request
-latency, 500GB storage capacity.
+ratio steady at 2.3:1, message queue throughput averaging 120 msgs/sec with the same ~4%/month growth
+trend across the 12 months; `forecast_horizon: 6 months`; `current_baseline`: 6 replicas at 2 cores/4GB
+each, per-replica capacity 500 RPS, DB connection limit 200, 90 active DB connections, 50ms average
+request latency, 500GB storage capacity.
 
 **Agent:**
 
@@ -37,7 +38,10 @@ latency, 500GB storage capacity.
    4,070 × 0.05s ≈ 204); CPU/memory scaled linearly from baseline; DB connections projected from
    concurrency × a connections-per-concurrent-request ratio derived from `current_baseline` (90 current
    connections ÷ 161 current concurrency ≈ 0.56), giving ~114 projected connections (well under the 200
-   limit); storage growth projected from the data-volume trend to ~340GB (under 500GB capacity); replica
+   limit); queue throughput projected from `demand_data`'s own queue metrics scaled by the ~4%/month
+   growth trend to ~152 msgs/sec at horizon end (no queue throughput ceiling stated in `current_baseline`,
+   so no ceiling check applies, but the projection is complete — not a gap); storage growth projected from
+   the data-volume trend to ~340GB (under 500GB capacity); replica
    requirement projected to 10 — bare-minimum 8.14 (4,070 ÷ per-replica capacity of 500 RPS, stated in
    `current_baseline`), the skill's default 20% headroom margin applied on top since the caller supplied
    no `headroom_margin` (8.14 × 1.2 = 9.768), rounded up once to 10 — (under no known ceiling, since
