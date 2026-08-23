@@ -38,7 +38,7 @@ When adding a new skill, add it here first; then each existing skill only needs 
 | Local uncommitted diff, review unstaged | **Host local diff/code-review workflow** — no registered skill owns local-only diff review | pr-review |
 | Required provider/capability unavailable or unauthorized | Follow **mcp-error-handling.md** and the skill's declared degraded mode; do not route to an unregistered setup skill | all registered skills |
 | Live rollback, kubectl apply, deploy, restart pods | **Out of scope** — accountable operator or explicitly authorized host workflow | all skills |
-| Security-only deep review (no MR) | **pr-review** with security persona | — |
+| Security-only deep review (no MR) | **security-review** | pr-review (general code-quality review, which escalates here for security-sensitive findings) |
 | Architecture review, ADR, architecture decision record, design review, "should we build it this way", scale limits, failure modes, proposed design + diagram | **architecture-review** | prd-architect (PRD authoring), system-design (implementation-level design), pr-review (already-merged code) |
 | System design, technical design doc, component design, data model, state machine, rollout plan, implementation-oriented design | **system-design** | architecture-review (whether the architecture is sound), api-design-review (an existing API's contract), prd-architect (the PRD itself) |
 | API design review, API contract review, breaking change (API), API versioning, pagination design | **api-design-review** | pr-review (full MR review), database-review (schema), system-design (whole-system design) |

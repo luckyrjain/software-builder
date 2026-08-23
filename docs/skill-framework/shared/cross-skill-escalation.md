@@ -87,6 +87,8 @@ know about — don't treat it as a "you may want to" row the way every other row
 | System design defines a data model needing schema review | system-design → database-review | Data model from design spec | "Review the database schema for `{feature}`" |
 | System design ready, needs an observability plan review | system-design → observability-review | Observability plan from design spec | "Review observability coverage for `{feature}`" |
 | API design finding looks exploitable | api-design-review → security-review | Endpoint + authorization gap | "Security review of `{endpoint}` — authorization gap found in API design review" |
+| Review request is actually a MySQL→Postgres dialect migration, not a general schema review | database-review → mysql-to-postgres-sql | Schema/query findings + service path | "Scan/rewrite MySQL dialect in `{service}` — flagged as a PG migration during schema review" |
+| Reviewing one MR's migration, not a standalone schema review | database-review → pr-review | MR !IID + schema/migration findings | "Review MR !{iid} for the schema/migration change found during database review" |
 | Database review finding suggests a broader performance problem | database-review → performance-review | Query/index finding | "Performance review of `{service}` — {finding} found in database review" |
 | Security-sensitive finding on an MR under review | pr-review → security-review | MR !IID + finding | "Security review of `{finding}` flagged on MR !{iid}" |
 | Vulnerable dependency is the root cause of a security finding | security-review → dependency-upgrade-review | Dependency + CVE | "Review upgrade path for `{dependency}` — CVE `{cve_id}` found during security review" |
@@ -181,7 +183,7 @@ When `MYSQL_TO_PG_SQL_REWRITES.md` exists in the workspace deliverable directory
 | E2E / browser user-journey tests | e2e-test-creator directly |
 | Black-box API tests — Postman/Newman, no browser | api-test-creator directly |
 | Live rollback / kubectl apply | Out of scope — human operator |
-| Security-only deep review | pr-review with security persona |
+| Security-only deep review | security-review |
 | Cost/billing investigation across services | Canvas + appropriate skill; not auto-routed |
 
 See each skill's **when NOT to use** table in `SKILL.md`.

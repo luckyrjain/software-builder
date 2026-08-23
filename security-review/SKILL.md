@@ -75,7 +75,6 @@ Full matrix: [cross-skill-escalation.md](../docs/skill-framework/shared/cross-sk
 | Finding (this skill) | Next skill |
 |-----------------------|------------|
 | A vulnerable dependency version is the root cause | **dependency-upgrade-review** |
-| This came from a broader MR review needing security depth | **pr-review** (bidirectional — pr-review escalates here for security-sensitive findings) |
 
 ## Post-actions
 

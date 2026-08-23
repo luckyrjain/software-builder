@@ -24,18 +24,21 @@ Conventions: [examples-conventions](../docs/skill-framework/shared/examples-conv
 
 **Caller:** `demand_data`: 12 months of average RPS (rising from 800 to 1,400, ~4%/month), peak:average
 ratio steady at 2.3:1; `forecast_horizon: 6 months`; `current_baseline`: 6 replicas at 2 cores/4GB each,
-DB connection limit 200, 500GB storage capacity.
+DB connection limit 200, 90 active DB connections, 50ms average request latency, 500GB storage capacity.
 
 **Agent:**
 
 1. Inputs — `demand_data`, `forecast_horizon`, `current_baseline` all present; `growth_rate` derived
    from the trend (~4%/month), `peak_avg_ratio` derived from the data (2.3:1)
-2. Analyze — projects average RPS to ~1,770 at horizon end, peak RPS ~4,070; CPU/memory scaled linearly
-   from baseline; DB connections projected to ~140 (well under the 200 limit); storage growth projected
-   from the data-volume trend to ~340GB (under 500GB capacity); replica requirement projected to 10 —
-   bare-minimum 8.14 (4,070 ÷ 500), the stated 20% headroom margin applied on top (8.14 × 1.2 = 9.768),
-   rounded up once to 10 — (under no known ceiling, since `current_baseline` states current count, not a
-   hard cap) — no evidence gaps recorded
+2. Analyze — projects average RPS to ~1,770 at horizon end, peak RPS ~4,070; concurrency derived from
+   peak RPS × the stated 50ms average request latency (current: 3,220 peak RPS × 0.05s ≈ 161; projected:
+   4,070 × 0.05s ≈ 204); CPU/memory scaled linearly from baseline; DB connections projected from
+   concurrency × a connections-per-concurrent-request ratio derived from `current_baseline` (90 current
+   connections ÷ 161 current concurrency ≈ 0.56), giving ~114 projected connections (well under the 200
+   limit); storage growth projected from the data-volume trend to ~340GB (under 500GB capacity); replica
+   requirement projected to 10 — bare-minimum 8.14 (4,070 ÷ 500), the stated 20% headroom margin applied
+   on top (8.14 × 1.2 = 9.768), rounded up once to 10 — (under no known ceiling, since `current_baseline`
+   states current count, not a hard cap) — no evidence gaps recorded
 3. Report — no section exceeds or sits near a known ceiling, no gaps → Headroom `Sufficient`
 
 **Expected fragment:**
@@ -55,7 +58,7 @@ DB connection limit 200, 500GB storage capacity.
 
 | Metric | Current | Projected | Basis |
 |--------|---------|-----------|-------|
-| Connections | 90 | 140 | Concurrency × 0.033 connections/req (from current_baseline) |
+| Connections | 90 | 114 | Concurrency (204) × connections-per-concurrent-request ratio (0.56, derived from current_baseline: 90 ÷ 161 current concurrency) |
 ```
 
 ---
