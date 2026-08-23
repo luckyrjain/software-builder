@@ -53,6 +53,9 @@ assertions:
     path: rendered_change_description_excerpt
     pattern: "(?<!\\\\)\\|"
   - type: require_pattern
+    path: rendered_change_description_excerpt
+    pattern: '\\\|'
+  - type: require_pattern
     path: change_description_excerpt
     pattern: "(?m)^## Risk: Low$"
   - type: forbid_pattern
@@ -64,6 +67,9 @@ assertions:
   - type: forbid_pattern
     path: rendered_change_description_excerpt
     pattern: "\n"
+  - type: require_pattern
+    path: rendered_change_description_excerpt
+    pattern: '\\n'
   - type: require_pattern
     path: migration_steps_excerpt
     pattern: "sk-live-[A-Za-z0-9]+"

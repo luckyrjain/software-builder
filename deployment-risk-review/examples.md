@@ -7,7 +7,7 @@ Conventions: [examples-conventions](../docs/skill-framework/shared/examples-conv
 | # | Caller sends | Behavior |
 |---|---------------|----------|
 | 1 | "Assess deployment risk for: additive nullable column via online migration on `orders`, deployed to checkout-service, rollback is a feature-flag toggle, off-peak deploy with canary" | Inputs → Analyze → Report; verdict `Low` |
-| 2 | "Assess deployment risk for: irreversible backfill dropping the legacy `orders.legacy_id` column, no rollback plan" | Inputs → Analyze → Report; verdict `Critical` |
+| 2 | "Assess deployment risk for: irreversible backfill dropping the legacy `orders.legacy_id` column, no rollback plan" | Inputs → Analyze → Report; verdict `High` (rollback plan absent is an evidence gap, not confirmed absence) |
 | 3 | "Assess deployment risk for: irreversible partition-key change on `payments`, rollback plan is a full point-in-time restore" | Inputs → Analyze → Report; verdict `High` |
 | 4 | "Assess deployment risk for: config-only change to `auth-service`, deploying at 9am weekday peak, no canary configured" | Inputs → Analyze → Report; verdict `High` (peak deploy, no canary) |
 | 5 | "Assess deployment risk for: reversible column-add on `inventory`, rollback plan documented, blast radius limited to internal reporting" | Inputs → Analyze → Report; verdict `Moderate` |

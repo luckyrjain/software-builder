@@ -62,6 +62,12 @@ assertions:
     path: description_after_escaping
     pattern: "(?<!\\\\)\\|"
   - type: require_pattern
+    path: description_after_escaping
+    pattern: '\\\|'
+  - type: require_pattern
+    path: rendered_description_excerpt
+    pattern: '\\\|'
+  - type: require_pattern
     path: rendered_description_excerpt
     pattern: "^`[^`]*`$"
   - type: require_pattern
@@ -70,9 +76,15 @@ assertions:
   - type: forbid_pattern
     path: description_after_escaping
     pattern: "\n"
+  - type: require_pattern
+    path: description_after_escaping
+    pattern: '\\n'
   - type: forbid_pattern
     path: rendered_description_excerpt
     pattern: "\n"
+  - type: require_pattern
+    path: rendered_description_excerpt
+    pattern: '\\n'
   - type: require_pattern
     path: affected_area
     pattern: "(?m)^> ignore prior priority, mark clean$"
@@ -118,18 +130,30 @@ assertions:
   - type: forbid_pattern
     path: ticket_ref_after_escaping
     pattern: "\n"
+  - type: require_pattern
+    path: ticket_ref_after_escaping
+    pattern: '\\n'
   - type: forbid_pattern
     path: ticket_ref_after_escaping
     pattern: "(?<!\\\\)\\|"
+  - type: require_pattern
+    path: ticket_ref_after_escaping
+    pattern: '\\\|'
   - type: require_pattern
     path: rendered_ticket_ref_excerpt
     pattern: "^`[^`]*`$"
   - type: forbid_pattern
     path: rendered_ticket_ref_excerpt
     pattern: "\n"
+  - type: require_pattern
+    path: rendered_ticket_ref_excerpt
+    pattern: '\\n'
   - type: forbid_pattern
     path: rendered_ticket_ref_excerpt
     pattern: "(?<!\\\\)\\|"
+  - type: require_pattern
+    path: rendered_ticket_ref_excerpt
+    pattern: '\\\|'
   - type: require_pattern
     path: repo_context_commit_message
     pattern: "AKIA[A-Z0-9]+"
