@@ -16,7 +16,6 @@ Conventions: [examples-conventions](../docs/skill-framework/shared/examples-conv
 | 8 | "Is `payments-service` currently overprovisioned?" (asking about live/current resource usage, not a forward-looking forecast) | **Wrong skill** → k8s-overprovisioning-datadog directly |
 | 9 | "Review this service for N+1 queries and cache invalidation issues" | **Wrong skill** → performance-review directly |
 | 10 | A clean `Sufficient` plan is produced and the caller asks whether it holds against live metrics | Cross-skill escalation → k8s-overprovisioning-datadog |
-| 11 | An `Insufficient` plan is produced and the caller wants it turned into a scaling/cost sprint | Cross-skill escalation → cost-optimization-sprint-planner |
 
 ---
 

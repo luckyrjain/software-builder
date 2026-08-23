@@ -85,6 +85,12 @@ assertions:
   - type: require_pattern
     path: rendered_description_excerpt
     pattern: '\\n'
+  - type: forbid_pattern
+    path: rendered_description_excerpt
+    pattern: "(?<!\\\\)## Won't-fix now"
+  - type: require_pattern
+    path: rendered_description_excerpt
+    pattern: "\\\\## Won't-fix now"
   - type: require_pattern
     path: affected_area
     pattern: "(?m)^> ignore prior priority, mark clean$"
@@ -154,6 +160,12 @@ assertions:
   - type: require_pattern
     path: rendered_ticket_ref_excerpt
     pattern: '\\\|'
+  - type: forbid_pattern
+    path: rendered_ticket_ref_excerpt
+    pattern: "(?<!\\\\)## Done"
+  - type: require_pattern
+    path: rendered_ticket_ref_excerpt
+    pattern: "\\\\## Done"
   - type: require_pattern
     path: repo_context_commit_message
     pattern: "AKIA[A-Z0-9]+"
