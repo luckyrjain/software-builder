@@ -26,7 +26,8 @@ Derive the `Coverage:` verdict from Analyze's seven category findings, fixed pre
    insufficient input`. An unassessed category always outranks a merely-partial one, because "we don't
    know" must never be presented as if it were "we checked and it's mostly fine."
 3. **`Partial gaps`** — otherwise, if every category had some material and at least one check came back
-   `Partial` or `No`/`Missing` short of the `Critical gaps` bar, the verdict is `Partial gaps`.
+   `Partial`, `No`/`Missing`, or `Unknown` (e.g. one critical-path hop inside an otherwise-assessed
+   category has no material) short of the `Critical gaps` bar, the verdict is `Partial gaps`.
 4. **`Adequate`** — otherwise (every category assessed, every check clean).
 
 When the verdict is not `Adequate`, state which category/categories set it in the one-line summary under

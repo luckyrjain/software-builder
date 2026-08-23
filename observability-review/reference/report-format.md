@@ -106,9 +106,10 @@ applied to a quoted excerpt; any `critical_path` inferred rather than supplied.>
   - `Unknown — insufficient input` — one or more of the seven categories had **no supplied material to
     evaluate**, and no `Critical gaps`/`Partial gaps` finding was otherwise proven from what *was*
     supplied. An unassessed category is not the same as a clean one.
-  - `Partial gaps` — every category had some material to assess, and at least one check is `Partial` or
-    `No` short of the `Critical gaps` bar (e.g. alerts present but noisy/no runbook, a dashboard missing
-    one golden signal).
+  - `Partial gaps` — every category had some material to assess, and at least one check is `Partial`,
+    `No`, or `Unknown` short of the `Critical gaps` bar (e.g. alerts present but noisy/no runbook, a
+    dashboard missing one golden signal, or a single critical-path hop with no material inside an
+    otherwise-assessed category).
   - `Adequate` — every category assessed, no `Critical gaps`, `Partial gaps`, or `Unknown` findings.
 - **An evidence gap (no material supplied for a category) is its own state (`Unknown`) or an explicit
   per-row `Unknown` flag — never silently merged into a clean pass or folded into `Critical gaps`/`Partial
