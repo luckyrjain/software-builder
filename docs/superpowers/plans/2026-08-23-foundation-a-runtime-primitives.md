@@ -595,7 +595,10 @@ def test_validated_runtime_handoff_preserves_but_does_not_upgrade_authority() ->
     )
     trust = classify_assessment_context_trust(
         ctx,
-        runtime_metadata={"acquisition": "runtime_handoff", "parent_skill": "production-readiness-review", "parent_execution_validated": True},
+        runtime_metadata=_issue_runtime_handoff_metadata(
+            parent_skill="production-readiness-review",
+            trusted_authorities={"rollback_plan": "repository"},
+        ),
     )
     assert trust.effective_authority("rollback_plan") == "repository"
 ```

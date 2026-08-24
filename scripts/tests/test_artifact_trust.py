@@ -1,4 +1,5 @@
 from scripts.registry.artifact_trust import (
+    _issue_runtime_handoff_metadata,
     classify_artifact_trust,
     classify_assessment_context_trust,
 )
@@ -34,13 +35,26 @@ def test_caller_context_cannot_self_claim_authoritative_host() -> None:
 
 
 def test_validated_runtime_handoff_preserves_but_does_not_upgrade_authority() -> None:
-    ctx = {"input_provenance": {"rollback_plan": {"authority": "repository"}}}
+    ctx = {"input_provenance": {"rollback_plan": {"authority": "authoritative_host"}}}
+    trust = classify_assessment_context_trust(
+        ctx,
+        runtime_metadata=_issue_runtime_handoff_metadata(
+            parent_skill="production-readiness-review",
+            trusted_authorities={"rollback_plan": "repository"},
+        ),
+    )
+    assert trust.effective_authority("rollback_plan") == "repository"
+
+
+def test_caller_dictionary_cannot_forge_runtime_handoff() -> None:
+    ctx = {"input_provenance": {"rollback_plan": {"authority": "authoritative_host"}}}
     trust = classify_assessment_context_trust(
         ctx,
         runtime_metadata={
             "acquisition": "runtime_handoff",
             "parent_skill": "production-readiness-review",
             "parent_execution_validated": True,
+            "trusted_authorities": {"rollback_plan": "authoritative_host"},
         },
     )
-    assert trust.effective_authority("rollback_plan") == "repository"
+    assert trust.effective_authority("rollback_plan") == "caller"

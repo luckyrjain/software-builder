@@ -1,4 +1,4 @@
-from scripts.registry.artifact_trust import classify_assessment_context_trust
+from scripts.registry.artifact_trust import _issue_runtime_handoff_metadata, classify_assessment_context_trust
 from scripts.registry.embedded_context import resolve_embedded_inputs, validate_embedded_result_target
 
 
@@ -35,6 +35,12 @@ def test_child_result_target_must_match_handoff_target() -> None:
     assert validate_embedded_result_target(assessment_target(head_revision_or_digest="a" * 40), assessment_target(head_revision_or_digest="b" * 40)) != []
 
 
+def test_child_result_target_normalizes_both_scalar_identity_values() -> None:
+    expected = assessment_target(source_type="release_candidate")
+    actual = assessment_target(source_type=" release_candidate ")
+    assert validate_embedded_result_target(expected, actual) == []
+
+
 def test_embedded_handoff_preserves_caller_input_authority() -> None:
     ctx = assessment_context(inputs={"rollback_plan": "always safe"}, input_provenance={"rollback_plan": {"authority": "caller", "evidence_refs": ["caller:rollback"]}})
     resolved = resolve_embedded_inputs(assessment_context=ctx, top_level={})
@@ -42,6 +48,12 @@ def test_embedded_handoff_preserves_caller_input_authority() -> None:
 
 
 def test_validated_runtime_handoff_preserves_but_does_not_upgrade_authority() -> None:
-    ctx = assessment_context(input_provenance={"rollback_plan": {"authority": "repository"}})
-    trust = classify_assessment_context_trust(ctx, runtime_metadata={"acquisition": "runtime_handoff", "parent_skill": "production-readiness-review", "parent_execution_validated": True})
+    ctx = assessment_context(input_provenance={"rollback_plan": {"authority": "authoritative_host"}})
+    trust = classify_assessment_context_trust(
+        ctx,
+        runtime_metadata=_issue_runtime_handoff_metadata(
+            parent_skill="production-readiness-review",
+            trusted_authorities={"rollback_plan": "repository"},
+        ),
+    )
     assert trust.effective_authority("rollback_plan") == "repository"

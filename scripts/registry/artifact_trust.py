@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from types import MappingProxyType
+from typing import Any, Mapping
 
 _AUTHORITIES = {"authoritative_host", "repository", "trusted_runtime", "caller", "model_knowledge"}
+_RUNTIME_HANDOFF_TOKEN = object()
 
 
 @dataclass(frozen=True)
@@ -34,14 +36,38 @@ class AssessmentContextTrust:
     parent_skill: str | None
     parent_execution_validated: bool
     _context: dict[str, Any]
+    _trusted_authorities: Mapping[str, str]
 
     def effective_authority(self, input_name: str) -> str:
-        provenance = self._context.get("input_provenance", {})
-        entry = provenance.get(input_name, {}) if isinstance(provenance, dict) else {}
-        claimed = entry.get("authority") if isinstance(entry, dict) else None
         if self.acquisition != "runtime_handoff" or not self.parent_execution_validated or not self.parent_skill:
             return "caller"
-        return claimed if claimed in _AUTHORITIES else "caller"
+        authority = self._trusted_authorities.get(input_name)
+        return authority if authority in _AUTHORITIES else "caller"
+
+
+@dataclass(frozen=True)
+class _RuntimeHandoffMetadata:
+    """Opaque metadata issued by the composition runtime, not by a caller payload."""
+
+    parent_skill: str
+    trusted_authorities: Mapping[str, str]
+    _token: object
+
+
+def _issue_runtime_handoff_metadata(
+    *, parent_skill: str, trusted_authorities: Mapping[str, str] | None = None
+) -> _RuntimeHandoffMetadata:
+    """Create runtime-owned metadata after the parent has validated its evidence."""
+    authorities = {
+        name: authority
+        for name, authority in (trusted_authorities or {}).items()
+        if isinstance(name, str) and authority in _AUTHORITIES
+    }
+    return _RuntimeHandoffMetadata(
+        parent_skill=parent_skill,
+        trusted_authorities=MappingProxyType(authorities),
+        _token=_RUNTIME_HANDOFF_TOKEN,
+    )
 
 
 def classify_assessment_context_trust(
@@ -50,10 +76,12 @@ def classify_assessment_context_trust(
     runtime_metadata: object,
 ) -> AssessmentContextTrust:
     safe_context = context if isinstance(context, dict) else {}
-    metadata = runtime_metadata if isinstance(runtime_metadata, dict) else {}
-    acquisition = metadata.get("acquisition")
-    if acquisition not in {"runtime_handoff", "caller_supplied"}:
-        acquisition = "caller_supplied"
-    parent_skill = metadata.get("parent_skill") if isinstance(metadata.get("parent_skill"), str) else None
-    validated = metadata.get("parent_execution_validated") is True
-    return AssessmentContextTrust(acquisition, parent_skill, validated, safe_context)
+    if isinstance(runtime_metadata, _RuntimeHandoffMetadata) and runtime_metadata._token is _RUNTIME_HANDOFF_TOKEN:
+        return AssessmentContextTrust(
+            "runtime_handoff",
+            runtime_metadata.parent_skill,
+            True,
+            safe_context,
+            runtime_metadata.trusted_authorities,
+        )
+    return AssessmentContextTrust("caller_supplied", None, False, safe_context, MappingProxyType({}))

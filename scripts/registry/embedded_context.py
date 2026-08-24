@@ -62,10 +62,11 @@ def validate_embedded_result_target(expected: dict[str, Any], actual: dict[str, 
             left, right = normalize_service_identity(left), normalize_service_identity(right)
         elif field == "environment" and isinstance(left, str) and isinstance(right, str):
             left, right = normalize_environment_identity(left), normalize_environment_identity(right)
-        elif isinstance(left, str):
-            left = left.strip()
-        elif isinstance(right, str):
-            right = right.strip()
+        else:
+            if isinstance(left, str):
+                left = left.strip()
+            if isinstance(right, str):
+                right = right.strip()
         if left != right:
             errors.append(f"assessment target mismatch: {field}")
     return errors
