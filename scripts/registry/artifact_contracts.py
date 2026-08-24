@@ -8,6 +8,7 @@ from typing import Any
 
 from scripts.registry.canonical_manifest import is_semver, load_canonical_manifest
 from scripts.registry.composition_contracts import load_contracts
+from scripts.registry.machine_summary import COMMON_MACHINE_SUMMARY_FIELDS, validate_machine_summary
 from scripts.yaml_safety import YAML_SAFETY_ERRORS, require_mapping
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -391,15 +392,19 @@ def validate_artifact_result(
                     }[expected]
                     if not matches:
                         errors.append(f"error: {artifact_type}: payload.{field} must be {expected}")
+        has_machine_summary = set(artifact_schemas.get(artifact_type, [])) >= COMMON_MACHINE_SUMMARY_FIELDS
+        if has_machine_summary:
+            errors.extend(validate_machine_summary({"payload": payload, "provenance": provenance}))
         if provenance:
             provenance_revision = provenance.get("source_revision")
             if provenance_revision not in (None, "UNKNOWN") and (
                 not isinstance(provenance_revision, str) or not provenance_revision
             ):
                 errors.append(f"error: {artifact_type}: provenance.source_revision must be a string, null, or UNKNOWN")
-            sources = provenance.get("sources")
-            if not isinstance(sources, list) or not all(isinstance(source, str) and source for source in sources):
-                errors.append(f"error: {artifact_type}: provenance.sources must be a list of strings")
+            if not has_machine_summary:
+                sources = provenance.get("sources")
+                if not isinstance(sources, list) or not all(isinstance(source, str) and source for source in sources):
+                    errors.append(f"error: {artifact_type}: provenance.sources must be a list of strings")
         if freshness:
             for field in ("observed_at", "source_revision", "source_environment"):
                 value = freshness.get(field)

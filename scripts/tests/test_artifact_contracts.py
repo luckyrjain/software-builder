@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import shutil
+from dataclasses import replace
 from pathlib import Path
 
 import yaml
@@ -11,6 +12,14 @@ from scripts.registry.artifact_contracts import (
     validate_artifact_contracts,
     validate_artifact_result,
 )
+from scripts.registry.machine_summary import (
+    effective_authorities,
+    validate_condition_item,
+    validate_finding_item,
+    validate_machine_summary,
+    validate_required_action_item,
+)
+from scripts.tests.artifact_v2_fixtures import finding, machine_summary_fixture
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -62,6 +71,199 @@ def _valid_result() -> dict:
 
 def _validate(result: object, artifact_type: str = "mr_review_report", producer_skill: str = "pr-review") -> list[str]:
     return validate_artifact_result(ROOT, artifact_type, result, producer_skill=producer_skill)
+
+
+def test_finding_item_rejects_extra_keys() -> None:
+    item = {
+        "id": "F-001",
+        "category": "security",
+        "summary": "auth gap",
+        "blocking": True,
+        "evidence_status": "OBSERVED",
+        "evidence_refs": ["src:1"],
+        "forged": "PASS",
+    }
+    assert any("undeclared" in e for e in validate_finding_item(item))
+
+
+def test_condition_requires_required_before() -> None:
+    item = {"id": "C-001", "summary": "load test", "evidence_refs": ["design:4"]}
+    assert any("required_before" in e for e in validate_condition_item(item))
+
+
+def test_required_action_requires_verification() -> None:
+    item = {
+        "id": "A-001",
+        "summary": "add rollback check",
+        "required_before": "DEPLOY",
+        "evidence_refs": ["risk:2"],
+    }
+    assert any("verification" in e for e in validate_required_action_item(item))
+
+
+def test_root_evidence_refs_must_cover_nested_refs() -> None:
+    summary = machine_summary_fixture(
+        findings=[finding("F-001", evidence_refs=["src:7"])],
+        evidence_refs=[],
+    )
+    assert any("evidence_refs" in e for e in validate_machine_summary(summary))
+
+
+def test_v2_evidence_refs_must_resolve_to_typed_sources() -> None:
+    summary = machine_summary_fixture(
+        evidence_refs=["repo:diff"],
+        provenance_sources=[],
+    )
+    assert any("provenance.sources" in e for e in validate_machine_summary(summary))
+
+
+def test_derived_source_preserves_ultimate_caller_authority() -> None:
+    summary = machine_summary_fixture(
+        evidence_refs=["derived:x"],
+        provenance_sources=[
+            {
+                "ref": "caller:x",
+                "authority": "caller",
+                "kind": "caller_input",
+                "observed_at": "UNKNOWN",
+                "source_revision": "UNKNOWN",
+                "source_environment": "UNKNOWN",
+                "derived_from": [],
+            },
+            {
+                "ref": "derived:x",
+                "authority": "trusted_runtime",
+                "kind": "artifact",
+                "observed_at": "UNKNOWN",
+                "source_revision": "UNKNOWN",
+                "source_environment": "UNKNOWN",
+                "derived_from": ["caller:x"],
+            },
+        ],
+    )
+    assert validate_machine_summary(summary) == []
+    assert effective_authorities(summary, "derived:x") == {"caller"}
+
+
+def test_malformed_derived_source_reference_returns_validation_errors() -> None:
+    summary = machine_summary_fixture(
+        provenance_sources=[
+            {
+                "ref": "repo:diff",
+                "authority": "repository",
+                "kind": "repo_content",
+                "observed_at": "UNKNOWN",
+                "source_revision": "UNKNOWN",
+                "source_environment": "UNKNOWN",
+                "derived_from": [{"forged": "ref"}],
+            }
+        ]
+    )
+
+    assert any("derived_from" in error for error in validate_machine_summary(summary))
+
+
+def test_machine_summary_rejects_malformed_provenance_source_revision() -> None:
+    summary = machine_summary_fixture()
+    summary["provenance"]["source_revision"] = []
+
+    assert any("provenance.source_revision" in error for error in validate_machine_summary(summary))
+
+
+def test_machine_summary_rejects_null_derived_from_without_exception() -> None:
+    summary = machine_summary_fixture()
+    summary["provenance"]["sources"][0]["derived_from"] = None
+
+    assert any("derived_from" in error for error in validate_machine_summary(summary))
+
+
+def test_machine_summary_rejects_integer_derived_from_without_exception() -> None:
+    summary = machine_summary_fixture()
+    summary["provenance"]["sources"][0]["derived_from"] = 1
+
+    assert any("derived_from" in error for error in validate_machine_summary(summary))
+
+
+def test_machine_summary_accepts_a_deep_reverse_ordered_source_chain() -> None:
+    depth = 1_100
+    sources = [
+        {
+            "ref": f"derived:{index}",
+            "authority": "trusted_runtime",
+            "kind": "artifact",
+            "observed_at": "UNKNOWN",
+            "source_revision": "UNKNOWN",
+            "source_environment": "UNKNOWN",
+            "derived_from": [f"derived:{index - 1}"],
+        }
+        for index in range(depth, 0, -1)
+    ]
+    sources.append(
+        {
+            "ref": "derived:0",
+            "authority": "repository",
+            "kind": "repo_content",
+            "observed_at": "UNKNOWN",
+            "source_revision": "UNKNOWN",
+            "source_environment": "UNKNOWN",
+            "derived_from": [],
+        }
+    )
+    summary = machine_summary_fixture(
+        evidence_refs=[f"derived:{depth}"], provenance_sources=sources
+    )
+
+    assert validate_machine_summary(summary) == []
+
+
+def test_artifact_validation_routes_v2_schemas_to_machine_summary(monkeypatch) -> None:
+    original_load_contract_data = artifact_contracts._load_contract_data
+
+    def v2_contract_data(root: Path):
+        (
+            artifact_runtime,
+            runtime,
+            authority_levels,
+            skill_contracts,
+            artifact_types,
+            artifact_schemas,
+            skills,
+        ) = original_load_contract_data(root)
+        v2_fields = list(artifact_contracts.COMMON_MACHINE_SUMMARY_FIELDS)
+        artifact_schemas["mr_review_report"] = v2_fields
+        artifact_runtime["payload_types"]["mr_review_report"] = {
+            "assessment_target": "mapping",
+            "normalized_decision": "string",
+            "findings": "list",
+            "conditions": "list",
+            "required_actions": "list",
+            "evidence_refs": "list",
+        }
+        producer = skill_contracts["pr-review"]
+        skill_contracts["pr-review"] = replace(
+            producer,
+            produce_fields={**producer.produce_fields, "mr_review_report": v2_fields},
+        )
+        return (
+            artifact_runtime,
+            runtime,
+            authority_levels,
+            skill_contracts,
+            artifact_types,
+            artifact_schemas,
+            skills,
+        )
+
+    monkeypatch.setattr(artifact_contracts, "_load_contract_data", v2_contract_data)
+    result = _valid_result()
+    summary = machine_summary_fixture(findings=[finding("F-001")])
+    summary["payload"]["findings"][0]["forged"] = True
+    result["payload"] = summary["payload"]
+    result["provenance"] = summary["provenance"]
+
+    errors = _validate(result)
+
+    assert any("finding contains undeclared fields" in error for error in errors)
 
 
 def test_every_durable_artifact_has_one_runtime_contract() -> None:
