@@ -29,7 +29,7 @@ Routing table: [skill-routing.md](../docs/skill-framework/shared/skill-routing.m
 
 | Use | Not |
 |-----|-----|
-| Turn an approved architecture decision into components/APIs/data model | **architecture-review** — decide whether the architecture itself is sound |
+| Turn a ready PRD or approved architecture decision into components/APIs/data model | **architecture-review** — decide whether the resulting architecture itself is sound |
 | Design a state machine, consistency model, or retry/idempotency strategy | **architecture-review** — architecture-level risk/scale/security verdict |
 | Produce a rollout/migration plan for a new implementation | **prd-architect** — write the PRD itself |
 | Draft an API surface as part of a broader design | **api-design-review** — review an existing API's contract in isolation |
@@ -44,7 +44,7 @@ Rollout plan. Structure: [reference/report-format.md](reference/report-format.md
 
 | Input | Required | Default |
 |-------|----------|---------|
-| `architecture_decision_or_prd` | **Yes — HARD STOP if absent** | Architecture decision (from architecture-review) or PRD text; ask for it per the input_resolution convention (facts supplied → retrievable context → safe default → focused question) |
+| `architecture_decision_or_prd` | **Yes — HARD STOP if absent** | Full PRD text or approved architecture decision; machine readiness metadata alone is insufficient |
 | `existing_system_context` | No | Analyzed as available; absence is noted, not blocking |
 
 Details: [workflow/inputs.md](workflow/inputs.md).

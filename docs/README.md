@@ -18,6 +18,11 @@ Human-readable guide to everything in the **software-builder** repository. Agent
 | [../scripts/README.md](../scripts/README.md) | What `scripts/install.sh` does |
 | [../CHANGELOG.md](../CHANGELOG.md) | Per-skill change history (replaces stale inline "Recent changes" in SKILL files) |
 
+Security-sensitive negative fixtures are generated at runtime by
+`.github/workflows/secret-scan.yml`. Committed golden/adversarial fixtures must use only clearly
+non-functional example or non-matching sentinel values; do not suppress a new finding with
+`.gitleaksignore` without policy approval.
+
 ## Skills (what each one does)
 
 Each skill is a self-contained directory copied to `~/.cursor/skills/<name>/` on install. The agent reads

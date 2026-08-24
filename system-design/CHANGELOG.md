@@ -1,5 +1,9 @@
 # Changelog — system-design
 
+## 1.1.0
+
+- Accept ready PRD context for implementation design and hand off the resulting design to architecture review.
+
 ## 1.0.0 — 2026-08-22
 
 ### Added

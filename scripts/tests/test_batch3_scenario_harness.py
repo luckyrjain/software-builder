@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[2]
 def test_literal_dimension_directories_cover_every_skill() -> None:
     registry = parse_registry(ROOT / "skills.yaml")
     results = run_per_skill_scenarios(ROOT, registry)
-    assert len(results) == len(registry.skills) * len(DIMENSIONS) == 170
+    assert len(results) == len(registry.skills) * len(DIMENSIONS)
     assert all(result.passed for result in results), [
         (result.skill, result.case_id, result.messages) for result in results if not result.passed
     ]

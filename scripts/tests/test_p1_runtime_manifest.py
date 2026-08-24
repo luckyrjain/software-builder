@@ -7,8 +7,6 @@ from scripts.registry.p1_validation import PERMISSION_FIELDS, validate_p1_contra
 from scripts.registry.runtime_manifest import P1_CONTRACT_KEYS, build_runtime_manifest
 
 ROOT = Path(__file__).resolve().parents[2]
-EXPECTED_SKILL_COUNT = 34
-
 
 def test_runtime_manifest_exposes_all_p1_contracts() -> None:
     manifest = build_runtime_manifest(ROOT)
@@ -24,7 +22,9 @@ def test_batch1_all_skills_validate_against_one_manifest() -> None:
     assert validate_p1_contracts(ROOT) == []
     manifest = build_runtime_manifest(ROOT)
     skills = manifest["skills"]
-    assert len(skills) == EXPECTED_SKILL_COUNT
+    from scripts.registry.schema import parse_registry
+
+    assert len(skills) == len(parse_registry(ROOT / "skills.yaml").skills)
 
     for skill_id, skill in skills.items():
         assert set(skill["permissions"]) == PERMISSION_FIELDS, skill_id

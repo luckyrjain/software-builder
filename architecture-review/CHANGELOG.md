@@ -1,5 +1,9 @@
 # Changelog — architecture-review
 
+## 1.1.0
+
+- Consume implementation design plus PRD context for architecture validation.
+
 ## 1.0.0 — 2026-08-22
 
 ### Added

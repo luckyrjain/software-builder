@@ -60,6 +60,7 @@ contracts:
       external_input_artifacts:
       - mr_context
       - implementation_task
+      - assessment_context
       durable_artifacts:
       - mr_review_report
       - rca_report
@@ -132,6 +133,7 @@ contracts:
         deployment_risk_report: proposed_state
         dependency_upgrade_report: proposed_state
         tech_debt_assessment: current_state
+      allowed_state_semantics: {}
       payload_types:
         mr_review_report:
           review_metadata: mapping
@@ -633,6 +635,9 @@ contracts:
       mr_context:
         mode: external
         owners: []
+      assessment_context:
+        mode: external
+        owners: []
       mr_review_report:
         mode: canonical
         owners:
@@ -748,6 +753,7 @@ contracts:
   composition:
     artifact_types:
     - mr_context
+    - assessment_context
     - mr_review_report
     - rca_report
     - k8s_rightsizing_report
@@ -782,6 +788,13 @@ contracts:
         - review_mode
         - audit_type
         - expected_head_sha
+      assessment_context:
+        fields:
+        - assessment_target
+        - inputs
+        - input_provenance
+        - evidence_refs
+        - unresolved
       mr_review_report:
         fields:
         - review_metadata
@@ -1301,26 +1314,38 @@ contracts:
         produces:
         - architecture_review_report
         consumes:
+        - system_design_spec
         - prd_report
         produce_fields:
           architecture_review_report:
           - title
           - decision
         consume_fields:
+          system_design_spec:
+          - title
+          - readiness
           prd_report:
           - title
           - build_readiness
+          - depth
+          - response_mode
         write_authority: read-only
       system-design:
         produces:
         - system_design_spec
         consumes:
+        - prd_report
         - architecture_review_report
         produce_fields:
           system_design_spec:
           - title
           - readiness
         consume_fields:
+          prd_report:
+          - title
+          - build_readiness
+          - depth
+          - response_mode
           architecture_review_report:
           - title
           - decision
@@ -2211,7 +2236,7 @@ skills:
     risk_class:
     - merge
     - repository-write
-    version: 1.2.0
+    version: 1.3.0
     type: orchestrator
     authority: repository-write
     permissions:
@@ -2771,7 +2796,7 @@ skills:
       target: architecture-review
     risk_class:
     - read-only
-    version: 1.0.0
+    version: 1.1.0
     type: leaf
     authority: read-only
     permissions:
@@ -2823,7 +2848,7 @@ skills:
       target: system-design
     risk_class:
     - read-only
-    version: 1.0.0
+    version: 1.1.0
     type: leaf
     authority: read-only
     permissions:

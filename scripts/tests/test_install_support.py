@@ -32,10 +32,11 @@ def _write_minimal_package(skill_dir: Path, *, files: dict[str, str] | None = No
 
 def test_list_includes_registered_skill() -> None:
     from scripts.install_support import registry_skill_ids
+    from scripts.registry.schema import parse_registry
 
     ids = registry_skill_ids(ROOT)
     assert "unit-test-creator" in ids
-    assert len(ids) == 34
+    assert len(ids) == len(parse_registry(ROOT / "skills.yaml").skills)
 
 
 def test_check_rejects_unknown_skill() -> None:

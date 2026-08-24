@@ -105,6 +105,9 @@ artifact_ownership:
   mr_context:
     mode: external
     owners: []
+  assessment_context:
+    mode: external
+    owners: []
   mr_review_report:
     mode: canonical
     owners:

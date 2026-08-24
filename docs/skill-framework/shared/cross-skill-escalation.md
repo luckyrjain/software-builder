@@ -78,7 +78,8 @@ know about — don't treat it as a "you may want to" row the way every other row
 | PRD security finding needs review of existing code on an MR | prd-architect → pr-review | MR !IID + finding | "Review MR !{iid} for `{finding}` flagged during PRD review" |
 | Task needs a PRD before implementation | loop-task-implementer → prd-architect | Task description + constraints | "Write an implementation-ready PRD for task `{task_id}`" |
 | Domain map suggests a new product initiative | domain-comprehension → prd-architect | Bounded context + problem statement | "Write a PRD for `{initiative}` based on domain-comprehension findings" |
-| PRD needs an architecture decision before implementation | prd-architect → architecture-review | Final PRD | "Architecture review for `{feature}` before implementation" |
+| Ready PRD needs implementation-level design | prd-architect → system-design | Final PRD | "Design the implementation for `{feature}` from the ready PRD" |
+| Implementation-level design needs architecture validation | system-design → architecture-review | System design + PRD | "Review the architecture for `{feature}` from the implementation design" |
 | Architecture decision approved, needs implementation-level design | architecture-review → system-design | Architecture decision + PRD | "Design the implementation for `{feature}` per the approved architecture decision" |
 | Architecture decision approved and ready to build | architecture-review → loop-task-implementer | Architecture decision | "Implement `{feature}` per the approved architecture decision" |
 | A specific security/trust-boundary concern needs a deep audit | architecture-review → security-review | Architecture decision + trust-boundary concern | "Security review of `{concern}` — trust-boundary concern found during architecture review" |

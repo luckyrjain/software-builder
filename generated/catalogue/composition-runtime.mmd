@@ -127,5 +127,7 @@ graph TD
   pr-review -->|mr_review_report| release-readiness-checker
   prd-architect -->|prd_report| architecture-review
   prd-architect -->|prd_report| loop-task-implementer
+  prd-architect -->|prd_report| system-design
   incident-rca -->|rca_report| release-readiness-checker
   incident-triage-agent -->|rca_report| release-readiness-checker
+  system-design -->|system_design_spec| architecture-review

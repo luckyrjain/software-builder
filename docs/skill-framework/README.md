@@ -76,6 +76,15 @@ repository checkout via relative links — no install step required for in-repo 
 
 A skill is framework-compliant when it passes the checklist in the design spec §4 and `make lint-<skill>` plus `make lint-framework` (repo root).
 
+### Adversarial fixture safety
+
+Committed golden and adversarial fixtures must not contain real or realistic secret-shaped values. Use
+well-known non-functional `...EXAMPLE` placeholders or clearly non-matching sentinels for committed
+fixtures. Do not add `.gitleaksignore` solely to silence a new fixture without explicit policy approval.
+The secret-scanner negative test is intentionally generated at runtime by
+`.github/workflows/secret-scan.yml` and is scanned in isolation; its secret-shaped value must not be
+committed to the repository.
+
 ## Status
 
 | File | Status |

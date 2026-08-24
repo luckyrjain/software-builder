@@ -56,6 +56,7 @@ artifact_runtime:
   external_input_artifacts:
   - mr_context
   - implementation_task
+  - assessment_context
   durable_artifacts:
   - mr_review_report
   - rca_report
@@ -128,6 +129,7 @@ artifact_runtime:
     deployment_risk_report: proposed_state
     dependency_upgrade_report: proposed_state
     tech_debt_assessment: current_state
+  allowed_state_semantics: {}
   payload_types:
     mr_review_report:
       review_metadata: mapping

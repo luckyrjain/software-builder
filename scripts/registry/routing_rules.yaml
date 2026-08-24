@@ -82,12 +82,15 @@ routes:
   prd-architect:
     patterns:
       - '\b(PRD|product requirements?|requirements document|build readiness)\b'
+    exclude_patterns:
+      - '\bready PRD\b.*\bimplementation design\b'
   architecture-review:
     patterns:
       - '\b(architecture review|ADR|architecture decision record|architecture design review)\b'
   system-design:
     patterns:
       - '\b(system design|technical design doc|component design|data model design)\b'
+      - '\bready PRD\b.*\bimplementation design\b'
   api-design-review:
     patterns:
       - '\b(API design review|API contract review|API versioning review)\b'

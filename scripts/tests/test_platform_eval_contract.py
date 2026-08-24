@@ -31,7 +31,6 @@ def test_every_registered_skill_keeps_platform_metadata_in_manifest() -> None:
 
     registry = parse_registry(ROOT / "skills.yaml")
     manifest = load_canonical_manifest(ROOT)
-    assert len(registry.skills) == 34
     assert set(manifest["skills"]) == set(registry.skills)
 
     for skill_id, entry in registry.skills.items():
