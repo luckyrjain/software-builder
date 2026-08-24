@@ -105,6 +105,53 @@ authority:
 payload: <producer-declared artifact-schema fields>
 ```
 
+### Artifact-v2 machine summaries
+
+An artifact schema that declares the common v2 fields uses this typed payload shape in
+addition to its artifact-specific fields:
+
+```yaml
+payload:
+  assessment_target: {}
+  normalized_decision: PASS|CONDITIONAL|FAIL
+  findings:
+    - id: <stable non-empty id>
+      category: <non-empty category>
+      summary: <non-empty summary>
+      blocking: true|false
+      evidence_status: OBSERVED|INFERRED|UNKNOWN|CONFLICTED|NOT_APPLICABLE
+      evidence_refs: [<source ref>]
+  conditions:
+    - id: <stable non-empty id>
+      summary: <non-empty summary>
+      required_before: IMPLEMENTATION|MERGE|DEPLOY|FOLLOW_UP
+      evidence_refs: [<source ref>]
+  required_actions:
+    - id: <stable non-empty id>
+      summary: <non-empty summary>
+      required_before: IMPLEMENTATION|MERGE|DEPLOY|FOLLOW_UP
+      verification: <non-empty verification>
+      evidence_refs: [<source ref>]
+  evidence_refs: [<de-duplicated source ref>]
+provenance:
+  source_revision: <revision, UNKNOWN, or null>
+  sources:
+    - ref: <source ref>
+      authority: authoritative_host|repository|trusted_runtime|caller|model_knowledge
+      kind: scm|repo_content|ci|runtime_metric|service_metadata|build_provenance|artifact|caller_input|model_knowledge
+      observed_at: <ISO-8601 timestamp, UNKNOWN, or null>
+      source_revision: <revision, UNKNOWN, or null>
+      source_environment: <environment, UNKNOWN, or null>
+      derived_from: [<source ref>]
+```
+
+Each item family has unique IDs and exact item keys. Nested evidence references must
+be covered by the root `evidence_refs`; that root is a de-duplicated superset and each
+of its values resolves to exactly one typed `provenance.sources` item. A `PASS`,
+`CONDITIONAL`, or `FAIL` decision always requires at least one root reference. Derived
+sources retain the authorities of their ultimate sources; `derived_from` references
+must resolve and must not form cycles.
+
 The registry validates this envelope and the payload schema with:
 
 ```bash
