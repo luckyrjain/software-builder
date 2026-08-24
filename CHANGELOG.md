@@ -6,6 +6,12 @@ the create-skill anti-pattern on time-sensitive info).
 
 Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/README.md).
 
+### Add bounded change-impact analysis (2026-08-24)
+
+- Added the read-only `change-impact-analyzer` leaf and `change_impact_report` v1 artifact.
+- Added deterministic change classes, exact-head PR/MR handling, evidence-derived coverage, and
+  scanner-safe input handling.
+
 ## Platform
 
 ### Add architecture, design, and specialized review skills (2026-08-22)

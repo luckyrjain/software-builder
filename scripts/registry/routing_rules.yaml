@@ -91,6 +91,8 @@ routes:
     patterns:
       - '\b(system design|technical design doc|component design|data model design)\b'
       - '\bready PRD\b.*\bimplementation design\b'
+    exclude_patterns:
+      - '\bwhat\b.*\bservices?\b.*\b(touch|affected|impact)\b'
   api-design-review:
     patterns:
       - '\b(API design review|API contract review|API versioning review)\b'
@@ -118,6 +120,15 @@ routes:
   tech-debt-assessor:
     patterns:
       - '\b(tech(?:nical)? debt (?:assess|priorit|rank)|debt backlog)\b'
+  change-impact-analyzer:
+    patterns:
+      - '\b(change impact|impact analysis|affected surface)\b'
+      - '\bwhat does this change touch\b'
+      - '\bwhat\b.*\b(services?|contracts?|data|tests?)\b.*\b(change|affected|impact|touch)\b'
+      - '\b(services?|contracts?|data|tests?)\b.*\b(affected|impact|change|touch)\b.*\b(PR|MR|pull request|merge request|design|proposal|change)\b'
+      - '\b(PR|MR|pull request|merge request)\s*[#!]?\d+\b.*\b(services?|contracts?|data|tests?|dependencies?)\b.*\b(affected|impact|change|touch)\b'
+    exclude_patterns:
+      - '\b(review|regression|correctness|blast radius|rollback risk|deployment risk|release risk)\b'
   test-writer:
     patterns:
       - '\b(write|generate|add)\b\s+(tests?|test coverage)\b(?!.*\b(unit|integration|contract|e2e|end[- ]to[- ]end|API|HTTP|REST)\b)'

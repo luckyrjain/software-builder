@@ -13,7 +13,7 @@ When adding a new skill, add it here first; then each existing skill only needs 
 | Overprovisioned, right-size, rightsizing, CPU/memory requests, HPA, replicas, throttling, OOM (sizing context), Kafka consumer lag (scaling), cost/waste, namespace waste ranking | **k8s-overprovisioning-datadog** | incident-rca, pr-review |
 | RCA, root cause, postmortem, incident, outage, 5xx spike, error spike, deploy regression (time-window), consumer lag (incident), SLO breach, P1/P2, INC-, on-call (interactive, conversational) | **incident-rca** | k8s-overprovisioning-datadog, pr-review |
 | PagerDuty/Opsgenie page-fire or incident-resolved webhook, no follow-up turn possible | **incident-triage-agent** | incident-rca, squad-map (that's what it delegates to internally — do not call either directly for an unattended paging event, their own confirmation gates are designed to wait for a human chat turn) |
-| Review PR/MR, review pull request/merge request, review #number/!IID, /pr-review, re-review, post-merge audit, list open reviews, review as SRE/security/architect (interactive, conversational) | **pr-review** | incident-rca, k8s-overprovisioning-datadog |
+| Review PR/MR, review pull request/merge request — generic correctness/regression review, /pr-review, re-review, post-merge audit, list open reviews, review as SRE/security/architect (interactive, conversational) | **pr-review** | change-impact-analyzer, incident-rca, k8s-overprovisioning-datadog |
 | GitLab push-event webhook, automated review on every push, no follow-up turn possible | **pr-gatekeeper** | pr-review (that's what it delegates to internally — do not call pr-review directly for an unattended webhook run, its own posting confirmation is designed to wait for a human chat turn) |
 | Domain comprehension, bounded context, data ownership, critical path, architecture smells, subsystem onboarding **with no person named**, multi-repo ground truth, five questions | **domain-comprehension** | squad-map (ownership only), incident-rca, new-hire-guide (onboarding **a named person**, not a subsystem) |
 | Squad map, ownership, who owns, CODEOWNERS, GitLab group, Datadog team, team reconciliation (interactive, conversational) | **squad-map** | domain-comprehension (full map) |
@@ -50,12 +50,13 @@ When adding a new skill, add it here first; then each existing skill only needs 
 | Deployment risk, release risk, blast radius, rollback plan, go/no-go for one change | **deployment-risk-review** | release-readiness-checker (multi-repo release sweep), incident-triage-agent (an incident that already happened) |
 | Dependency upgrade, version bump review, CVE review, breaking change (library), transitive dependency | **dependency-upgrade-review** | security-review (a dedicated deep security audit), mysql-to-postgres-sql (the MySQL-to-Postgres migration itself) |
 | Tech debt, debt prioritization, debt backlog, engineering drag, refactor prioritization | **tech-debt-assessor** | migration-program-manager (planning a specific migration program), cost-optimization-sprint-planner (cost/rightsizing sweep) |
+| Change impact, affected services/contracts/data/tests, callers/consumers touched by a proposed design or exact PR/MR | **change-impact-analyzer** | pr-review (generic correctness/regression review), deployment-risk-review (blast radius/rollback risk after deployment) |
 
 ## Disambiguation rules
 
 1. **Time-window + error/outage** → incident-rca (even if service is overprovisioned)
 2. **Sizing / resource optimization** (no active incident) → k8s-overprovisioning-datadog
-3. **GitLab MR target** → pr-review (even if the MR changes resources)
+3. **GitLab MR target** → pr-review for generic correctness; affected-surface questions take precedence and route to change-impact-analyzer
 4. **"Who owns X?"** without domain map intent → squad-map
 5. **"Map the domain / bounded contexts"** → domain-comprehension (which delegates ownership to squad-map at Session 0b)
 6. **OOM in sizing context** ("is this overprovisioned?") → k8s-overprovisioning-datadog; **OOM in incident context** ("what caused the outage?") → incident-rca
@@ -67,7 +68,7 @@ When adding a new skill, add it here first; then each existing skill only needs 
 12. **Page-fire or incident-resolved event from a paging system, no human turn available** → incident-triage-agent; **RCA or ownership request from an interactive human turn** → incident-rca / squad-map directly
 13. **Scheduled overnight ticket-queue sweep, no human turn available** → backlog-runner; **single-task or human-driven multi-task request** → loop-task-implementer directly
 14. **Onboarding request naming a person** ("onboard `<name>`, joining `<squad>`") → new-hire-guide; **onboarding request naming a subsystem/domain, no person named** ("help me onboard to the payments subsystem") → domain-comprehension directly, even though both skills use the word "onboarding"; **plain "who owns X?"** (no new-hire input) → squad-map directly
-15. **Release-wide go/no-go request with a `release_manifest`** → release-readiness-checker; **one specific MR** → pr-review directly; **one specific service's rightsizing** → k8s-overprovisioning-datadog directly; **full RCA on a known/suspected incident** → incident-rca directly
+15. **Release-wide go/no-go request with a `release_manifest`** → release-readiness-checker; **one specific MR generic review** → pr-review directly, while **one specific MR affected-surface analysis** → change-impact-analyzer; **one specific service's rightsizing** → k8s-overprovisioning-datadog directly; **full RCA on a known/suspected incident** → incident-rca directly
 16. **Org-wide migration status across many workspaces with a `program_manifest`** → migration-program-manager; **one workspace's own migration status** → mysql-to-postgres-sql directly; **plain "who owns X?" with no migration angle** → squad-map directly
 17. **Org-wide cost/waste ranking across many deployments with a `sweep_scope`** → cost-optimization-sprint-planner; **one deployment's own rightsizing question** → k8s-overprovisioning-datadog directly; **plain "who owns X?" with no cost angle** → squad-map directly
 18. **Scheduled combined squad digest, no human turn available** → weekly-squad-digest; **a fresh single-source rollup, interactive** → migration-program-manager / cost-optimization-sprint-planner directly

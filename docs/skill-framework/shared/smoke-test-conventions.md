@@ -95,6 +95,7 @@ Maintainer pressure scenarios: [pressure-tests.md](pressure-tests.md).
 | deployment-risk-review | `Deployment risk review for <change>` + release/change description | Inputs parsed, before Analyze starts |
 | dependency-upgrade-review | `Review upgrading <dependency> from <current> to <target>` | Inputs parsed, before Analyze starts |
 | tech-debt-assessor | `Rank this tech debt backlog` + debt-item list | Inputs parsed, before Analyze starts |
+| change-impact-analyzer | `What services/contracts are affected by PR #123?` | Exact target/diff and capability profile announced before Analyze |
 
 ## 4. Output checklist template
 
@@ -159,6 +160,7 @@ A correct minimal output should contain:
 | deployment-risk-review | `make lint-deployment-risk-review` |
 | dependency-upgrade-review | `make lint-dependency-upgrade-review` |
 | tech-debt-assessor | `make lint-tech-debt-assessor` |
+| change-impact-analyzer | `make lint-change-impact-analyzer` |
 | Framework | `make lint-framework` |
 | All | `make lint` |
 

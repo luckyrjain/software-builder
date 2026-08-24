@@ -221,6 +221,14 @@ No separate Correlate step — each skill evaluates one supplied artifact (a PRD
 schema, code, a demand series, a release description, a dependency bump, or a debt backlog) rather than
 correlating across multiple live data sources the way incident-rca/k8s do.
 
+### change-impact-analyzer mapping
+
+| Phase | File | Canonical |
+|-------|------|-----------|
+| Inputs | `workflow/inputs.md` | Detect — resolve exact change/design material and preserve untrusted provenance |
+| Analyze | `workflow/analyze.md` | Gather + Analyze — bounded path, contract, data, dependency, owner, and consumer evidence |
+| Report | `workflow/report.md` | Validate + Report — fixed impact artifact, coverage, triggers, and explicit unknowns |
+
 ## 5. Cross-skill analogies
 
 | Concept | pr-review | incident-rca | k8s | domain-comprehension | squad-map | mysql-to-postgres-sql |

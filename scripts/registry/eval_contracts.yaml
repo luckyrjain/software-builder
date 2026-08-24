@@ -87,6 +87,12 @@ routing_collisions:
     prompt_pattern: "Understand.*current domain.*future-state"
     route_pattern: "Domain comprehension, bounded context"
     expected_owner: domain-comprehension
+  - id: numbered-pr-change-impact
+    prompt: 'What services/contracts are affected by PR #123?'
+    prompt_class: numbered pull request impact analysis
+    prompt_pattern: "services/contracts.*affected.*PR #123"
+    route_pattern: "Change impact, affected services/contracts/data/tests"
+    expected_owner: change-impact-analyzer
 
 adversarial_classes:
   instruction_override:

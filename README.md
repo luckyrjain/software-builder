@@ -2,7 +2,7 @@
 
 [![Lint](https://github.com/luckyrjain/software-builder/actions/workflows/lint.yml/badge.svg)](https://github.com/luckyrjain/software-builder/actions/workflows/lint.yml)
 <!-- skills-count:start -->
-![Skills](https://img.shields.io/badge/skills-34-blue)
+![Skills](https://img.shields.io/badge/skills-35-blue)
 <!-- skills-count:end -->
 
 Portable, evidence-driven agent skills for software delivery: code review, incident response,
@@ -183,6 +183,7 @@ routes to skills in another category.
 | [pr-gatekeeper](pr-gatekeeper/) | Push webhook | Runs `pr-review` on every push to an open MR and applies unattended posting policy | [README](pr-gatekeeper/README.md) · [SETUP](pr-gatekeeper/SETUP.md) |
 | [release-readiness-checker](release-readiness-checker/) | “Is this release ready?” | Aggregates review, Kubernetes, and incident signals into a release go/no-go report | [README](release-readiness-checker/README.md) · [SETUP](release-readiness-checker/SETUP.md) |
 | [prd-architect](prd-architect/) | “Write a PRD for …” / “Should we build this?” | Validates ideas and turns specs into implementation-ready PRDs with Build Readiness gating | [README](prd-architect/README.md) · [SETUP](prd-architect/SETUP.md) |
+| [change-impact-analyzer](change-impact-analyzer/) | “What services/contracts are affected by this change?” | Bounded, evidence-backed impact analysis for designs and exact PR/MR heads | [README](change-impact-analyzer/README.md) · [SETUP](change-impact-analyzer/SETUP.md) |
 | [test-writer](test-writer/) | “Write tests for MR !123” — level unspecified | Router: classifies the request and dispatches to exactly one of the five skills below | [README](test-writer/README.md) · [SETUP](test-writer/SETUP.md) |
 | [unit-test-creator](unit-test-creator/) | “Write unit tests for `<file/module>`” | Isolated, fast, every external dependency mocked; detects the repo's test framework and never patches production code to force green | [README](unit-test-creator/README.md) · [SETUP](unit-test-creator/SETUP.md) |
 | [integration-test-creator](integration-test-creator/) | “Write an integration test against the real DB” | Tests the real seam to one real adjacent dependency (testcontainers/docker-compose) — never mocks it | [README](integration-test-creator/README.md) · [SETUP](integration-test-creator/SETUP.md) |
@@ -257,7 +258,7 @@ MCP is **skill-specific**, not a prerequisite for installing or browsing the rep
 | `k8s-overprovisioning-datadog` | At least one sufficient evidence source: read-only Kubernetes MCP or Datadog |
 | `cost-optimization-sprint-planner` | Datadog for its namespace pre-filter; then inherits the Kubernetes skill's per-deployment routing |
 | `backlog-runner` | Jira or GitHub Issues access |
-| `prd-architect`, `architecture-review`, `system-design`, `api-design-review`, `database-review`, `security-review`, `performance-review`, `capacity-planner`, `observability-review`, `deployment-risk-review`, `dependency-upgrade-review`, `tech-debt-assessor` | No MCP; analysis and report-drafting skills that read supplied content (and, at most, read-only repository access) |
+| `prd-architect`, `architecture-review`, `system-design`, `api-design-review`, `database-review`, `security-review`, `performance-review`, `capacity-planner`, `observability-review`, `deployment-risk-review`, `dependency-upgrade-review`, `tech-debt-assessor`, `change-impact-analyzer` | No MCP; analysis and report-drafting skills that read supplied content (and, at most, read-only repository access) |
 | Composed skills | Inherit the capabilities of the skills they call |
 
 Read the selected skill's `SETUP.md` before its first real run. The complete required/optional matrix

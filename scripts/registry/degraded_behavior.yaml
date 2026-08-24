@@ -38,3 +38,4 @@ skills:
   deployment-risk-review: {missing_capability: host.report.write, available_capabilities: [], behavior: BLOCKED}
   dependency-upgrade-review: {missing_capability: host.report.write, available_capabilities: [], behavior: BLOCKED}
   tech-debt-assessor: {missing_capability: host.report.write, available_capabilities: [], behavior: BLOCKED}
+  change-impact-analyzer: {missing_capability: host.repository.read, available_capabilities: [host.report.write, host.scm.change.read], behavior: DEGRADED}

@@ -42,7 +42,8 @@ software-builder/
 ├── integration-test-creator/  # Tests the real seam to one real adjacent dependency (never mocked)
 ├── contract-test-creator/     # Consumer-driven contract tests (Pact-style)
 ├── e2e-test-creator/          # Full user-journey browser tests (Playwright/Cypress/Selenium)
-└── api-test-creator/          # Black-box Postman/Newman request/response tests against a real API
+├── api-test-creator/          # Black-box Postman/Newman request/response tests against a real API
+└── change-impact-analyzer/    # Bounded impact analysis for designs and exact PR/MR heads
 ```
 
 Each skill directory follows the same pattern:
@@ -55,6 +56,7 @@ Each skill directory follows the same pattern:
 | `architecture-review` | review | ambient | — | `make lint-architecture-review` |
 | `backlog-runner` | automation | automation-only | loop-task-implementer | `make lint-backlog-runner` |
 | `capacity-planner` | platform | ambient | — | `make lint-capacity-planner` |
+| `change-impact-analyzer` | analysis | ambient | — | `make lint-change-impact-analyzer` |
 | `contract-test-creator` | testing | ambient | — | `make lint-contract-test-creator` |
 | `cost-optimization-sprint-planner` | platform | ambient | k8s-overprovisioning-datadog, squad-map | `make lint-cost-optimization-sprint-planner` |
 | `database-review` | review | ambient | — | `make lint-database-review` |
@@ -213,9 +215,10 @@ and [docs/skill-framework/shared/claude-code-setup.md](skill-framework/shared/cl
 | `make install-contract-test-creator` | Install only `contract-test-creator/` |
 | `make install-e2e-test-creator` | Install only `e2e-test-creator/` |
 | `make install-api-test-creator` | Install only `api-test-creator/` |
+| `make install-change-impact-analyzer` | Install only `change-impact-analyzer/` |
 | `make install-test-writer` | Install only `test-writer/` (also runs all five `install-*-test-creator` targets above — the router is useless without them) |
 | `make install-claude` | Run `scripts/install.sh --agent claude-user` for all skills |
-| `make install-claude-<skill>` | Install only `<skill>/` for Claude Code (`pr-review`, `pr-gatekeeper`, `k8s-overprovisioning`, `incident-rca`, `incident-triage-agent`, `domain-comprehension`, `squad-map`, `who-owns-x-bot`, `new-hire-guide`, `release-readiness-checker`, `migration-program-manager`, `cost-optimization-sprint-planner`, `mysql-to-postgres-sql`, `loop-task-implementer`, `backlog-runner`, `weekly-squad-digest`, `unit-test-creator`, `integration-test-creator`, `contract-test-creator`, `e2e-test-creator`, `api-test-creator`, `test-writer`) |
+| `make install-claude-<skill>` | Install only `<skill>/` for Claude Code (`pr-review`, `pr-gatekeeper`, `k8s-overprovisioning`, `incident-rca`, `incident-triage-agent`, `domain-comprehension`, `squad-map`, `who-owns-x-bot`, `new-hire-guide`, `release-readiness-checker`, `migration-program-manager`, `cost-optimization-sprint-planner`, `mysql-to-postgres-sql`, `loop-task-implementer`, `backlog-runner`, `weekly-squad-digest`, `unit-test-creator`, `integration-test-creator`, `contract-test-creator`, `e2e-test-creator`, `api-test-creator`, `test-writer`, `change-impact-analyzer`) |
 | `make lint` | Run all lint targets below + shellcheck on `scripts/*.sh` |
 | `make lint-pr-review` | pr-review `SKILL.md` ≤ 180 lines; each `workflow/*.md` has `workflow_version`/`phase`/`produces`/`consumes` frontmatter; dangling markdown anchors; script pytest |
 | `make lint-pr-gatekeeper` | pr-gatekeeper `SKILL.md` ≤ 180 lines; `disable-model-invocation: true` set; workflow frontmatter; dangling anchors; required reference files |
@@ -238,6 +241,7 @@ and [docs/skill-framework/shared/claude-code-setup.md](skill-framework/shared/cl
 | `make lint-contract-test-creator` | contract-test-creator, same shape as above |
 | `make lint-e2e-test-creator` | e2e-test-creator, same shape as above |
 | `make lint-api-test-creator` | api-test-creator, same shape as above |
+| `make lint-change-impact-analyzer` | change-impact-analyzer bounded contract checks, framework references, `py_compile`, and focused pytest |
 | `make lint-test-writer` | test-writer `SKILL.md` ≤ 180 lines; workflow frontmatter; required references; confirms no `scripts/`/`tests/` exist (router only); dangling anchors across test-writer and all four dispatch targets' SKILL.md/workflow files |
 | `make lint-framework` | shared `docs/skill-framework/` files present; required sections; SETUP.md links; metadata footer examples parse; every skill has a `.cursor/rules/*.mdc` + `.kiro/steering/*.md` discovery file |
 | `make setup-hooks` | Set `git config core.hooksPath .githooks` (shellcheck pre-commit) |
@@ -499,6 +503,6 @@ These improve discoverability but cannot be changed from a PR:
 | test-writer | None — router only, dispatches to the skills below | Requires at least one of the four dispatch targets installed and configured |
 | unit-test-creator, integration-test-creator, contract-test-creator, e2e-test-creator, api-test-creator | None — use the host agent's own repo read/write access | Host's test-runner/browser/API access (set `run_tests: false` to draft without executing) |
 | prd-architect | None — analysis and drafting skill, no MCP, no repository access | Web search for material unknowns (generalized queries only) |
-| architecture-review, system-design, api-design-review, database-review, security-review, performance-review, capacity-planner, observability-review, deployment-risk-review, dependency-upgrade-review, tech-debt-assessor | None — read-only repository access at most; each reads supplied PRD/design/code/config/data content, no MCP required | None |
+| architecture-review, system-design, api-design-review, database-review, security-review, performance-review, capacity-planner, observability-review, deployment-risk-review, dependency-upgrade-review, tech-debt-assessor, change-impact-analyzer | None — read-only repository access at most; each reads supplied PRD/design/code/config/data content, no MCP required | None |
 
 Per-skill setup: see each skill's `SETUP.md`.

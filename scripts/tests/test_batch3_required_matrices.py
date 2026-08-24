@@ -58,6 +58,7 @@ REQUIRED_ROUTING_COLLISIONS = {
     "resource-safety-vs-incident",
     "write-tests-vs-test-review",
     "current-state-before-change",
+    "numbered-pr-change-impact",
 }
 
 

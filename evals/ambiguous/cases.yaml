@@ -35,3 +35,4 @@ cases:
   - {skill: deployment-risk-review, prompt: "Deployment risk review for this release, which includes a dependency upgrade review of Django.", expected_status: ambiguous, expected_candidates: [deployment-risk-review, dependency-upgrade-review]}
   - {skill: dependency-upgrade-review, prompt: "Dependency upgrade review of this library and a security review of its exposed endpoints.", expected_status: ambiguous, expected_candidates: [dependency-upgrade-review, security-review]}
   - {skill: tech-debt-assessor, prompt: "Rank this tech debt backlog and also give me the migration program status across workspaces.", expected_status: ambiguous, expected_candidates: [tech-debt-assessor, migration-program-manager]}
+  - {skill: change-impact-analyzer, prompt: "What services/contracts change in this proposed design, and also write the system design.", expected_status: ambiguous, expected_candidates: [change-impact-analyzer, system-design]}

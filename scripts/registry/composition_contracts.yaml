@@ -25,6 +25,7 @@ artifact_types:
 - deployment_risk_report
 - dependency_upgrade_report
 - tech_debt_assessment
+- change_impact_report
 artifact_schemas:
   mr_context:
     fields:
@@ -237,6 +238,25 @@ artifact_schemas:
     fields:
     - title
     - items
+  change_impact_report:
+    fields:
+    - title
+    - assessment_target
+    - coverage_status
+    - material_unknowns
+    - impacted_repositories
+    - criticality
+    - change_classes
+    - impacted_services
+    - impacted_contracts
+    - impacted_data
+    - impacted_dependencies
+    - impacted_owners
+    - required_tests
+    - operational_impacts
+    - review_triggers
+    - unknowns
+    - evidence_refs
 creator_parity:
   skills:
   - unit-test-creator
@@ -916,4 +936,41 @@ skills:
       tech_debt_assessment:
       - title
       - items
+    write_authority: read-only
+  change-impact-analyzer:
+    produces:
+    - change_impact_report
+    consumes:
+    - mr_context
+    - assessment_context
+    produce_fields:
+      change_impact_report:
+      - title
+      - assessment_target
+      - coverage_status
+      - material_unknowns
+      - impacted_repositories
+      - criticality
+      - change_classes
+      - impacted_services
+      - impacted_contracts
+      - impacted_data
+      - impacted_dependencies
+      - impacted_owners
+      - required_tests
+      - operational_impacts
+      - review_triggers
+      - unknowns
+      - evidence_refs
+    consume_fields:
+      mr_context:
+      - project
+      - merge_request_iid
+      - head_sha
+      assessment_context:
+      - assessment_target
+      - inputs
+      - input_provenance
+      - evidence_refs
+      - unresolved
     write_authority: read-only
