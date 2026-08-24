@@ -141,9 +141,14 @@ def _validate_catalog(
                 + ", ".join(unknown_allowed),
             )
         for artifact, allowed in allowed_state_semantics.items():
-            if not isinstance(allowed, list) or not allowed or len(allowed) != len(set(allowed)):
+            if (
+                not isinstance(allowed, list)
+                or not allowed
+                or not all(isinstance(value, str) for value in allowed)
+                or len(allowed) != len(set(allowed))
+            ):
                 errors.append(f"error: artifact runtime allowed_state_semantics.{artifact} must be a non-empty unique list")
-            elif any(not isinstance(value, str) or value not in _STATE_VALUES for value in allowed):
+            elif any(value not in _STATE_VALUES for value in allowed):
                 errors.append(f"error: artifact runtime allowed_state_semantics.{artifact} contains an invalid value")
             elif isinstance(state_semantics, dict) and state_semantics.get(artifact) not in allowed:
                 errors.append(f"error: artifact runtime allowed_state_semantics.{artifact} must include the default state semantic")

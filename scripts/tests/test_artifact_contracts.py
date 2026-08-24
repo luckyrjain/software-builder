@@ -236,6 +236,15 @@ def test_artifact_without_allowed_set_remains_exact() -> None:
     assert any("state semantic" in error for error in errors)
 
 
+def test_allowed_state_semantics_rejects_unhashable_values_without_traceback(monkeypatch) -> None:
+    manifest = artifact_contracts.load_canonical_manifest(ROOT)
+    runtime = manifest["contracts"]["platform"]["artifact_runtime"]
+    runtime["allowed_state_semantics"] = {"mr_review_report": [["current_state"]]}
+    monkeypatch.setattr(artifact_contracts, "load_canonical_manifest", lambda _root: manifest)
+    errors = artifact_contracts.validate_artifact_contracts(ROOT)
+    assert any("allowed_state_semantics.mr_review_report" in error for error in errors)
+
+
 def test_catalog_rejects_scalar_ownership_without_traceback(tmp_path: Path) -> None:
     shutil.copy2(ROOT / "skills.yaml", tmp_path / "skills.yaml")
     manifest = yaml.safe_load((tmp_path / "skills.yaml").read_text(encoding="utf-8"))
