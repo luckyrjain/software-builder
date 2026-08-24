@@ -1,3 +1,7 @@
+import math
+
+import pytest
+
 from scripts.registry.assessment_target import (
     canonical_payload_digest,
     canonical_text_digest,
@@ -9,6 +13,11 @@ from scripts.registry.assessment_target import (
 
 def test_payload_digest_is_key_order_independent() -> None:
     assert canonical_payload_digest({"b": 2, "a": 1}) == canonical_payload_digest({"a": 1, "b": 2})
+
+
+def test_payload_digest_rejects_non_json_numbers() -> None:
+    with pytest.raises(ValueError):
+        canonical_payload_digest({"value": math.nan})
 
 
 def test_text_digest_normalizes_crlf_only() -> None:

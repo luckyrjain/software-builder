@@ -26,6 +26,22 @@ def test_architecture_review_blocks_on_machine_design_summary_without_design_bod
     assert result.missing == ["full_system_design_content_or_ref"]
 
 
+def test_non_string_document_content_cannot_satisfy_full_document_gate() -> None:
+    result = resolve_embedded_inputs(
+        target_skill="system-design",
+        machine_artifact={"artifact_type": "prd_report", "payload": {"build_readiness": "READY"}},
+        document_content={"body": "not a document"},
+    )
+    assert result.status == "BLOCKED"
+    assert result.missing == ["full_prd_content_or_ref"]
+
+
+def test_malformed_machine_artifact_fails_closed() -> None:
+    result = resolve_embedded_inputs(target_skill="system-design", machine_artifact=["prd_report"])
+    assert result.status == "BLOCKED"
+    assert result.missing == ["machine_artifact"]
+
+
 def test_embedded_context_conflict_never_silently_prefers_top_level_input() -> None:
     result = resolve_embedded_inputs(assessment_context=assessment_context(inputs={"service_name": "payments"}), top_level={"service_name": "ledger"})
     assert result.status in {"CONFLICTED", "BLOCKED"}

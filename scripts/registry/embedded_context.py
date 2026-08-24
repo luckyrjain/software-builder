@@ -28,7 +28,11 @@ def resolve_embedded_inputs(
 ) -> EmbeddedInputResolution:
     del execution_context
     missing: list[str] = []
-    if machine_artifact and not document_content and not document_ref:
+    if machine_artifact is not None and not isinstance(machine_artifact, dict):
+        return EmbeddedInputResolution("BLOCKED", ["machine_artifact"])
+    has_document_content = isinstance(document_content, str) and bool(document_content)
+    has_document_ref = isinstance(document_ref, str) and bool(document_ref)
+    if isinstance(machine_artifact, dict) and machine_artifact and not has_document_content and not has_document_ref:
         artifact_type = machine_artifact.get("artifact_type")
         if artifact_type == "prd_report" or target_skill == "system-design":
             missing.append("full_prd_content_or_ref")

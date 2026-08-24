@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python 3, YAML registry contracts, pytest, Make, Markdown skill contracts.
 
-**Spec:** `./2026-08-23-engineering-decision-delivery-after-pr159-design-v10.md`
+**Spec:** External reviewed execution-package artifact `2026-08-23-engineering-decision-delivery-after-pr159-design-v10.md` (SHA-256: `78f8810b1b7d45508c413eb46cff654824205cca8976d6319931dbe8456bf57b`).
 
 ## Global Constraints
 
@@ -28,7 +28,7 @@
 **Repository:** `luckyrjain/software-builder`
 **Repository destination:** `docs/superpowers/plans/2026-08-23-foundation-a-runtime-primitives.md`
 **Depends on:** fresh `main` containing PR #159 merge commit `319eb2200264f5b2a4cdf327686d98e5383387ef`
-**Design source:** `./2026-08-23-engineering-decision-delivery-after-pr159-design-v10.md`
+**Design source:** External reviewed execution-package artifact `2026-08-23-engineering-decision-delivery-after-pr159-design-v10.md` (SHA-256: `78f8810b1b7d45508c413eb46cff654824205cca8976d6319931dbe8456bf57b`).
 
 ## Baseline preflight
 
@@ -107,7 +107,7 @@ Commit: none.
 
 Use the repository's real dispatcher/registry loaders. Production APIs introduced/modified by this PR are exactly: `canonical_payload_digest`, `canonical_text_digest`, `normalize_repo_identity`, `normalize_environment_identity`, `same_environment`, `classify_artifact_trust`, `classify_assessment_context_trust`, `resolve_embedded_inputs`, `validate_embedded_result_target`, `validate_artifact_contracts`, `validate_artifact_result`, and `validate_composition_runtime`.
 
-Module ownership is explicit: digest/identity helpers live in `scripts/registry/assessment_target.py`; producer/context trust classification lives in `scripts/registry/artifact_trust.py`; `resolve_embedded_inputs` and `validate_embedded_result_target` live in new `scripts/registry/embedded_context.py`; artifact validators remain in `scripts/registry/artifact_contracts.py`; runtime graph validation remains in `scripts/registry/composition_runtime.py`.
+Module ownership is explicit: digest/identity helpers live in `scripts/registry/assessment_target.py`; producer/context trust classification lives in `scripts/registry/artifact_trust.py`; `resolve_embedded_inputs` and `validate_embedded_result_target` live in new `scripts/registry/embedded_context.py`; artifact validators remain in `scripts/registry/artifact_contracts.py`; runtime graph validation remains in `scripts/registry/composition_runtime.py`. The internal `_issue_runtime_handoff_metadata` factory is runtime-owned test/integration plumbing, not a caller-authenticated payload field; dictionary metadata claiming `runtime_handoff` must remain untrusted.
 
 Test-local builders defined before first use are exactly: `assessment_context`, `assessment_target`, `registry_fixture`, `registry_fixture_with_raw_only_invoke_edge`, `registry_fixture_with_assessment_context_invoke_edge`, `load_manifest_with_assessment_context`, `valid_security_result`, and `valid_mr_review_result`. `no_mandatory_handoff` is a one-line local assertion helper over `load_registry(ROOT).skills[source].composition.invokes`. Routing tests call `dispatch_prompt` directly; there is no generic `route()` production API.
 ### Execution checklist

@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import Any, Mapping
 
 _AUTHORITIES = {"authoritative_host", "repository", "trusted_runtime", "caller", "model_knowledge"}
 _RUNTIME_HANDOFF_TOKEN = object()
@@ -35,7 +35,6 @@ class AssessmentContextTrust:
     acquisition: str
     parent_skill: str | None
     parent_execution_validated: bool
-    _context: dict[str, Any]
     _trusted_authorities: Mapping[str, str]
 
     def effective_authority(self, input_name: str) -> str:
@@ -58,10 +57,11 @@ def _issue_runtime_handoff_metadata(
     *, parent_skill: str, trusted_authorities: Mapping[str, str] | None = None
 ) -> _RuntimeHandoffMetadata:
     """Create runtime-owned metadata after the parent has validated its evidence."""
+    supplied = trusted_authorities if isinstance(trusted_authorities, Mapping) else {}
     authorities = {
         name: authority
-        for name, authority in (trusted_authorities or {}).items()
-        if isinstance(name, str) and authority in _AUTHORITIES
+        for name, authority in supplied.items()
+        if isinstance(name, str) and isinstance(authority, str) and authority in _AUTHORITIES
     }
     return _RuntimeHandoffMetadata(
         parent_skill=parent_skill,
@@ -75,13 +75,12 @@ def classify_assessment_context_trust(
     *,
     runtime_metadata: object,
 ) -> AssessmentContextTrust:
-    safe_context = context if isinstance(context, dict) else {}
+    del context
     if isinstance(runtime_metadata, _RuntimeHandoffMetadata) and runtime_metadata._token is _RUNTIME_HANDOFF_TOKEN:
         return AssessmentContextTrust(
             "runtime_handoff",
             runtime_metadata.parent_skill,
             True,
-            safe_context,
             runtime_metadata.trusted_authorities,
         )
-    return AssessmentContextTrust("caller_supplied", None, False, safe_context, MappingProxyType({}))
+    return AssessmentContextTrust("caller_supplied", None, False, MappingProxyType({}))
