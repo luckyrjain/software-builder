@@ -1,10 +1,7 @@
 from __future__ import annotations
 
-from copy import deepcopy
-from dataclasses import replace
 from pathlib import Path
 
-import scripts.registry.artifact_contracts as artifact_contracts
 from scripts.registry.artifact_trust import _issue_runtime_handoff_metadata
 from scripts.registry.artifact_contracts import validate_artifact_result
 from scripts.resilience_review import review_resilience
@@ -440,60 +437,12 @@ def test_successful_envelope_passes_actual_artifact_validator() -> None:
             trusted_authorities={"evidence": "repository"},
         ),
     )
-    original = artifact_contracts._load_contract_data
-
-    def resilience_contract_data(root: Path):
-        artifact_runtime, runtime, authority_levels, contracts, artifact_types, schemas, skills = original(root)
-        artifact_runtime = deepcopy(artifact_runtime)
-        runtime = deepcopy(runtime)
-        contracts = dict(contracts)
-        artifact_types = set(artifact_types)
-        schemas = dict(schemas)
-        skills = deepcopy(skills)
-        artifact_type = "resilience_review_report"
-        fields = [
-            "title",
-            "verdict",
-            "assessment_target",
-            "normalized_decision",
-            "findings",
-            "conditions",
-            "required_actions",
-            "evidence_refs",
-        ]
-        artifact_runtime["durable_artifacts"].append(artifact_type)
-        artifact_runtime["artifact_schema_versions"][artifact_type] = 1
-        artifact_runtime["state_semantics"][artifact_type] = "current_state"
-        artifact_runtime["allowed_state_semantics"][artifact_type] = ["current_state", "proposed_state"]
-        artifact_runtime["payload_types"][artifact_type] = dict(
-            artifact_runtime["payload_types"]["performance_review_report"]
-        )
-        runtime["artifact_ownership"][artifact_type] = {
-            "owners": ["resilience-review"],
-            "delegates": [],
-            "mode": "canonical",
-        }
-        contracts["resilience-review"] = replace(
-            contracts["performance-review"],
-            produces=[artifact_type],
-            produce_fields={artifact_type: fields},
-        )
-        artifact_types.add(artifact_type)
-        schemas[artifact_type] = fields
-        skills["resilience-review"] = deepcopy(skills["performance-review"])
-        skills["resilience-review"]["version"] = "1.0.0"
-        return artifact_runtime, runtime, authority_levels, contracts, artifact_types, schemas, skills
-
-    artifact_contracts._load_contract_data = resilience_contract_data
-    try:
-        errors = validate_artifact_result(
-            ROOT,
-            "resilience_review_report",
-            result,
-            producer_skill="resilience-review",
-        )
-    finally:
-        artifact_contracts._load_contract_data = original
+    errors = validate_artifact_result(
+        ROOT,
+        "resilience_review_report",
+        result,
+        producer_skill="resilience-review",
+    )
 
     assert errors == [], errors
 

@@ -51,6 +51,7 @@ When adding a new skill, add it here first; then each existing skill only needs 
 | Dependency upgrade, version bump review, CVE review, breaking change (library), transitive dependency | **dependency-upgrade-review** | security-review (a dedicated deep security audit), mysql-to-postgres-sql (the MySQL-to-Postgres migration itself) |
 | Tech debt, debt prioritization, debt backlog, engineering drag, refactor prioritization | **tech-debt-assessor** | migration-program-manager (planning a specific migration program), cost-optimization-sprint-planner (cost/rightsizing sweep) |
 | Change impact, affected services/contracts/data/tests, callers/consumers touched by a proposed design or exact PR/MR | **change-impact-analyzer** | pr-review (generic correctness/regression review), deployment-risk-review (blast radius/rollback risk after deployment) |
+| Resilience review, failure-mode review, timeout budgets, retries, circuit breakers, load shedding, backpressure, queues, idempotency, partial failure, recovery or reconciliation | **resilience-review** | incident-rca (live incident diagnosis), capacity-planner (demand/headroom forecasting), pr-review (generic correctness/regression review) |
 
 ## Disambiguation rules
 

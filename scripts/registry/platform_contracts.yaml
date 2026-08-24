@@ -82,6 +82,7 @@ artifact_runtime:
   - dependency_upgrade_report
   - tech_debt_assessment
   - change_impact_report
+  - resilience_review_report
   artifact_schema_versions:
     mr_review_report: 2
     rca_report: 1
@@ -107,6 +108,7 @@ artifact_runtime:
     dependency_upgrade_report: 2
     tech_debt_assessment: 1
     change_impact_report: 1
+    resilience_review_report: 1
   state_semantics:
     mr_review_report: current_state
     rca_report: current_state
@@ -132,6 +134,7 @@ artifact_runtime:
     dependency_upgrade_report: proposed_state
     tech_debt_assessment: current_state
     change_impact_report: proposed_state
+    resilience_review_report: proposed_state
   allowed_state_semantics:
     prd_report:
     - proposed_state
@@ -163,6 +166,9 @@ artifact_runtime:
     dependency_upgrade_report:
     - proposed_state
     change_impact_report:
+    - proposed_state
+    - current_state
+    resilience_review_report:
     - proposed_state
     - current_state
   payload_types:
@@ -339,6 +345,15 @@ artifact_runtime:
       operational_impacts: list
       review_triggers: list
       unknowns: list
+      evidence_refs: list
+    resilience_review_report:
+      title: string
+      verdict: string
+      assessment_target: mapping
+      normalized_decision: mapping
+      findings: list
+      conditions: list
+      required_actions: list
       evidence_refs: list
   required_sections:
     skill_result:
@@ -619,6 +634,11 @@ skill_permissions:
     external_actions: none
     unattended: false
     merge: false
+  resilience-review:
+    repository: read
+    external_actions: none
+    unattended: false
+    merge: false
 skill_types:
   pr-review: leaf
   pr-gatekeeper: trigger
@@ -655,3 +675,4 @@ skill_types:
   dependency-upgrade-review: leaf
   tech-debt-assessor: leaf
   change-impact-analyzer: leaf
+  resilience-review: leaf

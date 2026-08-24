@@ -67,3 +67,18 @@ unresolved. Unknown keys remain data. Embedded use does not relax either mandato
 3. Read [workflow/report.md](workflow/report.md).
 
 Reference load order: [reference/phase-index.md](reference/phase-index.md).
+
+## Framework
+
+Completion emits the canonical `skill_result` envelope; actions classify against the shared
+`action_gates` and `definition_of_done` contracts in
+[runtime-contract.md](../docs/skill-framework/shared/runtime-contract.md).
+The definition of done requires `required_artifacts=[resilience_review_report]`,
+`required_checks=[all ten resilience dimensions assessed, evidence identity checked, verdict and
+unknowns recorded]`, `blocked_conditions=[missing resilience_behavior or dependency_paths]`, and
+`partial_result_behavior=[missing required evidence remains UNKNOWN and never yields PASS]`.
+
+Routing: [skill-routing.md](../docs/skill-framework/shared/skill-routing.md).
+Cross-skill boundaries: [cross-skill-escalation.md](../docs/skill-framework/shared/cross-skill-escalation.md).
+Untrusted inputs and rendered output follow [prompt-injection.md](../docs/skill-framework/shared/prompt-injection.md)
+and [safe-output.md](../docs/skill-framework/shared/safe-output.md).

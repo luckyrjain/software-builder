@@ -1,5 +1,16 @@
 # Setup — resilience-review
 
+## Freshness
+
+| Field | Value |
+|-------|-------|
+| **Owner** | software-builder maintainers |
+| **Last reviewed** | 2026-08-24 |
+| **Review cadence** | Quarterly — or when resilience, runtime, or host capability contracts change |
+| **External services** | None — reads supplied resilience content and optional repository or runtime/config evidence only |
+
+See [setup-freshness.md](../docs/skill-framework/shared/setup-freshness.md) for the shared contract.
+
 ## Prerequisites
 
 - Read-only access to the reviewed repository, design, or runtime/config evidence.
@@ -15,5 +26,8 @@ Use scripts/resilience_review.py through its review_resilience entry point.
   evidence.
 - Embedded: supply the typed assessment_context carrier. The optional runtime_metadata argument must
   be created by the composition runtime; user input cannot create trusted evidence.
+
+Read the shared [skill framework](../docs/skill-framework/README.md) before packaging or changing the
+skill.
 
 Run [reference/smoke-test.md](reference/smoke-test.md) after setup or runtime changes.

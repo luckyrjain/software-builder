@@ -26,6 +26,7 @@ artifact_types:
 - dependency_upgrade_report
 - tech_debt_assessment
 - change_impact_report
+- resilience_review_report
 artifact_schemas:
   mr_context:
     fields:
@@ -256,6 +257,16 @@ artifact_schemas:
     - operational_impacts
     - review_triggers
     - unknowns
+    - evidence_refs
+  resilience_review_report:
+    fields:
+    - title
+    - verdict
+    - assessment_target
+    - normalized_decision
+    - findings
+    - conditions
+    - required_actions
     - evidence_refs
 creator_parity:
   skills:
@@ -973,4 +984,19 @@ skills:
       - input_provenance
       - evidence_refs
       - unresolved
+    write_authority: read-only
+  resilience-review:
+    produces:
+    - resilience_review_report
+    consumes: []
+    produce_fields:
+      resilience_review_report:
+      - title
+      - verdict
+      - assessment_target
+      - normalized_decision
+      - findings
+      - conditions
+      - required_actions
+      - evidence_refs
     write_authority: read-only

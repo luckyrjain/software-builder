@@ -1,5 +1,10 @@
 # Examples — resilience-review
 
+## Invocation
+
+Invoke `resilience-review` for a failure-mode or resilience-control assessment outside a live
+incident. Supply the resilience behavior, dependency paths, assessment target, and any typed evidence.
+
 ## Proposed design
 
 Review a proposed checkout design with a documented end-to-end timeout budget, bounded retry budget,
