@@ -84,6 +84,13 @@ Full matrix: [cross-skill-escalation.md](../docs/skill-framework/shared/cross-sk
 None of its own — `OBSERVABILITY_REVIEW_REPORT.md` is a markdown deliverable, not a ticket/chat write-back.
 See [post-action-templates.md](../docs/skill-framework/shared/post-action-templates.md).
 
+## Machine artifact v2
+
+The machine result preserves `assessment_target`, typed `provenance.sources`, `findings`,
+`conditions`, `required_actions`, and `evidence_refs`. `normalized_decision` is an object with
+`status` (`PASS`, `CONDITIONAL`, `FAIL`, or `UNKNOWN`) and `raw_verdict`: `Adequate` maps to `PASS`,
+`Partial gaps` to `CONDITIONAL`, `Critical gaps` to `FAIL`, and insufficient input to `UNKNOWN`.
+
 ## Framework
 
 Completion emits the canonical `skill_result` envelope; actions classify against

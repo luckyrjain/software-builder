@@ -31,3 +31,9 @@ Report the single highest-precedence state that applies; list every contributing
 one that set the verdict) across the seven sections, never just the winning one.
 
 Build per [reference/report-format.md](../reference/report-format.md).
+
+## Machine artifact v2
+
+Emit `api_design_review_report` with typed findings, conditions, required actions, evidence references,
+the assessment target, and an evidence-aware `normalized_decision`. An unresolved required compatibility
+check is `UNKNOWN`, not an unqualified approval.

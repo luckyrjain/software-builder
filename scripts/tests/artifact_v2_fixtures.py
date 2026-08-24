@@ -2,7 +2,13 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
+
+from scripts.registry.canonical_manifest import load_canonical_manifest
+
+
+ROOT = Path(__file__).resolve().parents[2]
 
 
 def finding(identifier: str, *, evidence_refs: list[str] | None = None) -> dict[str, Any]:
@@ -19,7 +25,7 @@ def finding(identifier: str, *, evidence_refs: list[str] | None = None) -> dict[
 def machine_summary_fixture(
     *,
     assessment_target: dict[str, Any] | None = None,
-    normalized_decision: str = "PASS",
+    normalized_decision: dict[str, Any] | None = None,
     findings: list[dict[str, Any]] | None = None,
     conditions: list[dict[str, Any]] | None = None,
     required_actions: list[dict[str, Any]] | None = None,
@@ -32,7 +38,8 @@ def machine_summary_fixture(
         "payload": {
             "assessment_target": assessment_target
             or {"kind": "repository", "repo": "acme/service"},
-            "normalized_decision": normalized_decision,
+            "normalized_decision": normalized_decision
+            or {"status": "PASS", "raw_verdict": "Pass"},
             "findings": [] if findings is None else findings,
             "conditions": [] if conditions is None else conditions,
             "required_actions": [] if required_actions is None else required_actions,
@@ -55,3 +62,30 @@ def machine_summary_fixture(
             else provenance_sources,
         },
     }
+
+
+def artifact_schema_version(artifact_type: str) -> int:
+    manifest = load_canonical_manifest(ROOT)
+    return manifest["contracts"]["platform"]["artifact_runtime"]["artifact_schema_versions"][artifact_type]
+
+
+def consumes(skill_id: str, artifact_type: str) -> bool:
+    manifest = load_canonical_manifest(ROOT)
+    return artifact_type in manifest["contracts"]["composition"]["skills"][skill_id].get("consumes", [])
+
+
+def consume_fields(skill_id: str, artifact_type: str) -> list[str]:
+    manifest = load_canonical_manifest(ROOT)
+    return manifest["contracts"]["composition"]["skills"][skill_id].get("consume_fields", {}).get(artifact_type, [])
+
+
+def assessment_context(**overrides: Any) -> dict[str, Any]:
+    context: dict[str, Any] = {
+        "assessment_target": {},
+        "inputs": {},
+        "input_provenance": {},
+        "evidence_refs": [],
+        "unresolved": [],
+    }
+    context.update(overrides)
+    return context

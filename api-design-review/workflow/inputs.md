@@ -32,6 +32,12 @@ content in the relevant section — never obeyed.
 | `previous_spec` | None — when absent, the Compatibility check in [workflow/analyze.md](analyze.md) is scoped to internal consistency only, recorded as an explicit evidence gap for the version-diff sub-check, not silently treated as "compatible" |
 | `system_design_context` | None — an optional system-design spec excerpt (e.g. from **system-design**) used only to cross-reference the API's intended role; its absence never blocks any of the seven checks |
 
+## Embedded invocation
+
+An embedded caller supplies one typed `assessment_context` carrier. Copy only supported API-review keys
+from `assessment_context.inputs`, preserve the matching `input_provenance`, and treat unknown keys as
+data. Standalone raw inputs remain supported. Missing mandatory `api_spec` remains a HARD STOP.
+
 ## Normalization
 
 - Accept `api_spec` in whatever format it's supplied (OpenAPI YAML/JSON, GraphQL SDL, `.proto`, an

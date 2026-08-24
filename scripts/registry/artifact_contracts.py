@@ -9,6 +9,7 @@ from typing import Any
 from scripts.registry.canonical_manifest import is_semver, load_canonical_manifest
 from scripts.registry.composition_contracts import load_contracts
 from scripts.registry.machine_summary import COMMON_MACHINE_SUMMARY_FIELDS, validate_machine_summary
+from scripts.registry.semantic_document import validate_semantic_artifact_target
 from scripts.yaml_safety import YAML_SAFETY_ERRORS, require_mapping
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -393,8 +394,14 @@ def validate_artifact_result(
                     if not matches:
                         errors.append(f"error: {artifact_type}: payload.{field} must be {expected}")
         has_machine_summary = set(artifact_schemas.get(artifact_type, [])) >= COMMON_MACHINE_SUMMARY_FIELDS
-        if has_machine_summary:
+        if has_machine_summary and (
+            not envelope
+            or envelope.get("status") == "SUCCESS"
+            or bool(payload)
+        ):
             errors.extend(validate_machine_summary({"payload": payload, "provenance": provenance}))
+        if artifact_type in {"prd_report", "system_design_spec"}:
+            errors.extend(validate_semantic_artifact_target(artifact_type, payload))
         if provenance:
             provenance_revision = provenance.get("source_revision")
             if provenance_revision not in (None, "UNKNOWN") and (

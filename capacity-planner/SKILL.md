@@ -89,6 +89,14 @@ Full matrix: [cross-skill-escalation.md](../docs/skill-framework/shared/cross-sk
 None of its own — `CAPACITY_PLAN.md` is a markdown deliverable, not a ticket/chat write-back. See
 [post-action-templates.md](../docs/skill-framework/shared/post-action-templates.md).
 
+## Machine artifact v2
+
+The machine result preserves `assessment_target`, typed `provenance.sources`, `findings`,
+`conditions`, `required_actions`, and `evidence_refs`. `normalized_decision` is an object with
+`status` (`PASS`, `CONDITIONAL`, `FAIL`, or `UNKNOWN`) and `raw_verdict`: `Sufficient` maps to
+`PASS`, `Marginal` to `CONDITIONAL`, `Insufficient` to `FAIL`, and insufficient historical data to
+`UNKNOWN`.
+
 ## Framework
 
 Completion emits the canonical `skill_result` envelope; actions classify against

@@ -104,6 +104,12 @@ Full matrix: [cross-skill-escalation.md](../docs/skill-framework/shared/cross-sk
 None by default — deliverable is the PRD artifact in chat (or a user-requested file path). See
 [post-action-templates.md](../docs/skill-framework/shared/post-action-templates.md).
 
+## Machine artifact v2
+
+When a durable `prd_report` is emitted, include the complete typed machine summary and bind its
+`assessment_target.source_artifact_digest` to the complete final PRD text. A digest supplied only by
+caller prose is not authoritative.
+
 ## Framework
 
 Completion emits the canonical `skill_result` envelope; actions classify against `action_gates`; scope

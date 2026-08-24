@@ -30,3 +30,10 @@ Derive the Readiness verdict with fixed, worst-first precedence:
 3. **Ready to implement** — every section has a concrete answer; no Open questions remain.
 
 Build per [reference/report-format.md](../reference/report-format.md).
+
+## Machine artifact v2
+
+Emit `system_design_spec` with the common machine summary fields. Set
+`assessment_target.source_type: system_design` and bind `source_artifact_digest` to the complete final
+System Design text. A missing or mismatched source document is `UNKNOWN`/blocked, never a guessed Ready
+verdict.

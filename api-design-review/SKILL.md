@@ -81,6 +81,12 @@ Full matrix: [cross-skill-escalation.md](../docs/skill-framework/shared/cross-sk
 None of its own — `API_DESIGN_REVIEW_REPORT.md` is a markdown deliverable, not a ticket/chat write-back.
 See [post-action-templates.md](../docs/skill-framework/shared/post-action-templates.md).
 
+## Machine artifact v2
+
+Emit typed findings, conditions, required actions, evidence references, assessment target, and an
+evidence-aware normalized decision. Embedded callers use the typed `assessment_context` carrier; standalone
+input rules remain unchanged.
+
 ## Framework
 
 Completion emits the canonical `skill_result` envelope; actions classify against

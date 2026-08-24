@@ -39,3 +39,9 @@ or `Partial gaps` finding that plausibly explains slow incident detection gets a
 **deployment-risk-review** pointer instead (or in addition — the two are not mutually exclusive).
 
 Build per [reference/report-format.md](../reference/report-format.md).
+
+## Machine artifact v2
+
+Emit the common machine fields and map `Adequate` to `PASS`, `Partial gaps` to `CONDITIONAL`,
+`Critical gaps` to `FAIL`, and `Unknown — insufficient input` to `UNKNOWN`. Preserve the human
+verdict in `raw_verdict`; every unassessed category remains an explicit finding or unresolved item.

@@ -33,3 +33,9 @@ Report the single highest-precedence state; list every contributing finding (not
 the verdict) across the relevant sections and in Notes.
 
 Build per [reference/report-format.md](../reference/report-format.md).
+
+## Machine artifact v2
+
+Emit `database_review_report` with typed findings, conditions, required actions, evidence references,
+the assessment target, and an evidence-aware `normalized_decision`. Unknown migration or query-plan
+evidence remains `UNKNOWN`; it is never silently treated as approved.

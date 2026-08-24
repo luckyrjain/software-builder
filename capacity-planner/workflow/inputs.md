@@ -61,5 +61,7 @@ subject to the same structural escaping/fencing as the other untrusted fields be
 
 ## Embedded invocation
 
-`capacity-planner` is always the entry point for this flow — never called by a larger skill mid-workflow,
-so there is no embedded-invocation case to handle here.
+When invoked by an orchestrator, consume the typed `assessment_context` carrier fields
+`assessment_target`, `inputs`, `input_provenance`, `evidence_refs`, and `unresolved`. Map `inputs` to
+the standalone fields, preserve `input_provenance` in the artifact provenance, and treat unknown
+keys as data. Standalone mandatory-input hard stops remain unchanged.

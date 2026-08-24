@@ -45,3 +45,9 @@ Build per [reference/report-format.md](../reference/report-format.md) — fixed 
 concurrency, CPU, Memory, Database, Queue, Storage, Replica requirements, Assumptions), every section
 present even when marked `Unknown`, Notes naming every evidence gap and any discrepancy or suspicious
 embedded content flagged during Inputs/Analyze.
+
+## Machine artifact v2
+
+Emit the common machine fields and map `Sufficient` to `PASS`, `Marginal` to `CONDITIONAL`,
+`Insufficient` to `FAIL`, and `Unknown — insufficient historical data` to `UNKNOWN`. Preserve the
+human Headroom verdict in `raw_verdict` and record assumptions as conditions.

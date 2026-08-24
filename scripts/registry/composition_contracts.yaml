@@ -48,6 +48,13 @@ artifact_schemas:
     - posted
     - head_sha
     - posting_mode
+    - integrated_revision
+    - assessment_target
+    - normalized_decision
+    - findings
+    - conditions
+    - required_actions
+    - evidence_refs
   rca_report:
     fields:
     - assessment_metadata
@@ -119,47 +126,113 @@ artifact_schemas:
     - build_readiness
     - depth
     - response_mode
+    - assessment_target
+    - normalized_decision
+    - findings
+    - conditions
+    - required_actions
+    - evidence_refs
   architecture_review_report:
     fields:
     - title
     - decision
+    - assessment_target
+    - normalized_decision
+    - findings
+    - conditions
+    - required_actions
+    - evidence_refs
   system_design_spec:
     fields:
     - title
     - readiness
+    - assessment_target
+    - normalized_decision
+    - findings
+    - conditions
+    - required_actions
+    - evidence_refs
   api_design_review_report:
     fields:
     - title
     - verdict
+    - assessment_target
+    - normalized_decision
+    - findings
+    - conditions
+    - required_actions
+    - evidence_refs
   database_review_report:
     fields:
     - title
     - verdict
+    - assessment_target
+    - normalized_decision
+    - findings
+    - conditions
+    - required_actions
+    - evidence_refs
   security_review_report:
     fields:
     - title
     - verdict
+    - assessment_target
+    - normalized_decision
+    - findings
+    - conditions
+    - required_actions
+    - evidence_refs
   performance_review_report:
     fields:
     - title
     - verdict
+    - assessment_target
+    - normalized_decision
+    - findings
+    - conditions
+    - required_actions
+    - evidence_refs
   capacity_plan:
     fields:
     - title
     - headroom
+    - assessment_target
+    - normalized_decision
+    - findings
+    - conditions
+    - required_actions
+    - evidence_refs
   observability_review_report:
     fields:
     - title
     - coverage
+    - assessment_target
+    - normalized_decision
+    - findings
+    - conditions
+    - required_actions
+    - evidence_refs
   deployment_risk_report:
     fields:
     - title
     - risk
     - deployment_confidence
+    - assessment_target
+    - normalized_decision
+    - findings
+    - conditions
+    - required_actions
+    - evidence_refs
   dependency_upgrade_report:
     fields:
     - title
     - verdict
+    - assessment_target
+    - normalized_decision
+    - findings
+    - conditions
+    - required_actions
+    - evidence_refs
   tech_debt_assessment:
     fields:
     - title
@@ -211,6 +284,13 @@ skills:
       - posted
       - head_sha
       - posting_mode
+      - integrated_revision
+      - assessment_target
+      - normalized_decision
+      - findings
+      - conditions
+      - required_actions
+      - evidence_refs
     consume_fields:
       mr_context:
       - project
@@ -227,6 +307,14 @@ skills:
       - review_metadata
       - posted
       - head_sha
+      - posting_mode
+      - integrated_revision
+      - assessment_target
+      - normalized_decision
+      - findings
+      - conditions
+      - required_actions
+      - evidence_refs
     consume_fields:
       mr_context:
       - project
@@ -315,6 +403,14 @@ skills:
       mr_review_report:
       - review_metadata
       - posted
+      - head_sha
+      - integrated_revision
+      - assessment_target
+      - normalized_decision
+      - findings
+      - conditions
+      - required_actions
+      - evidence_refs
       k8s_rightsizing_report:
       - assessment_metadata
       - recommendations
@@ -551,6 +647,12 @@ skills:
       - build_readiness
       - depth
       - response_mode
+      - assessment_target
+      - normalized_decision
+      - findings
+      - conditions
+      - required_actions
+      - evidence_refs
     consume_fields:
       implementation_task:
       - task_id
@@ -567,15 +669,27 @@ skills:
       architecture_review_report:
       - title
       - decision
+      - assessment_target
+      - normalized_decision
+      - findings
+      - conditions
+      - required_actions
+      - evidence_refs
     consume_fields:
       system_design_spec:
       - title
       - readiness
+      - assessment_target
+      - normalized_decision
+      - evidence_refs
       prd_report:
       - title
       - build_readiness
       - depth
       - response_mode
+      - assessment_target
+      - normalized_decision
+      - evidence_refs
     write_authority: read-only
   system-design:
     produces:
@@ -587,88 +701,212 @@ skills:
       system_design_spec:
       - title
       - readiness
+      - assessment_target
+      - normalized_decision
+      - findings
+      - conditions
+      - required_actions
+      - evidence_refs
     consume_fields:
       prd_report:
       - title
       - build_readiness
       - depth
       - response_mode
+      - assessment_target
+      - normalized_decision
+      - evidence_refs
       architecture_review_report:
       - title
       - decision
+      - assessment_target
+      - normalized_decision
+      - evidence_refs
     write_authority: read-only
   api-design-review:
     produces:
     - api_design_review_report
-    consumes: []
+    consumes:
+    - assessment_context
     produce_fields:
       api_design_review_report:
       - title
       - verdict
+      - assessment_target
+      - normalized_decision
+      - findings
+      - conditions
+      - required_actions
+      - evidence_refs
+    consume_fields:
+      assessment_context:
+      - assessment_target
+      - inputs
+      - input_provenance
+      - evidence_refs
+      - unresolved
     write_authority: read-only
   database-review:
     produces:
     - database_review_report
-    consumes: []
+    consumes:
+    - assessment_context
     produce_fields:
       database_review_report:
       - title
       - verdict
+      - assessment_target
+      - normalized_decision
+      - findings
+      - conditions
+      - required_actions
+      - evidence_refs
+    consume_fields:
+      assessment_context:
+      - assessment_target
+      - inputs
+      - input_provenance
+      - evidence_refs
+      - unresolved
     write_authority: read-only
   security-review:
     produces:
     - security_review_report
-    consumes: []
+    consumes:
+    - assessment_context
     produce_fields:
       security_review_report:
       - title
       - verdict
+      - assessment_target
+      - normalized_decision
+      - findings
+      - conditions
+      - required_actions
+      - evidence_refs
+    consume_fields:
+      assessment_context:
+      - assessment_target
+      - inputs
+      - input_provenance
+      - evidence_refs
+      - unresolved
     write_authority: read-only
   performance-review:
     produces:
     - performance_review_report
-    consumes: []
+    consumes:
+    - assessment_context
     produce_fields:
       performance_review_report:
       - title
       - verdict
+      - assessment_target
+      - normalized_decision
+      - findings
+      - conditions
+      - required_actions
+      - evidence_refs
+    consume_fields:
+      assessment_context:
+      - assessment_target
+      - inputs
+      - input_provenance
+      - evidence_refs
+      - unresolved
     write_authority: read-only
   capacity-planner:
     produces:
     - capacity_plan
-    consumes: []
+    consumes:
+    - assessment_context
     produce_fields:
       capacity_plan:
       - title
       - headroom
+      - assessment_target
+      - normalized_decision
+      - findings
+      - conditions
+      - required_actions
+      - evidence_refs
+    consume_fields:
+      assessment_context:
+      - assessment_target
+      - inputs
+      - input_provenance
+      - evidence_refs
+      - unresolved
     write_authority: read-only
   observability-review:
     produces:
     - observability_review_report
-    consumes: []
+    consumes:
+    - assessment_context
     produce_fields:
       observability_review_report:
       - title
       - coverage
+      - assessment_target
+      - normalized_decision
+      - findings
+      - conditions
+      - required_actions
+      - evidence_refs
+    consume_fields:
+      assessment_context:
+      - assessment_target
+      - inputs
+      - input_provenance
+      - evidence_refs
+      - unresolved
     write_authority: read-only
   deployment-risk-review:
     produces:
     - deployment_risk_report
-    consumes: []
+    consumes:
+    - assessment_context
     produce_fields:
       deployment_risk_report:
       - title
       - risk
       - deployment_confidence
+      - assessment_target
+      - normalized_decision
+      - findings
+      - conditions
+      - required_actions
+      - evidence_refs
+    consume_fields:
+      assessment_context:
+      - assessment_target
+      - inputs
+      - input_provenance
+      - evidence_refs
+      - unresolved
     write_authority: read-only
   dependency-upgrade-review:
     produces:
     - dependency_upgrade_report
-    consumes: []
+    consumes:
+    - assessment_context
     produce_fields:
       dependency_upgrade_report:
       - title
       - verdict
+      - assessment_target
+      - normalized_decision
+      - findings
+      - conditions
+      - required_actions
+      - evidence_refs
+    consume_fields:
+      assessment_context:
+      - assessment_target
+      - inputs
+      - input_provenance
+      - evidence_refs
+      - unresolved
     write_authority: read-only
   tech-debt-assessor:
     produces:

@@ -32,3 +32,9 @@ Build per [reference/report-format.md](../reference/report-format.md) — every 
 present (populated or "None found"), `## Unknowns` present whenever Analyze recorded a gap (omit
 the section only when there are none), evidence excerpts escaped/fenced and redacted per that
 file's § Safe rendered-output boundary.
+
+## Machine artifact v2
+
+Emit the common machine fields and map `Pass` to `PASS`, `Pass with findings` to `CONDITIONAL`,
+Critical/High findings to `FAIL`, and `Blocked — insufficient access` to `UNKNOWN`. Preserve the
+human verdict in `raw_verdict` and keep all evidence gaps in `findings` or `unresolved`.

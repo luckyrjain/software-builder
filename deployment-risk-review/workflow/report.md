@@ -41,3 +41,9 @@ verdict — so the report shows its full reasoning per
 [reference/report-format.md § Rules](../reference/report-format.md#rules).
 
 Build per [reference/report-format.md](../reference/report-format.md).
+
+## Machine artifact v2
+
+Emit the common machine fields and map Critical/High risk to `FAIL`, Low risk to `PASS`, and High
+risk with unresolved required evidence to `UNKNOWN`. Preserve the human Risk verdict in `raw_verdict`
+and keep evidence gaps in `unresolved`.

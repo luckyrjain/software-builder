@@ -46,3 +46,10 @@ gets an explicit "None found" row — never omitted. Quote grounding excerpts fr
 them.
 
 Build per [reference/report-format.md](../reference/report-format.md).
+
+## Machine artifact v2
+
+Emit `architecture_review_report` with the common machine summary fields alongside the human decision.
+Derive `normalized_decision.status` from structured findings: proven unrecoverable risk is `FAIL`, a
+required evidence gap is `UNKNOWN`, a known nonblocking condition is `CONDITIONAL`, and only a complete
+clean assessment is `PASS`. Preserve `assessment_target` and typed `provenance.sources`.

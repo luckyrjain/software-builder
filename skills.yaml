@@ -86,7 +86,7 @@ contracts:
       - dependency_upgrade_report
       - tech_debt_assessment
       artifact_schema_versions:
-        mr_review_report: 1
+        mr_review_report: 2
         rca_report: 1
         k8s_rightsizing_report: 1
         squad_map: 1
@@ -97,17 +97,17 @@ contracts:
         digest_report: 1
         test_suite: 1
         test_orchestration_result: 1
-        prd_report: 1
-        architecture_review_report: 1
-        system_design_spec: 1
-        api_design_review_report: 1
-        database_review_report: 1
-        security_review_report: 1
-        performance_review_report: 1
-        capacity_plan: 1
-        observability_review_report: 1
-        deployment_risk_report: 1
-        dependency_upgrade_report: 1
+        prd_report: 2
+        architecture_review_report: 2
+        system_design_spec: 2
+        api_design_review_report: 2
+        database_review_report: 2
+        security_review_report: 2
+        performance_review_report: 2
+        capacity_plan: 2
+        observability_review_report: 2
+        deployment_risk_report: 2
+        dependency_upgrade_report: 2
         tech_debt_assessment: 1
       state_semantics:
         mr_review_report: current_state
@@ -133,13 +133,37 @@ contracts:
         deployment_risk_report: proposed_state
         dependency_upgrade_report: proposed_state
         tech_debt_assessment: current_state
-      allowed_state_semantics: {}
-      payload_types:
+      allowed_state_semantics:
+        prd_report:
+        - proposed_state
         mr_review_report:
-          review_metadata: mapping
-          posted: boolean
-          head_sha: string
-          posting_mode: string
+        - current_state
+        architecture_review_report:
+        - proposed_state
+        system_design_spec:
+        - proposed_state
+        api_design_review_report:
+        - current_state
+        - proposed_state
+        database_review_report:
+        - current_state
+        - proposed_state
+        security_review_report:
+        - current_state
+        - proposed_state
+        performance_review_report:
+        - current_state
+        - proposed_state
+        capacity_plan:
+        - desired_state
+        observability_review_report:
+        - current_state
+        - proposed_state
+        deployment_risk_report:
+        - proposed_state
+        dependency_upgrade_report:
+        - proposed_state
+      payload_types:
         rca_report:
           assessment_metadata: mapping
           root_cause: string
@@ -184,37 +208,115 @@ contracts:
           build_readiness: string
           depth: string
           response_mode: string
+          assessment_target: mapping
+          normalized_decision: mapping
+          findings: list
+          conditions: list
+          required_actions: list
+          evidence_refs: list
+        mr_review_report:
+          review_metadata: mapping
+          posted: boolean
+          head_sha: string
+          posting_mode: string
+          integrated_revision: string
+          assessment_target: mapping
+          normalized_decision: mapping
+          findings: list
+          conditions: list
+          required_actions: list
+          evidence_refs: list
         architecture_review_report:
           title: string
           decision: string
+          assessment_target: mapping
+          normalized_decision: mapping
+          findings: list
+          conditions: list
+          required_actions: list
+          evidence_refs: list
         system_design_spec:
           title: string
           readiness: string
+          assessment_target: mapping
+          normalized_decision: mapping
+          findings: list
+          conditions: list
+          required_actions: list
+          evidence_refs: list
         api_design_review_report:
           title: string
           verdict: string
+          assessment_target: mapping
+          normalized_decision: mapping
+          findings: list
+          conditions: list
+          required_actions: list
+          evidence_refs: list
         database_review_report:
           title: string
           verdict: string
+          assessment_target: mapping
+          normalized_decision: mapping
+          findings: list
+          conditions: list
+          required_actions: list
+          evidence_refs: list
         security_review_report:
           title: string
           verdict: string
+          assessment_target: mapping
+          normalized_decision: mapping
+          findings: list
+          conditions: list
+          required_actions: list
+          evidence_refs: list
         performance_review_report:
           title: string
           verdict: string
+          assessment_target: mapping
+          normalized_decision: mapping
+          findings: list
+          conditions: list
+          required_actions: list
+          evidence_refs: list
         capacity_plan:
           title: string
           headroom: string
+          assessment_target: mapping
+          normalized_decision: mapping
+          findings: list
+          conditions: list
+          required_actions: list
+          evidence_refs: list
         observability_review_report:
           title: string
           coverage: string
+          assessment_target: mapping
+          normalized_decision: mapping
+          findings: list
+          conditions: list
+          required_actions: list
+          evidence_refs: list
         deployment_risk_report:
           title: string
           risk: string
           deployment_confidence: string
+          assessment_target: mapping
+          normalized_decision: mapping
+          findings: list
+          conditions: list
+          required_actions: list
+          evidence_refs: list
         dependency_upgrade_report:
           title: string
           verdict: string
+          assessment_target: mapping
+          normalized_decision: mapping
+          findings: list
+          conditions: list
+          required_actions: list
+          evidence_refs: list
         tech_debt_assessment:
           title: string
           items: list
@@ -801,6 +903,13 @@ contracts:
         - posted
         - head_sha
         - posting_mode
+        - integrated_revision
+        - assessment_target
+        - normalized_decision
+        - findings
+        - conditions
+        - required_actions
+        - evidence_refs
       rca_report:
         fields:
         - assessment_metadata
@@ -872,47 +981,113 @@ contracts:
         - build_readiness
         - depth
         - response_mode
+        - assessment_target
+        - normalized_decision
+        - findings
+        - conditions
+        - required_actions
+        - evidence_refs
       architecture_review_report:
         fields:
         - title
         - decision
+        - assessment_target
+        - normalized_decision
+        - findings
+        - conditions
+        - required_actions
+        - evidence_refs
       system_design_spec:
         fields:
         - title
         - readiness
+        - assessment_target
+        - normalized_decision
+        - findings
+        - conditions
+        - required_actions
+        - evidence_refs
       api_design_review_report:
         fields:
         - title
         - verdict
+        - assessment_target
+        - normalized_decision
+        - findings
+        - conditions
+        - required_actions
+        - evidence_refs
       database_review_report:
         fields:
         - title
         - verdict
+        - assessment_target
+        - normalized_decision
+        - findings
+        - conditions
+        - required_actions
+        - evidence_refs
       security_review_report:
         fields:
         - title
         - verdict
+        - assessment_target
+        - normalized_decision
+        - findings
+        - conditions
+        - required_actions
+        - evidence_refs
       performance_review_report:
         fields:
         - title
         - verdict
+        - assessment_target
+        - normalized_decision
+        - findings
+        - conditions
+        - required_actions
+        - evidence_refs
       capacity_plan:
         fields:
         - title
         - headroom
+        - assessment_target
+        - normalized_decision
+        - findings
+        - conditions
+        - required_actions
+        - evidence_refs
       observability_review_report:
         fields:
         - title
         - coverage
+        - assessment_target
+        - normalized_decision
+        - findings
+        - conditions
+        - required_actions
+        - evidence_refs
       deployment_risk_report:
         fields:
         - title
         - risk
         - deployment_confidence
+        - assessment_target
+        - normalized_decision
+        - findings
+        - conditions
+        - required_actions
+        - evidence_refs
       dependency_upgrade_report:
         fields:
         - title
         - verdict
+        - assessment_target
+        - normalized_decision
+        - findings
+        - conditions
+        - required_actions
+        - evidence_refs
       tech_debt_assessment:
         fields:
         - title
@@ -964,6 +1139,13 @@ contracts:
           - posted
           - head_sha
           - posting_mode
+          - integrated_revision
+          - assessment_target
+          - normalized_decision
+          - findings
+          - conditions
+          - required_actions
+          - evidence_refs
         consume_fields:
           mr_context:
           - project
@@ -980,6 +1162,14 @@ contracts:
           - review_metadata
           - posted
           - head_sha
+          - posting_mode
+          - integrated_revision
+          - assessment_target
+          - normalized_decision
+          - findings
+          - conditions
+          - required_actions
+          - evidence_refs
         consume_fields:
           mr_context:
           - project
@@ -1068,6 +1258,14 @@ contracts:
           mr_review_report:
           - review_metadata
           - posted
+          - head_sha
+          - integrated_revision
+          - assessment_target
+          - normalized_decision
+          - findings
+          - conditions
+          - required_actions
+          - evidence_refs
           k8s_rightsizing_report:
           - assessment_metadata
           - recommendations
@@ -1304,6 +1502,12 @@ contracts:
           - build_readiness
           - depth
           - response_mode
+          - assessment_target
+          - normalized_decision
+          - findings
+          - conditions
+          - required_actions
+          - evidence_refs
         consume_fields:
           implementation_task:
           - task_id
@@ -1320,15 +1524,27 @@ contracts:
           architecture_review_report:
           - title
           - decision
+          - assessment_target
+          - normalized_decision
+          - findings
+          - conditions
+          - required_actions
+          - evidence_refs
         consume_fields:
           system_design_spec:
           - title
           - readiness
+          - assessment_target
+          - normalized_decision
+          - evidence_refs
           prd_report:
           - title
           - build_readiness
           - depth
           - response_mode
+          - assessment_target
+          - normalized_decision
+          - evidence_refs
         write_authority: read-only
       system-design:
         produces:
@@ -1340,88 +1556,212 @@ contracts:
           system_design_spec:
           - title
           - readiness
+          - assessment_target
+          - normalized_decision
+          - findings
+          - conditions
+          - required_actions
+          - evidence_refs
         consume_fields:
           prd_report:
           - title
           - build_readiness
           - depth
           - response_mode
+          - assessment_target
+          - normalized_decision
+          - evidence_refs
           architecture_review_report:
           - title
           - decision
+          - assessment_target
+          - normalized_decision
+          - evidence_refs
         write_authority: read-only
       api-design-review:
         produces:
         - api_design_review_report
-        consumes: []
+        consumes:
+        - assessment_context
         produce_fields:
           api_design_review_report:
           - title
           - verdict
+          - assessment_target
+          - normalized_decision
+          - findings
+          - conditions
+          - required_actions
+          - evidence_refs
+        consume_fields:
+          assessment_context:
+          - assessment_target
+          - inputs
+          - input_provenance
+          - evidence_refs
+          - unresolved
         write_authority: read-only
       database-review:
         produces:
         - database_review_report
-        consumes: []
+        consumes:
+        - assessment_context
         produce_fields:
           database_review_report:
           - title
           - verdict
+          - assessment_target
+          - normalized_decision
+          - findings
+          - conditions
+          - required_actions
+          - evidence_refs
+        consume_fields:
+          assessment_context:
+          - assessment_target
+          - inputs
+          - input_provenance
+          - evidence_refs
+          - unresolved
         write_authority: read-only
       security-review:
         produces:
         - security_review_report
-        consumes: []
+        consumes:
+        - assessment_context
         produce_fields:
           security_review_report:
           - title
           - verdict
+          - assessment_target
+          - normalized_decision
+          - findings
+          - conditions
+          - required_actions
+          - evidence_refs
+        consume_fields:
+          assessment_context:
+          - assessment_target
+          - inputs
+          - input_provenance
+          - evidence_refs
+          - unresolved
         write_authority: read-only
       performance-review:
         produces:
         - performance_review_report
-        consumes: []
+        consumes:
+        - assessment_context
         produce_fields:
           performance_review_report:
           - title
           - verdict
+          - assessment_target
+          - normalized_decision
+          - findings
+          - conditions
+          - required_actions
+          - evidence_refs
+        consume_fields:
+          assessment_context:
+          - assessment_target
+          - inputs
+          - input_provenance
+          - evidence_refs
+          - unresolved
         write_authority: read-only
       capacity-planner:
         produces:
         - capacity_plan
-        consumes: []
+        consumes:
+        - assessment_context
         produce_fields:
           capacity_plan:
           - title
           - headroom
+          - assessment_target
+          - normalized_decision
+          - findings
+          - conditions
+          - required_actions
+          - evidence_refs
+        consume_fields:
+          assessment_context:
+          - assessment_target
+          - inputs
+          - input_provenance
+          - evidence_refs
+          - unresolved
         write_authority: read-only
       observability-review:
         produces:
         - observability_review_report
-        consumes: []
+        consumes:
+        - assessment_context
         produce_fields:
           observability_review_report:
           - title
           - coverage
+          - assessment_target
+          - normalized_decision
+          - findings
+          - conditions
+          - required_actions
+          - evidence_refs
+        consume_fields:
+          assessment_context:
+          - assessment_target
+          - inputs
+          - input_provenance
+          - evidence_refs
+          - unresolved
         write_authority: read-only
       deployment-risk-review:
         produces:
         - deployment_risk_report
-        consumes: []
+        consumes:
+        - assessment_context
         produce_fields:
           deployment_risk_report:
           - title
           - risk
           - deployment_confidence
+          - assessment_target
+          - normalized_decision
+          - findings
+          - conditions
+          - required_actions
+          - evidence_refs
+        consume_fields:
+          assessment_context:
+          - assessment_target
+          - inputs
+          - input_provenance
+          - evidence_refs
+          - unresolved
         write_authority: read-only
       dependency-upgrade-review:
         produces:
         - dependency_upgrade_report
-        consumes: []
+        consumes:
+        - assessment_context
         produce_fields:
           dependency_upgrade_report:
           - title
           - verdict
+          - assessment_target
+          - normalized_decision
+          - findings
+          - conditions
+          - required_actions
+          - evidence_refs
+        consume_fields:
+          assessment_context:
+          - assessment_target
+          - inputs
+          - input_provenance
+          - evidence_refs
+          - unresolved
         write_authority: read-only
       tech-debt-assessor:
         produces:
@@ -1489,7 +1829,7 @@ skills:
       target: pr-review
     risk_class:
     - posting
-    version: 1.1.0
+    version: 1.2.0
     type: leaf
     authority: comment
     permissions:
@@ -1514,6 +1854,13 @@ skills:
         - posted
         - head_sha
         - posting_mode
+        - integrated_revision
+        - assessment_target
+        - normalized_decision
+        - findings
+        - conditions
+        - required_actions
+        - evidence_refs
     dependencies: []
     version_source: skill_frontmatter_legacy_numeric
   pr-gatekeeper:
@@ -1549,7 +1896,7 @@ skills:
     risk_class:
     - posting
     - unattended
-    version: 1.0.0
+    version: 1.1.0
     type: trigger
     authority: comment
     permissions:
@@ -1573,6 +1920,14 @@ skills:
         - review_metadata
         - posted
         - head_sha
+        - posting_mode
+        - integrated_revision
+        - assessment_target
+        - normalized_decision
+        - findings
+        - conditions
+        - required_actions
+        - evidence_refs
     dependencies:
     - pr-review
     version_source: skill_frontmatter_legacy_numeric
@@ -2666,7 +3021,7 @@ skills:
       target: prd-architect
     risk_class:
     - read-only
-    version: 1.2.0
+    version: 1.3.0
     type: leaf
     authority: read-only
     permissions:
@@ -2691,6 +3046,12 @@ skills:
         - build_readiness
         - depth
         - response_mode
+        - assessment_target
+        - normalized_decision
+        - findings
+        - conditions
+        - required_actions
+        - evidence_refs
     dependencies: []
     version_source: skill_frontmatter_legacy_numeric
   test-writer:
@@ -2796,7 +3157,7 @@ skills:
       target: architecture-review
     risk_class:
     - read-only
-    version: 1.1.0
+    version: 1.2.0
     type: leaf
     authority: read-only
     permissions:
@@ -2819,6 +3180,12 @@ skills:
         architecture_review_report:
         - title
         - decision
+        - assessment_target
+        - normalized_decision
+        - findings
+        - conditions
+        - required_actions
+        - evidence_refs
     dependencies: []
     version_source: skill_frontmatter_legacy_numeric
   system-design:
@@ -2848,7 +3215,7 @@ skills:
       target: system-design
     risk_class:
     - read-only
-    version: 1.1.0
+    version: 1.2.0
     type: leaf
     authority: read-only
     permissions:
@@ -2871,6 +3238,12 @@ skills:
         system_design_spec:
         - title
         - readiness
+        - assessment_target
+        - normalized_decision
+        - findings
+        - conditions
+        - required_actions
+        - evidence_refs
     dependencies: []
     version_source: skill_frontmatter_legacy_numeric
   api-design-review:
@@ -2900,7 +3273,7 @@ skills:
       target: api-design-review
     risk_class:
     - read-only
-    version: 1.0.0
+    version: 1.1.0
     type: leaf
     authority: read-only
     permissions:
@@ -2923,6 +3296,12 @@ skills:
         api_design_review_report:
         - title
         - verdict
+        - assessment_target
+        - normalized_decision
+        - findings
+        - conditions
+        - required_actions
+        - evidence_refs
     dependencies: []
     version_source: skill_frontmatter_legacy_numeric
   database-review:
@@ -2952,7 +3331,7 @@ skills:
       target: database-review
     risk_class:
     - read-only
-    version: 1.0.0
+    version: 1.1.0
     type: leaf
     authority: read-only
     permissions:
@@ -2975,6 +3354,12 @@ skills:
         database_review_report:
         - title
         - verdict
+        - assessment_target
+        - normalized_decision
+        - findings
+        - conditions
+        - required_actions
+        - evidence_refs
     dependencies: []
     version_source: skill_frontmatter_legacy_numeric
   security-review:
@@ -3002,7 +3387,7 @@ skills:
       target: security-review
     risk_class:
     - read-only
-    version: 1.0.0
+    version: 1.1.0
     type: leaf
     authority: read-only
     permissions:
@@ -3025,6 +3410,12 @@ skills:
         security_review_report:
         - title
         - verdict
+        - assessment_target
+        - normalized_decision
+        - findings
+        - conditions
+        - required_actions
+        - evidence_refs
     dependencies: []
     version_source: skill_frontmatter_legacy_numeric
   performance-review:
@@ -3052,7 +3443,7 @@ skills:
       target: performance-review
     risk_class:
     - read-only
-    version: 1.0.0
+    version: 1.1.0
     type: leaf
     authority: read-only
     permissions:
@@ -3075,6 +3466,12 @@ skills:
         performance_review_report:
         - title
         - verdict
+        - assessment_target
+        - normalized_decision
+        - findings
+        - conditions
+        - required_actions
+        - evidence_refs
     dependencies: []
     version_source: skill_frontmatter_legacy_numeric
   capacity-planner:
@@ -3102,7 +3499,7 @@ skills:
       target: capacity-planner
     risk_class:
     - read-only
-    version: 1.0.0
+    version: 1.1.0
     type: leaf
     authority: read-only
     permissions:
@@ -3125,6 +3522,12 @@ skills:
         capacity_plan:
         - title
         - headroom
+        - assessment_target
+        - normalized_decision
+        - findings
+        - conditions
+        - required_actions
+        - evidence_refs
     dependencies: []
     version_source: skill_frontmatter_legacy_numeric
   observability-review:
@@ -3153,7 +3556,7 @@ skills:
       target: observability-review
     risk_class:
     - read-only
-    version: 1.0.0
+    version: 1.1.0
     type: leaf
     authority: read-only
     permissions:
@@ -3176,6 +3579,12 @@ skills:
         observability_review_report:
         - title
         - coverage
+        - assessment_target
+        - normalized_decision
+        - findings
+        - conditions
+        - required_actions
+        - evidence_refs
     dependencies: []
     version_source: skill_frontmatter_legacy_numeric
   deployment-risk-review:
@@ -3204,7 +3613,7 @@ skills:
       target: deployment-risk-review
     risk_class:
     - read-only
-    version: 1.0.0
+    version: 1.1.0
     type: leaf
     authority: read-only
     permissions:
@@ -3228,6 +3637,12 @@ skills:
         - title
         - risk
         - deployment_confidence
+        - assessment_target
+        - normalized_decision
+        - findings
+        - conditions
+        - required_actions
+        - evidence_refs
     dependencies: []
     version_source: skill_frontmatter_legacy_numeric
   dependency-upgrade-review:
@@ -3255,7 +3670,7 @@ skills:
       target: dependency-upgrade-review
     risk_class:
     - read-only
-    version: 1.0.0
+    version: 1.1.0
     type: leaf
     authority: read-only
     permissions:
@@ -3278,6 +3693,12 @@ skills:
         dependency_upgrade_report:
         - title
         - verdict
+        - assessment_target
+        - normalized_decision
+        - findings
+        - conditions
+        - required_actions
+        - evidence_refs
     dependencies: []
     version_source: skill_frontmatter_legacy_numeric
   tech-debt-assessor:

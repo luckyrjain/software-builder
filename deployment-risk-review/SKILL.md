@@ -90,6 +90,13 @@ None of its own — `DEPLOYMENT_RISK_REPORT.md` is a markdown deliverable, not a
 write-back. See
 [post-action-templates.md](../docs/skill-framework/shared/post-action-templates.md).
 
+## Machine artifact v2
+
+The machine result preserves `assessment_target`, typed `provenance.sources`, `findings`,
+`conditions`, `required_actions`, and `evidence_refs`. `normalized_decision` is an object with
+`status` (`PASS`, `CONDITIONAL`, `FAIL`, or `UNKNOWN`) and `raw_verdict`; Critical/High risk maps
+to `FAIL`, Low risk to `PASS`, and High risk with unresolved required evidence to `UNKNOWN`.
+
 ## Framework
 
 Completion emits the canonical `skill_result` envelope; actions classify against
