@@ -6,6 +6,7 @@ from pathlib import Path
 
 import yaml
 
+import scripts.registry.artifact_contracts as artifact_contracts
 from scripts.registry.artifact_contracts import (
     validate_artifact_contracts,
     validate_artifact_result,
@@ -216,6 +217,32 @@ def test_cli_validates_a_runtime_result_file(tmp_path: Path) -> None:
     result_path.write_text(json.dumps(_valid_result()), encoding="utf-8")
 
     assert cmd_validate_artifact(ROOT, "mr_review_report", result_path, "pr-review") == 0
+
+
+def test_allowed_state_semantics_accepts_declared_alternate_state(monkeypatch) -> None:
+    manifest = artifact_contracts.load_canonical_manifest(ROOT)
+    runtime = manifest["contracts"]["platform"]["artifact_runtime"]
+    runtime["allowed_state_semantics"] = {"mr_review_report": ["current_state", "proposed_state"]}
+    monkeypatch.setattr(artifact_contracts, "load_canonical_manifest", lambda _root: manifest)
+    result = _valid_result()
+    result["skill_result"]["state_semantic"] = "proposed_state"
+    assert _validate(result) == []
+
+
+def test_artifact_without_allowed_set_remains_exact() -> None:
+    result = _valid_result()
+    result["skill_result"]["state_semantic"] = "proposed_state"
+    errors = _validate(result)
+    assert any("state semantic" in error for error in errors)
+
+
+def test_allowed_state_semantics_rejects_unhashable_values_without_traceback(monkeypatch) -> None:
+    manifest = artifact_contracts.load_canonical_manifest(ROOT)
+    runtime = manifest["contracts"]["platform"]["artifact_runtime"]
+    runtime["allowed_state_semantics"] = {"mr_review_report": [["current_state"]]}
+    monkeypatch.setattr(artifact_contracts, "load_canonical_manifest", lambda _root: manifest)
+    errors = artifact_contracts.validate_artifact_contracts(ROOT)
+    assert any("allowed_state_semantics.mr_review_report" in error for error in errors)
 
 
 def test_catalog_rejects_scalar_ownership_without_traceback(tmp_path: Path) -> None:

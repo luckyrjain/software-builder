@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Changed
+
+- A ready PRD now hands off to `system-design` before architecture validation.
+
 ### Added
 
 - Existing-system current-state handoff contract compatible with `domain-comprehension` machine artifacts,

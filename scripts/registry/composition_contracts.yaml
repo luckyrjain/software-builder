@@ -1,5 +1,6 @@
 artifact_types:
 - mr_context
+- assessment_context
 - mr_review_report
 - rca_report
 - k8s_rightsizing_report
@@ -34,6 +35,13 @@ artifact_schemas:
     - review_mode
     - audit_type
     - expected_head_sha
+  assessment_context:
+    fields:
+    - assessment_target
+    - inputs
+    - input_provenance
+    - evidence_refs
+    - unresolved
   mr_review_report:
     fields:
     - review_metadata
@@ -553,26 +561,38 @@ skills:
     produces:
     - architecture_review_report
     consumes:
+    - system_design_spec
     - prd_report
     produce_fields:
       architecture_review_report:
       - title
       - decision
     consume_fields:
+      system_design_spec:
+      - title
+      - readiness
       prd_report:
       - title
       - build_readiness
+      - depth
+      - response_mode
     write_authority: read-only
   system-design:
     produces:
     - system_design_spec
     consumes:
+    - prd_report
     - architecture_review_report
     produce_fields:
       system_design_spec:
       - title
       - readiness
     consume_fields:
+      prd_report:
+      - title
+      - build_readiness
+      - depth
+      - response_mode
       architecture_review_report:
       - title
       - decision

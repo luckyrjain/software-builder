@@ -77,6 +77,7 @@ Full matrix: [cross-skill-escalation.md](../docs/skill-framework/shared/cross-sk
 
 | Finding (this skill) | Next skill |
 |-----------------------|------------|
+| Implementation design needs architecture validation | **architecture-review** |
 | Decision approved, needs implementation-level design | **system-design** |
 | A specific security/trust-boundary concern needs a deep audit | **security-review** |
 | Decision approved and ready to build | **loop-task-implementer** |

@@ -165,7 +165,7 @@ canonical artifact. Consumers may read, cite, or derive a new artifact; they mus
 rewrite another skill's canonical artifact. `scripts/registry/composition_contracts.yaml` is the
 generated projection of that ownership data.
 
-Durable artifacts declare one state semantic:
+Durable artifacts have one default state semantic and may declare a finite allowed set; each individual result still emits exactly one semantic:
 
 - `current_state`
 - `proposed_state`

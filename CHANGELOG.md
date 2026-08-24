@@ -2520,3 +2520,10 @@ _Pre-merge WIP on `feat/squad-map-skill` (internal v1.0–v1.5) is consolidated 
   MR-template completeness check; flaky-job handling in the CI verdict.
 - Explicit snippet-hash definition for re-run dedupe; AI/LLM checklist trigger signals; very-old
   baseline warning; clarified partial-post (no stop-on-error) and draft-note vs draft-MR wording.
+## Unreleased
+
+- Corrected the canonical PRD → system-design → architecture-review lifecycle.
+- Added bounded artifact state semantics, canonical assessment identity/digest helpers, execution-owned
+  trust classification, and the external `assessment_context` handoff carrier.
+- Registry-derived skill/eval coverage counts no longer rely on hard-coded totals.
+- Documented scanner-safe adversarial fixture rules; secret-shaped negative fixtures remain runtime-generated.

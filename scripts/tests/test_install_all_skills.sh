@@ -50,8 +50,14 @@ done < <(
   PYTHONPATH="${REPO_ROOT}" python3 "${REPO_ROOT}/scripts/install_support.py" list
 )
 
-if ((${#SKILLS[@]} != 34)); then
-  echo "error: expected 34 registry skills, got ${#SKILLS[@]}" >&2
+EXPECTED_SKILLS=$(PYTHONPATH="${REPO_ROOT}" python3 - <<PY
+import yaml
+from pathlib import Path
+print(len(yaml.safe_load((Path("${REPO_ROOT}") / "skills.yaml").read_text())["skills"]))
+PY
+)
+if ((${#SKILLS[@]} != EXPECTED_SKILLS)); then
+  echo "error: expected ${EXPECTED_SKILLS} registry skills, got ${#SKILLS[@]}" >&2
   exit 1
 fi
 

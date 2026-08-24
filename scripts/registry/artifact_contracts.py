@@ -129,6 +129,30 @@ def _validate_catalog(
     elif any(not isinstance(value, str) or value not in _STATE_VALUES for value in state_semantics.values()):
         errors.append("error: artifact runtime state_semantics contains an invalid value")
 
+    allowed_state_semantics = artifact_runtime.get("allowed_state_semantics", {})
+    if not isinstance(allowed_state_semantics, dict):
+        errors.append("error: artifact runtime allowed_state_semantics must be a mapping")
+        allowed_state_semantics = {}
+    else:
+        unknown_allowed = sorted(set(allowed_state_semantics) - set(durable or []))
+        if unknown_allowed:
+            errors.append(
+                "error: artifact runtime allowed_state_semantics contains unknown artifacts: "
+                + ", ".join(unknown_allowed),
+            )
+        for artifact, allowed in allowed_state_semantics.items():
+            if (
+                not isinstance(allowed, list)
+                or not allowed
+                or not all(isinstance(value, str) for value in allowed)
+                or len(allowed) != len(set(allowed))
+            ):
+                errors.append(f"error: artifact runtime allowed_state_semantics.{artifact} must be a non-empty unique list")
+            elif any(value not in _STATE_VALUES for value in allowed):
+                errors.append(f"error: artifact runtime allowed_state_semantics.{artifact} contains an invalid value")
+            elif isinstance(state_semantics, dict) and state_semantics.get(artifact) not in allowed:
+                errors.append(f"error: artifact runtime allowed_state_semantics.{artifact} must include the default state semantic")
+
     payload_types = artifact_runtime.get("payload_types")
     if not isinstance(payload_types, dict) or set(payload_types) != set(durable or []):
         errors.append("error: artifact runtime payload_types must cover every durable artifact exactly once")
@@ -296,7 +320,10 @@ def validate_artifact_result(
                 errors.append(f"error: {artifact_type}: invalid result.evidence_status")
             if envelope.get("artifact_schema_version") != artifact_runtime["artifact_schema_versions"][artifact_type]:
                 errors.append(f"error: {artifact_type}: artifact schema version is unsupported")
-            if envelope.get("state_semantic") != artifact_runtime["state_semantics"][artifact_type]:
+            allowed_states = artifact_runtime.get("allowed_state_semantics", {}).get(artifact_type)
+            if not isinstance(allowed_states, list):
+                allowed_states = [artifact_runtime["state_semantics"][artifact_type]]
+            if envelope.get("state_semantic") not in allowed_states:
                 errors.append(f"error: {artifact_type}: state semantic does not match the artifact contract")
             artifacts = envelope.get("artifacts")
             if not isinstance(artifacts, list) or not all(isinstance(item, str) for item in artifacts):
