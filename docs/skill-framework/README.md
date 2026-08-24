@@ -9,6 +9,7 @@ Normative conventions for **pr-review**, **pr-gatekeeper**, **incident-rca**, **
 **architecture-review**, **system-design**, **api-design-review**, **database-review**,
 **security-review**, **performance-review**, **capacity-planner**, **observability-review**,
 **deployment-risk-review**, **dependency-upgrade-review**, and **tech-debt-assessor**.
+**change-impact-analyzer** is also framework-compliant and follows the bounded impact pipeline.
 
 `test-writer` is a thin router (like `who-owns-x-bot`/`release-readiness-checker`) that classifies a
 test-writing request by level and dispatches to exactly one of `unit-test-creator`,

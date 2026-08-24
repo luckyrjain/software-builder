@@ -81,6 +81,7 @@ artifact_runtime:
   - deployment_risk_report
   - dependency_upgrade_report
   - tech_debt_assessment
+  - change_impact_report
   artifact_schema_versions:
     mr_review_report: 2
     rca_report: 1
@@ -105,6 +106,7 @@ artifact_runtime:
     deployment_risk_report: 2
     dependency_upgrade_report: 2
     tech_debt_assessment: 1
+    change_impact_report: 1
   state_semantics:
     mr_review_report: current_state
     rca_report: current_state
@@ -129,6 +131,7 @@ artifact_runtime:
     deployment_risk_report: proposed_state
     dependency_upgrade_report: proposed_state
     tech_debt_assessment: current_state
+    change_impact_report: proposed_state
   allowed_state_semantics:
     prd_report:
     - proposed_state
@@ -159,6 +162,9 @@ artifact_runtime:
     - proposed_state
     dependency_upgrade_report:
     - proposed_state
+    change_impact_report:
+    - proposed_state
+    - current_state
   payload_types:
     rca_report:
       assessment_metadata: mapping
@@ -316,6 +322,24 @@ artifact_runtime:
     tech_debt_assessment:
       title: string
       items: list
+    change_impact_report:
+      title: string
+      assessment_target: mapping
+      coverage_status: string
+      material_unknowns: list
+      impacted_repositories: list
+      criticality: string
+      change_classes: list
+      impacted_services: list
+      impacted_contracts: list
+      impacted_data: list
+      impacted_dependencies: list
+      impacted_owners: list
+      required_tests: list
+      operational_impacts: list
+      review_triggers: list
+      unknowns: list
+      evidence_refs: list
   required_sections:
     skill_result:
       required_fields:
@@ -590,6 +614,11 @@ skill_permissions:
     external_actions: none
     unattended: false
     merge: false
+  change-impact-analyzer:
+    repository: read
+    external_actions: none
+    unattended: false
+    merge: false
 skill_types:
   pr-review: leaf
   pr-gatekeeper: trigger
@@ -625,3 +654,4 @@ skill_types:
   deployment-risk-review: leaf
   dependency-upgrade-review: leaf
   tech-debt-assessor: leaf
+  change-impact-analyzer: leaf

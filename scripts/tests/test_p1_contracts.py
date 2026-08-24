@@ -101,8 +101,9 @@ def test_eval_contract_covers_required_collision_suite() -> None:
         "prod-failure-vs-sizing",
         "resource-safety-vs-incident",
         "write-tests-vs-test-review",
-        "current-state-before-change",
-    }
+            "current-state-before-change",
+            "numbered-pr-change-impact",
+        }
     assert set(raw["adversarial_classes"]) == {
         "instruction_override",
         "gate_bypass",

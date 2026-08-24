@@ -53,6 +53,7 @@ Each skill is a self-contained directory copied to `~/.cursor/skills/<name>/` on
 | **e2e-test-creator** | [e2e-test-creator/README.md](../e2e-test-creator/README.md) | [e2e-test-creator/SKILL.md](../e2e-test-creator/SKILL.md) | [e2e-test-creator/SETUP.md](../e2e-test-creator/SETUP.md) |
 | **api-test-creator** | [api-test-creator/README.md](../api-test-creator/README.md) | [api-test-creator/SKILL.md](../api-test-creator/SKILL.md) | [api-test-creator/SETUP.md](../api-test-creator/SETUP.md) |
 | **prd-architect** | [prd-architect/README.md](../prd-architect/README.md) | [prd-architect/SKILL.md](../prd-architect/SKILL.md) | [prd-architect/SETUP.md](../prd-architect/SETUP.md) |
+| **change-impact-analyzer** | [change-impact-analyzer/README.md](../change-impact-analyzer/README.md) | [change-impact-analyzer/SKILL.md](../change-impact-analyzer/SKILL.md) | [change-impact-analyzer/SETUP.md](../change-impact-analyzer/SETUP.md) |
 | **architecture-review** | [architecture-review/README.md](../architecture-review/README.md) | [architecture-review/SKILL.md](../architecture-review/SKILL.md) | [architecture-review/SETUP.md](../architecture-review/SETUP.md) |
 | **system-design** | [system-design/README.md](../system-design/README.md) | [system-design/SKILL.md](../system-design/SKILL.md) | [system-design/SETUP.md](../system-design/SETUP.md) |
 | **api-design-review** | [api-design-review/README.md](../api-design-review/README.md) | [api-design-review/SKILL.md](../api-design-review/SKILL.md) | [api-design-review/SETUP.md](../api-design-review/SETUP.md) |

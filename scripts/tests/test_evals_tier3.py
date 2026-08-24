@@ -66,7 +66,7 @@ def test_golden_fixtures_load() -> None:
     # tripping load_golden_fixtures' own malformed-fixture error. It won't catch a delete+add that
     # happens to net to the same count, but it catches the much more common single accidental
     # deletion or duplication. Bump this number when you intentionally add or remove a fixture.
-    assert len(cases) == 65
+    assert len(cases) == 66
 
 
 def test_golden_cases_pass_on_repository() -> None:

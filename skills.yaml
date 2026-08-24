@@ -85,6 +85,7 @@ contracts:
       - deployment_risk_report
       - dependency_upgrade_report
       - tech_debt_assessment
+      - change_impact_report
       artifact_schema_versions:
         mr_review_report: 2
         rca_report: 1
@@ -109,6 +110,7 @@ contracts:
         deployment_risk_report: 2
         dependency_upgrade_report: 2
         tech_debt_assessment: 1
+        change_impact_report: 1
       state_semantics:
         mr_review_report: current_state
         rca_report: current_state
@@ -133,6 +135,7 @@ contracts:
         deployment_risk_report: proposed_state
         dependency_upgrade_report: proposed_state
         tech_debt_assessment: current_state
+        change_impact_report: proposed_state
       allowed_state_semantics:
         prd_report:
         - proposed_state
@@ -163,6 +166,9 @@ contracts:
         - proposed_state
         dependency_upgrade_report:
         - proposed_state
+        change_impact_report:
+        - proposed_state
+        - current_state
       payload_types:
         rca_report:
           assessment_metadata: mapping
@@ -320,6 +326,24 @@ contracts:
         tech_debt_assessment:
           title: string
           items: list
+        change_impact_report:
+          title: string
+          assessment_target: mapping
+          coverage_status: string
+          material_unknowns: list
+          impacted_repositories: list
+          criticality: string
+          change_classes: list
+          impacted_services: list
+          impacted_contracts: list
+          impacted_data: list
+          impacted_dependencies: list
+          impacted_owners: list
+          required_tests: list
+          operational_impacts: list
+          review_triggers: list
+          unknowns: list
+          evidence_refs: list
       required_sections:
         skill_result:
           required_fields:
@@ -594,6 +618,11 @@ contracts:
         external_actions: none
         unattended: false
         merge: false
+      change-impact-analyzer:
+        repository: read
+        external_actions: none
+        unattended: false
+        merge: false
     skill_types:
       pr-review: leaf
       pr-gatekeeper: trigger
@@ -629,6 +658,7 @@ contracts:
       deployment-risk-review: leaf
       dependency-upgrade-review: leaf
       tech-debt-assessor: leaf
+      change-impact-analyzer: leaf
   composition_runtime:
     schema_version: 1
     skill_types:
@@ -666,6 +696,7 @@ contracts:
       deployment-risk-review: leaf
       dependency-upgrade-review: leaf
       tech-debt-assessor: leaf
+      change-impact-analyzer: leaf
     handoff_schema:
       required_fields:
       - target_skill
@@ -852,6 +883,10 @@ contracts:
         mode: canonical
         owners:
         - tech-debt-assessor
+      change_impact_report:
+        mode: canonical
+        owners:
+        - change-impact-analyzer
   composition:
     artifact_types:
     - mr_context
@@ -880,6 +915,7 @@ contracts:
     - deployment_risk_report
     - dependency_upgrade_report
     - tech_debt_assessment
+    - change_impact_report
     artifact_schemas:
       mr_context:
         fields:
@@ -1092,6 +1128,25 @@ contracts:
         fields:
         - title
         - items
+      change_impact_report:
+        fields:
+        - title
+        - assessment_target
+        - coverage_status
+        - material_unknowns
+        - impacted_repositories
+        - criticality
+        - change_classes
+        - impacted_services
+        - impacted_contracts
+        - impacted_data
+        - impacted_dependencies
+        - impacted_owners
+        - required_tests
+        - operational_impacts
+        - review_triggers
+        - unknowns
+        - evidence_refs
     creator_parity:
       skills:
       - unit-test-creator
@@ -1771,6 +1826,43 @@ contracts:
           tech_debt_assessment:
           - title
           - items
+        write_authority: read-only
+      change-impact-analyzer:
+        produces:
+        - change_impact_report
+        consumes:
+        - mr_context
+        - assessment_context
+        produce_fields:
+          change_impact_report:
+          - title
+          - assessment_target
+          - coverage_status
+          - material_unknowns
+          - impacted_repositories
+          - criticality
+          - change_classes
+          - impacted_services
+          - impacted_contracts
+          - impacted_data
+          - impacted_dependencies
+          - impacted_owners
+          - required_tests
+          - operational_impacts
+          - review_triggers
+          - unknowns
+          - evidence_refs
+        consume_fields:
+          mr_context:
+          - project
+          - merge_request_iid
+          - head_sha
+          assessment_context:
+          - assessment_target
+          - inputs
+          - input_provenance
+          - evidence_refs
+          - unresolved
         write_authority: read-only
 skills:
   pr-review:
@@ -3750,5 +3842,74 @@ skills:
         tech_debt_assessment:
         - title
         - items
+    dependencies: []
+    version_source: skill_frontmatter_legacy_numeric
+  change-impact-analyzer:
+    path: change-impact-analyzer
+    category: analysis
+    invocation: ambient
+    hosts:
+      cursor:
+        discovery: rule
+      claude:
+        install: true
+      kiro:
+        discovery: manual
+    install:
+      requires: []
+    composition:
+      invokes: []
+      escalation_targets: []
+    capabilities:
+      required:
+      - host.report.write
+      optional:
+      - name: host.repository.read
+        enables: repository-grounded diff/caller/consumer/config discovery
+      - name: host.scm.change.read
+        enables: exact-head remote PR/MR metadata + diff retrieval
+    lint:
+      skill_md_max_lines: 180
+      target: change-impact-analyzer
+    risk_class:
+    - read-only
+    version: 1.0.0
+    type: leaf
+    authority: read-only
+    permissions:
+      repository: read
+      external_actions: none
+      unattended: false
+      merge: false
+    supported_hosts:
+    - chatgpt
+    - claude
+    - codex
+    - cursor
+    - generic
+    - kiro
+    entrypoint: SKILL.md
+    output_contract:
+      produces:
+      - change_impact_report
+      produce_fields:
+        change_impact_report:
+        - title
+        - assessment_target
+        - coverage_status
+        - material_unknowns
+        - impacted_repositories
+        - criticality
+        - change_classes
+        - impacted_services
+        - impacted_contracts
+        - impacted_data
+        - impacted_dependencies
+        - impacted_owners
+        - required_tests
+        - operational_impacts
+        - review_triggers
+        - unknowns
+        - evidence_refs
     dependencies: []
     version_source: skill_frontmatter_legacy_numeric

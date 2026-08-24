@@ -35,3 +35,4 @@ cases:
   - {skill: deployment-risk-review, prompt: "Is this release ready to ship? Give me a go/no-go.", expected_status: selected, expected_owner: release-readiness-checker, forbidden_owner: deployment-risk-review}
   - {skill: dependency-upgrade-review, prompt: "Security review of the auth flow for CVE exposure.", expected_status: selected, expected_owner: security-review, forbidden_owner: dependency-upgrade-review}
   - {skill: tech-debt-assessor, prompt: "What's our migration program status across all workspaces?", expected_status: selected, expected_owner: migration-program-manager, forbidden_owner: tech-debt-assessor}
+  - {skill: change-impact-analyzer, prompt: "Review PR #123 for correctness and regressions.", expected_status: selected, expected_owner: pr-review, forbidden_owner: change-impact-analyzer}

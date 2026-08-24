@@ -283,3 +283,11 @@ skills:
   tech-debt-assessor:
     required: [host.report.write]
     optional: []
+
+  change-impact-analyzer:
+    required: [host.report.write]
+    optional:
+      - name: host.repository.read
+        enables: repository-grounded diff/caller/consumer/config discovery
+      - name: host.scm.change.read
+        enables: exact-head remote PR/MR metadata + diff retrieval
