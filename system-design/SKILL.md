@@ -83,6 +83,12 @@ Full matrix: [cross-skill-escalation.md](../docs/skill-framework/shared/cross-sk
 None of its own — `SYSTEM_DESIGN_SPEC.md` is a markdown deliverable, not a ticket/chat write-back. See
 [post-action-templates.md](../docs/skill-framework/shared/post-action-templates.md).
 
+## Machine artifact v2
+
+Emit the common typed machine summary and bind `system_design_spec` to the complete semantic design text
+through `assessment_target.source_artifact_digest`. A summary cannot substitute for the source PRD or
+architecture document.
+
 ## Framework
 
 Completion emits the canonical `skill_result` envelope; actions classify against

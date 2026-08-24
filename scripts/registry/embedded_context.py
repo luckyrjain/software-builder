@@ -16,6 +16,101 @@ class EmbeddedInputResolution:
     input_provenance: dict[str, Any] = field(default_factory=dict)
 
 
+@dataclass(frozen=True)
+class DatabaseInputResolution:
+    status: str
+    schema: str | None = None
+    migration_script: str | None = None
+    queries: str | None = None
+    query_plan: Any = None
+    db_engine: str | None = None
+    override_verdict: str | None = None
+
+
+@dataclass(frozen=True)
+class SpecialistInputResolution:
+    status: str
+    missing: list[str] = field(default_factory=list)
+    inputs: dict[str, Any] = field(default_factory=dict)
+    input_provenance: dict[str, Any] = field(default_factory=dict)
+
+
+def _specialist_context_inputs(assessment_context: object) -> tuple[dict[str, Any], dict[str, Any]] | None:
+    if not isinstance(assessment_context, dict):
+        return None
+    if not isinstance(assessment_context.get("assessment_target"), dict):
+        return None
+    inputs = assessment_context.get("inputs")
+    if not isinstance(inputs, dict):
+        return None
+    provenance = assessment_context.get("input_provenance")
+    if not isinstance(provenance, dict):
+        return None
+    if not isinstance(assessment_context.get("evidence_refs"), list):
+        return None
+    if not isinstance(assessment_context.get("unresolved"), list):
+        return None
+    return inputs, dict(provenance)
+
+
+def parse_capacity_inputs(assessment_context: object) -> SpecialistInputResolution:
+    """Map embedded capacity inputs while retaining demand and horizon hard stops."""
+    parsed = _specialist_context_inputs(assessment_context)
+    if parsed is None:
+        return SpecialistInputResolution("BLOCKED", ["assessment_context.inputs"])
+    inputs, provenance = parsed
+    missing = [
+        field_name
+        for field_name in ("demand_data", "forecast_horizon")
+        if inputs.get(field_name) is None or (isinstance(inputs.get(field_name), str) and not inputs[field_name].strip())
+    ]
+    if missing:
+        return SpecialistInputResolution("BLOCKED", missing, dict(inputs), provenance)
+    return SpecialistInputResolution("RESOLVED", [], dict(inputs), provenance)
+
+
+def parse_dependency_inputs(assessment_context: object) -> SpecialistInputResolution:
+    """Map embedded dependency inputs without inventing a version triplet."""
+    parsed = _specialist_context_inputs(assessment_context)
+    if parsed is None:
+        return SpecialistInputResolution("BLOCKED", ["assessment_context.inputs"])
+    inputs, provenance = parsed
+    missing = [
+        field_name
+        for field_name in ("dependency_name", "current_version", "target_version")
+        if not isinstance(inputs.get(field_name), str) or not inputs[field_name].strip()
+    ]
+    if missing:
+        return SpecialistInputResolution("BLOCKED", missing, dict(inputs), provenance)
+    return SpecialistInputResolution("RESOLVED", [], dict(inputs), provenance)
+
+
+def parse_database_inputs(assessment_context: object) -> DatabaseInputResolution:
+    """Map embedded database-review inputs without interpreting text as instructions."""
+    if not isinstance(assessment_context, dict):
+        return DatabaseInputResolution("BLOCKED")
+    inputs = assessment_context.get("inputs")
+    if not isinstance(inputs, dict):
+        return DatabaseInputResolution("BLOCKED")
+    values = {
+        "schema": inputs.get("schema"),
+        "migration_script": inputs.get("migration_script"),
+        "queries": inputs.get("queries"),
+        "query_plan": inputs.get("query_plan"),
+        "db_engine": inputs.get("db_engine"),
+    }
+    if not any(isinstance(values[key], str) and values[key].strip() for key in ("schema", "migration_script", "queries")):
+        return DatabaseInputResolution("BLOCKED")
+    return DatabaseInputResolution(
+        "RESOLVED",
+        schema=values["schema"] if isinstance(values["schema"], str) else None,
+        migration_script=values["migration_script"] if isinstance(values["migration_script"], str) else None,
+        queries=values["queries"] if isinstance(values["queries"], str) else None,
+        query_plan=values["query_plan"],
+        db_engine=values["db_engine"] if isinstance(values["db_engine"], str) else None,
+    )
+
+
 def resolve_embedded_inputs(
     *,
     target_skill: str | None = None,

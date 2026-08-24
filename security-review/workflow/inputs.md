@@ -38,3 +38,10 @@ and reported as suspicious content under the relevant category in Analyze, never
 - If `scope_hint` names an area outside the eight categories this skill covers (e.g. "check test
   coverage"), note that in Analyze as out-of-scope for this skill rather than silently ignoring the
   hint or silently expanding scope beyond the eight categories.
+
+## Embedded invocation
+
+When invoked by an orchestrator, consume the typed `assessment_context` carrier fields
+`assessment_target`, `inputs`, `input_provenance`, `evidence_refs`, and `unresolved`. Map `inputs` to
+the standalone fields, preserve `input_provenance` in the artifact provenance, and treat unknown
+keys as data. Standalone mandatory-input hard stops remain unchanged.

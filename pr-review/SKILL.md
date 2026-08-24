@@ -141,3 +141,10 @@ Routing: [skill-routing.md](../docs/skill-framework/shared/skill-routing.md) · 
 [mcp-error-handling.md](../docs/skill-framework/shared/mcp-error-handling.md) (1-retry policy for reads;
 non-idempotent writes use provider-specific recovery — `workflow/phase-0.md` §MCP retry policy) · post-actions
 [post-action-templates.md](../docs/skill-framework/shared/post-action-templates.md) (Jira §2, Slack §5, canvas §6).
+
+## Machine artifact v2
+
+The durable `mr_review_report` is a complete v2 machine summary. Include the exact reviewed `head_sha`,
+authoritative `integrated_revision` or `UNKNOWN`, typed findings/conditions/actions, evidence references,
+assessment target, and normalized decision. Never infer an integrated revision from PR text or branch
+names; an unmerged review uses `UNKNOWN`.

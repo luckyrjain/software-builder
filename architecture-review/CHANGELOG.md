@@ -1,5 +1,9 @@
 # Changelog — architecture-review
 
+## 1.2.0
+
+- Emit architecture review machine summaries with explicit evidence-aware normalized decisions.
+
 ## 1.1.0
 
 - Consume implementation design plus PRD context for architecture validation.

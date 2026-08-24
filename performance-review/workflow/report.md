@@ -41,3 +41,10 @@ gets its table populated from Analyze's findings for that area, with an explicit
 Analyze produced nothing for it. Every evidence gap Analyze recorded appears in the report's Evidence
 gaps section — never silently dropped and never merged into a "None found" row, which would misrepresent
 an unchecked area as a checked-and-clean one.
+
+## Machine artifact v2
+
+Emit the common machine fields and map a clean report to `PASS`, findings without unresolved required
+areas to `CONDITIONAL`, proven regression risk to `FAIL`, and any unresolved required area to
+`UNKNOWN`. Preserve the human verdict in `raw_verdict`; do not downgrade a proven failure because a
+separate evidence gap exists.

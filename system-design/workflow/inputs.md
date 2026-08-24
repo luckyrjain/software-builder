@@ -33,3 +33,9 @@ workflow or the eventual verdict
 | Field | Description | Default when absent |
 |-------|-------------|------------------------|
 | `existing_system_context` | Description of the current system this design integrates with or replaces | Treated as greenfield; rollout/migration-order notes the absence explicitly where relevant |
+
+## Semantic document binding
+
+When consuming `prd_report`, require the complete PRD semantic document or an immutable resolvable
+reference. Recompute its SHA-256 digest and require exact equality with
+`prd_report.payload.assessment_target.source_artifact_digest`; the machine summary alone is not a PRD.

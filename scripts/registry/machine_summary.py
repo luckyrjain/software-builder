@@ -30,7 +30,9 @@ _SOURCE_FIELDS = frozenset(
 _EVIDENCE_STATUSES = frozenset(
     {"OBSERVED", "INFERRED", "UNKNOWN", "CONFLICTED", "NOT_APPLICABLE"}
 )
-_DECISIONS = frozenset({"PASS", "CONDITIONAL", "FAIL"})
+_NORMALIZED_DECISION_FIELDS = frozenset({"status", "raw_verdict"})
+_DECISIONS = frozenset({"PASS", "CONDITIONAL", "FAIL", "UNKNOWN", "NOT_APPLICABLE"})
+_EVIDENCE_REQUIRED_DECISIONS = frozenset({"PASS", "CONDITIONAL", "FAIL"})
 _REQUIRED_BEFORE = frozenset({"IMPLEMENTATION", "MERGE", "DEPLOY", "FOLLOW_UP"})
 _AUTHORITIES = frozenset(
     {"authoritative_host", "repository", "trusted_runtime", "caller", "model_knowledge"}
@@ -321,8 +323,22 @@ def validate_machine_summary(summary: object) -> list[str]:
         errors.append(f"error: machine summary payload missing fields: {', '.join(missing)}")
     if not isinstance(payload.get("assessment_target"), dict) or not payload.get("assessment_target"):
         errors.append("error: assessment_target must be a non-empty mapping")
-    if payload.get("normalized_decision") not in _DECISIONS:
-        errors.append("error: normalized_decision must be PASS|CONDITIONAL|FAIL")
+    normalized_decision, decision_errors = _validate_exact_mapping(
+        payload.get("normalized_decision"),
+        _NORMALIZED_DECISION_FIELDS,
+        "normalized_decision",
+    )
+    errors.extend(decision_errors)
+    decision_status: str | None = None
+    if normalized_decision is not None:
+        decision_status = normalized_decision.get("status")
+        if decision_status not in _DECISIONS:
+            errors.append(
+                "error: normalized_decision.status must be "
+                "PASS|CONDITIONAL|FAIL|UNKNOWN|NOT_APPLICABLE"
+            )
+        if not _non_empty_string(normalized_decision.get("raw_verdict")):
+            errors.append("error: normalized_decision.raw_verdict must be a non-empty string")
     root_refs, root_ref_errors = _validate_evidence_refs(
         payload.get("evidence_refs"), "evidence_refs", allow_empty=True
     )
@@ -357,7 +373,7 @@ def validate_machine_summary(summary: object) -> list[str]:
                 "error: evidence_refs must include every nested evidence ref: "
                 + ", ".join(missing_nested_refs)
             )
-        if payload.get("normalized_decision") in _DECISIONS and not root_refs:
+        if decision_status in _EVIDENCE_REQUIRED_DECISIONS and not root_refs:
             errors.append("error: evidence_refs must identify the basis for every normalized decision")
 
     sources = _typed_sources(provenance, errors)

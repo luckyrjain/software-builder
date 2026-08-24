@@ -26,3 +26,9 @@ Derive the verdict from Analyze's five check outputs using the fixed, worst-firs
 4. **`Safe to upgrade`** — none of the above; every check completed and found nothing blocking.
 
 Build per [reference/report-format.md](../reference/report-format.md).
+
+## Machine artifact v2
+
+Emit the common machine fields and map `Safe to upgrade` to `PASS`, `Upgrade with mitigations` to
+`CONDITIONAL`, `Do not upgrade yet` to `FAIL`, and `Blocked — insufficient info` to `UNKNOWN`.
+Preserve the human verdict in `raw_verdict` and retain each evidence gap in `unresolved`.

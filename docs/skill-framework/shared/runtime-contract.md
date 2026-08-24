@@ -113,7 +113,9 @@ addition to its artifact-specific fields:
 ```yaml
 payload:
   assessment_target: {}
-  normalized_decision: PASS|CONDITIONAL|FAIL
+  normalized_decision:
+    status: PASS|CONDITIONAL|FAIL|UNKNOWN|NOT_APPLICABLE
+    raw_verdict: <non-empty string>
   findings:
     - id: <stable non-empty id>
       category: <non-empty category>

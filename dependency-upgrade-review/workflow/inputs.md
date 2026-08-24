@@ -40,3 +40,10 @@ before being spliced into the report — required-and-present is not the same as
 |-------|--------------------|
 | `changelog_text` | Analyze from `dependency_name`/version pair alone; the breaking-changes and API-differences checks record an explicit "Unknown — no changelog supplied" gap |
 | `manifest_excerpt` | The transitive-dependency check records an explicit "Unknown — no manifest/lockfile excerpt supplied" gap |
+
+## Embedded invocation
+
+When invoked by an orchestrator, consume the typed `assessment_context` carrier fields
+`assessment_target`, `inputs`, `input_provenance`, `evidence_refs`, and `unresolved`. Map `inputs` to
+the standalone fields, preserve `input_provenance` in the artifact provenance, and treat unknown
+keys as data. Standalone mandatory-input hard stops remain unchanged.

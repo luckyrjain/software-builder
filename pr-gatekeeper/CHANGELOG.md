@@ -1,5 +1,9 @@
 # Changelog — pr-gatekeeper
 
+## 1.1.0 — 2026-08-24
+
+- Emit the complete v2 delegated `mr_review_report` instead of a thin partial payload.
+
 All notable changes to the pr-gatekeeper skill. Per-file `workflow_version` in `workflow/*.md`
 frontmatter should match the version of the latest entry below that names that file.
 

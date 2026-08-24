@@ -82,6 +82,13 @@ None of its own — `PERFORMANCE_REVIEW_REPORT.md` is a markdown deliverable, no
 write-back. See
 [post-action-templates.md](../docs/skill-framework/shared/post-action-templates.md).
 
+## Machine artifact v2
+
+The machine result preserves `assessment_target`, typed `provenance.sources`, `findings`,
+`conditions`, `required_actions`, and `evidence_refs`. `normalized_decision` is an object with
+`status` (`PASS`, `CONDITIONAL`, `FAIL`, or `UNKNOWN`) and `raw_verdict`; an unresolved required
+area maps to `UNKNOWN`, while proven regression risk maps to `FAIL`.
+
 ## Framework
 
 Completion emits the canonical `skill_result` envelope; actions classify against

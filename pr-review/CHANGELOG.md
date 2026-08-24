@@ -1,5 +1,9 @@
 # pr-review — Changelog
 
+## v1.13 — 2026-08-24
+
+- Emit the complete v2 `mr_review_report`, including authoritative integrated-revision evidence.
+
 Prompt and workflow changes are versioned here. Per-phase `workflow_version` in workflow frontmatter
 should match the latest entry when that file is edited.
 

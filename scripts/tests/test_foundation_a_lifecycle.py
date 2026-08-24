@@ -33,7 +33,17 @@ def test_foundation_a_lifecycle_consume_fields_are_exact() -> None:
     contracts = load_unique_yaml_file(ROOT / "skills.yaml")["contracts"]["composition"]["skills"]
     sd = contracts["system-design"]
     ar = contracts["architecture-review"]
-    assert sd["consume_fields"]["prd_report"] == ["title", "build_readiness", "depth", "response_mode"]
-    assert sd["consume_fields"]["architecture_review_report"] == ["title", "decision"]
-    assert ar["consume_fields"]["system_design_spec"] == ["title", "readiness"]
-    assert ar["consume_fields"]["prd_report"] == ["title", "build_readiness", "depth", "response_mode"]
+    assert sd["consume_fields"]["prd_report"] == [
+        "title", "build_readiness", "depth", "response_mode",
+        "assessment_target", "normalized_decision", "evidence_refs",
+    ]
+    assert sd["consume_fields"]["architecture_review_report"] == [
+        "title", "decision", "assessment_target", "normalized_decision", "evidence_refs",
+    ]
+    assert ar["consume_fields"]["system_design_spec"] == [
+        "title", "readiness", "assessment_target", "normalized_decision", "evidence_refs",
+    ]
+    assert ar["consume_fields"]["prd_report"] == [
+        "title", "build_readiness", "depth", "response_mode",
+        "assessment_target", "normalized_decision", "evidence_refs",
+    ]

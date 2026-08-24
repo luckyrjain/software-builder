@@ -144,3 +144,11 @@ Mode: Validation — <reason>
 
 Do not include MVP, Functional Requirements, or Build Readiness unless the user explicitly requests a
 full PRD or readiness verdict.
+
+## Machine artifact v2 binding
+
+When emitting the durable `prd_report`, emit the complete machine summary in the same invocation as the
+human PRD. Its `assessment_target.source_type` is `prd`, and `source_artifact_digest` is the SHA-256
+`canonical_text_digest` of the complete final PRD text, not of this compact machine payload. Preserve the
+stable immutable `source_artifact_ref` when one exists; never accept a caller-supplied digest without
+recomputing it from the available semantic document.

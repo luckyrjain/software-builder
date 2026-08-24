@@ -1,5 +1,9 @@
 # Changelog — api-design-review
 
+## 1.1.0
+
+- Add v2 machine summary output and typed `assessment_context` embedded input handling.
+
 ## 1.0.0 — 2026-08-22
 
 ### Added

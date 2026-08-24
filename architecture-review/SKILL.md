@@ -88,6 +88,12 @@ Full matrix: [cross-skill-escalation.md](../docs/skill-framework/shared/cross-sk
 None of its own — `ARCHITECTURE_REVIEW_REPORT.md` is a markdown deliverable, not a ticket/chat
 write-back. See [post-action-templates.md](../docs/skill-framework/shared/post-action-templates.md).
 
+## Machine artifact v2
+
+Emit the common typed machine summary with the architecture decision. Required evidence gaps normalize to
+`UNKNOWN`; proven unrecoverable risk normalizes to `FAIL`; do not derive machine status from human verdict
+text alone.
+
 ## Framework
 
 Completion emits the canonical `skill_result` envelope; actions classify against

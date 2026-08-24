@@ -44,7 +44,7 @@ def test_explain_prints_canonical_skill_contract() -> None:
     assert result.returncode == 0
     output = result.stdout
     assert "Skill: pr-review" in output
-    assert "Version: 1.1.0" in output
+    assert "Version: 1.2.0" in output
     assert "Authority:" in output
     assert "Supported hosts:" in output
     assert "Output contract:" in output

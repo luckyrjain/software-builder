@@ -1,5 +1,9 @@
 # Changelog — prd-architect
 
+## 1.3.0
+
+- Emit `prd_report` v2 machine fields with a full-document semantic digest binding.
+
 ## Unreleased
 
 ### Changed

@@ -82,7 +82,7 @@ artifact_runtime:
   - dependency_upgrade_report
   - tech_debt_assessment
   artifact_schema_versions:
-    mr_review_report: 1
+    mr_review_report: 2
     rca_report: 1
     k8s_rightsizing_report: 1
     squad_map: 1
@@ -93,17 +93,17 @@ artifact_runtime:
     digest_report: 1
     test_suite: 1
     test_orchestration_result: 1
-    prd_report: 1
-    architecture_review_report: 1
-    system_design_spec: 1
-    api_design_review_report: 1
-    database_review_report: 1
-    security_review_report: 1
-    performance_review_report: 1
-    capacity_plan: 1
-    observability_review_report: 1
-    deployment_risk_report: 1
-    dependency_upgrade_report: 1
+    prd_report: 2
+    architecture_review_report: 2
+    system_design_spec: 2
+    api_design_review_report: 2
+    database_review_report: 2
+    security_review_report: 2
+    performance_review_report: 2
+    capacity_plan: 2
+    observability_review_report: 2
+    deployment_risk_report: 2
+    dependency_upgrade_report: 2
     tech_debt_assessment: 1
   state_semantics:
     mr_review_report: current_state
@@ -129,13 +129,37 @@ artifact_runtime:
     deployment_risk_report: proposed_state
     dependency_upgrade_report: proposed_state
     tech_debt_assessment: current_state
-  allowed_state_semantics: {}
-  payload_types:
+  allowed_state_semantics:
+    prd_report:
+    - proposed_state
     mr_review_report:
-      review_metadata: mapping
-      posted: boolean
-      head_sha: string
-      posting_mode: string
+    - current_state
+    architecture_review_report:
+    - proposed_state
+    system_design_spec:
+    - proposed_state
+    api_design_review_report:
+    - current_state
+    - proposed_state
+    database_review_report:
+    - current_state
+    - proposed_state
+    security_review_report:
+    - current_state
+    - proposed_state
+    performance_review_report:
+    - current_state
+    - proposed_state
+    capacity_plan:
+    - desired_state
+    observability_review_report:
+    - current_state
+    - proposed_state
+    deployment_risk_report:
+    - proposed_state
+    dependency_upgrade_report:
+    - proposed_state
+  payload_types:
     rca_report:
       assessment_metadata: mapping
       root_cause: string
@@ -180,37 +204,115 @@ artifact_runtime:
       build_readiness: string
       depth: string
       response_mode: string
+      assessment_target: mapping
+      normalized_decision: mapping
+      findings: list
+      conditions: list
+      required_actions: list
+      evidence_refs: list
+    mr_review_report:
+      review_metadata: mapping
+      posted: boolean
+      head_sha: string
+      posting_mode: string
+      integrated_revision: string
+      assessment_target: mapping
+      normalized_decision: mapping
+      findings: list
+      conditions: list
+      required_actions: list
+      evidence_refs: list
     architecture_review_report:
       title: string
       decision: string
+      assessment_target: mapping
+      normalized_decision: mapping
+      findings: list
+      conditions: list
+      required_actions: list
+      evidence_refs: list
     system_design_spec:
       title: string
       readiness: string
+      assessment_target: mapping
+      normalized_decision: mapping
+      findings: list
+      conditions: list
+      required_actions: list
+      evidence_refs: list
     api_design_review_report:
       title: string
       verdict: string
+      assessment_target: mapping
+      normalized_decision: mapping
+      findings: list
+      conditions: list
+      required_actions: list
+      evidence_refs: list
     database_review_report:
       title: string
       verdict: string
+      assessment_target: mapping
+      normalized_decision: mapping
+      findings: list
+      conditions: list
+      required_actions: list
+      evidence_refs: list
     security_review_report:
       title: string
       verdict: string
+      assessment_target: mapping
+      normalized_decision: mapping
+      findings: list
+      conditions: list
+      required_actions: list
+      evidence_refs: list
     performance_review_report:
       title: string
       verdict: string
+      assessment_target: mapping
+      normalized_decision: mapping
+      findings: list
+      conditions: list
+      required_actions: list
+      evidence_refs: list
     capacity_plan:
       title: string
       headroom: string
+      assessment_target: mapping
+      normalized_decision: mapping
+      findings: list
+      conditions: list
+      required_actions: list
+      evidence_refs: list
     observability_review_report:
       title: string
       coverage: string
+      assessment_target: mapping
+      normalized_decision: mapping
+      findings: list
+      conditions: list
+      required_actions: list
+      evidence_refs: list
     deployment_risk_report:
       title: string
       risk: string
       deployment_confidence: string
+      assessment_target: mapping
+      normalized_decision: mapping
+      findings: list
+      conditions: list
+      required_actions: list
+      evidence_refs: list
     dependency_upgrade_report:
       title: string
       verdict: string
+      assessment_target: mapping
+      normalized_decision: mapping
+      findings: list
+      conditions: list
+      required_actions: list
+      evidence_refs: list
     tech_debt_assessment:
       title: string
       items: list

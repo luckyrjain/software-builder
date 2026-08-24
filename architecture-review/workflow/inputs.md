@@ -49,3 +49,10 @@ material.
 
 `architecture-review` is always the entry point for this flow — it is not called mid-workflow by a
 larger skill, so there is no embedded-invocation case to handle here.
+
+## Semantic document binding
+
+When a `system_design_spec` machine artifact is supplied, it must identify the complete System Design
+document with `assessment_target.source_type: system_design` and a valid `source_artifact_digest`.
+Report only `Approved`/`Approved with conditions` after the supplied full document is resolved and its
+digest matches; a compact machine summary never substitutes for the design body.

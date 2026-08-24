@@ -108,6 +108,12 @@ blocked_conditions=[`project`/`merge_request_iid` missing, non-GitLab payload (`
 pr-review's full findings and executive summary through the notification path, never a stub without them;
 a stale head-mismatch run is flagged explicit and routed for a fresh webhook event, never silently retried.
 
+## Machine artifact v2
+
+The delegated `mr_review_report` is the same complete v2 shape emitted by `pr-review`; the gatekeeper
+does not emit a thin summary or invent a separate verdict. Preserve the reviewed head, integrated
+revision, typed evidence, and normalized decision from the delegated review.
+
 Routing: [skill-routing.md](../docs/skill-framework/shared/skill-routing.md) · shared conventions:
 [docs/skill-framework/README.md](../docs/skill-framework/README.md) · confidence
 [confidence-bands.md](../docs/skill-framework/shared/confidence-bands.md) · prompt injection

@@ -1,5 +1,9 @@
 # Changelog — system-design
 
+## 1.2.0
+
+- Emit system-design machine summaries and bind the v2 artifact to the complete semantic design document.
+
 ## 1.1.0
 
 - Accept ready PRD context for implementation design and hand off the resulting design to architecture review.

@@ -12,6 +12,7 @@ from scripts.registry.artifact_contracts import (
     validate_artifact_contracts,
     validate_artifact_result,
 )
+from scripts.registry.canonical_manifest import load_canonical_manifest
 from scripts.registry.machine_summary import (
     effective_authorities,
     validate_condition_item,
@@ -19,17 +20,72 @@ from scripts.registry.machine_summary import (
     validate_machine_summary,
     validate_required_action_item,
 )
-from scripts.tests.artifact_v2_fixtures import finding, machine_summary_fixture
+from scripts.tests.artifact_v2_fixtures import (
+    artifact_schema_version,
+    consume_fields,
+    consumes,
+    finding,
+    machine_summary_fixture,
+)
 
 
 ROOT = Path(__file__).resolve().parents[2]
 
+B1_ARTIFACT_FIELDS = {
+    "prd_report": {
+        "title": "string",
+        "build_readiness": "string",
+        "depth": "string",
+        "response_mode": "string",
+    },
+    "mr_review_report": {
+        "review_metadata": "mapping",
+        "posted": "boolean",
+        "head_sha": "string",
+        "posting_mode": "string",
+        "integrated_revision": "string",
+    },
+    "architecture_review_report": {"title": "string", "decision": "string"},
+    "system_design_spec": {"title": "string", "readiness": "string"},
+    "api_design_review_report": {"title": "string", "verdict": "string"},
+    "database_review_report": {"title": "string", "verdict": "string"},
+}
+B1_COMMON_FIELDS = {
+    "assessment_target": "mapping",
+    "normalized_decision": "mapping",
+    "findings": "list",
+    "conditions": "list",
+    "required_actions": "list",
+    "evidence_refs": "list",
+}
+B2_ARTIFACT_FIELDS = {
+    "security_review_report": {"title": "string", "verdict": "string"},
+    "performance_review_report": {"title": "string", "verdict": "string"},
+    "capacity_plan": {"title": "string", "headroom": "string"},
+    "observability_review_report": {"title": "string", "coverage": "string"},
+    "deployment_risk_report": {
+        "title": "string",
+        "risk": "string",
+        "deployment_confidence": "string",
+    },
+    "dependency_upgrade_report": {"title": "string", "verdict": "string"},
+}
+B2_STATE_SEMANTICS = {
+    "security_review_report": ("current_state", ["current_state", "proposed_state"]),
+    "performance_review_report": ("current_state", ["current_state", "proposed_state"]),
+    "capacity_plan": ("desired_state", ["desired_state"]),
+    "observability_review_report": ("current_state", ["current_state", "proposed_state"]),
+    "deployment_risk_report": ("proposed_state", ["proposed_state"]),
+    "dependency_upgrade_report": ("proposed_state", ["proposed_state"]),
+}
+
 
 def _valid_result() -> dict:
+    summary = machine_summary_fixture()
     return {
         "skill_result": {
             "skill": "pr-review",
-            "version": "1.1.0",
+            "version": "1.2.0",
             "status": "SUCCESS",
             "confidence": "HIGH",
             "source_revision": "a" * 40,
@@ -37,13 +93,10 @@ def _valid_result() -> dict:
             "artifacts": ["mr_review_report"],
             "blockers": [],
             "recommended_next_skill": None,
-            "artifact_schema_version": 1,
+            "artifact_schema_version": 2,
             "state_semantic": "current_state",
         },
-        "provenance": {
-            "source_revision": "a" * 40,
-            "sources": ["github.pull_request"],
-        },
+        "provenance": summary["provenance"],
         "freshness": {
             "observed_at": "2026-08-22T00:00:00Z",
             "source_revision": "a" * 40,
@@ -65,6 +118,8 @@ def _valid_result() -> dict:
             "posted": False,
             "head_sha": "a" * 40,
             "posting_mode": "chat-only",
+            "integrated_revision": "UNKNOWN",
+            **summary["payload"],
         },
     }
 
@@ -107,6 +162,35 @@ def test_root_evidence_refs_must_cover_nested_refs() -> None:
         evidence_refs=[],
     )
     assert any("evidence_refs" in e for e in validate_machine_summary(summary))
+
+
+def test_normalized_decision_is_a_typed_status_and_raw_verdict_mapping() -> None:
+    summary = machine_summary_fixture()
+    summary["payload"]["normalized_decision"] = {
+        "status": "PASS",
+        "raw_verdict": "Pass",
+    }
+
+    assert validate_machine_summary(summary) == []
+
+
+def test_specialist_consumes_assessment_context() -> None:
+    for skill_id in (
+        "security-review",
+        "performance-review",
+        "capacity-planner",
+        "observability-review",
+        "deployment-risk-review",
+        "dependency-upgrade-review",
+    ):
+        assert consumes(skill_id, "assessment_context")
+        assert consume_fields(skill_id, "assessment_context") == [
+            "assessment_target",
+            "inputs",
+            "input_provenance",
+            "evidence_refs",
+            "unresolved",
+        ]
 
 
 def test_v2_evidence_refs_must_resolve_to_typed_sources() -> None:
@@ -233,7 +317,7 @@ def test_artifact_validation_routes_v2_schemas_to_machine_summary(monkeypatch) -
         artifact_schemas["mr_review_report"] = v2_fields
         artifact_runtime["payload_types"]["mr_review_report"] = {
             "assessment_target": "mapping",
-            "normalized_decision": "string",
+            "normalized_decision": "mapping",
             "findings": "list",
             "conditions": "list",
             "required_actions": "list",
@@ -268,6 +352,53 @@ def test_artifact_validation_routes_v2_schemas_to_machine_summary(monkeypatch) -
 
 def test_every_durable_artifact_has_one_runtime_contract() -> None:
     assert validate_artifact_contracts(ROOT) == []
+
+
+def test_b1_artifacts_are_v2_after_registration() -> None:
+    assert all(artifact_schema_version(artifact) == 2 for artifact in B1_ARTIFACT_FIELDS)
+
+
+def test_b1_payload_types_retain_v1_fields_and_add_common_machine_fields() -> None:
+    manifest = load_canonical_manifest(ROOT)
+    payload_types = manifest["contracts"]["platform"]["artifact_runtime"]["payload_types"]
+
+    for artifact, v1_fields in B1_ARTIFACT_FIELDS.items():
+        assert payload_types[artifact] == {**v1_fields, **B1_COMMON_FIELDS}
+
+
+def test_v1_mr_review_is_rejected_after_b1_registration() -> None:
+    result = _valid_result()
+    result["skill_result"]["artifact_schema_version"] = 1
+
+    errors = _validate(result)
+
+    assert any("artifact schema version is unsupported" in error for error in errors)
+
+
+def test_b2_artifacts_are_v2_after_registration() -> None:
+    assert all(artifact_schema_version(artifact) == 2 for artifact in B2_ARTIFACT_FIELDS)
+
+
+def test_b1_versions_are_not_changed_by_b2() -> None:
+    assert artifact_schema_version("mr_review_report") == 2
+    assert artifact_schema_version("system_design_spec") == 2
+
+
+def test_b2_payload_types_retain_v1_fields_and_add_common_machine_fields() -> None:
+    manifest = load_canonical_manifest(ROOT)
+    payload_types = manifest["contracts"]["platform"]["artifact_runtime"]["payload_types"]
+
+    for artifact, v1_fields in B2_ARTIFACT_FIELDS.items():
+        assert payload_types[artifact] == {**v1_fields, **B1_COMMON_FIELDS}
+
+
+def test_b2_state_semantics_have_exact_defaults_and_allowed_values() -> None:
+    manifest = load_canonical_manifest(ROOT)
+    runtime = manifest["contracts"]["platform"]["artifact_runtime"]
+
+    for artifact, (default, allowed) in B2_STATE_SEMANTICS.items():
+        assert runtime["state_semantics"][artifact] == default
+        assert runtime["allowed_state_semantics"][artifact] == allowed
 
 
 def test_valid_durable_artifact_result_passes() -> None:
@@ -381,6 +512,11 @@ def test_unknown_provenance_is_allowed_for_unknown_evidence() -> None:
     result["skill_result"]["evidence_status"] = "UNKNOWN"
     result["provenance"]["source_revision"] = None
     result["provenance"]["sources"] = []
+    result["payload"]["normalized_decision"] = {
+        "status": "UNKNOWN",
+        "raw_verdict": "Blocked — insufficient evidence",
+    }
+    result["payload"]["evidence_refs"] = []
     result["freshness"] = {
         "observed_at": None,
         "source_revision": None,
@@ -394,7 +530,14 @@ def test_delegated_producer_uses_its_declared_partial_payload() -> None:
     result = _valid_result()
     result["skill_result"].update(skill="pr-gatekeeper", version="1.0.0")
     result["authority"]["canonical_owner"] = "pr-review"
-    result["payload"] = {"review_metadata": {}, "posted": False, "head_sha": "a" * 40}
+    result["payload"] = {
+        "review_metadata": {},
+        "posted": False,
+        "head_sha": "a" * 40,
+        "posting_mode": "chat-only",
+        "integrated_revision": "UNKNOWN",
+        **machine_summary_fixture()["payload"],
+    }
 
     assert _validate(result, producer_skill="pr-gatekeeper") == []
 
