@@ -195,7 +195,9 @@ def test_runtime_configured_behavior_requires_the_exact_target_environment() -> 
     )
 
     assert result["payload"]["verdict"] == "Blocked — insufficient evidence"
-    assert result["payload"]["conditions"][0]["id"] == "unknown-timeout-budgets"
+    assert {condition["id"] for condition in result["payload"]["conditions"]} == {
+        f"unknown-{dimension.replace('_', '-')}" for dimension in ALL_DIMENSIONS
+    }
 
 
 def test_typed_assessment_context_preserves_its_target_and_evidence_reference() -> None:
@@ -437,6 +439,7 @@ def test_successful_envelope_passes_actual_artifact_validator() -> None:
             trusted_authorities={"evidence": "repository"},
         ),
     )
+
     errors = validate_artifact_result(
         ROOT,
         "resilience_review_report",
@@ -473,7 +476,9 @@ def test_untagged_trusted_service_metadata_requires_environment_for_timeout() ->
     )
 
     assert result["payload"]["normalized_decision"]["status"] == "UNKNOWN"
-    assert result["payload"]["conditions"][0]["id"] == "unknown-timeout-budgets"
+    assert {condition["id"] for condition in result["payload"]["conditions"]} == {
+        "unknown-timeout-budgets", "unknown-retry-policy", "unknown-circuit-breaking",
+    }
 
 
 def test_input_provenance_reference_without_source_remains_caller_provenance() -> None:
@@ -530,7 +535,9 @@ def test_trusted_repo_deployment_config_requires_environment_for_timeout() -> No
     )
 
     assert result["payload"]["normalized_decision"]["status"] == "UNKNOWN"
-    assert result["payload"]["conditions"][0]["id"] == "unknown-timeout-budgets"
+    assert {condition["id"] for condition in result["payload"]["conditions"]} == {
+        "unknown-timeout-budgets", "unknown-retry-policy", "unknown-circuit-breaking",
+    }
 
 
 def test_trusted_repo_settings_yaml_requires_environment_for_timeout() -> None:
@@ -559,7 +566,9 @@ def test_trusted_repo_settings_yaml_requires_environment_for_timeout() -> None:
     )
 
     assert result["payload"]["normalized_decision"]["status"] == "UNKNOWN"
-    assert result["payload"]["conditions"][0]["id"] == "unknown-timeout-budgets"
+    assert {condition["id"] for condition in result["payload"]["conditions"]} == {
+        "unknown-timeout-budgets", "unknown-retry-policy", "unknown-circuit-breaking",
+    }
 
 
 def test_unrelated_timestamped_evidence_cannot_upgrade_confidence() -> None:
