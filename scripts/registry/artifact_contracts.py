@@ -318,8 +318,14 @@ def validate_artifact_result(
                 errors.append(f"error: {artifact_type}: invalid result.status")
             if not isinstance(envelope.get("confidence"), str) or envelope.get("confidence") not in _CONFIDENCE_VALUES:
                 errors.append(f"error: {artifact_type}: invalid result.confidence")
-            if not isinstance(envelope.get("evidence_status"), str) or envelope.get("evidence_status") not in _EVIDENCE_STATUSES:
+            evidence_status = envelope.get("evidence_status")
+            if not isinstance(evidence_status, str) or evidence_status not in _EVIDENCE_STATUSES:
                 errors.append(f"error: {artifact_type}: invalid result.evidence_status")
+            elif evidence_status in {"UNKNOWN", "CONFLICTED"} and (
+                not isinstance(envelope.get("confidence"), str)
+                or envelope.get("confidence") not in {"LOW", "UNKNOWN"}
+            ):
+                errors.append(f"error: {artifact_type}: {evidence_status} evidence_status requires LOW or UNKNOWN confidence")
             if envelope.get("artifact_schema_version") != artifact_runtime["artifact_schema_versions"][artifact_type]:
                 errors.append(f"error: {artifact_type}: artifact schema version is unsupported")
             allowed_states = artifact_runtime.get("allowed_state_semantics", {}).get(artifact_type)
@@ -343,11 +349,19 @@ def validate_artifact_result(
                 not isinstance(source_revision, str) or not source_revision
             ):
                 errors.append(f"error: {artifact_type}: result.source_revision must be a string, null, or UNKNOWN")
-            if not isinstance(envelope.get("blockers"), list):
-                errors.append(f"error: {artifact_type}: result.blockers must be a list")
+            result_blockers = envelope.get("blockers")
+            if not isinstance(result_blockers, list) or not all(isinstance(item, str) for item in result_blockers):
+                errors.append(f"error: {artifact_type}: result.blockers must be a list of strings")
             next_skill = envelope.get("recommended_next_skill")
             if next_skill is not None and (not isinstance(next_skill, str) or next_skill not in skills):
                 errors.append(f"error: {artifact_type}: result.recommended_next_skill must be a registered skill or null")
+            elif next_skill is not None:
+                producer_composition = skills.get(envelope.get("skill"), {}).get("composition", {})
+                escalation_targets = producer_composition.get("escalation_targets") if isinstance(producer_composition, dict) else None
+                if not isinstance(escalation_targets, list) or next_skill not in escalation_targets:
+                    errors.append(
+                        f"error: {artifact_type}: result.recommended_next_skill must be declared in the producer skill's composition.escalation_targets",
+                    )
             if envelope.get("status") == "SUCCESS" and envelope.get("blockers"):
                 errors.append(f"error: {artifact_type}: SUCCESS results must not contain blockers")
             if isinstance(envelope.get("status"), str) and envelope.get("status") in {"BLOCKED", "FAILED", "ESCALATED"} and not envelope.get("blockers"):
@@ -473,6 +487,17 @@ def validate_artifact_result(
                     errors.append(f"error: {artifact_type}: PARTIAL result must be missing at least one DoD check")
             if not isinstance(dod.get("partial_result_behavior"), str) or not dod["partial_result_behavior"]:
                 errors.append(f"error: {artifact_type}: definition_of_done.partial_result_behavior must be a non-empty string")
+            if (
+                envelope
+                and isinstance(result_blockers, list)
+                and all(isinstance(item, str) for item in result_blockers)
+                and isinstance(dod.get("blocked_conditions"), list)
+                and all(isinstance(item, str) for item in dod["blocked_conditions"])
+                and set(result_blockers) != set(dod["blocked_conditions"])
+            ):
+                errors.append(
+                    f"error: {artifact_type}: result.blockers and definition_of_done.blocked_conditions must match",
+                )
         if provenance and freshness:
             revisions = [
                 envelope.get("source_revision") if envelope else None,

@@ -468,6 +468,7 @@ def test_result_rejects_unowned_claims_and_extra_payload_fields() -> None:
 def test_blocked_result_may_have_empty_payload() -> None:
     result = _valid_result()
     result["skill_result"].update(status="BLOCKED", blockers=["missing capability"])
+    result["definition_of_done"]["blocked_conditions"] = ["missing capability"]
     result["payload"] = {}
 
     assert _validate(result) == []
@@ -599,3 +600,59 @@ def test_catalog_rejects_scalar_ownership_without_traceback(tmp_path: Path) -> N
     errors = validate_artifact_contracts(tmp_path)
 
     assert any("ownership must declare owners" in error for error in errors)
+
+
+def test_result_rejects_blockers_desynced_from_dod_blocked_conditions() -> None:
+    result = _valid_result()
+    result["skill_result"].update(status="BLOCKED", blockers=["dependency_paths"])
+    result["definition_of_done"]["blocked_conditions"] = []
+    result["payload"] = {}
+
+    errors = _validate(result)
+
+    assert any("result.blockers and definition_of_done.blocked_conditions must match" in error for error in errors)
+
+
+def test_result_rejects_partial_status_with_no_missing_dod_checks() -> None:
+    result = _valid_result()
+    result["skill_result"]["status"] = "PARTIAL"
+
+    errors = _validate(result)
+
+    assert any("PARTIAL result must be missing at least one DoD check" in error for error in errors)
+
+
+def test_result_rejects_next_skill_not_in_producer_escalation_targets() -> None:
+    result = _valid_result()
+    result["skill_result"]["recommended_next_skill"] = "performance-review"
+
+    errors = _validate(result)
+
+    assert any("composition.escalation_targets" in error for error in errors)
+
+
+def test_result_accepts_next_skill_in_producer_escalation_targets() -> None:
+    result = _valid_result()
+    result["skill_result"]["recommended_next_skill"] = "security-review"
+
+    assert _validate(result) == []
+
+
+def test_result_rejects_unknown_evidence_status_with_high_confidence() -> None:
+    result = _valid_result()
+    result["skill_result"]["evidence_status"] = "UNKNOWN"
+
+    errors = _validate(result)
+
+    assert any("evidence_status requires LOW or UNKNOWN confidence" in error for error in errors)
+
+
+def test_result_rejects_non_string_blocker_elements() -> None:
+    result = _valid_result()
+    result["skill_result"].update(status="BLOCKED", blockers=["dependency_paths", 123, None])
+    result["definition_of_done"]["blocked_conditions"] = ["dependency_paths", 123, None]
+    result["payload"] = {}
+
+    errors = _validate(result)
+
+    assert any("result.blockers must be a list of strings" in error for error in errors)
