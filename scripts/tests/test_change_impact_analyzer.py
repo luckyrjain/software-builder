@@ -560,3 +560,25 @@ def test_runtime_envelope_validates_against_registered_artifact_contract() -> No
         producer_skill="change-impact-analyzer",
     )
     assert errors == []
+
+
+def test_partial_envelope_completed_checks_omit_target_normalized() -> None:
+    result = finalize_impact(impact_fixture(coverage_status="PARTIAL"))
+    dod = result.to_envelope()["definition_of_done"]
+    assert dod["completed_checks"] != dod["required_checks"]
+    assert "target_normalized" not in dod["completed_checks"]
+
+
+def test_partial_envelope_with_material_unknowns_omits_surfaces_check() -> None:
+    result = finalize_impact(
+        impact_fixture(coverage_status="COMPLETE", material_unknowns=["consumer graph unavailable"]),
+    )
+    dod = result.to_envelope()["definition_of_done"]
+    assert dod["completed_checks"] != dod["required_checks"]
+    assert "surfaces_and_unknowns_recorded" not in dod["completed_checks"]
+
+
+def test_success_envelope_completes_every_dod_check() -> None:
+    result = finalize_impact(impact_fixture(coverage_status="COMPLETE", blockers=[]))
+    dod = result.to_envelope()["definition_of_done"]
+    assert dod["completed_checks"] == dod["required_checks"]

@@ -97,6 +97,21 @@ class ImpactResult:
             head_revision_or_digest=target.get("head_revision_or_digest"),
         )
 
+    def _completed_dod_checks(self, coverage: str | None) -> list[str]:
+        """Derive which DoD checks genuinely completed, so PARTIAL reflects real gaps."""
+        if self.skill_result.status not in {"SUCCESS", "PARTIAL"}:
+            return []
+        checks: list[str] = []
+        # COMPLETE coverage means the target identity was confirmed against bounded, authoritative
+        # repository evidence (see _coverage); anything less means normalization is unfinished.
+        if coverage == "COMPLETE":
+            checks.append("target_normalized")
+        if self.payload.get("change_classes"):
+            checks.append("change_classes_evaluated")
+        if not self.payload.get("material_unknowns") and self.payload.get("evidence_refs"):
+            checks.append("surfaces_and_unknowns_recorded")
+        return checks
+
     def to_envelope(self) -> dict[str, Any]:
         """Serialize to the manifest-backed runtime result envelope."""
         target = self.assessment_target
@@ -119,6 +134,7 @@ class ImpactResult:
         for field in REPORT_FIELDS:
             if payload[field] is None:
                 payload[field] = [] if field in list_fields else {} if field == "assessment_target" else "UNKNOWN"
+        completed_checks = self._completed_dod_checks(coverage)
         return {
             "skill_result": {
                 "skill": "change-impact-analyzer",
@@ -150,8 +166,7 @@ class ImpactResult:
             "definition_of_done": {
                 "required_artifacts": ["change_impact_report"],
                 "required_checks": ["target_normalized", "change_classes_evaluated", "surfaces_and_unknowns_recorded"],
-                "completed_checks": ["target_normalized", "change_classes_evaluated", "surfaces_and_unknowns_recorded"]
-                if self.skill_result.status in {"SUCCESS", "PARTIAL"} else [],
+                "completed_checks": completed_checks,
                 "blocked_conditions": self.skill_result.blockers or [],
                 "partial_result_behavior": "return PARTIAL or UNKNOWN with explicit evidence gaps",
             },
