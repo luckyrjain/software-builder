@@ -403,6 +403,17 @@ def test_proven_impact_blocker_fails_decision_without_failing_execution() -> Non
     assert result.skill_result.status == "SUCCESS"
 
 
+def test_proven_impact_blocker_outranks_material_unknowns() -> None:
+    result = finalize_impact(
+        {
+            **impact_fixture(coverage_status="COMPLETE", material_unknowns=["consumer graph unavailable"]),
+            "impact_blockers": ["public contract has an incompatible change"],
+        },
+    )
+    assert result.normalized_decision.status == "FAIL"
+    assert result.skill_result.status == "SUCCESS"
+
+
 def test_partial_coverage_is_unknown_partial() -> None:
     result = finalize_impact(
         impact_fixture(

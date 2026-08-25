@@ -691,6 +691,12 @@ def finalize_impact(impact: Mapping[str, Any]) -> ImpactResult:
             normalized_decision=NormalizedDecision("UNKNOWN", "BLOCKED"),
             skill_result=SkillExecutionResult("BLOCKED", normalized_blockers, state_semantic),
         )
+    if coverage == "COMPLETE" and impact_blockers:
+        return ImpactResult(
+            payload=payload,
+            normalized_decision=NormalizedDecision("FAIL", "IMPACT_BLOCKER"),
+            skill_result=SkillExecutionResult("SUCCESS", [], state_semantic),
+        )
     if coverage == "COMPLETE" and payload.get("material_unknowns"):
         return ImpactResult(
             payload=payload,
@@ -706,10 +712,7 @@ def finalize_impact(impact: Mapping[str, Any]) -> ImpactResult:
             )
         return ImpactResult(
             payload=payload,
-            normalized_decision=NormalizedDecision(
-                "FAIL" if impact_blockers else "PASS",
-                "IMPACT_BLOCKER" if impact_blockers else "COMPLETE",
-            ),
+            normalized_decision=NormalizedDecision("PASS", "COMPLETE"),
             skill_result=SkillExecutionResult("SUCCESS", [], state_semantic),
         )
     if coverage in {"PARTIAL", "UNKNOWN"}:
