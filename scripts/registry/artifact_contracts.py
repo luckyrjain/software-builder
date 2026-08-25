@@ -469,6 +469,8 @@ def validate_artifact_result(
                 missing_checks = sorted(set(dod["required_checks"]) - set(dod["completed_checks"]))
                 if missing_checks and envelope and envelope.get("status") == "SUCCESS":
                     errors.append(f"error: {artifact_type}: SUCCESS result is missing DoD checks: {', '.join(missing_checks)}")
+                if not missing_checks and envelope and envelope.get("status") == "PARTIAL":
+                    errors.append(f"error: {artifact_type}: PARTIAL result must be missing at least one DoD check")
             if not isinstance(dod.get("partial_result_behavior"), str) or not dod["partial_result_behavior"]:
                 errors.append(f"error: {artifact_type}: definition_of_done.partial_result_behavior must be a non-empty string")
         if provenance and freshness:
