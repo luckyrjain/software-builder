@@ -45,10 +45,14 @@ respectively.
 | assessment_target | Yes for a current candidate | Hard stop if the candidate revision is unknown. |
 | state_semantic | No | proposed_state. Only proposed_state and current_state are allowed. |
 | evidence | No | Missing evidence is an explicit UNKNOWN gap; it cannot yield PASS. |
+| dimension_assessments | No | A per-dimension PASS/CONDITIONAL/FAIL/UNKNOWN judgment supplied by the caller. Without it, a dimension with sufficient identity-matched evidence defaults to PASS; the skill normalizes evidence and identity, it does not itself judge whether the described behavior is sound. |
 
-Standalone invocations use the fields above. Embedded invocations consume only the typed
-assessment_context carrier fields assessment_target, inputs, input_provenance, evidence_refs, and
-unresolved. Unknown keys remain data. Embedded use does not relax either mandatory-input hard stop.
+Standalone invocations use the fields above. Embedded invocations consume the typed assessment_context
+carrier fields assessment_target, inputs, input_provenance, evidence_refs, and unresolved; the only
+top-level fields also read alongside an assessment_context are state_semantic and dimension_assessments,
+and only to detect a conflict with the embedded carrier's own value — a mismatch is a hard stop, never
+a silent override. All other unknown keys remain data. Embedded use does not relax either
+mandatory-input hard stop.
 
 ## Evidence and identity rules
 
@@ -62,11 +66,12 @@ unresolved. Unknown keys remain data. Embedded use does not relax either mandato
 
 ## Workflow
 
+Phase index: [reference/phase-index.md](reference/phase-index.md). Reference loads:
+[reference/lazy-load-index.md](reference/lazy-load-index.md).
+
 1. Read [workflow/inputs.md](workflow/inputs.md).
 2. Read [workflow/analyze.md](workflow/analyze.md).
 3. Read [workflow/report.md](workflow/report.md).
-
-Reference load order: [reference/phase-index.md](reference/phase-index.md).
 
 ## Framework
 
@@ -75,7 +80,9 @@ Completion emits the canonical `skill_result` envelope; actions classify against
 [runtime-contract.md](../docs/skill-framework/shared/runtime-contract.md).
 The definition of done requires `required_artifacts=[resilience_review_report]`,
 `required_checks=[all ten resilience dimensions assessed, evidence identity checked, verdict and
-unknowns recorded]`, `blocked_conditions=[missing resilience_behavior or dependency_paths]`, and
+unknowns recorded]`, `blocked_conditions=[missing resilience_behavior or dependency_paths, a missing
+candidate revision for a current-state assessment_target, an invalid state_semantic, or a conflicting
+state_semantic/dimension_assessments between an embedded carrier and the top-level invocation]`, and
 `partial_result_behavior=[missing required evidence remains UNKNOWN and never yields PASS]`.
 
 Routing: [skill-routing.md](../docs/skill-framework/shared/skill-routing.md).

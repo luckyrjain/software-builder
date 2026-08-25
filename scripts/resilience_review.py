@@ -26,10 +26,14 @@ RUNTIME_CONFIG_SOURCE_KINDS = frozenset({"runtime_metric", "service_metadata", "
 RUNTIME_CONFIG_DIMENSIONS = frozenset({"timeout_budgets", "retry_policy", "circuit_breaking"})
 DEPLOYMENT_CONFIG_MARKERS = frozenset(
     {
-        "config", "configuration", "configmap", "deploy", "deployment", "env", "environment",
-        "helm", "ini", "k8s", "kubernetes", "manifest", "overlay", "properties", "runtime",
-        "setting", "settings", "toml", "values", "yaml", "yml",
+        "config", "configs", "configuration", "configmap", "deploy", "deployment", "deployments",
+        "env", "environment", "environments", "helm", "ini", "k8s", "kubernetes", "manifest",
+        "overlay", "overlays", "properties", "runtime", "setting", "settings", "toml", "values",
+        "yaml", "yml",
     }
+)
+ENVIRONMENT_NAME_STEMS = frozenset(
+    {"production", "prod", "staging", "stage", "development", "dev", "test", "testing", "local", "qa", "sandbox"}
 )
 SOURCE_CODE_SUFFIXES = (
     "c", "cc", "clj", "cljs", "cpp", "cs", "ex", "exs", "fs", "fsx", "go", "groovy",
@@ -47,6 +51,7 @@ SOURCE_CODE_DECLARATION = re.compile(
     r"(?m)^\s*(?:async\s+def|class|def|export\s+(?:async\s+)?function|func|function|"
     r"interface|namespace|package|public\s+(?:class|interface)|struct)\s+\w+"
 )
+SOURCE_CODE_SUFFIX_PATTERN = re.compile(r"\.(?:" + "|".join(SOURCE_CODE_SUFFIXES) + r")(?:$|[\s:#?])")
 _MAX_UNTRUSTED_VALUE_DEPTH = 32
 _MAX_UNTRUSTED_VALUE_NODES = 4_096
 
@@ -63,7 +68,7 @@ def _runtime_source(ref: str) -> dict[str, Any]:
     return {
         "ref": ref, "authority": "trusted_runtime", "kind": "artifact", "observed_at": None,
         "source_revision": "UNKNOWN", "source_environment": None, "derived_from": [],
-        "dimensions": [], "environment_sensitive_dimensions": [], "markers": "",
+        "dimensions": [], "environment_sensitive_dimensions": [],
         "source_defined_application_code": False,
     }
 
@@ -109,15 +114,6 @@ def _string_values(value: object) -> list[str] | None:
     return strings
 
 
-def _source_markers(value: Mapping[str, Any]) -> tuple[str, list[str]] | None:
-    markers = [value.get(field) for field in ("ref", "path", "source_path", "artifact_path", "content")]
-    metadata_markers = _string_values(value.get("metadata"))
-    if metadata_markers is None:
-        return None
-    markers.extend(metadata_markers)
-    return " ".join(item.lower() for item in markers if isinstance(item, str)), metadata_markers
-
-
 def _marker_tokens(markers: str) -> set[str]:
     return set(re.findall(r"[a-z0-9]+", markers))
 
@@ -130,23 +126,41 @@ def _has_runtime_config_signal(value: object) -> bool:
     return bool(tokens & DEPLOYMENT_CONFIG_MARKERS)
 
 
-def _source_defined_application_code(value: Mapping[str, Any], markers: str, metadata_markers: list[str]) -> bool:
-    paths = " ".join(
-        item.lower()
-        for field in ("ref", "path", "source_path", "artifact_path")
-        for item in [value.get(field)]
-        if isinstance(item, str)
-    )
-    suffix_pattern = r"\.(?:" + "|".join(SOURCE_CODE_SUFFIXES) + r")(?:$|[\s:#?])"
-    if re.search(suffix_pattern, paths):
+def _path_indicates_deployment_config(path: str) -> bool:
+    """A marker word as a whole path segment (a directory, or a filename token) is a much
+    more precise config signal than the word appearing anywhere in the string — it catches
+    real per-environment conventions like config/settings/production.py,
+    environments/production/timeouts.py, or env.production.js without flagging ordinary
+    source names that merely contain the same word, like env_utils.py or
+    database_config.py. Deliberately not defended: a bare short filename that happens to
+    equal an environment name (dev.py, test.py) still reads as config — an unavoidable
+    false positive in the safe (more-evidence-required) direction given a word-based
+    heuristic, not a special case worth chasing further."""
+    segments = [segment for segment in re.split(r"[\\/:]", path) if segment]
+    if not segments:
+        return False
+    directories = segments[:-1]
+    if any(segment in DEPLOYMENT_CONFIG_MARKERS or segment in ENVIRONMENT_NAME_STEMS for segment in directories):
         return True
+    return bool(_marker_tokens(segments[-1]) & ENVIRONMENT_NAME_STEMS)
+
+
+def _source_defined_application_code(value: Mapping[str, Any], metadata_markers: list[str]) -> bool:
     metadata_tokens = _marker_tokens(" ".join(item.lower() for item in metadata_markers))
     if metadata_tokens & SOURCE_CODE_LANGUAGES or {"source", "code"} <= metadata_tokens:
         return True
     content = value.get("content")
     if isinstance(content, str) and SOURCE_CODE_DECLARATION.search(content) is not None:
         return True
-    return not _has_runtime_config_signal(markers)
+    path_values = [
+        item.lower()
+        for field in ("ref", "path", "source_path", "artifact_path")
+        for item in [value.get(field)]
+        if isinstance(item, str)
+    ]
+    if any(_path_indicates_deployment_config(path) for path in path_values):
+        return False
+    return SOURCE_CODE_SUFFIX_PATTERN.search(" ".join(path_values)) is not None
 
 
 def _normalized_source(value: object, *, trusted_authority: str = "caller") -> dict[str, Any] | None:
@@ -156,10 +170,9 @@ def _normalized_source(value: object, *, trusted_authority: str = "caller") -> d
     sensitive = value.get("environment_sensitive_dimensions", [])
     derived_from = value.get("derived_from", [])
     kind = value.get("kind")
-    markers_result = _source_markers(value)
-    if markers_result is None:
+    metadata_markers = _string_values(value.get("metadata"))
+    if metadata_markers is None:
         return None
-    markers, metadata_markers = markers_result
     return {
         "ref": value["ref"].strip(),
         "authority": trusted_authority if trusted_authority in ALLOWED_AUTHORITIES else "caller",
@@ -170,8 +183,7 @@ def _normalized_source(value: object, *, trusted_authority: str = "caller") -> d
         "derived_from": list(derived_from) if isinstance(derived_from, list) and all(_non_empty(ref) for ref in derived_from) else [],
         "dimensions": [item for item in dimensions if item in DIMENSIONS] if isinstance(dimensions, list) else [],
         "environment_sensitive_dimensions": [item for item in sensitive if item in DIMENSIONS] if isinstance(sensitive, list) else [],
-        "markers": markers,
-        "source_defined_application_code": _source_defined_application_code(value, markers, metadata_markers),
+        "source_defined_application_code": _source_defined_application_code(value, metadata_markers),
     }
 
 
@@ -182,7 +194,10 @@ def _resolve_inputs(
     context = invocation.get("assessment_context")
     if context is None:
         target = invocation.get("assessment_target")
-        return dict(invocation), dict(target) if isinstance(target, Mapping) else _empty_target(), [], "caller"
+        resolved = dict(invocation)
+        resolved.pop("_context_evidence_refs", None)
+        resolved.pop("_input_provenance", None)
+        return resolved, dict(target) if isinstance(target, Mapping) else _empty_target(), [], "caller"
     if not isinstance(context, dict):
         return {}, _empty_target(), ["assessment_context"], "caller"
     inputs = context.get("inputs")
@@ -197,10 +212,23 @@ def _resolve_inputs(
     blockers: list[str] = []
     if embedded_state is not None and top_level_state is not None and embedded_state != top_level_state:
         blockers.append("state_semantic_conflict")
+        resolved.pop("state_semantic", None)
     elif top_level_state is not None:
         resolved["state_semantic"] = top_level_state
-    if "dimension_assessments" in invocation:
-        resolved["dimension_assessments"] = invocation["dimension_assessments"]
+    embedded_assessments = resolved.get("dimension_assessments")
+    top_level_assessments = invocation.get("dimension_assessments")
+    embedded_dimensions = {k: v for k, v in embedded_assessments.items() if k in DIMENSIONS} if isinstance(embedded_assessments, Mapping) else embedded_assessments
+    top_level_dimensions = {k: v for k, v in top_level_assessments.items() if k in DIMENSIONS} if isinstance(top_level_assessments, Mapping) else top_level_assessments
+    if embedded_assessments is not None and top_level_assessments is not None and embedded_dimensions != top_level_dimensions:
+        blockers.append("dimension_assessments_conflict")
+        resolved.pop("dimension_assessments", None)
+    elif top_level_assessments is not None:
+        resolved["dimension_assessments"] = top_level_assessments
+    blockers.extend(
+        field
+        for field in ("resilience_behavior", "dependency_paths", "assessment_target")
+        if field in context["unresolved"]
+    )
     resolved["_context_evidence_refs"] = [ref for ref in context["evidence_refs"] if _non_empty(ref)]
     resolved["_input_provenance"] = dict(context["input_provenance"])
     trust = classify_assessment_context_trust(context, runtime_metadata=runtime_metadata)
@@ -450,16 +478,20 @@ def review_resilience(invocation: Mapping[str, Any], *, runtime_metadata: object
                                      "verification": f"Re-run resilience review with evidence covering {label}.",
                                      "evidence_refs": refs})
 
-    if failed:
-        verdict, completion_status = "Changes required", "SUCCESS"
-    elif blockers:
-        verdict, completion_status = "Blocked — insufficient evidence", "BLOCKED"
+    if blockers:
+        completion_status = "BLOCKED"
     elif unknown:
-        verdict, completion_status = "Blocked — insufficient evidence", "PARTIAL"
-    elif conditional:
-        verdict, completion_status = "Approved with conditions", "SUCCESS"
+        completion_status = "PARTIAL"
     else:
-        verdict, completion_status = "Approved", "SUCCESS"
+        completion_status = "SUCCESS"
+    if failed:
+        verdict = "Changes required"
+    elif blockers or unknown:
+        verdict = "Blocked — insufficient evidence"
+    elif conditional:
+        verdict = "Approved with conditions"
+    else:
+        verdict = "Approved"
     for blocker in sorted(set(blockers)):
         ref = f"runtime:missing:{blocker}"
         if ref not in known_refs:
@@ -488,9 +520,9 @@ def review_resilience(invocation: Mapping[str, Any], *, runtime_metadata: object
         source_environment=source_environment,
         observed_at=observed_at,
         completion_status=completion_status,
-        confidence="HIGH" if not verdict.startswith("Blocked") and freshness_known else "UNKNOWN",
+        confidence="HIGH" if not (unknown or blockers) and freshness_known else "UNKNOWN",
         evidence_status="UNKNOWN" if unknown or blockers else "OBSERVED",
-        blockers=sorted(set(blockers)),
+        blockers=sorted(set(blockers)) if completion_status == "BLOCKED" else [],
         state_semantic=normalized_state,
         completed_checks=[dimension for dimension in DIMENSIONS if dimension not in unknown],
     )

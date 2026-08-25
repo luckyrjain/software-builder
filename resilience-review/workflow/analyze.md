@@ -14,8 +14,9 @@ consumes:
 
 # Analyze
 
-Assess every dimension. Never silently omit a dimension; lack of source- and identity-matched
-evidence is an explicit UNKNOWN gap.
+Assess every dimension and record the judgment in dimension_assessments (PASS, CONDITIONAL, or FAIL)
+for Report to normalize against evidence. Never silently omit a dimension; lack of source- and
+identity-matched evidence is an explicit UNKNOWN gap regardless of the recorded judgment.
 
 1. Timeout budgets: end-to-end budget allocation, cancellation, and deadline propagation.
 2. Retry policy and amplification: bounded attempts, jitter, retry budgets, and fanout multiplication.

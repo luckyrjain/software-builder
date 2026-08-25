@@ -4,7 +4,7 @@ from pathlib import Path
 
 from scripts.registry.artifact_trust import _issue_runtime_handoff_metadata
 from scripts.registry.artifact_contracts import validate_artifact_result
-from scripts.resilience_review import review_resilience
+from scripts.resilience_review import _source_defined_application_code, review_resilience
 
 
 ALL_DIMENSIONS = [
@@ -572,6 +572,11 @@ def test_trusted_repo_settings_yaml_requires_environment_for_timeout() -> None:
 
 
 def test_unrelated_timestamped_evidence_cannot_upgrade_confidence() -> None:
+    # The primary evidence item deliberately has no observed_at. The appended item fully
+    # covers all ten dimensions with a valid observed_at, so it must be excluded by the
+    # revision check specifically (it's for a different candidate revision) — not merely
+    # because it happens to be unrelated in some other, more trivially-excluded way — or
+    # confidence would wrongly upgrade to HIGH from this item alone.
     invocation = _complete_invocation(state_semantic="current_state")
     invocation["evidence"][0]["source_environment"] = "production"
     invocation["evidence"].append(
@@ -580,9 +585,9 @@ def test_unrelated_timestamped_evidence_cannot_upgrade_confidence() -> None:
             "authority": "repository",
             "kind": "repo_content",
             "observed_at": "2026-08-24T12:00:00Z",
-            "source_revision": "a" * 40,
+            "source_revision": "b" * 40,
             "source_environment": "production",
-            "dimensions": [],
+            "dimensions": ALL_DIMENSIONS,
         }
     )
     invocation["assessment_context"] = {
@@ -685,3 +690,171 @@ def test_cyclic_evidence_metadata_fails_closed_without_exhausting_the_stack() ->
 
     assert result["payload"]["normalized_decision"]["status"] == "UNKNOWN"
     assert result["skill_result"]["evidence_status"] == "UNKNOWN"
+
+
+def test_a_proven_failure_with_a_top_level_blocker_reports_blocked_completion_not_success() -> None:
+    result = review_resilience(
+        _complete_invocation(
+            dependency_paths=[],
+            dimension_assessments={dimension: "FAIL" for dimension in ALL_DIMENSIONS},
+        )
+    )
+
+    assert result["payload"]["verdict"] == "Changes required"
+    assert result["skill_result"]["status"] == "BLOCKED"
+    assert result["skill_result"]["blockers"] == ["dependency_paths"]
+
+
+def test_a_proven_failure_with_an_unresolved_dimension_reports_partial_completion_not_success() -> None:
+    behavior = {dimension: f"documented {dimension}" for dimension in ALL_DIMENSIONS}
+    invocation = _complete_invocation(
+        dimension_assessments={dimension: "FAIL" for dimension in ALL_DIMENSIONS},
+        evidence=[
+            {
+                "ref": "repo:x",
+                "authority": "repository",
+                "kind": "repo_content",
+                "source_revision": "a" * 40,
+                "source_environment": None,
+                "dimensions": ALL_DIMENSIONS,
+            }
+        ],
+    )
+
+    result = review_resilience(invocation)
+
+    assert result["payload"]["verdict"] == "Changes required"
+    assert result["skill_result"]["status"] == "PARTIAL"
+
+
+def test_standalone_caller_injected_internal_keys_fail_closed_without_crashing() -> None:
+    result = review_resilience(
+        _complete_invocation(
+            _context_evidence_refs={"not": "a list"},
+            _input_provenance="not a mapping",
+        )
+    )
+
+    assert result["payload"]["verdict"] == "Approved"
+
+
+def test_conflicting_embedded_and_top_level_dimension_assessments_block_resolution() -> None:
+    invocation = _complete_invocation(
+        dimension_assessments={dimension: "PASS" for dimension in ALL_DIMENSIONS}
+    )
+    invocation["assessment_context"] = {
+        "assessment_target": invocation.pop("assessment_target"),
+        "inputs": {
+            "resilience_behavior": invocation.pop("resilience_behavior"),
+            "dependency_paths": invocation.pop("dependency_paths"),
+            "evidence": invocation.pop("evidence"),
+            "dimension_assessments": {dimension: "FAIL" for dimension in ALL_DIMENSIONS},
+        },
+        "input_provenance": {},
+        "evidence_refs": [],
+        "unresolved": [],
+    }
+    invocation.pop("state_semantic")
+
+    result = review_resilience(invocation)
+
+    assert result["skill_result"]["status"] == "BLOCKED"
+    assert "dimension_assessments_conflict" in result["skill_result"]["blockers"]
+    assert result["payload"]["verdict"] != "Changes required"
+    assert result["payload"]["findings"] == []
+
+
+def test_dimension_assessments_conflict_ignores_keys_outside_the_ten_dimensions() -> None:
+    invocation = _complete_invocation(
+        dimension_assessments={dimension: "PASS" for dimension in ALL_DIMENSIONS}
+    )
+    invocation["assessment_context"] = {
+        "assessment_target": invocation.pop("assessment_target"),
+        "inputs": {
+            "resilience_behavior": invocation.pop("resilience_behavior"),
+            "dependency_paths": invocation.pop("dependency_paths"),
+            "evidence": invocation.pop("evidence"),
+            "dimension_assessments": {
+                **{dimension: "PASS" for dimension in ALL_DIMENSIONS},
+                "irrelevant_key": "whatever",
+            },
+        },
+        "input_provenance": {},
+        "evidence_refs": [],
+        "unresolved": [],
+    }
+    invocation.pop("state_semantic")
+
+    result = review_resilience(invocation)
+
+    assert "dimension_assessments_conflict" not in result["skill_result"]["blockers"]
+    assert result["payload"]["verdict"] == "Approved"
+
+
+def test_unresolved_required_input_is_a_blocker_even_with_a_value_present() -> None:
+    invocation = _complete_invocation()
+    invocation["assessment_context"] = {
+        "assessment_target": invocation.pop("assessment_target"),
+        "inputs": {
+            "resilience_behavior": invocation.pop("resilience_behavior"),
+            "dependency_paths": invocation.pop("dependency_paths"),
+            "evidence": invocation.pop("evidence"),
+        },
+        "input_provenance": {},
+        "evidence_refs": [],
+        "unresolved": ["resilience_behavior"],
+    }
+    invocation.pop("state_semantic")
+
+    result = review_resilience(invocation)
+
+    assert result["skill_result"]["status"] == "BLOCKED"
+    assert "resilience_behavior" in result["skill_result"]["blockers"]
+
+
+def test_required_actions_content_for_an_unresolved_dimension() -> None:
+    behavior = {dimension: f"documented {dimension}" for dimension in ALL_DIMENSIONS}
+    del behavior["queue_handling"]
+
+    result = review_resilience(_complete_invocation(resilience_behavior=behavior))
+
+    assert result["payload"]["required_actions"] == [
+        {
+            "id": "evidence-queue-handling",
+            "summary": "Provide authoritative evidence for queue handling.",
+            "required_before": "IMPLEMENTATION",
+            "verification": "Re-run resilience review with evidence covering queue handling.",
+            "evidence_refs": ["repo:src/checkout_resilience.py"],
+        }
+    ]
+
+
+def _is_source_defined(ref: str) -> bool:
+    return _source_defined_application_code({"ref": ref}, [])
+
+
+def test_ordinary_source_filenames_are_not_misclassified_as_deployment_config() -> None:
+    for ref in ("repo:app/settings.py", "repo:src/config.py", "repo:src/env_utils.py",
+                "repo:src/runtime_helpers.py", "repo:src/database_config.py"):
+        assert _is_source_defined(ref), ref
+
+
+def test_per_environment_config_using_a_source_suffix_still_requires_environment_evidence() -> None:
+    for ref in ("repo:config/settings/production.py", "repo:config/environments/production.rb",
+                "repo:config/environments/staging.rb", "repo:config/production.js",
+                "repo:config/staging.ts",
+                # an environment-named directory, or a compound/dotenv-style filename, are
+                # both config signals even without a "config"/"settings"-type directory word
+                "repo:environments/production/timeouts.py",
+                "repo:src/env.production.js",
+                "repo:app/staging-config.rb",
+                "repo:src/production_settings.py"):
+        assert not _is_source_defined(ref), ref
+
+
+def test_a_bare_filename_matching_an_environment_name_reads_as_config() -> None:
+    # Deliberate, accepted trade-off: a word-based heuristic can't distinguish "dev.py used
+    # as a dev-environment config toggle" from "dev.py as an ordinary short module name"
+    # without its actual content — it fails toward requiring more evidence, the safe
+    # direction, rather than silently exempting evidence from the environment-match rule.
+    assert not _is_source_defined("repo:src/dev.py")

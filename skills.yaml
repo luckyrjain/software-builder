@@ -1904,7 +1904,8 @@ contracts:
       resilience-review:
         produces:
         - resilience_review_report
-        consumes: []
+        consumes:
+        - assessment_context
         produce_fields:
           resilience_review_report:
           - title
@@ -1915,6 +1916,13 @@ contracts:
           - conditions
           - required_actions
           - evidence_refs
+        consume_fields:
+          assessment_context:
+          - assessment_target
+          - inputs
+          - input_provenance
+          - evidence_refs
+          - unresolved
         write_authority: read-only
 skills:
   pr-review:
