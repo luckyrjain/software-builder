@@ -1,0 +1,821 @@
+"""Fail-closed validation and identity helpers for implementation_plan v1."""
+
+from __future__ import annotations
+
+import argparse
+import copy
+import json
+from pathlib import Path
+from typing import Any, Mapping
+
+from scripts.registry.assessment_target import canonical_payload_digest, normalize_repo_identity
+
+
+PLAN_FIELDS = {
+    "plan_set_id",
+    "plan_id",
+    "title",
+    "readiness",
+    "assessment_target",
+    "target_repo",
+    "external_dependencies",
+    "source_refs",
+    "tasks",
+    "execution_waves",
+    "sequencing_constraints",
+    "verification_gates",
+    "traceability",
+}
+TASK_FIELDS = {
+    "task_id",
+    "title",
+    "task_type",
+    "executor",
+    "scope",
+    "target_paths",
+    "acceptance_criteria",
+    "dependencies",
+    "required_tests",
+    "verification",
+    "rollout_notes",
+    "completion_evidence",
+    "source_condition_refs",
+    "source_action_refs",
+    "estimated_scope",
+}
+ESTIMATE_FIELDS = {
+    "estimate_known",
+    "files_upper_bound",
+    "changed_lines_upper_bound",
+    "confidence",
+}
+EXECUTION_STATE_FIELDS = {
+    "schema_version",
+    "plan_id",
+    "plan_digest",
+    "target_repo",
+    "state_generation",
+    "current_task_id",
+    "task_statuses",
+    "completed_evidence_refs",
+    "observed_head_revision",
+    "blocked_reason",
+    "updated_at",
+}
+READINESS = {"READY", "PARTIAL", "BLOCKED"}
+TASK_TYPES = {"code", "config", "schema", "migration", "other"}
+ESTIMATE_CONFIDENCE = {"HIGH", "MEDIUM", "LOW", "UNKNOWN"}
+TASK_STATUSES = {"PENDING", "IN_PROGRESS", "COMPLETE", "BLOCKED"}
+OFFICIAL_TASK_STATUS_MAP = {
+    "NOT_STARTED": "PENDING",
+    "BUILDING": "IN_PROGRESS",
+    "REVIEWING": "IN_PROGRESS",
+    "VALIDATING": "IN_PROGRESS",
+    "READY": "IN_PROGRESS",
+    "COMPLETE": "COMPLETE",
+    "ESCALATED": "BLOCKED",
+}
+SPECIALIST_ARTIFACTS = {
+    "api": "api_design_review_report",
+    "database": "database_review_report",
+    "security": "security_review_report",
+    "performance": "performance_review_report",
+    "capacity": "capacity_plan",
+    "observability": "observability_review_report",
+    "resilience": "resilience_review_report",
+    "dependency_upgrade": "dependency_upgrade_report",
+}
+SHA256 = 64
+LOOP_TASK_MAX_FILES = 40
+LOOP_TASK_MAX_LINES = 1500
+
+
+def _non_empty_string(value: object) -> bool:
+    return isinstance(value, str) and bool(value.strip())
+
+
+def _string_list(value: object, label: str, errors: list[str], *, allow_empty: bool = True) -> None:
+    if not isinstance(value, list) or not all(_non_empty_string(item) for item in value):
+        errors.append(f"error: {label} must be a list of non-empty strings")
+    elif not allow_empty and not value:
+        errors.append(f"error: {label} must not be empty")
+
+
+def derive_plan_set_id(
+    change_impact_digest: str,
+    system_design_digest: str,
+    architecture_review_digest: str,
+) -> str:
+    """Derive the immutable plan-set identity from the three required upstream digests."""
+    source = {
+        "architecture_review_digest": architecture_review_digest,
+        "change_impact_digest": change_impact_digest,
+        "system_design_digest": system_design_digest,
+    }
+    return "PLANSET-" + canonical_payload_digest(source)[:12]
+
+
+def derive_plan_id(plan_set_id: str, target_repo: str) -> str:
+    """Derive the per-repository plan identity from canonical repository identity."""
+    normalized = normalize_repo_identity(target_repo)
+    return f"{plan_set_id}-{canonical_payload_digest(normalized)[:8]}"
+
+
+def canonical_plan_digest(plan: Mapping[str, Any]) -> str:
+    """Digest the complete canonical plan payload for resume and immutability checks."""
+    return canonical_payload_digest(dict(plan))
+
+
+def execution_identity(plan_id: str, task_id: str, target_repo: str) -> str:
+    """Return the stable identity used for branch/PR adoption and race detection."""
+    return ":".join((plan_id, task_id, normalize_repo_identity(target_repo)))
+
+
+def execution_branch_name(plan_id: str, task_id: str, target_repo: str) -> str:
+    """Return a deterministic, bounded branch name for one plan task."""
+    digest = canonical_payload_digest(execution_identity(plan_id, task_id, target_repo))[:12]
+    safe_plan = "".join(char if char.isalnum() or char in "-_" else "-" for char in plan_id).strip("-")
+    safe_task = "".join(char if char.isalnum() or char in "-_" else "-" for char in task_id).strip("-")
+    return f"loop-plan/{safe_plan[:48]}/{safe_task[:40]}-{digest}"
+
+
+def _payload(source: object) -> Mapping[str, Any]:
+    if isinstance(source, Mapping) and isinstance(source.get("payload"), Mapping):
+        return source["payload"]
+    return source if isinstance(source, Mapping) else {}
+
+
+def _source_digest(source: object) -> str:
+    payload = _payload(source)
+    target = payload.get("assessment_target") if isinstance(payload, Mapping) else None
+    if isinstance(target, Mapping) and isinstance(target.get("source_artifact_digest"), str):
+        return target["source_artifact_digest"]
+    return canonical_payload_digest(payload)
+
+
+def _source_status(source: object, *, default: str = "UNKNOWN") -> str:
+    if not isinstance(source, Mapping):
+        return default
+    result = source.get("skill_result")
+    if isinstance(result, Mapping) and isinstance(result.get("status"), str):
+        return result["status"]
+    payload = _payload(source)
+    decision = payload.get("normalized_decision") if isinstance(payload, Mapping) else None
+    if isinstance(decision, Mapping) and isinstance(decision.get("status"), str):
+        return decision["status"]
+    if isinstance(payload.get("readiness"), str):
+        readiness = payload["readiness"].lower()
+        return {"ready": "READY", "not ready": "NOT_READY", "conditional": "CONDITIONAL"}.get(readiness, default)
+    return default
+
+
+def _items(source: object, field: str) -> list[Mapping[str, Any]]:
+    value = _payload(source).get(field)
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, Mapping)]
+
+
+def _item_ref(item: Mapping[str, Any], prefix: str, index: int) -> str:
+    value = item.get("id") or item.get("ref") or item.get("key")
+    return f"{prefix}:{value}" if _non_empty_string(value) else f"{prefix}:{index + 1}"
+
+
+def build_implementation_plan(
+    sources: Mapping[str, Any],
+    *,
+    repository_evidence: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Build a deterministic single-repository plan from the required upstream artifacts.
+
+    The planner never invents target paths or silently drops a triggered specialist. Missing
+    grounding therefore produces a BLOCKED/PARTIAL plan that the validator can explain.
+    """
+    errors: list[str] = []
+    required = ("system_design_spec", "architecture_review_report", "change_impact_report")
+    for name in required:
+        if name not in sources:
+            errors.append(f"missing required source {name}")
+    design = _payload(sources.get("system_design_spec"))
+    impact = _payload(sources.get("change_impact_report"))
+    target = design.get("assessment_target") if isinstance(design.get("assessment_target"), Mapping) else {}
+    impact_target = impact.get("assessment_target") if isinstance(impact.get("assessment_target"), Mapping) else {}
+    target_repo = (
+        impact.get("target_repo")
+        or impact_target.get("repo")
+        or target.get("repo")
+        or sources.get("target_repo")
+    )
+    if not _non_empty_string(target_repo):
+        errors.append("target repository is missing")
+        target_repo = "UNKNOWN"
+    normalized_repo = normalize_repo_identity(str(target_repo))
+    digests = {
+        "change_impact_digest": _source_digest(sources.get("change_impact_report")),
+        "system_design_digest": _source_digest(sources.get("system_design_spec")),
+        "architecture_review_digest": _source_digest(sources.get("architecture_review_report")),
+    }
+    plan_set_id = derive_plan_set_id(**digests)
+    plan_id = derive_plan_id(plan_set_id, normalized_repo)
+    source_refs = [f"{name}:{digests[name.replace('_report', '_digest')] if name.replace('_report', '_digest') in digests else _source_digest(source)}" for name, source in sources.items() if name != "target_repo"]
+    source_refs = sorted(set(source_refs))
+    statuses: dict[str, str] = {
+        "system_design": _source_status(sources.get("system_design_spec")),
+        "architecture": _source_status(sources.get("architecture_review_report")),
+    }
+    triggers = [
+        str(item) for item in impact.get("review_triggers", [])
+        if isinstance(item, str) and item in SPECIALIST_ARTIFACTS
+    ]
+    specialist_sources = sources.get("specialist_reports")
+    if not isinstance(specialist_sources, Mapping):
+        specialist_sources = {}
+    for trigger in sorted(set(triggers)):
+        artifact = SPECIALIST_ARTIFACTS[trigger]
+        report = specialist_sources.get(trigger) or sources.get(artifact)
+        statuses[f"specialist:{trigger}"] = _source_status(report)
+        if report is None:
+            errors.append(f"triggered specialist {trigger} is missing")
+    target_paths = impact.get("target_paths")
+    if not isinstance(target_paths, list) and isinstance(repository_evidence, Mapping):
+        target_paths = repository_evidence.get("target_paths")
+    if not isinstance(target_paths, list):
+        target_paths = []
+    target_paths = sorted({path for path in target_paths if _non_empty_string(path)})
+    if not target_paths:
+        errors.append("change impact report has no grounded target_paths")
+    required_tests = [test for test in impact.get("required_tests", []) if _non_empty_string(test)] if isinstance(impact.get("required_tests"), list) else []
+    conditions: list[str] = []
+    actions: list[str] = []
+    for name, source in [("design", sources.get("system_design_spec")), ("architecture", sources.get("architecture_review_report")), ("impact", sources.get("change_impact_report"))]:
+        conditions.extend(_item_ref(item, f"{name}-condition", index) for index, item in enumerate(_items(source, "conditions")))
+        actions.extend(_item_ref(item, f"{name}-action", index) for index, item in enumerate(_items(source, "required_actions")))
+    evidence = repository_evidence or {}
+    estimate = evidence.get("estimated_scope") if isinstance(evidence.get("estimated_scope"), Mapping) else None
+    if estimate is None:
+        estimate = {"estimate_known": False, "files_upper_bound": 0, "changed_lines_upper_bound": 0, "confidence": "UNKNOWN"}
+    tasks: list[dict[str, Any]] = []
+    for index, path in enumerate(target_paths):
+        task_id = f"TASK-{index + 1:03d}-{canonical_payload_digest({'plan_id': plan_id, 'path': path})[:8]}"
+        task_tests = required_tests if index == 0 else []
+        tasks.append({
+            "task_id": task_id,
+            "title": f"Implement changes under {path}",
+            "task_type": "code",
+            "executor": "loop-task-implementer",
+            "scope": f"Implement the approved change impact for target path {path} in {normalized_repo}.",
+            "target_paths": [path],
+            "acceptance_criteria": [f"Implement the approved behavior for {path}.", *task_tests],
+            "dependencies": [tasks[-1]["task_id"]] if tasks else [],
+            "required_tests": task_tests,
+            "verification": ["Run every required test and repository gate for this task."],
+            "rollout_notes": ["Use the repository's existing review, CI, and deployment gates."],
+            "completion_evidence": ["Committed diff, focused tests, authoritative CI, and review evidence."],
+            "source_condition_refs": conditions,
+            "source_action_refs": actions,
+            "estimated_scope": dict(estimate),
+        })
+    readiness = "READY"
+    if errors:
+        readiness = "BLOCKED"
+    elif any(status in {"FAIL", "FAILED", "UNKNOWN", "BLOCKED", "NOT_READY"} for status in statuses.values()):
+        readiness = "BLOCKED"
+    elif not repository_evidence or estimate.get("estimate_known") is not True:
+        readiness = "PARTIAL"
+    traceability = {
+        "condition_coverage": {condition: [task["task_id"] for task in tasks] for condition in conditions},
+        "action_coverage": {action: [task["task_id"] for task in tasks] for action in actions},
+        "required_test_coverage": {test: [task["task_id"] for task in tasks if test in task["required_tests"]] for test in required_tests},
+    }
+    waves = [[task["task_id"] for task in tasks[:1]]] if tasks else []
+    if len(tasks) > 1:
+        waves.append([task["task_id"] for task in tasks[1:]])
+    plan = {
+        "plan_set_id": plan_set_id,
+        "plan_id": plan_id,
+        "title": str(design.get("title") or impact.get("title") or "Implementation plan"),
+        "readiness": readiness,
+        "assessment_target": dict(impact_target or target),
+        "target_repo": normalized_repo,
+        "external_dependencies": [],
+        "source_refs": source_refs,
+        "tasks": tasks,
+        "execution_waves": waves,
+        "sequencing_constraints": ["Tasks execute in deterministic dependency-wave order."],
+        "verification_gates": ["Every required test, task verification, and traceability item is satisfied."],
+        "traceability": traceability,
+    }
+    validation_errors = validate_implementation_plan(
+        plan,
+        source_statuses=statuses,
+        source_conditions=conditions,
+        source_actions=actions,
+        required_tests=required_tests,
+    )
+    if validation_errors and readiness == "READY":
+        plan["readiness"] = "BLOCKED"
+    return plan
+
+
+def _validate_estimate(
+    estimate: object,
+    label: str,
+    readiness: str,
+    errors: list[str],
+) -> None:
+    if not isinstance(estimate, Mapping):
+        errors.append(f"error: {label} must be a mapping")
+        return
+    unknown = sorted(set(estimate) - ESTIMATE_FIELDS)
+    missing = sorted(ESTIMATE_FIELDS - set(estimate))
+    if unknown:
+        errors.append(f"error: {label} contains undeclared fields: {', '.join(unknown)}")
+    if missing:
+        errors.append(f"error: {label} missing fields: {', '.join(missing)}")
+    known = estimate.get("estimate_known")
+    files = estimate.get("files_upper_bound")
+    lines = estimate.get("changed_lines_upper_bound")
+    confidence = estimate.get("confidence")
+    if type(known) is not bool:
+        errors.append(f"error: {label}.estimate_known must be boolean")
+    for name, value in (("files_upper_bound", files), ("changed_lines_upper_bound", lines)):
+        if type(value) is not int or value < 0:
+            errors.append(f"error: {label}.{name} must be a non-negative integer")
+    if not isinstance(confidence, str) or confidence not in ESTIMATE_CONFIDENCE:
+        errors.append(f"error: {label}.confidence is invalid")
+    if known is False:
+        if files != 0 or lines != 0 or confidence != "UNKNOWN":
+            errors.append(f"error: {label} unknown estimates require zero bounds and UNKNOWN confidence")
+        if readiness == "READY":
+            errors.append(f"error: READY plan cannot contain an unknown estimate at {label}")
+    elif known is True:
+        if confidence not in {"HIGH", "MEDIUM"}:
+            errors.append(f"error: {label} known estimates require HIGH or MEDIUM confidence")
+        if isinstance(files, int) and files > LOOP_TASK_MAX_FILES:
+            errors.append(f"error: {label} exceeds loop-task hard stop of {LOOP_TASK_MAX_FILES} files")
+        if isinstance(lines, int) and lines > LOOP_TASK_MAX_LINES:
+            errors.append(f"error: {label} exceeds loop-task hard stop of {LOOP_TASK_MAX_LINES} changed lines")
+
+
+def _validate_task(task: object, index: int, readiness: str, errors: list[str]) -> tuple[str | None, list[str]]:
+    label = f"tasks[{index}]"
+    if not isinstance(task, Mapping):
+        errors.append(f"error: {label} must be a mapping")
+        return None, []
+    unknown = sorted(set(task) - TASK_FIELDS)
+    missing = sorted(TASK_FIELDS - set(task))
+    if unknown:
+        errors.append(f"error: {label} contains undeclared fields: {', '.join(unknown)}")
+    if missing:
+        errors.append(f"error: {label} missing fields: {', '.join(missing)}")
+    task_id = task.get("task_id")
+    if not _non_empty_string(task_id):
+        errors.append(f"error: {label}.task_id must be a non-empty string")
+        task_id = None
+    for field in ("title", "scope"):
+        if not _non_empty_string(task.get(field)):
+            errors.append(f"error: {label}.{field} must be a non-empty string")
+    if task.get("task_type") not in TASK_TYPES:
+        errors.append(f"error: {label}.task_type is invalid")
+    if task.get("executor") != "loop-task-implementer":
+        errors.append(f"error: {label}.executor must be loop-task-implementer")
+    for field in (
+        "target_paths", "acceptance_criteria", "dependencies", "required_tests", "verification",
+        "rollout_notes", "completion_evidence", "source_condition_refs", "source_action_refs",
+    ):
+        _string_list(task.get(field), f"{label}.{field}", errors)
+    paths = task.get("target_paths")
+    if isinstance(paths, list):
+        for path in paths:
+            if isinstance(path, str) and (path.startswith("/") or path == ".." or "/../" in f"/{path}/"):
+                errors.append(f"error: {label}.target_paths must remain inside target_repo")
+    _validate_estimate(task.get("estimated_scope"), f"{label}.estimated_scope", readiness, errors)
+    dependencies = task.get("dependencies")
+    return task_id, list(dependencies) if isinstance(dependencies, list) else []
+
+
+def _validate_traceability(
+    plan: Mapping[str, Any],
+    errors: list[str],
+    source_conditions: list[str],
+    source_actions: list[str],
+    required_tests: list[str],
+) -> None:
+    traceability = plan.get("traceability")
+    if not isinstance(traceability, Mapping):
+        errors.append("error: traceability must be a mapping")
+        return
+    expected = {"condition_coverage", "action_coverage", "required_test_coverage"}
+    if set(traceability) != expected:
+        errors.append("error: traceability must contain condition_coverage, action_coverage, and required_test_coverage")
+        return
+    task_ids = {task.get("task_id") for task in plan.get("tasks", []) if isinstance(task, Mapping)}
+    for group, sources in (
+        ("condition_coverage", source_conditions),
+        ("action_coverage", source_actions),
+        ("required_test_coverage", required_tests),
+    ):
+        coverage = traceability.get(group)
+        if not isinstance(coverage, Mapping):
+            errors.append(f"error: traceability.{group} must be a mapping")
+            continue
+        for source in sources:
+            targets = coverage.get(source)
+            if not isinstance(targets, list) or not targets or not all(target in task_ids for target in targets):
+                errors.append(f"error: traceability.{group} does not cover {source}")
+
+
+def _validate_source_readiness(plan: Mapping[str, Any], source_statuses: Mapping[str, str], errors: list[str]) -> None:
+    if plan.get("readiness") != "READY":
+        return
+    blocking = {"FAIL", "FAILED", "UNKNOWN", "BLOCKED", "NOT_READY"}
+    for source, status in source_statuses.items():
+        if status in blocking:
+            errors.append(f"error: READY plan has blocking source status {source}={status}")
+
+
+def validate_external_dependency_cycles(
+    plan: Mapping[str, Any],
+    sibling_plans: Mapping[str, Mapping[str, Any]] | None = None,
+) -> list[str]:
+    """Reject only cycles that are provable from the available sibling plan set."""
+    available: dict[str, Mapping[str, Any]] = {normalize_repo_identity(str(plan.get("target_repo"))): plan}
+    for repo, sibling in (sibling_plans or {}).items():
+        if isinstance(sibling, Mapping) and _non_empty_string(repo):
+            available[normalize_repo_identity(repo)] = sibling
+    graph: dict[str, set[str]] = {repo: set() for repo in available}
+    for repo, candidate in available.items():
+        dependencies = candidate.get("external_dependencies", [])
+        if not isinstance(dependencies, list):
+            continue
+        for dependency in dependencies:
+            if not isinstance(dependency, Mapping):
+                continue
+            target = dependency.get("repo")
+            if isinstance(target, str):
+                normalized = normalize_repo_identity(target)
+                if normalized in available:
+                    graph[repo].add(normalized)
+    visiting: set[str] = set()
+    visited: set[str] = set()
+    errors: list[str] = []
+
+    def visit(repo: str) -> None:
+        if repo in visiting:
+            errors.append("error: external dependency graph contains a provable cycle")
+            return
+        if repo in visited:
+            return
+        visiting.add(repo)
+        for dependency in graph[repo]:
+            visit(dependency)
+        visiting.remove(repo)
+        visited.add(repo)
+
+    for repo in graph:
+        visit(repo)
+    return sorted(set(errors))
+
+
+def validate_implementation_plan(
+    plan: object,
+    *,
+    source_statuses: Mapping[str, str] | None = None,
+    source_conditions: list[str] | None = None,
+    source_actions: list[str] | None = None,
+    required_tests: list[str] | None = None,
+) -> list[str]:
+    """Return validation errors; never raise for caller-controlled plan data."""
+    errors: list[str] = []
+    if not isinstance(plan, Mapping):
+        return ["error: implementation_plan must be a mapping"]
+    unknown = sorted(set(plan) - PLAN_FIELDS)
+    missing = sorted(PLAN_FIELDS - set(plan))
+    if unknown:
+        errors.append(f"error: implementation_plan contains undeclared fields: {', '.join(unknown)}")
+    if missing:
+        errors.append(f"error: implementation_plan missing fields: {', '.join(missing)}")
+    readiness = plan.get("readiness")
+    if readiness not in READINESS:
+        errors.append("error: readiness must be READY, PARTIAL, or BLOCKED")
+        readiness = "BLOCKED"
+    for field in ("plan_set_id", "plan_id", "title", "target_repo"):
+        if not _non_empty_string(plan.get(field)):
+            errors.append(f"error: {field} must be a non-empty string")
+    if _non_empty_string(plan.get("target_repo")):
+        normalized = normalize_repo_identity(plan["target_repo"])
+        expected_id = derive_plan_id(str(plan.get("plan_set_id")), normalized)
+        if plan.get("plan_id") != expected_id:
+            errors.append("error: plan_id is not deterministic for plan_set_id and target_repo")
+    for field in ("external_dependencies", "source_refs", "tasks", "execution_waves", "sequencing_constraints", "verification_gates"):
+        if not isinstance(plan.get(field), list):
+            errors.append(f"error: {field} must be a list")
+    _string_list(plan.get("source_refs"), "source_refs", errors, allow_empty=False)
+    tasks = plan.get("tasks")
+    task_ids: list[str] = []
+    dependency_map: dict[str, list[str]] = {}
+    if isinstance(tasks, list):
+        for index, task in enumerate(tasks):
+            task_id, dependencies = _validate_task(task, index, str(readiness), errors)
+            if task_id is not None:
+                if task_id in task_ids:
+                    errors.append(f"error: duplicate task_id {task_id}")
+                task_ids.append(task_id)
+                dependency_map[task_id] = dependencies
+        known = set(task_ids)
+        for task_id, dependencies in dependency_map.items():
+            for dependency in dependencies:
+                if dependency not in known:
+                    errors.append(f"error: {task_id} has unknown dependency {dependency}")
+                if dependency == task_id:
+                    errors.append(f"error: {task_id} cannot depend on itself")
+        visiting: set[str] = set()
+        visited: set[str] = set()
+
+        def visit(node: str) -> None:
+            if node in visiting:
+                errors.append("error: task dependency graph contains a cycle")
+                return
+            if node in visited:
+                return
+            visiting.add(node)
+            for dependency in dependency_map.get(node, []):
+                if dependency in known:
+                    visit(dependency)
+            visiting.remove(node)
+            visited.add(node)
+
+        for task_id in task_ids:
+            visit(task_id)
+    waves = plan.get("execution_waves")
+    if isinstance(waves, list):
+        wave_positions: dict[str, int] = {}
+        for wave_index, wave in enumerate(waves):
+            if not isinstance(wave, list):
+                errors.append(f"error: execution_waves[{wave_index}] must be a list")
+                continue
+            for task_id in wave:
+                if task_id in wave_positions:
+                    errors.append(f"error: task {task_id} must appear exactly once in execution_waves")
+                wave_positions[task_id] = wave_index
+        for task_id in task_ids:
+            if task_id not in wave_positions:
+                errors.append(f"error: task {task_id} must appear exactly once in execution_waves")
+        for task_id, dependencies in dependency_map.items():
+            for dependency in dependencies:
+                if dependency in wave_positions and task_id in wave_positions and wave_positions[dependency] >= wave_positions[task_id]:
+                    errors.append(f"error: {task_id} dependency {dependency} must be in an earlier wave")
+    external = plan.get("external_dependencies")
+    if isinstance(external, list):
+        for index, dependency in enumerate(external):
+            if not isinstance(dependency, Mapping):
+                errors.append(f"error: external_dependencies[{index}] must be a mapping")
+                continue
+            for field in ("repo", "required_state_or_artifact", "reason", "evidence_ref"):
+                if not _non_empty_string(dependency.get(field)):
+                    errors.append(f"error: external_dependencies[{index}].{field} must be non-empty")
+    _validate_traceability(
+        plan,
+        errors,
+        source_conditions or [],
+        source_actions or [],
+        required_tests or [],
+    )
+    _validate_source_readiness(plan, source_statuses or {}, errors)
+    return sorted(set(errors))
+
+
+def validate_plan_execution_state(
+    state: object,
+    plan: Mapping[str, Any],
+    *,
+    current_head: str | None,
+    minimum_generation: int | None = None,
+    authoritative_task_statuses: Mapping[str, str] | None = None,
+) -> list[str]:
+    """Validate resumable internal state against immutable plan and observed SCM state."""
+    errors: list[str] = []
+    if not isinstance(state, Mapping):
+        return ["error: plan_execution_state must be a mapping"]
+    unknown = sorted(set(state) - EXECUTION_STATE_FIELDS)
+    missing = sorted(EXECUTION_STATE_FIELDS - set(state))
+    if unknown:
+        errors.append("error: plan_execution_state contains undeclared fields: " + ", ".join(unknown))
+    if missing:
+        errors.append("error: plan_execution_state missing fields: " + ", ".join(missing))
+    if state.get("schema_version") != 1:
+        errors.append("error: plan_execution_state.schema_version must be 1")
+    if state.get("plan_id") != plan.get("plan_id"):
+        errors.append("error: plan_execution_state.plan_id does not match implementation_plan")
+    if state.get("plan_digest") != canonical_plan_digest(plan):
+        errors.append("error: plan_execution_state.plan_digest does not match implementation_plan")
+    if state.get("target_repo") != plan.get("target_repo"):
+        errors.append("error: plan_execution_state.target_repo does not match implementation_plan")
+    generation = state.get("state_generation")
+    if type(generation) is not int or generation < 0:
+        errors.append("error: plan_execution_state.state_generation must be a non-negative integer")
+    elif minimum_generation is not None and generation < minimum_generation:
+        errors.append("error: plan_execution_state.state_generation is stale")
+    statuses = state.get("task_statuses")
+    task_ids = {task.get("task_id") for task in plan.get("tasks", []) if isinstance(task, Mapping)}
+    if not isinstance(statuses, Mapping) or set(statuses) != task_ids or any(status not in TASK_STATUSES for status in statuses.values()):
+        errors.append("error: plan_execution_state.task_statuses must cover every plan task with a valid status")
+    if authoritative_task_statuses is not None:
+        expected_statuses: dict[str, str] = {}
+        for task_id in task_ids:
+            official = authoritative_task_statuses.get(task_id)
+            mapped = OFFICIAL_TASK_STATUS_MAP.get(official) if isinstance(official, str) else None
+            if mapped is None:
+                errors.append(f"error: authoritative task status is missing or invalid for {task_id}")
+            else:
+                expected_statuses[task_id] = mapped
+        if isinstance(statuses, Mapping) and expected_statuses and dict(statuses) != expected_statuses:
+            errors.append("error: plan_execution_state.task_statuses disagrees with authoritative task state")
+    if current_head is not None and state.get("observed_head_revision") != current_head:
+        errors.append("error: plan_execution_state observed head is stale")
+    if not isinstance(state.get("completed_evidence_refs"), list) or not all(_non_empty_string(item) for item in state["completed_evidence_refs"]):
+        errors.append("error: plan_execution_state.completed_evidence_refs must be a list of strings")
+    if state.get("current_task_id") is not None and state.get("current_task_id") not in task_ids:
+        errors.append("error: plan_execution_state.current_task_id is not a plan task")
+    if isinstance(statuses, Mapping):
+        active = [task_id for task_id, status in statuses.items() if status == "IN_PROGRESS"]
+        if len(active) > 1:
+            errors.append("error: plan_execution_state may have only one IN_PROGRESS task")
+        if state.get("current_task_id") is not None and statuses.get(state.get("current_task_id")) != "IN_PROGRESS":
+            errors.append("error: current_task_id must be the IN_PROGRESS task")
+    if not _non_empty_string(state.get("updated_at")):
+        errors.append("error: plan_execution_state.updated_at must be a non-empty timestamp")
+    return sorted(set(errors))
+
+
+def select_next_task(
+    plan: Mapping[str, Any],
+    task_statuses: Mapping[str, str] | None = None,
+) -> dict[str, Any] | None:
+    """Select the first dependency-satisfied task in the earliest incomplete wave.
+
+    Invalid, non-READY, concurrently active, or blocked plans return ``None``. The returned task is
+    a deep copy so a caller cannot mutate the canonical plan while normalizing it for execution.
+    """
+    if plan.get("readiness") != "READY" or validate_implementation_plan(plan):
+        return None
+    tasks = {task["task_id"]: task for task in plan.get("tasks", []) if isinstance(task, Mapping)}
+    statuses = {task_id: "PENDING" for task_id in tasks}
+    if task_statuses is not None:
+        statuses.update({task_id: status for task_id, status in task_statuses.items() if task_id in tasks})
+    if any(status == "IN_PROGRESS" for status in statuses.values()):
+        return None
+    for wave in plan.get("execution_waves", []):
+        eligible: list[Mapping[str, Any]] = []
+        for task_id in wave:
+            task = tasks.get(task_id)
+            if task is None or statuses.get(task_id) != "PENDING":
+                continue
+            dependencies = task.get("dependencies", [])
+            if all(statuses.get(dependency) == "COMPLETE" for dependency in dependencies):
+                eligible.append(task)
+        if eligible:
+            return copy.deepcopy(dict(eligible[0]))
+        if any(statuses.get(task_id) == "BLOCKED" for task_id in wave):
+            return None
+    return None
+
+
+def normalize_plan_task(task: Mapping[str, Any]) -> dict[str, Any]:
+    """Adapt one v1 plan task to the legacy loop-task internal task shape."""
+    return {
+        "task_id": task["task_id"],
+        "title": task["title"],
+        "description": task["scope"],
+        "requirements_ref": task.get("source_condition_refs") or task.get("source_action_refs") or None,
+        "acceptance_criteria": list(task["acceptance_criteria"]),
+        "dependencies": list(task["dependencies"]),
+        "target_paths": list(task["target_paths"]),
+        "required_tests": list(task["required_tests"]),
+        "verification": list(task["verification"]),
+        "rollout_notes": list(task["rollout_notes"]),
+        "estimated_scope": copy.deepcopy(task["estimated_scope"]),
+    }
+
+
+def initial_plan_execution_state(
+    plan: Mapping[str, Any],
+    *,
+    current_head: str | None,
+    updated_at: str,
+) -> dict[str, Any]:
+    """Create a generation-zero internal checkpoint without changing the canonical plan."""
+    task_ids = [task["task_id"] for task in plan.get("tasks", []) if isinstance(task, Mapping)]
+    return {
+        "schema_version": 1,
+        "plan_id": plan.get("plan_id"),
+        "plan_digest": canonical_plan_digest(plan),
+        "target_repo": plan.get("target_repo"),
+        "state_generation": 0,
+        "current_task_id": None,
+        "task_statuses": {task_id: "PENDING" for task_id in task_ids},
+        "completed_evidence_refs": [],
+        "observed_head_revision": current_head,
+        "blocked_reason": None,
+        "updated_at": updated_at,
+    }
+
+
+def reconcile_plan_execution_state(
+    state: object,
+    plan: Mapping[str, Any],
+    *,
+    authoritative_task_statuses: Mapping[str, str],
+    current_head: str | None,
+    completed_evidence_refs: list[str] | None = None,
+    minimum_generation: int | None = None,
+) -> tuple[dict[str, Any] | None, list[str]]:
+    """Reconcile advisory checkpoint data to official task state and current SCM head."""
+    errors = validate_plan_execution_state(
+        state,
+        plan,
+        current_head=current_head,
+        minimum_generation=minimum_generation,
+    )
+    expected_statuses = {
+        task.get("task_id"): OFFICIAL_TASK_STATUS_MAP.get(authoritative_task_statuses.get(task.get("task_id")))
+        for task in plan.get("tasks", [])
+        if isinstance(task, Mapping)
+    }
+    if any(not task_id or status is None for task_id, status in expected_statuses.items()):
+        errors.append("error: authoritative task statuses do not cover every plan task")
+    if errors or not isinstance(state, Mapping):
+        return None, errors
+    normalized = copy.deepcopy(dict(state))
+    normalized["task_statuses"] = {
+        task_id: OFFICIAL_TASK_STATUS_MAP[authoritative_task_statuses[task_id]]
+        for task_id in normalized["task_statuses"]
+    }
+    normalized["current_task_id"] = next(
+        (task_id for task_id, status in normalized["task_statuses"].items() if status == "IN_PROGRESS"),
+        None,
+    )
+    normalized["completed_evidence_refs"] = sorted(
+        {ref for ref in (completed_evidence_refs or []) if _non_empty_string(ref)}
+    )
+    normalized["observed_head_revision"] = current_head
+    return normalized, []
+
+
+def advance_plan_execution_state(
+    state: object,
+    plan: Mapping[str, Any],
+    *,
+    expected_generation: int,
+    authoritative_task_statuses: Mapping[str, str],
+    current_head: str | None,
+    updated_at: str,
+    completed_evidence_refs: list[str] | None = None,
+) -> tuple[dict[str, Any] | None, list[str]]:
+    """Advance one checkpoint generation; stale writers cannot overwrite newer state."""
+    if not isinstance(state, Mapping) or state.get("state_generation") != expected_generation:
+        return None, ["error: plan_execution_state generation compare-and-swap failed"]
+    normalized, errors = reconcile_plan_execution_state(
+        state,
+        plan,
+        authoritative_task_statuses=authoritative_task_statuses,
+        current_head=current_head,
+        completed_evidence_refs=completed_evidence_refs,
+        minimum_generation=expected_generation,
+    )
+    if errors or normalized is None:
+        return None, errors
+    normalized["state_generation"] = expected_generation + 1
+    normalized["updated_at"] = updated_at
+    return normalized, []
+
+
+def _load_json(path: Path) -> object:
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Validate implementation_plan v1 or plan_execution_state")
+    parser.add_argument("path", type=Path)
+    parser.add_argument("--execution-state", action="store_true")
+    parser.add_argument("--plan", type=Path)
+    parser.add_argument("--current-head")
+    args = parser.parse_args()
+    value = _load_json(args.path)
+    if args.execution_state:
+        if args.plan is None:
+            parser.error("--plan is required with --execution-state")
+        errors = validate_plan_execution_state(
+            value,
+            _load_json(args.plan),
+            current_head=args.current_head,
+        )
+    else:
+        errors = validate_implementation_plan(value)
+    for error in errors:
+        print(error)
+    return 1 if errors else 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -87,6 +87,7 @@ contracts:
       - tech_debt_assessment
       - change_impact_report
       - resilience_review_report
+      - implementation_plan
       artifact_schema_versions:
         mr_review_report: 2
         rca_report: 1
@@ -113,6 +114,7 @@ contracts:
         tech_debt_assessment: 1
         change_impact_report: 1
         resilience_review_report: 1
+        implementation_plan: 1
       state_semantics:
         mr_review_report: current_state
         rca_report: current_state
@@ -139,6 +141,7 @@ contracts:
         tech_debt_assessment: current_state
         change_impact_report: proposed_state
         resilience_review_report: proposed_state
+        implementation_plan: proposed_state
       allowed_state_semantics:
         prd_report:
         - proposed_state
@@ -175,6 +178,8 @@ contracts:
         resilience_review_report:
         - proposed_state
         - current_state
+        implementation_plan:
+        - proposed_state
       payload_types:
         rca_report:
           assessment_metadata: mapping
@@ -359,6 +364,20 @@ contracts:
           conditions: list
           required_actions: list
           evidence_refs: list
+        implementation_plan:
+          plan_set_id: string
+          plan_id: string
+          title: string
+          readiness: string
+          assessment_target: mapping
+          target_repo: string
+          external_dependencies: list
+          source_refs: list
+          tasks: list
+          execution_waves: list
+          sequencing_constraints: list
+          verification_gates: list
+          traceability: mapping
       required_sections:
         skill_result:
           required_fields:
@@ -643,6 +662,11 @@ contracts:
         external_actions: none
         unattended: false
         merge: false
+      implementation-planner:
+        repository: read
+        external_actions: none
+        unattended: false
+        merge: false
     skill_types:
       pr-review: leaf
       pr-gatekeeper: trigger
@@ -680,6 +704,7 @@ contracts:
       tech-debt-assessor: leaf
       change-impact-analyzer: leaf
       resilience-review: leaf
+      implementation-planner: leaf
   composition_runtime:
     schema_version: 1
     skill_types:
@@ -719,6 +744,7 @@ contracts:
       tech-debt-assessor: leaf
       change-impact-analyzer: leaf
       resilience-review: leaf
+      implementation-planner: leaf
     handoff_schema:
       required_fields:
       - target_skill
@@ -833,6 +859,10 @@ contracts:
       implementation_task:
         mode: external
         owners: []
+      implementation_plan:
+        mode: canonical
+        owners:
+        - implementation-planner
       implementation_pr:
         mode: shared
         owners:
@@ -943,6 +973,7 @@ contracts:
     - tech_debt_assessment
     - change_impact_report
     - resilience_review_report
+    - implementation_plan
     artifact_schemas:
       mr_context:
         fields:
@@ -1184,6 +1215,21 @@ contracts:
         - conditions
         - required_actions
         - evidence_refs
+      implementation_plan:
+        fields:
+        - plan_set_id
+        - plan_id
+        - title
+        - readiness
+        - assessment_target
+        - target_repo
+        - external_dependencies
+        - source_refs
+        - tasks
+        - execution_waves
+        - sequencing_constraints
+        - verification_gates
+        - traceability
     creator_parity:
       skills:
       - unit-test-creator
@@ -1398,6 +1444,22 @@ contracts:
         consumes:
         - implementation_task
         - prd_report
+        - implementation_plan
+        consume_fields:
+          implementation_plan:
+          - plan_set_id
+          - plan_id
+          - title
+          - readiness
+          - assessment_target
+          - target_repo
+          - external_dependencies
+          - source_refs
+          - tasks
+          - execution_waves
+          - sequencing_constraints
+          - verification_gates
+          - traceability
         write_authority: repository-write
       backlog-runner:
         produces:
@@ -1923,6 +1985,136 @@ contracts:
           - input_provenance
           - evidence_refs
           - unresolved
+        write_authority: read-only
+      implementation-planner:
+        produces:
+        - implementation_plan
+        consumes:
+        - system_design_spec
+        - architecture_review_report
+        - change_impact_report
+        - api_design_review_report
+        - database_review_report
+        - security_review_report
+        - performance_review_report
+        - capacity_plan
+        - observability_review_report
+        - resilience_review_report
+        - dependency_upgrade_report
+        produce_fields:
+          implementation_plan:
+          - plan_set_id
+          - plan_id
+          - title
+          - readiness
+          - assessment_target
+          - target_repo
+          - external_dependencies
+          - source_refs
+          - tasks
+          - execution_waves
+          - sequencing_constraints
+          - verification_gates
+          - traceability
+        consume_fields:
+          system_design_spec:
+          - title
+          - readiness
+          - assessment_target
+          - normalized_decision
+          - conditions
+          - required_actions
+          - evidence_refs
+          architecture_review_report:
+          - title
+          - decision
+          - assessment_target
+          - normalized_decision
+          - conditions
+          - required_actions
+          - evidence_refs
+          change_impact_report:
+          - title
+          - assessment_target
+          - coverage_status
+          - material_unknowns
+          - impacted_repositories
+          - criticality
+          - change_classes
+          - impacted_services
+          - impacted_contracts
+          - impacted_data
+          - impacted_dependencies
+          - impacted_owners
+          - required_tests
+          - operational_impacts
+          - review_triggers
+          - unknowns
+          - evidence_refs
+          api_design_review_report:
+          - title
+          - verdict
+          - assessment_target
+          - normalized_decision
+          - conditions
+          - required_actions
+          - evidence_refs
+          database_review_report:
+          - title
+          - verdict
+          - assessment_target
+          - normalized_decision
+          - conditions
+          - required_actions
+          - evidence_refs
+          security_review_report:
+          - title
+          - verdict
+          - assessment_target
+          - normalized_decision
+          - conditions
+          - required_actions
+          - evidence_refs
+          performance_review_report:
+          - title
+          - verdict
+          - assessment_target
+          - normalized_decision
+          - conditions
+          - required_actions
+          - evidence_refs
+          capacity_plan:
+          - title
+          - headroom
+          - assessment_target
+          - normalized_decision
+          - conditions
+          - required_actions
+          - evidence_refs
+          observability_review_report:
+          - title
+          - coverage
+          - assessment_target
+          - normalized_decision
+          - conditions
+          - required_actions
+          - evidence_refs
+          resilience_review_report:
+          - title
+          - verdict
+          - assessment_target
+          - normalized_decision
+          - conditions
+          - required_actions
+          - evidence_refs
+          dependency_upgrade_report:
+          - title
+          - verdict
+          - assessment_target
+          - normalized_decision
+          - conditions
+          - required_actions
+          - evidence_refs
         write_authority: read-only
 skills:
   pr-review:
@@ -2743,7 +2935,7 @@ skills:
     risk_class:
     - merge
     - repository-write
-    version: 1.3.0
+    version: 1.4.0
     type: orchestrator
     authority: repository-write
     permissions:
@@ -4029,5 +4221,68 @@ skills:
         - conditions
         - required_actions
         - evidence_refs
+    dependencies: []
+    version_source: skill_frontmatter_legacy_numeric
+  implementation-planner:
+    path: implementation-planner
+    category: automation
+    invocation: ambient
+    hosts:
+      cursor:
+        discovery: rule
+      claude:
+        install: true
+      kiro:
+        discovery: manual
+    install:
+      requires: []
+    composition:
+      invokes: []
+      escalation_targets:
+      - loop-task-implementer
+    capabilities:
+      required:
+      - host.report.write
+      - host.repository.read
+      optional: []
+    lint:
+      skill_md_max_lines: 180
+      target: implementation-planner
+    risk_class:
+    - read-only
+    version: 1.0.0
+    type: leaf
+    authority: read-only
+    permissions:
+      repository: read
+      external_actions: none
+      unattended: false
+      merge: false
+    supported_hosts:
+    - chatgpt
+    - claude
+    - codex
+    - cursor
+    - generic
+    - kiro
+    entrypoint: SKILL.md
+    output_contract:
+      produces:
+      - implementation_plan
+      produce_fields:
+        implementation_plan:
+        - plan_set_id
+        - plan_id
+        - title
+        - readiness
+        - assessment_target
+        - target_repo
+        - external_dependencies
+        - source_refs
+        - tasks
+        - execution_waves
+        - sequencing_constraints
+        - verification_gates
+        - traceability
     dependencies: []
     version_source: skill_frontmatter_legacy_numeric

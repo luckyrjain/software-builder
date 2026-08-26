@@ -2,6 +2,15 @@
 
 For earlier history, see the `## loop-task-implementer` section in the repository root `CHANGELOG.md`.
 
+## v1.3 — implementation-plan execution bridge (2026-08-26)
+
+- Added validated `implementation_plan` input while preserving legacy `implementation_task` behavior.
+- Added deterministic earliest-wave task selection, plan-task normalization, and
+  `plan_id + task_id + target_repo` execution identity guidance.
+- Added generation-checked, SCM-reconciled host/runtime `plan_execution_state`; it is not a durable
+  composition artifact and caller-supplied status cannot promote a task to complete.
+- Kept the existing Builder, Reviewer, CI, merge, and lifecycle gates unchanged.
+
 ## v1.2 — post-merge Batch 5.2C lifecycle hardening (2026-08-21)
 
 - Made `scripts/validate_loop_lifecycle.py` an actual fail-closed CLI. The documented Python 3 lifecycle gate now reads official JSON state and exits `0` only on a valid state, `1` on lifecycle errors, and `2` whenever argument/input/runtime validation cannot complete. This closes the original function-only direct-execution no-op, unexpected runtime exceptions, imported-runtime `SystemExit(0)`, argparse success exits such as `--help`, ambiguous duplicate JSON object keys, non-finite JSON constants, and standards-valid numeric syntax such as `1e999` that would overflow Python floats to infinity, none of which may count as lifecycle proof.

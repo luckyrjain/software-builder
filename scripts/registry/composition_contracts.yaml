@@ -27,6 +27,7 @@ artifact_types:
 - tech_debt_assessment
 - change_impact_report
 - resilience_review_report
+- implementation_plan
 artifact_schemas:
   mr_context:
     fields:
@@ -268,6 +269,21 @@ artifact_schemas:
     - conditions
     - required_actions
     - evidence_refs
+  implementation_plan:
+    fields:
+    - plan_set_id
+    - plan_id
+    - title
+    - readiness
+    - assessment_target
+    - target_repo
+    - external_dependencies
+    - source_refs
+    - tasks
+    - execution_waves
+    - sequencing_constraints
+    - verification_gates
+    - traceability
 creator_parity:
   skills:
   - unit-test-creator
@@ -482,6 +498,22 @@ skills:
     consumes:
     - implementation_task
     - prd_report
+    - implementation_plan
+    consume_fields:
+      implementation_plan:
+      - plan_set_id
+      - plan_id
+      - title
+      - readiness
+      - assessment_target
+      - target_repo
+      - external_dependencies
+      - source_refs
+      - tasks
+      - execution_waves
+      - sequencing_constraints
+      - verification_gates
+      - traceability
     write_authority: repository-write
   backlog-runner:
     produces:
@@ -1007,4 +1039,134 @@ skills:
       - input_provenance
       - evidence_refs
       - unresolved
+    write_authority: read-only
+  implementation-planner:
+    produces:
+    - implementation_plan
+    consumes:
+    - system_design_spec
+    - architecture_review_report
+    - change_impact_report
+    - api_design_review_report
+    - database_review_report
+    - security_review_report
+    - performance_review_report
+    - capacity_plan
+    - observability_review_report
+    - resilience_review_report
+    - dependency_upgrade_report
+    produce_fields:
+      implementation_plan:
+      - plan_set_id
+      - plan_id
+      - title
+      - readiness
+      - assessment_target
+      - target_repo
+      - external_dependencies
+      - source_refs
+      - tasks
+      - execution_waves
+      - sequencing_constraints
+      - verification_gates
+      - traceability
+    consume_fields:
+      system_design_spec:
+      - title
+      - readiness
+      - assessment_target
+      - normalized_decision
+      - conditions
+      - required_actions
+      - evidence_refs
+      architecture_review_report:
+      - title
+      - decision
+      - assessment_target
+      - normalized_decision
+      - conditions
+      - required_actions
+      - evidence_refs
+      change_impact_report:
+      - title
+      - assessment_target
+      - coverage_status
+      - material_unknowns
+      - impacted_repositories
+      - criticality
+      - change_classes
+      - impacted_services
+      - impacted_contracts
+      - impacted_data
+      - impacted_dependencies
+      - impacted_owners
+      - required_tests
+      - operational_impacts
+      - review_triggers
+      - unknowns
+      - evidence_refs
+      api_design_review_report:
+      - title
+      - verdict
+      - assessment_target
+      - normalized_decision
+      - conditions
+      - required_actions
+      - evidence_refs
+      database_review_report:
+      - title
+      - verdict
+      - assessment_target
+      - normalized_decision
+      - conditions
+      - required_actions
+      - evidence_refs
+      security_review_report:
+      - title
+      - verdict
+      - assessment_target
+      - normalized_decision
+      - conditions
+      - required_actions
+      - evidence_refs
+      performance_review_report:
+      - title
+      - verdict
+      - assessment_target
+      - normalized_decision
+      - conditions
+      - required_actions
+      - evidence_refs
+      capacity_plan:
+      - title
+      - headroom
+      - assessment_target
+      - normalized_decision
+      - conditions
+      - required_actions
+      - evidence_refs
+      observability_review_report:
+      - title
+      - coverage
+      - assessment_target
+      - normalized_decision
+      - conditions
+      - required_actions
+      - evidence_refs
+      resilience_review_report:
+      - title
+      - verdict
+      - assessment_target
+      - normalized_decision
+      - conditions
+      - required_actions
+      - evidence_refs
+      dependency_upgrade_report:
+      - title
+      - verdict
+      - assessment_target
+      - normalized_decision
+      - conditions
+      - required_actions
+      - evidence_refs
     write_authority: read-only

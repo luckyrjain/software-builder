@@ -37,3 +37,4 @@ cases:
   - {skill: tech-debt-assessor, prompt: "What's our migration program status across all workspaces?", expected_status: selected, expected_owner: migration-program-manager, forbidden_owner: tech-debt-assessor}
   - {skill: change-impact-analyzer, prompt: "Review PR #123 for correctness and regressions.", expected_status: selected, expected_owner: pr-review, forbidden_owner: change-impact-analyzer}
   - {skill: resilience-review, prompt: "Review PR #123 for correctness and regressions.", expected_status: selected, expected_owner: pr-review, forbidden_owner: resilience-review}
+  - {skill: implementation-planner, prompt: "Implement this task, review the changes, fix issues, and repeat until zero issues.", expected_status: selected, expected_owner: loop-task-implementer, forbidden_owner: implementation-planner}

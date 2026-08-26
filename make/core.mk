@@ -1,9 +1,12 @@
 .PHONY: install install-pr-review install-pr-gatekeeper install-k8s-overprovisioning install-incident-rca install-incident-rca-deps install-incident-triage-agent install-domain-comprehension install-squad-map install-who-owns-x-bot install-new-hire-guide install-release-readiness-checker install-migration-program-manager install-cost-optimization-sprint-planner install-mysql-to-postgres-sql install-loop-task-implementer install-backlog-runner install-weekly-squad-digest install-unit-test-creator install-integration-test-creator install-contract-test-creator install-e2e-test-creator install-api-test-creator install-test-writer install-prd-architect install-architecture-review install-system-design install-api-design-review install-database-review install-security-review install-performance-review install-capacity-planner install-observability-review install-deployment-risk-review install-dependency-upgrade-review install-tech-debt-assessor install-claude install-claude-pr-review install-claude-pr-gatekeeper install-claude-k8s-overprovisioning install-claude-incident-rca install-claude-incident-triage-agent install-claude-domain-comprehension install-claude-squad-map install-claude-who-owns-x-bot install-claude-new-hire-guide install-claude-release-readiness-checker install-claude-migration-program-manager install-claude-cost-optimization-sprint-planner install-claude-mysql-to-postgres-sql install-claude-loop-task-implementer install-claude-backlog-runner install-claude-weekly-squad-digest install-claude-unit-test-creator install-claude-integration-test-creator install-claude-contract-test-creator install-claude-e2e-test-creator install-claude-api-test-creator install-claude-prd-architect install-claude-test-writer install-claude-architecture-review install-claude-system-design install-claude-api-design-review install-claude-database-review install-claude-security-review install-claude-performance-review install-claude-capacity-planner install-claude-observability-review install-claude-deployment-risk-review install-claude-dependency-upgrade-review install-claude-tech-debt-assessor lint lint-framework lint-pr-review lint-pr-gatekeeper lint-k8s-skill lint-k8s lint-incident-rca lint-incident-triage-agent lint-domain-comprehension lint-squad-map lint-who-owns-x-bot lint-new-hire-guide lint-release-readiness-checker lint-migration-program-manager lint-cost-optimization-sprint-planner lint-mysql-to-postgres-sql lint-loop-task-implementer lint-backlog-runner lint-weekly-squad-digest lint-unit-test-creator lint-integration-test-creator lint-contract-test-creator lint-e2e-test-creator lint-api-test-creator lint-test-writer lint-architecture-review lint-system-design lint-api-design-review lint-database-review lint-security-review lint-performance-review lint-capacity-planner lint-observability-review lint-deployment-risk-review lint-dependency-upgrade-review lint-tech-debt-assessor setup-hooks setup validate-registry validate-operational-upkeep generate generate-check verify-github-ruleset kubesense-errors
 .PHONY: install-change-impact-analyzer
 .PHONY: lint-change-impact-analyzer
+.PHONY: install-implementation-planner
+.PHONY: lint-implementation-planner
 .PHONY: lint-resilience-review
 .PHONY: install-resilience-review
 .PHONY: install-claude-change-impact-analyzer
+.PHONY: install-claude-implementation-planner
 .PHONY: install-claude-resilience-review
 
 install:
@@ -156,6 +159,9 @@ install-claude-test-writer: install-claude-unit-test-creator install-claude-inte
 install-claude-change-impact-analyzer:
 	bash scripts/install.sh --agent claude-user change-impact-analyzer
 
+install-claude-implementation-planner:
+	bash scripts/install.sh --agent claude-user implementation-planner
+
 install-claude-resilience-review:
 	bash scripts/install.sh --agent claude-user resilience-review
 
@@ -194,6 +200,9 @@ install-tech-debt-assessor:
 
 install-change-impact-analyzer:
 	bash scripts/install.sh change-impact-analyzer
+
+install-implementation-planner:
+	bash scripts/install.sh implementation-planner
 
 install-resilience-review:
 	bash scripts/install.sh resilience-review
@@ -1571,6 +1580,28 @@ lint-change-impact-analyzer:
 lint: lint-change-impact-analyzer
 lint: lint-resilience-review
 
+lint: lint-implementation-planner
+
+lint-implementation-planner:
+	@echo "lint-implementation-planner: SKILL.md line count (<= 180)"
+	$(call check_skill_md_length,implementation-planner,180,keep the leaf bounded; detail in workflow/)
+	$(call forbid_disable_model_invocation,implementation-planner)
+	$(call check_workflow_frontmatter,implementation-planner)
+	$(call check_dangling_links,implementation-planner/*.md implementation-planner/reference/*.md implementation-planner/workflow/*.md)
+	$(call require_ref_files,implementation-planner/reference,phase-index lazy-load-index report-format smoke-test pressure-tests)
+	@grep -q 'pressure-tests' implementation-planner/reference/smoke-test.md
+	@grep -q '## Invocation' implementation-planner/examples.md
+	$(call require_setup_links_framework,implementation-planner)
+	$(call require_cross_skill_escalation,implementation-planner)
+	$(call require_safe_output_link,implementation-planner)
+	@grep -q 'docs/skill-framework/shared/prompt-injection.md' implementation-planner/reference/report-format.md && \
+	 grep -q 'docs/skill-framework/shared/safe-output.md' implementation-planner/reference/report-format.md && \
+	 grep -qiE 'escape|fence|backtick' implementation-planner/reference/report-format.md && \
+	 grep -qi 'redact' implementation-planner/reference/report-format.md
+	@python3 -m py_compile scripts/implementation_plan.py
+	@python3 -m pytest -p no:cacheprovider scripts/tests/test_implementation_plan.py -q
+	@echo "  ok"
+
 lint-resilience-review:
 	@echo "lint-resilience-review: SKILL.md line count (<= 180)"
 	$(call check_skill_md_length,resilience-review,180,keep the leaf bounded; detail in workflow/)
@@ -1616,7 +1647,7 @@ lint-framework:
 	@grep -q '^## 1\. Required sections' docs/skill-framework/shared/examples-conventions.md
 	@grep -q '^## 2\. Scenario format' docs/skill-framework/shared/examples-conventions.md
 	@grep -q '^## 5\. Anti-patterns' docs/skill-framework/shared/examples-conventions.md
-	@for skill in pr-review pr-gatekeeper incident-rca incident-triage-agent k8s-overprovisioning-datadog domain-comprehension squad-map who-owns-x-bot new-hire-guide release-readiness-checker migration-program-manager mysql-to-postgres-sql loop-task-implementer backlog-runner cost-optimization-sprint-planner weekly-squad-digest prd-architect test-writer unit-test-creator integration-test-creator contract-test-creator e2e-test-creator api-test-creator architecture-review system-design api-design-review database-review security-review performance-review capacity-planner observability-review deployment-risk-review dependency-upgrade-review tech-debt-assessor change-impact-analyzer resilience-review; do \
+	@for skill in pr-review pr-gatekeeper incident-rca incident-triage-agent k8s-overprovisioning-datadog domain-comprehension squad-map who-owns-x-bot new-hire-guide release-readiness-checker migration-program-manager mysql-to-postgres-sql loop-task-implementer backlog-runner cost-optimization-sprint-planner weekly-squad-digest prd-architect test-writer unit-test-creator integration-test-creator contract-test-creator e2e-test-creator api-test-creator architecture-review system-design api-design-review database-review security-review performance-review capacity-planner observability-review deployment-risk-review dependency-upgrade-review tech-debt-assessor change-impact-analyzer resilience-review implementation-planner; do \
 		test -f $$skill/examples.md || \
 			{ echo "error: missing $$skill/examples.md (examples-conventions)" >&2; exit 1; }; \
 		grep -q '## Invocation' $$skill/examples.md || \
@@ -1665,7 +1696,7 @@ lint-framework:
 	done; \
 	if [ "$$fail" -ne 0 ]; then exit 1; fi
 	@grep -q '| Complete |' docs/skill-framework/README.md
-	@for skill in pr-review pr-gatekeeper incident-rca incident-triage-agent k8s-overprovisioning-datadog domain-comprehension squad-map who-owns-x-bot new-hire-guide release-readiness-checker migration-program-manager mysql-to-postgres-sql loop-task-implementer backlog-runner cost-optimization-sprint-planner weekly-squad-digest prd-architect test-writer unit-test-creator integration-test-creator contract-test-creator e2e-test-creator api-test-creator architecture-review system-design api-design-review database-review security-review performance-review capacity-planner observability-review deployment-risk-review dependency-upgrade-review tech-debt-assessor change-impact-analyzer resilience-review; do \
+	@for skill in pr-review pr-gatekeeper incident-rca incident-triage-agent k8s-overprovisioning-datadog domain-comprehension squad-map who-owns-x-bot new-hire-guide release-readiness-checker migration-program-manager mysql-to-postgres-sql loop-task-implementer backlog-runner cost-optimization-sprint-planner weekly-squad-digest prd-architect test-writer unit-test-creator integration-test-creator contract-test-creator e2e-test-creator api-test-creator architecture-review system-design api-design-review database-review security-review performance-review capacity-planner observability-review deployment-risk-review dependency-upgrade-review tech-debt-assessor change-impact-analyzer resilience-review implementation-planner; do \
 		grep -q 'skill-framework' $$skill/SETUP.md || \
 			{ echo "error: $$skill/SETUP.md must link to docs/skill-framework" >&2; exit 1; }; \
 		grep -q 'docs/skill-framework/shared/skill-routing.md' $$skill/SKILL.md || \
@@ -1710,7 +1741,8 @@ lint-framework:
 		"dependency-upgrade-review:workflow/inputs.md" \
 		"tech-debt-assessor:workflow/inputs.md" \
 		"change-impact-analyzer:workflow/inputs.md" \
-		"resilience-review:workflow/inputs.md"; do \
+		"resilience-review:workflow/inputs.md" \
+		"implementation-planner:workflow/inputs.md"; do \
 		skill=$${pair%%:*}; file=$${pair#*:}; \
 		if ! grep -qiE 'untrusted|prompt-injection' $$skill/$$file; then \
 			echo "error: $$skill/$$file must declare untrusted-content guard" >&2; fail=1; \
@@ -1727,7 +1759,7 @@ lint-framework:
 	@echo "lint-framework: all SETUP.md links ok"
 	@echo "lint-framework: cross-agent discovery files (.cursor/rules + .kiro/steering)"
 	@fail=0; \
-	for skill in pr-review pr-gatekeeper incident-rca incident-triage-agent k8s-overprovisioning-datadog domain-comprehension squad-map who-owns-x-bot new-hire-guide release-readiness-checker migration-program-manager mysql-to-postgres-sql loop-task-implementer backlog-runner cost-optimization-sprint-planner weekly-squad-digest prd-architect test-writer unit-test-creator integration-test-creator contract-test-creator e2e-test-creator api-test-creator architecture-review system-design api-design-review database-review security-review performance-review capacity-planner observability-review deployment-risk-review dependency-upgrade-review tech-debt-assessor change-impact-analyzer resilience-review; do \
+	for skill in pr-review pr-gatekeeper incident-rca incident-triage-agent k8s-overprovisioning-datadog domain-comprehension squad-map who-owns-x-bot new-hire-guide release-readiness-checker migration-program-manager mysql-to-postgres-sql loop-task-implementer backlog-runner cost-optimization-sprint-planner weekly-squad-digest prd-architect test-writer unit-test-creator integration-test-creator contract-test-creator e2e-test-creator api-test-creator architecture-review system-design api-design-review database-review security-review performance-review capacity-planner observability-review deployment-risk-review dependency-upgrade-review tech-debt-assessor change-impact-analyzer resilience-review implementation-planner; do \
 		test -f .cursor/rules/$$skill.mdc || \
 			{ echo "  missing .cursor/rules/$$skill.mdc" >&2; fail=1; }; \
 		test -f .kiro/steering/$$skill.md || \

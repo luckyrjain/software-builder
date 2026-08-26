@@ -12,6 +12,14 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 - Added deterministic change classes, exact-head PR/MR handling, evidence-derived coverage, and
   scanner-safe input handling.
 
+### Add deterministic implementation planning (2026-08-26)
+
+- Added the read-only `implementation-planner` leaf and `implementation_plan` v1 artifact.
+- Added deterministic plan identity, dependency waves, source traceability, single-repository scope,
+  executor-compatible size gates, and fail-closed readiness validation.
+- Extended loop-task-implementer with an internal, generation-checked plan execution checkpoint while
+  preserving legacy task execution and existing review/CI/merge gates.
+
 ## Platform
 
 ### Add architecture, design, and specialized review skills (2026-08-22)
