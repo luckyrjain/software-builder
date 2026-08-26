@@ -326,16 +326,35 @@ def test_builder_never_floors_a_known_per_task_estimate_to_zero() -> None:
 
 
 def test_builder_never_lets_assessment_target_repo_disagree_with_target_repo() -> None:
+    # Neither system_design_spec nor change_impact_report declares an assessment_target.repo, so
+    # target_repo can only resolve through the explicit sources["target_repo"] override -- the
+    # emitted assessment_target.repo must still agree with it, not silently stay empty/absent.
     plan = build_implementation_plan(
         {
-            "system_design_spec": {"payload": {"title": "Checkout", "readiness": "Ready", "assessment_target": {"repo": "github.com/acme/reference-example"}}},
+            "system_design_spec": {"payload": {"title": "Checkout", "readiness": "Ready"}},
             "architecture_review_report": {"payload": {"normalized_decision": {"status": "PASS"}}},
-            "change_impact_report": {"skill_result": {"status": "SUCCESS"}, "payload": {"assessment_target": {}, "target_repo": "github.com/acme/checkout", "coverage_status": "COMPLETE", "target_paths": ["src/checkout.py"], "required_tests": [], "review_triggers": []}},
+            "change_impact_report": {"skill_result": {"status": "SUCCESS"}, "payload": {"coverage_status": "COMPLETE", "target_paths": ["src/checkout.py"], "required_tests": [], "review_triggers": []}},
+            "target_repo": "github.com/acme/checkout",
         },
         repository_evidence={"estimated_scope": {"estimate_known": True, "files_upper_bound": 1, "changed_lines_upper_bound": 50, "confidence": "HIGH"}},
     )
     assert plan["target_repo"] == "github.com/acme/checkout"
     assert plan["assessment_target"]["repo"] == plan["target_repo"]
+
+
+def test_builder_ignores_an_undeclared_target_repo_field_inside_change_impact_report() -> None:
+    # change_impact_report's registered schema has no top-level target_repo field, only
+    # assessment_target.repo -- an unrelated field with that name inside the artifact must never
+    # be picked up ahead of the schema-declared field or the explicit sources["target_repo"] override.
+    plan = build_implementation_plan(
+        {
+            "system_design_spec": {"payload": {"title": "Checkout", "readiness": "Ready", "assessment_target": {"repo": "github.com/acme/checkout"}}},
+            "architecture_review_report": {"payload": {"normalized_decision": {"status": "PASS"}}},
+            "change_impact_report": {"skill_result": {"status": "SUCCESS"}, "payload": {"assessment_target": {"repo": "github.com/acme/checkout"}, "target_repo": "github.com/acme/unrelated-field-value", "coverage_status": "COMPLETE", "target_paths": ["src/checkout.py"], "required_tests": [], "review_triggers": []}},
+        },
+        repository_evidence={"estimated_scope": {"estimate_known": True, "files_upper_bound": 1, "changed_lines_upper_bound": 50, "confidence": "HIGH"}},
+    )
+    assert plan["target_repo"] == "github.com/acme/checkout"
 
 
 def test_builder_blocks_when_impacted_repositories_is_explicitly_empty() -> None:
@@ -433,6 +452,12 @@ def test_path_traversal_and_mismatched_traceability_fail_closed() -> None:
     assert any("target_paths" in error for error in validate_implementation_plan(plan))
     plan = _plan()
     plan["tasks"][0]["target_paths"] = ["."]
+    assert any("target_paths" in error for error in validate_implementation_plan(plan))
+    plan = _plan()
+    plan["tasks"][0]["target_paths"] = ["./."]
+    assert any("target_paths" in error for error in validate_implementation_plan(plan))
+    plan = _plan()
+    plan["tasks"][0]["target_paths"] = ["././"]
     assert any("target_paths" in error for error in validate_implementation_plan(plan))
     plan = _plan()
     plan["tasks"][1]["source_condition_refs"] = []

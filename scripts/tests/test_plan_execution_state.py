@@ -326,6 +326,15 @@ def test_plan_input_honors_authoritative_task_statuses_not_the_raw_checkpoint() 
     assert result["task_id"] == "TASK-002"
 
 
+def test_malformed_authoritative_task_statuses_fails_closed_not_silently_ignored() -> None:
+    plan = _plan()
+    result = normalize_input({
+        "implementation_plan": plan,
+        "authoritative_task_statuses": ["not", "a", "mapping"],
+    })
+    assert result["status"] == "BLOCKED"
+
+
 def test_plan_cannot_grant_merge_or_other_authority() -> None:
     plan = _plan()
     plan["tasks"][0]["merge"] = True

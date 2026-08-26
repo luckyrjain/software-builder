@@ -417,9 +417,11 @@ def build_implementation_plan(
     impact = _payload(sources.get("change_impact_report"))
     target = design.get("assessment_target") if isinstance(design.get("assessment_target"), Mapping) else {}
     impact_target = impact.get("assessment_target") if isinstance(impact.get("assessment_target"), Mapping) else {}
+    # change_impact_report's registered schema has no top-level target_repo field -- only
+    # assessment_target.repo -- so resolution never reads one from inside the artifact itself;
+    # sources["target_repo"] remains the one explicit, caller-controlled override.
     target_repo = (
-        impact.get("target_repo")
-        or impact_target.get("repo")
+        impact_target.get("repo")
         or target.get("repo")
         or sources.get("target_repo")
     )
@@ -697,12 +699,14 @@ def _validate_task(task: object, index: int, readiness: str, errors: list[str]) 
     if isinstance(paths, list):
         for path in paths:
             normalized_path = path.replace("\\", "/").strip() if isinstance(path, str) else ""
+            segments = [part for part in normalized_path.split("/") if part != ""]
             if isinstance(path, str) and (
                 path != path.strip()
                 or normalized_path.startswith("/")
                 or bool(re.match(r"^[A-Za-z]:/", normalized_path))
-                or any(part == ".." for part in normalized_path.split("/"))
-                or normalized_path.rstrip("/") == "."
+                or any(part == ".." for part in segments)
+                or not segments
+                or all(part == "." for part in segments)
             ):
                 errors.append(f"error: {label}.target_paths must remain inside target_repo")
     _validate_estimate(task.get("estimated_scope"), f"{label}.estimated_scope", readiness, errors)
@@ -1222,9 +1226,11 @@ def normalize_input(raw: Mapping[str, Any]) -> dict[str, Any]:
     # -> validate_implementation_plan; re-running it here first would validate the same immutable
     # plan twice on every task-selection call for no functional benefit.
     authoritative_task_statuses = raw.get("authoritative_task_statuses")
+    if authoritative_task_statuses is not None and not isinstance(authoritative_task_statuses, Mapping):
+        return {"status": "BLOCKED", "reason": "authoritative_task_statuses must be a mapping"}
     result = select_task(
         plan,
-        authoritative_task_statuses=authoritative_task_statuses if isinstance(authoritative_task_statuses, Mapping) else None,
+        authoritative_task_statuses=authoritative_task_statuses,
         scm_evidence=raw.get("scm_evidence"),
         repository_snapshot=raw.get("repository_snapshot"),
     )
