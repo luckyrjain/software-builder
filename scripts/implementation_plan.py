@@ -1408,8 +1408,15 @@ def reconcile_plan_execution_state(
     current_head: str | None,
     completed_evidence_refs: list[str] | None = None,
     minimum_generation: int | None = None,
+    blocked_reason: str | None = None,
 ) -> tuple[dict[str, Any] | None, list[str]]:
-    """Reconcile advisory checkpoint data to official task state and current SCM head."""
+    """Reconcile advisory checkpoint data to official task state and current SCM head.
+
+    ``blocked_reason`` is recomputed on every call rather than carried over from the prior
+    checkpoint: it is cleared whenever no task is reconciled to BLOCKED (even if the prior
+    checkpoint still named a since-resolved reason), and only set when the caller supplies one
+    for a task that authoritative state confirms is BLOCKED.
+    """
     if plan.get("readiness") != "READY":
         return None, ["error: implementation_plan must be READY before execution-state reconciliation"]
     if not isinstance(authoritative_task_statuses, Mapping):
@@ -1442,6 +1449,8 @@ def reconcile_plan_execution_state(
         {ref for ref in (completed_evidence_refs or []) if _non_empty_string(ref)}
     )
     normalized["observed_head_revision"] = current_head
+    is_blocked = any(status == "BLOCKED" for status in normalized["task_statuses"].values())
+    normalized["blocked_reason"] = blocked_reason if is_blocked else None
     return normalized, []
 
 
@@ -1454,6 +1463,7 @@ def advance_plan_execution_state(
     current_head: str | None,
     updated_at: str,
     completed_evidence_refs: list[str] | None = None,
+    blocked_reason: str | None = None,
 ) -> tuple[dict[str, Any] | None, list[str]]:
     """Advance one checkpoint generation; stale writers cannot overwrite newer state."""
     if not isinstance(state, Mapping) or state.get("state_generation") != expected_generation:
@@ -1465,6 +1475,7 @@ def advance_plan_execution_state(
         current_head=current_head,
         completed_evidence_refs=completed_evidence_refs,
         minimum_generation=expected_generation,
+        blocked_reason=blocked_reason,
     )
     if errors or normalized is None:
         return None, errors

@@ -174,6 +174,43 @@ def test_execution_state_cannot_launder_caller_complete_status() -> None:
     assert reconciled["task_statuses"]["TASK-001"] == "PENDING"
 
 
+def test_reconcile_clears_a_stale_blocked_reason_once_the_task_unblocks() -> None:
+    plan = _plan()
+    state = initial_plan_execution_state(plan, current_head="a" * 40, updated_at="2026-08-26T00:00:00Z")
+    state["blocked_reason"] = "stale reason from a previous escalation"
+    reconciled, errors = reconcile_plan_execution_state(
+        state,
+        plan,
+        authoritative_task_statuses={"TASK-001": "BUILDING", "TASK-002": "NOT_STARTED"},
+        current_head="a" * 40,
+    )
+    assert errors == []
+    assert reconciled["blocked_reason"] is None
+
+
+def test_reconcile_sets_blocked_reason_only_when_a_task_is_actually_blocked() -> None:
+    plan = _plan()
+    state = initial_plan_execution_state(plan, current_head="a" * 40, updated_at="2026-08-26T00:00:00Z")
+    reconciled, errors = reconcile_plan_execution_state(
+        state,
+        plan,
+        authoritative_task_statuses={"TASK-001": "ESCALATED", "TASK-002": "NOT_STARTED"},
+        current_head="a" * 40,
+        blocked_reason="circuit breaker tripped",
+    )
+    assert errors == []
+    assert reconciled["blocked_reason"] == "circuit breaker tripped"
+
+    reconciled2, _ = reconcile_plan_execution_state(
+        state,
+        plan,
+        authoritative_task_statuses={"TASK-001": "BUILDING", "TASK-002": "NOT_STARTED"},
+        current_head="a" * 40,
+        blocked_reason="this reason must be ignored because nothing is blocked",
+    )
+    assert reconciled2["blocked_reason"] is None
+
+
 def test_execution_state_compare_and_swap_rejects_stale_writer() -> None:
     plan = _plan()
     state = initial_plan_execution_state(plan, current_head="a" * 40, updated_at="2026-08-26T00:00:00Z")
