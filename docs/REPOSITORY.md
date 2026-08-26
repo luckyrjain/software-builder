@@ -78,6 +78,7 @@ Each skill directory follows the same pattern:
 | `pr-review` | review | ambient | — | `make lint-pr-review` |
 | `prd-architect` | product | ambient | — | `make lint-prd-architect` |
 | `release-readiness-checker` | release | ambient | pr-review, k8s-overprovisioning-datadog, incident-rca | `make lint-release-readiness-checker` |
+| `resilience-review` | review | ambient | — | `make lint-resilience-review` |
 | `security-review` | review | ambient | — | `make lint-security-review` |
 | `squad-map` | architecture | ambient | — | `make lint-squad-map` |
 | `system-design` | architecture | ambient | — | `make lint-system-design` |

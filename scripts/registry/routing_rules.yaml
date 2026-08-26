@@ -129,6 +129,13 @@ routes:
       - '\b(PR|MR|pull request|merge request)\s*[#!]?\d+\b.*\b(services?|contracts?|data|tests?|dependencies?)\b.*\b(affected|impact|change|touch)\b'
     exclude_patterns:
       - '\b(review|regression|correctness|blast radius|rollback risk|deployment risk|release risk)\b'
+  resilience-review:
+    patterns:
+      - '\b(resilience|failure[- ]mode|fault[- ]toleran)\w*\b.*\b(review|assessment|analysis|controls?)\b'
+      - '\b(timeout budgets?|retry polic(?:y|ies)|circuit breakers?|load shedding|backpressure|queue handling|idempotency|partial failures?|recovery reconciliation)\b'
+    exclude_patterns:
+      - '\b(incident|outage|postmortem|root cause|RCA)\b'
+      - '\b(capacity|headroom|forecast|sizing)\b'
   test-writer:
     patterns:
       - '\b(write|generate|add)\b\s+(tests?|test coverage)\b(?!.*\b(unit|integration|contract|e2e|end[- ]to[- ]end|API|HTTP|REST)\b)'

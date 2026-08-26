@@ -35,6 +35,7 @@ skill_types:
   dependency-upgrade-review: leaf
   tech-debt-assessor: leaf
   change-impact-analyzer: leaf
+  resilience-review: leaf
 handoff_schema:
   required_fields:
   - target_skill
@@ -225,3 +226,7 @@ artifact_ownership:
     mode: canonical
     owners:
     - change-impact-analyzer
+  resilience_review_report:
+    mode: canonical
+    owners:
+    - resilience-review

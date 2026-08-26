@@ -36,3 +36,4 @@ cases:
   - {skill: dependency-upgrade-review, missing_capability: host.report.write, available_capabilities: [], expected_behavior: BLOCKED}
   - {skill: tech-debt-assessor, missing_capability: host.report.write, available_capabilities: [], expected_behavior: BLOCKED}
   - {skill: change-impact-analyzer, prompt: "Analyze this proposed change without repository read.", missing_capability: host.repository.read, available_capabilities: [host.report.write, host.scm.change.read], expected_behavior: DEGRADED}
+  - {skill: resilience-review, prompt: "Review resilience controls without repository evidence.", missing_capability: host.repository.read, available_capabilities: [host.report.write], expected_behavior: DEGRADED}

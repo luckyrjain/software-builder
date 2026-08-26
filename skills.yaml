@@ -86,6 +86,7 @@ contracts:
       - dependency_upgrade_report
       - tech_debt_assessment
       - change_impact_report
+      - resilience_review_report
       artifact_schema_versions:
         mr_review_report: 2
         rca_report: 1
@@ -111,6 +112,7 @@ contracts:
         dependency_upgrade_report: 2
         tech_debt_assessment: 1
         change_impact_report: 1
+        resilience_review_report: 1
       state_semantics:
         mr_review_report: current_state
         rca_report: current_state
@@ -136,6 +138,7 @@ contracts:
         dependency_upgrade_report: proposed_state
         tech_debt_assessment: current_state
         change_impact_report: proposed_state
+        resilience_review_report: proposed_state
       allowed_state_semantics:
         prd_report:
         - proposed_state
@@ -167,6 +170,9 @@ contracts:
         dependency_upgrade_report:
         - proposed_state
         change_impact_report:
+        - proposed_state
+        - current_state
+        resilience_review_report:
         - proposed_state
         - current_state
       payload_types:
@@ -343,6 +349,15 @@ contracts:
           operational_impacts: list
           review_triggers: list
           unknowns: list
+          evidence_refs: list
+        resilience_review_report:
+          title: string
+          verdict: string
+          assessment_target: mapping
+          normalized_decision: mapping
+          findings: list
+          conditions: list
+          required_actions: list
           evidence_refs: list
       required_sections:
         skill_result:
@@ -623,6 +638,11 @@ contracts:
         external_actions: none
         unattended: false
         merge: false
+      resilience-review:
+        repository: read
+        external_actions: none
+        unattended: false
+        merge: false
     skill_types:
       pr-review: leaf
       pr-gatekeeper: trigger
@@ -659,6 +679,7 @@ contracts:
       dependency-upgrade-review: leaf
       tech-debt-assessor: leaf
       change-impact-analyzer: leaf
+      resilience-review: leaf
   composition_runtime:
     schema_version: 1
     skill_types:
@@ -697,6 +718,7 @@ contracts:
       dependency-upgrade-review: leaf
       tech-debt-assessor: leaf
       change-impact-analyzer: leaf
+      resilience-review: leaf
     handoff_schema:
       required_fields:
       - target_skill
@@ -887,6 +909,10 @@ contracts:
         mode: canonical
         owners:
         - change-impact-analyzer
+      resilience_review_report:
+        mode: canonical
+        owners:
+        - resilience-review
   composition:
     artifact_types:
     - mr_context
@@ -916,6 +942,7 @@ contracts:
     - dependency_upgrade_report
     - tech_debt_assessment
     - change_impact_report
+    - resilience_review_report
     artifact_schemas:
       mr_context:
         fields:
@@ -1146,6 +1173,16 @@ contracts:
         - operational_impacts
         - review_triggers
         - unknowns
+        - evidence_refs
+      resilience_review_report:
+        fields:
+        - title
+        - verdict
+        - assessment_target
+        - normalized_decision
+        - findings
+        - conditions
+        - required_actions
         - evidence_refs
     creator_parity:
       skills:
@@ -1857,6 +1894,29 @@ contracts:
           - project
           - merge_request_iid
           - head_sha
+          assessment_context:
+          - assessment_target
+          - inputs
+          - input_provenance
+          - evidence_refs
+          - unresolved
+        write_authority: read-only
+      resilience-review:
+        produces:
+        - resilience_review_report
+        consumes:
+        - assessment_context
+        produce_fields:
+          resilience_review_report:
+          - title
+          - verdict
+          - assessment_target
+          - normalized_decision
+          - findings
+          - conditions
+          - required_actions
+          - evidence_refs
+        consume_fields:
           assessment_context:
           - assessment_target
           - inputs
@@ -3910,6 +3970,64 @@ skills:
         - operational_impacts
         - review_triggers
         - unknowns
+        - evidence_refs
+    dependencies: []
+    version_source: skill_frontmatter_legacy_numeric
+  resilience-review:
+    path: resilience-review
+    category: review
+    invocation: ambient
+    hosts:
+      cursor:
+        discovery: rule
+      claude:
+        install: true
+      kiro:
+        discovery: manual
+    install:
+      requires: []
+    composition:
+      invokes: []
+      escalation_targets: []
+    capabilities:
+      required:
+      - host.report.write
+      optional:
+      - name: host.repository.read
+        enables: repository and runtime/config evidence discovery
+    lint:
+      skill_md_max_lines: 180
+      target: resilience-review
+    risk_class:
+    - read-only
+    version: 1.0.0
+    type: leaf
+    authority: read-only
+    permissions:
+      repository: read
+      external_actions: none
+      unattended: false
+      merge: false
+    supported_hosts:
+    - chatgpt
+    - claude
+    - codex
+    - cursor
+    - generic
+    - kiro
+    entrypoint: SKILL.md
+    output_contract:
+      produces:
+      - resilience_review_report
+      produce_fields:
+        resilience_review_report:
+        - title
+        - verdict
+        - assessment_target
+        - normalized_decision
+        - findings
+        - conditions
+        - required_actions
         - evidence_refs
     dependencies: []
     version_source: skill_frontmatter_legacy_numeric
