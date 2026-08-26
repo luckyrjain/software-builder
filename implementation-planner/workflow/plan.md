@@ -36,4 +36,7 @@ forbidden for failed/unknown mandatory evidence or unknown estimates.
 
 Pass `implementation_plan` to `loop-task-implementer`. The executor validates it, selects one eligible
 task, and reconciles `plan_execution_state` against official task/SCM state before any branch or PR
-write. The canonical plan is immutable.
+write. Remote branch/ref creation uses the observed head as an expected-head/fast-forward
+precondition; after a create conflict, re-read the deterministic branch and PR identity and adopt the
+matching execution or return `BLOCKED`. Never force-update a conflicting execution. The canonical
+plan is immutable.

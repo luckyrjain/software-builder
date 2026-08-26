@@ -136,8 +136,10 @@ Record task dependencies and sequencing constraints.
 When a plan is present, `tasks[].dependencies` is the only dependency graph. The checkpoint is an
 index, not authority: official task state and SCM evidence determine whether a task is complete.
 Reject stale plan digests, stale generations, stale observed heads, and unsupported cross-repository
-scope before dispatch. A repository-head change requires revalidation of completed evidence and
-pending-task eligibility.
+scope before dispatch. Remote branch/ref writes use the observed head as an expected-head or
+fast-forward precondition; after a create race, re-read the deterministic branch/PR identity and
+adopt the matching execution or block. A repository-head change requires revalidation of completed
+evidence and pending-task eligibility.
 
 After the previous task completes, refresh the base branch and re-evaluate the next task. Do not assume the next task remains valid after earlier changes.
 

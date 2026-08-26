@@ -269,6 +269,7 @@ def build_implementation_plan(
         conditions.extend(_item_ref(item, f"{name}-condition", index) for index, item in enumerate(_items(source, "conditions")))
         actions.extend(_item_ref(item, f"{name}-action", index) for index, item in enumerate(_items(source, "required_actions")))
     evidence = repository_evidence or {}
+    external_dependencies = evidence.get("external_dependencies") if isinstance(evidence.get("external_dependencies"), list) else []
     estimate = evidence.get("estimated_scope") if isinstance(evidence.get("estimated_scope"), Mapping) else None
     if estimate is None:
         estimate = {"estimate_known": False, "files_upper_bound": 0, "changed_lines_upper_bound": 0, "confidence": "UNKNOWN"}
@@ -315,7 +316,7 @@ def build_implementation_plan(
         "readiness": readiness,
         "assessment_target": dict(impact_target or target),
         "target_repo": normalized_repo,
-        "external_dependencies": [],
+        "external_dependencies": copy.deepcopy(external_dependencies),
         "source_refs": source_refs,
         "tasks": tasks,
         "execution_waves": waves,

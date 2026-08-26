@@ -383,3 +383,25 @@ def test_builder_blocks_incomplete_or_multi_repository_impact() -> None:
         "estimated_scope": {"estimate_known": True, "files_upper_bound": 1, "changed_lines_upper_bound": 100, "confidence": "HIGH"},
     })
     assert plan["readiness"] == "BLOCKED"
+
+
+def test_builder_preserves_explicit_external_dependencies() -> None:
+    dependency = {
+        "repo": "github.com/acme/catalog",
+        "required_state_or_artifact": "catalog schema plan COMPLETE",
+        "reason": "checkout consumes the catalog contract",
+        "evidence_ref": "architecture:catalog-contract",
+    }
+    plan = build_implementation_plan(
+        {
+            "system_design_spec": {"payload": {"title": "Checkout", "readiness": "Ready", "assessment_target": {"repo": "github.com/acme/checkout"}}},
+            "architecture_review_report": {"payload": {"normalized_decision": {"status": "PASS"}}},
+            "change_impact_report": {"skill_result": {"status": "SUCCESS"}, "payload": {"assessment_target": {"repo": "github.com/acme/checkout"}, "coverage_status": "COMPLETE", "target_paths": ["src/checkout.py"], "review_triggers": []}},
+        },
+        repository_evidence={
+            "external_dependencies": [dependency],
+            "estimated_scope": {"estimate_known": True, "files_upper_bound": 1, "changed_lines_upper_bound": 100, "confidence": "HIGH"},
+        },
+    )
+    assert plan["external_dependencies"] == [dependency]
+    assert validate_implementation_plan(plan) == []
