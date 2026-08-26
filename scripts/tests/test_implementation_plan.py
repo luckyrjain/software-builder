@@ -149,6 +149,19 @@ def test_malformed_task_lists_fail_closed_without_raising() -> None:
     assert any("required_tests" in error for error in errors)
 
 
+def test_malformed_nested_values_and_keys_fail_closed_without_raising() -> None:
+    plan = _plan()
+    plan[123] = "unexpected"
+    plan["tasks"][0]["dependencies"] = [[]]
+    errors = validate_implementation_plan(plan)
+    assert errors
+
+    state = initial_plan_execution_state(_plan(), current_head="a" * 40, updated_at="2026-08-26T00:00:00Z")
+    state["task_statuses"]["TASK-001"] = []
+    errors = validate_plan_execution_state(state, _plan(), current_head="a" * 40)
+    assert errors
+
+
 def test_cli_json_loader_rejects_duplicate_and_nonfinite_values(tmp_path) -> None:
     duplicate = tmp_path / "duplicate.json"
     duplicate.write_text('{"readiness":"READY","readiness":"BLOCKED"}', encoding="utf-8")

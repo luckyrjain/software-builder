@@ -103,6 +103,12 @@ def _string_list(value: object, label: str, errors: list[str], *, allow_empty: b
         errors.append(f"error: {label} must not be empty")
 
 
+def _safe_sorted(values: object) -> list[Any]:
+    if not isinstance(values, (list, tuple, set, frozenset)):
+        return []
+    return sorted(values, key=lambda value: (type(value).__name__, repr(value)))
+
+
 def derive_plan_set_id(
     change_impact_digest: str,
     system_design_digest: str,
@@ -394,10 +400,10 @@ def _validate_estimate(
     if not isinstance(estimate, Mapping):
         errors.append(f"error: {label} must be a mapping")
         return
-    unknown = sorted(set(estimate) - ESTIMATE_FIELDS)
-    missing = sorted(ESTIMATE_FIELDS - set(estimate))
+    unknown = _safe_sorted(set(estimate) - ESTIMATE_FIELDS)
+    missing = _safe_sorted(ESTIMATE_FIELDS - set(estimate))
     if unknown:
-        errors.append(f"error: {label} contains undeclared fields: {', '.join(unknown)}")
+        errors.append(f"error: {label} contains undeclared fields: {', '.join(map(str, unknown))}")
     if missing:
         errors.append(f"error: {label} missing fields: {', '.join(missing)}")
     known = estimate.get("estimate_known")
@@ -430,10 +436,10 @@ def _validate_task(task: object, index: int, readiness: str, errors: list[str]) 
     if not isinstance(task, Mapping):
         errors.append(f"error: {label} must be a mapping")
         return None, []
-    unknown = sorted(set(task) - TASK_FIELDS)
-    missing = sorted(TASK_FIELDS - set(task))
+    unknown = _safe_sorted(set(task) - TASK_FIELDS)
+    missing = _safe_sorted(TASK_FIELDS - set(task))
     if unknown:
-        errors.append(f"error: {label} contains undeclared fields: {', '.join(unknown)}")
+        errors.append(f"error: {label} contains undeclared fields: {', '.join(map(str, unknown))}")
     if missing:
         errors.append(f"error: {label} missing fields: {', '.join(missing)}")
     task_id = task.get("task_id")
@@ -443,7 +449,7 @@ def _validate_task(task: object, index: int, readiness: str, errors: list[str]) 
     for field in ("title", "scope"):
         if not _non_empty_string(task.get(field)):
             errors.append(f"error: {label}.{field} must be a non-empty string")
-    if task.get("task_type") not in TASK_TYPES:
+    if not isinstance(task.get("task_type"), str) or task.get("task_type") not in TASK_TYPES:
         errors.append(f"error: {label}.task_type is invalid")
     if task.get("executor") != "loop-task-implementer":
         errors.append(f"error: {label}.executor must be loop-task-implementer")
@@ -469,7 +475,7 @@ def _validate_task(task: object, index: int, readiness: str, errors: list[str]) 
                 errors.append(f"error: {label}.target_paths must remain inside target_repo")
     _validate_estimate(task.get("estimated_scope"), f"{label}.estimated_scope", readiness, errors)
     dependencies = task.get("dependencies")
-    return task_id, list(dependencies) if isinstance(dependencies, list) else []
+    return task_id, [dependency for dependency in dependencies if isinstance(dependency, str)] if isinstance(dependencies, list) else []
 
 
 def _validate_traceability(
@@ -490,19 +496,19 @@ def _validate_traceability(
     task_items = [task for task in plan.get("tasks", []) if isinstance(task, Mapping)]
     task_ids = {task.get("task_id") for task in task_items}
     expected_conditions = (
-        sorted(set(source_conditions))
+        _safe_sorted({value for value in source_conditions if isinstance(value, str)})
         if source_conditions is not None
-        else sorted({ref for task in task_items for ref in _task_string_values(task, "source_condition_refs")})
+        else _safe_sorted({ref for task in task_items for ref in _task_string_values(task, "source_condition_refs")})
     )
     expected_actions = (
-        sorted(set(source_actions))
+        _safe_sorted({value for value in source_actions if isinstance(value, str)})
         if source_actions is not None
-        else sorted({ref for task in task_items for ref in _task_string_values(task, "source_action_refs")})
+        else _safe_sorted({ref for task in task_items for ref in _task_string_values(task, "source_action_refs")})
     )
     expected_tests = (
-        sorted(set(required_tests))
+        _safe_sorted({value for value in required_tests if isinstance(value, str)})
         if required_tests is not None
-        else sorted({test for task in task_items for test in _task_string_values(task, "required_tests")})
+        else _safe_sorted({test for task in task_items for test in _task_string_values(task, "required_tests")})
     )
     for group, sources in (
         ("condition_coverage", expected_conditions),
@@ -526,7 +532,7 @@ def _validate_traceability(
                     errors.append(f"error: traceability.{group} maps {source} to a task that does not cite it")
                 elif group == "required_test_coverage" and source not in _task_string_values(task, "required_tests"):
                     errors.append(f"error: traceability.{group} maps {source} to a task that does not run it")
-        for source in sorted(set(coverage) - set(sources)):
+        for source in _safe_sorted(set(coverage) - set(sources)):
             errors.append(f"error: traceability.{group} contains undeclared source {source}")
 
 
@@ -602,14 +608,14 @@ def validate_implementation_plan(
         canonical_payload_digest(dict(plan))
     except (TypeError, ValueError):
         errors.append("error: implementation_plan must contain only finite JSON-compatible values")
-    unknown = sorted(set(plan) - PLAN_FIELDS)
-    missing = sorted(PLAN_FIELDS - set(plan))
+    unknown = _safe_sorted(set(plan) - PLAN_FIELDS)
+    missing = _safe_sorted(PLAN_FIELDS - set(plan))
     if unknown:
-        errors.append(f"error: implementation_plan contains undeclared fields: {', '.join(unknown)}")
+        errors.append(f"error: implementation_plan contains undeclared fields: {', '.join(map(str, unknown))}")
     if missing:
         errors.append(f"error: implementation_plan missing fields: {', '.join(missing)}")
     readiness = plan.get("readiness")
-    if readiness not in READINESS:
+    if not isinstance(readiness, str) or readiness not in READINESS:
         errors.append("error: readiness must be READY, PARTIAL, or BLOCKED")
         readiness = "BLOCKED"
     for field in ("plan_set_id", "plan_id", "title", "target_repo"):
@@ -672,6 +678,9 @@ def validate_implementation_plan(
                 errors.append(f"error: execution_waves[{wave_index}] must be a list")
                 continue
             for task_id in wave:
+                if not isinstance(task_id, str):
+                    errors.append(f"error: execution_waves[{wave_index}] task IDs must be strings")
+                    continue
                 if task_id not in task_ids:
                     errors.append(f"error: execution_waves contains unknown task {task_id}")
                     continue
@@ -721,10 +730,10 @@ def validate_plan_execution_state(
     plan_errors = validate_implementation_plan(plan)
     if plan_errors:
         errors.extend(f"error: invalid implementation_plan: {error}" for error in plan_errors)
-    unknown = sorted(set(state) - EXECUTION_STATE_FIELDS)
-    missing = sorted(EXECUTION_STATE_FIELDS - set(state))
+    unknown = _safe_sorted(set(state) - EXECUTION_STATE_FIELDS)
+    missing = _safe_sorted(EXECUTION_STATE_FIELDS - set(state))
     if unknown:
-        errors.append("error: plan_execution_state contains undeclared fields: " + ", ".join(unknown))
+        errors.append("error: plan_execution_state contains undeclared fields: " + ", ".join(map(str, unknown)))
     if missing:
         errors.append("error: plan_execution_state missing fields: " + ", ".join(missing))
     if state.get("schema_version") != 1:
@@ -742,7 +751,9 @@ def validate_plan_execution_state(
         errors.append("error: plan_execution_state.state_generation is stale")
     statuses = state.get("task_statuses")
     task_ids = {task.get("task_id") for task in plan.get("tasks", []) if isinstance(task, Mapping)}
-    if not isinstance(statuses, Mapping) or set(statuses) != task_ids or any(status not in TASK_STATUSES for status in statuses.values()):
+    if not isinstance(statuses, Mapping) or set(statuses) != task_ids or any(
+        not isinstance(status, str) or status not in TASK_STATUSES for status in statuses.values()
+    ):
         errors.append("error: plan_execution_state.task_statuses must cover every plan task with a valid status")
     if authoritative_task_statuses is not None:
         expected_statuses: dict[str, str] = {}
@@ -792,7 +803,9 @@ def select_next_task(
             return None
         if not isinstance(task_statuses, Mapping):
             return None
-        if set(task_statuses) != set(tasks) or any(status not in TASK_STATUSES for status in task_statuses.values()):
+        if set(task_statuses) != set(tasks) or any(
+            not isinstance(status, str) or status not in TASK_STATUSES for status in task_statuses.values()
+        ):
             return None
         statuses.update({task_id: status for task_id, status in task_statuses.items() if task_id in tasks})
     if any(status == "IN_PROGRESS" for status in statuses.values()):
