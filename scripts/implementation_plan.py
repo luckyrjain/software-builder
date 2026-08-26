@@ -312,8 +312,12 @@ def reconcile_remote_claim(
     """
     if existing_pr is None:
         return RemoteClaimDecision(status="READY", reuse_existing=False, create_new_pr=True)
+    if not is_sha256_digest(execution_identity):
+        return RemoteClaimDecision(
+            status="BLOCKED", reuse_existing=False, create_new_pr=False, reason="execution_identity is not a SHA-256 digest"
+        )
     stored_identity = existing_pr.get("execution_identity") if isinstance(existing_pr, Mapping) else None
-    if stored_identity == execution_identity:
+    if is_sha256_digest(stored_identity) and stored_identity == execution_identity:
         return RemoteClaimDecision(status="READY", reuse_existing=True, create_new_pr=False)
     return RemoteClaimDecision(
         status="BLOCKED",
@@ -811,13 +815,19 @@ def validate_external_dependency_cycles(
     sibling_plans: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> list[str]:
     """Reject only cycles that are provable from the available sibling plan set."""
-    available: dict[str, Mapping[str, Any]] = {normalize_repo_identity(str(plan.get("target_repo"))): plan}
+    own_repo = normalize_repo_identity(str(plan.get("target_repo")))
+    available: dict[str, Mapping[str, Any]] = {own_repo: plan}
     if sibling_plans is not None and not isinstance(sibling_plans, Mapping):
         return ["error: sibling_plans must be a mapping"]
     for repo, sibling in (sibling_plans or {}).items():
         if isinstance(sibling, Mapping) and _non_empty_string(repo):
             sibling_repo = sibling.get("target_repo") or repo
-            available[normalize_repo_identity(str(sibling_repo))] = sibling
+            normalized_sibling_repo = normalize_repo_identity(str(sibling_repo))
+            # Never let a sibling entry that (incorrectly) shares the primary plan's own repo
+            # overwrite the plan itself in the analysis graph -- that would drop the plan's real
+            # external_dependencies edges and/or misattribute the sibling's edges to this plan.
+            if normalized_sibling_repo != own_repo:
+                available[normalized_sibling_repo] = sibling
     graph: dict[str, set[str]] = {repo: set() for repo in available}
     for repo, candidate in available.items():
         dependencies = candidate.get("external_dependencies", [])
@@ -1017,6 +1027,16 @@ def validate_plan_set(plans: list[Mapping[str, Any]]) -> list[str]:
     plan_set_ids = {plan.get("plan_set_id") for plan in valid_plans}
     if len(plan_set_ids) > 1:
         return ["error: validate_plan_set requires every plan to share one plan_set_id"]
+    repo_names = [
+        normalize_repo_identity(str(plan.get("target_repo")))
+        for plan in valid_plans
+        if _non_empty_string(plan.get("target_repo"))
+    ]
+    if len(set(repo_names)) != len(repo_names):
+        # A duplicate target_repo would otherwise silently collapse to one entry in
+        # siblings_by_repo below, hiding both plans from each other's cycle detection instead of
+        # being flagged as the malformed plan set it is.
+        return ["error: validate_plan_set requires each plan to target a distinct repository"]
     siblings_by_repo = {
         normalize_repo_identity(str(plan.get("target_repo"))): plan
         for plan in valid_plans

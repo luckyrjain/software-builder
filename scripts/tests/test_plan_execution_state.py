@@ -473,6 +473,16 @@ def test_no_existing_pr_creates_a_new_pr() -> None:
     assert result.status == "READY"
 
 
+def test_reconcile_remote_claim_never_matches_two_missing_identities() -> None:
+    result = reconcile_remote_claim(execution_identity=None, existing_pr={"execution_identity": None})
+    assert result.reuse_existing is False
+    assert result.status == "BLOCKED"
+
+    result = reconcile_remote_claim(execution_identity="not-a-digest", existing_pr={"execution_identity": "not-a-digest"})
+    assert result.reuse_existing is False
+    assert result.status == "BLOCKED"
+
+
 def test_same_plan_id_but_changed_task_contract_cannot_reuse_remote_claim() -> None:
     old_identity = execution_identity(
         plan_digest="a" * 64, task_id="TASK-001", task_digest="b" * 64,

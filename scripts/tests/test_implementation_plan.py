@@ -672,6 +672,29 @@ def test_validate_plan_set_rejects_cross_repo_cycle_and_keeps_missing_sibling_un
     mismatched_plan_set["plan_set_id"] = "PLANSET-different0000"
     assert any("plan_set_id" in error for error in validate_plan_set([plan_a, mismatched_plan_set]))
 
+    duplicate_repo_plan = deepcopy(plan_b)
+    duplicate_repo_plan["target_repo"] = plan_a["target_repo"]
+    duplicate_repo_plan["plan_id"] = derive_plan_id(duplicate_repo_plan["plan_set_id"], duplicate_repo_plan["target_repo"])
+    assert any("distinct repository" in error for error in validate_plan_set([plan_a, duplicate_repo_plan]))
+
+
+def test_sibling_sharing_the_primary_plans_own_repo_is_never_substituted_for_it() -> None:
+    plan = _plan()
+    plan["target_repo"] = "github.com/acme/one"
+    plan["plan_id"] = derive_plan_id(plan["plan_set_id"], plan["target_repo"])
+    plan["external_dependencies"] = [{
+        "repo": "github.com/acme/two",
+        "required_state_or_artifact": "plan complete",
+        "reason": "shared contract",
+        "evidence_ref": "plan:two",
+    }]
+    # A malformed sibling_plans entry keyed to the plan's own repo must never replace the plan
+    # itself in the analysis graph -- its real external_dependencies edge to "two" must still be
+    # visible, and it must not be reported as a (nonexistent) self-cycle.
+    imposter_sibling = {"target_repo": "github.com/acme/one", "external_dependencies": []}
+    errors = validate_external_dependency_cycles(plan, {"github.com/acme/one": imposter_sibling})
+    assert not any("cycle" in error for error in errors)
+
 
 def test_finalize_plan_maps_readiness_to_execution_status() -> None:
     ready = finalize_plan(_plan())
