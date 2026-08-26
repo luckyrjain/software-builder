@@ -139,6 +139,15 @@ def test_cli_style_validation_derives_traceability_obligations_from_tasks() -> N
     assert any("required_test_coverage" in error for error in errors)
 
 
+def test_malformed_task_lists_fail_closed_without_raising() -> None:
+    plan = _plan()
+    plan["tasks"][0]["source_condition_refs"] = None
+    plan["tasks"][0]["required_tests"] = None
+    errors = validate_implementation_plan(plan)
+    assert any("source_condition_refs" in error for error in errors)
+    assert any("required_tests" in error for error in errors)
+
+
 def test_unknown_estimate_cannot_make_a_ready_plan() -> None:
     plan = _plan()
     plan["tasks"][0]["estimated_scope"] = {

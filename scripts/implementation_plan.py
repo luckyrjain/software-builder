@@ -181,6 +181,11 @@ def _item_ref(item: Mapping[str, Any], prefix: str, index: int) -> str:
     return f"{prefix}:{value}" if _non_empty_string(value) else f"{prefix}:{index + 1}"
 
 
+def _task_string_values(task: Mapping[str, Any], field: str) -> list[str]:
+    value = task.get(field)
+    return [item for item in value if _non_empty_string(item)] if isinstance(value, list) else []
+
+
 def build_implementation_plan(
     sources: Mapping[str, Any],
     *,
@@ -383,7 +388,12 @@ def _validate_task(task: object, index: int, readiness: str, errors: list[str]) 
         "target_paths", "acceptance_criteria", "dependencies", "required_tests", "verification",
         "rollout_notes", "completion_evidence", "source_condition_refs", "source_action_refs",
     ):
-        _string_list(task.get(field), f"{label}.{field}", errors)
+        _string_list(
+            task.get(field),
+            f"{label}.{field}",
+            errors,
+            allow_empty=field not in {"target_paths", "acceptance_criteria", "verification", "completion_evidence"},
+        )
     paths = task.get("target_paths")
     if isinstance(paths, list):
         for path in paths:
@@ -414,17 +424,17 @@ def _validate_traceability(
     expected_conditions = (
         sorted(set(source_conditions))
         if source_conditions is not None
-        else sorted({ref for task in task_items for ref in task.get("source_condition_refs", []) if _non_empty_string(ref)})
+        else sorted({ref for task in task_items for ref in _task_string_values(task, "source_condition_refs")})
     )
     expected_actions = (
         sorted(set(source_actions))
         if source_actions is not None
-        else sorted({ref for task in task_items for ref in task.get("source_action_refs", []) if _non_empty_string(ref)})
+        else sorted({ref for task in task_items for ref in _task_string_values(task, "source_action_refs")})
     )
     expected_tests = (
         sorted(set(required_tests))
         if required_tests is not None
-        else sorted({test for task in task_items for test in task.get("required_tests", []) if _non_empty_string(test)})
+        else sorted({test for task in task_items for test in _task_string_values(task, "required_tests")})
     )
     for group, sources in (
         ("condition_coverage", expected_conditions),
@@ -456,9 +466,12 @@ def validate_external_dependency_cycles(
 ) -> list[str]:
     """Reject only cycles that are provable from the available sibling plan set."""
     available: dict[str, Mapping[str, Any]] = {normalize_repo_identity(str(plan.get("target_repo"))): plan}
+    if sibling_plans is not None and not isinstance(sibling_plans, Mapping):
+        return ["error: sibling_plans must be a mapping"]
     for repo, sibling in (sibling_plans or {}).items():
         if isinstance(sibling, Mapping) and _non_empty_string(repo):
-            available[normalize_repo_identity(repo)] = sibling
+            sibling_repo = sibling.get("target_repo") or repo
+            available[normalize_repo_identity(str(sibling_repo))] = sibling
     graph: dict[str, set[str]] = {repo: set() for repo in available}
     for repo, candidate in available.items():
         dependencies = candidate.get("external_dependencies", [])
@@ -519,6 +532,8 @@ def validate_implementation_plan(
     for field in ("plan_set_id", "plan_id", "title", "target_repo"):
         if not _non_empty_string(plan.get(field)):
             errors.append(f"error: {field} must be a non-empty string")
+    if not isinstance(plan.get("assessment_target"), Mapping):
+        errors.append("error: assessment_target must be a mapping")
     if _non_empty_string(plan.get("target_repo")):
         normalized = normalize_repo_identity(plan["target_repo"])
         expected_id = derive_plan_id(str(plan.get("plan_set_id")), normalized)
@@ -532,6 +547,8 @@ def validate_implementation_plan(
     task_ids: list[str] = []
     dependency_map: dict[str, list[str]] = {}
     if isinstance(tasks, list):
+        if not tasks and readiness == "READY":
+            errors.append("error: READY plan must contain at least one task")
         for index, task in enumerate(tasks):
             task_id, dependencies = _validate_task(task, index, str(readiness), errors)
             if task_id is not None:
@@ -683,6 +700,8 @@ def select_next_task(
     tasks = {task["task_id"]: task for task in plan.get("tasks", []) if isinstance(task, Mapping)}
     statuses = {task_id: "PENDING" for task_id in tasks}
     if task_statuses is not None:
+        if not isinstance(task_statuses, Mapping):
+            return None
         if set(task_statuses) != set(tasks) or any(status not in TASK_STATUSES for status in task_statuses.values()):
             return None
         statuses.update({task_id: status for task_id, status in task_statuses.items() if task_id in tasks})
@@ -756,6 +775,8 @@ def reconcile_plan_execution_state(
     """Reconcile advisory checkpoint data to official task state and current SCM head."""
     if plan.get("readiness") != "READY":
         return None, ["error: implementation_plan must be READY before execution-state reconciliation"]
+    if not isinstance(authoritative_task_statuses, Mapping):
+        return None, ["error: authoritative task statuses must be a mapping"]
     errors = validate_plan_execution_state(
         state,
         plan,
