@@ -212,6 +212,11 @@ def execution_branch_name(plan_id: str, task_id: str, identity: str) -> str:
         raise ValueError("execution_branch_name requires a SHA-256 execution identity")
     safe_plan = "".join(char if char.isalnum() or char in "-_" else "-" for char in plan_id).strip("-")
     safe_task = "".join(char if char.isalnum() or char in "-_" else "-" for char in task_id).strip("-")
+    if not safe_plan or not safe_task:
+        # A plan_id/task_id built entirely from characters outside [A-Za-z0-9_-] sanitizes to an
+        # empty segment, which would otherwise produce an invalid git ref (a "//" component, or
+        # one starting with "-" that risks being parsed as a flag by an unquoted git subcommand).
+        raise ValueError("execution_branch_name requires a plan_id and task_id with at least one alphanumeric/-/_ character")
     return f"loop-plan/{safe_plan[:48]}/{safe_task[:40]}-{identity[:12]}"
 
 
@@ -256,7 +261,10 @@ def prepare_remote_write(
         str(plan.get("target_repo")),
         base_revision,
     )
-    branch_name = execution_branch_name(str(plan.get("plan_id")), task_id, identity)
+    try:
+        branch_name = execution_branch_name(str(plan.get("plan_id")), task_id, identity)
+    except ValueError as exc:
+        return RemoteWriteDecision(status="BLOCKED", branch_name=None, reason=str(exc), create_fallback_branch=False)
     if observed_branch_owner is not None and observed_branch_owner != actor:
         return RemoteWriteDecision(
             status="BLOCKED",

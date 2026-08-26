@@ -443,6 +443,25 @@ def test_execution_branch_name_requires_a_sha256_identity() -> None:
         raise AssertionError("execution_branch_name must reject a non-SHA-256 identity")
 
 
+def test_execution_branch_name_rejects_a_plan_or_task_id_that_sanitizes_to_empty() -> None:
+    identity = execution_identity("a" * 64, "TASK-001", "b" * 64, "github.com/acme/payments", "c" * 40)
+    for bad_plan_id, bad_task_id in (("!!!", "TASK-001"), ("PLANSET-abc-123", "!!!")):
+        try:
+            execution_branch_name(bad_plan_id, bad_task_id, identity)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("execution_branch_name must reject an all-sanitized-away plan_id/task_id")
+
+
+def test_prepare_remote_write_blocks_instead_of_raising_on_unsanitizable_task_id() -> None:
+    plan = _plan()
+    plan["tasks"][0]["task_id"] = "!!!"
+    result = prepare_remote_write(plan, "!!!", base_revision="c" * 40, actor="run-a")
+    assert result.status == "BLOCKED"
+    assert result.branch_name is None
+
+
 def test_existing_peer_branch_blocks_second_remote_dispatch() -> None:
     plan = _plan()
     result = prepare_remote_write(
