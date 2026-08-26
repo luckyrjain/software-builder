@@ -247,7 +247,7 @@ def test_builder_uses_repository_estimate_to_produce_a_ready_plan() -> None:
         {
             "system_design_spec": {"payload": {"title": "Checkout", "readiness": "Ready", "assessment_target": {"repo": "github.com/acme/checkout"}}},
             "architecture_review_report": {"payload": {"normalized_decision": {"status": "PASS"}}},
-            "change_impact_report": {"payload": {"title": "Impact", "assessment_target": {"repo": "github.com/acme/checkout"}, "target_paths": ["src/checkout.py"], "required_tests": ["pytest -q tests/test_checkout.py"], "review_triggers": []}},
+            "change_impact_report": {"skill_result": {"status": "SUCCESS"}, "payload": {"title": "Impact", "assessment_target": {"repo": "github.com/acme/checkout"}, "coverage_status": "COMPLETE", "target_paths": ["src/checkout.py"], "required_tests": ["pytest -q tests/test_checkout.py"], "review_triggers": []}},
         },
         repository_evidence={"estimated_scope": {"estimate_known": True, "files_upper_bound": 1, "changed_lines_upper_bound": 100, "confidence": "HIGH"}},
     )
@@ -356,7 +356,7 @@ def test_builder_uses_repository_target_paths_when_impact_has_no_path_field() ->
         {
             "system_design_spec": {"payload": {"title": "Checkout", "readiness": "Ready", "assessment_target": {"repo": "github.com/acme/checkout"}}},
             "architecture_review_report": {"payload": {"normalized_decision": {"status": "PASS"}}},
-            "change_impact_report": {"payload": {"title": "Impact", "assessment_target": {"repo": "github.com/acme/checkout"}, "required_tests": [], "review_triggers": []}},
+            "change_impact_report": {"skill_result": {"status": "SUCCESS"}, "payload": {"title": "Impact", "assessment_target": {"repo": "github.com/acme/checkout"}, "coverage_status": "COMPLETE", "required_tests": [], "review_triggers": []}},
         },
         repository_evidence={
             "target_paths": ["src/checkout.py"],
@@ -365,3 +365,21 @@ def test_builder_uses_repository_target_paths_when_impact_has_no_path_field() ->
     )
     assert plan["readiness"] == "READY"
     assert plan["tasks"][0]["target_paths"] == ["src/checkout.py"]
+
+
+def test_builder_blocks_incomplete_or_multi_repository_impact() -> None:
+    sources = {
+        "system_design_spec": {"payload": {"title": "Checkout", "readiness": "Ready", "assessment_target": {"repo": "github.com/acme/checkout"}}},
+        "architecture_review_report": {"payload": {"normalized_decision": {"status": "PASS"}}},
+        "change_impact_report": {"payload": {
+            "assessment_target": {"repo": "github.com/acme/checkout"},
+            "coverage_status": "COMPLETE",
+            "impacted_repositories": ["github.com/acme/checkout", "github.com/acme/catalog"],
+            "target_paths": ["src/checkout.py"],
+            "review_triggers": [],
+        }},
+    }
+    plan = build_implementation_plan(sources, repository_evidence={
+        "estimated_scope": {"estimate_known": True, "files_upper_bound": 1, "changed_lines_upper_bound": 100, "confidence": "HIGH"},
+    })
+    assert plan["readiness"] == "BLOCKED"

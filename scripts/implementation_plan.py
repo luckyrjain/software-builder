@@ -228,6 +228,19 @@ def build_implementation_plan(
         "system_design": _source_status(sources.get("system_design_spec")),
         "architecture": _source_status(sources.get("architecture_review_report")),
     }
+    impact_status = _source_status(sources.get("change_impact_report"))
+    if impact.get("coverage_status") != "COMPLETE":
+        impact_status = "PARTIAL"
+    statuses["change_impact"] = impact_status
+    impacted_repositories = impact.get("impacted_repositories")
+    if isinstance(impacted_repositories, list):
+        normalized_repositories = sorted({
+            normalize_repo_identity(repository)
+            for repository in impacted_repositories
+            if _non_empty_string(repository)
+        })
+        if len(normalized_repositories) > 1:
+            errors.append("change impact names multiple repositories; invoke planner once per repository")
     triggers = [
         str(item) for item in impact.get("review_triggers", [])
         if isinstance(item, str) and item in SPECIALIST_ARTIFACTS
@@ -283,7 +296,7 @@ def build_implementation_plan(
     readiness = "READY"
     if errors:
         readiness = "BLOCKED"
-    elif any(status in {"FAIL", "FAILED", "UNKNOWN", "BLOCKED", "NOT_READY"} for status in statuses.values()):
+    elif any(status in {"FAIL", "FAILED", "UNKNOWN", "BLOCKED", "NOT_READY", "PARTIAL"} for status in statuses.values()):
         readiness = "BLOCKED"
     elif not repository_evidence or estimate.get("estimate_known") is not True:
         readiness = "PARTIAL"
@@ -454,7 +467,7 @@ def _validate_traceability(
 def _validate_source_readiness(plan: Mapping[str, Any], source_statuses: Mapping[str, str], errors: list[str]) -> None:
     if plan.get("readiness") != "READY":
         return
-    blocking = {"FAIL", "FAILED", "UNKNOWN", "BLOCKED", "NOT_READY"}
+    blocking = {"FAIL", "FAILED", "UNKNOWN", "BLOCKED", "NOT_READY", "PARTIAL"}
     for source, status in source_statuses.items():
         if status in blocking:
             errors.append(f"error: READY plan has blocking source status {source}={status}")
