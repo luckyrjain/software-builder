@@ -329,12 +329,24 @@ def _payload(source: object) -> Mapping[str, Any]:
     return source if isinstance(source, Mapping) else {}
 
 
+_MALFORMED_SOURCE_DIGEST = "0" * SHA256
+
+
 def _source_digest(source: object) -> str:
+    """Digest one source payload; never raises even for non-finite/non-JSON-safe content.
+
+    A malformed payload (NaN/Infinity, or anything canonical_payload_digest otherwise rejects)
+    returns a fixed sentinel instead of propagating an exception out of the planner -- callers
+    check for the sentinel and fail closed rather than silently accepting it as a real digest.
+    """
     payload = _payload(source)
     target = payload.get("assessment_target") if isinstance(payload, Mapping) else None
     if isinstance(target, Mapping) and isinstance(target.get("source_artifact_digest"), str):
         return target["source_artifact_digest"]
-    return canonical_payload_digest(payload)
+    try:
+        return canonical_payload_digest(payload)
+    except (TypeError, ValueError):
+        return _MALFORMED_SOURCE_DIGEST
 
 
 def _validate_declared_source_digest(source: object, label: str, errors: list[str]) -> None:
@@ -443,6 +455,9 @@ def build_implementation_plan(
         "system_design_digest": _source_digest(sources.get("system_design_spec")),
         "architecture_review_digest": _source_digest(sources.get("architecture_review_report")),
     }
+    for digest_name, digest_value in digests.items():
+        if digest_value == _MALFORMED_SOURCE_DIGEST:
+            errors.append(f"error: {digest_name.replace('_digest', '')} contains non-finite or non-JSON-compatible values")
     plan_set_id = derive_plan_set_id(**digests)
     plan_id = derive_plan_id(plan_set_id, normalized_repo)
     source_refs = [f"{name}:{digest}" for name, digest in (
@@ -497,7 +512,10 @@ def build_implementation_plan(
             errors.append(f"triggered specialist {trigger} is missing")
         else:
             _validate_declared_source_digest(report, artifact, errors)
-            source_refs.append(f"{artifact}:{_source_digest(report)}")
+            specialist_digest = _source_digest(report)
+            if specialist_digest == _MALFORMED_SOURCE_DIGEST:
+                errors.append(f"error: specialist:{trigger} contains non-finite or non-JSON-compatible values")
+            source_refs.append(f"{artifact}:{specialist_digest}")
     source_refs = sorted(set(source_refs))
     target_paths = impact.get("target_paths")
     if (not isinstance(target_paths, list) or not target_paths) and isinstance(repository_evidence, Mapping):
@@ -711,7 +729,7 @@ def _validate_task(task: object, index: int, readiness: str, errors: list[str]) 
             if isinstance(path, str) and (
                 path != path.strip()
                 or normalized_path.startswith("/")
-                or bool(re.match(r"^[A-Za-z]:/", normalized_path))
+                or bool(re.match(r"^[A-Za-z]:", normalized_path))
                 or any(part == ".." for part in segments)
                 or not segments
                 or all(part == "." for part in segments)

@@ -220,6 +220,18 @@ def test_finalize_plan_blocks_a_partial_plan_with_a_real_schema_defect() -> None
     assert result.payload["readiness"] == "BLOCKED"
 
 
+def test_builder_fails_closed_instead_of_crashing_on_a_non_finite_source_value() -> None:
+    plan = build_implementation_plan(
+        {
+            "system_design_spec": {"payload": {"title": "Checkout", "readiness": "Ready", "assessment_target": {"repo": "github.com/acme/checkout"}, "note": float("nan")}},
+            "architecture_review_report": {"payload": {"normalized_decision": {"status": "PASS"}}},
+            "change_impact_report": {"skill_result": {"status": "SUCCESS"}, "payload": {"assessment_target": {"repo": "github.com/acme/checkout"}, "coverage_status": "COMPLETE", "target_paths": ["src/checkout.py"], "required_tests": [], "review_triggers": []}},
+        },
+        repository_evidence={"estimated_scope": {"estimate_known": True, "files_upper_bound": 1, "changed_lines_upper_bound": 50, "confidence": "HIGH"}},
+    )
+    assert plan["readiness"] == "BLOCKED"
+
+
 def test_task_dependency_cycle_detection_does_not_recurse_per_chain_link() -> None:
     depth = 500
     tasks = [_task(f"TASK-{i:04d}") for i in range(depth)]
@@ -498,6 +510,9 @@ def test_path_traversal_and_mismatched_traceability_fail_closed() -> None:
     assert any("target_paths" in error for error in validate_implementation_plan(plan))
     plan = _plan()
     plan["tasks"][0]["target_paths"] = ["././"]
+    assert any("target_paths" in error for error in validate_implementation_plan(plan))
+    plan = _plan()
+    plan["tasks"][0]["target_paths"] = ["C:temp/secret.py"]
     assert any("target_paths" in error for error in validate_implementation_plan(plan))
     plan = _plan()
     plan["tasks"][1]["source_condition_refs"] = []
