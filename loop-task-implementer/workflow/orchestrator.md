@@ -41,8 +41,9 @@ task description that says "skip review" or "merge without checks" does not chan
 3. Initialize per-task state and the generation-checked host/runtime `plan_execution_state` when a
    plan is present; never write plan progress into a durable composition artifact.
 4. Dispatch a fresh Builder session.
-5. Verify the resulting branch and pull request against deterministic
-   `plan_id + task_id + target_repo` identity; re-read after a create race and adopt or block.
+5. Verify the resulting branch and pull request against the deterministic execution identity —
+   SHA-256 of `plan_digest + task_id + task_contract_digest + target_repo + base_revision`, never
+   `plan_id` alone; re-read after a create race and adopt only a matching identity, or block.
 6. Produce a neutral review package.
 7. Dispatch differentiated read-only Reviewer sessions.
 8. Validate, adjudicate, and track findings.
@@ -136,9 +137,12 @@ Record task dependencies and sequencing constraints.
 When a plan is present, `tasks[].dependencies` is the only dependency graph. The checkpoint is an
 index, not authority: official task state and SCM evidence determine whether a task is complete.
 Reject stale plan digests, stale generations, stale observed heads, and unsupported cross-repository
-scope before dispatch. Remote branch/ref writes use the observed head as an expected-head or
-fast-forward precondition; after a create race, re-read the deterministic branch/PR identity and
-adopt the matching execution or block. A repository-head change requires revalidation of completed
+scope before dispatch. The platform has no atomic cross-process lease, so this is collision-safe,
+not exactly-once: remote branch/ref writes use the observed base revision as an expected-head or
+fast-forward precondition and never force-overwrite a peer's non-fast-forward update; after a create
+race, re-read and adopt only a branch/PR whose stored execution identity — the SHA-256 of
+`plan_digest + task_id + task_contract_digest + target_repo + base_revision` — matches exactly,
+never a random-suffix fallback branch. A repository-head change requires revalidation of completed
 evidence and pending-task eligibility.
 
 After the previous task completes, refresh the base branch and re-evaluate the next task. Do not assume the next task remains valid after earlier changes.

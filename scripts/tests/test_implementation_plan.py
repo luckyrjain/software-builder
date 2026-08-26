@@ -5,18 +5,18 @@ from copy import deepcopy
 from scripts.implementation_plan import (
     canonical_plan_digest,
     derive_plan_id,
+    derive_plan_ids,
     derive_plan_set_id,
-    advance_plan_execution_state,
     build_implementation_plan,
-    execution_branch_name,
-    execution_identity,
-    initial_plan_execution_state,
+    finalize_plan,
     normalize_plan_task,
-    reconcile_plan_execution_state,
+    plan_from_sources,
     select_next_task,
+    source_digest_bundle,
     validate_external_dependency_cycles,
     validate_implementation_plan,
-    validate_plan_execution_state,
+    validate_plan,
+    validate_plan_set,
     _load_json,
 )
 
@@ -156,11 +156,6 @@ def test_malformed_nested_values_and_keys_fail_closed_without_raising() -> None:
     errors = validate_implementation_plan(plan)
     assert errors
 
-    state = initial_plan_execution_state(_plan(), current_head="a" * 40, updated_at="2026-08-26T00:00:00Z")
-    state["task_statuses"]["TASK-001"] = []
-    errors = validate_plan_execution_state(state, _plan(), current_head="a" * 40)
-    assert errors
-
 
 def test_cli_json_loader_rejects_duplicate_and_nonfinite_values(tmp_path) -> None:
     duplicate = tmp_path / "duplicate.json"
@@ -213,54 +208,6 @@ def test_source_failure_blocks_ready_but_allows_partial() -> None:
         source_statuses={"system_design": "READY", "architecture": "PASS", "specialist:resilience": "UNKNOWN"},
     )
     assert any("blocking source status" in error for error in errors)
-
-
-def test_execution_state_requires_plan_digest_and_monotonic_generation() -> None:
-    plan = _plan()
-    state = {
-        "schema_version": 1,
-        "plan_id": plan["plan_id"],
-        "plan_digest": canonical_plan_digest(plan),
-        "target_repo": plan["target_repo"],
-        "state_generation": 2,
-        "current_task_id": "TASK-001",
-        "task_statuses": {"TASK-001": "IN_PROGRESS", "TASK-002": "PENDING"},
-        "completed_evidence_refs": [],
-        "observed_head_revision": "a" * 40,
-        "blocked_reason": None,
-        "updated_at": "2026-08-26T00:00:00Z",
-    }
-    assert validate_plan_execution_state(state, plan, current_head="a" * 40) == []
-    state["plan_digest"] = "b" * 64
-    assert any("plan_digest" in error for error in validate_plan_execution_state(state, plan, current_head="a" * 40))
-
-
-def test_execution_state_blocks_stale_head_and_generation() -> None:
-    plan = _plan()
-    state = {
-        "schema_version": 1,
-        "plan_id": plan["plan_id"],
-        "plan_digest": canonical_plan_digest(plan),
-        "target_repo": plan["target_repo"],
-        "state_generation": 0,
-        "current_task_id": None,
-        "task_statuses": {"TASK-001": "PENDING", "TASK-002": "PENDING"},
-        "completed_evidence_refs": [],
-        "observed_head_revision": "a" * 40,
-        "blocked_reason": None,
-        "updated_at": "2026-08-26T00:00:00Z",
-    }
-    errors = validate_plan_execution_state(state, plan, current_head="b" * 40, minimum_generation=1)
-    assert any("generation" in error for error in errors)
-    assert any("head" in error for error in errors)
-
-
-def test_execution_identity_and_branch_are_stable_and_repo_bound() -> None:
-    identity = execution_identity("PLANSET-abc-123", "TASK-001", "https://github.com/acme/checkout.git")
-    assert identity == "PLANSET-abc-123:TASK-001:https://github.com/acme/checkout"
-    branch = execution_branch_name("PLANSET-abc-123", "TASK-001", "https://github.com/acme/checkout.git")
-    assert branch == execution_branch_name("PLANSET-abc-123", "TASK-001", "https://github.com/acme/checkout")
-    assert branch.startswith("loop-plan/PLANSET-abc-123/TASK-001-")
 
 
 def test_builder_blocks_when_triggered_specialist_or_paths_are_missing() -> None:
@@ -383,61 +330,6 @@ def test_plan_task_normalization_preserves_legacy_task_inputs() -> None:
     }
 
 
-def test_execution_state_reconciles_to_authoritative_task_statuses() -> None:
-    plan = _plan()
-    state = initial_plan_execution_state(plan, current_head="a" * 40, updated_at="2026-08-26T00:00:00Z")
-    reconciled, errors = reconcile_plan_execution_state(
-        state,
-        plan,
-        authoritative_task_statuses={"TASK-001": "COMPLETE", "TASK-002": "NOT_STARTED"},
-        current_head="a" * 40,
-        completed_evidence_refs=["ci:task-001", "ci:task-001"],
-    )
-    assert errors == []
-    assert reconciled is not None
-    assert reconciled["task_statuses"] == {"TASK-001": "COMPLETE", "TASK-002": "PENDING"}
-    assert reconciled["completed_evidence_refs"] == ["ci:task-001"]
-
-
-def test_execution_state_cannot_launder_caller_complete_status() -> None:
-    plan = _plan()
-    state = initial_plan_execution_state(plan, current_head="a" * 40, updated_at="2026-08-26T00:00:00Z")
-    state["task_statuses"]["TASK-001"] = "COMPLETE"
-    reconciled, errors = reconcile_plan_execution_state(
-        state,
-        plan,
-        authoritative_task_statuses={"TASK-001": "NOT_STARTED", "TASK-002": "NOT_STARTED"},
-        current_head="a" * 40,
-    )
-    assert errors == []
-    assert reconciled is not None
-    assert reconciled["task_statuses"]["TASK-001"] == "PENDING"
-
-
-def test_execution_state_compare_and_swap_rejects_stale_writer() -> None:
-    plan = _plan()
-    state = initial_plan_execution_state(plan, current_head="a" * 40, updated_at="2026-08-26T00:00:00Z")
-    advanced, errors = advance_plan_execution_state(
-        state,
-        plan,
-        expected_generation=0,
-        authoritative_task_statuses={"TASK-001": "BUILDING", "TASK-002": "NOT_STARTED"},
-        current_head="a" * 40,
-        updated_at="2026-08-26T00:01:00Z",
-    )
-    assert errors == []
-    assert advanced is not None and advanced["state_generation"] == 1
-    _, newer_errors = advance_plan_execution_state(
-        advanced,
-        plan,
-        expected_generation=0,
-        authoritative_task_statuses={"TASK-001": "COMPLETE", "TASK-002": "NOT_STARTED"},
-        current_head="a" * 40,
-        updated_at="2026-08-26T00:03:00Z",
-    )
-    assert any("compare-and-swap" in error for error in newer_errors)
-
-
 def test_external_dependency_cycles_are_only_rejected_when_provable() -> None:
     plan = _plan()
     plan["target_repo"] = "github.com/acme/one"
@@ -458,7 +350,7 @@ def test_external_dependency_cycles_are_only_rejected_when_provable() -> None:
         "reason": "shared contract",
         "evidence_ref": "plan:one",
     }]
-    assert any("provable cycle" in error for error in validate_external_dependency_cycles(plan, {"github.com/acme/two": sibling}))
+    assert any("cross-repository cycle" in error for error in validate_external_dependency_cycles(plan, {"github.com/acme/two": sibling}))
 
 
 def test_builder_uses_repository_target_paths_when_impact_has_no_path_field() -> None:
@@ -515,3 +407,65 @@ def test_builder_preserves_explicit_external_dependencies() -> None:
     )
     assert plan["external_dependencies"] == [dependency]
     assert validate_implementation_plan(plan) == []
+
+
+def test_source_digest_bundle_and_derive_plan_ids_are_deterministic_and_repo_specific() -> None:
+    bundle = source_digest_bundle("design-a")
+    assert derive_plan_ids(bundle, "github.com/acme/payments") == derive_plan_ids(bundle, "github.com/acme/payments")
+    plan_set_id, plan_id = derive_plan_ids(bundle, "github.com/acme/payments")
+    assert plan_id == derive_plan_id(plan_set_id, "github.com/acme/payments")
+    other_bundle_plan_set_id, _ = derive_plan_ids(source_digest_bundle("design-b"), "github.com/acme/payments")
+    assert other_bundle_plan_set_id != plan_set_id
+
+
+def test_validate_plan_and_plan_from_sources_are_the_canonical_aliases() -> None:
+    assert validate_plan is validate_implementation_plan
+    assert plan_from_sources is build_implementation_plan
+    assert validate_plan(_plan()) == []
+
+
+def test_validate_plan_set_rejects_cross_repo_cycle_and_keeps_missing_sibling_unresolved() -> None:
+    plan_a = _plan()
+    plan_a["target_repo"] = "github.com/acme/one"
+    plan_a["plan_id"] = derive_plan_id(plan_a["plan_set_id"], plan_a["target_repo"])
+    plan_a["external_dependencies"] = [{
+        "repo": "github.com/acme/two",
+        "required_state_or_artifact": "plan complete",
+        "reason": "shared contract",
+        "evidence_ref": "plan:two",
+    }]
+    plan_b = deepcopy(plan_a)
+    plan_b["target_repo"] = "github.com/acme/two"
+    plan_b["plan_id"] = derive_plan_id(plan_b["plan_set_id"], plan_b["target_repo"])
+    plan_b["external_dependencies"] = [{
+        "repo": "github.com/acme/one",
+        "required_state_or_artifact": "plan complete",
+        "reason": "shared contract",
+        "evidence_ref": "plan:one",
+    }]
+    assert any("cross-repository cycle" in error for error in validate_plan_set([plan_a, plan_b]))
+    assert not any("cross-repository cycle" in error for error in validate_plan_set([plan_a]))
+
+    mismatched_plan_set = deepcopy(plan_b)
+    mismatched_plan_set["plan_set_id"] = "PLANSET-different0000"
+    assert any("plan_set_id" in error for error in validate_plan_set([plan_a, mismatched_plan_set]))
+
+
+def test_finalize_plan_maps_readiness_to_execution_status() -> None:
+    ready = finalize_plan(_plan())
+    assert ready.payload["readiness"] == "READY"
+    assert ready.skill_result.status == "SUCCESS"
+
+    partial_plan = _plan()
+    partial_plan["readiness"] = "PARTIAL"
+    partial = finalize_plan(partial_plan)
+    assert partial.payload["readiness"] == "PARTIAL"
+    assert partial.skill_result.status == "PARTIAL"
+
+    broken_plan = _plan()
+    broken_plan["tasks"] = [_task("A", ["B"]), _task("B", ["A"])]
+    blocked = finalize_plan(broken_plan)
+    assert blocked.skill_result.status == "BLOCKED"
+
+    failed = finalize_plan("not-a-plan")
+    assert failed.skill_result.status == "FAILED"

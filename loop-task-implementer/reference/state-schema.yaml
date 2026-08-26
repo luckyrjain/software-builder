@@ -28,6 +28,13 @@ task:
   status: NOT_STARTED  # NOT_STARTED | BUILDING | REVIEWING | VALIDATING | READY | COMPLETE | ESCALATED
   started_at: null
   completed_at: null
+  # Present only when this task was normalized from an implementation_plan. Traces this task back
+  # to its plan without granting any authority beyond the legacy task schema above.
+  plan_context:
+    plan_id: null
+    plan_digest: null
+    source_plan_task_id: null
+    state_generation: null
 
 repository:
   repo: null

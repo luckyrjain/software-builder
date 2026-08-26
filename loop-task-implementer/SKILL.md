@@ -135,10 +135,10 @@ Initialize state from [reference/state-schema.yaml](reference/state-schema.yaml)
 
 For an `implementation_plan`, validate its digest and `READY` status before dispatch. Reconcile the
 checkpoint to official per-task state and authoritative SCM evidence, require a monotonic
-`state_generation`, and revalidate when the repository head moves. Execution identity is
-`plan_id + task_id + target_repo`; an existing deterministic branch/PR is adopted after re-read, and
-a conflicting active execution blocks duplicate creation. Caller-supplied checkpoint status is
-advisory and cannot mark a task complete.
+`state_generation`, and revalidate when the repository head moves. Remote dispatch is collision-safe,
+not exactly-once — see [workflow/orchestrator.md](workflow/orchestrator.md) for the SHA-256 execution
+identity and expected-head/fast-forward rules. Caller-supplied checkpoint status is advisory and
+cannot mark a task complete.
 
 ## Role prompts and lifecycle adapters
 

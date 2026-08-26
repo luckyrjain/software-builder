@@ -27,6 +27,12 @@ design-time specialist report named by `change_impact_report.review_triggers`. A
 triggered report is an explicit planning blocker. Repository read is required for target paths,
 verification commands, and conservative scope estimates.
 
+## Capabilities
+
+- Required: `host.report.write` for emitting `implementation_plan`.
+- Required: `host.repository.read` for grounding target paths, verification commands, and scope
+  estimates. Without it, planning cannot safely reach `READY` and returns `PARTIAL`/`BLOCKED`.
+
 ## Contract rules
 
 - `plan_set_id` and `plan_id` are deterministic SHA-256-derived identities.

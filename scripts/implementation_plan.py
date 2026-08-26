@@ -7,7 +7,7 @@ import copy
 import json
 import re
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Mapping, NamedTuple
 
 from scripts.registry.assessment_target import canonical_payload_digest, normalize_repo_identity
 from scripts.registry.semantic_document import is_sha256_digest
@@ -129,22 +129,198 @@ def derive_plan_id(plan_set_id: str, target_repo: str) -> str:
     return f"{plan_set_id}-{canonical_payload_digest(normalized)[:8]}"
 
 
+def source_digest_bundle(label: str) -> dict[str, str]:
+    """Return a deterministic three-digest bundle for a named set of upstream sources.
+
+    Lets callers (and tests) exercise plan-identity derivation from a stable label instead of
+    full artifact payloads; each digest is namespaced by both its own field name and the label
+    so two different labels never collide and the same label always reproduces the same bundle.
+    """
+    return {
+        "change_impact_digest": canonical_payload_digest({"label": label, "source": "change_impact_report"}),
+        "system_design_digest": canonical_payload_digest({"label": label, "source": "system_design_spec"}),
+        "architecture_review_digest": canonical_payload_digest({"label": label, "source": "architecture_review_report"}),
+    }
+
+
+def derive_plan_ids(source: Mapping[str, str], target_repo: str) -> tuple[str, str]:
+    """Return ``(plan_set_id, plan_id)`` for a source digest bundle and target repository."""
+    plan_set_id = derive_plan_set_id(**dict(source))
+    return plan_set_id, derive_plan_id(plan_set_id, target_repo)
+
+
 def canonical_plan_digest(plan: Mapping[str, Any]) -> str:
     """Digest the complete canonical plan payload for resume and immutability checks."""
     return canonical_payload_digest(dict(plan))
 
 
-def execution_identity(plan_id: str, task_id: str, target_repo: str) -> str:
-    """Return the stable identity used for branch/PR adoption and race detection."""
-    return ":".join((plan_id, task_id, normalize_repo_identity(target_repo)))
+TASK_CONTRACT_FIELDS = (
+    "dependencies",
+    "target_paths",
+    "acceptance_criteria",
+    "required_tests",
+    "verification",
+    "rollout_notes",
+    "completion_evidence",
+)
 
 
-def execution_branch_name(plan_id: str, task_id: str, target_repo: str) -> str:
-    """Return a deterministic, bounded branch name for one plan task."""
-    digest = canonical_payload_digest(execution_identity(plan_id, task_id, target_repo))[:12]
+def task_contract_digest(task: Mapping[str, Any]) -> str:
+    """Digest the binding contract fields of one plan task.
+
+    Only the fields that determine what Builder actually does (dependencies, target paths,
+    acceptance criteria, tests, verification, rollout notes, completion evidence) are covered.
+    A plan revision that leaves a task's contract untouched keeps the same digest; a revision
+    that changes what the task requires must not be able to reuse a prior remote claim.
+    """
+    contract = {field: task.get(field) for field in TASK_CONTRACT_FIELDS}
+    return canonical_payload_digest(contract)
+
+
+def execution_identity(
+    plan_digest: str,
+    task_id: str,
+    task_digest: str,
+    target_repo: str,
+    base_revision: str,
+) -> str:
+    """Return the SHA-256 collision-safe identity binding one plan task execution.
+
+    ``plan_id`` alone is not sufficient for remote adoption because task contents can change
+    while source-derived plan identity remains stable; this identity is therefore derived from
+    the full plan digest, the task's own contract digest, the canonical target repository, and
+    the authoritative base revision observed immediately before Builder dispatch.
+    """
+    payload = {
+        "plan_digest": plan_digest,
+        "task_id": task_id,
+        "task_digest": task_digest,
+        "target_repo": normalize_repo_identity(target_repo),
+        "base_revision": base_revision,
+    }
+    return canonical_payload_digest(payload)
+
+
+def execution_branch_name(plan_id: str, task_id: str, identity: str) -> str:
+    """Return a deterministic, bounded branch name bound to a full execution identity.
+
+    ``identity`` must be the SHA-256 hex digest from :func:`execution_identity`. The branch name
+    embeds a collision-resistant prefix of it purely for legibility; it is never treated as
+    sufficient proof of identity by itself — callers must re-read and compare the full identity.
+    """
+    if not is_sha256_digest(identity):
+        raise ValueError("execution_branch_name requires a SHA-256 execution identity")
     safe_plan = "".join(char if char.isalnum() or char in "-_" else "-" for char in plan_id).strip("-")
     safe_task = "".join(char if char.isalnum() or char in "-_" else "-" for char in task_id).strip("-")
-    return f"loop-plan/{safe_plan[:48]}/{safe_task[:40]}-{digest}"
+    return f"loop-plan/{safe_plan[:48]}/{safe_task[:40]}-{identity[:12]}"
+
+
+class RemoteWriteDecision(NamedTuple):
+    """Outcome of :func:`prepare_remote_write`."""
+
+    status: str
+    branch_name: str | None
+    identity: str | None = None
+    reason: str | None = None
+    create_fallback_branch: bool = False
+
+
+def prepare_remote_write(
+    plan: Mapping[str, Any],
+    task_id: str,
+    *,
+    base_revision: str,
+    actor: str,
+    observed_branch_owner: str | None = None,
+) -> RemoteWriteDecision:
+    """Decide whether ``actor`` may create or advance the deterministic branch for one task.
+
+    The platform exposes no atomic cross-process lease, so this never claims exactly-once
+    dispatch across independent invocations. It only enforces the supported contract: the
+    deterministic branch/identity is the collision detector, and this never authorizes a
+    random-suffix fallback branch. If the deterministic branch is already observed to be owned
+    by a different actor, the caller must block rather than create a second remote write.
+    """
+    task = next(
+        (item for item in plan.get("tasks", []) if isinstance(item, Mapping) and item.get("task_id") == task_id),
+        None,
+    )
+    if task is None:
+        return RemoteWriteDecision(
+            status="BLOCKED", branch_name=None, reason=f"unknown task_id {task_id}", create_fallback_branch=False
+        )
+    identity = execution_identity(
+        canonical_plan_digest(plan),
+        task_id,
+        task_contract_digest(task),
+        str(plan.get("target_repo")),
+        base_revision,
+    )
+    branch_name = execution_branch_name(str(plan.get("plan_id")), task_id, identity)
+    if observed_branch_owner is not None and observed_branch_owner != actor:
+        return RemoteWriteDecision(
+            status="BLOCKED",
+            branch_name=branch_name,
+            identity=identity,
+            reason="deterministic branch is already claimed by another actor",
+            create_fallback_branch=False,
+        )
+    return RemoteWriteDecision(status="READY", branch_name=branch_name, identity=identity, create_fallback_branch=False)
+
+
+class PushCollisionDecision(NamedTuple):
+    """Outcome of :func:`handle_push_collision`."""
+
+    status: str
+    force_push: bool = False
+    reason: str | None = None
+
+
+def handle_push_collision(expected_head: str, actual_head: str) -> PushCollisionDecision:
+    """Decide the outcome of a push whose precondition was ``expected_head``.
+
+    Pushes use expected-head/fast-forward semantics only; a peer's non-fast-forward update to
+    the remote branch is never force-overwritten.
+    """
+    if expected_head == actual_head:
+        return PushCollisionDecision(status="READY", force_push=False)
+    return PushCollisionDecision(
+        status="BLOCKED", force_push=False, reason="remote head advanced past the expected precondition"
+    )
+
+
+class RemoteClaimDecision(NamedTuple):
+    """Outcome of :func:`reconcile_remote_claim`."""
+
+    status: str
+    reuse_existing: bool
+    create_new_pr: bool
+    reason: str | None = None
+
+
+def reconcile_remote_claim(
+    *,
+    execution_identity: str,
+    existing_pr: Mapping[str, Any] | None,
+) -> RemoteClaimDecision:
+    """Decide whether an existing PR may be adopted for this execution identity.
+
+    Adoption requires the existing PR to carry the identical execution identity. A matching
+    ``plan_id`` is never sufficient by itself: the task contract, plan revision, target
+    repository, and base revision must all match, because task contents can change while
+    source-derived plan identity remains stable.
+    """
+    if existing_pr is None:
+        return RemoteClaimDecision(status="READY", reuse_existing=False, create_new_pr=True)
+    stored_identity = existing_pr.get("execution_identity") if isinstance(existing_pr, Mapping) else None
+    if stored_identity == execution_identity:
+        return RemoteClaimDecision(status="READY", reuse_existing=True, create_new_pr=False)
+    return RemoteClaimDecision(
+        status="BLOCKED",
+        reuse_existing=False,
+        create_new_pr=False,
+        reason="existing PR execution identity does not match this plan/task/base-revision",
+    )
 
 
 def _payload(source: object) -> Mapping[str, Any]:
@@ -391,6 +567,10 @@ def build_implementation_plan(
     return plan
 
 
+plan_from_sources = build_implementation_plan
+"""Alias for :func:`build_implementation_plan` matching the planner's public contract name."""
+
+
 def _validate_estimate(
     estimate: object,
     label: str,
@@ -576,7 +756,7 @@ def validate_external_dependency_cycles(
 
     def visit(repo: str) -> None:
         if repo in visiting:
-            errors.append("error: external dependency graph contains a provable cycle")
+            errors.append("error: external dependency graph contains a provable cross-repository cycle")
             return
         if repo in visited:
             return
@@ -715,6 +895,39 @@ def validate_implementation_plan(
     return sorted(set(errors))
 
 
+validate_plan = validate_implementation_plan
+"""Alias for :func:`validate_implementation_plan` matching the planner's public contract name."""
+
+
+def validate_plan_set(plans: list[Mapping[str, Any]]) -> list[str]:
+    """Validate every plan in a cross-repository plan set sharing one ``plan_set_id``.
+
+    Each plan is validated on its own terms, using every other plan in the set as sibling
+    evidence for external-dependency cycle detection (:func:`validate_external_dependency_cycles`).
+    A plan whose sibling is not present in ``plans`` keeps its external dependency unresolved
+    rather than being treated as satisfied or as a cycle.
+    """
+    valid_plans = [plan for plan in plans if isinstance(plan, Mapping)]
+    if len(valid_plans) != len(plans):
+        return ["error: validate_plan_set requires every entry to be a plan mapping"]
+    plan_set_ids = {plan.get("plan_set_id") for plan in valid_plans}
+    if len(plan_set_ids) > 1:
+        return ["error: validate_plan_set requires every plan to share one plan_set_id"]
+    siblings_by_repo = {
+        normalize_repo_identity(str(plan.get("target_repo"))): plan
+        for plan in valid_plans
+        if _non_empty_string(plan.get("target_repo"))
+    }
+    errors: list[str] = []
+    for plan in valid_plans:
+        own_repo = (
+            normalize_repo_identity(str(plan.get("target_repo"))) if _non_empty_string(plan.get("target_repo")) else None
+        )
+        siblings = {repo: sibling for repo, sibling in siblings_by_repo.items() if repo != own_repo}
+        errors.extend(validate_implementation_plan(plan, sibling_plans=siblings))
+    return sorted(set(errors))
+
+
 def validate_plan_execution_state(
     state: object,
     plan: Mapping[str, Any],
@@ -826,6 +1039,54 @@ def select_next_task(
     return None
 
 
+def select_eligible_task(plan: Mapping[str, Any], state: Mapping[str, Any] | None = None) -> str | None:
+    """Return the ``task_id`` of the earliest dependency-satisfied task, or ``None``.
+
+    Thin wrapper over :func:`select_next_task` for callers that only need the identifier.
+    """
+    task_statuses = state.get("task_statuses") if isinstance(state, Mapping) else None
+    task = select_next_task(plan, task_statuses, state_reconciled=task_statuses is not None)
+    return task.get("task_id") if task is not None else None
+
+
+def select_task(
+    plan: Mapping[str, Any],
+    state: Mapping[str, Any] | None = None,
+    *,
+    scm_evidence: Mapping[str, Mapping[str, Any]] | None = None,
+    repository_snapshot: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Select one eligible plan task, re-grounding it against live SCM and repository state.
+
+    Fails closed (``BLOCKED``) instead of dispatching a duplicate Builder run when SCM evidence
+    shows an existing active branch or pull request for a candidate task, and fails closed
+    requesting a replan when a candidate task's target paths are no longer present in the
+    repository snapshot. Never mutates the canonical plan.
+    """
+    task_statuses = state.get("task_statuses") if isinstance(state, Mapping) else None
+    task = select_next_task(plan, task_statuses, state_reconciled=task_statuses is not None)
+    if task is None:
+        return {"status": "BLOCKED", "task": None, "reason": "no eligible task"}
+    task_id = task.get("task_id")
+    evidence = (scm_evidence or {}).get(task_id) if isinstance(scm_evidence, Mapping) else None
+    if isinstance(evidence, Mapping) and any(evidence.get(key) for key in ("active_branch", "active_pr")):
+        return {
+            "status": "BLOCKED",
+            "task": None,
+            "reason": f"task {task_id} already has an active branch or pull request",
+        }
+    if isinstance(repository_snapshot, Mapping) and isinstance(repository_snapshot.get("paths"), list):
+        known_paths = repository_snapshot["paths"]
+        missing = [path for path in task.get("target_paths", []) if path not in known_paths]
+        if missing:
+            return {
+                "status": "BLOCKED",
+                "task": None,
+                "reason": f"task {task_id} target paths are stale ({', '.join(missing)}); replan required",
+            }
+    return {"status": "READY", "task": task, "reason": None}
+
+
 def normalize_plan_task(task: Mapping[str, Any], *, target_repo: str | None = None) -> dict[str, Any]:
     """Adapt one v1 plan task to the legacy loop-task internal task shape."""
     return {
@@ -844,6 +1105,42 @@ def normalize_plan_task(task: Mapping[str, Any], *, target_repo: str | None = No
         "session_token_budget": None,
         "output_dir": None,
     }
+
+
+def normalize_input(raw: Mapping[str, Any]) -> dict[str, Any]:
+    """Normalize loop-task-implementer input, preserving legacy behavior unchanged.
+
+    A legacy ``implementation_task`` input (no ``implementation_plan`` key) passes through
+    unchanged. An ``implementation_plan`` input is validated, reconciled against any accompanying
+    ``plan_execution_state``, and normalized to exactly one eligible task in the legacy shape.
+    The canonical plan itself is never mutated, and no plan field can grant merge or other
+    authority beyond what the legacy task schema already carries.
+    """
+    if not isinstance(raw, Mapping):
+        return {"status": "BLOCKED", "reason": "input must be a mapping"}
+    plan = raw.get("implementation_plan")
+    if plan is None:
+        return dict(raw)
+    if not isinstance(plan, Mapping) or plan.get("readiness") != "READY" or validate_implementation_plan(plan):
+        return {"status": "BLOCKED", "reason": "implementation_plan is not a valid READY plan"}
+    state = raw.get("plan_execution_state")
+    state = state if isinstance(state, Mapping) else {}
+    result = select_task(
+        plan,
+        state,
+        scm_evidence=raw.get("scm_evidence"),
+        repository_snapshot=raw.get("repository_snapshot"),
+    )
+    if result["status"] != "READY" or result["task"] is None:
+        return {"status": "BLOCKED", "reason": result.get("reason") or "no eligible plan task"}
+    normalized = normalize_plan_task(result["task"], target_repo=plan.get("target_repo"))
+    normalized["plan_context"] = {
+        "plan_id": plan.get("plan_id"),
+        "plan_digest": canonical_plan_digest(plan),
+        "source_plan_task_id": result["task"].get("task_id"),
+        "state_generation": state.get("state_generation"),
+    }
+    return normalized
 
 
 def initial_plan_execution_state(
@@ -867,6 +1164,34 @@ def initial_plan_execution_state(
         "blocked_reason": None,
         "updated_at": updated_at,
     }
+
+
+def reconcile_plan_state(*, plan_digest: str, state: Mapping[str, Any]) -> dict[str, Any]:
+    """Cheap fail-closed guard: block resume immediately on a stale checkpoint plan digest.
+
+    Callers run this before the full :func:`reconcile_plan_execution_state` reconciliation,
+    which additionally requires the complete immutable plan and authoritative task state. The
+    checkpoint is advisory unless it was produced against the current plan; a mismatched digest
+    always blocks rather than resuming against a plan the checkpoint was never validated for.
+    """
+    if not isinstance(state, Mapping) or state.get("plan_digest") != plan_digest:
+        return {"status": "BLOCKED", "reason": "plan_execution_state.plan_digest does not match implementation_plan"}
+    return {"status": "READY", "reason": None}
+
+
+def merge_plan_state(current: Mapping[str, Any], incoming: Mapping[str, Any]) -> Mapping[str, Any]:
+    """Return whichever of two internal checkpoints has the higher ``state_generation``.
+
+    A stale writer's checkpoint — one with an equal or lower generation — can never overwrite
+    newer state; ties are resolved in favor of ``current`` so a duplicate write is a no-op.
+    """
+    current_generation = current.get("state_generation") if isinstance(current, Mapping) else None
+    incoming_generation = incoming.get("state_generation") if isinstance(incoming, Mapping) else None
+    if isinstance(incoming_generation, int) and (
+        not isinstance(current_generation, int) or incoming_generation > current_generation
+    ):
+        return incoming
+    return current
 
 
 def reconcile_plan_execution_state(
@@ -940,6 +1265,45 @@ def advance_plan_execution_state(
     normalized["state_generation"] = expected_generation + 1
     normalized["updated_at"] = updated_at
     return normalized, []
+
+
+class SkillResult(NamedTuple):
+    """The subset of the shared result envelope that carries execution status."""
+
+    status: str
+
+
+class FinalizedPlan(NamedTuple):
+    """Result of :func:`finalize_plan`: the plan payload plus its execution-status envelope."""
+
+    payload: Mapping[str, Any]
+    skill_result: SkillResult
+
+
+_READINESS_TO_STATUS = {"READY": "SUCCESS", "PARTIAL": "PARTIAL", "BLOCKED": "BLOCKED"}
+
+
+def finalize_plan(plan: object) -> FinalizedPlan:
+    """Attach explicit execution-status semantics to a built/validated plan.
+
+    A plan's ``readiness`` is a property of the proposed implementation, not of the planner's
+    own execution: READY maps to SUCCESS, PARTIAL to PARTIAL, and BLOCKED (or a plan that fails
+    validation while claiming READY) to BLOCKED. ``FAILED`` is reserved for the planner's own
+    internal errors — a non-mapping input or schema corruption — never for a plan that validly
+    says implementation is blocked.
+    """
+    if not isinstance(plan, Mapping):
+        return FinalizedPlan(payload={}, skill_result=SkillResult(status="FAILED"))
+    readiness = plan.get("readiness")
+    errors = validate_implementation_plan(plan)
+    if errors and readiness == "READY":
+        readiness = "BLOCKED"
+    status = _READINESS_TO_STATUS.get(readiness) if isinstance(readiness, str) else None
+    if status is None:
+        return FinalizedPlan(payload=dict(plan), skill_result=SkillResult(status="FAILED"))
+    payload = dict(plan)
+    payload["readiness"] = readiness
+    return FinalizedPlan(payload=payload, skill_result=SkillResult(status=status))
 
 
 def _reject_duplicate_object_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:

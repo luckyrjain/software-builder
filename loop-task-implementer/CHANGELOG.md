@@ -2,11 +2,16 @@
 
 For earlier history, see the `## loop-task-implementer` section in the repository root `CHANGELOG.md`.
 
-## v1.3 — implementation-plan execution bridge (2026-08-26)
+## v1.4 — implementation-plan execution bridge (2026-08-26)
 
 - Added validated `implementation_plan` input while preserving legacy `implementation_task` behavior.
-- Added deterministic earliest-wave task selection, plan-task normalization, and
-  `plan_id + task_id + target_repo` execution identity guidance.
+- Added deterministic earliest-wave task selection and plan-task normalization; a plan field can
+  never grant merge or any authority beyond the legacy task schema.
+- Added collision-safe (not exactly-once) remote dispatch: execution identity is the SHA-256 of
+  `plan_digest + task_id + task_contract_digest + target_repo + base_revision`, never `plan_id`
+  alone, since a plan revision can change a task's contract while the plan's own identity stays
+  stable. Remote writes use expected-head/fast-forward preconditions, never force-push, and never
+  fall back to a random-suffix branch.
 - Added generation-checked, SCM-reconciled host/runtime `plan_execution_state`; it is not a durable
   composition artifact and caller-supplied status cannot promote a task to complete.
 - Kept the existing Builder, Reviewer, CI, merge, and lifecycle gates unchanged.
