@@ -441,6 +441,8 @@ def build_implementation_plan(
         })
         if len(normalized_repositories) > 1:
             errors.append("change impact names multiple repositories; invoke planner once per repository")
+        elif normalized_repositories and normalized_repo not in normalized_repositories:
+            errors.append("target repository is not in the change impact report's impacted_repositories")
     raw_triggers = impact.get("review_triggers", [])
     triggers: list[str] = []
     if not isinstance(raw_triggers, list):
@@ -650,7 +652,7 @@ def _validate_task(task: object, index: int, readiness: str, errors: list[str]) 
         for path in paths:
             normalized_path = path.replace("\\", "/") if isinstance(path, str) else ""
             if isinstance(path, str) and (
-                path.startswith("/")
+                normalized_path.startswith("/")
                 or bool(re.match(r"^[A-Za-z]:/", normalized_path))
                 or any(part == ".." for part in normalized_path.split("/"))
             ):
@@ -1165,8 +1167,11 @@ def normalize_input(raw: Mapping[str, Any]) -> dict[str, Any]:
     plan = raw.get("implementation_plan")
     if plan is None:
         return dict(raw)
-    if not isinstance(plan, Mapping) or plan.get("readiness") != "READY" or validate_implementation_plan(plan):
+    if not isinstance(plan, Mapping) or plan.get("readiness") != "READY":
         return {"status": "BLOCKED", "reason": "implementation_plan is not a valid READY plan"}
+    # Full schema/DAG/traceability validation happens once, inside select_task -> select_next_task
+    # -> validate_implementation_plan; re-running it here first would validate the same immutable
+    # plan twice on every task-selection call for no functional benefit.
     authoritative_task_statuses = raw.get("authoritative_task_statuses")
     result = select_task(
         plan,

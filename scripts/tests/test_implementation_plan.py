@@ -325,6 +325,9 @@ def test_path_traversal_and_mismatched_traceability_fail_closed() -> None:
     plan["tasks"][0]["target_paths"] = ["C:\\repo\\..\\secrets.txt"]
     assert any("target_paths" in error for error in validate_implementation_plan(plan))
     plan = _plan()
+    plan["tasks"][0]["target_paths"] = ["\\etc\\passwd"]
+    assert any("target_paths" in error for error in validate_implementation_plan(plan))
+    plan = _plan()
     plan["tasks"][1]["source_condition_refs"] = []
     plan["traceability"]["condition_coverage"]["condition:timeout-budget"] = ["TASK-002"]
     assert any("does not cite it" in error for error in validate_implementation_plan(plan))
@@ -391,6 +394,24 @@ def test_builder_blocks_incomplete_or_multi_repository_impact() -> None:
             "assessment_target": {"repo": "github.com/acme/checkout"},
             "coverage_status": "COMPLETE",
             "impacted_repositories": ["github.com/acme/checkout", "github.com/acme/catalog"],
+            "target_paths": ["src/checkout.py"],
+            "review_triggers": [],
+        }},
+    }
+    plan = build_implementation_plan(sources, repository_evidence={
+        "estimated_scope": {"estimate_known": True, "files_upper_bound": 1, "changed_lines_upper_bound": 100, "confidence": "HIGH"},
+    })
+    assert plan["readiness"] == "BLOCKED"
+
+
+def test_builder_blocks_target_repo_absent_from_impacted_repositories() -> None:
+    sources = {
+        "system_design_spec": {"payload": {"title": "Checkout", "readiness": "Ready", "assessment_target": {"repo": "github.com/acme/checkout"}}},
+        "architecture_review_report": {"payload": {"normalized_decision": {"status": "PASS"}}},
+        "change_impact_report": {"skill_result": {"status": "SUCCESS"}, "payload": {
+            "assessment_target": {"repo": "github.com/acme/checkout"},
+            "coverage_status": "COMPLETE",
+            "impacted_repositories": ["github.com/acme/other-repo"],
             "target_paths": ["src/checkout.py"],
             "review_triggers": [],
         }},
