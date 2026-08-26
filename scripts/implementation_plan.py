@@ -487,9 +487,11 @@ def build_implementation_plan(
     specialist_sources = sources.get("specialist_reports")
     if not isinstance(specialist_sources, Mapping):
         specialist_sources = {}
+    resolved_specialist_reports: dict[str, object] = {}
     for trigger in sorted(set(triggers)):
         artifact = SPECIALIST_ARTIFACTS[trigger]
         report = specialist_sources.get(trigger) if trigger in specialist_sources else sources.get(artifact)
+        resolved_specialist_reports[trigger] = report
         statuses[f"specialist:{trigger}"] = _source_status(report)
         if report is None:
             errors.append(f"triggered specialist {trigger} is missing")
@@ -514,9 +516,7 @@ def build_implementation_plan(
         ("impact", sources.get("change_impact_report")),
     ]
     for trigger in sorted(set(triggers)):
-        artifact = SPECIALIST_ARTIFACTS[trigger]
-        report = specialist_sources.get(trigger) if trigger in specialist_sources else sources.get(artifact)
-        planning_sources.append((f"specialist:{trigger}", report))
+        planning_sources.append((f"specialist:{trigger}", resolved_specialist_reports.get(trigger)))
     for name, source in planning_sources:
         conditions.extend(_item_ref(item, f"{name}-condition", index) for index, item in enumerate(_items(source, "conditions")))
         actions.extend(_item_ref(item, f"{name}-action", index) for index, item in enumerate(_items(source, "required_actions")))
