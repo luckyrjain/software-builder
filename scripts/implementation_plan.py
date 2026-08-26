@@ -237,7 +237,7 @@ def build_implementation_plan(
         if report is None:
             errors.append(f"triggered specialist {trigger} is missing")
     target_paths = impact.get("target_paths")
-    if not isinstance(target_paths, list) and isinstance(repository_evidence, Mapping):
+    if (not isinstance(target_paths, list) or not target_paths) and isinstance(repository_evidence, Mapping):
         target_paths = repository_evidence.get("target_paths")
     if not isinstance(target_paths, list):
         target_paths = []
@@ -397,9 +397,9 @@ def _validate_task(task: object, index: int, readiness: str, errors: list[str]) 
 def _validate_traceability(
     plan: Mapping[str, Any],
     errors: list[str],
-    source_conditions: list[str],
-    source_actions: list[str],
-    required_tests: list[str],
+    source_conditions: list[str] | None,
+    source_actions: list[str] | None,
+    required_tests: list[str] | None,
 ) -> None:
     traceability = plan.get("traceability")
     if not isinstance(traceability, Mapping):
@@ -409,11 +409,27 @@ def _validate_traceability(
     if set(traceability) != expected:
         errors.append("error: traceability must contain condition_coverage, action_coverage, and required_test_coverage")
         return
-    task_ids = {task.get("task_id") for task in plan.get("tasks", []) if isinstance(task, Mapping)}
+    task_items = [task for task in plan.get("tasks", []) if isinstance(task, Mapping)]
+    task_ids = {task.get("task_id") for task in task_items}
+    expected_conditions = (
+        sorted(set(source_conditions))
+        if source_conditions is not None
+        else sorted({ref for task in task_items for ref in task.get("source_condition_refs", []) if _non_empty_string(ref)})
+    )
+    expected_actions = (
+        sorted(set(source_actions))
+        if source_actions is not None
+        else sorted({ref for task in task_items for ref in task.get("source_action_refs", []) if _non_empty_string(ref)})
+    )
+    expected_tests = (
+        sorted(set(required_tests))
+        if required_tests is not None
+        else sorted({test for task in task_items for test in task.get("required_tests", []) if _non_empty_string(test)})
+    )
     for group, sources in (
-        ("condition_coverage", source_conditions),
-        ("action_coverage", source_actions),
-        ("required_test_coverage", required_tests),
+        ("condition_coverage", expected_conditions),
+        ("action_coverage", expected_actions),
+        ("required_test_coverage", expected_tests),
     ):
         coverage = traceability.get(group)
         if not isinstance(coverage, Mapping):
@@ -484,6 +500,7 @@ def validate_implementation_plan(
     source_conditions: list[str] | None = None,
     source_actions: list[str] | None = None,
     required_tests: list[str] | None = None,
+    sibling_plans: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> list[str]:
     """Return validation errors; never raise for caller-controlled plan data."""
     errors: list[str] = []
@@ -555,6 +572,9 @@ def validate_implementation_plan(
                 errors.append(f"error: execution_waves[{wave_index}] must be a list")
                 continue
             for task_id in wave:
+                if task_id not in task_ids:
+                    errors.append(f"error: execution_waves contains unknown task {task_id}")
+                    continue
                 if task_id in wave_positions:
                     errors.append(f"error: task {task_id} must appear exactly once in execution_waves")
                 wave_positions[task_id] = wave_index
@@ -577,11 +597,12 @@ def validate_implementation_plan(
     _validate_traceability(
         plan,
         errors,
-        source_conditions or [],
-        source_actions or [],
-        required_tests or [],
+        source_conditions,
+        source_actions,
+        required_tests,
     )
     _validate_source_readiness(plan, source_statuses or {}, errors)
+    errors.extend(validate_external_dependency_cycles(plan, sibling_plans))
     return sorted(set(errors))
 
 
@@ -662,6 +683,8 @@ def select_next_task(
     tasks = {task["task_id"]: task for task in plan.get("tasks", []) if isinstance(task, Mapping)}
     statuses = {task_id: "PENDING" for task_id in tasks}
     if task_statuses is not None:
+        if set(task_statuses) != set(tasks) or any(status not in TASK_STATUSES for status in task_statuses.values()):
+            return None
         statuses.update({task_id: status for task_id, status in task_statuses.items() if task_id in tasks})
     if any(status == "IN_PROGRESS" for status in statuses.values()):
         return None
@@ -731,6 +754,8 @@ def reconcile_plan_execution_state(
     minimum_generation: int | None = None,
 ) -> tuple[dict[str, Any] | None, list[str]]:
     """Reconcile advisory checkpoint data to official task state and current SCM head."""
+    if plan.get("readiness") != "READY":
+        return None, ["error: implementation_plan must be READY before execution-state reconciliation"]
     errors = validate_plan_execution_state(
         state,
         plan,

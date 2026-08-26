@@ -104,6 +104,12 @@ def test_cycle_and_invalid_wave_order_are_rejected() -> None:
     assert any("earlier wave" in error for error in errors)
 
 
+def test_execution_waves_reject_unknown_task_ids() -> None:
+    plan = _plan()
+    plan["execution_waves"] = [["TASK-001", "UNKNOWN-TASK"], ["TASK-002"]]
+    assert any("unknown task" in error for error in validate_implementation_plan(plan))
+
+
 def test_ready_plan_requires_traceability_for_every_required_source_item() -> None:
     plan = _plan()
     plan["traceability"] = {
@@ -118,6 +124,19 @@ def test_ready_plan_requires_traceability_for_every_required_source_item() -> No
         required_tests=["pytest -q tests/test_checkout.py"],
     )
     assert sum("traceability" in error for error in errors) == 3
+
+
+def test_cli_style_validation_derives_traceability_obligations_from_tasks() -> None:
+    plan = _plan()
+    plan["traceability"] = {
+        "condition_coverage": {},
+        "action_coverage": {},
+        "required_test_coverage": {},
+    }
+    errors = validate_implementation_plan(plan)
+    assert any("condition_coverage" in error for error in errors)
+    assert any("action_coverage" in error for error in errors)
+    assert any("required_test_coverage" in error for error in errors)
 
 
 def test_unknown_estimate_cannot_make_a_ready_plan() -> None:
@@ -233,8 +252,8 @@ def test_select_next_task_is_earliest_dependency_satisfied_and_non_mutating() ->
     assert task is not None and task["task_id"] == "TASK-001"
     task["title"] = "caller mutation"
     assert plan["tasks"][0]["title"] != "caller mutation"
-    assert select_next_task(plan, {"TASK-001": "COMPLETE"})["task_id"] == "TASK-002"
-    assert select_next_task(plan, {"TASK-001": "IN_PROGRESS"}) is None
+    assert select_next_task(plan, {"TASK-001": "COMPLETE", "TASK-002": "PENDING"})["task_id"] == "TASK-002"
+    assert select_next_task(plan, {"TASK-001": "IN_PROGRESS", "TASK-002": "PENDING"}) is None
 
 
 def test_plan_task_normalization_preserves_legacy_task_inputs() -> None:
