@@ -477,7 +477,10 @@ def build_implementation_plan(
     _validate_declared_source_digest(sources.get("architecture_review_report"), "architecture_review_report", errors)
     _validate_declared_source_digest(sources.get("change_impact_report"), "change_impact_report", errors)
     impact_status = _source_status(sources.get("change_impact_report"))
-    if impact.get("coverage_status") != "COMPLETE":
+    # Incomplete coverage must downgrade a non-blocking status to at least PARTIAL, but must
+    # never clobber an already-worse status (e.g. an explicit FAIL decision) with the weaker
+    # PARTIAL label -- that would understate the true severity to anyone reading `statuses`.
+    if impact.get("coverage_status") != "COMPLETE" and impact_status not in _BLOCKING_SOURCE_STATUSES:
         impact_status = "PARTIAL"
     statuses["change_impact"] = impact_status
     impacted_repositories = impact.get("impacted_repositories")
@@ -1488,6 +1491,7 @@ class SkillResult(NamedTuple):
     """The subset of the shared result envelope that carries execution status."""
 
     status: str
+    blockers: tuple[str, ...] = ()
 
 
 class FinalizedPlan(NamedTuple):
@@ -1507,20 +1511,24 @@ def finalize_plan(plan: object) -> FinalizedPlan:
     execution: READY maps to SUCCESS, PARTIAL to PARTIAL, and BLOCKED (or any plan that fails
     validation, whatever readiness it claims) to BLOCKED. ``FAILED`` is reserved for the
     planner's own internal errors — a non-mapping input or schema corruption — never for a plan
-    that validly says implementation is blocked.
+    that validly says implementation is blocked. ``skill_result.blockers`` carries
+    validate_implementation_plan's own error messages so a caller isn't left with a bare status
+    string; it does not recover a build-time source error (e.g. a missing upstream artifact) that
+    build_implementation_plan already resolved to a fallback value before returning the plan.
     """
     if not isinstance(plan, Mapping):
-        return FinalizedPlan(payload={}, skill_result=SkillResult(status="FAILED"))
+        return FinalizedPlan(payload={}, skill_result=SkillResult(status="FAILED", blockers=("implementation_plan must be a mapping",)))
     readiness = plan.get("readiness")
     errors = validate_implementation_plan(plan)
     if errors:
         readiness = "BLOCKED"
     status = _READINESS_TO_STATUS.get(readiness) if isinstance(readiness, str) else None
     if status is None:
-        return FinalizedPlan(payload=dict(plan), skill_result=SkillResult(status="FAILED"))
+        blockers = tuple(errors) if errors else (f"unrecognized readiness: {plan.get('readiness')!r}",)
+        return FinalizedPlan(payload=dict(plan), skill_result=SkillResult(status="FAILED", blockers=blockers))
     payload = dict(plan)
     payload["readiness"] = readiness
-    return FinalizedPlan(payload=payload, skill_result=SkillResult(status=status))
+    return FinalizedPlan(payload=payload, skill_result=SkillResult(status=status, blockers=tuple(errors)))
 
 
 def _reject_duplicate_object_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:

@@ -727,6 +727,21 @@ def test_finalize_plan_maps_readiness_to_execution_status() -> None:
     broken_plan["tasks"] = [_task("A", ["B"]), _task("B", ["A"])]
     blocked = finalize_plan(broken_plan)
     assert blocked.skill_result.status == "BLOCKED"
+    assert any("cycle" in blocker for blocker in blocked.skill_result.blockers)
+    assert ready.skill_result.blockers == ()
 
     failed = finalize_plan("not-a-plan")
     assert failed.skill_result.status == "FAILED"
+    assert failed.skill_result.blockers != ()
+
+
+def test_builder_downgrading_for_incomplete_coverage_never_overwrites_a_worse_status() -> None:
+    plan = build_implementation_plan(
+        {
+            "system_design_spec": {"payload": {"title": "Checkout", "readiness": "Ready", "assessment_target": {"repo": "github.com/acme/checkout"}}},
+            "architecture_review_report": {"skill_result": {"status": "SUCCESS"}, "payload": {"normalized_decision": {"status": "FAIL"}}},
+            "change_impact_report": {"skill_result": {"status": "SUCCESS"}, "payload": {"assessment_target": {"repo": "github.com/acme/checkout"}, "coverage_status": "PARTIAL", "target_paths": ["src/checkout.py"], "required_tests": [], "review_triggers": []}},
+        },
+        repository_evidence={"estimated_scope": {"estimate_known": True, "files_upper_bound": 1, "changed_lines_upper_bound": 50, "confidence": "HIGH"}},
+    )
+    assert plan["readiness"] == "BLOCKED"
