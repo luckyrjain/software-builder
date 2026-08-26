@@ -17,6 +17,7 @@ from scripts.implementation_plan import (
     validate_external_dependency_cycles,
     validate_implementation_plan,
     validate_plan_execution_state,
+    _load_json,
 )
 
 
@@ -148,6 +149,25 @@ def test_malformed_task_lists_fail_closed_without_raising() -> None:
     assert any("required_tests" in error for error in errors)
 
 
+def test_cli_json_loader_rejects_duplicate_and_nonfinite_values(tmp_path) -> None:
+    duplicate = tmp_path / "duplicate.json"
+    duplicate.write_text('{"readiness":"READY","readiness":"BLOCKED"}', encoding="utf-8")
+    try:
+        _load_json(duplicate)
+    except ValueError as exc:
+        assert "duplicate" in str(exc)
+    else:
+        raise AssertionError("duplicate JSON keys must fail closed")
+    nonfinite = tmp_path / "nonfinite.json"
+    nonfinite.write_text('{"value":NaN}', encoding="utf-8")
+    try:
+        _load_json(nonfinite)
+    except ValueError as exc:
+        assert "non-finite" in str(exc)
+    else:
+        raise AssertionError("non-finite JSON values must fail closed")
+
+
 def test_unknown_estimate_cannot_make_a_ready_plan() -> None:
     plan = _plan()
     plan["tasks"][0]["estimated_scope"] = {
@@ -266,11 +286,17 @@ def test_select_next_task_is_earliest_dependency_satisfied_and_non_mutating() ->
 
 
 def test_plan_task_normalization_preserves_legacy_task_inputs() -> None:
-    normalized = normalize_plan_task(_task("TASK-001"))
+    normalized = normalize_plan_task(_task("TASK-001"), target_repo="github.com/acme/checkout")
     assert normalized["task_id"] == "TASK-001"
-    assert normalized["description"] == "Implement the bounded task."
-    assert normalized["target_paths"] == ["src/checkout.py"]
-    assert normalized["estimated_scope"]["estimate_known"] is True
+    assert normalized["request"] == "Implement TASK-001"
+    assert normalized["target"] == ["src/checkout.py"]
+    assert normalized["repo_root"] == "github.com/acme/checkout"
+    assert normalized["max_files_per_run"] == 1
+    assert set(normalized) == {
+        "task_id", "scope", "acceptance_criteria", "request", "repo_root", "target", "level_hint",
+        "specialist_inputs", "test_framework_hint", "run_tests", "max_files_per_run", "deadline",
+        "session_token_budget", "output_dir",
+    }
 
 
 def test_execution_state_reconciles_to_authoritative_task_statuses() -> None:

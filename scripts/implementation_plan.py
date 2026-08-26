@@ -737,20 +737,23 @@ def select_next_task(
     return None
 
 
-def normalize_plan_task(task: Mapping[str, Any]) -> dict[str, Any]:
+def normalize_plan_task(task: Mapping[str, Any], *, target_repo: str | None = None) -> dict[str, Any]:
     """Adapt one v1 plan task to the legacy loop-task internal task shape."""
     return {
         "task_id": task["task_id"],
-        "title": task["title"],
-        "description": task["scope"],
-        "requirements_ref": task.get("source_condition_refs") or task.get("source_action_refs") or None,
+        "scope": task["scope"],
         "acceptance_criteria": list(task["acceptance_criteria"]),
-        "dependencies": list(task["dependencies"]),
-        "target_paths": list(task["target_paths"]),
-        "required_tests": list(task["required_tests"]),
-        "verification": list(task["verification"]),
-        "rollout_notes": list(task["rollout_notes"]),
-        "estimated_scope": copy.deepcopy(task["estimated_scope"]),
+        "request": task["title"],
+        "repo_root": target_repo,
+        "target": list(task["target_paths"]),
+        "level_hint": task["task_type"],
+        "specialist_inputs": [*task.get("source_condition_refs", []), *task.get("source_action_refs", [])],
+        "test_framework_hint": None,
+        "run_tests": list(task["required_tests"]),
+        "max_files_per_run": task["estimated_scope"]["files_upper_bound"],
+        "deadline": None,
+        "session_token_budget": None,
+        "output_dir": None,
     }
 
 
@@ -850,8 +853,25 @@ def advance_plan_execution_state(
     return normalized, []
 
 
+def _reject_duplicate_object_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"duplicate JSON object key: {key}")
+        result[key] = value
+    return result
+
+
+def _reject_nonfinite_json(value: str) -> object:
+    raise ValueError(f"non-finite JSON value is not allowed: {value}")
+
+
 def _load_json(path: Path) -> object:
-    return json.loads(path.read_text(encoding="utf-8"))
+    return json.loads(
+        path.read_text(encoding="utf-8"),
+        object_pairs_hook=_reject_duplicate_object_keys,
+        parse_constant=_reject_nonfinite_json,
+    )
 
 
 def main() -> int:
@@ -861,17 +881,21 @@ def main() -> int:
     parser.add_argument("--plan", type=Path)
     parser.add_argument("--current-head")
     args = parser.parse_args()
-    value = _load_json(args.path)
-    if args.execution_state:
-        if args.plan is None:
-            parser.error("--plan is required with --execution-state")
-        errors = validate_plan_execution_state(
-            value,
-            _load_json(args.plan),
-            current_head=args.current_head,
-        )
-    else:
-        errors = validate_implementation_plan(value)
+    try:
+        value = _load_json(args.path)
+        if args.execution_state:
+            if args.plan is None:
+                parser.error("--plan is required with --execution-state")
+            errors = validate_plan_execution_state(
+                value,
+                _load_json(args.plan),
+                current_head=args.current_head,
+            )
+        else:
+            errors = validate_implementation_plan(value)
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        print(f"error: unable to load validation input: {exc}")
+        return 2
     for error in errors:
         print(error)
     return 1 if errors else 0
