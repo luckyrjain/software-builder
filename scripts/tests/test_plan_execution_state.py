@@ -73,10 +73,6 @@ def _plan() -> dict[str, object]:
     }
 
 
-def _default_state() -> dict[str, object]:
-    return {task["task_id"]: "PENDING" for task in _plan()["tasks"]}
-
-
 # -- plan_execution_state validation and reconciliation (Task 5) ------------------------------
 
 
@@ -215,20 +211,36 @@ def test_head_drift_forces_revalidation() -> None:
 # -- earliest-eligible-task selection (Task 6) -------------------------------------------------
 
 
+def _official_state(**overrides: str) -> dict[str, str]:
+    state = {task["task_id"]: "NOT_STARTED" for task in _plan()["tasks"]}
+    state.update(overrides)
+    return state
+
+
 def test_earliest_dependency_satisfied_task_is_selected_by_id() -> None:
     plan = _plan()
-    assert select_eligible_task(plan, {"task_statuses": _default_state()}) == "TASK-001"
-    assert (
-        select_eligible_task(plan, {"task_statuses": {"TASK-001": "COMPLETE", "TASK-002": "PENDING"}})
-        == "TASK-002"
-    )
+    assert select_eligible_task(plan, _official_state()) == "TASK-001"
+    assert select_eligible_task(plan, _official_state(**{"TASK-001": "COMPLETE"})) == "TASK-002"
+
+
+def test_caller_claimed_complete_status_cannot_promote_selection_without_authority() -> None:
+    plan = _plan()
+    # No authoritative evidence at all: everything defaults to PENDING/NOT_STARTED, so the
+    # earliest task is selected regardless of what a caller's own unverified state might claim.
+    assert select_eligible_task(plan) == "TASK-001"
+    # An authoritative map that omits a task, or names an invalid status, fails closed rather
+    # than falling back to trusting whatever the caller separately asserted about that task.
+    result = select_task(plan, authoritative_task_statuses={"TASK-001": "COMPLETE"})
+    assert result["status"] == "BLOCKED"
+    result = select_task(plan, authoritative_task_statuses=_official_state(**{"TASK-001": "not-a-real-status"}))
+    assert result["status"] == "BLOCKED"
 
 
 def test_existing_active_branch_or_pr_blocks_duplicate_dispatch() -> None:
     plan = _plan()
     result = select_task(
         plan,
-        {"task_statuses": _default_state()},
+        authoritative_task_statuses=_official_state(),
         scm_evidence={"TASK-001": {"active_pr": 42}},
     )
     assert result["status"] == "BLOCKED"
@@ -240,7 +252,7 @@ def test_stale_remaining_task_blocks_and_requests_replan() -> None:
     plan["tasks"][0]["target_paths"] = ["src/removed.py"]
     result = select_task(
         plan,
-        {"task_statuses": _default_state()},
+        authoritative_task_statuses=_official_state(),
         repository_snapshot={"paths": ["src/new.py"]},
     )
     assert result["status"] == "BLOCKED"
@@ -249,7 +261,7 @@ def test_stale_remaining_task_blocks_and_requests_replan() -> None:
 
 def test_select_task_returns_ready_task_when_ungated() -> None:
     plan = _plan()
-    result = select_task(plan, {"task_statuses": _default_state()})
+    result = select_task(plan, authoritative_task_statuses=_official_state())
     assert result["status"] == "READY"
     assert result["task"]["task_id"] == "TASK-001"
 
@@ -276,6 +288,23 @@ def test_plan_input_normalizes_earliest_eligible_task_and_carries_plan_context()
     assert result["plan_context"]["plan_id"] == plan["plan_id"]
     assert result["plan_context"]["plan_digest"] == canonical_plan_digest(plan)
     assert result["plan_context"]["source_plan_task_id"] == "TASK-001"
+
+
+def test_plan_input_honors_authoritative_task_statuses_not_the_raw_checkpoint() -> None:
+    plan = _plan()
+    # A caller-asserted checkpoint claiming TASK-001 complete is not, by itself, authority: with
+    # no authoritative_task_statuses supplied, TASK-001 is still selected.
+    result = normalize_input({
+        "implementation_plan": plan,
+        "plan_execution_state": {"task_statuses": {"TASK-001": "COMPLETE", "TASK-002": "PENDING"}},
+    })
+    assert result["task_id"] == "TASK-001"
+
+    result = normalize_input({
+        "implementation_plan": plan,
+        "authoritative_task_statuses": _official_state(**{"TASK-001": "COMPLETE"}),
+    })
+    assert result["task_id"] == "TASK-002"
 
 
 def test_plan_cannot_grant_merge_or_other_authority() -> None:

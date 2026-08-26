@@ -456,7 +456,7 @@ def build_implementation_plan(
         specialist_sources = {}
     for trigger in sorted(set(triggers)):
         artifact = SPECIALIST_ARTIFACTS[trigger]
-        report = specialist_sources.get(trigger) or sources.get(artifact)
+        report = specialist_sources.get(trigger) if trigger in specialist_sources else sources.get(artifact)
         statuses[f"specialist:{trigger}"] = _source_status(report)
         if report is None:
             errors.append(f"triggered specialist {trigger} is missing")
@@ -481,9 +481,9 @@ def build_implementation_plan(
         ("impact", sources.get("change_impact_report")),
     ]
     for trigger in sorted(set(triggers)):
-        planning_sources.append(
-            (f"specialist:{trigger}", specialist_sources.get(trigger) or sources.get(SPECIALIST_ARTIFACTS[trigger]))
-        )
+        artifact = SPECIALIST_ARTIFACTS[trigger]
+        report = specialist_sources.get(trigger) if trigger in specialist_sources else sources.get(artifact)
+        planning_sources.append((f"specialist:{trigger}", report))
     for name, source in planning_sources:
         conditions.extend(_item_ref(item, f"{name}-condition", index) for index, item in enumerate(_items(source, "conditions")))
         actions.extend(_item_ref(item, f"{name}-action", index) for index, item in enumerate(_items(source, "required_actions")))
@@ -1041,31 +1041,70 @@ def select_next_task(
     return None
 
 
-def select_eligible_task(plan: Mapping[str, Any], state: Mapping[str, Any] | None = None) -> str | None:
+def _authoritative_selection_statuses(
+    plan: Mapping[str, Any],
+    authoritative_task_statuses: Mapping[str, str] | None,
+) -> tuple[dict[str, str] | None, str | None]:
+    """Map official per-task statuses to the internal PENDING/IN_PROGRESS/COMPLETE/BLOCKED vocabulary.
+
+    Returns ``(None, None)`` when no authoritative evidence is supplied at all (every task then
+    defaults to PENDING inside :func:`select_next_task` — safe because nothing has claimed
+    completion yet). Once evidence is supplied it must cover every plan task; a caller cannot
+    selectively omit a task to smuggle in an unverified status for it.
+    """
+    if authoritative_task_statuses is None:
+        return None, None
+    if not isinstance(authoritative_task_statuses, Mapping):
+        return None, "authoritative task statuses must be a mapping"
+    task_ids = {task.get("task_id") for task in plan.get("tasks", []) if isinstance(task, Mapping)}
+    mapped: dict[str, str] = {}
+    for task_id in task_ids:
+        official = authoritative_task_statuses.get(task_id)
+        status = OFFICIAL_TASK_STATUS_MAP.get(official) if isinstance(official, str) else None
+        if status is None:
+            return None, f"authoritative task status is missing or invalid for {task_id}"
+        mapped[task_id] = status
+    return mapped, None
+
+
+def select_eligible_task(
+    plan: Mapping[str, Any],
+    authoritative_task_statuses: Mapping[str, str] | None = None,
+) -> str | None:
     """Return the ``task_id`` of the earliest dependency-satisfied task, or ``None``.
 
-    Thin wrapper over :func:`select_next_task` for callers that only need the identifier.
+    ``authoritative_task_statuses`` must use the host's official per-task status vocabulary
+    (NOT_STARTED|BUILDING|REVIEWING|VALIDATING|READY|COMPLETE|ESCALATED); a caller's own claim
+    about progress is never trusted directly — see :func:`select_task`.
     """
-    task_statuses = state.get("task_statuses") if isinstance(state, Mapping) else None
-    task = select_next_task(plan, task_statuses, state_reconciled=task_statuses is not None)
+    result = select_task(plan, authoritative_task_statuses=authoritative_task_statuses)
+    task = result["task"]
     return task.get("task_id") if task is not None else None
 
 
 def select_task(
     plan: Mapping[str, Any],
-    state: Mapping[str, Any] | None = None,
     *,
+    authoritative_task_statuses: Mapping[str, str] | None = None,
     scm_evidence: Mapping[str, Mapping[str, Any]] | None = None,
     repository_snapshot: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Select one eligible plan task, re-grounding it against live SCM and repository state.
+    """Select one eligible plan task from authoritative task state, never a caller's own claim.
 
-    Fails closed (``BLOCKED``) instead of dispatching a duplicate Builder run when SCM evidence
-    shows an existing active branch or pull request for a candidate task, and fails closed
-    requesting a replan when a candidate task's target paths are no longer present in the
+    ``authoritative_task_statuses`` must come from the host's official per-task state (e.g. the
+    per-task ``status`` field in reference/state-schema.yaml), not from an unreconciled
+    ``plan_execution_state`` checkpoint — a checkpoint is an index, not authority, and a caller
+    asserting a task COMPLETE can never by itself unblock the next task. Omit it only when no
+    plan task has ever been dispatched, so every task safely defaults to PENDING.
+
+    Also fails closed (``BLOCKED``) instead of dispatching a duplicate Builder run when SCM
+    evidence shows an existing active branch or pull request for a candidate task, and fails
+    closed requesting a replan when a candidate task's target paths are no longer present in the
     repository snapshot. Never mutates the canonical plan.
     """
-    task_statuses = state.get("task_statuses") if isinstance(state, Mapping) else None
+    task_statuses, error = _authoritative_selection_statuses(plan, authoritative_task_statuses)
+    if error is not None:
+        return {"status": "BLOCKED", "task": None, "reason": error}
     task = select_next_task(plan, task_statuses, state_reconciled=task_statuses is not None)
     if task is None:
         return {"status": "BLOCKED", "task": None, "reason": "no eligible task"}
@@ -1113,10 +1152,13 @@ def normalize_input(raw: Mapping[str, Any]) -> dict[str, Any]:
     """Normalize loop-task-implementer input, preserving legacy behavior unchanged.
 
     A legacy ``implementation_task`` input (no ``implementation_plan`` key) passes through
-    unchanged. An ``implementation_plan`` input is validated, reconciled against any accompanying
-    ``plan_execution_state``, and normalized to exactly one eligible task in the legacy shape.
-    The canonical plan itself is never mutated, and no plan field can grant merge or other
-    authority beyond what the legacy task schema already carries.
+    unchanged. An ``implementation_plan`` input is validated and normalized to exactly one
+    eligible task in the legacy shape. Task selection is driven only by ``raw["authoritative_task_statuses"]``
+    — the host's official per-task state — never by the raw ``plan_execution_state`` checkpoint,
+    which is advisory and used here only to label the returned task's ``plan_context``; a caller
+    cannot promote a task to complete just by asserting so in that checkpoint. The canonical plan
+    itself is never mutated, and no plan field can grant merge or other authority beyond what the
+    legacy task schema already carries.
     """
     if not isinstance(raw, Mapping):
         return {"status": "BLOCKED", "reason": "input must be a mapping"}
@@ -1125,17 +1167,18 @@ def normalize_input(raw: Mapping[str, Any]) -> dict[str, Any]:
         return dict(raw)
     if not isinstance(plan, Mapping) or plan.get("readiness") != "READY" or validate_implementation_plan(plan):
         return {"status": "BLOCKED", "reason": "implementation_plan is not a valid READY plan"}
-    state = raw.get("plan_execution_state")
-    state = state if isinstance(state, Mapping) else {}
+    authoritative_task_statuses = raw.get("authoritative_task_statuses")
     result = select_task(
         plan,
-        state,
+        authoritative_task_statuses=authoritative_task_statuses if isinstance(authoritative_task_statuses, Mapping) else None,
         scm_evidence=raw.get("scm_evidence"),
         repository_snapshot=raw.get("repository_snapshot"),
     )
     if result["status"] != "READY" or result["task"] is None:
         return {"status": "BLOCKED", "reason": result.get("reason") or "no eligible plan task"}
     normalized = normalize_plan_task(result["task"], target_repo=plan.get("target_repo"))
+    state = raw.get("plan_execution_state")
+    state = state if isinstance(state, Mapping) else {}
     normalized["plan_context"] = {
         "plan_id": plan.get("plan_id"),
         "plan_digest": canonical_plan_digest(plan),
