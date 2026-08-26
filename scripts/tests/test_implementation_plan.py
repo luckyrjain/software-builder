@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 from copy import deepcopy
 
 from scripts.implementation_plan import (
@@ -208,6 +209,45 @@ def test_source_failure_blocks_ready_but_allows_partial() -> None:
         source_statuses={"system_design": "READY", "architecture": "PASS", "specialist:resilience": "UNKNOWN"},
     )
     assert any("blocking source status" in error for error in errors)
+
+
+def test_finalize_plan_blocks_a_partial_plan_with_a_real_schema_defect() -> None:
+    plan = _plan()
+    plan["readiness"] = "PARTIAL"
+    plan["tasks"][1]["dependencies"] = ["TASK-002"]
+    result = finalize_plan(plan)
+    assert result.skill_result.status == "BLOCKED"
+    assert result.payload["readiness"] == "BLOCKED"
+
+
+def test_task_dependency_cycle_detection_does_not_recurse_per_chain_link() -> None:
+    depth = 500
+    tasks = [_task(f"TASK-{i:04d}") for i in range(depth)]
+    for i in range(1, depth):
+        tasks[i]["dependencies"] = [tasks[i - 1]["task_id"]]
+    plan = _plan()
+    plan["tasks"] = tasks
+    plan["execution_waves"] = [[task["task_id"]] for task in tasks]
+    plan["traceability"] = {"condition_coverage": {}, "action_coverage": {}, "required_test_coverage": {}}
+    original_limit = sys.getrecursionlimit()
+    sys.setrecursionlimit(150)
+    try:
+        errors = validate_implementation_plan(plan)
+    finally:
+        sys.setrecursionlimit(original_limit)
+    assert isinstance(errors, list)
+
+
+def test_builder_preserves_the_repo_contributing_sources_other_assessment_fields() -> None:
+    plan = build_implementation_plan(
+        {
+            "system_design_spec": {"payload": {"title": "Checkout", "readiness": "Ready", "assessment_target": {"repo": "github.com/acme/svc", "component": "checkout"}}},
+            "architecture_review_report": {"payload": {"normalized_decision": {"status": "PASS"}}},
+            "change_impact_report": {"skill_result": {"status": "SUCCESS"}, "payload": {"assessment_target": {"notes": "unrelated"}, "coverage_status": "COMPLETE", "target_paths": ["src/checkout.py"], "required_tests": [], "review_triggers": []}},
+        },
+        repository_evidence={"estimated_scope": {"estimate_known": True, "files_upper_bound": 1, "changed_lines_upper_bound": 50, "confidence": "HIGH"}},
+    )
+    assert plan["assessment_target"] == {"repo": "github.com/acme/svc", "component": "checkout"}
 
 
 def test_builder_blocks_when_triggered_specialist_or_paths_are_missing() -> None:

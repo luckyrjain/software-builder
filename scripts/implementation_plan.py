@@ -425,6 +425,15 @@ def build_implementation_plan(
         or target.get("repo")
         or sources.get("target_repo")
     )
+    # Preserve the other fields from whichever mapping actually contributed the resolved repo,
+    # not just whichever mapping happens to be non-empty -- otherwise an unrelated field from the
+    # "wrong" source could be attributed to the plan's assessment_target.
+    if _non_empty_string(impact_target.get("repo")):
+        assessment_target_source = impact_target
+    elif _non_empty_string(target.get("repo")):
+        assessment_target_source = target
+    else:
+        assessment_target_source = impact_target or target
     if not _non_empty_string(target_repo):
         errors.append("target repository is missing")
         target_repo = "UNKNOWN"
@@ -594,10 +603,9 @@ def build_implementation_plan(
         "plan_id": plan_id,
         "title": str(design.get("title") or impact.get("title") or "Implementation plan"),
         "readiness": readiness,
-        # Whichever source's assessment_target we borrow other fields from, its "repo" must never
-        # disagree with the plan's own resolved target_repo -- an empty impact_target otherwise
-        # falls back to the design's target, which can name a different repo entirely.
-        "assessment_target": {**(impact_target or target), "repo": normalized_repo},
+        # "repo" must never disagree with the plan's own resolved target_repo, whichever source's
+        # other fields are preserved alongside it.
+        "assessment_target": {**assessment_target_source, "repo": normalized_repo},
         "target_repo": normalized_repo,
         "external_dependencies": copy.deepcopy(external_dependencies),
         "source_refs": source_refs,
@@ -614,7 +622,7 @@ def build_implementation_plan(
         source_actions=actions,
         required_tests=required_tests,
     )
-    if validation_errors and readiness == "READY":
+    if validation_errors:
         plan["readiness"] = "BLOCKED"
     return plan
 
@@ -809,17 +817,29 @@ def validate_external_dependency_cycles(
     visited: set[str] = set()
     errors: list[str] = []
 
-    def visit(repo: str) -> None:
-        if repo in visiting:
-            errors.append("error: external dependency graph contains a provable cross-repository cycle")
+    def visit(start: str) -> None:
+        # Iterative DFS to avoid recursion-depth limits on a large sibling plan set; see the
+        # matching comment on the task-dependency cycle check for why this matters.
+        if start in visited:
             return
-        if repo in visited:
-            return
-        visiting.add(repo)
-        for dependency in graph[repo]:
-            visit(dependency)
-        visiting.remove(repo)
-        visited.add(repo)
+        stack: list[tuple[str, Any]] = [(start, iter(graph[start]))]
+        visiting.add(start)
+        while stack:
+            node, iterator = stack[-1]
+            advanced = False
+            for dependency in iterator:
+                if dependency in visiting:
+                    errors.append("error: external dependency graph contains a provable cross-repository cycle")
+                    continue
+                if dependency not in visited:
+                    visiting.add(dependency)
+                    stack.append((dependency, iter(graph[dependency])))
+                    advanced = True
+                    break
+            if not advanced:
+                stack.pop()
+                visiting.discard(node)
+                visited.add(node)
 
     for repo in graph:
         visit(repo)
@@ -887,24 +907,35 @@ def validate_implementation_plan(
                     errors.append(f"error: {task_id} has unknown dependency {dependency}")
                 if dependency == task_id:
                     errors.append(f"error: {task_id} cannot depend on itself")
+        # Iterative DFS: an equivalent recursive walk would use one Python stack frame per chain
+        # link, so a plan with a long linear dependency chain (thousands of tasks) could raise
+        # RecursionError instead of returning an error list, breaking this function's own
+        # "never raise for caller-controlled plan data" contract.
         visiting: set[str] = set()
         visited: set[str] = set()
-
-        def visit(node: str) -> None:
-            if node in visiting:
-                errors.append("error: task dependency graph contains a cycle")
-                return
-            if node in visited:
-                return
-            visiting.add(node)
-            for dependency in dependency_map.get(node, []):
-                if dependency in known:
-                    visit(dependency)
-            visiting.remove(node)
-            visited.add(node)
-
         for task_id in task_ids:
-            visit(task_id)
+            if task_id in visited:
+                continue
+            stack: list[tuple[str, Any]] = [(task_id, iter(dependency_map.get(task_id, [])))]
+            visiting.add(task_id)
+            while stack:
+                node, iterator = stack[-1]
+                advanced = False
+                for dependency in iterator:
+                    if dependency not in known:
+                        continue
+                    if dependency in visiting:
+                        errors.append("error: task dependency graph contains a cycle")
+                        continue
+                    if dependency not in visited:
+                        visiting.add(dependency)
+                        stack.append((dependency, iter(dependency_map.get(dependency, []))))
+                        advanced = True
+                        break
+                if not advanced:
+                    stack.pop()
+                    visiting.discard(node)
+                    visited.add(node)
     waves = plan.get("execution_waves")
     if isinstance(waves, list):
         wave_positions: dict[str, int] = {}
@@ -1391,17 +1422,17 @@ _READINESS_TO_STATUS = {"READY": "SUCCESS", "PARTIAL": "PARTIAL", "BLOCKED": "BL
 def finalize_plan(plan: object) -> FinalizedPlan:
     """Attach explicit execution-status semantics to a built/validated plan.
 
-    A plan's ``readiness`` is a property of the proposed implementation, not of the planner's
-    own execution: READY maps to SUCCESS, PARTIAL to PARTIAL, and BLOCKED (or a plan that fails
-    validation while claiming READY) to BLOCKED. ``FAILED`` is reserved for the planner's own
-    internal errors — a non-mapping input or schema corruption — never for a plan that validly
-    says implementation is blocked.
+    A plan's ``readiness`` is a property of the proposed implementation, not of the planner's own
+    execution: READY maps to SUCCESS, PARTIAL to PARTIAL, and BLOCKED (or any plan that fails
+    validation, whatever readiness it claims) to BLOCKED. ``FAILED`` is reserved for the
+    planner's own internal errors — a non-mapping input or schema corruption — never for a plan
+    that validly says implementation is blocked.
     """
     if not isinstance(plan, Mapping):
         return FinalizedPlan(payload={}, skill_result=SkillResult(status="FAILED"))
     readiness = plan.get("readiness")
     errors = validate_implementation_plan(plan)
-    if errors and readiness == "READY":
+    if errors:
         readiness = "BLOCKED"
     status = _READINESS_TO_STATUS.get(readiness) if isinstance(readiness, str) else None
     if status is None:
