@@ -290,6 +290,22 @@ def test_fabricated_plan_set_id_is_rejected_when_source_refs_are_canonical() -> 
     assert any("plan_set_id" in error and "source_refs" in error for error in validate_implementation_plan(plan))
 
 
+def test_corrupting_a_single_canonical_source_ref_digest_cannot_bypass_the_check() -> None:
+    plan = build_implementation_plan(
+        {
+            "system_design_spec": {"payload": {"title": "Checkout", "readiness": "Ready", "assessment_target": {"repo": "github.com/acme/checkout"}}},
+            "architecture_review_report": {"payload": {"normalized_decision": {"status": "PASS"}}},
+            "change_impact_report": {"skill_result": {"status": "SUCCESS"}, "payload": {"assessment_target": {"repo": "github.com/acme/checkout"}, "coverage_status": "COMPLETE", "target_paths": ["src/checkout.py"], "required_tests": [], "review_triggers": []}},
+        },
+        repository_evidence={"estimated_scope": {"estimate_known": True, "files_upper_bound": 1, "changed_lines_upper_bound": 50, "confidence": "HIGH"}},
+    )
+    # Corrupting just one of the three canonical digests must not let the consistency check skip
+    # itself entirely -- only a plan_set_id/plan_id that also happen to still be consistent with
+    # the (now unverifiable) declared source lineage would otherwise slip through.
+    plan["source_refs"] = ["change_impact_report:not-a-real-digest", "system_design_spec:" + "a" * 64, "architecture_review_report:" + "b" * 64]
+    assert any("source_refs" in error for error in validate_implementation_plan(plan))
+
+
 def test_builder_uses_repository_estimate_to_produce_a_ready_plan() -> None:
     plan = build_implementation_plan(
         {

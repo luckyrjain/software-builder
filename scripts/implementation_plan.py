@@ -7,7 +7,7 @@ import copy
 import json
 import re
 from pathlib import Path
-from typing import Any, Mapping, NamedTuple
+from typing import Any, Iterable, Mapping, NamedTuple
 
 from scripts.registry.assessment_target import canonical_payload_digest, normalize_repo_identity
 from scripts.registry.semantic_document import is_sha256_digest
@@ -826,14 +826,26 @@ def _validate_plan_set_id_matches_source_refs(plan: Mapping[str, Any], errors: l
     refs = plan.get("source_refs")
     if not isinstance(refs, list):
         return
+    seen_names: set[str] = set()
     digests: dict[str, str] = {}
     for ref in refs:
         if not isinstance(ref, str) or ":" not in ref:
             continue
         name, _, digest = ref.partition(":")
-        if name in _CANONICAL_SOURCE_REF_NAMES and is_sha256_digest(digest):
+        if name not in _CANONICAL_SOURCE_REF_NAMES:
+            continue
+        seen_names.add(name)
+        if is_sha256_digest(digest):
             digests[name] = digest
+    if not seen_names:
+        # No canonical name appears at all -- source_refs uses a different naming convention this
+        # check cannot verify, so it stays silent rather than rejecting a differently-shaped plan.
+        return
     if set(digests) != set(_CANONICAL_SOURCE_REF_NAMES):
+        # At least one canonical name was declared but not every one resolved to a well-formed
+        # digest -- do not silently skip the check just because the corruption made a name drop
+        # out of `digests`; that would let a single malformed digest bypass this entirely.
+        errors.append("error: source_refs must declare all three canonical source digests as valid SHA-256 hashes")
         return
     expected_plan_set_id = derive_plan_set_id(
         change_impact_digest=digests["change_impact_report"],
@@ -850,6 +862,40 @@ def _validate_source_readiness(plan: Mapping[str, Any], source_statuses: Mapping
     for source, status in source_statuses.items():
         if status in _BLOCKING_SOURCE_STATUSES:
             errors.append(f"error: READY plan has blocking source status {source}={status}")
+
+
+def _graph_has_cycle(graph: Mapping[str, Iterable[str]], nodes: Iterable[str]) -> bool:
+    """Iterative DFS cycle detector shared by task-dependency and cross-repository cycle checks.
+
+    Iterative rather than recursive so a long chain (thousands of tasks) cannot exhaust Python's
+    recursion limit and raise instead of returning a plain boolean, per this file's "never raise
+    for caller-controlled plan data" contract.
+    """
+    visiting: set[str] = set()
+    visited: set[str] = set()
+    found_cycle = False
+    for start in nodes:
+        if start in visited:
+            continue
+        stack: list[tuple[str, Any]] = [(start, iter(graph.get(start, [])))]
+        visiting.add(start)
+        while stack:
+            node, iterator = stack[-1]
+            advanced = False
+            for dependency in iterator:
+                if dependency in visiting:
+                    found_cycle = True
+                    continue
+                if dependency not in visited:
+                    visiting.add(dependency)
+                    stack.append((dependency, iter(graph.get(dependency, []))))
+                    advanced = True
+                    break
+            if not advanced:
+                stack.pop()
+                visiting.discard(node)
+                visited.add(node)
+    return found_cycle
 
 
 def validate_external_dependency_cycles(
@@ -883,36 +929,9 @@ def validate_external_dependency_cycles(
                 normalized = normalize_repo_identity(target)
                 if normalized in available:
                     graph[repo].add(normalized)
-    visiting: set[str] = set()
-    visited: set[str] = set()
     errors: list[str] = []
-
-    def visit(start: str) -> None:
-        # Iterative DFS to avoid recursion-depth limits on a large sibling plan set; see the
-        # matching comment on the task-dependency cycle check for why this matters.
-        if start in visited:
-            return
-        stack: list[tuple[str, Any]] = [(start, iter(graph[start]))]
-        visiting.add(start)
-        while stack:
-            node, iterator = stack[-1]
-            advanced = False
-            for dependency in iterator:
-                if dependency in visiting:
-                    errors.append("error: external dependency graph contains a provable cross-repository cycle")
-                    continue
-                if dependency not in visited:
-                    visiting.add(dependency)
-                    stack.append((dependency, iter(graph[dependency])))
-                    advanced = True
-                    break
-            if not advanced:
-                stack.pop()
-                visiting.discard(node)
-                visited.add(node)
-
-    for repo in graph:
-        visit(repo)
+    if _graph_has_cycle(graph, graph):
+        errors.append("error: external dependency graph contains a provable cross-repository cycle")
     return sorted(set(errors))
 
 
@@ -978,35 +997,12 @@ def validate_implementation_plan(
                     errors.append(f"error: {task_id} has unknown dependency {dependency}")
                 if dependency == task_id:
                     errors.append(f"error: {task_id} cannot depend on itself")
-        # Iterative DFS: an equivalent recursive walk would use one Python stack frame per chain
-        # link, so a plan with a long linear dependency chain (thousands of tasks) could raise
-        # RecursionError instead of returning an error list, breaking this function's own
-        # "never raise for caller-controlled plan data" contract.
-        visiting: set[str] = set()
-        visited: set[str] = set()
-        for task_id in task_ids:
-            if task_id in visited:
-                continue
-            stack: list[tuple[str, Any]] = [(task_id, iter(dependency_map.get(task_id, [])))]
-            visiting.add(task_id)
-            while stack:
-                node, iterator = stack[-1]
-                advanced = False
-                for dependency in iterator:
-                    if dependency not in known:
-                        continue
-                    if dependency in visiting:
-                        errors.append("error: task dependency graph contains a cycle")
-                        continue
-                    if dependency not in visited:
-                        visiting.add(dependency)
-                        stack.append((dependency, iter(dependency_map.get(dependency, []))))
-                        advanced = True
-                        break
-                if not advanced:
-                    stack.pop()
-                    visiting.discard(node)
-                    visited.add(node)
+        known_dependency_graph = {
+            task_id: [dependency for dependency in dependencies if dependency in known]
+            for task_id, dependencies in dependency_map.items()
+        }
+        if _graph_has_cycle(known_dependency_graph, task_ids):
+            errors.append("error: task dependency graph contains a cycle")
     waves = plan.get("execution_waves")
     if isinstance(waves, list):
         wave_positions: dict[str, int] = {}
