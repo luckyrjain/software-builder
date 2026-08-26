@@ -459,7 +459,9 @@ def build_implementation_plan(
         })
         if len(normalized_repositories) > 1:
             errors.append("change impact names multiple repositories; invoke planner once per repository")
-        elif normalized_repositories and normalized_repo not in normalized_repositories:
+        elif not normalized_repositories:
+            errors.append("change impact report's impacted_repositories is present but names no repository")
+        elif normalized_repo not in normalized_repositories:
             errors.append("target repository is not in the change impact report's impacted_repositories")
     raw_triggers = impact.get("review_triggers", [])
     triggers: list[str] = []
@@ -518,6 +520,18 @@ def build_implementation_plan(
     estimate = evidence.get("estimated_scope") if isinstance(evidence.get("estimated_scope"), Mapping) else None
     if estimate is None:
         estimate = {"estimate_known": False, "files_upper_bound": 0, "changed_lines_upper_bound": 0, "confidence": "UNKNOWN"}
+    task_count = len(target_paths) or 1
+
+    def _task_share(total: object, index: int) -> object:
+        # Split the plan-wide estimate across chained tasks so a per-task hard-stop check bounds
+        # each task's own slice, not the whole plan's total repeated on every task -- otherwise N
+        # chained tasks could each individually pass the hard stop while collectively exceeding it
+        # by a factor of N.
+        if not isinstance(total, int):
+            return total
+        share, remainder = divmod(total, task_count)
+        return share + (1 if index < remainder else 0)
+
     tasks: list[dict[str, Any]] = []
     last_index = len(target_paths) - 1
     for index, path in enumerate(target_paths):
@@ -541,7 +555,11 @@ def build_implementation_plan(
             "completion_evidence": ["Committed diff, focused tests, authoritative CI, and review evidence."],
             "source_condition_refs": conditions,
             "source_action_refs": actions,
-            "estimated_scope": dict(estimate),
+            "estimated_scope": {
+                **estimate,
+                "files_upper_bound": _task_share(estimate.get("files_upper_bound"), index),
+                "changed_lines_upper_bound": _task_share(estimate.get("changed_lines_upper_bound"), index),
+            },
         })
     readiness = "READY"
     if errors:
@@ -571,7 +589,10 @@ def build_implementation_plan(
         "plan_id": plan_id,
         "title": str(design.get("title") or impact.get("title") or "Implementation plan"),
         "readiness": readiness,
-        "assessment_target": dict(impact_target or target),
+        # Whichever source's assessment_target we borrow other fields from, its "repo" must never
+        # disagree with the plan's own resolved target_repo -- an empty impact_target otherwise
+        # falls back to the design's target, which can name a different repo entirely.
+        "assessment_target": {**(impact_target or target), "repo": normalized_repo},
         "target_repo": normalized_repo,
         "external_dependencies": copy.deepcopy(external_dependencies),
         "source_refs": source_refs,

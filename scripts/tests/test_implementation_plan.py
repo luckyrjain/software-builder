@@ -294,6 +294,47 @@ def test_builder_recognizes_the_real_system_design_readiness_vocabulary() -> Non
     assert _plan_with_design_readiness("Ready with open questions")["readiness"] != "BLOCKED"
 
 
+def test_builder_splits_the_aggregate_estimate_across_chained_tasks() -> None:
+    plan = build_implementation_plan(
+        {
+            "system_design_spec": {"payload": {"title": "Checkout", "readiness": "Ready", "assessment_target": {"repo": "github.com/acme/checkout"}}},
+            "architecture_review_report": {"payload": {"normalized_decision": {"status": "PASS"}}},
+            "change_impact_report": {"skill_result": {"status": "SUCCESS"}, "payload": {"assessment_target": {"repo": "github.com/acme/checkout"}, "coverage_status": "COMPLETE", "target_paths": ["src/a.py", "src/b.py", "src/c.py", "src/d.py", "src/e.py"], "required_tests": [], "review_triggers": []}},
+        },
+        repository_evidence={"estimated_scope": {"estimate_known": True, "files_upper_bound": 40, "changed_lines_upper_bound": 1500, "confidence": "HIGH"}},
+    )
+    assert plan["readiness"] == "READY"
+    assert sum(task["estimated_scope"]["files_upper_bound"] for task in plan["tasks"]) == 40
+    assert sum(task["estimated_scope"]["changed_lines_upper_bound"] for task in plan["tasks"]) == 1500
+    for task in plan["tasks"]:
+        assert task["estimated_scope"]["files_upper_bound"] < 40
+
+
+def test_builder_never_lets_assessment_target_repo_disagree_with_target_repo() -> None:
+    plan = build_implementation_plan(
+        {
+            "system_design_spec": {"payload": {"title": "Checkout", "readiness": "Ready", "assessment_target": {"repo": "github.com/acme/reference-example"}}},
+            "architecture_review_report": {"payload": {"normalized_decision": {"status": "PASS"}}},
+            "change_impact_report": {"skill_result": {"status": "SUCCESS"}, "payload": {"assessment_target": {}, "target_repo": "github.com/acme/checkout", "coverage_status": "COMPLETE", "target_paths": ["src/checkout.py"], "required_tests": [], "review_triggers": []}},
+        },
+        repository_evidence={"estimated_scope": {"estimate_known": True, "files_upper_bound": 1, "changed_lines_upper_bound": 50, "confidence": "HIGH"}},
+    )
+    assert plan["target_repo"] == "github.com/acme/checkout"
+    assert plan["assessment_target"]["repo"] == plan["target_repo"]
+
+
+def test_builder_blocks_when_impacted_repositories_is_explicitly_empty() -> None:
+    plan = build_implementation_plan(
+        {
+            "system_design_spec": {"payload": {"title": "Checkout", "readiness": "Ready", "assessment_target": {"repo": "github.com/acme/checkout"}}},
+            "architecture_review_report": {"payload": {"normalized_decision": {"status": "PASS"}}},
+            "change_impact_report": {"skill_result": {"status": "SUCCESS"}, "payload": {"assessment_target": {"repo": "github.com/acme/checkout"}, "coverage_status": "COMPLETE", "impacted_repositories": [], "target_paths": ["src/checkout.py"], "required_tests": [], "review_triggers": []}},
+        },
+        repository_evidence={"estimated_scope": {"estimate_known": True, "files_upper_bound": 1, "changed_lines_upper_bound": 100, "confidence": "HIGH"}},
+    )
+    assert plan["readiness"] == "BLOCKED"
+
+
 def test_select_next_task_is_earliest_dependency_satisfied_and_non_mutating() -> None:
     plan = _plan()
     task = select_next_task(plan)
