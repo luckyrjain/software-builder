@@ -346,20 +346,32 @@ def _validate_declared_source_digest(source: object, label: str, errors: list[st
         errors.append(f"error: {label}.assessment_target.source_artifact_digest must be a SHA-256 hex digest")
 
 
+_BLOCKING_SOURCE_STATUSES = {"FAIL", "FAILED", "UNKNOWN", "BLOCKED", "NOT_READY", "PARTIAL"}
+
+
 def _source_status(source: object, *, default: str = "UNKNOWN") -> str:
+    """Return the source's effective status: a rejected decision always outranks a successful run.
+
+    ``skill_result.status`` only says the producing skill executed without error; it says nothing
+    about the artifact's own verdict. A report that ran successfully (``skill_result.status ==
+    "SUCCESS"``) but whose own decision is FAIL/NOT_READY/etc. must still be treated as blocking,
+    not laundered into SUCCESS.
+    """
     if not isinstance(source, Mapping):
         return default
     result = source.get("skill_result")
-    if isinstance(result, Mapping) and isinstance(result.get("status"), str):
-        return result["status"]
+    execution_status = result["status"] if isinstance(result, Mapping) and isinstance(result.get("status"), str) else None
     payload = _payload(source)
     decision = payload.get("normalized_decision") if isinstance(payload, Mapping) else None
-    if isinstance(decision, Mapping) and isinstance(decision.get("status"), str):
-        return decision["status"]
-    if isinstance(payload.get("readiness"), str):
+    decision_status = decision["status"] if isinstance(decision, Mapping) and isinstance(decision.get("status"), str) else None
+    if decision_status is None and isinstance(payload.get("readiness"), str):
         readiness = payload["readiness"].lower()
-        return {"ready": "READY", "not ready": "NOT_READY", "conditional": "CONDITIONAL"}.get(readiness, default)
-    return default
+        decision_status = {"ready": "READY", "not ready": "NOT_READY", "conditional": "CONDITIONAL"}.get(readiness)
+    if decision_status in _BLOCKING_SOURCE_STATUSES:
+        return decision_status
+    if execution_status is not None:
+        return execution_status
+    return decision_status if decision_status is not None else default
 
 
 def _items(source: object, field: str) -> list[Mapping[str, Any]]:
@@ -501,9 +513,13 @@ def build_implementation_plan(
     if estimate is None:
         estimate = {"estimate_known": False, "files_upper_bound": 0, "changed_lines_upper_bound": 0, "confidence": "UNKNOWN"}
     tasks: list[dict[str, Any]] = []
+    last_index = len(target_paths) - 1
     for index, path in enumerate(target_paths):
         task_id = f"TASK-{index + 1:03d}-{canonical_payload_digest({'plan_id': plan_id, 'path': path})[:8]}"
-        task_tests = required_tests if index == 0 else []
+        # Tasks execute in chained order, so a required test that depends on the whole change
+        # (the common case for change-impact-derived required_tests) can only run once every
+        # target path has been touched — attach it to the last task, not the first.
+        task_tests = required_tests if index == last_index else []
         tasks.append({
             "task_id": task_id,
             "title": f"Implement changes under {path}",
@@ -524,7 +540,7 @@ def build_implementation_plan(
     readiness = "READY"
     if errors:
         readiness = "BLOCKED"
-    elif any(status in {"FAIL", "FAILED", "UNKNOWN", "BLOCKED", "NOT_READY", "PARTIAL"} for status in statuses.values()):
+    elif any(status in _BLOCKING_SOURCE_STATUSES for status in statuses.values()):
         readiness = "BLOCKED"
     elif external_dependencies and any(
         normalized_external_statuses.get(normalize_repo_identity(str(dependency.get("repo")))) not in {"READY", "COMPLETE", "SUCCESS"}
@@ -724,9 +740,8 @@ def _validate_traceability(
 def _validate_source_readiness(plan: Mapping[str, Any], source_statuses: Mapping[str, str], errors: list[str]) -> None:
     if plan.get("readiness") != "READY":
         return
-    blocking = {"FAIL", "FAILED", "UNKNOWN", "BLOCKED", "NOT_READY", "PARTIAL"}
     for source, status in source_statuses.items():
-        if status in blocking:
+        if status in _BLOCKING_SOURCE_STATUSES:
             errors.append(f"error: READY plan has blocking source status {source}={status}")
 
 
