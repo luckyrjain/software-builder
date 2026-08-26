@@ -1112,7 +1112,11 @@ def validate_plan_execution_state(
         errors.append("error: plan_execution_state.schema_version must be 1")
     if state.get("plan_id") != plan.get("plan_id"):
         errors.append("error: plan_execution_state.plan_id does not match implementation_plan")
-    if state.get("plan_digest") != canonical_plan_digest(plan):
+    try:
+        expected_plan_digest = canonical_plan_digest(plan)
+    except (TypeError, ValueError):
+        expected_plan_digest = None
+    if expected_plan_digest is None or state.get("plan_digest") != expected_plan_digest:
         errors.append("error: plan_execution_state.plan_digest does not match implementation_plan")
     if state.get("target_repo") != plan.get("target_repo"):
         errors.append("error: plan_execution_state.target_repo does not match implementation_plan")

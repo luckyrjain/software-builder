@@ -143,6 +143,14 @@ def test_malformed_execution_state_fails_closed_without_raising() -> None:
     assert errors
 
 
+def test_validate_plan_execution_state_fails_closed_on_a_non_finite_plan_value() -> None:
+    plan = _plan()
+    plan["poison"] = float("nan")
+    errors = validate_plan_execution_state({}, plan, current_head="a" * 40)
+    assert errors
+    assert any("plan_digest" in error for error in errors)
+
+
 def test_execution_state_reconciles_to_authoritative_task_statuses() -> None:
     plan = _plan()
     state = initial_plan_execution_state(plan, current_head="a" * 40, updated_at="2026-08-26T00:00:00Z")
