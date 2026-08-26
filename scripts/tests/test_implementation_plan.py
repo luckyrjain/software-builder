@@ -235,6 +235,20 @@ def test_builder_uses_repository_estimate_to_produce_a_ready_plan() -> None:
     assert validate_implementation_plan(plan) == []
 
 
+def test_builder_puts_each_chained_task_in_its_own_wave_for_three_or_more_targets() -> None:
+    plan = build_implementation_plan(
+        {
+            "system_design_spec": {"payload": {"title": "Checkout", "readiness": "Ready", "assessment_target": {"repo": "github.com/acme/checkout"}}},
+            "architecture_review_report": {"payload": {"normalized_decision": {"status": "PASS"}}},
+            "change_impact_report": {"skill_result": {"status": "SUCCESS"}, "payload": {"assessment_target": {"repo": "github.com/acme/checkout"}, "coverage_status": "COMPLETE", "target_paths": ["src/a.py", "src/b.py", "src/c.py"], "required_tests": [], "review_triggers": []}},
+        },
+        repository_evidence={"estimated_scope": {"estimate_known": True, "files_upper_bound": 3, "changed_lines_upper_bound": 100, "confidence": "HIGH"}},
+    )
+    assert plan["readiness"] == "READY"
+    assert validate_implementation_plan(plan) == []
+    assert plan["execution_waves"] == [[task["task_id"]] for task in plan["tasks"]]
+
+
 def test_select_next_task_is_earliest_dependency_satisfied_and_non_mutating() -> None:
     plan = _plan()
     task = select_next_task(plan)

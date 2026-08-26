@@ -537,9 +537,11 @@ def build_implementation_plan(
         "action_coverage": {action: [task["task_id"] for task in tasks] for action in actions},
         "required_test_coverage": {test: [task["task_id"] for task in tasks if test in task["required_tests"]] for test in required_tests},
     }
-    waves = [[task["task_id"] for task in tasks[:1]]] if tasks else []
-    if len(tasks) > 1:
-        waves.append([task["task_id"] for task in tasks[1:]])
+    # Each task depends on the one before it (see the linear chain built above), so each task
+    # must occupy its own wave — putting every task after the first into one shared wave breaks
+    # validate_implementation_plan's "a dependency must be in an earlier wave" rule as soon as a
+    # plan has 3+ tasks, silently demoting an otherwise-healthy plan from READY to BLOCKED.
+    waves = [[task["task_id"]] for task in tasks]
     plan = {
         "plan_set_id": plan_set_id,
         "plan_id": plan_id,
