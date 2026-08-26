@@ -277,6 +277,23 @@ def test_builder_attaches_required_tests_to_the_last_chained_task_not_the_first(
     assert plan["traceability"]["required_test_coverage"]["pytest -q tests/test_integration.py"] == [plan["tasks"][2]["task_id"]]
 
 
+def test_builder_recognizes_the_real_system_design_readiness_vocabulary() -> None:
+    def _plan_with_design_readiness(readiness: str) -> dict[str, object]:
+        return build_implementation_plan(
+            {
+                "system_design_spec": {"payload": {"title": "Checkout", "readiness": readiness, "assessment_target": {"repo": "github.com/acme/checkout"}}},
+                "architecture_review_report": {"payload": {"normalized_decision": {"status": "PASS"}}},
+                "change_impact_report": {"skill_result": {"status": "SUCCESS"}, "payload": {"assessment_target": {"repo": "github.com/acme/checkout"}, "coverage_status": "COMPLETE", "target_paths": ["src/checkout.py"], "required_tests": [], "review_triggers": []}},
+            },
+            repository_evidence={"estimated_scope": {"estimate_known": True, "files_upper_bound": 1, "changed_lines_upper_bound": 100, "confidence": "HIGH"}},
+        )
+
+    assert _plan_with_design_readiness("Ready to implement")["readiness"] == "READY"
+    assert _plan_with_design_readiness("Not ready")["readiness"] == "BLOCKED"
+    # "Ready with open questions" maps to CONDITIONAL, which is not itself blocking.
+    assert _plan_with_design_readiness("Ready with open questions")["readiness"] != "BLOCKED"
+
+
 def test_select_next_task_is_earliest_dependency_satisfied_and_non_mutating() -> None:
     plan = _plan()
     task = select_next_task(plan)

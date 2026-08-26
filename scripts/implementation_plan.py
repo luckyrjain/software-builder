@@ -347,6 +347,13 @@ def _validate_declared_source_digest(source: object, label: str, errors: list[st
 
 
 _BLOCKING_SOURCE_STATUSES = {"FAIL", "FAILED", "UNKNOWN", "BLOCKED", "NOT_READY", "PARTIAL"}
+_READINESS_TEXT_STATUS = {
+    "ready": "READY",
+    "ready to implement": "READY",
+    "ready with open questions": "CONDITIONAL",
+    "not ready": "NOT_READY",
+    "conditional": "CONDITIONAL",
+}
 
 
 def _source_status(source: object, *, default: str = "UNKNOWN") -> str:
@@ -365,8 +372,8 @@ def _source_status(source: object, *, default: str = "UNKNOWN") -> str:
     decision = payload.get("normalized_decision") if isinstance(payload, Mapping) else None
     decision_status = decision["status"] if isinstance(decision, Mapping) and isinstance(decision.get("status"), str) else None
     if decision_status is None and isinstance(payload.get("readiness"), str):
-        readiness = payload["readiness"].lower()
-        decision_status = {"ready": "READY", "not ready": "NOT_READY", "conditional": "CONDITIONAL"}.get(readiness)
+        readiness = payload["readiness"].strip().lower()
+        decision_status = _READINESS_TEXT_STATUS.get(readiness)
     if decision_status in _BLOCKING_SOURCE_STATUSES:
         return decision_status
     if execution_status is not None:
@@ -432,7 +439,6 @@ def build_implementation_plan(
         ("system_design_spec", digests["system_design_digest"]),
         ("architecture_review_report", digests["architecture_review_digest"]),
     )]
-    source_refs = sorted(set(source_refs))
     statuses: dict[str, str] = {
         "system_design": _source_status(sources.get("system_design_spec")),
         "architecture": _source_status(sources.get("architecture_review_report")),
