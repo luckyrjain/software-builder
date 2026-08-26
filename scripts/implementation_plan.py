@@ -370,7 +370,7 @@ def _validate_declared_source_digest(source: object, label: str, errors: list[st
         errors.append(f"error: {label}.assessment_target.source_artifact_digest must be a SHA-256 hex digest")
 
 
-_BLOCKING_SOURCE_STATUSES = {"FAIL", "FAILED", "UNKNOWN", "BLOCKED", "NOT_READY", "PARTIAL"}
+_BLOCKING_SOURCE_STATUSES = {"FAIL", "FAILED", "UNKNOWN", "BLOCKED", "NOT_READY", "PARTIAL", "ESCALATED"}
 _READINESS_TEXT_STATUS = {
     "ready": "READY",
     "ready to implement": "READY",

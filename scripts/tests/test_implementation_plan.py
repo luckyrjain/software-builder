@@ -761,3 +761,15 @@ def test_builder_downgrading_for_incomplete_coverage_never_overwrites_a_worse_st
         repository_evidence={"estimated_scope": {"estimate_known": True, "files_upper_bound": 1, "changed_lines_upper_bound": 50, "confidence": "HIGH"}},
     )
     assert plan["readiness"] == "BLOCKED"
+
+
+def test_builder_blocks_when_an_upstream_source_escalated() -> None:
+    plan = build_implementation_plan(
+        {
+            "system_design_spec": {"skill_result": {"status": "ESCALATED"}, "payload": {"title": "Checkout", "readiness": "Ready to implement", "assessment_target": {"repo": "github.com/acme/checkout"}}},
+            "architecture_review_report": {"payload": {"normalized_decision": {"status": "PASS"}}},
+            "change_impact_report": {"skill_result": {"status": "SUCCESS"}, "payload": {"assessment_target": {"repo": "github.com/acme/checkout"}, "coverage_status": "COMPLETE", "target_paths": ["src/checkout.py"], "required_tests": [], "review_triggers": []}},
+        },
+        repository_evidence={"estimated_scope": {"estimate_known": True, "files_upper_bound": 1, "changed_lines_upper_bound": 50, "confidence": "HIGH"}},
+    )
+    assert plan["readiness"] == "BLOCKED"
