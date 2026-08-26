@@ -310,6 +310,21 @@ def test_builder_splits_the_aggregate_estimate_across_chained_tasks() -> None:
         assert task["estimated_scope"]["files_upper_bound"] < 40
 
 
+def test_builder_never_floors_a_known_per_task_estimate_to_zero() -> None:
+    plan = build_implementation_plan(
+        {
+            "system_design_spec": {"payload": {"title": "Checkout", "readiness": "Ready", "assessment_target": {"repo": "github.com/acme/checkout"}}},
+            "architecture_review_report": {"payload": {"normalized_decision": {"status": "PASS"}}},
+            "change_impact_report": {"skill_result": {"status": "SUCCESS"}, "payload": {"assessment_target": {"repo": "github.com/acme/checkout"}, "coverage_status": "COMPLETE", "target_paths": ["src/a.py", "src/b.py", "src/c.py", "src/d.py", "src/e.py"], "required_tests": [], "review_triggers": []}},
+        },
+        repository_evidence={"estimated_scope": {"estimate_known": True, "files_upper_bound": 3, "changed_lines_upper_bound": 3, "confidence": "HIGH"}},
+    )
+    assert plan["readiness"] == "READY"
+    for task in plan["tasks"]:
+        assert task["estimated_scope"]["files_upper_bound"] >= 1
+        assert task["estimated_scope"]["changed_lines_upper_bound"] >= 1
+
+
 def test_builder_never_lets_assessment_target_repo_disagree_with_target_repo() -> None:
     plan = build_implementation_plan(
         {
@@ -415,6 +430,9 @@ def test_path_traversal_and_mismatched_traceability_fail_closed() -> None:
     assert any("target_paths" in error for error in validate_implementation_plan(plan))
     plan = _plan()
     plan["tasks"][0]["target_paths"] = [" /etc/passwd"]
+    assert any("target_paths" in error for error in validate_implementation_plan(plan))
+    plan = _plan()
+    plan["tasks"][0]["target_paths"] = ["."]
     assert any("target_paths" in error for error in validate_implementation_plan(plan))
     plan = _plan()
     plan["tasks"][1]["source_condition_refs"] = []

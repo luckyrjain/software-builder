@@ -530,7 +530,10 @@ def build_implementation_plan(
         if not isinstance(total, int):
             return total
         share, remainder = divmod(total, task_count)
-        return share + (1 if index < remainder else 0)
+        value = share + (1 if index < remainder else 0)
+        # A known estimate must never floor a task to 0: every task touches at least the one
+        # target path it owns, so its own bound must allow at least that much room.
+        return max(value, 1) if estimate.get("estimate_known") is True else value
 
     tasks: list[dict[str, Any]] = []
     last_index = len(target_paths) - 1
@@ -699,6 +702,7 @@ def _validate_task(task: object, index: int, readiness: str, errors: list[str]) 
                 or normalized_path.startswith("/")
                 or bool(re.match(r"^[A-Za-z]:/", normalized_path))
                 or any(part == ".." for part in normalized_path.split("/"))
+                or normalized_path.rstrip("/") == "."
             ):
                 errors.append(f"error: {label}.target_paths must remain inside target_repo")
     _validate_estimate(task.get("estimated_scope"), f"{label}.estimated_scope", readiness, errors)
