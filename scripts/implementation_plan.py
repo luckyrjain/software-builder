@@ -5,10 +5,12 @@ from __future__ import annotations
 import argparse
 import copy
 import json
+import re
 from pathlib import Path
 from typing import Any, Mapping
 
 from scripts.registry.assessment_target import canonical_payload_digest, normalize_repo_identity
+from scripts.registry.semantic_document import is_sha256_digest
 
 
 PLAN_FIELDS = {
@@ -153,6 +155,15 @@ def _source_digest(source: object) -> str:
     return canonical_payload_digest(payload)
 
 
+def _validate_declared_source_digest(source: object, label: str, errors: list[str]) -> None:
+    payload = _payload(source)
+    target = payload.get("assessment_target")
+    if not isinstance(target, Mapping) or "source_artifact_digest" not in target:
+        return
+    if not is_sha256_digest(target.get("source_artifact_digest")):
+        errors.append(f"error: {label}.assessment_target.source_artifact_digest must be a SHA-256 hex digest")
+
+
 def _source_status(source: object, *, default: str = "UNKNOWN") -> str:
     if not isinstance(source, Mapping):
         return default
@@ -222,12 +233,19 @@ def build_implementation_plan(
     }
     plan_set_id = derive_plan_set_id(**digests)
     plan_id = derive_plan_id(plan_set_id, normalized_repo)
-    source_refs = [f"{name}:{digests[name.replace('_report', '_digest')] if name.replace('_report', '_digest') in digests else _source_digest(source)}" for name, source in sources.items() if name != "target_repo"]
+    source_refs = [f"{name}:{digest}" for name, digest in (
+        ("change_impact_report", digests["change_impact_digest"]),
+        ("system_design_spec", digests["system_design_digest"]),
+        ("architecture_review_report", digests["architecture_review_digest"]),
+    )]
     source_refs = sorted(set(source_refs))
     statuses: dict[str, str] = {
         "system_design": _source_status(sources.get("system_design_spec")),
         "architecture": _source_status(sources.get("architecture_review_report")),
     }
+    _validate_declared_source_digest(sources.get("system_design_spec"), "system_design_spec", errors)
+    _validate_declared_source_digest(sources.get("architecture_review_report"), "architecture_review_report", errors)
+    _validate_declared_source_digest(sources.get("change_impact_report"), "change_impact_report", errors)
     impact_status = _source_status(sources.get("change_impact_report"))
     if impact.get("coverage_status") != "COMPLETE":
         impact_status = "PARTIAL"
@@ -241,10 +259,16 @@ def build_implementation_plan(
         })
         if len(normalized_repositories) > 1:
             errors.append("change impact names multiple repositories; invoke planner once per repository")
-    triggers = [
-        str(item) for item in impact.get("review_triggers", [])
-        if isinstance(item, str) and item in SPECIALIST_ARTIFACTS
-    ]
+    raw_triggers = impact.get("review_triggers", [])
+    triggers: list[str] = []
+    if not isinstance(raw_triggers, list):
+        errors.append("error: change impact review_triggers must be a list")
+    else:
+        for item in raw_triggers:
+            if not isinstance(item, str) or item not in SPECIALIST_ARTIFACTS:
+                errors.append(f"error: unknown or malformed specialist trigger: {item!r}")
+            else:
+                triggers.append(item)
     specialist_sources = sources.get("specialist_reports")
     if not isinstance(specialist_sources, Mapping):
         specialist_sources = {}
@@ -254,6 +278,10 @@ def build_implementation_plan(
         statuses[f"specialist:{trigger}"] = _source_status(report)
         if report is None:
             errors.append(f"triggered specialist {trigger} is missing")
+        else:
+            _validate_declared_source_digest(report, artifact, errors)
+            source_refs.append(f"{artifact}:{_source_digest(report)}")
+    source_refs = sorted(set(source_refs))
     target_paths = impact.get("target_paths")
     if (not isinstance(target_paths, list) or not target_paths) and isinstance(repository_evidence, Mapping):
         target_paths = repository_evidence.get("target_paths")
@@ -265,11 +293,26 @@ def build_implementation_plan(
     required_tests = [test for test in impact.get("required_tests", []) if _non_empty_string(test)] if isinstance(impact.get("required_tests"), list) else []
     conditions: list[str] = []
     actions: list[str] = []
-    for name, source in [("design", sources.get("system_design_spec")), ("architecture", sources.get("architecture_review_report")), ("impact", sources.get("change_impact_report"))]:
+    planning_sources: list[tuple[str, object]] = [
+        ("design", sources.get("system_design_spec")),
+        ("architecture", sources.get("architecture_review_report")),
+        ("impact", sources.get("change_impact_report")),
+    ]
+    for trigger in sorted(set(triggers)):
+        planning_sources.append(
+            (f"specialist:{trigger}", specialist_sources.get(trigger) or sources.get(SPECIALIST_ARTIFACTS[trigger]))
+        )
+    for name, source in planning_sources:
         conditions.extend(_item_ref(item, f"{name}-condition", index) for index, item in enumerate(_items(source, "conditions")))
         actions.extend(_item_ref(item, f"{name}-action", index) for index, item in enumerate(_items(source, "required_actions")))
     evidence = repository_evidence or {}
     external_dependencies = evidence.get("external_dependencies") if isinstance(evidence.get("external_dependencies"), list) else []
+    external_dependency_statuses = evidence.get("external_dependency_statuses") if isinstance(evidence.get("external_dependency_statuses"), Mapping) else {}
+    normalized_external_statuses = {
+        normalize_repo_identity(str(repo)): str(status).upper()
+        for repo, status in external_dependency_statuses.items()
+        if _non_empty_string(repo) and isinstance(status, str)
+    }
     estimate = evidence.get("estimated_scope") if isinstance(evidence.get("estimated_scope"), Mapping) else None
     if estimate is None:
         estimate = {"estimate_known": False, "files_upper_bound": 0, "changed_lines_upper_bound": 0, "confidence": "UNKNOWN"}
@@ -299,6 +342,12 @@ def build_implementation_plan(
         readiness = "BLOCKED"
     elif any(status in {"FAIL", "FAILED", "UNKNOWN", "BLOCKED", "NOT_READY", "PARTIAL"} for status in statuses.values()):
         readiness = "BLOCKED"
+    elif external_dependencies and any(
+        normalized_external_statuses.get(normalize_repo_identity(str(dependency.get("repo")))) not in {"READY", "COMPLETE", "SUCCESS"}
+        for dependency in external_dependencies
+        if isinstance(dependency, Mapping) and _non_empty_string(dependency.get("repo"))
+    ):
+        readiness = "PARTIAL"
     elif not repository_evidence or estimate.get("estimate_known") is not True:
         readiness = "PARTIAL"
     traceability = {
@@ -411,7 +460,12 @@ def _validate_task(task: object, index: int, readiness: str, errors: list[str]) 
     paths = task.get("target_paths")
     if isinstance(paths, list):
         for path in paths:
-            if isinstance(path, str) and (path.startswith("/") or path == ".." or "/../" in f"/{path}/"):
+            normalized_path = path.replace("\\", "/") if isinstance(path, str) else ""
+            if isinstance(path, str) and (
+                path.startswith("/")
+                or bool(re.match(r"^[A-Za-z]:/", normalized_path))
+                or any(part == ".." for part in normalized_path.split("/"))
+            ):
                 errors.append(f"error: {label}.target_paths must remain inside target_repo")
     _validate_estimate(task.get("estimated_scope"), f"{label}.estimated_scope", readiness, errors)
     dependencies = task.get("dependencies")
@@ -463,6 +517,17 @@ def _validate_traceability(
             targets = coverage.get(source)
             if not isinstance(targets, list) or not targets or not all(target in task_ids for target in targets):
                 errors.append(f"error: traceability.{group} does not cover {source}")
+                continue
+            for target in targets:
+                task = next(task for task in task_items if task.get("task_id") == target)
+                if group == "condition_coverage" and source not in _task_string_values(task, "source_condition_refs"):
+                    errors.append(f"error: traceability.{group} maps {source} to a task that does not cite it")
+                elif group == "action_coverage" and source not in _task_string_values(task, "source_action_refs"):
+                    errors.append(f"error: traceability.{group} maps {source} to a task that does not cite it")
+                elif group == "required_test_coverage" and source not in _task_string_values(task, "required_tests"):
+                    errors.append(f"error: traceability.{group} maps {source} to a task that does not run it")
+        for source in sorted(set(coverage) - set(sources)):
+            errors.append(f"error: traceability.{group} contains undeclared source {source}")
 
 
 def _validate_source_readiness(plan: Mapping[str, Any], source_statuses: Mapping[str, str], errors: list[str]) -> None:
@@ -533,6 +598,10 @@ def validate_implementation_plan(
     errors: list[str] = []
     if not isinstance(plan, Mapping):
         return ["error: implementation_plan must be a mapping"]
+    try:
+        canonical_payload_digest(dict(plan))
+    except (TypeError, ValueError):
+        errors.append("error: implementation_plan must contain only finite JSON-compatible values")
     unknown = sorted(set(plan) - PLAN_FIELDS)
     missing = sorted(PLAN_FIELDS - set(plan))
     if unknown:
@@ -649,6 +718,9 @@ def validate_plan_execution_state(
     errors: list[str] = []
     if not isinstance(state, Mapping):
         return ["error: plan_execution_state must be a mapping"]
+    plan_errors = validate_implementation_plan(plan)
+    if plan_errors:
+        errors.extend(f"error: invalid implementation_plan: {error}" for error in plan_errors)
     unknown = sorted(set(state) - EXECUTION_STATE_FIELDS)
     missing = sorted(EXECUTION_STATE_FIELDS - set(state))
     if unknown:
@@ -703,6 +775,8 @@ def validate_plan_execution_state(
 def select_next_task(
     plan: Mapping[str, Any],
     task_statuses: Mapping[str, str] | None = None,
+    *,
+    state_reconciled: bool = False,
 ) -> dict[str, Any] | None:
     """Select the first dependency-satisfied task in the earliest incomplete wave.
 
@@ -714,6 +788,8 @@ def select_next_task(
     tasks = {task["task_id"]: task for task in plan.get("tasks", []) if isinstance(task, Mapping)}
     statuses = {task_id: "PENDING" for task_id in tasks}
     if task_statuses is not None:
+        if not state_reconciled:
+            return None
         if not isinstance(task_statuses, Mapping):
             return None
         if set(task_statuses) != set(tasks) or any(status not in TASK_STATUSES for status in task_statuses.values()):

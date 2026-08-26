@@ -26,6 +26,10 @@ Call `build_implementation_plan` from `scripts/implementation_plan.py`. It deriv
 repository plan identities, creates only repository-grounded tasks, preserves cross-repository work as
 explicit external dependencies, and assigns deterministic task waves.
 
+Unresolved `external_dependencies` keep the plan `PARTIAL` until repository evidence records each
+dependency as `READY`, `COMPLETE`, or `SUCCESS`; a requirement declaration is never treated as proof
+that the dependency is satisfied.
+
 ## 3. Validate
 
 Run `validate_implementation_plan` before emitting output. Check all dependencies, cycles, wave order,
@@ -39,4 +43,5 @@ task, and reconciles `plan_execution_state` against official task/SCM state befo
 write. Remote branch/ref creation uses the observed head as an expected-head/fast-forward
 precondition; after a create conflict, re-read the deterministic branch and PR identity and adopt the
 matching execution or return `BLOCKED`. Never force-update a conflicting execution. The canonical
-plan is immutable.
+plan is immutable. Task statuses may be supplied to the selector only after this reconciliation; an
+unreconciled caller/file status map is rejected.

@@ -281,8 +281,79 @@ def test_select_next_task_is_earliest_dependency_satisfied_and_non_mutating() ->
     assert task is not None and task["task_id"] == "TASK-001"
     task["title"] = "caller mutation"
     assert plan["tasks"][0]["title"] != "caller mutation"
-    assert select_next_task(plan, {"TASK-001": "COMPLETE", "TASK-002": "PENDING"})["task_id"] == "TASK-002"
-    assert select_next_task(plan, {"TASK-001": "IN_PROGRESS", "TASK-002": "PENDING"}) is None
+    assert select_next_task(plan, {"TASK-001": "COMPLETE", "TASK-002": "PENDING"}, state_reconciled=True)["task_id"] == "TASK-002"
+    assert select_next_task(plan, {"TASK-001": "IN_PROGRESS", "TASK-002": "PENDING"}, state_reconciled=True) is None
+    assert select_next_task(plan, {"TASK-001": "COMPLETE", "TASK-002": "PENDING"}) is None
+
+
+def test_builder_rejects_unknown_specialist_trigger_and_carries_specialist_traceability() -> None:
+    sources = {
+        "system_design_spec": {"payload": {"title": "Checkout", "readiness": "Ready", "assessment_target": {"repo": "github.com/acme/checkout"}}},
+        "architecture_review_report": {"payload": {"normalized_decision": {"status": "PASS"}}},
+        "change_impact_report": {"skill_result": {"status": "SUCCESS"}, "payload": {
+            "assessment_target": {"repo": "github.com/acme/checkout"},
+            "coverage_status": "COMPLETE",
+            "target_paths": ["src/checkout.py"],
+            "review_triggers": ["security", "future-specialist"],
+        }},
+        "specialist_reports": {
+            "security": {"skill_result": {"status": "SUCCESS"}, "payload": {
+                "conditions": [{"id": "security-condition"}],
+                "required_actions": [{"id": "security-action"}],
+            }},
+        },
+    }
+    plan = build_implementation_plan(sources, repository_evidence={
+        "estimated_scope": {"estimate_known": True, "files_upper_bound": 1, "changed_lines_upper_bound": 100, "confidence": "HIGH"},
+    })
+    assert plan["readiness"] == "BLOCKED"
+
+    sources["change_impact_report"]["payload"]["review_triggers"] = ["security"]
+    plan = build_implementation_plan(sources, repository_evidence={
+        "estimated_scope": {"estimate_known": True, "files_upper_bound": 1, "changed_lines_upper_bound": 100, "confidence": "HIGH"},
+    })
+    assert "specialist:security-condition:security-condition" in plan["tasks"][0]["source_condition_refs"]
+    assert "specialist:security-action:security-action" in plan["tasks"][0]["source_action_refs"]
+    assert validate_implementation_plan(plan) == []
+
+
+def test_builder_keeps_unresolved_external_dependencies_partial() -> None:
+    plan = build_implementation_plan(
+        {
+            "system_design_spec": {"payload": {"title": "Checkout", "readiness": "Ready", "assessment_target": {"repo": "github.com/acme/checkout"}}},
+            "architecture_review_report": {"payload": {"normalized_decision": {"status": "PASS"}}},
+            "change_impact_report": {"skill_result": {"status": "SUCCESS"}, "payload": {"assessment_target": {"repo": "github.com/acme/checkout"}, "coverage_status": "COMPLETE", "target_paths": ["src/checkout.py"], "review_triggers": []}},
+        },
+        repository_evidence={
+            "external_dependencies": [{"repo": "https://github.com/acme/catalog", "required_state_or_artifact": "COMPLETE", "reason": "shared contract", "evidence_ref": "plan:catalog"}],
+            "estimated_scope": {"estimate_known": True, "files_upper_bound": 1, "changed_lines_upper_bound": 100, "confidence": "HIGH"},
+        },
+    )
+    assert plan["readiness"] == "PARTIAL"
+
+    resolved_plan = build_implementation_plan(
+        {
+            "system_design_spec": {"payload": {"title": "Checkout", "readiness": "Ready", "assessment_target": {"repo": "github.com/acme/checkout"}}},
+            "architecture_review_report": {"payload": {"normalized_decision": {"status": "PASS"}}},
+            "change_impact_report": {"skill_result": {"status": "SUCCESS"}, "payload": {"assessment_target": {"repo": "github.com/acme/checkout"}, "coverage_status": "COMPLETE", "target_paths": ["src/checkout.py"], "review_triggers": []}},
+        },
+        repository_evidence={
+            "external_dependencies": [{"repo": "https://github.com/acme/catalog", "required_state_or_artifact": "COMPLETE", "reason": "shared contract", "evidence_ref": "plan:catalog"}],
+            "external_dependency_statuses": {"https://github.com/acme/catalog.git": "complete"},
+            "estimated_scope": {"estimate_known": True, "files_upper_bound": 1, "changed_lines_upper_bound": 100, "confidence": "HIGH"},
+        },
+    )
+    assert resolved_plan["readiness"] == "READY"
+
+
+def test_path_traversal_and_mismatched_traceability_fail_closed() -> None:
+    plan = _plan()
+    plan["tasks"][0]["target_paths"] = ["C:\\repo\\..\\secrets.txt"]
+    assert any("target_paths" in error for error in validate_implementation_plan(plan))
+    plan = _plan()
+    plan["tasks"][1]["source_condition_refs"] = []
+    plan["traceability"]["condition_coverage"]["condition:timeout-budget"] = ["TASK-002"]
+    assert any("does not cite it" in error for error in validate_implementation_plan(plan))
 
 
 def test_plan_task_normalization_preserves_legacy_task_inputs() -> None:
