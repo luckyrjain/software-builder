@@ -328,6 +328,9 @@ def test_path_traversal_and_mismatched_traceability_fail_closed() -> None:
     plan["tasks"][0]["target_paths"] = ["\\etc\\passwd"]
     assert any("target_paths" in error for error in validate_implementation_plan(plan))
     plan = _plan()
+    plan["tasks"][0]["target_paths"] = [" /etc/passwd"]
+    assert any("target_paths" in error for error in validate_implementation_plan(plan))
+    plan = _plan()
     plan["tasks"][1]["source_condition_refs"] = []
     plan["traceability"]["condition_coverage"]["condition:timeout-budget"] = ["TASK-002"]
     assert any("does not cite it" in error for error in validate_implementation_plan(plan))

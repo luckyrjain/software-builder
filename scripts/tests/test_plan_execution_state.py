@@ -116,6 +116,25 @@ def test_execution_state_blocks_stale_head_and_generation() -> None:
     assert any("head" in error for error in errors)
 
 
+def test_in_progress_task_without_matching_current_task_id_is_rejected() -> None:
+    plan = _plan()
+    state = {
+        "schema_version": 1,
+        "plan_id": plan["plan_id"],
+        "plan_digest": canonical_plan_digest(plan),
+        "target_repo": plan["target_repo"],
+        "state_generation": 0,
+        "current_task_id": None,
+        "task_statuses": {"TASK-001": "IN_PROGRESS", "TASK-002": "PENDING"},
+        "completed_evidence_refs": [],
+        "observed_head_revision": "a" * 40,
+        "blocked_reason": None,
+        "updated_at": "2026-08-26T00:00:00Z",
+    }
+    errors = validate_plan_execution_state(state, plan, current_head="a" * 40)
+    assert any("current_task_id must be the IN_PROGRESS task" in error for error in errors)
+
+
 def test_malformed_execution_state_fails_closed_without_raising() -> None:
     plan = _plan()
     state = initial_plan_execution_state(plan, current_head="a" * 40, updated_at="2026-08-26T00:00:00Z")

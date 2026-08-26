@@ -650,9 +650,10 @@ def _validate_task(task: object, index: int, readiness: str, errors: list[str]) 
     paths = task.get("target_paths")
     if isinstance(paths, list):
         for path in paths:
-            normalized_path = path.replace("\\", "/") if isinstance(path, str) else ""
+            normalized_path = path.replace("\\", "/").strip() if isinstance(path, str) else ""
             if isinstance(path, str) and (
-                normalized_path.startswith("/")
+                path != path.strip()
+                or normalized_path.startswith("/")
                 or bool(re.match(r"^[A-Za-z]:/", normalized_path))
                 or any(part == ".." for part in normalized_path.split("/"))
             ):
@@ -993,8 +994,10 @@ def validate_plan_execution_state(
         active = [task_id for task_id, status in statuses.items() if status == "IN_PROGRESS"]
         if len(active) > 1:
             errors.append("error: plan_execution_state may have only one IN_PROGRESS task")
-        if state.get("current_task_id") is not None and statuses.get(state.get("current_task_id")) != "IN_PROGRESS":
-            errors.append("error: current_task_id must be the IN_PROGRESS task")
+        else:
+            expected_current = active[0] if active else None
+            if state.get("current_task_id") != expected_current:
+                errors.append("error: current_task_id must be the IN_PROGRESS task")
     if not _non_empty_string(state.get("updated_at")):
         errors.append("error: plan_execution_state.updated_at must be a non-empty timestamp")
     return sorted(set(errors))
