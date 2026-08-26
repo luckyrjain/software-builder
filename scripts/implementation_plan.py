@@ -802,6 +802,37 @@ def _validate_traceability(
             errors.append(f"error: traceability.{group} contains undeclared source {source}")
 
 
+_CANONICAL_SOURCE_REF_NAMES = ("change_impact_report", "system_design_spec", "architecture_review_report")
+
+
+def _validate_plan_set_id_matches_source_refs(plan: Mapping[str, Any], errors: list[str]) -> None:
+    """When source_refs uses the canonical producer names, plan_set_id must derive from them.
+
+    Without this, a fabricated plan_set_id paired with a plan_id kept internally consistent with
+    it (via derive_plan_id) would pass validation with no error, since nothing else ties
+    plan_set_id back to the source digests the plan itself claims to be built from.
+    """
+    refs = plan.get("source_refs")
+    if not isinstance(refs, list):
+        return
+    digests: dict[str, str] = {}
+    for ref in refs:
+        if not isinstance(ref, str) or ":" not in ref:
+            continue
+        name, _, digest = ref.partition(":")
+        if name in _CANONICAL_SOURCE_REF_NAMES and is_sha256_digest(digest):
+            digests[name] = digest
+    if set(digests) != set(_CANONICAL_SOURCE_REF_NAMES):
+        return
+    expected_plan_set_id = derive_plan_set_id(
+        change_impact_digest=digests["change_impact_report"],
+        system_design_digest=digests["system_design_spec"],
+        architecture_review_digest=digests["architecture_review_report"],
+    )
+    if plan.get("plan_set_id") != expected_plan_set_id:
+        errors.append("error: plan_set_id is not deterministic for the declared source_refs digests")
+
+
 def _validate_source_readiness(plan: Mapping[str, Any], source_statuses: Mapping[str, str], errors: list[str]) -> None:
     if plan.get("readiness") != "READY":
         return
@@ -915,6 +946,7 @@ def validate_implementation_plan(
         if not isinstance(plan.get(field), list):
             errors.append(f"error: {field} must be a list")
     _string_list(plan.get("source_refs"), "source_refs", errors, allow_empty=False)
+    _validate_plan_set_id_matches_source_refs(plan, errors)
     tasks = plan.get("tasks")
     task_ids: list[str] = []
     dependency_map: dict[str, list[str]] = {}

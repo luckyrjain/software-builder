@@ -274,6 +274,22 @@ def test_builder_blocks_when_triggered_specialist_or_paths_are_missing() -> None
     assert plan["tasks"] == []
 
 
+def test_fabricated_plan_set_id_is_rejected_when_source_refs_are_canonical() -> None:
+    plan = build_implementation_plan(
+        {
+            "system_design_spec": {"payload": {"title": "Checkout", "readiness": "Ready", "assessment_target": {"repo": "github.com/acme/checkout"}}},
+            "architecture_review_report": {"payload": {"normalized_decision": {"status": "PASS"}}},
+            "change_impact_report": {"skill_result": {"status": "SUCCESS"}, "payload": {"assessment_target": {"repo": "github.com/acme/checkout"}, "coverage_status": "COMPLETE", "target_paths": ["src/checkout.py"], "required_tests": [], "review_triggers": []}},
+        },
+        repository_evidence={"estimated_scope": {"estimate_known": True, "files_upper_bound": 1, "changed_lines_upper_bound": 50, "confidence": "HIGH"}},
+    )
+    assert validate_implementation_plan(plan) == []
+
+    plan["plan_set_id"] = derive_plan_set_id("a" * 64, "b" * 64, "c" * 64)
+    plan["plan_id"] = derive_plan_id(plan["plan_set_id"], plan["target_repo"])
+    assert any("plan_set_id" in error and "source_refs" in error for error in validate_implementation_plan(plan))
+
+
 def test_builder_uses_repository_estimate_to_produce_a_ready_plan() -> None:
     plan = build_implementation_plan(
         {
