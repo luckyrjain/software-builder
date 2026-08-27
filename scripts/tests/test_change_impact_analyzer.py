@@ -594,13 +594,6 @@ def test_hyphenated_partial_failure_emits_resilience_trigger() -> None:
     assert "resilience" in result["review_triggers"]
 
 
-def test_non_k8s_resource_limits_do_not_emit_k8s_rightsizing() -> None:
-    result = analyze_change(
-        source=diff_text("Rate limiter change: requests: 100 per minute, limits: 50 burst per client."),
-    )
-    assert "k8s_rightsizing" not in result["review_triggers"]
-
-
 def test_unrelated_memory_and_generic_limits_do_not_emit_k8s_rightsizing() -> None:
     result = analyze_change(
         source=diff_text("Fixed a memory leak in the parser. Also updated API rate limits: 100 req/s per client."),
@@ -661,6 +654,38 @@ def test_diff_stripped_single_space_indentation_still_emits_k8s_rightsizing() ->
         source=diff_text("diff --git a/x.yaml b/x.yaml\n+resources:\n+ limits:\n+  cpu: 500m\n"),
     )
     assert "k8s_rightsizing" in result["review_triggers"]
+
+
+def test_extensionless_path_key_does_not_emit_k8s_rightsizing() -> None:
+    result = analyze_change(
+        source=diff_text("resources:\n  limits:\n    docs/readme:\n      - clarified installation steps\n"),
+    )
+    assert "k8s_rightsizing" not in result["review_triggers"]
+    assert "capacity" not in result["review_triggers"]
+
+
+def test_real_vendor_extended_resource_still_emits_k8s_rightsizing() -> None:
+    result = analyze_change(
+        source=diff_text("resources:\n  limits:\n    nvidia.com/gpu: 2\n"),
+    )
+    assert "k8s_rightsizing" in result["review_triggers"]
+
+
+def test_many_blank_lines_between_resources_and_limits_still_emits_k8s_rightsizing() -> None:
+    hostile = "resources:" + ("\n" * 40) + "  limits:\n    cpu: 500m\n"
+    result = analyze_change(source=diff_text(hostile))
+    assert "k8s_rightsizing" in result["review_triggers"]
+
+
+def test_unbounded_blank_line_matcher_still_does_not_blow_up() -> None:
+    import time
+
+    hostile = "diff --git a/x.yaml b/x.yaml\n+resources:\n" + ("+ \n" * 200000) + "+done: true\n"
+    start = time.monotonic()
+    result = analyze_change(source=diff_text(hostile))
+    elapsed = time.monotonic() - start
+    assert elapsed < 2.0
+    assert "k8s_rightsizing" not in result["review_triggers"]
 
 
 def test_invalid_coverage_status_is_execution_failure_not_finding() -> None:

@@ -38,17 +38,23 @@ _HYPHEN_VARIANTS = str.maketrans(
     },
 )
 # A real Kubernetes resources stanza names an actual resource type (cpu/memory/ephemeral-storage/
-# hugepages, or a vendor extended resource like nvidia.com/gpu) under limits:/requests:. Every
-# quantifier below is anchored to either horizontal whitespace ([ \t]) or a literal newline, with no
-# overlap between adjacent groups, so a non-matching input cannot trigger catastrophic backtracking
-# the way `\s*\n\s+` (whose classes both match "\n") could.
-_K8S_RESOURCE_KEY_NAMES = r"cpu|memory|ephemeral-storage|hugepages(?:-\S+)?|[\w.-]+/[\w-]+"
+# hugepages, or a vendor extended resource formatted as <dns-domain>/<name>, e.g. nvidia.com/gpu —
+# the domain requires at least one dot, so an ordinary extension-free path like "docs/readme" does
+# not qualify) under limits:/requests:. Every quantifier below is anchored to either horizontal
+# whitespace ([ \t]) or a literal newline, with no overlap between adjacent groups, so a non-matching
+# input cannot trigger catastrophic backtracking the way `\s*\n\s+` (whose classes both match "\n")
+# could; blank-line runs are intentionally unbounded rather than capped, since each repetition still
+# consumes a mandatory newline and so cannot itself introduce backtracking blowup — a bounded cap
+# would only let enough padding evade detection entirely.
+_K8S_DNS_LABEL = r"[a-z0-9](?:[a-z0-9-]*[a-z0-9])?"
+_K8S_RESOURCE_KEY_PATTERN = rf"cpu|memory|ephemeral-storage|hugepages(?:-\S+)?|{_K8S_DNS_LABEL}(?:\.{_K8S_DNS_LABEL})+/[\w-]+"
+_K8S_BLANK_LINES = r"(?:[ \t]*\r?\n)*"
 _K8S_RESOURCES_BLOCK = re.compile(
     r"resources:[ \t]*\r?\n"
-    r"(?:[ \t]*\r?\n){0,5}"
+    rf"{_K8S_BLANK_LINES}"
     r"[ \t]*(?:limits|requests):[ \t]*\r?\n"
-    r"(?:[ \t]*\r?\n){0,5}"
-    rf"[ \t]*(?:{_K8S_RESOURCE_KEY_NAMES})\s*:",
+    rf"{_K8S_BLANK_LINES}"
+    rf"[ \t]*(?:{_K8S_RESOURCE_KEY_PATTERN})\s*:",
 )
 _LOCKFILES = {
     "package-lock.json",
