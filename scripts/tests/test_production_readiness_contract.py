@@ -143,6 +143,17 @@ def test_valid_waiver_records_risk_but_not_ready_promotion() -> None:
     assert result["waivers"] == [waiver]
 
 
+def test_waiver_with_naive_expires_at_does_not_raise() -> None:
+    # expires_at without a "Z"/offset parses to a naive datetime; comparing it to an
+    # aware "now" must not raise -- a malformed-but-plausible timestamp fails closed
+    # (waiver excluded), it never crashes aggregation.
+    dims = [dimension("security", "FAIL")]
+    future_naive = {"accepted_by": "release-owner", "evidence_ref": "ticket:123", "expires_at": "2099-01-01T00:00:00"}
+    past_naive = {"accepted_by": "release-owner", "evidence_ref": "ticket:124", "expires_at": "2000-01-01T00:00:00"}
+    result = pr.aggregate_report(dims, waivers=[future_naive, past_naive])
+    assert result["waivers"] == [future_naive]
+
+
 # ---------------------------------------------------------------------------
 # Slice 3 — capability registration regression
 # ---------------------------------------------------------------------------
@@ -321,6 +332,14 @@ def test_required_codeowners_unknown_is_unknown() -> None:
     assert result.status == "UNKNOWN"
 
 
+def test_required_codeowners_never_gathered_is_unknown_not_fail() -> None:
+    # codeowners_satisfied simply absent (never gathered) is an evidence gap like the explicit
+    # "unknown" sentinel above -- it must not be treated as an affirmative "not satisfied" finding.
+    result = pr.evaluate_scm_policy(policy(codeowners_required=True), observed(codeowners_satisfied=None))
+    assert result.status == "UNKNOWN"
+    assert result.reason == "codeowners_unknown"
+
+
 def test_blocking_thread_open_fails_when_policy_requires_resolution() -> None:
     result = pr.evaluate_scm_policy(policy(blocking_threads_must_resolve=True), observed(blocking_threads_open=1))
     assert result.status == "FAIL"
@@ -424,6 +443,14 @@ def test_dependency_leaf_pass_with_only_model_cve_knowledge_is_unknown_for_prod(
     assert pr.evaluate_dependency_gate(report, advisory_evidence=None, dependency_ci=None).status == "UNKNOWN"
 
 
+def test_dependency_gate_with_no_cve_authority_declared_is_unknown_not_pass() -> None:
+    # A report with no "cve" entry in evidence_authorities at all (not merely a weak one) must
+    # never be treated as if it were strongly authoritative -- absence of evidence is not evidence
+    # of authority, and per capability_catalog.yaml "absence never maps to PASS".
+    report = trusted_child_result("dependency_upgrade_report", status="PASS", evidence_authorities={})
+    assert pr.evaluate_dependency_gate(report, advisory_evidence=None, dependency_ci=None).status == "UNKNOWN"
+
+
 def test_current_dependency_ci_can_satisfy_advisory_requirement() -> None:
     report = trusted_child_result("dependency_upgrade_report", status="PASS", evidence_authorities={"cve": {"model_knowledge"}})
     check = dependency_ci_fixture(source_revision="a" * 40, required=True, scope_covers_changed_manifest=True, conclusion="success")
@@ -453,6 +480,19 @@ def test_stateful_tier1_without_recovery_freshness_policy_is_unknown() -> None:
 
 def test_stateless_change_can_make_recovery_not_applicable() -> None:
     assert pr.evaluate_recovery(stateless_reversible_fixture()).status == "NOT_APPLICABLE"
+
+
+def test_caller_only_recovery_mechanism_is_unknown_for_tier1() -> None:
+    fixture = tier1_stateful_fixture(mechanism_authority="caller")
+    assert pr.evaluate_recovery(fixture, criticality="tier1").status == "UNKNOWN"
+
+
+def test_caller_only_recovery_mechanism_is_conditional_for_tier3() -> None:
+    # Recovery is one of the four operational dimensions in operational-gates.md's tier-sensitive
+    # table alongside ownership/rollback/post-deploy -- caller-only evidence is at most CONDITIONAL
+    # (never UNKNOWN, never PASS) at tier2/tier3, the same rule already applied to its siblings.
+    fixture = tier1_stateful_fixture(mechanism_authority="caller")
+    assert pr.evaluate_recovery(fixture, criticality="tier3").status == "CONDITIONAL"
 
 
 def test_monitor_normally_is_not_a_verification_plan() -> None:

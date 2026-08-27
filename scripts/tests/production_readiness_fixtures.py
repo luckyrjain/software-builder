@@ -326,11 +326,13 @@ def authoritative_unowned() -> dict[str, Any]:
     return {"owner_authority": "authoritative_host", "unowned": True}
 
 
-def tier1_stateful_fixture(*, policy_freshness: str | None = "2026-08-01T00:00:00Z") -> dict[str, Any]:
+def tier1_stateful_fixture(
+    *, policy_freshness: str | None = "2026-08-01T00:00:00Z", mechanism_authority: str = "authoritative_host"
+) -> dict[str, Any]:
     return {
         "stateful": True,
         "reversible": False,
-        "mechanism_authority": "authoritative_host",
+        "mechanism_authority": mechanism_authority,
         "rpo_rto_policy": {"rpo_minutes": 15, "rto_minutes": 60},
         "last_exercise": {"date": "2026-07-01", "result": "success"},
         "policy_freshness": policy_freshness,

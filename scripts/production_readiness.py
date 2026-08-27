@@ -116,10 +116,14 @@ def _is_valid_waiver(waiver: Mapping) -> bool:
             import datetime
 
             expiry = datetime.datetime.fromisoformat(str(expires_at).replace("Z", "+00:00"))
+            if expiry.tzinfo is None:
+                # A naive timestamp (no "Z"/offset) can't be compared to an aware "now" below --
+                # treat it as UTC rather than letting the comparison raise TypeError.
+                expiry = expiry.replace(tzinfo=datetime.timezone.utc)
             now = datetime.datetime.now(datetime.timezone.utc)
             if expiry < now:
                 return False
-        except ValueError:
+        except (ValueError, TypeError):
             return False
     return True
 
@@ -367,7 +371,10 @@ def evaluate_scm_policy(policy: Mapping[str, Any], observed: Mapping[str, Any]) 
 
     if policy.get("codeowners_required"):
         satisfied = observed.get("codeowners_satisfied")
-        if satisfied == "unknown":
+        # Evidence never gathered (key absent, None) is an evidence gap, not an affirmative
+        # negative finding -- it must land on the same UNKNOWN as the explicit "unknown" sentinel,
+        # not fall through to FAIL as if CODEOWNERS had been checked and found unsatisfied.
+        if satisfied == "unknown" or satisfied is None:
             return GateResult("UNKNOWN", "codeowners_unknown")
         if not satisfied:
             return GateResult("FAIL", "codeowners_not_satisfied")
@@ -455,7 +462,7 @@ def evaluate_post_deploy_plan(plan: Mapping[str, Any], criticality: str = "unkno
     return GateResult("CONDITIONAL", "caller_only_signals")
 
 
-def evaluate_recovery(fixture: Mapping[str, Any]) -> GateResult:
+def evaluate_recovery(fixture: Mapping[str, Any], criticality: str = "unknown") -> GateResult:
     if not fixture.get("stateful") and fixture.get("reversible"):
         return GateResult("NOT_APPLICABLE")
     if fixture.get("destructive_no_recovery"):
@@ -465,7 +472,12 @@ def evaluate_recovery(fixture: Mapping[str, Any]) -> GateResult:
 
     mechanism_authority = fixture.get("mechanism_authority", "caller")
     if mechanism_authority not in STRONG_AUTHORITIES:
-        return GateResult("UNKNOWN", "caller_only_mechanism")
+        # Tier-sensitive per operational-gates.md: caller-only evidence is UNKNOWN at
+        # tier0/tier1/unknown, but at most CONDITIONAL (never PASS) at tier2/tier3 -- the same rule
+        # already applied to the sibling ownership/rollback/post-deploy gates below.
+        if criticality in ("tier0", "tier1", "unknown"):
+            return GateResult("UNKNOWN", "caller_only_mechanism")
+        return GateResult("CONDITIONAL", "caller_only_mechanism")
     if not fixture.get("rpo_rto_policy"):
         return GateResult("UNKNOWN", "missing_rpo_rto")
     if not fixture.get("last_exercise"):
@@ -497,7 +509,7 @@ def evaluate_dependency_gate(
     dependency_ci: Optional[Mapping[str, Any]] = None,
 ) -> GateResult:
     evidence_authorities = report.get("evidence_authorities") or {}
-    cve_auth = set(evidence_authorities.get("cve", STRONG_AUTHORITIES))
+    cve_auth = set(evidence_authorities.get("cve", ()))
     if cve_auth & STRONG_AUTHORITIES:
         return GateResult(report.get("status", "PASS"))
 
