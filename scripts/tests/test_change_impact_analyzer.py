@@ -582,3 +582,33 @@ def test_success_envelope_completes_every_dod_check() -> None:
     result = finalize_impact(impact_fixture(coverage_status="COMPLETE", blockers=[]))
     dod = result.to_envelope()["definition_of_done"]
     assert dod["completed_checks"] == dod["required_checks"]
+
+
+def test_hyphenated_trust_boundary_emits_security_trigger() -> None:
+    result = analyze_change(source=diff_text("This change crosses a trust-boundary between services."))
+    assert "security" in result["review_triggers"]
+
+
+def test_hyphenated_partial_failure_emits_resilience_trigger() -> None:
+    result = analyze_change(source=diff_text("This introduces partial-failure handling in the worker."))
+    assert "resilience" in result["review_triggers"]
+
+
+def test_non_k8s_resource_limits_do_not_emit_k8s_rightsizing() -> None:
+    result = analyze_change(
+        source=diff_text("Rate limiter change: requests: 100 per minute, limits: 50 burst per client."),
+    )
+    assert "k8s_rightsizing" not in result["review_triggers"]
+
+
+def test_invalid_coverage_status_is_execution_failure_not_finding() -> None:
+    result = finalize_impact(impact_fixture(coverage_status="BOGUS"))
+    assert result.skill_result.status == "FAILED"
+
+
+def test_authoritative_criticality_conflict_is_unknown() -> None:
+    result = analyze_change(
+        source={"source_type": "change"},
+        repository_evidence={"criticality": "tier0", "criticality_by_repository": {"svcA": "tier2"}},
+    )
+    assert result["criticality"] == "unknown"

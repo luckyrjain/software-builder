@@ -310,7 +310,7 @@ def _triggers(classes: list[str], text: str, paths: list[str]) -> list[str]:
         triggers.add("api")
     if "schema_or_data" in classes or any(token in lowered for token in ("schema", "migration", "database", "table", "backfill")):
         triggers.add("database")
-    if any(token in lowered for token in ("authn", "authz", "authentication", "authorization", "secret", "crypto", "trust boundary", "data exposure")):
+    if any(token in lowered for token in ("authn", "authz", "authentication", "authorization", "secret", "crypto", "trust boundary", "trust-boundary", "data exposure")):
         triggers.add("security")
     if any(token in lowered for token in ("hot-path", "hot path", "n+1", "cache", "concurrency", "pool", "fanout", "fan-out")):
         triggers.add("performance")
@@ -318,11 +318,14 @@ def _triggers(classes: list[str], text: str, paths: list[str]) -> list[str]:
         triggers.add("capacity")
     if any(token in lowered for token in ("metrics", "logs", "traces", "slo", "alerts", "correlation")):
         triggers.add("observability")
-    if any(token in lowered for token in ("timeout", "retry", "backpressure", "circuit-breaker", "partial failure", "recovery")):
+    if any(token in lowered for token in ("timeout", "retry", "backpressure", "circuit-breaker", "partial failure", "partial-failure", "recovery")):
         triggers.add("resilience")
     if "dependency" in classes or any(token in lowered for token in ("dependency", "framework", "lockfile", "package-lock", "version bump")):
         triggers.add("dependency_upgrade")
-    if any(token in lowered for token in ("k8s", "kubernetes", "hpa", "resources:", "limits:", "requests:")):
+    k8s_explicit = any(token in lowered for token in ("k8s", "kubernetes", "hpa"))
+    k8s_resource_fields = any(token in lowered for token in ("resources:", "limits:", "requests:"))
+    k8s_context_hints = any(token in lowered for token in ("replica", "replicas", "cpu", "memory"))
+    if k8s_explicit or (k8s_resource_fields and k8s_context_hints):
         triggers.add("k8s_rightsizing")
     return sorted(triggers)
 
