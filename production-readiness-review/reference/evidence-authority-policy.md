@@ -43,10 +43,11 @@ cannot alone set an operational gate `PASS` (see
 3. A dimension whose only supporting evidence is `caller` or `model_knowledge` is `UNKNOWN` — not
    `FAIL` (nothing proven wrong) and not `CONDITIONAL` (that would imply some authoritative signal
    exists, just an imperfect one).
-4. A dimension with **mixed** evidence (some authoritative, some caller-only) is judged on its
-   authoritative evidence; the caller-only portion is noted but does not itself downgrade an otherwise
-   authoritative `PASS` to `UNKNOWN` — it can, however, surface as a `CONDITIONAL` note when the
-   authoritative evidence alone is incomplete.
+4. A dimension with **mixed** evidence (some authoritative, some caller-only) requires every
+   decisive evidence item to independently trace to a strong authority. A single caller-only item
+   mixed into an otherwise-authoritative set downgrades the dimension to `UNKNOWN` — evidence is
+   never selectively cherry-picked to launder a weak item through to an otherwise-authoritative
+   `PASS`.
 5. Capability unavailability (a `host.*` capability not connected) removes the possibility of
    authoritative evidence for that dimension entirely — the dimension is `UNKNOWN`, not silently
    downgraded to relying on whatever `caller`/`model_knowledge` evidence happens to be present.

@@ -47,8 +47,9 @@ routes:
     exclude_patterns:
       - '\b(PR|MR|pull request|merge request)\s*[#!]?\d+\b.*\b(ready to release|production ready|production readiness)\b'
       - '\b(ready to release|production ready|production readiness)\b.*\b(PR|MR|pull request|merge request)\s*[#!]?\d+\b'
-      - '\b(this|the) (pr|mr|pull request|merge request|release candidate)\b.*\bproduction ready\b'
-      - '\bproduction ready\b.*\b(this|the) (pr|mr|pull request|merge request|release candidate)\b'
+      - '\b(this|the) (pr|mr|pull request|merge request|release candidate)\b.*\b(production ready|production readiness|ready to release|ready to deploy)\b'
+      - '\b(production ready|production readiness|ready to release|ready to deploy)\b.*\b(this|the) (pr|mr|pull request|merge request|release candidate)\b'
+      - '\bgo[- /]?no[- ]?go for (this|one) (change|pr|mr|pull request|merge request)\b'
   migration-program-manager:
     patterns:
       - '\b(migration program|migration portfolio|migration status rollup|migration program status)\b'
@@ -153,6 +154,6 @@ routes:
       - '\b(production ready|production readiness|ready to release|ready to deploy)\b.*\b(PR|MR|pull request|merge request)\s*[#!]?\d+\b'
       - '\bproduction readiness (review|assessment|check)\b'
       - '\bis (this|the) (service|change|deployment|pr|mr|pull request|merge request|release candidate) production ready\b'
-      - '\b(this|the) (pr|mr|pull request|merge request|release candidate)\b.*\bproduction ready\b'
+      - '\b(this|the) (pr|mr|pull request|merge request|release candidate)\b.*\b(production ready|production readiness|ready to release|ready to deploy)\b'
       - '\bship (this|that) (pr|mr|pull request|merge request|change)\b'
       - '\bgo[- /]?no[- ]?go for (this|one) (change|pr|mr|pull request|merge request)\b'

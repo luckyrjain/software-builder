@@ -929,3 +929,133 @@ def test_dispatch_child_pr_review_requires_its_own_mandatory_fields() -> None:
     result = pr.dispatch_child("pr-review", inputs={}, invoke=invoked)
     assert result.dispatched is False
     assert invoked.calls == 0
+
+
+# ---------------------------------------------------------------------------
+# Round 3 adversarial-review regression tests
+# ---------------------------------------------------------------------------
+
+
+def test_recovery_upgrading_authority_never_makes_an_incomplete_verdict_worse() -> None:
+    incomplete_caller = {"stateful": True, "mechanism_authority": "caller"}
+    incomplete_authoritative = {"stateful": True, "mechanism_authority": "repository"}
+    caller_result = pr.evaluate_recovery(incomplete_caller, criticality="tier0")
+    authoritative_result = pr.evaluate_recovery(incomplete_authoritative, criticality="tier0")
+    # Both are missing the same completeness fields -- upgrading the authority of otherwise
+    # identical, still-incomplete evidence must never move the verdict from CONDITIONAL/UNKNOWN
+    # to a *worse* status than the caller-only case produced.
+    assert caller_result.status == "UNKNOWN"
+    assert authoritative_result.status == "UNKNOWN"
+    assert authoritative_result.reason == caller_result.reason
+
+
+def test_capacity_gate_normalizes_unrecognized_child_status_to_unknown() -> None:
+    report = {
+        "status": "BLOCKED",
+        "evidence_authorities": {"demand": {"repository"}, "baseline": {"repository"}},
+    }
+    assert pr.evaluate_capacity_gate(report, criticality="tier0").status == "UNKNOWN"
+
+
+def test_capacity_gate_does_not_trust_an_explicitly_untrusted_producer() -> None:
+    report = {
+        "status": "PASS",
+        "producer_trusted": False,
+        "evidence_authorities": {"demand": {"repository"}, "baseline": {"repository"}},
+    }
+    assert pr.evaluate_capacity_gate(report, criticality="tier0").status == "UNKNOWN"
+
+
+def test_capacity_gate_rejects_list_shaped_evidence_authorities_without_crashing() -> None:
+    report = {"status": "PASS", "evidence_authorities": ["repository"]}
+    assert pr.evaluate_capacity_gate(report, criticality="tier0").status == "UNKNOWN"
+
+
+def test_dependency_gate_normalizes_unrecognized_child_status_to_unknown() -> None:
+    report = {"status": "BLOCKED", "evidence_authorities": {"cve": {"repository"}}}
+    assert pr.evaluate_dependency_gate(report).status == "UNKNOWN"
+
+
+def test_dependency_gate_rejects_list_shaped_evidence_authorities_without_crashing() -> None:
+    report = {"status": "PASS", "evidence_authorities": ["repository"]}
+    result = pr.evaluate_dependency_gate(report)
+    assert result.status == "UNKNOWN"
+    assert result.reason == "no_current_vulnerability_evidence"
+
+
+def test_resolve_prerequisite_reuses_deployment_risk_report_without_coverage_status() -> None:
+    supplied = trusted_child_result("deployment_risk_report", source_revision="a" * 40)
+    result = pr.resolve_prerequisite(
+        "deployment_risk_report", supplied=supplied, candidate=source_candidate("a" * 40)
+    )
+    assert result == {"status": "PASS", "mode": "REUSE"}
+
+
+def test_validate_ci_rejects_non_boolean_all_required_green() -> None:
+    candidate = source_candidate("a" * 40)
+    ci = trusted_ci(head_revision="a" * 40, all_required_green="true")
+    result = pr.validate_ci(candidate, ci)
+    assert result["status"] == "UNKNOWN"
+    assert result["reason"] == "all_required_green_not_boolean"
+
+
+def test_check_final_freshness_missing_head_identity_is_unknown() -> None:
+    result = pr.check_final_freshness({"ci_green": True}, {"head": "a", "ci_green": True})
+    assert result.status == "UNKNOWN"
+    assert result.reason == "missing_head_identity"
+
+
+def test_check_final_freshness_ci_never_captured_but_observed_red_at_final_fails() -> None:
+    result = pr.check_final_freshness({"head": "a"}, {"head": "a", "ci_green": False})
+    assert result.status == "FAIL"
+    assert result.reason == "ci_red_at_final_check"
+
+
+def test_check_final_freshness_approvals_never_captured_but_rejected_at_final_fails() -> None:
+    result = pr.check_final_freshness({"head": "a"}, {"head": "a", "approvals_ok": False})
+    assert result.status == "FAIL"
+    assert result.reason == "approvals_rejected_at_final_check"
+
+
+def test_check_final_freshness_already_red_at_initial_is_not_flagged_as_new_regression() -> None:
+    result = pr.check_final_freshness(
+        {"head": "a", "ci_green": False}, {"head": "a", "ci_green": False}
+    )
+    assert result.status == "PASS"
+
+
+def test_check_final_freshness_string_true_is_not_treated_as_confirmed_boolean() -> None:
+    result = pr.check_final_freshness(
+        {"head": "a", "ci_green": True}, {"head": "a", "ci_green": "true"}
+    )
+    # "true" is a truthy string but not `is True`/`is False` -- it must not be accepted as a
+    # reconfirmation of green CI, since it is not the boolean the acquisition contract promises.
+    assert result.status == "PASS" or result.status == "UNKNOWN"
+
+
+def test_ready_to_release_this_mr_phrasing_routes_to_production_readiness() -> None:
+    result = dispatch_prompt(ROOT, load_registry(ROOT), "Is this MR ready to release?")
+    assert result.status == "selected"
+    assert result.candidates == ("production-readiness-review",)
+
+
+def test_ready_to_deploy_release_candidate_phrasing_routes_to_production_readiness() -> None:
+    result = dispatch_prompt(
+        ROOT, load_registry(ROOT), "Is the release candidate ready to deploy?"
+    )
+    assert result.status == "selected"
+    assert result.candidates == ("production-readiness-review",)
+
+
+def test_go_no_go_for_this_change_selects_production_readiness_alone() -> None:
+    result = dispatch_prompt(ROOT, load_registry(ROOT), "go/no-go for this change")
+    assert result.status == "selected"
+    assert result.candidates == ("production-readiness-review",)
+
+
+def test_release_wide_ready_to_release_phrasing_still_routes_to_release_readiness_checker() -> None:
+    result = dispatch_prompt(
+        ROOT, load_registry(ROOT), "What is the release readiness for our Q3 launch?"
+    )
+    assert result.status == "selected"
+    assert result.candidates == ("release-readiness-checker",)

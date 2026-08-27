@@ -10,7 +10,7 @@ table needs the matching update.
 | Child | Mandatory input(s) | Carried as |
 |---|---|---|
 | pr-review | `merge_request_iid`/PR number, `project`, `expected_head_sha` | Typed `mr_context` fields, always with `review_mode: retrospective`, `audit_type: retrospective`, `posting_policy: forbidden` |
-| change-impact-analyzer | At least one of: trusted `system_design_spec`, exact `mr_context`/diff, direct change text | `assessment_context` |
+| change-impact-analyzer | At least one of: trusted `system_design_spec`, exact `mr_context`, `diff_text`, direct `change_text`, or an explicit `changed_paths` list | `assessment_context` |
 | deployment-risk-review | `change_description` | `assessment_context` |
 | security-review | `review_target` (the code/config/design content under review) | `assessment_context` |
 | observability-review | `service_name` **and** `observability_material` (metrics/logs/tracing/dashboards/alerts/SLO material) | `assessment_context` |
