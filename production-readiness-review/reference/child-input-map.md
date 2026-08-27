@@ -66,14 +66,17 @@ object's own `assessment_target` (or `target`) carrier — both are legitimate s
 a specialist may use either one. When checking a specialist's result against the candidate:
 
 1. Look for the field (`environment`, `source_revision`, `head_sha`) inside the result's own
-   `assessment_target`/`target` mapping first, if it has one.
-2. If that nested carrier doesn't declare the field at all, fall back to the object's own flat
-   top-level field.
-3. If the SAME object declares the field in both places and they disagree with each other — a
-   result whose flat `source_revision` matches the candidate but whose own nested
-   `assessment_target.source_revision` names a different commit, for example — that internal
-   disagreement is itself disqualifying (`target_mismatch`/`environment_mismatch`), never resolved
-   by picking whichever location happens to match what you were hoping to see.
+   `assessment_target`/`target` mapping first, if it has one and it declares that field.
+2. Only if that nested carrier is absent, or is present but doesn't declare the field, fall back to
+   the object's own flat top-level field.
+3. Once a nested carrier declares the field, it is authoritative outright — a flat field's own
+   agreement or disagreement with the candidate becomes irrelevant and is not itself consulted. A
+   result whose flat `source_revision` happens to match the candidate but whose own nested
+   `assessment_target.source_revision` names a different commit is still rejected
+   (`target_mismatch`), because step 1 already resolved the nested value and never falls through
+   to step 2. Never resolve identity or environment by picking whichever of the two locations
+   happens to match what you were hoping to see — always resolve nested-first per steps 1–2 above,
+   independent of what the flat field says.
 
 This nested-vs-flat check applies everywhere a specialist's or child result's identity or
 environment is compared against the candidate — not only for the environment-sensitive dimensions

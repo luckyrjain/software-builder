@@ -69,6 +69,16 @@ following is `FAIL`, not `UNKNOWN` or `CONDITIONAL`:
 A `FAIL` on any operational dimension is a required dimension `FAIL` for the purposes of the overall
 verdict precedence in [gate-policy.md § Verdict precedence](gate-policy.md#verdict-precedence).
 
+## Recovery's `NOT_APPLICABLE` outcome
+
+Recovery is the one operational dimension that can be `NOT_APPLICABLE`, retiring it from the
+required set entirely: this is reachable only when authoritative evidence *affirmatively confirms*
+the change is non-stateful (an explicit, confirmed `false` — never merely absent or unassessed) and
+reversible. A caller-only assertion of either is never enough to reach `NOT_APPLICABLE`; it falls
+through to the ordinary completeness/tier ladder above instead, the same as any other caller-only
+claim. A change that IS stateful, or whose statefulness was simply never determined, must never take
+this shortcut — recovery stays required and is evaluated normally.
+
 ## Evidence sourcing
 
 Ownership and recovery-policy evidence come primarily from `host.service.metadata.read`. Rollback/abort

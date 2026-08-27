@@ -78,10 +78,11 @@ scoped to a different revision, or a different declared environment, must never 
 this candidate's own evidence. Pass the resolved candidate through when accepting each specialist's
 result, the same way its identity is compared. Both revision and environment may be declared on
 either side (candidate or result) as a flat field or nested one level down inside that same
-object's own `assessment_target`/`target` — check both locations, nested first, per
-[child-input-map.md § Checking identity and environment on a nested or flat carrier](../reference/child-input-map.md#checking-identity-and-environment-on-a-nested-or-flat-carrier);
-a result that disagrees with itself between its flat and nested declarations is a mismatch, not
-something to resolve by picking whichever value happens to match.
+object's own `assessment_target`/`target` — resolve nested-first per
+[child-input-map.md § Checking identity and environment on a nested or flat carrier](../reference/child-input-map.md#checking-identity-and-environment-on-a-nested-or-flat-carrier):
+once a nested carrier declares the field, it is authoritative outright and a flat field's own
+agreement or disagreement is never separately consulted. Never resolve by picking whichever of the
+two locations happens to match what you were hoping to see.
 
 ## 4. No merge/deploy/rollback authority; BLOCKED propagation
 

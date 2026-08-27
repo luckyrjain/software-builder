@@ -2529,3 +2529,107 @@ def test_validate_build_provenance_nested_not_applicable_value_wins_over_a_diffe
     }
     result = pr.validate_build_provenance(candidate, None)
     assert result["status"] == "NOT_APPLICABLE"
+
+
+# ---------------------------------------------------------------------------
+# Round 15 adversarial-review regression tests (mutation-survival audit)
+# ---------------------------------------------------------------------------
+
+
+def test_identity_mismatch_rejects_a_forged_revision_wearing_the_real_digest() -> None:
+    # A forged child claiming the WRONG source_revision but copying the candidate's real
+    # head_revision_or_digest must still be rejected on the revision check alone -- every existing
+    # mismatch test also differs on the digest, which would mask a deletion of this branch.
+    candidate = {"source_revision": "a" * 40, "head_revision_or_digest": "sha256:" + "b" * 64}
+    forged_child = {
+        "status": "PASS",
+        "source_revision": "wrong" * 8,
+        "head_revision_or_digest": "sha256:" + "b" * 64,
+        "evidence_authorities": {"result": {"repository"}},
+    }
+    result = pr.accept_child_result(forged_child, candidate=candidate)
+    assert result.status == "UNKNOWN"
+    assert result.reason == "target_mismatch"
+
+
+def test_production_readiness_recognizes_merge_request_iid_zero_as_mr_shaped() -> None:
+    # merge_request_iid=0 is a legitimate (if unusual) MR number -- `is not None`, not bare
+    # truthiness, must gate MR-shape detection, or a real MR whose id happens to be 0 would skip
+    # the live-scm-read fence entirely and reach a verdict without ever consulting scm_change_read.
+    candidate = {"source_revision": "a" * 40, "project": "acme/checkout", "merge_request_iid": 0}
+    result = pr.production_readiness(candidate, scm_change_read=None, dimensions=[dim("ci", "PASS")])
+    assert result.verdict != "READY"
+    assert result.skill_result.status == "PARTIAL"
+
+
+def test_has_minimum_candidate_identity_recognizes_merge_request_iid_zero() -> None:
+    candidate = {"project": "acme/checkout", "merge_request_iid": 0, "head_sha": "a" * 40}
+    assert pr._has_minimum_candidate_identity(candidate) is True
+
+
+def test_resolve_prerequisite_reuses_a_genuine_conditional_without_refreshing() -> None:
+    # The REUSE tuple must include CONDITIONAL alongside PASS/FAIL/NOT_APPLICABLE -- a standalone,
+    # strongly-authoritative CONDITIONAL result is real evidence and must not be discarded or
+    # needlessly refreshed just because no test previously pinned this specific tuple member.
+    supplied = trusted_impact(coverage_status="COMPLETE", status="CONDITIONAL")
+    candidate = source_candidate()
+    result = pr.resolve_prerequisite("change_impact_report", supplied=supplied, candidate=candidate)
+    assert result == {"status": "CONDITIONAL", "mode": "REUSE"}
+
+
+def test_resolve_prerequisite_refresh_invoke_returning_none_is_not_mislabeled_as_refreshed() -> None:
+    # When mandatory inputs ARE satisfiable and invoke_spy is actually called but returns None (a
+    # child that couldn't produce a result), the mode must stay None -- not silently claim
+    # "REFRESH" was attempted-and-resolved when nothing was actually resolved.
+    result = pr.resolve_prerequisite(
+        "change_impact_report",
+        candidate=source_candidate(),
+        invoke_spy=lambda *a, **k: None,
+        mandatory_inputs={"diff_text": "some diff"},
+    )
+    assert result == {"status": "UNKNOWN", "mode": None}
+
+
+def test_sanitized_child_inputs_pins_pr_review_retrospective_read_only_policy() -> None:
+    # child-input-map.md: pr-review is always dispatched retrospective/read-only -- this guarantee
+    # had zero direct test coverage; nothing pinned review_mode/audit_type being forced.
+    sanitized = pr._sanitized_child_inputs("pr-review", {"review_mode": "live", "audit_type": "live"})
+    assert sanitized["review_mode"] == "retrospective"
+    assert sanitized["audit_type"] == "retrospective"
+
+
+def test_dimension_fail_status_permits_unknown_evidence_status() -> None:
+    # Unlike PASS/CONDITIONAL/NOT_APPLICABLE, a FAIL dimension's evidence_status is not required to
+    # be anything but UNKNOWN -- confirms FAIL is legitimately excluded from __post_init__'s
+    # evidence_status-vs-status guard tuple, not merely untested by omission.
+    d = pr.Dimension("security", "FAIL", evidence_status="UNKNOWN")
+    assert d.status == "FAIL"
+
+
+def test_assessment_context_trust_returns_model_knowledge_authority_as_is() -> None:
+    # A validly-weak `model_knowledge` authority value must pass through unchanged, not be silently
+    # downgraded to "caller" -- distinguishes the full _ALL_AUTHORITIES membership check from a
+    # narrower STRONG_AUTHORITIES-only mutation.
+    ctx = assessment_context_fixture(input_provenance={"x": {"authority": "model_knowledge"}})
+    trust = pr.classify_assessment_context_trust(ctx, acquisition="authoritative_host")
+    assert trust.effective_authority("x") == "model_knowledge"
+
+
+def test_dispatch_child_explicit_empty_expected_target_does_not_fall_back_to_candidate() -> None:
+    # `expected_target` uses a strict `is None` check before falling back to `candidate` -- an
+    # explicitly-supplied empty mapping (not omitted) must stay fail-closed (UNKNOWN) rather than
+    # silently falling through to bind against the candidate instead.
+    candidate = {"source_revision": "a" * 40}
+    matching_result = {
+        "status": "PASS",
+        "source_revision": "a" * 40,
+        "evidence_authorities": {"x": {"repository"}},
+    }
+    result = pr.dispatch_child(
+        "security-review",
+        {"review_target": "some code"},
+        lambda n, i: matching_result,
+        expected_target={},
+        candidate=candidate,
+    )
+    assert result.dimension_status == "UNKNOWN"
