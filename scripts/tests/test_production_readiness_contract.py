@@ -2633,3 +2633,105 @@ def test_dispatch_child_explicit_empty_expected_target_does_not_fall_back_to_can
         candidate=candidate,
     )
     assert result.dimension_status == "UNKNOWN"
+
+
+# ---------------------------------------------------------------------------
+# Round 16 adversarial-review regression tests (mutation-survival audit)
+# ---------------------------------------------------------------------------
+
+
+def test_evaluate_ownership_conflicting_flag_is_unknown_in_isolation() -> None:
+    # The `conflicting` branch must be reachable and effective on its own -- the only prior test
+    # touching it also set `unowned=True`, so an earlier branch always fired first and this one was
+    # never actually exercised.
+    owner = {"owner_authority": "authoritative_host", "owner": "team-a", "escalation_route": "#oncall", "conflicting": True}
+    result = pr.evaluate_ownership(owner)
+    assert result.status == "UNKNOWN"
+    assert result.reason == "conflicting_ownership"
+
+
+def test_evaluate_ownership_requires_both_owner_and_escalation_route() -> None:
+    # `has_owner_evidence` is an AND of two fields -- one present without the other must still be
+    # incomplete, distinguishing this from an OR mutation.
+    owner_only = {"owner_authority": "authoritative_host", "owner": "team-a"}
+    result = pr.evaluate_ownership(owner_only)
+    assert result.status == "UNKNOWN"
+    assert result.reason == "incomplete_ownership_evidence"
+
+    escalation_only = {"owner_authority": "authoritative_host", "escalation_route": "#oncall"}
+    result = pr.evaluate_ownership(escalation_only)
+    assert result.status == "UNKNOWN"
+    assert result.reason == "incomplete_ownership_evidence"
+
+
+def test_evaluate_rollback_abort_requires_actor_specifically() -> None:
+    # Every _ROLLBACK_REQUIRED_FIELDS member must be independently required -- prior tests blanked
+    # all four fields together, never isolating just `actor`.
+    plan = rollback_fixture(authority="repository", complete=True, actor=None)
+    result = pr.evaluate_rollback_abort(plan)
+    assert result.status == "UNKNOWN"
+    assert result.reason == "incomplete_plan"
+
+
+def test_evaluate_post_deploy_plan_requires_decision_owner_specifically() -> None:
+    # Same as the rollback-abort actor test, for _POST_DEPLOY_REQUIRED_FIELDS' decision_owner --
+    # also pins the `all(...)` (not `any(...)`) requirement over that frozenset.
+    plan = post_deploy_fixture(signal_authority="repository", complete=True, decision_owner=None)
+    result = pr.evaluate_post_deploy_plan(plan)
+    assert result.status == "UNKNOWN"
+    assert result.reason == "incomplete_plan"
+
+
+def test_evaluate_dependency_gate_non_iterable_authority_value_degrades_without_crashing() -> None:
+    # A malformed evidence_authorities entry (an int, not a string/mapping/iterable) must degrade to
+    # no-authority rather than crash the whole aggregation with a TypeError.
+    result = pr.evaluate_dependency_gate({"status": "PASS", "evidence_authorities": {"cve": 5}})
+    assert result.status == "UNKNOWN"
+
+
+def test_evaluate_dependency_gate_requires_the_cve_key_specifically() -> None:
+    # A strong-authority evidence_authorities map that simply lacks a "cve" key at all (a different
+    # key is strong instead) must not be read as satisfying the CVE-currency requirement.
+    result = pr.evaluate_dependency_gate({"status": "PASS", "evidence_authorities": {"version_delta": {"repository"}}})
+    assert result.status == "UNKNOWN"
+    assert result.reason == "no_current_vulnerability_evidence"
+
+
+def test_evaluate_capacity_gate_requires_both_demand_and_baseline_keys() -> None:
+    # `has_required_keys` is an AND of "demand" and "baseline" -- one present alone must not satisfy
+    # the PASS-authority bar.
+    result = pr.evaluate_capacity_gate({"status": "PASS", "evidence_authorities": {"demand": {"repository"}}})
+    assert result.status == "UNKNOWN"
+    assert result.reason == "caller_only_basis"
+
+
+def test_aggregate_readiness_treats_explicit_unknown_evidence_status_as_partial() -> None:
+    # A non-UNKNOWN dimension status (FAIL) paired with an explicit evidence_status="UNKNOWN" must
+    # still mark the readiness result PARTIAL/UNKNOWN -- distinguishes the `or` from an `and`
+    # mutation, since every prior UNKNOWN-status test also happened to have evidence_status UNKNOWN
+    # by the same dataclass default, never isolating the evidence_status side alone.
+    result = pr.aggregate_readiness([pr.Dimension("security", "FAIL", evidence_status="UNKNOWN")])
+    assert result.skill_result_status == "PARTIAL"
+    assert result.evidence_status == "UNKNOWN"
+
+
+def test_mandatory_inputs_available_rejects_an_unmapped_artifact_type() -> None:
+    # _mandatory_inputs_available's artifact_type -> child_name lookup must actually gate on the
+    # real mapping -- an artifact type with no corresponding refreshable child (e.g. a specialist
+    # report type resolve_prerequisite was never meant to refresh) must never be treated as
+    # available just because some mandatory_inputs mapping was supplied.
+    invoked = spy(return_value=trusted_child_result("security_review_report", source_revision="a" * 40))
+    result = pr.resolve_prerequisite(
+        "security_review_report",
+        candidate={"source_revision": "a" * 40},
+        invoke_spy=invoked,
+        mandatory_inputs={"changed_paths": ["a.py"]},
+    )
+    assert result == {"status": "UNKNOWN", "mode": None}
+
+
+def test_summarize_required_passes_does_not_count_fail_or_unknown_dimensions() -> None:
+    # AND of _is_required(d) and d.status == "PASS" -- a required FAIL dimension must not inflate
+    # this count just because it's required; only genuine PASS dimensions count.
+    dims = [dim("security", "PASS"), dim("api", "FAIL")]
+    assert pr.summarize_required_passes(dims) == 1

@@ -13,16 +13,17 @@ Dispatch invoked — they are about the change's operational readiness, not its 
 | **Recovery** | If the change is destructive or hard to reverse (a data migration, a deletion), a proven path back to a good state exists |
 
 In the report and in code these four are the dimension identifiers `operational_ownership`,
-`rollback_and_abort`, `post_deploy_verification_plan`, and `recovery`. All four are
+`rollback_and_abort`, `post_deploy_verification_plan`, and `recovery`. All four (plus capacity) are
 environment-sensitive: evidence collected for one environment (e.g. a staging on-call rotation)
 must not silently stand in for another (e.g. production) — a declared-environment conflict between
-the candidate and the evidence downgrades the dimension to `UNKNOWN`, never `PASS`. This is not
-limited to an explicit conflict: if either side (the candidate or the gate's own evidence) doesn't
-declare an environment at all, that is never itself grounds to treat the two as matching — never
-assume they agree just because no conflicting field was supplied. The same rule applies to every
-`ENV_SENSITIVE_DIMENSIONS` member, not just these four; see
+the candidate and the evidence (both sides declare an environment, and they disagree) downgrades
+the dimension to `UNKNOWN`, never `PASS`. Unlike the two dispatched-specialist dimensions covered in
 [child-input-map.md § Environment-sensitive specialists](child-input-map.md#environment-sensitive-specialists)
-for the three dispatched-specialist dimensions it also covers.
+(`observability`, `deployment_risk`, whose own dispatched result is expected to declare the
+environment it was produced for), these five gates' evidence often has no per-environment concept
+at all (a single on-call rotation covering every environment, a recovery/rollback mechanism that
+isn't environment-scoped) — so an environment left undeclared on either side is not itself treated
+as a mismatch here; only an actual, resolvable disagreement between two declared values is.
 
 Every completeness/affirmative flag these gates read (`complete`, `reversible`, and the
 sibling gates' `required`/`scope_covers_changed_manifest`/`bypass_approved`/`codeowners_satisfied`)

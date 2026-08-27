@@ -40,10 +40,15 @@ rollback/abort, post-deploy verification plan, and recovery against `criticality
 - All four (plus capacity, observability, and deployment_risk — every `ENV_SENSITIVE_DIMENSIONS`
   member) are environment-sensitive: pass the resolved candidate alongside each gate's own evidence
   so a conflicting declared environment (staging evidence for a production candidate) downgrades
-  the dimension to `UNKNOWN` — never silently accepted as `PASS`. Absence of a declared environment
-  on either side is never itself a match, and either side's environment may be declared flat or
-  nested (checked the same nested-first way as identity — see
+  the dimension to `UNKNOWN` — never silently accepted as `PASS`. Either side's environment may be
+  declared flat or nested (checked the same nested-first way as identity — see
   [child-input-map.md § Checking identity and environment on a nested or flat carrier](../reference/child-input-map.md#checking-identity-and-environment-on-a-nested-or-flat-carrier)).
+  For observability and deployment_risk specifically, an environment left undeclared on either side
+  is itself an evidence gap (`UNKNOWN`), not just an explicit conflict; the four operational gates
+  and capacity are more lenient here — see
+  [operational-gates.md](../reference/operational-gates.md) and
+  [child-input-map.md § Environment-sensitive specialists](../reference/child-input-map.md#environment-sensitive-specialists)
+  for the exact split.
 
 ## 3. Derive the overall verdict — worst-first precedence
 

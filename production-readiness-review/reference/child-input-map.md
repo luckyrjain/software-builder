@@ -53,10 +53,21 @@ covered in [operational-gates.md](operational-gates.md)): a result scoped to a d
 environment than the candidate's own must never be recorded as this candidate's evidence, even when
 its identity (revision/head SHA) otherwise matches. Assemble and compare each specialist's declared
 `environment` the same way its mandatory inputs above are assembled — never assume it matches the
-candidate's just because no conflicting field was supplied: if either side (the candidate or the
-specialist's own result) doesn't declare an environment at all, that absence is never itself a
-match, on any of the seven `ENV_SENSITIVE_DIMENSIONS` (these three specialists and the four
-operational gates alike).
+candidate's just because no conflicting field was supplied.
+
+Two different strictness levels apply, matching how each dimension is actually evaluated:
+
+- **`observability-review` and `deployment-risk-review`** — compared generically against the
+  candidate the same way every other dispatched specialist's identity is bound. For these two, an
+  environment left undeclared on *either* side is itself an evidence gap (`UNKNOWN`), not just an
+  explicit disagreement between two declared values — a specialist dispatched for this specific
+  candidate has every opportunity to declare which environment it analyzed, so silence here is
+  treated the same as a conflict.
+- **`capacity-planner`** — evaluated by its own dedicated gate, alongside (and with the same
+  leniency as) the four operational gates in [operational-gates.md](operational-gates.md): only an
+  actual, resolvable disagreement between two declared environment values downgrades it to
+  `UNKNOWN`; an environment left undeclared on either side is not itself treated as a mismatch,
+  since a capacity/demand forecast often has no per-environment concept at all.
 
 ### Checking identity and environment on a nested or flat carrier
 
