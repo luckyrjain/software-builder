@@ -2458,3 +2458,74 @@ def test_evaluate_build_provenance_unresolved_attestation_policy_is_unknown_not_
     result = pr.evaluate_build_provenance(fixture)
     assert result.status == "UNKNOWN"
     assert result.reason == "attestation_policy_unresolved"
+
+
+# ---------------------------------------------------------------------------
+# Round 13 adversarial-review regression tests
+# ---------------------------------------------------------------------------
+
+
+def test_validate_build_provenance_falsy_but_present_deployable_digest_is_not_treated_as_absent() -> None:
+    # A provenance record that legitimately exists but carries a falsy (""/0) deployable_digest --
+    # a malformed record -- must not fall through to the MR-shape default (source_revision itself),
+    # which would wrongly land on NOT_APPLICABLE and discard a known FAILED build status entirely.
+    # Presence, not truthiness, of the key must gate this branch.
+    candidate = {"project": "group/proj", "merge_request_iid": 7, "head_sha": "a" * 40, "source_revision": "a" * 40}
+    provenance = {
+        "source_revision": "a" * 40,
+        "deployable_digest": "",
+        "build_status": "FAILED",
+        "evidence_ref": "https://ci.example/build/1",
+    }
+    result = pr.validate_build_provenance(candidate, provenance)
+    assert result["status"] != "NOT_APPLICABLE"
+
+
+def test_evaluate_recovery_confirmed_stateful_with_reversible_claim_never_reaches_not_applicable() -> None:
+    # The mirror image of the stateful-is-False regression test above: a CONFIRMED `stateful: True`
+    # finding, paired with a caller/authoritative "reversible" claim, must never take the
+    # NOT_APPLICABLE shortcut either -- only an explicit, confirmed `False` may. This is the one
+    # input shape that distinguishes `stateful is False` from a looser `stateful is not None`
+    # mutation (both agree on the already-tested None and False cases).
+    confirmed_stateful = dict(tier1_stateful_fixture(mechanism_authority="repository"), reversible=True)
+    result = pr.evaluate_recovery(confirmed_stateful)
+    assert result.status != "NOT_APPLICABLE"
+    assert result.status == "PASS"
+
+
+def test_scm_policy_non_boolean_truthy_codeowners_required_is_unknown_not_pass() -> None:
+    # A non-boolean, non-None truthy value ("true" the string, not True the boolean) must still be
+    # rejected as unresolved -- distinguishes the `isinstance(x, bool)` guard from a looser
+    # `x is not None` mutation, which every existing None-only test leaves undetected.
+    malformed_policy = policy(codeowners_required="true")
+    result = pr.evaluate_scm_policy(malformed_policy, observed())
+    assert result.status == "UNKNOWN"
+    assert result.reason == "scm_policy_incompletely_read"
+
+
+def test_scm_policy_non_boolean_truthy_blocking_threads_flag_is_unknown_not_pass() -> None:
+    malformed_policy = policy(blocking_threads_must_resolve=1)
+    result = pr.evaluate_scm_policy(malformed_policy, observed())
+    assert result.status == "UNKNOWN"
+    assert result.reason == "scm_policy_incompletely_read"
+
+
+def test_evaluate_build_provenance_non_boolean_truthy_attestation_policy_is_unknown() -> None:
+    fixture = build_fixture(policy_requires_attestation="true", attestation="SUCCESS")
+    result = pr.evaluate_build_provenance(fixture)
+    assert result.status == "UNKNOWN"
+    assert result.reason == "attestation_policy_unresolved"
+
+
+def test_validate_build_provenance_nested_not_applicable_value_wins_over_a_differing_flat_field() -> None:
+    # Mirror image of the forged-flat-collision test above: the nested target genuinely declares
+    # head_revision_or_digest == source_revision (the real NOT_APPLICABLE-triggering value), while a
+    # stale/differing flat field sits alongside it. Nested must still win in THIS direction too --
+    # not just when it happens to be the one catching a forgery.
+    candidate = {
+        "source_revision": "a" * 40,
+        "assessment_target": {"head_revision_or_digest": "a" * 40},
+        "head_revision_or_digest": "c" * 40,
+    }
+    result = pr.validate_build_provenance(candidate, None)
+    assert result["status"] == "NOT_APPLICABLE"

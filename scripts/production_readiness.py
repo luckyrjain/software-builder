@@ -616,12 +616,15 @@ def validate_build_provenance(
         head_revision_or_digest = mr_probe.get("head_revision_or_digest")
     elif "head_revision_or_digest" in candidate:
         head_revision_or_digest = candidate.get("head_revision_or_digest")
-    elif provenance is not None and provenance.get("deployable_digest"):
-        # A supplied provenance record naming a real deployable digest is itself proof a build
+    elif provenance is not None and "deployable_digest" in provenance:
+        # A supplied provenance record naming a deployable digest is itself proof a build
         # step exists for this candidate, even though the candidate never carried a
         # head_revision_or_digest field of its own -- that evidence must be consulted before
         # falling back to "no separate build step," or a real build (success or failure) for an
-        # MR-shaped candidate is discarded as NOT_APPLICABLE without ever being read.
+        # MR-shaped candidate is discarded as NOT_APPLICABLE without ever being read. Presence,
+        # not truthiness: a falsy-but-present value (""/0, a malformed record) must still route
+        # here rather than silently falling through to the MR-shape default -- it correctly lands
+        # on the missing-identity UNKNOWN below instead of a wrongful NOT_APPLICABLE.
         head_revision_or_digest = provenance.get("deployable_digest")
     elif is_mr_shaped:
         # An MR-shaped candidate with no provenance record and no head_revision_or_digest field
