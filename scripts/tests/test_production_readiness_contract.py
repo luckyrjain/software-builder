@@ -317,6 +317,18 @@ def test_failed_required_build_policy_is_fail() -> None:
     assert result.status == "FAIL"
 
 
+def test_successful_attestation_without_candidate_is_unknown_not_pass() -> None:
+    # A satisfied attestation control alone doesn't bind to any source/digest pair when no
+    # candidate is supplied -- absence of the underlying evidence is never PASS.
+    result = pr.evaluate_build_provenance(build_fixture(policy_requires_attestation=True, attestation="SUCCESS"))
+    assert result.status == "UNKNOWN"
+
+
+def test_no_policy_and_no_candidate_is_unknown_not_pass() -> None:
+    result = pr.evaluate_build_provenance(build_fixture())
+    assert result.status == "UNKNOWN"
+
+
 # ---------------------------------------------------------------------------
 # Task 5.5 — authoritative SCM policy gate
 # ---------------------------------------------------------------------------

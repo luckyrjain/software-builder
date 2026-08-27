@@ -352,7 +352,9 @@ def evaluate_build_provenance(fixture: Mapping[str, Any]) -> GateResult:
     if candidate is not None:
         base = validate_build_provenance(candidate, fixture.get("provenance"))
         return GateResult(base["status"], base.get("reason", ""))
-    return GateResult("PASS")
+    # No candidate to bind the (possibly-satisfied) attestation policy to a source/digest pair --
+    # absence of evidence is never PASS, even when the attestation control itself succeeded.
+    return GateResult("UNKNOWN", "missing_candidate")
 
 
 # ---------------------------------------------------------------------------
