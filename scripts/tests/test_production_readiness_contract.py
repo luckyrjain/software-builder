@@ -3086,3 +3086,29 @@ def test_validate_build_provenance_requires_authoritative_acquisition() -> None:
     authoritative = dict(caller_asserted, acquisition="authoritative_host")
     result = pr.validate_build_provenance(candidate, authoritative)
     assert result["status"] == "PASS"
+
+
+def test_scm_policy_scope_check_does_not_vacuously_match_when_candidate_revision_unresolved() -> None:
+    # The `not candidate_rev` half of the scope guard must independently reject the case where the
+    # CANDIDATE's own revision can't be resolved at all (not just where observed lacks one) --
+    # otherwise two unresolvable revisions could vacuously "match."
+    scm_policy = policy()
+    result = pr.evaluate_scm_policy(scm_policy, observed(), candidate={})
+    assert result.status == "UNKNOWN"
+    assert result.reason == "scope_mismatch"
+
+
+def test_validate_build_provenance_acquisition_check_also_applies_to_the_fail_path() -> None:
+    # The acquisition gate must apply uniformly before branching on build_status, not just inside
+    # the SUCCESS branch -- an untrusted, caller-asserted "build_status: FAILED" claim must not be
+    # trusted as a real FAIL any more than a caller-asserted SUCCESS should be trusted as a PASS.
+    candidate = {"source_revision": "a" * 40, "head_revision_or_digest": "sha256:" + "b" * 64}
+    caller_asserted_failure = {
+        "source_revision": "a" * 40,
+        "deployable_digest": "sha256:" + "b" * 64,
+        "build_status": "FAILED",
+        "acquisition": "caller",
+    }
+    result = pr.validate_build_provenance(candidate, caller_asserted_failure)
+    assert result["status"] == "UNKNOWN"
+    assert result["reason"] == "untrusted_acquisition"
