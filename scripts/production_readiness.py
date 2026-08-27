@@ -1127,16 +1127,28 @@ def evaluate_dependency_gate(
     other_authorities = {k: v for k, v in evidence_authorities.items() if k != "cve"}
     other_entries_ok = _minimum_authority_met(other_authorities) if other_authorities else True
 
-    if (
-        other_entries_ok
-        and advisory_evidence is not None
-        and advisory_evidence.get("status") == "CURRENT"
-        and _is_strong_authority(advisory_evidence.get("acquisition"))
-    ):
-        # A substitute for the child's own CVE evidence needs the same authority bar the child's
-        # own evidence would have needed -- a caller-forged "status: CURRENT" claim with no
-        # acquisition behind it must not launder a weakly-authoritative report into a PASS.
-        return GateResult(status)
+    if other_entries_ok and advisory_evidence is not None:
+        # capability_catalog.yaml describes host.dependency.advisories.read as delivering
+        # "current vulnerability/advisory evidence for changed dependencies AT THE EXACT SOURCE
+        # REVISION" -- the same scope concept dependency_ci carries. This scope fence was
+        # previously entirely absent (unlike dependency_ci's, which was merely miscategorized as
+        # nested-first): a cached/forged/reused advisory blob for an unrelated revision was
+        # accepted with no binding to the candidate under review at all. Flat-only, matching every
+        # other evidence-record parameter in this module (dependency_ci, ci, coverage, provenance)
+        # -- advisory_evidence doesn't declare its own canonical identity carrier either.
+        candidate_rev = _effective_source_revision(candidate) if candidate is not None else None
+        advisory_rev = advisory_evidence.get("source_revision")
+        scope_ok = candidate is None or (bool(candidate_rev) and advisory_rev == candidate_rev)
+        if (
+            scope_ok
+            and advisory_evidence.get("status") == "CURRENT"
+            and _is_strong_authority(advisory_evidence.get("acquisition"))
+        ):
+            # A substitute for the child's own CVE evidence needs the same authority bar the
+            # child's own evidence would have needed -- a caller-forged "status: CURRENT" claim
+            # with no acquisition behind it must not launder a weakly-authoritative report into a
+            # PASS.
+            return GateResult(status)
 
     if other_entries_ok and dependency_ci is not None:
         # The candidate side resolves nested-first (it's an identity-declaring object, same as

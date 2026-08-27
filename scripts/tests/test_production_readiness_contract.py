@@ -2985,3 +2985,53 @@ def test_dependency_gate_ci_scope_check_reads_evidence_record_flat_only() -> Non
     result = pr.evaluate_dependency_gate(report, dependency_ci=dep_ci, candidate=candidate)
     assert result.status == "UNKNOWN"
     assert result.reason == "no_current_vulnerability_evidence"
+
+
+def test_dependency_gate_advisory_evidence_requires_matching_scope() -> None:
+    # advisory_evidence had NO scope fence at all -- unlike dependency_ci (which was merely
+    # miscategorized, per the test above), a cached/forged/reused advisory blob for a totally
+    # unrelated revision was accepted with no binding to the candidate whatsoever.
+    # capability_catalog.yaml describes this evidence as scoped "at the exact source revision,"
+    # the same concept dependency_ci already enforces.
+    report = {
+        "status": "PASS",
+        "producer_trusted": True,
+        "evidence_authorities": {"cve": {"model_knowledge"}, "version_delta": {"authoritative_host"}},
+    }
+    candidate = {"source_revision": "a" * 40}
+    wrong_scope = {"status": "CURRENT", "acquisition": "authoritative_host", "source_revision": "b" * 40}
+    result = pr.evaluate_dependency_gate(report, advisory_evidence=wrong_scope, candidate=candidate)
+    assert result.status == "UNKNOWN"
+    assert result.reason == "no_current_vulnerability_evidence"
+
+    right_scope = {"status": "CURRENT", "acquisition": "authoritative_host", "source_revision": "a" * 40}
+    result = pr.evaluate_dependency_gate(report, advisory_evidence=right_scope, candidate=candidate)
+    assert result.status == "PASS"
+
+
+def test_dependency_gate_advisory_evidence_requires_current_status() -> None:
+    # A strong-authority advisory that isn't actually CURRENT (stale, or the status key altogether
+    # missing) must not cure the gate just because acquisition and scope happen to check out.
+    report = {"status": "PASS", "evidence_authorities": {"cve": {"caller"}}}
+    stale_advisory = {"status": "STALE", "acquisition": "authoritative_host"}
+    result = pr.evaluate_dependency_gate(report, advisory_evidence=stale_advisory)
+    assert result.status == "UNKNOWN"
+    assert result.reason == "no_current_vulnerability_evidence"
+
+
+def test_dependency_gate_dependency_ci_requires_successful_conclusion() -> None:
+    # A dependency-security CI run that is otherwise required/scoped/authoritative but did NOT
+    # conclude successfully (it failed) must not cure the gate.
+    rev = "a" * 40
+    report = {"status": "PASS", "evidence_authorities": {"cve": {"caller"}}}
+    dep_ci = {
+        "required": True,
+        "scope_covers_changed_manifest": True,
+        "conclusion": "failure",
+        "acquisition": "authoritative_host",
+        "source_revision": rev,
+    }
+    candidate = {"source_revision": rev}
+    result = pr.evaluate_dependency_gate(report, dependency_ci=dep_ci, candidate=candidate)
+    assert result.status == "UNKNOWN"
+    assert result.reason == "no_current_vulnerability_evidence"
