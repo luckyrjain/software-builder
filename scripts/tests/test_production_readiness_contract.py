@@ -2406,3 +2406,55 @@ def test_validate_build_provenance_recognizes_mr_shape_declared_only_in_a_nested
     nested_mr_candidate = {"assessment_target": {"project": "acme/x", "merge_request_iid": 5, "head_sha": "a" * 40}}
     result = pr.validate_build_provenance(nested_mr_candidate, None)
     assert result["status"] == "NOT_APPLICABLE"
+
+
+# ---------------------------------------------------------------------------
+# Round 12 adversarial-review regression tests
+# ---------------------------------------------------------------------------
+
+
+def test_scm_policy_unresolved_codeowners_required_flag_is_unknown_not_pass() -> None:
+    # `codeowners_required` present but unresolved (None) must not be read as a confirmed "not
+    # required" via bare truthiness -- the presence-only fence (_SCM_POLICY_KEYS) only checks the
+    # key exists, not that its value was actually resolved to a boolean.
+    unresolved_policy = policy(codeowners_required=None)
+    result = pr.evaluate_scm_policy(unresolved_policy, observed(codeowners_satisfied=None))
+    assert result.status == "UNKNOWN"
+    assert result.reason == "scm_policy_incompletely_read"
+
+
+def test_scm_policy_unresolved_blocking_threads_flag_is_unknown_not_pass() -> None:
+    unresolved_policy = policy(blocking_threads_must_resolve=None)
+    result = pr.evaluate_scm_policy(unresolved_policy, observed(blocking_threads_open=None))
+    assert result.status == "UNKNOWN"
+    assert result.reason == "scm_policy_incompletely_read"
+
+
+def test_validate_build_provenance_prefers_nested_head_revision_over_a_forged_flat_field() -> None:
+    # A forged flat `head_revision_or_digest` colliding with source_revision must not shadow (and
+    # thereby discard) a real, differing digest declared under the candidate's own nested
+    # assessment_target -- is_mr_shaped was fixed to resolve nested-first in round 11, but this
+    # sibling field-read was left reading only the flat candidate.
+    real_digest = "sha256:" + "b" * 64
+    candidate = {
+        "assessment_target": {"source_revision": "a" * 40, "head_revision_or_digest": real_digest},
+        "head_revision_or_digest": "a" * 40,
+    }
+    provenance = {"source_revision": "a" * 40, "deployable_digest": real_digest, "build_status": "FAILED"}
+    result = pr.validate_build_provenance(candidate, provenance)
+    assert result["status"] == "FAIL"
+    assert result["reason"] == "build_failed"
+
+
+def test_evaluate_build_provenance_unresolved_attestation_policy_is_unknown_not_not_applicable() -> None:
+    # An unresolved `policy_requires_attestation` (None) must not be read as a confirmed "not
+    # required" -- doing so would silently discard a known FAILED attestation result below it.
+    fixture = {
+        "policy_requires_attestation": None,
+        "attestation": "FAILED",
+        "candidate": {"source_revision": "a" * 40, "head_revision_or_digest": "a" * 40},
+        "provenance": None,
+    }
+    result = pr.evaluate_build_provenance(fixture)
+    assert result.status == "UNKNOWN"
+    assert result.reason == "attestation_policy_unresolved"

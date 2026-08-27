@@ -608,7 +608,13 @@ def validate_build_provenance(
     is_mr_shaped = bool(
         mr_probe.get("project") and mr_probe.get("merge_request_iid") is not None and mr_probe.get("head_sha")
     )
-    if "head_revision_or_digest" in candidate:
+    if "head_revision_or_digest" in mr_probe:
+        # Nested-first, same as is_mr_shaped just above: a flat top-level field must never be
+        # preferred over (or allowed to shadow) a real nested declaration of the same identity
+        # concept -- a forged/stale flat value colliding with source_revision must not mask a
+        # genuinely different nested digest and the real build evidence behind it.
+        head_revision_or_digest = mr_probe.get("head_revision_or_digest")
+    elif "head_revision_or_digest" in candidate:
         head_revision_or_digest = candidate.get("head_revision_or_digest")
     elif provenance is not None and provenance.get("deployable_digest"):
         # A supplied provenance record naming a real deployable digest is itself proof a build
@@ -650,7 +656,14 @@ def validate_build_provenance(
 
 def evaluate_build_provenance(fixture: Mapping[str, Any]) -> GateResult:
     fixture = _as_mapping(fixture)
-    if fixture.get("policy_requires_attestation"):
+    policy_requires_attestation = fixture.get("policy_requires_attestation")
+    if not isinstance(policy_requires_attestation, bool):
+        # A non-boolean value (None, an absent key) means the attestation policy itself was never
+        # resolved -- reading it with bare truthiness would treat "couldn't determine" the same as
+        # a confirmed "not required," silently discarding a known attestation result (including a
+        # FAILED one) below.
+        return GateResult("UNKNOWN", "attestation_policy_unresolved")
+    if policy_requires_attestation:
         attestation = fixture.get("attestation")
         if attestation is None:
             return GateResult("UNKNOWN", "attestation_missing")
@@ -715,7 +728,13 @@ def evaluate_scm_policy(policy: Mapping[str, Any], observed: Mapping[str, Any]) 
         if approvals < required_approvals:
             return GateResult("FAIL", "insufficient_approvals")
 
-    if policy["codeowners_required"]:
+    codeowners_required = policy["codeowners_required"]
+    if not isinstance(codeowners_required, bool):
+        # A non-boolean value (None, a string) is an unresolved policy rule, not a legitimate
+        # "not required" -- the presence-only fence above doesn't distinguish a resolved False
+        # from a rule the policy-read tool simply couldn't determine.
+        return GateResult("UNKNOWN", "scm_policy_incompletely_read")
+    if codeowners_required:
         satisfied = observed.get("codeowners_satisfied")
         if satisfied == "unknown" or satisfied is None:
             return GateResult("UNKNOWN", "codeowners_unknown")
@@ -727,7 +746,12 @@ def evaluate_scm_policy(policy: Mapping[str, Any], observed: Mapping[str, Any]) 
         if not satisfied:
             return GateResult("FAIL", "codeowners_not_satisfied")
 
-    if policy["blocking_threads_must_resolve"]:
+    blocking_threads_must_resolve = policy["blocking_threads_must_resolve"]
+    if not isinstance(blocking_threads_must_resolve, bool):
+        # Same rule as codeowners_required just above: an unresolved policy rule must not default
+        # to "not required" via bare truthiness on a None/malformed value.
+        return GateResult("UNKNOWN", "scm_policy_incompletely_read")
+    if blocking_threads_must_resolve:
         blocking_open = observed.get("blocking_threads_open")
         if blocking_open is None:
             return GateResult("UNKNOWN", "blocking_threads_unknown")
@@ -778,8 +802,8 @@ def _effective_environment(obj: Any) -> Any:
 def _environment_conflict(fixture: Any, candidate: Optional[Mapping[str, Any]]) -> bool:
     """True when `candidate` declares an environment that conflicts with `fixture`'s own.
 
-    Applied to the five environment-sensitive gates (ownership, rollback/abort, post-deploy,
-    recovery, capacity), all of which are `ENV_SENSITIVE_DIMENSIONS` per operational-gates.md:
+    Applied to every `ENV_SENSITIVE_DIMENSIONS` member per operational-gates.md and
+    child-input-map.md (the four operational gates, capacity, observability, deployment_risk):
     evidence collected for one environment (a staging on-call rotation) must not silently stand in
     for another (production). Only fires when BOTH sides resolve an environment and they actually
     disagree -- a caller not supplying `candidate`, or a fixture with no declared environment
