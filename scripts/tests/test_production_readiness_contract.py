@@ -2104,3 +2104,237 @@ def test_non_mapping_top_level_arguments_degrade_to_unknown_without_crashing() -
     assert pr.evaluate_scm_policy(policy(), ["x"]).status == "UNKNOWN"
     assert pr.evaluate_ownership([]).status == "UNKNOWN"
     assert pr.production_readiness(["x"]).skill_result.status == "BLOCKED"
+
+
+# ---------------------------------------------------------------------------
+# Round 10 adversarial-review regression tests
+# ---------------------------------------------------------------------------
+
+
+def test_remote_mr_fence_recognizes_nested_assessment_target_shape() -> None:
+    # An MR expressed only through the canonical assessment_target carrier must not skip the live
+    # scm_change_read fence just because project/merge_request_iid/head_sha aren't also flat.
+    nested_mr = {"assessment_target": {"project": "org/svc", "merge_request_iid": 42, "head_sha": "r" * 40}}
+    result = pr.production_readiness(nested_mr, scm_change_read=None, dimensions=[dim("ci", "PASS")])
+    assert result.verdict != "READY"
+    assert result.skill_result.status == "PARTIAL"
+
+
+def test_environment_conflict_degrades_on_non_mapping_candidate_without_crashing() -> None:
+    owner = {"owner": "x", "escalation_route": "y", "owner_authority": "repository", "environment": "production"}
+    result = pr.evaluate_ownership(owner, "tier0", candidate=["prod"])
+    assert result.status == "PASS"
+
+
+def test_environment_conflict_falls_back_to_flat_environment_when_nested_target_has_none() -> None:
+    # A nested assessment_target that simply doesn't declare its own environment must not shadow
+    # (and thereby disable checking against) a real flat environment declaration on the candidate.
+    candidate = {"environment": "production", "assessment_target": {"source_revision": "a" * 40}}
+    staging_owner = {"owner": "x", "escalation_route": "y", "owner_authority": "repository", "environment": "staging"}
+    result = pr.evaluate_ownership(staging_owner, "tier0", candidate=candidate)
+    assert result.status == "UNKNOWN"
+    assert result.reason == "environment_mismatch"
+
+
+def test_match_dimension_evidence_falls_back_to_flat_environment_when_nested_target_has_none() -> None:
+    candidate = {"environment": "production", "assessment_target": {"source_revision": "a" * 40}}
+    staging_artifact = {
+        "assessment_target": {"source_revision": "a" * 40},
+        "environment": "staging",
+        "status": "PASS",
+        "evidence_authorities": {"x": {"repository"}},
+    }
+    result = pr.match_dimension_evidence("api", candidate=candidate, artifact=staging_artifact)
+    assert result.status == "UNKNOWN"
+    assert result.reason == "environment_mismatch"
+
+
+def test_evaluate_capacity_gate_is_environment_sensitive() -> None:
+    staging_report = {
+        "status": "PASS",
+        "producer_trusted": True,
+        "evidence_authorities": {"demand": {"repository"}, "baseline": {"repository"}},
+        "environment": "staging",
+    }
+    prod_candidate = source_candidate("a" * 40, environment="production")
+    result = pr.evaluate_capacity_gate(staging_report, "tier0", candidate=prod_candidate)
+    assert result.status == "UNKNOWN"
+    assert result.reason == "environment_mismatch"
+
+
+def test_dispatch_child_rejects_a_result_scoped_to_a_conflicting_environment() -> None:
+    prod_candidate = {"source_revision": "a" * 40, "environment": "production"}
+    staging_report = {
+        "status": "PASS",
+        "evidence_authorities": {"x": {"repository"}},
+        "source_revision": "a" * 40,
+        "environment": "staging",
+    }
+    result = pr.dispatch_child(
+        "observability-review",
+        {"service_name": "x", "observability_material": "y"},
+        lambda n, i: staging_report,
+        candidate=prod_candidate,
+    )
+    assert result.dimension_status == "UNKNOWN"
+
+
+def test_more_non_mapping_top_level_arguments_degrade_without_crashing() -> None:
+    assert pr.evaluate_build_provenance([]).status == "UNKNOWN"
+    assert pr.check_final_freshness("a", "b").status == "UNKNOWN"
+    trust = pr.classify_assessment_context_trust([], "authoritative_host")
+    assert trust.effective_authority("svc") == "caller"
+    result = pr.resolve_prerequisite(
+        "change_impact_report",
+        candidate={"source_revision": "a" * 40},
+        invoke_spy=lambda *a, **k: None,
+        mandatory_inputs=["diff_text"],
+    )
+    assert result == {"status": "UNKNOWN", "mode": None}
+
+
+# ---------------------------------------------------------------------------
+# Round 10, second pass: nested-first environment resolution on the evidence
+# side (the five gates and accept_child_result were still reading a
+# pre-extracted flat `environment` field, shadowing a nested assessment_target
+# declaration the same way the candidate side was fixed earlier this round).
+# ---------------------------------------------------------------------------
+
+
+def test_operational_gates_reject_conflicting_environment_evidence_declared_only_in_a_nested_target() -> None:
+    # The evidence side's own environment is declared only under a nested assessment_target, never
+    # as a flat top-level field -- _environment_conflict must resolve it nested-first, the same way
+    # the candidate side already does, not silently treat this evidence as environment-less.
+    nested_staging_owner = {
+        "owner": "x",
+        "escalation_route": "y",
+        "owner_authority": "repository",
+        "assessment_target": {"environment": "staging"},
+    }
+    nested_staging_rollback = rollback_fixture(
+        authority="repository", complete=True, assessment_target={"environment": "staging"}
+    )
+    nested_staging_post_deploy = post_deploy_fixture(
+        signal_authority="repository", complete=True, assessment_target={"environment": "staging"}
+    )
+    nested_staging_recovery = dict(tier1_stateful_fixture(), assessment_target={"environment": "staging"})
+    nested_staging_capacity = {
+        "status": "PASS",
+        "producer_trusted": True,
+        "evidence_authorities": {"demand": {"repository"}, "baseline": {"repository"}},
+        "assessment_target": {"environment": "staging"},
+    }
+    prod_candidate = source_candidate("a" * 40, environment="production")
+
+    assert pr.evaluate_ownership(nested_staging_owner, "tier0", candidate=prod_candidate).status == "UNKNOWN"
+    assert pr.evaluate_rollback_abort(nested_staging_rollback, "tier0", candidate=prod_candidate).status == "UNKNOWN"
+    assert pr.evaluate_post_deploy_plan(nested_staging_post_deploy, "tier0", candidate=prod_candidate).status == "UNKNOWN"
+    assert pr.evaluate_recovery(nested_staging_recovery, "tier0", candidate=prod_candidate).status == "UNKNOWN"
+    assert pr.evaluate_capacity_gate(nested_staging_capacity, "tier0", candidate=prod_candidate).status == "UNKNOWN"
+
+
+def test_environment_conflict_detected_when_candidate_environment_is_nested_only() -> None:
+    # Mirrors the evidence-side fixture above from the candidate's side: a candidate declaring its
+    # environment only under assessment_target, with no flat top-level field at all, must still be
+    # compared -- an evidence-side flat "staging" must not slip past a nested-only "production".
+    nested_prod_candidate = {"assessment_target": {"source_revision": "a" * 40, "environment": "production"}}
+    staging_owner = {"owner": "x", "escalation_route": "y", "owner_authority": "repository", "environment": "staging"}
+    result = pr.evaluate_ownership(staging_owner, "tier0", candidate=nested_prod_candidate)
+    assert result.status == "UNKNOWN"
+    assert result.reason == "environment_mismatch"
+
+
+def test_match_dimension_evidence_environment_specific_flag_read_from_nested_target() -> None:
+    # `environment_specific` is itself declared only on a nested assessment_target -- an otherwise
+    # environment-agnostic dimension name must still be treated as environment-sensitive here, the
+    # same as ENV_SENSITIVE_DIMENSIONS membership would force.
+    candidate = source_candidate("a" * 40, environment="production")
+    nested_env_specific_artifact = {
+        "assessment_target": {"source_revision": "a" * 40, "environment_specific": True},
+        "status": "PASS",
+        "evidence_authorities": {"x": {"repository"}},
+        # No declared environment at all on either side -- env_sensitive alone must still block.
+    }
+    result = pr.match_dimension_evidence("api", candidate=candidate, artifact=nested_env_specific_artifact)
+    assert result.status == "UNKNOWN"
+    assert result.reason == "environment_mismatch"
+
+
+def test_match_dimension_evidence_matches_when_candidate_env_flat_and_artifact_env_nested() -> None:
+    # A legitimate mixed shape: candidate declares environment flat, the artifact declares its own
+    # only under a nested assessment_target -- when they actually agree, this must still pass.
+    candidate = source_candidate("a" * 40, environment="production")
+    nested_prod_artifact = {
+        "assessment_target": {"source_revision": "a" * 40, "environment": "production"},
+        "status": "PASS",
+        "evidence_authorities": {"x": {"repository"}},
+    }
+    result = pr.match_dimension_evidence("api", candidate=candidate, artifact=nested_prod_artifact)
+    assert result.status == "PASS"
+
+
+def test_accept_child_result_rejects_child_environment_declared_only_in_a_nested_target() -> None:
+    # accept_child_result's own environment fence (used by dispatch_child and resolve_prerequisite)
+    # must resolve the child's environment nested-first too, not just via the manual extraction that
+    # used to live inline here before it was replaced by a plain _environment_conflict(child, ...)
+    # call.
+    prod_candidate = {"source_revision": "a" * 40, "environment": "production"}
+    nested_staging_child = {
+        "status": "PASS",
+        "evidence_authorities": {"x": {"repository"}},
+        "assessment_target": {"source_revision": "a" * 40, "environment": "staging"},
+    }
+    accepted = pr.accept_child_result(nested_staging_child, candidate=prod_candidate)
+    assert accepted.status == "UNKNOWN"
+    assert accepted.reason == "environment_mismatch"
+
+
+def test_evaluate_capacity_gate_report_non_mapping_degrades_without_crashing() -> None:
+    assert pr.evaluate_capacity_gate([], "tier0").status == "UNKNOWN"
+
+
+def test_evaluate_dependency_gate_report_non_mapping_degrades_without_crashing() -> None:
+    assert pr.evaluate_dependency_gate([]).status == "UNKNOWN"
+
+
+def test_evaluate_dependency_gate_candidate_non_mapping_degrades_without_crashing() -> None:
+    report = {"status": "PASS", "evidence_authorities": {"cve": {"repository"}}}
+    result = pr.evaluate_dependency_gate(report, candidate=[])
+    assert result.status == "PASS"
+
+
+def test_dispatch_child_inputs_non_mapping_degrades_without_crashing() -> None:
+    result = pr.dispatch_child("security-review", [], lambda n, i: {"status": "PASS"})
+    assert result.dimension_status == "UNKNOWN"
+    assert result.dispatched is False
+
+
+def test_validate_code_review_coverage_non_mapping_arguments_degrade_without_crashing() -> None:
+    assert pr.validate_code_review_coverage([], {"source_revision": "a" * 40})["status"] == "UNKNOWN"
+    assert pr.validate_code_review_coverage(code_review_coverage(), [])["status"] == "UNKNOWN"
+
+
+def test_validate_build_provenance_non_mapping_arguments_degrade_without_crashing() -> None:
+    assert pr.validate_build_provenance([], build_provenance())["status"] == "UNKNOWN"
+    assert pr.validate_build_provenance(source_candidate("a" * 40), [])["status"] in ("UNKNOWN", "NOT_APPLICABLE")
+
+
+def test_resolve_prerequisite_supplied_non_mapping_degrades_without_crashing() -> None:
+    result = pr.resolve_prerequisite(
+        "change_impact_report",
+        supplied=[],
+        candidate={"source_revision": "a" * 40},
+        invoke_spy=lambda *a, **k: None,
+        mandatory_inputs=["diff_text"],
+    )
+    assert result == {"status": "UNKNOWN", "mode": None}
+
+
+def test_resolve_prerequisite_candidate_non_mapping_degrades_without_crashing() -> None:
+    result = pr.resolve_prerequisite(
+        "change_impact_report",
+        candidate=["not-a-mapping"],
+        invoke_spy=lambda *a, **k: None,
+        mandatory_inputs=["diff_text"],
+    )
+    assert result == {"status": "UNKNOWN", "mode": None}

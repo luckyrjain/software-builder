@@ -409,6 +409,15 @@ def accept_child_result(
     if target_ref is not None and _identity_mismatch(child, target_ref):
         return AcceptedChildResult(status="UNKNOWN", trusted_for_gate=False, reason="target_mismatch")
 
+    if target_ref is not None:
+        # Same binding this identity check just applied, extended to environment: a child result
+        # scoped to a different environment than the one this dispatch/reuse was actually for must
+        # not be recorded as this candidate's own evidence, per operational-gates.md's
+        # environment-sensitivity rule. This is the one place dispatch_child's binding and
+        # match_dimension_evidence's own separate environment fence both ultimately route through.
+        if _environment_conflict(child, target_ref):
+            return AcceptedChildResult(status="UNKNOWN", trusted_for_gate=False, reason="environment_mismatch")
+
     if child.get("producer_trusted", True) is not True:
         # Strict identity: a malformed non-bool value (a truthy string like "false") must never
         # be read as "trusted" just because it's Python-truthy.
@@ -445,7 +454,7 @@ class AssessmentContextTrust:
         # carrier -- a malformed shape at any level (a bare string/list instead of a mapping, a
         # non-str authority value) must degrade to "caller," never raise and take down the whole
         # aggregation over one bad nested field.
-        input_provenance = self.context.get("input_provenance")
+        input_provenance = _as_mapping(self.context).get("input_provenance")
         if not isinstance(input_provenance, Mapping):
             return "caller"
         provenance = input_provenance.get(field)
@@ -480,6 +489,7 @@ def _child_mandatory_inputs_satisfied(child_name: str, inputs: Mapping[str, Any]
 
 
 def _mandatory_inputs_available(artifact_type: str, mandatory_inputs: Optional[Mapping[str, Any]]) -> bool:
+    mandatory_inputs = _as_mapping(mandatory_inputs) if mandatory_inputs is not None else {}
     if not mandatory_inputs:
         return False
     child_name = {
@@ -635,6 +645,7 @@ def validate_build_provenance(
 
 
 def evaluate_build_provenance(fixture: Mapping[str, Any]) -> GateResult:
+    fixture = _as_mapping(fixture)
     if fixture.get("policy_requires_attestation"):
         attestation = fixture.get("attestation")
         if attestation is None:
@@ -736,22 +747,50 @@ def _safe_same_environment(candidate_env: Any, artifact_env: Any) -> bool:
         return False
 
 
-def _environment_conflict(fixture_env: Any, candidate: Optional[Mapping[str, Any]]) -> bool:
-    """True when `candidate` declares an environment that conflicts with the fixture's own.
+def _effective_environment(obj: Any) -> Any:
+    """Best-effort environment read: a nested assessment_target/target's own `environment` first,
+    falling back to the object's own flat top-level field when the nested target doesn't declare
+    one.
 
-    Applied to the four operational gates (ownership, rollback/abort, post-deploy, recovery),
-    all of which are `ENV_SENSITIVE_DIMENSIONS` per operational-gates.md: evidence collected for
-    one environment (a staging on-call rotation) must not silently stand in for another
-    (production). Only fires when BOTH sides declare an environment and they actually disagree --
-    a caller not supplying `candidate`, or a fixture with no declared environment, leaves this
-    check inert rather than retroactively blocking every existing caller that never had
-    environment context to give.
+    Mirrors `_effective_source_revision`'s nested-first precedence, applied uniformly to every
+    side of every environment-sensitivity check in this module (the four operational gates,
+    capacity, `_environment_conflict`'s own candidate resolution, `match_dimension_evidence`'s
+    candidate/artifact resolution, `accept_child_result`'s child resolution). Unlike a revision
+    field -- where a nested target's silence is uniformly safe, since every validator fails closed
+    on an absent revision either way -- letting a nested target's silence shadow a real flat
+    `environment` would be fail-OPEN: it would silently disable the relevant check instead of
+    falling back to the object's own known environment. A single shared helper exists specifically
+    so this fallback is applied identically everywhere, rather than re-derived (and inevitably
+    missed somewhere) at each call site.
     """
-    if candidate is None or fixture_env is None:
+    obj = _as_mapping(obj)
+    target = _target_of(obj) or {}
+    env = target.get("environment")
+    if env is None:
+        env = obj.get("environment")
+    return env
+
+
+def _environment_conflict(fixture: Any, candidate: Optional[Mapping[str, Any]]) -> bool:
+    """True when `candidate` declares an environment that conflicts with `fixture`'s own.
+
+    Applied to the five environment-sensitive gates (ownership, rollback/abort, post-deploy,
+    recovery, capacity), all of which are `ENV_SENSITIVE_DIMENSIONS` per operational-gates.md:
+    evidence collected for one environment (a staging on-call rotation) must not silently stand in
+    for another (production). Only fires when BOTH sides resolve an environment and they actually
+    disagree -- a caller not supplying `candidate`, or a fixture with no declared environment
+    (nested or flat), leaves this check inert rather than retroactively blocking every existing
+    caller that never had environment context to give.
+
+    Takes the whole `fixture`/`candidate` object (not a pre-extracted flat field) specifically so
+    both sides resolve nested-first via `_effective_environment` -- passing an already-flat-read
+    value here reopens the exact laundering hole this function exists to close.
+    """
+    if candidate is None or fixture is None:
         return False
-    candidate_target = _target_of(candidate) or candidate
-    candidate_env = candidate_target.get("environment")
-    if candidate_env is None:
+    fixture_env = _effective_environment(fixture)
+    candidate_env = _effective_environment(candidate)
+    if fixture_env is None or candidate_env is None:
         return False
     return not _safe_same_environment(candidate_env, fixture_env)
 
@@ -768,11 +807,14 @@ def match_dimension_evidence(
     # carrier declares `environment` alongside source_revision/head_revision_or_digest, and a
     # flat top-level field must never be read in preference to (or in ignorance of) it -- identity
     # already resolves nested via accept_child_result below, so environment must agree.
-    candidate_target = _target_of(candidate) or candidate
+    candidate_env = _effective_environment(candidate)
+    artifact_env = _effective_environment(artifact)
     artifact_target = _target_of(artifact) or artifact
-    candidate_env = candidate_target.get("environment")
-    artifact_env = artifact_target.get("environment")
+    # Same nested-first-with-flat-fallback resolution as the environment fields themselves --
+    # a nested target's silence on `environment_specific` must not shadow a real flat declaration.
     env_specific = bool(artifact_target.get("environment_specific"))
+    if not env_specific and "environment_specific" not in artifact_target:
+        env_specific = bool(artifact.get("environment_specific"))
     env_sensitive = dimension_name in ENV_SENSITIVE_DIMENSIONS or env_specific
 
     if candidate_env is not None and artifact_env is not None:
@@ -799,7 +841,7 @@ def evaluate_ownership(
     owner: Mapping[str, Any], criticality: str = "unknown", candidate: Optional[Mapping[str, Any]] = None
 ) -> GateResult:
     owner = _as_mapping(owner)
-    if _environment_conflict(owner.get("environment"), candidate):
+    if _environment_conflict(owner, candidate):
         return GateResult("UNKNOWN", "environment_mismatch")
     authority = owner.get("owner_authority", "caller")
     if owner.get("unowned"):
@@ -829,7 +871,7 @@ def evaluate_rollback_abort(
     plan: Mapping[str, Any], criticality: str = "unknown", candidate: Optional[Mapping[str, Any]] = None
 ) -> GateResult:
     plan = _as_mapping(plan)
-    if _environment_conflict(plan.get("environment"), candidate):
+    if _environment_conflict(plan, candidate):
         return GateResult("UNKNOWN", "environment_mismatch")
     authority = plan.get("authority", "caller")
     if plan.get("unsafe_irreversible_no_recovery"):
@@ -866,7 +908,7 @@ def evaluate_post_deploy_plan(
     plan: Mapping[str, Any], criticality: str = "unknown", candidate: Optional[Mapping[str, Any]] = None
 ) -> GateResult:
     plan = _as_mapping(plan)
-    if _environment_conflict(plan.get("environment"), candidate):
+    if _environment_conflict(plan, candidate):
         return GateResult("UNKNOWN", "environment_mismatch")
     if not plan or not all(plan.get(field) for field in _POST_DEPLOY_REQUIRED_FIELDS):
         return GateResult("UNKNOWN", "incomplete_plan")
@@ -885,7 +927,7 @@ def evaluate_recovery(
     fixture: Mapping[str, Any], criticality: str = "unknown", candidate: Optional[Mapping[str, Any]] = None
 ) -> GateResult:
     fixture = _as_mapping(fixture)
-    if _environment_conflict(fixture.get("environment"), candidate):
+    if _environment_conflict(fixture, candidate):
         return GateResult("UNKNOWN", "environment_mismatch")
     mechanism_authority = fixture.get("mechanism_authority", "caller")
 
@@ -932,8 +974,12 @@ def evaluate_recovery(
 # ---------------------------------------------------------------------------
 
 
-def evaluate_capacity_gate(report: Mapping[str, Any], criticality: str = "unknown") -> GateResult:
+def evaluate_capacity_gate(
+    report: Mapping[str, Any], criticality: str = "unknown", candidate: Optional[Mapping[str, Any]] = None
+) -> GateResult:
     report = _as_mapping(report)
+    if _environment_conflict(report, candidate):
+        return GateResult("UNKNOWN", "environment_mismatch")
     if report.get("producer_trusted", True) is not True:
         return GateResult("UNKNOWN", "untrusted_producer")
     status = report.get("status", "UNKNOWN")
@@ -1210,9 +1256,13 @@ def production_readiness(
 
     # Any ONE of these fields, not all three, marks the candidate as MR-shaped: a caller must not
     # be able to skip the live scm_change_read fence just by omitting one of them while still
-    # supplying enough identity (e.g. head_sha + source_revision) to pass the check above.
+    # supplying enough identity (e.g. head_sha + source_revision) to pass the check above. Nested-
+    # first via _target_of, matching _has_minimum_candidate_identity immediately above -- an MR
+    # expressed through the canonical assessment_target carrier must not skip this fence just
+    # because these fields aren't also duplicated at the candidate's own flat top level.
+    mr_probe = _target_of(candidate) or candidate
     is_remote_mr = bool(
-        candidate.get("project") or candidate.get("merge_request_iid") is not None or candidate.get("head_sha")
+        mr_probe.get("project") or mr_probe.get("merge_request_iid") is not None or mr_probe.get("head_sha")
     )
     if is_remote_mr and scm_change_read is None:
         return ProductionReadinessResult(
@@ -1257,6 +1307,8 @@ def check_final_freshness(
 ) -> GateResult:
     """Compare identity/CI/policy snapshots taken before dispatch vs immediately before report emission."""
 
+    initial = _as_mapping(initial)
+    final = _as_mapping(final)
     if not initial or not final:
         return GateResult("UNKNOWN", "missing_freshness_snapshot")
 

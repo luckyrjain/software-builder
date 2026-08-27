@@ -36,6 +36,9 @@ rollback/abort, post-deploy verification plan, and recovery against `criticality
 - `tier2`/`tier3` — caller-only evidence is at most `CONDITIONAL`, never `PASS`.
 - Any tier — an authoritative "unowned" finding, or an authoritative proven-destructive-operation
   finding with no recovery path, is `FAIL`.
+- All four (plus capacity) are environment-sensitive: pass the resolved candidate alongside each
+  gate's own evidence so a conflicting declared environment (staging evidence for a production
+  candidate) downgrades the dimension to `UNKNOWN` — never silently accepted as `PASS`.
 
 ## 3. Derive the overall verdict — worst-first precedence
 

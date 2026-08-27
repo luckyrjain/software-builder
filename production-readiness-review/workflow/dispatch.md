@@ -73,6 +73,11 @@ Invoke each applicable, fully-assembled specialist with its own typed `assessmen
 (`assessment_target`, `inputs`, `input_provenance`, `evidence_refs`, `unresolved`) — never a bare
 conversational phrase.
 
+Every specialist's result must be bound to the candidate this dispatch was actually for: a `PASS`
+scoped to a different revision, or a different declared environment, must never be recorded as
+this candidate's own evidence. Pass the resolved candidate through when accepting each specialist's
+result, the same way its identity is compared.
+
 ## 4. No merge/deploy/rollback authority; BLOCKED propagation
 
 No invocation in this phase grants any child merge, deploy, or rollback authority — every child stays

@@ -44,3 +44,13 @@ input and blocks dispatch the same as a fully-missing field.
 Unlike the composite rows above, `database-review`'s row is satisfied by **any one** of `schema`,
 `migration_script`, or `queries` — dispatch proceeds once one of the three is assembled; it is not
 required to assemble all three.
+
+## Environment-sensitive specialists
+
+`observability-review`, `capacity-planner`, and `deployment-risk-review` are environment-sensitive
+dimensions (`ENV_SENSITIVE_DIMENSIONS` in the implementation, alongside the four operational gates
+covered in [operational-gates.md](operational-gates.md)): a result scoped to a different declared
+environment than the candidate's own must never be recorded as this candidate's evidence, even when
+its identity (revision/head SHA) otherwise matches. Assemble and compare each specialist's declared
+`environment` the same way its mandatory inputs above are assembled — never assume it matches the
+candidate's just because no conflicting field was supplied.
