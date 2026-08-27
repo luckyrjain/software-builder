@@ -64,6 +64,7 @@ Each skill directory follows the same pattern:
 | `deployment-risk-review` | review | ambient | — | `make lint-deployment-risk-review` |
 | `domain-comprehension` | architecture | ambient | squad-map | `make lint-domain-comprehension` |
 | `e2e-test-creator` | testing | ambient | — | `make lint-e2e-test-creator` |
+| `implementation-planner` | automation | ambient | — | `make lint-implementation-planner` |
 | `incident-rca` | incident | ambient | — | `make lint-incident-rca` |
 | `incident-triage-agent` | incident | automation-only | incident-rca, squad-map | `make lint-incident-triage-agent` |
 | `integration-test-creator` | testing | ambient | — | `make lint-integration-test-creator` |

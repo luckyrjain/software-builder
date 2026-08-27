@@ -136,6 +136,9 @@ routes:
     exclude_patterns:
       - '\b(incident|outage|postmortem|root cause|RCA)\b'
       - '\b(capacity|headroom|forecast|sizing)\b'
+  implementation-planner:
+    patterns:
+      - '\b(implementation plan|implementation planning|implementation task DAG|task decomposition|dependency[- ]aware plan|execution waves)\b'
   test-writer:
     patterns:
       - '\b(write|generate|add)\b\s+(tests?|test coverage)\b(?!.*\b(unit|integration|contract|e2e|end[- ]to[- ]end|API|HTTP|REST)\b)'

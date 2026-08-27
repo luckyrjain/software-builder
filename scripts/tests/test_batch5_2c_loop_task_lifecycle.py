@@ -42,7 +42,7 @@ def test_loop_task_declares_shared_lifecycle_contract():
 
 def test_state_schema_carries_shared_identity_requirements_and_lens_evidence():
     data = yaml.safe_load((SKILL / "reference/state-schema.yaml").read_text(encoding="utf-8"))
-    assert data["workflow_version"] == "1.6"
+    assert data["workflow_version"] == "1.7"
     assert "requirements_ref" in data["task"]
     assert "change_identity" in data["workspace"]
     assert "conflict_resolution_occurred" in data["workspace"]

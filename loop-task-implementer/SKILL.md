@@ -14,6 +14,12 @@ description: >-
 
 Use this skill to take software tasks from requirements to verified repository completion while separating implementation, review, and orchestration responsibilities. Core principle: **claims are advisory; repository evidence is authoritative.** This skill is platform-neutral — the active coding agent may be Cursor, ChatGPT/Codex, Claude Code, Kiro, or another repository-capable agent.
 
+In addition to legacy `implementation_task`, this skill accepts a validated `implementation_plan`.
+For plan execution, select exactly one dependency-satisfied task from the earliest incomplete wave,
+normalize it to the legacy internal task shape, and keep the canonical plan immutable. Store plan
+progress only in the host/runtime `plan_execution_state` checkpoint described in
+[state-schema.yaml](reference/state-schema.yaml); it is not a durable composition artifact.
+
 ## Natural-language invocation
 
 Users can invoke the skill without memorizing commands:
@@ -126,6 +132,13 @@ Use the strongest isolation primitive available: (1) native subagents, (2) separ
 ## Required state
 
 Initialize state from [reference/state-schema.yaml](reference/state-schema.yaml) and enforce [reference/review-lifecycle-contract.yaml](reference/review-lifecycle-contract.yaml). The Orchestrator is the only role allowed to mutate official workflow state.
+
+For an `implementation_plan`, validate its digest and `READY` status before dispatch. Reconcile the
+checkpoint to official per-task state and authoritative SCM evidence, require a monotonic
+`state_generation`, and revalidate when the repository head moves. Remote dispatch is collision-safe,
+not exactly-once — see [workflow/orchestrator.md](workflow/orchestrator.md) for the SHA-256 execution
+identity and expected-head/fast-forward rules. Caller-supplied checkpoint status is advisory and
+cannot mark a task complete.
 
 ## Role prompts and lifecycle adapters
 

@@ -254,7 +254,8 @@ def _basename(path: str) -> str:
 
 
 def _is_test_path(path: str) -> bool:
-    normalized = f"/{path.replace('\\', '/').lower().strip('/')}/"
+    slash_path = path.replace("\\", "/")
+    normalized = f"/{slash_path.lower().strip('/')}/"
     basename = _basename(path)
     return any(marker in normalized for marker in _TEST_MARKERS) or basename in {"test.py", "tests.py"} or basename.startswith("test_")
 
