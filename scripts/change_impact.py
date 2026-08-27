@@ -42,7 +42,7 @@ _HYPHEN_VARIANTS = str.maketrans(
 # the domain requires at least one dot and at least one letter, so an ordinary extension-free path
 # like "docs/readme" and IP/CIDR notation like "10.0.0.1/24" don't qualify) under limits:/requests:.
 # The skeleton (resources:/limits:/requests: lines and the blank-line filler) only ever uses
-# horizontal whitespace ([ \t]) or a literal newline with no overlap between adjacent groups, so a
+# horizontal whitespace ([ \t]) or a literal newline, with no overlap between adjacent groups, so a
 # non-matching input cannot trigger catastrophic backtracking there the way `\s*\n\s+` (whose classes
 # both match "\n") could; blank-line runs are intentionally unbounded rather than capped, since each
 # repetition still consumes a mandatory newline and so cannot itself introduce backtracking blowup —
@@ -58,9 +58,12 @@ _K8S_RESOURCES_BLOCK = re.compile(
     rf"{_K8S_BLANK_LINE_RUN}"
     rf"[ \t]*(?:{_K8S_RESOURCE_KEY_PATTERN})\s*:",
 )
-# Word-boundary, not substring: "replicated"/"replication" (ordinary database-replication prose)
-# must not match, only a standalone "replica"/"replicas" (a scaling-relevant count/change).
-_REPLICA_TOKEN = re.compile(r"\breplicas?\b")
+# A negative lookahead, not a word boundary: real config field names for this concept are commonly
+# compounded with no separator recognizable after lowercasing — replicaCount (the standard Helm/k8s
+# values.yaml field), replica_count, num_replicas all need to match. What must NOT match is "replica"
+# as the root of an unrelated English word describing replication behavior generally, not a count/
+# scaling change: replicated, replication, replicating, replicator, replicable.
+_REPLICA_TOKEN = re.compile(r"replica(?!ted|ting|tion|tor|ble)")
 _LOCKFILES = {
     "package-lock.json",
     "npm-shrinkwrap.json",
@@ -362,14 +365,14 @@ def _triggers(classes: list[str], text: str, paths: list[str]) -> list[str]:
     )
     if is_k8s_resource_change or any(token in lowered for token in ("demand", "headroom")) or _REPLICA_TOKEN.search(lowered):
         triggers.add("capacity")
+    if is_k8s_resource_change:
+        triggers.add("k8s_rightsizing")
     if any(token in lowered for token in ("metrics", "logs", "traces", "slo", "alerts", "correlation")):
         triggers.add("observability")
     if any(token in lowered for token in ("timeout", "retry", "backpressure", "circuit-breaker", "partial failure", "partial-failure", "recovery")):
         triggers.add("resilience")
     if "dependency" in classes or any(token in lowered for token in ("dependency", "framework", "lockfile", "package-lock", "version bump")):
         triggers.add("dependency_upgrade")
-    if is_k8s_resource_change:
-        triggers.add("k8s_rightsizing")
     return sorted(triggers)
 
 

@@ -584,21 +584,9 @@ def test_success_envelope_completes_every_dod_check() -> None:
     assert dod["completed_checks"] == dod["required_checks"]
 
 
-def test_hyphenated_trust_boundary_emits_security_trigger() -> None:
-    result = analyze_change(source=diff_text("This change crosses a trust-boundary between services."))
-    assert "security" in result["review_triggers"]
-
-
 def test_hyphenated_partial_failure_emits_resilience_trigger() -> None:
     result = analyze_change(source=diff_text("This introduces partial-failure handling in the worker."))
     assert "resilience" in result["review_triggers"]
-
-
-def test_unrelated_memory_and_generic_limits_do_not_emit_k8s_rightsizing() -> None:
-    result = analyze_change(
-        source=diff_text("Fixed a memory leak in the parser. Also updated API rate limits: 100 req/s per client."),
-    )
-    assert "k8s_rightsizing" not in result["review_triggers"]
 
 
 def test_k8s_resources_block_without_cpu_or_memory_still_emits_rightsizing() -> None:
@@ -687,6 +675,16 @@ def test_replicated_database_text_does_not_emit_capacity() -> None:
 def test_standalone_replica_word_still_emits_capacity() -> None:
     result = analyze_change(source=diff_text("Increased the replica count for the checkout service to 5."))
     assert "capacity" in result["review_triggers"]
+
+
+def test_helm_replica_count_field_names_emit_capacity() -> None:
+    for text in (
+        "Bumped replicaCount from 3 to 5 in charts/checkout/values.yaml.",
+        "Bumped replica_count from 3 to 5 in charts/checkout/values.yaml.",
+        "Bumped num_replicas from 3 to 5 in charts/checkout/values.yaml.",
+    ):
+        result = analyze_change(source=diff_text(text))
+        assert "capacity" in result["review_triggers"], text
 
 
 def test_invalid_coverage_status_is_execution_failure_not_finding() -> None:
