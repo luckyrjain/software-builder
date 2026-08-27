@@ -1480,3 +1480,106 @@ def test_missing_candidate_identity_blocks_even_with_unrelated_fields_present() 
     result = run_readiness(candidate={"service": "checkout-api", "note": "ship it"}, dimensions=[dim("security", "PASS")])
     assert result.skill_result.status == "BLOCKED"
     assert result.verdict != "READY"
+
+
+# ---------------------------------------------------------------------------
+# Round 6 adversarial-review regression tests
+# ---------------------------------------------------------------------------
+
+
+def test_validate_build_provenance_release_candidate_missing_digest_is_unknown_not_not_applicable() -> None:
+    # Only an MR-shaped candidate (merge_request_iid/head_sha) may default a missing digest to
+    # source_revision -- a release-candidate-shaped input with a real, distinct deployable-digest
+    # concept that simply failed to resolve must stay UNKNOWN, never silently NOT_APPLICABLE.
+    rc = {"source_type": "release_candidate", "service": "checkout", "source_revision": "a" * 40}
+    result = pr.validate_build_provenance(rc, None)
+    assert result["status"] == "UNKNOWN"
+    assert result["reason"] == "missing_candidate_identity"
+
+
+def test_dependency_gate_ci_scope_check_recognizes_mr_shaped_candidate_head_sha() -> None:
+    candidate = {"project": "acme/checkout", "merge_request_iid": 9, "head_sha": "c" * 40}
+    report = {"status": "PASS", "evidence_authorities": {"cve": {"caller"}}}
+    matching_ci = {
+        "required": True,
+        "scope_covers_changed_manifest": True,
+        "conclusion": "success",
+        "acquisition": "repository",
+        "source_revision": "c" * 40,
+    }
+    assert pr.evaluate_dependency_gate(report, dependency_ci=matching_ci, candidate=candidate).status == "PASS"
+
+
+def test_dependency_gate_ci_scope_check_rejects_unscoped_ci_for_mr_shaped_candidate() -> None:
+    candidate = {"project": "acme/checkout", "merge_request_iid": 9, "head_sha": "c" * 40}
+    report = {"status": "PASS", "evidence_authorities": {"cve": {"caller"}}}
+    unscoped_ci = {
+        "required": True,
+        "scope_covers_changed_manifest": True,
+        "conclusion": "success",
+        "acquisition": "repository",
+    }
+    assert pr.evaluate_dependency_gate(report, dependency_ci=unscoped_ci, candidate=candidate).status == "UNKNOWN"
+
+
+def test_dependency_gate_empty_evidence_authorities_cannot_be_cured_by_a_substitute() -> None:
+    strong_advisory = {"status": "CURRENT", "acquisition": "authoritative_host"}
+    assert pr.evaluate_dependency_gate({"status": "PASS", "evidence_authorities": {}}, advisory_evidence=strong_advisory).status == "UNKNOWN"
+    assert pr.evaluate_dependency_gate({"status": "PASS"}, advisory_evidence=strong_advisory).status == "UNKNOWN"
+
+
+def test_dependency_gate_cve_only_weak_entry_can_still_be_cured_by_a_substitute() -> None:
+    # A report that HONESTLY discloses a single weak "cve" entry (nothing else to authenticate)
+    # must not be penalized more harshly than one that discloses nothing at all.
+    strong_advisory = {"status": "CURRENT", "acquisition": "authoritative_host"}
+    report = {"status": "PASS", "evidence_authorities": {"cve": {"model_knowledge"}}}
+    assert pr.evaluate_dependency_gate(report, advisory_evidence=strong_advisory).status == "PASS"
+
+
+def test_capacity_and_dependency_gates_never_relabel_a_child_reported_not_applicable() -> None:
+    report = {"status": "NOT_APPLICABLE", "producer_trusted": True}
+    assert pr.evaluate_capacity_gate(report, criticality="tier0").status == "NOT_APPLICABLE"
+    assert pr.evaluate_capacity_gate(report, criticality="tier3").status == "NOT_APPLICABLE"
+    assert pr.evaluate_dependency_gate(report).status == "NOT_APPLICABLE"
+
+
+def test_assessment_context_trust_degrades_on_malformed_nested_provenance() -> None:
+    cases = [
+        {"input_provenance": {"ci": "repository"}},
+        {"input_provenance": {"ci": {"authority": ["repository"]}}},
+        {"input_provenance": ["ci"]},
+    ]
+    for ctx in cases:
+        trust = pr.classify_assessment_context_trust(ctx, "authoritative_host")
+        assert trust.effective_authority("ci") == "caller", ctx
+
+
+def test_dimension_rejects_pass_with_unknown_evidence_status() -> None:
+    try:
+        pr.Dimension("ci", "PASS", evidence_status="UNKNOWN")
+        assert False, "expected ValueError"
+    except ValueError:
+        pass
+
+
+def test_production_ready_framing_does_not_collide_with_pr_review() -> None:
+    for prompt in (
+        "Review this pull request and tell me if it is production ready",
+        "Review PR #482 and tell me if it is ready to deploy",
+        "Analyze this MR and tell me if it is ready to release",
+    ):
+        result = dispatch_prompt(ROOT, load_registry(ROOT), prompt)
+        assert result.status == "selected", prompt
+        assert result.candidates == ("production-readiness-review",), prompt
+
+
+def test_ready_to_ship_release_wide_routes_to_release_readiness_checker() -> None:
+    result = dispatch_prompt(ROOT, load_registry(ROOT), "Is this release ready to ship?")
+    assert result.status == "selected"
+    assert result.candidates == ("release-readiness-checker",)
+
+
+def test_ready_to_ship_numbered_pr_routes_to_production_readiness() -> None:
+    result = dispatch_prompt(ROOT, load_registry(ROOT), "Is PR #482 ready to ship?")
+    assert result.status == "selected"
+    assert result.candidates == ("production-readiness-review",)

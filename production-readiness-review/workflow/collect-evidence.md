@@ -30,7 +30,11 @@ passing.
 
 Read approvals, CODEOWNERS coverage, branch-protection rules, and unresolved review threads at the
 exact source revision. An unresolved required thread or a missing required approval is a genuine
-finding, not an evidence gap; capability unavailability is `UNKNOWN`.
+finding, not an evidence gap; capability unavailability is `UNKNOWN`. A policy document that could
+only be partially read (a required-approvals/CODEOWNERS/blocking-threads rule that didn't resolve)
+is `UNKNOWN`, never a permissive "not required" default. A recorded branch-protection bypass is a
+`FAIL` unless it carries an authoritative approver and an evidence reference — a caller's bare "yes
+it was approved" claim never suppresses it.
 
 ## 3. Build provenance — `host.build.provenance.read`
 

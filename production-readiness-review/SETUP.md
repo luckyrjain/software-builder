@@ -15,7 +15,7 @@ See [setup-freshness.md](../docs/skill-framework/shared/setup-freshness.md) for 
 
 This skill deliberately does not set `disable-model-invocation` — the agent can auto-apply it when you
 ask "is this PR/MR/release-candidate production ready?" with an `assessment_target`, as well as an
-explicit invocation. It fans out over up to ten child skills to produce **one** aggregated verdict, so
+explicit invocation. It fans out over up to eleven child skills to produce **one** aggregated verdict, so
 every one of those children's own live gates needs a scripted or constructed-away answer — see
 [reference/gate-policy.md](reference/gate-policy.md).
 

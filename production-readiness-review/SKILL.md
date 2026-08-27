@@ -117,9 +117,12 @@ follows `definition_of_done` — all defined in
 [runtime-contract.md](../docs/skill-framework/shared/runtime-contract.md).
 
 `definition_of_done`: required_artifacts=[`production_readiness_report`]; required_checks=[CI status,
-code review evidence, build provenance linkage, SCM policy, change-impact and deployment-risk
-prerequisites, every applicable specialist dimension dispatched or recorded UNKNOWN, four operational
-dimensions evaluated at the resolved criticality tier, worst-first verdict derivation];
+code review evidence, build provenance linkage, SCM policy (including an unapproved branch-
+protection bypass, which FAILs outright), change-impact and deployment-risk prerequisites, every
+applicable specialist dimension dispatched or recorded UNKNOWN, four operational dimensions
+evaluated at the resolved criticality tier, a final freshness re-check immediately before report
+emission (head/CI/approvals must not have regressed since evidence was first collected), worst-first
+verdict derivation];
 blocked_conditions=[`assessment_target` absent — HARD STOP]; partial_result_behavior=a missing or stale
 prerequisite, an unreachable specialist, or a knowingly-incomplete mandatory input lands that dimension
 as `UNKNOWN`, never silently dropped and never folded into `READY`.

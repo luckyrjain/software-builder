@@ -81,7 +81,7 @@ UNKNOWN — never just the bare state.>
 |------|--------|-------|
 | Ownership | PASS \| CONDITIONAL \| FAIL \| UNKNOWN | Evidence authority level |
 | Rollback / abort | PASS \| CONDITIONAL \| FAIL \| UNKNOWN | Evidence authority level |
-| Post-deploy verification plan | PASS \| CONDITIONAL \| FAIL \| UNKNOWN | Evidence authority level |
+| Post-deploy verification plan | PASS \| CONDITIONAL \| UNKNOWN | Evidence authority level; no authoritative-negative-finding rule applies to this gate, so `FAIL` is not reachable |
 | Recovery | PASS \| CONDITIONAL \| FAIL \| UNKNOWN \| NOT_APPLICABLE | Evidence authority level; NOT_APPLICABLE only for an authoritatively-confirmed stateless/reversible change |
 
 ## Blockers

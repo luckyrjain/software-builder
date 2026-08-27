@@ -145,21 +145,6 @@ def _tier_requires_strict_unknown(criticality: str) -> bool:
     return criticality in ("tier0", "tier1", "unknown")
 
 
-def _normalize_child_status(report: Mapping[str, Any]) -> str:
-    """Validate + trust-check a child result's own status, matching accept_child_result's rules.
-
-    Used by gates (capacity, dependency) that apply their own dimension-specific authority check
-    ahead of this, rather than routing through accept_child_result's generic identity/authority
-    pipeline -- but the child's raw status string still needs the same two guards: never pass
-    through an unrecognized value (a typo, or a child-specific vocabulary like "BLOCKED"), and
-    never trust an explicitly untrusted producer.
-    """
-    if not report.get("producer_trusted", True):
-        return "UNKNOWN"
-    status = report.get("status", "UNKNOWN")
-    return status if status in DIMENSION_STATUSES else "UNKNOWN"
-
-
 # ---------------------------------------------------------------------------
 # Dimension model + verdict aggregation
 # ---------------------------------------------------------------------------
@@ -179,6 +164,12 @@ class Dimension:
             object.__setattr__(
                 self, "evidence_status", "UNKNOWN" if self.status == "UNKNOWN" else "OBSERVED"
             )
+        elif self.status == "PASS" and self.evidence_status == "UNKNOWN":
+            # A self-contradictory artifact: aggregate_verdict would fold this into a READY
+            # verdict while aggregate_readiness's own envelope would simultaneously mark the
+            # evidence UNKNOWN -- per evidence-authority-policy.md rule 3, a dimension with no
+            # authoritative evidence trace is UNKNOWN, not PASS.
+            raise ValueError("A PASS dimension cannot declare evidence_status='UNKNOWN'")
 
 
 def _is_required(d: Dimension) -> bool:
@@ -363,8 +354,19 @@ class AssessmentContextTrust:
     def effective_authority(self, field: str) -> str:
         if self.acquisition not in STRONG_AUTHORITIES:
             return "caller"
-        provenance = (self.context.get("input_provenance") or {}).get(field) or {}
+        # input_provenance (and each field's own entry within it) is a caller/child-populated
+        # carrier -- a malformed shape at any level (a bare string/list instead of a mapping, a
+        # non-str authority value) must degrade to "caller," never raise and take down the whole
+        # aggregation over one bad nested field.
+        input_provenance = self.context.get("input_provenance")
+        if not isinstance(input_provenance, Mapping):
+            return "caller"
+        provenance = input_provenance.get(field)
+        if not isinstance(provenance, Mapping):
+            return "caller"
         authority = provenance.get("authority", "caller")
+        if not isinstance(authority, str):
+            return "caller"
         return authority if authority in _ALL_AUTHORITIES else "caller"
 
 
@@ -473,10 +475,18 @@ def validate_build_provenance(
     candidate: Mapping[str, Any], provenance: Optional[Mapping[str, Any]]
 ) -> MutableMapping[str, Any]:
     source_revision = _effective_source_revision(candidate)
-    # An MR-shaped candidate (project+merge_request_iid+head_sha, no separate digest field) has no
-    # distinct deployable identity to link to -- defaulting to source_revision itself correctly
-    # lands on the NOT_APPLICABLE branch below instead of UNKNOWN forever.
-    head_revision_or_digest = candidate.get("head_revision_or_digest") or source_revision
+    if "head_revision_or_digest" in candidate:
+        head_revision_or_digest = candidate.get("head_revision_or_digest")
+    elif candidate.get("merge_request_iid") is not None or candidate.get("head_sha") is not None:
+        # An MR-shaped candidate (project+merge_request_iid+head_sha) has no separate deployable-
+        # digest field at all -- defaulting to source_revision itself correctly lands on the
+        # NOT_APPLICABLE branch below instead of UNKNOWN forever. This must NOT apply to a
+        # release-candidate-shaped input that simply failed to resolve a digest (e.g. a
+        # host.build.provenance.read lookup that came back empty): that case has a real, distinct
+        # deployable identity concept and must stay UNKNOWN, never silently NOT_APPLICABLE.
+        head_revision_or_digest = source_revision
+    else:
+        head_revision_or_digest = None
     if not source_revision or not head_revision_or_digest:
         return {"status": "UNKNOWN", "reason": "missing_candidate_identity"}
     if head_revision_or_digest == source_revision:
@@ -734,10 +744,12 @@ def evaluate_capacity_gate(report: Mapping[str, Any], criticality: str = "unknow
     status = report.get("status", "UNKNOWN")
     if status not in DIMENSION_STATUSES:
         status = "UNKNOWN"
-    if status in ("FAIL", "UNKNOWN"):
-        # An already-negative or already-unresolved child status is never softened by the
-        # capacity-specific authority check below -- that check exists to keep an under-evidenced
-        # PASS/CONDITIONAL from being trusted, not to launder a FAIL into a milder CONDITIONAL.
+    if status in ("FAIL", "UNKNOWN", "NOT_APPLICABLE"):
+        # An already-negative, already-unresolved, or already-inapplicable child status is never
+        # relabeled by the capacity-specific authority check below -- that check exists to keep an
+        # under-evidenced PASS/CONDITIONAL from being trusted, not to re-score a status the child
+        # already reported. report-format.md is explicit that a child's own verdict is surfaced
+        # as-is, never re-labeled or re-scored.
         return GateResult(status)
 
     evidence_authorities = _as_authority_map(report.get("evidence_authorities"))
@@ -763,10 +775,10 @@ def evaluate_dependency_gate(
     status = report.get("status", "UNKNOWN")
     if status not in DIMENSION_STATUSES:
         status = "UNKNOWN"
-    if status in ("FAIL", "UNKNOWN"):
-        # An already-negative or already-unresolved child status is never softened by a substitute
-        # CVE-currency check below -- a substitute cures missing/weak CVE evidence, it does not
-        # launder a FAIL into something better.
+    if status in ("FAIL", "UNKNOWN", "NOT_APPLICABLE"):
+        # An already-negative, already-unresolved, or already-inapplicable child status is never
+        # relabeled by a substitute CVE-currency check below -- a substitute cures missing/weak
+        # CVE evidence, it does not re-score a status the child already reported.
         return GateResult(status)
 
     evidence_authorities = _as_authority_map(report.get("evidence_authorities"))
@@ -775,6 +787,14 @@ def evaluate_dependency_gate(
     has_cve_key = "cve" in evidence_authorities
     if has_cve_key and _minimum_authority_met(evidence_authorities):
         return GateResult(status)
+
+    if not evidence_authorities:
+        # The child declared NO evidence trail at all -- not even a weak "cve" entry. A substitute
+        # can cure missing/weak CVE evidence specifically, but it cannot vouch for a report that
+        # discloses nothing whatsoever about its own basis (accept_child_result treats an empty/
+        # absent evidence_authorities map the same way, via _minimum_authority_met's own
+        # empty-map-is-False rule).
+        return GateResult("UNKNOWN", "no_current_vulnerability_evidence")
 
     # A substitute (advisory_evidence / dependency_ci) only cures the "cve" entry specifically --
     # every OTHER entry already in the report's own evidence_authorities (e.g. version_delta,
@@ -794,18 +814,21 @@ def evaluate_dependency_gate(
         # acquisition behind it must not launder a weakly-authoritative report into a PASS.
         return GateResult(status)
 
-    if (
-        other_entries_ok
-        and dependency_ci is not None
-        and dependency_ci.get("required")
-        and dependency_ci.get("scope_covers_changed_manifest")
-        and dependency_ci.get("conclusion") == "success"
-        and dependency_ci.get("acquisition") in STRONG_AUTHORITIES
-        and (candidate is None or dependency_ci.get("source_revision") == candidate.get("source_revision"))
-    ):
-        # Same authority bar, plus a scope check when a candidate is supplied: dependency CI
-        # evidence collected for a different commit must not stand in for this one's.
-        return GateResult(status)
+    if other_entries_ok and dependency_ci is not None:
+        # Scope check uses the same MR-aware identity fallback every other comparison in this
+        # module uses -- and, unlike the old bare `.get("source_revision")` comparison, requires
+        # BOTH sides to actually name an identity: two None revisions must never vacuously match.
+        candidate_rev = _effective_source_revision(candidate) if candidate is not None else None
+        dependency_ci_rev = _effective_source_revision(dependency_ci)
+        scope_ok = candidate is None or (bool(candidate_rev) and dependency_ci_rev == candidate_rev)
+        if (
+            scope_ok
+            and dependency_ci.get("required")
+            and dependency_ci.get("scope_covers_changed_manifest")
+            and dependency_ci.get("conclusion") == "success"
+            and dependency_ci.get("acquisition") in STRONG_AUTHORITIES
+        ):
+            return GateResult(status)
 
     return GateResult("UNKNOWN", "no_current_vulnerability_evidence")
 

@@ -39,7 +39,7 @@ skipping the dimension without recording `UNKNOWN` are all violations of this ru
 
 ## An embedded child's interactive question returns BLOCKED, never a live prompt mid-aggregation
 
-This skill fans out to up to ten children to build **one** report; pausing for a live confirmation
+This skill fans out to up to eleven children to build **one** report; pausing for a live confirmation
 inside any one of those invocations would turn one report into N interruptions, and a specialist
 embedded mid-aggregation has no direct caller turn to answer it anyway. When a dispatched child would
 otherwise render an interactive ask-question (an ambiguous scope, a missing-but-askable field, a
