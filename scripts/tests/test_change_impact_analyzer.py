@@ -615,6 +615,54 @@ def test_k8s_resources_block_without_cpu_or_memory_still_emits_rightsizing() -> 
     assert "k8s_rightsizing" in result["review_triggers"]
 
 
+def test_non_k8s_resource_limits_do_not_emit_capacity_either() -> None:
+    result = analyze_change(
+        source=diff_text("Rate limiter change: requests: 100 per minute, limits: 50 burst per client."),
+    )
+    assert "capacity" not in result["review_triggers"]
+    assert "k8s_rightsizing" not in result["review_triggers"]
+
+
+def test_non_k8s_resources_block_with_arbitrary_keys_does_not_emit_k8s_rightsizing() -> None:
+    result = analyze_change(
+        source=diff_text(
+            "resources:\n  limits:\n    monthly_budget_usd: 5000\n  requests:\n    approval_needed_above_usd: 1000\n",
+        ),
+    )
+    assert "k8s_rightsizing" not in result["review_triggers"]
+    assert "capacity" not in result["review_triggers"]
+
+
+def test_unicode_hyphen_trust_boundary_still_emits_security_trigger() -> None:
+    result = analyze_change(source=diff_text("This change introduces a trust‑boundary crossing."))
+    assert "security" in result["review_triggers"]
+
+
+def test_line_wrapped_trust_boundary_still_emits_security_trigger() -> None:
+    result = analyze_change(
+        source=diff_text("This change introduces a trust-\nboundary crossing between services."),
+    )
+    assert "security" in result["review_triggers"]
+
+
+def test_k8s_resources_block_matcher_does_not_blow_up_on_adversarial_whitespace() -> None:
+    import time
+
+    hostile = "diff --git a/x.yaml b/x.yaml\n+resources:\n" + ("+ \n" * 20000) + "+done: true\n"
+    start = time.monotonic()
+    result = analyze_change(source=diff_text(hostile))
+    elapsed = time.monotonic() - start
+    assert elapsed < 1.0
+    assert "k8s_rightsizing" not in result["review_triggers"]
+
+
+def test_diff_stripped_single_space_indentation_still_emits_k8s_rightsizing() -> None:
+    result = analyze_change(
+        source=diff_text("diff --git a/x.yaml b/x.yaml\n+resources:\n+ limits:\n+  cpu: 500m\n"),
+    )
+    assert "k8s_rightsizing" in result["review_triggers"]
+
+
 def test_invalid_coverage_status_is_execution_failure_not_finding() -> None:
     result = finalize_impact(impact_fixture(coverage_status="BOGUS"))
     assert result.skill_result.status == "FAILED"

@@ -27,7 +27,29 @@ CHANGE_CLASSES = (
 )
 
 _DIFF_PATH = re.compile(r"^diff --git a/(\S+) b/(\S+)", re.MULTILINE)
-_K8S_RESOURCES_BLOCK = re.compile(r"resources:\s*\n\s+(?:limits|requests):")
+_HYPHEN_VARIANTS = str.maketrans(
+    {
+        "‐": "-",
+        "‑": "-",
+        "‒": "-",
+        "–": "-",
+        "—": "-",
+        "−": "-",
+    },
+)
+# A real Kubernetes resources stanza names an actual resource type (cpu/memory/ephemeral-storage/
+# hugepages, or a vendor extended resource like nvidia.com/gpu) under limits:/requests:. Every
+# quantifier below is anchored to either horizontal whitespace ([ \t]) or a literal newline, with no
+# overlap between adjacent groups, so a non-matching input cannot trigger catastrophic backtracking
+# the way `\s*\n\s+` (whose classes both match "\n") could.
+_K8S_RESOURCE_KEY_NAMES = r"cpu|memory|ephemeral-storage|hugepages(?:-\S+)?|[\w.-]+/[\w-]+"
+_K8S_RESOURCES_BLOCK = re.compile(
+    r"resources:[ \t]*\r?\n"
+    r"(?:[ \t]*\r?\n){0,5}"
+    r"[ \t]*(?:limits|requests):[ \t]*\r?\n"
+    r"(?:[ \t]*\r?\n){0,5}"
+    rf"[ \t]*(?:{_K8S_RESOURCE_KEY_NAMES})\s*:",
+)
 _LOCKFILES = {
     "package-lock.json",
     "npm-shrinkwrap.json",
@@ -304,8 +326,13 @@ def _classify_paths(paths: list[str], text: str) -> list[str]:
     return [item for item in CHANGE_CLASSES if item in classes]
 
 
+def _normalize_hyphens(text: str) -> str:
+    """Fold unicode hyphen/dash variants to ASCII and rejoin a hyphenated word split by a line wrap."""
+    return re.sub(r"-\s*\n\s*", "-", text.translate(_HYPHEN_VARIANTS))
+
+
 def _triggers(classes: list[str], text: str, paths: list[str]) -> list[str]:
-    lowered = f"{text}\n{' '.join(paths).lower()}"
+    lowered = _normalize_hyphens(f"{text}\n{' '.join(paths).lower()}")
     triggers: set[str] = set()
     if "api_contract" in classes or any(token in lowered for token in ("api contract", "openapi", "graphql", "endpoint")):
         triggers.add("api")
@@ -315,7 +342,14 @@ def _triggers(classes: list[str], text: str, paths: list[str]) -> list[str]:
         triggers.add("security")
     if any(token in lowered for token in ("hot-path", "hot path", "n+1", "cache", "concurrency", "pool", "fanout", "fan-out")):
         triggers.add("performance")
-    if any(token in lowered for token in ("demand", "headroom", "replica", "replicas", "hpa", "resources:", "limits:", "requests:")):
+    # "resources:"/"limits:"/"requests:" are only meaningful capacity signals in an actual K8s
+    # resources stanza (see _K8S_RESOURCES_BLOCK) — matched together with k8s_rightsizing below, per
+    # the plan's paired "K8s requests/limits/HPA/replicas -> capacity + k8s_rightsizing" mapping.
+    # Bare "demand"/"headroom"/"replica(s)" remain independent, general capacity signals.
+    is_k8s_resource_change = any(token in lowered for token in ("k8s", "kubernetes", "hpa")) or bool(
+        _K8S_RESOURCES_BLOCK.search(lowered),
+    )
+    if is_k8s_resource_change or any(token in lowered for token in ("demand", "headroom", "replica", "replicas")):
         triggers.add("capacity")
     if any(token in lowered for token in ("metrics", "logs", "traces", "slo", "alerts", "correlation")):
         triggers.add("observability")
@@ -323,8 +357,7 @@ def _triggers(classes: list[str], text: str, paths: list[str]) -> list[str]:
         triggers.add("resilience")
     if "dependency" in classes or any(token in lowered for token in ("dependency", "framework", "lockfile", "package-lock", "version bump")):
         triggers.add("dependency_upgrade")
-    k8s_explicit = any(token in lowered for token in ("k8s", "kubernetes", "hpa"))
-    if k8s_explicit or _K8S_RESOURCES_BLOCK.search(lowered):
+    if is_k8s_resource_change:
         triggers.add("k8s_rightsizing")
     return sorted(triggers)
 
