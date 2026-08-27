@@ -27,6 +27,7 @@ CHANGE_CLASSES = (
 )
 
 _DIFF_PATH = re.compile(r"^diff --git a/(\S+) b/(\S+)", re.MULTILINE)
+_K8S_RESOURCES_BLOCK = re.compile(r"resources:\s*\n\s+(?:limits|requests):")
 _LOCKFILES = {
     "package-lock.json",
     "npm-shrinkwrap.json",
@@ -323,9 +324,7 @@ def _triggers(classes: list[str], text: str, paths: list[str]) -> list[str]:
     if "dependency" in classes or any(token in lowered for token in ("dependency", "framework", "lockfile", "package-lock", "version bump")):
         triggers.add("dependency_upgrade")
     k8s_explicit = any(token in lowered for token in ("k8s", "kubernetes", "hpa"))
-    k8s_resource_fields = any(token in lowered for token in ("resources:", "limits:", "requests:"))
-    k8s_context_hints = any(token in lowered for token in ("replica", "replicas", "cpu", "memory"))
-    if k8s_explicit or (k8s_resource_fields and k8s_context_hints):
+    if k8s_explicit or _K8S_RESOURCES_BLOCK.search(lowered):
         triggers.add("k8s_rightsizing")
     return sorted(triggers)
 

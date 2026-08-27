@@ -601,6 +601,20 @@ def test_non_k8s_resource_limits_do_not_emit_k8s_rightsizing() -> None:
     assert "k8s_rightsizing" not in result["review_triggers"]
 
 
+def test_unrelated_memory_and_generic_limits_do_not_emit_k8s_rightsizing() -> None:
+    result = analyze_change(
+        source=diff_text("Fixed a memory leak in the parser. Also updated API rate limits: 100 req/s per client."),
+    )
+    assert "k8s_rightsizing" not in result["review_triggers"]
+
+
+def test_k8s_resources_block_without_cpu_or_memory_still_emits_rightsizing() -> None:
+    result = analyze_change(
+        source=diff_text("resources:\n  requests:\n    ephemeral-storage: 1Gi\n  limits:\n    ephemeral-storage: 2Gi\n"),
+    )
+    assert "k8s_rightsizing" in result["review_triggers"]
+
+
 def test_invalid_coverage_status_is_execution_failure_not_finding() -> None:
     result = finalize_impact(impact_fixture(coverage_status="BOGUS"))
     assert result.skill_result.status == "FAILED"
