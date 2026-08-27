@@ -49,6 +49,10 @@ following is `FAIL`, not `UNKNOWN` or `CONDITIONAL`:
   authoritative host signal) to perform a destructive or hard-to-reverse operation (e.g. an
   irreversible data deletion, a non-additive schema change with no down-migration), and no recovery
   path is evidenced.
+- **Unsafe/irreversible rollback plan** — the rollback/abort plan itself is confirmed unsafe or
+  irreversible with no recovery path (e.g. the "rollback" is itself a destructive operation with no
+  way back), the same any-tier-FAIL escape hatch as the two findings above, scoped to the
+  rollback/abort dimension.
 
 A `FAIL` on any operational dimension is a required dimension `FAIL` for the purposes of the overall
 verdict precedence in [gate-policy.md § Verdict precedence](gate-policy.md#verdict-precedence).

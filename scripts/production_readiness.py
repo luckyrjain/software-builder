@@ -598,11 +598,15 @@ def validate_build_provenance(
     candidate = _as_mapping(candidate)
     provenance = _as_mapping(provenance) if provenance is not None else None
     source_revision = _effective_source_revision(candidate)
-    # Mirrors _has_minimum_candidate_identity's exact MR-shape test: ALL THREE fields, with a
-    # truthy (not merely non-None) project/head_sha -- `is not None` alone would accept junk like
-    # head_sha="" or merge_request_iid=0 with no project at all as "MR-shaped."
+    # Mirrors _has_minimum_candidate_identity's exact MR-shape test: nested-first via _target_of
+    # (a candidate declaring its MR identity only under assessment_target must not be treated as
+    # having no separate deployable-digest concept, landing on the wrong UNKNOWN-forever branch
+    # below), then ALL THREE fields with a truthy (not merely non-None) project/head_sha --
+    # `is not None` alone would accept junk like head_sha="" or merge_request_iid=0 with no
+    # project at all as "MR-shaped."
+    mr_probe = _target_of(candidate) or candidate
     is_mr_shaped = bool(
-        candidate.get("project") and candidate.get("merge_request_iid") is not None and candidate.get("head_sha")
+        mr_probe.get("project") and mr_probe.get("merge_request_iid") is not None and mr_probe.get("head_sha")
     )
     if "head_revision_or_digest" in candidate:
         head_revision_or_digest = candidate.get("head_revision_or_digest")
@@ -938,9 +942,12 @@ def evaluate_recovery(
             return GateResult("FAIL", "destructive_no_recovery")
         return GateResult("UNKNOWN", "destructive_claim_not_authoritative")
 
-    if not fixture.get("stateful") and _is_true(fixture.get("reversible")):
-        # A caller-only "this is reversible" assertion with no authoritative statefulness
-        # evidence must not delete the recovery dimension from the required set entirely.
+    if fixture.get("stateful") is False and _is_true(fixture.get("reversible")):
+        # `stateful` must be an explicit, confirmed `False` -- an omitted field (evidence that
+        # never actually determined statefulness) must not be silently treated as a confirmed
+        # non-stateful finding just because `not None` is truthy. A caller-only "this is
+        # reversible" assertion with no authoritative statefulness evidence must not delete the
+        # recovery dimension from the required set entirely either way.
         if _is_strong_authority(mechanism_authority):
             return GateResult("NOT_APPLICABLE")
         # Falls through to the normal completeness/tier ladder below rather than short-circuiting

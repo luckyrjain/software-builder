@@ -2338,3 +2338,71 @@ def test_resolve_prerequisite_candidate_non_mapping_degrades_without_crashing() 
         mandatory_inputs=["diff_text"],
     )
     assert result == {"status": "UNKNOWN", "mode": None}
+
+
+# ---------------------------------------------------------------------------
+# Round 11 adversarial-review regression tests
+# ---------------------------------------------------------------------------
+
+
+def test_default_unknown_criticality_treats_operational_gates_as_strictly_as_tier0() -> None:
+    # operational-gates.md: "`unknown` criticality is treated as strictly as tier0/tier1, never as
+    # a permissive default." No existing test exercised the literal lowercase "unknown" string (the
+    # gates' own default) -- every tier-ladder test passed an explicit tier0-tier3, and the
+    # unrecognized-criticality test used values that never reach the `_tier_requires_strict_unknown`
+    # tuple membership check at all (they're rejected earlier as unrecognized).
+    assert pr.evaluate_ownership(caller_owner()).status == "UNKNOWN"
+    assert pr.evaluate_ownership(caller_owner(), "unknown").status == "UNKNOWN"
+    assert pr.evaluate_rollback_abort(rollback_fixture(authority="caller", complete=True), "unknown").status == "UNKNOWN"
+    assert (
+        pr.evaluate_post_deploy_plan(post_deploy_fixture(signal_authority="caller", complete=True), "unknown").status
+        == "UNKNOWN"
+    )
+    assert pr.evaluate_recovery(tier1_stateful_fixture(mechanism_authority="caller"), "unknown").status == "UNKNOWN"
+    capacity_caller_only = {
+        "status": "PASS",
+        "producer_trusted": True,
+        "evidence_authorities": {"demand": {"caller"}, "baseline": {"caller"}},
+    }
+    assert pr.evaluate_capacity_gate(capacity_caller_only, "unknown").status == "UNKNOWN"
+
+
+def test_match_dimension_evidence_nested_environment_specific_false_is_not_overridden_by_flat_true() -> None:
+    # The nested/flat fallback for `environment_specific` only consults the flat field when the
+    # nested target doesn't declare the key at all (`"environment_specific" not in artifact_target`)
+    # -- an explicit nested `False` must win over a conflicting flat `True`, not be replaced by it.
+    # This is the one input shape that distinguishes the `and` in that fallback from a mutated `or`.
+    candidate = source_candidate("a" * 40)
+    artifact = {
+        "assessment_target": {"source_revision": "a" * 40, "environment_specific": False},
+        "environment_specific": True,
+        "status": "PASS",
+        "evidence_authorities": {"x": {"repository"}},
+    }
+    result = pr.match_dimension_evidence("some_non_env_sensitive_dimension", candidate=candidate, artifact=artifact)
+    assert result.status == "PASS"
+
+
+def test_evaluate_recovery_requires_an_explicit_confirmed_non_stateful_finding() -> None:
+    # An absent `stateful` field (evidence that never actually determined statefulness) must not be
+    # read the same as a confirmed `stateful: False` -- `not fixture.get("stateful")` is True for
+    # both `False` and a missing key, which would let a bare authoritative "reversible" claim delete
+    # the recovery dimension from the required set via NOT_APPLICABLE even though statefulness was
+    # never actually assessed. Only an explicit `False` may take the NOT_APPLICABLE shortcut.
+    unassessed_statefulness = {"reversible": True, "mechanism_authority": "repository"}
+    result = pr.evaluate_recovery(unassessed_statefulness)
+    assert result.status != "NOT_APPLICABLE"
+    assert result.status == "UNKNOWN"
+
+    confirmed_not_stateful = {"stateful": False, "reversible": True, "mechanism_authority": "repository"}
+    assert pr.evaluate_recovery(confirmed_not_stateful).status == "NOT_APPLICABLE"
+
+
+def test_validate_build_provenance_recognizes_mr_shape_declared_only_in_a_nested_target() -> None:
+    # A candidate declaring its MR identity (project/merge_request_iid/head_sha) only under a
+    # nested assessment_target, with none of those fields flat, must still be recognized as
+    # MR-shaped -- otherwise it falls through to "no separate deployable-digest concept" being
+    # misread as "unresolved digest," landing on UNKNOWN forever instead of NOT_APPLICABLE.
+    nested_mr_candidate = {"assessment_target": {"project": "acme/x", "merge_request_iid": 5, "head_sha": "a" * 40}}
+    result = pr.validate_build_provenance(nested_mr_candidate, None)
+    assert result["status"] == "NOT_APPLICABLE"
