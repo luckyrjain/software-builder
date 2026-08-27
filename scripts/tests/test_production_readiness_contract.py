@@ -2440,7 +2440,12 @@ def test_validate_build_provenance_prefers_nested_head_revision_over_a_forged_fl
         "assessment_target": {"source_revision": "a" * 40, "head_revision_or_digest": real_digest},
         "head_revision_or_digest": "a" * 40,
     }
-    provenance = {"source_revision": "a" * 40, "deployable_digest": real_digest, "build_status": "FAILED"}
+    provenance = {
+        "source_revision": "a" * 40,
+        "deployable_digest": real_digest,
+        "build_status": "FAILED",
+        "acquisition": "authoritative_host",
+    }
     result = pr.validate_build_provenance(candidate, provenance)
     assert result["status"] == "FAIL"
     assert result["reason"] == "build_failed"
@@ -2881,6 +2886,7 @@ def test_validate_build_provenance_nested_explicit_none_digest_falls_back_to_fla
         "deployable_digest": "digest123",
         "build_status": "SUCCESS",
         "evidence_ref": "evref-1",
+        "acquisition": "authoritative_host",
     }
     result = pr.validate_build_provenance(candidate, provenance)
     assert result["status"] == "PASS"
@@ -3035,3 +3041,48 @@ def test_dependency_gate_dependency_ci_requires_successful_conclusion() -> None:
     result = pr.evaluate_dependency_gate(report, dependency_ci=dep_ci, candidate=candidate)
     assert result.status == "UNKNOWN"
     assert result.reason == "no_current_vulnerability_evidence"
+
+
+def test_scm_policy_requires_observed_evidence_to_match_candidate_scope() -> None:
+    # evaluate_scm_policy had NO candidate/scope binding at all -- approvals/CODEOWNERS/blocking-
+    # thread state gathered for a completely different revision (a pre-force-push head, or a
+    # different MR entirely) was accepted unconditionally to satisfy the current candidate's SCM
+    # policy gate. This is the same live, force-push-sensitive SCM-fact class
+    # validate_code_review_coverage's own mandatory scope fence already guards.
+    scm_policy = policy(required_approvals=2)
+    candidate = {"source_revision": "a" * 40}
+    wrong_scope = observed(approvals=2, source_revision="totally-unrelated-commit-deadbeef")
+    result = pr.evaluate_scm_policy(scm_policy, wrong_scope, candidate=candidate)
+    assert result.status == "UNKNOWN"
+    assert result.reason == "scope_mismatch"
+
+    right_scope = observed(approvals=2, source_revision="a" * 40)
+    result = pr.evaluate_scm_policy(scm_policy, right_scope, candidate=candidate)
+    assert result.status == "PASS"
+
+    # Backward compatible: omitting candidate entirely (every pre-round-21 caller) must not newly
+    # block anything -- the scope check is inert without a candidate to compare.
+    result = pr.evaluate_scm_policy(scm_policy, wrong_scope)
+    assert result.status == "PASS"
+
+
+def test_validate_build_provenance_requires_authoritative_acquisition() -> None:
+    # validate_build_provenance never checked WHO produced the provenance record at all -- unlike
+    # its siblings validate_ci and validate_code_review_coverage, which both gate on
+    # _is_host_or_runtime_acquisition. A caller could simply assert build success with a
+    # self-declared matching digest/evidence_ref and no acquisition field at all.
+    candidate = {"source_revision": "a" * 40, "head_revision_or_digest": "sha256:" + "b" * 64}
+    caller_asserted = {
+        "source_revision": "a" * 40,
+        "deployable_digest": "sha256:" + "b" * 64,
+        "build_status": "SUCCESS",
+        "evidence_ref": "build:1",
+        "acquisition": "caller",
+    }
+    result = pr.validate_build_provenance(candidate, caller_asserted)
+    assert result["status"] == "UNKNOWN"
+    assert result["reason"] == "untrusted_acquisition"
+
+    authoritative = dict(caller_asserted, acquisition="authoritative_host")
+    result = pr.validate_build_provenance(candidate, authoritative)
+    assert result["status"] == "PASS"

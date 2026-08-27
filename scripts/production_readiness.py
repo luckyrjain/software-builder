@@ -672,6 +672,12 @@ def validate_build_provenance(
         return {"status": "UNKNOWN", "reason": "source_mismatch"}
     if provenance.get("deployable_digest") != head_revision_or_digest:
         return {"status": "UNKNOWN", "reason": "digest_mismatch"}
+    if not _is_host_or_runtime_acquisition(provenance.get("acquisition")):
+        # Matching validate_ci/validate_code_review_coverage's own acquisition gate: a
+        # caller-asserted (or acquisition-less) build-success claim is not itself proof a build
+        # actually ran and succeeded -- gates both PASS and FAIL uniformly, the same as CI's own
+        # acquisition check, since an untrusted record can't be relied on for either outcome.
+        return {"status": "UNKNOWN", "reason": "untrusted_acquisition"}
     build_status = provenance.get("build_status")
     if build_status == "SUCCESS":
         evidence_ref = provenance.get("evidence_ref")
@@ -719,9 +725,12 @@ def evaluate_build_provenance(fixture: Mapping[str, Any]) -> GateResult:
 _SCM_POLICY_KEYS = ("required_approvals", "codeowners_required", "blocking_threads_must_resolve")
 
 
-def evaluate_scm_policy(policy: Mapping[str, Any], observed: Mapping[str, Any]) -> GateResult:
+def evaluate_scm_policy(
+    policy: Mapping[str, Any], observed: Mapping[str, Any], candidate: Optional[Mapping[str, Any]] = None
+) -> GateResult:
     policy = _as_mapping(policy)
     observed = _as_mapping(observed)
+    candidate = _as_mapping(candidate) if candidate is not None else None
     if not policy or not observed:
         return GateResult("UNKNOWN", "missing_scm_policy_evidence")
     if any(key not in policy for key in _SCM_POLICY_KEYS):
@@ -729,6 +738,19 @@ def evaluate_scm_policy(policy: Mapping[str, Any], observed: Mapping[str, Any]) 
         # default to "not required" -- an unread rule is an evidence gap, never a permissive
         # default.
         return GateResult("UNKNOWN", "scm_policy_incompletely_read")
+
+    if candidate is not None:
+        # Approvals/CODEOWNERS/blocking-thread state is the same kind of live, force-push-
+        # sensitive SCM fact as code-review coverage -- validate_code_review_coverage's own
+        # mandatory scope fence exists specifically because "code review evidence computed for a
+        # different revision (e.g. the pre-force-push head) must never validate as this
+        # candidate's own coverage." `observed` is an evidence record (flat-only, like
+        # dependency_ci/advisory_evidence), not an identity-declaring object. Inert when no
+        # candidate is supplied, matching this module's established convention.
+        candidate_rev = _effective_source_revision(candidate)
+        observed_rev = observed.get("source_revision")
+        if not candidate_rev or observed_rev != candidate_rev:
+            return GateResult("UNKNOWN", "scope_mismatch")
 
     bypass_refs = observed.get("policy_bypass_refs") or []
     if bypass_refs:
