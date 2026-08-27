@@ -39,23 +39,28 @@ _HYPHEN_VARIANTS = str.maketrans(
 )
 # A real Kubernetes resources stanza names an actual resource type (cpu/memory/ephemeral-storage/
 # hugepages, or a vendor extended resource formatted as <dns-domain>/<name>, e.g. nvidia.com/gpu —
-# the domain requires at least one dot, so an ordinary extension-free path like "docs/readme" does
-# not qualify) under limits:/requests:. Every quantifier below is anchored to either horizontal
-# whitespace ([ \t]) or a literal newline, with no overlap between adjacent groups, so a non-matching
-# input cannot trigger catastrophic backtracking the way `\s*\n\s+` (whose classes both match "\n")
-# could; blank-line runs are intentionally unbounded rather than capped, since each repetition still
-# consumes a mandatory newline and so cannot itself introduce backtracking blowup — a bounded cap
-# would only let enough padding evade detection entirely.
+# the domain requires at least one dot and at least one letter, so an ordinary extension-free path
+# like "docs/readme" and IP/CIDR notation like "10.0.0.1/24" don't qualify) under limits:/requests:.
+# The skeleton (resources:/limits:/requests: lines and the blank-line filler) only ever uses
+# horizontal whitespace ([ \t]) or a literal newline with no overlap between adjacent groups, so a
+# non-matching input cannot trigger catastrophic backtracking there the way `\s*\n\s+` (whose classes
+# both match "\n") could; blank-line runs are intentionally unbounded rather than capped, since each
+# repetition still consumes a mandatory newline and so cannot itself introduce backtracking blowup —
+# a bounded cap would only let enough padding evade detection entirely.
 _K8S_DNS_LABEL = r"[a-z0-9](?:[a-z0-9-]*[a-z0-9])?"
-_K8S_RESOURCE_KEY_PATTERN = rf"cpu|memory|ephemeral-storage|hugepages(?:-\S+)?|{_K8S_DNS_LABEL}(?:\.{_K8S_DNS_LABEL})+/[\w-]+"
-_K8S_BLANK_LINES = r"(?:[ \t]*\r?\n)*"
+_K8S_VENDOR_RESOURCE = rf"(?=[a-z0-9.-]*[a-z])(?:{_K8S_DNS_LABEL}(?:\.{_K8S_DNS_LABEL})+)/[\w-]+"
+_K8S_RESOURCE_KEY_PATTERN = rf"cpu|memory|ephemeral-storage|hugepages(?:-\S+)?|{_K8S_VENDOR_RESOURCE}"
+_K8S_BLANK_LINE_RUN = r"(?:[ \t]*\r?\n)*"
 _K8S_RESOURCES_BLOCK = re.compile(
     r"resources:[ \t]*\r?\n"
-    rf"{_K8S_BLANK_LINES}"
+    rf"{_K8S_BLANK_LINE_RUN}"
     r"[ \t]*(?:limits|requests):[ \t]*\r?\n"
-    rf"{_K8S_BLANK_LINES}"
+    rf"{_K8S_BLANK_LINE_RUN}"
     rf"[ \t]*(?:{_K8S_RESOURCE_KEY_PATTERN})\s*:",
 )
+# Word-boundary, not substring: "replicated"/"replication" (ordinary database-replication prose)
+# must not match, only a standalone "replica"/"replicas" (a scaling-relevant count/change).
+_REPLICA_TOKEN = re.compile(r"\breplicas?\b")
 _LOCKFILES = {
     "package-lock.json",
     "npm-shrinkwrap.json",
@@ -355,7 +360,7 @@ def _triggers(classes: list[str], text: str, paths: list[str]) -> list[str]:
     is_k8s_resource_change = any(token in lowered for token in ("k8s", "kubernetes", "hpa")) or bool(
         _K8S_RESOURCES_BLOCK.search(lowered),
     )
-    if is_k8s_resource_change or any(token in lowered for token in ("demand", "headroom", "replica", "replicas")):
+    if is_k8s_resource_change or any(token in lowered for token in ("demand", "headroom")) or _REPLICA_TOKEN.search(lowered):
         triggers.add("capacity")
     if any(token in lowered for token in ("metrics", "logs", "traces", "slo", "alerts", "correlation")):
         triggers.add("observability")
