@@ -1583,3 +1583,197 @@ def test_ready_to_ship_numbered_pr_routes_to_production_readiness() -> None:
     result = dispatch_prompt(ROOT, load_registry(ROOT), "Is PR #482 ready to ship?")
     assert result.status == "selected"
     assert result.candidates == ("production-readiness-review",)
+
+
+# ---------------------------------------------------------------------------
+# Round 7 adversarial-review regression tests
+# ---------------------------------------------------------------------------
+
+
+def test_validate_build_provenance_junk_head_sha_is_not_mr_shaped() -> None:
+    rc = {"source_type": "release_candidate", "service": "checkout", "source_revision": "a" * 40}
+    for junk in ({"head_sha": ""}, {"merge_request_iid": 0}, {"head_sha": "", "merge_request_iid": 0}):
+        result = pr.validate_build_provenance(dict(rc, **junk), None)
+        assert result["status"] == "UNKNOWN", junk
+        assert result["reason"] == "missing_candidate_identity", junk
+
+
+def test_validate_build_provenance_consults_provenance_before_mr_shape_fallback() -> None:
+    # A provenance record naming a real deployable digest is itself proof a build step exists,
+    # even for an MR-shaped candidate with no head_revision_or_digest field of its own -- a failed
+    # build must FAIL the dimension, not vanish as NOT_APPLICABLE before provenance is even read.
+    sha = "a" * 40
+    mr = {"project": "acme/checkout", "merge_request_iid": 412, "head_sha": sha}
+    failed = {
+        "source_revision": sha,
+        "deployable_digest": "sha256:" + "b" * 64,
+        "build_status": "FAILED",
+        "acquisition": "authoritative_host",
+        "evidence_ref": "build:7",
+    }
+    result = pr.validate_build_provenance(mr, failed)
+    assert result["status"] == "FAIL"
+    assert result["reason"] == "build_failed"
+
+
+def test_target_of_recognizes_assessment_target_as_identity_carrier() -> None:
+    sha = "a" * 40
+    candidate = {"project": "acme/checkout", "merge_request_iid": 412, "head_sha": sha, "environment": "production"}
+    security_report = {
+        "artifact_type": "security_review_report",
+        "status": "PASS",
+        "assessment_target": dict(candidate),
+        "environment": "production",
+        "evidence_authorities": {"code": {"repository"}},
+        "producer_trusted": True,
+    }
+    assert pr.accept_child_result(security_report, candidate=candidate).status == "PASS"
+
+
+def test_nested_target_takes_precedence_over_a_flat_source_revision() -> None:
+    sha = "a" * 40
+    digest = "sha256:" + "b" * 64
+    rc = {"repo": "acme/checkout", "source_revision": sha, "head_revision_or_digest": digest, "source_type": "release_candidate"}
+    child = {"status": "PASS", "source_revision": sha, "target": dict(rc), "evidence_authorities": {"c": {"repository"}}}
+    assert pr.accept_child_result(child, candidate=rc).status == "PASS"
+    without_flat = {k: v for k, v in child.items() if k != "source_revision"}
+    assert pr.accept_child_result(without_flat, candidate=rc).status == "PASS"
+
+
+def test_nested_target_naming_a_different_commit_is_rejected_despite_matching_flat_field() -> None:
+    sha = "a" * 40
+    other = "9" * 40
+    mr = {"project": "p", "merge_request_iid": 1, "head_sha": sha}
+    child = {
+        "status": "PASS",
+        "source_revision": sha,
+        "target": {"source_revision": other, "head_revision_or_digest": other},
+        "evidence_authorities": {"c": {"repository"}},
+    }
+    assert pr.accept_child_result(child, candidate=mr).status == "UNKNOWN"
+
+
+def test_validate_code_review_coverage_rejects_scope_mismatch_when_candidate_supplied() -> None:
+    coverage = code_review_coverage(candidate_source_revision="a" * 40)
+    mismatched_candidate = source_candidate("b" * 40)
+    result = pr.validate_code_review_coverage(coverage, candidate=mismatched_candidate)
+    assert result["status"] == "UNKNOWN"
+    assert result["reason"] == "scope_mismatch"
+
+
+def test_validate_code_review_coverage_passes_when_candidate_matches() -> None:
+    coverage = code_review_coverage(candidate_source_revision="a" * 40)
+    matching_candidate = source_candidate("a" * 40)
+    assert pr.validate_code_review_coverage(coverage, candidate=matching_candidate) == {"status": "PASS"}
+
+
+def test_evaluate_recovery_reversible_claim_falls_through_to_tier_conditional() -> None:
+    # Claiming reversibility (caller-only) must never make the verdict WORSE than not claiming
+    # it -- both should be able to reach CONDITIONAL at tier3 given otherwise-identical evidence.
+    base = dict(
+        policy_freshness="2026-08-01T00:00:00Z",
+        rpo_rto_policy={"rpo_minutes": 15},
+        last_exercise={"date": "2026-07-01"},
+        mechanism_authority="caller",
+    )
+    not_reversible = pr.evaluate_recovery(dict(base, stateful=True, reversible=False), "tier3")
+    reversible = pr.evaluate_recovery(dict(base, stateful=False, reversible=True), "tier3")
+    assert not_reversible.status == "CONDITIONAL"
+    assert reversible.status == "CONDITIONAL"
+
+
+def test_scm_policy_codeowners_satisfied_non_boolean_is_unknown_not_pass() -> None:
+    p = policy(codeowners_required=True)
+    for junk in ("false", "pending", ["missing-owner"]):
+        result = pr.evaluate_scm_policy(p, observed(codeowners_satisfied=junk))
+        assert result.status == "UNKNOWN", junk
+        assert result.reason == "codeowners_status_not_boolean", junk
+
+
+def test_scm_policy_bypass_approved_non_boolean_still_fails() -> None:
+    result = pr.evaluate_scm_policy(
+        policy(),
+        observed(
+            policy_bypass_refs=["override-1"],
+            bypass_approved="yes",
+            bypass_approval_authority="authoritative_host",
+            bypass_approval_ref="approval-123",
+        ),
+    )
+    assert result.status == "FAIL"
+
+
+def test_producer_trusted_non_boolean_string_is_never_read_as_trusted() -> None:
+    child = {"status": "PASS", "producer_trusted": "false", "evidence_authorities": {"a": {"repository"}}}
+    assert pr.accept_child_result(child).status == "UNKNOWN"
+
+
+def test_rollback_and_post_deploy_complete_non_boolean_is_unknown() -> None:
+    assert pr.evaluate_rollback_abort({"complete": "false", "authority": "repository"}).status == "UNKNOWN"
+    plan = post_deploy_fixture(signal_authority="authoritative_host", complete="false")
+    assert pr.evaluate_post_deploy_plan(plan).status == "UNKNOWN"
+
+
+def test_recovery_reversible_non_boolean_string_does_not_reach_not_applicable() -> None:
+    fixture = {"stateful": False, "reversible": "false", "mechanism_authority": "repository"}
+    assert pr.evaluate_recovery(fixture).status != "NOT_APPLICABLE"
+
+
+def test_dependency_gate_ci_non_boolean_required_flag_is_unknown() -> None:
+    report = {"status": "PASS", "evidence_authorities": {"cve": {"caller"}}}
+    dep_ci = {
+        "required": "false",
+        "scope_covers_changed_manifest": "no",
+        "conclusion": "success",
+        "acquisition": "authoritative_host",
+        "source_revision": "a" * 40,
+    }
+    result = pr.evaluate_dependency_gate(report, dependency_ci=dep_ci, candidate=source_candidate("a" * 40))
+    assert result.status == "UNKNOWN"
+
+
+def test_authority_membership_checks_degrade_on_unhashable_value_without_crashing() -> None:
+    assert pr.evaluate_ownership({"owner": "t", "escalation_route": "p", "owner_authority": ["repository"]}).status == "UNKNOWN"
+    assert pr.validate_ci({"source_revision": "a" * 40}, {"head_revision": "a" * 40, "acquisition": ["authoritative_host"], "all_required_green": True})["status"] == "UNKNOWN"
+    assert pr.evaluate_ownership({"owner": "t", "escalation_route": "p"}, criticality=["tier3"]).status == "UNKNOWN"
+
+
+def test_not_applicable_claim_requires_the_same_authority_pass_would_need() -> None:
+    # Claiming inapplicability (which deletes the dimension from the required set) must never
+    # require LESS authority than claiming PASS would -- both should degrade to UNKNOWN together.
+    candidate = source_candidate("a" * 40)
+    weak_artifact = {"source_revision": "a" * 40, "environment": "prod", "evidence_authorities": {}}
+    pass_result = pr.match_dimension_evidence("capacity", candidate=candidate, artifact=dict(weak_artifact, status="PASS"))
+    na_result = pr.match_dimension_evidence("capacity", candidate=candidate, artifact=dict(weak_artifact, status="NOT_APPLICABLE"))
+    assert pass_result.status == "UNKNOWN"
+    assert na_result.status == "UNKNOWN"
+
+
+def test_dimension_rejects_conditional_with_unknown_evidence_status() -> None:
+    try:
+        pr.Dimension("capacity", "CONDITIONAL", evidence_status="UNKNOWN")
+        assert False, "expected ValueError"
+    except ValueError:
+        pass
+
+
+def test_sanitized_child_inputs_strips_posting_mode_and_auto_post_authorized() -> None:
+    sanitized = pr._sanitized_child_inputs(
+        "pr-review",
+        {
+            "merge_request_iid": 482,
+            "project": "acme/checkout",
+            "expected_head_sha": "a" * 40,
+            "posting_mode": "full",
+            "auto_post_authorized": True,
+        },
+    )
+    assert "posting_mode" not in sanitized
+    assert "auto_post_authorized" not in sanitized
+    assert sanitized["posting_policy"] == "forbidden"
+
+
+def test_aggregate_report_non_iterable_waivers_does_not_crash() -> None:
+    result = pr.aggregate_report([pr.Dimension("ci", "FAIL")], waivers=5)
+    assert result["waivers"] == []
+    assert result["verdict"] == "NOT_READY"

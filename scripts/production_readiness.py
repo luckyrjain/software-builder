@@ -109,6 +109,38 @@ def _as_authority_map(value: Any) -> Mapping[str, Any]:
     return value if isinstance(value, Mapping) else {}
 
 
+def _is_strong_authority(value: Any) -> bool:
+    """True only when value is a hashable string naming a strong authority.
+
+    A scalar `*_authority`/`acquisition` field is normally tested with `value in
+    STRONG_AUTHORITIES`; an unhashable shape (a list, a dict) raises TypeError there instead of
+    failing closed, taking down the whole aggregation over one malformed field. Every such
+    membership test in this module should route through this helper instead of the bare `in`.
+    """
+    return isinstance(value, str) and value in STRONG_AUTHORITIES
+
+
+def _is_host_or_runtime_acquisition(value: Any) -> bool:
+    """True only when value is a hashable string naming authoritative_host or trusted_runtime.
+
+    CI and code-review coverage evidence specifically excludes "repository" acquisition (a static
+    repo-content read is not a live CI/review observation) -- narrower than STRONG_AUTHORITIES,
+    but the same unhashable-value hazard applies to a bare `in {...}` membership test.
+    """
+    return isinstance(value, str) and value in {"authoritative_host", "trusted_runtime"}
+
+
+def _is_true(value: Any) -> bool:
+    """Strict boolean read: only the literal `True` counts.
+
+    A truthy non-bool (the string "false", a nonzero int, a non-empty list) must never be read as
+    a confirmed affirmative signal for a field that is only ever supposed to carry a real boolean
+    (`complete`, `reversible`, `required`, `producer_trusted`, `bypass_approved`, ...) -- bare
+    Python truthiness would treat the string "false" as true.
+    """
+    return value is True
+
+
 def _minimum_authority_met(evidence_authorities: Optional[Mapping[str, Any]]) -> bool:
     """True only when EVERY evidence entry backing a conclusion is *purely* strongly authoritative.
 
@@ -140,7 +172,9 @@ def _tier_requires_strict_unknown(criticality: str) -> bool:
     casing, an unrecognized string) must not silently take the permissive tier2/tier3 branch
     either: it is treated at least as strictly as `unknown`.
     """
-    if criticality not in _KNOWN_CRITICALITY_TIERS:
+    if not isinstance(criticality, str) or criticality not in _KNOWN_CRITICALITY_TIERS:
+        # An unhashable shape (a list, a dict) must degrade to the strict branch, never raise --
+        # `in _KNOWN_CRITICALITY_TIERS` alone would crash on `criticality=['tier3']`.
         return True
     return criticality in ("tier0", "tier1", "unknown")
 
@@ -164,12 +198,16 @@ class Dimension:
             object.__setattr__(
                 self, "evidence_status", "UNKNOWN" if self.status == "UNKNOWN" else "OBSERVED"
             )
-        elif self.status == "PASS" and self.evidence_status == "UNKNOWN":
-            # A self-contradictory artifact: aggregate_verdict would fold this into a READY
-            # verdict while aggregate_readiness's own envelope would simultaneously mark the
-            # evidence UNKNOWN -- per evidence-authority-policy.md rule 3, a dimension with no
-            # authoritative evidence trace is UNKNOWN, not PASS.
-            raise ValueError("A PASS dimension cannot declare evidence_status='UNKNOWN'")
+        elif self.status in ("PASS", "CONDITIONAL") and self.evidence_status == "UNKNOWN":
+            # A self-contradictory artifact: aggregate_verdict would fold this into a READY/
+            # CONDITIONAL verdict while aggregate_readiness's own envelope would simultaneously
+            # mark the evidence UNKNOWN -- per evidence-authority-policy.md rule 3, a dimension
+            # with no authoritative evidence trace is UNKNOWN, not PASS and not CONDITIONAL either
+            # (CONDITIONAL implies some authoritative signal exists, and ranks below UNKNOWN in
+            # the verdict ladder, so it is strictly the more favorable of the two).
+            raise ValueError(
+                f"A {self.status} dimension cannot declare evidence_status='UNKNOWN'"
+            )
 
 
 def _is_required(d: Dimension) -> bool:
@@ -225,7 +263,13 @@ def aggregate_report(
     waivers: Optional[Sequence[Mapping]] = None,
 ) -> MutableMapping[str, Any]:
     verdict = aggregate_verdict(dims, waivers=waivers)
-    valid_waivers = [w for w in (waivers or []) if _is_valid_waiver(w)]
+    try:
+        waiver_candidates = list(waivers) if waivers else []
+    except TypeError:
+        # A malformed (non-iterable) waivers value must degrade to "no waivers supplied,"
+        # never crash the whole report.
+        waiver_candidates = []
+    valid_waivers = [w for w in waiver_candidates if _is_valid_waiver(w)]
     return {
         "verdict": verdict,
         "dimension_statuses": list(dims),
@@ -272,17 +316,26 @@ class AcceptedChildResult:
 
 
 def _target_of(obj: Any) -> Optional[Mapping[str, Any]]:
-    if obj is None:
+    """Resolve a child artifact's own declared identity carrier.
+
+    Every readiness-relevant artifact schema (scripts/registry/composition_contracts.yaml) carries
+    its identity in `assessment_target` (`security_review_report`, `change_impact_report`,
+    `deployment_risk_report`, etc. all declare it); a bare `target` key is this module's own
+    test-fixture convention. Either is checked BEFORE any flat top-level source_revision/
+    head_revision_or_digest/head_sha field the child might also carry -- a child's own declared,
+    nested identity must never be shadowed by (or silently preferred over) a flat field that could
+    disagree with it. A malformed nested value (a bare string/list/int instead of a mapping)
+    degrades to "keep looking," never crashes -- a caller downstream calls .get() on the result
+    unconditionally.
+    """
+    if not isinstance(obj, Mapping):
         return None
-    if isinstance(obj, Mapping) and ("source_revision" in obj or "head_revision_or_digest" in obj):
+    for key in ("assessment_target", "target"):
+        nested = obj.get(key)
+        if isinstance(nested, Mapping):
+            return nested
+    if "source_revision" in obj or "head_revision_or_digest" in obj or "head_sha" in obj:
         return obj
-    if isinstance(obj, Mapping):
-        nested = obj.get("target")
-        # A malformed "target" (a bare string/list/int instead of a mapping) must degrade to "no
-        # target," never be returned as-is -- a caller three calls downstream (_identity_mismatch)
-        # calls .get() on this unconditionally, and a crash here would take down the whole
-        # aggregation instead of failing closed on just the affected dimension.
-        return nested if isinstance(nested, Mapping) else None
     return None
 
 
@@ -298,7 +351,7 @@ def _effective_source_revision(obj: Mapping[str, Any]) -> Optional[str]:
 
 def _identity_mismatch(child: Mapping[str, Any], expected: Mapping[str, Any]) -> bool:
     child_target = _target_of(child) or {}
-    child_rev = _effective_source_revision(child) or _effective_source_revision(child_target)
+    child_rev = _effective_source_revision(child_target)
     child_head = child_target.get("head_revision_or_digest") or child_rev
     expected_rev = _effective_source_revision(expected)
     expected_head = expected.get("head_revision_or_digest") or expected_rev
@@ -329,7 +382,9 @@ def accept_child_result(
     if target_ref is not None and _identity_mismatch(child, target_ref):
         return AcceptedChildResult(status="UNKNOWN", trusted_for_gate=False, reason="target_mismatch")
 
-    if not child.get("producer_trusted", True):
+    if child.get("producer_trusted", True) is not True:
+        # Strict identity: a malformed non-bool value (a truthy string like "false") must never
+        # be read as "trusted" just because it's Python-truthy.
         return AcceptedChildResult(status="UNKNOWN", trusted_for_gate=False, reason="untrusted_producer")
 
     status = child.get("status", "UNKNOWN")
@@ -337,10 +392,15 @@ def accept_child_result(
         # An unrecognized status (a typo, a child-specific vocabulary like "BLOCKED") must never
         # silently fall through an aggregator's status-string comparisons as an implicit PASS.
         status = "UNKNOWN"
-    elif status in ("PASS", "CONDITIONAL") and not _minimum_authority_met(child.get("evidence_authorities")):
-        # The no-laundering rule applies to PASS and CONDITIONAL alike: per evidence-authority-
-        # policy.md rule 3, evidence that is only caller/model_knowledge-authoritative is UNKNOWN
-        # -- not CONDITIONAL either, since CONDITIONAL implies some authoritative signal exists.
+    elif status in ("PASS", "CONDITIONAL", "NOT_APPLICABLE") and not _minimum_authority_met(
+        child.get("evidence_authorities")
+    ):
+        # The no-laundering rule applies to PASS/CONDITIONAL/NOT_APPLICABLE alike: per evidence-
+        # authority-policy.md rule 3, evidence that is only caller/model_knowledge-authoritative is
+        # UNKNOWN. NOT_APPLICABLE is included because it is the MORE favorable outcome (deletes the
+        # dimension from the required set entirely) -- claiming inapplicability must never require
+        # LESS authority than claiming PASS would, matching the precedent evaluate_recovery already
+        # sets for its own reversible/NOT_APPLICABLE shortcut.
         # A FAIL a child already reported is not softened just because it lacked authority.
         status = "UNKNOWN"
     return AcceptedChildResult(status=status, trusted_for_gate=True, reason="")
@@ -352,7 +412,7 @@ class AssessmentContextTrust:
     acquisition: str
 
     def effective_authority(self, field: str) -> str:
-        if self.acquisition not in STRONG_AUTHORITIES:
+        if not _is_strong_authority(self.acquisition):
             return "caller"
         # input_provenance (and each field's own entry within it) is a caller/child-populated
         # carrier -- a malformed shape at any level (a bare string/list instead of a mapping, a
@@ -447,7 +507,7 @@ def validate_ci(candidate: Mapping[str, Any], ci: Optional[Mapping[str, Any]]) -
     head_revision = ci.get("head_revision")
     if not source_revision or not head_revision or head_revision != source_revision:
         return {"status": "UNKNOWN", "reason": "scope_mismatch"}
-    if ci.get("acquisition") not in {"authoritative_host", "trusted_runtime"}:
+    if not _is_host_or_runtime_acquisition(ci.get("acquisition")):
         return {"status": "UNKNOWN", "reason": "untrusted_acquisition"}
     all_required_green = ci.get("all_required_green")
     if all_required_green is not True and all_required_green is not False:
@@ -459,13 +519,23 @@ def validate_ci(candidate: Mapping[str, Any], ci: Optional[Mapping[str, Any]]) -
     return {"status": "PASS"}
 
 
-def validate_code_review_coverage(coverage: Optional[Mapping[str, Any]]) -> MutableMapping[str, Any]:
+def validate_code_review_coverage(
+    coverage: Optional[Mapping[str, Any]], candidate: Optional[Mapping[str, Any]] = None
+) -> MutableMapping[str, Any]:
     if coverage is None:
         return {"status": "UNKNOWN", "reason": "missing_coverage_evidence"}
+    if candidate is not None:
+        # Unlike validate_ci's mandatory scope fence, this scope check only applies when a
+        # candidate is supplied, matching resolve_prerequisite's own "no candidate to bind to"
+        # convention -- but when one IS supplied, coverage computed for a different revision
+        # (e.g. the pre-force-push head) must never validate as this candidate's own coverage.
+        candidate_rev = _effective_source_revision(candidate)
+        if not candidate_rev or coverage.get("candidate_source_revision") != candidate_rev:
+            return {"status": "UNKNOWN", "reason": "scope_mismatch"}
     if (
         coverage.get("status") == "COMPLETE"
         and not coverage.get("uncovered_change_refs")
-        and coverage.get("acquisition") in {"authoritative_host", "trusted_runtime"}
+        and _is_host_or_runtime_acquisition(coverage.get("acquisition"))
     ):
         return {"status": "PASS"}
     return {"status": "UNKNOWN", "reason": "incomplete_coverage"}
@@ -475,15 +545,28 @@ def validate_build_provenance(
     candidate: Mapping[str, Any], provenance: Optional[Mapping[str, Any]]
 ) -> MutableMapping[str, Any]:
     source_revision = _effective_source_revision(candidate)
+    # Mirrors _has_minimum_candidate_identity's exact MR-shape test: ALL THREE fields, with a
+    # truthy (not merely non-None) project/head_sha -- `is not None` alone would accept junk like
+    # head_sha="" or merge_request_iid=0 with no project at all as "MR-shaped."
+    is_mr_shaped = bool(
+        candidate.get("project") and candidate.get("merge_request_iid") is not None and candidate.get("head_sha")
+    )
     if "head_revision_or_digest" in candidate:
         head_revision_or_digest = candidate.get("head_revision_or_digest")
-    elif candidate.get("merge_request_iid") is not None or candidate.get("head_sha") is not None:
-        # An MR-shaped candidate (project+merge_request_iid+head_sha) has no separate deployable-
-        # digest field at all -- defaulting to source_revision itself correctly lands on the
-        # NOT_APPLICABLE branch below instead of UNKNOWN forever. This must NOT apply to a
-        # release-candidate-shaped input that simply failed to resolve a digest (e.g. a
-        # host.build.provenance.read lookup that came back empty): that case has a real, distinct
-        # deployable identity concept and must stay UNKNOWN, never silently NOT_APPLICABLE.
+    elif provenance is not None and provenance.get("deployable_digest"):
+        # A supplied provenance record naming a real deployable digest is itself proof a build
+        # step exists for this candidate, even though the candidate never carried a
+        # head_revision_or_digest field of its own -- that evidence must be consulted before
+        # falling back to "no separate build step," or a real build (success or failure) for an
+        # MR-shaped candidate is discarded as NOT_APPLICABLE without ever being read.
+        head_revision_or_digest = provenance.get("deployable_digest")
+    elif is_mr_shaped:
+        # An MR-shaped candidate with no provenance record and no head_revision_or_digest field
+        # has no separate deployable-digest concept at all -- defaulting to source_revision itself
+        # correctly lands on the NOT_APPLICABLE branch below instead of UNKNOWN forever. This must
+        # NOT apply to a release-candidate-shaped input that simply failed to resolve a digest
+        # (e.g. a host.build.provenance.read lookup that came back empty): that case has a real,
+        # distinct deployable identity concept and must stay UNKNOWN, never silently NOT_APPLICABLE.
         head_revision_or_digest = source_revision
     else:
         head_revision_or_digest = None
@@ -553,7 +636,7 @@ def evaluate_scm_policy(policy: Mapping[str, Any], observed: Mapping[str, Any]) 
         # A caller-supplied "yes it was approved" claim needs an authoritative approver and an
         # evidence ref behind it -- bare truthiness must never suppress a real policy-bypass
         # finding.
-        if not approved or bypass_authority not in STRONG_AUTHORITIES or not evidence_ref:
+        if approved is not True or not _is_strong_authority(bypass_authority) or not evidence_ref:
             return GateResult("FAIL", "unapproved_policy_bypass")
 
     required_approvals = policy["required_approvals"]
@@ -576,6 +659,11 @@ def evaluate_scm_policy(policy: Mapping[str, Any], observed: Mapping[str, Any]) 
         satisfied = observed.get("codeowners_satisfied")
         if satisfied == "unknown" or satisfied is None:
             return GateResult("UNKNOWN", "codeowners_unknown")
+        if not isinstance(satisfied, bool):
+            # A non-boolean, non-"unknown" value (a string like "false"/"pending", a list of
+            # missing owners) is a malformed signal, not a confirmed PASS -- bare truthiness would
+            # treat "false" as satisfied.
+            return GateResult("UNKNOWN", "codeowners_status_not_boolean")
         if not satisfied:
             return GateResult("FAIL", "codeowners_not_satisfied")
 
@@ -639,7 +727,7 @@ def evaluate_ownership(owner: Mapping[str, Any], criticality: str = "unknown") -
     if owner.get("unowned"):
         # An authoritative negative finding is FAIL at any tier; a caller-only "nobody owns this"
         # assertion is not itself proof and must not sink the verdict to NOT_READY on its own.
-        if authority in STRONG_AUTHORITIES:
+        if _is_strong_authority(authority):
             return GateResult("FAIL", "authoritative_unowned")
         return GateResult("UNKNOWN", "unowned_claim_not_authoritative")
     if owner.get("conflicting"):
@@ -649,7 +737,7 @@ def evaluate_ownership(owner: Mapping[str, Any], criticality: str = "unknown") -
     if not has_owner_evidence:
         return GateResult("UNKNOWN", "incomplete_ownership_evidence")
 
-    if authority in STRONG_AUTHORITIES:
+    if _is_strong_authority(authority):
         return GateResult("PASS")
     if _tier_requires_strict_unknown(criticality):
         return GateResult("UNKNOWN", "caller_only_owner")
@@ -662,14 +750,14 @@ def evaluate_rollback_abort(plan: Mapping[str, Any], criticality: str = "unknown
         # Checked before the completeness gate: an authoritative proven-unsafe finding is FAIL
         # at any tier, including when the rollback plan itself is incomplete -- that is exactly
         # the scenario this rule exists to catch, not a reason to soften it to UNKNOWN.
-        if authority in STRONG_AUTHORITIES:
+        if _is_strong_authority(authority):
             return GateResult("FAIL", "unsafe_irreversible")
         return GateResult("UNKNOWN", "unsafe_claim_not_authoritative")
 
-    if not plan.get("complete"):
+    if not _is_true(plan.get("complete")):
         return GateResult("UNKNOWN", "incomplete_plan")
 
-    if authority in STRONG_AUTHORITIES:
+    if _is_strong_authority(authority):
         return GateResult("PASS")
     if _tier_requires_strict_unknown(criticality):
         return GateResult("UNKNOWN", "caller_only_rollback")
@@ -684,11 +772,11 @@ _POST_DEPLOY_REQUIRED_FIELDS = frozenset(
 def evaluate_post_deploy_plan(plan: Mapping[str, Any], criticality: str = "unknown") -> GateResult:
     if not plan or not all(plan.get(field) for field in _POST_DEPLOY_REQUIRED_FIELDS):
         return GateResult("UNKNOWN", "incomplete_plan")
-    if not plan.get("complete"):
+    if not _is_true(plan.get("complete")):
         return GateResult("UNKNOWN", "incomplete_plan")
 
     authority = plan.get("signal_authority", "caller")
-    if authority in STRONG_AUTHORITIES:
+    if _is_strong_authority(authority):
         return GateResult("PASS")
     if _tier_requires_strict_unknown(criticality):
         return GateResult("UNKNOWN", "caller_only_signals")
@@ -701,16 +789,19 @@ def evaluate_recovery(fixture: Mapping[str, Any], criticality: str = "unknown") 
     if fixture.get("destructive_no_recovery"):
         # Checked first: an authoritative destructive-without-recovery finding is FAIL at any
         # tier, and must not be masked by a "reversible"/NOT_APPLICABLE shortcut below.
-        if mechanism_authority in STRONG_AUTHORITIES:
+        if _is_strong_authority(mechanism_authority):
             return GateResult("FAIL", "destructive_no_recovery")
         return GateResult("UNKNOWN", "destructive_claim_not_authoritative")
 
-    if not fixture.get("stateful") and fixture.get("reversible"):
+    if not fixture.get("stateful") and _is_true(fixture.get("reversible")):
         # A caller-only "this is reversible" assertion with no authoritative statefulness
         # evidence must not delete the recovery dimension from the required set entirely.
-        if mechanism_authority in STRONG_AUTHORITIES:
+        if _is_strong_authority(mechanism_authority):
             return GateResult("NOT_APPLICABLE")
-        return GateResult("UNKNOWN", "reversible_claim_not_authoritative")
+        # Falls through to the normal completeness/tier ladder below rather than short-circuiting
+        # straight to UNKNOWN -- claiming reversibility must never make the verdict WORSE than not
+        # claiming it at all (the non-reversible path below can still reach tier2/tier3
+        # CONDITIONAL for the same caller-only evidence).
 
     # Completeness is checked before authority/tier, matching the sibling ownership/rollback/
     # post-deploy gates -- otherwise upgrading incomplete evidence from a caller assertion to an
@@ -723,7 +814,7 @@ def evaluate_recovery(fixture: Mapping[str, Any], criticality: str = "unknown") 
     if not fixture.get("last_exercise"):
         return GateResult("UNKNOWN", "missing_exercise_evidence")
 
-    if mechanism_authority not in STRONG_AUTHORITIES:
+    if not _is_strong_authority(mechanism_authority):
         # Tier-sensitive per operational-gates.md: caller-only evidence is UNKNOWN at
         # tier0/tier1/unknown, but at most CONDITIONAL (never PASS) at tier2/tier3 -- the same
         # rule already applied to the sibling ownership/rollback/post-deploy gates above.
@@ -739,7 +830,7 @@ def evaluate_recovery(fixture: Mapping[str, Any], criticality: str = "unknown") 
 
 
 def evaluate_capacity_gate(report: Mapping[str, Any], criticality: str = "unknown") -> GateResult:
-    if not report.get("producer_trusted", True):
+    if report.get("producer_trusted", True) is not True:
         return GateResult("UNKNOWN", "untrusted_producer")
     status = report.get("status", "UNKNOWN")
     if status not in DIMENSION_STATUSES:
@@ -770,7 +861,7 @@ def evaluate_dependency_gate(
     dependency_ci: Optional[Mapping[str, Any]] = None,
     candidate: Optional[Mapping[str, Any]] = None,
 ) -> GateResult:
-    if not report.get("producer_trusted", True):
+    if report.get("producer_trusted", True) is not True:
         return GateResult("UNKNOWN", "untrusted_producer")
     status = report.get("status", "UNKNOWN")
     if status not in DIMENSION_STATUSES:
@@ -807,7 +898,7 @@ def evaluate_dependency_gate(
         other_entries_ok
         and advisory_evidence is not None
         and advisory_evidence.get("status") == "CURRENT"
-        and advisory_evidence.get("acquisition") in STRONG_AUTHORITIES
+        and _is_strong_authority(advisory_evidence.get("acquisition"))
     ):
         # A substitute for the child's own CVE evidence needs the same authority bar the child's
         # own evidence would have needed -- a caller-forged "status: CURRENT" claim with no
@@ -823,10 +914,10 @@ def evaluate_dependency_gate(
         scope_ok = candidate is None or (bool(candidate_rev) and dependency_ci_rev == candidate_rev)
         if (
             scope_ok
-            and dependency_ci.get("required")
-            and dependency_ci.get("scope_covers_changed_manifest")
+            and _is_true(dependency_ci.get("required"))
+            and _is_true(dependency_ci.get("scope_covers_changed_manifest"))
             and dependency_ci.get("conclusion") == "success"
-            and dependency_ci.get("acquisition") in STRONG_AUTHORITIES
+            and _is_strong_authority(dependency_ci.get("acquisition"))
         ):
             return GateResult(status)
 
@@ -857,6 +948,8 @@ _CALLER_CONTROLLED_AUTHORITY_KEYS = frozenset(
     {
         "posting_policy",
         "posting_decision",
+        "posting_mode",
+        "auto_post_authorized",
         "authorized_to_merge",
         "authorized_to_deploy",
         "authorized_to_rollback",

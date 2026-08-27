@@ -95,7 +95,9 @@ change the verdict — see Notes below). Empty list if none.>
 
 ## Waivers
 
-<Any caller-supplied waiver, with its own provenance. Empty list if none.>
+<Any *valid* caller-supplied waiver (accepted_by and evidence_ref both non-empty, expires_at not in
+the past), with its own provenance. An invalid or forged waiver is excluded from the report
+entirely, not merely inert on the verdict. Empty list if none.>
 
 ## Required actions
 
