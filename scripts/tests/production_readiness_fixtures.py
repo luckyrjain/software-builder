@@ -13,7 +13,6 @@ from typing import Any, Mapping, Sequence
 
 from scripts.registry.canonical_manifest import load_canonical_manifest
 from scripts.registry.load import load_registry
-from scripts.evals.dispatcher import dispatch_prompt
 from scripts import production_readiness as pr
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -340,7 +339,9 @@ def tier1_stateful_fixture(
 
 
 def stateless_reversible_fixture() -> dict[str, Any]:
-    return {"stateful": False, "reversible": True}
+    # An authoritative (repository-diff-backed) determination of statelessness, not a caller
+    # assertion -- a caller-only "this is reversible" claim must not bypass the recovery gate.
+    return {"stateful": False, "reversible": True, "mechanism_authority": "repository"}
 
 
 def rollback_fixture(*, authority: str = "caller", complete: bool = True, **extra: Any) -> dict[str, Any]:
@@ -426,12 +427,6 @@ def consumes(skill_id: str, artifact_type: str) -> bool:
     manifest = load_canonical_manifest(ROOT)
     contract = manifest["contracts"]["composition"]["skills"].get(skill_id, {})
     return artifact_type in contract.get("consumes", [])
-
-
-def dispatch_prompt_owner(prompt: str) -> str | None:
-    result = dispatch_prompt(ROOT, load_registry(ROOT), prompt)
-    assert result.status == "selected", result
-    return result.owner
 
 
 # ---------------------------------------------------------------------------

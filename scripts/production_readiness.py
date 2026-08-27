@@ -19,10 +19,10 @@ from scripts.registry.assessment_target import same_environment
 # ---------------------------------------------------------------------------
 
 DIMENSION_STATUSES = ("PASS", "CONDITIONAL", "FAIL", "UNKNOWN", "NOT_APPLICABLE")
-VERDICTS = ("READY", "CONDITIONAL", "NOT_READY", "UNKNOWN")
 
 STRONG_AUTHORITIES = frozenset({"repository", "authoritative_host", "trusted_runtime"})
 WEAK_AUTHORITIES = frozenset({"caller", "model_knowledge"})
+_ALL_AUTHORITIES = STRONG_AUTHORITIES | WEAK_AUTHORITIES
 
 ENV_SENSITIVE_DIMENSIONS = frozenset(
     {
@@ -37,13 +37,11 @@ ENV_SENSITIVE_DIMENSIONS = frozenset(
 )
 
 CHILD_MANDATORY_INPUTS: Mapping[str, Sequence[str]] = {
+    "pr-review": ("merge_request_iid", "project", "expected_head_sha"),
+    "deployment-risk-review": ("change_description",),
     "security-review": ("review_target",),
     "observability-review": ("service_name", "observability_material"),
-    "resilience-review": (
-        "current_failure_behavior",
-        "proposed_failure_behavior",
-        "affected_dependency_paths",
-    ),
+    "resilience-review": ("resilience_behavior", "dependency_paths"),
     "api-design-review": ("api_spec",),
     "performance-review": ("reviewed_content",),
     "capacity-planner": ("demand_data", "forecast_horizon"),
@@ -52,6 +50,12 @@ CHILD_MANDATORY_INPUTS: Mapping[str, Sequence[str]] = {
 
 DATABASE_REVIEW_ONE_OF = ("schema", "migration_script", "queries")
 
+# Children whose mandatory input is satisfied by ANY ONE of several fields, not ALL of them.
+CHILD_ONE_OF_INPUTS: Mapping[str, Sequence[str]] = {
+    "database-review": DATABASE_REVIEW_ONE_OF,
+    "change-impact-analyzer": ("system_design_spec", "mr_context", "diff_text", "change_text", "changed_paths"),
+}
+
 
 @dataclasses.dataclass(frozen=True)
 class GateResult:
@@ -59,6 +63,37 @@ class GateResult:
 
     status: str
     reason: str = ""
+
+
+# ---------------------------------------------------------------------------
+# Evidence-authority helpers (shared by every gate below)
+# ---------------------------------------------------------------------------
+
+
+def _authority_set(value: Any) -> set:
+    """Normalize an authority value (bare string or iterable of strings) to a set of strings."""
+    if not value:
+        return set()
+    if isinstance(value, str):
+        return {value}
+    try:
+        return set(value)
+    except TypeError:
+        return set()
+
+
+def _minimum_authority_met(evidence_authorities: Optional[Mapping[str, Any]]) -> bool:
+    """True only when EVERY evidence entry backing a conclusion is strongly authoritative.
+
+    A single weakly-authoritative entry must not be laundered into a strong conclusion merely
+    because some unrelated entry in the same map happens to be strong.
+    """
+    if not evidence_authorities:
+        return False
+    for authorities in evidence_authorities.values():
+        if not (_authority_set(authorities) & STRONG_AUTHORITIES):
+            return False
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -74,6 +109,8 @@ class Dimension:
     evidence_status: Optional[str] = None
 
     def __post_init__(self) -> None:
+        if self.status not in DIMENSION_STATUSES:
+            raise ValueError(f"Dimension status must be one of {DIMENSION_STATUSES}, got {self.status!r}")
         if self.evidence_status is None:
             object.__setattr__(
                 self, "evidence_status", "UNKNOWN" if self.status == "UNKNOWN" else "OBSERVED"
@@ -172,16 +209,6 @@ def aggregate_readiness(
 # ---------------------------------------------------------------------------
 
 
-def _minimum_authority_met(evidence_authorities: Optional[Mapping[str, Any]]) -> bool:
-    if not evidence_authorities:
-        return False
-    for authorities in evidence_authorities.values():
-        authorities_set = set(authorities) if not isinstance(authorities, str) else {authorities}
-        if authorities_set & STRONG_AUTHORITIES:
-            return True
-    return False
-
-
 @dataclasses.dataclass(frozen=True)
 class AcceptedChildResult:
     status: str
@@ -205,9 +232,11 @@ def _identity_mismatch(child: Mapping[str, Any], expected: Mapping[str, Any]) ->
     child_head = child_target.get("head_revision_or_digest") or child_rev
     expected_rev = expected.get("source_revision")
     expected_head = expected.get("head_revision_or_digest") or expected_rev
-    if expected_rev and child_rev and expected_rev != child_rev:
+    # When the expected side names an identity, the child MUST supply a matching one -- a child
+    # that names no revision/target at all is evidence of unknown scope, not a safe match.
+    if expected_rev and (not child_rev or expected_rev != child_rev):
         return True
-    if expected_head and child_head and expected_head != child_head:
+    if expected_head and (not child_head or expected_head != child_head):
         return True
     return False
 
@@ -228,7 +257,13 @@ def accept_child_result(
         return AcceptedChildResult(status="UNKNOWN", trusted_for_gate=False, reason="untrusted_producer")
 
     status = child.get("status", "UNKNOWN")
-    if not _minimum_authority_met(child.get("evidence_authorities")):
+    if status not in DIMENSION_STATUSES:
+        # An unrecognized status (a typo, a child-specific vocabulary like "BLOCKED") must never
+        # silently fall through an aggregator's status-string comparisons as an implicit PASS.
+        status = "UNKNOWN"
+    elif status == "PASS" and not _minimum_authority_met(child.get("evidence_authorities")):
+        # The no-laundering rule concerns PASS specifically: a FAIL/CONDITIONAL a child already
+        # reported is not softened just because it didn't also populate evidence_authorities.
         status = "UNKNOWN"
     return AcceptedChildResult(status=status, trusted_for_gate=True, reason="")
 
@@ -239,10 +274,11 @@ class AssessmentContextTrust:
     acquisition: str
 
     def effective_authority(self, field: str) -> str:
-        if self.acquisition != "trusted_runtime":
+        if self.acquisition not in STRONG_AUTHORITIES:
             return "caller"
         provenance = (self.context.get("input_provenance") or {}).get(field) or {}
-        return provenance.get("authority", "caller")
+        authority = provenance.get("authority", "caller")
+        return authority if authority in _ALL_AUTHORITIES else "caller"
 
 
 def classify_assessment_context_trust(
@@ -256,17 +292,27 @@ def classify_assessment_context_trust(
 # ---------------------------------------------------------------------------
 
 
+def _child_mandatory_inputs_satisfied(child_name: str, inputs: Mapping[str, Any]) -> bool:
+    one_of = CHILD_ONE_OF_INPUTS.get(child_name)
+    if one_of is not None:
+        return any(inputs.get(key) for key in one_of)
+    required = CHILD_MANDATORY_INPUTS.get(child_name)
+    if required is None:
+        # An unmapped/unrecognized child's requirements are unknown -- never assume satisfied.
+        return False
+    return all(inputs.get(key) for key in required)
+
+
 def _mandatory_inputs_available(artifact_type: str, mandatory_inputs: Optional[Mapping[str, Any]]) -> bool:
-    if mandatory_inputs is None:
+    if not mandatory_inputs:
         return False
     child_name = {
         "change_impact_report": "change-impact-analyzer",
         "deployment_risk_report": "deployment-risk-review",
     }.get(artifact_type)
     if child_name is None:
-        return bool(mandatory_inputs)
-    required = CHILD_MANDATORY_INPUTS.get(child_name, ())
-    return all(key in mandatory_inputs for key in required) if required else bool(mandatory_inputs)
+        return False
+    return _child_mandatory_inputs_satisfied(child_name, mandatory_inputs)
 
 
 def resolve_prerequisite(
@@ -277,10 +323,13 @@ def resolve_prerequisite(
     invoke_spy: Optional[Callable[..., Any]] = None,
     mandatory_inputs: Optional[Mapping[str, Any]] = None,
 ) -> MutableMapping[str, Any]:
+    if candidate is None:
+        # No candidate identity to bind reuse/refresh to -- never resolve a prerequisite blind.
+        return {"status": "UNKNOWN", "mode": None}
+
     if supplied is not None:
         accepted = accept_child_result(supplied, candidate=candidate)
-        coverage_status = supplied.get("coverage_status")
-        if coverage_status is not None and coverage_status != "COMPLETE":
+        if supplied.get("coverage_status") != "COMPLETE":
             return {"status": "UNKNOWN", "mode": None}
         return {"status": accepted.status, "mode": "REUSE"}
 
@@ -302,7 +351,9 @@ def resolve_prerequisite(
 def validate_ci(candidate: Mapping[str, Any], ci: Optional[Mapping[str, Any]]) -> MutableMapping[str, Any]:
     if ci is None:
         return {"status": "UNKNOWN", "reason": "missing_ci_evidence"}
-    if ci.get("head_revision") != candidate.get("source_revision"):
+    source_revision = candidate.get("source_revision")
+    head_revision = ci.get("head_revision")
+    if not source_revision or not head_revision or head_revision != source_revision:
         return {"status": "UNKNOWN", "reason": "scope_mismatch"}
     if ci.get("acquisition") not in {"authoritative_host", "trusted_runtime"}:
         return {"status": "UNKNOWN", "reason": "untrusted_acquisition"}
@@ -314,7 +365,11 @@ def validate_ci(candidate: Mapping[str, Any], ci: Optional[Mapping[str, Any]]) -
 def validate_code_review_coverage(coverage: Optional[Mapping[str, Any]]) -> MutableMapping[str, Any]:
     if coverage is None:
         return {"status": "UNKNOWN", "reason": "missing_coverage_evidence"}
-    if coverage.get("status") == "COMPLETE" and not coverage.get("uncovered_change_refs"):
+    if (
+        coverage.get("status") == "COMPLETE"
+        and not coverage.get("uncovered_change_refs")
+        and coverage.get("acquisition") in {"authoritative_host", "trusted_runtime"}
+    ):
         return {"status": "PASS"}
     return {"status": "UNKNOWN", "reason": "incomplete_coverage"}
 
@@ -322,17 +377,24 @@ def validate_code_review_coverage(coverage: Optional[Mapping[str, Any]]) -> Muta
 def validate_build_provenance(
     candidate: Mapping[str, Any], provenance: Optional[Mapping[str, Any]]
 ) -> MutableMapping[str, Any]:
-    if candidate.get("head_revision_or_digest") == candidate.get("source_revision"):
+    source_revision = candidate.get("source_revision")
+    head_revision_or_digest = candidate.get("head_revision_or_digest")
+    if not source_revision or not head_revision_or_digest:
+        return {"status": "UNKNOWN", "reason": "missing_candidate_identity"}
+    if head_revision_or_digest == source_revision:
         return {"status": "NOT_APPLICABLE", "build_provenance_ref": "NOT_APPLICABLE"}
     if provenance is None:
         return {"status": "UNKNOWN", "reason": "missing_build_provenance"}
-    if provenance.get("source_revision") != candidate.get("source_revision"):
+    if provenance.get("source_revision") != source_revision:
         return {"status": "UNKNOWN", "reason": "source_mismatch"}
-    if provenance.get("deployable_digest") != candidate.get("head_revision_or_digest"):
+    if provenance.get("deployable_digest") != head_revision_or_digest:
         return {"status": "UNKNOWN", "reason": "digest_mismatch"}
     build_status = provenance.get("build_status")
     if build_status == "SUCCESS":
-        return {"status": "PASS", "build_provenance_ref": provenance.get("evidence_ref")}
+        evidence_ref = provenance.get("evidence_ref")
+        if not evidence_ref:
+            return {"status": "UNKNOWN", "reason": "missing_build_provenance_ref"}
+        return {"status": "PASS", "build_provenance_ref": evidence_ref}
     if build_status == "FAILED":
         return {"status": "FAIL", "reason": "build_failed"}
     return {"status": "UNKNOWN", "reason": "build_status_unknown"}
@@ -349,12 +411,13 @@ def evaluate_build_provenance(fixture: Mapping[str, Any]) -> GateResult:
             return GateResult("UNKNOWN", "attestation_unknown")
 
     candidate = fixture.get("candidate")
-    if candidate is not None:
-        base = validate_build_provenance(candidate, fixture.get("provenance"))
-        return GateResult(base["status"], base.get("reason", ""))
-    # No candidate to bind the (possibly-satisfied) attestation policy to a source/digest pair --
-    # absence of evidence is never PASS, even when the attestation control itself succeeded.
-    return GateResult("UNKNOWN", "missing_candidate")
+    if not candidate:
+        # No candidate (None, or an unresolved {}) to bind the (possibly-satisfied) attestation
+        # policy to a source/digest pair -- absence of evidence is never PASS, even when the
+        # attestation control itself succeeded.
+        return GateResult("UNKNOWN", "missing_candidate")
+    base = validate_build_provenance(candidate, fixture.get("provenance"))
+    return GateResult(base["status"], base.get("reason", ""))
 
 
 # ---------------------------------------------------------------------------
@@ -363,26 +426,36 @@ def evaluate_build_provenance(fixture: Mapping[str, Any]) -> GateResult:
 
 
 def evaluate_scm_policy(policy: Mapping[str, Any], observed: Mapping[str, Any]) -> GateResult:
+    if not policy or not observed:
+        return GateResult("UNKNOWN", "missing_scm_policy_evidence")
+
     bypass_refs = observed.get("policy_bypass_refs") or []
     if bypass_refs and not observed.get("bypass_approved"):
         return GateResult("FAIL", "unapproved_policy_bypass")
 
     required_approvals = policy.get("required_approvals", 0)
-    if required_approvals and observed.get("approvals", 0) < required_approvals:
-        return GateResult("FAIL", "insufficient_approvals")
+    if required_approvals:
+        approvals = observed.get("approvals")
+        # Evidence never gathered (key absent, or present as None) is an evidence gap, not an
+        # affirmative "zero approvals" finding -- it must land on UNKNOWN, never FAIL.
+        if approvals is None:
+            return GateResult("UNKNOWN", "approvals_unknown")
+        if approvals < required_approvals:
+            return GateResult("FAIL", "insufficient_approvals")
 
     if policy.get("codeowners_required"):
         satisfied = observed.get("codeowners_satisfied")
-        # Evidence never gathered (key absent, None) is an evidence gap, not an affirmative
-        # negative finding -- it must land on the same UNKNOWN as the explicit "unknown" sentinel,
-        # not fall through to FAIL as if CODEOWNERS had been checked and found unsatisfied.
         if satisfied == "unknown" or satisfied is None:
             return GateResult("UNKNOWN", "codeowners_unknown")
         if not satisfied:
             return GateResult("FAIL", "codeowners_not_satisfied")
 
-    if policy.get("blocking_threads_must_resolve") and observed.get("blocking_threads_open", 0) > 0:
-        return GateResult("FAIL", "blocking_threads_open")
+    if policy.get("blocking_threads_must_resolve"):
+        blocking_open = observed.get("blocking_threads_open")
+        if blocking_open is None:
+            return GateResult("UNKNOWN", "blocking_threads_unknown")
+        if blocking_open > 0:
+            return GateResult("FAIL", "blocking_threads_open")
 
     return GateResult("PASS")
 
@@ -390,6 +463,13 @@ def evaluate_scm_policy(policy: Mapping[str, Any], observed: Mapping[str, Any]) 
 # ---------------------------------------------------------------------------
 # Environment-sensitive evidence matching (Task 7.25) + evidence scope (Task 7)
 # ---------------------------------------------------------------------------
+
+
+def _safe_same_environment(candidate_env: Any, artifact_env: Any) -> bool:
+    try:
+        return same_environment(candidate_env, artifact_env)
+    except (TypeError, AttributeError):
+        return False
 
 
 def match_dimension_evidence(
@@ -401,10 +481,16 @@ def match_dimension_evidence(
     candidate_env = candidate.get("environment")
     artifact_env = artifact.get("environment")
     env_specific = bool(artifact.get("environment_specific"))
+    env_sensitive = dimension_name in ENV_SENSITIVE_DIMENSIONS or env_specific
 
-    if dimension_name in ENV_SENSITIVE_DIMENSIONS or env_specific:
-        if candidate_env is None or artifact_env is None or not same_environment(candidate_env, artifact_env):
+    if candidate_env is not None and artifact_env is not None:
+        # Two explicitly-declared environments that conflict are never silently accepted, even
+        # for a dimension that is otherwise environment-agnostic -- a directly conflicting field
+        # is evidence of the wrong target, not something applicability rules get to ignore.
+        if not _safe_same_environment(candidate_env, artifact_env):
             return GateResult("UNKNOWN", "environment_mismatch")
+    elif env_sensitive:
+        return GateResult("UNKNOWN", "environment_mismatch")
 
     accepted = accept_child_result(artifact, candidate=candidate, dimension=dimension_name)
     if not accepted.trusted_for_gate:
@@ -418,12 +504,20 @@ def match_dimension_evidence(
 
 
 def evaluate_ownership(owner: Mapping[str, Any], criticality: str = "unknown") -> GateResult:
+    authority = owner.get("owner_authority", "caller")
+    if owner.get("unowned"):
+        # An authoritative negative finding is FAIL at any tier; a caller-only "nobody owns this"
+        # assertion is not itself proof and must not sink the verdict to NOT_READY on its own.
+        if authority in STRONG_AUTHORITIES:
+            return GateResult("FAIL", "authoritative_unowned")
+        return GateResult("UNKNOWN", "unowned_claim_not_authoritative")
     if owner.get("conflicting"):
         return GateResult("UNKNOWN", "conflicting_ownership")
-    if owner.get("unowned"):
-        return GateResult("FAIL", "authoritative_unowned")
 
-    authority = owner.get("owner_authority", "caller")
+    has_owner_evidence = bool(owner.get("owner")) and bool(owner.get("escalation_route"))
+    if not has_owner_evidence:
+        return GateResult("UNKNOWN", "incomplete_ownership_evidence")
+
     if authority in STRONG_AUTHORITIES:
         return GateResult("PASS")
     if criticality in ("tier0", "tier1", "unknown"):
@@ -432,12 +526,18 @@ def evaluate_ownership(owner: Mapping[str, Any], criticality: str = "unknown") -
 
 
 def evaluate_rollback_abort(plan: Mapping[str, Any], criticality: str = "unknown") -> GateResult:
+    authority = plan.get("authority", "caller")
+    if plan.get("unsafe_irreversible_no_recovery"):
+        # Checked before the completeness gate: an authoritative proven-unsafe finding is FAIL
+        # at any tier, including when the rollback plan itself is incomplete -- that is exactly
+        # the scenario this rule exists to catch, not a reason to soften it to UNKNOWN.
+        if authority in STRONG_AUTHORITIES:
+            return GateResult("FAIL", "unsafe_irreversible")
+        return GateResult("UNKNOWN", "unsafe_claim_not_authoritative")
+
     if not plan.get("complete"):
         return GateResult("UNKNOWN", "incomplete_plan")
-    if plan.get("unsafe_irreversible_no_recovery"):
-        return GateResult("FAIL", "unsafe_irreversible")
 
-    authority = plan.get("authority", "caller")
     if authority in STRONG_AUTHORITIES:
         return GateResult("PASS")
     if criticality in ("tier0", "tier1", "unknown"):
@@ -451,9 +551,9 @@ _POST_DEPLOY_REQUIRED_FIELDS = frozenset(
 
 
 def evaluate_post_deploy_plan(plan: Mapping[str, Any], criticality: str = "unknown") -> GateResult:
-    if not plan or not _POST_DEPLOY_REQUIRED_FIELDS.issubset(plan.keys()):
+    if not plan or not all(plan.get(field) for field in _POST_DEPLOY_REQUIRED_FIELDS):
         return GateResult("UNKNOWN", "incomplete_plan")
-    if not plan.get("complete", True):
+    if not plan.get("complete"):
         return GateResult("UNKNOWN", "incomplete_plan")
 
     authority = plan.get("signal_authority", "caller")
@@ -465,18 +565,29 @@ def evaluate_post_deploy_plan(plan: Mapping[str, Any], criticality: str = "unkno
 
 
 def evaluate_recovery(fixture: Mapping[str, Any], criticality: str = "unknown") -> GateResult:
-    if not fixture.get("stateful") and fixture.get("reversible"):
-        return GateResult("NOT_APPLICABLE")
+    mechanism_authority = fixture.get("mechanism_authority", "caller")
+
     if fixture.get("destructive_no_recovery"):
-        return GateResult("FAIL", "destructive_no_recovery")
-    if fixture.get("policy_freshness") is None:
+        # Checked first: an authoritative destructive-without-recovery finding is FAIL at any
+        # tier, and must not be masked by a "reversible"/NOT_APPLICABLE shortcut below.
+        if mechanism_authority in STRONG_AUTHORITIES:
+            return GateResult("FAIL", "destructive_no_recovery")
+        return GateResult("UNKNOWN", "destructive_claim_not_authoritative")
+
+    if not fixture.get("stateful") and fixture.get("reversible"):
+        # A caller-only "this is reversible" assertion with no authoritative statefulness
+        # evidence must not delete the recovery dimension from the required set entirely.
+        if mechanism_authority in STRONG_AUTHORITIES:
+            return GateResult("NOT_APPLICABLE")
+        return GateResult("UNKNOWN", "reversible_claim_not_authoritative")
+
+    if not fixture.get("policy_freshness"):
         return GateResult("UNKNOWN", "missing_recovery_policy_freshness")
 
-    mechanism_authority = fixture.get("mechanism_authority", "caller")
     if mechanism_authority not in STRONG_AUTHORITIES:
         # Tier-sensitive per operational-gates.md: caller-only evidence is UNKNOWN at
-        # tier0/tier1/unknown, but at most CONDITIONAL (never PASS) at tier2/tier3 -- the same rule
-        # already applied to the sibling ownership/rollback/post-deploy gates below.
+        # tier0/tier1/unknown, but at most CONDITIONAL (never PASS) at tier2/tier3 -- the same
+        # rule already applied to the sibling ownership/rollback/post-deploy gates above.
         if criticality in ("tier0", "tier1", "unknown"):
             return GateResult("UNKNOWN", "caller_only_mechanism")
         return GateResult("CONDITIONAL", "caller_only_mechanism")
@@ -494,12 +605,12 @@ def evaluate_recovery(fixture: Mapping[str, Any], criticality: str = "unknown") 
 
 def evaluate_capacity_gate(report: Mapping[str, Any], criticality: str = "unknown") -> GateResult:
     evidence_authorities = report.get("evidence_authorities") or {}
-    demand_auth = set(evidence_authorities.get("demand", ()))
-    baseline_auth = set(evidence_authorities.get("baseline", ()))
+    demand_auth = _authority_set(evidence_authorities.get("demand"))
+    baseline_auth = _authority_set(evidence_authorities.get("baseline"))
     both_strong = bool(demand_auth & STRONG_AUTHORITIES) and bool(baseline_auth & STRONG_AUTHORITIES)
 
     if both_strong:
-        return GateResult(report.get("status", "PASS"))
+        return GateResult(report.get("status", "UNKNOWN"))
     if criticality in ("tier0", "tier1", "unknown"):
         return GateResult("UNKNOWN", "caller_only_basis")
     return GateResult("CONDITIONAL", "caller_only_basis")
@@ -511,12 +622,12 @@ def evaluate_dependency_gate(
     dependency_ci: Optional[Mapping[str, Any]] = None,
 ) -> GateResult:
     evidence_authorities = report.get("evidence_authorities") or {}
-    cve_auth = set(evidence_authorities.get("cve", ()))
+    cve_auth = _authority_set(evidence_authorities.get("cve"))
     if cve_auth & STRONG_AUTHORITIES:
-        return GateResult(report.get("status", "PASS"))
+        return GateResult(report.get("status", "UNKNOWN"))
 
     if advisory_evidence is not None and advisory_evidence.get("status") == "CURRENT":
-        return GateResult(report.get("status", "PASS"))
+        return GateResult(report.get("status", "UNKNOWN"))
 
     if (
         dependency_ci is not None
@@ -524,7 +635,7 @@ def evaluate_dependency_gate(
         and dependency_ci.get("scope_covers_changed_manifest")
         and dependency_ci.get("conclusion") == "success"
     ):
-        return GateResult(report.get("status", "PASS"))
+        return GateResult(report.get("status", "UNKNOWN"))
 
     return GateResult("UNKNOWN", "no_current_vulnerability_evidence")
 
@@ -562,13 +673,6 @@ class DispatchResult:
     dispatched: bool
     dimension_status: str
     result: Optional[Mapping[str, Any]] = None
-
-
-def _child_mandatory_inputs_satisfied(child_name: str, inputs: Mapping[str, Any]) -> bool:
-    if child_name == "database-review":
-        return any(key in inputs for key in DATABASE_REVIEW_ONE_OF)
-    required = CHILD_MANDATORY_INPUTS.get(child_name, ())
-    return all(key in inputs for key in required)
 
 
 def dispatch_child(
@@ -643,8 +747,16 @@ def production_readiness(
             skill_result=SkillResult(status="PARTIAL", evidence_status="UNKNOWN"),
         )
 
-    dims = dimensions if dimensions is not None else []
-    readiness = aggregate_readiness(dims, waivers=waivers)
+    if dimensions is None:
+        # No evidence collection was ever attempted for this candidate -- never default that
+        # silently to READY. An explicit empty list (a real "nothing applies" determination,
+        # e.g. a docs-only change) is different and is allowed to aggregate normally below.
+        return ProductionReadinessResult(
+            verdict="UNKNOWN",
+            skill_result=SkillResult(status="PARTIAL", evidence_status="UNKNOWN"),
+        )
+
+    readiness = aggregate_readiness(dimensions, waivers=waivers)
     return ProductionReadinessResult(
         verdict=readiness.verdict,
         skill_result=SkillResult(status=readiness.skill_result_status, evidence_status=readiness.evidence_status),
@@ -658,6 +770,9 @@ def check_final_freshness(
 ) -> GateResult:
     """Compare identity/CI/policy snapshots taken before dispatch vs immediately before report emission."""
 
+    if not initial or not final:
+        return GateResult("UNKNOWN", "missing_freshness_snapshot")
+
     if initial.get("head") != final.get("head"):
         return GateResult("UNKNOWN", "head_changed_during_review")
     if initial.get("release_resolution") != final.get("release_resolution"):
@@ -665,12 +780,20 @@ def check_final_freshness(
 
     initial_ci_green = initial.get("ci_green")
     final_ci_green = final.get("ci_green")
-    if initial_ci_green and final_ci_green is False:
-        return GateResult("FAIL", "ci_regressed")
+    if initial_ci_green is not None:
+        if final_ci_green is None:
+            # The re-read could not reconfirm CI state -- that's an evidence gap, not proof it
+            # stayed green, and must not silently fall through to the PASS at the end.
+            return GateResult("UNKNOWN", "ci_could_not_be_reconfirmed")
+        if initial_ci_green and not final_ci_green:
+            return GateResult("FAIL", "ci_regressed")
 
     initial_approvals_ok = initial.get("approvals_ok")
     final_approvals_ok = final.get("approvals_ok")
-    if initial_approvals_ok and final_approvals_ok is False:
-        return GateResult("FAIL", "approval_dismissed")
+    if initial_approvals_ok is not None:
+        if final_approvals_ok is None:
+            return GateResult("UNKNOWN", "approvals_could_not_be_reconfirmed")
+        if initial_approvals_ok and not final_approvals_ok:
+            return GateResult("FAIL", "approval_dismissed")
 
     return GateResult("PASS")
