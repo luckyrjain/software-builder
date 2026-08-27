@@ -1972,3 +1972,135 @@ def test_validate_code_review_coverage_unhashable_acquisition_does_not_crash() -
 def test_ownership_unowned_branch_unhashable_authority_does_not_crash() -> None:
     result = pr.evaluate_ownership({"unowned": True, "owner_authority": ["authoritative_host"]})
     assert result.status == "UNKNOWN"
+
+
+# ---------------------------------------------------------------------------
+# Round 9 adversarial-review regression tests
+# ---------------------------------------------------------------------------
+
+
+def test_match_dimension_evidence_reads_environment_from_nested_assessment_target() -> None:
+    cand = {"source_revision": "a" * 40, "environment": "production"}
+    nested_staging = {
+        "assessment_target": {"source_revision": "a" * 40, "environment": "staging"},
+        "status": "PASS",
+        "evidence_authorities": {"x": {"repository"}},
+    }
+    result = pr.match_dimension_evidence("api", candidate=cand, artifact=nested_staging)
+    assert result.status == "UNKNOWN"
+    assert result.reason == "environment_mismatch"
+
+
+def test_match_dimension_evidence_matching_nested_environments_on_both_sides_passes() -> None:
+    cand_nested = {"assessment_target": {"source_revision": "a" * 40, "environment": "production"}}
+    artifact_nested = {
+        "assessment_target": {"source_revision": "a" * 40, "environment": "production"},
+        "status": "PASS",
+        "evidence_authorities": {"x": {"repository"}},
+    }
+    result = pr.match_dimension_evidence("observability", candidate=cand_nested, artifact=artifact_nested)
+    assert result.status == "PASS"
+
+
+def test_match_dimension_evidence_conflicting_nested_environments_rejected_even_for_non_sensitive_dimension() -> None:
+    cand_nested = {"assessment_target": {"source_revision": "a" * 40, "environment": "production"}}
+    artifact_nested = {
+        "assessment_target": {"source_revision": "a" * 40, "environment": "staging"},
+        "status": "PASS",
+        "evidence_authorities": {"x": {"repository"}},
+    }
+    result = pr.match_dimension_evidence("security", candidate=cand_nested, artifact=artifact_nested)
+    assert result.status == "UNKNOWN"
+    assert result.reason == "environment_mismatch"
+
+
+def test_capacity_and_dependency_gates_not_applicable_does_not_require_pass_specific_keys() -> None:
+    # A genuinely-inapplicable dimension naturally has none of the PASS-specific evidence keys
+    # (a config-only change has no demand forecast at all) -- requiring them here would make a
+    # fully-authoritative NOT_APPLICABLE claim impossible to ever satisfy.
+    capacity_report = {
+        "status": "NOT_APPLICABLE",
+        "producer_trusted": True,
+        "evidence_authorities": {"change_classes": "repository", "scaling_config": "authoritative_host"},
+    }
+    assert pr.evaluate_capacity_gate(capacity_report).status == "NOT_APPLICABLE"
+    dependency_report = {
+        "status": "NOT_APPLICABLE",
+        "producer_trusted": True,
+        "evidence_authorities": {"manifest_diff": "repository"},
+    }
+    assert pr.evaluate_dependency_gate(dependency_report).status == "NOT_APPLICABLE"
+
+
+def test_resolve_prerequisite_reuses_an_authoritative_not_applicable_supplied_artifact() -> None:
+    candidate = source_candidate("a" * 40)
+    supplied = trusted_child_result(
+        "deployment_risk_report", source_revision="a" * 40, status="NOT_APPLICABLE", evidence_authorities={"risk": {"repository"}}
+    )
+    invoked = spy(return_value={"status": "PASS"})
+    result = pr.resolve_prerequisite("deployment_risk_report", supplied=supplied, candidate=candidate, invoke_spy=invoked)
+    assert result == {"status": "NOT_APPLICABLE", "mode": "REUSE"}
+    assert invoked.calls == 0
+
+
+def test_split_identity_candidate_cannot_launder_stale_flat_evidence_via_nested_target() -> None:
+    # A candidate whose flat source_revision is stale but whose own nested assessment_target
+    # names the real (fresher) head must not let CI/coverage/provenance/dependency-CI evidence
+    # gathered for the STALE flat revision validate against the fresher one children are bound to.
+    old_green = "a" * 40
+    new_head = "b" * 40
+    candidate = {"source_revision": old_green, "assessment_target": {"head_revision_or_digest": new_head}}
+
+    ci_for_old = {"head_revision": old_green, "acquisition": "authoritative_host", "all_required_green": True}
+    assert pr.validate_ci(candidate, ci_for_old)["status"] == "UNKNOWN"
+
+    coverage_for_old = code_review_coverage(candidate_source_revision=old_green)
+    assert pr.validate_code_review_coverage(coverage_for_old, candidate)["status"] == "UNKNOWN"
+
+    dep_ci_for_old = {
+        "required": True,
+        "scope_covers_changed_manifest": True,
+        "conclusion": "success",
+        "acquisition": "authoritative_host",
+        "source_revision": old_green,
+    }
+    report = {"status": "PASS", "evidence_authorities": {"cve": {"caller"}}}
+    result = pr.evaluate_dependency_gate(report, dependency_ci=dep_ci_for_old, candidate=candidate)
+    assert result.status == "UNKNOWN"
+
+
+def test_has_minimum_candidate_identity_recognizes_nested_only_assessment_target() -> None:
+    nested_only = {"assessment_target": {"head_revision_or_digest": "b" * 40}}
+    result = pr.production_readiness(nested_only, dimensions=[dim("ci", "PASS")])
+    assert result.skill_result.status != "BLOCKED"
+
+
+def test_operational_gates_reject_conflicting_environment_evidence() -> None:
+    staging_owner = {"owner": "x", "escalation_route": "y", "owner_authority": "repository", "environment": "staging"}
+    staging_rollback = rollback_fixture(authority="repository", complete=True, environment="staging")
+    staging_post_deploy = post_deploy_fixture(signal_authority="repository", complete=True, environment="staging")
+    staging_recovery = dict(tier1_stateful_fixture(), environment="staging")
+    prod_candidate = source_candidate("a" * 40, environment="production")
+
+    assert pr.evaluate_ownership(staging_owner, "tier0", candidate=prod_candidate).status == "UNKNOWN"
+    assert pr.evaluate_rollback_abort(staging_rollback, "tier0", candidate=prod_candidate).status == "UNKNOWN"
+    assert pr.evaluate_post_deploy_plan(staging_post_deploy, "tier0", candidate=prod_candidate).status == "UNKNOWN"
+    assert pr.evaluate_recovery(staging_recovery, "tier0", candidate=prod_candidate).status == "UNKNOWN"
+
+
+def test_operational_gates_still_work_without_a_candidate_argument() -> None:
+    # Backward compatible: omitting `candidate` entirely (as every pre-round-9 caller does) must
+    # not newly block anything -- the environment check is inert without a candidate to compare.
+    owner = {"owner": "x", "escalation_route": "y", "owner_authority": "repository"}
+    assert pr.evaluate_ownership(owner, "tier0").status == "PASS"
+
+
+def test_non_mapping_top_level_arguments_degrade_to_unknown_without_crashing() -> None:
+    assert pr.evaluate_dependency_gate({"status": "PASS", "evidence_authorities": {"cve": {"caller"}}}, dependency_ci=[]).status == "UNKNOWN"
+    assert pr.evaluate_dependency_gate({"status": "PASS", "evidence_authorities": {"cve": {"caller"}}}, advisory_evidence=[]).status == "UNKNOWN"
+    assert pr.validate_ci({"source_revision": "a" * 40}, [])["status"] == "UNKNOWN"
+    assert pr.accept_child_result([]).status == "UNKNOWN"
+    assert pr.match_dimension_evidence("api", candidate={"source_revision": "a" * 40}, artifact=[]).status == "UNKNOWN"
+    assert pr.evaluate_scm_policy(policy(), ["x"]).status == "UNKNOWN"
+    assert pr.evaluate_ownership([]).status == "UNKNOWN"
+    assert pr.production_readiness(["x"]).skill_result.status == "BLOCKED"
