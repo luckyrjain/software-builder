@@ -17,10 +17,11 @@ def test_ready_prd_routes_to_system_design_before_architecture_review() -> None:
     assert _owner("Turn this ready PRD into the implementation design") == "system-design"
 
 
-def test_pre_pr_d_numbered_pr_readiness_remains_unowned() -> None:
-    result = dispatch_prompt(ROOT, load_registry(ROOT), "Is PR #123 production ready?")
-    assert result.status == "no_match"
-    assert result.owner is None
+def test_numbered_pr_readiness_is_owned_by_production_readiness_review() -> None:
+    # Foundation A shipped before production-readiness-review existed, so this prompt was
+    # deliberately unowned (no_match) as a placeholder guard against another skill silently
+    # claiming it first. PR D added production-readiness-review as the explicit owner.
+    assert _owner("Is PR #123 production ready?") == "production-readiness-review"
 
 
 def test_architecture_rework_is_recommendation_not_runtime_cycle() -> None:
