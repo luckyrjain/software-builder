@@ -68,7 +68,7 @@ _K8S_RESOURCES_BLOCK = re.compile(
 # suffixes real config field names actually use (replicaCount, replica_count, replica-count,
 # num_replicas, ReplicaSet); anything else immediately continuing in a-z is presumed to be ordinary
 # English prose, not a scaling-relevant field name, and correctly left unmatched.
-_REPLICA_TOKEN = re.compile(r"replica(?:s|_count|-count|count|set)?(?=[^a-z]|$)")
+_REPLICA_TOKEN = re.compile(r"replica(?:s|_count|-count|counts?|sets?)?(?=[^a-z]|$)")
 _LOCKFILES = {
     "package-lock.json",
     "npm-shrinkwrap.json",

@@ -687,6 +687,13 @@ def test_helm_replica_count_field_names_emit_capacity() -> None:
         assert "capacity" in result["review_triggers"], text
 
 
+def test_replicasets_plural_k8s_kind_emits_capacity() -> None:
+    result = analyze_change(
+        source=diff_text("The deployment rollout created new ReplicaSets to replace the old ones."),
+    )
+    assert "capacity" in result["review_triggers"]
+
+
 def test_unrelated_english_words_containing_replica_do_not_emit_capacity() -> None:
     for text in (
         "Modeled the viral RNA replicase complex binding site in the pipeline.",
