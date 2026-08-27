@@ -6,7 +6,7 @@
 | Step | Read now | Produces |
 |------|----------|----------|
 | **Inputs** | [workflow/inputs.md](../workflow/inputs.md) | `assessment_target`, `criticality`, `source_revision`, `build_provenance_ref` |
-| **Collect evidence** | [workflow/collect-evidence.md](../workflow/collect-evidence.md) | `ci_evidence`, `scm_policy_evidence`, `build_provenance_evidence`, `change_impact_evidence`, `deployment_risk_evidence` |
+| **Collect evidence** | [workflow/collect-evidence.md](../workflow/collect-evidence.md) | `ci_evidence`, `scm_policy_evidence`, `build_provenance_evidence`, `change_impact_evidence`, `deployment_risk_evidence`, `freshness_snapshot` |
 | **Dispatch** | [workflow/dispatch.md](../workflow/dispatch.md) | `dimension_evidence`, `dispatch_log` |
 | **Aggregate** | [workflow/aggregate.md](../workflow/aggregate.md) | `dimension_statuses`, `operational_evidence`, `verdict` |
 | **Report** | [workflow/report.md](../workflow/report.md) | `production_readiness_report` |

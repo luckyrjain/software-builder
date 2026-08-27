@@ -7,6 +7,7 @@ produces:
   - build_provenance_evidence
   - change_impact_evidence
   - deployment_risk_evidence
+  - freshness_snapshot
 consumes:
   - assessment_target
   - criticality
@@ -19,6 +20,10 @@ consumes:
 Gather every foundational evidence source before deciding which specialists to dispatch. Each source
 below is independently optional — a missing one degrades only its own dimension to `UNKNOWN` in
 Aggregate, never blocks the others and never fabricates a `PASS`.
+
+Record a `freshness_snapshot` here too — the candidate's head identity, CI status, and approval
+state as read in this phase — for [report.md § Final freshness re-check](report.md) to compare
+against immediately before the report is emitted.
 
 ## 1. CI status — `host.ci.status`
 
@@ -68,8 +73,9 @@ invoke **deployment-risk-review** with the change description and evidence alrea
 | `build_provenance_evidence` | Resolved digest, `NOT_APPLICABLE`, or `UNKNOWN` |
 | `change_impact_evidence` | `change_classes`, `impacted_*`, `coverage_status`, `material_unknowns` |
 | `deployment_risk_evidence` | `Risk` verdict, `deployment_confidence`, evidence gaps |
+| `freshness_snapshot` | Head identity, CI status, and approval state as read in this phase, for report.md's final freshness re-check |
 
-Every evidence source's own provenance (`caller`, `repository`, `authoritative_host`, or
-`trusted_runtime`) is preserved alongside its value — Aggregate applies the ladder in
-[reference/evidence-authority-policy.md](../reference/evidence-authority-policy.md), it is not
-re-derived here.
+Every evidence source's own provenance (`caller`, `model_knowledge`, `repository`,
+`authoritative_host`, or `trusted_runtime`) is preserved alongside its value — Aggregate applies
+the ladder in [reference/evidence-authority-policy.md](../reference/evidence-authority-policy.md),
+it is not re-derived here.
