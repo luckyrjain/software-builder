@@ -18,6 +18,7 @@ from scripts.tests.production_readiness_fixtures import (
     assessment_context_fixture,
     authoritative_unowned,
     build_fixture,
+    build_provenance,
     caller_owner,
     caller_supplied_impact,
     child_gate_policy,
@@ -1267,3 +1268,215 @@ def test_unrecognized_criticality_is_treated_as_strictly_as_unknown() -> None:
 def test_accept_child_result_downgrades_conditional_for_weak_only_authority() -> None:
     child = {"status": "CONDITIONAL", "evidence_authorities": {"a": {"caller"}, "b": {"model_knowledge"}}}
     assert pr.accept_child_result(child).status == "UNKNOWN"
+
+
+# ---------------------------------------------------------------------------
+# Round 5 adversarial-review regression tests
+# ---------------------------------------------------------------------------
+
+
+def test_production_readiness_all_dimensions_not_applicable_by_applicability_is_not_ready() -> None:
+    # _is_required excludes a dimension via EITHER applicability=='NOT_APPLICABLE' OR
+    # status=='NOT_APPLICABLE' -- the vacuous-READY guard must check the same union, not just
+    # status, or a set that's inapplicable-by-applicability slips through to a vacuous READY.
+    dims = [
+        pr.Dimension("security", "UNKNOWN", applicability="NOT_APPLICABLE"),
+        pr.Dimension("ci", "FAIL", applicability="NOT_APPLICABLE"),
+    ]
+    result = pr.production_readiness(source_candidate("a" * 40), dimensions=dims)
+    assert result.verdict != "READY"
+    assert result.skill_result.status == "PARTIAL"
+
+
+def test_capacity_gate_never_softens_an_already_failed_child_into_conditional() -> None:
+    report = {"status": "FAIL", "evidence_authorities": {"demand": {"caller"}, "baseline": {"caller"}}}
+    assert pr.evaluate_capacity_gate(report, criticality="tier3").status == "FAIL"
+
+
+def test_capacity_gate_untrusted_producer_is_unknown_not_conditional() -> None:
+    report = {
+        "status": "PASS",
+        "producer_trusted": False,
+        "evidence_authorities": {"demand": {"caller"}, "baseline": {"caller"}},
+    }
+    assert pr.evaluate_capacity_gate(report, criticality="tier2").status == "UNKNOWN"
+
+
+def test_dependency_gate_never_softens_an_already_failed_child_into_unknown_via_substitute() -> None:
+    report = {"status": "FAIL", "evidence_authorities": {"cve": {"caller"}}}
+    result = pr.evaluate_dependency_gate(report)
+    assert result.status == "FAIL"
+
+
+def test_target_of_rejects_non_mapping_target_without_crashing() -> None:
+    child = {"status": "PASS", "target": "deadbeef", "evidence_authorities": {"a": {"repository"}}}
+    result = pr.accept_child_result(child, candidate=source_candidate("a" * 40))
+    assert result.status == "UNKNOWN"
+    assert result.reason == "target_mismatch"
+
+
+def test_mr_shaped_candidate_with_no_source_revision_can_still_reach_pass() -> None:
+    # Round-4's "expected side names no identity" fence must recognize head_sha as identity for
+    # an MR-shaped candidate (project+merge_request_iid+head_sha, no source_revision at all) --
+    # _has_minimum_candidate_identity already accepts this shape as first-class.
+    mr = {"project": "acme/checkout", "merge_request_iid": 9, "head_sha": "c" * 40}
+    child = {"status": "PASS", "source_revision": "c" * 40, "evidence_authorities": {"x": {"repository"}}}
+    assert pr.accept_child_result(child, candidate=mr).status == "PASS"
+    assert (
+        pr.validate_ci(mr, {"head_revision": "c" * 40, "acquisition": "authoritative_host", "all_required_green": True})[
+            "status"
+        ]
+        == "PASS"
+    )
+    assert pr.validate_build_provenance(mr, None) == {"status": "NOT_APPLICABLE", "build_provenance_ref": "NOT_APPLICABLE"}
+
+
+def test_mr_shaped_candidate_still_rejects_a_mismatched_child_revision() -> None:
+    mr = {"project": "acme/checkout", "merge_request_iid": 9, "head_sha": "c" * 40}
+    hostile = {"status": "PASS", "source_revision": "d" * 40, "evidence_authorities": {"x": {"repository"}}}
+    assert pr.accept_child_result(hostile, candidate=mr).status == "UNKNOWN"
+
+
+def test_scm_policy_string_required_approvals_is_unknown_not_a_crash() -> None:
+    result = pr.evaluate_scm_policy(
+        {"required_approvals": "2", "codeowners_required": False, "blocking_threads_must_resolve": False},
+        {"approvals": 5},
+    )
+    assert result.status == "UNKNOWN"
+    assert result.reason == "scm_policy_incompletely_read"
+
+
+def test_dependency_gate_substitute_does_not_cure_a_weak_non_cve_entry() -> None:
+    report = {
+        "status": "PASS",
+        "evidence_authorities": {"cve": {"authoritative_host"}, "version_delta": {"caller"}},
+    }
+    strong_advisory = {"status": "CURRENT", "acquisition": "authoritative_host"}
+    assert pr.evaluate_dependency_gate(report, advisory_evidence=strong_advisory).status == "UNKNOWN"
+    strong_ci = dependency_ci_fixture()
+    assert pr.evaluate_dependency_gate(report, dependency_ci=strong_ci).status == "UNKNOWN"
+
+
+def test_production_readiness_phrasing_does_not_collide_with_pr_review() -> None:
+    for prompt in ("Do a production readiness review for PR #123.", "Run a production readiness review on this merge request."):
+        result = dispatch_prompt(ROOT, load_registry(ROOT), prompt)
+        assert result.status == "selected", prompt
+        assert result.candidates == ("production-readiness-review",), prompt
+
+
+def test_plain_pr_review_request_still_routes_to_pr_review() -> None:
+    result = dispatch_prompt(ROOT, load_registry(ROOT), "review PR #123")
+    assert result.status == "selected"
+    assert result.candidates == ("pr-review",)
+
+
+def test_deployment_risk_alone_go_no_go_does_not_collide_with_release_readiness_checker() -> None:
+    for prompt in ("go/no-go on deployment risk alone", "Give me a go/no-go on deployment risk alone for this release."):
+        result = dispatch_prompt(ROOT, load_registry(ROOT), prompt)
+        assert result.status == "selected", prompt
+        assert result.candidates == ("deployment-risk-review",), prompt
+
+
+def test_ship_this_pr_phrasing_routes_to_production_readiness() -> None:
+    result = dispatch_prompt(ROOT, load_registry(ROOT), "Should we ship this PR?")
+    assert result.status == "selected"
+    assert result.candidates == ("production-readiness-review",)
+
+
+# ---------------------------------------------------------------------------
+# Happy-path (PASS/READY) coverage -- closes a real gap: prior rounds tested the
+# fail-closed direction exhaustively but left every gate's PASS path almost entirely
+# unpinned, so a structurally-always-blocking implementation would have passed the
+# suite. These pin the genuine positive outcome for each gate.
+# ---------------------------------------------------------------------------
+
+
+def test_validate_ci_happy_path_is_pass() -> None:
+    result = pr.validate_ci(image_candidate(), ci_green())
+    assert result == {"status": "PASS"}
+
+
+def test_validate_code_review_coverage_happy_path_is_pass() -> None:
+    assert pr.validate_code_review_coverage(code_review_coverage()) == {"status": "PASS"}
+
+
+def test_validate_build_provenance_happy_path_is_pass() -> None:
+    candidate = image_candidate(source_revision="a" * 40, digest="sha256:" + "b" * 64)
+    provenance = build_provenance(source_revision="a" * 40, digest="sha256:" + "b" * 64)
+    result = pr.validate_build_provenance(candidate, provenance)
+    assert result["status"] == "PASS"
+    assert result["build_provenance_ref"] == "build:1"
+
+
+def test_validate_build_provenance_digest_mismatch_is_unknown_not_pass() -> None:
+    candidate = image_candidate(source_revision="a" * 40, digest="sha256:" + "c" * 64)
+    provenance = build_provenance(source_revision="a" * 40, digest="sha256:" + "b" * 64)
+    result = pr.validate_build_provenance(candidate, provenance)
+    assert result["status"] == "UNKNOWN"
+    assert result["reason"] == "digest_mismatch"
+
+
+def test_evaluate_ownership_happy_path_is_pass() -> None:
+    owner = {"owner_authority": "authoritative_host", "owner": "team-checkout", "escalation_route": "#checkout-oncall"}
+    assert pr.evaluate_ownership(owner, criticality="tier0").status == "PASS"
+
+
+def test_evaluate_rollback_abort_happy_path_is_pass() -> None:
+    plan = rollback_fixture(authority="authoritative_host", complete=True)
+    assert pr.evaluate_rollback_abort(plan, criticality="tier0").status == "PASS"
+
+
+def test_evaluate_post_deploy_plan_happy_path_is_pass() -> None:
+    plan = post_deploy_fixture(signal_authority="authoritative_host", complete=True)
+    assert pr.evaluate_post_deploy_plan(plan, criticality="tier0").status == "PASS"
+
+
+def test_evaluate_recovery_happy_path_is_pass() -> None:
+    assert pr.evaluate_recovery(tier1_stateful_fixture(), criticality="tier0").status == "PASS"
+
+
+def test_evaluate_capacity_gate_happy_path_is_pass() -> None:
+    report = {"status": "PASS", "evidence_authorities": {"demand": {"repository"}, "baseline": {"repository"}}}
+    assert pr.evaluate_capacity_gate(report, criticality="tier0").status == "PASS"
+
+
+def test_evaluate_dependency_gate_happy_path_is_pass() -> None:
+    report = {"status": "PASS", "evidence_authorities": {"cve": {"authoritative_host"}}}
+    assert pr.evaluate_dependency_gate(report).status == "PASS"
+
+
+def test_evaluate_scm_policy_happy_path_is_pass() -> None:
+    result = pr.evaluate_scm_policy(policy(required_approvals=2), observed(approvals=2))
+    assert result.status == "PASS"
+
+
+def test_resolve_prerequisite_refresh_happy_path_is_pass() -> None:
+    candidate = source_candidate("a" * 40)
+    fresh = trusted_child_result("change_impact_report", source_revision="a" * 40, coverage_status="COMPLETE", evidence_authorities={"x": {"repository"}})
+    result = pr.resolve_prerequisite(
+        "change_impact_report",
+        candidate=candidate,
+        invoke_spy=lambda artifact_type, candidate: fresh,
+        mandatory_inputs={"diff_text": "the diff"},
+    )
+    assert result == {"status": "PASS", "mode": "REFRESH"}
+
+
+def test_aggregate_verdict_all_pass_is_ready() -> None:
+    assert pr.aggregate_verdict([dim("ci", "PASS"), dim("security", "PASS")]) == "READY"
+
+
+def test_production_readiness_end_to_end_happy_path_is_ready() -> None:
+    dims = [dim("ci", "PASS"), dim("security", "PASS"), dim("capacity", "NOT_APPLICABLE")]
+    result = pr.production_readiness(source_candidate("a" * 40), dimensions=dims)
+    assert result.verdict == "READY"
+    assert result.skill_result.status == "SUCCESS"
+
+
+def test_missing_candidate_identity_blocks_even_with_unrelated_fields_present() -> None:
+    # A candidate carrying real-looking fields (service, a free-text note) but no actual identity
+    # field (source_revision/head_revision_or_digest/project+merge_request_iid+head_sha) must
+    # still be blocked -- not just the {} case.
+    result = run_readiness(candidate={"service": "checkout-api", "note": "ship it"}, dimensions=[dim("security", "PASS")])
+    assert result.skill_result.status == "BLOCKED"
+    assert result.verdict != "READY"

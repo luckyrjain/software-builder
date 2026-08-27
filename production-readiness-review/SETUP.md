@@ -7,7 +7,7 @@
 | **Owner** | software-builder maintainers |
 | **Last reviewed** | 2026-08-27 |
 | **Review cadence** | Quarterly — or when a composed child skill's own input contract changes |
-| **External services** | None — reads supplied candidate evidence and optional repository, SCM, CI, build-provenance, service-metadata, or dependency-advisory host evidence, and reuses/dispatches trusted child-skill invocations only |
+| **External services** | None — reads supplied candidate evidence and optional repository, SCM, CI, build-provenance, service-metadata, runtime-metrics, or dependency-advisory host evidence, and reuses/dispatches trusted child-skill invocations only |
 
 See [setup-freshness.md](../docs/skill-framework/shared/setup-freshness.md) for the shared contract.
 

@@ -286,15 +286,30 @@ def _target_of(obj: Any) -> Optional[Mapping[str, Any]]:
     if isinstance(obj, Mapping) and ("source_revision" in obj or "head_revision_or_digest" in obj):
         return obj
     if isinstance(obj, Mapping):
-        return obj.get("target")
+        nested = obj.get("target")
+        # A malformed "target" (a bare string/list/int instead of a mapping) must degrade to "no
+        # target," never be returned as-is -- a caller three calls downstream (_identity_mismatch)
+        # calls .get() on this unconditionally, and a crash here would take down the whole
+        # aggregation instead of failing closed on just the affected dimension.
+        return nested if isinstance(nested, Mapping) else None
     return None
+
+
+def _effective_source_revision(obj: Mapping[str, Any]) -> Optional[str]:
+    """Best-effort revision identity: `source_revision`, else the MR-shaped candidate's `head_sha`.
+
+    `_has_minimum_candidate_identity` accepts a project+merge_request_iid+head_sha candidate as a
+    first-class shape carrying no `source_revision` at all -- every identity comparison downstream
+    must recognize that shape too, or an MR-shaped candidate can never be better than UNKNOWN.
+    """
+    return obj.get("source_revision") or obj.get("head_sha")
 
 
 def _identity_mismatch(child: Mapping[str, Any], expected: Mapping[str, Any]) -> bool:
     child_target = _target_of(child) or {}
-    child_rev = child.get("source_revision") or child_target.get("source_revision")
+    child_rev = _effective_source_revision(child) or _effective_source_revision(child_target)
     child_head = child_target.get("head_revision_or_digest") or child_rev
-    expected_rev = expected.get("source_revision")
+    expected_rev = _effective_source_revision(expected)
     expected_head = expected.get("head_revision_or_digest") or expected_rev
     if not expected_rev and not expected_head:
         # The expected side (an empty/unresolved candidate) names no identity at all -- there is
@@ -426,7 +441,7 @@ def resolve_prerequisite(
 def validate_ci(candidate: Mapping[str, Any], ci: Optional[Mapping[str, Any]]) -> MutableMapping[str, Any]:
     if ci is None:
         return {"status": "UNKNOWN", "reason": "missing_ci_evidence"}
-    source_revision = candidate.get("source_revision")
+    source_revision = _effective_source_revision(candidate)
     head_revision = ci.get("head_revision")
     if not source_revision or not head_revision or head_revision != source_revision:
         return {"status": "UNKNOWN", "reason": "scope_mismatch"}
@@ -457,8 +472,11 @@ def validate_code_review_coverage(coverage: Optional[Mapping[str, Any]]) -> Muta
 def validate_build_provenance(
     candidate: Mapping[str, Any], provenance: Optional[Mapping[str, Any]]
 ) -> MutableMapping[str, Any]:
-    source_revision = candidate.get("source_revision")
-    head_revision_or_digest = candidate.get("head_revision_or_digest")
+    source_revision = _effective_source_revision(candidate)
+    # An MR-shaped candidate (project+merge_request_iid+head_sha, no separate digest field) has no
+    # distinct deployable identity to link to -- defaulting to source_revision itself correctly
+    # lands on the NOT_APPLICABLE branch below instead of UNKNOWN forever.
+    head_revision_or_digest = candidate.get("head_revision_or_digest") or source_revision
     if not source_revision or not head_revision_or_digest:
         return {"status": "UNKNOWN", "reason": "missing_candidate_identity"}
     if head_revision_or_digest == source_revision:
@@ -529,6 +547,10 @@ def evaluate_scm_policy(policy: Mapping[str, Any], observed: Mapping[str, Any]) 
             return GateResult("FAIL", "unapproved_policy_bypass")
 
     required_approvals = policy["required_approvals"]
+    if isinstance(required_approvals, bool) or not isinstance(required_approvals, int):
+        # A non-numeric (or boolean) required_approvals value is a malformed/unread policy field,
+        # not a legitimate "0 required" -- comparing it below would also raise TypeError.
+        return GateResult("UNKNOWN", "scm_policy_incompletely_read")
     if required_approvals:
         approvals = observed.get("approvals")
         # Evidence never gathered (key absent, or present as None) is an evidence gap, not an
@@ -707,13 +729,24 @@ def evaluate_recovery(fixture: Mapping[str, Any], criticality: str = "unknown") 
 
 
 def evaluate_capacity_gate(report: Mapping[str, Any], criticality: str = "unknown") -> GateResult:
+    if not report.get("producer_trusted", True):
+        return GateResult("UNKNOWN", "untrusted_producer")
+    status = report.get("status", "UNKNOWN")
+    if status not in DIMENSION_STATUSES:
+        status = "UNKNOWN"
+    if status in ("FAIL", "UNKNOWN"):
+        # An already-negative or already-unresolved child status is never softened by the
+        # capacity-specific authority check below -- that check exists to keep an under-evidenced
+        # PASS/CONDITIONAL from being trusted, not to launder a FAIL into a milder CONDITIONAL.
+        return GateResult(status)
+
     evidence_authorities = _as_authority_map(report.get("evidence_authorities"))
     # `_minimum_authority_met` checks EVERY entry in the map, not just "demand"/"baseline" -- a
     # third weakly-authoritative entry (e.g. "headroom_model": {"caller"}) must not be ignored
     # just because the two named keys happen to be strong.
     has_required_keys = "demand" in evidence_authorities and "baseline" in evidence_authorities
     if has_required_keys and _minimum_authority_met(evidence_authorities):
-        return GateResult(_normalize_child_status(report))
+        return GateResult(status)
     if _tier_requires_strict_unknown(criticality):
         return GateResult("UNKNOWN", "caller_only_basis")
     return GateResult("CONDITIONAL", "caller_only_basis")
@@ -725,25 +758,45 @@ def evaluate_dependency_gate(
     dependency_ci: Optional[Mapping[str, Any]] = None,
     candidate: Optional[Mapping[str, Any]] = None,
 ) -> GateResult:
+    if not report.get("producer_trusted", True):
+        return GateResult("UNKNOWN", "untrusted_producer")
+    status = report.get("status", "UNKNOWN")
+    if status not in DIMENSION_STATUSES:
+        status = "UNKNOWN"
+    if status in ("FAIL", "UNKNOWN"):
+        # An already-negative or already-unresolved child status is never softened by a substitute
+        # CVE-currency check below -- a substitute cures missing/weak CVE evidence, it does not
+        # launder a FAIL into something better.
+        return GateResult(status)
+
     evidence_authorities = _as_authority_map(report.get("evidence_authorities"))
     # Same all-entries rule as the capacity gate above: a weak entry elsewhere in the map (e.g.
     # "version_delta": {"caller"}) must not be ignored just because "cve" itself is strong.
     has_cve_key = "cve" in evidence_authorities
     if has_cve_key and _minimum_authority_met(evidence_authorities):
-        return GateResult(_normalize_child_status(report))
+        return GateResult(status)
+
+    # A substitute (advisory_evidence / dependency_ci) only cures the "cve" entry specifically --
+    # every OTHER entry already in the report's own evidence_authorities (e.g. version_delta,
+    # breaking_changes) still has to independently meet the same authority bar, per the no-
+    # laundering rule the primary branch above applies to the whole map.
+    other_authorities = {k: v for k, v in evidence_authorities.items() if k != "cve"}
+    other_entries_ok = _minimum_authority_met(other_authorities) if other_authorities else True
 
     if (
-        advisory_evidence is not None
+        other_entries_ok
+        and advisory_evidence is not None
         and advisory_evidence.get("status") == "CURRENT"
         and advisory_evidence.get("acquisition") in STRONG_AUTHORITIES
     ):
         # A substitute for the child's own CVE evidence needs the same authority bar the child's
         # own evidence would have needed -- a caller-forged "status: CURRENT" claim with no
         # acquisition behind it must not launder a weakly-authoritative report into a PASS.
-        return GateResult(_normalize_child_status(report))
+        return GateResult(status)
 
     if (
-        dependency_ci is not None
+        other_entries_ok
+        and dependency_ci is not None
         and dependency_ci.get("required")
         and dependency_ci.get("scope_covers_changed_manifest")
         and dependency_ci.get("conclusion") == "success"
@@ -752,7 +805,7 @@ def evaluate_dependency_gate(
     ):
         # Same authority bar, plus a scope check when a candidate is supplied: dependency CI
         # evidence collected for a different commit must not stand in for this one's.
-        return GateResult(_normalize_child_status(report))
+        return GateResult(status)
 
     return GateResult("UNKNOWN", "no_current_vulnerability_evidence")
 
@@ -920,13 +973,15 @@ def production_readiness(
             skill_result=SkillResult(status="PARTIAL", evidence_status="UNKNOWN"),
         )
 
-    if not dimensions or all(d.status == "NOT_APPLICABLE" for d in dimensions):
-        # An empty list, or a set where every dimension resolved NOT_APPLICABLE, carries zero
-        # required evidence -- aggregate_verdict's worst-first ladder is vacuously READY over an
-        # empty required set, but report-format.md is explicit that NOT_APPLICABLE dimensions
-        # never count as evidence toward PASS, and this skill's own definition of done says a
-        # check that never ran must never be folded into READY. A caller cannot get a clean
-        # verdict just by supplying no dimensions, or by marking all of them inapplicable.
+    if not dimensions or not any(_is_required(d) for d in dimensions):
+        # An empty list, or a set with no REQUIRED dimension left after applicability/status
+        # filtering (matching _is_required's own rule: NOT_APPLICABLE by either applicability OR
+        # status is excluded), carries zero required evidence -- aggregate_verdict's worst-first
+        # ladder is vacuously READY over an empty required set, but report-format.md is explicit
+        # that NOT_APPLICABLE dimensions never count as evidence toward PASS, and this skill's own
+        # definition of done says a check that never ran must never be folded into READY. A caller
+        # cannot get a clean verdict just by supplying no dimensions, or by marking all of them
+        # inapplicable via either field.
         return ProductionReadinessResult(
             verdict="UNKNOWN",
             skill_result=SkillResult(status="PARTIAL", evidence_status="UNKNOWN"),

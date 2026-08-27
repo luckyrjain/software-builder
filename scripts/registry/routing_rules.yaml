@@ -10,6 +10,7 @@ routes:
     exclude_patterns:
       - '\b(no|without)\s+(PR|MR|pull request|merge request)\b'
       - '\bthere is no\s+(PR|MR|pull request|merge request)\b'
+      - '\bproduction readiness\b'
   pr-gatekeeper:
     patterns:
       - '\b(PR|MR|pull request|merge request)\b.*\b(webhook|gatekeeper|automation gate|opened event)\b'
@@ -50,6 +51,7 @@ routes:
       - '\b(this|the) (pr|mr|pull request|merge request|release candidate)\b.*\b(production ready|production readiness|ready to release|ready to deploy)\b'
       - '\b(production ready|production readiness|ready to release|ready to deploy)\b.*\b(this|the) (pr|mr|pull request|merge request|release candidate)\b'
       - '\bgo[- /]?no[- ]?go for (this|one) (change|pr|mr|pull request|merge request)\b'
+      - '\bgo[- /]?no[- ]?go\b.*\bdeployment risk\b'
   migration-program-manager:
     patterns:
       - '\b(migration program|migration portfolio|migration status rollup|migration program status)\b'
