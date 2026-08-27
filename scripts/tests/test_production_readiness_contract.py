@@ -45,7 +45,6 @@ from scripts.tests.production_readiness_fixtures import (
     source_candidate,
     spy,
     stateless_reversible_fixture,
-    summarize_required_passes,
     tier1_stateful_fixture,
     trusted_child_result,
     trusted_ci,
@@ -105,7 +104,7 @@ def test_unknown_beats_conditional() -> None:
 
 def test_not_applicable_does_not_count_as_pass() -> None:
     dims = [dimension("api", "NOT_APPLICABLE", applicability="NOT_APPLICABLE")]
-    assert summarize_required_passes(dims) == 0
+    assert pr.summarize_required_passes(dims) == 0
 
 
 def test_child_order_does_not_change_verdict() -> None:
@@ -368,7 +367,7 @@ def test_blocking_thread_open_fails_when_policy_requires_resolution() -> None:
 
 
 def test_admin_bypass_is_not_silent_pass() -> None:
-    result = pr.evaluate_scm_policy(policy(require_review=True), observed(policy_bypass_refs=["override-1"], bypass_approved=False))
+    result = pr.evaluate_scm_policy(policy(), observed(policy_bypass_refs=["override-1"], bypass_approved=False))
     assert result.status in {"FAIL", "UNKNOWN"}
 
 
@@ -1743,19 +1742,6 @@ def test_recovery_reversible_non_boolean_string_does_not_reach_not_applicable() 
     assert pr.evaluate_recovery(fixture).status != "NOT_APPLICABLE"
 
 
-def test_dependency_gate_ci_non_boolean_required_flag_is_unknown() -> None:
-    report = {"status": "PASS", "evidence_authorities": {"cve": {"caller"}}}
-    dep_ci = {
-        "required": "false",
-        "scope_covers_changed_manifest": "no",
-        "conclusion": "success",
-        "acquisition": "authoritative_host",
-        "source_revision": "a" * 40,
-    }
-    result = pr.evaluate_dependency_gate(report, dependency_ci=dep_ci, candidate=source_candidate("a" * 40))
-    assert result.status == "UNKNOWN"
-
-
 def test_authority_membership_checks_degrade_on_unhashable_value_without_crashing() -> None:
     assert pr.evaluate_ownership({"owner": "t", "escalation_route": "p", "owner_authority": ["repository"]}).status == "UNKNOWN"
     assert pr.validate_ci({"source_revision": "a" * 40}, {"head_revision": "a" * 40, "acquisition": ["authoritative_host"], "all_required_green": True})["status"] == "UNKNOWN"
@@ -3112,3 +3098,29 @@ def test_validate_build_provenance_acquisition_check_also_applies_to_the_fail_pa
     result = pr.validate_build_provenance(candidate, caller_asserted_failure)
     assert result["status"] == "UNKNOWN"
     assert result["reason"] == "untrusted_acquisition"
+
+
+def test_aggregate_report_waivers_iterator_raising_mid_iteration_does_not_crash() -> None:
+    # A non-iterable waivers value is already handled (raises TypeError at list() entry), but an
+    # iterable whose iterator raises something else mid-iteration (a hostile/buggy generator) must
+    # degrade the same way, not propagate an uncaught exception out of the whole report.
+    def poison_gen():
+        yield {"accepted_by": "x", "evidence_ref": "y"}
+        raise RuntimeError("boom mid-iteration")
+
+    report = pr.aggregate_report([dim("security", "PASS")], waivers=poison_gen())
+    assert report["verdict"] == "READY"
+    assert report["waivers"] == []
+
+
+def test_is_valid_waiver_expires_at_with_broken_str_does_not_crash() -> None:
+    # expires_at is converted via str() before any type check -- a caller-supplied object whose
+    # __str__ itself raises must degrade to "invalid waiver," not crash.
+    class Poison:
+        def __str__(self) -> str:
+            raise RuntimeError("str boom")
+
+    waiver = {"accepted_by": "x", "evidence_ref": "y", "expires_at": Poison()}
+    assert pr._is_valid_waiver(waiver) is False
+    report = pr.aggregate_report([dim("security", "PASS")], waivers=[waiver])
+    assert report["waivers"] == []

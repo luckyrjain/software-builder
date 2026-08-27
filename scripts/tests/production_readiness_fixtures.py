@@ -50,10 +50,6 @@ def deterministic_permutations(items: Sequence[Any], limit: int = 24) -> list[li
     return perms[:limit]
 
 
-def summarize_required_passes(dims: Sequence[pr.Dimension]) -> int:
-    return sum(1 for d in dims if d.applicability != "NOT_APPLICABLE" and d.status != "NOT_APPLICABLE" and d.status == "PASS")
-
-
 # ---------------------------------------------------------------------------
 # Candidate fixtures
 # ---------------------------------------------------------------------------
@@ -275,7 +271,6 @@ def policy(**overrides: Any) -> dict[str, Any]:
         "required_approvals": 0,
         "codeowners_required": False,
         "blocking_threads_must_resolve": False,
-        "require_review": False,
     }
     base.update(overrides)
     return base

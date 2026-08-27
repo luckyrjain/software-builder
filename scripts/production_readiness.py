@@ -58,7 +58,7 @@ DATABASE_REVIEW_ONE_OF = ("schema", "migration_script", "queries")
 
 # Children whose mandatory input is satisfied by ANY ONE of several fields, not ALL of them.
 # "changed_paths" is change-impact-analyzer's own real diff-carrier field (see its `analyze_change`
-# contract), documented alongside the other three in reference/child-input-map.md.
+# contract), documented alongside the other four in reference/child-input-map.md.
 CHILD_ONE_OF_INPUTS: Mapping[str, Sequence[str]] = MappingProxyType(
     {
         "database-review": DATABASE_REVIEW_ONE_OF,
@@ -264,7 +264,11 @@ def _is_valid_waiver(waiver: Mapping) -> bool:
             now = datetime.datetime.now(datetime.timezone.utc)
             if expiry < now:
                 return False
-        except (ValueError, TypeError):
+        except Exception:
+            # Broad on purpose: `str(expires_at)` itself can raise (a caller-supplied object with
+            # a broken __str__), not just datetime.fromisoformat's documented ValueError/TypeError
+            # -- any failure parsing an untrusted, caller-controlled expiry must degrade to
+            # "invalid waiver," never crash the whole report.
             return False
     return True
 
@@ -276,9 +280,11 @@ def aggregate_report(
     verdict = aggregate_verdict(dims, waivers=waivers)
     try:
         waiver_candidates = list(waivers) if waivers else []
-    except TypeError:
-        # A malformed (non-iterable) waivers value must degrade to "no waivers supplied,"
-        # never crash the whole report.
+    except Exception:
+        # Broad on purpose: a non-iterable `waivers` value raises TypeError at this line, but an
+        # iterable whose iterator raises mid-iteration (a hostile/buggy generator) can raise
+        # anything -- either way this is untrusted, caller-controlled input, and must degrade to
+        # "no waivers supplied," never crash the whole report.
         waiver_candidates = []
     valid_waivers = [w for w in waiver_candidates if _is_valid_waiver(w)]
     return {
