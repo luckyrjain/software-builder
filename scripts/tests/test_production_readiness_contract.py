@@ -2859,3 +2859,108 @@ def test_dispatch_child_result_carries_the_actual_child_payload() -> None:
     payload = {"status": "PASS", "evidence_authorities": {"x": {"repository"}}, "extra_field": "present"}
     result = pr.dispatch_child("security-review", {"review_target": "code"}, lambda n, i: payload)
     assert result.result == payload
+
+
+def test_validate_build_provenance_nested_explicit_none_digest_falls_back_to_flat() -> None:
+    # A nested assessment_target that explicitly declares head_revision_or_digest as None (a
+    # producer that always emits the full field set, populated or not) has not actually declared a
+    # value -- it must fall back to the flat sibling field, matching _effective_head_digest's own
+    # is-None precedence, rather than treating mere key presence as a real declaration.
+    candidate = {
+        "assessment_target": {
+            "head_revision_or_digest": None,
+            "project": "p",
+            "merge_request_iid": 5,
+            "head_sha": "abc",
+        },
+        "source_revision": "abc",
+        "head_revision_or_digest": "digest123",
+    }
+    provenance = {
+        "source_revision": "abc",
+        "deployable_digest": "digest123",
+        "build_status": "SUCCESS",
+        "evidence_ref": "evref-1",
+    }
+    result = pr.validate_build_provenance(candidate, provenance)
+    assert result["status"] == "PASS"
+
+
+# ---------------------------------------------------------------------------
+# Round 18: CHILD_MANDATORY_INPUTS entries with no prior dedicated dispatch coverage
+# ---------------------------------------------------------------------------
+
+
+def test_dispatch_child_observability_review_requires_both_mandatory_fields() -> None:
+    complete = spy(return_value={"status": "PASS", "evidence_authorities": {"r": {"repository"}}})
+    result = pr.dispatch_child(
+        "observability-review", {"service_name": "checkout", "observability_material": "dashboards"}, complete
+    )
+    assert result.dispatched is True
+    assert complete.calls == 1
+
+    incomplete = spy(return_value={"status": "PASS", "evidence_authorities": {"r": {"repository"}}})
+    result = pr.dispatch_child("observability-review", {"service_name": "checkout"}, incomplete)
+    assert result.dispatched is False
+    assert result.dimension_status == "UNKNOWN"
+    assert incomplete.calls == 0
+
+
+def test_dispatch_child_resilience_review_requires_both_mandatory_fields() -> None:
+    complete = spy(return_value={"status": "PASS", "evidence_authorities": {"r": {"repository"}}})
+    result = pr.dispatch_child(
+        "resilience-review", {"resilience_behavior": "timeout+retry", "dependency_paths": ["svc-a"]}, complete
+    )
+    assert result.dispatched is True
+    assert complete.calls == 1
+
+    incomplete = spy(return_value={"status": "PASS", "evidence_authorities": {"r": {"repository"}}})
+    result = pr.dispatch_child("resilience-review", {"resilience_behavior": "timeout+retry"}, incomplete)
+    assert result.dispatched is False
+    assert result.dimension_status == "UNKNOWN"
+    assert incomplete.calls == 0
+
+
+def test_dispatch_child_api_design_review_requires_api_spec() -> None:
+    complete = spy(return_value={"status": "PASS", "evidence_authorities": {"r": {"repository"}}})
+    result = pr.dispatch_child("api-design-review", {"api_spec": "openapi: 3.0.0"}, complete)
+    assert result.dispatched is True
+    assert complete.calls == 1
+
+    incomplete = spy(return_value={"status": "PASS", "evidence_authorities": {"r": {"repository"}}})
+    result = pr.dispatch_child("api-design-review", {}, incomplete)
+    assert result.dispatched is False
+    assert result.dimension_status == "UNKNOWN"
+    assert incomplete.calls == 0
+
+
+def test_dispatch_child_performance_review_requires_reviewed_content() -> None:
+    complete = spy(return_value={"status": "PASS", "evidence_authorities": {"r": {"repository"}}})
+    result = pr.dispatch_child("performance-review", {"reviewed_content": "def hot_path(): ..."}, complete)
+    assert result.dispatched is True
+    assert complete.calls == 1
+
+    incomplete = spy(return_value={"status": "PASS", "evidence_authorities": {"r": {"repository"}}})
+    result = pr.dispatch_child("performance-review", {}, incomplete)
+    assert result.dispatched is False
+    assert result.dimension_status == "UNKNOWN"
+    assert incomplete.calls == 0
+
+
+def test_dispatch_child_dependency_upgrade_review_requires_all_three_fields() -> None:
+    complete = spy(return_value={"status": "PASS", "evidence_authorities": {"r": {"repository"}}})
+    result = pr.dispatch_child(
+        "dependency-upgrade-review",
+        {"dependency_name": "requests", "current_version": "2.28.0", "target_version": "2.31.0"},
+        complete,
+    )
+    assert result.dispatched is True
+    assert complete.calls == 1
+
+    incomplete = spy(return_value={"status": "PASS", "evidence_authorities": {"r": {"repository"}}})
+    result = pr.dispatch_child(
+        "dependency-upgrade-review", {"dependency_name": "requests", "current_version": "2.28.0"}, incomplete
+    )
+    assert result.dispatched is False
+    assert result.dimension_status == "UNKNOWN"
+    assert incomplete.calls == 0

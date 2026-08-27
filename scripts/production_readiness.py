@@ -630,12 +630,16 @@ def validate_build_provenance(
         bool(probe.get("project") and probe.get("merge_request_iid") is not None and probe.get("head_sha"))
         for probe in (mr_probe, candidate)
     )
-    if "head_revision_or_digest" in mr_probe:
+    nested_head_revision_or_digest = mr_probe.get("head_revision_or_digest")
+    if nested_head_revision_or_digest is not None:
         # Nested-first, same as is_mr_shaped just above: a flat top-level field must never be
         # preferred over (or allowed to shadow) a real nested declaration of the same identity
         # concept -- a forged/stale flat value colliding with source_revision must not mask a
-        # genuinely different nested digest and the real build evidence behind it.
-        head_revision_or_digest = mr_probe.get("head_revision_or_digest")
+        # genuinely different nested digest and the real build evidence behind it. `is not None`,
+        # not mere key presence: a nested carrier that explicitly declares this field `None` (a
+        # producer that always emits the full field set) has not actually declared a value and
+        # must fall back to the flat sibling, matching _effective_head_digest's own precedence.
+        head_revision_or_digest = nested_head_revision_or_digest
     elif "head_revision_or_digest" in candidate:
         head_revision_or_digest = candidate.get("head_revision_or_digest")
     elif provenance is not None and "deployable_digest" in provenance:
