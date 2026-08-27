@@ -56,7 +56,7 @@ config-value change, `criticality: tier2`.
 | Ownership | PASS | On-call owner confirmed (host.service.metadata.read) |
 | Rollback/abort | PASS | Rollback plan verified in deploy config |
 | Post-deploy verification | PASS | Health check gate configured |
-| Recovery | PASS | No destructive operation in this change |
+| Recovery | NOT_APPLICABLE | Change confirmed stateless/reversible (host.service.metadata.read); no destructive operation |
 ```
 
 ---

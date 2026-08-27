@@ -303,12 +303,14 @@ def dependency_ci_fixture(
     required: bool = True,
     scope_covers_changed_manifest: bool = True,
     conclusion: str = "success",
+    acquisition: str = "authoritative_host",
 ) -> dict[str, Any]:
     return {
         "source_revision": source_revision,
         "required": required,
         "scope_covers_changed_manifest": scope_covers_changed_manifest,
         "conclusion": conclusion,
+        "acquisition": acquisition,
     }
 
 

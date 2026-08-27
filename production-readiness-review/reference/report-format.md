@@ -69,9 +69,9 @@ UNKNOWN — never just the bare state.>
 |-----------|--------|-------|
 | CI | PASS \| CONDITIONAL \| FAIL \| UNKNOWN | Required-check summary |
 | Code review (pr-review) | PASS \| CONDITIONAL \| FAIL \| UNKNOWN | Severity summary, posting always forbidden |
-| Build provenance | PASS \| UNKNOWN \| NOT_APPLICABLE | `<build_provenance_ref>` |
+| Build provenance | PASS \| FAIL \| UNKNOWN \| NOT_APPLICABLE | `<build_provenance_ref>` |
 | SCM policy | PASS \| CONDITIONAL \| FAIL \| UNKNOWN | Approvals/CODEOWNERS/thread summary |
-| Change impact | PASS \| CONDITIONAL \| UNKNOWN | `coverage_status`, material unknowns |
+| Change impact | PASS \| CONDITIONAL \| FAIL \| UNKNOWN | `coverage_status`, material unknowns |
 | Deployment risk | PASS \| CONDITIONAL \| FAIL \| UNKNOWN | Risk verdict, `deployment_confidence` |
 | <Each dispatched specialist> | PASS \| CONDITIONAL \| FAIL \| UNKNOWN \| NOT_APPLICABLE | One-line summary or dispatch-skip reason |
 
@@ -82,7 +82,7 @@ UNKNOWN — never just the bare state.>
 | Ownership | PASS \| CONDITIONAL \| FAIL \| UNKNOWN | Evidence authority level |
 | Rollback / abort | PASS \| CONDITIONAL \| FAIL \| UNKNOWN | Evidence authority level |
 | Post-deploy verification plan | PASS \| CONDITIONAL \| FAIL \| UNKNOWN | Evidence authority level |
-| Recovery | PASS \| CONDITIONAL \| FAIL \| UNKNOWN | Evidence authority level |
+| Recovery | PASS \| CONDITIONAL \| FAIL \| UNKNOWN \| NOT_APPLICABLE | Evidence authority level; NOT_APPLICABLE only for an authoritatively-confirmed stateless/reversible change |
 
 ## Blockers
 
@@ -90,7 +90,8 @@ UNKNOWN — never just the bare state.>
 
 ## Conditions
 
-<Every dimension that set CONDITIONAL, plus any applied waiver. Empty list if none.>
+<Every dimension that set CONDITIONAL, plus any valid recorded waiver (which does not itself
+change the verdict — see Notes below). Empty list if none.>
 
 ## Waivers
 
@@ -117,5 +118,8 @@ UNKNOWN — never just the bare state.>
 - **Every specialist's own verdict is surfaced as-is** — this skill never re-labels or re-scores a
   child's own PASS/CONDITIONAL/FAIL/UNKNOWN judgment, only aggregates across dimensions per
   [workflow/aggregate.md](../workflow/aggregate.md).
-- **A waiver never upgrades the underlying evidence-authority trace** — it only changes whether that
-  dimension's status still blocks the overall verdict, and is always recorded with its own provenance.
+- **A waiver never changes the computed verdict or its underlying evidence-authority trace** —
+  verdict derivation is fixed per [gate-policy.md § Verdict precedence](gate-policy.md#verdict-precedence)
+  with no waiver exception. A waiver is recorded for audit/traceability alongside the dimension it
+  names and its own provenance (`accepted_by`, `evidence_ref`, `expires_at`), but a waived FAIL,
+  UNKNOWN, or CONDITIONAL dimension still blocks the verdict exactly as an unwaived one would.

@@ -12,6 +12,12 @@ Dispatch invoked — they are about the change's operational readiness, not its 
 | **Post-deploy verification plan** | A defined way to confirm the change worked after it ships — a health check, a dashboard, a canary/synthetic check |
 | **Recovery** | If the change is destructive or hard to reverse (a data migration, a deletion), a proven path back to a good state exists |
 
+In the report and in code these four are the dimension identifiers `operational_ownership`,
+`rollback_and_abort`, `post_deploy_verification_plan`, and `recovery`. All four are
+environment-sensitive: evidence collected for one environment (e.g. a staging on-call rotation)
+must not silently stand in for another (e.g. production) — a declared-environment conflict between
+the candidate and the evidence downgrades the dimension to `UNKNOWN`, never `PASS`.
+
 ## Tier-sensitive rules
 
 Apply `criticality` (`tier0`/`tier1`/`tier2`/`tier3`/`unknown`, resolved in Inputs) to every one of the

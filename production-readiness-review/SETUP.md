@@ -67,8 +67,10 @@ Working directly in this repo? `.cursor/rules/production-readiness-review.mdc` a
 | `host.dependency.advisories.read` | Current advisory evidence for changed dependencies at the exact source revision |
 | `host.runtime.metrics.read` | Authoritative current demand/history and capacity baseline evidence for [reference/operational-gates.md](reference/operational-gates.md)'s capacity dimension |
 
-Every capability above is optional individually — a missing one degrades its own dimension(s) to
-`UNKNOWN`, never to a fabricated `PASS`. No capability failure blocks the whole run.
+Every capability above is optional individually **except `host.report.write`**, which is required
+because this skill cannot emit its `production_readiness_report` deliverable without it and the
+run is `BLOCKED` if it's unavailable. A missing read capability degrades its own dimension(s) to
+`UNKNOWN`, never to a fabricated `PASS`, and does not block the rest of the run.
 
 ## Config
 

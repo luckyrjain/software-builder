@@ -49,10 +49,16 @@ recorded `NOT_APPLICABLE`, not `UNKNOWN` and not silently omitted from the repor
 | capacity-planner | A demand-affecting change (new traffic path, scaling config) with forecast-relevant data available |
 | dependency-upgrade-review | A dependency version bump present in the diff |
 
-`change_impact_evidence.coverage_status` not `COMPLETE` does not itself force every specialist to
-dispatch — it is recorded as a `change_impact` dimension gap in Aggregate, and a specialist is still
-dispatched only when its own triggering signal is present (or an explicit `assessment_context` from
-the caller already asserts applicability).
+`change_impact_evidence.coverage_status` not `COMPLETE` is a `change_impact` dimension gap recorded
+in Aggregate, and per [collect-evidence.md § 4](collect-evidence.md), it also means "no triggering
+signal found" for a given specialist is not itself proof that specialist doesn't apply — absence of
+a signal in an admittedly-incomplete scan is "cannot determine," never "assume inapplicable." So
+with incomplete coverage: dispatch a specialist whose signal IS present (or whose applicability the
+caller's `assessment_context` already asserts) as usual; for every other specialist, record
+`UNKNOWN` (not `NOT_APPLICABLE`) unless its own mandatory input can't be assembled either, which is
+`UNKNOWN` regardless. `NOT_APPLICABLE` for "no triggering signal" is reserved for the case where
+`coverage_status` **is** `COMPLETE` and the scan can be trusted to have found every applicable
+surface.
 
 ## 3. Assemble each applicable specialist's mandatory input — or dispatch nothing
 

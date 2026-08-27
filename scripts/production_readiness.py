@@ -81,11 +81,18 @@ class GateResult:
 
 
 def _authority_set(value: Any) -> set:
-    """Normalize an authority value (bare string or iterable of strings) to a set of strings."""
+    """Normalize an authority value (bare string or iterable of strings) to a set of strings.
+
+    A Mapping is rejected outright rather than iterated: `set({"repository": "REVOKED"})`
+    would silently collect the *keys*, letting a child name a strong authority as a dict key
+    with an arbitrary (even negating) value and still be read back as authoritative.
+    """
     if not value:
         return set()
     if isinstance(value, str):
         return {value}
+    if isinstance(value, Mapping):
+        return set()
     try:
         return set(value)
     except TypeError:
@@ -103,18 +110,39 @@ def _as_authority_map(value: Any) -> Mapping[str, Any]:
 
 
 def _minimum_authority_met(evidence_authorities: Optional[Mapping[str, Any]]) -> bool:
-    """True only when EVERY evidence entry backing a conclusion is strongly authoritative.
+    """True only when EVERY evidence entry backing a conclusion is *purely* strongly authoritative.
 
     A single weakly-authoritative entry must not be laundered into a strong conclusion merely
-    because some unrelated entry in the same map happens to be strong.
+    because some unrelated entry in the same map happens to be strong (round-3 fix). Nor may an
+    entry that mixes a strong and a weak authority together (`{"caller", "repository"}`) pass on
+    the strength of its strong half alone -- per evidence-authority-policy.md rule 4, mixed
+    evidence downgrades the whole entry, so each entry's authority set must be a *subset* of
+    `STRONG_AUTHORITIES`, not merely intersect it.
     """
     evidence_authorities = _as_authority_map(evidence_authorities)
     if not evidence_authorities:
         return False
     for authorities in evidence_authorities.values():
-        if not (_authority_set(authorities) & STRONG_AUTHORITIES):
+        authority_set = _authority_set(authorities)
+        if not authority_set or not authority_set.issubset(STRONG_AUTHORITIES):
             return False
     return True
+
+
+_KNOWN_CRITICALITY_TIERS = frozenset({"tier0", "tier1", "tier2", "tier3", "unknown"})
+
+
+def _tier_requires_strict_unknown(criticality: str) -> bool:
+    """True when caller-only evidence must be UNKNOWN (never CONDITIONAL) at this tier.
+
+    Per operational-gates.md, `unknown` criticality is treated as strictly as tier0/tier1 -- never
+    as a permissive default. A value outside the five-tier vocabulary (a typo, `None`, wrong
+    casing, an unrecognized string) must not silently take the permissive tier2/tier3 branch
+    either: it is treated at least as strictly as `unknown`.
+    """
+    if criticality not in _KNOWN_CRITICALITY_TIERS:
+        return True
+    return criticality in ("tier0", "tier1", "unknown")
 
 
 def _normalize_child_status(report: Mapping[str, Any]) -> str:
@@ -268,6 +296,12 @@ def _identity_mismatch(child: Mapping[str, Any], expected: Mapping[str, Any]) ->
     child_head = child_target.get("head_revision_or_digest") or child_rev
     expected_rev = expected.get("source_revision")
     expected_head = expected.get("head_revision_or_digest") or expected_rev
+    if not expected_rev and not expected_head:
+        # The expected side (an empty/unresolved candidate) names no identity at all -- there is
+        # nothing to bind the child's evidence to, so this is unknown scope, not a vacuous match.
+        # Only a genuinely absent expected side (checked by the caller via `is not None`) skips
+        # this fence entirely; an empty mapping must not.
+        return True
     # When the expected side names an identity, the child MUST supply a matching one -- a child
     # that names no revision/target at all is evidence of unknown scope, not a safe match.
     if expected_rev and (not child_rev or expected_rev != child_rev):
@@ -297,9 +331,11 @@ def accept_child_result(
         # An unrecognized status (a typo, a child-specific vocabulary like "BLOCKED") must never
         # silently fall through an aggregator's status-string comparisons as an implicit PASS.
         status = "UNKNOWN"
-    elif status == "PASS" and not _minimum_authority_met(child.get("evidence_authorities")):
-        # The no-laundering rule concerns PASS specifically: a FAIL/CONDITIONAL a child already
-        # reported is not softened just because it didn't also populate evidence_authorities.
+    elif status in ("PASS", "CONDITIONAL") and not _minimum_authority_met(child.get("evidence_authorities")):
+        # The no-laundering rule applies to PASS and CONDITIONAL alike: per evidence-authority-
+        # policy.md rule 3, evidence that is only caller/model_knowledge-authoritative is UNKNOWN
+        # -- not CONDITIONAL either, since CONDITIONAL implies some authoritative signal exists.
+        # A FAIL a child already reported is not softened just because it lacked authority.
         status = "UNKNOWN"
     return AcceptedChildResult(status=status, trusted_for_gate=True, reason="")
 
@@ -469,35 +505,54 @@ def evaluate_build_provenance(fixture: Mapping[str, Any]) -> GateResult:
 # ---------------------------------------------------------------------------
 
 
+_SCM_POLICY_KEYS = ("required_approvals", "codeowners_required", "blocking_threads_must_resolve")
+
+
 def evaluate_scm_policy(policy: Mapping[str, Any], observed: Mapping[str, Any]) -> GateResult:
     if not policy or not observed:
         return GateResult("UNKNOWN", "missing_scm_policy_evidence")
+    if any(key not in policy for key in _SCM_POLICY_KEYS):
+        # A partially-resolved policy document (a rule that could not be read) must not silently
+        # default to "not required" -- an unread rule is an evidence gap, never a permissive
+        # default.
+        return GateResult("UNKNOWN", "scm_policy_incompletely_read")
 
     bypass_refs = observed.get("policy_bypass_refs") or []
-    if bypass_refs and not observed.get("bypass_approved"):
-        return GateResult("FAIL", "unapproved_policy_bypass")
+    if bypass_refs:
+        approved = observed.get("bypass_approved")
+        bypass_authority = observed.get("bypass_approval_authority", "caller")
+        evidence_ref = observed.get("bypass_approval_ref")
+        # A caller-supplied "yes it was approved" claim needs an authoritative approver and an
+        # evidence ref behind it -- bare truthiness must never suppress a real policy-bypass
+        # finding.
+        if not approved or bypass_authority not in STRONG_AUTHORITIES or not evidence_ref:
+            return GateResult("FAIL", "unapproved_policy_bypass")
 
-    required_approvals = policy.get("required_approvals", 0)
+    required_approvals = policy["required_approvals"]
     if required_approvals:
         approvals = observed.get("approvals")
         # Evidence never gathered (key absent, or present as None) is an evidence gap, not an
         # affirmative "zero approvals" finding -- it must land on UNKNOWN, never FAIL.
         if approvals is None:
             return GateResult("UNKNOWN", "approvals_unknown")
+        if not isinstance(approvals, int) or isinstance(approvals, bool):
+            return GateResult("UNKNOWN", "approvals_not_numeric")
         if approvals < required_approvals:
             return GateResult("FAIL", "insufficient_approvals")
 
-    if policy.get("codeowners_required"):
+    if policy["codeowners_required"]:
         satisfied = observed.get("codeowners_satisfied")
         if satisfied == "unknown" or satisfied is None:
             return GateResult("UNKNOWN", "codeowners_unknown")
         if not satisfied:
             return GateResult("FAIL", "codeowners_not_satisfied")
 
-    if policy.get("blocking_threads_must_resolve"):
+    if policy["blocking_threads_must_resolve"]:
         blocking_open = observed.get("blocking_threads_open")
         if blocking_open is None:
             return GateResult("UNKNOWN", "blocking_threads_unknown")
+        if not isinstance(blocking_open, int) or isinstance(blocking_open, bool):
+            return GateResult("UNKNOWN", "blocking_threads_not_numeric")
         if blocking_open > 0:
             return GateResult("FAIL", "blocking_threads_open")
 
@@ -564,7 +619,7 @@ def evaluate_ownership(owner: Mapping[str, Any], criticality: str = "unknown") -
 
     if authority in STRONG_AUTHORITIES:
         return GateResult("PASS")
-    if criticality in ("tier0", "tier1", "unknown"):
+    if _tier_requires_strict_unknown(criticality):
         return GateResult("UNKNOWN", "caller_only_owner")
     return GateResult("CONDITIONAL", "caller_only_owner")
 
@@ -584,7 +639,7 @@ def evaluate_rollback_abort(plan: Mapping[str, Any], criticality: str = "unknown
 
     if authority in STRONG_AUTHORITIES:
         return GateResult("PASS")
-    if criticality in ("tier0", "tier1", "unknown"):
+    if _tier_requires_strict_unknown(criticality):
         return GateResult("UNKNOWN", "caller_only_rollback")
     return GateResult("CONDITIONAL", "caller_only_rollback")
 
@@ -603,7 +658,7 @@ def evaluate_post_deploy_plan(plan: Mapping[str, Any], criticality: str = "unkno
     authority = plan.get("signal_authority", "caller")
     if authority in STRONG_AUTHORITIES:
         return GateResult("PASS")
-    if criticality in ("tier0", "tier1", "unknown"):
+    if _tier_requires_strict_unknown(criticality):
         return GateResult("UNKNOWN", "caller_only_signals")
     return GateResult("CONDITIONAL", "caller_only_signals")
 
@@ -640,7 +695,7 @@ def evaluate_recovery(fixture: Mapping[str, Any], criticality: str = "unknown") 
         # Tier-sensitive per operational-gates.md: caller-only evidence is UNKNOWN at
         # tier0/tier1/unknown, but at most CONDITIONAL (never PASS) at tier2/tier3 -- the same
         # rule already applied to the sibling ownership/rollback/post-deploy gates above.
-        if criticality in ("tier0", "tier1", "unknown"):
+        if _tier_requires_strict_unknown(criticality):
             return GateResult("UNKNOWN", "caller_only_mechanism")
         return GateResult("CONDITIONAL", "caller_only_mechanism")
     return GateResult("PASS")
@@ -653,13 +708,13 @@ def evaluate_recovery(fixture: Mapping[str, Any], criticality: str = "unknown") 
 
 def evaluate_capacity_gate(report: Mapping[str, Any], criticality: str = "unknown") -> GateResult:
     evidence_authorities = _as_authority_map(report.get("evidence_authorities"))
-    demand_auth = _authority_set(evidence_authorities.get("demand"))
-    baseline_auth = _authority_set(evidence_authorities.get("baseline"))
-    both_strong = bool(demand_auth & STRONG_AUTHORITIES) and bool(baseline_auth & STRONG_AUTHORITIES)
-
-    if both_strong:
+    # `_minimum_authority_met` checks EVERY entry in the map, not just "demand"/"baseline" -- a
+    # third weakly-authoritative entry (e.g. "headroom_model": {"caller"}) must not be ignored
+    # just because the two named keys happen to be strong.
+    has_required_keys = "demand" in evidence_authorities and "baseline" in evidence_authorities
+    if has_required_keys and _minimum_authority_met(evidence_authorities):
         return GateResult(_normalize_child_status(report))
-    if criticality in ("tier0", "tier1", "unknown"):
+    if _tier_requires_strict_unknown(criticality):
         return GateResult("UNKNOWN", "caller_only_basis")
     return GateResult("CONDITIONAL", "caller_only_basis")
 
@@ -668,13 +723,23 @@ def evaluate_dependency_gate(
     report: Mapping[str, Any],
     advisory_evidence: Optional[Mapping[str, Any]] = None,
     dependency_ci: Optional[Mapping[str, Any]] = None,
+    candidate: Optional[Mapping[str, Any]] = None,
 ) -> GateResult:
     evidence_authorities = _as_authority_map(report.get("evidence_authorities"))
-    cve_auth = _authority_set(evidence_authorities.get("cve"))
-    if cve_auth & STRONG_AUTHORITIES:
+    # Same all-entries rule as the capacity gate above: a weak entry elsewhere in the map (e.g.
+    # "version_delta": {"caller"}) must not be ignored just because "cve" itself is strong.
+    has_cve_key = "cve" in evidence_authorities
+    if has_cve_key and _minimum_authority_met(evidence_authorities):
         return GateResult(_normalize_child_status(report))
 
-    if advisory_evidence is not None and advisory_evidence.get("status") == "CURRENT":
+    if (
+        advisory_evidence is not None
+        and advisory_evidence.get("status") == "CURRENT"
+        and advisory_evidence.get("acquisition") in STRONG_AUTHORITIES
+    ):
+        # A substitute for the child's own CVE evidence needs the same authority bar the child's
+        # own evidence would have needed -- a caller-forged "status: CURRENT" claim with no
+        # acquisition behind it must not launder a weakly-authoritative report into a PASS.
         return GateResult(_normalize_child_status(report))
 
     if (
@@ -682,7 +747,11 @@ def evaluate_dependency_gate(
         and dependency_ci.get("required")
         and dependency_ci.get("scope_covers_changed_manifest")
         and dependency_ci.get("conclusion") == "success"
+        and dependency_ci.get("acquisition") in STRONG_AUTHORITIES
+        and (candidate is None or dependency_ci.get("source_revision") == candidate.get("source_revision"))
     ):
+        # Same authority bar, plus a scope check when a candidate is supplied: dependency CI
+        # evidence collected for a different commit must not stand in for this one's.
         return GateResult(_normalize_child_status(report))
 
     return GateResult("UNKNOWN", "no_current_vulnerability_evidence")
@@ -703,6 +772,40 @@ class ChildGatePolicy:
 def child_gate_policy(child_name: str) -> ChildGatePolicy:
     del child_name  # policy is uniform across every child: no child may post, merge, or deploy.
     return ChildGatePolicy()
+
+
+# Caller-settable fields that must never reach a child unmodified: gate-policy.md requires this
+# skill to never forward a caller-controllable "authorized to merge/deploy/rollback" or posting
+# field to any child, regardless of what the caller supplied in `inputs`.
+_CALLER_CONTROLLED_AUTHORITY_KEYS = frozenset(
+    {
+        "posting_policy",
+        "posting_decision",
+        "authorized_to_merge",
+        "authorized_to_deploy",
+        "authorized_to_rollback",
+        "merge_allowed",
+        "remote_writes_allowed",
+    }
+)
+
+
+def _sanitized_child_inputs(child_name: str, inputs: Mapping[str, Any]) -> Mapping[str, Any]:
+    """Strip caller-controllable authority/posting fields and enforce this skill's fixed policy.
+
+    A fabricated `posting_policy: allow` (or any other authority-shaped field) in the caller's
+    inputs must be dropped, not forwarded -- every child always dispatches with this skill's own
+    fixed, uniform gate policy, never one the caller can override.
+    """
+    sanitized = dict(inputs)
+    for key in _CALLER_CONTROLLED_AUTHORITY_KEYS:
+        sanitized.pop(key, None)
+    sanitized["posting_policy"] = "forbidden"
+    if child_name == "pr-review":
+        # child-input-map.md: pr-review is always dispatched retrospective/read-only.
+        sanitized["review_mode"] = "retrospective"
+        sanitized["audit_type"] = "retrospective"
+    return sanitized
 
 
 @dataclasses.dataclass(frozen=True)
@@ -727,6 +830,7 @@ def dispatch_child(
     child_name: str,
     inputs: Optional[Mapping[str, Any]] = None,
     invoke: Optional[Callable[[str, Mapping[str, Any]], Optional[Mapping[str, Any]]]] = None,
+    expected_target: Optional[Mapping[str, Any]] = None,
 ) -> DispatchResult:
     inputs = inputs or {}
     if not _child_mandatory_inputs_satisfied(child_name, inputs):
@@ -735,11 +839,19 @@ def dispatch_child(
     if invoke is None:
         return DispatchResult(dispatched=False, dimension_status="UNKNOWN")
 
-    result = invoke(child_name, inputs)
+    result = invoke(child_name, _sanitized_child_inputs(child_name, inputs))
     if result is None:
         return DispatchResult(dispatched=False, dimension_status="UNKNOWN")
 
-    accepted = accept_child_result(result)
+    # A child's result must be bound to the identity this dispatch was actually for -- otherwise
+    # a PASS reported for a different commit/environment is recorded as this candidate's PASS.
+    # pr-review's own mandatory `expected_head_sha` input is exactly that declared identity, so
+    # it binds automatically even when the caller doesn't separately pass expected_target.
+    target_ref = expected_target
+    if target_ref is None and inputs.get("expected_head_sha"):
+        target_ref = {"source_revision": inputs["expected_head_sha"]}
+
+    accepted = accept_child_result(result, expected_target=target_ref)
     return DispatchResult(dispatched=True, dimension_status=accepted.status, result=result)
 
 
@@ -788,7 +900,12 @@ def production_readiness(
             skill_result=SkillResult(status="BLOCKED", evidence_status="UNKNOWN"),
         )
 
-    is_remote_mr = "project" in candidate and "merge_request_iid" in candidate
+    # Any ONE of these fields, not all three, marks the candidate as MR-shaped: a caller must not
+    # be able to skip the live scm_change_read fence just by omitting one of them while still
+    # supplying enough identity (e.g. head_sha + source_revision) to pass the check above.
+    is_remote_mr = bool(
+        candidate.get("project") or candidate.get("merge_request_iid") is not None or candidate.get("head_sha")
+    )
     if is_remote_mr and scm_change_read is None:
         return ProductionReadinessResult(
             verdict="UNKNOWN",
@@ -797,11 +914,23 @@ def production_readiness(
 
     if dimensions is None:
         # No evidence collection was ever attempted for this candidate -- never default that
-        # silently to READY. An explicit empty list (a real "nothing applies" determination,
-        # e.g. a docs-only change) is different and is allowed to aggregate normally below.
+        # silently to READY.
         return ProductionReadinessResult(
             verdict="UNKNOWN",
             skill_result=SkillResult(status="PARTIAL", evidence_status="UNKNOWN"),
+        )
+
+    if not dimensions or all(d.status == "NOT_APPLICABLE" for d in dimensions):
+        # An empty list, or a set where every dimension resolved NOT_APPLICABLE, carries zero
+        # required evidence -- aggregate_verdict's worst-first ladder is vacuously READY over an
+        # empty required set, but report-format.md is explicit that NOT_APPLICABLE dimensions
+        # never count as evidence toward PASS, and this skill's own definition of done says a
+        # check that never ran must never be folded into READY. A caller cannot get a clean
+        # verdict just by supplying no dimensions, or by marking all of them inapplicable.
+        return ProductionReadinessResult(
+            verdict="UNKNOWN",
+            skill_result=SkillResult(status="PARTIAL", evidence_status="UNKNOWN"),
+            dimension_statuses=tuple(dimensions),
         )
 
     readiness = aggregate_readiness(dimensions, waivers=waivers)
@@ -828,10 +957,16 @@ def check_final_freshness(
     if initial.get("release_resolution") != final.get("release_resolution"):
         return GateResult("UNKNOWN", "release_ref_resolved_inconsistently")
 
-    # Strict `is True`/`is False`/`is None` identity checks throughout: a truthy
-    # non-bool (e.g. the string "false") must never be treated as a confirmed state.
+    # Strict `is True`/`is False`/`is None` identity checks throughout: a non-bool value (e.g.
+    # the string "false", or an integer 0) must never be treated as a confirmed state -- it must
+    # not fall through the ladder below to the terminal PASS just because it is neither `is
+    # False` nor `is None`.
     initial_ci_green = initial.get("ci_green")
     final_ci_green = final.get("ci_green")
+    if not isinstance(final_ci_green, bool) and final_ci_green is not None:
+        return GateResult("UNKNOWN", "ci_signal_not_boolean")
+    if not isinstance(initial_ci_green, bool) and initial_ci_green is not None:
+        return GateResult("UNKNOWN", "ci_signal_not_boolean")
     if final_ci_green is False:
         if initial_ci_green is not False:
             # Covers both "confirmed green, now red" and "never confirmed, now
@@ -846,6 +981,10 @@ def check_final_freshness(
 
     initial_approvals_ok = initial.get("approvals_ok")
     final_approvals_ok = final.get("approvals_ok")
+    if not isinstance(final_approvals_ok, bool) and final_approvals_ok is not None:
+        return GateResult("UNKNOWN", "approvals_signal_not_boolean")
+    if not isinstance(initial_approvals_ok, bool) and initial_approvals_ok is not None:
+        return GateResult("UNKNOWN", "approvals_signal_not_boolean")
     if final_approvals_ok is False:
         if initial_approvals_ok is not False:
             reason = (

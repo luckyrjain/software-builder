@@ -1030,7 +1030,24 @@ def test_check_final_freshness_string_true_is_not_treated_as_confirmed_boolean()
     )
     # "true" is a truthy string but not `is True`/`is False` -- it must not be accepted as a
     # reconfirmation of green CI, since it is not the boolean the acquisition contract promises.
-    assert result.status == "PASS" or result.status == "UNKNOWN"
+    assert result.status == "UNKNOWN"
+    assert result.reason == "ci_signal_not_boolean"
+
+
+def test_check_final_freshness_falsy_non_bool_ci_signal_does_not_fall_through_to_pass() -> None:
+    # An integer 0 (or any non-bool) is neither `is False` nor `is None`, so a ladder that only
+    # checks those two identities falls through to the terminal PASS -- that must not happen.
+    result = pr.check_final_freshness({"head": "a", "ci_green": True}, {"head": "a", "ci_green": 0})
+    assert result.status == "UNKNOWN"
+    assert result.reason == "ci_signal_not_boolean"
+
+
+def test_check_final_freshness_falsy_non_bool_approvals_signal_does_not_fall_through_to_pass() -> None:
+    result = pr.check_final_freshness(
+        {"head": "a", "approvals_ok": True}, {"head": "a", "approvals_ok": "false"}
+    )
+    assert result.status == "UNKNOWN"
+    assert result.reason == "approvals_signal_not_boolean"
 
 
 def test_ready_to_release_this_mr_phrasing_routes_to_production_readiness() -> None:
@@ -1059,3 +1076,194 @@ def test_release_wide_ready_to_release_phrasing_still_routes_to_release_readines
     )
     assert result.status == "selected"
     assert result.candidates == ("release-readiness-checker",)
+
+
+# ---------------------------------------------------------------------------
+# Round 4 adversarial-review regression tests
+# ---------------------------------------------------------------------------
+
+
+def test_identity_mismatch_when_expected_target_names_no_identity_at_all() -> None:
+    # An empty/unresolved expected candidate is unknown scope, not a vacuous match -- otherwise a
+    # child report for ANY commit is accepted as evidence for a candidate that was never resolved.
+    hostile = trusted_child_result("change_impact_report", source_revision="d" * 40, coverage_status="COMPLETE")
+    assert pr.accept_child_result(hostile, candidate={}).status == "UNKNOWN"
+    assert pr.resolve_prerequisite("change_impact_report", supplied=hostile, candidate={}) == {
+        "status": "UNKNOWN",
+        "mode": "REUSE",
+    }
+
+
+def test_dispatch_child_rejects_result_scoped_to_a_different_target() -> None:
+    hostile = trusted_child_result("security_review_report", source_revision="d" * 40, evidence_authorities={"code": {"repository"}})
+    result = pr.dispatch_child(
+        "security-review",
+        inputs={"review_target": "diff"},
+        invoke=lambda name, i: hostile,
+        expected_target=source_candidate("a" * 40),
+    )
+    assert result.dimension_status == "UNKNOWN"
+
+
+def test_dispatch_child_binds_pr_review_to_its_own_expected_head_sha() -> None:
+    hostile = trusted_child_result("pr_review_report", source_revision="d" * 40, evidence_authorities={"code": {"repository"}})
+    result = pr.dispatch_child(
+        "pr-review",
+        inputs={"merge_request_iid": 1, "project": "acme/checkout", "expected_head_sha": "a" * 40},
+        invoke=lambda name, i: hostile,
+    )
+    assert result.dimension_status == "UNKNOWN"
+
+
+def test_dispatch_child_never_forwards_caller_supplied_posting_policy() -> None:
+    captured = {}
+
+    def invoke(name, inputs):
+        captured.update(inputs)
+        return {"status": "PASS"}
+
+    pr.dispatch_child(
+        "security-review",
+        inputs={"review_target": "diff", "posting_policy": "allow", "authorized_to_merge": True},
+        invoke=invoke,
+    )
+    assert captured["posting_policy"] == "forbidden"
+    assert "authorized_to_merge" not in captured
+
+
+def test_production_readiness_empty_dimensions_is_not_ready() -> None:
+    result = pr.production_readiness(source_candidate("a" * 40), dimensions=[])
+    assert result.verdict != "READY"
+    assert result.skill_result.status == "PARTIAL"
+
+
+def test_production_readiness_all_not_applicable_dimensions_is_not_ready() -> None:
+    result = pr.production_readiness(
+        source_candidate("a" * 40),
+        dimensions=[dim("security", "NOT_APPLICABLE"), dim("ci", "NOT_APPLICABLE")],
+    )
+    assert result.verdict != "READY"
+    assert result.skill_result.status == "PARTIAL"
+
+
+def test_remote_mr_candidate_missing_project_key_still_requires_scm_change_read() -> None:
+    candidate = {"merge_request_iid": 7, "head_sha": "a" * 40, "source_revision": "a" * 40}
+    result = pr.production_readiness(candidate, dimensions=[dim("security", "PASS")])
+    assert result.verdict != "READY"
+
+
+def test_remote_mr_candidate_missing_merge_request_iid_still_requires_scm_change_read() -> None:
+    candidate = {"project": "acme/checkout", "head_sha": "a" * 40, "source_revision": "a" * 40}
+    result = pr.production_readiness(candidate, dimensions=[dim("security", "PASS")])
+    assert result.verdict != "READY"
+
+
+def test_dependency_gate_forged_advisory_without_authority_is_not_accepted() -> None:
+    weak = {"status": "PASS", "evidence_authorities": {"cve": {"caller"}}}
+    result = pr.evaluate_dependency_gate(weak, advisory_evidence={"status": "CURRENT", "acquisition": "caller"})
+    assert result.status == "UNKNOWN"
+
+
+def test_dependency_gate_forged_dependency_ci_without_authority_is_not_accepted() -> None:
+    weak = {"status": "PASS", "evidence_authorities": {"cve": {"caller"}}}
+    forged_ci = dependency_ci_fixture(acquisition="caller")
+    assert pr.evaluate_dependency_gate(weak, dependency_ci=forged_ci).status == "UNKNOWN"
+
+
+def test_dependency_gate_ci_evidence_for_a_different_commit_is_not_accepted() -> None:
+    weak = {"status": "PASS", "evidence_authorities": {"cve": {"caller"}}}
+    ci_for_other_commit = dependency_ci_fixture(source_revision="z" * 40)
+    result = pr.evaluate_dependency_gate(
+        weak, dependency_ci=ci_for_other_commit, candidate=source_candidate("a" * 40)
+    )
+    assert result.status == "UNKNOWN"
+
+
+def test_capacity_gate_ignores_neither_a_third_weak_authority_entry() -> None:
+    report = {
+        "status": "PASS",
+        "evidence_authorities": {"demand": {"repository"}, "baseline": {"repository"}, "headroom_model": {"caller"}},
+    }
+    assert pr.evaluate_capacity_gate(report, criticality="tier0").status == "UNKNOWN"
+
+
+def test_dependency_gate_ignores_neither_a_third_weak_authority_entry() -> None:
+    report = {
+        "status": "PASS",
+        "evidence_authorities": {"cve": {"authoritative_host"}, "version_delta": {"caller"}},
+    }
+    assert pr.evaluate_dependency_gate(report).status == "UNKNOWN"
+
+
+def test_minimum_authority_met_rejects_mixed_authority_within_one_entry() -> None:
+    # A single entry naming both a strong and a weak authority must not pass on the strength of
+    # its strong half alone -- per evidence-authority-policy.md rule 4, mixed evidence downgrades.
+    assert pr._minimum_authority_met({"code": {"caller", "repository"}}) is False
+
+
+def test_authority_set_rejects_mapping_shaped_value() -> None:
+    # A Mapping must never be treated as an iterable of authorities -- `set({...})` would collect
+    # the dict's *keys*, letting a strong authority name be used as a key with any value at all.
+    assert pr._authority_set({"repository": "REVOKED"}) == set()
+
+
+def test_scm_policy_incompletely_read_policy_is_unknown_not_pass() -> None:
+    result = pr.evaluate_scm_policy({"codeowners_required": True}, {"codeowners_satisfied": True})
+    assert result.status == "UNKNOWN"
+    assert result.reason == "scm_policy_incompletely_read"
+
+
+def test_scm_policy_bypass_approved_without_authority_still_fails() -> None:
+    result = pr.evaluate_scm_policy(
+        policy(),
+        observed(policy_bypass_refs=["override-1"], bypass_approved=True, bypass_approval_authority="caller"),
+    )
+    assert result.status == "FAIL"
+
+
+def test_scm_policy_bypass_approved_without_evidence_ref_still_fails() -> None:
+    result = pr.evaluate_scm_policy(
+        policy(),
+        observed(
+            policy_bypass_refs=["override-1"],
+            bypass_approved=True,
+            bypass_approval_authority="authoritative_host",
+        ),
+    )
+    assert result.status == "FAIL"
+
+
+def test_scm_policy_bypass_approved_with_authority_and_ref_passes() -> None:
+    result = pr.evaluate_scm_policy(
+        policy(),
+        observed(
+            policy_bypass_refs=["override-1"],
+            bypass_approved=True,
+            bypass_approval_authority="authoritative_host",
+            bypass_approval_ref="approval-123",
+        ),
+    )
+    assert result.status == "PASS"
+
+
+def test_scm_policy_string_approvals_is_unknown_not_a_crash() -> None:
+    result = pr.evaluate_scm_policy(policy(required_approvals=2), observed(approvals="5"))
+    assert result.status == "UNKNOWN"
+    assert result.reason == "approvals_not_numeric"
+
+
+def test_scm_policy_string_blocking_threads_is_unknown_not_a_crash() -> None:
+    result = pr.evaluate_scm_policy(policy(blocking_threads_must_resolve=True), observed(blocking_threads_open="3"))
+    assert result.status == "UNKNOWN"
+    assert result.reason == "blocking_threads_not_numeric"
+
+
+def test_unrecognized_criticality_is_treated_as_strictly_as_unknown() -> None:
+    for bad_criticality in (None, "Unknown", "tier-0", "", "tier9"):
+        result = pr.evaluate_ownership(caller_owner(), criticality=bad_criticality)
+        assert result.status == "UNKNOWN", bad_criticality
+
+
+def test_accept_child_result_downgrades_conditional_for_weak_only_authority() -> None:
+    child = {"status": "CONDITIONAL", "evidence_authorities": {"a": {"caller"}, "b": {"model_knowledge"}}}
+    assert pr.accept_child_result(child).status == "UNKNOWN"
