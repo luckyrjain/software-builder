@@ -1139,11 +1139,19 @@ def evaluate_dependency_gate(
         return GateResult(status)
 
     if other_entries_ok and dependency_ci is not None:
-        # Scope check uses the same MR-aware identity fallback every other comparison in this
-        # module uses -- and, unlike the old bare `.get("source_revision")` comparison, requires
-        # BOTH sides to actually name an identity: two None revisions must never vacuously match.
+        # The candidate side resolves nested-first (it's an identity-declaring object, same as
+        # everywhere else in this module) -- and, requires BOTH sides to actually name an
+        # identity: two None revisions must never vacuously match. `dependency_ci` itself, though,
+        # is a live-CI-style EVIDENCE RECORD, the same kind of object as validate_ci's `ci`,
+        # validate_code_review_coverage's `coverage`, and validate_build_provenance's
+        # `provenance` -- all three of those are read flat-only, deliberately, because an
+        # evidence record isn't a child artifact declaring its own canonical identity carrier.
+        # Routing it through the nested-first `_effective_source_revision` (as an earlier version
+        # of this check did) let a dependency-CI run genuinely scoped to the WRONG commit carry a
+        # nested assessment_target/target agreeing with the candidate and launder its (out-of-
+        # scope) success into this candidate's own CVE-currency evidence -- a real, fail-open gap.
         candidate_rev = _effective_source_revision(candidate) if candidate is not None else None
-        dependency_ci_rev = _effective_source_revision(dependency_ci)
+        dependency_ci_rev = dependency_ci.get("source_revision")
         scope_ok = candidate is None or (bool(candidate_rev) and dependency_ci_rev == candidate_rev)
         if (
             scope_ok

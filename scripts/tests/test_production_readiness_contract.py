@@ -2964,3 +2964,24 @@ def test_dispatch_child_dependency_upgrade_review_requires_all_three_fields() ->
     assert result.dispatched is False
     assert result.dimension_status == "UNKNOWN"
     assert incomplete.calls == 0
+
+
+# ---------------------------------------------------------------------------
+# Round 19 adversarial-review regression test
+# ---------------------------------------------------------------------------
+
+
+def test_dependency_gate_ci_scope_check_reads_evidence_record_flat_only() -> None:
+    # dependency_ci is an evidence record (the same kind of object as validate_ci's `ci`,
+    # validate_code_review_coverage's `coverage`, validate_build_provenance's `provenance`), not an
+    # identity-declaring child artifact -- its own revision must be read flat-only, matching those
+    # three siblings. A dependency-CI run genuinely scoped to a DIFFERENT commit must not be
+    # laundered into scope-matched just because it also carries a nested assessment_target/target
+    # that happens to agree with the candidate.
+    report = {"status": "PASS", "evidence_authorities": {"version_delta": {"repository"}}}
+    candidate = source_candidate("a" * 40)
+    dep_ci = dependency_ci_fixture(source_revision="z" * 40)
+    dep_ci["assessment_target"] = {"source_revision": "a" * 40}
+    result = pr.evaluate_dependency_gate(report, dependency_ci=dep_ci, candidate=candidate)
+    assert result.status == "UNKNOWN"
+    assert result.reason == "no_current_vulnerability_evidence"
