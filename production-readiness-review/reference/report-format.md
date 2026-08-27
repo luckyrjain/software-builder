@@ -67,10 +67,10 @@ UNKNOWN — never just the bare state.>
 
 | Dimension | Status | Notes |
 |-----------|--------|-------|
-| CI | PASS \| CONDITIONAL \| FAIL \| UNKNOWN | Required-check summary |
+| CI | PASS \| FAIL \| UNKNOWN | Required-check summary; no `CONDITIONAL` path is defined for this gate |
 | Code review (pr-review) | PASS \| CONDITIONAL \| FAIL \| UNKNOWN | Severity summary, posting always forbidden |
 | Build provenance | PASS \| FAIL \| UNKNOWN \| NOT_APPLICABLE | `<build_provenance_ref>` |
-| SCM policy | PASS \| CONDITIONAL \| FAIL \| UNKNOWN | Approvals/CODEOWNERS/thread summary |
+| SCM policy | PASS \| FAIL \| UNKNOWN | Approvals/CODEOWNERS/thread summary; no `CONDITIONAL` path is defined for this gate |
 | Change impact | PASS \| CONDITIONAL \| FAIL \| UNKNOWN | `coverage_status`, material unknowns |
 | Deployment risk | PASS \| CONDITIONAL \| FAIL \| UNKNOWN | Risk verdict, `deployment_confidence` |
 | <Each dispatched specialist> | PASS \| CONDITIONAL \| FAIL \| UNKNOWN \| NOT_APPLICABLE | One-line summary or dispatch-skip reason |

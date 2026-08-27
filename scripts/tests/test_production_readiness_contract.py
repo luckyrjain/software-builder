@@ -2735,3 +2735,127 @@ def test_summarize_required_passes_does_not_count_fail_or_unknown_dimensions() -
     # this count just because it's required; only genuine PASS dimensions count.
     dims = [dim("security", "PASS"), dim("api", "FAIL")]
     assert pr.summarize_required_passes(dims) == 1
+
+
+# ---------------------------------------------------------------------------
+# Round 17 adversarial-review regression tests
+# ---------------------------------------------------------------------------
+
+
+def test_effective_source_revision_falls_back_to_flat_when_nested_target_declares_other_fields() -> None:
+    # A nested assessment_target that legitimately declares OTHER fields (environment) without
+    # declaring any identity field must not shadow a real flat identity -- distinct from the
+    # already-correct "nested declares identity, flat is ignored" precedence.
+    candidate = {"source_revision": "sha1", "assessment_target": {"environment": "prod"}}
+    assert pr._effective_source_revision(candidate) == "sha1"
+    assert pr._has_minimum_candidate_identity(candidate) is True
+
+
+def test_has_minimum_candidate_identity_falls_back_for_mr_shape_when_nested_lacks_it() -> None:
+    candidate = {
+        "project": "acme/x",
+        "merge_request_iid": 5,
+        "head_sha": "a" * 40,
+        "assessment_target": {"environment": "prod"},
+    }
+    assert pr._has_minimum_candidate_identity(candidate) is True
+
+
+def test_validate_build_provenance_mr_shape_falls_back_to_flat_when_nested_lacks_it() -> None:
+    # Mirrors _has_minimum_candidate_identity's fallback -- validate_build_provenance's own
+    # is_mr_shaped probe must not treat a nested carrier that only declares environment as
+    # "not MR-shaped" when the flat candidate itself carries the full MR identity.
+    candidate = {
+        "project": "acme/x",
+        "merge_request_iid": 5,
+        "head_sha": "a" * 40,
+        "assessment_target": {"environment": "prod"},
+    }
+    result = pr.validate_build_provenance(candidate, None)
+    assert result["status"] == "NOT_APPLICABLE"
+
+
+def test_production_readiness_is_remote_mr_fence_falls_back_to_flat_mr_fields() -> None:
+    # The live-scm-read fence's is_remote_mr probe must not be defeated by a nested carrier that
+    # declares unrelated fields (environment) while the flat candidate is fully MR-shaped -- this
+    # was a fail-OPEN gap: a real remote MR could skip the mandatory scm_change_read requirement
+    # entirely and reach a verdict without ever consulting live SCM state.
+    candidate = {
+        "project": "acme/x",
+        "merge_request_iid": 5,
+        "head_sha": "a" * 40,
+        "assessment_target": {"environment": "prod"},
+    }
+    result = pr.production_readiness(candidate, scm_change_read=None, dimensions=[dim("ci", "PASS")])
+    assert result.verdict != "READY"
+    assert result.skill_result.status == "PARTIAL"
+
+
+def test_identity_mismatch_still_prefers_nested_identity_when_nested_declares_it() -> None:
+    # Regression guard alongside the fallback fixes above: when the nested carrier DOES declare its
+    # own identity, it must still win outright over a disagreeing flat field (the original,
+    # already-correct precedence this round's fix must not weaken).
+    candidate = {"source_revision": "a" * 40}
+    child = {
+        "source_revision": "b" * 40,
+        "assessment_target": {"source_revision": "c" * 40},
+        "status": "PASS",
+        "evidence_authorities": {"x": {"repository"}},
+    }
+    result = pr.accept_child_result(child, candidate=candidate)
+    assert result.status == "UNKNOWN"
+    assert result.reason == "target_mismatch"
+
+
+def test_aggregate_report_carries_the_real_required_passes_count() -> None:
+    # No prior test read report["required_passes"] -- only the standalone summarize_required_passes
+    # function was exercised directly.
+    dims = [dim("ci", "PASS"), dim("security", "PASS"), dim("api", "FAIL")]
+    report = pr.aggregate_report(dims)
+    assert report["required_passes"] == 2
+
+
+def test_aggregate_report_dimension_statuses_carries_every_dimension() -> None:
+    # No prior test checked that dimension_statuses is complete -- only that each PRESENT dim's own
+    # applicability field was correct, never that none were silently dropped.
+    dims = [dim("ci", "PASS"), pr.Dimension("recovery", "NOT_APPLICABLE", applicability="NOT_APPLICABLE")]
+    report = pr.aggregate_report(dims)
+    assert list(report["dimension_statuses"]) == dims
+
+
+def test_aggregate_readiness_dimensions_field_carries_every_input_dimension() -> None:
+    # ReadinessResult.dimensions must carry every dimension passed in, not just the required-and-
+    # unresolved subset used internally to compute skill_result_status/evidence_status.
+    dims = [dim("ci", "PASS"), pr.Dimension("recovery", "NOT_APPLICABLE", applicability="NOT_APPLICABLE")]
+    result = pr.aggregate_readiness(dims)
+    assert list(result.dimensions) == dims
+
+
+def test_is_valid_waiver_rejects_missing_accepted_by_even_with_evidence_ref() -> None:
+    # The combined OR condition's two halves must each independently invalidate a waiver -- the
+    # only prior invalid-waiver test blanked both fields together, unable to isolate either half.
+    assert pr._is_valid_waiver({"accepted_by": "", "evidence_ref": "ticket:999"}) is False
+
+
+def test_is_valid_waiver_rejects_missing_evidence_ref_even_with_accepted_by() -> None:
+    assert pr._is_valid_waiver({"accepted_by": "release-owner", "evidence_ref": ""}) is False
+
+
+def test_assessment_context_trust_recognizes_trusted_runtime_and_repository_acquisition() -> None:
+    # Every existing test used only "caller_supplied" or "authoritative_host" as the acquisition
+    # value -- the other two STRONG_AUTHORITIES members were never exercised, leaving
+    # _is_strong_authority's full membership set unpinned here.
+    ctx = assessment_context_fixture(input_provenance={"ci": {"authority": "repository"}})
+    trust = pr.classify_assessment_context_trust(ctx, acquisition="trusted_runtime")
+    assert trust.effective_authority("ci") == "repository"
+
+    trust2 = pr.classify_assessment_context_trust(ctx, acquisition="repository")
+    assert trust2.effective_authority("ci") == "repository"
+
+
+def test_dispatch_child_result_carries_the_actual_child_payload() -> None:
+    # DispatchResult.result must be the real child payload, not silently discarded -- no prior test
+    # read this field, only .dispatched/.dimension_status.
+    payload = {"status": "PASS", "evidence_authorities": {"x": {"repository"}}, "extra_field": "present"}
+    result = pr.dispatch_child("security-review", {"review_target": "code"}, lambda n, i: payload)
+    assert result.result == payload

@@ -363,24 +363,45 @@ def _effective_source_revision(obj: Mapping[str, Any]) -> Optional[str]:
     "current" identities in the same run. `_has_minimum_candidate_identity` accepts a
     project+merge_request_iid+head_sha candidate as a first-class shape carrying no
     `source_revision` at all, so `head_sha` and `head_revision_or_digest` are both checked too.
+
+    Falls back to `obj`'s own flat fields when the nested target exists but simply doesn't declare
+    any identity field itself (e.g. a carrier that only declares `environment`) -- the same
+    per-field nested-then-flat precedence `_effective_environment` already gives `environment`.
+    Without this, a nested carrier declaring unrelated fields would shadow a real flat identity
+    entirely, wrongly reporting no identity at all for a fully-identified candidate.
+
+    Coerces a non-Mapping `obj` to `{}` up front -- some callers (e.g. `_identity_mismatch`'s
+    `expected` side, sourced from a caller-supplied `candidate`) may not have pre-validated it.
     """
-    target = _target_of(obj)
-    if target is None:
-        target = obj
-    return target.get("source_revision") or target.get("head_sha") or target.get("head_revision_or_digest")
+    obj = _as_mapping(obj)
+    target = _target_of(obj) or {}
+    revision = target.get("source_revision") or target.get("head_sha") or target.get("head_revision_or_digest")
+    if revision is None:
+        revision = obj.get("source_revision") or obj.get("head_sha") or obj.get("head_revision_or_digest")
+    return revision
+
+
+def _effective_head_digest(obj: Mapping[str, Any]) -> Optional[str]:
+    """Best-effort `head_revision_or_digest` read, nested-first with the same per-field flat
+    fallback `_effective_source_revision` gives the sibling identity fields.
+    """
+    obj = _as_mapping(obj)
+    target = _target_of(obj) or {}
+    digest = target.get("head_revision_or_digest")
+    if digest is None:
+        digest = obj.get("head_revision_or_digest")
+    return digest
 
 
 def _identity_mismatch(child: Mapping[str, Any], expected: Mapping[str, Any]) -> bool:
-    child_target = _target_of(child) or {}
-    child_rev = _effective_source_revision(child_target)
-    child_head = child_target.get("head_revision_or_digest") or child_rev
+    child_rev = _effective_source_revision(child)
+    child_head = _effective_head_digest(child) or child_rev
     # The expected/candidate side gets the same nested-first resolution as the child side: if it
     # names its identity via a nested assessment_target/target (rather than flat top-level
     # fields), that nested value is authoritative -- a flat field alongside it must never be
     # silently preferred over (or allowed to shadow) the candidate's own declared canonical target.
-    expected_target = _target_of(expected) or {}
-    expected_rev = _effective_source_revision(expected_target)
-    expected_head = expected_target.get("head_revision_or_digest") or expected_rev
+    expected_rev = _effective_source_revision(expected)
+    expected_head = _effective_head_digest(expected) or expected_rev
     if not expected_rev and not expected_head:
         # The expected side (an empty/unresolved candidate) names no identity at all -- there is
         # nothing to bind the child's evidence to, so this is unknown scope, not a vacuous match.
@@ -605,8 +626,9 @@ def validate_build_provenance(
     # `is not None` alone would accept junk like head_sha="" or merge_request_iid=0 with no
     # project at all as "MR-shaped."
     mr_probe = _target_of(candidate) or candidate
-    is_mr_shaped = bool(
-        mr_probe.get("project") and mr_probe.get("merge_request_iid") is not None and mr_probe.get("head_sha")
+    is_mr_shaped = any(
+        bool(probe.get("project") and probe.get("merge_request_iid") is not None and probe.get("head_sha"))
+        for probe in (mr_probe, candidate)
     )
     if "head_revision_or_digest" in mr_probe:
         # Nested-first, same as is_mr_shaped just above: a flat top-level field must never be
@@ -1266,12 +1288,16 @@ def _has_minimum_candidate_identity(candidate: Mapping[str, Any]) -> bool:
         return False
     # Nested-first, matching _target_of/_effective_source_revision: a candidate whose identity
     # lives entirely in its own declared assessment_target must not be BLOCKED at the entry gate
-    # just because it carries no flat top-level identity field.
+    # just because it carries no flat top-level identity field. Falls back to the flat candidate
+    # itself when the nested target doesn't declare either identity shape -- a nested carrier that
+    # legitimately declares OTHER fields (e.g. `environment`) without declaring identity must not
+    # shadow a real flat identity and get treated as "no identity at all."
     target = _target_of(candidate) or candidate
-    if target.get("source_revision") or target.get("head_revision_or_digest"):
-        return True
-    if target.get("project") and target.get("merge_request_iid") is not None and target.get("head_sha"):
-        return True
+    for probe in (target, candidate):
+        if probe.get("source_revision") or probe.get("head_revision_or_digest"):
+            return True
+        if probe.get("project") and probe.get("merge_request_iid") is not None and probe.get("head_sha"):
+            return True
     return False
 
 
@@ -1295,8 +1321,9 @@ def production_readiness(
     # expressed through the canonical assessment_target carrier must not skip this fence just
     # because these fields aren't also duplicated at the candidate's own flat top level.
     mr_probe = _target_of(candidate) or candidate
-    is_remote_mr = bool(
-        mr_probe.get("project") or mr_probe.get("merge_request_iid") is not None or mr_probe.get("head_sha")
+    is_remote_mr = any(
+        bool(probe.get("project") or probe.get("merge_request_iid") is not None or probe.get("head_sha"))
+        for probe in (mr_probe, candidate)
     )
     if is_remote_mr and scm_change_read is None:
         return ProductionReadinessResult(
