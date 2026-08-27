@@ -198,13 +198,13 @@ class Dimension:
             object.__setattr__(
                 self, "evidence_status", "UNKNOWN" if self.status == "UNKNOWN" else "OBSERVED"
             )
-        elif self.status in ("PASS", "CONDITIONAL") and self.evidence_status == "UNKNOWN":
-            # A self-contradictory artifact: aggregate_verdict would fold this into a READY/
-            # CONDITIONAL verdict while aggregate_readiness's own envelope would simultaneously
-            # mark the evidence UNKNOWN -- per evidence-authority-policy.md rule 3, a dimension
-            # with no authoritative evidence trace is UNKNOWN, not PASS and not CONDITIONAL either
-            # (CONDITIONAL implies some authoritative signal exists, and ranks below UNKNOWN in
-            # the verdict ladder, so it is strictly the more favorable of the two).
+        elif self.status in ("PASS", "CONDITIONAL", "NOT_APPLICABLE") and self.evidence_status == "UNKNOWN":
+            # A self-contradictory artifact: aggregate_verdict would fold PASS/CONDITIONAL into a
+            # READY/CONDITIONAL verdict, and NOT_APPLICABLE deletes the dimension from the
+            # required set entirely (an even MORE favorable outcome), while aggregate_readiness's
+            # own envelope would simultaneously mark the evidence UNKNOWN -- per accept_child_
+            # result's own precedent (claiming inapplicability must never require less authority
+            # than claiming PASS would), NOT_APPLICABLE is included alongside PASS/CONDITIONAL.
             raise ValueError(
                 f"A {self.status} dimension cannot declare evidence_status='UNKNOWN'"
             )
@@ -353,8 +353,13 @@ def _identity_mismatch(child: Mapping[str, Any], expected: Mapping[str, Any]) ->
     child_target = _target_of(child) or {}
     child_rev = _effective_source_revision(child_target)
     child_head = child_target.get("head_revision_or_digest") or child_rev
-    expected_rev = _effective_source_revision(expected)
-    expected_head = expected.get("head_revision_or_digest") or expected_rev
+    # The expected/candidate side gets the same nested-first resolution as the child side: if it
+    # names its identity via a nested assessment_target/target (rather than flat top-level
+    # fields), that nested value is authoritative -- a flat field alongside it must never be
+    # silently preferred over (or allowed to shadow) the candidate's own declared canonical target.
+    expected_target = _target_of(expected) or {}
+    expected_rev = _effective_source_revision(expected_target)
+    expected_head = expected_target.get("head_revision_or_digest") or expected_rev
     if not expected_rev and not expected_head:
         # The expected side (an empty/unresolved candidate) names no identity at all -- there is
         # nothing to bind the child's evidence to, so this is unknown scope, not a vacuous match.
@@ -481,9 +486,16 @@ def resolve_prerequisite(
         # coverage_status is a change_impact_report-specific field (composition_contracts.yaml);
         # other prerequisite artifacts (e.g. deployment_risk_report) have no such field and must
         # not be required to carry it.
-        if artifact_type == "change_impact_report" and supplied.get("coverage_status") != "COMPLETE":
-            return {"status": "UNKNOWN", "mode": None}
-        return {"status": accepted.status, "mode": "REUSE"}
+        stale = artifact_type == "change_impact_report" and supplied.get("coverage_status") != "COMPLETE"
+        if not stale and accepted.status in ("PASS", "FAIL", "CONDITIONAL"):
+            # A definitive PASS/FAIL/CONDITIONAL the supplied artifact reached is real,
+            # standalone evidence and must not be discarded just because a refresh path exists.
+            return {"status": accepted.status, "mode": "REUSE"}
+        # Falls through: the supplied artifact is stale (incomplete coverage), or all it yielded
+        # was UNKNOWN (identity mismatch, untrusted producer, or weak-authority claim) -- per
+        # collect-evidence.md, that is exactly the case that should attempt a fresh invocation
+        # when one is available, not a dead end reported as UNKNOWN with an unused refresh path
+        # sitting right there.
 
     if invoke_spy is None or not _mandatory_inputs_available(artifact_type, mandatory_inputs):
         return {"status": "UNKNOWN", "mode": None}
@@ -520,18 +532,18 @@ def validate_ci(candidate: Mapping[str, Any], ci: Optional[Mapping[str, Any]]) -
 
 
 def validate_code_review_coverage(
-    coverage: Optional[Mapping[str, Any]], candidate: Optional[Mapping[str, Any]] = None
+    coverage: Optional[Mapping[str, Any]], candidate: Mapping[str, Any]
 ) -> MutableMapping[str, Any]:
     if coverage is None:
         return {"status": "UNKNOWN", "reason": "missing_coverage_evidence"}
-    if candidate is not None:
-        # Unlike validate_ci's mandatory scope fence, this scope check only applies when a
-        # candidate is supplied, matching resolve_prerequisite's own "no candidate to bind to"
-        # convention -- but when one IS supplied, coverage computed for a different revision
-        # (e.g. the pre-force-push head) must never validate as this candidate's own coverage.
-        candidate_rev = _effective_source_revision(candidate)
-        if not candidate_rev or coverage.get("candidate_source_revision") != candidate_rev:
-            return {"status": "UNKNOWN", "reason": "scope_mismatch"}
+    # Mandatory scope fence, matching validate_ci/validate_build_provenance's own contract: code
+    # review evidence computed for a different revision (e.g. the pre-force-push head) must never
+    # validate as this candidate's own coverage. Making `candidate` optional here (as an earlier
+    # fix did) left the fence opt-in and unused by every real caller -- exactly the same class of
+    # gap round 7 found and fixed for _target_of.
+    candidate_rev = _effective_source_revision(candidate)
+    if not candidate_rev or coverage.get("candidate_source_revision") != candidate_rev:
+        return {"status": "UNKNOWN", "reason": "scope_mismatch"}
     if (
         coverage.get("status") == "COMPLETE"
         and not coverage.get("uncovered_change_refs")
@@ -744,6 +756,9 @@ def evaluate_ownership(owner: Mapping[str, Any], criticality: str = "unknown") -
     return GateResult("CONDITIONAL", "caller_only_owner")
 
 
+_ROLLBACK_REQUIRED_FIELDS = frozenset({"trigger", "action", "actor", "decision_window_minutes"})
+
+
 def evaluate_rollback_abort(plan: Mapping[str, Any], criticality: str = "unknown") -> GateResult:
     authority = plan.get("authority", "caller")
     if plan.get("unsafe_irreversible_no_recovery"):
@@ -754,6 +769,13 @@ def evaluate_rollback_abort(plan: Mapping[str, Any], criticality: str = "unknown
             return GateResult("FAIL", "unsafe_irreversible")
         return GateResult("UNKNOWN", "unsafe_claim_not_authoritative")
 
+    # Symmetric with the sibling post-deploy/ownership/recovery gates: a "complete" flag alone is
+    # not evidence of a concrete plan -- operational-gates.md defines this dimension as "a
+    # concrete, verified way to stop or reverse this change," so the plan's own content fields
+    # must actually be present. `decision_window_minutes` may legitimately be 0 (an immediate
+    # decision window), so presence is checked via `is None`, not truthiness.
+    if not plan or any(plan.get(field) is None for field in _ROLLBACK_REQUIRED_FIELDS):
+        return GateResult("UNKNOWN", "incomplete_plan")
     if not _is_true(plan.get("complete")):
         return GateResult("UNKNOWN", "incomplete_plan")
 
@@ -835,12 +857,10 @@ def evaluate_capacity_gate(report: Mapping[str, Any], criticality: str = "unknow
     status = report.get("status", "UNKNOWN")
     if status not in DIMENSION_STATUSES:
         status = "UNKNOWN"
-    if status in ("FAIL", "UNKNOWN", "NOT_APPLICABLE"):
-        # An already-negative, already-unresolved, or already-inapplicable child status is never
-        # relabeled by the capacity-specific authority check below -- that check exists to keep an
-        # under-evidenced PASS/CONDITIONAL from being trusted, not to re-score a status the child
-        # already reported. report-format.md is explicit that a child's own verdict is surfaced
-        # as-is, never re-labeled or re-scored.
+    if status in ("FAIL", "UNKNOWN"):
+        # An already-negative or already-unresolved child status is never relabeled by the
+        # capacity-specific authority check below -- that check exists to keep an under-evidenced
+        # PASS/CONDITIONAL from being trusted, not to re-score a status the child already reported.
         return GateResult(status)
 
     evidence_authorities = _as_authority_map(report.get("evidence_authorities"))
@@ -848,6 +868,15 @@ def evaluate_capacity_gate(report: Mapping[str, Any], criticality: str = "unknow
     # third weakly-authoritative entry (e.g. "headroom_model": {"caller"}) must not be ignored
     # just because the two named keys happen to be strong.
     has_required_keys = "demand" in evidence_authorities and "baseline" in evidence_authorities
+    if status == "NOT_APPLICABLE":
+        # Claiming inapplicability deletes this dimension from the required set entirely -- the
+        # MORE favorable outcome than PASS -- so it must never require LESS authority than PASS
+        # would, matching accept_child_result's own rule. A caller-only "doesn't apply" claim is
+        # surfaced as-is in the sense that it's never re-scored to CONDITIONAL, but it is not
+        # exempt from the authority bar every other status here is held to.
+        if has_required_keys and _minimum_authority_met(evidence_authorities):
+            return GateResult("NOT_APPLICABLE")
+        return GateResult("UNKNOWN", "not_applicable_claim_not_authoritative")
     if has_required_keys and _minimum_authority_met(evidence_authorities):
         return GateResult(status)
     if _tier_requires_strict_unknown(criticality):
@@ -866,16 +895,24 @@ def evaluate_dependency_gate(
     status = report.get("status", "UNKNOWN")
     if status not in DIMENSION_STATUSES:
         status = "UNKNOWN"
-    if status in ("FAIL", "UNKNOWN", "NOT_APPLICABLE"):
-        # An already-negative, already-unresolved, or already-inapplicable child status is never
-        # relabeled by a substitute CVE-currency check below -- a substitute cures missing/weak
-        # CVE evidence, it does not re-score a status the child already reported.
+    if status in ("FAIL", "UNKNOWN"):
+        # An already-negative or already-unresolved child status is never relabeled by a
+        # substitute CVE-currency check below -- a substitute cures missing/weak CVE evidence, it
+        # does not re-score a status the child already reported.
         return GateResult(status)
 
     evidence_authorities = _as_authority_map(report.get("evidence_authorities"))
     # Same all-entries rule as the capacity gate above: a weak entry elsewhere in the map (e.g.
     # "version_delta": {"caller"}) must not be ignored just because "cve" itself is strong.
     has_cve_key = "cve" in evidence_authorities
+    if status == "NOT_APPLICABLE":
+        # Same rule as the capacity gate: claiming inapplicability must never require LESS
+        # authority than PASS would. A substitute (advisory_evidence/dependency_ci) proves CVE
+        # currency specifically -- it doesn't bear on whether "no vulnerability check applies" is
+        # itself a trustworthy claim, so it is not consulted here.
+        if has_cve_key and _minimum_authority_met(evidence_authorities):
+            return GateResult("NOT_APPLICABLE")
+        return GateResult("UNKNOWN", "not_applicable_claim_not_authoritative")
     if has_cve_key and _minimum_authority_met(evidence_authorities):
         return GateResult(status)
 
@@ -1000,6 +1037,7 @@ def dispatch_child(
     inputs: Optional[Mapping[str, Any]] = None,
     invoke: Optional[Callable[[str, Mapping[str, Any]], Optional[Mapping[str, Any]]]] = None,
     expected_target: Optional[Mapping[str, Any]] = None,
+    candidate: Optional[Mapping[str, Any]] = None,
 ) -> DispatchResult:
     inputs = inputs or {}
     if not _child_mandatory_inputs_satisfied(child_name, inputs):
@@ -1014,9 +1052,15 @@ def dispatch_child(
 
     # A child's result must be bound to the identity this dispatch was actually for -- otherwise
     # a PASS reported for a different commit/environment is recorded as this candidate's PASS.
-    # pr-review's own mandatory `expected_head_sha` input is exactly that declared identity, so
-    # it binds automatically even when the caller doesn't separately pass expected_target.
+    # Precedence: an explicit expected_target always wins; otherwise fall back to the candidate
+    # under assessment (this binds EVERY child, not just pr-review -- the old code only had an
+    # automatic fallback for pr-review's own mandatory expected_head_sha input, leaving every
+    # other child unbound unless the caller remembered to pass expected_target manually);
+    # pr-review's expected_head_sha remains a last-resort fallback for a caller that supplies
+    # neither expected_target nor candidate.
     target_ref = expected_target
+    if target_ref is None:
+        target_ref = candidate
     if target_ref is None and inputs.get("expected_head_sha"):
         target_ref = {"source_revision": inputs["expected_head_sha"]}
 

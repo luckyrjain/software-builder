@@ -314,7 +314,7 @@ def test_build_provenance_wrong_source_is_unknown() -> None:
 
 def test_release_review_partial_coverage_is_unknown() -> None:
     coverage = code_review_coverage(status="PARTIAL", uncovered_change_refs=["pr:44"])
-    assert pr.validate_code_review_coverage(coverage)["status"] == "UNKNOWN"
+    assert pr.validate_code_review_coverage(coverage, source_candidate())["status"] == "UNKNOWN"
 
 
 def test_required_attestation_missing_is_unknown() -> None:
@@ -781,7 +781,7 @@ def test_scm_policy_null_blocking_threads_is_unknown_and_does_not_crash() -> Non
 
 def test_code_review_coverage_caller_acquisition_cannot_pass() -> None:
     coverage = code_review_coverage(status="COMPLETE", uncovered_change_refs=[], acquisition="caller")
-    assert pr.validate_code_review_coverage(coverage)["status"] == "UNKNOWN"
+    assert pr.validate_code_review_coverage(coverage, source_candidate())["status"] == "UNKNOWN"
 
 
 def test_identity_mismatch_when_child_supplies_no_revision_at_all() -> None:
@@ -1089,9 +1089,12 @@ def test_identity_mismatch_when_expected_target_names_no_identity_at_all() -> No
     # child report for ANY commit is accepted as evidence for a candidate that was never resolved.
     hostile = trusted_child_result("change_impact_report", source_revision="d" * 40, coverage_status="COMPLETE")
     assert pr.accept_child_result(hostile, candidate={}).status == "UNKNOWN"
+    # A rejected (identity-mismatched) supplied artifact falls through to attempt a refresh
+    # (round-8 fix); with no invoke_spy available here, that correctly lands on mode=None rather
+    # than reporting the rejected artifact as if it were successfully reused.
     assert pr.resolve_prerequisite("change_impact_report", supplied=hostile, candidate={}) == {
         "status": "UNKNOWN",
-        "mode": "REUSE",
+        "mode": None,
     }
 
 
@@ -1397,7 +1400,7 @@ def test_validate_ci_happy_path_is_pass() -> None:
 
 
 def test_validate_code_review_coverage_happy_path_is_pass() -> None:
-    assert pr.validate_code_review_coverage(code_review_coverage()) == {"status": "PASS"}
+    assert pr.validate_code_review_coverage(code_review_coverage(), source_candidate()) == {"status": "PASS"}
 
 
 def test_validate_build_provenance_happy_path_is_pass() -> None:
@@ -1536,11 +1539,32 @@ def test_dependency_gate_cve_only_weak_entry_can_still_be_cured_by_a_substitute(
     assert pr.evaluate_dependency_gate(report, advisory_evidence=strong_advisory).status == "PASS"
 
 
-def test_capacity_and_dependency_gates_never_relabel_a_child_reported_not_applicable() -> None:
-    report = {"status": "NOT_APPLICABLE", "producer_trusted": True}
-    assert pr.evaluate_capacity_gate(report, criticality="tier0").status == "NOT_APPLICABLE"
-    assert pr.evaluate_capacity_gate(report, criticality="tier3").status == "NOT_APPLICABLE"
-    assert pr.evaluate_dependency_gate(report).status == "NOT_APPLICABLE"
+def test_capacity_and_dependency_gates_never_relabel_a_child_reported_not_applicable_status() -> None:
+    # A child's own NOT_APPLICABLE is never re-scored to FAIL/CONDITIONAL -- but (per the
+    # authority-gating fix below) it still isn't exempt from the authority bar PASS is held to.
+    strong_capacity = {
+        "status": "NOT_APPLICABLE",
+        "producer_trusted": True,
+        "evidence_authorities": {"demand": {"repository"}, "baseline": {"repository"}},
+    }
+    assert pr.evaluate_capacity_gate(strong_capacity, criticality="tier0").status == "NOT_APPLICABLE"
+    assert pr.evaluate_capacity_gate(strong_capacity, criticality="tier3").status == "NOT_APPLICABLE"
+    strong_dependency = {
+        "status": "NOT_APPLICABLE",
+        "producer_trusted": True,
+        "evidence_authorities": {"cve": {"repository"}},
+    }
+    assert pr.evaluate_dependency_gate(strong_dependency).status == "NOT_APPLICABLE"
+
+
+def test_capacity_and_dependency_gates_reject_caller_only_not_applicable_claim() -> None:
+    # A caller-only "this doesn't apply" claim deletes the dimension from the required set --
+    # strictly MORE favorable than a caller-only PASS -- so it must require the SAME authority
+    # PASS would, not less. This holds at every tier: there is no "conditionally inapplicable."
+    weak_report = {"status": "NOT_APPLICABLE", "producer_trusted": True}
+    assert pr.evaluate_capacity_gate(weak_report, criticality="tier0").status == "UNKNOWN"
+    assert pr.evaluate_capacity_gate(weak_report, criticality="tier3").status == "UNKNOWN"
+    assert pr.evaluate_dependency_gate(weak_report).status == "UNKNOWN"
 
 
 def test_assessment_context_trust_degrades_on_malformed_nested_provenance() -> None:
@@ -1741,12 +1765,17 @@ def test_authority_membership_checks_degrade_on_unhashable_value_without_crashin
 def test_not_applicable_claim_requires_the_same_authority_pass_would_need() -> None:
     # Claiming inapplicability (which deletes the dimension from the required set) must never
     # require LESS authority than claiming PASS would -- both should degrade to UNKNOWN together.
-    candidate = source_candidate("a" * 40)
+    # Candidate and artifact environments must match ("prod"/"prod"), or the env-sensitivity fence
+    # rejects both before accept_child_result's own authority check is ever reached, making this
+    # vacuous.
+    candidate = source_candidate("a" * 40, environment="prod")
     weak_artifact = {"source_revision": "a" * 40, "environment": "prod", "evidence_authorities": {}}
     pass_result = pr.match_dimension_evidence("capacity", candidate=candidate, artifact=dict(weak_artifact, status="PASS"))
     na_result = pr.match_dimension_evidence("capacity", candidate=candidate, artifact=dict(weak_artifact, status="NOT_APPLICABLE"))
     assert pass_result.status == "UNKNOWN"
+    assert pass_result.reason != "environment_mismatch"
     assert na_result.status == "UNKNOWN"
+    assert na_result.reason != "environment_mismatch"
 
 
 def test_dimension_rejects_conditional_with_unknown_evidence_status() -> None:
@@ -1777,3 +1806,169 @@ def test_aggregate_report_non_iterable_waivers_does_not_crash() -> None:
     result = pr.aggregate_report([pr.Dimension("ci", "FAIL")], waivers=5)
     assert result["waivers"] == []
     assert result["verdict"] == "NOT_READY"
+
+
+# ---------------------------------------------------------------------------
+# Round 8 adversarial-review regression tests
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_prerequisite_refreshes_a_rejected_supplied_artifact() -> None:
+    candidate = source_candidate("a" * 40)
+    fresh = trusted_impact(source_revision="a" * 40, coverage_status="COMPLETE")
+    rejected_cases = {
+        "stale revision": trusted_impact(source_revision="b" * 40, coverage_status="COMPLETE"),
+        "incomplete coverage": trusted_impact(source_revision="a" * 40, coverage_status="PARTIAL"),
+        "caller-only authority": caller_supplied_impact(source_revision="a" * 40, coverage_status="COMPLETE"),
+    }
+    for label, supplied in rejected_cases.items():
+        invoked = spy(return_value=fresh)
+        result = pr.resolve_prerequisite(
+            "change_impact_report",
+            supplied=supplied,
+            candidate=candidate,
+            invoke_spy=invoked,
+            mandatory_inputs={"changed_paths": ["a.py"]},
+        )
+        assert result == {"status": "PASS", "mode": "REFRESH"}, label
+        assert invoked.calls == 1, label
+
+
+def test_resolve_prerequisite_reuses_a_genuine_fail_without_refreshing() -> None:
+    candidate = source_candidate("a" * 40)
+    failed = trusted_impact(source_revision="a" * 40, coverage_status="COMPLETE", status="FAIL")
+    invoked = spy(return_value=trusted_impact(source_revision="a" * 40, coverage_status="COMPLETE"))
+    result = pr.resolve_prerequisite(
+        "change_impact_report", supplied=failed, candidate=candidate, invoke_spy=invoked
+    )
+    assert result == {"status": "FAIL", "mode": "REUSE"}
+    assert invoked.calls == 0
+
+
+def test_evaluate_rollback_abort_requires_concrete_plan_content() -> None:
+    assert pr.evaluate_rollback_abort({"authority": "repository", "complete": True}, "tier0").status == "UNKNOWN"
+    empty_fields = rollback_fixture(authority="repository", complete=True, trigger=None, action=None, actor=None, decision_window_minutes=None)
+    assert pr.evaluate_rollback_abort(empty_fields, "tier0").status == "UNKNOWN"
+
+
+def test_evaluate_rollback_abort_allows_a_zero_decision_window() -> None:
+    plan = rollback_fixture(authority="repository", complete=True, decision_window_minutes=0)
+    assert pr.evaluate_rollback_abort(plan, "tier0").status == "PASS"
+
+
+def test_dispatch_child_binds_every_child_to_a_supplied_candidate_not_just_pr_review() -> None:
+    foreign = {"assessment_target": {"source_revision": "deadbeef"}, "status": "PASS", "evidence_authorities": {"r": {"repository"}}}
+    candidate = source_candidate("a" * 40)
+    result = pr.dispatch_child("security-review", {"review_target": "x"}, lambda n, i: foreign, candidate=candidate)
+    assert result.dimension_status == "UNKNOWN"
+
+
+def test_identity_mismatch_resolves_expected_side_via_nested_assessment_target() -> None:
+    good = "a" * 40
+    child = {"assessment_target": {"source_revision": good}, "status": "PASS", "evidence_authorities": {"r": {"repository"}}}
+    nested_expected = {"assessment_target": {"source_revision": good}}
+    assert pr.accept_child_result(child, expected_target=nested_expected).status == "PASS"
+
+
+def test_identity_mismatch_prefers_candidates_own_nested_target_over_its_flat_field() -> None:
+    good = "a" * 40
+    evil = "e" * 40
+    child = {"assessment_target": {"source_revision": good}, "status": "PASS", "evidence_authorities": {"r": {"repository"}}}
+    candidate = {"source_revision": good, "assessment_target": {"source_revision": evil}}
+    assert pr.accept_child_result(child, candidate=candidate).status == "UNKNOWN"
+
+
+def test_dimension_rejects_not_applicable_with_unknown_evidence_status() -> None:
+    try:
+        pr.Dimension("security", "NOT_APPLICABLE", evidence_status="UNKNOWN")
+        assert False, "expected ValueError"
+    except ValueError:
+        pass
+
+
+def test_validate_code_review_coverage_requires_a_candidate() -> None:
+    import inspect
+
+    sig = inspect.signature(pr.validate_code_review_coverage)
+    assert sig.parameters["candidate"].default is inspect.Parameter.empty
+
+
+def test_identity_mismatch_child_side_rejects_nested_source_revision_disagreement_alone() -> None:
+    # Isolates the child-side _target_of hardening from the head_revision_or_digest comparison --
+    # the nested assessment_target disagrees on source_revision only, with no head field at all.
+    good = "a" * 40
+    other = "9" * 40
+    child = {
+        "status": "PASS",
+        "source_revision": good,
+        "assessment_target": {"source_revision": other},
+        "evidence_authorities": {"c": {"repository"}},
+    }
+    candidate = {"repo": "r", "source_revision": good}
+    assert pr.accept_child_result(child, candidate=candidate).status == "UNKNOWN"
+
+
+def test_dependency_gate_required_flag_alone_non_boolean_is_unknown() -> None:
+    report = {"status": "PASS", "evidence_authorities": {"cve": {"caller"}}}
+    dep_ci = {
+        "required": "false",
+        "scope_covers_changed_manifest": True,
+        "conclusion": "success",
+        "acquisition": "authoritative_host",
+        "source_revision": "a" * 40,
+    }
+    result = pr.evaluate_dependency_gate(report, dependency_ci=dep_ci, candidate=source_candidate("a" * 40))
+    assert result.status == "UNKNOWN"
+
+
+def test_dependency_gate_scope_covers_changed_manifest_alone_non_boolean_is_unknown() -> None:
+    report = {"status": "PASS", "evidence_authorities": {"cve": {"caller"}}}
+    dep_ci = {
+        "required": True,
+        "scope_covers_changed_manifest": "no",
+        "conclusion": "success",
+        "acquisition": "authoritative_host",
+        "source_revision": "a" * 40,
+    }
+    result = pr.evaluate_dependency_gate(report, dependency_ci=dep_ci, candidate=source_candidate("a" * 40))
+    assert result.status == "UNKNOWN"
+
+
+def test_capacity_gate_producer_trusted_non_boolean_string_is_never_read_as_trusted() -> None:
+    report = {
+        "status": "PASS",
+        "producer_trusted": "false",
+        "evidence_authorities": {"demand": {"repository"}, "baseline": {"repository"}},
+    }
+    assert pr.evaluate_capacity_gate(report, criticality="tier0").status == "UNKNOWN"
+
+
+def test_dependency_gate_producer_trusted_non_boolean_string_is_never_read_as_trusted() -> None:
+    report = {"status": "PASS", "producer_trusted": "false", "evidence_authorities": {"cve": {"repository"}}}
+    assert pr.evaluate_dependency_gate(report).status == "UNKNOWN"
+
+
+def test_dependency_gate_ci_scope_check_rejects_when_neither_side_names_an_identity() -> None:
+    # Two None revisions must never vacuously match -- both candidate and dependency_ci name no
+    # identity at all.
+    report = {"status": "PASS", "evidence_authorities": {"cve": {"caller"}}}
+    dep_ci = {
+        "required": True,
+        "scope_covers_changed_manifest": True,
+        "conclusion": "success",
+        "acquisition": "authoritative_host",
+    }
+    candidate_with_no_revision = {"repo": "acme/checkout"}
+    result = pr.evaluate_dependency_gate(report, dependency_ci=dep_ci, candidate=candidate_with_no_revision)
+    assert result.status == "UNKNOWN"
+
+
+def test_validate_code_review_coverage_unhashable_acquisition_does_not_crash() -> None:
+    coverage = code_review_coverage(acquisition=["authoritative_host"])
+    result = pr.validate_code_review_coverage(coverage, source_candidate())
+    assert result["status"] == "UNKNOWN"
+
+
+def test_ownership_unowned_branch_unhashable_authority_does_not_crash() -> None:
+    result = pr.evaluate_ownership({"unowned": True, "owner_authority": ["authoritative_host"]})
+    assert result.status == "UNKNOWN"

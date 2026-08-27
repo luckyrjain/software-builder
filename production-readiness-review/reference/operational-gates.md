@@ -18,6 +18,12 @@ environment-sensitive: evidence collected for one environment (e.g. a staging on
 must not silently stand in for another (e.g. production) — a declared-environment conflict between
 the candidate and the evidence downgrades the dimension to `UNKNOWN`, never `PASS`.
 
+Every completeness/affirmative flag these gates read (`complete`, `reversible`, and the
+sibling gates' `required`/`scope_covers_changed_manifest`/`bypass_approved`/`codeowners_satisfied`)
+is read as a strict boolean: only the literal `true` counts as an affirmative signal. A truthy
+non-boolean value (a string like `"false"`, a nonzero count) is never treated as confirming
+anything — it degrades the same way an absent field does, never the way a confirmed `true` does.
+
 ## Tier-sensitive rules
 
 Apply `criticality` (`tier0`/`tier1`/`tier2`/`tier3`/`unknown`, resolved in Inputs) to every one of the

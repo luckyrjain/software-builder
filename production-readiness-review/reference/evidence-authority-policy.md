@@ -41,8 +41,11 @@ cannot alone set an operational gate `PASS` (see
 2. In Aggregate, a dimension is `PASS` only when its decisive evidence traces to `repository`,
    `authoritative_host`, or `trusted_runtime`.
 3. A dimension whose only supporting evidence is `caller` or `model_knowledge` is `UNKNOWN` — not
-   `FAIL` (nothing proven wrong) and not `CONDITIONAL` (that would imply some authoritative signal
-   exists, just an imperfect one).
+   `FAIL` (nothing proven wrong), not `CONDITIONAL` (that would imply some authoritative signal
+   exists, just an imperfect one), and not `NOT_APPLICABLE` either: a claim that a dimension
+   doesn't apply at all is the MORE favorable outcome (it deletes the dimension from the required
+   set entirely, so it can never contribute anything less than `PASS` would), and so needs exactly
+   the same authority `PASS` would — never less.
 4. A dimension with **mixed** evidence (some authoritative, some caller-only) requires every
    decisive evidence item to independently trace to a strong authority. A single caller-only item
    mixed into an otherwise-authoritative set downgrades the dimension to `UNKNOWN` — evidence is

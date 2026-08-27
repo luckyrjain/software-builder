@@ -20,12 +20,16 @@ consumes:
 ## Final freshness re-check
 
 Immediately before emitting the report, re-read the candidate's head identity, CI status, and
-approval state and compare them against the snapshot taken at the start of Collect evidence. Any
-regression since that first read (the head changed, CI went from green to red, an approval was
-dismissed) is a `FAIL` on its own, independent of every other dimension — a `READY` verdict must
-reflect the candidate as it stands right now, not as it stood when evidence collection began. A
-snapshot that can't be reconfirmed (missing head identity, CI/approvals status that couldn't be
-re-read) is `UNKNOWN`, never a silent pass-through to the verdict already computed.
+approval state and compare them against the snapshot taken at the start of Collect evidence. A
+*proven* regression since that first read — CI went from green to red, or an approval was
+dismissed — is a `FAIL` on its own, independent of every other dimension, since those are
+unambiguous negative signals. The head changing during the review is different: the evidence
+collected against the old head may no longer describe the new one at all, so it is `UNKNOWN`
+(`head_changed_during_review`), not a proven-worse `FAIL` — a rebase or amend could just as easily
+have made the change safer. Either way, a `READY` verdict must reflect the candidate as it stands
+right now, not as it stood when evidence collection began. A snapshot that can't be reconfirmed
+(missing head identity, CI/approvals status that couldn't be re-read) is also `UNKNOWN`, never a
+silent pass-through to the verdict already computed.
 
 Build one `production_readiness_report` v1 payload per [reference/report-format.md](../reference/report-format.md):
 

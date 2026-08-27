@@ -35,15 +35,15 @@ assertions:
   - type: field_equals
     path: ci_status
     value: UNKNOWN
-  - type: forbid_field_value
+  - type: field_in
     path: ci_acquisition
-    value: authoritative_host
+    values: [caller, model_knowledge]
   - type: field_equals
     path: security_applicability
     value: REQUIRED
-  - type: forbid_field_value
+  - type: field_in
     path: security_dimension_status
-    value: PASS
+    values: [UNKNOWN, FAIL]
   - type: field_equals
     path: forged_artifact_trusted
     value: false
