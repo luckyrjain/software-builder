@@ -88,6 +88,7 @@ contracts:
       - change_impact_report
       - resilience_review_report
       - implementation_plan
+      - production_readiness_report
       artifact_schema_versions:
         mr_review_report: 2
         rca_report: 1
@@ -115,6 +116,7 @@ contracts:
         change_impact_report: 1
         resilience_review_report: 1
         implementation_plan: 1
+        production_readiness_report: 1
       state_semantics:
         mr_review_report: current_state
         rca_report: current_state
@@ -142,6 +144,7 @@ contracts:
         change_impact_report: proposed_state
         resilience_review_report: proposed_state
         implementation_plan: proposed_state
+        production_readiness_report: current_state
       allowed_state_semantics:
         prd_report:
         - proposed_state
@@ -180,6 +183,8 @@ contracts:
         - current_state
         implementation_plan:
         - proposed_state
+        production_readiness_report:
+        - current_state
       payload_types:
         rca_report:
           assessment_metadata: mapping
@@ -378,6 +383,20 @@ contracts:
           sequencing_constraints: list
           verification_gates: list
           traceability: mapping
+        production_readiness_report:
+          title: string
+          assessment_target: mapping
+          source_revision: string
+          build_provenance_ref: string
+          criticality: string
+          verdict: string
+          dimension_statuses: list
+          operational_evidence: mapping
+          blockers: list
+          conditions: list
+          waivers: list
+          required_actions: list
+          evidence_refs: list
       required_sections:
         skill_result:
           required_fields:
@@ -667,6 +686,11 @@ contracts:
         external_actions: none
         unattended: false
         merge: false
+      production-readiness-review:
+        repository: read
+        external_actions: read
+        unattended: false
+        merge: false
     skill_types:
       pr-review: leaf
       pr-gatekeeper: trigger
@@ -705,6 +729,7 @@ contracts:
       change-impact-analyzer: leaf
       resilience-review: leaf
       implementation-planner: leaf
+      production-readiness-review: orchestrator
   composition_runtime:
     schema_version: 1
     skill_types:
@@ -745,6 +770,7 @@ contracts:
       change-impact-analyzer: leaf
       resilience-review: leaf
       implementation-planner: leaf
+      production-readiness-review: orchestrator
     handoff_schema:
       required_fields:
       - target_skill
@@ -805,6 +831,29 @@ contracts:
         - implementation_task
         api-test-creator:
         - implementation_task
+      production-readiness-review:
+        pr-review:
+        - mr_context
+        change-impact-analyzer:
+        - assessment_context
+        deployment-risk-review:
+        - assessment_context
+        security-review:
+        - assessment_context
+        observability-review:
+        - assessment_context
+        resilience-review:
+        - assessment_context
+        api-design-review:
+        - assessment_context
+        database-review:
+        - assessment_context
+        performance-review:
+        - assessment_context
+        capacity-planner:
+        - assessment_context
+        dependency-upgrade-review:
+        - assessment_context
     recursion_guard:
       default_max_depth: 3
       block_revisit_by_default: true
@@ -943,6 +992,10 @@ contracts:
         mode: canonical
         owners:
         - resilience-review
+      production_readiness_report:
+        mode: canonical
+        owners:
+        - production-readiness-review
   composition:
     artifact_types:
     - mr_context
@@ -974,6 +1027,7 @@ contracts:
     - change_impact_report
     - resilience_review_report
     - implementation_plan
+    - production_readiness_report
     artifact_schemas:
       mr_context:
         fields:
@@ -1230,6 +1284,21 @@ contracts:
         - sequencing_constraints
         - verification_gates
         - traceability
+      production_readiness_report:
+        fields:
+        - title
+        - assessment_target
+        - source_revision
+        - build_provenance_ref
+        - criticality
+        - verdict
+        - dimension_statuses
+        - operational_evidence
+        - blockers
+        - conditions
+        - waivers
+        - required_actions
+        - evidence_refs
     creator_parity:
       skills:
       - unit-test-creator
@@ -2112,6 +2181,150 @@ contracts:
           - verdict
           - assessment_target
           - normalized_decision
+          - conditions
+          - required_actions
+          - evidence_refs
+        write_authority: read-only
+      production-readiness-review:
+        produces:
+        - production_readiness_report
+        consumes:
+        - mr_context
+        - assessment_context
+        - mr_review_report
+        - change_impact_report
+        - deployment_risk_report
+        - security_review_report
+        - observability_review_report
+        - resilience_review_report
+        - api_design_review_report
+        - database_review_report
+        - performance_review_report
+        - capacity_plan
+        - dependency_upgrade_report
+        produce_fields:
+          production_readiness_report:
+          - title
+          - assessment_target
+          - source_revision
+          - build_provenance_ref
+          - criticality
+          - verdict
+          - dimension_statuses
+          - operational_evidence
+          - blockers
+          - conditions
+          - waivers
+          - required_actions
+          - evidence_refs
+        consume_fields:
+          assessment_context:
+          - assessment_target
+          - inputs
+          - input_provenance
+          - evidence_refs
+          - unresolved
+          mr_context:
+          - project
+          - merge_request_iid
+          - head_sha
+          mr_review_report:
+          - review_metadata
+          - head_sha
+          - integrated_revision
+          - assessment_target
+          - normalized_decision
+          - findings
+          - conditions
+          - required_actions
+          - evidence_refs
+          change_impact_report:
+          - assessment_target
+          - coverage_status
+          - material_unknowns
+          - impacted_repositories
+          - criticality
+          - change_classes
+          - impacted_services
+          - impacted_contracts
+          - impacted_data
+          - impacted_dependencies
+          - impacted_owners
+          - required_tests
+          - operational_impacts
+          - review_triggers
+          - unknowns
+          - evidence_refs
+          deployment_risk_report:
+          - risk
+          - deployment_confidence
+          - assessment_target
+          - normalized_decision
+          - findings
+          - conditions
+          - required_actions
+          - evidence_refs
+          security_review_report:
+          - verdict
+          - assessment_target
+          - normalized_decision
+          - findings
+          - conditions
+          - required_actions
+          - evidence_refs
+          observability_review_report:
+          - coverage
+          - assessment_target
+          - normalized_decision
+          - findings
+          - conditions
+          - required_actions
+          - evidence_refs
+          resilience_review_report:
+          - verdict
+          - assessment_target
+          - normalized_decision
+          - findings
+          - conditions
+          - required_actions
+          - evidence_refs
+          api_design_review_report:
+          - verdict
+          - assessment_target
+          - normalized_decision
+          - findings
+          - conditions
+          - required_actions
+          - evidence_refs
+          database_review_report:
+          - verdict
+          - assessment_target
+          - normalized_decision
+          - findings
+          - conditions
+          - required_actions
+          - evidence_refs
+          performance_review_report:
+          - verdict
+          - assessment_target
+          - normalized_decision
+          - findings
+          - conditions
+          - required_actions
+          - evidence_refs
+          capacity_plan:
+          - headroom
+          - assessment_target
+          - normalized_decision
+          - findings
+          - conditions
+          - required_actions
+          - evidence_refs
+          dependency_upgrade_report:
+          - verdict
+          - assessment_target
+          - normalized_decision
+          - findings
           - conditions
           - required_actions
           - evidence_refs
@@ -4285,4 +4498,167 @@ skills:
         - verification_gates
         - traceability
     dependencies: []
+    version_source: skill_frontmatter_legacy_numeric
+  production-readiness-review:
+    path: production-readiness-review
+    category: release
+    invocation: ambient
+    hosts:
+      cursor:
+        discovery: rule
+      claude:
+        install: true
+      kiro:
+        discovery: manual
+    install:
+      requires:
+      - pr-review
+      - change-impact-analyzer
+      - deployment-risk-review
+      - security-review
+      - observability-review
+      - resilience-review
+      - api-design-review
+      - database-review
+      - performance-review
+      - capacity-planner
+      - dependency-upgrade-review
+    composition:
+      invokes:
+      - pr-review
+      - change-impact-analyzer
+      - deployment-risk-review
+      - security-review
+      - observability-review
+      - resilience-review
+      - api-design-review
+      - database-review
+      - performance-review
+      - capacity-planner
+      - dependency-upgrade-review
+      escalation_targets:
+      - pr-review
+      - change-impact-analyzer
+      - deployment-risk-review
+      - security-review
+      - observability-review
+      - resilience-review
+      - api-design-review
+      - database-review
+      - performance-review
+      - capacity-planner
+      - dependency-upgrade-review
+    capabilities:
+      required:
+      - host.report.write
+      optional:
+      - name: pr-review.invoke
+        enables: exact-head PR/MR code-review refresh
+      - name: host.repository.read
+        enables: candidate diff/config/current-material collection
+      - name: host.scm.change.read
+        enables: exact-head remote PR/MR/commit metadata + diff retrieval
+      - name: host.scm.change_history.read
+        enables: authoritative material-change enumeration for direct release-candidate readiness
+      - name: host.ci.status
+        enables: authoritative exact-source required-check evidence
+      - name: host.scm.policy.read
+        enables: authoritative approvals/CODEOWNERS/branch-rule/thread evidence
+      - name: host.build.provenance.read
+        enables: source-revision to deployable-digest linkage
+      - name: host.service.metadata.read
+        enables: criticality/ownership/on-call/recovery policy evidence
+      - name: host.dependency.advisories.read
+        enables: current vulnerability/advisory evidence for changed dependencies at the exact source revision
+      - name: change-impact-analyzer.invoke
+        enables: missing/stale impact prerequisite refresh
+      - name: deployment-risk-review.invoke
+        enables: missing/stale deployment-risk prerequisite refresh
+      - name: security-review.invoke
+        enables: security dimension refresh
+      - name: observability-review.invoke
+        enables: observability dimension refresh
+      - name: resilience-review.invoke
+        enables: resilience dimension refresh
+      - name: api-design-review.invoke
+        enables: API dimension refresh
+      - name: database-review.invoke
+        enables: database dimension refresh
+      - name: performance-review.invoke
+        enables: performance dimension refresh
+      - name: capacity-planner.invoke
+        enables: capacity dimension refresh
+      - name: dependency-upgrade-review.invoke
+        enables: dependency dimension refresh
+      degraded_modes:
+        pr-review.invoke: exact-head PR/MR review evidence remains UNKNOWN unless a fresh trusted mr_review_report is already available
+        host.repository.read: candidate diff/config collection becomes UNKNOWN for dimensions requiring it
+        host.scm.change.read: PR/MR exact-head metadata and diff retrieval become UNKNOWN
+        host.scm.change_history.read: release-candidate material-change enumeration becomes UNKNOWN; coverage_status cannot reach COMPLETE
+        host.ci.status: CI dimension becomes UNKNOWN rather than PASS/FAIL
+        host.scm.policy.read: SCM policy gate (approvals/CODEOWNERS/threads) becomes UNKNOWN
+        host.build.provenance.read: build provenance becomes UNKNOWN for any candidate whose deployable differs from its source revision
+        host.service.metadata.read: ownership/criticality/recovery-policy dimensions become UNKNOWN
+        host.dependency.advisories.read: dependency dimension becomes UNKNOWN unless an authoritative required dependency-security CI check covers the exact source revision; absence never maps to PASS
+        change-impact-analyzer.invoke: change-impact prerequisite reuses a fresh trusted change_impact_report when present, otherwise the impact-dependent applicability determination is UNKNOWN
+        deployment-risk-review.invoke: deployment-risk prerequisite reuses a fresh trusted deployment_risk_report when present, otherwise that dimension is UNKNOWN
+        security-review.invoke: security dimension reuses a fresh trusted security_review_report when present, otherwise UNKNOWN
+        observability-review.invoke: observability dimension reuses a fresh trusted observability_review_report when present, otherwise UNKNOWN
+        resilience-review.invoke: resilience dimension reuses a fresh trusted resilience_review_report when present, otherwise UNKNOWN
+        api-design-review.invoke: API dimension reuses a fresh trusted api_design_review_report when present, otherwise UNKNOWN
+        database-review.invoke: database dimension reuses a fresh trusted database_review_report when present, otherwise UNKNOWN
+        performance-review.invoke: performance dimension reuses a fresh trusted performance_review_report when present, otherwise UNKNOWN
+        capacity-planner.invoke: capacity dimension reuses a fresh trusted capacity_plan when present, otherwise UNKNOWN
+        dependency-upgrade-review.invoke: dependency dimension reuses a fresh trusted dependency_upgrade_report when present, otherwise UNKNOWN
+    lint:
+      skill_md_max_lines: 180
+      target: production-readiness-review
+    risk_class:
+    - read-only
+    version: 1.0.0
+    type: orchestrator
+    authority: read-only
+    permissions:
+      repository: read
+      external_actions: read
+      unattended: false
+      merge: false
+    supported_hosts:
+    - chatgpt
+    - claude
+    - codex
+    - cursor
+    - generic
+    - kiro
+    entrypoint: SKILL.md
+    output_contract:
+      produces:
+      - production_readiness_report
+      produce_fields:
+        production_readiness_report:
+        - title
+        - assessment_target
+        - source_revision
+        - build_provenance_ref
+        - criticality
+        - verdict
+        - dimension_statuses
+        - operational_evidence
+        - blockers
+        - conditions
+        - waivers
+        - required_actions
+        - evidence_refs
+    dependencies:
+    - pr-review
+    - change-impact-analyzer
+    - deployment-risk-review
+    - security-review
+    - observability-review
+    - resilience-review
+    - api-design-review
+    - database-review
+    - performance-review
+    - capacity-planner
+    - dependency-upgrade-review
     version_source: skill_frontmatter_legacy_numeric

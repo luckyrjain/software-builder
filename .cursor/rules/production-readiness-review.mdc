@@ -1,0 +1,9 @@
+---
+description: Read-only orchestrator answering "is this PR/MR/release-candidate production ready?" by gathering trusted evidence (CI, code review, build provenance, SCM policy, change-impact, deployment-risk) and dispatching the applicable specialist reviews (security, observability, resilience, API design, database, performance, capacity, dependency-upgrade), then aggregating everything into one fail-closed verdict. Keywords: production ready, ready to release, ship this PR, go/no-go for one change. Not for generic code review (pr-review), a multi-repo/multi-service release sweep (release-readiness-checker), or a standalone change-impact/blast-radius/deployment-risk question (change-impact-analyzer, deployment-risk-review).
+alwaysApply: false
+---
+
+<!-- GENERATED from skills.yaml + SKILL.md — do not edit; run make generate -->
+
+Invoke the production-readiness-review skill. Read `production-readiness-review/SKILL.md` and follow it.
+Phase index: `production-readiness-review/reference/phase-index.md` when present under the skill directory.

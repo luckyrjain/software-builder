@@ -5,6 +5,9 @@
 .PHONY: lint-implementation-planner
 .PHONY: lint-resilience-review
 .PHONY: install-resilience-review
+.PHONY: install-production-readiness-review
+.PHONY: lint-production-readiness-review
+.PHONY: install-claude-production-readiness-review
 .PHONY: install-claude-change-impact-analyzer
 .PHONY: install-claude-implementation-planner
 .PHONY: install-claude-resilience-review
@@ -165,6 +168,9 @@ install-claude-implementation-planner:
 install-claude-resilience-review:
 	bash scripts/install.sh --agent claude-user resilience-review
 
+install-claude-production-readiness-review:
+	bash scripts/install.sh --agent claude-user production-readiness-review
+
 install-architecture-review:
 	bash scripts/install.sh architecture-review
 
@@ -206,6 +212,9 @@ install-implementation-planner:
 
 install-resilience-review:
 	bash scripts/install.sh resilience-review
+
+install-production-readiness-review: install-pr-review install-change-impact-analyzer install-deployment-risk-review install-security-review install-observability-review install-resilience-review install-api-design-review install-database-review install-performance-review install-capacity-planner install-dependency-upgrade-review
+	bash scripts/install.sh production-readiness-review
 
 install-claude-architecture-review:
 	bash scripts/install.sh --agent claude-user architecture-review
@@ -1620,6 +1629,28 @@ lint-resilience-review:
 	 grep -qi 'redact' resilience-review/reference/report-format.md
 	@python3 -m py_compile scripts/resilience_review.py
 	@python3 -m pytest -p no:cacheprovider scripts/tests/test_resilience_review.py -q
+	@echo "  ok"
+
+lint: lint-production-readiness-review
+
+lint-production-readiness-review:
+	@echo "lint-production-readiness-review: SKILL.md line count (<= 180)"
+	$(call check_skill_md_length,production-readiness-review,180,keep the orchestrator bounded; detail in workflow/)
+	$(call forbid_disable_model_invocation,production-readiness-review)
+	$(call check_workflow_frontmatter,production-readiness-review)
+	$(call check_dangling_links,production-readiness-review/*.md production-readiness-review/reference/*.md production-readiness-review/workflow/*.md)
+	$(call require_ref_files,production-readiness-review/reference,phase-index lazy-load-index report-format smoke-test pressure-tests)
+	@grep -q 'pressure-tests' production-readiness-review/reference/smoke-test.md
+	@grep -q '## Invocation' production-readiness-review/examples.md
+	$(call require_setup_links_framework,production-readiness-review)
+	$(call require_cross_skill_escalation,production-readiness-review)
+	$(call require_safe_output_link,production-readiness-review)
+	@grep -q 'docs/skill-framework/shared/prompt-injection.md' production-readiness-review/reference/report-format.md && \
+	 grep -q 'docs/skill-framework/shared/safe-output.md' production-readiness-review/reference/report-format.md && \
+	 grep -qiE 'escape|fence|backtick' production-readiness-review/reference/report-format.md && \
+	 grep -qi 'redact' production-readiness-review/reference/report-format.md
+	@python3 -m py_compile scripts/production_readiness.py
+	@python3 -m pytest -p no:cacheprovider scripts/tests/test_production_readiness_contract.py -q
 	@echo "  ok"
 
 lint-framework:

@@ -78,6 +78,7 @@ Each skill directory follows the same pattern:
 | `pr-gatekeeper` | review | automation-only | pr-review | `make lint-pr-gatekeeper` |
 | `pr-review` | review | ambient | — | `make lint-pr-review` |
 | `prd-architect` | product | ambient | — | `make lint-prd-architect` |
+| `production-readiness-review` | release | ambient | pr-review, change-impact-analyzer, deployment-risk-review, security-review, observability-review, resilience-review, api-design-review, database-review, performance-review, capacity-planner, dependency-upgrade-review | `make lint-production-readiness-review` |
 | `release-readiness-checker` | release | ambient | pr-review, k8s-overprovisioning-datadog, incident-rca | `make lint-release-readiness-checker` |
 | `resilience-review` | review | ambient | — | `make lint-resilience-review` |
 | `security-review` | review | ambient | — | `make lint-security-review` |

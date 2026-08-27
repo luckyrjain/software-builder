@@ -2,7 +2,7 @@
 
 [![Lint](https://github.com/luckyrjain/software-builder/actions/workflows/lint.yml/badge.svg)](https://github.com/luckyrjain/software-builder/actions/workflows/lint.yml)
 <!-- skills-count:start -->
-![Skills](https://img.shields.io/badge/skills-37-blue)
+![Skills](https://img.shields.io/badge/skills-38-blue)
 <!-- skills-count:end -->
 
 Portable, evidence-driven agent skills for software delivery: code review, incident response,
@@ -182,6 +182,7 @@ routes to skills in another category.
 | [pr-review](pr-review/) | `/pr-review` or “review this MR/PR” | GitHub/GHES PR or GitLab MR review with evidence-backed findings and optional inline posts | [README](pr-review/README.md) · [SETUP](pr-review/SETUP.md) |
 | [pr-gatekeeper](pr-gatekeeper/) | Push webhook | Runs `pr-review` on every push to an open MR and applies unattended posting policy | [README](pr-gatekeeper/README.md) · [SETUP](pr-gatekeeper/SETUP.md) |
 | [release-readiness-checker](release-readiness-checker/) | “Is this release ready?” | Aggregates review, Kubernetes, and incident signals into a release go/no-go report | [README](release-readiness-checker/README.md) · [SETUP](release-readiness-checker/SETUP.md) |
+| [production-readiness-review](production-readiness-review/) | “Is PR #123 production ready?” | Read-only rollup of trusted CI, code-review, build-provenance, SCM-policy, change-impact, deployment-risk, and specialist-review evidence into one fail-closed verdict for one exact PR/MR/release candidate | [README](production-readiness-review/README.md) · [SETUP](production-readiness-review/SETUP.md) |
 | [prd-architect](prd-architect/) | “Write a PRD for …” / “Should we build this?” | Validates ideas and turns specs into implementation-ready PRDs with Build Readiness gating | [README](prd-architect/README.md) · [SETUP](prd-architect/SETUP.md) |
 | [change-impact-analyzer](change-impact-analyzer/) | “What services/contracts are affected by this change?” | Bounded, evidence-backed impact analysis for designs and exact PR/MR heads | [README](change-impact-analyzer/README.md) · [SETUP](change-impact-analyzer/SETUP.md) |
 | [test-writer](test-writer/) | “Write tests for MR !123” — level unspecified | Router: classifies the request and dispatches to exactly one of the five skills below | [README](test-writer/README.md) · [SETUP](test-writer/SETUP.md) |

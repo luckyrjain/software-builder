@@ -44,6 +44,9 @@ routes:
   release-readiness-checker:
     patterns:
       - '\b(release readiness|go[- /]?no[- ]?go|ready to release|release candidate)\b'
+    exclude_patterns:
+      - '\b(PR|MR|pull request|merge request)\s*[#!]?\d+\b.*\b(ready to release|production ready|production readiness)\b'
+      - '\b(ready to release|production ready|production readiness)\b.*\b(PR|MR|pull request|merge request)\s*[#!]?\d+\b'
   migration-program-manager:
     patterns:
       - '\b(migration program|migration portfolio|migration status rollup|migration program status)\b'
@@ -142,3 +145,12 @@ routes:
   test-writer:
     patterns:
       - '\b(write|generate|add)\b\s+(tests?|test coverage)\b(?!.*\b(unit|integration|contract|e2e|end[- ]to[- ]end|API|HTTP|REST)\b)'
+  production-readiness-review:
+    patterns:
+      - '\b(PR|MR|pull request|merge request)\s*[#!]?\d+\b.*\b(production ready|production readiness|ready to release|ready to deploy)\b'
+      - '\b(production ready|production readiness|ready to release|ready to deploy)\b.*\b(PR|MR|pull request|merge request)\s*[#!]?\d+\b'
+      - '\bproduction readiness (review|assessment|check)\b'
+      - '\bis (this|the) (service|change|deployment) production ready\b'
+    exclude_patterns:
+      - '\b(release candidate|go[- /]?no[- ]?go)\b'
+      - '\bacross (these |multiple )?services?\b'

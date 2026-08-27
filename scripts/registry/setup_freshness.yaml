@@ -80,3 +80,5 @@ skills:
     external_services: None — reads supplied resilience content and optional repository or runtime/config evidence only
   implementation-planner:
     external_services: None — reads supplied design/review artifacts and optional repository evidence only
+  production-readiness-review:
+    external_services: None — reads supplied candidate evidence and optional repository, SCM, CI, build-provenance, service-metadata, or dependency-advisory host evidence, and reuses/dispatches trusted child-skill invocations only

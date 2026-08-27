@@ -93,6 +93,30 @@ routing_collisions:
     prompt_pattern: "services/contracts.*affected.*PR #123"
     route_pattern: "Change impact, affected services/contracts/data/tests"
     expected_owner: change-impact-analyzer
+  - id: numbered-pr-change-impact-vs-deployment-risk
+    prompt: 'What is the blast radius and deployment risk if PR #123 ships?'
+    prompt_class: numbered pull request deployment risk (not change impact)
+    prompt_pattern: "blast radius.*deployment risk.*PR #123"
+    route_pattern: "Deployment risk, release risk, blast radius"
+    expected_owner: deployment-risk-review
+  - id: numbered-pr-production-readiness
+    prompt: 'Is PR #123 production ready?'
+    prompt_class: numbered pull request production-readiness request
+    prompt_pattern: "PR #123.*production ready"
+    route_pattern: "Is this PR/MR production ready, ready to release"
+    expected_owner: production-readiness-review
+  - id: numbered-pr-ready-to-release-vs-release-wide
+    prompt: 'Is PR #123 ready to release?'
+    prompt_class: numbered pull request ready-to-release request (not release-wide go/no-go)
+    prompt_pattern: "PR #123.*ready to release"
+    route_pattern: "Is this PR/MR production ready, ready to release"
+    expected_owner: production-readiness-review
+  - id: release-wide-go-no-go-vs-production-readiness
+    prompt: 'Is release candidate 2026.08 ready to ship across these services?'
+    prompt_class: release-wide go/no-go across multiple services (not a single PR/MR readiness rollup)
+    prompt_pattern: "release candidate.*ready to ship.*across.*services"
+    route_pattern: "Release readiness,"
+    expected_owner: release-readiness-checker
 
 adversarial_classes:
   instruction_override:

@@ -10,6 +10,17 @@ graph TD
   new-hire-guide --> domain-comprehension
   new-hire-guide --> squad-map
   pr-gatekeeper --> pr-review
+  production-readiness-review --> pr-review
+  production-readiness-review --> change-impact-analyzer
+  production-readiness-review --> deployment-risk-review
+  production-readiness-review --> security-review
+  production-readiness-review --> observability-review
+  production-readiness-review --> resilience-review
+  production-readiness-review --> api-design-review
+  production-readiness-review --> database-review
+  production-readiness-review --> performance-review
+  production-readiness-review --> capacity-planner
+  production-readiness-review --> dependency-upgrade-review
   release-readiness-checker --> pr-review
   release-readiness-checker --> k8s-overprovisioning-datadog
   release-readiness-checker --> incident-rca
