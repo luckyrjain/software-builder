@@ -54,6 +54,8 @@ skills:
         enables: criticality/ownership/on-call/recovery policy evidence
       - name: host.dependency.advisories.read
         enables: current vulnerability/advisory evidence for changed dependencies at the exact source revision
+      - name: host.runtime.metrics.read
+        enables: authoritative current demand/history and capacity baseline evidence
       - name: change-impact-analyzer.invoke
         enables: missing/stale impact prerequisite refresh
       - name: deployment-risk-review.invoke
@@ -84,6 +86,7 @@ skills:
       host.build.provenance.read: build provenance becomes UNKNOWN for any candidate whose deployable differs from its source revision
       host.service.metadata.read: ownership/criticality/recovery-policy dimensions become UNKNOWN
       host.dependency.advisories.read: dependency dimension becomes UNKNOWN unless an authoritative required dependency-security CI check covers the exact source revision; absence never maps to PASS
+      host.runtime.metrics.read: capacity dimension becomes UNKNOWN for tier0/tier1/unknown criticality (caller-only demand/baseline cannot PASS at those tiers) and at most CONDITIONAL for tier2/tier3
       change-impact-analyzer.invoke: change-impact prerequisite reuses a fresh trusted change_impact_report when present, otherwise the impact-dependent applicability determination is UNKNOWN
       deployment-risk-review.invoke: deployment-risk prerequisite reuses a fresh trusted deployment_risk_report when present, otherwise that dimension is UNKNOWN
       security-review.invoke: security dimension reuses a fresh trusted security_review_report when present, otherwise UNKNOWN

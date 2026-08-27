@@ -10,7 +10,7 @@ This level, not which child produced the evidence, decides whether it can set a 
 | `caller` | A field the invoking caller asserted directly, with no independent evidence behind it (e.g. "rollback plan: revert the deploy") | No |
 | `model_knowledge` | An inference this skill or a child derived from general reasoning, without a citable source (e.g. "this pattern is usually safe") | No |
 | `repository` | Content actually read from the repository at the exact source revision (diff, config, code, committed docs) | Yes |
-| `authoritative_host` | A `host.*` read capability's own live answer (`host.ci.status`, `host.scm.policy.read`, `host.build.provenance.read`, `host.service.metadata.read`, `host.dependency.advisories.read`) | Yes |
+| `authoritative_host` | A `host.*` read capability's own live answer (`host.ci.status`, `host.scm.policy.read`, `host.build.provenance.read`, `host.service.metadata.read`, `host.dependency.advisories.read`, `host.runtime.metrics.read`) | Yes |
 | `trusted_runtime` | A live signal from a trusted running system a specialist child itself authenticates against (e.g. a specialist's own observability/runtime evidence source) | Yes |
 
 `caller` and `model_knowledge` rank below `repository`, `authoritative_host`, and `trusted_runtime` —

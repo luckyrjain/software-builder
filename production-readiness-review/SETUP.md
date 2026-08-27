@@ -65,6 +65,7 @@ Working directly in this repo? `.cursor/rules/production-readiness-review.mdc` a
 | `host.build.provenance.read` | Source-revision → deployable-digest linkage; `build_provenance_ref` is `NOT_APPLICABLE` when there's no separate build step |
 | `host.service.metadata.read` | Criticality/ownership/on-call/recovery-policy evidence for [reference/operational-gates.md](reference/operational-gates.md) |
 | `host.dependency.advisories.read` | Current advisory evidence for changed dependencies at the exact source revision |
+| `host.runtime.metrics.read` | Authoritative current demand/history and capacity baseline evidence for [reference/operational-gates.md](reference/operational-gates.md)'s capacity dimension |
 
 Every capability above is optional individually — a missing one degrades its own dimension(s) to
 `UNKNOWN`, never to a fabricated `PASS`. No capability failure blocks the whole run.
