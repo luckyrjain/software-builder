@@ -37,9 +37,13 @@ rollback/abort, post-deploy verification plan, and recovery against `criticality
 - Any tier — an authoritative "unowned" finding, an authoritative proven-destructive-operation
   finding with no recovery path, or an authoritative unsafe/irreversible-rollback-plan finding, is
   `FAIL`.
-- All four (plus capacity) are environment-sensitive: pass the resolved candidate alongside each
-  gate's own evidence so a conflicting declared environment (staging evidence for a production
-  candidate) downgrades the dimension to `UNKNOWN` — never silently accepted as `PASS`.
+- All four (plus capacity, observability, and deployment_risk — every `ENV_SENSITIVE_DIMENSIONS`
+  member) are environment-sensitive: pass the resolved candidate alongside each gate's own evidence
+  so a conflicting declared environment (staging evidence for a production candidate) downgrades
+  the dimension to `UNKNOWN` — never silently accepted as `PASS`. Absence of a declared environment
+  on either side is never itself a match, and either side's environment may be declared flat or
+  nested (checked the same nested-first way as identity — see
+  [child-input-map.md § Checking identity and environment on a nested or flat carrier](../reference/child-input-map.md#checking-identity-and-environment-on-a-nested-or-flat-carrier)).
 
 ## 3. Derive the overall verdict — worst-first precedence
 

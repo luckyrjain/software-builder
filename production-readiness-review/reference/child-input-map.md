@@ -53,4 +53,29 @@ covered in [operational-gates.md](operational-gates.md)): a result scoped to a d
 environment than the candidate's own must never be recorded as this candidate's evidence, even when
 its identity (revision/head SHA) otherwise matches. Assemble and compare each specialist's declared
 `environment` the same way its mandatory inputs above are assembled — never assume it matches the
-candidate's just because no conflicting field was supplied.
+candidate's just because no conflicting field was supplied: if either side (the candidate or the
+specialist's own result) doesn't declare an environment at all, that absence is never itself a
+match, on any of the seven `ENV_SENSITIVE_DIMENSIONS` (these three specialists and the four
+operational gates alike).
+
+### Checking identity and environment on a nested or flat carrier
+
+A candidate's or a specialist result's own identity (`source_revision`/`head_sha`) and `environment`
+may be declared either as a flat top-level field on the object, or one level down inside that same
+object's own `assessment_target` (or `target`) carrier — both are legitimate shapes, and a caller or
+a specialist may use either one. When checking a specialist's result against the candidate:
+
+1. Look for the field (`environment`, `source_revision`, `head_sha`) inside the result's own
+   `assessment_target`/`target` mapping first, if it has one.
+2. If that nested carrier doesn't declare the field at all, fall back to the object's own flat
+   top-level field.
+3. If the SAME object declares the field in both places and they disagree with each other — a
+   result whose flat `source_revision` matches the candidate but whose own nested
+   `assessment_target.source_revision` names a different commit, for example — that internal
+   disagreement is itself disqualifying (`target_mismatch`/`environment_mismatch`), never resolved
+   by picking whichever location happens to match what you were hoping to see.
+
+This nested-vs-flat check applies everywhere a specialist's or child result's identity or
+environment is compared against the candidate — not only for the environment-sensitive dimensions
+listed above, but for every dispatched child's identity binding (per
+[dispatch.md § 3](../workflow/dispatch.md)).

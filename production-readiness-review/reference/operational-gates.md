@@ -16,7 +16,13 @@ In the report and in code these four are the dimension identifiers `operational_
 `rollback_and_abort`, `post_deploy_verification_plan`, and `recovery`. All four are
 environment-sensitive: evidence collected for one environment (e.g. a staging on-call rotation)
 must not silently stand in for another (e.g. production) — a declared-environment conflict between
-the candidate and the evidence downgrades the dimension to `UNKNOWN`, never `PASS`.
+the candidate and the evidence downgrades the dimension to `UNKNOWN`, never `PASS`. This is not
+limited to an explicit conflict: if either side (the candidate or the gate's own evidence) doesn't
+declare an environment at all, that is never itself grounds to treat the two as matching — never
+assume they agree just because no conflicting field was supplied. The same rule applies to every
+`ENV_SENSITIVE_DIMENSIONS` member, not just these four; see
+[child-input-map.md § Environment-sensitive specialists](child-input-map.md#environment-sensitive-specialists)
+for the three dispatched-specialist dimensions it also covers.
 
 Every completeness/affirmative flag these gates read (`complete`, `reversible`, and the
 sibling gates' `required`/`scope_covers_changed_manifest`/`bypass_approved`/`codeowners_satisfied`)
@@ -31,8 +37,14 @@ four dimensions independently:
 
 | Criticality | Caller-only evidence | Authoritative evidence |
 |---|---|---|
-| `tier0`, `tier1`, `unknown` | `UNKNOWN` — never `PASS`. A caller's own assertion of ownership/rollback/verification/recovery is not sufficient at this stakes level | `PASS` when the evidence affirmatively confirms the dimension; `FAIL` on an affirmative negative finding (below) |
-| `tier2`, `tier3` | At most `CONDITIONAL` — never `PASS`. Lower stakes still don't let an unverified caller assertion stand in for evidence, but it also doesn't sink the whole assessment to `UNKNOWN` on its own | `PASS` when the evidence affirmatively confirms the dimension; `FAIL` on an affirmative negative finding (below) |
+| `tier0`, `tier1`, `unknown` | `UNKNOWN` — never `PASS`. A caller's own assertion of ownership/rollback/verification/recovery is not sufficient at this stakes level | `PASS` when the evidence affirmatively confirms the dimension; `FAIL` on an affirmative negative finding (below), for ownership/rollback-abort/recovery only — see the note below |
+| `tier2`, `tier3` | At most `CONDITIONAL` — never `PASS`. Lower stakes still don't let an unverified caller assertion stand in for evidence, but it also doesn't sink the whole assessment to `UNKNOWN` on its own | `PASS` when the evidence affirmatively confirms the dimension; `FAIL` on an affirmative negative finding (below), for ownership/rollback-abort/recovery only — see the note below |
+
+**Post-deploy verification plan has no `FAIL` path.** Unlike the other three, no
+authoritative-negative-finding rule is defined for this dimension (per
+[report-format.md](report-format.md)'s fixed report schema) — its ceiling at any tier is `PASS`, its
+floor `CONDITIONAL`/`UNKNOWN`. Even an authoritative finding of "this service has no post-deploy
+verification of any kind" is `UNKNOWN`/`CONDITIONAL` per the table above, never `FAIL`.
 
 `unknown` criticality is treated as strictly as `tier0`/`tier1`, never as a permissive default — an
 unresolved criticality tier is not grounds for relaxing the operational bar.
