@@ -49,21 +49,26 @@ _HYPHEN_VARIANTS = str.maketrans(
 # a bounded cap would only let enough padding evade detection entirely.
 _K8S_DNS_LABEL = r"[a-z0-9](?:[a-z0-9-]*[a-z0-9])?"
 _K8S_VENDOR_RESOURCE = rf"(?=[a-z0-9.-]*[a-z])(?:{_K8S_DNS_LABEL}(?:\.{_K8S_DNS_LABEL})+)/[\w-]+"
-_K8S_RESOURCE_KEY_PATTERN = rf"cpu|memory|ephemeral-storage|hugepages(?:-\S+)?|{_K8S_VENDOR_RESOURCE}"
+_K8S_RESOURCE_KEY_FRAGMENT = rf"cpu|memory|ephemeral-storage|hugepages(?:-\S+)?|{_K8S_VENDOR_RESOURCE}"
 _K8S_BLANK_LINE_RUN = r"(?:[ \t]*\r?\n)*"
 _K8S_RESOURCES_BLOCK = re.compile(
     r"resources:[ \t]*\r?\n"
     rf"{_K8S_BLANK_LINE_RUN}"
     r"[ \t]*(?:limits|requests):[ \t]*\r?\n"
     rf"{_K8S_BLANK_LINE_RUN}"
-    rf"[ \t]*(?:{_K8S_RESOURCE_KEY_PATTERN})\s*:",
+    rf"[ \t]*(?:{_K8S_RESOURCE_KEY_FRAGMENT})\s*:",
 )
-# A negative lookahead, not a word boundary: real config field names for this concept are commonly
-# compounded with no separator recognizable after lowercasing — replicaCount (the standard Helm/k8s
-# values.yaml field), replica_count, num_replicas all need to match. What must NOT match is "replica"
-# as the root of an unrelated English word describing replication behavior generally, not a count/
-# scaling change: replicated, replication, replicating, replicator, replicable.
-_REPLICA_TOKEN = re.compile(r"replica(?!ted|ting|tion|tor|ble)")
+# A whitelist of plausible continuations, not a blacklist of excluded ones: text is already
+# lowercased before _triggers ever runs (_source_text lowers it), which destroys the camelCase
+# boundary a config field like replicaCount would otherwise have, so "replicacount" and an unrelated
+# dictionary word like "replicase"/"replicability" are lexically identical once case is gone — no
+# blacklist of excluded suffixes can be complete against the whole of English (replicated, replicase,
+# replicability, replicasome, ... were each found and patched in turn across review rounds). Instead,
+# only match "replica" bare, pluralized, possessive, or compounded with the handful of separators/
+# suffixes real config field names actually use (replicaCount, replica_count, replica-count,
+# num_replicas, ReplicaSet); anything else immediately continuing in a-z is presumed to be ordinary
+# English prose, not a scaling-relevant field name, and correctly left unmatched.
+_REPLICA_TOKEN = re.compile(r"replica(?:s|_count|-count|count|set)?(?=[^a-z]|$)")
 _LOCKFILES = {
     "package-lock.json",
     "npm-shrinkwrap.json",

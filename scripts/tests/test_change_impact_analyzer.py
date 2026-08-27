@@ -687,6 +687,16 @@ def test_helm_replica_count_field_names_emit_capacity() -> None:
         assert "capacity" in result["review_triggers"], text
 
 
+def test_unrelated_english_words_containing_replica_do_not_emit_capacity() -> None:
+    for text in (
+        "Modeled the viral RNA replicase complex binding site in the pipeline.",
+        "Improved results replicability across random seeds in the experiment tracker.",
+        "Documented the irreplicability of the earlier benchmark run.",
+    ):
+        result = analyze_change(source=diff_text(text))
+        assert "capacity" not in result["review_triggers"], text
+
+
 def test_invalid_coverage_status_is_execution_failure_not_finding() -> None:
     result = finalize_impact(impact_fixture(coverage_status="BOGUS"))
     assert result.skill_result.status == "FAILED"
