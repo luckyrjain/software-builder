@@ -12,6 +12,8 @@ from __future__ import annotations
 import dataclasses
 from typing import Any, Callable, Mapping, MutableMapping, Optional, Sequence
 
+from scripts.registry.assessment_target import same_environment
+
 # ---------------------------------------------------------------------------
 # Canonical vocab
 # ---------------------------------------------------------------------------
@@ -392,7 +394,7 @@ def match_dimension_evidence(
     env_specific = bool(artifact.get("environment_specific"))
 
     if dimension_name in ENV_SENSITIVE_DIMENSIONS or env_specific:
-        if candidate_env is None or artifact_env is None or candidate_env != artifact_env:
+        if candidate_env is None or artifact_env is None or not same_environment(candidate_env, artifact_env):
             return GateResult("UNKNOWN", "environment_mismatch")
 
     accepted = accept_child_result(artifact, candidate=candidate, dimension=dimension_name)

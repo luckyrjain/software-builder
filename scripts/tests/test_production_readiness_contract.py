@@ -603,6 +603,33 @@ def test_caller_claimed_green_ci_without_authoritative_acquisition_is_unknown() 
     assert pr.validate_ci(candidate, forged_ci)["status"] == "UNKNOWN"
 
 
+def test_prod_alias_does_not_silently_match_production() -> None:
+    result = pr.match_dimension_evidence(
+        "observability",
+        candidate=source_candidate(environment="prod"),
+        artifact=trusted_child_result("observability_review_report", environment="production"),
+    )
+    assert result.status == "UNKNOWN"
+
+
+def test_environment_case_and_whitespace_variants_still_match() -> None:
+    result = pr.match_dimension_evidence(
+        "observability",
+        candidate=source_candidate(environment="Production "),
+        artifact=trusted_child_result("observability_review_report", environment="production"),
+    )
+    assert result.status != "UNKNOWN"
+
+
+def test_budget_exhaustion_preserves_completed_evidence_as_unknown() -> None:
+    completed = [dimension("security", "PASS"), dimension("api", "FAIL")]
+    remaining_unreached = [dimension("capacity", "UNKNOWN"), dimension("dependency", "UNKNOWN")]
+    result = pr.aggregate_readiness(completed + remaining_unreached)
+    assert result.verdict == "NOT_READY"
+    assert result.skill_result_status == "PARTIAL"
+    assert dimension("security", "PASS") in result.dimensions
+
+
 def test_embedded_instruction_text_does_not_change_security_applicability() -> None:
     child = trusted_child_result(
         "security_review_report",
