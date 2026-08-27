@@ -1,7 +1,22 @@
 # Per-task shared state schema
 # The Orchestrator is the only role that mutates the official state.
 
-workflow_version: "1.6"
+workflow_version: "1.7"
+
+# Optional host/runtime checkpoint for implementation_plan execution. This is not a durable
+# composition artifact and is never emitted in skill_result.artifacts.
+plan_execution_state:
+  schema_version: 1
+  plan_id: null
+  plan_digest: null
+  target_repo: null
+  state_generation: 0
+  current_task_id: null
+  task_statuses: {}
+  completed_evidence_refs: []
+  observed_head_revision: null
+  blocked_reason: null
+  updated_at: null
 
 task:
   task_id: null
@@ -13,6 +28,13 @@ task:
   status: NOT_STARTED  # NOT_STARTED | BUILDING | REVIEWING | VALIDATING | READY | COMPLETE | ESCALATED
   started_at: null
   completed_at: null
+  # Present only when this task was normalized from an implementation_plan. Traces this task back
+  # to its plan without granting any authority beyond the legacy task schema above.
+  plan_context:
+    plan_id: null
+    plan_digest: null
+    source_plan_task_id: null
+    state_generation: null
 
 repository:
   repo: null

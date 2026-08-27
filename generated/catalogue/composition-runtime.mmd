@@ -12,6 +12,7 @@ graph TD
   deployment-risk-review["deployment-risk-review<br/>leaf"]
   domain-comprehension["domain-comprehension<br/>orchestrator"]
   e2e-test-creator["e2e-test-creator<br/>leaf"]
+  implementation-planner["implementation-planner<br/>leaf"]
   incident-rca["incident-rca<br/>leaf"]
   incident-triage-agent["incident-triage-agent<br/>trigger"]
   integration-test-creator["integration-test-creator<br/>leaf"]
@@ -57,6 +58,7 @@ graph TD
   deployment-risk-review -.->|escalates| release-readiness-checker
   domain-comprehension -->|requires| squad-map
   domain-comprehension ==>|handoff| squad-map
+  implementation-planner -.->|escalates| loop-task-implementer
   incident-rca -.->|escalates| k8s-overprovisioning-datadog
   incident-rca -.->|escalates| pr-review
   incident-rca -.->|escalates| squad-map
@@ -121,15 +123,27 @@ graph TD
   weekly-squad-digest -.->|escalates| migration-program-manager
   who-owns-x-bot -->|requires| squad-map
   who-owns-x-bot ==>|handoff| squad-map
+  api-design-review -->|api_design_review_report| implementation-planner
+  architecture-review -->|architecture_review_report| implementation-planner
   architecture-review -->|architecture_review_report| system-design
+  capacity-planner -->|capacity_plan| implementation-planner
+  change-impact-analyzer -->|change_impact_report| implementation-planner
   cost-optimization-sprint-planner -->|cost_sweep_rollup| weekly-squad-digest
+  database-review -->|database_review_report| implementation-planner
+  dependency-upgrade-review -->|dependency_upgrade_report| implementation-planner
+  implementation-planner -->|implementation_plan| loop-task-implementer
   k8s-overprovisioning-datadog -->|k8s_rightsizing_report| release-readiness-checker
   migration-program-manager -->|migration_status_rollup| weekly-squad-digest
   pr-gatekeeper -->|mr_review_report| release-readiness-checker
   pr-review -->|mr_review_report| release-readiness-checker
+  observability-review -->|observability_review_report| implementation-planner
+  performance-review -->|performance_review_report| implementation-planner
   prd-architect -->|prd_report| architecture-review
   prd-architect -->|prd_report| loop-task-implementer
   prd-architect -->|prd_report| system-design
   incident-rca -->|rca_report| release-readiness-checker
   incident-triage-agent -->|rca_report| release-readiness-checker
+  resilience-review -->|resilience_review_report| implementation-planner
+  security-review -->|security_review_report| implementation-planner
   system-design -->|system_design_spec| architecture-review
+  system-design -->|system_design_spec| implementation-planner

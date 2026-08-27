@@ -37,3 +37,4 @@ cases:
   - {skill: tech-debt-assessor, prompt: "Rank this tech debt backlog by priority.", expected_status: selected, expected_owner: tech-debt-assessor}
   - {skill: change-impact-analyzer, prompt: "what services/contracts/data/tests change in this proposed design?", expected_status: selected, expected_owner: change-impact-analyzer}
   - {skill: resilience-review, prompt: "Perform a resilience review of the checkout service's timeout, retry, and recovery controls.", expected_status: selected, expected_owner: resilience-review}
+  - {skill: implementation-planner, prompt: "Create a dependency-aware implementation plan with execution waves and traceability.", expected_status: selected, expected_owner: implementation-planner}

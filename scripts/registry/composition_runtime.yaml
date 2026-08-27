@@ -36,6 +36,7 @@ skill_types:
   tech-debt-assessor: leaf
   change-impact-analyzer: leaf
   resilience-review: leaf
+  implementation-planner: leaf
 handoff_schema:
   required_fields:
   - target_skill
@@ -150,6 +151,10 @@ artifact_ownership:
   implementation_task:
     mode: external
     owners: []
+  implementation_plan:
+    mode: canonical
+    owners:
+    - implementation-planner
   implementation_pr:
     mode: shared
     owners:

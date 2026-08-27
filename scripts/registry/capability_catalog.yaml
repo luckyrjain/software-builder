@@ -297,3 +297,7 @@ skills:
     optional:
       - name: host.repository.read
         enables: repository and runtime/config evidence discovery
+
+  implementation-planner:
+    required: [host.report.write, host.repository.read]
+    optional: []
