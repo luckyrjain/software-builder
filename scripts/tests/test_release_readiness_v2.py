@@ -418,8 +418,7 @@ def test_trustworthy_coverage_cannot_stamp_forged_evidence_refs_as_trusted_runti
 def test_code_review_coverage_is_never_mutated_through_the_assessment_context() -> None:
     # A production_invoke callable is a plain, caller-supplied Python
     # callable with no enforcement preventing it from mutating whatever
-    # mapping it's handed -- unlike `candidate` (already defensively copied
-    # via `dict(candidate)`), `code_review_coverage` was stored into
+    # mapping it's handed. `code_review_coverage` was stored into
     # `inputs`/`assessment_target` by raw reference. Since run_release
     # passes the SAME code_review_coverage object to every entry in a
     # multi-entry manifest and to every future call that reuses it, an
@@ -451,6 +450,28 @@ def test_code_review_coverage_is_never_mutated_through_the_assessment_context() 
     entry = v2_entry(required=True, repo="acme/checkout", service="checkout", source_revision="a" * 40)
     run_release(entry, trusted_reports=[], production_invoke=mutating_invoke, code_review_coverage=coverage)
     assert coverage == original_coverage
+
+
+def test_build_assessment_context_candidate_override_is_never_mutated_via_assessment_target() -> None:
+    # Sibling to the code_review_coverage mutation-safety fix above: a
+    # caller-supplied `candidate` override carrying nested mutable state (a
+    # dict/list value) must not be mutable-in-place through
+    # `assessment_context["assessment_target"]` either -- a shallow
+    # `dict(candidate)` copy only protects the top-level keys, leaving any
+    # nested mutable value aliased to the caller's own object. Not reachable
+    # via run_release/resolve_production_readiness today (their own
+    # `_candidate_from_entry` output is always flat/scalar-only), but
+    # `candidate` is a documented public parameter of build_assessment_context
+    # and must not be held to a weaker mutation-safety standard than its
+    # sibling `code_review_coverage` parameter.
+    entry = parse_release_entry(v2_entry(source_revision="a" * 40))
+    candidate = {"repo": "acme/checkout", "service": "checkout", "nested": {"x": 1}}
+    original_candidate = copy.deepcopy(candidate)
+
+    context = build_assessment_context(entry, candidate=candidate)
+    context["assessment_target"]["nested"]["x"] = 999
+
+    assert candidate == original_candidate
 
 
 def test_manifest_criticality_is_never_folded_into_the_candidate_as_identity() -> None:

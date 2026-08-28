@@ -521,7 +521,17 @@ def build_assessment_context(
     candidate: Optional[Mapping[str, Any]] = None,
     code_review_coverage: Optional[Mapping[str, Any]] = None,
 ) -> MutableMapping[str, Any]:
-    candidate = dict(candidate) if candidate is not None else _candidate_from_entry(entry)
+    # A deep copy, not merely `dict(candidate)` -- round 16's `code_review_
+    # coverage` mutation-aliasing fix applies equally here: a caller-supplied
+    # `candidate` carrying nested mutable state (a dict/list value) would
+    # otherwise still be mutable-in-place through `assessment_context[
+    # "assessment_target"]` by a misbehaving `production_invoke`, a shallow
+    # copy only protecting the top-level keys. `_candidate_from_entry`'s own
+    # output is always flat/scalar-only, so this is currently unreachable via
+    # `run_release`/`resolve_production_readiness`'s own wiring, but
+    # `candidate` is a documented public parameter of this function and must
+    # not be held to a weaker mutation-safety standard than its sibling.
+    candidate = copy.deepcopy(candidate) if candidate is not None else _candidate_from_entry(entry)
     inputs: MutableMapping[str, Any] = {}
     input_provenance: MutableMapping[str, Any] = {}
     evidence_refs: list = []

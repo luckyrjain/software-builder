@@ -406,6 +406,36 @@ and 4 (crash-safety against novel type-confusion inputs) all came back clean. Ad
 verified to fail when the fix is reverted and pass when restored. Full suite (1700 passed, 1 skipped),
 registry validate/generate-check, and lint-release-readiness-checker all green.
 
+### Round 17, same day -- two independent adversarial passes found no code defect; one more closed by a
+### third, confirmatory pass
+
+Two independent adversarial passes: one systematically re-checked every external-boundary crossing in the
+module (into `check_spy`, into `production_invoke`'s `candidate`/`assessment_context`, out of
+`trusted_reports`/invoke/check-spy return values into this module's own returned state, and
+`build_code_review_coverage`'s two separate `list()` copies) for more instances of round 16's mutation/
+aliasing bug class -- found none; round 16's fix was the only site. The other did a fresh security pass on
+`cap_release_verdict`'s severity ordering (can a caller manufacture a favorable starting verdict -- no,
+`overall` always starts at a literal `"READY"` and only ever caps, never widens), `SkillResult` construction
+(never built from externally-influenced text anywhere in this module), a TODO/FIXME/HACK grep (zero matches),
+and `test_engineering_delivery_lifecycle.py`'s continued validity against the current identity/digest rules
+-- all clean.
+
+### Fixed (adversarial review round 17 follow-up, same day)
+- **`build_assessment_context`'s `candidate` override parameter used a shallow `dict(candidate)` copy, not a
+  deep one -- the same mutation-aliasing defect class round 16 fixed for `code_review_coverage`, left open
+  for `candidate`.** A caller-supplied `candidate` carrying nested mutable state (a dict/list value) remained
+  mutable-in-place through `assessment_context["assessment_target"]` by a misbehaving `production_invoke`,
+  since a shallow copy only protects the top-level keys. Not reachable via `run_release`/
+  `resolve_production_readiness`'s own wiring today (their `_candidate_from_entry` output is always
+  flat/scalar-only), but `candidate` is a documented public parameter of this function, and this module's own
+  header docstring claims "pure, side-effect-free evidence logic" -- it must not be held to a weaker
+  mutation-safety standard than its sibling `code_review_coverage` parameter. Fixed with the same
+  `copy.deepcopy` treatment. Found by a third, confirmatory adversarial pass (the packaged code-review skill)
+  after both of round 17's own independent passes came back clean.
+
+Added 1 regression test. Full suite (1701 passed, 1 skipped), registry validate/generate-check, and
+lint-release-readiness-checker all green.
+
 ## [1.0.0] — 2026-08-05
 
 ### Added
