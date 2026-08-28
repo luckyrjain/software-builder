@@ -289,6 +289,26 @@ Added 3 new regression tests and strengthened one existing test covering all thr
 
 Added 3 new regression tests covering both items above.
 
+### Fixed (adversarial review round 12, same day)
+- **Security: a validly SHA-shaped `source_revision` could still redeem a mutable `release_ref` for reuse,
+  reopening round 11's exact gap through its own fix's "either field suffices" logic.** Round 11's
+  `_has_immutable_identity` returned `True` whenever `source_revision` alone was SHA-shaped, regardless of
+  what `release_ref` looked like -- but `release_ref` (not `source_revision`) is the actual deployable
+  identity `match_release_report` keys reuse on via exact string equality. A manifest entry declaring a
+  mutable tag in `release_ref` (e.g. `v1.2.3`, potentially repointed to different, unreviewed content since
+  a trusted report was produced) plus a stale/replayed but validly-shaped `source_revision` copied from that
+  old report could still `MATCH` and reuse it as `READY`, with `production_invoke` never called. Unlike
+  invoking (where the freshly-invoked child independently re-validates build provenance linking
+  `source_revision` to today's actual deployable), reuse performs no such re-verification -- it is pure
+  static string matching against a possibly long-stale report, so `source_revision` can never substitute for
+  `release_ref`'s own immutability there. Replaced the shared `_has_immutable_identity` helper with two
+  single-purpose ones: `_release_ref_is_immutable_identity` (reuse gate, checks `release_ref` alone, never
+  redeemable by `source_revision`) and `_candidate_identity_sufficient`'s own inline check (invoke gate,
+  unchanged behavior: a validly-shaped `source_revision` legitimately substitutes there, since the invoked
+  child's own re-validation is what makes that safe).
+
+Added 1 new regression test (plus a corrected stale docstring reference in an existing round-11 test) covering the fix above. Found by a follow-up code-review pass after round 12's two independent adversarial reviews both reported zero new issues -- a reminder that "the same code region has already had two bugs found in it" (true of this exact reuse-vs-invoke identity logic, across rounds 9, 10, and 11) remains a strong signal to keep looking even after a review round comes back clean.
+
 ## [1.0.0] — 2026-08-05
 
 ### Added

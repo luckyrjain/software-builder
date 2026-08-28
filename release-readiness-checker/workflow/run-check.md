@@ -160,13 +160,18 @@ is being tracked across this run — it is not gated on `production_readiness_re
    matches whenever either side declares one (an entry that omits `environment` never reuses a report
    produced for some other declared environment — only "neither side declares one" is a harmless match),
    and whose own `source_revision` matches this entry's, when supplied, use one. An exact string match is
-   never enough by itself: the entry's identity must also be anchored to something immutable (a real git SHA,
-   or a real content-addressed digest such as `sha256:...` in `release_ref` even with no `source_revision`
-   separately known) — a mutable, non-identity-pinning tag (`latest`, `main`, a release name) is never
-   trustworthy for reuse even on an exact string match, since the tag could have been repointed between when
-   the report was produced and now. A caller- or file-supplied report can never satisfy this by itself — only
-   a runtime-validated/direct-child result is trusted for the gate. Conflict detection runs first, on every
-   such trusted, identity-matching report: if two or more
+   never enough by itself: `release_ref` itself — the actual deployable identity this match is keyed on —
+   must also be anchored to something immutable (a real git SHA, or a real content-addressed digest such as
+   `sha256:...`, even with no `source_revision` separately known). A mutable, non-identity-pinning tag
+   (`latest`, `main`, a release name) is never trustworthy for reuse even on an exact string match, since the
+   tag could have been repointed between when the report was produced and now — and critically, a validly
+   SHA-shaped `source_revision` can never redeem a mutable `release_ref` here either: unlike invoking (where
+   the freshly-invoked child independently re-validates build provenance linking `source_revision` to today's
+   actual deployable), reuse performs no such re-verification, so a stale or replayed `source_revision` that
+   happens to also match a mutable tag proves nothing about what that tag resolves to now. A caller- or
+   file-supplied report can never satisfy this by itself — only a runtime-validated/direct-child result is
+   trusted for the gate. Conflict detection runs first, on every such trusted, identity-matching report: if
+   two or more
    disagree in verdict, that is conflicting authoritative evidence, not a pick-one — the dimension is
    `UNKNOWN` until reconciled, and this is never bypassed by a `production_readiness_ref` pin. Only once the
    matching set agrees is the entry's `production_readiness_ref` applied, and only to select which of the

@@ -506,7 +506,7 @@ def test_mutable_tag_identity_can_never_be_reused_even_on_an_exact_string_match(
 
 
 def test_immutable_digest_release_ref_alone_can_still_be_reused_without_source_revision() -> None:
-    # The legitimate case _has_immutable_identity's reuse-path leniency
+    # The legitimate case _release_ref_is_immutable_identity's leniency
     # exists for: a real (immutable, content-addressed) digest release_ref is
     # itself a trustworthy anchor for REUSE even with no source_revision
     # separately known -- unlike the stricter invoke-path requirement (a bare
@@ -520,6 +520,41 @@ def test_immutable_digest_release_ref_alone_can_still_be_reused_without_source_r
         source_revision=None,
     )
     assert match_release_report(entry, report)["status"] == "MATCH"
+
+
+def test_matching_source_revision_never_redeems_a_mutable_release_ref_for_reuse() -> None:
+    # Security: release_ref is the actual deployable identity match already
+    # checks via exact string equality against the report's own
+    # head_revision_or_digest -- a validly SHA-shaped source_revision must
+    # never substitute for release_ref's own immutability on the reuse path,
+    # even when it also matches the report's. A mutable tag (e.g. "v1.2.3")
+    # can be repointed to entirely different, unreviewed content between when
+    # a trusted report was produced and now; a stale/replayed source_revision
+    # value that happens to still match tells us nothing about what the tag
+    # resolves to today. Unlike the invoke path (where the freshly-invoked
+    # child independently re-validates build provenance), reuse performs no
+    # such re-verification -- it is pure static string matching.
+    entry = v2_entry(
+        repo="acme/checkout", service="checkout", release_ref="v1.2.3", source_revision="f" * 40
+    )
+    stale_report = trusted_production_report(
+        verdict="READY", repo="acme/checkout", service="checkout", deployable="v1.2.3", source_revision="f" * 40
+    )
+    result = match_release_report(entry, stale_report)
+    assert result["status"] == "UNKNOWN"
+    assert result["reason"] == "unpinned_identity"
+
+    # The stale report is never reused -- but since source_revision is
+    # validly SHA-shaped, resolve_production_readiness correctly falls
+    # through to a FRESH invoke attempt instead (the invoke gate's own,
+    # separately-justified leniency), rather than silently going UNKNOWN.
+    s = spy()
+    required_entry = v2_entry(
+        required=True, repo="acme/checkout", service="checkout", release_ref="v1.2.3", source_revision="f" * 40
+    )
+    release_result = run_release(required_entry, trusted_reports=[stale_report], production_invoke=s)
+    assert release_result.production_readiness_source is None
+    assert s.calls == 1
 
 
 def test_conflicting_trusted_reports_are_unknown_not_first_match() -> None:

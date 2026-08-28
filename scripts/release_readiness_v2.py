@@ -274,16 +274,21 @@ def match_release_report(entry: Any, report: Mapping[str, Any]) -> MutableMappin
         if report_source_revision != parsed.source_revision:
             return {"status": "UNKNOWN", "reason": "source_revision_mismatch"}
 
-    if not _has_immutable_identity(parsed, allow_digest_release_ref=True):
-        # An exact string match against a mutable, non-identity-pinning tag
-        # (`latest`/`main`/`v1.2.3`, whether in release_ref or in an
-        # explicitly declared but equally unproven source_revision) is not
-        # proof this report was ever produced for the SAME concrete content --
-        # a tag can be repointed between when the report was produced and now.
-        # A real digest release_ref (no source_revision needed) or a real SHA
-        # is immutable and content-addressed, so it remains a trustworthy
-        # anchor for reuse even though `_candidate_identity_sufficient`
-        # correctly refuses to *invoke* on a bare digest alone.
+    if not _release_ref_is_immutable_identity(parsed.release_ref):
+        # release_ref is the actual deployable this match is keyed on (the
+        # exact-string check against report_head above) -- an exact string
+        # match against a mutable, non-identity-pinning tag (`latest`/`main`/
+        # `v1.2.3`) is not proof this report was ever produced for the SAME
+        # concrete content, since the tag can be repointed between when the
+        # report was produced and now. Critically, a validly SHA-shaped
+        # source_revision must NEVER redeem a mutable release_ref for reuse
+        # purposes: unlike the invoke path (where the freshly-invoked child
+        # independently re-validates build provenance linking source_revision
+        # to today's actual deployable via validate_build_provenance), reuse
+        # performs no such re-verification -- it is pure static string
+        # matching against a possibly long-stale report, so a stale/replayed
+        # source_revision value that happens to also match tells us nothing
+        # about what the mutable tag resolves to right now.
         return {"status": "UNKNOWN", "reason": "unpinned_identity"}
 
     return {"status": "MATCH"}
@@ -322,35 +327,35 @@ def _looks_like_immutable_digest(ref: str) -> bool:
     production readiness (there is no source_revision to prove code-review/CI
     evidence against) -- but it IS a legitimate anchor for *reusing* an
     already-produced report keyed to that same immutable content hash, even
-    with no source_revision separately known. See `_has_immutable_identity`.
+    with no source_revision separately known. See
+    `_release_ref_is_immutable_identity`.
     """
     return bool(_IMMUTABLE_DIGEST_RE.fullmatch(ref))
 
 
-def _has_immutable_identity(entry: ReleaseEntry, *, allow_digest_release_ref: bool) -> bool:
-    """True only when this entry's declared identity is pinned to something
-    immutable, never merely a mutable tag/arbitrary caller text.
+def _release_ref_is_immutable_identity(release_ref: Optional[str]) -> bool:
+    """True only when release_ref ITSELF -- never redeemable by a merely
+    string-matching source_revision -- is pinned to something immutable.
 
-    An explicit source_revision is required to look like a real git commit
-    SHA -- design v10 defines source_revision as "the immutable
-    source-control revision that code review and CI prove," and
-    source_revision is untrusted `release_manifest` text (`_as_str`-coerced,
-    same trust boundary as release_ref), so a mutable tag or arbitrary text
-    supplied there is exactly as unproven an identity as one supplied via
-    release_ref.
-
-    Absent an explicit source_revision, release_ref itself must be the
-    immutable anchor: a real git SHA always qualifies; a real digest
-    qualifies only when `allow_digest_release_ref` is set. The two callers
-    need different strictness here -- see each one's own docstring.
+    Used only to gate reuse (`match_release_report`). release_ref is the
+    actual deployable identity that match already checks via exact string
+    equality against the report's own `head_revision_or_digest`; if
+    release_ref is a mutable tag (`latest`, `main`, `v1.2.3`), an exact
+    string match today proves nothing about whether the tag still resolves
+    to the same content it did when the trusted report was produced -- even
+    when a SHA-shaped source_revision ALSO happens to match (e.g. a stale or
+    replayed value copied alongside the tag). Unlike the invoke gate
+    (`_candidate_identity_sufficient`), where the freshly-invoked child
+    independently re-validates build provenance linking source_revision to
+    today's actual deployable, reuse performs no such re-verification -- it
+    is pure static string matching against a possibly long-stale report, so
+    source_revision can never substitute for release_ref's own immutability
+    here. A real digest qualifies (no source_revision needed for reuse); a
+    real git SHA also qualifies.
     """
-    if entry.source_revision:
-        return _looks_like_source_revision(entry.source_revision)
-    if not entry.release_ref:
+    if not release_ref:
         return False
-    if _looks_like_source_revision(entry.release_ref):
-        return True
-    return allow_digest_release_ref and _looks_like_immutable_digest(entry.release_ref)
+    return _looks_like_source_revision(release_ref) or _looks_like_immutable_digest(release_ref)
 
 
 def _candidate_identity_sufficient(entry: ReleaseEntry) -> bool:
@@ -362,18 +367,35 @@ def _candidate_identity_sufficient(entry: ReleaseEntry) -> bool:
     child for a candidate that can never be identified downstream is a wasted
     call, not merely a redundant check.
 
-    `allow_digest_release_ref=False`: a release_ref shaped like a build/image
-    digest (`sha256:...`) is NOT sufficient on its own to invoke -- without an
-    explicit, SHA-shaped source_revision, there is no way to prove
-    code-review/CI evidence about *this* deployable, so invocation must not be
-    attempted at all. (Reuse has different, more permissive rules -- see
-    `match_release_report`.)
+    A release_ref that is itself shaped like a source revision (a git commit
+    SHA) needs nothing else beyond that. Anything else -- a build/image
+    digest (`sha256:...`), a mutable tag (`latest`, `main`, a release name),
+    or arbitrary caller text -- needs an explicit source_revision; without
+    one, there is no way to prove code-review/CI evidence about *this*
+    deployable, so invocation must not be attempted at all. (Reuse has
+    different, more permissive rules for a bare digest release_ref -- see
+    `match_release_report`/`_release_ref_is_immutable_identity`.)
+
+    An explicit source_revision is itself required to look like a real git
+    commit SHA -- design v10 defines source_revision as "the immutable
+    source-control revision that code review and CI prove," and
+    source_revision is untrusted `release_manifest` text (`_as_str`-coerced,
+    same trust boundary as release_ref), so a mutable tag or arbitrary text
+    supplied there is exactly as unproven an identity as one supplied via
+    release_ref, and must not be treated as sufficient to invoke. Here (only
+    here, unlike reuse) a validly-shaped source_revision legitimately
+    substitutes for release_ref's own shape, because the invoked child
+    independently re-validates build provenance linking that source revision
+    to today's actual deployable -- there is no equivalent re-verification on
+    the reuse path.
     """
     if not entry.repo or not entry.service:
         return False
     if not entry.release_ref:
         return False
-    return _has_immutable_identity(entry, allow_digest_release_ref=False)
+    if entry.source_revision:
+        return _looks_like_source_revision(entry.source_revision)
+    return _looks_like_source_revision(entry.release_ref)
 
 
 def _candidate_from_entry(entry: ReleaseEntry) -> MutableMapping[str, Any]:
