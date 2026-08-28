@@ -8,7 +8,7 @@
 | **Owner** | software-builder maintainers |
 | **Last reviewed** | 2026-08-09 |
 | **Review cadence** | Quarterly — or when pinned MCP package versions change |
-| **External services** | GitLab MCP, Kubernetes MCP, Datadog MCP (via composed skills) |
+| **External services** | GitLab MCP, Kubernetes MCP, Datadog MCP (via composed skills); optional SCM history/policy and build-provenance host evidence for v2 conditional production-readiness invocation |
 
 See [setup-freshness.md](../docs/skill-framework/shared/setup-freshness.md) for the shared contract.
 ## Ambient discovery is intended

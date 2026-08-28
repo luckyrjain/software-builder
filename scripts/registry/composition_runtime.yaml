@@ -79,6 +79,8 @@ handoffs:
     - mr_context
     incident-rca:
     - mr_context
+    production-readiness-review:
+    - assessment_context
   cost-optimization-sprint-planner:
     k8s-overprovisioning-datadog:
     - mr_context

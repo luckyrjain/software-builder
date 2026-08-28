@@ -449,12 +449,21 @@ skills:
     - mr_review_report
     - k8s_rightsizing_report
     - rca_report
+    - production_readiness_report
     produce_fields:
       digest_report:
       - sections
       - generated_at
       - source_revisions
     consume_fields:
+      production_readiness_report:
+      - assessment_target
+      - source_revision
+      - verdict
+      - dimension_statuses
+      - conditions
+      - waivers
+      - evidence_refs
       mr_context:
       - project
       - merge_request_iid
