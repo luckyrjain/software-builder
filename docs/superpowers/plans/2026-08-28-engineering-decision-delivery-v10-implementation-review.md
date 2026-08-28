@@ -13,8 +13,8 @@ Findings
 
 • P0: 0
 • P1: 0
-• P2: 1 — `resolve_production_readiness` in `scripts/release_readiness_v2.py` correctly runs trusted-report reuse before the coverage-completeness short-circuit (lines ~637-698), but no test in `scripts/tests/test_release_readiness_v2.py` calls it with both a matching `trusted_reports` entry AND an incomplete `code_review_coverage` bundle in the same invocation. A future reordering regression would not be caught by the existing suite. Recommend adding that combined-case test.
-• P3: 1 — `scripts/registry/semantic_document.py::is_sha256_digest` (line 135) lower-cases its input before the hex regex match, so it accepts a mixed/upper-case 64-hex string as "a valid SHA-256 digest," contrary to the design's literal "exact lower-case SHA-256 hex match" wording. Not exploitable: every digest comparison in the codebase also lower-cases both sides before comparing, so no two distinct digests can be made to alias. Cosmetic/spec-wording gap only.
+• P2: 1, FIXED same day (see Resolution below) — `resolve_production_readiness` in `scripts/release_readiness_v2.py` correctly runs trusted-report reuse before the coverage-completeness short-circuit (lines ~637-698), but no test in `scripts/tests/test_release_readiness_v2.py` called it with both a matching `trusted_reports` entry AND an incomplete `code_review_coverage` bundle in the same invocation. A future reordering regression would not have been caught by the existing suite.
+• P3: 1, FIXED same day (see Resolution below) — `scripts/registry/semantic_document.py::is_sha256_digest` (line 135) lower-cased its input before the hex regex match, so it accepted a mixed/upper-case 64-hex string as "a valid SHA-256 digest," contrary to the design's literal "exact lower-case SHA-256 hex match" wording. Not exploitable: every digest comparison in the codebase also lower-cased both sides before comparing, so no two distinct digests could be made to alias. Cosmetic/spec-wording gap only.
 
 Validation performed
 
@@ -35,3 +35,12 @@ The design v10 document as committed to the repo (`docs/superpowers/plans/2026-0
 Limitations
 
 This review covers the merged implementation of all eight companion deliverables against the design v10 spec's normative requirements, focusing on the highest-risk trust-boundary/evidence-authority contracts called out in the original planning certificate. It is not an exhaustive line-by-line audit of every one of the ~1700 tests or every skill's reference documentation. The one pre-existing, out-of-scope test failure noted above was not investigated further or fixed.
+
+Resolution (2026-08-28, same day)
+
+Both findings above are fixed on this branch:
+
+• P2 fixed — added `test_reuse_wins_even_when_code_review_coverage_is_incomplete` to `scripts/tests/test_release_readiness_v2.py`, calling `resolve_production_readiness` with a matching `trusted_reports` entry AND an incomplete `code_review_coverage` bundle in the same invocation. Asserts `production_invoke` is never called and the result is `{"status": "READY", "source": "REUSED"}`, so a future swap of the reuse-first/coverage-gate order in `resolve_production_readiness` (`scripts/release_readiness_v2.py`) would now fail this test even though the two pre-existing single-condition tests would still pass.
+• P3 fixed — `scripts/registry/semantic_document.py`'s three digest checks (`_target`, `_resolve`, `is_sha256_digest`) now match `_SHA256` against the raw string instead of `value.lower()`, so a mixed/upper-case 64-hex string is rejected rather than accepted as a valid digest, matching the design's literal "exact lower-case SHA-256 hex match" wording. Added three regression tests to `scripts/tests/test_semantic_document_binding.py`: `test_prd_v2_rejects_mixed_case_semantic_document_digest`, `test_system_design_resolve_rejects_mixed_case_digest_even_when_bytes_match`, and `test_is_sha256_digest_rejects_mixed_and_upper_case`.
+
+Verified: `pytest scripts/tests/test_release_readiness_v2.py scripts/tests/test_semantic_document_binding.py scripts/tests/test_production_readiness_contract.py scripts/tests/test_implementation_plan.py` — 487 passed. Full repository suite re-run after the fix; see git log for the result.
