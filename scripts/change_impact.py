@@ -27,6 +27,48 @@ CHANGE_CLASSES = (
 )
 
 _DIFF_PATH = re.compile(r"^diff --git a/(\S+) b/(\S+)", re.MULTILINE)
+_HYPHEN_VARIANTS = str.maketrans(
+    {
+        "‐": "-",
+        "‑": "-",
+        "‒": "-",
+        "–": "-",
+        "—": "-",
+        "−": "-",
+    },
+)
+# A real Kubernetes resources stanza names an actual resource type (cpu/memory/ephemeral-storage/
+# hugepages, or a vendor extended resource formatted as <dns-domain>/<name>, e.g. nvidia.com/gpu —
+# the domain requires at least one dot and at least one letter, so an ordinary extension-free path
+# like "docs/readme" and IP/CIDR notation like "10.0.0.1/24" don't qualify) under limits:/requests:.
+# The skeleton (resources:/limits:/requests: lines and the blank-line filler) only ever uses
+# horizontal whitespace ([ \t]) or a literal newline, with no overlap between adjacent groups, so a
+# non-matching input cannot trigger catastrophic backtracking there the way `\s*\n\s+` (whose classes
+# both match "\n") could; blank-line runs are intentionally unbounded rather than capped, since each
+# repetition still consumes a mandatory newline and so cannot itself introduce backtracking blowup —
+# a bounded cap would only let enough padding evade detection entirely.
+_K8S_DNS_LABEL = r"[a-z0-9](?:[a-z0-9-]*[a-z0-9])?"
+_K8S_VENDOR_RESOURCE = rf"(?=[a-z0-9.-]*[a-z])(?:{_K8S_DNS_LABEL}(?:\.{_K8S_DNS_LABEL})+)/[\w-]+"
+_K8S_RESOURCE_KEY_FRAGMENT = rf"cpu|memory|ephemeral-storage|hugepages(?:-\S+)?|{_K8S_VENDOR_RESOURCE}"
+_K8S_BLANK_LINE_RUN = r"(?:[ \t]*\r?\n)*"
+_K8S_RESOURCES_BLOCK = re.compile(
+    r"resources:[ \t]*\r?\n"
+    rf"{_K8S_BLANK_LINE_RUN}"
+    r"[ \t]*(?:limits|requests):[ \t]*\r?\n"
+    rf"{_K8S_BLANK_LINE_RUN}"
+    rf"[ \t]*(?:{_K8S_RESOURCE_KEY_FRAGMENT})\s*:",
+)
+# A whitelist of plausible continuations, not a blacklist of excluded ones: text is already
+# lowercased before _triggers ever runs (_source_text lowers it), which destroys the camelCase
+# boundary a config field like replicaCount would otherwise have, so "replicacount" and an unrelated
+# dictionary word like "replicase"/"replicability" are lexically identical once case is gone — no
+# blacklist of excluded suffixes can be complete against the whole of English (replicated, replicase,
+# replicability, replicasome, ... were each found and patched in turn across review rounds). Instead,
+# only match "replica" bare, pluralized, possessive, or compounded with the handful of separators/
+# suffixes real config field names actually use (replicaCount, replica_count, replica-count,
+# num_replicas, ReplicaSet); anything else immediately continuing in a-z is presumed to be ordinary
+# English prose, not a scaling-relevant field name, and correctly left unmatched.
+_REPLICA_TOKEN = re.compile(r"replica(?:s|_count|-count|counts?|sets?)?(?=[^a-z]|$)")
 _LOCKFILES = {
     "package-lock.json",
     "npm-shrinkwrap.json",
@@ -304,27 +346,39 @@ def _classify_paths(paths: list[str], text: str) -> list[str]:
     return [item for item in CHANGE_CLASSES if item in classes]
 
 
+def _normalize_hyphens(text: str) -> str:
+    """Fold unicode hyphen/dash variants to ASCII and rejoin a hyphenated word split by a line wrap."""
+    return re.sub(r"-\s*\n\s*", "-", text.translate(_HYPHEN_VARIANTS))
+
+
 def _triggers(classes: list[str], text: str, paths: list[str]) -> list[str]:
-    lowered = f"{text}\n{' '.join(paths).lower()}"
+    lowered = _normalize_hyphens(f"{text}\n{' '.join(paths).lower()}")
     triggers: set[str] = set()
     if "api_contract" in classes or any(token in lowered for token in ("api contract", "openapi", "graphql", "endpoint")):
         triggers.add("api")
     if "schema_or_data" in classes or any(token in lowered for token in ("schema", "migration", "database", "table", "backfill")):
         triggers.add("database")
-    if any(token in lowered for token in ("authn", "authz", "authentication", "authorization", "secret", "crypto", "trust boundary", "data exposure")):
+    if any(token in lowered for token in ("authn", "authz", "authentication", "authorization", "secret", "crypto", "trust boundary", "trust-boundary", "data exposure")):
         triggers.add("security")
     if any(token in lowered for token in ("hot-path", "hot path", "n+1", "cache", "concurrency", "pool", "fanout", "fan-out")):
         triggers.add("performance")
-    if any(token in lowered for token in ("demand", "headroom", "replica", "replicas", "hpa", "resources:", "limits:", "requests:")):
+    # "resources:"/"limits:"/"requests:" are only meaningful capacity signals in an actual K8s
+    # resources stanza (see _K8S_RESOURCES_BLOCK) — matched together with k8s_rightsizing below, per
+    # the plan's paired "K8s requests/limits/HPA/replicas -> capacity + k8s_rightsizing" mapping.
+    # Bare "demand"/"headroom"/"replica(s)" remain independent, general capacity signals.
+    is_k8s_resource_change = any(token in lowered for token in ("k8s", "kubernetes", "hpa")) or bool(
+        _K8S_RESOURCES_BLOCK.search(lowered),
+    )
+    if is_k8s_resource_change or any(token in lowered for token in ("demand", "headroom")) or _REPLICA_TOKEN.search(lowered):
         triggers.add("capacity")
+    if is_k8s_resource_change:
+        triggers.add("k8s_rightsizing")
     if any(token in lowered for token in ("metrics", "logs", "traces", "slo", "alerts", "correlation")):
         triggers.add("observability")
-    if any(token in lowered for token in ("timeout", "retry", "backpressure", "circuit-breaker", "partial failure", "recovery")):
+    if any(token in lowered for token in ("timeout", "retry", "backpressure", "circuit-breaker", "partial failure", "partial-failure", "recovery")):
         triggers.add("resilience")
     if "dependency" in classes or any(token in lowered for token in ("dependency", "framework", "lockfile", "package-lock", "version bump")):
         triggers.add("dependency_upgrade")
-    if any(token in lowered for token in ("k8s", "kubernetes", "hpa", "resources:", "limits:", "requests:")):
-        triggers.add("k8s_rightsizing")
     return sorted(triggers)
 
 
