@@ -160,7 +160,13 @@ def _normalize_manifest(manifest: Any) -> list:
     if isinstance(manifest, Mapping):
         return [manifest]
     if isinstance(manifest, Sequence) and not isinstance(manifest, (str, bytes)):
-        return list(manifest)
+        # A non-mapping item (a string, a number, None, ...) is dropped here
+        # rather than parsed into a phantom all-None ReleaseEntry -- a
+        # manifest that is a non-empty list of nothing but garbage must still
+        # reach run_release's own "no entries -> BLOCKED" hard stop, the same
+        # as a literally empty manifest, rather than silently generating
+        # NOT_RUN check rows for unidentifiable services.
+        return [item for item in manifest if isinstance(item, Mapping)]
     return []
 
 
@@ -242,16 +248,21 @@ def match_release_report(entry: Any, report: Mapping[str, Any]) -> MutableMappin
         return {"status": "UNKNOWN", "reason": "release_ref_mismatch"}
 
     if parsed.source_revision is not None:
-        # Flat-only, deliberately NOT production_readiness.py's generic
-        # _effective_source_revision: that helper's nested-target fallback
-        # chain treats a candidate's own head_revision_or_digest as a
-        # stand-in for "revision" when no nested source_revision is present --
-        # correct for a generic candidate object, but wrong here, since
-        # production_readiness_report's own schema (composition_contracts.yaml)
-        # declares source_revision as a top-level sibling of assessment_target,
-        # never nested inside it. Using the generic helper would silently
-        # compare against the report's deployable digest instead.
-        report_source_revision = report.get("source_revision") or target.get("source_revision")
+        # Flat-only -- genuinely, not merely "flat-first" -- deliberately NOT
+        # production_readiness.py's generic _effective_source_revision: that
+        # helper's nested-target fallback chain treats a candidate's own
+        # head_revision_or_digest as a stand-in for "revision" when no nested
+        # source_revision is present -- correct for a generic candidate
+        # object, but wrong here, since production_readiness_report's own
+        # schema (composition_contracts.yaml) declares source_revision as a
+        # top-level sibling of assessment_target, never nested inside it. A
+        # report that omits the flat field is schema-nonconforming and must
+        # never have its source_revision inferred from `target` (a prior
+        # `or target.get("source_revision")` fallback here reopened exactly
+        # this nested/flat ambiguity; a well-formed report's own
+        # `head_revision_or_digest` inside `target` could otherwise be misread
+        # as a source revision it never actually declared).
+        report_source_revision = report.get("source_revision")
         if report_source_revision != parsed.source_revision:
             return {"status": "UNKNOWN", "reason": "source_revision_mismatch"}
 
@@ -565,14 +576,22 @@ def build_code_review_coverage(
     `code_review_coverage` parameter for any entry.
     """
     included_refs = [_change_ref_id(change, index) for index, change in enumerate(included_change_refs)]
-    reviewed = set(trusted_review_refs)
+    # `trusted_review_refs` comes from the same authoritative-SCM-enumeration
+    # trust boundary as `included_change_refs` (whose own malformed entries
+    # `_change_ref_id` already hardens against) -- a non-string/unhashable
+    # item here must not crash `set(...)`; it simply can never match any real
+    # ref, so it's silently excluded from `reviewed` rather than raising.
+    reviewed = {ref for ref in trusted_review_refs if isinstance(ref, str) and ref}
     integrated_revisions = dict(integrated_revisions or {})
 
     def _is_covered(ref: str) -> bool:
         if ref in reviewed:
             return True
         integrated = integrated_revisions.get(ref)
-        return bool(integrated) and integrated in reviewed
+        # isinstance guard before the `in` membership test: an unhashable
+        # integrated_revisions value (a list/dict instead of a string) must
+        # never reach `integrated in reviewed`, which would raise TypeError.
+        return isinstance(integrated, str) and bool(integrated) and integrated in reviewed
 
     uncovered = [ref for ref in included_refs if not _is_covered(ref)]
     if not included_refs:
@@ -663,7 +682,7 @@ def finalize_release(pre: Mapping[str, Any]) -> ReleaseResult:
         production_readiness_source=pre.get("production_readiness_source"),
         production_readiness=pre.get("production_readiness"),
         production_readiness_results=list(pre.get("production_readiness_results") or []),
-        checks=list(pre.get("checks", [])),
+        checks=list(pre.get("checks") or []),
         candidate_changed_during_review=bool(pre.get("candidate_changed_during_review", False)),
     )
 
@@ -752,8 +771,13 @@ def run_release(
         for name in _EXISTING_CHECKS:
             if check_spy is not None:
                 outcome = check_spy.run(name, repo=parsed.repo, service=parsed.service, environment=parsed.environment)
-                status = outcome.get("status", "UNKNOWN") if isinstance(outcome, Mapping) else "UNKNOWN"
+                status = _safe_verdict(outcome.get("status")) if isinstance(outcome, Mapping) else "UNKNOWN"
                 checks.append({"name": name, "repo": parsed.repo, "service": parsed.service, "status": status, "executed": True})
+                # _safe_verdict already guarantees a hashable string, but an
+                # arbitrary string not in this table (as opposed to one of the
+                # dict/list shapes _safe_verdict guards against) still needs
+                # the same UNKNOWN default -- _CHECK_STATUS_VERDICT.get(...)
+                # handles that half; _safe_verdict handles the unhashable half.
                 mapped = _CHECK_STATUS_VERDICT.get(status, "UNKNOWN")
                 overall = cap_release_verdict(overall, mapped)
                 if mapped == "UNKNOWN":
@@ -781,6 +805,15 @@ def run_release(
             candidate_changed = True
             overall = cap_release_verdict(overall, "UNKNOWN")
             unknown_dimensions.append("release_ref_freshness")
+            if parsed.production_readiness_required:
+                # This entry required production readiness -- it must still
+                # appear in production_readiness_results (voided by the stale
+                # ref, never simply absent) so a per-entry report render can
+                # show it was required and why it's unresolved, matching this
+                # field's own "every entry that actually required it" contract.
+                production_readiness_results.append(
+                    {"repo": parsed.repo, "service": parsed.service, "source": None, "verdict": "UNKNOWN"}
+                )
             continue
 
         if not parsed.production_readiness_required:

@@ -119,6 +119,27 @@ def test_multi_entry_production_readiness_results_are_all_recorded() -> None:
     assert by_repo == {"acme/a": "NOT_READY", "acme/b": "READY"}
 
 
+def test_required_entry_voided_by_freshness_fence_still_recorded() -> None:
+    # An entry that required production readiness but whose ref moved
+    # mid-run must still appear in production_readiness_results (as UNKNOWN,
+    # voided by the stale ref) -- never silently absent, which would make a
+    # per-entry report render unable to show it was ever required at all.
+    moved_entry = v2_entry(required=True, repo="acme/moved", service="moved")
+    stable_entry = v2_entry(required=True, repo="acme/stable", service="stable", source_revision="a" * 40)
+    stable_report = trusted_production_report(verdict="READY", repo="acme/stable", service="stable", source_revision="a" * 40)
+    moved_key = ("acme/moved", "moved", None)
+    stable_key = ("acme/stable", "stable", None)
+
+    result = run_release(
+        [moved_entry, stable_entry],
+        trusted_reports=[stable_report],
+        start_ref={moved_key: "a" * 40, stable_key: "a" * 40},
+        final_ref={moved_key: "b" * 40, stable_key: "a" * 40},
+    )
+    by_repo = {r["repo"]: r["verdict"] for r in result.production_readiness_results}
+    assert by_repo == {"acme/moved": "UNKNOWN", "acme/stable": "READY"}
+
+
 def test_v2_required_missing_report_invokes_when_safe() -> None:
     s = spy(return_value=trusted_production_report(verdict="READY"))
     result = run_release(v2_entry(required=True, source_revision="a" * 40), trusted_reports=[], production_invoke=s)
@@ -242,6 +263,69 @@ def test_evidence_refs_wrong_shape_is_never_shredded() -> None:
     )
     assert context["evidence_refs"] == []
     assert context["input_provenance"]["code_review_coverage"]["evidence_refs"] == []
+
+
+def test_non_string_check_status_degrades_to_unknown_not_a_crash() -> None:
+    # A check harness returning a non-string, unhashable status (e.g. a list)
+    # must not crash the _CHECK_STATUS_VERDICT lookup.
+    class _MalformedStatusSpy:
+        def run(self, name: str, **_: object) -> dict:
+            return {"status": ["PASS", "extra"]}
+
+    result = run_release(v1_entry(), check_spy=_MalformedStatusSpy())
+    assert result.overall == "UNKNOWN"
+    assert result.skill_result.status == "PARTIAL"
+
+
+def test_match_release_report_source_revision_is_flat_only() -> None:
+    # A report that omits the flat top-level source_revision but carries one
+    # nested inside assessment_target is schema-nonconforming for
+    # production_readiness_report (source_revision is a declared top-level
+    # sibling, never nested) -- it must never be read from the nested location.
+    report = trusted_production_report(source_revision=None)
+    report["assessment_target"]["source_revision"] = "a" * 40
+    result = match_release_report(v2_entry(source_revision="a" * 40), report)
+    assert result["status"] == "UNKNOWN"
+    assert result["reason"] == "source_revision_mismatch"
+
+
+def test_unhashable_trusted_review_ref_never_crashes_coverage_build() -> None:
+    coverage = build_code_review_coverage(
+        candidate_source_revision="a" * 40,
+        included_change_refs=["mr:1"],
+        trusted_review_refs=["mr:1", {"oops": "dict"}],
+    )
+    assert coverage["status"] == "COMPLETE"
+
+
+def test_unhashable_integrated_revision_value_never_crashes_coverage_build() -> None:
+    coverage = build_code_review_coverage(
+        candidate_source_revision="a" * 40,
+        included_change_refs=["mr:1"],
+        trusted_review_refs=["squash-sha"],
+        integrated_revisions={"mr:1": ["squash-sha"]},
+    )
+    assert coverage["status"] == "PARTIAL"
+    assert coverage["uncovered_change_refs"] == ["mr:1"]
+
+
+def test_finalize_release_tolerates_explicit_none_checks() -> None:
+    result = finalize_release(release_fixture(overall="READY", unknown_dimensions=[], checks=None))
+    assert result.checks == []
+
+
+def test_manifest_of_only_garbage_items_is_blocked_not_a_partial_analysis() -> None:
+    # A non-empty manifest whose every item is a non-mapping must reach the
+    # same BLOCKED hard stop as a literally empty manifest, never generate
+    # phantom NOT_RUN check rows for unidentified services.
+    result = run_release(["not-a-dict", 123, None])
+    assert result.skill_result.status == "BLOCKED"
+    assert result.checks == []
+
+
+def test_manifest_mixing_valid_and_garbage_items_keeps_the_valid_ones() -> None:
+    result = run_release([v1_entry(), "garbage", None])
+    assert result.skill_result.status != "BLOCKED"
 
 
 # ---------------------------------------------------------------------------

@@ -157,7 +157,30 @@ Added 8 new regression tests covering every fix above.
   harness no way to discriminate which candidate it was being asked to check, contrary to
   `run-check.md`'s own documented "once per service"/"per resolved MR" contract.
 
-Added 8 new regression tests covering every fix above.
+Added 5 new regression tests covering every fix above.
+
+### Fixed (adversarial review round 6, same day)
+- **A check harness's own non-string status no longer crashes `run_release`** — round 5's `_safe_verdict`
+  guard covered every verdict extraction point except the sibling check-status lookup
+  (`_CHECK_STATUS_VERDICT.get(status, ...)`) added in the same round.
+- **An entry voided by the freshness fence is no longer silently absent from
+  `production_readiness_results`** — an entry whose ref moved mid-run and that also required production
+  readiness now still gets a `{"verdict": "UNKNOWN", "source": None}` record, so a per-entry report render
+  can show it was required and why it's unresolved.
+- **`match_release_report`'s `source_revision` check is now genuinely flat-only** — a residual
+  `or target.get("source_revision")` fallback reopened the exact nested/flat ambiguity round 3's comment
+  said was deliberately avoided; a schema-nonconforming report with a nested-only `source_revision` no
+  longer matches.
+- **`build_code_review_coverage` no longer crashes on an unhashable `trusted_review_refs` item or
+  `integrated_revisions` value** — the same untrusted-SCM-enumeration boundary `_change_ref_id` already
+  hardens `included_change_refs` against was left open on its two sibling parameters.
+- **`finalize_release` now tolerates an explicit `checks: None`**, matching the `or []` pattern its
+  sibling `unknown_dimensions`/`production_readiness_results` fields already used.
+- **A manifest that is a non-empty list of nothing but garbage (non-mapping) items now reaches the same
+  `BLOCKED` hard stop as a literally empty manifest**, instead of silently generating phantom `NOT_RUN`
+  check rows for unidentifiable services.
+
+Added 7 new regression tests covering every fix above.
 
 ## [1.0.0] — 2026-08-05
 
