@@ -70,6 +70,21 @@ All notable changes to the release-readiness-checker skill. Per-file `workflow_v
   registry runtime-handoff data instead of returning pure arithmetic, and the Task 5.5 no-revisit harness
   no longer mutates the real `ReleaseResult` return value with test-only bookkeeping.
 
+### Fixed (adversarial review round 2, same day)
+- **Closed a cross-entry coverage leak.** The round-1 fix moved `code_review_coverage` off the untrusted
+  manifest text, but the new out-of-band parameter had no per-entry binding — one `code_review_coverage`
+  bundle assembled for one manifest entry was silently applied to every OTHER entry in the same
+  multi-entry `run_release` call too, laundering one candidate's review evidence into a different
+  candidate's verdict. Fixed with `_coverage_for_entry`, which only applies a bundle to the entry whose
+  `source_revision` matches the bundle's own `candidate_source_revision`; a scope mismatch is treated as
+  "not supplied for this entry," never as untrustworthy evidence for it.
+- Fixed two tests that could not have caught the bugs they were named for:
+  `test_production_report_for_old_digest_not_reused_after_ref_moves` built its entry without
+  `required=True`, so production readiness was never resolved and the assertion passed vacuously;
+  `test_conflicting_trusted_reports_are_unknown_not_first_match` never checked that the conflicting-report
+  path avoids a wasted child invocation. Both now exercise the real path and pass a spy that would fail if
+  the invariant regressed.
+
 ## [1.0.0] — 2026-08-05
 
 ### Added

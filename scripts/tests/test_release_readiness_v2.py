@@ -130,16 +130,19 @@ def test_wrong_deployable_digest_is_unknown() -> None:
 def test_conflicting_trusted_reports_are_unknown_not_first_match() -> None:
     # Two trusted, identity-matching reports that disagree in verdict are
     # conflicting authoritative evidence -- never silently resolved by
-    # picking whichever happens to come first in the list.
+    # picking whichever happens to come first in the list, and never worth
+    # a wasted child invocation either.
     stale_ready = trusted_production_report(verdict="READY")
     fresh_not_ready = trusted_production_report(verdict="NOT_READY")
+    s = spy()
     result = run_release(
         v2_entry(required=True),
         trusted_reports=[stale_ready, fresh_not_ready],
-        production_invoke=spy(),
+        production_invoke=s,
     )
     assert result["production_readiness_source"] is None
     assert result.production_readiness == "UNKNOWN"
+    assert s.calls == 0
 
 
 def test_production_readiness_ref_pins_the_reused_report() -> None:
@@ -182,6 +185,40 @@ def test_manifest_supplied_code_review_coverage_is_not_trusted() -> None:
     # The forged field must have no effect on whether/how the child was
     # invoked -- it simply isn't read from the manifest at all.
     assert s.calls == 1
+
+
+def test_code_review_coverage_never_leaks_across_manifest_entries() -> None:
+    # Security: a single code_review_coverage bundle assembled for one entry
+    # must never be silently applied to a DIFFERENT entry in the same
+    # multi-entry manifest -- that would launder one candidate's review
+    # evidence into another candidate's verdict.
+    coverage_for_checkout = build_code_review_coverage(
+        candidate_source_revision="a" * 40,
+        included_change_refs=["mr:1"],
+        trusted_review_refs=["mr:1"],
+    )
+    checkout_entry = v2_entry(required=True, repo="acme/checkout", service="checkout", source_revision="a" * 40)
+    billing_entry = v2_entry(required=True, repo="acme/billing", service="billing", source_revision="b" * 40)
+
+    def production_invoke(candidate: dict, *, assessment_context: dict | None = None):
+        supplied = (assessment_context or {}).get("inputs", {}).get("code_review_coverage")
+        # billing's own invocation must never see checkout's coverage bundle.
+        if candidate["repo"] == "acme/billing":
+            assert supplied is None
+        return trusted_production_report(
+            verdict="READY",
+            repo=candidate["repo"],
+            service=candidate["service"],
+            deployable=candidate["head_revision_or_digest"],
+            source_revision=candidate["source_revision"],
+        )
+
+    run_release(
+        [checkout_entry, billing_entry],
+        trusted_reports=[],
+        production_invoke=production_invoke,
+        code_review_coverage=coverage_for_checkout,
+    )
 
 
 def test_caller_only_code_review_coverage_never_gates_invoke_as_complete() -> None:
@@ -411,11 +448,22 @@ def test_release_ref_changes_during_v2_run_is_unknown() -> None:
 
 
 def test_production_report_for_old_digest_not_reused_after_ref_moves() -> None:
+    # required=True and a real invoke path so this actually exercises reuse
+    # rejection (a stale report for a digest that no longer matches) rather
+    # than passing vacuously because production readiness was never required.
+    stale_report = trusted_production_report(deployable="sha256:" + "a" * 64)
+    s = spy()
     result = run_release(
-        v2_entry(release_ref="sha256:" + "b" * 64),
-        trusted_reports=[trusted_production_report(deployable="sha256:" + "a" * 64)],
+        v2_entry(required=True, release_ref="sha256:" + "b" * 64, source_revision="a" * 40),
+        trusted_reports=[stale_report],
+        production_invoke=s,
     )
+    assert result["production_readiness_source"] != "REUSED"
     assert result.production_readiness != "READY"
+    # The stale report's digest mismatch correctly falls through to the
+    # invoke path (not a silent reuse) -- confirmed by the spy actually
+    # having been consulted.
+    assert s.calls == 1
 
 
 # ---------------------------------------------------------------------------

@@ -235,12 +235,40 @@ def _coverage_is_trustworthy_and_complete(coverage: Optional[Mapping[str, Any]])
     return pr._is_host_or_runtime_acquisition(coverage.get("acquisition"))
 
 
+def _coverage_for_entry(
+    entry: ReleaseEntry, coverage: Optional[Mapping[str, Any]]
+) -> Optional[Mapping[str, Any]]:
+    """Scope a trusted-runtime `code_review_coverage` bundle to the exact entry
+    it was assembled for.
+
+    `run_release` accepts one `code_review_coverage` bundle per call, but a
+    multi-entry manifest can require production readiness for more than one
+    entry, each with its own source revision. Unlike `trusted_reports` (which
+    is already identity-matched per entry via `match_release_report`), a bare
+    `code_review_coverage` value has no such per-entry binding by construction
+    -- without this check, a bundle assembled for one entry would be reused
+    unmodified for every other entry in the same run, laundering review
+    evidence for the wrong candidate into that other candidate's own verdict.
+    A coverage bundle only applies when its own `candidate_source_revision`
+    exactly matches this entry's `source_revision`; otherwise it is treated as
+    not supplied for this entry (never as "supplied but untrustworthy" --
+    production-readiness-review remains free to derive its own coverage).
+    """
+    coverage = pr._as_mapping(coverage) if coverage is not None else None
+    if not coverage:
+        return None
+    if not entry.source_revision or coverage.get("candidate_source_revision") != entry.source_revision:
+        return None
+    return coverage
+
+
 def build_assessment_context(
     entry: ReleaseEntry,
     *,
+    candidate: Optional[Mapping[str, Any]] = None,
     code_review_coverage: Optional[Mapping[str, Any]] = None,
 ) -> MutableMapping[str, Any]:
-    candidate = _candidate_from_entry(entry)
+    candidate = dict(candidate) if candidate is not None else _candidate_from_entry(entry)
     inputs: MutableMapping[str, Any] = {}
     input_provenance: MutableMapping[str, Any] = {}
     evidence_refs: list = []
@@ -283,7 +311,10 @@ def resolve_production_readiness(
     mapping, so a `release_manifest` author can never inject a self-attested
     "already reviewed, trust me" coverage bundle merely by adding a key to their
     YAML. See `_coverage_is_trustworthy_and_complete` for the defensive
-    acquisition check applied on top of that structural separation.
+    acquisition check applied on top of that structural separation, and
+    `_coverage_for_entry` for the per-entry source_revision scoping that keeps
+    one entry's coverage from leaking into another entry's verdict in the same
+    multi-entry `run_release` call.
 
     Never invoked at all for a v1 entry (production_readiness_required defaults
     False) -- callers must check that flag before calling this, matching
@@ -325,7 +356,8 @@ def resolve_production_readiness(
     if not _candidate_identity_sufficient(parsed):
         return {"status": "UNKNOWN", "source": None, "report": None}
 
-    if code_review_coverage is not None and not _coverage_is_trustworthy_and_complete(code_review_coverage):
+    scoped_coverage = _coverage_for_entry(parsed, code_review_coverage)
+    if scoped_coverage is not None and not _coverage_is_trustworthy_and_complete(scoped_coverage):
         # Task 5.5: release-assembled code-review coverage that is known
         # incomplete (or not host/runtime-authoritative) must not trigger a
         # child invocation merely to obtain a predictable UNKNOWN -- and must
@@ -338,7 +370,7 @@ def resolve_production_readiness(
         return {"status": "UNKNOWN", "source": None, "report": None}
 
     candidate = _candidate_from_entry(parsed)
-    assessment_context = build_assessment_context(parsed, code_review_coverage=code_review_coverage)
+    assessment_context = build_assessment_context(parsed, candidate=candidate, code_review_coverage=scoped_coverage)
     invoked = production_invoke(candidate, assessment_context=assessment_context)
     if invoked is None:
         return {"status": "UNKNOWN", "source": None, "report": None}
@@ -502,9 +534,10 @@ def run_release(
 ) -> ReleaseResult:
     """`code_review_coverage`, like `trusted_reports`/`production_invoke`, is a
     trusted-runtime input supplied by release-readiness-checker's own execution
-    harness -- never sourced from `manifest` itself. It applies to whichever
-    entry in this run requires production readiness (today's real orchestration
-    calls this per release candidate, matching every existing test's shape).
+    harness -- never sourced from `manifest` itself. It applies only to the
+    entry whose own `source_revision` matches the bundle's
+    `candidate_source_revision` (see `_coverage_for_entry`); for any other
+    entry in a multi-entry manifest it is treated as not supplied.
     """
     entries = _normalize_manifest(manifest)
     if not entries:
