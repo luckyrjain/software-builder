@@ -267,6 +267,28 @@ Added 4 new regression tests covering both fixes above.
 
 Added 3 new regression tests and strengthened one existing test covering all three fixes above.
 
+### Fixed (adversarial review round 11, same day)
+- **Security: the trusted-reuse path now requires the same immutable-identity anchor the invoke path
+  already required (rounds 9/10), closing a reuse-side bypass of that exact requirement.**
+  `match_release_report` compared `release_ref`/`source_revision` by flat string equality only, with no
+  shape validation -- so a manifest entry declaring a mutable, non-identity-pinning tag in both fields (e.g.
+  `release_ref: "v1.2.3"`, `source_revision: "latest"`) could still `MATCH` and be *reused* as `READY` against
+  a `trusted_reports` entry carrying the identical strings, even though `_candidate_identity_sufficient`
+  would correctly refuse to *invoke* on that same unproven identity. An exact string match against a mutable
+  tag is not proof a report was ever produced for the same concrete content, since a tag can be repointed
+  between when the report was produced and now. Added `_has_immutable_identity`/`_looks_like_immutable_digest`
+  and wired the same anchor requirement into `match_release_report` -- but with correctly *different*
+  strictness than the invoke path: a real content-addressed digest `release_ref` (e.g. `sha256:...`) remains
+  a legitimate reuse anchor even with no `source_revision` known (unlike invoking, reuse needs no new proof,
+  only confirmation this is the same immutable artifact a report already covers), so this fix does not
+  regress the documented "reuse a trusted, deployable-scoped report... when supplied" digest-only pattern.
+- Added a missing regression test for round 4's "a `code_review_coverage` bundle omitting `repo`/`service`
+  is never applied, even to the one entry whose `source_revision` matches" fix -- the code was already
+  correct, but no existing test exercised this exact branch (the closest existing test only asserted the
+  *non-matching*-revision entry didn't receive the bundle).
+
+Added 3 new regression tests covering both items above.
+
 ## [1.0.0] — 2026-08-05
 
 ### Added

@@ -217,8 +217,9 @@ def _safe_normalize_environment(value: Any) -> Optional[str]:
 def match_release_report(entry: Any, report: Mapping[str, Any]) -> MutableMapping[str, Any]:
     """Deployable-scoped identity match: canonical repo/service, exact
     environment whenever either side declares one, exact release_ref ==
-    report's deployable target, and exact source_revision when the entry
-    declares one. No fuzzy matching.
+    report's deployable target, exact source_revision when the entry
+    declares one, and an immutable identity anchor (a real digest/SHA, never
+    a mutable tag) somewhere in that identity. No fuzzy matching.
     """
     parsed = entry if isinstance(entry, ReleaseEntry) else parse_release_entry(entry)
     report = pr._as_mapping(report)
@@ -273,6 +274,18 @@ def match_release_report(entry: Any, report: Mapping[str, Any]) -> MutableMappin
         if report_source_revision != parsed.source_revision:
             return {"status": "UNKNOWN", "reason": "source_revision_mismatch"}
 
+    if not _has_immutable_identity(parsed, allow_digest_release_ref=True):
+        # An exact string match against a mutable, non-identity-pinning tag
+        # (`latest`/`main`/`v1.2.3`, whether in release_ref or in an
+        # explicitly declared but equally unproven source_revision) is not
+        # proof this report was ever produced for the SAME concrete content --
+        # a tag can be repointed between when the report was produced and now.
+        # A real digest release_ref (no source_revision needed) or a real SHA
+        # is immutable and content-addressed, so it remains a trustworthy
+        # anchor for reuse even though `_candidate_identity_sufficient`
+        # correctly refuses to *invoke* on a bare digest alone.
+        return {"status": "UNKNOWN", "reason": "unpinned_identity"}
+
     return {"status": "MATCH"}
 
 
@@ -282,6 +295,7 @@ def match_release_report(entry: Any, report: Mapping[str, Any]) -> MutableMappin
 
 
 _GIT_SHA_RE = re.compile(r"^[0-9a-fA-F]{7,40}$")
+_IMMUTABLE_DIGEST_RE = re.compile(r"^[a-z0-9]+(?:[+._-][a-z0-9]+)*:[0-9a-fA-F]{32,}$")
 
 
 def _looks_like_source_revision(ref: str) -> bool:
@@ -299,6 +313,46 @@ def _looks_like_source_revision(ref: str) -> bool:
     return bool(_GIT_SHA_RE.fullmatch(ref))
 
 
+def _looks_like_immutable_digest(ref: str) -> bool:
+    """True only for a ref shaped like a real content-addressed digest
+    (`algo:hexhash`, e.g. `sha256:...`), as opposed to a mutable tag that
+    merely lacks a colon.
+
+    Unlike a git SHA, a digest is never itself sufficient to *invoke*
+    production readiness (there is no source_revision to prove code-review/CI
+    evidence against) -- but it IS a legitimate anchor for *reusing* an
+    already-produced report keyed to that same immutable content hash, even
+    with no source_revision separately known. See `_has_immutable_identity`.
+    """
+    return bool(_IMMUTABLE_DIGEST_RE.fullmatch(ref))
+
+
+def _has_immutable_identity(entry: ReleaseEntry, *, allow_digest_release_ref: bool) -> bool:
+    """True only when this entry's declared identity is pinned to something
+    immutable, never merely a mutable tag/arbitrary caller text.
+
+    An explicit source_revision is required to look like a real git commit
+    SHA -- design v10 defines source_revision as "the immutable
+    source-control revision that code review and CI prove," and
+    source_revision is untrusted `release_manifest` text (`_as_str`-coerced,
+    same trust boundary as release_ref), so a mutable tag or arbitrary text
+    supplied there is exactly as unproven an identity as one supplied via
+    release_ref.
+
+    Absent an explicit source_revision, release_ref itself must be the
+    immutable anchor: a real git SHA always qualifies; a real digest
+    qualifies only when `allow_digest_release_ref` is set. The two callers
+    need different strictness here -- see each one's own docstring.
+    """
+    if entry.source_revision:
+        return _looks_like_source_revision(entry.source_revision)
+    if not entry.release_ref:
+        return False
+    if _looks_like_source_revision(entry.release_ref):
+        return True
+    return allow_digest_release_ref and _looks_like_immutable_digest(entry.release_ref)
+
+
 def _candidate_identity_sufficient(entry: ReleaseEntry) -> bool:
     """True only when enough identity exists to safely invoke production readiness.
 
@@ -308,29 +362,18 @@ def _candidate_identity_sufficient(entry: ReleaseEntry) -> bool:
     child for a candidate that can never be identified downstream is a wasted
     call, not merely a redundant check.
 
-    A release_ref that is itself shaped like a source revision (a git commit
-    SHA) needs nothing else beyond that. Anything else -- a build/image
-    digest (`sha256:...`), a mutable tag (`latest`, `main`, a release name),
-    or arbitrary caller text -- needs an explicit source_revision; without
-    one, there is no way to prove code-review/CI evidence about *this*
-    deployable, so invocation must not be attempted at all.
-
-    An explicit source_revision is itself required to look like a real git
-    commit SHA, the same shape `_looks_like_source_revision` requires of a
-    self-sufficient release_ref -- design v10 defines source_revision as "the
-    immutable source-control revision that code review and CI prove," and
-    source_revision is untrusted `release_manifest` text (`_as_str`-coerced,
-    same trust boundary as release_ref), so a mutable tag or arbitrary text
-    supplied there is exactly as unproven an identity as one supplied via
-    release_ref, and must not be treated as sufficient to invoke.
+    `allow_digest_release_ref=False`: a release_ref shaped like a build/image
+    digest (`sha256:...`) is NOT sufficient on its own to invoke -- without an
+    explicit, SHA-shaped source_revision, there is no way to prove
+    code-review/CI evidence about *this* deployable, so invocation must not be
+    attempted at all. (Reuse has different, more permissive rules -- see
+    `match_release_report`.)
     """
     if not entry.repo or not entry.service:
         return False
     if not entry.release_ref:
         return False
-    if entry.source_revision:
-        return _looks_like_source_revision(entry.source_revision)
-    return _looks_like_source_revision(entry.release_ref)
+    return _has_immutable_identity(entry, allow_digest_release_ref=False)
 
 
 def _candidate_from_entry(entry: ReleaseEntry) -> MutableMapping[str, Any]:

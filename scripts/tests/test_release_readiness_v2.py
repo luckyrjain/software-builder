@@ -480,6 +480,48 @@ def test_wrong_deployable_digest_is_unknown() -> None:
     assert match_release_report(entry, report)["status"] == "UNKNOWN"
 
 
+def test_mutable_tag_identity_can_never_be_reused_even_on_an_exact_string_match() -> None:
+    # Security: sibling gap to the invoke-path SHA-shape checks -- a mutable,
+    # non-identity-pinning tag (release_ref and/or source_revision) is not
+    # proof a trusted report was ever produced for the SAME concrete content,
+    # since a tag can be repointed between when the report was produced and
+    # now. An exact string match against such a tag must never itself
+    # constitute reuse, even though _candidate_identity_sufficient would
+    # equally refuse to *invoke* on that same identity.
+    entry = v2_entry(repo="acme/checkout", service="checkout", release_ref="v1.2.3", source_revision="latest")
+    report = trusted_production_report(
+        verdict="READY", repo="acme/checkout", service="checkout", deployable="v1.2.3", source_revision="latest"
+    )
+    result = match_release_report(entry, report)
+    assert result["status"] == "UNKNOWN"
+    assert result["reason"] == "unpinned_identity"
+
+    s = spy()
+    required_entry = v2_entry(
+        required=True, repo="acme/checkout", service="checkout", release_ref="v1.2.3", source_revision="latest"
+    )
+    release_result = run_release(required_entry, trusted_reports=[report], production_invoke=s)
+    assert release_result.production_readiness == "UNKNOWN"
+    assert s.calls == 0
+
+
+def test_immutable_digest_release_ref_alone_can_still_be_reused_without_source_revision() -> None:
+    # The legitimate case _has_immutable_identity's reuse-path leniency
+    # exists for: a real (immutable, content-addressed) digest release_ref is
+    # itself a trustworthy anchor for REUSE even with no source_revision
+    # separately known -- unlike the stricter invoke-path requirement (a bare
+    # digest alone is never sufficient to *invoke*, per
+    # test_v2_image_digest_without_source_revision_is_unknown_before_invoke).
+    entry = v2_entry(
+        repo="acme/checkout", service="checkout", release_ref="sha256:" + "b" * 64, source_revision=None
+    )
+    report = trusted_production_report(
+        verdict="READY", repo="acme/checkout", service="checkout", deployable="sha256:" + "b" * 64,
+        source_revision=None,
+    )
+    assert match_release_report(entry, report)["status"] == "MATCH"
+
+
 def test_conflicting_trusted_reports_are_unknown_not_first_match() -> None:
     # Two trusted, identity-matching reports that disagree in verdict are
     # conflicting authoritative evidence -- never silently resolved by
@@ -637,6 +679,41 @@ def test_code_review_coverage_never_leaks_across_manifest_entries() -> None:
         trusted_reports=[],
         production_invoke=production_invoke,
         code_review_coverage=coverage_for_checkout,
+    )
+
+
+def test_code_review_coverage_omitting_repo_service_never_applies_even_to_the_matching_revision_entry() -> None:
+    # Security: round 4's fix requires repo/service to be declared on the
+    # bundle for it to ever be applied at all -- not merely "compared when
+    # present". A bundle that omits them entirely must be treated as not
+    # supplied even for the ONE entry whose source_revision it matches
+    # (unlike test_code_review_coverage_never_leaks_across_manifest_entries
+    # above, which only asserts this for the non-matching-revision entry).
+    coverage_missing_repo_service = build_code_review_coverage(
+        candidate_source_revision="a" * 40,
+        included_change_refs=["mr:1"],
+        trusted_review_refs=["mr:1"],
+    )
+    assert coverage_missing_repo_service["repo"] is None
+    assert coverage_missing_repo_service["service"] is None
+    checkout_entry = v2_entry(required=True, repo="acme/checkout", service="checkout", source_revision="a" * 40)
+
+    def production_invoke(candidate: dict, *, assessment_context: dict | None = None):
+        supplied = (assessment_context or {}).get("inputs", {}).get("code_review_coverage")
+        assert supplied is None
+        return trusted_production_report(
+            verdict="READY",
+            repo=candidate["repo"],
+            service=candidate["service"],
+            deployable=candidate["head_revision_or_digest"],
+            source_revision=candidate["source_revision"],
+        )
+
+    run_release(
+        checkout_entry,
+        trusted_reports=[],
+        production_invoke=production_invoke,
+        code_review_coverage=coverage_missing_repo_service,
     )
 
 
