@@ -69,6 +69,7 @@ graph TD
   release-readiness-checker -->|invokes| pr-review
   release-readiness-checker -->|invokes| k8s-overprovisioning-datadog
   release-readiness-checker -->|invokes| incident-rca
+  release-readiness-checker -->|invokes| production-readiness-review
   release-readiness-checker -.->|escalates| pr-review
   release-readiness-checker -.->|escalates| k8s-overprovisioning-datadog
   release-readiness-checker -.->|escalates| incident-rca
