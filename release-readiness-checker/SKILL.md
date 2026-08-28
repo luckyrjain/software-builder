@@ -64,16 +64,24 @@ Parse per [workflow/inputs.md](workflow/inputs.md).
 
 | Input | Required | Default |
 |-------|----------|---------|
-| `release_manifest` | Yes | **HARD STOP if empty** — list of `{repo, service, since, release_ref?}` |
+| `release_manifest` | Yes | **HARD STOP if empty** — list of v1 `{repo, service, since, release_ref?}` or v2 (adds `environment`, `source_revision`, `criticality`, `production_readiness_required`, `production_readiness_ref`) entries |
 | `incident_lookback_hours` | No | 48 |
 | `target_branch` | No | Repo's configured release branch — see [SETUP.md](SETUP.md) |
+
+A v1 entry (no `production_readiness_required`) behaves exactly as before. A v2 entry with
+`production_readiness_required: true` additionally gates on production readiness — see
+[reference/report-format.md § Manifest v2](reference/report-format.md) and
+[scripts/release_readiness_v2.py](../scripts/release_readiness_v2.py).
 
 ## Prerequisites
 
 No MCP of its own. Requires **pr-review**, **k8s-overprovisioning-datadog**, and **incident-rca**
-installed and configured — see each skill's own `SETUP.md`. Read-only throughout — pr-review's Phase 3
+installed and configured — see each skill's own `SETUP.md`. **production-readiness-review** is optional:
+only a v2 entry requiring readiness with no reusable trusted report conditionally invokes it, and it is
+never part of the mandatory install footprint. Read-only throughout — pr-review's Phase 3
 posting confirmation is always answered "Hold — don't post" (never posts, regardless of which posting
-mode its Phase 0 detects), k8s and incident-rca are already read-only. Smoke test:
+mode its Phase 0 detects), k8s and incident-rca are already read-only, and a nested production-readiness-
+review invocation is likewise always read-only. Smoke test:
 [reference/smoke-test.md](reference/smoke-test.md).
 
 ## Workflow
