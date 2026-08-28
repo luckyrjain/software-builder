@@ -17,6 +17,7 @@ from scripts.release_readiness_v2 import (
     finalize_release,
     match_release_report,
     parse_release_entry,
+    resolve_production_readiness,
     run_release,
 )
 from scripts import production_readiness as pr
@@ -181,6 +182,25 @@ def test_v2_required_missing_report_invokes_when_safe() -> None:
 def test_v2_required_missing_report_and_invoke_unavailable_is_unknown() -> None:
     result = run_release(v2_entry(required=True), trusted_reports=[], production_invoke=None)
     assert result["verdict"] == "UNKNOWN"
+
+
+def test_resolve_production_readiness_accepts_a_raw_manifest_dict_directly() -> None:
+    # resolve_production_readiness's own signature (`entry: Any`) and docstring
+    # ("resolution for one v2 manifest entry") document standalone use with a
+    # raw manifest mapping, not only a pre-parsed ReleaseEntry -- run_release
+    # always pre-parses before calling it, so this branch
+    # (`entry if isinstance(entry, ReleaseEntry) else parse_release_entry(entry)`)
+    # is otherwise never exercised by any test that only goes through
+    # run_release. Also exercises the NOT_REQUIRED early return, which
+    # run_release never reaches this function for at all (it filters
+    # non-required entries out beforehand).
+    not_required = resolve_production_readiness(v2_entry(required=False))
+    assert not_required == {"status": "NOT_REQUIRED", "source": None, "report": None}
+
+    report = trusted_production_report(verdict="READY")
+    reused = resolve_production_readiness(v2_entry(required=True), trusted_reports=[report])
+    assert reused["status"] == "READY"
+    assert reused["source"] == "REUSED"
 
 
 def test_v2_image_digest_without_source_revision_is_unknown_before_invoke() -> None:

@@ -368,6 +368,21 @@ cluster per rounds 9-13's track record, one covering the rest of the module fres
 tests and split one existing test into two (trustworthy vs. caller-only paths) to keep both wrong-shape
 guards independently exercised.
 
+### Round 15, same day -- no code defect found; one coverage gap closed
+
+Two independent adversarial passes: one re-derived every function in the six-round (9-14) identity-
+immutability defect cluster character-by-character against a precisely stated invariant ("any value treated
+as content-addressed/immutable must match an exact real-world digest/SHA shape, AND data forwarded under an
+authority tag must come from the same field that authority check examined") and confirmed every relevant
+site in the file satisfies it -- this defect family is closed as of round 14. The other ran a break-and-
+restore audit against all ~15 regression tests added across rounds 9-14 (every one genuinely fails when its
+own fix is reverted -- no dead tests), checked for test-order dependence (none found, structurally and
+empirically), and identified a real coverage gap: `resolve_production_readiness` is a public function whose
+own docstring documents standalone use with a raw manifest dict, but no test ever calls it directly --
+`run_release` always pre-parses first, so the `parse_release_entry` branch inside
+`resolve_production_readiness` and the entire `NOT_REQUIRED` early return had zero direct test coverage
+anywhere in the suite. No functional code change; added a test exercising both.
+
 ## [1.0.0] — 2026-08-05
 
 ### Added
