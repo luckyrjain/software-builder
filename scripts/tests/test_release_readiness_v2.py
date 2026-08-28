@@ -96,6 +96,28 @@ def test_v2_required_reuses_trusted_report_first() -> None:
     assert result["production_readiness_source"] == "REUSED"
 
 
+def test_multi_entry_production_readiness_results_are_all_recorded() -> None:
+    # Two entries both require production readiness: acme/a reuses a trusted
+    # NOT_READY report, acme/b (processed second) reuses a trusted READY
+    # report. The top-level convenience fields must reflect the entry that
+    # actually drove the (correctly capped) overall verdict, not whichever
+    # entry happened to be processed last, and both entries' own results must
+    # still be individually recoverable.
+    entry_a = v2_entry(required=True, repo="acme/a", service="a", source_revision="a" * 40)
+    entry_b = v2_entry(required=True, repo="acme/b", service="b", source_revision="b" * 40)
+    report_a = trusted_production_report(verdict="NOT_READY", repo="acme/a", service="a", source_revision="a" * 40)
+    report_b = trusted_production_report(verdict="READY", repo="acme/b", service="b", source_revision="b" * 40)
+
+    result = run_release([entry_a, entry_b], trusted_reports=[report_a, report_b])
+
+    assert result.overall == "NOT_READY"
+    assert result.production_readiness == "NOT_READY"
+    assert result["production_readiness_source"] == "REUSED"
+    assert len(result.production_readiness_results) == 2
+    by_repo = {r["repo"]: r["verdict"] for r in result.production_readiness_results}
+    assert by_repo == {"acme/a": "NOT_READY", "acme/b": "READY"}
+
+
 def test_v2_required_missing_report_invokes_when_safe() -> None:
     s = spy(return_value=trusted_production_report(verdict="READY"))
     result = run_release(v2_entry(required=True, source_revision="a" * 40), trusted_reports=[], production_invoke=s)
@@ -114,6 +136,44 @@ def test_v2_image_digest_without_source_revision_is_unknown_before_invoke() -> N
     result = run_release(entry, trusted_reports=[], production_invoke=s)
     assert result["verdict"] == "UNKNOWN"
     assert s.calls == 0
+
+
+def test_entry_missing_repo_or_service_never_invokes() -> None:
+    # An unidentifiable candidate (no repo/service) must never trigger the
+    # real, expensive production-readiness-review invocation -- it can never
+    # be matched against anything downstream anyway.
+    entry = v2_entry(required=True, repo=None, service=None, source_revision="a" * 40)
+    s = spy()
+    result = run_release(entry, trusted_reports=[], production_invoke=s)
+    assert result["verdict"] == "UNKNOWN"
+    assert s.calls == 0
+
+
+def test_malformed_non_string_manifest_fields_degrade_to_unknown_not_a_crash() -> None:
+    # release_manifest is caller-supplied text; a malformed field (an int
+    # where a string is expected) must degrade that entry to UNKNOWN, never
+    # crash the whole run_release call with an uncaught TypeError.
+    malformed = {
+        "repo": 12345,
+        "service": "checkout",
+        "release_ref": "a" * 40,
+        "source_revision": "a" * 40,
+        "production_readiness_required": True,
+    }
+    result = run_release(malformed, trusted_reports=[], production_invoke=spy())
+    assert result["verdict"] == "UNKNOWN"
+
+
+def test_non_string_release_ref_degrades_to_unknown_not_a_crash() -> None:
+    malformed = {
+        "repo": "acme/checkout",
+        "service": "checkout",
+        "release_ref": 123456,
+        "source_revision": None,
+        "production_readiness_required": True,
+    }
+    result = run_release(malformed, trusted_reports=[], production_invoke=spy())
+    assert result["verdict"] == "UNKNOWN"
 
 
 # ---------------------------------------------------------------------------
@@ -260,6 +320,8 @@ def test_caller_only_code_review_coverage_never_gates_invoke_as_complete() -> No
     self_attested = {
         "status": "COMPLETE",
         "candidate_source_revision": "a" * 40,
+        "repo": "acme/checkout",
+        "service": "checkout",
         "included_change_refs": ["mr:1"],
         "trusted_review_refs": ["mr:1"],
         "uncovered_change_refs": [],
@@ -391,6 +453,8 @@ def test_internally_inconsistent_coverage_is_never_trusted_as_complete() -> None
     inconsistent = {
         "status": "COMPLETE",
         "candidate_source_revision": "a" * 40,
+        "repo": "acme/checkout",
+        "service": "checkout",
         "included_change_refs": ["mr:1", "mr:2"],
         "trusted_review_refs": ["mr:1"],
         "uncovered_change_refs": ["mr:2"],
@@ -569,8 +633,10 @@ def test_freshness_fence_is_scoped_per_entry_not_globally() -> None:
     # bleed into) another entry whose own ref stayed put.
     stable_entry = v2_entry(repo="acme/checkout", service="checkout")
     moved_entry = v2_entry(repo="acme/billing", service="billing")
-    start_refs = {("acme/checkout", "checkout"): "a" * 40, ("acme/billing", "billing"): "a" * 40}
-    final_refs = {("acme/checkout", "checkout"): "a" * 40, ("acme/billing", "billing"): "b" * 40}
+    checkout_key = ("acme/checkout", "checkout", None)
+    billing_key = ("acme/billing", "billing", None)
+    start_refs = {checkout_key: "a" * 40, billing_key: "a" * 40}
+    final_refs = {checkout_key: "a" * 40, billing_key: "b" * 40}
 
     result = run_release([stable_entry, moved_entry], start_ref=start_refs, final_ref=final_refs)
     assert result.candidate_changed_during_review is True
@@ -579,10 +645,29 @@ def test_freshness_fence_is_scoped_per_entry_not_globally() -> None:
     # And the inverse: neither entry's ref moved -> no freshness-fence hit.
     stable_result = run_release(
         [stable_entry, moved_entry],
-        start_ref={("acme/checkout", "checkout"): "a" * 40, ("acme/billing", "billing"): "a" * 40},
-        final_ref={("acme/checkout", "checkout"): "a" * 40, ("acme/billing", "billing"): "a" * 40},
+        start_ref={checkout_key: "a" * 40, billing_key: "a" * 40},
+        final_ref={checkout_key: "a" * 40, billing_key: "a" * 40},
     )
     assert stable_result.candidate_changed_during_review is False
+
+
+def test_freshness_fence_key_includes_environment_not_just_repo_service() -> None:
+    # The same repo/service legitimately appears as two entries targeting
+    # different environments (e.g. staging and prod) -- one entry's ref
+    # movement must never be masked because it shares a repo/service key
+    # with another entry in a different environment.
+    staging_entry = v2_entry(repo="acme/checkout", service="checkout", environment="staging")
+    prod_entry = v2_entry(repo="acme/checkout", service="checkout", environment="prod")
+    staging_key = ("acme/checkout", "checkout", "staging")
+    prod_key = ("acme/checkout", "checkout", "prod")
+
+    result = run_release(
+        [staging_entry, prod_entry],
+        start_ref={staging_key: "a" * 40, prod_key: "a" * 40},
+        final_ref={staging_key: "b" * 40, prod_key: "a" * 40},
+    )
+    assert result.candidate_changed_during_review is True
+    assert result.overall == "UNKNOWN"
 
 
 # ---------------------------------------------------------------------------

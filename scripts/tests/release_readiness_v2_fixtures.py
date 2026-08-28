@@ -252,6 +252,8 @@ def run_v2_release_with_complete_review_coverage() -> Trace:
 
     coverage = release_readiness_v2.build_code_review_coverage(
         candidate_source_revision=_DEFAULT_REVISION,
+        repo="acme/checkout",
+        service="checkout",
         included_change_refs=["mr:1"],
         trusted_review_refs=["mr:1"],
     )
@@ -288,6 +290,8 @@ def run_v2_release_with_uncovered_change():
 
     coverage = release_readiness_v2.build_code_review_coverage(
         candidate_source_revision=_DEFAULT_REVISION,
+        repo="acme/checkout",
+        service="checkout",
         included_change_refs=["mr:1", "commit:2"],
         trusted_review_refs=["mr:1"],
     )

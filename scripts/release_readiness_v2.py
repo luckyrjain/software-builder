@@ -106,18 +106,36 @@ def _is_required_flag(value: Any) -> bool:
     return isinstance(value, str) and value.strip().lower() == "true"
 
 
+def _as_str(value: Any) -> Optional[str]:
+    """Coerce a manifest field to a string, or None for any other shape.
+
+    `release_manifest` is caller-supplied text; a malformed field (an int, a
+    list, ...) must degrade this one field to "absent" and let the existing
+    None-handling everywhere downstream (`if not parsed.repo: ... UNKNOWN`)
+    take over, never raise. Without this, a non-string `repo`/`service`/
+    `environment`/`release_ref` would reach `normalize_repo_identity`/
+    `normalize_service_identity`/`same_environment`/`_looks_like_digest`,
+    all of which raise TypeError on a non-string input -- crashing the whole
+    `run_release` call over one malformed entry instead of failing closed on
+    just that entry, contrary to this codebase's pervasive fail-closed
+    convention (see `scripts/production_readiness.py`'s own `_as_mapping`/
+    `_is_strong_authority`/`_target_of`).
+    """
+    return value if isinstance(value, str) else None
+
+
 def parse_release_entry(entry: Mapping[str, Any]) -> ReleaseEntry:
     entry = pr._as_mapping(entry)
     return ReleaseEntry(
-        repo=entry.get("repo"),
-        service=entry.get("service"),
-        since=entry.get("since"),
-        release_ref=entry.get("release_ref"),
-        environment=entry.get("environment"),
-        source_revision=entry.get("source_revision"),
-        criticality=entry.get("criticality"),
+        repo=_as_str(entry.get("repo")),
+        service=_as_str(entry.get("service")),
+        since=_as_str(entry.get("since")),
+        release_ref=_as_str(entry.get("release_ref")),
+        environment=_as_str(entry.get("environment")),
+        source_revision=_as_str(entry.get("source_revision")),
+        criticality=_as_str(entry.get("criticality")),
         production_readiness_required=_is_required_flag(entry.get("production_readiness_required")),
-        production_readiness_ref=entry.get("production_readiness_ref"),
+        production_readiness_ref=_as_str(entry.get("production_readiness_ref")),
     )
 
 
@@ -221,11 +239,20 @@ def _looks_like_digest(ref: str) -> bool:
 def _candidate_identity_sufficient(entry: ReleaseEntry) -> bool:
     """True only when enough identity exists to safely invoke production readiness.
 
-    A release_ref that is itself a source revision needs nothing else. A release_ref
-    shaped like a build/image digest (contains ':', e.g. `sha256:...`) needs an
-    explicit source_revision -- without one, there is no way to prove code-review/CI
-    evidence about *this* deployable, so invocation must not be attempted at all.
+    repo and service are mandatory -- match_release_report already treats a
+    repo-less/service-less candidate as unidentifiable ("missing_candidate_
+    identity"), and invoking the real (expensive) production-readiness-review
+    child for a candidate that can never be identified downstream is a wasted
+    call, not merely a redundant check.
+
+    A release_ref that is itself a source revision needs nothing else beyond
+    that. A release_ref shaped like a build/image digest (contains ':', e.g.
+    `sha256:...`) needs an explicit source_revision -- without one, there is
+    no way to prove code-review/CI evidence about *this* deployable, so
+    invocation must not be attempted at all.
     """
+    if not entry.repo or not entry.service:
+        return False
     if not entry.release_ref:
         return False
     if entry.source_revision:
@@ -289,18 +316,19 @@ def _coverage_for_entry(
     -- without this check, a bundle assembled for one entry would be reused
     unmodified for every other entry in the same run, laundering review
     evidence for the wrong candidate into that other candidate's own verdict.
-    A coverage bundle only applies when its own `candidate_source_revision`
-    exactly matches this entry's `source_revision` AND (when the bundle
-    declares them) its own `repo`/`service` canonically match this entry's --
-    a source-revision string alone is caller-controlled manifest text and, in
-    a multi-repo/multi-service manifest, is not itself proof the bundle was
+    A coverage bundle only applies when its own `repo`, `service`, AND
+    `candidate_source_revision` all exactly match this entry's -- a
+    source-revision string alone is caller-controlled manifest text and, in a
+    multi-repo/multi-service manifest, is not itself proof the bundle was
     assembled for *this* candidate rather than a different one that happens
-    to declare the same revision string. A bundle with no declared repo/
-    service is scoped by source_revision alone, matching
-    `build_code_review_coverage`'s own optional repo/service parameters.
-    Otherwise it is treated as not supplied for this entry (never as
-    "supplied but untrustworthy" -- production-readiness-review remains free
-    to derive its own coverage).
+    to declare the same revision string (round-2's original fix). A bundle
+    that omits `repo`/`service` entirely cannot be safely scoped by
+    source_revision alone either, so it is likewise never applied to any
+    entry -- `build_code_review_coverage`'s own `repo`/`service` parameters
+    exist specifically so the trusted harness always supplies them. Any
+    non-match is treated as not supplied for this entry (never as "supplied
+    but untrustworthy" -- production-readiness-review remains free to derive
+    its own coverage).
     """
     coverage = pr._as_mapping(coverage) if coverage is not None else None
     if not coverage:
@@ -308,12 +336,12 @@ def _coverage_for_entry(
     if not entry.source_revision or coverage.get("candidate_source_revision") != entry.source_revision:
         return None
     coverage_repo = coverage.get("repo")
-    if coverage_repo is not None and (not entry.repo or normalize_repo_identity(coverage_repo) != normalize_repo_identity(entry.repo)):
-        return None
     coverage_service = coverage.get("service")
-    if coverage_service is not None and (
-        not entry.service or normalize_service_identity(coverage_service) != normalize_service_identity(entry.service)
-    ):
+    if not coverage_repo or not coverage_service:
+        return None
+    if not entry.repo or normalize_repo_identity(coverage_repo) != normalize_repo_identity(entry.repo):
+        return None
+    if not entry.service or normalize_service_identity(coverage_service) != normalize_service_identity(entry.service):
         return None
     return coverage
 
@@ -487,11 +515,14 @@ def build_code_review_coverage(
     `claimed_integrated_revision` field a caller attached to a ref mapping) is
     never consulted, so a forged integrated revision has no effect.
 
-    `repo`/`service` are optional but strongly recommended: `_coverage_for_entry`
-    uses them (when present) to bind this bundle to the exact candidate it was
-    assembled for, on top of `candidate_source_revision` -- a bare source-
-    revision string is manifest-entry text and, in a multi-repo/multi-service
-    manifest, is not by itself proof of which candidate this bundle covers.
+    `repo`/`service` are optional parameters here but effectively mandatory
+    for the resulting bundle to ever be usable: `_coverage_for_entry` requires
+    both to be present and to canonically match an entry before applying this
+    bundle to it at all -- a bare `candidate_source_revision` string is
+    manifest-entry text and, in a multi-repo/multi-service manifest, is not by
+    itself proof of which candidate this bundle covers. Omitting them here
+    means this bundle can never be reused via `run_release`'s
+    `code_review_coverage` parameter for any entry.
     """
     included_refs = [_change_ref_id(change, index) for index, change in enumerate(included_change_refs)]
     reviewed = set(trusted_review_refs)
@@ -541,6 +572,14 @@ class ReleaseResult:
     skill_result: SkillResult
     production_readiness_source: Optional[str] = None
     production_readiness: Optional[str] = None
+    # Every entry that actually required production readiness in this run,
+    # each as {"repo", "service", "source", "verdict"} -- `production_readiness`/
+    # `production_readiness_source` above are a convenience projection of
+    # whichever ONE entry here is most severe (see `run_release`), for the
+    # common single-required-entry case every existing caller assumes; a
+    # multi-entry manifest with more than one required entry should read this
+    # list instead of assuming the top-level fields describe every entry.
+    production_readiness_results: list = dataclasses.field(default_factory=list)
     checks: list = dataclasses.field(default_factory=list)
     candidate_changed_during_review: bool = False
 
@@ -583,6 +622,7 @@ def finalize_release(pre: Mapping[str, Any]) -> ReleaseResult:
         skill_result=SkillResult(status=status, evidence_status=evidence_status),
         production_readiness_source=pre.get("production_readiness_source"),
         production_readiness=pre.get("production_readiness"),
+        production_readiness_results=list(pre.get("production_readiness_results") or []),
         checks=list(pre.get("checks", [])),
         candidate_changed_during_review=bool(pre.get("candidate_changed_during_review", False)),
     )
@@ -604,12 +644,16 @@ def _ref_pair_for_entry(
 
     `start_ref`/`final_ref` each accept either a single value (applied to
     every entry in the manifest -- the original single-entry-manifest shape)
-    or a `{(repo, service): ref}` mapping, so a multi-entry manifest where
-    each entry tracks its own independently mutable `release_ref` gets its
-    own freshness fence instead of one entry's identity silently standing in
-    for every other entry's.
+    or a `{(repo, service, environment): ref}` mapping, so a multi-entry
+    manifest where each entry tracks its own independently mutable
+    `release_ref` gets its own freshness fence instead of one entry's
+    identity silently standing in for every other entry's. `environment` is
+    part of the key (not just repo/service) because the same repo/service
+    legitimately appears as multiple manifest entries targeting different
+    environments (e.g. staging and prod) -- keying by repo/service alone
+    would let one environment's ref-resolution data silently mask another's.
     """
-    key = (entry.repo, entry.service)
+    key = (entry.repo, entry.service, entry.environment)
     resolved_start = start_ref.get(key) if isinstance(start_ref, Mapping) else start_ref
     resolved_final = final_ref.get(key) if isinstance(final_ref, Mapping) else final_ref
     return resolved_start, resolved_final
@@ -628,13 +672,13 @@ def run_release(
     """`code_review_coverage`, like `trusted_reports`/`production_invoke`, is a
     trusted-runtime input supplied by release-readiness-checker's own execution
     harness -- never sourced from `manifest` itself. It applies only to the
-    entry whose own `source_revision` (and, when declared, `repo`/`service`)
-    matches the bundle's own scope (see `_coverage_for_entry`); for any other
-    entry in a multi-entry manifest it is treated as not supplied.
+    entry whose own `repo`/`service`/`source_revision` all match the bundle's
+    own declared scope (see `_coverage_for_entry`); for any other entry in a
+    multi-entry manifest it is treated as not supplied.
 
     `start_ref`/`final_ref` each accept a single value (applied uniformly) or
-    a `{(repo, service): ref}` mapping for independent per-entry freshness
-    tracking -- see `_ref_pair_for_entry`.
+    a `{(repo, service, environment): ref}` mapping for independent per-entry
+    freshness tracking -- see `_ref_pair_for_entry`.
     """
     entries = _normalize_manifest(manifest)
     if not entries:
@@ -647,8 +691,7 @@ def run_release(
         )
 
     overall = "READY"
-    production_readiness_source: Optional[str] = None
-    production_readiness_value: Optional[str] = None
+    production_readiness_results: list = []
     checks: list = []
     unknown_dimensions: list = []
     candidate_changed = False
@@ -704,17 +747,39 @@ def run_release(
             production_invoke=production_invoke,
             code_review_coverage=code_review_coverage,
         )
-        production_readiness_source = resolution["source"]
-        production_readiness_value = resolution["status"]
         if resolution["status"] == "NOT_REQUIRED":
             continue
-        if resolution["status"] not in _VERDICT_SEVERITY:
+        resolved_status = resolution["status"] if resolution["status"] in _VERDICT_SEVERITY else "UNKNOWN"
+        # Every required entry's own result is recorded -- a scalar
+        # last-write-wins assignment here would silently discard every
+        # entry's result but the last one processed, even though each
+        # entry's status already correctly feeds the capped `overall` below.
+        production_readiness_results.append(
+            {
+                "repo": parsed.repo,
+                "service": parsed.service,
+                "source": resolution["source"],
+                "verdict": resolved_status,
+            }
+        )
+        if resolved_status == "UNKNOWN":
             unknown_dimensions.append("production_readiness")
-            overall = cap_release_verdict(overall, "UNKNOWN")
-            continue
-        if resolution["status"] == "UNKNOWN":
-            unknown_dimensions.append("production_readiness")
-        overall = cap_release_verdict(overall, resolution["status"])
+        overall = cap_release_verdict(overall, resolved_status)
+
+    # The top-level production_readiness/production_readiness_source fields
+    # are a convenience projection for the common single-required-entry case:
+    # when more than one entry required it, they reflect whichever entry's
+    # result is most severe (the one that actually drove `overall`'s cap),
+    # never an arbitrary "last processed" one.
+    production_readiness_source: Optional[str] = None
+    production_readiness_value: Optional[str] = None
+    if production_readiness_results:
+        worst = max(
+            production_readiness_results,
+            key=lambda r: _VERDICT_SEVERITY.get(r["verdict"], _VERDICT_SEVERITY["UNKNOWN"]),
+        )
+        production_readiness_source = worst["source"]
+        production_readiness_value = worst["verdict"]
 
     return finalize_release(
         {
@@ -722,6 +787,7 @@ def run_release(
             "unknown_dimensions": unknown_dimensions,
             "production_readiness_source": production_readiness_source,
             "production_readiness": production_readiness_value,
+            "production_readiness_results": production_readiness_results,
             "checks": checks,
             "candidate_changed_during_review": candidate_changed,
         }

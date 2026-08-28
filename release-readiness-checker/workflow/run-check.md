@@ -171,8 +171,8 @@ is being tracked across this run — it is not gated on `production_readiness_re
    enumeration (never from the manifest entry's own text — a `release_manifest` field can never self-attest
    "already reviewed"), pass it too, so production-readiness-review reuses that coverage and never revisits
    pr-review within this same release-root run. That coverage bundle is bound to the exact candidate it was
-   assembled for by its own `candidate_source_revision` and, when declared, `repo`/`service` — a bundle
-   assembled for one manifest entry is never applied to a different entry in the same run merely because
+   assembled for by its own `repo`, `service`, AND `candidate_source_revision` — a bundle that omits
+   `repo`/`service`, or one assembled for a different manifest entry, is never applied here merely because
    they happen to share a (caller-controlled) `source_revision` string. A `code_review_coverage` bundle
    that is not `COMPLETE` with an empty `uncovered_change_refs`, and host/runtime-authoritative, never
    triggers an invocation; the dimension is `UNKNOWN` directly (never a bypass of the recursion guard by

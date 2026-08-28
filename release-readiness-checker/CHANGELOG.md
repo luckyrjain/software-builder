@@ -106,6 +106,36 @@ All notable changes to the release-readiness-checker skill. Per-file `workflow_v
 - **`ReleaseResult`'s bracket access now raises `KeyError`** for an unrecognized key instead of leaking
   the underlying `AttributeError`, matching normal dict-like conventions.
 
+### Fixed (adversarial review round 4, same day)
+- **`code_review_coverage` now requires repo/service to be declared, not merely optional.** Round 3's
+  scoping only checked repo/service "when the bundle declares them" — a bundle assembled without them
+  (a real possibility for any caller of the still-optional `build_code_review_coverage` parameters)
+  silently reverted to source_revision-alone scoping, reopening round 2's cross-entry leak. A bundle
+  missing either is now never applied to any entry.
+- **The per-entry freshness-fence key now includes `environment`.** Keying by `(repo, service)` alone
+  let two entries for the same repo/service in different environments (e.g. staging and prod) collide in
+  the `start_ref`/`final_ref` mapping, silently masking one environment's real ref movement with another's.
+- **Malformed non-string manifest fields (`repo`, `service`, `release_ref`, `environment`,
+  `source_revision`, ...) no longer crash `run_release`.** They previously reached
+  `normalize_repo_identity`/`normalize_service_identity`/`same_environment`/`_looks_like_digest`, all of
+  which raise `TypeError` on a non-string input — one malformed entry took down the whole manifest's
+  readiness check instead of degrading just that entry to `UNKNOWN`.
+- **A multi-entry manifest with more than one `production_readiness_required` entry now records every
+  entry's own result** (`ReleaseResult.production_readiness_results`) instead of silently discarding every
+  entry's result but the last one processed; the top-level `production_readiness`/
+  `production_readiness_source` convenience fields now reflect whichever entry's result is most severe
+  (the one that actually drove the capped overall verdict), never an arbitrary last-write-wins value.
+- **`_candidate_identity_sufficient` now also requires `repo`/`service`** before invoking
+  production-readiness-review — an unidentifiable candidate can never be matched downstream anyway, so
+  invoking the real child for one was a wasted call and a definitional inconsistency with
+  `match_release_report`'s own mandatory repo/service check.
+- Investigated and rejected as a false positive: using `production_readiness.py`'s generic
+  `_effective_source_revision` for `match_release_report`'s environment/source-revision resolution (see
+  round 3's note on the same helper) — confirmed the existing flat/nested-fallback logic here is correct
+  for this artifact's actual schema.
+
+Added 8 new regression tests covering every fix above.
+
 ## [1.0.0] — 2026-08-05
 
 ### Added
