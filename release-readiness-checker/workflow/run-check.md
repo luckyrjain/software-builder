@@ -165,9 +165,12 @@ is being tracked across this run — it is not gated on `production_readiness_re
    disagree in verdict, that is conflicting authoritative evidence, not a pick-one — the dimension is
    `UNKNOWN` until reconciled, and this is never bypassed by a `production_readiness_ref` pin. Only once the
    matching set agrees is the entry's `production_readiness_ref` applied, and only to select which of the
-   (already-agreeing) reports is attributed as the reused source.
-2. **Otherwise, invoke only when safe.** If `release_ref` is itself a source revision, or a
-   `source_revision` is separately known, and production-readiness-review is available, invoke it once with
+   (already-agreeing) reports is attributed as the reused source — a pin that names no report in that
+   agreeing set (a typo, a stale ref) never suppresses the reuse itself, since every remaining report already
+   agrees in verdict and attribution alone cannot change the resolved status.
+2. **Otherwise, invoke only when safe.** If `release_ref` is itself shaped like a source revision (a git
+   commit SHA), or a `source_revision` is separately known, and production-readiness-review is available,
+   invoke it once with
    this entry's repo/service/environment/`source_revision`/`release_ref` plus `since`, via
    `assessment_context`. A manifest-declared `criticality` is untrusted caller text — this skill has no
    authoritative source to vet it against — so it is passed only as a `caller`-authority input (never folded

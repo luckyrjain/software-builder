@@ -219,6 +219,27 @@ Added 4 new regression tests covering every fix above.
 
 Added 3 new regression tests covering the fix above.
 
+### Fixed (adversarial review round 9, same day)
+- **Security: a non-resolving `production_readiness_ref` pin no longer discards agreeing trusted
+  evidence.** After round 7 moved conflict detection ahead of pin narrowing, a pin that named no report
+  among the (already-agreeing) matching set still fell through past reuse entirely into the invoke-or-
+  UNKNOWN path -- silently discarding known trusted evidence (e.g. a resolved `NOT_READY`) via a typo'd or
+  stale `production_readiness_ref`, an untrusted manifest field, potentially reaching a more favorable
+  outcome through a fresh invocation instead. Since every remaining match in that branch already agrees in
+  verdict, which one gets attributed can never change the resolved status, so a non-resolving pin now
+  falls back to the full agreeing set rather than suppressing reuse.
+- **Security: `_candidate_identity_sufficient` no longer treats a mutable tag as a usable source
+  revision.** `_looks_like_digest`'s "contains a colon" heuristic meant any colon-free `release_ref` --
+  including a mutable, non-identity-pinning tag like `latest`/`main`/`staging` -- was accepted as "the
+  release_ref is itself a source revision," letting a manifest declare such a tag with no `source_revision`
+  and still reach a full `INVOKED` production-readiness verdict. design v10 Sec9 defines `release_ref` as
+  "the immutable deployable ref (commit SHA when that is the deployable, otherwise image/artifact
+  digest)," and Sec9.2 requires "if source_revision is absent ... and cannot be authoritatively resolved,
+  do not invoke." Replaced the colon-only heuristic with `_looks_like_source_revision`, which requires an
+  actual hex-SHA shape.
+
+Added 4 new regression tests covering both fixes above.
+
 ## [1.0.0] — 2026-08-05
 
 ### Added

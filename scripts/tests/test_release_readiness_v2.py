@@ -161,6 +161,31 @@ def test_v2_image_digest_without_source_revision_is_unknown_before_invoke() -> N
     assert s.calls == 0
 
 
+def test_mutable_tag_release_ref_without_source_revision_is_unknown_before_invoke() -> None:
+    # Security: design v10 Sec9 defines release_ref as "the immutable
+    # deployable ref (commit SHA when that is the deployable, otherwise
+    # image/artifact digest)". A colon-free but non-SHA-shaped mutable tag
+    # (e.g. "latest") is neither -- it must not be mistaken for "release_ref
+    # is itself a usable source revision" merely because it lacks a colon.
+    for mutable_tag in ("latest", "main", "staging", "v1.2.3"):
+        entry = v2_entry(required=True, release_ref=mutable_tag, source_revision=None)
+        s = spy()
+        result = run_release(entry, trusted_reports=[], production_invoke=s)
+        assert result["verdict"] == "UNKNOWN", mutable_tag
+        assert s.calls == 0, mutable_tag
+
+
+def test_git_sha_release_ref_without_source_revision_is_sufficient_to_invoke() -> None:
+    # The positive case: a release_ref that genuinely looks like a git commit
+    # SHA is still usable as the source revision on its own, with no
+    # additional source_revision field required.
+    entry = v2_entry(required=True, release_ref="a" * 40, source_revision=None)
+    s = spy(return_value=trusted_production_report(verdict="READY", deployable="a" * 40, source_revision=None))
+    result = run_release(entry, trusted_reports=[], production_invoke=s)
+    assert s.calls == 1
+    assert result.production_readiness == "READY"
+
+
 def test_entry_missing_repo_or_service_never_invokes() -> None:
     # An unidentifiable candidate (no repo/service) must never trigger the
     # real, expensive production-readiness-review invocation -- it can never
@@ -460,6 +485,27 @@ def test_production_readiness_ref_pin_selects_among_agreeing_matches() -> None:
     assert result["production_readiness_source"] == "REUSED"
     assert result.production_readiness == "READY"
     assert result.production_readiness_results[0]["source"] == "REUSED"
+
+
+def test_non_resolving_pin_never_discards_agreeing_trusted_evidence() -> None:
+    # Security: a production_readiness_ref that names no report among an
+    # already-agreeing trusted match set (a typo, a stale/rotated ref, or
+    # untrusted manifest text an attacker deliberately points at nothing)
+    # must never suppress reuse of that evidence -- since every remaining
+    # match already agrees in verdict, which one gets attributed cannot
+    # change the resolved status, so falling through past reuse (into a
+    # fresh, potentially more favorable invocation, or UNKNOWN) would
+    # silently discard known trusted evidence for no security benefit.
+    trusted_not_ready = trusted_production_report(verdict="NOT_READY", report_ref="run-1")
+    s = spy()
+    result = run_release(
+        v2_entry(required=True, production_readiness_ref="no-such-ref"),
+        trusted_reports=[trusted_not_ready],
+        production_invoke=s,
+    )
+    assert result["production_readiness_source"] == "REUSED"
+    assert result.production_readiness == "NOT_READY"
+    assert s.calls == 0
 
 
 def test_authoritative_host_acquisition_is_not_gate_trusted_for_a_report() -> None:

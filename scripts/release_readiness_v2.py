@@ -13,6 +13,7 @@ policy-level adapter only, matching scripts/production_readiness.py's own
 from __future__ import annotations
 
 import dataclasses
+import re
 from typing import Any, Callable, Mapping, MutableMapping, Optional, Sequence
 
 from scripts import production_readiness as pr
@@ -129,7 +130,7 @@ def _as_str(value: Any) -> Optional[str]:
     None-handling everywhere downstream (`if not parsed.repo: ... UNKNOWN`)
     take over, never raise. Without this, a non-string `repo`/`service`/
     `environment`/`release_ref` would reach `normalize_repo_identity`/
-    `normalize_service_identity`/`same_environment`/`_looks_like_digest`,
+    `normalize_service_identity`/`same_environment`/`_looks_like_source_revision`,
     all of which raise TypeError on a non-string input -- crashing the whole
     `run_release` call over one malformed entry instead of failing closed on
     just that entry, contrary to this codebase's pervasive fail-closed
@@ -274,8 +275,22 @@ def match_release_report(entry: Any, report: Mapping[str, Any]) -> MutableMappin
 # ---------------------------------------------------------------------------
 
 
-def _looks_like_digest(ref: str) -> bool:
-    return ":" in ref
+_GIT_SHA_RE = re.compile(r"^[0-9a-fA-F]{7,40}$")
+
+
+def _looks_like_source_revision(ref: str) -> bool:
+    """True only for a ref that is actually shaped like a git commit SHA.
+
+    design v10 Sec9 defines `release_ref` as "the immutable deployable ref
+    (commit SHA when that is the deployable, otherwise image/artifact
+    digest)". A colon-free string is not automatically a SHA -- a mutable,
+    non-identity-pinning tag like "latest"/"main"/"staging" is colon-free too,
+    and per Sec9.2, "if source_revision is absent ... and cannot be
+    authoritatively resolved, do not invoke; release readiness is UNKNOWN".
+    Requiring an actual hex-SHA shape (not merely "no colon") is what makes
+    that non-source-revision-shaped case correctly insufficient below.
+    """
+    return bool(_GIT_SHA_RE.fullmatch(ref))
 
 
 def _candidate_identity_sufficient(entry: ReleaseEntry) -> bool:
@@ -287,11 +302,12 @@ def _candidate_identity_sufficient(entry: ReleaseEntry) -> bool:
     child for a candidate that can never be identified downstream is a wasted
     call, not merely a redundant check.
 
-    A release_ref that is itself a source revision needs nothing else beyond
-    that. A release_ref shaped like a build/image digest (contains ':', e.g.
-    `sha256:...`) needs an explicit source_revision -- without one, there is
-    no way to prove code-review/CI evidence about *this* deployable, so
-    invocation must not be attempted at all.
+    A release_ref that is itself shaped like a source revision (a git commit
+    SHA) needs nothing else beyond that. Anything else -- a build/image
+    digest (`sha256:...`), a mutable tag (`latest`, `main`, a release name),
+    or arbitrary caller text -- needs an explicit source_revision; without
+    one, there is no way to prove code-review/CI evidence about *this*
+    deployable, so invocation must not be attempted at all.
     """
     if not entry.repo or not entry.service:
         return False
@@ -299,7 +315,7 @@ def _candidate_identity_sufficient(entry: ReleaseEntry) -> bool:
         return False
     if entry.source_revision:
         return True
-    return not _looks_like_digest(entry.release_ref)
+    return _looks_like_source_revision(entry.release_ref)
 
 
 def _candidate_from_entry(entry: ReleaseEntry) -> MutableMapping[str, Any]:
@@ -510,14 +526,22 @@ def resolve_production_readiness(
 
         pinned = matches
         if parsed.production_readiness_ref is not None:
-            # An explicit pin narrows reuse to the one report it names -- other
-            # identity-matching-but-unpinned reports are not silently
-            # substituted. Applied only after the conflict check above, purely
-            # to select which (already-agreeing) report object to attribute.
-            pinned = [r for r in matches if r.get("report_ref") == parsed.production_readiness_ref]
+            # An explicit pin selects which of the already-agreeing report
+            # objects to attribute -- applied only after the conflict check
+            # above. A pin that resolves to nothing (a typo, a stale/rotated
+            # ref, or untrusted manifest text an attacker deliberately points
+            # at nothing) must never suppress reuse of evidence that is
+            # otherwise trusted and unanimous: since every remaining match
+            # already agrees in verdict, which one gets attributed cannot
+            # change the resolved status, so falling back to the full
+            # agreeing set is safe and keeps a non-resolving pin from
+            # discarding known trusted evidence in favor of a fresh
+            # invocation (or UNKNOWN).
+            by_ref = [r for r in matches if r.get("report_ref") == parsed.production_readiness_ref]
+            if by_ref:
+                pinned = by_ref
 
-        if pinned:
-            return {"status": _safe_verdict(pinned[0].get("verdict")), "source": "REUSED", "report": pinned[0]}
+        return {"status": _safe_verdict(pinned[0].get("verdict")), "source": "REUSED", "report": pinned[0]}
 
     # 2. Otherwise, invoke only when safe.
     if not _candidate_identity_sufficient(parsed):
