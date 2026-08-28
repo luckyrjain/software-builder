@@ -18,6 +18,7 @@ from typing import Any, Callable, Mapping, MutableMapping, Optional, Sequence
 
 from scripts import production_readiness as pr
 from scripts.registry.assessment_target import (
+    normalize_environment_identity,
     normalize_repo_identity,
     normalize_service_identity,
 )
@@ -208,6 +209,11 @@ def _safe_normalize_service(value: Any) -> Optional[str]:
     return normalize_service_identity(value) if isinstance(value, str) else None
 
 
+def _safe_normalize_environment(value: Any) -> Optional[str]:
+    """See `_safe_normalize_repo` -- same rationale for `normalize_environment_identity`."""
+    return normalize_environment_identity(value) if isinstance(value, str) else None
+
+
 def match_release_report(entry: Any, report: Mapping[str, Any]) -> MutableMapping[str, Any]:
     """Deployable-scoped identity match: canonical repo/service, exact
     environment whenever either side declares one, exact release_ref ==
@@ -308,13 +314,22 @@ def _candidate_identity_sufficient(entry: ReleaseEntry) -> bool:
     or arbitrary caller text -- needs an explicit source_revision; without
     one, there is no way to prove code-review/CI evidence about *this*
     deployable, so invocation must not be attempted at all.
+
+    An explicit source_revision is itself required to look like a real git
+    commit SHA, the same shape `_looks_like_source_revision` requires of a
+    self-sufficient release_ref -- design v10 defines source_revision as "the
+    immutable source-control revision that code review and CI prove," and
+    source_revision is untrusted `release_manifest` text (`_as_str`-coerced,
+    same trust boundary as release_ref), so a mutable tag or arbitrary text
+    supplied there is exactly as unproven an identity as one supplied via
+    release_ref, and must not be treated as sufficient to invoke.
     """
     if not entry.repo or not entry.service:
         return False
     if not entry.release_ref:
         return False
     if entry.source_revision:
-        return True
+        return _looks_like_source_revision(entry.source_revision)
     return _looks_like_source_revision(entry.release_ref)
 
 
@@ -750,6 +765,33 @@ def finalize_release(pre: Mapping[str, Any]) -> ReleaseResult:
 _EXISTING_CHECKS = ("pr_review", "k8s", "incident")
 
 
+def _normalized_ref_pair_key(repo: Any, service: Any, environment: Any) -> tuple:
+    return (
+        _safe_normalize_repo(repo),
+        _safe_normalize_service(service),
+        _safe_normalize_environment(environment),
+    )
+
+
+def _resolve_ref_pair_mapping(mapping: Mapping[Any, Any], normalized_key: tuple) -> Any:
+    # A raw `dict.get(key)` on the untrusted, merely-`_as_str`-coerced entry
+    # identity would miss whenever the mapping's own keys use a differently
+    # formatted-but-identity-equivalent spelling (a repo string with/without
+    # a `.git` suffix, a differently cased environment) -- exactly the same
+    # spellings `match_release_report` already treats as identical via
+    # `_safe_normalize_repo`/`_safe_normalize_service`/`_safe_same_environment`.
+    # Comparing raw tuples there would silently miss a genuine ref move and
+    # let the freshness fence go inert instead of failing closed, while
+    # identity-matching elsewhere still happily reuses the report keyed to
+    # the other spelling. Normalizing both sides the same way closes that gap.
+    for raw_key, ref in mapping.items():
+        if not isinstance(raw_key, tuple) or len(raw_key) != 3:
+            continue
+        if _normalized_ref_pair_key(*raw_key) == normalized_key:
+            return ref
+    return None
+
+
 def _ref_pair_for_entry(
     entry: ReleaseEntry,
     start_ref: Any,
@@ -767,10 +809,17 @@ def _ref_pair_for_entry(
     legitimately appears as multiple manifest entries targeting different
     environments (e.g. staging and prod) -- keying by repo/service alone
     would let one environment's ref-resolution data silently mask another's.
+
+    The lookup key is normalized the same way `match_release_report` compares
+    identity, not a raw tuple -- see `_resolve_ref_pair_mapping`.
     """
-    key = (entry.repo, entry.service, entry.environment)
-    resolved_start = start_ref.get(key) if isinstance(start_ref, Mapping) else start_ref
-    resolved_final = final_ref.get(key) if isinstance(final_ref, Mapping) else final_ref
+    normalized_key = _normalized_ref_pair_key(entry.repo, entry.service, entry.environment)
+    resolved_start = (
+        _resolve_ref_pair_mapping(start_ref, normalized_key) if isinstance(start_ref, Mapping) else start_ref
+    )
+    resolved_final = (
+        _resolve_ref_pair_mapping(final_ref, normalized_key) if isinstance(final_ref, Mapping) else final_ref
+    )
     return resolved_start, resolved_final
 
 
@@ -828,7 +877,16 @@ def run_release(
             if check_spy is not None:
                 outcome = check_spy.run(name, repo=parsed.repo, service=parsed.service, environment=parsed.environment)
                 status = _safe_verdict(outcome.get("status")) if isinstance(outcome, Mapping) else "UNKNOWN"
-                checks.append({"name": name, "repo": parsed.repo, "service": parsed.service, "status": status, "executed": True})
+                checks.append(
+                    {
+                        "name": name,
+                        "repo": parsed.repo,
+                        "service": parsed.service,
+                        "environment": parsed.environment,
+                        "status": status,
+                        "executed": True,
+                    }
+                )
                 # _safe_verdict already guarantees a hashable string, but an
                 # arbitrary string not in this table (as opposed to one of the
                 # dict/list shapes _safe_verdict guards against) still needs
@@ -844,7 +902,16 @@ def run_release(
             else:
                 # No wrapped-skill harness supplied -- an unexecuted check is an
                 # evidence gap (UNKNOWN), never an implicit PASS.
-                checks.append({"name": name, "repo": parsed.repo, "service": parsed.service, "status": "NOT_RUN", "executed": False})
+                checks.append(
+                    {
+                        "name": name,
+                        "repo": parsed.repo,
+                        "service": parsed.service,
+                        "environment": parsed.environment,
+                        "status": "NOT_RUN",
+                        "executed": False,
+                    }
+                )
                 overall = cap_release_verdict(overall, "UNKNOWN")
                 unknown_dimensions.append(name)
 
@@ -868,7 +935,13 @@ def run_release(
                 # show it was required and why it's unresolved, matching this
                 # field's own "every entry that actually required it" contract.
                 production_readiness_results.append(
-                    {"repo": parsed.repo, "service": parsed.service, "source": None, "verdict": "UNKNOWN"}
+                    {
+                        "repo": parsed.repo,
+                        "service": parsed.service,
+                        "environment": parsed.environment,
+                        "source": None,
+                        "verdict": "UNKNOWN",
+                    }
                 )
             continue
 
@@ -892,6 +965,7 @@ def run_release(
             {
                 "repo": parsed.repo,
                 "service": parsed.service,
+                "environment": parsed.environment,
                 "source": resolution["source"],
                 "verdict": resolved_status,
             }

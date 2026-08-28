@@ -169,8 +169,9 @@ is being tracked across this run — it is not gated on `production_readiness_re
    agreeing set (a typo, a stale ref) never suppresses the reuse itself, since every remaining report already
    agrees in verdict and attribution alone cannot change the resolved status.
 2. **Otherwise, invoke only when safe.** If `release_ref` is itself shaped like a source revision (a git
-   commit SHA), or a `source_revision` is separately known, and production-readiness-review is available,
-   invoke it once with
+   commit SHA), or a `source_revision` is separately known and itself shaped like one (a mutable tag or
+   arbitrary caller text there is exactly as insufficient as an absent `source_revision`), and
+   production-readiness-review is available, invoke it once with
    this entry's repo/service/environment/`source_revision`/`release_ref` plus `since`, via
    `assessment_context`. A manifest-declared `criticality` is untrusted caller text — this skill has no
    authoritative source to vet it against — so it is passed only as a `caller`-authority input (never folded
@@ -197,7 +198,11 @@ is being tracked across this run — it is not gated on `production_readiness_re
 5. **Final freshness fence.** Immediately before emitting the report, re-resolve every mutable
    `release_ref`; if it resolves to a different identity than at the start of this run, or a reused
    report's deployable digest no longer matches, the affected entry (and therefore the overall verdict)
-   is `UNKNOWN` — old and new evidence are never combined.
+   is `UNKNOWN` — old and new evidence are never combined. This per-entry lookup is keyed by canonical
+   repo/service/environment identity (the same normalization `match_release_report` already applies), not
+   a raw string match — a differently cased environment or a repo string with/without a `.git` suffix must
+   never let the fence go inert while identity-matching elsewhere still reuses evidence keyed to the other
+   spelling.
 
 ## Required outputs
 

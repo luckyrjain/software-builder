@@ -33,7 +33,7 @@ readiness is never invoked for it. A v2 entry adds:
 | Field | Required | Meaning |
 |-------|----------|---------|
 | `environment` | No | Deployment environment; exact-match only (`prod` and `production` are different unless authoritative metadata aliases them) |
-| `source_revision` | No | The source commit the deployable was built from — required before a non-source `release_ref` (an image/artifact digest) can safely invoke production readiness |
+| `source_revision` | No | The source commit the deployable was built from (a git SHA) — required before a non-source `release_ref` (an image/artifact digest, or a mutable tag) can safely invoke production readiness; a present-but-not-SHA-shaped value (a mutable tag, arbitrary text) is exactly as insufficient as one that's absent |
 | `criticality` | No | `tier0`\|`tier1`\|`tier2`\|`tier3`\|`unknown` |
 | `production_readiness_required` | No, default `false` | the boolean `true`, or the case-insensitive string `"true"` (a plausible hand-authoring/templating mistake), marks the entry v2-readiness-required; it never silently skips the gate. Any other value (including an unrecognized truthy string) stays `false` rather than being guessed. |
 | `production_readiness_ref` | No | Optional pointer to a specific prior `production_readiness_report` to prefer during reuse matching |

@@ -240,6 +240,33 @@ Added 3 new regression tests covering the fix above.
 
 Added 4 new regression tests covering both fixes above.
 
+### Fixed (adversarial review round 10, same day)
+- **Security: the freshness-fence lookup now normalizes identity the same way `match_release_report`
+  does.** `_ref_pair_for_entry` built its `start_ref`/`final_ref` lookup key from raw, unnormalized
+  `repo`/`service`/`environment` and did a bare `dict.get()`, while every other identity comparison in this
+  module normalizes first (canonical repo form, case-insensitive environment). A differently-cased
+  environment (`"Production"` vs `"production"`) or a repo string with/without a `.git` suffix could
+  silently miss the freshness-fence lookup -- letting the fence go inert (a moved ref undetected) instead of
+  failing closed, even though `match_release_report`'s own format-insensitive comparison would still reuse a
+  report keyed to the other spelling. Added `_normalized_ref_pair_key`/`_resolve_ref_pair_mapping`, which
+  normalize both the entry's own identity and the mapping's keys before comparing.
+- **Security: an explicit `source_revision` is now itself required to look like a real git commit SHA** --
+  sibling gap to round 9's `release_ref` fix. `_candidate_identity_sufficient` treated any truthy
+  `source_revision` as sufficient with no shape check, even though `source_revision` is untrusted
+  `release_manifest` text at the exact same trust boundary as `release_ref`; a manifest declaring
+  `source_revision: "latest"` (or any other mutable tag/arbitrary text) reached a full `INVOKED`
+  production-readiness verdict on an unproven "revision." Now validated via the same
+  `_looks_like_source_revision` check already applied to the `release_ref`-alone fallback path.
+- **`production_readiness_results` and `checks` now carry `environment`.** Two entries legitimately sharing
+  repo+service across different environments (staging/prod) produced result rows distinguishable only by
+  `verdict`/`status` -- any consumer keying on `(repo, service)` alone (the natural key) would silently
+  collapse one environment's result into the other's. Strengthened
+  `test_freshness_fence_key_includes_environment_not_just_repo_service`, which previously only asserted
+  "some entry was affected" and would not have caught a regression that voided both entries or the wrong
+  one, to assert per-environment attribution directly.
+
+Added 3 new regression tests and strengthened one existing test covering all three fixes above.
+
 ## [1.0.0] — 2026-08-05
 
 ### Added

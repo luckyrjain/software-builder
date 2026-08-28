@@ -120,6 +120,36 @@ def test_multi_entry_production_readiness_results_are_all_recorded() -> None:
     assert by_repo == {"acme/a": "NOT_READY", "acme/b": "READY"}
 
 
+def test_same_repo_service_different_environment_entries_stay_distinguishable() -> None:
+    # Two entries sharing repo+service but targeting different environments
+    # (staging/prod) are a legitimate, first-class manifest shape (see the
+    # freshness-fence environment-keying tests above) -- their own
+    # production_readiness_results and checks rows must carry `environment`
+    # so a consumer keying on (repo, service) alone cannot silently collapse
+    # one environment's verdict into the other's.
+    staging = v2_entry(
+        required=True, repo="acme/checkout", service="checkout", environment="staging", source_revision="a" * 40
+    )
+    prod = v2_entry(
+        required=True, repo="acme/checkout", service="checkout", environment="prod", source_revision="a" * 40
+    )
+    staging_report = trusted_production_report(
+        verdict="READY", repo="acme/checkout", service="checkout", environment="staging", source_revision="a" * 40
+    )
+    prod_report = trusted_production_report(
+        verdict="NOT_READY", repo="acme/checkout", service="checkout", environment="prod", source_revision="a" * 40
+    )
+
+    result = run_release([staging, prod], trusted_reports=[staging_report, prod_report])
+
+    assert len(result.production_readiness_results) == 2
+    by_environment = {r["environment"]: r["verdict"] for r in result.production_readiness_results}
+    assert by_environment == {"staging": "READY", "prod": "NOT_READY"}
+
+    check_environments = {c["environment"] for c in result.checks}
+    assert check_environments == {"staging", "prod"}
+
+
 def test_required_entry_voided_by_freshness_fence_still_recorded() -> None:
     # An entry that required production readiness but whose ref moved
     # mid-run must still appear in production_readiness_results (as UNKNOWN,
@@ -184,6 +214,23 @@ def test_git_sha_release_ref_without_source_revision_is_sufficient_to_invoke() -
     result = run_release(entry, trusted_reports=[], production_invoke=s)
     assert s.calls == 1
     assert result.production_readiness == "READY"
+
+
+def test_mutable_tag_source_revision_is_unknown_before_invoke() -> None:
+    # Security: sibling gap to the release_ref bug above -- an explicit
+    # source_revision is untrusted release_manifest text at the exact same
+    # trust boundary as release_ref, so a mutable tag or arbitrary caller
+    # text supplied there (instead of merely being absent) must be exactly
+    # as insufficient to invoke as one supplied via release_ref alone.
+    # design v10 defines source_revision as "the immutable source-control
+    # revision that code review and CI prove" -- an unproven, non-SHA-shaped
+    # value can never satisfy that.
+    for mutable_tag in ("latest", "HEAD", "main"):
+        entry = v2_entry(required=True, release_ref="sha256:" + "b" * 64, source_revision=mutable_tag)
+        s = spy()
+        result = run_release(entry, trusted_reports=[], production_invoke=s)
+        assert result["verdict"] == "UNKNOWN", mutable_tag
+        assert s.calls == 0, mutable_tag
 
 
 def test_entry_missing_repo_or_service_never_invokes() -> None:
@@ -961,18 +1008,83 @@ def test_freshness_fence_key_includes_environment_not_just_repo_service() -> Non
     # different environments (e.g. staging and prod) -- one entry's ref
     # movement must never be masked because it shares a repo/service key
     # with another entry in a different environment.
-    staging_entry = v2_entry(repo="acme/checkout", service="checkout", environment="staging")
-    prod_entry = v2_entry(repo="acme/checkout", service="checkout", environment="prod")
+    #
+    # This asserts specifically WHICH entry got voided, not merely that
+    # *some* entry did (a regression that collapsed the two entries' keys
+    # together -- voiding both, or voiding the wrong one -- would still pass
+    # a weaker "at least one entry moved" assertion). Each entry is given its
+    # own distinct trusted report so per-entry attribution (via the
+    # `environment` field on `production_readiness_results`) can be checked.
+    staging_entry = v2_entry(
+        required=True, repo="acme/checkout", service="checkout", environment="staging",
+        source_revision="a" * 40, release_ref="a" * 40,
+    )
+    prod_entry = v2_entry(
+        required=True, repo="acme/checkout", service="checkout", environment="prod",
+        source_revision="a" * 40, release_ref="a" * 40,
+    )
+    staging_report = trusted_production_report(
+        verdict="READY", environment="staging", deployable="a" * 40, source_revision="a" * 40
+    )
+    prod_report = trusted_production_report(
+        verdict="NOT_READY", environment="prod", deployable="a" * 40, source_revision="a" * 40
+    )
     staging_key = ("acme/checkout", "checkout", "staging")
     prod_key = ("acme/checkout", "checkout", "prod")
 
     result = run_release(
         [staging_entry, prod_entry],
+        trusted_reports=[staging_report, prod_report],
         start_ref={staging_key: "a" * 40, prod_key: "a" * 40},
         final_ref={staging_key: "b" * 40, prod_key: "a" * 40},
     )
     assert result.candidate_changed_during_review is True
+    # Worst-first: prod's own resolved NOT_READY (severity 3) caps the overall
+    # verdict past staging's mere UNKNOWN (severity 2) -- proving prod's real,
+    # unmasked verdict actually feeds the aggregate, not just "some entry
+    # went UNKNOWN."
+    assert result.overall == "NOT_READY"
+
+    by_environment = {r["environment"]: r for r in result.production_readiness_results}
+    assert by_environment["staging"] == {
+        "repo": "acme/checkout", "service": "checkout", "environment": "staging",
+        "source": None, "verdict": "UNKNOWN",
+    }
+    assert by_environment["prod"] == {
+        "repo": "acme/checkout", "service": "checkout", "environment": "prod",
+        "source": "REUSED", "verdict": "NOT_READY",
+    }
+
+
+def test_freshness_fence_key_matching_is_normalized_not_a_raw_tuple() -> None:
+    # Security: every other identity comparison in this module normalizes
+    # before comparing (canonical repo form, case-insensitive environment) --
+    # a raw `dict.get()` on the unnormalized (repo, service, environment)
+    # tuple would let a differently-cased environment (or a repo string
+    # with/without a ".git" suffix) silently miss the freshness-fence lookup,
+    # going inert (ref_moved=False) instead of failing closed, even though
+    # match_release_report's own case/format-insensitive comparison would
+    # still happily reuse a report keyed to the other spelling.
+    entry = v2_entry(repo="acme/checkout", service="checkout", environment="Production")
+    normalized_key = ("acme/checkout", "checkout", "production")
+
+    result = run_release(
+        entry,
+        start_ref={normalized_key: "a" * 40},
+        final_ref={normalized_key: "b" * 40},
+    )
+    assert result.candidate_changed_during_review is True
     assert result.overall == "UNKNOWN"
+
+    repo_with_git_suffix = v2_entry(repo="https://github.com/acme/checkout.git", service="checkout")
+    canonical_repo_key = ("https://github.com/acme/checkout", "checkout", None)
+    repo_result = run_release(
+        repo_with_git_suffix,
+        start_ref={canonical_repo_key: "a" * 40},
+        final_ref={canonical_repo_key: "b" * 40},
+    )
+    assert repo_result.candidate_changed_during_review is True
+    assert repo_result.overall == "UNKNOWN"
 
 
 # ---------------------------------------------------------------------------
