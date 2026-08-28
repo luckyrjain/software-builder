@@ -45,13 +45,19 @@ A manifest entry stays exactly `{repo, service, since, release_ref?}` (v1) unles
 byte-for-byte as before and **never** invoke production readiness.
 
 For a v2 entry that requires it, this skill first reuses a trusted, deployable-scoped
-`production_readiness_report` (exact repo/service/environment/`release_ref` match) if one is available;
-otherwise, when candidate identity is sufficient (a source revision is known, or `release_ref` already
+`production_readiness_report` (exact repo/service/environment/`release_ref` match, `release_ref` itself
+anchored to something immutable -- a real git SHA or `sha256:`/`sha384:`/`sha512:`-shaped digest, never a
+mutable tag -- and never resolvable by two trusted, identity-matching reports that disagree in verdict,
+which is `UNKNOWN` until reconciled rather than picked arbitrarily) if one is available; otherwise, when
+candidate identity is sufficient (a source revision is known and itself SHA-shaped, or `release_ref` already
 is one) and **production-readiness-review** is available, it conditionally invokes that skill once via
 `assessment_context`, reusing the code-review coverage this skill already assembled so
-production-readiness-review never revisits pr-review. Missing/untrusted/stale readiness with no safe
-invoke path is `UNKNOWN`, never a silently skipped gate. Production readiness never causes the existing
-pr-review/k8s/incident-rca checks to be skipped, and its verdict only ever caps the release verdict
+production-readiness-review never revisits pr-review. Missing/untrusted/stale/conflicting readiness with no
+safe invoke path is `UNKNOWN`, never a silently skipped gate. A final freshness fence also re-resolves every
+mutable `release_ref` immediately before the report is emitted; if it moved mid-run, the affected entry (and
+therefore the overall verdict) is `UNKNOWN`, old and new evidence never combined. Production readiness never
+causes the existing pr-review/k8s/incident-rca checks to be skipped, and its verdict only ever caps the
+release verdict
 worse (`NOT_READY`/`UNKNOWN`/`CONDITIONAL`), never better. See
 [scripts/release_readiness_v2.py](../scripts/release_readiness_v2.py) and
 [reference/report-format.md](reference/report-format.md).

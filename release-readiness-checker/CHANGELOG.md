@@ -436,6 +436,40 @@ and `test_engineering_delivery_lifecycle.py`'s continued validity against the cu
 Added 1 regression test. Full suite (1701 passed, 1 skipped), registry validate/generate-check, and
 lint-release-readiness-checker all green.
 
+### Round 18, same day -- test-quality gaps closed; docs updated to match 17 rounds of logic changes
+
+Two independent adversarial passes: one did a from-scratch attack simulation (a manifest-only attacker
+trying every primitive rounds 1-17 closed -- mutable-tag reuse, pin-vs-conflict bypass, non-resolving-pin
+discard, environment omission, criticality relaxation, forged coverage, malformed-field crashes -- all
+correctly blocked, named by which round's fix stops each one), scale/tie-break correctness at 10,000-report
+scale (clean), and Unicode-confusable identity spoofing (NFC normalization correctly does not unify
+confusables, so this fails closed rather than falsely matching). The other did a break-and-restore audit of
+30 tests from rounds 1-8 not previously individually verified (rounds 11/15 covered the rounds 9-14 cluster
+and rounds 16/17's mutation-safety tests) and found two dead tests:
+
+- `test_code_review_coverage_never_leaks_across_manifest_entries` (guarding round 2's fix) passed even with
+  `_coverage_for_entry`'s repo/service scoping fully reverted to its pre-round-2 shape, because its two
+  fixture entries also differed in `source_revision` -- the (separately, correctly tested) revision mismatch
+  alone protected it, never exercising the repo/service leak the test's own comment describes. Fixed by
+  giving both entries the same `source_revision`, so only repo/service scoping can protect it, plus a
+  positive-control assertion that the bundle DOES reach the entry it was actually assembled for (proving the
+  negative assertion isn't vacuous).
+- `test_production_readiness_ref_pin_selects_among_agreeing_matches` (guarding the pin-selection logic)
+  passed even with pin selection removed entirely, because both fixture reports shared the identical verdict
+  and `run_release`'s own output never exposes which underlying report object was picked. Fixed by calling
+  `resolve_production_readiness` directly (which does return the full `report` mapping) and asserting on the
+  pinned report's own `report_ref`.
+
+Both fixes verified by the same break-and-restore technique: reverting the exact original defect, confirming
+the strengthened test now fails, then restoring and confirming it passes again.
+
+The attack-simulation pass also found `release-readiness-checker/README.md`'s "Manifest v2" section and
+`reference/report-format.md`'s production-readiness `UNKNOWN`-cause enumeration had drifted stale --
+written once in round 1 (task 8) and never revisited despite rounds 7-14 materially tightening the reuse
+gate (the immutable-identity-anchor requirement, conflicting-report resolution) and the freshness fence
+going undocumented in report-format.md entirely. Updated both docs to match current behavior; no code
+change.
+
 ## [1.0.0] — 2026-08-05
 
 ### Added

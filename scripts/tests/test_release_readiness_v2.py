@@ -815,15 +815,21 @@ def test_production_readiness_ref_pin_selects_among_agreeing_matches() -> None:
     # A pin still does useful work when the identity-matching reports do NOT
     # disagree: it selects which specific (already-agreeing) report object is
     # attributed as the reused source, without needing to override a conflict.
+    # Both reports share the identical verdict ("READY"), and run_release's
+    # own output never exposes which underlying report object was picked --
+    # only resolve_production_readiness's "report" field does -- so this
+    # calls it directly and asserts on the pinned report's own report_ref,
+    # the only thing that can actually distinguish "pin honored" from
+    # "pin ignored, first match picked by coincidence."
     older_ready = trusted_production_report(verdict="READY", report_ref="run-1")
     newer_ready = trusted_production_report(verdict="READY", report_ref="run-2")
-    result = run_release(
+    result = resolve_production_readiness(
         v2_entry(required=True, production_readiness_ref="run-2"),
         trusted_reports=[older_ready, newer_ready],
     )
-    assert result["production_readiness_source"] == "REUSED"
-    assert result.production_readiness == "READY"
-    assert result.production_readiness_results[0]["source"] == "REUSED"
+    assert result["status"] == "READY"
+    assert result["source"] == "REUSED"
+    assert result["report"]["report_ref"] == "run-2"
 
 
 def test_non_resolving_pin_never_discards_agreeing_trusted_evidence() -> None:
@@ -902,20 +908,24 @@ def test_code_review_coverage_never_leaks_across_manifest_entries() -> None:
     # Security: a single code_review_coverage bundle assembled for one entry
     # must never be silently applied to a DIFFERENT entry in the same
     # multi-entry manifest -- that would launder one candidate's review
-    # evidence into another candidate's verdict.
+    # evidence into another candidate's verdict. The two entries deliberately
+    # share the SAME source_revision (and the bundle declares repo/service),
+    # so the only thing that could prevent a leak here is repo/service
+    # scoping itself -- a source_revision-only mismatch (a weaker, already
+    # separately covered scenario) is not what's being tested.
     coverage_for_checkout = build_code_review_coverage(
         candidate_source_revision="a" * 40,
         included_change_refs=["mr:1"],
         trusted_review_refs=["mr:1"],
+        repo="acme/checkout",
+        service="checkout",
     )
     checkout_entry = v2_entry(required=True, repo="acme/checkout", service="checkout", source_revision="a" * 40)
-    billing_entry = v2_entry(required=True, repo="acme/billing", service="billing", source_revision="b" * 40)
+    billing_entry = v2_entry(required=True, repo="acme/billing", service="billing", source_revision="a" * 40)
+    seen_coverage: dict = {}
 
     def production_invoke(candidate: dict, *, assessment_context: dict | None = None):
-        supplied = (assessment_context or {}).get("inputs", {}).get("code_review_coverage")
-        # billing's own invocation must never see checkout's coverage bundle.
-        if candidate["repo"] == "acme/billing":
-            assert supplied is None
+        seen_coverage[candidate["repo"]] = (assessment_context or {}).get("inputs", {}).get("code_review_coverage")
         return trusted_production_report(
             verdict="READY",
             repo=candidate["repo"],
@@ -930,6 +940,13 @@ def test_code_review_coverage_never_leaks_across_manifest_entries() -> None:
         production_invoke=production_invoke,
         code_review_coverage=coverage_for_checkout,
     )
+    # Positive control: checkout (the entry the bundle was actually assembled
+    # for) DOES receive it -- proving the bundle isn't simply rejected
+    # outright, which would make the negative assertion below vacuous.
+    assert seen_coverage["acme/checkout"] is not None
+    # billing's own invocation must never see checkout's coverage bundle,
+    # despite sharing the identical source_revision.
+    assert seen_coverage["acme/billing"] is None
 
 
 def test_code_review_coverage_omitting_repo_service_never_applies_even_to_the_matching_revision_entry() -> None:

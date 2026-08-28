@@ -85,8 +85,9 @@ pr-review/k8s/incident-rca evidence already reached, never widens it —
 
 - production readiness `NOT_READY` → this entry's contribution is `NOT_READY`, regardless of its other
   checks;
-- production readiness `UNKNOWN` (missing/untrusted/stale report, insufficient identity, or the child
-  unavailable) → `UNKNOWN`;
+- production readiness `UNKNOWN` (missing/untrusted/stale report, insufficient identity, the child
+  unavailable, or two trusted, identity-matching reports that disagree in verdict -- conflicting
+  authoritative evidence, never picked one over the other) → `UNKNOWN`;
 - production readiness `CONDITIONAL` → at most `CONDITIONAL`;
 - production readiness `READY`, or the entry doesn't require it (v1, or v2 with
   `production_readiness_required` absent/`false`) → unchanged, use the entry's other checks as today.
@@ -94,7 +95,12 @@ pr-review/k8s/incident-rca evidence already reached, never widens it —
 `overall_verdict` across the whole manifest still follows `NOT_READY` > `UNKNOWN` > `CONDITIONAL` >
 `READY` over every entry's own (possibly capped) contribution. Record which entries were reused
 (`REUSED`) vs. freshly invoked (`INVOKED`) for production readiness in Notes, alongside the existing
-release-pin/k8s/incident-rca notes.
+release-pin/k8s/incident-rca notes. A final freshness fence also re-resolves every entry's mutable
+`release_ref` immediately before this report is emitted (general, not gated on
+`production_readiness_required`); if it moved mid-run, that entry's contribution -- and, per the same
+worst-first precedence, the overall verdict -- is `UNKNOWN`, never a silent combination of evidence
+gathered against two different identities. Note this in Notes the same way (e.g. "1 manifest entry's
+release_ref resolved differently mid-run; see Notes").
 
 ## Rules
 
