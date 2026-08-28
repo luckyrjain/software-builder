@@ -470,6 +470,27 @@ gate (the immutable-identity-anchor requirement, conflicting-report resolution) 
 going undocumented in report-format.md entirely. Updated both docs to match current behavior; no code
 change.
 
+### Round 19, same day -- no code defect found; three untested-but-correct branches given coverage
+
+Two independent adversarial passes: one stacked multiple previously-individually-blocked attack primitives
+into single, complex `run_release` calls (a non-resolving pin plus a mutable-tag entry, sharing a repo/
+service with a differently-scoped coverage bundle, alongside an uppercase `"TRUE"` flag and a git null-SHA
+entry, all in one manifest; two entries sharing an identical `(repo, service, environment)` triple with
+different pins/reports; a 5-entry mixed v1/v2 manifest reusing the same `code_review_coverage` object and
+`trusted_reports` list under an actively adversarial `production_invoke`) -- every entry resolved correctly
+and independently in every combination, with zero cross-entry bleed and the round-16/17 deep-copy fixes
+holding under far more stress than their own original tests used. The other did a full manual branch-
+coverage audit of every function in `scripts/release_readiness_v2.py` and, via break-and-restore, found
+three branches that behave correctly today but had zero test coverage at all: `classify_report_for_release`'s
+`producer_trusted` gate (a distinct trust axis from `acquisition`, tested only via `acquisition`-focused
+cases since round 1), `match_release_report`'s environment check in the "entry declares, report omits"
+direction (only the reverse direction had a test), and `build_code_review_coverage`'s empty-
+`included_change_refs` → `UNKNOWN` fail-closed branch (untested since it was introduced). Each gap was
+confirmed to matter by temporarily reverting the corresponding guard and showing the existing suite stayed
+fully green -- i.e. a future refactor could silently regress any of these three with no test catching it.
+Added 3 regression tests, each independently verified by the same revert-confirm-restore technique. No
+production code change.
+
 ## [1.0.0] — 2026-08-05
 
 ### Added

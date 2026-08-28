@@ -584,8 +584,36 @@ def test_file_ready_report_cannot_self_attest() -> None:
     assert classify_report_for_release(report)["trusted_for_gate"] is False
 
 
+def test_untrusted_producer_report_is_not_gate_trusted_even_with_trusted_acquisition() -> None:
+    # producer_trusted is a distinct trust axis from acquisition -- a report
+    # with an otherwise-trusted acquisition (direct_child/runtime_validated)
+    # must still never be gate-trusted if its own producer_trusted field is
+    # explicitly False.
+    report = trusted_production_report(verdict="READY", producer_trusted=False)
+    assert classify_report_for_release(report)["trusted_for_gate"] is False
+
+    # With identity sufficient to invoke, resolution correctly falls through
+    # to a fresh invoke attempt (never reusing the untrusted report) --
+    # mirroring test_authoritative_host_acquisition_is_not_gate_trusted_
+    # for_a_report's own no-real-invocation-configured case.
+    result = run_release(v2_entry(required=True), trusted_reports=[report])
+    assert result.production_readiness == "UNKNOWN"
+    assert result["production_readiness_source"] is None
+
+
 def test_environment_alias_mismatch_is_unknown() -> None:
     report = trusted_production_report(environment="production")
+    result = match_release_report(v2_entry(environment="prod"), report)
+    assert result["status"] == "UNKNOWN"
+
+
+def test_entry_declared_environment_does_not_reuse_a_report_that_omits_it() -> None:
+    # Mirror of test_omitted_entry_environment_does_not_reuse_a_declared_
+    # environment_report: the OTHER direction of the "either side declares
+    # one" guard -- an entry pinned to a specific environment must never
+    # reuse a report that omits environment entirely (None), the fixture
+    # default. Both directions of this OR-guard must independently hold.
+    report = trusted_production_report(environment=None)
     result = match_release_report(v2_entry(environment="prod"), report)
     assert result["status"] == "UNKNOWN"
 
@@ -1116,6 +1144,24 @@ def test_malformed_change_ref_is_never_silently_dropped() -> None:
     assert len(coverage["included_change_refs"]) == 2
     assert coverage["status"] == "PARTIAL"
     assert len(coverage["uncovered_change_refs"]) == 1
+
+
+def test_empty_included_change_refs_is_unknown_not_trivially_complete() -> None:
+    # Security: a release range with zero enumerated changes must fail
+    # closed to UNKNOWN, never be treated as trivially COMPLETE -- an
+    # authoritative-looking bundle claiming COMPLETE with no actually-
+    # enumerated changes is exactly the kind of no-real-work self-attestation
+    # this module otherwise treats as a security concern (it would otherwise
+    # satisfy _coverage_is_trustworthy_and_complete and get stamped
+    # trusted_runtime despite representing zero real review evidence).
+    coverage = build_code_review_coverage(
+        candidate_source_revision="a" * 40,
+        included_change_refs=[],
+        trusted_review_refs=[],
+        repo="acme/checkout",
+        service="checkout",
+    )
+    assert coverage["status"] == "UNKNOWN"
 
 
 def test_malformed_change_ref_cannot_be_laundered_into_covered_by_a_placeholder_collision() -> None:
