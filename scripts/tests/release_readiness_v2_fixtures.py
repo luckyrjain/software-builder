@@ -161,7 +161,7 @@ def release_check_spy():
     class _CheckSpy:
         executed_checks = executed
 
-        def run(self, name: str) -> dict:
+        def run(self, name: str, **_: Any) -> dict:
             executed.append(name)
             return {"status": "PASS"}
 
@@ -246,7 +246,7 @@ def run_v2_release_with_complete_review_coverage() -> Trace:
     class _CheckSpy:
         executed_checks = trace
 
-        def run(self, name: str) -> dict:
+        def run(self, name: str, **_: Any) -> dict:
             trace.append(name.replace("_", "-"))
             return {"status": "PASS"}
 
@@ -284,7 +284,7 @@ def run_v2_release_with_uncovered_change():
     class _CheckSpy:
         executed_checks = trace
 
-        def run(self, name: str) -> dict:
+        def run(self, name: str, **_: Any) -> dict:
             trace.append(name.replace("_", "-"))
             return {"status": "PASS"}
 

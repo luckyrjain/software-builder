@@ -9,6 +9,7 @@ when candidate identity/context/capability are sufficient, otherwise UNKNOWN.
 from __future__ import annotations
 
 from scripts.release_readiness_v2 import (
+    build_assessment_context,
     build_code_review_coverage,
     cap_release_verdict,
     classify_report_for_release,
@@ -174,6 +175,73 @@ def test_non_string_release_ref_degrades_to_unknown_not_a_crash() -> None:
     }
     result = run_release(malformed, trusted_reports=[], production_invoke=spy())
     assert result["verdict"] == "UNKNOWN"
+
+
+def test_non_string_trusted_report_identity_degrades_to_unknown_not_a_crash() -> None:
+    # trusted_reports/production_invoke returns are external data too -- a
+    # non-string repo/service/environment there must not crash run_release
+    # via normalize_repo_identity/normalize_service_identity/same_environment.
+    malformed_report = trusted_production_report(repo=12345)
+    result = run_release(
+        v2_entry(required=True), trusted_reports=[malformed_report], production_invoke=spy()
+    )
+    assert result["verdict"] == "UNKNOWN"
+
+
+def test_non_string_coverage_repo_degrades_to_not_applied_not_a_crash() -> None:
+    coverage_with_bad_repo = {
+        "candidate_source_revision": "a" * 40,
+        "repo": 999,
+        "service": "checkout",
+        "status": "COMPLETE",
+        "uncovered_change_refs": [],
+        "acquisition": "authoritative_host",
+    }
+    s = spy(return_value=trusted_production_report(verdict="READY"))
+    result = run_release(
+        v2_entry(required=True, source_revision="a" * 40),
+        trusted_reports=[],
+        production_invoke=s,
+        code_review_coverage=coverage_with_bad_repo,
+    )
+    # Not applied to this entry (repo can't be normalized) -- proceeds to
+    # invoke without pre-assembled coverage rather than crashing.
+    assert s.calls == 1
+    assert result.production_readiness == "READY"
+
+
+def test_unhashable_verdict_degrades_to_unknown_not_a_crash() -> None:
+    # A malformed report/invoke-result verdict (a list instead of a string)
+    # must not crash the set-based conflict check or the _VERDICT_SEVERITY
+    # membership test -- both would otherwise raise on an unhashable value.
+    malformed_report = trusted_production_report(verdict=["READY"])
+    result = run_release(v2_entry(required=True), trusted_reports=[malformed_report])
+    assert result["verdict"] == "UNKNOWN"
+
+    s = spy(return_value=trusted_production_report(verdict=["READY"]))
+    invoked_result = run_release(
+        v2_entry(required=True, source_revision="a" * 40), trusted_reports=[], production_invoke=s
+    )
+    assert invoked_result["verdict"] == "UNKNOWN"
+
+
+def test_evidence_refs_wrong_shape_is_never_shredded() -> None:
+    # A single ref string (instead of a one-element list) must never be
+    # silently exploded into individual characters by a bare list(...) call.
+    coverage = {
+        "candidate_source_revision": "a" * 40,
+        "repo": "acme/checkout",
+        "service": "checkout",
+        "status": "COMPLETE",
+        "uncovered_change_refs": [],
+        "acquisition": "authoritative_host",
+        "evidence_refs": "pr-42",
+    }
+    context = build_assessment_context(
+        parse_release_entry(v2_entry(source_revision="a" * 40)), code_review_coverage=coverage
+    )
+    assert context["evidence_refs"] == []
+    assert context["input_provenance"]["code_review_coverage"]["evidence_refs"] == []
 
 
 # ---------------------------------------------------------------------------
@@ -545,11 +613,35 @@ def test_ready_production_still_runs_existing_k8s_and_incident_checks() -> None:
     assert {"k8s", "incident"} <= set(s.executed_checks)
 
 
+def test_existing_checks_are_attributed_to_the_correct_entry() -> None:
+    # A multi-entry manifest: check_spy.run must receive enough identity to
+    # discriminate which candidate it's being asked to check for pr-review/
+    # k8s/incident-rca (run-check.md's own "once per service"/"per resolved
+    # MR" contract), and the recorded `checks` entries must carry that
+    # attribution too, not just a bare check name.
+    seen_calls: list = []
+
+    class _AttributingSpy:
+        def run(self, name: str, **kwargs: object) -> dict:
+            seen_calls.append((name, kwargs.get("repo"), kwargs.get("service")))
+            return {"status": "PASS"}
+
+    entry_a = v1_entry(repo="acme/a", service="a")
+    entry_b = v1_entry(repo="acme/b", service="b")
+    result = run_release([entry_a, entry_b], check_spy=_AttributingSpy())
+
+    assert ("pr_review", "acme/a", "a") in seen_calls
+    assert ("pr_review", "acme/b", "b") in seen_calls
+    checks_by_repo = {(c["name"], c["repo"]) for c in result.get("checks", [])}
+    assert ("pr_review", "acme/a") in checks_by_repo
+    assert ("pr_review", "acme/b") in checks_by_repo
+
+
 def test_not_ready_short_circuit_does_not_report_existing_checks_as_passed_if_not_run() -> None:
     # A check_spy with mixed outcomes: every executed check reporting PASS must
     # be marked executed=True (meaningful even when k8s independently fails).
     class _MixedSpy:
-        def run(self, name: str) -> dict:
+        def run(self, name: str, **_: object) -> dict:
             return {"status": "FAIL" if name == "k8s" else "PASS"}
 
     result = run_release(
@@ -576,7 +668,7 @@ def test_executed_check_resolving_to_unknown_makes_result_partial() -> None:
     # as unresolved as one that never ran -- it must not be silently treated
     # as a resolved SUCCESS.
     class _UnknownK8sSpy:
-        def run(self, name: str) -> dict:
+        def run(self, name: str, **_: object) -> dict:
             return {"status": "UNKNOWN"} if name == "k8s" else {"status": "PASS"}
 
     result = run_release(v1_entry(), check_spy=_UnknownK8sSpy())
@@ -620,7 +712,7 @@ def test_freshness_fence_caps_not_ready_never_downgrades_it_to_unknown() -> None
     # because the freshness fence also fired -- worst-first capping, not a
     # raw overwrite.
     class _FailingSpy:
-        def run(self, name: str) -> dict:
+        def run(self, name: str, **_: object) -> dict:
             return {"status": "NOT_READY"}
 
     result = run_release(v1_entry(), check_spy=_FailingSpy(), start_ref="a" * 40, final_ref="b" * 40)

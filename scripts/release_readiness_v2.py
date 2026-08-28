@@ -19,7 +19,6 @@ from scripts import production_readiness as pr
 from scripts.registry.assessment_target import (
     normalize_repo_identity,
     normalize_service_identity,
-    same_environment,
 )
 
 # ---------------------------------------------------------------------------
@@ -47,6 +46,20 @@ _CHECK_STATUS_VERDICT = {
 }
 
 
+def _safe_verdict(value: Any) -> str:
+    """Coerce an external verdict value to a string, or "UNKNOWN" for any other
+    shape (including an unhashable one like a list/dict).
+
+    A verdict is read from a `trusted_reports` entry or a `production_invoke`
+    return value -- both are external data this module does not control the
+    shape of. Every downstream use compares it against `_VERDICT_SEVERITY`
+    (a `dict`) via `in`/set-membership, which raises `TypeError` outright for
+    an unhashable value; this must be sanitized once, at the point each
+    verdict is first read, rather than guarded separately at every call site.
+    """
+    return value if isinstance(value, str) else "UNKNOWN"
+
+
 def cap_release_verdict(current: str, production_verdict: str) -> str:
     """Worst-first cap: a release verdict is never better than production readiness's own.
 
@@ -54,8 +67,10 @@ def cap_release_verdict(current: str, production_verdict: str) -> str:
     most CONDITIONAL, READY never downgrades an already-worse existing verdict.
     An unrecognized production verdict is never treated as the permissive READY.
     """
+    production_verdict = _safe_verdict(production_verdict)
     if production_verdict not in _VERDICT_SEVERITY:
         production_verdict = "UNKNOWN"
+    current = _safe_verdict(current)
     if current not in _VERDICT_SEVERITY:
         current = "UNKNOWN"
     return current if _VERDICT_SEVERITY[current] >= _VERDICT_SEVERITY[production_verdict] else production_verdict
@@ -172,6 +187,20 @@ def classify_report_for_release(report: Mapping[str, Any]) -> MutableMapping[str
     }
 
 
+def _safe_normalize_repo(value: Any) -> Optional[str]:
+    """`normalize_repo_identity` raises TypeError for a non-string input; a
+    report's own repo field is external data (trusted_reports / a
+    production_invoke return value), never guaranteed to be a string, unlike
+    a parsed manifest entry's already-`_as_str`-coerced `repo`.
+    """
+    return normalize_repo_identity(value) if isinstance(value, str) else None
+
+
+def _safe_normalize_service(value: Any) -> Optional[str]:
+    """See `_safe_normalize_repo` -- same rationale for `normalize_service_identity`."""
+    return normalize_service_identity(value) if isinstance(value, str) else None
+
+
 def match_release_report(entry: Any, report: Mapping[str, Any]) -> MutableMapping[str, Any]:
     """Deployable-scoped identity match: canonical repo/service, exact
     environment whenever either side declares one, exact release_ref ==
@@ -185,12 +214,12 @@ def match_release_report(entry: Any, report: Mapping[str, Any]) -> MutableMappin
     if not parsed.repo or not parsed.service:
         return {"status": "UNKNOWN", "reason": "missing_candidate_identity"}
 
-    report_repo = target.get("repo")
-    if not report_repo or normalize_repo_identity(report_repo) != normalize_repo_identity(parsed.repo):
+    normalized_report_repo = _safe_normalize_repo(target.get("repo"))
+    if not normalized_report_repo or normalized_report_repo != _safe_normalize_repo(parsed.repo):
         return {"status": "UNKNOWN", "reason": "repo_mismatch"}
 
-    report_service = target.get("service")
-    if not report_service or normalize_service_identity(report_service) != normalize_service_identity(parsed.service):
+    normalized_report_service = _safe_normalize_service(target.get("service"))
+    if not normalized_report_service or normalized_report_service != _safe_normalize_service(parsed.service):
         return {"status": "UNKNOWN", "reason": "service_mismatch"}
 
     report_env = target.get("environment")
@@ -200,8 +229,10 @@ def match_release_report(entry: Any, report: Mapping[str, Any]) -> MutableMappin
         # `environment` must never silently reuse a report produced for SOME
         # OTHER declared environment. Only "neither side declares one" is a
         # harmless match; any other combination (one side null, or both
-        # non-null but different) is a mismatch.
-        if parsed.environment is None or report_env is None or not same_environment(parsed.environment, report_env):
+        # non-null but different) is a mismatch. `pr._safe_same_environment`
+        # (not the raw `same_environment`) because `report_env` is external
+        # data that need not be a string.
+        if parsed.environment is None or report_env is None or not pr._safe_same_environment(parsed.environment, report_env):
             return {"status": "UNKNOWN", "reason": "environment_mismatch"}
 
     if not parsed.release_ref:
@@ -339,9 +370,11 @@ def _coverage_for_entry(
     coverage_service = coverage.get("service")
     if not coverage_repo or not coverage_service:
         return None
-    if not entry.repo or normalize_repo_identity(coverage_repo) != normalize_repo_identity(entry.repo):
+    normalized_coverage_repo = _safe_normalize_repo(coverage_repo)
+    if not normalized_coverage_repo or normalized_coverage_repo != _safe_normalize_repo(entry.repo):
         return None
-    if not entry.service or normalize_service_identity(coverage_service) != normalize_service_identity(entry.service):
+    normalized_coverage_service = _safe_normalize_service(coverage_service)
+    if not normalized_coverage_service or normalized_coverage_service != _safe_normalize_service(entry.service):
         return None
     return coverage
 
@@ -365,7 +398,11 @@ def build_assessment_context(
     if code_review_coverage is not None:
         inputs["code_review_coverage"] = code_review_coverage
         authority = "trusted_runtime" if _coverage_is_trustworthy_and_complete(code_review_coverage) else "caller"
-        coverage_refs = list(pr._as_mapping(code_review_coverage).get("evidence_refs", []) or [])
+        raw_refs = pr._as_mapping(code_review_coverage).get("evidence_refs")
+        # A wrong-shaped value (a bare string, a mapping) must never be
+        # silently shredded by `list(...)` into characters or dict keys --
+        # only a genuine list is ever treated as a ref list.
+        coverage_refs = list(raw_refs) if isinstance(raw_refs, list) else []
         input_provenance["code_review_coverage"] = {
             "authority": authority,
             "evidence_refs": coverage_refs,
@@ -427,14 +464,17 @@ def resolve_production_readiness(
         matches = [r for r in matches if r.get("report_ref") == parsed.production_readiness_ref]
 
     if matches:
-        verdicts = {r.get("verdict", "UNKNOWN") for r in matches}
+        # _safe_verdict before the set/membership operations below: an
+        # unhashable raw verdict (a list/dict a malformed report carries)
+        # would otherwise raise TypeError building this very set.
+        verdicts = {_safe_verdict(r.get("verdict")) for r in matches}
         if len(verdicts) > 1:
             # Two trusted, identity-matching reports that disagree are
             # conflicting authoritative evidence -- per the evidence-authority
             # policy, this is never silently resolved by picking one; it is
             # UNKNOWN until reconciled by a fresher/pinned report.
             return {"status": "UNKNOWN", "source": None, "report": None}
-        return {"status": matches[0].get("verdict", "UNKNOWN"), "source": "REUSED", "report": matches[0]}
+        return {"status": _safe_verdict(matches[0].get("verdict")), "source": "REUSED", "report": matches[0]}
 
     # 2. Otherwise, invoke only when safe.
     if not _candidate_identity_sufficient(parsed):
@@ -465,7 +505,7 @@ def resolve_production_readiness(
     match = match_release_report(parsed, invoked)
     if match["status"] != "MATCH":
         return {"status": "UNKNOWN", "source": None, "report": None}
-    return {"status": invoked.get("verdict", "UNKNOWN"), "source": "INVOKED", "report": invoked}
+    return {"status": _safe_verdict(invoked.get("verdict")), "source": "INVOKED", "report": invoked}
 
 
 # ---------------------------------------------------------------------------
@@ -703,12 +743,17 @@ def run_release(
 
         # Existing PR/K8s/incident checks are never skipped because of anything
         # production readiness does or doesn't find -- they always run first,
-        # per entry, exactly as v1 already does.
+        # per entry, exactly as v1 already does. The candidate's own
+        # repo/service/environment are passed to check_spy.run so a real
+        # (non-stub) harness in a multi-entry manifest can run/attribute
+        # pr-review/k8s/incident-rca against the correct per-entry candidate,
+        # per run-check.md's own "once per service"/"per resolved MR" contract
+        # -- a bare check name alone carries no such attribution.
         for name in _EXISTING_CHECKS:
             if check_spy is not None:
-                outcome = check_spy.run(name)
+                outcome = check_spy.run(name, repo=parsed.repo, service=parsed.service, environment=parsed.environment)
                 status = outcome.get("status", "UNKNOWN") if isinstance(outcome, Mapping) else "UNKNOWN"
-                checks.append({"name": name, "status": status, "executed": True})
+                checks.append({"name": name, "repo": parsed.repo, "service": parsed.service, "status": status, "executed": True})
                 mapped = _CHECK_STATUS_VERDICT.get(status, "UNKNOWN")
                 overall = cap_release_verdict(overall, mapped)
                 if mapped == "UNKNOWN":
@@ -719,7 +764,7 @@ def run_release(
             else:
                 # No wrapped-skill harness supplied -- an unexecuted check is an
                 # evidence gap (UNKNOWN), never an implicit PASS.
-                checks.append({"name": name, "status": "NOT_RUN", "executed": False})
+                checks.append({"name": name, "repo": parsed.repo, "service": parsed.service, "status": "NOT_RUN", "executed": False})
                 overall = cap_release_verdict(overall, "UNKNOWN")
                 unknown_dimensions.append(name)
 

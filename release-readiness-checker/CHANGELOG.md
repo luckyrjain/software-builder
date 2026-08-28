@@ -136,6 +136,29 @@ All notable changes to the release-readiness-checker skill. Per-file `workflow_v
 
 Added 8 new regression tests covering every fix above.
 
+### Fixed (adversarial review round 5, same day)
+- **Crash-safety: non-string external identity fields no longer crash `run_release`.** Round 4's
+  `_as_str` coercion only covered the manifest side; a non-string `repo`/`service`/`environment` in a
+  `trusted_reports` entry or a `production_invoke` return value still reached
+  `normalize_repo_identity`/`normalize_service_identity`/`same_environment` unguarded, all of which raise
+  `TypeError` on a non-string input (as does an unquoted YAML `environment: no`, which PyYAML's
+  SafeLoader parses as the bool `False`). `match_release_report` and `_coverage_for_entry` now use
+  `_safe_normalize_repo`/`_safe_normalize_service`/`pr._safe_same_environment`.
+- **Crash-safety: an unhashable verdict (a list/dict) no longer crashes conflict detection or verdict
+  capping.** A malformed report/invoke-result `verdict` reached a `set` comprehension and a `dict`
+  membership test, both of which raise `TypeError` on an unhashable value. Added `_safe_verdict`, applied
+  at every point a verdict is read from external data, and hardened `cap_release_verdict` itself.
+- **`evidence_refs` of the wrong shape (a bare string instead of a list) is no longer silently shredded**
+  into individual characters by a bare `list(...)` call — only a genuine list is ever treated as a ref
+  list.
+- **Existing pr-review/k8s/incident-rca checks are now attributed to the entry that triggered them.**
+  `check_spy.run` now receives the candidate's `repo`/`service`/`environment`, and each recorded `checks`
+  entry now carries `repo`/`service` too — previously a multi-entry manifest gave a real (non-stub) check
+  harness no way to discriminate which candidate it was being asked to check, contrary to
+  `run-check.md`'s own documented "once per service"/"per resolved MR" contract.
+
+Added 8 new regression tests covering every fix above.
+
 ## [1.0.0] — 2026-08-05
 
 ### Added
