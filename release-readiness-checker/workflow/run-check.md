@@ -159,15 +159,21 @@ is being tracked across this run — it is not gated on `production_readiness_re
    repo/service and `head_revision_or_digest` exactly match this entry's `release_ref`, whose environment
    matches whenever either side declares one (an entry that omits `environment` never reuses a report
    produced for some other declared environment — only "neither side declares one" is a harmless match),
-   and whose own `source_revision` matches this entry's, when supplied, use one — narrowed to the report
-   named by `production_readiness_ref` when the entry pins one. A caller- or file-supplied report can never
-   satisfy this by itself — only a runtime-validated/direct-child result is trusted for the gate. If more
-   than one trusted, identity-matching report disagrees in verdict, that is conflicting authoritative
-   evidence, not a pick-one: the dimension is `UNKNOWN` until reconciled.
+   and whose own `source_revision` matches this entry's, when supplied, use one. A caller- or file-supplied
+   report can never satisfy this by itself — only a runtime-validated/direct-child result is trusted for the
+   gate. Conflict detection runs first, on every such trusted, identity-matching report: if two or more
+   disagree in verdict, that is conflicting authoritative evidence, not a pick-one — the dimension is
+   `UNKNOWN` until reconciled, and this is never bypassed by a `production_readiness_ref` pin. Only once the
+   matching set agrees is the entry's `production_readiness_ref` applied, and only to select which of the
+   (already-agreeing) reports is attributed as the reused source.
 2. **Otherwise, invoke only when safe.** If `release_ref` is itself a source revision, or a
-   `source_revision` is separately known, and production-readiness-review is available, invoke it once
-   with this entry's repo/service/environment/`source_revision`/`release_ref`/criticality plus `since`, via
-   `assessment_context`. If this skill has already assembled `code_review_coverage` from authoritative SCM
+   `source_revision` is separately known, and production-readiness-review is available, invoke it once with
+   this entry's repo/service/environment/`source_revision`/`release_ref` plus `since`, via
+   `assessment_context`. A manifest-declared `criticality` is untrusted caller text — this skill has no
+   authoritative source to vet it against — so it is passed only as a `caller`-authority input (never folded
+   into the candidate's identity, and never defaulted to "unknown" when absent), letting
+   production-readiness-review apply its own documented authoritative-wins-over-caller precedence rather
+   than treating this caller's tier claim as ground truth. If this skill has already assembled `code_review_coverage` from authoritative SCM
    enumeration (never from the manifest entry's own text — a `release_manifest` field can never self-attest
    "already reviewed"), pass it too, so production-readiness-review reuses that coverage and never revisits
    pr-review within this same release-root run. That coverage bundle is bound to the exact candidate it was

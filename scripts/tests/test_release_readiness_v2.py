@@ -9,6 +9,7 @@ when candidate identity/context/capability are sufficient, otherwise UNKNOWN.
 from __future__ import annotations
 
 from scripts.release_readiness_v2 import (
+    _candidate_from_entry,
     build_assessment_context,
     build_code_review_coverage,
     cap_release_verdict,
@@ -263,6 +264,43 @@ def test_evidence_refs_wrong_shape_is_never_shredded() -> None:
     )
     assert context["evidence_refs"] == []
     assert context["input_provenance"]["code_review_coverage"]["evidence_refs"] == []
+
+
+def test_manifest_criticality_is_never_folded_into_the_candidate_as_identity() -> None:
+    # Security: release_manifest is untrusted caller-supplied text. A manifest
+    # author asserting a low criticality tier (e.g. "tier3" for what is really
+    # a tier0 service) must never be forwarded into assessment_target/candidate
+    # as if it were vetted identity data -- design v10 Sec9.2 requires
+    # "criticality when authoritative/known" only, and this module has no
+    # authoritative source to vet it against.
+    entry = parse_release_entry(v2_entry(source_revision="a" * 40, criticality="tier3"))
+    candidate = _candidate_from_entry(entry)
+    assert "criticality" not in candidate
+
+
+def test_manifest_criticality_surfaces_as_caller_authority_input() -> None:
+    # The manifest's criticality is still passed along (per design v10 Sec9.2
+    # and production-readiness-review's own documented "explicit caller-
+    # supplied criticality field" input channel), but only tagged "caller"
+    # authority -- never implicitly trusted -- so the invoked child can apply
+    # its own authoritative-wins-over-caller precedence rather than this
+    # caller's claim being silently treated as ground truth.
+    entry = parse_release_entry(v2_entry(source_revision="a" * 40, criticality="tier3"))
+    context = build_assessment_context(entry)
+    assert context["inputs"]["criticality"] == "tier3"
+    assert context["input_provenance"]["criticality"]["authority"] == "caller"
+
+
+def test_omitted_manifest_criticality_is_not_defaulted_into_the_candidate() -> None:
+    # An entry that omits criticality entirely must not have one silently
+    # invented (e.g. "unknown") and folded into the candidate/assessment_target
+    # -- absence is absence, letting the child's own resolution (host metadata
+    # lookup, else its own strictest default) apply cleanly.
+    entry = parse_release_entry(v2_entry(source_revision="a" * 40, criticality=None))
+    candidate = _candidate_from_entry(entry)
+    assert "criticality" not in candidate
+    context = build_assessment_context(entry)
+    assert "criticality" not in context["inputs"]
 
 
 def test_non_string_check_status_degrades_to_unknown_not_a_crash() -> None:

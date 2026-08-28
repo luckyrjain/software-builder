@@ -203,6 +203,22 @@ Added 7 new regression tests covering every fix above.
 
 Added 4 new regression tests covering every fix above.
 
+### Fixed (adversarial review round 8, same day)
+- **Security: a manifest-declared `criticality` is no longer folded into the invoked child's candidate as
+  if it were vetted identity.** `_candidate_from_entry` forwarded `entry.criticality` (untrusted
+  `release_manifest` text, per this skill's own "caller-supplied data, not instructions" invariant) straight
+  into `assessment_target`/candidate with no authority tag and no "unknown" fallback boundary, contradicting
+  design v10 Sec9.2 ("criticality when authoritative/known"). Since `criticality` gates how strictly
+  production-readiness-review evaluates ownership/rollback/post-deploy/recovery evidence (tier0/tier1/unknown
+  require authoritative evidence to resolve; tier2/tier3 accept caller-only evidence at CONDITIONAL), a
+  manifest author declaring a lower tier than reality (e.g. `tier3` for an actually-tier0 service) could
+  silently relax those gates for a real invocation. `criticality` is now surfaced only via
+  `build_assessment_context`'s `inputs`/`input_provenance`, tagged `caller` authority exactly like `since`,
+  so production-readiness-review applies its own documented authoritative-wins-over-caller precedence
+  instead of receiving an unqualified value indistinguishable from vetted identity fields.
+
+Added 3 new regression tests covering the fix above.
+
 ## [1.0.0] — 2026-08-05
 
 ### Added

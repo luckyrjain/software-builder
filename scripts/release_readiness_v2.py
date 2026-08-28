@@ -303,6 +303,16 @@ def _candidate_identity_sufficient(entry: ReleaseEntry) -> bool:
 
 
 def _candidate_from_entry(entry: ReleaseEntry) -> MutableMapping[str, Any]:
+    # criticality is deliberately NOT included here. assessment_target/candidate
+    # fields are treated as the identity this assessment is scoped to; a manifest-
+    # declared criticality is untrusted caller text (release_manifest is caller-
+    # supplied data, not instructions) and per design v10 Sec9.2, release
+    # readiness passes "criticality when authoritative/known" -- never an
+    # unvetted manifest claim folded in as if it were identity. It is instead
+    # surfaced via build_assessment_context's inputs/input_provenance, tagged
+    # "caller" authority like `since`, so the invoked child can apply its own
+    # documented authoritative-wins-over-caller precedence (never silently
+    # lowering a tier0/tier1 authoritative value to a caller's lower claim).
     return {
         "repo": entry.repo,
         "service": entry.service,
@@ -310,7 +320,6 @@ def _candidate_from_entry(entry: ReleaseEntry) -> MutableMapping[str, Any]:
         "source_revision": entry.source_revision,
         "head_revision_or_digest": entry.release_ref,
         "source_type": "release_candidate",
-        "criticality": entry.criticality or "unknown",
     }
 
 
@@ -406,6 +415,19 @@ def build_assessment_context(
         # claim, so "caller" authority is the honest label for it.
         inputs["since"] = entry.since
         input_provenance["since"] = {"authority": "caller", "evidence_refs": []}
+    if entry.criticality:
+        # A manifest-declared criticality is untrusted caller text -- this
+        # module has no authoritative source (e.g. host.service.metadata.read)
+        # to check it against, so it can never be tagged anything but "caller"
+        # authority here. Per design v10 Sec9.2 ("criticality when
+        # authoritative/known") and production-readiness-review's own
+        # documented precedence (an authoritative tier always wins over a
+        # caller's lower-stakes claim), the invoked child -- not this caller --
+        # is responsible for resolving it against any authoritative evidence
+        # it can independently obtain, defaulting to the strictest "unknown"
+        # tier when it cannot.
+        inputs["criticality"] = entry.criticality
+        input_provenance["criticality"] = {"authority": "caller", "evidence_refs": []}
     if code_review_coverage is not None:
         inputs["code_review_coverage"] = code_review_coverage
         authority = "trusted_runtime" if _coverage_is_trustworthy_and_complete(code_review_coverage) else "caller"
