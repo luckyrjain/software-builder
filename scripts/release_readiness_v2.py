@@ -308,8 +308,18 @@ _GIT_SHA_RE = re.compile(r"^[0-9a-fA-F]{7,40}$")
 # container reference (e.g. `nightly-build:<40 hex chars>` -- a common CI
 # convention of tagging an image with a commit SHA) syntactically
 # indistinguishable from a genuine `algo:hexdigest` content digest whenever
-# the tag happens to be hex-shaped.
-_IMMUTABLE_DIGEST_RE = re.compile(r"^(?:sha256|sha384|sha512):[0-9a-fA-F]{32,}$")
+# the tag happens to be hex-shaped. The hex-length is likewise exact per
+# algorithm (sha256=64, sha384=96, sha512=128 hex chars), not merely ">=32"
+# for all three interchangeably -- an open length range would reopen this
+# exact same reference-vs-tag ambiguity whenever the "name" component of a
+# mutable tag happens to literally be one of the three allowlisted words
+# (e.g. a repository or artifact store named `sha256` carrying a mutable,
+# git-SHA-style tag `sha256:<40-hex-char-tag>` -- wrong length for a real
+# sha256 digest, but still hex-shaped and thus still indistinguishable from
+# one under an open-ended length).
+_IMMUTABLE_DIGEST_RE = re.compile(
+    r"^(?:sha256:[0-9a-fA-F]{64}|sha384:[0-9a-fA-F]{96}|sha512:[0-9a-fA-F]{128})$"
+)
 
 
 def _looks_like_source_revision(ref: str) -> bool:
@@ -535,8 +545,25 @@ def build_assessment_context(
         input_provenance["criticality"] = {"authority": "caller", "evidence_refs": []}
     if code_review_coverage is not None:
         inputs["code_review_coverage"] = code_review_coverage
-        authority = "trusted_runtime" if _coverage_is_trustworthy_and_complete(code_review_coverage) else "caller"
-        raw_refs = pr._as_mapping(code_review_coverage).get("evidence_refs")
+        coverage_mapping = pr._as_mapping(code_review_coverage)
+        trustworthy = _coverage_is_trustworthy_and_complete(code_review_coverage)
+        authority = "trusted_runtime" if trustworthy else "caller"
+        # When the bundle is trustworthy, propagate refs from
+        # `trusted_review_refs` -- the field `_coverage_is_trustworthy_and_
+        # complete`/`validate_code_review_coverage` actually vet -- never
+        # from the bundle's own independently-settable `evidence_refs`.
+        # `build_code_review_coverage` always sets `evidence_refs` to a copy
+        # of `trusted_review_refs`, so this changes nothing for a
+        # properly-constructed bundle; but a hand-built or otherwise-produced
+        # bundle could satisfy every structural trustworthiness check
+        # (status/uncovered_change_refs/acquisition) while declaring an
+        # `evidence_refs` list unrelated to what was actually reviewed --
+        # stamping that unrelated content "trusted_runtime" would be exactly
+        # the kind of authority-tag mismatch this module's evidence-authority
+        # discipline exists to prevent. An untrustworthy bundle's
+        # `evidence_refs` remains merely descriptive caller text either way.
+        refs_field = "trusted_review_refs" if trustworthy else "evidence_refs"
+        raw_refs = coverage_mapping.get(refs_field)
         # A wrong-shaped value (a bare string, a mapping) must never be
         # silently shredded by `list(...)` into characters or dict keys --
         # only a genuine list is ever treated as a ref list.

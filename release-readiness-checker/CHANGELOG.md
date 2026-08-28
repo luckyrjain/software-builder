@@ -336,6 +336,38 @@ Added 1 new regression test (plus a corrected stale docstring reference in an ex
 
 Added 3 new regression tests covering both fixes above.
 
+### Fixed (adversarial review round 14, same day)
+- **Security: the digest hex-length was still open-ended per algorithm, reopening round 13's exact exploit
+  shape under one of the three now-allowlisted algorithm names.** `_IMMUTABLE_DIGEST_RE` restricted the
+  algorithm to `sha256`/`sha384`/`sha512` (round 13) but still accepted "32 or more" hex characters for all
+  three interchangeably, even though a real digest of each has one fixed length (sha256=64, sha384=96,
+  sha512=128). A repository/artifact store literally named e.g. `sha256`, carrying a mutable, git-SHA-style
+  tag (`sha256:<40-hex-char-tag>` -- wrong length for a real sha256 digest), was still accepted as an
+  immutable reuse anchor -- the sixth distinct variant of the "mutable reference accepted as immutable
+  identity" defect family found across rounds 9-14. The regression test round 13 itself added for
+  sha384/sha512 support (`test_sha384_and_sha512_digests_are_also_recognized_as_immutable`) was unknowingly
+  complicit: it reused sha256's 64-char length for sha384/sha512 fixtures too, so it never actually exercised
+  a digest shaped like a real sha384/sha512 hash. Both the regex (now requiring the exact hex length per
+  algorithm) and that test's fixtures are fixed.
+- **`build_assessment_context` could stamp forged `code_review_coverage.evidence_refs` content as
+  `"trusted_runtime"`.** A bundle can satisfy every structural trustworthiness check
+  (`_coverage_is_trustworthy_and_complete`: `status: COMPLETE`, no `uncovered_change_refs`, host/runtime-
+  authoritative `acquisition`) while separately declaring an `evidence_refs` list unrelated to
+  `trusted_review_refs` (the field those checks -- and `production_readiness.py`'s own
+  `validate_code_review_coverage` -- actually vet). `build_assessment_context` propagated that
+  independently-settable `evidence_refs` field into the release-level evidence trail whenever the bundle
+  passed its trustworthiness check, tagging unrelated/forged content `"trusted_runtime"`. A bundle produced
+  by `build_code_review_coverage` itself is unaffected (it always sets `evidence_refs` to a copy of
+  `trusted_review_refs`, so this changes nothing for the normal path), but a hand-built or otherwise-produced
+  trusted-channel bundle was not similarly protected. Now propagates refs from `trusted_review_refs` whenever
+  the bundle is trustworthy, falling back to `evidence_refs` (still merely descriptive caller text) only on
+  the caller-only path.
+
+Both found by two independent adversarial passes this round (one re-hammering the reuse-vs-invoke identity
+cluster per rounds 9-13's track record, one covering the rest of the module fresh). Added 3 new regression
+tests and split one existing test into two (trustworthy vs. caller-only paths) to keep both wrong-shape
+guards independently exercised.
+
 ## [1.0.0] — 2026-08-05
 
 ### Added

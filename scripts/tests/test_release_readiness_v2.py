@@ -322,6 +322,10 @@ def test_unhashable_verdict_degrades_to_unknown_not_a_crash() -> None:
 def test_evidence_refs_wrong_shape_is_never_shredded() -> None:
     # A single ref string (instead of a one-element list) must never be
     # silently exploded into individual characters by a bare list(...) call.
+    # For a trustworthy bundle, refs are read from `trusted_review_refs` (the
+    # field actually vetted -- see
+    # test_untrusted_coverage_evidence_refs_wrong_shape_is_never_shredded for
+    # the caller-only/`evidence_refs` path).
     coverage = {
         "candidate_source_revision": "a" * 40,
         "repo": "acme/checkout",
@@ -329,6 +333,7 @@ def test_evidence_refs_wrong_shape_is_never_shredded() -> None:
         "status": "COMPLETE",
         "uncovered_change_refs": [],
         "acquisition": "authoritative_host",
+        "trusted_review_refs": "pr-42",
         "evidence_refs": "pr-42",
     }
     context = build_assessment_context(
@@ -336,6 +341,56 @@ def test_evidence_refs_wrong_shape_is_never_shredded() -> None:
     )
     assert context["evidence_refs"] == []
     assert context["input_provenance"]["code_review_coverage"]["evidence_refs"] == []
+
+
+def test_untrusted_coverage_evidence_refs_wrong_shape_is_never_shredded() -> None:
+    # Same wrong-shape guard, exercised on the caller-only (not host/runtime-
+    # authoritative) path, where evidence_refs is still the field actually
+    # read since there's no `trusted_review_refs` field to prefer instead.
+    coverage = {
+        "candidate_source_revision": "a" * 40,
+        "repo": "acme/checkout",
+        "service": "checkout",
+        "status": "COMPLETE",
+        "uncovered_change_refs": [],
+        "acquisition": "caller_supplied",
+        "evidence_refs": "pr-42",
+    }
+    context = build_assessment_context(
+        parse_release_entry(v2_entry(source_revision="a" * 40)), code_review_coverage=coverage
+    )
+    assert context["input_provenance"]["code_review_coverage"]["authority"] == "caller"
+    assert context["evidence_refs"] == []
+    assert context["input_provenance"]["code_review_coverage"]["evidence_refs"] == []
+
+
+def test_trustworthy_coverage_cannot_stamp_forged_evidence_refs_as_trusted_runtime() -> None:
+    # Security: a bundle can satisfy every structural trustworthiness check
+    # (status COMPLETE, no uncovered_change_refs, host/runtime-authoritative
+    # acquisition) while separately declaring an `evidence_refs` list
+    # unrelated to `trusted_review_refs` (the field actually vetted) -- e.g.
+    # a hand-built or otherwise-produced bundle, not one assembled by
+    # build_code_review_coverage itself (which always sets evidence_refs to
+    # a copy of trusted_review_refs). That unrelated content must never be
+    # stamped "trusted_runtime" and folded into the release-level
+    # evidence_refs merely because the surrounding bundle passed its
+    # trustworthiness check.
+    coverage = {
+        "candidate_source_revision": "a" * 40,
+        "repo": "acme/checkout",
+        "service": "checkout",
+        "status": "COMPLETE",
+        "uncovered_change_refs": [],
+        "acquisition": "authoritative_host",
+        "trusted_review_refs": ["mr:1"],
+        "evidence_refs": ["TOTALLY-FORGED-UNRELATED-REF"],
+    }
+    context = build_assessment_context(
+        parse_release_entry(v2_entry(source_revision="a" * 40)), code_review_coverage=coverage
+    )
+    assert context["input_provenance"]["code_review_coverage"]["authority"] == "trusted_runtime"
+    assert context["evidence_refs"] == ["mr:1"]
+    assert context["input_provenance"]["code_review_coverage"]["evidence_refs"] == ["mr:1"]
 
 
 def test_manifest_criticality_is_never_folded_into_the_candidate_as_identity() -> None:
@@ -526,9 +581,13 @@ def test_sha384_and_sha512_digests_are_also_recognized_as_immutable() -> None:
     # The digest-algorithm allowlist covers every genuine, registered
     # content-hash algorithm this codebase might reasonably encounter, not
     # only sha256 -- a real sha384/sha512 digest must not be rejected merely
-    # because every OTHER fixture in this file happens to use sha256.
-    for algo in ("sha384", "sha512"):
-        digest = f"{algo}:" + "b" * 64
+    # because every OTHER fixture in this file happens to use sha256. Each
+    # algorithm's hex portion must be its OWN correct length (sha384=96,
+    # sha512=128) -- reusing sha256's 64-char length here would make this
+    # test pass without ever exercising a digest shaped like a real
+    # sha384/sha512 hash at all.
+    for algo, hex_length in (("sha384", 96), ("sha512", 128)):
+        digest = f"{algo}:" + "b" * hex_length
         entry = v2_entry(repo="acme/checkout", service="checkout", release_ref=digest, source_revision=None)
         report = trusted_production_report(
             verdict="READY", repo="acme/checkout", service="checkout", deployable=digest, source_revision=None,
@@ -599,6 +658,37 @@ def test_mutable_name_tag_ref_shaped_like_a_digest_is_never_an_immutable_anchor(
     assert release_result.production_readiness_source is None
     assert release_result.production_readiness == "UNKNOWN"
     assert s.calls == 0
+
+
+def test_wrong_length_hex_after_a_real_algorithm_name_is_never_an_immutable_anchor() -> None:
+    # Security: sixth variant of the same defect family -- round 13's
+    # algorithm allowlist alone isn't enough if the hex-length requirement
+    # stays open-ended ("32 or more" for every algorithm interchangeably).
+    # A repository/artifact store literally named "sha256" carrying a
+    # mutable, git-SHA-style tag (e.g. "sha256:<40 hex chars>") is wrong
+    # length for a real sha256 digest (which is always exactly 64 hex chars)
+    # but would still pass an open-ended length check -- reopening round 13's
+    # exact "mutable tag mistaken for immutable digest" exploit shape under
+    # one of the three now-allowlisted algorithm names instead of an
+    # arbitrary one.
+    wrong_length_variants = [
+        "sha256:" + "a" * 40,   # too short for sha256 (needs 64)
+        "sha256:" + "a" * 128,  # too long for sha256
+        "sha384:" + "a" * 64,   # too short for sha384 (needs 96)
+        "sha512:" + "a" * 64,   # too short for sha512 (needs 128)
+    ]
+    for fake_digest in wrong_length_variants:
+        entry = v2_entry(
+            required=True, repo="acme/checkout", service="checkout",
+            release_ref=fake_digest, source_revision=None,
+        )
+        stale_report = trusted_production_report(
+            verdict="READY", repo="acme/checkout", service="checkout",
+            deployable=fake_digest, source_revision=None,
+        )
+        result = match_release_report(entry, stale_report)
+        assert result["status"] == "UNKNOWN", fake_digest
+        assert result["reason"] == "unpinned_identity", fake_digest
 
 
 def test_conflicting_trusted_reports_are_unknown_not_first_match() -> None:
