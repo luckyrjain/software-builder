@@ -132,6 +132,7 @@ graph TD
   release-readiness-checker ==>|handoff| incident-rca
   release-readiness-checker ==>|handoff| k8s-overprovisioning-datadog
   release-readiness-checker ==>|handoff| pr-review
+  release-readiness-checker ==>|handoff| production-readiness-review
   release-readiness-checker -.->|escalates| incident-rca
   release-readiness-checker -.->|escalates| k8s-overprovisioning-datadog
   release-readiness-checker -.->|escalates| pr-review
@@ -185,6 +186,7 @@ graph TD
   prd-architect -->|prd_report| architecture-review
   prd-architect -->|prd_report| loop-task-implementer
   prd-architect -->|prd_report| system-design
+  production-readiness-review -->|production_readiness_report| release-readiness-checker
   incident-rca -->|rca_report| release-readiness-checker
   incident-triage-agent -->|rca_report| release-readiness-checker
   resilience-review -->|resilience_review_report| implementation-planner
