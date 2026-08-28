@@ -147,6 +147,73 @@ Notes section per [reference/report-format.md](../reference/report-format.md).
 Every manifest entry appears in the report — a repo with no MRs, a service that's clear on both k8s and
 incident-rca, still gets a row. Never silently drop a manifest entry from the report.
 
+## 6. Manifest v2 — conditional production-readiness gate
+
+Steps 1–4 below apply only to an entry carrying `production_readiness_required: true` (see
+[inputs.md § Manifest v2](inputs.md#manifest-v2-optional-per-entry)); a v1 entry skips them entirely and
+behaves exactly as steps 1–5 above always have. Step 5 (final freshness fence) is a general
+release-candidate identity check and applies to every entry, v1 included, whenever a mutable `release_ref`
+is being tracked across this run — it is not gated on `production_readiness_required`.
+
+1. **Reuse first.** If one or more trusted `production_readiness_report`s are available whose canonical
+   repo/service and `head_revision_or_digest` exactly match this entry's `release_ref`, whose environment
+   matches whenever either side declares one (an entry that omits `environment` never reuses a report
+   produced for some other declared environment — only "neither side declares one" is a harmless match),
+   and whose own `source_revision` matches this entry's, when supplied, use one. An exact string match is
+   never enough by itself: `release_ref` itself — the actual deployable identity this match is keyed on —
+   must also be anchored to something immutable (a real git SHA, or a real content-addressed digest such as
+   `sha256:...`, even with no `source_revision` separately known). A mutable, non-identity-pinning tag
+   (`latest`, `main`, a release name) is never trustworthy for reuse even on an exact string match, since the
+   tag could have been repointed between when the report was produced and now — and critically, a validly
+   SHA-shaped `source_revision` can never redeem a mutable `release_ref` here either: unlike invoking (where
+   the freshly-invoked child independently re-validates build provenance linking `source_revision` to today's
+   actual deployable), reuse performs no such re-verification, so a stale or replayed `source_revision` that
+   happens to also match a mutable tag proves nothing about what that tag resolves to now. A caller- or
+   file-supplied report can never satisfy this by itself — only a runtime-validated/direct-child result is
+   trusted for the gate. Conflict detection runs first, on every such trusted, identity-matching report: if
+   two or more
+   disagree in verdict, that is conflicting authoritative evidence, not a pick-one — the dimension is
+   `UNKNOWN` until reconciled, and this is never bypassed by a `production_readiness_ref` pin. Only once the
+   matching set agrees is the entry's `production_readiness_ref` applied, and only to select which of the
+   (already-agreeing) reports is attributed as the reused source — a pin that names no report in that
+   agreeing set (a typo, a stale ref) never suppresses the reuse itself, since every remaining report already
+   agrees in verdict and attribution alone cannot change the resolved status.
+2. **Otherwise, invoke only when safe.** If `release_ref` is itself shaped like a source revision (a git
+   commit SHA), or a `source_revision` is separately known and itself shaped like one (a mutable tag or
+   arbitrary caller text there is exactly as insufficient as an absent `source_revision`), and
+   production-readiness-review is available, invoke it once with
+   this entry's repo/service/environment/`source_revision`/`release_ref` plus `since`, via
+   `assessment_context`. A manifest-declared `criticality` is untrusted caller text — this skill has no
+   authoritative source to vet it against — so it is passed only as a `caller`-authority input (never folded
+   into the candidate's identity, and never defaulted to "unknown" when absent), letting
+   production-readiness-review apply its own documented authoritative-wins-over-caller precedence rather
+   than treating this caller's tier claim as ground truth. If this skill has already assembled `code_review_coverage` from authoritative SCM
+   enumeration (never from the manifest entry's own text — a `release_manifest` field can never self-attest
+   "already reviewed"), pass it too, so production-readiness-review reuses that coverage and never revisits
+   pr-review within this same release-root run. That coverage bundle is bound to the exact candidate it was
+   assembled for by its own `repo`, `service`, AND `candidate_source_revision` — a bundle that omits
+   `repo`/`service`, or one assembled for a different manifest entry, is never applied here merely because
+   they happen to share a (caller-controlled) `source_revision` string. A `code_review_coverage` bundle
+   that is not `COMPLETE` with an empty `uncovered_change_refs`, and host/runtime-authoritative, never
+   triggers an invocation; the dimension is `UNKNOWN` directly (never a bypass of the recursion guard by
+   re-reviewing, and never a "trust me, it's complete" claim honored).
+3. **Otherwise, `UNKNOWN`.** Missing report, insufficient candidate identity, or the child unavailable
+   all land here — never a silently skipped gate and never an inferred `READY`.
+4. **Cap the release verdict, never widen it.** Production readiness `NOT_READY` caps the release
+   verdict to `NOT_READY`; `UNKNOWN` caps it to `UNKNOWN`; `CONDITIONAL` caps it to at most `CONDITIONAL`;
+   `READY` never changes what steps 1–5 already found. This never causes the pr-review/k8s/incident-rca
+   checks in steps 2–4 above to be skipped — they always run regardless of the production-readiness
+   outcome, and a check that itself resolves to an evidence gap counts as unresolved exactly like one that
+   never ran.
+5. **Final freshness fence.** Immediately before emitting the report, re-resolve every mutable
+   `release_ref`; if it resolves to a different identity than at the start of this run, or a reused
+   report's deployable digest no longer matches, the affected entry (and therefore the overall verdict)
+   is `UNKNOWN` — old and new evidence are never combined. This per-entry lookup is keyed by canonical
+   repo/service/environment identity (the same normalization `match_release_report` already applies), not
+   a raw string match — a differently cased environment or a repo string with/without a `.git` suffix must
+   never let the fence go inert while identity-matching elsewhere still reuses evidence keyed to the other
+   spelling.
+
 ## Required outputs
 
 | Output | Location | Required fields |

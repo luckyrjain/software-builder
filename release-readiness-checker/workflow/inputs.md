@@ -23,7 +23,27 @@ handled by pr-review's own guard, not re-implemented here.
 
 | Field | Required | Default |
 |-------|----------|---------|
-| `release_manifest` | Yes | **HARD STOP if absent or empty** — ask; list of `{repo, service, since, release_ref?}`, where `since` is a git tag/ref or an explicit ISO-8601 timestamp and optional `release_ref` is the **release candidate pin** (40-char git SHA or container image digest) |
+| `release_manifest` | Yes | **HARD STOP if absent or empty** — ask; list of v1 `{repo, service, since, release_ref?}` or v2 entries, where `since` is a git tag/ref or an explicit ISO-8601 timestamp and optional `release_ref` is the **release candidate pin** (40-char git SHA or container image digest) |
+
+## Manifest v2 (optional per entry)
+
+An entry with no `production_readiness_required` key is v1 and behaves exactly as before — production
+readiness is never invoked for it. A v2 entry adds:
+
+| Field | Required | Meaning |
+|-------|----------|---------|
+| `environment` | No | Deployment environment; exact-match only (`prod` and `production` are different unless authoritative metadata aliases them) |
+| `source_revision` | No | The source commit the deployable was built from (a git SHA) — required before a non-source `release_ref` (an image/artifact digest, or a mutable tag) can safely invoke production readiness; a present-but-not-SHA-shaped value (a mutable tag, arbitrary text) is exactly as insufficient as one that's absent |
+| `criticality` | No | `tier0`\|`tier1`\|`tier2`\|`tier3`\|`unknown` |
+| `production_readiness_required` | No, default `false` | the boolean `true`, or the case-insensitive string `"true"` (a plausible hand-authoring/templating mistake), marks the entry v2-readiness-required; it never silently skips the gate. Any other value (including an unrecognized truthy string) stays `false` rather than being guessed. |
+| `production_readiness_ref` | No | Optional pointer to a specific prior `production_readiness_report` to prefer during reuse matching |
+
+For a `production_readiness_required: true` entry: reuse a trusted, fresh, deployable-scoped
+`production_readiness_report` first (exact repo/service/environment/`release_ref` match); otherwise,
+when candidate identity is sufficient and production-readiness-review is available, conditionally invoke
+it once via `assessment_context` carrying this skill's own already-assembled code-review coverage;
+otherwise the entry's production-readiness dimension — and the release verdict — is `UNKNOWN`. See
+[run-check.md § 6](run-check.md) and [reference/report-format.md § Manifest v2](../reference/report-format.md).
 
 ## Optional
 

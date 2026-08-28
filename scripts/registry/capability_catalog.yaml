@@ -191,10 +191,22 @@ skills:
         enables: per-service health slice
       - name: telemetry.logs.query
         enables: incident window cross-check
+      - name: production-readiness-review.conditional_invoke
+        enables: conditional v2 production-readiness refresh when no trusted deployable-scoped report is reusable
+      - name: host.scm.change_history.read
+        enables: authoritative commits/PRs/reverts/cherry-picks enumeration in the release range
+      - name: host.scm.policy.read
+        enables: authoritative review/approval/bypass policy evidence for release-candidate code-review coverage
+      - name: host.build.provenance.read
+        enables: source-revision to release-deployable-digest linkage when release_ref is an artifact digest
     degraded_modes:
       gitlab.list_merge_requests: require an explicit release_ref per manifest entry instead of auto-discovering MRs
       datadog.query_metrics: per-service health slice becomes UNKNOWN rather than READY/NOT_READY for that dimension
       telemetry.logs.query: incident window cross-check becomes UNKNOWN; falls through to incident-rca's own signal instead
+      production-readiness-review.conditional_invoke: a v2 entry requiring production readiness with no reusable trusted report becomes UNKNOWN rather than invoking the child
+      host.scm.change_history.read: v2 release-candidate code-review coverage cannot reach COMPLETE; the production-readiness dimension becomes UNKNOWN
+      host.scm.policy.read: release-candidate SCM policy evidence becomes UNKNOWN
+      host.build.provenance.read: a v2 entry whose release_ref is a non-source digest cannot establish candidate identity; production readiness is never invoked and stays UNKNOWN
 
   migration-program-manager:
     required: [host.filesystem.read]

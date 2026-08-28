@@ -17,6 +17,10 @@
 schema_version: 1
 
 families:
+  release.production_readiness.conditional_invoke:
+    resolves:
+      - production-readiness-review.conditional_invoke
+
   scm.pull_request.read:
     resolves:
       - gitlab.get_merge_request
