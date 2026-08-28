@@ -37,6 +37,25 @@ see [reference/gate-policy.md](reference/gate-policy.md).
    `insufficient_metrics` service) rather than silently assuming clean **or** conflating an evidence
    gap with a proven `NOT_READY` blocker.
 
+## Manifest v2 — optional production-readiness gate
+
+A manifest entry stays exactly `{repo, service, since, release_ref?}` (v1) unless it also carries
+`production_readiness_required: true`, in which case it's a v2 entry and may additionally carry
+`environment`, `source_revision`, `criticality`, and `production_readiness_ref`. v1 entries behave
+byte-for-byte as before and **never** invoke production readiness.
+
+For a v2 entry that requires it, this skill first reuses a trusted, deployable-scoped
+`production_readiness_report` (exact repo/service/environment/`release_ref` match) if one is available;
+otherwise, when candidate identity is sufficient (a source revision is known, or `release_ref` already
+is one) and **production-readiness-review** is available, it conditionally invokes that skill once via
+`assessment_context`, reusing the code-review coverage this skill already assembled so
+production-readiness-review never revisits pr-review. Missing/untrusted/stale readiness with no safe
+invoke path is `UNKNOWN`, never a silently skipped gate. Production readiness never causes the existing
+pr-review/k8s/incident-rca checks to be skipped, and its verdict only ever caps the release verdict
+worse (`NOT_READY`/`UNKNOWN`/`CONDITIONAL`), never better. See
+[scripts/release_readiness_v2.py](../scripts/release_readiness_v2.py) and
+[reference/report-format.md](reference/report-format.md).
+
 ## When to use
 
 | Use release-readiness-checker | Use instead |
@@ -68,7 +87,9 @@ make install-release-readiness-checker
 Restart Cursor. Requires **pr-review**, **k8s-overprovisioning-datadog**, and **incident-rca** installed
 too (the make target chains all three automatically). MCP setup is each wrapped skill's own — see
 [pr-review/SETUP.md](../pr-review/SETUP.md), [k8s-overprovisioning-datadog/SETUP.md](../k8s-overprovisioning-datadog/SETUP.md),
-[incident-rca/SETUP.md](../incident-rca/SETUP.md).
+[incident-rca/SETUP.md](../incident-rca/SETUP.md). **production-readiness-review** is optional — only a
+v2 manifest entry with `production_readiness_required: true` and no reusable trusted report ever
+conditionally invokes it; it is not part of this skill's mandatory install footprint.
 
 ## Related skills
 

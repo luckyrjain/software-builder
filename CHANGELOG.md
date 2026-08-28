@@ -6,6 +6,24 @@ the create-skill anti-pattern on time-sensitive info).
 
 Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/README.md).
 
+### Add release readiness manifest v2 (2026-08-28)
+
+- `release-readiness-checker` 1.0.0 -> 1.1.0: manifest v2 (`environment`, `source_revision`,
+  `criticality`, `production_readiness_required`, `production_readiness_ref`), byte/semantics-unchanged
+  for v1 entries, which never invoke production readiness.
+- Added `scripts/release_readiness_v2.py`: trusted deployable-scoped production-readiness reuse first,
+  conditional `production-readiness-review` invoke only when candidate identity is sufficient, worst-first
+  verdict capping that never causes the existing pr-review/k8s-overprovisioning-datadog/incident-rca
+  checks to be skipped, a final release-candidate freshness fence, and execution-status semantics
+  distinguishing a resolved verdict (`SUCCESS`) from an unresolved required dimension (`PARTIAL`) and an
+  empty manifest (`BLOCKED`).
+- Added authoritative code-review coverage enumeration (merged PR/MR objects, direct commits,
+  cherry-picks, reverts, with authoritative-only squash/merge `integrated_revision` linkage) that
+  production-readiness-review reuses instead of revisiting `pr-review` within one release-root run.
+- Registry: optional `production-readiness-review.conditional_invoke` capability and
+  `composition.invokes`/handoff to production-readiness-review via `assessment_context`; this skill's
+  mandatory `install.requires` footprint is unchanged.
+
 ### Add production readiness review orchestrator (2026-08-27)
 
 - Added the read-only `production-readiness-review` orchestrator and `production_readiness_report` v1

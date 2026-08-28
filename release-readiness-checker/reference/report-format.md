@@ -75,6 +75,27 @@ what tag strategies were attempted; any incident-rca escalation per gate-policy.
 override.>
 ```
 
+## Manifest v2
+
+A manifest entry with `production_readiness_required: true` (see
+[workflow/inputs.md § Manifest v2](../workflow/inputs.md#manifest-v2-optional-per-entry) and
+[workflow/run-check.md § 6](../workflow/run-check.md)) adds one more input to the fixed-precedence
+verdict derivation above: the resolved production-readiness outcome caps the verdict this entry's own
+pr-review/k8s/incident-rca evidence already reached, never widens it —
+
+- production readiness `NOT_READY` → this entry's contribution is `NOT_READY`, regardless of its other
+  checks;
+- production readiness `UNKNOWN` (missing/untrusted/stale report, insufficient identity, or the child
+  unavailable) → `UNKNOWN`;
+- production readiness `CONDITIONAL` → at most `CONDITIONAL`;
+- production readiness `READY`, or the entry doesn't require it (v1, or v2 with
+  `production_readiness_required` absent/`false`) → unchanged, use the entry's other checks as today.
+
+`overall_verdict` across the whole manifest still follows `NOT_READY` > `UNKNOWN` > `CONDITIONAL` >
+`READY` over every entry's own (possibly capped) contribution. Record which entries were reused
+(`REUSED`) vs. freshly invoked (`INVOKED`) for production readiness in Notes, alongside the existing
+release-pin/k8s/incident-rca notes.
+
 ## Rules
 
 - **Every `release_manifest` entry appears somewhere in the report** — a clear/uneventful entry still
