@@ -186,7 +186,7 @@ def classify_report_for_release(report: Mapping[str, Any]) -> MutableMapping[str
     if report.get("producer_trusted", True) is not True:
         return {"trusted_for_gate": False, "reason": "untrusted_producer"}
     acquisition = report.get("acquisition")
-    trusted = acquisition in ("direct_child", "runtime_validated", "trusted_runtime", "authoritative_host")
+    trusted = acquisition in ("direct_child", "runtime_validated")
     return {
         "trusted_for_gate": trusted,
         "reason": "" if trusted else "untrusted_acquisition",
@@ -469,12 +469,12 @@ def resolve_production_readiness(
         if match["status"] == "MATCH":
             matches.append(report)
 
-    if parsed.production_readiness_ref is not None:
-        # An explicit pin narrows reuse to the one report it names -- other
-        # identity-matching-but-unpinned reports are not silently substituted.
-        matches = [r for r in matches if r.get("report_ref") == parsed.production_readiness_ref]
-
     if matches:
+        # Conflict detection runs on the full unpinned match set. The pin is
+        # caller/manifest-supplied text -- untrusted -- and must never be able
+        # to silently resolve a genuine disagreement between two trusted,
+        # identity-matching reports by hiding the one it doesn't name.
+        #
         # _safe_verdict before the set/membership operations below: an
         # unhashable raw verdict (a list/dict a malformed report carries)
         # would otherwise raise TypeError building this very set.
@@ -485,7 +485,17 @@ def resolve_production_readiness(
             # policy, this is never silently resolved by picking one; it is
             # UNKNOWN until reconciled by a fresher/pinned report.
             return {"status": "UNKNOWN", "source": None, "report": None}
-        return {"status": _safe_verdict(matches[0].get("verdict")), "source": "REUSED", "report": matches[0]}
+
+        pinned = matches
+        if parsed.production_readiness_ref is not None:
+            # An explicit pin narrows reuse to the one report it names -- other
+            # identity-matching-but-unpinned reports are not silently
+            # substituted. Applied only after the conflict check above, purely
+            # to select which (already-agreeing) report object to attribute.
+            pinned = [r for r in matches if r.get("report_ref") == parsed.production_readiness_ref]
+
+        if pinned:
+            return {"status": _safe_verdict(pinned[0].get("verdict")), "source": "REUSED", "report": pinned[0]}
 
     # 2. Otherwise, invoke only when safe.
     if not _candidate_identity_sufficient(parsed):

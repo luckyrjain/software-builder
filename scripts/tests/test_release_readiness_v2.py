@@ -388,18 +388,63 @@ def test_conflicting_trusted_reports_are_unknown_not_first_match() -> None:
     assert s.calls == 0
 
 
-def test_production_readiness_ref_pins_the_reused_report() -> None:
-    # Two trusted, identity-matching, disagreeing reports would normally
-    # conflict (see above) -- but an explicit production_readiness_ref pin
-    # narrows reuse to the one report it names.
+def test_production_readiness_ref_pin_cannot_resolve_a_genuine_conflict() -> None:
+    # Security: production_readiness_ref is caller/manifest-supplied text --
+    # untrusted -- and must never be usable to silently resolve a genuine
+    # disagreement between two trusted, identity-matching reports by simply
+    # hiding the one it doesn't name (e.g. pinning past a fresher NOT_READY
+    # report to reuse a stale favorable READY one). Conflict detection runs
+    # on the full unpinned match set; the pin narrows only among matches that
+    # already agree.
     unpinned_ready = trusted_production_report(verdict="READY", report_ref="run-1")
     pinned_not_ready = trusted_production_report(verdict="NOT_READY", report_ref="run-2")
+    s = spy()
     result = run_release(
         v2_entry(required=True, production_readiness_ref="run-2"),
         trusted_reports=[unpinned_ready, pinned_not_ready],
+        production_invoke=s,
+    )
+    assert result["production_readiness_source"] is None
+    assert result.production_readiness == "UNKNOWN"
+    assert s.calls == 0
+
+
+def test_production_readiness_ref_pin_selects_among_agreeing_matches() -> None:
+    # A pin still does useful work when the identity-matching reports do NOT
+    # disagree: it selects which specific (already-agreeing) report object is
+    # attributed as the reused source, without needing to override a conflict.
+    older_ready = trusted_production_report(verdict="READY", report_ref="run-1")
+    newer_ready = trusted_production_report(verdict="READY", report_ref="run-2")
+    result = run_release(
+        v2_entry(required=True, production_readiness_ref="run-2"),
+        trusted_reports=[older_ready, newer_ready],
     )
     assert result["production_readiness_source"] == "REUSED"
-    assert result.production_readiness == "NOT_READY"
+    assert result.production_readiness == "READY"
+    assert result.production_readiness_results[0]["source"] == "REUSED"
+
+
+def test_authoritative_host_acquisition_is_not_gate_trusted_for_a_report() -> None:
+    # Security: a whole production_readiness_report's gate trust turns only on
+    # direct_child/runtime_validated acquisition (an actual invocation this
+    # release performed or that a trusted runtime performed for it) --
+    # "authoritative_host"/"trusted_runtime" are evidence-level authority
+    # concepts used elsewhere (e.g. code_review_coverage, provenance.sources)
+    # and must never let a forged/replayed report self-attest whole-artifact
+    # trust and get reused as READY without any real invocation.
+    forged = trusted_production_report(verdict="READY", acquisition="authoritative_host")
+    assert classify_report_for_release(forged)["trusted_for_gate"] is False
+    forged2 = trusted_production_report(verdict="READY", acquisition="trusted_runtime")
+    assert classify_report_for_release(forged2)["trusted_for_gate"] is False
+
+    # With no real invocation configured, neither forged report is reused --
+    # the result is UNKNOWN, never a self-attested READY.
+    result = run_release(
+        v2_entry(required=True),
+        trusted_reports=[forged, forged2],
+    )
+    assert result["production_readiness_source"] is None
+    assert result.production_readiness == "UNKNOWN"
 
 
 def test_manifest_supplied_code_review_coverage_is_not_trusted() -> None:

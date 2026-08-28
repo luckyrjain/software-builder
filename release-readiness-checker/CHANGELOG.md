@@ -182,6 +182,27 @@ Added 5 new regression tests covering every fix above.
 
 Added 7 new regression tests covering every fix above.
 
+### Fixed (adversarial review round 7, same day)
+- **Security: `classify_report_for_release` no longer gate-trusts `"authoritative_host"`/`"trusted_runtime"`
+  acquisition for a whole `production_readiness_report`.** These are evidence-level authority concepts used
+  elsewhere (e.g. a `code_review_coverage` bundle's own trust check, `provenance.sources`) — treating them
+  as sufficient to reuse a *report* let a forged or replayed report self-attest whole-artifact trust and be
+  reused as READY without this release ever performing or witnessing a real production-readiness
+  invocation. Only `direct_child`/`runtime_validated` acquisition — an actual invocation this release
+  performed, or one a trusted runtime performed for it — now satisfies the gate. Present unchanged since
+  the very first commit; not caught by rounds 1-6 because those rounds focused on crash-safety and
+  identity-matching, not a report's own trust classification.
+- **Security: an untrusted `production_readiness_ref` pin can no longer resolve a genuine conflict between
+  two trusted, identity-matching reports.** The pin is caller/manifest-supplied text and was applied to
+  narrow the reuse candidate set *before* the disagreeing-verdicts conflict check ran — letting a pin
+  silently pick a stale favorable report (e.g. `READY`) over a fresher, disagreeing one (e.g. `NOT_READY`)
+  by simply not naming it, instead of the conflict resolving to `UNKNOWN` as the evidence-authority policy
+  requires. Conflict detection now runs on the full unpinned match set first; the pin is applied only
+  afterward, among already-agreeing matches, purely to select which report object to attribute. Also
+  present unchanged since the first commit.
+
+Added 4 new regression tests covering every fix above.
+
 ## [1.0.0] — 2026-08-05
 
 ### Added
