@@ -5,6 +5,9 @@
 .PHONY: lint-implementation-planner
 .PHONY: lint-resilience-review
 .PHONY: install-resilience-review
+.PHONY: install-production-readiness-review
+.PHONY: lint-production-readiness-review
+.PHONY: install-claude-production-readiness-review
 .PHONY: install-claude-change-impact-analyzer
 .PHONY: install-claude-implementation-planner
 .PHONY: install-claude-resilience-review
@@ -165,6 +168,9 @@ install-claude-implementation-planner:
 install-claude-resilience-review:
 	bash scripts/install.sh --agent claude-user resilience-review
 
+install-claude-production-readiness-review:
+	bash scripts/install.sh --agent claude-user production-readiness-review
+
 install-architecture-review:
 	bash scripts/install.sh architecture-review
 
@@ -206,6 +212,9 @@ install-implementation-planner:
 
 install-resilience-review:
 	bash scripts/install.sh resilience-review
+
+install-production-readiness-review: install-pr-review install-change-impact-analyzer install-deployment-risk-review install-security-review install-observability-review install-resilience-review install-api-design-review install-database-review install-performance-review install-capacity-planner install-dependency-upgrade-review
+	bash scripts/install.sh production-readiness-review
 
 install-claude-architecture-review:
 	bash scripts/install.sh --agent claude-user architecture-review
@@ -1622,6 +1631,28 @@ lint-resilience-review:
 	@python3 -m pytest -p no:cacheprovider scripts/tests/test_resilience_review.py -q
 	@echo "  ok"
 
+lint: lint-production-readiness-review
+
+lint-production-readiness-review:
+	@echo "lint-production-readiness-review: SKILL.md line count (<= 180)"
+	$(call check_skill_md_length,production-readiness-review,180,keep the orchestrator bounded; detail in workflow/)
+	$(call forbid_disable_model_invocation,production-readiness-review)
+	$(call check_workflow_frontmatter,production-readiness-review)
+	$(call check_dangling_links,production-readiness-review/*.md production-readiness-review/reference/*.md production-readiness-review/workflow/*.md)
+	$(call require_ref_files,production-readiness-review/reference,phase-index lazy-load-index report-format smoke-test pressure-tests)
+	@grep -q 'pressure-tests' production-readiness-review/reference/smoke-test.md
+	@grep -q '## Invocation' production-readiness-review/examples.md
+	$(call require_setup_links_framework,production-readiness-review)
+	$(call require_cross_skill_escalation,production-readiness-review)
+	$(call require_safe_output_link,production-readiness-review)
+	@grep -q 'docs/skill-framework/shared/prompt-injection.md' production-readiness-review/reference/report-format.md && \
+	 grep -q 'docs/skill-framework/shared/safe-output.md' production-readiness-review/reference/report-format.md && \
+	 grep -qiE 'escape|fence|backtick' production-readiness-review/reference/report-format.md && \
+	 grep -qi 'redact' production-readiness-review/reference/report-format.md
+	@python3 -m py_compile scripts/production_readiness.py
+	@python3 -m pytest -p no:cacheprovider scripts/tests/test_production_readiness_contract.py -q
+	@echo "  ok"
+
 lint-framework:
 	@echo "lint-framework: shared docs present"
 	@test -f docs/skill-framework/README.md
@@ -1647,7 +1678,7 @@ lint-framework:
 	@grep -q '^## 1\. Required sections' docs/skill-framework/shared/examples-conventions.md
 	@grep -q '^## 2\. Scenario format' docs/skill-framework/shared/examples-conventions.md
 	@grep -q '^## 5\. Anti-patterns' docs/skill-framework/shared/examples-conventions.md
-	@for skill in pr-review pr-gatekeeper incident-rca incident-triage-agent k8s-overprovisioning-datadog domain-comprehension squad-map who-owns-x-bot new-hire-guide release-readiness-checker migration-program-manager mysql-to-postgres-sql loop-task-implementer backlog-runner cost-optimization-sprint-planner weekly-squad-digest prd-architect test-writer unit-test-creator integration-test-creator contract-test-creator e2e-test-creator api-test-creator architecture-review system-design api-design-review database-review security-review performance-review capacity-planner observability-review deployment-risk-review dependency-upgrade-review tech-debt-assessor change-impact-analyzer resilience-review implementation-planner; do \
+	@for skill in pr-review pr-gatekeeper incident-rca incident-triage-agent k8s-overprovisioning-datadog domain-comprehension squad-map who-owns-x-bot new-hire-guide release-readiness-checker migration-program-manager mysql-to-postgres-sql loop-task-implementer backlog-runner cost-optimization-sprint-planner weekly-squad-digest prd-architect test-writer unit-test-creator integration-test-creator contract-test-creator e2e-test-creator api-test-creator architecture-review system-design api-design-review database-review security-review performance-review capacity-planner observability-review deployment-risk-review dependency-upgrade-review tech-debt-assessor change-impact-analyzer resilience-review implementation-planner production-readiness-review; do \
 		test -f $$skill/examples.md || \
 			{ echo "error: missing $$skill/examples.md (examples-conventions)" >&2; exit 1; }; \
 		grep -q '## Invocation' $$skill/examples.md || \
@@ -1696,7 +1727,7 @@ lint-framework:
 	done; \
 	if [ "$$fail" -ne 0 ]; then exit 1; fi
 	@grep -q '| Complete |' docs/skill-framework/README.md
-	@for skill in pr-review pr-gatekeeper incident-rca incident-triage-agent k8s-overprovisioning-datadog domain-comprehension squad-map who-owns-x-bot new-hire-guide release-readiness-checker migration-program-manager mysql-to-postgres-sql loop-task-implementer backlog-runner cost-optimization-sprint-planner weekly-squad-digest prd-architect test-writer unit-test-creator integration-test-creator contract-test-creator e2e-test-creator api-test-creator architecture-review system-design api-design-review database-review security-review performance-review capacity-planner observability-review deployment-risk-review dependency-upgrade-review tech-debt-assessor change-impact-analyzer resilience-review implementation-planner; do \
+	@for skill in pr-review pr-gatekeeper incident-rca incident-triage-agent k8s-overprovisioning-datadog domain-comprehension squad-map who-owns-x-bot new-hire-guide release-readiness-checker migration-program-manager mysql-to-postgres-sql loop-task-implementer backlog-runner cost-optimization-sprint-planner weekly-squad-digest prd-architect test-writer unit-test-creator integration-test-creator contract-test-creator e2e-test-creator api-test-creator architecture-review system-design api-design-review database-review security-review performance-review capacity-planner observability-review deployment-risk-review dependency-upgrade-review tech-debt-assessor change-impact-analyzer resilience-review implementation-planner production-readiness-review; do \
 		grep -q 'skill-framework' $$skill/SETUP.md || \
 			{ echo "error: $$skill/SETUP.md must link to docs/skill-framework" >&2; exit 1; }; \
 		grep -q 'docs/skill-framework/shared/skill-routing.md' $$skill/SKILL.md || \
@@ -1742,7 +1773,8 @@ lint-framework:
 		"tech-debt-assessor:workflow/inputs.md" \
 		"change-impact-analyzer:workflow/inputs.md" \
 		"resilience-review:workflow/inputs.md" \
-		"implementation-planner:workflow/inputs.md"; do \
+		"implementation-planner:workflow/inputs.md" \
+		"production-readiness-review:workflow/inputs.md"; do \
 		skill=$${pair%%:*}; file=$${pair#*:}; \
 		if ! grep -qiE 'untrusted|prompt-injection' $$skill/$$file; then \
 			echo "error: $$skill/$$file must declare untrusted-content guard" >&2; fail=1; \
@@ -1759,7 +1791,7 @@ lint-framework:
 	@echo "lint-framework: all SETUP.md links ok"
 	@echo "lint-framework: cross-agent discovery files (.cursor/rules + .kiro/steering)"
 	@fail=0; \
-	for skill in pr-review pr-gatekeeper incident-rca incident-triage-agent k8s-overprovisioning-datadog domain-comprehension squad-map who-owns-x-bot new-hire-guide release-readiness-checker migration-program-manager mysql-to-postgres-sql loop-task-implementer backlog-runner cost-optimization-sprint-planner weekly-squad-digest prd-architect test-writer unit-test-creator integration-test-creator contract-test-creator e2e-test-creator api-test-creator architecture-review system-design api-design-review database-review security-review performance-review capacity-planner observability-review deployment-risk-review dependency-upgrade-review tech-debt-assessor change-impact-analyzer resilience-review implementation-planner; do \
+	for skill in pr-review pr-gatekeeper incident-rca incident-triage-agent k8s-overprovisioning-datadog domain-comprehension squad-map who-owns-x-bot new-hire-guide release-readiness-checker migration-program-manager mysql-to-postgres-sql loop-task-implementer backlog-runner cost-optimization-sprint-planner weekly-squad-digest prd-architect test-writer unit-test-creator integration-test-creator contract-test-creator e2e-test-creator api-test-creator architecture-review system-design api-design-review database-review security-review performance-review capacity-planner observability-review deployment-risk-review dependency-upgrade-review tech-debt-assessor change-impact-analyzer resilience-review implementation-planner production-readiness-review; do \
 		test -f .cursor/rules/$$skill.mdc || \
 			{ echo "  missing .cursor/rules/$$skill.mdc" >&2; fail=1; }; \
 		test -f .kiro/steering/$$skill.md || \

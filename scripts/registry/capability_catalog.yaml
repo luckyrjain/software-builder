@@ -33,6 +33,71 @@ skills:
       github.list_pull_request_review_comments: chat-only posting
       github.list_issue_comments: chat-only posting
 
+  production-readiness-review:
+    required: [host.report.write]
+    optional:
+      - name: pr-review.invoke
+        enables: exact-head PR/MR code-review refresh
+      - name: host.repository.read
+        enables: candidate diff/config/current-material collection
+      - name: host.scm.change.read
+        enables: exact-head remote PR/MR/commit metadata + diff retrieval
+      - name: host.scm.change_history.read
+        enables: authoritative material-change enumeration for direct release-candidate readiness
+      - name: host.ci.status
+        enables: authoritative exact-source required-check evidence
+      - name: host.scm.policy.read
+        enables: authoritative approvals/CODEOWNERS/branch-rule/thread evidence
+      - name: host.build.provenance.read
+        enables: source-revision to deployable-digest linkage
+      - name: host.service.metadata.read
+        enables: criticality/ownership/on-call/recovery policy evidence
+      - name: host.dependency.advisories.read
+        enables: current vulnerability/advisory evidence for changed dependencies at the exact source revision
+      - name: host.runtime.metrics.read
+        enables: authoritative current demand/history and capacity baseline evidence
+      - name: change-impact-analyzer.invoke
+        enables: missing/stale impact prerequisite refresh
+      - name: deployment-risk-review.invoke
+        enables: missing/stale deployment-risk prerequisite refresh
+      - name: security-review.invoke
+        enables: security dimension refresh
+      - name: observability-review.invoke
+        enables: observability dimension refresh
+      - name: resilience-review.invoke
+        enables: resilience dimension refresh
+      - name: api-design-review.invoke
+        enables: API dimension refresh
+      - name: database-review.invoke
+        enables: database dimension refresh
+      - name: performance-review.invoke
+        enables: performance dimension refresh
+      - name: capacity-planner.invoke
+        enables: capacity dimension refresh
+      - name: dependency-upgrade-review.invoke
+        enables: dependency dimension refresh
+    degraded_modes:
+      pr-review.invoke: exact-head PR/MR review evidence remains UNKNOWN unless a fresh trusted mr_review_report is already available
+      host.repository.read: candidate diff/config collection becomes UNKNOWN for dimensions requiring it
+      host.scm.change.read: PR/MR exact-head metadata and diff retrieval become UNKNOWN
+      host.scm.change_history.read: release-candidate material-change enumeration becomes UNKNOWN; coverage_status cannot reach COMPLETE
+      host.ci.status: CI dimension becomes UNKNOWN rather than PASS/FAIL
+      host.scm.policy.read: SCM policy gate (approvals/CODEOWNERS/threads) becomes UNKNOWN
+      host.build.provenance.read: build provenance becomes UNKNOWN for any candidate whose deployable differs from its source revision
+      host.service.metadata.read: ownership/criticality/recovery-policy dimensions become UNKNOWN
+      host.dependency.advisories.read: dependency dimension becomes UNKNOWN unless an authoritative required dependency-security CI check covers the exact source revision; absence never maps to PASS
+      host.runtime.metrics.read: capacity dimension becomes UNKNOWN for tier0/tier1/unknown criticality (caller-only demand/baseline cannot PASS at those tiers) and at most CONDITIONAL for tier2/tier3
+      change-impact-analyzer.invoke: change-impact prerequisite reuses a fresh trusted change_impact_report when present, otherwise the impact-dependent applicability determination is UNKNOWN
+      deployment-risk-review.invoke: deployment-risk prerequisite reuses a fresh trusted deployment_risk_report when present, otherwise that dimension is UNKNOWN
+      security-review.invoke: security dimension reuses a fresh trusted security_review_report when present, otherwise UNKNOWN
+      observability-review.invoke: observability dimension reuses a fresh trusted observability_review_report when present, otherwise UNKNOWN
+      resilience-review.invoke: resilience dimension reuses a fresh trusted resilience_review_report when present, otherwise UNKNOWN
+      api-design-review.invoke: API dimension reuses a fresh trusted api_design_review_report when present, otherwise UNKNOWN
+      database-review.invoke: database dimension reuses a fresh trusted database_review_report when present, otherwise UNKNOWN
+      performance-review.invoke: performance dimension reuses a fresh trusted performance_review_report when present, otherwise UNKNOWN
+      capacity-planner.invoke: capacity dimension reuses a fresh trusted capacity_plan when present, otherwise UNKNOWN
+      dependency-upgrade-review.invoke: dependency dimension reuses a fresh trusted dependency_upgrade_report when present, otherwise UNKNOWN
+
   pr-gatekeeper:
     required: [gitlab.get_merge_request]
     optional:

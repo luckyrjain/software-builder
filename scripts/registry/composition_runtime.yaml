@@ -37,6 +37,7 @@ skill_types:
   change-impact-analyzer: leaf
   resilience-review: leaf
   implementation-planner: leaf
+  production-readiness-review: orchestrator
 handoff_schema:
   required_fields:
   - target_skill
@@ -97,6 +98,29 @@ handoffs:
     - implementation_task
     api-test-creator:
     - implementation_task
+  production-readiness-review:
+    pr-review:
+    - mr_context
+    change-impact-analyzer:
+    - assessment_context
+    deployment-risk-review:
+    - assessment_context
+    security-review:
+    - assessment_context
+    observability-review:
+    - assessment_context
+    resilience-review:
+    - assessment_context
+    api-design-review:
+    - assessment_context
+    database-review:
+    - assessment_context
+    performance-review:
+    - assessment_context
+    capacity-planner:
+    - assessment_context
+    dependency-upgrade-review:
+    - assessment_context
 recursion_guard:
   default_max_depth: 3
   block_revisit_by_default: true
@@ -235,3 +259,7 @@ artifact_ownership:
     mode: canonical
     owners:
     - resilience-review
+  production_readiness_report:
+    mode: canonical
+    owners:
+    - production-readiness-review

@@ -1,0 +1,34 @@
+schema_version: 1
+skill: production-readiness-review
+case_id: golden-split-identity-nested-flat-mismatch
+tier: 3
+description: >-
+  A dispatched specialist's report carries a flat top-level source_revision that matches the
+  candidate under assessment, but its own nested assessment_target names a different commit --
+  a "split identity" shape a caller could use to launder stale or wrongly-scoped evidence past an
+  identity check that only inspects one of the two locations. The mismatch on either side must be
+  detected and the result rejected as UNKNOWN, never accepted as this candidate's own evidence.
+recorded_output:
+  verdict: UNKNOWN
+  candidate_source_revision: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  child_flat_source_revision: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  child_nested_source_revision: "cccccccccccccccccccccccccccccccccccccccc"
+  security_dimension_status: UNKNOWN
+  security_dimension_reason: target_mismatch
+  child_result_trusted_for_gate: false
+assertions:
+  - type: forbid_field_value
+    path: verdict
+    value: READY
+  - type: field_equals
+    path: security_dimension_status
+    value: UNKNOWN
+  - type: field_equals
+    path: security_dimension_reason
+    value: target_mismatch
+  - type: field_equals
+    path: child_result_trusted_for_gate
+    value: false
+  - type: forbid_field_value
+    path: security_dimension_status
+    value: PASS

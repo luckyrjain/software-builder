@@ -10,6 +10,9 @@ Normative conventions for **pr-review**, **pr-gatekeeper**, **incident-rca**, **
 **security-review**, **performance-review**, **capacity-planner**, **observability-review**,
 **deployment-risk-review**, **dependency-upgrade-review**, and **tech-debt-assessor**.
 **change-impact-analyzer** is also framework-compliant and follows the bounded impact pipeline.
+**production-readiness-review** is a read-only orchestrator that aggregates trusted CI, code-review,
+build-provenance, SCM-policy, change-impact, deployment-risk, and applicable specialist-review evidence
+into one fail-closed verdict for one exact PR/MR/release candidate.
 
 `test-writer` is a thin router (like `who-owns-x-bot`/`release-readiness-checker`) that classifies a
 test-writing request by level and dispatches to exactly one of `unit-test-creator`,

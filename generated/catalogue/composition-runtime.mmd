@@ -26,6 +26,7 @@ graph TD
   pr-gatekeeper["pr-gatekeeper<br/>trigger"]
   pr-review["pr-review<br/>leaf"]
   prd-architect["prd-architect<br/>leaf"]
+  production-readiness-review["production-readiness-review<br/>orchestrator"]
   release-readiness-checker["release-readiness-checker<br/>orchestrator"]
   resilience-review["resilience-review<br/>leaf"]
   security-review["security-review<br/>leaf"]
@@ -92,6 +93,39 @@ graph TD
   prd-architect -.->|escalates| loop-task-implementer
   prd-architect -.->|escalates| pr-review
   prd-architect -.->|escalates| test-writer
+  production-readiness-review -->|requires| api-design-review
+  production-readiness-review -->|requires| capacity-planner
+  production-readiness-review -->|requires| change-impact-analyzer
+  production-readiness-review -->|requires| database-review
+  production-readiness-review -->|requires| dependency-upgrade-review
+  production-readiness-review -->|requires| deployment-risk-review
+  production-readiness-review -->|requires| observability-review
+  production-readiness-review -->|requires| performance-review
+  production-readiness-review -->|requires| pr-review
+  production-readiness-review -->|requires| resilience-review
+  production-readiness-review -->|requires| security-review
+  production-readiness-review ==>|handoff| api-design-review
+  production-readiness-review ==>|handoff| capacity-planner
+  production-readiness-review ==>|handoff| change-impact-analyzer
+  production-readiness-review ==>|handoff| database-review
+  production-readiness-review ==>|handoff| dependency-upgrade-review
+  production-readiness-review ==>|handoff| deployment-risk-review
+  production-readiness-review ==>|handoff| observability-review
+  production-readiness-review ==>|handoff| performance-review
+  production-readiness-review ==>|handoff| pr-review
+  production-readiness-review ==>|handoff| resilience-review
+  production-readiness-review ==>|handoff| security-review
+  production-readiness-review -.->|escalates| api-design-review
+  production-readiness-review -.->|escalates| capacity-planner
+  production-readiness-review -.->|escalates| change-impact-analyzer
+  production-readiness-review -.->|escalates| database-review
+  production-readiness-review -.->|escalates| dependency-upgrade-review
+  production-readiness-review -.->|escalates| deployment-risk-review
+  production-readiness-review -.->|escalates| observability-review
+  production-readiness-review -.->|escalates| performance-review
+  production-readiness-review -.->|escalates| pr-review
+  production-readiness-review -.->|escalates| resilience-review
+  production-readiness-review -.->|escalates| security-review
   release-readiness-checker -->|requires| incident-rca
   release-readiness-checker -->|requires| k8s-overprovisioning-datadog
   release-readiness-checker -->|requires| pr-review
@@ -124,26 +158,38 @@ graph TD
   who-owns-x-bot -->|requires| squad-map
   who-owns-x-bot ==>|handoff| squad-map
   api-design-review -->|api_design_review_report| implementation-planner
+  api-design-review -->|api_design_review_report| production-readiness-review
   architecture-review -->|architecture_review_report| implementation-planner
   architecture-review -->|architecture_review_report| system-design
   capacity-planner -->|capacity_plan| implementation-planner
+  capacity-planner -->|capacity_plan| production-readiness-review
   change-impact-analyzer -->|change_impact_report| implementation-planner
+  change-impact-analyzer -->|change_impact_report| production-readiness-review
   cost-optimization-sprint-planner -->|cost_sweep_rollup| weekly-squad-digest
   database-review -->|database_review_report| implementation-planner
+  database-review -->|database_review_report| production-readiness-review
   dependency-upgrade-review -->|dependency_upgrade_report| implementation-planner
+  dependency-upgrade-review -->|dependency_upgrade_report| production-readiness-review
+  deployment-risk-review -->|deployment_risk_report| production-readiness-review
   implementation-planner -->|implementation_plan| loop-task-implementer
   k8s-overprovisioning-datadog -->|k8s_rightsizing_report| release-readiness-checker
   migration-program-manager -->|migration_status_rollup| weekly-squad-digest
+  pr-gatekeeper -->|mr_review_report| production-readiness-review
   pr-gatekeeper -->|mr_review_report| release-readiness-checker
+  pr-review -->|mr_review_report| production-readiness-review
   pr-review -->|mr_review_report| release-readiness-checker
   observability-review -->|observability_review_report| implementation-planner
+  observability-review -->|observability_review_report| production-readiness-review
   performance-review -->|performance_review_report| implementation-planner
+  performance-review -->|performance_review_report| production-readiness-review
   prd-architect -->|prd_report| architecture-review
   prd-architect -->|prd_report| loop-task-implementer
   prd-architect -->|prd_report| system-design
   incident-rca -->|rca_report| release-readiness-checker
   incident-triage-agent -->|rca_report| release-readiness-checker
   resilience-review -->|resilience_review_report| implementation-planner
+  resilience-review -->|resilience_review_report| production-readiness-review
   security-review -->|security_review_report| implementation-planner
+  security-review -->|security_review_report| production-readiness-review
   system-design -->|system_design_spec| architecture-review
   system-design -->|system_design_spec| implementation-planner

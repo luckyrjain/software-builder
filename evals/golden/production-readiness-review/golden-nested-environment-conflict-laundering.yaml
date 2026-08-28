@@ -1,0 +1,38 @@
+schema_version: 1
+skill: production-readiness-review
+case_id: golden-nested-environment-conflict-laundering
+tier: 3
+description: >-
+  A dispatched specialist's report declares its own environment only inside a nested
+  assessment_target carrier (no flat top-level field), and that declared environment conflicts
+  with the candidate's own (production). The conflicting nested declaration must still be
+  detected and the dimension downgraded to UNKNOWN -- a specialist result scoped to staging must
+  never be recorded as this production candidate's own passing evidence just because the
+  environment field sits one level deeper than the candidate's.
+recorded_output:
+  verdict: UNKNOWN
+  candidate_environment: production
+  observability_dimension_status: UNKNOWN
+  observability_dimension_reason: environment_mismatch
+  observability_report_environment_carrier: nested
+  observability_report_declared_environment: staging
+  laundered_as_pass: false
+assertions:
+  - type: forbid_field_value
+    path: verdict
+    value: READY
+  - type: field_equals
+    path: observability_dimension_status
+    value: UNKNOWN
+  - type: field_equals
+    path: observability_dimension_reason
+    value: environment_mismatch
+  - type: field_equals
+    path: observability_report_environment_carrier
+    value: nested
+  - type: forbid_field_value
+    path: observability_dimension_status
+    value: PASS
+  - type: field_equals
+    path: laundered_as_pass
+    value: false

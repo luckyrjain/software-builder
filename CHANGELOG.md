@@ -6,6 +6,22 @@ the create-skill anti-pattern on time-sensitive info).
 
 Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/README.md).
 
+### Add production readiness review orchestrator (2026-08-27)
+
+- Added the read-only `production-readiness-review` orchestrator and `production_readiness_report` v1
+  artifact: a fail-closed rollup of trusted CI, code-review, build-provenance, SCM-policy, change-impact,
+  deployment-risk, and applicable specialist-review evidence for one exact PR/MR/release candidate.
+- Never posts, merges, or deploys; invokes `pr-review` only for exact-head code-review evidence (always
+  held, never posted) plus `change-impact-analyzer`, `deployment-risk-review`, and the applicable
+  specialist leaves (security, observability, resilience, API design, database, performance, capacity,
+  dependency-upgrade).
+- Added evidence-authority policy preventing caller/model-knowledge evidence from laundering through a
+  trusted child into a PASS, environment-sensitive evidence matching, tier-sensitive operational gates
+  (ownership, rollback/abort, post-deploy verification, recovery), and a final candidate-freshness fence
+  before report emission.
+- Added intent-based PR/MR routing: explicit production-readiness/ready-to-release requests route here
+  instead of `pr-review` (generic review) or `release-readiness-checker` (release-wide go/no-go).
+
 ### Add bounded change-impact analysis (2026-08-24)
 
 - Added the read-only `change-impact-analyzer` leaf and `change_impact_report` v1 artifact.

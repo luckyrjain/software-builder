@@ -3,9 +3,10 @@ name: deployment-risk-review
 description: >-
   Use when a specific release or change needs a risk assessment before shipping: blast radius,
   migration risk, rollback complexity, dependency risk, traffic risk, and confidence. Keywords:
-  deployment risk, release risk, blast radius, rollback plan, go/no-go. Not for the composed
-  multi-repo release go/no-go sweep (release-readiness-checker) or investigating an incident that
-  already happened (incident-triage-agent).
+  deployment risk, release risk, blast radius, rollback plan, go/no-go on deployment risk alone.
+  Not for the composed multi-repo release go/no-go sweep (release-readiness-checker), an aggregated
+  ship/no-ship verdict across CI/review/policy/specialists for one change (production-readiness-
+  review), or investigating an incident that already happened (incident-triage-agent).
 ---
 
 # deployment-risk-review
@@ -34,6 +35,7 @@ Routing table: [skill-routing.md](../docs/skill-framework/shared/skill-routing.m
 | Blast radius, rollback complexity, migration risk before shipping | This deploy already happened and something broke → **incident-triage-agent** |
 | Pre-deploy risk check on a single change description | Post-incident root-cause investigation of a confirmed incident → **incident-triage-agent** (delegates to incident-rca) |
 | Assessing rollback-plan safety/speed before shipping | Composed, multi-service release-wide readiness report → **release-readiness-checker** |
+| — | "Is this PR/MR production ready?", "go/no-go for this change" spanning ALL evidence (CI, review, policy, specialists), not deployment risk alone → **production-readiness-review** |
 
 ## Deliverable
 
