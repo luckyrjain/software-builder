@@ -522,6 +522,20 @@ def test_immutable_digest_release_ref_alone_can_still_be_reused_without_source_r
     assert match_release_report(entry, report)["status"] == "MATCH"
 
 
+def test_sha384_and_sha512_digests_are_also_recognized_as_immutable() -> None:
+    # The digest-algorithm allowlist covers every genuine, registered
+    # content-hash algorithm this codebase might reasonably encounter, not
+    # only sha256 -- a real sha384/sha512 digest must not be rejected merely
+    # because every OTHER fixture in this file happens to use sha256.
+    for algo in ("sha384", "sha512"):
+        digest = f"{algo}:" + "b" * 64
+        entry = v2_entry(repo="acme/checkout", service="checkout", release_ref=digest, source_revision=None)
+        report = trusted_production_report(
+            verdict="READY", repo="acme/checkout", service="checkout", deployable=digest, source_revision=None,
+        )
+        assert match_release_report(entry, report)["status"] == "MATCH", algo
+
+
 def test_matching_source_revision_never_redeems_a_mutable_release_ref_for_reuse() -> None:
     # Security: release_ref is the actual deployable identity match already
     # checks via exact string equality against the report's own
@@ -555,6 +569,36 @@ def test_matching_source_revision_never_redeems_a_mutable_release_ref_for_reuse(
     release_result = run_release(required_entry, trusted_reports=[stale_report], production_invoke=s)
     assert release_result.production_readiness_source is None
     assert s.calls == 1
+
+
+def test_mutable_name_tag_ref_shaped_like_a_digest_is_never_an_immutable_anchor() -> None:
+    # Security: the digest algorithm component must be an explicit allowlist
+    # of genuine, registered content-hash algorithms, not open-ended --
+    # otherwise an ordinary, fully mutable `name:tag` container reference
+    # (a common CI convention: tagging an image with a commit SHA, e.g.
+    # "nightly-build:<40 hex chars>") is syntactically indistinguishable from
+    # a genuine `algo:hexdigest` content digest whenever the tag happens to
+    # be hex-shaped -- letting a stale trusted report keyed to such a tag be
+    # reused as READY even though the registry could have repointed that tag
+    # to entirely different, unreviewed content since the report was produced.
+    mutable_tag_shaped_like_digest = "nightly-build:" + "a1b2c3d4e5" * 4
+    entry = v2_entry(
+        required=True, repo="acme/checkout", service="checkout",
+        release_ref=mutable_tag_shaped_like_digest, source_revision=None,
+    )
+    stale_report = trusted_production_report(
+        verdict="READY", repo="acme/checkout", service="checkout",
+        deployable=mutable_tag_shaped_like_digest, source_revision=None,
+    )
+    result = match_release_report(entry, stale_report)
+    assert result["status"] == "UNKNOWN"
+    assert result["reason"] == "unpinned_identity"
+
+    s = spy()
+    release_result = run_release(entry, trusted_reports=[stale_report], production_invoke=s)
+    assert release_result.production_readiness_source is None
+    assert release_result.production_readiness == "UNKNOWN"
+    assert s.calls == 0
 
 
 def test_conflicting_trusted_reports_are_unknown_not_first_match() -> None:
@@ -884,6 +928,28 @@ def test_malformed_change_ref_is_never_silently_dropped() -> None:
     assert len(coverage["included_change_refs"]) == 2
     assert coverage["status"] == "PARTIAL"
     assert len(coverage["uncovered_change_refs"]) == 1
+
+
+def test_malformed_change_ref_cannot_be_laundered_into_covered_by_a_placeholder_collision() -> None:
+    # Security: a malformed entry's synthetic display placeholder
+    # (__unresolvable_change_<index>__) must never itself participate in the
+    # covered/uncovered string comparison -- a genuine ref, or an
+    # integrated_revisions value, that happens to collide with that exact
+    # placeholder text must never launder the malformed entry into
+    # "reviewed," even though trusted_review_refs/included_change_refs come
+    # from a trusted SCM-enumeration boundary and such a collision would
+    # require either a harness bug or an unusual real ref/branch name.
+    coverage = build_code_review_coverage(
+        candidate_source_revision="a" * 40,
+        included_change_refs=[
+            {"bad_key_no_ref": "whatever"},           # malformed -> index 0
+            {"ref": "__unresolvable_change_0__"},     # a REAL ref colliding with index 0's placeholder
+        ],
+        trusted_review_refs=["__unresolvable_change_0__"],
+        repo="acme/widgets", service="widgets-api",
+    )
+    assert coverage["status"] == "PARTIAL"
+    assert coverage["uncovered_change_refs"] == ["__unresolvable_change_0__"]
 
 
 def test_internally_inconsistent_coverage_is_never_trusted_as_complete() -> None:

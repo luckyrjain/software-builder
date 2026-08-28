@@ -300,7 +300,16 @@ def match_release_report(entry: Any, report: Mapping[str, Any]) -> MutableMappin
 
 
 _GIT_SHA_RE = re.compile(r"^[0-9a-fA-F]{7,40}$")
-_IMMUTABLE_DIGEST_RE = re.compile(r"^[a-z0-9]+(?:[+._-][a-z0-9]+)*:[0-9a-fA-F]{32,}$")
+# The algorithm component is deliberately an explicit allowlist of genuine,
+# registered content-hash algorithms, NOT an open-ended `[a-z0-9]+` -- this
+# module performs no actual hash verification, so an unrecognized "algorithm"
+# name provides zero cryptographic assurance over arbitrary text. An
+# open-ended component would make an ordinary, fully mutable `name:tag`
+# container reference (e.g. `nightly-build:<40 hex chars>` -- a common CI
+# convention of tagging an image with a commit SHA) syntactically
+# indistinguishable from a genuine `algo:hexdigest` content digest whenever
+# the tag happens to be hex-shaped.
+_IMMUTABLE_DIGEST_RE = re.compile(r"^(?:sha256|sha384|sha512):[0-9a-fA-F]{32,}$")
 
 
 def _looks_like_source_revision(ref: str) -> bool:
@@ -660,15 +669,20 @@ def resolve_production_readiness(
 # ---------------------------------------------------------------------------
 
 
-def _change_ref_id(change: Any, index: int) -> str:
-    """Resolve one included-change entry to a stable ref string.
+def _change_ref_id(change: Any) -> Optional[str]:
+    """Resolve one included-change entry to its ref string, or None when it's
+    malformed/unresolvable (wrong key, non-mapping, empty string, ...).
 
-    A malformed/unresolvable entry (wrong key, non-mapping, empty string, ...)
-    is never dropped -- it becomes a synthetic ref that can never appear in
-    `trusted_review_refs`/`integrated_revisions`, so it always counts as
-    uncovered. Silently skipping it instead would let a manifest with N real
-    changes and one malformed entry look identical to one with N-1 changes,
-    letting coverage read COMPLETE when a real change was never accounted for.
+    A malformed entry is never dropped by its caller -- see
+    `build_code_review_coverage`, which unconditionally treats a `None`
+    result as uncovered without ever comparing it by string equality against
+    `trusted_review_refs`/`integrated_revisions`. Returning a fixed,
+    predictable placeholder string here instead (as an earlier version of
+    this function did) would let a real ref or `integrated_revisions` value
+    that happens to collide with that exact placeholder text silently launder
+    the malformed entry into "covered" -- exactly the self-attestation-style
+    outcome this function exists to prevent. `None` can never collide with
+    any string, so no such coincidence is possible.
     """
     if isinstance(change, Mapping):
         ref = change.get("ref")
@@ -676,7 +690,7 @@ def _change_ref_id(change: Any, index: int) -> str:
             return ref
     elif isinstance(change, str) and change:
         return change
-    return f"__unresolvable_change_{index}__"
+    return None
 
 
 def build_code_review_coverage(
@@ -711,7 +725,17 @@ def build_code_review_coverage(
     means this bundle can never be reused via `run_release`'s
     `code_review_coverage` parameter for any entry.
     """
-    included_refs = [_change_ref_id(change, index) for index, change in enumerate(included_change_refs)]
+    resolved_refs = [_change_ref_id(change) for change in included_change_refs]
+    # A malformed/unresolvable entry gets a synthetic placeholder for display
+    # purposes only (`included_change_refs`/`uncovered_change_refs`) -- it is
+    # never dropped, so a manifest with N real changes and one malformed
+    # entry can never look identical to one with N-1 changes. The placeholder
+    # never participates in the covered/uncovered decision itself; see
+    # `_change_ref_id` and the `resolved_refs[index] is None` check below.
+    included_refs = [
+        ref if ref is not None else f"__unresolvable_change_{index}__"
+        for index, ref in enumerate(resolved_refs)
+    ]
     # `trusted_review_refs` comes from the same authoritative-SCM-enumeration
     # trust boundary as `included_change_refs` (whose own malformed entries
     # `_change_ref_id` already hardens against) -- a non-string/unhashable
@@ -729,7 +753,16 @@ def build_code_review_coverage(
         # never reach `integrated in reviewed`, which would raise TypeError.
         return isinstance(integrated, str) and bool(integrated) and integrated in reviewed
 
-    uncovered = [ref for ref in included_refs if not _is_covered(ref)]
+    # A malformed entry (resolved_refs[index] is None) is unconditionally
+    # uncovered -- never run through `_is_covered`, which compares by string
+    # equality and would otherwise be exploitable via a coincidental (or
+    # adversarially chosen) real ref/integrated-revision value matching that
+    # entry's own display placeholder.
+    uncovered = [
+        included_refs[index]
+        for index, ref in enumerate(resolved_refs)
+        if ref is None or not _is_covered(ref)
+    ]
     if not included_refs:
         status = "UNKNOWN"
     elif uncovered:

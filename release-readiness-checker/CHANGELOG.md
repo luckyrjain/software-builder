@@ -309,6 +309,33 @@ Added 3 new regression tests covering both items above.
 
 Added 1 new regression test (plus a corrected stale docstring reference in an existing round-11 test) covering the fix above. Found by a follow-up code-review pass after round 12's two independent adversarial reviews both reported zero new issues -- a reminder that "the same code region has already had two bugs found in it" (true of this exact reuse-vs-invoke identity logic, across rounds 9, 10, and 11) remains a strong signal to keep looking even after a review round comes back clean.
 
+### Fixed (adversarial review round 13, same day)
+- **Security: the digest-algorithm component of the immutable-identity check was open-ended, letting an
+  ordinary mutable `name:tag` container reference be mistaken for a genuine content digest.**
+  `_IMMUTABLE_DIGEST_RE`'s algorithm component accepted any `[a-z0-9]+`-with-separators string, not just a
+  genuine registered content-hash algorithm -- so a fully mutable image reference like
+  `nightly-build:<40 hex chars>` (a common CI convention: tagging an image with a commit SHA) was
+  syntactically indistinguishable from `sha256:<hexdigest>`. `_release_ref_is_immutable_identity` then
+  treated such a tag as a pinned, immutable reuse anchor, letting a stale trusted report keyed to it be
+  reused as `READY` with no re-verification, even though the registry could have repointed that tag to
+  entirely different, unreviewed content since the report was produced -- the fifth distinct variant of the
+  "mutable reference accepted as immutable identity" defect family found across rounds 9-13, all in this
+  same reuse-vs-invoke identity logic. Restricted the algorithm component to an explicit allowlist of
+  genuine content-hash algorithms (`sha256`, `sha384`, `sha512`).
+- **A malformed/unresolvable `included_change_refs` entry's synthetic display placeholder
+  (`__unresolvable_change_<index>__`) could be laundered into "covered" by a coincidental string collision.**
+  `_change_ref_id` returned that fixed, predictable placeholder string for a malformed entry, and
+  `build_code_review_coverage` then compared it by ordinary string equality against
+  `trusted_review_refs`/`integrated_revisions` like any real ref -- so a genuine ref or integrated-revision
+  value that happened to equal that exact placeholder text (e.g. an SCM-enumeration harness bug, or an
+  unusual real branch/PR identifier) would incorrectly mark the malformed entry as reviewed, letting coverage
+  read `COMPLETE` despite a real change never having been accounted for. `_change_ref_id` now returns `None`
+  for a malformed entry; `build_code_review_coverage` treats `None` as unconditionally uncovered without ever
+  string-comparing it, while still surfacing the same placeholder text in `included_change_refs`/
+  `uncovered_change_refs` for display.
+
+Added 3 new regression tests covering both fixes above.
+
 ## [1.0.0] — 2026-08-05
 
 ### Added
