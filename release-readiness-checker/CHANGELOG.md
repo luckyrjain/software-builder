@@ -383,6 +383,29 @@ own docstring documents standalone use with a raw manifest dict, but no test eve
 `resolve_production_readiness` and the entire `NOT_REQUIRED` early return had zero direct test coverage
 anywhere in the suite. No functional code change; added a test exercising both.
 
+### Fixed (adversarial review round 16, same day)
+- **`build_assessment_context` stored the trusted `code_review_coverage` bundle into `assessment_context`
+  by raw reference, unlike `candidate` (already defensively copied via `dict(candidate)`).** `production_invoke`
+  is a plain caller-supplied Python callable with no enforcement preventing it from mutating whatever mapping
+  it's handed. Since `run_release` passes the SAME `code_review_coverage` object to every entry in a
+  multi-entry manifest and to every future call that reuses it, an invoke that mutated its own
+  `assessment_context["inputs"]["code_review_coverage"]` (or one of its nested mutable lists, e.g.
+  `trusted_review_refs`) corrupted the caller's own trusted-runtime-supplied bundle in place -- confirmed by
+  direct execution to silently flip a later entry's (or a later call's) resolved verdict from `READY` to
+  `UNKNOWN`, purely from the aliasing rather than any real evidence problem. This is a correctness/reliability
+  bug, not a security bypass (it fails toward `UNKNOWN`, never toward a falsely-favorable verdict, in every
+  case tried) -- but it directly contradicts this module's own header docstring ("pure, side-effect-free
+  evidence logic"). Fixed with a defensive `copy.deepcopy`, mirroring `candidate`'s existing treatment.
+
+Found by a confirmatory round after round 15's two passes both concluded the six-round (9-14) identity-
+immutability defect family was closed -- this round's angles deliberately moved to a different concern
+(cross-file vocabulary consistency, v1 compatibility, crash-safety, and mutation/aliasing safety) rather than
+re-testing that same family, and the mutation-safety angle surfaced this genuinely new bug class. Angles 1
+(cross-file `acquisition` vocabulary consistency), 2 (v1 backward compatibility against 10 varied manifests),
+and 4 (crash-safety against novel type-confusion inputs) all came back clean. Added 1 regression test,
+verified to fail when the fix is reverted and pass when restored. Full suite (1700 passed, 1 skipped),
+registry validate/generate-check, and lint-release-readiness-checker all green.
+
 ## [1.0.0] — 2026-08-05
 
 ### Added

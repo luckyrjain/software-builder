@@ -12,6 +12,7 @@ policy-level adapter only, matching scripts/production_readiness.py's own
 
 from __future__ import annotations
 
+import copy
 import dataclasses
 import re
 from typing import Any, Callable, Mapping, MutableMapping, Optional, Sequence
@@ -544,6 +545,19 @@ def build_assessment_context(
         inputs["criticality"] = entry.criticality
         input_provenance["criticality"] = {"authority": "caller", "evidence_refs": []}
     if code_review_coverage is not None:
+        # A defensive deep copy, mirroring `candidate`'s own `dict(candidate)`
+        # copy above -- `production_invoke` is a plain caller-supplied
+        # Callable (this module's own header docstring notwithstanding, it
+        # has no enforcement mechanism preventing a careless or buggy
+        # implementation from mutating whatever mapping it's handed). Without
+        # a copy, an invoke that mutates `assessment_context["inputs"]
+        # ["code_review_coverage"]` (or one of its nested mutable lists, e.g.
+        # `trusted_review_refs`) would corrupt the CALLER's own trusted-
+        # runtime-supplied bundle in place -- and `run_release` passes this
+        # same object to every entry in a multi-entry manifest and to every
+        # future call that reuses it, so one entry's invoke could silently
+        # flip a later entry's (or a later run's) resolved verdict.
+        code_review_coverage = copy.deepcopy(code_review_coverage) if isinstance(code_review_coverage, Mapping) else code_review_coverage
         inputs["code_review_coverage"] = code_review_coverage
         coverage_mapping = pr._as_mapping(code_review_coverage)
         trustworthy = _coverage_is_trustworthy_and_complete(code_review_coverage)

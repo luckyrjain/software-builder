@@ -8,6 +8,8 @@ when candidate identity/context/capability are sufficient, otherwise UNKNOWN.
 
 from __future__ import annotations
 
+import copy
+
 from scripts.release_readiness_v2 import (
     _candidate_from_entry,
     build_assessment_context,
@@ -411,6 +413,44 @@ def test_trustworthy_coverage_cannot_stamp_forged_evidence_refs_as_trusted_runti
     assert context["input_provenance"]["code_review_coverage"]["authority"] == "trusted_runtime"
     assert context["evidence_refs"] == ["mr:1"]
     assert context["input_provenance"]["code_review_coverage"]["evidence_refs"] == ["mr:1"]
+
+
+def test_code_review_coverage_is_never_mutated_through_the_assessment_context() -> None:
+    # A production_invoke callable is a plain, caller-supplied Python
+    # callable with no enforcement preventing it from mutating whatever
+    # mapping it's handed -- unlike `candidate` (already defensively copied
+    # via `dict(candidate)`), `code_review_coverage` was stored into
+    # `inputs`/`assessment_target` by raw reference. Since run_release
+    # passes the SAME code_review_coverage object to every entry in a
+    # multi-entry manifest and to every future call that reuses it, an
+    # invoke mutating its own assessment_context could otherwise corrupt the
+    # caller's trusted-runtime-supplied bundle in place, silently changing a
+    # later entry's (or a later run's) resolved verdict.
+    coverage = build_code_review_coverage(
+        candidate_source_revision="a" * 40,
+        included_change_refs=["mr:1"],
+        trusted_review_refs=["mr:1"],
+        repo="acme/checkout",
+        service="checkout",
+    )
+    original_coverage = copy.deepcopy(coverage)
+
+    def mutating_invoke(candidate: dict, *, assessment_context: dict | None = None):
+        supplied = (assessment_context or {}).get("inputs", {}).get("code_review_coverage")
+        if supplied is not None:
+            supplied["status"] = "CORRUPTED"
+            supplied["trusted_review_refs"].append("INJECTED")
+        return trusted_production_report(
+            verdict="READY",
+            repo=candidate["repo"],
+            service=candidate["service"],
+            deployable=candidate["head_revision_or_digest"],
+            source_revision=candidate["source_revision"],
+        )
+
+    entry = v2_entry(required=True, repo="acme/checkout", service="checkout", source_revision="a" * 40)
+    run_release(entry, trusted_reports=[], production_invoke=mutating_invoke, code_review_coverage=coverage)
+    assert coverage == original_coverage
 
 
 def test_manifest_criticality_is_never_folded_into_the_candidate_as_identity() -> None:
