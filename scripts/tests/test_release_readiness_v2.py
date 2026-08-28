@@ -60,6 +60,22 @@ def test_v1_never_invokes_production_readiness() -> None:
     assert invoke.calls == 0
 
 
+def test_string_true_required_flag_is_not_silently_ignored() -> None:
+    # A quoted "true" (a plausible hand-authoring/templating mistake) must
+    # still mark the entry v2-readiness-required -- inputs.md's own documented
+    # invariant is that this flag "never silently skips the gate."
+    entry = v2_entry(required=False, production_readiness_required="true")
+    assert parse_release_entry(entry).production_readiness_required is True
+
+
+def test_unrecognized_required_flag_value_stays_false() -> None:
+    # An arbitrary truthy-but-unrecognized value (not True, not "true") is
+    # never guessed into True -- fail closed to v1 behavior rather than
+    # silently gating on an ambiguous value.
+    entry = v2_entry(required=False, production_readiness_required="yes")
+    assert parse_release_entry(entry).production_readiness_required is False
+
+
 def test_v1_mandatory_install_footprint_is_unchanged() -> None:
     registry_ = registry()
     requires = registry_.skills["release-readiness-checker"].install.requires
@@ -114,6 +130,21 @@ def test_environment_alias_mismatch_is_unknown() -> None:
     report = trusted_production_report(environment="production")
     result = match_release_report(v2_entry(environment="prod"), report)
     assert result["status"] == "UNKNOWN"
+
+
+def test_omitted_entry_environment_does_not_reuse_a_declared_environment_report() -> None:
+    # An entry that simply omits `environment` must never silently reuse a
+    # report produced for some OTHER declared environment (e.g. staging) --
+    # only "neither side declares one" is a harmless match.
+    report = trusted_production_report(environment="staging")
+    result = match_release_report(v2_entry(environment=None), report)
+    assert result["status"] == "UNKNOWN"
+
+
+def test_both_sides_environment_null_is_a_harmless_match() -> None:
+    report = trusted_production_report(environment=None)
+    result = match_release_report(v2_entry(environment=None), report)
+    assert result["status"] == "MATCH"
 
 
 def test_wrong_source_revision_is_unknown() -> None:
@@ -353,6 +384,59 @@ def test_malformed_change_ref_is_never_silently_dropped() -> None:
     assert len(coverage["uncovered_change_refs"]) == 1
 
 
+def test_internally_inconsistent_coverage_is_never_trusted_as_complete() -> None:
+    # A hand-built (not build_code_review_coverage-produced) bundle claiming
+    # COMPLETE while still listing an uncovered ref is self-contradictory --
+    # never trusted merely because it claims completeness.
+    inconsistent = {
+        "status": "COMPLETE",
+        "candidate_source_revision": "a" * 40,
+        "included_change_refs": ["mr:1", "mr:2"],
+        "trusted_review_refs": ["mr:1"],
+        "uncovered_change_refs": ["mr:2"],
+        "acquisition": "authoritative_host",
+    }
+    s = spy()
+    result = run_release(
+        v2_entry(required=True, source_revision="a" * 40),
+        trusted_reports=[],
+        production_invoke=s,
+        code_review_coverage=inconsistent,
+    )
+    assert s.calls == 0
+    assert result["verdict"] == "UNKNOWN"
+
+
+def test_code_review_coverage_scoped_by_repo_service_not_just_revision() -> None:
+    # Security: a coverage bundle that declares its own repo/service must
+    # never apply to a different repo/service entry even if that entry's
+    # (caller-controlled) source_revision text happens to match.
+    coverage_for_checkout = build_code_review_coverage(
+        candidate_source_revision="a" * 40,
+        repo="acme/checkout",
+        service="checkout",
+        included_change_refs=["mr:1"],
+        trusted_review_refs=["mr:1"],
+    )
+    billing_entry_with_same_revision = v2_entry(
+        required=True, repo="acme/billing", service="billing", source_revision="a" * 40
+    )
+
+    def production_invoke(candidate: dict, *, assessment_context: dict | None = None):
+        supplied = (assessment_context or {}).get("inputs", {}).get("code_review_coverage")
+        assert supplied is None
+        return trusted_production_report(
+            verdict="READY", repo="acme/billing", service="billing", source_revision="a" * 40
+        )
+
+    run_release(
+        billing_entry_with_same_revision,
+        trusted_reports=[],
+        production_invoke=production_invoke,
+        code_review_coverage=coverage_for_checkout,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Task 5.5 -- no composition revisits in the release-root path
 # ---------------------------------------------------------------------------
@@ -466,6 +550,41 @@ def test_production_report_for_old_digest_not_reused_after_ref_moves() -> None:
     assert s.calls == 1
 
 
+def test_freshness_fence_caps_not_ready_never_downgrades_it_to_unknown() -> None:
+    # A proven NOT_READY from a check that already ran this same iteration
+    # must never be silently downgraded to the merely-uncertain UNKNOWN just
+    # because the freshness fence also fired -- worst-first capping, not a
+    # raw overwrite.
+    class _FailingSpy:
+        def run(self, name: str) -> dict:
+            return {"status": "NOT_READY"}
+
+    result = run_release(v1_entry(), check_spy=_FailingSpy(), start_ref="a" * 40, final_ref="b" * 40)
+    assert result.overall == "NOT_READY"
+
+
+def test_freshness_fence_is_scoped_per_entry_not_globally() -> None:
+    # A multi-entry manifest where each entry tracks its own independently
+    # mutable release_ref: one entry's ref moving must not be masked by (or
+    # bleed into) another entry whose own ref stayed put.
+    stable_entry = v2_entry(repo="acme/checkout", service="checkout")
+    moved_entry = v2_entry(repo="acme/billing", service="billing")
+    start_refs = {("acme/checkout", "checkout"): "a" * 40, ("acme/billing", "billing"): "a" * 40}
+    final_refs = {("acme/checkout", "checkout"): "a" * 40, ("acme/billing", "billing"): "b" * 40}
+
+    result = run_release([stable_entry, moved_entry], start_ref=start_refs, final_ref=final_refs)
+    assert result.candidate_changed_during_review is True
+    assert result.overall == "UNKNOWN"
+
+    # And the inverse: neither entry's ref moved -> no freshness-fence hit.
+    stable_result = run_release(
+        [stable_entry, moved_entry],
+        start_ref={("acme/checkout", "checkout"): "a" * 40, ("acme/billing", "billing"): "a" * 40},
+        final_ref={("acme/checkout", "checkout"): "a" * 40, ("acme/billing", "billing"): "a" * 40},
+    )
+    assert stable_result.candidate_changed_during_review is False
+
+
 # ---------------------------------------------------------------------------
 # Task 7.5 -- release execution-status semantics
 # ---------------------------------------------------------------------------
@@ -488,3 +607,16 @@ def test_not_ready_plus_other_unknown_is_partial_analysis() -> None:
 
 def test_empty_manifest_is_blocked_not_failed() -> None:
     assert run_release([]).skill_result.status == "BLOCKED"
+
+
+def test_release_result_bracket_access_raises_key_error_not_attribute_error() -> None:
+    # ReleaseResult is dict-like: an idiomatic `try: result[key] except
+    # KeyError` on it must actually catch a missing key, not let an
+    # AttributeError leak through instead.
+    result = run_release(v1_entry())
+    try:
+        result["definitely_not_a_real_field"]
+    except KeyError:
+        pass
+    else:
+        raise AssertionError("expected KeyError for an unrecognized ReleaseResult key")

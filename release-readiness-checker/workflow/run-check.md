@@ -156,9 +156,11 @@ release-candidate identity check and applies to every entry, v1 included, whenev
 is being tracked across this run — it is not gated on `production_readiness_required`.
 
 1. **Reuse first.** If one or more trusted `production_readiness_report`s are available whose canonical
-   repo/service/environment and `head_revision_or_digest` exactly match this entry's `release_ref` (and
-   whose own `source_revision` matches this entry's, when supplied), use one — narrowed to the report named
-   by `production_readiness_ref` when the entry pins one. A caller- or file-supplied report can never
+   repo/service and `head_revision_or_digest` exactly match this entry's `release_ref`, whose environment
+   matches whenever either side declares one (an entry that omits `environment` never reuses a report
+   produced for some other declared environment — only "neither side declares one" is a harmless match),
+   and whose own `source_revision` matches this entry's, when supplied, use one — narrowed to the report
+   named by `production_readiness_ref` when the entry pins one. A caller- or file-supplied report can never
    satisfy this by itself — only a runtime-validated/direct-child result is trusted for the gate. If more
    than one trusted, identity-matching report disagrees in verdict, that is conflicting authoritative
    evidence, not a pick-one: the dimension is `UNKNOWN` until reconciled.
@@ -168,9 +170,13 @@ is being tracked across this run — it is not gated on `production_readiness_re
    `assessment_context`. If this skill has already assembled `code_review_coverage` from authoritative SCM
    enumeration (never from the manifest entry's own text — a `release_manifest` field can never self-attest
    "already reviewed"), pass it too, so production-readiness-review reuses that coverage and never revisits
-   pr-review within this same release-root run. A `code_review_coverage` bundle that is not both `COMPLETE`
-   and host/runtime-authoritative never triggers an invocation; the dimension is `UNKNOWN` directly (never a
-   bypass of the recursion guard by re-reviewing, and never a "trust me, it's complete" claim honored).
+   pr-review within this same release-root run. That coverage bundle is bound to the exact candidate it was
+   assembled for by its own `candidate_source_revision` and, when declared, `repo`/`service` — a bundle
+   assembled for one manifest entry is never applied to a different entry in the same run merely because
+   they happen to share a (caller-controlled) `source_revision` string. A `code_review_coverage` bundle
+   that is not `COMPLETE` with an empty `uncovered_change_refs`, and host/runtime-authoritative, never
+   triggers an invocation; the dimension is `UNKNOWN` directly (never a bypass of the recursion guard by
+   re-reviewing, and never a "trust me, it's complete" claim honored).
 3. **Otherwise, `UNKNOWN`.** Missing report, insufficient candidate identity, or the child unavailable
    all land here — never a silently skipped gate and never an inferred `READY`.
 4. **Cap the release verdict, never widen it.** Production readiness `NOT_READY` caps the release

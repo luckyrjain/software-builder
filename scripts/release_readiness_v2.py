@@ -90,6 +90,22 @@ class ReleaseEntry:
         }
 
 
+def _is_required_flag(value: Any) -> bool:
+    """True for the boolean True or the case-insensitive string "true".
+
+    A manifest is YAML/JSON text; `production_readiness_required: true` parses
+    to the real bool in normal YAML, but a quoted `"true"` (a plausible
+    hand-authoring or templating mistake) must not silently degrade the entry
+    to v1 behavior -- inputs.md's own documented invariant is that this flag
+    "never silently skips the gate." Nothing else truthy (a nonzero int, an
+    arbitrary non-empty string) is accepted; an unrecognized shape stays False
+    rather than guessing, matching this module's fail-closed convention.
+    """
+    if value is True:
+        return True
+    return isinstance(value, str) and value.strip().lower() == "true"
+
+
 def parse_release_entry(entry: Mapping[str, Any]) -> ReleaseEntry:
     entry = pr._as_mapping(entry)
     return ReleaseEntry(
@@ -100,7 +116,7 @@ def parse_release_entry(entry: Mapping[str, Any]) -> ReleaseEntry:
         environment=entry.get("environment"),
         source_revision=entry.get("source_revision"),
         criticality=entry.get("criticality"),
-        production_readiness_required=entry.get("production_readiness_required") is True,
+        production_readiness_required=_is_required_flag(entry.get("production_readiness_required")),
         production_readiness_ref=entry.get("production_readiness_ref"),
     )
 
@@ -139,9 +155,10 @@ def classify_report_for_release(report: Mapping[str, Any]) -> MutableMapping[str
 
 
 def match_release_report(entry: Any, report: Mapping[str, Any]) -> MutableMapping[str, Any]:
-    """Deployable-scoped identity match: canonical repo/service, exact environment
-    when the entry declares one, exact release_ref == report's deployable target,
-    and exact source_revision when the entry declares one. No fuzzy matching.
+    """Deployable-scoped identity match: canonical repo/service, exact
+    environment whenever either side declares one, exact release_ref ==
+    report's deployable target, and exact source_revision when the entry
+    declares one. No fuzzy matching.
     """
     parsed = entry if isinstance(entry, ReleaseEntry) else parse_release_entry(entry)
     report = pr._as_mapping(report)
@@ -158,9 +175,15 @@ def match_release_report(entry: Any, report: Mapping[str, Any]) -> MutableMappin
     if not report_service or normalize_service_identity(report_service) != normalize_service_identity(parsed.service):
         return {"status": "UNKNOWN", "reason": "service_mismatch"}
 
-    if parsed.environment is not None:
-        report_env = target.get("environment")
-        if report_env is None or not same_environment(parsed.environment, report_env):
+    report_env = target.get("environment")
+    if parsed.environment is not None or report_env is not None:
+        # A final production_readiness_report requires the exact candidate
+        # environment (design v10 Sec8.11) -- an entry that simply omits
+        # `environment` must never silently reuse a report produced for SOME
+        # OTHER declared environment. Only "neither side declares one" is a
+        # harmless match; any other combination (one side null, or both
+        # non-null but different) is a mismatch.
+        if parsed.environment is None or report_env is None or not same_environment(parsed.environment, report_env):
             return {"status": "UNKNOWN", "reason": "environment_mismatch"}
 
     if not parsed.release_ref:
@@ -170,6 +193,15 @@ def match_release_report(entry: Any, report: Mapping[str, Any]) -> MutableMappin
         return {"status": "UNKNOWN", "reason": "release_ref_mismatch"}
 
     if parsed.source_revision is not None:
+        # Flat-only, deliberately NOT production_readiness.py's generic
+        # _effective_source_revision: that helper's nested-target fallback
+        # chain treats a candidate's own head_revision_or_digest as a
+        # stand-in for "revision" when no nested source_revision is present --
+        # correct for a generic candidate object, but wrong here, since
+        # production_readiness_report's own schema (composition_contracts.yaml)
+        # declares source_revision as a top-level sibling of assessment_target,
+        # never nested inside it. Using the generic helper would silently
+        # compare against the report's deployable digest instead.
         report_source_revision = report.get("source_revision") or target.get("source_revision")
         if report_source_revision != parsed.source_revision:
             return {"status": "UNKNOWN", "reason": "source_revision_mismatch"}
@@ -225,12 +257,20 @@ def _coverage_is_trustworthy_and_complete(coverage: Optional[Mapping[str, Any]])
     own `coverage.get("acquisition")` via `_is_host_or_runtime_acquisition`. A
     bundle claiming `status: COMPLETE` with no (or a weak) acquisition is never
     trusted merely because it claims completeness -- that is exactly the
-    self-attestation this whole module exists to prevent.
+    self-attestation this whole module exists to prevent. A bundle that is
+    internally inconsistent (claims `COMPLETE` while still listing
+    `uncovered_change_refs`) is likewise never trusted merely because it
+    claims completeness -- mirroring `validate_code_review_coverage`'s own
+    `not coverage.get("uncovered_change_refs")` check, which every bundle
+    `build_code_review_coverage` itself produces already satisfies by
+    construction, but a hand-built or otherwise-produced bundle might not.
     """
     coverage = pr._as_mapping(coverage) if coverage is not None else None
     if not coverage:
         return False
     if coverage.get("status") != "COMPLETE":
+        return False
+    if coverage.get("uncovered_change_refs"):
         return False
     return pr._is_host_or_runtime_acquisition(coverage.get("acquisition"))
 
@@ -250,14 +290,30 @@ def _coverage_for_entry(
     unmodified for every other entry in the same run, laundering review
     evidence for the wrong candidate into that other candidate's own verdict.
     A coverage bundle only applies when its own `candidate_source_revision`
-    exactly matches this entry's `source_revision`; otherwise it is treated as
-    not supplied for this entry (never as "supplied but untrustworthy" --
-    production-readiness-review remains free to derive its own coverage).
+    exactly matches this entry's `source_revision` AND (when the bundle
+    declares them) its own `repo`/`service` canonically match this entry's --
+    a source-revision string alone is caller-controlled manifest text and, in
+    a multi-repo/multi-service manifest, is not itself proof the bundle was
+    assembled for *this* candidate rather than a different one that happens
+    to declare the same revision string. A bundle with no declared repo/
+    service is scoped by source_revision alone, matching
+    `build_code_review_coverage`'s own optional repo/service parameters.
+    Otherwise it is treated as not supplied for this entry (never as
+    "supplied but untrustworthy" -- production-readiness-review remains free
+    to derive its own coverage).
     """
     coverage = pr._as_mapping(coverage) if coverage is not None else None
     if not coverage:
         return None
     if not entry.source_revision or coverage.get("candidate_source_revision") != entry.source_revision:
+        return None
+    coverage_repo = coverage.get("repo")
+    if coverage_repo is not None and (not entry.repo or normalize_repo_identity(coverage_repo) != normalize_repo_identity(entry.repo)):
+        return None
+    coverage_service = coverage.get("service")
+    if coverage_service is not None and (
+        not entry.service or normalize_service_identity(coverage_service) != normalize_service_identity(entry.service)
+    ):
         return None
     return coverage
 
@@ -413,6 +469,8 @@ def build_code_review_coverage(
     candidate_source_revision: str,
     included_change_refs: Sequence[Any],
     trusted_review_refs: Sequence[str],
+    repo: Optional[str] = None,
+    service: Optional[str] = None,
     integrated_revisions: Optional[Mapping[str, str]] = None,
     acquisition: str = "authoritative_host",
 ) -> MutableMapping[str, Any]:
@@ -428,6 +486,12 @@ def build_code_review_coverage(
     metadata. A change's own claimed/forged linkage (e.g. an untrusted
     `claimed_integrated_revision` field a caller attached to a ref mapping) is
     never consulted, so a forged integrated revision has no effect.
+
+    `repo`/`service` are optional but strongly recommended: `_coverage_for_entry`
+    uses them (when present) to bind this bundle to the exact candidate it was
+    assembled for, on top of `candidate_source_revision` -- a bare source-
+    revision string is manifest-entry text and, in a multi-repo/multi-service
+    manifest, is not by itself proof of which candidate this bundle covers.
     """
     included_refs = [_change_ref_id(change, index) for index, change in enumerate(included_change_refs)]
     reviewed = set(trusted_review_refs)
@@ -449,6 +513,8 @@ def build_code_review_coverage(
 
     return {
         "candidate_source_revision": candidate_source_revision,
+        "repo": repo,
+        "service": service,
         "status": status,
         "included_change_refs": included_refs,
         "trusted_review_refs": list(trusted_review_refs),
@@ -485,12 +551,19 @@ class ReleaseResult:
     def __getitem__(self, key: str) -> Any:
         if key == "verdict":
             return self.verdict
-        return getattr(self, key)
+        try:
+            return getattr(self, key)
+        except AttributeError as exc:
+            # Mapping-like access must raise the conventional KeyError, not
+            # leak the attribute-lookup's own AttributeError -- code using the
+            # idiomatic `try: result[key] except KeyError` pattern on this
+            # dict-like object must actually catch the miss.
+            raise KeyError(key) from exc
 
     def get(self, key: str, default: Any = None) -> Any:
         try:
             return self[key]
-        except AttributeError:
+        except KeyError:
             return default
 
 
@@ -522,22 +595,46 @@ def finalize_release(pre: Mapping[str, Any]) -> ReleaseResult:
 _EXISTING_CHECKS = ("pr_review", "k8s", "incident")
 
 
+def _ref_pair_for_entry(
+    entry: ReleaseEntry,
+    start_ref: Any,
+    final_ref: Any,
+) -> tuple[Optional[str], Optional[str]]:
+    """Resolve the (start, final) ref pair to fence for one entry.
+
+    `start_ref`/`final_ref` each accept either a single value (applied to
+    every entry in the manifest -- the original single-entry-manifest shape)
+    or a `{(repo, service): ref}` mapping, so a multi-entry manifest where
+    each entry tracks its own independently mutable `release_ref` gets its
+    own freshness fence instead of one entry's identity silently standing in
+    for every other entry's.
+    """
+    key = (entry.repo, entry.service)
+    resolved_start = start_ref.get(key) if isinstance(start_ref, Mapping) else start_ref
+    resolved_final = final_ref.get(key) if isinstance(final_ref, Mapping) else final_ref
+    return resolved_start, resolved_final
+
+
 def run_release(
     manifest: Any,
     *,
     trusted_reports: Optional[Sequence[Mapping[str, Any]]] = None,
     production_invoke: Optional[Callable[..., Any]] = None,
     check_spy: Any = None,
-    start_ref: Optional[str] = None,
-    final_ref: Optional[str] = None,
+    start_ref: Any = None,
+    final_ref: Any = None,
     code_review_coverage: Optional[Mapping[str, Any]] = None,
 ) -> ReleaseResult:
     """`code_review_coverage`, like `trusted_reports`/`production_invoke`, is a
     trusted-runtime input supplied by release-readiness-checker's own execution
     harness -- never sourced from `manifest` itself. It applies only to the
-    entry whose own `source_revision` matches the bundle's
-    `candidate_source_revision` (see `_coverage_for_entry`); for any other
+    entry whose own `source_revision` (and, when declared, `repo`/`service`)
+    matches the bundle's own scope (see `_coverage_for_entry`); for any other
     entry in a multi-entry manifest it is treated as not supplied.
+
+    `start_ref`/`final_ref` each accept a single value (applied uniformly) or
+    a `{(repo, service): ref}` mapping for independent per-entry freshness
+    tracking -- see `_ref_pair_for_entry`.
     """
     entries = _normalize_manifest(manifest)
     if not entries:
@@ -556,10 +653,10 @@ def run_release(
     unknown_dimensions: list = []
     candidate_changed = False
 
-    ref_moved = start_ref is not None and final_ref is not None and start_ref != final_ref
-
     for raw_entry in entries:
         parsed = parse_release_entry(raw_entry)
+        entry_start_ref, entry_final_ref = _ref_pair_for_entry(parsed, start_ref, final_ref)
+        ref_moved = entry_start_ref is not None and entry_final_ref is not None and entry_start_ref != entry_final_ref
 
         # Existing PR/K8s/incident checks are never skipped because of anything
         # production readiness does or doesn't find -- they always run first,
@@ -590,9 +687,11 @@ def run_release(
             # against two different identities is never safe. Applies to every
             # entry (v1 included): this is a general release-candidate identity
             # fence, independent of whether production readiness is separately
-            # gated for that entry.
+            # gated for that entry. Capped, never overwritten: a proven
+            # NOT_READY from a check that already ran this same iteration must
+            # never be silently downgraded to the merely-uncertain UNKNOWN.
             candidate_changed = True
-            overall = "UNKNOWN"
+            overall = cap_release_verdict(overall, "UNKNOWN")
             unknown_dimensions.append("release_ref_freshness")
             continue
 

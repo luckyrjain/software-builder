@@ -85,6 +85,27 @@ All notable changes to the release-readiness-checker skill. Per-file `workflow_v
   path avoids a wasted child invocation. Both now exercise the real path and pass a spy that would fail if
   the invariant regressed.
 
+### Fixed (adversarial review round 3, same day)
+- **`code_review_coverage` is now scoped by repo/service too, not source_revision alone.** Round 2's
+  per-entry binding used only `candidate_source_revision`, which is manifest-entry (caller-controlled)
+  text — two different entries could coincidentally (or deliberately) share the same value.
+  `build_code_review_coverage` now optionally records its own `repo`/`service`, and `_coverage_for_entry`
+  requires them to canonically match too when the bundle declares them.
+- **The final freshness fence now caps the verdict instead of overwriting it** — it previously set
+  `overall = "UNKNOWN"` directly, which could silently downgrade an already-proven `NOT_READY` (worse,
+  per this module's own severity order) down to the merely-uncertain `UNKNOWN`.
+- **`match_release_report`'s environment check now fires whenever either side declares an environment**,
+  not only when the entry does — an entry that simply omits `environment` no longer silently reuses a
+  report produced for some other declared environment.
+- **`_coverage_is_trustworthy_and_complete` now also rejects an internally inconsistent bundle** that
+  claims `COMPLETE` while still listing a non-empty `uncovered_change_refs`.
+- **`production_readiness_required` now accepts the case-insensitive string `"true"`** in addition to the
+  boolean `True` — a quoted `"true"` no longer silently degrades a v2 entry to v1 behavior.
+- **`start_ref`/`final_ref` now accept a `{(repo, service): ref}` mapping** for independent per-entry
+  freshness tracking in a multi-entry manifest, in addition to the original single-value-for-all shape.
+- **`ReleaseResult`'s bracket access now raises `KeyError`** for an unrecognized key instead of leaking
+  the underlying `AttributeError`, matching normal dict-like conventions.
+
 ## [1.0.0] — 2026-08-05
 
 ### Added

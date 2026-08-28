@@ -35,7 +35,7 @@ readiness is never invoked for it. A v2 entry adds:
 | `environment` | No | Deployment environment; exact-match only (`prod` and `production` are different unless authoritative metadata aliases them) |
 | `source_revision` | No | The source commit the deployable was built from — required before a non-source `release_ref` (an image/artifact digest) can safely invoke production readiness |
 | `criticality` | No | `tier0`\|`tier1`\|`tier2`\|`tier3`\|`unknown` |
-| `production_readiness_required` | No, default `false` | `true` marks the entry v2-readiness-required; it never silently skips the gate |
+| `production_readiness_required` | No, default `false` | the boolean `true`, or the case-insensitive string `"true"` (a plausible hand-authoring/templating mistake), marks the entry v2-readiness-required; it never silently skips the gate. Any other value (including an unrecognized truthy string) stays `false` rather than being guessed. |
 | `production_readiness_ref` | No | Optional pointer to a specific prior `production_readiness_report` to prefer during reuse matching |
 
 For a `production_readiness_required: true` entry: reuse a trusted, fresh, deployable-scoped
