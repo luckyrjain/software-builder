@@ -47,10 +47,6 @@ _CHECK_STATUS_VERDICT = {
 }
 
 
-def _as_mapping(value: Any) -> Mapping[str, Any]:
-    return value if isinstance(value, Mapping) else {}
-
-
 def cap_release_verdict(current: str, production_verdict: str) -> str:
     """Worst-first cap: a release verdict is never better than production readiness's own.
 
@@ -81,11 +77,6 @@ class ReleaseEntry:
     criticality: Optional[str] = None
     production_readiness_required: bool = False
     production_readiness_ref: Optional[str] = None
-    # Not part of the v2 manifest schema itself -- an internal carrier so
-    # run_release can pass release-assembled code-review coverage down to a
-    # conditional production-readiness invocation without release-readiness-
-    # checker acquiring a second, competing PR/MR review path (Task 5.5).
-    code_review_coverage: Optional[Mapping[str, Any]] = None
 
     def compatibility_projection(self) -> Mapping[str, Any]:
         """The exact v1 field/shape projection -- must equal `legacy_parse(entry)`
@@ -100,7 +91,7 @@ class ReleaseEntry:
 
 
 def parse_release_entry(entry: Mapping[str, Any]) -> ReleaseEntry:
-    entry = _as_mapping(entry)
+    entry = pr._as_mapping(entry)
     return ReleaseEntry(
         repo=entry.get("repo"),
         service=entry.get("service"),
@@ -111,7 +102,6 @@ def parse_release_entry(entry: Mapping[str, Any]) -> ReleaseEntry:
         criticality=entry.get("criticality"),
         production_readiness_required=entry.get("production_readiness_required") is True,
         production_readiness_ref=entry.get("production_readiness_ref"),
-        code_review_coverage=entry.get("code_review_coverage"),
     )
 
 
@@ -137,7 +127,7 @@ def classify_report_for_release(report: Mapping[str, Any]) -> MutableMapping[str
     a caller-supplied or repository-file artifact is discovery evidence only, per
     the design's "no generic artifact store / file self-attestation" invariant.
     """
-    report = _as_mapping(report)
+    report = pr._as_mapping(report)
     if report.get("producer_trusted", True) is not True:
         return {"trusted_for_gate": False, "reason": "untrusted_producer"}
     acquisition = report.get("acquisition")
@@ -154,7 +144,7 @@ def match_release_report(entry: Any, report: Mapping[str, Any]) -> MutableMappin
     and exact source_revision when the entry declares one. No fuzzy matching.
     """
     parsed = entry if isinstance(entry, ReleaseEntry) else parse_release_entry(entry)
-    report = _as_mapping(report)
+    report = pr._as_mapping(report)
     target = pr._target_of(report) or report
 
     if not parsed.repo or not parsed.service:
@@ -223,18 +213,52 @@ def _candidate_from_entry(entry: ReleaseEntry) -> MutableMapping[str, Any]:
     }
 
 
-def build_assessment_context(entry: ReleaseEntry) -> MutableMapping[str, Any]:
+def _coverage_is_trustworthy_and_complete(coverage: Optional[Mapping[str, Any]]) -> bool:
+    """A release-assembled code_review_coverage bundle is usable only when it is
+    both complete AND carries a host/runtime-authoritative acquisition.
+
+    `coverage` must NEVER be sourced from a caller-supplied/manifest-text channel
+    (see `resolve_production_readiness`'s own `code_review_coverage` parameter,
+    which is deliberately kept separate from the parsed manifest entry) -- but
+    even so, this checks the acquisition field defensively, the same way
+    `scripts/production_readiness.py`'s `validate_code_review_coverage` gates its
+    own `coverage.get("acquisition")` via `_is_host_or_runtime_acquisition`. A
+    bundle claiming `status: COMPLETE` with no (or a weak) acquisition is never
+    trusted merely because it claims completeness -- that is exactly the
+    self-attestation this whole module exists to prevent.
+    """
+    coverage = pr._as_mapping(coverage) if coverage is not None else None
+    if not coverage:
+        return False
+    if coverage.get("status") != "COMPLETE":
+        return False
+    return pr._is_host_or_runtime_acquisition(coverage.get("acquisition"))
+
+
+def build_assessment_context(
+    entry: ReleaseEntry,
+    *,
+    code_review_coverage: Optional[Mapping[str, Any]] = None,
+) -> MutableMapping[str, Any]:
     candidate = _candidate_from_entry(entry)
     inputs: MutableMapping[str, Any] = {}
     input_provenance: MutableMapping[str, Any] = {}
     evidence_refs: list = []
-    if entry.code_review_coverage is not None:
-        inputs["code_review_coverage"] = entry.code_review_coverage
+    if entry.since:
+        # Release base/since context for the child's own impact discovery
+        # (design v10 Sec9.2) -- contextual scoping data, not a trust-bearing
+        # claim, so "caller" authority is the honest label for it.
+        inputs["since"] = entry.since
+        input_provenance["since"] = {"authority": "caller", "evidence_refs": []}
+    if code_review_coverage is not None:
+        inputs["code_review_coverage"] = code_review_coverage
+        authority = "trusted_runtime" if _coverage_is_trustworthy_and_complete(code_review_coverage) else "caller"
+        coverage_refs = list(pr._as_mapping(code_review_coverage).get("evidence_refs", []) or [])
         input_provenance["code_review_coverage"] = {
-            "authority": "trusted_runtime",
-            "evidence_refs": list(entry.code_review_coverage.get("evidence_refs", []) or []),
+            "authority": authority,
+            "evidence_refs": coverage_refs,
         }
-        evidence_refs.extend(entry.code_review_coverage.get("evidence_refs", []) or [])
+        evidence_refs.extend(coverage_refs)
     return {
         "assessment_target": candidate,
         "inputs": inputs,
@@ -249,8 +273,17 @@ def resolve_production_readiness(
     *,
     trusted_reports: Optional[Sequence[Mapping[str, Any]]] = None,
     production_invoke: Optional[Callable[..., Any]] = None,
+    code_review_coverage: Optional[Mapping[str, Any]] = None,
 ) -> MutableMapping[str, Any]:
     """Reuse-first, conditional-invoke resolution for one v2 manifest entry.
+
+    `code_review_coverage` is a trusted-runtime input the caller (release-
+    readiness-checker's own orchestration, after real SCM enumeration) supplies
+    out of band -- deliberately NOT a field read off the untrusted manifest-entry
+    mapping, so a `release_manifest` author can never inject a self-attested
+    "already reviewed, trust me" coverage bundle merely by adding a key to their
+    YAML. See `_coverage_is_trustworthy_and_complete` for the defensive
+    acquisition check applied on top of that structural separation.
 
     Never invoked at all for a v1 entry (production_readiness_required defaults
     False) -- callers must check that flag before calling this, matching
@@ -260,30 +293,52 @@ def resolve_production_readiness(
     if not parsed.production_readiness_required:
         return {"status": "NOT_REQUIRED", "source": None, "report": None}
 
-    # Task 5.5: release-assembled code-review coverage that is already known
-    # incomplete must not trigger a child invocation merely to obtain a
-    # predictable UNKNOWN -- and must never be "fixed" by letting the child
-    # revisit pr-review, which would both duplicate the release root's own
-    # review pass and risk defeating the composition recursion guard.
-    if parsed.code_review_coverage is not None and parsed.code_review_coverage.get("status") != "COMPLETE":
-        return {"status": "UNKNOWN", "source": None, "report": None}
-
+    # 1. Reuse first. A trusted, fresh, deployable-scoped report always wins,
+    # regardless of whether release-assembled code-review coverage is ready --
+    # per release-readiness-checker/workflow/run-check.md Sec6, reuse is
+    # attempted before the coverage-driven invoke gate below, never after it.
+    matches = []
     for report in trusted_reports or ():
         classification = classify_report_for_release(report)
         if not classification["trusted_for_gate"]:
             continue
         match = match_release_report(parsed, report)
         if match["status"] == "MATCH":
-            return {"status": report.get("verdict", "UNKNOWN"), "source": "REUSED", "report": report}
+            matches.append(report)
 
+    if parsed.production_readiness_ref is not None:
+        # An explicit pin narrows reuse to the one report it names -- other
+        # identity-matching-but-unpinned reports are not silently substituted.
+        matches = [r for r in matches if r.get("report_ref") == parsed.production_readiness_ref]
+
+    if matches:
+        verdicts = {r.get("verdict", "UNKNOWN") for r in matches}
+        if len(verdicts) > 1:
+            # Two trusted, identity-matching reports that disagree are
+            # conflicting authoritative evidence -- per the evidence-authority
+            # policy, this is never silently resolved by picking one; it is
+            # UNKNOWN until reconciled by a fresher/pinned report.
+            return {"status": "UNKNOWN", "source": None, "report": None}
+        return {"status": matches[0].get("verdict", "UNKNOWN"), "source": "REUSED", "report": matches[0]}
+
+    # 2. Otherwise, invoke only when safe.
     if not _candidate_identity_sufficient(parsed):
+        return {"status": "UNKNOWN", "source": None, "report": None}
+
+    if code_review_coverage is not None and not _coverage_is_trustworthy_and_complete(code_review_coverage):
+        # Task 5.5: release-assembled code-review coverage that is known
+        # incomplete (or not host/runtime-authoritative) must not trigger a
+        # child invocation merely to obtain a predictable UNKNOWN -- and must
+        # never be "fixed" by letting the child revisit pr-review, which would
+        # both duplicate the release root's own review pass and risk defeating
+        # the composition recursion guard.
         return {"status": "UNKNOWN", "source": None, "report": None}
 
     if production_invoke is None:
         return {"status": "UNKNOWN", "source": None, "report": None}
 
     candidate = _candidate_from_entry(parsed)
-    assessment_context = build_assessment_context(parsed)
+    assessment_context = build_assessment_context(parsed, code_review_coverage=code_review_coverage)
     invoked = production_invoke(candidate, assessment_context=assessment_context)
     if invoked is None:
         return {"status": "UNKNOWN", "source": None, "report": None}
@@ -302,12 +357,23 @@ def resolve_production_readiness(
 # ---------------------------------------------------------------------------
 
 
-def _change_ref_id(change: Any) -> Optional[str]:
+def _change_ref_id(change: Any, index: int) -> str:
+    """Resolve one included-change entry to a stable ref string.
+
+    A malformed/unresolvable entry (wrong key, non-mapping, empty string, ...)
+    is never dropped -- it becomes a synthetic ref that can never appear in
+    `trusted_review_refs`/`integrated_revisions`, so it always counts as
+    uncovered. Silently skipping it instead would let a manifest with N real
+    changes and one malformed entry look identical to one with N-1 changes,
+    letting coverage read COMPLETE when a real change was never accounted for.
+    """
     if isinstance(change, Mapping):
-        return change.get("ref")
-    if isinstance(change, str):
+        ref = change.get("ref")
+        if isinstance(ref, str) and ref:
+            return ref
+    elif isinstance(change, str) and change:
         return change
-    return None
+    return f"__unresolvable_change_{index}__"
 
 
 def build_code_review_coverage(
@@ -331,7 +397,7 @@ def build_code_review_coverage(
     `claimed_integrated_revision` field a caller attached to a ref mapping) is
     never consulted, so a forged integrated revision has no effect.
     """
-    included_refs = [ref for ref in (_change_ref_id(c) for c in included_change_refs) if ref is not None]
+    included_refs = [_change_ref_id(change, index) for index, change in enumerate(included_change_refs)]
     reviewed = set(trusted_review_refs)
     integrated_revisions = dict(integrated_revisions or {})
 
@@ -377,7 +443,6 @@ class ReleaseResult:
     skill_result: SkillResult
     production_readiness_source: Optional[str] = None
     production_readiness: Optional[str] = None
-    production_readiness_invoked_pr_review: bool = False
     checks: list = dataclasses.field(default_factory=list)
     candidate_changed_during_review: bool = False
 
@@ -403,7 +468,7 @@ def finalize_release(pre: Mapping[str, Any]) -> ReleaseResult:
     required dimension makes the result PARTIAL regardless of what the (possibly
     already-worst-case) verdict is; an empty manifest is BLOCKED, never FAILED.
     """
-    pre = _as_mapping(pre)
+    pre = pr._as_mapping(pre)
     overall = pre.get("overall", "UNKNOWN")
     unknown_dimensions = list(pre.get("unknown_dimensions") or [])
     status = "PARTIAL" if unknown_dimensions else "SUCCESS"
@@ -413,7 +478,6 @@ def finalize_release(pre: Mapping[str, Any]) -> ReleaseResult:
         skill_result=SkillResult(status=status, evidence_status=evidence_status),
         production_readiness_source=pre.get("production_readiness_source"),
         production_readiness=pre.get("production_readiness"),
-        production_readiness_invoked_pr_review=bool(pre.get("production_readiness_invoked_pr_review", False)),
         checks=list(pre.get("checks", [])),
         candidate_changed_during_review=bool(pre.get("candidate_changed_during_review", False)),
     )
@@ -434,7 +498,14 @@ def run_release(
     check_spy: Any = None,
     start_ref: Optional[str] = None,
     final_ref: Optional[str] = None,
+    code_review_coverage: Optional[Mapping[str, Any]] = None,
 ) -> ReleaseResult:
+    """`code_review_coverage`, like `trusted_reports`/`production_invoke`, is a
+    trusted-runtime input supplied by release-readiness-checker's own execution
+    harness -- never sourced from `manifest` itself. It applies to whichever
+    entry in this run requires production readiness (today's real orchestration
+    calls this per release candidate, matching every existing test's shape).
+    """
     entries = _normalize_manifest(manifest)
     if not entries:
         # HARD STOP per v1's own definition_of_done -- an empty manifest is a
@@ -465,7 +536,13 @@ def run_release(
                 outcome = check_spy.run(name)
                 status = outcome.get("status", "UNKNOWN") if isinstance(outcome, Mapping) else "UNKNOWN"
                 checks.append({"name": name, "status": status, "executed": True})
-                overall = cap_release_verdict(overall, _CHECK_STATUS_VERDICT.get(status, "UNKNOWN"))
+                mapped = _CHECK_STATUS_VERDICT.get(status, "UNKNOWN")
+                overall = cap_release_verdict(overall, mapped)
+                if mapped == "UNKNOWN":
+                    # An executed check that itself resolved to an evidence gap
+                    # is exactly as unresolved as one that never ran at all --
+                    # both must be reported PARTIAL, never a false SUCCESS.
+                    unknown_dimensions.append(name)
             else:
                 # No wrapped-skill harness supplied -- an unexecuted check is an
                 # evidence gap (UNKNOWN), never an implicit PASS.
@@ -477,7 +554,10 @@ def run_release(
             # Task 6.5 final freshness fence: a mutable release reference that
             # resolved differently between the start and end of this run means
             # the candidate moved mid-review -- combining evidence gathered
-            # against two different identities is never safe.
+            # against two different identities is never safe. Applies to every
+            # entry (v1 included): this is a general release-candidate identity
+            # fence, independent of whether production readiness is separately
+            # gated for that entry.
             candidate_changed = True
             overall = "UNKNOWN"
             unknown_dimensions.append("release_ref_freshness")
@@ -490,6 +570,7 @@ def run_release(
             parsed,
             trusted_reports=trusted_reports,
             production_invoke=production_invoke,
+            code_review_coverage=code_review_coverage,
         )
         production_readiness_source = resolution["source"]
         production_readiness_value = resolution["status"]

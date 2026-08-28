@@ -8,6 +8,7 @@ functions rather than pytest fixtures.
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, Mapping, Sequence
 
 from scripts.registry.canonical_manifest import load_canonical_manifest
@@ -92,6 +93,7 @@ def trusted_production_report(
     source_revision: str | None = _DEFAULT_REVISION,
     acquisition: str = "runtime_validated",
     producer_trusted: bool = True,
+    report_ref: str | None = None,
     **extra: Any,
 ) -> dict:
     result = {
@@ -106,6 +108,7 @@ def trusted_production_report(
         "verdict": verdict,
         "acquisition": acquisition,
         "producer_trusted": producer_trusted,
+        "report_ref": report_ref,
         "dimension_statuses": [],
         "conditions": [],
         "waivers": [],
@@ -202,10 +205,20 @@ def max_release_v2_composition_depth() -> int:
 
 
 def child_context(*, parent: str, child: str, depth: int) -> dict:
+    # Tied to the real registry, not pure arithmetic: fails if this edge isn't
+    # actually a registered runtime handoff, so a future removal of the
+    # release->production composition edge breaks this fixture instead of
+    # silently leaving the depth assertion vacuous.
+    if not runtime_handoff_artifacts(parent, child):
+        raise AssertionError(f"no registered runtime handoff from {parent!r} to {child!r}")
     return {"parent": parent, "child": child, "depth": depth + 1}
 
 
 def grandchild_context(*, root: str, parent: str, child: str) -> dict:
+    if not runtime_handoff_artifacts(root, parent):
+        raise AssertionError(f"no registered runtime handoff from {root!r} to {parent!r}")
+    if not runtime_handoff_artifacts(parent, child):
+        raise AssertionError(f"no registered runtime handoff from {parent!r} to {child!r}")
     return {"root": root, "parent": parent, "child": child, "depth": 2}
 
 
@@ -252,16 +265,13 @@ def run_v2_release_with_complete_review_coverage() -> Trace:
             trace.append("pr-review")
         return trusted_production_report(verdict="READY")
 
-    entry = v2_entry(
-        required=True,
-        source_revision=_DEFAULT_REVISION,
-        code_review_coverage=coverage,
-    )
+    entry = v2_entry(required=True, source_revision=_DEFAULT_REVISION)
     release_readiness_v2.run_release(
         entry,
         trusted_reports=[],
         production_invoke=production_invoke,
         check_spy=_CheckSpy(),
+        code_review_coverage=coverage,
     )
     return Trace(trace, production_readiness_invoked_pr_review=invoked_pr_review_in_child["value"])
 
@@ -291,16 +301,19 @@ def run_v2_release_with_uncovered_change():
         trace.append("pr-review")
         return trusted_production_report(verdict="READY")
 
-    entry = v2_entry(
-        required=True,
-        source_revision=_DEFAULT_REVISION,
-        code_review_coverage=coverage,
-    )
+    entry = v2_entry(required=True, source_revision=_DEFAULT_REVISION)
     result = release_readiness_v2.run_release(
         entry,
         trusted_reports=[],
         production_invoke=production_invoke,
         check_spy=_CheckSpy(),
+        code_review_coverage=coverage,
     )
-    result.production_readiness_invoked_pr_review = invoked_pr_review_in_child["value"]
-    return result
+    # A plain wrapper, never a mutation of the real ReleaseResult dataclass --
+    # `production_readiness_invoked_pr_review` here is this fixture's OWN
+    # bookkeeping of whether its fake `production_invoke` was ever called,
+    # not something the real run_release return value claims to observe.
+    return SimpleNamespace(
+        overall=result.overall,
+        production_readiness_invoked_pr_review=invoked_pr_review_in_child["value"],
+    )

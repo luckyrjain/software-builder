@@ -43,6 +43,33 @@ All notable changes to the release-readiness-checker skill. Per-file `workflow_v
   build provenance — the production-readiness dimension and the release verdict stay `UNKNOWN`.
 - Design spec: [docs/superpowers/plans/2026-08-23-engineering-decision-delivery-after-pr159-design-v10.md](../docs/superpowers/plans/2026-08-23-engineering-decision-delivery-after-pr159-design-v10.md)
 
+### Fixed (adversarial review, same day)
+- **Closed a self-attestation bypass.** `code_review_coverage` was read directly off the untrusted
+  `release_manifest` entry mapping and, if it claimed `status: COMPLETE`, stamped `authority:
+  trusted_runtime` in `assessment_context` with no check of its own `acquisition` field — a manifest
+  author could add a forged `code_review_coverage: {status: COMPLETE, ...}` block and have it accepted
+  as "already reviewed" evidence with no real SCM enumeration ever happening. Fixed by making
+  `code_review_coverage` a `run_release`/`resolve_production_readiness` parameter supplied out-of-band by
+  the trusted execution harness (mirroring `trusted_reports`/`production_invoke`, never the manifest
+  text), plus a defensive `acquisition` check (`_coverage_is_trustworthy_and_complete`) so even a
+  correctly-sourced-but-weakly-authoritative bundle can never gate an invocation as complete.
+- **Fixed reuse-before-completeness ordering.** The incomplete-coverage short-circuit ran *before* the
+  trusted-report reuse loop, discarding a valid `REUSED`-able report whenever coverage happened to be
+  supplied and incomplete. Reuse is now attempted first, exactly as documented.
+- **Conflicting trusted reports are `UNKNOWN`, not first-match.** Two trusted, identity-matching
+  `production_readiness_report`s that disagree in verdict are now treated as conflicting authoritative
+  evidence rather than silently resolved by picking whichever came first in the list; an explicit
+  `production_readiness_ref` pin (previously parsed but never read) now narrows reuse to the report it
+  names.
+- **A malformed `included_change_refs` entry is never silently dropped** from `build_code_review_coverage`
+  — it now always counts as uncovered instead of vanishing from the enumeration.
+- **An executed existing check (pr-review/k8s/incident-rca) that itself resolves to an evidence gap** now
+  correctly makes `skill_result.status` `PARTIAL`, matching an unexecuted check; previously only a missing
+  check harness triggered that.
+- Strengthened test-fixture fidelity: `child_context`/`grandchild_context` now validate against the real
+  registry runtime-handoff data instead of returning pure arithmetic, and the Task 5.5 no-revisit harness
+  no longer mutates the real `ReleaseResult` return value with test-only bookkeeping.
+
 ## [1.0.0] — 2026-08-05
 
 ### Added

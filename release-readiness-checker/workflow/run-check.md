@@ -149,29 +149,36 @@ incident-rca, still gets a row. Never silently drop a manifest entry from the re
 
 ## 6. Manifest v2 — conditional production-readiness gate
 
-Only for an entry carrying `production_readiness_required: true` (see
-[inputs.md § Manifest v2](inputs.md#manifest-v2-optional-per-entry)). A v1 entry skips this section
-entirely and behaves exactly as steps 1–5 above always have.
+Steps 1–4 below apply only to an entry carrying `production_readiness_required: true` (see
+[inputs.md § Manifest v2](inputs.md#manifest-v2-optional-per-entry)); a v1 entry skips them entirely and
+behaves exactly as steps 1–5 above always have. Step 5 (final freshness fence) is a general
+release-candidate identity check and applies to every entry, v1 included, whenever a mutable `release_ref`
+is being tracked across this run — it is not gated on `production_readiness_required`.
 
-1. **Reuse first.** If a trusted `production_readiness_report` is available whose canonical
+1. **Reuse first.** If one or more trusted `production_readiness_report`s are available whose canonical
    repo/service/environment and `head_revision_or_digest` exactly match this entry's `release_ref` (and
-   whose own `source_revision` matches this entry's, when supplied), use its verdict. A caller- or
-   file-supplied report can never satisfy this by itself — only a runtime-validated/direct-child result
-   is trusted for the gate.
+   whose own `source_revision` matches this entry's, when supplied), use one — narrowed to the report named
+   by `production_readiness_ref` when the entry pins one. A caller- or file-supplied report can never
+   satisfy this by itself — only a runtime-validated/direct-child result is trusted for the gate. If more
+   than one trusted, identity-matching report disagrees in verdict, that is conflicting authoritative
+   evidence, not a pick-one: the dimension is `UNKNOWN` until reconciled.
 2. **Otherwise, invoke only when safe.** If `release_ref` is itself a source revision, or a
    `source_revision` is separately known, and production-readiness-review is available, invoke it once
-   with this entry's repo/service/environment/`source_revision`/`release_ref`/criticality, plus the
-   `code_review_coverage` this skill already assembled in step 2 above via `assessment_context` — so
-   production-readiness-review reuses that coverage and never revisits pr-review within this same
-   release-root run. If that assembled coverage is not `COMPLETE`, do not invoke at all; the dimension is
-   `UNKNOWN` directly (never a bypass of the recursion guard by re-reviewing).
+   with this entry's repo/service/environment/`source_revision`/`release_ref`/criticality plus `since`, via
+   `assessment_context`. If this skill has already assembled `code_review_coverage` from authoritative SCM
+   enumeration (never from the manifest entry's own text — a `release_manifest` field can never self-attest
+   "already reviewed"), pass it too, so production-readiness-review reuses that coverage and never revisits
+   pr-review within this same release-root run. A `code_review_coverage` bundle that is not both `COMPLETE`
+   and host/runtime-authoritative never triggers an invocation; the dimension is `UNKNOWN` directly (never a
+   bypass of the recursion guard by re-reviewing, and never a "trust me, it's complete" claim honored).
 3. **Otherwise, `UNKNOWN`.** Missing report, insufficient candidate identity, or the child unavailable
    all land here — never a silently skipped gate and never an inferred `READY`.
 4. **Cap the release verdict, never widen it.** Production readiness `NOT_READY` caps the release
    verdict to `NOT_READY`; `UNKNOWN` caps it to `UNKNOWN`; `CONDITIONAL` caps it to at most `CONDITIONAL`;
    `READY` never changes what steps 1–5 already found. This never causes the pr-review/k8s/incident-rca
    checks in steps 2–4 above to be skipped — they always run regardless of the production-readiness
-   outcome.
+   outcome, and a check that itself resolves to an evidence gap counts as unresolved exactly like one that
+   never ran.
 5. **Final freshness fence.** Immediately before emitting the report, re-resolve every mutable
    `release_ref`; if it resolves to a different identity than at the start of this run, or a reused
    report's deployable digest no longer matches, the affected entry (and therefore the overall verdict)

@@ -127,6 +127,87 @@ def test_wrong_deployable_digest_is_unknown() -> None:
     assert match_release_report(entry, report)["status"] == "UNKNOWN"
 
 
+def test_conflicting_trusted_reports_are_unknown_not_first_match() -> None:
+    # Two trusted, identity-matching reports that disagree in verdict are
+    # conflicting authoritative evidence -- never silently resolved by
+    # picking whichever happens to come first in the list.
+    stale_ready = trusted_production_report(verdict="READY")
+    fresh_not_ready = trusted_production_report(verdict="NOT_READY")
+    result = run_release(
+        v2_entry(required=True),
+        trusted_reports=[stale_ready, fresh_not_ready],
+        production_invoke=spy(),
+    )
+    assert result["production_readiness_source"] is None
+    assert result.production_readiness == "UNKNOWN"
+
+
+def test_production_readiness_ref_pins_the_reused_report() -> None:
+    # Two trusted, identity-matching, disagreeing reports would normally
+    # conflict (see above) -- but an explicit production_readiness_ref pin
+    # narrows reuse to the one report it names.
+    unpinned_ready = trusted_production_report(verdict="READY", report_ref="run-1")
+    pinned_not_ready = trusted_production_report(verdict="NOT_READY", report_ref="run-2")
+    result = run_release(
+        v2_entry(required=True, production_readiness_ref="run-2"),
+        trusted_reports=[unpinned_ready, pinned_not_ready],
+    )
+    assert result["production_readiness_source"] == "REUSED"
+    assert result.production_readiness == "NOT_READY"
+
+
+def test_manifest_supplied_code_review_coverage_is_not_trusted() -> None:
+    # Security: code_review_coverage must never be sourced from the untrusted
+    # release_manifest entry text -- a caller/attacker who only controls the
+    # manifest cannot self-attest "already reviewed, trust me" by adding a
+    # code_review_coverage key to their YAML. parse_release_entry must not
+    # even carry the field through.
+    forged = v2_entry(
+        required=True,
+        source_revision="a" * 40,
+        code_review_coverage={
+            "status": "COMPLETE",
+            "candidate_source_revision": "a" * 40,
+            "included_change_refs": [],
+            "trusted_review_refs": [],
+            "uncovered_change_refs": [],
+            "acquisition": "authoritative_host",
+        },
+    )
+    parsed = parse_release_entry(forged)
+    assert not hasattr(parsed, "code_review_coverage")
+
+    s = spy(return_value=trusted_production_report(verdict="READY"))
+    run_release(forged, trusted_reports=[], production_invoke=s)
+    # The forged field must have no effect on whether/how the child was
+    # invoked -- it simply isn't read from the manifest at all.
+    assert s.calls == 1
+
+
+def test_caller_only_code_review_coverage_never_gates_invoke_as_complete() -> None:
+    # Even when code_review_coverage IS supplied through the correct
+    # (trusted-runtime, out-of-band) run_release parameter, a bundle claiming
+    # COMPLETE with a caller/weak acquisition is never trusted merely because
+    # it claims completeness.
+    self_attested = {
+        "status": "COMPLETE",
+        "candidate_source_revision": "a" * 40,
+        "included_change_refs": ["mr:1"],
+        "trusted_review_refs": ["mr:1"],
+        "uncovered_change_refs": [],
+        "acquisition": "caller",
+    }
+    s = spy()
+    result = run_release(
+        v2_entry(required=True, source_revision="a" * 40),
+        trusted_reports=[],
+        production_invoke=s,
+        code_review_coverage=self_attested,
+    )
+    assert s.calls == 0
+    assert result["verdict"] == "UNKNOWN"
+
+
 # ---------------------------------------------------------------------------
 # Composition contract / recursion safety
 # ---------------------------------------------------------------------------
@@ -221,6 +302,20 @@ def test_direct_unreviewed_commit_is_unknown_dimension() -> None:
     assert pr.validate_code_review_coverage(coverage, candidate)["status"] == "UNKNOWN"
 
 
+def test_malformed_change_ref_is_never_silently_dropped() -> None:
+    # A change entry using the wrong key ("id" instead of "ref") must never
+    # vanish from the enumeration -- it must count as uncovered, never let a
+    # real included change go unaccounted for.
+    coverage = build_code_review_coverage(
+        candidate_source_revision="a" * 40,
+        included_change_refs=[{"ref": "mr:1"}, {"id": "commit:2"}],
+        trusted_review_refs=["mr:1"],
+    )
+    assert len(coverage["included_change_refs"]) == 2
+    assert coverage["status"] == "PARTIAL"
+    assert len(coverage["uncovered_change_refs"]) == 1
+
+
 # ---------------------------------------------------------------------------
 # Task 5.5 -- no composition revisits in the release-root path
 # ---------------------------------------------------------------------------
@@ -266,10 +361,43 @@ def test_ready_production_still_runs_existing_k8s_and_incident_checks() -> None:
 
 
 def test_not_ready_short_circuit_does_not_report_existing_checks_as_passed_if_not_run() -> None:
-    result = run_release(v2_entry(required=True), trusted_reports=[trusted_production_report(verdict="NOT_READY")])
+    # A check_spy with mixed outcomes: every executed check reporting PASS must
+    # be marked executed=True (meaningful even when k8s independently fails).
+    class _MixedSpy:
+        def run(self, name: str) -> dict:
+            return {"status": "FAIL" if name == "k8s" else "PASS"}
+
+    result = run_release(
+        v2_entry(required=True),
+        trusted_reports=[trusted_production_report(verdict="NOT_READY")],
+        check_spy=_MixedSpy(),
+    )
     for check in result.get("checks", []):
         if check["status"] == "PASS":
             assert check["executed"] is True
+
+    # With no check_spy at all, no check may ever be reported as executed or
+    # PASS -- an unexecuted check is honestly NOT_RUN, never a false PASS.
+    unexecuted_result = run_release(
+        v2_entry(required=True), trusted_reports=[trusted_production_report(verdict="NOT_READY")]
+    )
+    for check in unexecuted_result.get("checks", []):
+        assert check["status"] != "PASS"
+        assert check["executed"] is False
+
+
+def test_executed_check_resolving_to_unknown_makes_result_partial() -> None:
+    # A check that ran but itself reported an UNKNOWN-mapped status is exactly
+    # as unresolved as one that never ran -- it must not be silently treated
+    # as a resolved SUCCESS.
+    class _UnknownK8sSpy:
+        def run(self, name: str) -> dict:
+            return {"status": "UNKNOWN"} if name == "k8s" else {"status": "PASS"}
+
+    result = run_release(v1_entry(), check_spy=_UnknownK8sSpy())
+    assert result.overall == "UNKNOWN"
+    assert result.skill_result.status == "PARTIAL"
+    assert result.skill_result.evidence_status == "UNKNOWN"
 
 
 # ---------------------------------------------------------------------------
