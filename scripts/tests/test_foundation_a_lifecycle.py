@@ -30,7 +30,7 @@ def test_architecture_rework_is_recommendation_not_runtime_cycle() -> None:
 
 
 def test_foundation_a_lifecycle_consume_fields_are_exact() -> None:
-    registry = load_registry(ROOT)
+    load_registry(ROOT)
     contracts = load_unique_yaml_file(ROOT / "skills.yaml")["contracts"]["composition"]["skills"]
     sd = contracts["system-design"]
     ar = contracts["architecture-review"]

@@ -14,7 +14,6 @@ through the real scripts.production_readiness orchestration logic.
 
 from __future__ import annotations
 
-from pathlib import Path
 
 from scripts import production_readiness as pr
 from scripts import release_readiness_v2

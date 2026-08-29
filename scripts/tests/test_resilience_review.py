@@ -706,7 +706,6 @@ def test_a_proven_failure_with_a_top_level_blocker_reports_blocked_completion_no
 
 
 def test_a_proven_failure_with_an_unresolved_dimension_reports_partial_completion_not_success() -> None:
-    behavior = {dimension: f"documented {dimension}" for dimension in ALL_DIMENSIONS}
     invocation = _complete_invocation(
         dimension_assessments={dimension: "FAIL" for dimension in ALL_DIMENSIONS},
         evidence=[

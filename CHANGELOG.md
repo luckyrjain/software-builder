@@ -6,6 +6,19 @@ the create-skill anti-pattern on time-sensitive info).
 
 Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/README.md).
 
+## Platform
+
+### Close gap-analysis findings: docs, Python static analysis (2026-08-29)
+
+- Added `resilience-review/README.md` (the only one of 38 skills missing it) and added
+  `resilience-review` and `implementation-planner` to the top-level `README.md` skills tables; both
+  landed with the v10 companion-deliverable roadmap but were never listed.
+- Added `make lint-python` (`ruff check scripts/`, scoped to pyflakes correctness rules and syntax
+  errors only via `ruff.toml` — no opinionated style enforcement) to the `lint` target chain, and
+  `ruff` to `requirements.txt`/`requirements.lock`. Fixed the 12 pre-existing findings this surfaced:
+  7 unused imports, 3 unused variables, 1 loop variable shadowing an import, and 1 undefined name in
+  a deferred (`from __future__ import annotations`) return annotation.
+
 ### Add release readiness manifest v2 (2026-08-28)
 
 - `release-readiness-checker` 1.0.0 -> 1.1.0: manifest v2 (`environment`, `source_revision`,

@@ -1,0 +1,9 @@
+# Python static analysis for scripts/. Scoped to pyflakes (F) and syntax errors
+# (E9) only -- correctness signals (unused imports/variables, undefined names,
+# shadowed builtins), not opinionated style. This repo has no prior Python
+# style tooling; widening beyond F/E9 is a separate decision, not a lint-drift
+# side effect.
+target-version = "py312"
+
+[lint]
+select = ["F", "E9"]
