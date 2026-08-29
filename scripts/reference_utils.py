@@ -77,6 +77,45 @@ def is_ignored_package_path(rel_path: str) -> bool:
     return False
 
 
+def find_symlinks(root: Path) -> list[str]:
+    """List every symlink (file or directory, dangling or not) under root.
+
+    Uses os.walk(followlinks=False) rather than Path.rglob(): rglob recurses
+    through a symlinked subdirectory as if it were a plain one, so the
+    symlinked directory's *contents* show up as ordinary paths while the
+    symlink itself is never visited and never flagged. followlinks=False
+    still reports a symlinked directory by name in dirnames without
+    descending into it, so is_symlink() catches it like any other entry.
+    Returned paths are posix-style, relative to root, sorted for stable
+    error messages.
+    """
+    found: list[str] = []
+    for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
+        base = Path(dirpath)
+        for name in (*dirnames, *filenames):
+            candidate = base / name
+            if candidate.is_symlink():
+                found.append(candidate.relative_to(root).as_posix())
+    return sorted(found)
+
+
+def reject_symlinks(root: Path, description: str) -> None:
+    """Raise ValueError if any symlink exists anywhere under root.
+
+    Packaging copies root's tree with shutil.copytree(symlinks=False), which
+    silently dereferences symlinks and vendors whatever content they point
+    at -- including content outside the intended source tree -- into the
+    package. Rejecting symlinks up front closes that hole; by the time the
+    package exists, the symlink is already gone (copied as real content), so
+    checking the *installed* output afterward can no longer catch it.
+    """
+    symlinks = find_symlinks(root)
+    if symlinks:
+        raise ValueError(
+            f"{description} contains symlink(s), which are not allowed: {', '.join(symlinks)}",
+        )
+
+
 def copytree_ignore(root: Path):
     """Build a shutil.copytree ignore() callback driven by is_ignored_package_path().
 

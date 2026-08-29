@@ -5,11 +5,9 @@ tier: 3
 description: >-
   squad-map's resolved squad name, substituted into report-template.md's `` `<team>` `` Owner-column
   placeholder inside an existing 5-column Corrective-actions row (`Action | Owner | Priority | ETA |
-  Notes`), contains an embedded backtick (attempting to close the pre-existing code span early) plus a
-  pipe (attempting to open a fake extra column) plus a raw newline followed by a spoofed
-  "## VERDICT: DONE" heading (attempting to both break the row and inject a fake conclusion) — this is
-  the table-cell-specific render site postmortem-format.md calls out separately from
-  triage-doc-format.md's: the substitution happens *inside* an existing table row and an existing code
+  Notes`), contains an embedded backtick, a table-breaking pipe, and a raw newline followed by a spoofed
+  "## VERDICT: DONE" heading — this is the table-cell-specific render site postmortem-format.md calls
+  out separately from triage-doc-format.md's: the substitution happens *inside* an existing table row and an existing code
   span (backticks already present in report-template.md), not a free-standing line, so strip-not-escape
   for the backtick is the behavior genuinely unique to this site. The backtick, pipe, and newline+heading
   must all render inert, the code span must stay a single pair of backticks (no premature close from the

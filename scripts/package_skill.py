@@ -23,6 +23,7 @@ from reference_utils import (
     framework_relative_path,
     is_ignored_package_path,
     is_local_markdown_link,
+    reject_symlinks,
     rewrite_framework_links,
     sha256_file,
     split_link_target,
@@ -77,6 +78,7 @@ def vendor_readme_superpowers_specs(repo_root: Path, package_root: Path) -> None
 
 def vendor_framework_tree(repo_root: Path, package_root: Path) -> list[str]:
     framework_src = repo_root / "docs" / "skill-framework"
+    reject_symlinks(framework_src, "vendored framework tree")
     framework_dest = package_root / "docs" / "skill-framework"
     if framework_dest.exists():
         shutil.rmtree(framework_dest)
@@ -217,6 +219,8 @@ def package_skill(
     if not skill_md.is_file():
         raise FileNotFoundError(f"skill not found at {skill_md}")
 
+    reject_symlinks(skill_src, f"skill source tree ({skill})")
+
     if dest.exists():
         shutil.rmtree(dest)
 
@@ -274,6 +278,8 @@ def validate_skill_name(skill: str) -> None:
 
 
 def validate_destination(dest: Path) -> None:
+    # Path.is_symlink() uses lstat() and does not require the link target to
+    # exist, so this also rejects dangling symlinks, not just live ones.
     if dest.is_symlink():
         raise ValueError(f"refusing to replace symlink destination: {dest}")
 
@@ -281,9 +287,16 @@ def validate_destination(dest: Path) -> None:
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     repo_root = args.repo_root.resolve()
-    dest = args.dest.resolve()
 
     try:
+        # Validate the raw --dest argument *before* resolving it: Path.resolve()
+        # follows symlinks, so a symlinked dest would no longer look like a
+        # symlink by the time it reached package_skill()'s own
+        # validate_destination() call, letting a caller-supplied symlink slip
+        # through and later get recursively deleted by shutil.rmtree() when it
+        # "exists".
+        validate_destination(args.dest)
+        dest = args.dest.resolve()
         package_skill(
             skill=args.skill,
             repo_root=repo_root,
