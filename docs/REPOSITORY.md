@@ -43,7 +43,22 @@ software-builder/
 ├── contract-test-creator/     # Consumer-driven contract tests (Pact-style)
 ├── e2e-test-creator/          # Full user-journey browser tests (Playwright/Cypress/Selenium)
 ├── api-test-creator/          # Black-box Postman/Newman request/response tests against a real API
-└── change-impact-analyzer/    # Bounded impact analysis for designs and exact PR/MR heads
+├── change-impact-analyzer/    # Bounded impact analysis for designs and exact PR/MR heads
+├── prd-architect/             # Idea validation + implementation-ready PRDs with Build Readiness gating
+├── implementation-planner/    # Dependency-ordered implementation plan feeding loop-task-implementer
+├── production-readiness-review/ # Read-only rollup verdict for one exact PR/MR/release candidate
+├── architecture-review/       # Architecture decision, risks, scale limits, failure modes, alternatives
+├── system-design/             # Implementation-level design: components, APIs, data model, rollout
+├── api-design-review/         # REST/GraphQL/gRPC/async-event design review
+├── database-review/           # Schema, indexing, locking, transactions, migrations, query plans
+├── security-review/           # AuthN/authZ, secrets, injection, SSRF, tenant isolation, crypto review
+├── performance-review/        # Algorithmic complexity, DB behavior, cache, memory, concurrency review
+├── capacity-planner/          # Historical demand -> RPS/CPU/memory/DB/queue/storage/replica forecast
+├── observability-review/      # Metrics, logs, tracing, dashboards, alerts, SLO coverage review
+├── deployment-risk-review/    # Blast radius, migration risk, rollback complexity, traffic risk review
+├── resilience-review/         # Timeout budgets, retries, circuit breaking, backpressure, recovery review
+├── dependency-upgrade-review/ # Breaking changes, CVEs, API diffs, transitive dependency rollout risk
+└── tech-debt-assessor/        # Ranks debt by business impact x engineering drag x risk / effort
 ```
 
 Each skill directory follows the same pattern:

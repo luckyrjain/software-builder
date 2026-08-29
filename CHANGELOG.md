@@ -8,6 +8,18 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 
 ## Platform
 
+### Fix stale documentation cross-references (2026-08-29)
+
+- `docs/README.md`: added the missing `resilience-review` row to the human-facing skills table (37 of
+  38 skills were listed; the skill existed and was already linked everywhere else).
+- `docs/REPOSITORY.md`: brought the illustrative repository-layout tree back in sync with the 38 actual
+  skill directories — it was missing 15 skills added since it was last hand-edited (`prd-architect`,
+  `implementation-planner`, `production-readiness-review`, `architecture-review`, `system-design`,
+  `api-design-review`, `database-review`, `security-review`, `performance-review`, `capacity-planner`,
+  `observability-review`, `deployment-risk-review`, `resilience-review`, `dependency-upgrade-review`,
+  `tech-debt-assessor`). The generated `registry-skills-table` immediately below it was already
+  accurate; only the hand-maintained ASCII tree had drifted.
+
 ### Close gap-analysis findings: docs, Python static analysis (2026-08-29)
 
 - Added `resilience-review/README.md` (the only one of 38 skills missing it) and added
