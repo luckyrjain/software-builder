@@ -259,8 +259,16 @@ def run_all(
         )
         results.extend(platform_results)
 
-        mutation_results = run_guardrail_mutation_checks(root, golden_cases)
-        results.extend(mutation_results)
+        # Dynamic mutate-and-reassert guardrail proof (distinct from
+        # _mutation_anchor_matrix below, which only checks the anchor's
+        # static raw_pattern -- this actually mutates fixtures and reruns
+        # golden assertions against them). Must run through the real eval
+        # CLI, not just pytest, or a broken guardrail is invisible here. Runs
+        # before run_batch3_contract_checks() because that check's own
+        # behavior-scenario-matrix cross-references these "batch3-mutation/*"
+        # result IDs inside case_results -- they must already be present by
+        # the time it runs, not added afterward.
+        results.extend(run_guardrail_mutation_checks(root, golden_cases))
 
         results.extend(
             run_batch3_contract_checks(
@@ -270,12 +278,6 @@ def run_all(
                 golden_cases=golden_cases,
             ),
         )
-        # Dynamic mutate-and-reassert guardrail proof (distinct from
-        # _mutation_anchor_matrix above, which only checks the anchor's
-        # static raw_pattern -- this actually mutates fixtures and reruns
-        # golden assertions against them). Must run through the real eval
-        # CLI, not just pytest, or a broken guardrail is invisible here.
-        results.extend(run_guardrail_mutation_checks(root, golden_cases))
     return results
 
 

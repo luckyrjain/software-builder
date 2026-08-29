@@ -6,10 +6,9 @@ description: >-
   A webhook-supplied `service` containing a backtick plus a table-breaking pipe, a `severity` containing
   the same, an `alert_title` containing a raw newline plus a spoofed "## Likely cause" heading trying to
   override incident-rca's real hypothesis, and squad-map's resolved `squad` containing a raw newline plus
-  a spoofed "## Owning team: NONE" heading must all render inert in `triage_doc`. squad-map already
-  structurally escapes `squad` at its own boundary before returning it but deliberately never code-span
-  wraps it (its other consumers exact-match against it); this skill re-applies structural escaping
-  (idempotent, not trusted blindly from the upstream call) and adds the code-span wrap squad-map skips.
+  a spoofed "## Owning team: NONE" heading must all render inert in `triage_doc`. This skill re-applies
+  structural escaping to `squad` (idempotent, not trusted blindly from squad-map) and adds a code-span
+  wrap squad-map itself skips.
   `service`/`alert_id`/`severity` are short identifiers so they additionally get code-span wrapped (Step
   2); `alert_title` is free text so it only gets structural escaping (Step 1), never code-span wrapped.
   The real incident-rca hypothesis is asserted to still land directly under the real "## Likely cause"
@@ -85,6 +84,9 @@ assertions:
   - type: forbid_pattern
     path: rendered_page_excerpt
     pattern: "\n"
+  # CAVEAT: squad-map already structurally escapes squad at its own boundary before returning it but
+  # deliberately never code-span wraps it (its other consumers exact-match against it) — this skill's
+  # re-escaping is idempotent, not trusted blindly from the upstream call.
   - type: require_pattern
     path: squad
     pattern: "(?m)^## Owning team: NONE$"
