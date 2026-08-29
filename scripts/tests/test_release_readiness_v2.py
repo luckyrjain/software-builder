@@ -100,6 +100,38 @@ def test_v2_required_reuses_trusted_report_first() -> None:
     assert result["production_readiness_source"] == "REUSED"
 
 
+def test_reuse_wins_even_when_code_review_coverage_is_incomplete() -> None:
+    # Regression for the ordering itself, not just each side alone: reuse
+    # (step 1) and the coverage-completeness gate (step 2) are both present
+    # in the same call here, so a future swap of their order -- which would
+    # make an incomplete `code_review_coverage` short-circuit to UNKNOWN
+    # before the trusted-report loop ever runs -- fails this test even
+    # though test_v2_required_reuses_trusted_report_first (no coverage
+    # supplied at all) and test_incomplete_release_review_coverage_stays_
+    # unknown_without_revisit (no trusted report supplied at all) would
+    # both still pass.
+    entry = v2_entry(required=True, repo="acme/checkout", service="checkout", source_revision="a" * 40)
+    report = trusted_production_report(
+        verdict="READY", repo="acme/checkout", service="checkout", source_revision="a" * 40
+    )
+    incomplete_coverage = build_code_review_coverage(
+        candidate_source_revision="a" * 40,
+        repo="acme/checkout",
+        service="checkout",
+        included_change_refs=["mr:1", "commit:2"],
+        trusted_review_refs=["mr:1"],
+    )
+    s = spy()
+
+    result = resolve_production_readiness(
+        entry, trusted_reports=[report], production_invoke=s, code_review_coverage=incomplete_coverage
+    )
+
+    assert s.calls == 0
+    assert result["status"] == "READY"
+    assert result["source"] == "REUSED"
+
+
 def test_multi_entry_production_readiness_results_are_all_recorded() -> None:
     # Two entries both require production readiness: acme/a reuses a trusted
     # NOT_READY report, acme/b (processed second) reuses a trusted READY

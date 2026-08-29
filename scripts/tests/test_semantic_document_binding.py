@@ -5,6 +5,7 @@ from pathlib import Path
 from scripts.registry.assessment_target import canonical_text_digest
 from scripts.registry.artifact_contracts import validate_artifact_result
 from scripts.registry.semantic_document import (
+    is_sha256_digest,
     resolve_architecture_design_input,
     resolve_system_design_prd_input,
 )
@@ -132,6 +133,35 @@ def test_system_design_rejects_prd_summary_with_mismatched_full_document() -> No
 
     assert resolved.status == "BLOCKED"
     assert "digest" in resolved.reason.lower()
+
+
+def test_prd_v2_rejects_mixed_case_semantic_document_digest() -> None:
+    text = "Final PRD\nRequirement A"
+    result = _prd_result(text)
+    result["payload"]["assessment_target"]["source_artifact_digest"] = canonical_text_digest(text).upper()
+
+    errors = validate_artifact_result(ROOT, "prd_report", result, producer_skill="prd-architect")
+
+    assert any("source_artifact_digest" in error for error in errors)
+
+
+def test_system_design_resolve_rejects_mixed_case_digest_even_when_bytes_match() -> None:
+    report = _prd_result("Final PRD\nRequirement A")
+    report["payload"]["assessment_target"]["source_artifact_digest"] = report["payload"][
+        "assessment_target"
+    ]["source_artifact_digest"].upper()
+
+    resolved = resolve_system_design_prd_input(report, full_prd="Final PRD\nRequirement A")
+
+    assert resolved.status == "BLOCKED"
+
+
+def test_is_sha256_digest_rejects_mixed_and_upper_case() -> None:
+    lower = canonical_text_digest("anything")
+
+    assert is_sha256_digest(lower) is True
+    assert is_sha256_digest(lower.upper()) is False
+    assert is_sha256_digest(lower[:-1] + lower[-1].upper()) is False
 
 
 def test_system_design_accepts_exact_prd_document_binding() -> None:
