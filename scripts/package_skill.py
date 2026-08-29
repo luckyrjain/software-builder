@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import sys
 from datetime import datetime, timezone
@@ -278,39 +279,37 @@ def validate_skill_name(skill: str) -> None:
 
 
 def validate_destination(dest: Path) -> None:
-    # Checks the leaf *and* every ancestor directory named in the path, not
-    # just the leaf -- a symlinked ancestor would otherwise slip past a
-    # leaf-only check here, then get followed anyway once main() calls
-    # dest.resolve().
-    #
-    # Walks path components strictly left-to-right instead of collapsing
-    # ".." lexically up front (e.g. via os.path.abspath()): once any
-    # component in that walk is found to be a symlink, everything after it
-    # is rejected immediately, before a later ".." in the same --dest value
-    # gets a chance to lexically cancel it out. A naive lexical collapse
-    # would resolve `<symlink>/../evil` down to the symlink's own *literal*
-    # parent -- a location distinct from `<symlink>/../evil`'s real,
-    # symlink-following resolution (which instead lands relative to the
-    # symlink's *target*), so an attacker could route through a symlink and
-    # a trailing ".." to reach an unvalidated path that dest.resolve()
-    # would still happily follow. Rejecting as soon as any component is a
-    # symlink -- before any ".." after it is ever applied -- means this
-    # check can never validate a path whose meaning depends on which side
-    # of a symlink a ".." falls on.
-    if not dest.is_absolute():
-        dest = Path.cwd() / dest
-    built = Path(dest.anchor)
-    for part in dest.parts[1:]:
-        if part == ".":
-            continue
-        if part == "..":
-            built = built.parent
-            continue
-        built = built / part
-        # is_symlink() uses lstat() and does not require the link target to
-        # exist, so this also rejects dangling symlinks, not just live ones.
-        if built.is_symlink():
-            raise ValueError(f"refusing to use destination under symlink: {built}")
+    # The leaf itself being a symlink is always rejected, live or dangling:
+    # is_symlink() uses lstat() and does not require the link target to
+    # exist. Checked on the raw, unresolved dest -- main() calls this before
+    # ever calling dest.resolve(), which is what would otherwise follow
+    # straight through it and hand shutil.rmtree()/copytree() a location the
+    # caller never actually named.
+    if dest.is_symlink():
+        raise ValueError(f"refusing to use destination under symlink: {dest}")
+
+    # An *ancestor* symlink is a different case: a plain symlinked ancestor
+    # with nothing already at the resolved destination is completely
+    # ordinary on real systems (macOS's /tmp and /var are themselves
+    # symlinks to /private/tmp and /private/var, and this tool's own CI runs
+    # installs under exactly those paths via mktemp) and is harmless here --
+    # package_skill() just creates a fresh directory there. What actually
+    # enables a symlink-redirection attack is something *already existing*
+    # at the resolved location while the literal --dest text implies a
+    # different one (e.g. a swapped ancestor directory, or a trailing ".."
+    # that dest.resolve() applies against a symlink's real target instead of
+    # its literal parent) -- that's the precondition shutil.rmtree()/
+    # copytree() need to clobber unrelated, pre-existing content. Comparing
+    # the real resolution against a purely lexical (symlink-blind) one and
+    # only rejecting when the real target already exists targets exactly
+    # that, without rejecting every ordinary symlink-backed system path.
+    resolved = dest.resolve()
+    lexical = Path(os.path.abspath(dest))
+    if resolved != lexical and resolved.exists():
+        raise ValueError(
+            f"refusing to use destination reached through a symlink where something "
+            f"already exists at the resolved location: {resolved} (--dest implies {lexical})",
+        )
 
 
 def main(argv: list[str] | None = None) -> int:

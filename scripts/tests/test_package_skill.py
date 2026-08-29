@@ -135,13 +135,19 @@ def test_main_accepts_ordinary_absolute_destination(isolated_repo: Path, tmp_pat
     assert not dest.is_symlink()
 
 
-def test_main_rejects_symlinked_ancestor_directory_in_destination(isolated_repo: Path, tmp_path: Path) -> None:
+def test_main_rejects_symlinked_ancestor_directory_when_target_preexists(
+    isolated_repo: Path, tmp_path: Path,
+) -> None:
     # Regression test: validate_destination() used to check only the leaf
     # component of --dest for is_symlink(). A symlinked *ancestor* directory
     # slipped past that check, then main()'s dest.resolve() followed it
     # anyway -- so a --dest reached through a symlinked parent directory
     # could still land package_skill()'s shutil.rmtree() outside the tree
     # the caller intended, even though the leaf itself was never a symlink.
+    # This is only actually dangerous once something already exists at the
+    # resolved location for shutil.rmtree()/copytree() to clobber -- see
+    # test_main_allows_symlinked_ancestor_when_resolved_target_is_fresh for
+    # the (allowed) case where nothing does.
     outside = tmp_path / "outside"
     target_dir = outside / "some-skill"
     target_dir.mkdir(parents=True)
@@ -160,7 +166,32 @@ def test_main_rejects_symlinked_ancestor_directory_in_destination(isolated_repo:
     assert canary.read_text(encoding="utf-8") == "do not delete me\n"
 
 
-def test_main_rejects_symlinked_ancestor_with_trailing_dotdot_escape(
+def test_main_allows_symlinked_ancestor_when_resolved_target_is_fresh(
+    isolated_repo: Path, tmp_path: Path,
+) -> None:
+    # A *plain* symlinked ancestor with nothing already at the resolved
+    # destination must be allowed, not rejected: macOS's /tmp and /var are
+    # themselves symlinks to /private/tmp and /private/var, so any --dest
+    # built from mktemp -- exactly what this project's own install tests do
+    # -- routes through a symlinked ancestor on every macOS CI run. Rejecting
+    # that outright (as an earlier version of this check did) broke every
+    # install on macOS even though nothing unsafe was happening: there is
+    # nothing pre-existing at the resolved location for shutil.rmtree()/
+    # copytree() to clobber, so package_skill() just creates a fresh
+    # directory there, exactly as if no symlink had been involved at all.
+    real_dir = tmp_path / "private-var"
+    real_dir.mkdir()
+    ancestor_link = tmp_path / "var"
+    ancestor_link.symlink_to(real_dir)
+    dest = ancestor_link / "folders" / "some-skill"
+
+    rc = main(["--skill", "unit-test-creator", "--dest", str(dest), "--repo-root", str(isolated_repo)])
+
+    assert rc == 0
+    assert (real_dir / "folders" / "some-skill" / "SKILL.md").is_file()
+
+
+def test_main_rejects_symlinked_ancestor_with_trailing_dotdot_escape_when_target_preexists(
     isolated_repo: Path, tmp_path: Path,
 ) -> None:
     # Regression test: validate_destination() used to collapse ".." purely
@@ -169,24 +200,51 @@ def test_main_rejects_symlinked_ancestor_with_trailing_dotdot_escape(
     # own *literal* parent + "evil" -- a path containing no symlink, so the
     # old check passed -- while dest.resolve() actually follows the symlink
     # first and applies ".." against its *target*, landing somewhere else
-    # entirely that was never validated.
+    # entirely that was never validated. As with a plain symlinked ancestor,
+    # this only matters once something already exists at the real resolved
+    # location.
     x = tmp_path / "x"
     (x / "a" / "b").mkdir(parents=True)
     elsewhere = x / "elsewhere"
     elsewhere.mkdir()
-    canary = elsewhere / "canary.txt"
+    evil = x / "evil"
+    evil.mkdir()
+    canary = evil / "canary.txt"
     canary.write_text("do not touch\n", encoding="utf-8")
     linkdir = x / "a" / "b" / "linkdir"
     linkdir.symlink_to(elsewhere)
 
     dest_arg = f"{linkdir}/../evil"
-    assert Path(dest_arg).resolve() == x / "evil"  # confirms the exploit's real target
+    assert Path(dest_arg).resolve() == evil  # confirms the exploit's real target
 
     rc = main(["--skill", "unit-test-creator", "--dest", dest_arg, "--repo-root", str(isolated_repo)])
 
     assert rc == 1
     assert canary.read_text(encoding="utf-8") == "do not touch\n"
-    assert not (x / "evil").exists()
+
+
+def test_main_allows_dotdot_escape_through_symlink_when_resolved_target_is_fresh(
+    isolated_repo: Path, tmp_path: Path,
+) -> None:
+    # Companion to the "preexists" case above: with nothing at the real
+    # resolved location, a symlink-then-".." --dest is allowed for the same
+    # reason a plain symlinked ancestor is -- nothing exists yet for
+    # shutil.rmtree()/copytree() to clobber, so this just creates a fresh
+    # directory at the real resolved location.
+    x = tmp_path / "x"
+    (x / "a" / "b").mkdir(parents=True)
+    elsewhere = x / "elsewhere"
+    elsewhere.mkdir()
+    linkdir = x / "a" / "b" / "linkdir"
+    linkdir.symlink_to(elsewhere)
+
+    dest_arg = f"{linkdir}/../fresh-skill"
+    assert Path(dest_arg).resolve() == x / "fresh-skill"
+
+    rc = main(["--skill", "unit-test-creator", "--dest", dest_arg, "--repo-root", str(isolated_repo)])
+
+    assert rc == 0
+    assert (x / "fresh-skill" / "SKILL.md").is_file()
 
 
 def test_package_skill_rejects_symlinked_source_root(isolated_repo: Path, tmp_path: Path) -> None:
