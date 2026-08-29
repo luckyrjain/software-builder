@@ -1,7 +1,6 @@
 """Tests for golden_refresh maintainer workflow."""
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import yaml

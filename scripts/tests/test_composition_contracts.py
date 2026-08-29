@@ -83,7 +83,7 @@ def test_write_authority_escalation_detected() -> None:
 
 
 def test_invoke_schema_matching_detects_missing_fields() -> None:
-    from scripts.registry.composition_contracts import CompositionContract, validate_composition_contracts
+    from scripts.registry.composition_contracts import validate_composition_contracts
     from scripts.registry.models import (
         CompositionSpec,
         HostClaude,
