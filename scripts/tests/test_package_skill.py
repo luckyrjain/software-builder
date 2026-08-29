@@ -135,6 +135,31 @@ def test_main_accepts_ordinary_absolute_destination(isolated_repo: Path, tmp_pat
     assert not dest.is_symlink()
 
 
+def test_main_rejects_symlinked_ancestor_directory_in_destination(isolated_repo: Path, tmp_path: Path) -> None:
+    # Regression test: validate_destination() used to check only the leaf
+    # component of --dest for is_symlink(). A symlinked *ancestor* directory
+    # slipped past that check, then main()'s dest.resolve() followed it
+    # anyway -- so a --dest reached through a symlinked parent directory
+    # could still land package_skill()'s shutil.rmtree() outside the tree
+    # the caller intended, even though the leaf itself was never a symlink.
+    outside = tmp_path / "outside"
+    target_dir = outside / "some-skill"
+    target_dir.mkdir(parents=True)
+    canary = target_dir / "canary.txt"
+    canary.write_text("do not delete me\n", encoding="utf-8")
+
+    link_parent = tmp_path / "link-parent"
+    link_parent.symlink_to(outside)
+    dest = link_parent / "some-skill"
+
+    rc = main(["--skill", "unit-test-creator", "--dest", str(dest), "--repo-root", str(isolated_repo)])
+
+    assert rc == 1
+    assert link_parent.is_symlink()
+    assert target_dir.is_dir()
+    assert canary.read_text(encoding="utf-8") == "do not delete me\n"
+
+
 def test_package_skill_rejects_existing_file_destination(isolated_repo: Path, tmp_path: Path) -> None:
     # A plain (non-symlink) file sitting at --dest is not a package directory;
     # shutil.rmtree() must refuse to touch it rather than silently deleting an

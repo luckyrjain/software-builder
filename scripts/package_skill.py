@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import sys
 from datetime import datetime, timezone
@@ -278,10 +279,23 @@ def validate_skill_name(skill: str) -> None:
 
 
 def validate_destination(dest: Path) -> None:
-    # Path.is_symlink() uses lstat() and does not require the link target to
-    # exist, so this also rejects dangling symlinks, not just live ones.
-    if dest.is_symlink():
-        raise ValueError(f"refusing to replace symlink destination: {dest}")
+    # Checks the leaf *and* every ancestor directory named in the path, not
+    # just the leaf: os.path.abspath() only collapses "." / ".." lexically
+    # (no symlink resolution, unlike Path.resolve()), so walking up from
+    # there and checking each component with is_symlink() -- which uses
+    # lstat() and does not require the link target to exist, so this also
+    # rejects dangling symlinks -- catches a symlinked ancestor directory
+    # too. Without this, a symlinked ancestor (e.g. --dest pointing through
+    # a symlinked parent directory) would slip past a leaf-only check here,
+    # then get followed anyway once main() calls dest.resolve().
+    current = Path(os.path.abspath(dest))
+    while True:
+        if current.is_symlink():
+            raise ValueError(f"refusing to use destination under symlink: {current}")
+        parent = current.parent
+        if parent == current:
+            return
+        current = parent
 
 
 def main(argv: list[str] | None = None) -> int:
