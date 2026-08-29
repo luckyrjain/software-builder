@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import shutil
 import sys
 from datetime import datetime, timezone
@@ -279,37 +278,32 @@ def validate_skill_name(skill: str) -> None:
 
 
 def validate_destination(dest: Path) -> None:
-    # The leaf itself being a symlink is always rejected, live or dangling:
-    # is_symlink() uses lstat() and does not require the link target to
-    # exist. Checked on the raw, unresolved dest -- main() calls this before
-    # ever calling dest.resolve(), which is what would otherwise follow
-    # straight through it and hand shutil.rmtree()/copytree() a location the
-    # caller never actually named.
+    # Checks only the leaf, deliberately: is_symlink() uses lstat() and does
+    # not require the link target to exist, so this also rejects a dangling
+    # symlink, not just a live one. Checked on the raw, unresolved dest --
+    # main() calls this before ever calling dest.resolve(), which is what
+    # would otherwise follow straight through it and hand
+    # shutil.rmtree()/copytree() a location the caller never actually named.
+    #
+    # An *ancestor* of dest being a symlink is not checked here, even though
+    # a swapped ancestor could in principle redirect dest.resolve() the same
+    # way: two earlier, more thorough versions of this check (rejecting any
+    # symlinked ancestor outright, then rejecting one only when the resolved
+    # destination already exists) both broke this tool's own real usage
+    # rather than catching an attack. install.sh always calls this with
+    # --dest set to a path mktemp -d has *already created* -- so "the
+    # resolved destination already exists" is true on every ordinary
+    # install, not a sign of anything wrong -- and on macOS that path is
+    # always reached through /tmp or /var, which are themselves symlinks to
+    # /private/tmp and /private/var by design. Every static, pre-operation
+    # check tried here ended up rejecting that completely ordinary case
+    # instead of an actual attack. Properly closing the ancestor-symlink gap
+    # needs race-free, O_NOFOLLOW-based filesystem operations in place of
+    # shutil.rmtree()/copytree(), not a heuristic here -- accepted as a
+    # known limitation rather than another heuristic likely to trade one
+    # false positive for another.
     if dest.is_symlink():
         raise ValueError(f"refusing to use destination under symlink: {dest}")
-
-    # An *ancestor* symlink is a different case: a plain symlinked ancestor
-    # with nothing already at the resolved destination is completely
-    # ordinary on real systems (macOS's /tmp and /var are themselves
-    # symlinks to /private/tmp and /private/var, and this tool's own CI runs
-    # installs under exactly those paths via mktemp) and is harmless here --
-    # package_skill() just creates a fresh directory there. What actually
-    # enables a symlink-redirection attack is something *already existing*
-    # at the resolved location while the literal --dest text implies a
-    # different one (e.g. a swapped ancestor directory, or a trailing ".."
-    # that dest.resolve() applies against a symlink's real target instead of
-    # its literal parent) -- that's the precondition shutil.rmtree()/
-    # copytree() need to clobber unrelated, pre-existing content. Comparing
-    # the real resolution against a purely lexical (symlink-blind) one and
-    # only rejecting when the real target already exists targets exactly
-    # that, without rejecting every ordinary symlink-backed system path.
-    resolved = dest.resolve()
-    lexical = Path(os.path.abspath(dest))
-    if resolved != lexical and resolved.exists():
-        raise ValueError(
-            f"refusing to use destination reached through a symlink where something "
-            f"already exists at the resolved location: {resolved} (--dest implies {lexical})",
-        )
 
 
 def main(argv: list[str] | None = None) -> int:
