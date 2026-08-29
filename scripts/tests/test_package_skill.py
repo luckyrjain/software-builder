@@ -160,6 +160,57 @@ def test_main_rejects_symlinked_ancestor_directory_in_destination(isolated_repo:
     assert canary.read_text(encoding="utf-8") == "do not delete me\n"
 
 
+def test_main_rejects_symlinked_ancestor_with_trailing_dotdot_escape(
+    isolated_repo: Path, tmp_path: Path,
+) -> None:
+    # Regression test: validate_destination() used to collapse ".." purely
+    # lexically (os.path.abspath()) before checking for symlinks. A --dest
+    # of the shape "<symlink>/../evil" lexically collapses to the symlink's
+    # own *literal* parent + "evil" -- a path containing no symlink, so the
+    # old check passed -- while dest.resolve() actually follows the symlink
+    # first and applies ".." against its *target*, landing somewhere else
+    # entirely that was never validated.
+    x = tmp_path / "x"
+    (x / "a" / "b").mkdir(parents=True)
+    elsewhere = x / "elsewhere"
+    elsewhere.mkdir()
+    canary = elsewhere / "canary.txt"
+    canary.write_text("do not touch\n", encoding="utf-8")
+    linkdir = x / "a" / "b" / "linkdir"
+    linkdir.symlink_to(elsewhere)
+
+    dest_arg = f"{linkdir}/../evil"
+    assert Path(dest_arg).resolve() == x / "evil"  # confirms the exploit's real target
+
+    rc = main(["--skill", "unit-test-creator", "--dest", dest_arg, "--repo-root", str(isolated_repo)])
+
+    assert rc == 1
+    assert canary.read_text(encoding="utf-8") == "do not touch\n"
+    assert not (x / "evil").exists()
+
+
+def test_package_skill_rejects_symlinked_source_root(isolated_repo: Path, tmp_path: Path) -> None:
+    # Regression test: find_symlinks()/reject_symlinks() only reported
+    # symlinks os.walk() discovered *beneath* root, never root itself, so a
+    # skill whose own top-level directory was a symlink passed the guard
+    # silently while shutil.copytree() still followed it and vendored the
+    # target's contents.
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "SKILL.md").write_text("# demo\n", encoding="utf-8")
+    (outside / "secret.md").write_text("secret-data\n", encoding="utf-8")
+
+    real_skill_dir = isolated_repo / "unit-test-creator"
+    shutil.rmtree(real_skill_dir)
+    real_skill_dir.symlink_to(outside)
+
+    dest = tmp_path / "installed" / "unit-test-creator"
+    with pytest.raises(ValueError, match="symlink"):
+        package_skill(skill="unit-test-creator", repo_root=isolated_repo, dest=dest, host="test")
+
+    assert not dest.exists()
+
+
 def test_package_skill_rejects_existing_file_destination(isolated_repo: Path, tmp_path: Path) -> None:
     # A plain (non-symlink) file sitting at --dest is not a package directory;
     # shutil.rmtree() must refuse to touch it rather than silently deleting an

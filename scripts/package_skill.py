@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import shutil
 import sys
 from datetime import datetime, timezone
@@ -280,22 +279,38 @@ def validate_skill_name(skill: str) -> None:
 
 def validate_destination(dest: Path) -> None:
     # Checks the leaf *and* every ancestor directory named in the path, not
-    # just the leaf: os.path.abspath() only collapses "." / ".." lexically
-    # (no symlink resolution, unlike Path.resolve()), so walking up from
-    # there and checking each component with is_symlink() -- which uses
-    # lstat() and does not require the link target to exist, so this also
-    # rejects dangling symlinks -- catches a symlinked ancestor directory
-    # too. Without this, a symlinked ancestor (e.g. --dest pointing through
-    # a symlinked parent directory) would slip past a leaf-only check here,
-    # then get followed anyway once main() calls dest.resolve().
-    current = Path(os.path.abspath(dest))
-    while True:
-        if current.is_symlink():
-            raise ValueError(f"refusing to use destination under symlink: {current}")
-        parent = current.parent
-        if parent == current:
-            return
-        current = parent
+    # just the leaf -- a symlinked ancestor would otherwise slip past a
+    # leaf-only check here, then get followed anyway once main() calls
+    # dest.resolve().
+    #
+    # Walks path components strictly left-to-right instead of collapsing
+    # ".." lexically up front (e.g. via os.path.abspath()): once any
+    # component in that walk is found to be a symlink, everything after it
+    # is rejected immediately, before a later ".." in the same --dest value
+    # gets a chance to lexically cancel it out. A naive lexical collapse
+    # would resolve `<symlink>/../evil` down to the symlink's own *literal*
+    # parent -- a location distinct from `<symlink>/../evil`'s real,
+    # symlink-following resolution (which instead lands relative to the
+    # symlink's *target*), so an attacker could route through a symlink and
+    # a trailing ".." to reach an unvalidated path that dest.resolve()
+    # would still happily follow. Rejecting as soon as any component is a
+    # symlink -- before any ".." after it is ever applied -- means this
+    # check can never validate a path whose meaning depends on which side
+    # of a symlink a ".." falls on.
+    if not dest.is_absolute():
+        dest = Path.cwd() / dest
+    built = Path(dest.anchor)
+    for part in dest.parts[1:]:
+        if part == ".":
+            continue
+        if part == "..":
+            built = built.parent
+            continue
+        built = built / part
+        # is_symlink() uses lstat() and does not require the link target to
+        # exist, so this also rejects dangling symlinks, not just live ones.
+        if built.is_symlink():
+            raise ValueError(f"refusing to use destination under symlink: {built}")
 
 
 def main(argv: list[str] | None = None) -> int:

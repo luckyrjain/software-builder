@@ -100,7 +100,15 @@ def find_symlinks(root: Path) -> list[str]:
 
 
 def reject_symlinks(root: Path, description: str) -> None:
-    """Raise ValueError if any symlink exists anywhere under root.
+    """Raise ValueError if root itself, or any symlink exists anywhere under it.
+
+    find_symlinks() only reports symlinks os.walk() discovers *while walking
+    beneath* root -- it never reports the walk's own starting argument, so a
+    root that is itself a symlink (e.g. the top-level skill directory or the
+    vendored framework directory having been replaced by one) would pass
+    silently even though shutil.copytree(root, dest, symlinks=False) still
+    follows it and vendors the symlink target's contents. Checking root
+    directly here closes that gap.
 
     Packaging copies root's tree with shutil.copytree(symlinks=False), which
     silently dereferences symlinks and vendors whatever content they point
@@ -109,6 +117,8 @@ def reject_symlinks(root: Path, description: str) -> None:
     package exists, the symlink is already gone (copied as real content), so
     checking the *installed* output afterward can no longer catch it.
     """
+    if root.is_symlink():
+        raise ValueError(f"{description} is itself a symlink, which is not allowed: {root}")
     symlinks = find_symlinks(root)
     if symlinks:
         raise ValueError(
