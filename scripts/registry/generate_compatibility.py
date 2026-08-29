@@ -4,7 +4,6 @@ from pathlib import Path
 
 from scripts.registry.backfill_capabilities import load_catalog
 from scripts.registry.canonical_manifest import (
-    MANIFEST_KIND,
     has_canonical_manifest_shape,
     load_canonical_manifest,
     validate_canonical_manifest,
@@ -67,7 +66,6 @@ def _load_optional_canonical_manifest(root: Path) -> dict | None:
     if not path.is_file():
         return None
     raw = require_mapping(load_unique_yaml_file(path), "skills.yaml root")
-    skills = raw.get("skills")
     canonical_marker = has_canonical_manifest_shape(raw)
     if not canonical_marker:
         return None
