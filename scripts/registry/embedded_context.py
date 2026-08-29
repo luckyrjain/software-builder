@@ -153,13 +153,13 @@ def validate_embedded_result_target(expected: dict[str, Any], actual: dict[str, 
     if not isinstance(expected, dict) or not isinstance(actual, dict):
         return ["assessment target must be a mapping"]
     errors: list[str] = []
-    for field in ("repo", "service", "environment", "source_type", "base_revision", "head_revision_or_digest", "source_artifact_ref", "source_artifact_digest"):
-        left, right = expected.get(field), actual.get(field)
-        if field == "repo" and isinstance(left, str) and isinstance(right, str):
+    for field_name in ("repo", "service", "environment", "source_type", "base_revision", "head_revision_or_digest", "source_artifact_ref", "source_artifact_digest"):
+        left, right = expected.get(field_name), actual.get(field_name)
+        if field_name == "repo" and isinstance(left, str) and isinstance(right, str):
             left, right = normalize_repo_identity(left), normalize_repo_identity(right)
-        elif field == "service" and isinstance(left, str) and isinstance(right, str):
+        elif field_name == "service" and isinstance(left, str) and isinstance(right, str):
             left, right = normalize_service_identity(left), normalize_service_identity(right)
-        elif field == "environment" and isinstance(left, str) and isinstance(right, str):
+        elif field_name == "environment" and isinstance(left, str) and isinstance(right, str):
             left, right = normalize_environment_identity(left), normalize_environment_identity(right)
         else:
             if isinstance(left, str):
@@ -167,5 +167,5 @@ def validate_embedded_result_target(expected: dict[str, Any], actual: dict[str, 
             if isinstance(right, str):
                 right = right.strip()
         if left != right:
-            errors.append(f"assessment target mismatch: {field}")
+            errors.append(f"assessment target mismatch: {field_name}")
     return errors

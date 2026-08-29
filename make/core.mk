@@ -11,6 +11,7 @@
 .PHONY: install-claude-change-impact-analyzer
 .PHONY: install-claude-implementation-planner
 .PHONY: install-claude-resilience-review
+.PHONY: lint-python
 
 install:
 	bash scripts/install.sh
@@ -258,6 +259,10 @@ setup:
 lint-requirements-lock:
 	@python3 scripts/check_requirements_lock.py
 
+lint-python:
+	@echo "lint-python: ruff (pyflakes + syntax errors) over scripts/"
+	@python3 -m ruff check scripts/ && echo "  ok"
+
 lint-actions-pinning:
 	@python3 scripts/check_pinned_actions.py
 
@@ -416,7 +421,7 @@ define require_safe_output_link
 		{ echo "error: $(1)/SKILL.md must link to shared safe-output" >&2; exit 1; }
 endef
 
-lint: validate-registry backfill-capabilities-check generate-check validate-evals validate-operational-upkeep lint-framework lint-pr-review lint-pr-gatekeeper lint-k8s-skill lint-incident-rca lint-incident-triage-agent lint-domain-comprehension lint-squad-map lint-who-owns-x-bot lint-new-hire-guide lint-release-readiness-checker lint-migration-program-manager lint-cost-optimization-sprint-planner lint-mysql-to-postgres-sql lint-loop-task-implementer lint-backlog-runner lint-weekly-squad-digest lint-unit-test-creator lint-integration-test-creator lint-contract-test-creator lint-e2e-test-creator lint-api-test-creator lint-test-writer lint-prd-architect lint-architecture-review lint-system-design lint-api-design-review lint-database-review lint-security-review lint-performance-review lint-capacity-planner lint-observability-review lint-deployment-risk-review lint-dependency-upgrade-review lint-tech-debt-assessor lint-requirements-lock lint-actions-pinning lint-actions-security verify-install verify-install-all
+lint: validate-registry backfill-capabilities-check generate-check validate-evals validate-operational-upkeep lint-framework lint-pr-review lint-pr-gatekeeper lint-k8s-skill lint-incident-rca lint-incident-triage-agent lint-domain-comprehension lint-squad-map lint-who-owns-x-bot lint-new-hire-guide lint-release-readiness-checker lint-migration-program-manager lint-cost-optimization-sprint-planner lint-mysql-to-postgres-sql lint-loop-task-implementer lint-backlog-runner lint-weekly-squad-digest lint-unit-test-creator lint-integration-test-creator lint-contract-test-creator lint-e2e-test-creator lint-api-test-creator lint-test-writer lint-prd-architect lint-architecture-review lint-system-design lint-api-design-review lint-database-review lint-security-review lint-performance-review lint-capacity-planner lint-observability-review lint-deployment-risk-review lint-dependency-upgrade-review lint-tech-debt-assessor lint-requirements-lock lint-python lint-actions-pinning lint-actions-security verify-install verify-install-all
 	@for f in scripts/*.sh; do \
 		echo "shellcheck $$f"; \
 		if command -v shellcheck >/dev/null 2>&1; then \

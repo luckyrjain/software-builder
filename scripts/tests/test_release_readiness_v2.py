@@ -24,7 +24,6 @@ from scripts.release_readiness_v2 import (
 )
 from scripts import production_readiness as pr
 from scripts.tests.release_readiness_v2_fixtures import (
-    ROOT,
     child_context,
     default_max_depth,
     expected_release_pr_review_invocations,
