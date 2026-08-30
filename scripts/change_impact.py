@@ -12,6 +12,7 @@ from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from scripts.registry.artifact_trust import classify_assessment_context_trust
 from scripts.registry.assessment_target import normalize_repo_identity
 
 CHANGE_CLASSES = (
@@ -463,9 +464,13 @@ def _has_authoritative_evidence(repository: Mapping[str, Any]) -> bool:
     )
 
 
-def _result_provenance(source: object, repository_evidence: object) -> dict[str, Any]:
+def _result_provenance(
+    source: object, repository_evidence: object, *, runtime_metadata: object = None
+) -> dict[str, Any]:
     source_map = _source_mapping(source)
     repository = _as_mapping(repository_evidence)
+    context = source.get("assessment_context") if isinstance(source, Mapping) else None
+    trust = classify_assessment_context_trust(context, runtime_metadata=runtime_metadata)
     sources: list[dict[str, Any]] = []
     for owner, authority in ((repository, "repository"), (source_map, "caller")):
         candidate_refs = owner.get("evidence_refs")
@@ -511,13 +516,19 @@ def _result_provenance(source: object, repository_evidence: object) -> dict[str,
                 continue
             for ref in refs:
                 ref_value = ref if isinstance(ref, str) else ref.get("ref") if isinstance(ref, Mapping) else None
-                if not isinstance(ref_value, str) or not ref_value.strip() or any(
-                    entry["ref"] == ref_value for entry in sources
-                ):
+                if not isinstance(ref_value, str) or not ref_value.strip():
                     continue
                 # Caller-controlled metadata cannot attest to a stronger authority. Runtime-owned
                 # handoff metadata is required before an external source can be elevated.
-                authority = "caller"
+                authority = trust.effective_authority(input_key)
+                existing = next((entry for entry in sources if entry["ref"] == ref_value), None)
+                if existing is not None:
+                    # A ref already claimed (e.g. from the flat evidence_refs list, always tagged
+                    # "caller") is upgraded in place when a runtime handoff vouches for the same
+                    # input; an already-stronger authority from elsewhere is never weakened.
+                    if existing["authority"] == "caller" and authority != "caller":
+                        existing["authority"] = authority
+                    continue
                 entry = {
                     "ref": ref_value,
                     "authority": authority,
@@ -615,6 +626,7 @@ def analyze_pr_impact(
     scm_change_read: object = None,
     assessment_context: object = None,
     final_head_reader: Callable[[], str] | None = None,
+    runtime_metadata: object = None,
 ) -> ImpactResult:
     """Analyze a remote PR/MR only at the supplied exact head revision."""
     context = _as_mapping(mr_context)
@@ -663,6 +675,7 @@ def analyze_pr_impact(
     result = run_impact(
         change_source=source,
         repository_evidence=repository or None,
+        runtime_metadata=runtime_metadata,
     )
     if not isinstance(scm_change_read, Mapping) or not scm_change_read:
         return ImpactResult(
@@ -743,7 +756,9 @@ def finalize_impact(impact: Mapping[str, Any]) -> ImpactResult:
     )
 
 
-def run_impact(*, change_source: object, repository_evidence: object = None) -> ImpactResult:
+def run_impact(
+    *, change_source: object, repository_evidence: object = None, runtime_metadata: object = None
+) -> ImpactResult:
     """Execute the documented Inputs -> Analyze -> Report path."""
     if not change_source or (isinstance(change_source, str) and not change_source.strip()):
         result = finalize_impact(
@@ -760,7 +775,7 @@ def run_impact(*, change_source: object, repository_evidence: object = None) -> 
             payload=result.payload,
             normalized_decision=result.normalized_decision,
             skill_result=result.skill_result,
-            provenance=_result_provenance(change_source, repository_evidence),
+            provenance=_result_provenance(change_source, repository_evidence, runtime_metadata=runtime_metadata),
         )
     result = finalize_impact(
         analyze_change(source=change_source, repository_evidence=repository_evidence),
@@ -769,5 +784,5 @@ def run_impact(*, change_source: object, repository_evidence: object = None) -> 
         payload=result.payload,
         normalized_decision=result.normalized_decision,
         skill_result=result.skill_result,
-        provenance=_result_provenance(change_source, repository_evidence),
+        provenance=_result_provenance(change_source, repository_evidence, runtime_metadata=runtime_metadata),
     )

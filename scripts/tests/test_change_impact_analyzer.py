@@ -8,6 +8,7 @@ from scripts.registry.canonical_manifest import load_canonical_manifest
 from scripts.registry.frontmatter import load_skill_frontmatter
 from scripts.yaml_safety import load_unique_yaml_file
 from scripts.change_impact import analyze_change, analyze_pr_impact, finalize_impact, run_impact
+from scripts.registry.artifact_trust import _RuntimeHandoffMetadata, _issue_runtime_handoff_metadata
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -303,6 +304,124 @@ def test_nested_assessment_context_provenance_and_evidence_are_preserved() -> No
     assert result["assessment_target"]["source_type"] == "system_design"
     assert result["assessment_target"]["service"] == "payments"
     assert result["evidence_refs"] == ["ENG-42"]
+
+
+def test_runtime_handoff_elevates_only_the_named_input() -> None:
+    source = {
+        "assessment_context": {
+            "inputs": {"source_type": "system_design", "text": "Add a payment event."},
+            "input_provenance": {
+                "design": {"evidence_refs": ["design-42"], "observed_at": "2026-08-24T00:00:00Z"},
+                "notes": {"evidence_refs": ["note-7"]},
+            },
+            "evidence_refs": [],
+        },
+    }
+    execution = run_impact(
+        change_source=source,
+        runtime_metadata=_issue_runtime_handoff_metadata(
+            parent_skill="release-readiness-checker",
+            trusted_authorities={"design": "repository"},
+        ),
+    )
+    sources = {item["ref"]: item for item in execution.provenance["sources"]}
+    assert sources["design-42"]["authority"] == "repository"
+    assert sources["design-42"]["observed_at"] == "2026-08-24T00:00:00Z"
+    assert sources["note-7"]["authority"] == "caller"
+
+
+def test_runtime_handoff_upgrades_a_ref_already_seen_in_flat_evidence_refs() -> None:
+    source = {
+        "assessment_context": {
+            "inputs": {"source_type": "system_design", "text": "Add a payment event."},
+            "input_provenance": {
+                "design": {"evidence_refs": ["shared-ref"]},
+            },
+            "evidence_refs": ["shared-ref"],
+        },
+    }
+    execution = run_impact(
+        change_source=source,
+        runtime_metadata=_issue_runtime_handoff_metadata(
+            parent_skill="release-readiness-checker",
+            trusted_authorities={"design": "repository"},
+        ),
+    )
+    sources = {item["ref"]: item["authority"] for item in execution.provenance["sources"]}
+    assert sources["shared-ref"] == "repository"
+    assert len(execution.provenance["sources"]) == 1
+
+
+def test_caller_claimed_authority_cannot_forge_runtime_handoff() -> None:
+    source = {
+        "assessment_context": {
+            "inputs": {"source_type": "system_design", "text": "Add a payment event."},
+            "input_provenance": {
+                "design": {"authority": "authoritative_host", "evidence_refs": ["design-42"]},
+            },
+            "evidence_refs": [],
+        },
+    }
+    execution = run_impact(
+        change_source=source,
+        runtime_metadata={
+            "acquisition": "runtime_handoff",
+            "parent_skill": "release-readiness-checker",
+            "trusted_authorities": {"design": "repository"},
+        },
+    )
+    sources = {item["ref"]: item["authority"] for item in execution.provenance["sources"]}
+    assert sources["design-42"] == "caller"
+
+
+def test_mistyped_token_cannot_forge_runtime_handoff() -> None:
+    """The unforgeability guarantee rests on `_token is _RUNTIME_HANDOFF_TOKEN`, not merely on
+    `isinstance`. A same-type object carrying a different token must still be rejected."""
+    source = {
+        "assessment_context": {
+            "inputs": {"source_type": "system_design", "text": "Add a payment event."},
+            "input_provenance": {
+                "design": {"evidence_refs": ["design-42"]},
+            },
+            "evidence_refs": [],
+        },
+    }
+    forged = _RuntimeHandoffMetadata(
+        parent_skill="release-readiness-checker",
+        trusted_authorities={"design": "repository"},
+        _token=object(),
+    )
+    execution = run_impact(change_source=source, runtime_metadata=forged)
+    sources = {item["ref"]: item["authority"] for item in execution.provenance["sources"]}
+    assert sources["design-42"] == "caller"
+
+
+def test_analyze_pr_impact_threads_runtime_metadata_through_to_provenance() -> None:
+    head = "a" * 40
+    result = analyze_pr_impact(
+        mr_context(project="acme/payments", iid=5, head_sha=head),
+        scm_change_read={
+            "project": "acme/payments",
+            "merge_request_iid": 5,
+            "base_sha": "b" * 40,
+            "head_sha": head,
+            "final_head_sha": head,
+            "diff_text": "diff --git a/services/payments.py b/services/payments.py\n+change\n",
+            "diff_complete": True,
+        },
+        assessment_context={
+            "inputs": {},
+            "input_provenance": {"design": {"evidence_refs": ["design-42"]}},
+            "evidence_refs": [],
+            "unresolved": [],
+        },
+        runtime_metadata=_issue_runtime_handoff_metadata(
+            parent_skill="release-readiness-checker",
+            trusted_authorities={"design": "repository"},
+        ),
+    )
+    sources = {item["ref"]: item["authority"] for item in result.provenance["sources"]}
+    assert sources["design-42"] == "repository"
 
 
 def test_nested_assessment_context_inputs_are_used() -> None:
