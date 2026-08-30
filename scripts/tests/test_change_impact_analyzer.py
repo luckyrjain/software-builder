@@ -701,3 +701,136 @@ def test_success_envelope_completes_every_dod_check() -> None:
     result = finalize_impact(impact_fixture(coverage_status="COMPLETE", blockers=[]))
     dod = result.to_envelope()["definition_of_done"]
     assert dod["completed_checks"] == dod["required_checks"]
+
+
+def test_hyphenated_partial_failure_emits_resilience_trigger() -> None:
+    result = analyze_change(source=diff_text("This introduces partial-failure handling in the worker."))
+    assert "resilience" in result["review_triggers"]
+
+
+def test_k8s_resources_block_without_cpu_or_memory_still_emits_rightsizing() -> None:
+    result = analyze_change(
+        source=diff_text("resources:\n  requests:\n    ephemeral-storage: 1Gi\n  limits:\n    ephemeral-storage: 2Gi\n"),
+    )
+    assert "k8s_rightsizing" in result["review_triggers"]
+
+
+def test_non_k8s_resource_limits_do_not_emit_capacity_either() -> None:
+    result = analyze_change(
+        source=diff_text("Rate limiter change: requests: 100 per minute, limits: 50 burst per client."),
+    )
+    assert "capacity" not in result["review_triggers"]
+    assert "k8s_rightsizing" not in result["review_triggers"]
+
+
+def test_unicode_hyphen_trust_boundary_still_emits_security_trigger() -> None:
+    result = analyze_change(source=diff_text("This change introduces a trust‑boundary crossing."))
+    assert "security" in result["review_triggers"]
+
+
+def test_line_wrapped_trust_boundary_still_emits_security_trigger() -> None:
+    result = analyze_change(
+        source=diff_text("This change introduces a trust-\nboundary crossing between services."),
+    )
+    assert "security" in result["review_triggers"]
+
+
+def test_diff_stripped_single_space_indentation_still_emits_k8s_rightsizing() -> None:
+    result = analyze_change(
+        source=diff_text("diff --git a/x.yaml b/x.yaml\n+resources:\n+ limits:\n+  cpu: 500m\n"),
+    )
+    assert "k8s_rightsizing" in result["review_triggers"]
+
+
+def test_extensionless_path_key_does_not_emit_k8s_rightsizing() -> None:
+    result = analyze_change(
+        source=diff_text("resources:\n  limits:\n    docs/readme:\n      - clarified installation steps\n"),
+    )
+    assert "k8s_rightsizing" not in result["review_triggers"]
+    assert "capacity" not in result["review_triggers"]
+
+
+def test_real_vendor_extended_resource_still_emits_k8s_rightsizing() -> None:
+    result = analyze_change(
+        source=diff_text("resources:\n  limits:\n    nvidia.com/gpu: 2\n"),
+    )
+    assert "k8s_rightsizing" in result["review_triggers"]
+
+
+def test_many_blank_lines_between_resources_and_limits_still_emits_k8s_rightsizing() -> None:
+    hostile = "resources:" + ("\n" * 40) + "  limits:\n    cpu: 500m\n"
+    result = analyze_change(source=diff_text(hostile))
+    assert "k8s_rightsizing" in result["review_triggers"]
+
+
+def test_unbounded_blank_line_matcher_still_does_not_blow_up() -> None:
+    import time
+
+    hostile = "diff --git a/x.yaml b/x.yaml\n+resources:\n" + ("+ \n" * 200000) + "+done: true\n"
+    start = time.monotonic()
+    result = analyze_change(source=diff_text(hostile))
+    elapsed = time.monotonic() - start
+    assert elapsed < 2.0
+    assert "k8s_rightsizing" not in result["review_triggers"]
+
+
+def test_cidr_notation_does_not_emit_k8s_rightsizing() -> None:
+    result = analyze_change(
+        source=diff_text("resources:\n  limits:\n    10.0.0.1/24: allow\n  requests:\n    192.168.1.1/32: allow\n"),
+    )
+    assert "k8s_rightsizing" not in result["review_triggers"]
+    assert "capacity" not in result["review_triggers"]
+
+
+def test_replicated_database_text_does_not_emit_capacity() -> None:
+    result = analyze_change(
+        source=diff_text(
+            "This service uses log replication; data is replicated across nodes for redundancy in the database.",
+        ),
+    )
+    assert "capacity" not in result["review_triggers"]
+
+
+def test_standalone_replica_word_still_emits_capacity() -> None:
+    result = analyze_change(source=diff_text("Increased the replica count for the checkout service to 5."))
+    assert "capacity" in result["review_triggers"]
+
+
+def test_helm_replica_count_field_names_emit_capacity() -> None:
+    for text in (
+        "Bumped replicaCount from 3 to 5 in charts/checkout/values.yaml.",
+        "Bumped replica_count from 3 to 5 in charts/checkout/values.yaml.",
+        "Bumped num_replicas from 3 to 5 in charts/checkout/values.yaml.",
+    ):
+        result = analyze_change(source=diff_text(text))
+        assert "capacity" in result["review_triggers"], text
+
+
+def test_replicasets_plural_k8s_kind_emits_capacity() -> None:
+    result = analyze_change(
+        source=diff_text("The deployment rollout created new ReplicaSets to replace the old ones."),
+    )
+    assert "capacity" in result["review_triggers"]
+
+
+def test_unrelated_english_words_containing_replica_do_not_emit_capacity() -> None:
+    for text in (
+        "Modeled the viral RNA replicase complex binding site in the pipeline.",
+        "Improved results replicability across random seeds in the experiment tracker.",
+        "Documented the irreplicability of the earlier benchmark run.",
+    ):
+        result = analyze_change(source=diff_text(text))
+        assert "capacity" not in result["review_triggers"], text
+
+
+def test_invalid_coverage_status_is_execution_failure_not_finding() -> None:
+    result = finalize_impact(impact_fixture(coverage_status="BOGUS"))
+    assert result.skill_result.status == "FAILED"
+
+
+def test_authoritative_criticality_conflict_is_unknown() -> None:
+    result = analyze_change(
+        source={"source_type": "change"},
+        repository_evidence={"criticality": "tier0", "criticality_by_repository": {"svcA": "tier2"}},
+    )
+    assert result["criticality"] == "unknown"

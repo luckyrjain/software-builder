@@ -83,6 +83,8 @@ artifact_runtime:
   - tech_debt_assessment
   - change_impact_report
   - resilience_review_report
+  - implementation_plan
+  - production_readiness_report
   artifact_schema_versions:
     mr_review_report: 2
     rca_report: 1
@@ -109,6 +111,8 @@ artifact_runtime:
     tech_debt_assessment: 1
     change_impact_report: 1
     resilience_review_report: 1
+    implementation_plan: 1
+    production_readiness_report: 1
   state_semantics:
     mr_review_report: current_state
     rca_report: current_state
@@ -135,6 +139,8 @@ artifact_runtime:
     tech_debt_assessment: current_state
     change_impact_report: proposed_state
     resilience_review_report: proposed_state
+    implementation_plan: proposed_state
+    production_readiness_report: current_state
   allowed_state_semantics:
     prd_report:
     - proposed_state
@@ -170,6 +176,10 @@ artifact_runtime:
     - current_state
     resilience_review_report:
     - proposed_state
+    - current_state
+    implementation_plan:
+    - proposed_state
+    production_readiness_report:
     - current_state
   payload_types:
     rca_report:
@@ -353,6 +363,34 @@ artifact_runtime:
       normalized_decision: mapping
       findings: list
       conditions: list
+      required_actions: list
+      evidence_refs: list
+    implementation_plan:
+      plan_set_id: string
+      plan_id: string
+      title: string
+      readiness: string
+      assessment_target: mapping
+      target_repo: string
+      external_dependencies: list
+      source_refs: list
+      tasks: list
+      execution_waves: list
+      sequencing_constraints: list
+      verification_gates: list
+      traceability: mapping
+    production_readiness_report:
+      title: string
+      assessment_target: mapping
+      source_revision: string
+      build_provenance_ref: string
+      criticality: string
+      verdict: string
+      dimension_statuses: list
+      operational_evidence: mapping
+      blockers: list
+      conditions: list
+      waivers: list
       required_actions: list
       evidence_refs: list
   required_sections:
@@ -639,6 +677,16 @@ skill_permissions:
     external_actions: none
     unattended: false
     merge: false
+  implementation-planner:
+    repository: read
+    external_actions: none
+    unattended: false
+    merge: false
+  production-readiness-review:
+    repository: read
+    external_actions: read
+    unattended: false
+    merge: false
 skill_types:
   pr-review: leaf
   pr-gatekeeper: trigger
@@ -676,3 +724,5 @@ skill_types:
   tech-debt-assessor: leaf
   change-impact-analyzer: leaf
   resilience-review: leaf
+  implementation-planner: leaf
+  production-readiness-review: orchestrator

@@ -17,6 +17,7 @@ graph TD
   deployment-risk-review -.->|escalates| release-readiness-checker
   deployment-risk-review -.->|escalates| incident-triage-agent
   domain-comprehension -->|invokes| squad-map
+  implementation-planner -.->|escalates| loop-task-implementer
   incident-rca -.->|escalates| pr-review
   incident-rca -.->|escalates| k8s-overprovisioning-datadog
   incident-rca -.->|escalates| squad-map
@@ -43,9 +44,32 @@ graph TD
   prd-architect -.->|escalates| domain-comprehension
   prd-architect -.->|escalates| test-writer
   prd-architect -.->|escalates| pr-review
+  production-readiness-review -->|invokes| pr-review
+  production-readiness-review -->|invokes| change-impact-analyzer
+  production-readiness-review -->|invokes| deployment-risk-review
+  production-readiness-review -->|invokes| security-review
+  production-readiness-review -->|invokes| observability-review
+  production-readiness-review -->|invokes| resilience-review
+  production-readiness-review -->|invokes| api-design-review
+  production-readiness-review -->|invokes| database-review
+  production-readiness-review -->|invokes| performance-review
+  production-readiness-review -->|invokes| capacity-planner
+  production-readiness-review -->|invokes| dependency-upgrade-review
+  production-readiness-review -.->|escalates| pr-review
+  production-readiness-review -.->|escalates| change-impact-analyzer
+  production-readiness-review -.->|escalates| deployment-risk-review
+  production-readiness-review -.->|escalates| security-review
+  production-readiness-review -.->|escalates| observability-review
+  production-readiness-review -.->|escalates| resilience-review
+  production-readiness-review -.->|escalates| api-design-review
+  production-readiness-review -.->|escalates| database-review
+  production-readiness-review -.->|escalates| performance-review
+  production-readiness-review -.->|escalates| capacity-planner
+  production-readiness-review -.->|escalates| dependency-upgrade-review
   release-readiness-checker -->|invokes| pr-review
   release-readiness-checker -->|invokes| k8s-overprovisioning-datadog
   release-readiness-checker -->|invokes| incident-rca
+  release-readiness-checker -->|invokes| production-readiness-review
   release-readiness-checker -.->|escalates| pr-review
   release-readiness-checker -.->|escalates| k8s-overprovisioning-datadog
   release-readiness-checker -.->|escalates| incident-rca

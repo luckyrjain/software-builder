@@ -4,7 +4,7 @@ Role isolation remains the primary execution model. Batch 5.2C adds explicit lif
 
 | Context | Read now | Produces |
 |---------|----------|----------|
-| **Orchestrator** | [workflow/orchestrator.md](../workflow/orchestrator.md) + mandatory [workflow/orchestrator-lifecycle.md](../workflow/orchestrator-lifecycle.md) | task state, current `change_identity`, per-lens `review_generation` / `review_evidence_generation`, dispatch packages, adjudication verdicts, completion report |
+| **Orchestrator** | [workflow/orchestrator.md](../workflow/orchestrator.md) + mandatory [workflow/orchestrator-lifecycle.md](../workflow/orchestrator-lifecycle.md) | task state, optional immutable `implementation_plan`, generation-checked `plan_execution_state`, current `change_identity`, per-lens `review_generation` / `review_evidence_generation`, dispatch packages, adjudication verdicts, completion report |
 | **Builder** | [workflow/builder.md](../workflow/builder.md) | implementation diff, pull request, builder report |
 | **Reviewer** | [workflow/reviewer.md](../workflow/reviewer.md) | reviewer report, lens verdict |
 | **Reviewer evidence adapter** | [workflow/reviewer-evidence.md](../workflow/reviewer-evidence.md), after Orchestrator increments the returned lens generation and adjudicates | portable `review_evidence`, `reviewed_change_identity`; Orchestrator persists matching `review_evidence_generation` only after validation |
@@ -15,7 +15,8 @@ Reference loads: [lazy-load-index.md](lazy-load-index.md) · [review-lifecycle-c
 ## Execution order
 
 ```
-Orchestrator + lifecycle overlay: discover policy → select task
+Orchestrator + lifecycle overlay: discover policy → validate optional implementation plan → select task
+  → reconcile plan_execution_state to official task/SCM state
   → dispatch Builder (fresh context)
   → rebuild/validate current shared change_identity + current requirements_ref
   → dispatch Reviewer Lens A (fresh context)

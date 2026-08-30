@@ -6,11 +6,66 @@ the create-skill anti-pattern on time-sensitive info).
 
 Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/README.md).
 
+## Platform
+
+### Close gap-analysis findings: docs, Python static analysis (2026-08-29)
+
+- Added `resilience-review/README.md` (the only one of 38 skills missing it) and added
+  `resilience-review` and `implementation-planner` to the top-level `README.md` skills tables; both
+  landed with the v10 companion-deliverable roadmap but were never listed.
+- Added `make lint-python` (`ruff check scripts/`, scoped to pyflakes correctness rules and syntax
+  errors only via `ruff.toml` — no opinionated style enforcement) to the `lint` target chain, and
+  `ruff` to `requirements.txt`/`requirements.lock`. Fixed the 12 pre-existing findings this surfaced:
+  7 unused imports, 3 unused variables, 1 loop variable shadowing an import, and 1 undefined name in
+  a deferred (`from __future__ import annotations`) return annotation.
+
+### Add release readiness manifest v2 (2026-08-28)
+
+- `release-readiness-checker` 1.0.0 -> 1.1.0: manifest v2 (`environment`, `source_revision`,
+  `criticality`, `production_readiness_required`, `production_readiness_ref`), byte/semantics-unchanged
+  for v1 entries, which never invoke production readiness.
+- Added `scripts/release_readiness_v2.py`: trusted deployable-scoped production-readiness reuse first,
+  conditional `production-readiness-review` invoke only when candidate identity is sufficient, worst-first
+  verdict capping that never causes the existing pr-review/k8s-overprovisioning-datadog/incident-rca
+  checks to be skipped, a final release-candidate freshness fence, and execution-status semantics
+  distinguishing a resolved verdict (`SUCCESS`) from an unresolved required dimension (`PARTIAL`) and an
+  empty manifest (`BLOCKED`).
+- Added authoritative code-review coverage enumeration (merged PR/MR objects, direct commits,
+  cherry-picks, reverts, with authoritative-only squash/merge `integrated_revision` linkage) that
+  production-readiness-review reuses instead of revisiting `pr-review` within one release-root run.
+- Registry: optional `production-readiness-review.conditional_invoke` capability and
+  `composition.invokes`/handoff to production-readiness-review via `assessment_context`; this skill's
+  mandatory `install.requires` footprint is unchanged.
+
+### Add production readiness review orchestrator (2026-08-27)
+
+- Added the read-only `production-readiness-review` orchestrator and `production_readiness_report` v1
+  artifact: a fail-closed rollup of trusted CI, code-review, build-provenance, SCM-policy, change-impact,
+  deployment-risk, and applicable specialist-review evidence for one exact PR/MR/release candidate.
+- Never posts, merges, or deploys; invokes `pr-review` only for exact-head code-review evidence (always
+  held, never posted) plus `change-impact-analyzer`, `deployment-risk-review`, and the applicable
+  specialist leaves (security, observability, resilience, API design, database, performance, capacity,
+  dependency-upgrade).
+- Added evidence-authority policy preventing caller/model-knowledge evidence from laundering through a
+  trusted child into a PASS, environment-sensitive evidence matching, tier-sensitive operational gates
+  (ownership, rollback/abort, post-deploy verification, recovery), and a final candidate-freshness fence
+  before report emission.
+- Added intent-based PR/MR routing: explicit production-readiness/ready-to-release requests route here
+  instead of `pr-review` (generic review) or `release-readiness-checker` (release-wide go/no-go).
+
 ### Add bounded change-impact analysis (2026-08-24)
 
 - Added the read-only `change-impact-analyzer` leaf and `change_impact_report` v1 artifact.
 - Added deterministic change classes, exact-head PR/MR handling, evidence-derived coverage, and
   scanner-safe input handling.
+
+### Add deterministic implementation planning (2026-08-26)
+
+- Added the read-only `implementation-planner` leaf and `implementation_plan` v1 artifact.
+- Added deterministic plan identity, dependency waves, source traceability, single-repository scope,
+  executor-compatible size gates, and fail-closed readiness validation.
+- Extended loop-task-implementer with an internal, generation-checked plan execution checkpoint while
+  preserving legacy task execution and existing review/CI/merge gates.
 
 ## Platform
 

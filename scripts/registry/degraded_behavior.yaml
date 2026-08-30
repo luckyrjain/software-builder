@@ -40,3 +40,5 @@ skills:
   tech-debt-assessor: {missing_capability: host.report.write, available_capabilities: [], behavior: BLOCKED}
   change-impact-analyzer: {missing_capability: host.repository.read, available_capabilities: [host.report.write, host.scm.change.read], behavior: DEGRADED}
   resilience-review: {missing_capability: host.repository.read, available_capabilities: [host.report.write], behavior: DEGRADED}
+  implementation-planner: {missing_capability: host.repository.read, available_capabilities: [host.report.write], behavior: BLOCKED}
+  production-readiness-review: {missing_capability: host.dependency.advisories.read, available_capabilities: [host.report.write, host.repository.read, host.scm.change.read, host.ci.status, host.scm.policy.read, host.build.provenance.read, host.service.metadata.read], behavior: DEGRADED}

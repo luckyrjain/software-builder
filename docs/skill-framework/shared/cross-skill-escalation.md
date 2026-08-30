@@ -1,6 +1,7 @@
 # Cross-skill escalation (shared)
 
-**Normative.** Symmetric escalation matrix for pr-review, pr-gatekeeper, incident-rca, incident-triage-agent, k8s-overprovisioning-datadog, domain-comprehension, squad-map, who-owns-x-bot, new-hire-guide, release-readiness-checker, mysql-to-postgres-sql, loop-task-implementer, backlog-runner, migration-program-manager, cost-optimization-sprint-planner, weekly-squad-digest, prd-architect, test-writer, unit-test-creator, integration-test-creator, contract-test-creator, e2e-test-creator, api-test-creator, architecture-review, system-design, api-design-review, database-review, security-review, performance-review, capacity-planner, observability-review, deployment-risk-review, dependency-upgrade-review, tech-debt-assessor, and change-impact-analyzer.
+**Normative.** Symmetric escalation matrix for pr-review, pr-gatekeeper, incident-rca, incident-triage-agent, k8s-overprovisioning-datadog, domain-comprehension, squad-map, who-owns-x-bot, new-hire-guide, release-readiness-checker, mysql-to-postgres-sql, loop-task-implementer, backlog-runner, migration-program-manager, cost-optimization-sprint-planner, weekly-squad-digest, prd-architect, test-writer, unit-test-creator, integration-test-creator, contract-test-creator, e2e-test-creator, api-test-creator, architecture-review, system-design, api-design-review, database-review, security-review, performance-review, capacity-planner, observability-review, deployment-risk-review, dependency-upgrade-review, tech-debt-assessor, change-impact-analyzer, resilience-review, implementation-planner, and
+production-readiness-review.
 
 **Consumers:** `SKILL.md` in each skill (link here; keep ≤10 skill-specific rows max).
 
@@ -104,6 +105,9 @@ know about — don't treat it as a "you may want to" row the way every other row
 | Deploy already happened and something broke | deployment-risk-review → incident-triage-agent | Service + change | "Triage `{service}` — deploy-related incident after {change}" |
 | A "Now" priority debt item is really a multi-service migration | tech-debt-assessor → migration-program-manager | Debt item + affected repos | "Plan migration for `{item}` across `{repos}`" |
 | A "Now" priority debt item is really a resource/cost problem | tech-debt-assessor → cost-optimization-sprint-planner | Debt item + affected services | "Cost sweep for `{services}` — {item} flagged as a resource problem" |
+| Caller wants one specific dimension deep-dived, not the aggregated readiness rollup | production-readiness-review → deployment-risk-review / change-impact-analyzer / the applicable specialist | Candidate + flagged dimension | "Deployment risk review for `{candidate}` — flagged during production readiness review" |
+| Caller wants the multi-repo release go/no-go sweep, not one candidate's readiness | production-readiness-review → release-readiness-checker | Release manifest | "Is this release ready to ship?" |
+| Production readiness review needs exact-head PR/MR code-review evidence | production-readiness-review → pr-review (no-post, chat-only result consumed) | `mr_context` | "Review MR !{iid} for `{project}` — chat-only, no post" |
 
 Skill-specific rows in each `SKILL.md` MUST be a subset of this table plus local deltas only.
 
@@ -188,6 +192,7 @@ When `MYSQL_TO_PG_SQL_REWRITES.md` exists in the workspace deliverable directory
 | Live rollback / kubectl apply | Out of scope — human operator |
 | Security-only deep review | security-review |
 | Cost/billing investigation across services | Canvas + appropriate skill; not auto-routed |
+| Is one exact PR/MR/release-candidate production ready / ready to release | production-readiness-review |
 
 See each skill's **when NOT to use** table in `SKILL.md`.
 

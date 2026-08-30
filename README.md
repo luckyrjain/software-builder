@@ -2,7 +2,7 @@
 
 [![Lint](https://github.com/luckyrjain/software-builder/actions/workflows/lint.yml/badge.svg)](https://github.com/luckyrjain/software-builder/actions/workflows/lint.yml)
 <!-- skills-count:start -->
-![Skills](https://img.shields.io/badge/skills-36-blue)
+![Skills](https://img.shields.io/badge/skills-38-blue)
 <!-- skills-count:end -->
 
 Portable, evidence-driven agent skills for software delivery: code review, incident response,
@@ -182,8 +182,10 @@ routes to skills in another category.
 | [pr-review](pr-review/) | `/pr-review` or “review this MR/PR” | GitHub/GHES PR or GitLab MR review with evidence-backed findings and optional inline posts | [README](pr-review/README.md) · [SETUP](pr-review/SETUP.md) |
 | [pr-gatekeeper](pr-gatekeeper/) | Push webhook | Runs `pr-review` on every push to an open MR and applies unattended posting policy | [README](pr-gatekeeper/README.md) · [SETUP](pr-gatekeeper/SETUP.md) |
 | [release-readiness-checker](release-readiness-checker/) | “Is this release ready?” | Aggregates review, Kubernetes, and incident signals into a release go/no-go report | [README](release-readiness-checker/README.md) · [SETUP](release-readiness-checker/SETUP.md) |
+| [production-readiness-review](production-readiness-review/) | “Is PR #123 production ready?” | Read-only rollup of trusted CI, code-review, build-provenance, SCM-policy, change-impact, deployment-risk, and specialist-review evidence into one fail-closed verdict for one exact PR/MR/release candidate | [README](production-readiness-review/README.md) · [SETUP](production-readiness-review/SETUP.md) |
 | [prd-architect](prd-architect/) | “Write a PRD for …” / “Should we build this?” | Validates ideas and turns specs into implementation-ready PRDs with Build Readiness gating | [README](prd-architect/README.md) · [SETUP](prd-architect/SETUP.md) |
 | [change-impact-analyzer](change-impact-analyzer/) | “What services/contracts are affected by this change?” | Bounded, evidence-backed impact analysis for designs and exact PR/MR heads | [README](change-impact-analyzer/README.md) · [SETUP](change-impact-analyzer/SETUP.md) |
+| [implementation-planner](implementation-planner/) | “Plan the implementation for `<task/PRD>`” | Deterministic, dependency-ordered implementation plan with source traceability, feeding `loop-task-implementer` | [README](implementation-planner/README.md) · [SETUP](implementation-planner/SETUP.md) |
 | [test-writer](test-writer/) | “Write tests for MR !123” — level unspecified | Router: classifies the request and dispatches to exactly one of the five skills below | [README](test-writer/README.md) · [SETUP](test-writer/SETUP.md) |
 | [unit-test-creator](unit-test-creator/) | “Write unit tests for `<file/module>`” | Isolated, fast, every external dependency mocked; detects the repo's test framework and never patches production code to force green | [README](unit-test-creator/README.md) · [SETUP](unit-test-creator/SETUP.md) |
 | [integration-test-creator](integration-test-creator/) | “Write an integration test against the real DB” | Tests the real seam to one real adjacent dependency (testcontainers/docker-compose) — never mocks it | [README](integration-test-creator/README.md) · [SETUP](integration-test-creator/SETUP.md) |
@@ -223,6 +225,7 @@ design, and dedicated single-domain reviews.
 | [capacity-planner](capacity-planner/) | “Forecast capacity for `<service>`” | Turns historical demand into RPS/CPU/memory/DB/queue/storage/replica requirements | [README](capacity-planner/README.md) · [SETUP](capacity-planner/SETUP.md) |
 | [observability-review](observability-review/) | “Observability review for `<service>`” | Evaluates metrics, logs, tracing, dashboards, alerts, SLOs, correlation IDs for coverage gaps | [README](observability-review/README.md) · [SETUP](observability-review/SETUP.md) |
 | [deployment-risk-review](deployment-risk-review/) | “Deployment risk review for `<change>`” | Blast radius, migration risk, rollback complexity, dependency risk, traffic risk, confidence | [README](deployment-risk-review/README.md) · [SETUP](deployment-risk-review/SETUP.md) |
+| [resilience-review](resilience-review/) | “Resilience review of `<design/implementation>`” | Timeout budgets, retries, circuit breaking, load shedding, backpressure, queues, idempotency, partial failures, recovery | [README](resilience-review/README.md) · [SETUP](resilience-review/SETUP.md) |
 | [dependency-upgrade-review](dependency-upgrade-review/) | “Review upgrading `<dependency>` to `<version>`” | Breaking changes, CVEs, API differences, transitive dependencies, rollout risk | [README](dependency-upgrade-review/README.md) · [SETUP](dependency-upgrade-review/SETUP.md) |
 | [tech-debt-assessor](tech-debt-assessor/) | “Rank this tech debt backlog” | Ranks debt by business impact × engineering drag × operational risk ÷ effort | [README](tech-debt-assessor/README.md) · [SETUP](tech-debt-assessor/SETUP.md) |
 

@@ -10,6 +10,7 @@ routes:
     exclude_patterns:
       - '\b(no|without)\s+(PR|MR|pull request|merge request)\b'
       - '\bthere is no\s+(PR|MR|pull request|merge request)\b'
+      - '\b(production ready|production readiness|ready to release|ready to deploy|ready to ship)\b'
   pr-gatekeeper:
     patterns:
       - '\b(PR|MR|pull request|merge request)\b.*\b(webhook|gatekeeper|automation gate|opened event)\b'
@@ -43,7 +44,14 @@ routes:
       - '\b(new hire|onboarding)\b.*\b(guide|tour|first week|service map)\b'
   release-readiness-checker:
     patterns:
-      - '\b(release readiness|go[- /]?no[- ]?go|ready to release|release candidate)\b'
+      - '\b(release readiness|go[- /]?no[- ]?go|ready to release|ready to ship|release candidate)\b'
+    exclude_patterns:
+      - '\b(PR|MR|pull request|merge request)\s*[#!]?\d+\b.*\b(ready to release|ready to ship|production ready|production readiness)\b'
+      - '\b(ready to release|ready to ship|production ready|production readiness)\b.*\b(PR|MR|pull request|merge request)\s*[#!]?\d+\b'
+      - '\b(this|the) (pr|mr|pull request|merge request|release candidate)\b.*\b(production ready|production readiness|ready to release|ready to deploy|ready to ship)\b'
+      - '\b(production ready|production readiness|ready to release|ready to deploy|ready to ship)\b.*\b(this|the) (pr|mr|pull request|merge request|release candidate)\b'
+      - '\bgo[- /]?no[- ]?go for (this|one) (change|pr|mr|pull request|merge request)\b'
+      - '\bgo[- /]?no[- ]?go\b.*\bdeployment risk\b'
   migration-program-manager:
     patterns:
       - '\b(migration program|migration portfolio|migration status rollup|migration program status)\b'
@@ -136,6 +144,18 @@ routes:
     exclude_patterns:
       - '\b(incident|outage|postmortem|root cause|RCA)\b'
       - '\b(capacity|headroom|forecast|sizing)\b'
+  implementation-planner:
+    patterns:
+      - '\b(implementation plan|implementation planning|implementation task DAG|task decomposition|dependency[- ]aware plan|execution waves)\b'
   test-writer:
     patterns:
       - '\b(write|generate|add)\b\s+(tests?|test coverage)\b(?!.*\b(unit|integration|contract|e2e|end[- ]to[- ]end|API|HTTP|REST)\b)'
+  production-readiness-review:
+    patterns:
+      - '\b(PR|MR|pull request|merge request)\s*[#!]?\d+\b.*\b(production ready|production readiness|ready to release|ready to deploy|ready to ship)\b'
+      - '\b(production ready|production readiness|ready to release|ready to deploy|ready to ship)\b.*\b(PR|MR|pull request|merge request)\s*[#!]?\d+\b'
+      - '\bproduction readiness (review|assessment|check)\b'
+      - '\bis (this|the) (service|change|deployment|pr|mr|pull request|merge request|release candidate) production ready\b'
+      - '\b(this|the) (pr|mr|pull request|merge request|release candidate)\b.*\b(production ready|production readiness|ready to release|ready to deploy|ready to ship)\b'
+      - '\bship (this|that) (pr|mr|pull request|merge request|change)\b'
+      - '\bgo[- /]?no[- ]?go for (this|one) (change|pr|mr|pull request|merge request)\b'

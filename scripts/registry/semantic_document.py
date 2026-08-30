@@ -55,8 +55,8 @@ def _target(payload: object) -> tuple[dict[str, Any] | None, list[str]]:
     if not isinstance(source_type, str) or not source_type.strip():
         errors.append("error: assessment_target.source_type must be a non-empty string")
     digest = value.get("source_artifact_digest")
-    if not isinstance(digest, str) or not _SHA256.fullmatch(digest.lower()):
-        errors.append("error: assessment_target.source_artifact_digest must be a SHA-256 hex digest")
+    if not isinstance(digest, str) or not _SHA256.fullmatch(digest):
+        errors.append("error: assessment_target.source_artifact_digest must be an exact lower-case SHA-256 hex digest")
     for field in _TARGET_FIELDS - {"source_type", "source_artifact_digest"}:
         current = value.get(field)
         if current is not None and not isinstance(current, str):
@@ -101,9 +101,9 @@ def _resolve(
     if target.get("source_type") != expected_type:
         return SemanticDocumentResolution("BLOCKED", "assessment target source type mismatch")
     digest = target.get("source_artifact_digest")
-    if not isinstance(digest, str) or not _SHA256.fullmatch(digest.lower()):
+    if not isinstance(digest, str) or not _SHA256.fullmatch(digest):
         return SemanticDocumentResolution("BLOCKED", "full-document digest is missing or invalid")
-    if digest.lower() != canonical_text_digest(full_document):
+    if digest != canonical_text_digest(full_document):
         return SemanticDocumentResolution("BLOCKED", "full-document digest mismatch")
     target_ref = _normalized_ref(target.get("source_artifact_ref"))
     resolved_ref = _normalized_ref(source_ref)
@@ -131,5 +131,10 @@ def resolve_architecture_design_input(
 
 
 def is_sha256_digest(value: object) -> bool:
-    """Expose strict digest validation for focused contract tests."""
-    return isinstance(value, str) and _SHA256.fullmatch(value.lower()) is not None
+    """Expose strict digest validation for focused contract tests.
+
+    Requires an exact lower-case 64-character hex digest per the design's
+    canonical target identity rule; a mixed/upper-case string is rejected
+    rather than silently accepted as an alias.
+    """
+    return isinstance(value, str) and _SHA256.fullmatch(value) is not None

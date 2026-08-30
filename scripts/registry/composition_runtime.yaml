@@ -36,6 +36,8 @@ skill_types:
   tech-debt-assessor: leaf
   change-impact-analyzer: leaf
   resilience-review: leaf
+  implementation-planner: leaf
+  production-readiness-review: orchestrator
 handoff_schema:
   required_fields:
   - target_skill
@@ -77,6 +79,8 @@ handoffs:
     - mr_context
     incident-rca:
     - mr_context
+    production-readiness-review:
+    - assessment_context
   cost-optimization-sprint-planner:
     k8s-overprovisioning-datadog:
     - mr_context
@@ -96,6 +100,29 @@ handoffs:
     - implementation_task
     api-test-creator:
     - implementation_task
+  production-readiness-review:
+    pr-review:
+    - mr_context
+    change-impact-analyzer:
+    - assessment_context
+    deployment-risk-review:
+    - assessment_context
+    security-review:
+    - assessment_context
+    observability-review:
+    - assessment_context
+    resilience-review:
+    - assessment_context
+    api-design-review:
+    - assessment_context
+    database-review:
+    - assessment_context
+    performance-review:
+    - assessment_context
+    capacity-planner:
+    - assessment_context
+    dependency-upgrade-review:
+    - assessment_context
 recursion_guard:
   default_max_depth: 3
   block_revisit_by_default: true
@@ -150,6 +177,10 @@ artifact_ownership:
   implementation_task:
     mode: external
     owners: []
+  implementation_plan:
+    mode: canonical
+    owners:
+    - implementation-planner
   implementation_pr:
     mode: shared
     owners:
@@ -230,3 +261,7 @@ artifact_ownership:
     mode: canonical
     owners:
     - resilience-review
+  production_readiness_report:
+    mode: canonical
+    owners:
+    - production-readiness-review

@@ -25,7 +25,7 @@ skills:
   new-hire-guide:
     external_services: squad-map, domain-comprehension
   release-readiness-checker:
-    external_services: GitLab MCP, Kubernetes MCP, Datadog MCP (via composed skills)
+    external_services: GitLab MCP, Kubernetes MCP, Datadog MCP (via composed skills); optional SCM history/policy and build-provenance host evidence for v2 conditional production-readiness invocation
   migration-program-manager:
     external_services: None (reads MIGRATION_STATUS.yaml + SQUAD_MAP.md on disk)
   cost-optimization-sprint-planner:
@@ -78,3 +78,7 @@ skills:
     external_services: None — reads supplied design/change content and optional repository or exact-head SCM evidence only
   resilience-review:
     external_services: None — reads supplied resilience content and optional repository or runtime/config evidence only
+  implementation-planner:
+    external_services: None — reads supplied design/review artifacts and optional repository evidence only
+  production-readiness-review:
+    external_services: None — reads supplied candidate evidence and optional repository, SCM, CI, build-provenance, service-metadata, runtime-metrics, or dependency-advisory host evidence, and reuses/dispatches trusted child-skill invocations only

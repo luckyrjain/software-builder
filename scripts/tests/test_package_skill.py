@@ -14,7 +14,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from package_skill import _release_provenance, package_skill  # noqa: E402
+from package_skill import _release_provenance, main, package_skill  # noqa: E402
 from reference_utils import copytree_ignore  # noqa: E402
 from validate_references import validate_tree  # noqa: E402
 
@@ -78,6 +78,203 @@ def test_package_skill_vendors_framework_and_validates(isolated_repo: Path, tmp_
 
     errors = validate_tree(dest, check_anchors=False, installed_package=True)
     assert errors == []
+
+
+def test_main_rejects_symlink_directory_destination(isolated_repo: Path, tmp_path: Path) -> None:
+    # Regression test: main() used to resolve --dest (following symlinks)
+    # before validate_destination() ran, so a symlinked dest looked like an
+    # ordinary directory by validation time and got wiped out by
+    # shutil.rmtree() once package_skill() saw it "exists".
+    target = tmp_path / "target"
+    target.mkdir()
+    canary = target / "canary.txt"
+    canary.write_text("do not delete me\n", encoding="utf-8")
+
+    link = tmp_path / "link"
+    link.symlink_to(target)
+
+    rc = main(["--skill", "unit-test-creator", "--dest", str(link), "--repo-root", str(isolated_repo)])
+
+    assert rc == 1
+    assert link.is_symlink()
+    assert target.is_dir()
+    assert canary.read_text(encoding="utf-8") == "do not delete me\n"
+
+
+def test_main_rejects_dangling_symlink_destination(isolated_repo: Path, tmp_path: Path) -> None:
+    link = tmp_path / "dangling-link"
+    link.symlink_to(tmp_path / "does-not-exist")
+
+    rc = main(["--skill", "unit-test-creator", "--dest", str(link), "--repo-root", str(isolated_repo)])
+
+    assert rc == 1
+    assert link.is_symlink()
+    assert not (tmp_path / "does-not-exist").exists()
+
+
+def test_main_rejects_symlink_to_file_destination(isolated_repo: Path, tmp_path: Path) -> None:
+    real_file = tmp_path / "real.txt"
+    real_file.write_text("keep me\n", encoding="utf-8")
+    link = tmp_path / "file-link"
+    link.symlink_to(real_file)
+
+    rc = main(["--skill", "unit-test-creator", "--dest", str(link), "--repo-root", str(isolated_repo)])
+
+    assert rc == 1
+    assert link.is_symlink()
+    assert real_file.read_text(encoding="utf-8") == "keep me\n"
+
+
+def test_main_accepts_ordinary_absolute_destination(isolated_repo: Path, tmp_path: Path) -> None:
+    dest = tmp_path / "installed" / "unit-test-creator"
+
+    rc = main(["--skill", "unit-test-creator", "--dest", str(dest), "--repo-root", str(isolated_repo)])
+
+    assert rc == 0
+    assert (dest / "SKILL.md").is_file()
+    assert not dest.is_symlink()
+
+
+def test_main_allows_symlinked_ancestor_directory_in_destination(isolated_repo: Path, tmp_path: Path) -> None:
+    # validate_destination() intentionally checks only the leaf of --dest,
+    # not its ancestors: install.sh always calls package_skill.py with
+    # --dest set to a path mktemp -d has already created, and on macOS that
+    # path is always reached through /tmp or /var -- themselves symlinks to
+    # /private/tmp and /private/var by design. Two earlier, more thorough
+    # versions of this check (rejecting any symlinked ancestor outright,
+    # then rejecting one only when the resolved destination already
+    # existed) both rejected that completely ordinary case instead of an
+    # actual attack -- see test_main_matches_install_sh_staging_directory_pattern
+    # for the exact shape that broke. A symlinked ancestor is accepted here
+    # as a documented, known limitation (closing it properly needs
+    # race-free, O_NOFOLLOW-based filesystem operations, not a heuristic in
+    # this check).
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    link_parent = tmp_path / "link-parent"
+    link_parent.symlink_to(outside)
+    dest = link_parent / "some-skill"
+
+    rc = main(["--skill", "unit-test-creator", "--dest", str(dest), "--repo-root", str(isolated_repo)])
+
+    assert rc == 0
+    assert (outside / "some-skill" / "SKILL.md").is_file()
+
+
+def test_main_matches_install_sh_staging_directory_pattern(isolated_repo: Path, tmp_path: Path) -> None:
+    # Regression test for the actual CI failure this check's ancestor logic
+    # kept tripping over: install.sh's install_skill() always does
+    # `stage_dir="$(mktemp -d "${dest_root}/.${skill}.staging.XXXXXX")"`
+    # *before* invoking package_skill.py --dest "${stage_dir}" -- so the
+    # real --dest this tool is actually called with always already exists
+    # (mktemp -d just created it) and, on macOS, is always reached through a
+    # symlinked ancestor (/tmp or /var). Any check that rejects "ancestor is
+    # a symlink" or "resolved destination already exists" rejects this
+    # pattern on every single real install.
+    dest_root = tmp_path / ".cursor" / "skills"
+    real_dest_root = tmp_path / "private-var" / "cursor-skills"
+    real_dest_root.mkdir(parents=True)
+    dest_root.parent.mkdir(parents=True, exist_ok=True)
+    dest_root.symlink_to(real_dest_root)
+
+    stage_dir = dest_root / ".unit-test-creator.staging.XXXXXX"
+    stage_dir.mkdir()  # what `mktemp -d` does before package_skill.py ever runs
+
+    rc = main(["--skill", "unit-test-creator", "--dest", str(stage_dir), "--repo-root", str(isolated_repo)])
+
+    assert rc == 0
+    assert (real_dest_root / ".unit-test-creator.staging.XXXXXX" / "SKILL.md").is_file()
+
+
+def test_package_skill_rejects_symlinked_source_root(isolated_repo: Path, tmp_path: Path) -> None:
+    # Regression test: find_symlinks()/reject_symlinks() only reported
+    # symlinks os.walk() discovered *beneath* root, never root itself, so a
+    # skill whose own top-level directory was a symlink passed the guard
+    # silently while shutil.copytree() still followed it and vendored the
+    # target's contents.
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "SKILL.md").write_text("# demo\n", encoding="utf-8")
+    (outside / "secret.md").write_text("secret-data\n", encoding="utf-8")
+
+    real_skill_dir = isolated_repo / "unit-test-creator"
+    shutil.rmtree(real_skill_dir)
+    real_skill_dir.symlink_to(outside)
+
+    dest = tmp_path / "installed" / "unit-test-creator"
+    with pytest.raises(ValueError, match="symlink"):
+        package_skill(skill="unit-test-creator", repo_root=isolated_repo, dest=dest, host="test")
+
+    assert not dest.exists()
+
+
+def test_package_skill_rejects_existing_file_destination(isolated_repo: Path, tmp_path: Path) -> None:
+    # A plain (non-symlink) file sitting at --dest is not a package directory;
+    # shutil.rmtree() must refuse to touch it rather than silently deleting an
+    # unrelated file that happens to occupy that path.
+    dest = tmp_path / "not-a-directory"
+    dest.write_text("unrelated file\n", encoding="utf-8")
+
+    with pytest.raises(NotADirectoryError):
+        package_skill(skill="unit-test-creator", repo_root=isolated_repo, dest=dest, host="test")
+
+    assert dest.read_text(encoding="utf-8") == "unrelated file\n"
+
+
+def test_package_skill_rejects_directory_symlink_in_skill_source(isolated_repo: Path, tmp_path: Path) -> None:
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "secret.md").write_text("outside content\n", encoding="utf-8")
+    (isolated_repo / "unit-test-creator" / "linked-dir").symlink_to(outside)
+
+    dest = tmp_path / "installed" / "unit-test-creator"
+    with pytest.raises(ValueError, match="symlink"):
+        package_skill(skill="unit-test-creator", repo_root=isolated_repo, dest=dest, host="test")
+
+    assert not dest.exists()
+
+
+def test_package_skill_rejects_file_symlink_in_skill_source(isolated_repo: Path, tmp_path: Path) -> None:
+    outside_file = tmp_path / "outside.txt"
+    outside_file.write_text("outside content\n", encoding="utf-8")
+    (isolated_repo / "unit-test-creator" / "linked-file.md").symlink_to(outside_file)
+
+    dest = tmp_path / "installed" / "unit-test-creator"
+    with pytest.raises(ValueError, match="symlink"):
+        package_skill(skill="unit-test-creator", repo_root=isolated_repo, dest=dest, host="test")
+
+
+def test_package_skill_rejects_dangling_symlink_in_skill_source(isolated_repo: Path, tmp_path: Path) -> None:
+    (isolated_repo / "unit-test-creator" / "dangling").symlink_to(isolated_repo / "does-not-exist")
+
+    dest = tmp_path / "installed" / "unit-test-creator"
+    with pytest.raises(ValueError, match="symlink"):
+        package_skill(skill="unit-test-creator", repo_root=isolated_repo, dest=dest, host="test")
+
+
+def test_package_skill_rejects_symlink_pointing_inside_repo(isolated_repo: Path, tmp_path: Path) -> None:
+    # A symlink that resolves to somewhere *inside* the repo is still a
+    # symlink -- it can be swapped to point elsewhere later (TOCTOU) and it
+    # still bypasses is_ignored_package_path()'s directory-boundary
+    # assumptions, so it must be rejected the same as a link pointing outside.
+    (isolated_repo / "unit-test-creator" / "linked-framework").symlink_to(
+        isolated_repo / "docs" / "skill-framework",
+    )
+
+    dest = tmp_path / "installed" / "unit-test-creator"
+    with pytest.raises(ValueError, match="symlink"):
+        package_skill(skill="unit-test-creator", repo_root=isolated_repo, dest=dest, host="test")
+
+
+def test_package_skill_rejects_symlink_in_vendored_framework_tree(isolated_repo: Path, tmp_path: Path) -> None:
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "extra.md").write_text("outside content\n", encoding="utf-8")
+    (isolated_repo / "docs" / "skill-framework" / "linked-dir").symlink_to(outside)
+
+    dest = tmp_path / "installed" / "unit-test-creator"
+    with pytest.raises(ValueError, match="symlink"):
+        package_skill(skill="unit-test-creator", repo_root=isolated_repo, dest=dest, host="test")
 
 
 def test_copytree_ignore_handles_symlinked_subdirectory(tmp_path: Path) -> None:

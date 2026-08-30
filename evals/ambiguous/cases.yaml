@@ -37,3 +37,5 @@ cases:
   - {skill: tech-debt-assessor, prompt: "Rank this tech debt backlog and also give me the migration program status across workspaces.", expected_status: ambiguous, expected_candidates: [tech-debt-assessor, migration-program-manager]}
   - {skill: change-impact-analyzer, prompt: "What services/contracts change in this proposed design, and also write the system design.", expected_status: ambiguous, expected_candidates: [change-impact-analyzer, system-design]}
   - {skill: resilience-review, prompt: "Perform a resilience review of checkout and a deployment risk assessment for its next release.", expected_status: ambiguous, expected_candidates: [deployment-risk-review, resilience-review]}
+  - {skill: implementation-planner, prompt: "Create an implementation plan and implement the task, review and fix it until zero issues.", expected_status: ambiguous, expected_candidates: [implementation-planner, loop-task-implementer]}
+  - {skill: production-readiness-review, prompt: "Is this service production ready, and also assess its resilience controls?", expected_status: ambiguous, expected_candidates: [production-readiness-review, resilience-review]}

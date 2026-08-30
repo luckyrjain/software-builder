@@ -1,0 +1,36 @@
+schema_version: 1
+skill: production-readiness-review
+case_id: golden-recovery-statefulness-bypass
+tier: 3
+description: >-
+  A candidate change (a migration) is asserted "reversible" by an authoritative mechanism, but no
+  authoritative evidence ever confirms it is actually non-stateful -- statefulness was simply
+  never assessed. A bare "reversible: true" claim must not be enough, on its own, to strike the
+  recovery dimension from the required set via NOT_APPLICABLE: an unassessed statefulness
+  determination is an evidence gap, not proof the dimension doesn't apply.
+recorded_output:
+  verdict: UNKNOWN
+  recovery_dimension_status: UNKNOWN
+  recovery_dimension_applicability: REQUIRED
+  statefulness_assessed: false
+  reversible_claim_authority: authoritative_host
+  recovery_marked_not_applicable: false
+assertions:
+  - type: forbid_field_value
+    path: verdict
+    value: READY
+  - type: field_equals
+    path: recovery_dimension_status
+    value: UNKNOWN
+  - type: field_equals
+    path: recovery_dimension_applicability
+    value: REQUIRED
+  - type: forbid_field_value
+    path: recovery_dimension_status
+    value: NOT_APPLICABLE
+  - type: field_equals
+    path: statefulness_assessed
+    value: false
+  - type: field_equals
+    path: recovery_marked_not_applicable
+    value: false

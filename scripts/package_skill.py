@@ -23,6 +23,7 @@ from reference_utils import (
     framework_relative_path,
     is_ignored_package_path,
     is_local_markdown_link,
+    reject_symlinks,
     rewrite_framework_links,
     sha256_file,
     split_link_target,
@@ -77,6 +78,7 @@ def vendor_readme_superpowers_specs(repo_root: Path, package_root: Path) -> None
 
 def vendor_framework_tree(repo_root: Path, package_root: Path) -> list[str]:
     framework_src = repo_root / "docs" / "skill-framework"
+    reject_symlinks(framework_src, "vendored framework tree")
     framework_dest = package_root / "docs" / "skill-framework"
     if framework_dest.exists():
         shutil.rmtree(framework_dest)
@@ -217,6 +219,8 @@ def package_skill(
     if not skill_md.is_file():
         raise FileNotFoundError(f"skill not found at {skill_md}")
 
+    reject_symlinks(skill_src, f"skill source tree ({skill})")
+
     if dest.exists():
         shutil.rmtree(dest)
 
@@ -274,16 +278,47 @@ def validate_skill_name(skill: str) -> None:
 
 
 def validate_destination(dest: Path) -> None:
+    # Checks only the leaf, deliberately: is_symlink() uses lstat() and does
+    # not require the link target to exist, so this also rejects a dangling
+    # symlink, not just a live one. Checked on the raw, unresolved dest --
+    # main() calls this before ever calling dest.resolve(), which is what
+    # would otherwise follow straight through it and hand
+    # shutil.rmtree()/copytree() a location the caller never actually named.
+    #
+    # An *ancestor* of dest being a symlink is not checked here, even though
+    # a swapped ancestor could in principle redirect dest.resolve() the same
+    # way: two earlier, more thorough versions of this check (rejecting any
+    # symlinked ancestor outright, then rejecting one only when the resolved
+    # destination already exists) both broke this tool's own real usage
+    # rather than catching an attack. install.sh always calls this with
+    # --dest set to a path mktemp -d has *already created* -- so "the
+    # resolved destination already exists" is true on every ordinary
+    # install, not a sign of anything wrong -- and on macOS that path is
+    # always reached through /tmp or /var, which are themselves symlinks to
+    # /private/tmp and /private/var by design. Every static, pre-operation
+    # check tried here ended up rejecting that completely ordinary case
+    # instead of an actual attack. Properly closing the ancestor-symlink gap
+    # needs race-free, O_NOFOLLOW-based filesystem operations in place of
+    # shutil.rmtree()/copytree(), not a heuristic here -- accepted as a
+    # known limitation rather than another heuristic likely to trade one
+    # false positive for another.
     if dest.is_symlink():
-        raise ValueError(f"refusing to replace symlink destination: {dest}")
+        raise ValueError(f"refusing to use destination under symlink: {dest}")
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     repo_root = args.repo_root.resolve()
-    dest = args.dest.resolve()
 
     try:
+        # Validate the raw --dest argument *before* resolving it: Path.resolve()
+        # follows symlinks, so a symlinked dest would no longer look like a
+        # symlink by the time it reached package_skill()'s own
+        # validate_destination() call, letting a caller-supplied symlink slip
+        # through and later get recursively deleted by shutil.rmtree() when it
+        # "exists".
+        validate_destination(args.dest)
+        dest = args.dest.resolve()
         package_skill(
             skill=args.skill,
             repo_root=repo_root,

@@ -64,6 +64,7 @@ Each skill directory follows the same pattern:
 | `deployment-risk-review` | review | ambient | — | `make lint-deployment-risk-review` |
 | `domain-comprehension` | architecture | ambient | squad-map | `make lint-domain-comprehension` |
 | `e2e-test-creator` | testing | ambient | — | `make lint-e2e-test-creator` |
+| `implementation-planner` | automation | ambient | — | `make lint-implementation-planner` |
 | `incident-rca` | incident | ambient | — | `make lint-incident-rca` |
 | `incident-triage-agent` | incident | automation-only | incident-rca, squad-map | `make lint-incident-triage-agent` |
 | `integration-test-creator` | testing | ambient | — | `make lint-integration-test-creator` |
@@ -77,6 +78,7 @@ Each skill directory follows the same pattern:
 | `pr-gatekeeper` | review | automation-only | pr-review | `make lint-pr-gatekeeper` |
 | `pr-review` | review | ambient | — | `make lint-pr-review` |
 | `prd-architect` | product | ambient | — | `make lint-prd-architect` |
+| `production-readiness-review` | release | ambient | pr-review, change-impact-analyzer, deployment-risk-review, security-review, observability-review, resilience-review, api-design-review, database-review, performance-review, capacity-planner, dependency-upgrade-review | `make lint-production-readiness-review` |
 | `release-readiness-checker` | release | ambient | pr-review, k8s-overprovisioning-datadog, incident-rca | `make lint-release-readiness-checker` |
 | `resilience-review` | review | ambient | — | `make lint-resilience-review` |
 | `security-review` | review | ambient | — | `make lint-security-review` |
@@ -245,6 +247,7 @@ and [docs/skill-framework/shared/claude-code-setup.md](skill-framework/shared/cl
 | `make lint-change-impact-analyzer` | change-impact-analyzer bounded contract checks, framework references, `py_compile`, and focused pytest |
 | `make lint-test-writer` | test-writer `SKILL.md` ≤ 180 lines; workflow frontmatter; required references; confirms no `scripts/`/`tests/` exist (router only); dangling anchors across test-writer and all four dispatch targets' SKILL.md/workflow files |
 | `make lint-framework` | shared `docs/skill-framework/` files present; required sections; SETUP.md links; metadata footer examples parse; every skill has a `.cursor/rules/*.mdc` + `.kiro/steering/*.md` discovery file |
+| `make lint-python` | `ruff check scripts/` (pyflakes correctness rules + syntax errors only; see `ruff.toml`) |
 | `make setup-hooks` | Set `git config core.hooksPath .githooks` (shellcheck pre-commit) |
 
 ### lint-incident-rca

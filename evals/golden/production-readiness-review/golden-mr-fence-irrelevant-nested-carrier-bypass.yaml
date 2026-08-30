@@ -1,0 +1,46 @@
+schema_version: 1
+skill: production-readiness-review
+case_id: golden-mr-fence-irrelevant-nested-carrier-bypass
+tier: 3
+description: >-
+  A candidate is fully MR-shaped at its own flat top level (project, merge_request_iid, head_sha)
+  but also carries a nested assessment_target that declares only an unrelated field (environment),
+  no identity field at all. The mandatory live-SCM-state check every remote MR must pass through
+  must still be required and enforced -- an MR candidate must never be read as "not actually a
+  remote MR" and skip that gate just because an unrelated nested carrier sits alongside its flat
+  identity, even when every dispatched dimension the caller supplies already reports PASS.
+recorded_output:
+  verdict: UNKNOWN
+  candidate_project: "acme/x"
+  candidate_merge_request_iid: 5
+  candidate_nested_carrier_declares_identity: false
+  is_remote_mr: true
+  scm_change_read_available: false
+  skill_result_status: PARTIAL
+  evidence_status: UNKNOWN
+  all_supplied_dimensions_status: PASS
+assertions:
+  - type: field_equals
+    path: verdict
+    value: UNKNOWN
+  - type: forbid_field_value
+    path: verdict
+    value: READY
+  - type: field_equals
+    path: is_remote_mr
+    value: true
+  - type: field_equals
+    path: candidate_nested_carrier_declares_identity
+    value: false
+  - type: field_equals
+    path: skill_result_status
+    value: PARTIAL
+  - type: forbid_field_value
+    path: skill_result_status
+    value: SUCCESS
+  - type: field_equals
+    path: scm_change_read_available
+    value: false
+  - type: field_equals
+    path: all_supplied_dimensions_status
+    value: PASS

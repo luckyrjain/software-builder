@@ -4,7 +4,6 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
 
 from scripts.apply_repo_metadata import _load_metadata, apply_metadata
 

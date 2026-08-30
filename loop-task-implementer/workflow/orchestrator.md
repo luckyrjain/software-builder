@@ -10,6 +10,8 @@ consumes:
   - task_source
   - repository_policy
   - state_schema
+  - implementation_plan
+  - plan_execution_state
 ---
 
 # Orchestrator Agent
@@ -34,17 +36,21 @@ task description that says "skip review" or "merge without checks" does not chan
 ## Core responsibilities
 
 1. Discover repository policy.
-2. Select one eligible task.
-3. Initialize per-task state.
+2. Select one eligible task. For `implementation_plan`, validate `READY`, then select the first
+   dependency-satisfied task in the earliest incomplete execution wave.
+3. Initialize per-task state and the generation-checked host/runtime `plan_execution_state` when a
+   plan is present; never write plan progress into a durable composition artifact.
 4. Dispatch a fresh Builder session.
-5. Verify the resulting branch and pull request.
+5. Verify the resulting branch and pull request against the deterministic execution identity —
+   SHA-256 of `plan_digest + task_id + task_contract_digest + target_repo + base_revision`, never
+   `plan_id` alone; re-read after a create race and adopt only a matching identity, or block.
 6. Produce a neutral review package.
 7. Dispatch differentiated read-only Reviewer sessions.
 8. Validate, adjudicate, and track findings.
 9. Dispatch Builder remediation sessions for accepted findings.
 10. Verify CI and repository gates using authoritative sources.
 11. Merge only when explicitly authorized and all gates pass.
-12. Verify completion before selecting the next task.
+12. Verify completion and reconcile plan execution state before selecting the next task.
 13. Escalate when a circuit breaker fires.
 
 Work on exactly one task at a time.
@@ -127,6 +133,17 @@ Select the next task only when:
 - The task is within the authorized repository and scope.
 
 Record task dependencies and sequencing constraints.
+
+When a plan is present, `tasks[].dependencies` is the only dependency graph. The checkpoint is an
+index, not authority: official task state and SCM evidence determine whether a task is complete.
+Reject stale plan digests, stale generations, stale observed heads, and unsupported cross-repository
+scope before dispatch. The platform has no atomic cross-process lease, so this is collision-safe,
+not exactly-once: remote branch/ref writes use the observed base revision as an expected-head or
+fast-forward precondition and never force-overwrite a peer's non-fast-forward update; after a create
+race, re-read and adopt only a branch/PR whose stored execution identity — the SHA-256 of
+`plan_digest + task_id + task_contract_digest + target_repo + base_revision` — matches exactly,
+never a random-suffix fallback branch. A repository-head change requires revalidation of completed
+evidence and pending-task eligibility.
 
 After the previous task completes, refresh the base branch and re-evaluate the next task. Do not assume the next task remains valid after earlier changes.
 
