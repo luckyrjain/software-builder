@@ -1473,7 +1473,7 @@ CI blocks future violations
 Add:
 ```text
 agent-hosts.yaml
-scripts/agent_hosts.py
+scripts/registry/host_registry.py
 registry models
 schema validation
 evidence model
@@ -1483,8 +1483,19 @@ Exit:
 ```text
 registry validated
 legacy hosts represented
-no duplicate host source of truth introduced
+new host identifiers are referentially checked against the pre-existing
+  scripts/registry/host_adapter.py HOSTS set (a subset relationship enforced by
+  validate-hosts), preventing the two host-identity lists from silently drifting
 ```
+This candidate's "no duplicate host source of truth" bar covers host *identity* only.
+`scripts/registry/host_contracts.yaml`/`host_adapter.py` (pre-existing, used for adapter generation and
+P1 validation) already models a second axis -- per-host *capability support* -- with its own vocabulary
+(`read_repo`/`write_repo`/etc., `full`/`degraded`/`unsupported`) that does not match this candidate's
+capability vocabulary (`host.filesystem.read`/etc., `AVAILABLE`/`UNAVAILABLE`/`UNKNOWN`).
+Reconciling those two capability vocabularies into one is explicitly Candidate 4's job (below), not this
+one's -- attempting it here would either break the existing adapter-generation pipeline this candidate
+promises not to touch, or silently mask the vocabulary mismatch behind a translation layer before the
+resolver that's supposed to own capability resolution even exists.
 ---
 ## Candidate 3 — Remove hard-coded host models
 Generalize the current `HostCursor / HostClaude / HostKiro` registry model.
@@ -1508,9 +1519,16 @@ constraints
 verification state
 ```
 Reuse existing doctor capability logic.
+This resolver SHALL also be the single place capability *support* is resolved from: it either subsumes
+`host_adapter.py`'s `read_repo`/`write_repo`/etc. vocabulary into `agent-hosts.yaml`'s capability
+vocabulary (with a documented, tested mapping so no adapter-generation behavior regresses), or explicitly
+retires the older vocabulary in favor of this one -- but the two vocabularies MUST NOT still exist as
+parallel, unmapped sources once this candidate exits.
 Exit:
 ```text
 host × skill results deterministic
+host_adapter.py's capability vocabulary is mapped into (or retired in favor of) this resolver's
+  vocabulary -- Candidate 2's deferred "no duplicate capability source of truth" bar is now met
 ```
 ---
 ## Candidate 5 — Installer resolver migration
