@@ -65,6 +65,7 @@ Each skill is a self-contained directory copied to `~/.cursor/skills/<name>/` on
 | **capacity-planner** | [capacity-planner/README.md](../capacity-planner/README.md) | [capacity-planner/SKILL.md](../capacity-planner/SKILL.md) | [capacity-planner/SETUP.md](../capacity-planner/SETUP.md) |
 | **observability-review** | [observability-review/README.md](../observability-review/README.md) | [observability-review/SKILL.md](../observability-review/SKILL.md) | [observability-review/SETUP.md](../observability-review/SETUP.md) |
 | **deployment-risk-review** | [deployment-risk-review/README.md](../deployment-risk-review/README.md) | [deployment-risk-review/SKILL.md](../deployment-risk-review/SKILL.md) | [deployment-risk-review/SETUP.md](../deployment-risk-review/SETUP.md) |
+| **resilience-review** | [resilience-review/README.md](../resilience-review/README.md) | [resilience-review/SKILL.md](../resilience-review/SKILL.md) | [resilience-review/SETUP.md](../resilience-review/SETUP.md) |
 | **dependency-upgrade-review** | [dependency-upgrade-review/README.md](../dependency-upgrade-review/README.md) | [dependency-upgrade-review/SKILL.md](../dependency-upgrade-review/SKILL.md) | [dependency-upgrade-review/SETUP.md](../dependency-upgrade-review/SETUP.md) |
 | **tech-debt-assessor** | [tech-debt-assessor/README.md](../tech-debt-assessor/README.md) | [tech-debt-assessor/SKILL.md](../tech-debt-assessor/SKILL.md) | [tech-debt-assessor/SETUP.md](../tech-debt-assessor/SETUP.md) |
 
