@@ -1825,7 +1825,7 @@ lint-framework:
 		echo "pytest not installed — install with 'python3 -m pip install pytest' to run metadata footer tests" >&2; \
 	fi
 	@echo "lint-framework: source-tree reference validation (anchors + local links, cross-cutting docs)"
-	@python3 scripts/validate_references.py --source-tree . --exclude docs/superpowers --exclude docs/skill-framework || exit 1
+	@python3 scripts/validate_references.py --source-tree . --exclude docs/superpowers --exclude docs/skill-framework --exclude .claude/worktrees || exit 1
 	@echo "lint-framework: ok"
 
 # Fetch KubeSense error logs with full body via SPL REST API.
