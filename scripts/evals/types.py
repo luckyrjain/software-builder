@@ -22,7 +22,9 @@ def missing_and_failing(
     against a result map this same way in several places -- shared here so a fix to the
     missing/failing definition doesn't need to land in both files to stay in sync.
     """
-    ref_list = list(refs)
-    missing = sorted(ref for ref in ref_list if ref not in case_results)
-    failing = sorted(ref for ref in ref_list if ref in case_results and not case_results[ref].passed)
+    # Deduped: some callers pass a plain list straight from YAML (case_refs can list the same ref
+    # twice by mistake), and a "missing referenced eval cases: x, x" message is worse than "x".
+    ref_set = set(refs)
+    missing = sorted(ref for ref in ref_set if ref not in case_results)
+    failing = sorted(ref for ref in ref_set if ref in case_results and not case_results[ref].passed)
     return missing, failing

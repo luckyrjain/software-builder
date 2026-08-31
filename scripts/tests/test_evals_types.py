@@ -32,3 +32,19 @@ def test_missing_and_failing_sorts_output() -> None:
     missing, _failing = missing_and_failing(["skill/z", "skill/a"], case_results)
 
     assert missing == ["skill/a", "skill/z"]
+
+
+def test_missing_and_failing_dedupes_repeated_refs() -> None:
+    # Regression test: two of the three pre-extraction implementations deduped "missing" via
+    # `set(refs) - set(case_results)`; a naive list-comprehension version doesn't, and would
+    # report "missing referenced eval cases: x, x" if a YAML case_refs list names the same ref
+    # twice by mistake.
+    case_results = {"skill/failing": EvalResult("skill", "failing", False, ["broke"])}
+
+    missing, failing = missing_and_failing(
+        ["skill/absent", "skill/absent", "skill/failing", "skill/failing"],
+        case_results,
+    )
+
+    assert missing == ["skill/absent"]
+    assert failing == ["skill/failing"]

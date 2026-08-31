@@ -14,11 +14,19 @@ ARROW = "→"  # →
 # re-anchored to the destination directory before it's rendered there.
 _SOURCE_DIR = "docs/skill-framework/shared"
 _DEST_DIR = "docs"
-_MARKDOWN_LINK = re.compile(r"\[([^\]]*)\]\(([^)\s]+)\)")
+# Allows exactly one level of nested parens in the target (e.g. a Wikipedia-style URL ending in
+# "_(bar)") so the match doesn't truncate at that inner ")" and leave a corrupted target plus a
+# stray ")" in the rendered text -- a plain "[^)]+" target class does exactly that.
+_MARKDOWN_LINK = re.compile(r"\[([^\]]*)\]\(((?:[^()\s]|\([^()]*\))*)\)")
 
 
 def _reanchor_link_target(target: str) -> str:
-    if target.startswith(("http://", "https://", "#", "mailto:")):
+    if target.startswith(("http://", "https://", "#", "mailto:", "/")):
+        # An absolute path isn't anchored to _SOURCE_DIR in the first place, and rewriting it
+        # relative to _DEST_DIR would resolve against the current process's cwd (via
+        # posixpath.relpath), not repo-relative content -- pass it through unchanged rather than
+        # produce a cwd-dependent result. No such link exists in cross-skill-escalation.md today;
+        # this only guards against one being added later.
         return target
     path, _, fragment = target.partition("#")
     if not path:

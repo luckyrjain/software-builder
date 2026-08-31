@@ -20,7 +20,11 @@ def update_marker_block(text: str, start: str, end: str, content: str) -> str:
     replacement = f"{start}{content}{end}"
     if not pattern.search(text):
         raise ValueError(f"missing marker block: {start} ... {end}")
-    return pattern.sub(replacement, text, count=1)
+    # A callable repl, not a string, so re.sub never interprets backslash-escapes (\g<0>, \1, ...)
+    # in `replacement` as backreferences -- content can come from free-text prose in a repo
+    # markdown file (e.g. a Trigger cell in cross-skill-escalation.md), not just tightly
+    # controlled registry strings, so treating it as a literal string here is load-bearing.
+    return pattern.sub(lambda _match: replacement, text, count=1)
 
 
 def update_readme_badge(readme: str, count: int) -> str:
