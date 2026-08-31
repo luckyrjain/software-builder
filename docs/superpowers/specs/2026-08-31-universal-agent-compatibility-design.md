@@ -324,6 +324,21 @@ Host B provides:
 => BLOCKED
 ```
 Therefore documentation SHALL NOT state that an agent supports "all software-builder skills" merely because it supports `SKILL.md`.
+
+## 11.1 Resolver scale budget
+The full host × surface × skill evaluation is bounded: at repository-current scale (12 named host
+selectors × up to 3 surfaces × 38 skills, §32) it is roughly 1,400 independent, side-effect-free
+capability comparisons, each an in-memory set/enum lookup against already-parsed registries -- no I/O,
+no network call, no external process per comparison.
+The resolver SHALL complete a full evaluation in under `resolver_time_budget_ms` (default 500ms,
+configurable in `agent-hosts.yaml` `defaults:`, §13) on the repository's CI hardware; `doctor.py`/
+`generate --check` (which run inside `lint-static`'s fast path, per the repository's existing convention
+that this target stays quick) SHALL fail their own CI step, not silently degrade, if a single evaluation
+run exceeds the budget -- this catches an accidental O(hosts × skills²) regression before it ships, the
+same way §22's catalog-budget preflight catches an oversized package before mutation.
+This budget scales linearly with host/skill count by construction (the resolver does one pass per
+host × surface × skill, not a nested search), so it remains a meaningful regression gate as both grow;
+it is not a claim that host or skill count itself is bounded.
 ---
 # 12. Unknown capabilities fail closed
 Host capability values SHALL support:
@@ -342,6 +357,8 @@ Illustrative schema:
 schema_version: 1
 defaults:
   evidence_max_age_days: 90
+  resolver_time_budget_ms: 500
+  stale_lock_timeout_seconds: 600
 targets:
   agents-project:
     scope: project
@@ -687,6 +704,17 @@ STALE
 ```
 rather than silently remaining `VERIFIED`.
 Staleness SHOULD block promotion to first-class but SHOULD NOT automatically make previously installed skills unusable.
+
+## 25.1 Evidence retention and refresh process
+Evidence records are append-only per claim but bounded per (host, surface, claim): only the current
+record plus the immediately-superseded one are retained in `agent-hosts.yaml` itself; anything older is
+expected to live in the source control history of that file, which is already a complete, queryable
+audit trail -- no separate evidence datastore or pruning job is needed.
+Refresh is driven by the same documentation-drift CI gate that already exists (§46): the generated
+`docs/agent-compatibility.md` SHALL list every `VERIFIED` claim within `evidence_max_age_days / 4` of
+going `STALE` in a dedicated "due for re-verification" section, so it surfaces on every `--check` run
+rather than requiring a separate scheduled job. Per §41's operability model (§41.1), the maintainer is
+the one who acts on that list; there is no additional automated re-verification actor in this phase.
 ---
 # 26. First-class promotion gate
 A host MUST NOT be marked `FIRST_CLASS + VERIFIED` merely because vendor documentation says it supports Agent Skills.
@@ -882,13 +910,52 @@ FAILED
 ```
 and enumerate exact destinations changed.
 It MUST NOT report global success when only some targets were installed.
+
+## 36.1 Partial-failure recovery policy
+`PARTIAL` MUST NOT trigger automatic rollback of the targets that already succeeded.
+Each target's atomic-replacement guarantee (§38) already makes that individual target either
+fully-installed-and-verified or unchanged; a later target's failure does not retroactively make an
+earlier target's successful, verified install wrong.
+Rolling an already-good install back to chase an unrelated target's failure would itself be a second,
+unforced mutation with its own failure surface.
+Therefore on `PARTIAL`:
+```text
+succeeded targets remain installed and verified
+failed target(s) are left exactly as install_skill's own failure path leaves them today (no destination
+  created or replaced; a pre-existing owned install is restored, per §38)
+the command exits non-zero and lists, separately: succeeded destinations, failed destinations, and each
+  failure's proximate cause
+```
+Re-running the same command is the supported recovery path: succeeded targets are idempotently re-verified
+(unchanged), and only the previously-failed target(s) are retried.
+A future `--continue-on-error=false` flag MAY be added to fail the whole operation before any mutation
+once one target's preflight fails, but this is a UX addition, not a change to the `PARTIAL` semantics above.
 ---
 # 37. Concurrent installation
 Concurrent writes to the same target can corrupt backup/replace semantics.
 Mutation SHALL acquire a target-scoped advisory lock.
 The lock implementation must work on the repository's supported POSIX environments.
 Concurrent lock contention SHALL fail clearly rather than race.
-A stale-lock strategy must be documented and tested.
+
+## 37.1 Stale-lock strategy
+The lock file SHALL record its holder's PID and acquisition timestamp.
+A lock is considered stale, and MAY be broken by a new acquirer, only when both hold:
+```text
+the recorded PID no longer corresponds to a running process on the local host
+the recorded acquisition timestamp is older than a fixed stale_lock_timeout_seconds default
+```
+Checking liveness alone is not sufficient on its own (PIDs are reused), and checking age alone is not
+sufficient on its own (a slow legitimate install may run long) -- both conditions SHALL hold before a
+lock is broken.
+Breaking a stale lock MUST log which PID/timestamp it replaced, so a human debugging a "why did my
+install vanish" report has the evidence.
+A lock whose holder PID belongs to a different host (e.g. a lock directory shared over a network
+filesystem) SHALL NOT be broken by liveness/age alone; cross-host lock breaking is out of scope for this
+phase and such a lock fails contention clearly instead (per §37's existing "fail clearly" rule) until a
+human removes it manually.
+The lock file's own path SHALL be subject to the same symlink-leaf hardening as install destinations
+(§48): a lock path that resolves through a symlink MUST be rejected rather than followed, exactly as an
+install/uninstall destination symlink is refused (§15, §16).
 ---
 # 38. Atomic replacement
 Preserve the existing staging strategy.
@@ -965,6 +1032,23 @@ UNOWNED_COLLISION
 INVALID_PACKAGE
 ```
 Status priority rules SHALL be deterministic and unit-tested.
+
+## 41.1 Operability and ownership
+This is developer tooling that runs inside a CLI invocation, not a running service -- it introduces no
+new on-call surface, no server, and no process that must stay up. The operating model is therefore: the
+repository's maintainer (currently its sole active maintainer, per the git history this proposal itself
+builds on) owns the registries, the resolver, and the evidence they contain, the same way they already
+own `skills.yaml`, `agent-hosts.yaml`, and every other canonical registry in this repository today. No
+new team or role is created by this proposal.
+The operating cost this proposal does add, beyond Candidate 0's baseline:
+```text
+reviewing/merging the "due for re-verification" list §25.1's doc-drift gate surfaces
+triaging a CI failure from §11.1's resolver-time-budget regression gate
+triaging a CI failure from §22's catalog-budget preflight
+```
+Each of these is an existing-pattern CI failure (the repository's `lint-static`/`lint-suites` jobs
+already fail the build on comparable deterministic checks), not a new incident class requiring a new
+runbook.
 ---
 # 42. Backward-compatible doctor behavior
 Existing doctor invocations without:
@@ -1050,8 +1134,30 @@ unknown capability vocabulary
 invalid surface
 invalid constraint value
 FIRST_CLASS + VERIFIED without required evidence
+non-portable frontmatter field present on a canonical skill without a documented per-host
+  interpretation for every first-class receiving host (§20, AD-14)
 ```
 Unknown fields SHALL fail for schema version 1.
+
+## 47.1 Cross-host permission-field enforcement
+§20/AD-14 states the principle that a field one host interprets as a permission grant must not be
+treated as a portable restriction elsewhere; this subsection is that principle's concrete gate.
+`agent-hosts.yaml` SHALL carry, per host, an explicit `frontmatter_field_interpretations` map from any
+non-portable frontmatter field name the registry knows about to one of:
+```text
+PERMISSION_GRANT
+RESTRICTION
+IGNORED
+UNKNOWN
+```
+Standard-conformance validation (§19) SHALL reject a canonical skill's `SKILL.md` that declares a
+non-portable frontmatter field if any first-class host's interpretation for that field is `UNKNOWN`, and
+SHALL reject it outright if any two first-class hosts disagree in a way that could broaden permissions on
+one host relative to what the field's authors intended on another (a `PERMISSION_GRANT` interpretation on
+any host is treated as broadening, regardless of what the field intends elsewhere, per AD-14's
+must-not-be-treated-as-restriction rule).
+This makes §20's exception path ("documented compatibility across all receiving hosts") an enforced
+registry fact rather than an unverified process step.
 ---
 # 48. Safe path expansion
 Allowed path variables SHALL be explicitly allowlisted.
@@ -1334,6 +1440,12 @@ shadowed skill
 corrupt manifest
 unknown required capability
 conflicting evidence
+cross-host permission-field reinterpretation (§47.1: a non-portable field with an UNKNOWN or
+  disagreeing per-host interpretation)
+stale-lock breaking (§37.1: a live-PID lock must never be broken; a truly-stale lock must be)
+lock-path symlink (§37.1: a lock path resolving through a symlink is refused, not followed)
+partial multi-target failure (§36.1: succeeded targets remain installed and verified; the failed
+  target is left exactly as its own failure path leaves it; re-run retries only the failed target)
 ```
 A success-only test suite is insufficient.
 ---
@@ -1685,3 +1797,23 @@ The implementation is correct only if this remains true:
 > A new coding agent should usually be supportable by adding verified declarative host data, not by copying or rewriting the 38 software-builder skills.
 And a new skill should usually become usable across already-compatible hosts without adding host-specific implementation code.
 That is the architectural property this project exists to create.
+---
+# 73. Additional alternatives considered
+Two architectural choices load-bearing enough to warrant explicit rationale, beyond §1/§30's two
+already-stated alternatives:
+**Filesystem-copy installation vs. vendor-native package managers/marketplaces as the primary
+mechanism.** Rejected as primary (though not excluded, per §28) because it is the one mechanism common to
+every host in scope: a marketplace/plugin-manager integration is itself a per-host implementation this
+proposal exists to avoid needing (§1, §72's final invariant), and would have to be built and maintained
+per vendor before a single new host could be supported at all -- exactly the N-implementations outcome
+§1 rejects. Filesystem-copy also composes with a future package-manager channel without rework: §28
+already models distribution channel as separate from discovery path, so a marketplace integration can be
+added later as an additional channel loading the same canonical package, not a replacement.
+**Declarative host registry vs. programmatic host auto-detection.** Rejected per §4's non-goals for
+this phase because auto-detection produces `INFERRED`, not `OBSERVED`, evidence (§24) at exactly the
+layer -- "does this host actually support this capability" -- where §12/§26 require the strongest
+guarantee (`UNKNOWN` must fail closed; first-class promotion requires runtime smoke evidence, not
+inference). A declarative registry lets each fact be individually evidenced and reviewed; auto-detection
+would either weaken that guarantee or require the same evidence-gathering work behind a detection
+heuristic instead of a maintainer-reviewed YAML file, with no scale or correctness benefit to offset the
+added inference risk.
