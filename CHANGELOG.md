@@ -17,9 +17,12 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 - `change-impact-analyzer`, `domain-comprehension`, `implementation-planner`, `resilience-review`:
   standardized frontmatter description to the `Keywords:` convention the other 34 skills already use;
   `scripts/registry/crosscheck.py` now enforces it for every skill.
-- `scripts/validate_setup_freshness.py` and `scripts/operational_upkeep.py` read registered skill ids
-  through the typed registry parser instead of two separately hand-rolled, differently-lenient reads
-  of `skills.yaml`.
+- `scripts/validate_setup_freshness.py` now reads registered skill ids through the typed registry
+  parser (`scripts/registry/schema.py`'s new `registered_skill_ids()`) instead of its own
+  hand-rolled, more-lenient read of `skills.yaml`; `scripts/operational_upkeep.py`'s own internal
+  duplicate read was collapsed to call its existing `_registered_skills()` helper once instead of
+  twice, but deliberately stays on that raw-dict shape (it needs fields `registered_skill_ids()`
+  doesn't expose), not the typed parser.
 - `scripts/evals/batch3_contract.py`: `run_batch3_contract_checks`'s mutation-matrix check no longer
   depends on `run_all()` merging mutation results into `case_results` in the right order before
   calling it (the exact fragility behind the `80e588a` "dedupe mutation evals" incident) — it now
