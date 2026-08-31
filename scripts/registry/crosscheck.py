@@ -19,7 +19,7 @@ from scripts.registry.skill_frontmatter_schema import (
 )
 from scripts.yaml_safety import YAML_SAFETY_ERRORS, load_unique_yaml_file
 
-_SKILL_ID_RE = re.compile(r"^[a-z0-9-]+$")
+_SKILL_ID_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 _GENERATED_MARKER = "GENERATED from skills.yaml"
 
 
@@ -34,7 +34,7 @@ def _skill_directories(root: Path) -> set[str]:
 def _validate_skill_path(root: Path, skill_id: str, entry_path: str) -> list[str]:
     errors: list[str] = []
     if not _SKILL_ID_RE.match(skill_id):
-        errors.append(f"error: {skill_id}: skill id must match [a-z0-9-]+")
+        errors.append(f"error: {skill_id}: skill id must be lowercase kebab-case (no leading/trailing/double hyphens)")
     if entry_path != skill_id:
         errors.append(
             f"error: {skill_id}: path {entry_path!r} must match skill id (no aliases in v1)",

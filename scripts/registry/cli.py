@@ -38,8 +38,8 @@ from scripts.registry.generate_docs import (
 from scripts.registry.generate_kiro import generate_kiro_steering
 from scripts.registry.generic_package import build_generic_package
 from scripts.registry.host_portability import validate_host_portability
-from scripts.registry.host_adapter import validate_host_adapter_identities, validate_host_adapter_interface
-from scripts.registry.host_registry import parse_host_registry
+from scripts.registry.host_adapter import HOSTS, validate_host_adapter_identities, validate_host_adapter_interface
+from scripts.registry.host_registry import HostRegistryParseError, parse_host_registry
 from scripts.registry.load import load_descriptions, load_registry
 from scripts.registry.manifest import validate_manifest
 from scripts.registry.p1_validation import validate_p1_contracts
@@ -262,7 +262,22 @@ def cmd_validate_agent_skills(root: Path) -> int:
 
 
 def cmd_validate_hosts(root: Path) -> int:
-    parse_host_registry(root / "agent-hosts.yaml")
+    try:
+        registry = parse_host_registry(root / "agent-hosts.yaml")
+    except HostRegistryParseError as exc:
+        for error in exc.errors:
+            print(f"error: {error}", file=sys.stderr)
+        return 1
+    errors = [
+        f"error: agent-hosts.yaml: hosts.{host_id} is not a known host adapter id "
+        f"(expected one of {sorted(HOSTS)})"
+        for host_id in sorted(registry.hosts)
+        if host_id not in HOSTS
+    ]
+    if errors:
+        for error in errors:
+            print(error, file=sys.stderr)
+        return 1
     print("ok: agent host registry validates")
     return 0
 

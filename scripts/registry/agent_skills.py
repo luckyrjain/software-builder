@@ -8,9 +8,11 @@ from typing import Any
 
 import yaml
 
+from scripts.registry.canonical_manifest import has_canonical_manifest_shape
 from scripts.registry.frontmatter import load_skill_frontmatter
 from scripts.registry.load import load_registry
 from scripts.registry.skill_frontmatter_schema import validate_skill_frontmatter_fields
+from scripts.yaml_safety import load_unique_yaml_file
 
 MAX_NAME_LENGTH = 64
 MAX_DESCRIPTION_LENGTH = 1024
@@ -55,15 +57,21 @@ def _validate_description(skill_dir: Path, frontmatter: dict[str, Any]) -> list[
     return []
 
 
-def _validate_schema(skill_dir: Path, frontmatter: dict[str, Any]) -> list[str]:
+def _validate_schema(
+    skill_dir: Path, frontmatter: dict[str, Any], *, require_legacy_platform_fields: bool
+) -> list[str]:
     schema_prefix = f"error: {skill_dir.name}: "
     return [
         _error(skill_dir, error.removeprefix(schema_prefix))
-        for error in validate_skill_frontmatter_fields(skill_dir.name, frontmatter)
+        for error in validate_skill_frontmatter_fields(
+            skill_dir.name,
+            frontmatter,
+            require_legacy_platform_fields=require_legacy_platform_fields,
+        )
     ]
 
 
-def validate_skill(skill_dir: Path) -> list[str]:
+def validate_skill(skill_dir: Path, *, require_legacy_platform_fields: bool = False) -> list[str]:
     """Validate one skill directory's portable Agent Skills frontmatter."""
     skill_md = skill_dir / "SKILL.md"
     if not skill_md.is_file():
@@ -83,14 +91,20 @@ def validate_skill(skill_dir: Path) -> list[str]:
     return (
         _validate_name(skill_dir, frontmatter)
         + _validate_description(skill_dir, frontmatter)
-        + _validate_schema(skill_dir, frontmatter)
+        + _validate_schema(
+            skill_dir, frontmatter, require_legacy_platform_fields=require_legacy_platform_fields
+        )
     )
 
 
 def validate_agent_skills(root: Path) -> list[str]:
     """Validate the SKILL.md files for every canonical registered skill."""
     registry = load_registry(root)
+    raw_manifest = load_unique_yaml_file(root / "skills.yaml")
+    legacy_manifest = not has_canonical_manifest_shape(raw_manifest)
     errors: list[str] = []
     for _skill_id, entry in sorted(registry.skills.items()):
-        errors.extend(validate_skill(root / entry.path))
+        errors.extend(
+            validate_skill(root / entry.path, require_legacy_platform_fields=legacy_manifest)
+        )
     return errors

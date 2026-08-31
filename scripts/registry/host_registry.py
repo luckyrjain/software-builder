@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
+from functools import cached_property
 from pathlib import Path
 from typing import Any
 
@@ -57,9 +58,13 @@ class CapabilitySpec:
     values: tuple[tuple[str, str], ...] = field(default_factory=tuple)
 
     def state_for(self, capability: str) -> str | None:
-        return dict(self.values).get(capability)
+        return self._by_name.get(capability)
 
-    @property
+    @cached_property
+    def _by_name(self) -> dict[str, str]:
+        return dict(self.values)
+
+    @cached_property
     def available(self) -> frozenset[str]:
         return frozenset(name for name, state in self.values if state == "AVAILABLE")
 
@@ -223,6 +228,8 @@ def _validate_target_path(path: str, scope: str | None, label: str, errors: list
 
 
 def _parse_aliases(raw: Any, errors: list[str]) -> dict[str, str]:
+    if raw is None:
+        return {}
     items = _sequence(raw, "aliases", errors)
     if items is None:
         return {}
@@ -538,16 +545,14 @@ def parse_host_registry(path: Path) -> HostRegistry:
                     )
                 )
             surfaces.append(SurfaceSpec(kind=surface.kind, discovery=tuple(discovery)))
-        hosts[host_id] = HostSpec(
-            id=raw_host.id,
-            surfaces=tuple(surfaces),
-            capabilities=raw_host.capabilities,
-            isolation=raw_host.isolation,
-            constraints=raw_host.constraints,
-            verification=raw_host.verification,
-            evidence=raw_host.evidence,
-            maintainer_support=raw_host.maintainer_support,
-        )
+        # Every _RawHost field except `surfaces` carries over to HostSpec unchanged;
+        # only `surfaces` needs its discovery bindings' target_id resolved to a
+        # TargetSpec above. Copying the rest by field name means a new scalar
+        # field only has to be added to _RawHost/HostSpec, not to this loop too.
+        passthrough = {
+            f.name: getattr(raw_host, f.name) for f in fields(raw_host) if f.name != "surfaces"
+        }
+        hosts[host_id] = HostSpec(surfaces=tuple(surfaces), **passthrough)
 
     resolved_aliases = _resolve_aliases(aliases, hosts, errors)
     if errors:
