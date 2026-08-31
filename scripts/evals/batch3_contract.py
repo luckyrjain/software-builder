@@ -18,7 +18,7 @@ from typing import Any
 from scripts.evals.dispatcher import dispatch_prompt
 from scripts.evals.golden import GoldenCase, field_matches_pattern, golden_case_index
 from scripts.evals.scenario_harness import DIMENSIONS
-from scripts.evals.types import EvalResult
+from scripts.evals.types import EvalResult, missing_and_failing
 from scripts.registry.schema import Registry
 from scripts.yaml_safety import load_unique_yaml_file, require_mapping
 
@@ -185,12 +185,9 @@ def _referenced_matrix(
         if not isinstance(refs, list) or not refs or not all(isinstance(ref, str) and ref for ref in refs):
             messages.append(f"{item_id}: case_refs must be a non-empty list")
             continue
-        for ref in refs:
-            result = results.get(ref)
-            if result is None:
-                messages.append(f"{item_id}: missing regression case {ref}")
-            elif not result.passed:
-                messages.append(f"{item_id}: regression case is failing: {ref}")
+        missing, failing = missing_and_failing(refs, results)
+        messages.extend(f"{item_id}: missing regression case {ref}" for ref in missing)
+        messages.extend(f"{item_id}: regression case is failing: {ref}" for ref in failing)
     return _result(case_id, messages)
 
 
