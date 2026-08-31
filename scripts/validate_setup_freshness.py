@@ -15,7 +15,8 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from scripts.yaml_safety import YAML_SAFETY_ERRORS, load_unique_yaml_file  # noqa: E402
+from scripts.registry.schema import load_registry_raw  # noqa: E402
+from scripts.yaml_safety import YAML_SAFETY_ERRORS  # noqa: E402
 
 _FRESHNESS_HEADING = "## Freshness"
 _LAST_REVIEWED_RE = re.compile(
@@ -67,7 +68,7 @@ def _insert_after_title(text: str, block: str) -> str:
 
 def _load_registry_skill_ids(root: Path) -> set[str]:
     registry_path = root / "skills.yaml"
-    raw = load_unique_yaml_file(registry_path)
+    raw = load_registry_raw(registry_path)
     skills = raw.get("skills") if isinstance(raw, dict) else None
     if not isinstance(skills, dict):
         raise ValueError("skills.yaml skills must be a mapping")
