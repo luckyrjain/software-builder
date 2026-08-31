@@ -102,8 +102,11 @@ def test_extract_markdown_links_preserves_parens_in_target() -> None:
 
 def test_rewrite_framework_links_preserves_parens_in_untouched_target(tmp_path: Path) -> None:
     # A link the rewriter doesn't touch (no docs/skill-framework/ marker) must still round-trip
-    # intact -- confirms the wider regex doesn't just fix extraction but also fixes .sub()-based
-    # rewriting, which reconstructs the full "](target)" from the captured group.
+    # intact. Note: replace_link() returns match.group(0) verbatim on this early-return path, so
+    # this specific case can't discriminate old vs. new regex behavior on its own (a truncated
+    # match's leftover text recombines into the same original string either way) -- it guards
+    # against a *different* mutation (e.g. .sub() dropping/mangling untouched text), not the
+    # paren-truncation bug. See the sibling test below for the discriminating case.
     content = "See [wiki](https://en.wikipedia.org/wiki/Foo_(bar)) for detail"
     source_file = tmp_path / "SKILL.md"
     package_root = tmp_path / "package"
@@ -111,3 +114,17 @@ def test_rewrite_framework_links_preserves_parens_in_untouched_target(tmp_path: 
     result = rewrite_framework_links(content, source_file, package_root)
 
     assert result == content
+
+
+def test_rewrite_framework_links_preserves_parens_in_rewritten_target(tmp_path: Path) -> None:
+    # Discriminating version: a framework-marked link actually gets rewritten (goes through
+    # framework_relative_path + os.path.relpath), so a truncated target here produces a visibly
+    # different (unresolved "/../") result versus the correctly-collapsed path -- same technique
+    # as test_reanchor_relative_links_preserves_parens_in_relative_link_target in test_registry.py.
+    content = "[x](docs/skill-framework/shared/foo_(bar)/../other.md)"
+    source_file = tmp_path / "sub" / "SKILL.md"
+    package_root = tmp_path
+
+    result = rewrite_framework_links(content, source_file, package_root)
+
+    assert result == "[x](../docs/skill-framework/shared/other.md)"
