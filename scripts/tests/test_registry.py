@@ -451,7 +451,12 @@ def test_cmd_generate_populates_docs_readme_link_table(
 
     assert cmd_generate(tmp_path, check_only=False) == 0
     docs_readme = (tmp_path / "docs" / "README.md").read_text(encoding="utf-8")
-    assert "solo" in docs_readme
+    # Exact row, not just "solo" in docs_readme -- a mutation that broke the link paths, column
+    # order, or file extensions would still leave "solo" present and pass a looser assertion.
+    assert (
+        "| **solo** | [solo/README.md](../solo/README.md) | [solo/SKILL.md](../solo/SKILL.md) | "
+        "[solo/SETUP.md](../solo/SETUP.md) |"
+    ) in docs_readme
     assert cmd_generate(tmp_path, check_only=True) == 0
 
 
@@ -1149,18 +1154,35 @@ def test_parse_forward_escalation_matrix_reanchors_relative_links_in_trigger() -
     assert "../../../" not in trigger
 
 
-def test_reanchor_relative_links_preserves_parens_in_link_target() -> None:
-    # Regression test: a naive "[^)]+" target class truncates at the FIRST ")", which corrupts
-    # any link whose target legitimately contains one (e.g. a Wikipedia-style URL ending in
-    # "_(bar)") -- losing the closing paren and leaving a stray ")" dangling in the rendered text.
+def test_markdown_link_regex_captures_full_target_with_nested_parens() -> None:
+    # Regression test: a naive "[^)]+"/"[^)\s]+" target class truncates at the FIRST ")", which
+    # corrupts any link whose target legitimately contains one (e.g. a Wikipedia-style URL ending
+    # in "_(bar)"). Asserts on the regex's own capture group directly rather than end-to-end
+    # through reanchor_relative_links() -- for an http(s) target specifically, _reanchor_link_target
+    # returns whatever it's given unchanged, and the leftover unmatched text after a truncated
+    # match happens to recombine into the original string either way, masking the bug end-to-end.
+    from scripts.registry.cross_skill_routing import _MARKDOWN_LINK
+
+    match = _MARKDOWN_LINK.search("[wiki](https://en.wikipedia.org/wiki/Foo_(bar))")
+
+    assert match is not None
+    assert match.group(2) == "https://en.wikipedia.org/wiki/Foo_(bar)"
+
+
+def test_reanchor_relative_links_preserves_parens_in_relative_link_target() -> None:
+    # End-to-end version of the regression above. Many inputs with parens don't actually
+    # discriminate old vs. new regex behavior here: a truncated target's dropped suffix often
+    # reappends as untouched leftover text and coincidentally reconstructs the same final string.
+    # This input does discriminate: the truncated old capture drops a trailing "/../other.md"
+    # segment from what posixpath.normpath sees, leaving an un-collapsed ".." in the output
+    # instead of correctly resolving to "other.md".
     from scripts.registry.cross_skill_routing import reanchor_relative_links
 
-    text = "See [wiki](https://en.wikipedia.org/wiki/Foo_(bar)) for detail"
+    text = "See [x](../shared/foo_(bar)/../other.md) end"
 
     result = reanchor_relative_links(text)
 
-    assert result == text  # http(s) targets are returned unchanged, but must round-trip intact
-    assert "Foo_(bar))" in result
+    assert result == "See [x](skill-framework/shared/other.md) end"
 
 
 def test_reanchor_relative_links_leaves_absolute_paths_unchanged() -> None:

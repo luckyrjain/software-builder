@@ -4,6 +4,7 @@ from __future__ import annotations
 from datetime import date, timedelta
 from pathlib import Path
 
+import pytest
 import yaml
 
 from scripts.validate_setup_freshness import ensure_setup_freshness
@@ -87,3 +88,26 @@ def test_stale_last_reviewed_fails_validation(tmp_path: Path) -> None:
     )
     errors = ensure_setup_freshness(tmp_path, write=False)
     assert any("exceeds 120d cadence" in e for e in errors)
+
+
+def test_unrelated_registry_schema_error_is_prefixed_and_not_mistaken_for_freshness(
+    tmp_path: Path,
+) -> None:
+    # Regression test: registered_skill_ids() now fully validates skills.yaml (not just "skills:
+    # is a mapping"), so an unrelated schema error elsewhere in the registry surfaces here too.
+    # Without a clarifying prefix, someone running this validator to debug a stale SETUP.md would
+    # see a risk_class/hosts/etc. error with no indication their actual target was never reached.
+    (tmp_path / "skills.yaml").write_text(
+        # Missing every required field _parse_skill_entry needs beyond `path` -- a genuinely
+        # broken registry entry, unrelated to SETUP.md freshness.
+        "schema_version: 1\nskills:\n  broken-skill:\n    path: broken-skill\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "scripts/registry").mkdir(parents=True)
+    (tmp_path / "scripts/registry/setup_freshness.yaml").write_text(
+        "defaults:\n  last_reviewed: 2026-08-09\nskills: {}\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="schema errors unrelated to SETUP.md freshness"):
+        ensure_setup_freshness(tmp_path, write=False)

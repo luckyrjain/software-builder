@@ -17,6 +17,13 @@ _DEST_DIR = "docs"
 # Allows exactly one level of nested parens in the target (e.g. a Wikipedia-style URL ending in
 # "_(bar)") so the match doesn't truncate at that inner ")" and leave a corrupted target plus a
 # stray ")" in the rendered text -- a plain "[^)]+" target class does exactly that.
+#
+# Residual limitation: a target with TWO or more levels of nesting (e.g. "foo_(a_(b)_c)") doesn't
+# match at all, rather than matching-and-truncating -- for a relative link this means it's left
+# completely un-reanchored (silently resolving from the wrong directory once copied into
+# docs/README.md), with no error. Python's `re` can't express general balanced-paren matching;
+# going further would mean a real parser. No such link exists in cross-skill-escalation.md today
+# (verified), so this is an accepted, documented gap rather than a case worth a parser for.
 _MARKDOWN_LINK = re.compile(r"\[([^\]]*)\]\(((?:[^()\s]|\([^()]*\))*)\)")
 
 
