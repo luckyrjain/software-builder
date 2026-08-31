@@ -9,7 +9,8 @@ import yaml
 
 from scripts.registry.frontmatter import load_skill_frontmatter
 from scripts.registry.host_adapter import HOSTS
-from scripts.yaml_safety import load_unique_yaml_file, require_mapping
+from scripts.registry.schema import load_registry_raw
+from scripts.yaml_safety import require_mapping
 
 ROOT = Path(__file__).resolve().parents[2]
 CANONICAL_PATH = ROOT / "skills.yaml"
@@ -67,7 +68,7 @@ def is_semver(value: str) -> bool:
 
 def load_canonical_manifest(root: Path = ROOT) -> dict[str, Any]:
     raw = require_mapping(
-        load_unique_yaml_file(root / "skills.yaml"),
+        load_registry_raw(root / "skills.yaml"),
         "canonical manifest",
     )
     schema_version = raw.get("schema_version")

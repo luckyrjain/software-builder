@@ -6,14 +6,13 @@ from scripts.registry.artifact_contracts import validate_artifact_result
 from scripts.registry.load import load_registry
 from scripts.registry.canonical_manifest import load_canonical_manifest
 from scripts.registry.frontmatter import load_skill_frontmatter
-from scripts.yaml_safety import load_unique_yaml_file
 from scripts.change_impact import analyze_change, analyze_pr_impact, finalize_impact, run_impact
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
 def _raw_manifest() -> dict:
-    return load_unique_yaml_file(ROOT / "skills.yaml")
+    return load_canonical_manifest(ROOT)
 
 
 def _route(prompt: str) -> str | None:
