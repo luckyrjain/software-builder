@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 if TYPE_CHECKING:
-    from scripts.registry.models import SkillEntry
+    from scripts.registry.models import Registry, SkillEntry
 
 ROOT = Path(__file__).resolve().parents[2]
 
