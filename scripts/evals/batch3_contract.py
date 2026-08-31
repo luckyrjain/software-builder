@@ -270,16 +270,22 @@ def run_batch3_contract_checks(
     registry: Registry,
     *,
     case_results: Iterable[EvalResult],
+    mutation_results: Iterable[EvalResult],
     golden_cases: Iterable[GoldenCase],
 ) -> list[EvalResult]:
     result_map = _result_map(case_results)
+    # Mutation results get their own map rather than relying on the caller having already
+    # merged them into case_results in the right order -- see the regression this caused in
+    # commit 80e588a ("dedupe mutation evals"): an implicit "case_results must already contain
+    # batch3-mutation/* by now" requirement enforced only by call order, not the signature.
+    mutation_map = _result_map(mutation_results)
     golden_list = list(golden_cases)
     return [
         _all_skill_scenarios(registry, result_map),
         _all_skill_golden(registry, result_map, golden_list),
         _behavior_scenario_matrix(root, result_map),
         _routing_matrix(root, registry),
-        _mutation_matrix(root, result_map),
+        _mutation_matrix(root, mutation_map),
         _mutation_anchor_matrix(root, result_map, golden_list),
         _referenced_matrix(root, result_map, key="untrusted_surfaces", case_id="untrusted-surface-matrix"),
         _referenced_matrix(root, result_map, key="degraded_host_cases", case_id="degraded-host-matrix"),
