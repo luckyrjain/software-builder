@@ -9,6 +9,7 @@ from pathlib import Path
 import yaml
 
 from scripts.registry.backfill_capabilities import cmd_backfill
+from scripts.registry.agent_skills import validate_agent_skills
 from scripts.registry.artifact_contracts import validate_artifact_result
 from scripts.registry.canonical_manifest import (
     has_canonical_manifest_shape,
@@ -38,6 +39,7 @@ from scripts.registry.generate_kiro import generate_kiro_steering
 from scripts.registry.generic_package import build_generic_package
 from scripts.registry.host_portability import validate_host_portability
 from scripts.registry.host_adapter import validate_host_adapter_identities, validate_host_adapter_interface
+from scripts.registry.host_registry import parse_host_registry
 from scripts.registry.load import load_descriptions, load_registry
 from scripts.registry.manifest import validate_manifest
 from scripts.registry.p1_validation import validate_p1_contracts
@@ -249,6 +251,22 @@ def cmd_validate(root: Path) -> int:
     return 0
 
 
+def cmd_validate_agent_skills(root: Path) -> int:
+    errors = validate_agent_skills(root)
+    if errors:
+        for error in errors:
+            print(error, file=sys.stderr)
+        return 1
+    print("ok: Agent Skills conformance validates")
+    return 0
+
+
+def cmd_validate_hosts(root: Path) -> int:
+    parse_host_registry(root / "agent-hosts.yaml")
+    print("ok: agent host registry validates")
+    return 0
+
+
 def cmd_generate(root: Path, check_only: bool) -> int:
     if not check_only:
         _prune_stale_adapters(root)
@@ -401,6 +419,16 @@ def main(argv: list[str] | None = None) -> int:
 
     subparsers.add_parser("validate", help="validate skills.yaml, capabilities and platform contracts")
 
+    subparsers.add_parser(
+        "validate-agent-skills",
+        help="validate portable Agent Skills frontmatter conformance",
+    )
+
+    subparsers.add_parser(
+        "validate-hosts",
+        help="validate the declarative agent host registry",
+    )
+
     subparsers.add_parser("list", help="list registered skills and their canonical metadata")
 
     explain_parser = subparsers.add_parser(
@@ -469,6 +497,10 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.command == "validate":
         return _run_command(lambda: cmd_validate(ROOT))
+    if args.command == "validate-agent-skills":
+        return _run_command(lambda: cmd_validate_agent_skills(ROOT))
+    if args.command == "validate-hosts":
+        return _run_command(lambda: cmd_validate_hosts(ROOT))
     if args.command == "list":
         return _run_command(lambda: cmd_list(ROOT))
     if args.command == "explain":

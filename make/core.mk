@@ -12,6 +12,8 @@
 .PHONY: install-claude-implementation-planner
 .PHONY: install-claude-resilience-review
 .PHONY: lint-python
+.PHONY: validate-agent-skills
+.PHONY: validate-hosts
 .PHONY: lint-static lint-suites lint-framework-tests lint-scripts-shellcheck
 
 # Parallelize the larger pytest suites with pytest-xdist when it's installed (it's pinned
@@ -306,6 +308,12 @@ verify-github-ruleset:
 
 validate-registry:
 	@python3 -m scripts.registry validate
+
+validate-agent-skills:
+	@python3 -m scripts.registry validate-agent-skills
+
+validate-hosts:
+	@python3 -m scripts.registry validate-hosts
 
 backfill-capabilities-check:
 	@python3 -m scripts.registry backfill-capabilities --check
