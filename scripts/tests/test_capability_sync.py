@@ -52,6 +52,40 @@ def test_capability_sync_reports_real_content_drift(tmp_path: Path) -> None:
     ]
 
 
+def test_capability_sync_resolves_extends_profile(tmp_path: Path) -> None:
+    # `extends:` only touches authority/entrypoint/hosts/invocation/risk_class/
+    # supported_hosts/version_source -- capabilities always stay inline, so a
+    # skill using extends should sync exactly like a fully-inlined one.
+    registry_dir = tmp_path / "scripts" / "registry"
+    registry_dir.mkdir(parents=True)
+    (tmp_path / "skills.yaml").write_text(
+        """
+schema_version: 1
+profiles:
+  read-only-leaf-review:
+    authority: read-only
+skills:
+  demo:
+    extends: read-only-leaf-review
+    capabilities:
+      required: [host.repository.read]
+      optional: []
+""",
+        encoding="utf-8",
+    )
+    (registry_dir / "capability_catalog.yaml").write_text(
+        """
+skills:
+  demo:
+    required: [host.repository.read]
+    optional: []
+""",
+        encoding="utf-8",
+    )
+
+    assert validate_capability_catalog_sync(tmp_path) == []
+
+
 def test_capability_sync_reports_missing_catalog_file(tmp_path: Path) -> None:
     (tmp_path / "skills.yaml").write_text("schema_version: 1\nskills: {}\n", encoding="utf-8")
 

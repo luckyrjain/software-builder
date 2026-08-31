@@ -1215,3 +1215,121 @@ def test_update_readme_routing_table_renders_trimmed_columns() -> None:
     # trimmed shape: no handoff-artifact/prompt-template columns from the source table
     assert "Handoff artifact" not in updated
     assert "MR link" not in updated
+
+
+def test_parse_registry_resolves_extends_profile(tmp_path: Path) -> None:
+    from scripts.registry.schema import parse_registry
+
+    registry_file = tmp_path / "skills.yaml"
+    registry_file.write_text(
+        """
+schema_version: 1
+profiles:
+  read-only-leaf-review:
+    invocation: ambient
+    hosts:
+      cursor: {discovery: rule}
+      claude: {install: true}
+      kiro: {discovery: manual}
+    risk_class: [read-only]
+skills:
+  squad-map:
+    path: squad-map
+    category: architecture
+    extends: read-only-leaf-review
+    install:
+      requires: []
+    capabilities:
+      required: [host.repository.read]
+    lint:
+      skill_md_max_lines: 180
+      target: squad-map
+""",
+        encoding="utf-8",
+    )
+
+    registry = parse_registry(registry_file)
+    entry = registry.skills["squad-map"]
+    assert entry.invocation == "ambient"
+    assert entry.hosts.cursor.discovery == "rule"
+    assert entry.risk_class == ["read-only"]
+    assert entry.install.requires == []
+
+
+def test_parse_registry_extends_unknown_profile_raises(tmp_path: Path) -> None:
+    from scripts.registry.schema import parse_registry
+
+    registry_file = tmp_path / "skills.yaml"
+    registry_file.write_text(
+        """
+schema_version: 1
+profiles:
+  read-only-leaf-review:
+    invocation: ambient
+skills:
+  squad-map:
+    path: squad-map
+    category: architecture
+    extends: nonexistent-profile
+    install:
+      requires: []
+    lint:
+      skill_md_max_lines: 180
+      target: squad-map
+    risk_class: [read-only]
+""",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match=r"skills\.squad-map\.extends: unknown profile 'nonexistent-profile'"):
+        parse_registry(registry_file)
+
+
+def test_parse_registry_skill_field_overrides_profile_field(tmp_path: Path) -> None:
+    # Deep merge, not full replace: a skill overriding one nested hosts.*
+    # field keeps the rest of the profile's hosts block.
+    from scripts.registry.schema import parse_registry
+
+    registry_file = tmp_path / "skills.yaml"
+    registry_file.write_text(
+        """
+schema_version: 1
+profiles:
+  read-only-leaf-review:
+    invocation: ambient
+    hosts:
+      cursor: {discovery: rule}
+      claude: {install: true}
+      kiro: {discovery: manual}
+    risk_class: [read-only]
+skills:
+  squad-map:
+    path: squad-map
+    category: architecture
+    extends: read-only-leaf-review
+    hosts:
+      cursor: {discovery: always}
+    install:
+      requires: []
+    lint:
+      skill_md_max_lines: 180
+      target: squad-map
+""",
+        encoding="utf-8",
+    )
+
+    registry = parse_registry(registry_file)
+    entry = registry.skills["squad-map"]
+    assert entry.hosts.cursor.discovery == "always"
+    assert entry.hosts.claude.install is True
+    assert entry.hosts.kiro.discovery == "manual"
+
+
+def test_resolve_registry_profiles_noop_without_profiles_key() -> None:
+    from scripts.registry.schema import resolve_registry_profiles
+
+    raw = {
+        "schema_version": 1,
+        "skills": {"squad-map": {"path": "squad-map", "invocation": "ambient"}},
+    }
+    assert resolve_registry_profiles(raw) is raw

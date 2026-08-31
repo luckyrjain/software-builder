@@ -16,6 +16,7 @@ if str(ROOT) not in sys.path:
 
 from scripts.git_paths import tracked_relative_paths
 from scripts.registry.canonical_manifest import load_canonical_manifest
+from scripts.registry.schema import resolve_registry_profiles
 from scripts.yaml_safety import FRONTMATTER_RE, load_unique_yaml, load_unique_yaml_file
 
 POLICY_PATH = ROOT / "scripts" / "operational_upkeep.yaml"
@@ -207,7 +208,8 @@ def _canonical_contract(root: Path, section: str, legacy_path: str) -> dict[str,
 
 
 def _registered_skills(root: Path) -> dict[str, Any]:
-    skills = _yaml_mapping(root / "skills.yaml").get("skills", {})
+    manifest = resolve_registry_profiles(_yaml_mapping(root / "skills.yaml"))
+    skills = manifest.get("skills", {})
     return skills if isinstance(skills, dict) else {}
 
 
@@ -329,7 +331,7 @@ def build_health_report(root: Path = ROOT, revision: str | None = None) -> dict[
     from scripts.eval_tier_health import build_eval_tier_health
 
     policy = load_policy(root / "scripts" / "operational_upkeep.yaml")
-    skills_file = _yaml_mapping(root / "skills.yaml")
+    skills_file = resolve_registry_profiles(_yaml_mapping(root / "skills.yaml"))
     skills = _registered_skills(root)
     composition = _canonical_contract(
         root, "composition", "scripts/registry/composition_contracts.yaml"

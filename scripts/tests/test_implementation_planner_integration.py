@@ -4,13 +4,12 @@ from scripts.evals.dispatcher import dispatch_prompt
 from scripts.registry.canonical_manifest import load_canonical_manifest
 from scripts.registry.frontmatter import load_skill_frontmatter
 from scripts.registry.load import load_registry
-from scripts.yaml_safety import load_unique_yaml_file
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
 def _raw_manifest() -> dict:
-    return load_unique_yaml_file(ROOT / "skills.yaml")
+    return load_canonical_manifest(ROOT)
 
 
 def _route(prompt: str) -> str | None:

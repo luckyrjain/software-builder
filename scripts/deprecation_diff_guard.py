@@ -15,6 +15,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from scripts.deprecation_lifecycle import validate_deprecation_item
+from scripts.registry.schema import resolve_registry_profiles
 from scripts.yaml_safety import FRONTMATTER_RE, load_unique_yaml
 
 POLICY_PATH = "scripts/operational_upkeep.yaml"
@@ -71,7 +72,7 @@ def governed_items(root: Path, ref: str) -> tuple[dict[str, dict[str, Any]], dic
     upkeep = _mapping(_git_text(root, ref, POLICY_PATH))
     items: dict[str, dict[str, Any]] = {}
 
-    skills_file = _mapping(_git_text(root, ref, "skills.yaml"))
+    skills_file = resolve_registry_profiles(_mapping(_git_text(root, ref, "skills.yaml")))
     skills = skills_file.get("skills", {})
     if isinstance(skills, dict):
         for skill_id, entry in skills.items():
