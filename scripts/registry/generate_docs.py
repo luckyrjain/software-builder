@@ -2,12 +2,17 @@ from __future__ import annotations
 
 import re
 
+from scripts.registry.cross_skill_routing import parse_forward_escalation_matrix
 from scripts.registry.models import Registry
 
 README_COUNT_START = "<!-- skills-count:start -->"
 README_COUNT_END = "<!-- skills-count:end -->"
 REPOSITORY_TABLE_START = "<!-- registry-skills-table:start -->"
 REPOSITORY_TABLE_END = "<!-- registry-skills-table:end -->"
+README_LINKS_START = "<!-- skill-doc-links:start -->"
+README_LINKS_END = "<!-- skill-doc-links:end -->"
+README_ROUTING_START = "<!-- cross-skill-routing:start -->"
+README_ROUTING_END = "<!-- cross-skill-routing:end -->"
 
 
 def update_marker_block(text: str, start: str, end: str, content: str) -> str:
@@ -64,3 +69,38 @@ def update_repository_table(repository_md: str, registry: Registry) -> str:
         REPOSITORY_TABLE_END,
         table,
     )
+
+
+def render_doc_links_table(registry: Registry) -> str:
+    lines = [
+        "| Skill | Human overview | Agent entry | Setup |",
+        "|-------|----------------|-------------|-------|",
+    ]
+    for skill_id in sorted(registry.skills):
+        lines.append(
+            f"| **{skill_id}** | [{skill_id}/README.md](../{skill_id}/README.md) | "
+            f"[{skill_id}/SKILL.md](../{skill_id}/SKILL.md) | "
+            f"[{skill_id}/SETUP.md](../{skill_id}/SETUP.md) |",
+        )
+    return "\n".join(lines) + "\n"
+
+
+def render_routing_table(edges: list[tuple[str, str, str]]) -> str:
+    lines = [
+        "| From | Trigger | Next skill |",
+        "|------|---------|------------|",
+    ]
+    for trigger, source, target in edges:
+        lines.append(f"| {source} | {trigger} | {target} |")
+    return "\n".join(lines) + "\n"
+
+
+def update_readme_doc_links(readme: str, registry: Registry) -> str:
+    table = "\n" + render_doc_links_table(registry).rstrip() + "\n"
+    return update_marker_block(readme, README_LINKS_START, README_LINKS_END, table)
+
+
+def update_readme_routing_table(readme: str, escalation_matrix_md: str) -> str:
+    edges = parse_forward_escalation_matrix(escalation_matrix_md)
+    table = "\n" + render_routing_table(edges).rstrip() + "\n"
+    return update_marker_block(readme, README_ROUTING_START, README_ROUTING_END, table)

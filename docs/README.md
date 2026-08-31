@@ -28,46 +28,48 @@ non-functional example or non-matching sentinel values; do not suppress a new fi
 Each skill is a self-contained directory copied to `~/.cursor/skills/<name>/` on install. The agent reads
 `SKILL.md` at runtime; humans should start with the skill `README.md`.
 
+<!-- skill-doc-links:start -->
 | Skill | Human overview | Agent entry | Setup |
 |-------|----------------|-------------|-------|
-| **pr-review** | [pr-review/README.md](../pr-review/README.md) | [pr-review/SKILL.md](../pr-review/SKILL.md) | [pr-review/SETUP.md](../pr-review/SETUP.md) |
-| **pr-gatekeeper** | [pr-gatekeeper/README.md](../pr-gatekeeper/README.md) | [pr-gatekeeper/SKILL.md](../pr-gatekeeper/SKILL.md) | [pr-gatekeeper/SETUP.md](../pr-gatekeeper/SETUP.md) |
+| **api-design-review** | [api-design-review/README.md](../api-design-review/README.md) | [api-design-review/SKILL.md](../api-design-review/SKILL.md) | [api-design-review/SETUP.md](../api-design-review/SETUP.md) |
+| **api-test-creator** | [api-test-creator/README.md](../api-test-creator/README.md) | [api-test-creator/SKILL.md](../api-test-creator/SKILL.md) | [api-test-creator/SETUP.md](../api-test-creator/SETUP.md) |
+| **architecture-review** | [architecture-review/README.md](../architecture-review/README.md) | [architecture-review/SKILL.md](../architecture-review/SKILL.md) | [architecture-review/SETUP.md](../architecture-review/SETUP.md) |
+| **backlog-runner** | [backlog-runner/README.md](../backlog-runner/README.md) | [backlog-runner/SKILL.md](../backlog-runner/SKILL.md) | [backlog-runner/SETUP.md](../backlog-runner/SETUP.md) |
+| **capacity-planner** | [capacity-planner/README.md](../capacity-planner/README.md) | [capacity-planner/SKILL.md](../capacity-planner/SKILL.md) | [capacity-planner/SETUP.md](../capacity-planner/SETUP.md) |
+| **change-impact-analyzer** | [change-impact-analyzer/README.md](../change-impact-analyzer/README.md) | [change-impact-analyzer/SKILL.md](../change-impact-analyzer/SKILL.md) | [change-impact-analyzer/SETUP.md](../change-impact-analyzer/SETUP.md) |
+| **contract-test-creator** | [contract-test-creator/README.md](../contract-test-creator/README.md) | [contract-test-creator/SKILL.md](../contract-test-creator/SKILL.md) | [contract-test-creator/SETUP.md](../contract-test-creator/SETUP.md) |
+| **cost-optimization-sprint-planner** | [cost-optimization-sprint-planner/README.md](../cost-optimization-sprint-planner/README.md) | [cost-optimization-sprint-planner/SKILL.md](../cost-optimization-sprint-planner/SKILL.md) | [cost-optimization-sprint-planner/SETUP.md](../cost-optimization-sprint-planner/SETUP.md) |
+| **database-review** | [database-review/README.md](../database-review/README.md) | [database-review/SKILL.md](../database-review/SKILL.md) | [database-review/SETUP.md](../database-review/SETUP.md) |
+| **dependency-upgrade-review** | [dependency-upgrade-review/README.md](../dependency-upgrade-review/README.md) | [dependency-upgrade-review/SKILL.md](../dependency-upgrade-review/SKILL.md) | [dependency-upgrade-review/SETUP.md](../dependency-upgrade-review/SETUP.md) |
+| **deployment-risk-review** | [deployment-risk-review/README.md](../deployment-risk-review/README.md) | [deployment-risk-review/SKILL.md](../deployment-risk-review/SKILL.md) | [deployment-risk-review/SETUP.md](../deployment-risk-review/SETUP.md) |
+| **domain-comprehension** | [domain-comprehension/README.md](../domain-comprehension/README.md) | [domain-comprehension/SKILL.md](../domain-comprehension/SKILL.md) | [domain-comprehension/SETUP.md](../domain-comprehension/SETUP.md) |
+| **e2e-test-creator** | [e2e-test-creator/README.md](../e2e-test-creator/README.md) | [e2e-test-creator/SKILL.md](../e2e-test-creator/SKILL.md) | [e2e-test-creator/SETUP.md](../e2e-test-creator/SETUP.md) |
+| **implementation-planner** | [implementation-planner/README.md](../implementation-planner/README.md) | [implementation-planner/SKILL.md](../implementation-planner/SKILL.md) | [implementation-planner/SETUP.md](../implementation-planner/SETUP.md) |
 | **incident-rca** | [incident-rca/README.md](../incident-rca/README.md) | [incident-rca/SKILL.md](../incident-rca/SKILL.md) | [incident-rca/SETUP.md](../incident-rca/SETUP.md) |
 | **incident-triage-agent** | [incident-triage-agent/README.md](../incident-triage-agent/README.md) | [incident-triage-agent/SKILL.md](../incident-triage-agent/SKILL.md) | [incident-triage-agent/SETUP.md](../incident-triage-agent/SETUP.md) |
+| **integration-test-creator** | [integration-test-creator/README.md](../integration-test-creator/README.md) | [integration-test-creator/SKILL.md](../integration-test-creator/SKILL.md) | [integration-test-creator/SETUP.md](../integration-test-creator/SETUP.md) |
 | **k8s-overprovisioning-datadog** | [k8s-overprovisioning-datadog/README.md](../k8s-overprovisioning-datadog/README.md) | [k8s-overprovisioning-datadog/SKILL.md](../k8s-overprovisioning-datadog/SKILL.md) | [k8s-overprovisioning-datadog/SETUP.md](../k8s-overprovisioning-datadog/SETUP.md) |
-| **domain-comprehension** | [domain-comprehension/README.md](../domain-comprehension/README.md) | [domain-comprehension/SKILL.md](../domain-comprehension/SKILL.md) | [domain-comprehension/SETUP.md](../domain-comprehension/SETUP.md) |
-| **squad-map** | [squad-map/README.md](../squad-map/README.md) | [squad-map/SKILL.md](../squad-map/SKILL.md) | [squad-map/SETUP.md](../squad-map/SETUP.md) |
-| **who-owns-x-bot** | [who-owns-x-bot/README.md](../who-owns-x-bot/README.md) | [who-owns-x-bot/SKILL.md](../who-owns-x-bot/SKILL.md) | [who-owns-x-bot/SETUP.md](../who-owns-x-bot/SETUP.md) |
-| **new-hire-guide** | [new-hire-guide/README.md](../new-hire-guide/README.md) | [new-hire-guide/SKILL.md](../new-hire-guide/SKILL.md) | [new-hire-guide/SETUP.md](../new-hire-guide/SETUP.md) |
-| **release-readiness-checker** | [release-readiness-checker/README.md](../release-readiness-checker/README.md) | [release-readiness-checker/SKILL.md](../release-readiness-checker/SKILL.md) | [release-readiness-checker/SETUP.md](../release-readiness-checker/SETUP.md) |
-| **migration-program-manager** | [migration-program-manager/README.md](../migration-program-manager/README.md) | [migration-program-manager/SKILL.md](../migration-program-manager/SKILL.md) | [migration-program-manager/SETUP.md](../migration-program-manager/SETUP.md) |
-| **cost-optimization-sprint-planner** | [cost-optimization-sprint-planner/README.md](../cost-optimization-sprint-planner/README.md) | [cost-optimization-sprint-planner/SKILL.md](../cost-optimization-sprint-planner/SKILL.md) | [cost-optimization-sprint-planner/SETUP.md](../cost-optimization-sprint-planner/SETUP.md) |
-| **mysql-to-postgres-sql** | [mysql-to-postgres-sql/README.md](../mysql-to-postgres-sql/README.md) | [mysql-to-postgres-sql/SKILL.md](../mysql-to-postgres-sql/SKILL.md) | [mysql-to-postgres-sql/SETUP.md](../mysql-to-postgres-sql/SETUP.md) |
 | **loop-task-implementer** | [loop-task-implementer/README.md](../loop-task-implementer/README.md) | [loop-task-implementer/SKILL.md](../loop-task-implementer/SKILL.md) | [loop-task-implementer/SETUP.md](../loop-task-implementer/SETUP.md) |
-| **backlog-runner** | [backlog-runner/README.md](../backlog-runner/README.md) | [backlog-runner/SKILL.md](../backlog-runner/SKILL.md) | [backlog-runner/SETUP.md](../backlog-runner/SETUP.md) |
-| **weekly-squad-digest** | [weekly-squad-digest/README.md](../weekly-squad-digest/README.md) | [weekly-squad-digest/SKILL.md](../weekly-squad-digest/SKILL.md) | [weekly-squad-digest/SETUP.md](../weekly-squad-digest/SETUP.md) |
+| **migration-program-manager** | [migration-program-manager/README.md](../migration-program-manager/README.md) | [migration-program-manager/SKILL.md](../migration-program-manager/SKILL.md) | [migration-program-manager/SETUP.md](../migration-program-manager/SETUP.md) |
+| **mysql-to-postgres-sql** | [mysql-to-postgres-sql/README.md](../mysql-to-postgres-sql/README.md) | [mysql-to-postgres-sql/SKILL.md](../mysql-to-postgres-sql/SKILL.md) | [mysql-to-postgres-sql/SETUP.md](../mysql-to-postgres-sql/SETUP.md) |
+| **new-hire-guide** | [new-hire-guide/README.md](../new-hire-guide/README.md) | [new-hire-guide/SKILL.md](../new-hire-guide/SKILL.md) | [new-hire-guide/SETUP.md](../new-hire-guide/SETUP.md) |
+| **observability-review** | [observability-review/README.md](../observability-review/README.md) | [observability-review/SKILL.md](../observability-review/SKILL.md) | [observability-review/SETUP.md](../observability-review/SETUP.md) |
+| **performance-review** | [performance-review/README.md](../performance-review/README.md) | [performance-review/SKILL.md](../performance-review/SKILL.md) | [performance-review/SETUP.md](../performance-review/SETUP.md) |
+| **pr-gatekeeper** | [pr-gatekeeper/README.md](../pr-gatekeeper/README.md) | [pr-gatekeeper/SKILL.md](../pr-gatekeeper/SKILL.md) | [pr-gatekeeper/SETUP.md](../pr-gatekeeper/SETUP.md) |
+| **pr-review** | [pr-review/README.md](../pr-review/README.md) | [pr-review/SKILL.md](../pr-review/SKILL.md) | [pr-review/SETUP.md](../pr-review/SETUP.md) |
+| **prd-architect** | [prd-architect/README.md](../prd-architect/README.md) | [prd-architect/SKILL.md](../prd-architect/SKILL.md) | [prd-architect/SETUP.md](../prd-architect/SETUP.md) |
+| **production-readiness-review** | [production-readiness-review/README.md](../production-readiness-review/README.md) | [production-readiness-review/SKILL.md](../production-readiness-review/SKILL.md) | [production-readiness-review/SETUP.md](../production-readiness-review/SETUP.md) |
+| **release-readiness-checker** | [release-readiness-checker/README.md](../release-readiness-checker/README.md) | [release-readiness-checker/SKILL.md](../release-readiness-checker/SKILL.md) | [release-readiness-checker/SETUP.md](../release-readiness-checker/SETUP.md) |
+| **resilience-review** | [resilience-review/README.md](../resilience-review/README.md) | [resilience-review/SKILL.md](../resilience-review/SKILL.md) | [resilience-review/SETUP.md](../resilience-review/SETUP.md) |
+| **security-review** | [security-review/README.md](../security-review/README.md) | [security-review/SKILL.md](../security-review/SKILL.md) | [security-review/SETUP.md](../security-review/SETUP.md) |
+| **squad-map** | [squad-map/README.md](../squad-map/README.md) | [squad-map/SKILL.md](../squad-map/SKILL.md) | [squad-map/SETUP.md](../squad-map/SETUP.md) |
+| **system-design** | [system-design/README.md](../system-design/README.md) | [system-design/SKILL.md](../system-design/SKILL.md) | [system-design/SETUP.md](../system-design/SETUP.md) |
+| **tech-debt-assessor** | [tech-debt-assessor/README.md](../tech-debt-assessor/README.md) | [tech-debt-assessor/SKILL.md](../tech-debt-assessor/SKILL.md) | [tech-debt-assessor/SETUP.md](../tech-debt-assessor/SETUP.md) |
 | **test-writer** | [test-writer/README.md](../test-writer/README.md) | [test-writer/SKILL.md](../test-writer/SKILL.md) | [test-writer/SETUP.md](../test-writer/SETUP.md) |
 | **unit-test-creator** | [unit-test-creator/README.md](../unit-test-creator/README.md) | [unit-test-creator/SKILL.md](../unit-test-creator/SKILL.md) | [unit-test-creator/SETUP.md](../unit-test-creator/SETUP.md) |
-| **integration-test-creator** | [integration-test-creator/README.md](../integration-test-creator/README.md) | [integration-test-creator/SKILL.md](../integration-test-creator/SKILL.md) | [integration-test-creator/SETUP.md](../integration-test-creator/SETUP.md) |
-| **contract-test-creator** | [contract-test-creator/README.md](../contract-test-creator/README.md) | [contract-test-creator/SKILL.md](../contract-test-creator/SKILL.md) | [contract-test-creator/SETUP.md](../contract-test-creator/SETUP.md) |
-| **e2e-test-creator** | [e2e-test-creator/README.md](../e2e-test-creator/README.md) | [e2e-test-creator/SKILL.md](../e2e-test-creator/SKILL.md) | [e2e-test-creator/SETUP.md](../e2e-test-creator/SETUP.md) |
-| **api-test-creator** | [api-test-creator/README.md](../api-test-creator/README.md) | [api-test-creator/SKILL.md](../api-test-creator/SKILL.md) | [api-test-creator/SETUP.md](../api-test-creator/SETUP.md) |
-| **prd-architect** | [prd-architect/README.md](../prd-architect/README.md) | [prd-architect/SKILL.md](../prd-architect/SKILL.md) | [prd-architect/SETUP.md](../prd-architect/SETUP.md) |
-| **change-impact-analyzer** | [change-impact-analyzer/README.md](../change-impact-analyzer/README.md) | [change-impact-analyzer/SKILL.md](../change-impact-analyzer/SKILL.md) | [change-impact-analyzer/SETUP.md](../change-impact-analyzer/SETUP.md) |
-| **implementation-planner** | [implementation-planner/README.md](../implementation-planner/README.md) | [implementation-planner/SKILL.md](../implementation-planner/SKILL.md) | [implementation-planner/SETUP.md](../implementation-planner/SETUP.md) |
-| **production-readiness-review** | [production-readiness-review/README.md](../production-readiness-review/README.md) | [production-readiness-review/SKILL.md](../production-readiness-review/SKILL.md) | [production-readiness-review/SETUP.md](../production-readiness-review/SETUP.md) |
-| **architecture-review** | [architecture-review/README.md](../architecture-review/README.md) | [architecture-review/SKILL.md](../architecture-review/SKILL.md) | [architecture-review/SETUP.md](../architecture-review/SETUP.md) |
-| **system-design** | [system-design/README.md](../system-design/README.md) | [system-design/SKILL.md](../system-design/SKILL.md) | [system-design/SETUP.md](../system-design/SETUP.md) |
-| **api-design-review** | [api-design-review/README.md](../api-design-review/README.md) | [api-design-review/SKILL.md](../api-design-review/SKILL.md) | [api-design-review/SETUP.md](../api-design-review/SETUP.md) |
-| **database-review** | [database-review/README.md](../database-review/README.md) | [database-review/SKILL.md](../database-review/SKILL.md) | [database-review/SETUP.md](../database-review/SETUP.md) |
-| **security-review** | [security-review/README.md](../security-review/README.md) | [security-review/SKILL.md](../security-review/SKILL.md) | [security-review/SETUP.md](../security-review/SETUP.md) |
-| **performance-review** | [performance-review/README.md](../performance-review/README.md) | [performance-review/SKILL.md](../performance-review/SKILL.md) | [performance-review/SETUP.md](../performance-review/SETUP.md) |
-| **capacity-planner** | [capacity-planner/README.md](../capacity-planner/README.md) | [capacity-planner/SKILL.md](../capacity-planner/SKILL.md) | [capacity-planner/SETUP.md](../capacity-planner/SETUP.md) |
-| **observability-review** | [observability-review/README.md](../observability-review/README.md) | [observability-review/SKILL.md](../observability-review/SKILL.md) | [observability-review/SETUP.md](../observability-review/SETUP.md) |
-| **deployment-risk-review** | [deployment-risk-review/README.md](../deployment-risk-review/README.md) | [deployment-risk-review/SKILL.md](../deployment-risk-review/SKILL.md) | [deployment-risk-review/SETUP.md](../deployment-risk-review/SETUP.md) |
-| **resilience-review** | [resilience-review/README.md](../resilience-review/README.md) | [resilience-review/SKILL.md](../resilience-review/SKILL.md) | [resilience-review/SETUP.md](../resilience-review/SETUP.md) |
-| **dependency-upgrade-review** | [dependency-upgrade-review/README.md](../dependency-upgrade-review/README.md) | [dependency-upgrade-review/SKILL.md](../dependency-upgrade-review/SKILL.md) | [dependency-upgrade-review/SETUP.md](../dependency-upgrade-review/SETUP.md) |
-| **tech-debt-assessor** | [tech-debt-assessor/README.md](../tech-debt-assessor/README.md) | [tech-debt-assessor/SKILL.md](../tech-debt-assessor/SKILL.md) | [tech-debt-assessor/SETUP.md](../tech-debt-assessor/SETUP.md) |
+| **weekly-squad-digest** | [weekly-squad-digest/README.md](../weekly-squad-digest/README.md) | [weekly-squad-digest/SKILL.md](../weekly-squad-digest/SKILL.md) | [weekly-squad-digest/SETUP.md](../weekly-squad-digest/SETUP.md) |
+| **who-owns-x-bot** | [who-owns-x-bot/README.md](../who-owns-x-bot/README.md) | [who-owns-x-bot/SKILL.md](../who-owns-x-bot/SKILL.md) | [who-owns-x-bot/SETUP.md](../who-owns-x-bot/SETUP.md) |
+<!-- skill-doc-links:end -->
 
 A one-line "invoke / does" summary of every skill is in root [README.md § Skills](../README.md#skills) —
 not repeated here to avoid two independently-maintained copies drifting apart.
@@ -76,69 +78,102 @@ not repeated here to avoid two independently-maintained copies drifting apart.
 
 Skills reference each other when a finding belongs in another workflow:
 
+<!-- cross-skill-routing:start -->
 | From | Trigger | Next skill |
 |------|---------|------------|
-| pr-review | Critical security finding tied to a deployed incident | incident-rca |
-| pr-review | Large perf regression in K8s manifests | k8s-overprovisioning-datadog |
-| k8s-overprovisioning | OOM / crashloop in analysis window | incident-rca |
-| k8s-overprovisioning | Utilization spike after a deploy | pr-review on the causative MR |
-| incident-rca | "Is deployment overprovisioned?" | k8s-overprovisioning-datadog |
-| incident-rca | "Review the MR" | pr-review |
-| domain-comprehension | Incident / outage in a time window | incident-rca |
-| domain-comprehension | "Review this MR" | pr-review |
-| incident-rca / pr-review | "How does this domain work?" / onboarding | domain-comprehension |
-| domain-comprehension | Squad / repo ownership only | squad-map |
-| squad-map | Full domain map / bounded contexts | domain-comprehension |
-| incident-rca | Unclear service owner during RCA | squad-map |
-| incident-triage-agent | Caller wants an interactive, on-demand RCA or ownership lookup | incident-rca / squad-map |
-| who-owns-x-bot | Caller wants the full mapping table, not one answer | squad-map |
-| who-owns-x-bot | Caller wants bounded contexts / domain map | domain-comprehension |
+| pr-review | Critical security / bad deploy in prod | incident-rca |
+| pr-review | K8s/infra perf regression in MR | k8s |
+| pr-review | Resource-down MR merged + outage | k8s + incident-rca |
+| incident-rca | Deploy regression confirmed | pr-review |
+| incident-rca | Infra capacity (OOM/throttle/crashloop) | k8s |
+| incident-rca | Kafka consumer lag | k8s |
+| k8s | OOM / crashloop on assessed deployment | incident-rca |
+| k8s | Manifest drift + active incident | incident-rca |
+| k8s | Spike + recent deploy | pr-review |
+| domain-comprehension | Squad ownership only (no domain map) | squad-map |
+| domain-comprehension | **Session 0b (subroutine, not optional)** — every domain-comprehension run | squad-map |
+| squad-map | Full domain map after squad map | domain-comprehension |
+| incident-rca | Incident + unclear service owner | squad-map |
+| who-owns-x-bot | Caller wants the full mapping table, not one Slack answer | squad-map |
+| who-owns-x-bot | Caller wants bounded contexts / domain map, not just ownership | domain-comprehension |
+| who-owns-x-bot | `query` names a service mid-incident (surfaced as a suffix line appended to the single reply — a single-shot Slack reply cannot itself switch skills; exact trigger keywords and template: [who-owns-x-bot/reference/slack-format.md § Escalation suffix](../who-owns-x-bot/reference/slack-format.md#escalation-suffix-mid-incident-query)) | incident-rca |
 | new-hire-guide | Caller wants a one-off ownership lookup, not a tour | squad-map |
 | new-hire-guide | Caller wants the full org-wide domain map, not scoped to one person | domain-comprehension |
 | release-readiness-checker | Caller wants one MR reviewed, not a release-wide sweep | pr-review |
 | release-readiness-checker | Caller wants one service's rightsizing question, not a release sweep | k8s-overprovisioning-datadog |
 | release-readiness-checker | A flagged service needs the full incident investigation | incident-rca |
-| migration-program-manager | Caller wants one workspace's own migration status, not the org-wide rollup | mysql-to-postgres-sql |
-| migration-program-manager | A workspace has no SQUAD_MAP.md — services join as UNKNOWN | squad-map |
-| cost-optimization-sprint-planner | Caller wants one deployment's own rightsizing question, not a sweep | k8s-overprovisioning-datadog |
-| cost-optimization-sprint-planner | A deployment has no SQUAD_MAP.md/service-alias match — joins as UNKNOWN | squad-map |
-| domain-comprehension | Produced `MYSQL_TO_PG_SQL_REWRITES.md` | mysql-to-postgres-sql |
+| pr-gatekeeper | Caller wants an interactive, on-demand review instead of the webhook-triggered auto-run | pr-review |
+| incident-triage-agent | Caller wants an interactive, on-demand RCA instead of the paging-webhook-triggered triage/postmortem | incident-rca |
+| incident-triage-agent | Caller wants an interactive, on-demand ownership lookup instead of the paging-webhook-triggered flow | squad-map |
+| backlog-runner | Caller wants a single, interactive, on-demand task instead of the scheduled overnight queue sweep | loop-task-implementer |
+| domain-comprehension | Security finding in domain analysis (P3b) | pr-review |
+| domain-comprehension | Architecture smell needs RCA context | incident-rca |
+| domain-comprehension | Domain map reveals overprovisioned service | k8s |
+| domain-comprehension | Domain analysis produced `MYSQL_TO_PG_SQL_REWRITES.md` | mysql-to-postgres-sql |
+| domain-comprehension | `RISK_MAP.md` § Change risk flags a critical/high-fan-out path with weak `Test signal` | unit-test-creator / integration-test-creator (per whether the flagged path is isolated or crosses a real dependency) |
+| domain-comprehension | `BUSINESS_FLOWS.md` documents a journey with no e2e coverage | e2e-test-creator |
+| domain-comprehension | `API_CATALOG.md` documents an endpoint with `exercise: none` | api-test-creator |
 | mysql-to-postgres-sql | Migration MR needs review | pr-review |
-| mysql-to-postgres-sql | Cutover regression / wrong query results | incident-rca |
-| loop-task-implementer | Task's MR needs review beyond its own lenses | pr-review |
-| pr-gatekeeper | Caller wants an interactive, on-demand review | pr-review |
-| loop-task-implementer | Task implementation causes/needs incident investigation | incident-rca |
-| loop-task-implementer | Task needs unfamiliar-codebase context first | domain-comprehension |
+| mysql-to-postgres-sql | Cutover wrong results / outage | incident-rca |
+| incident-rca | RCA recommends monitor/alert fix | kubesense-alerts |
+| incident-rca | RCA needs dashboard for verification | kubesense-dashboards |
+| loop-task-implementer | Builder needs an MR reviewed beyond its own lenses | pr-review |
+| loop-task-implementer | Task implementation causes or needs incident investigation | incident-rca |
+| loop-task-implementer | Task requires understanding an unfamiliar domain/codebase first | domain-comprehension |
 | loop-task-implementer | Task touches MySQL-dialect SQL during a PG migration | mysql-to-postgres-sql |
-| backlog-runner | Caller wants a single, interactive, on-demand task | loop-task-implementer |
-| weekly-squad-digest | Caller wants a fresh single-source rollup, not the combined digest | migration-program-manager / cost-optimization-sprint-planner |
-| unit-test-creator / integration-test-creator / contract-test-creator / e2e-test-creator / api-test-creator | A generated test surfaces a probable production bug | loop-task-implementer (fix) / pr-review (flag on the MR) |
-| pr-review | Missing/weak test coverage on the reviewed MR | test-writer |
-| loop-task-implementer | Task's changes need generated tests | test-writer |
-| test-writer | Request classified into a level | unit-test-creator / integration-test-creator / contract-test-creator / e2e-test-creator / api-test-creator (exactly one) |
-| unit-test-creator | Target needs a real adjacent dependency, not a mock | integration-test-creator |
-| integration-test-creator | Caller wants the full UI journey, not just the seam | e2e-test-creator |
-| integration-test-creator | Caller wants a consumer/provider agreement, not a live integration test | contract-test-creator |
-| integration-test-creator / contract-test-creator | Caller wants a standalone black-box HTTP suite | api-test-creator |
-| api-test-creator | Caller wants a consumer/provider interaction agreement, not a standalone suite | contract-test-creator |
-| prd-architect | PRD needs an architecture decision before implementation | architecture-review |
-| architecture-review | Decision approved, needs implementation-level design | system-design |
-| architecture-review | Decision approved and ready to build | loop-task-implementer |
-| system-design | API surface defined, needs contract review | api-design-review |
-| system-design | Data model defined, needs schema review | database-review |
-| system-design | Design ready, needs an observability plan review | observability-review |
-| api-design-review | Authorization gap looks exploitable | security-review |
-| database-review | Finding suggests a broader performance problem | performance-review |
-| pr-review | Security-sensitive finding on the reviewed MR | security-review |
-| security-review | Vulnerable dependency is the root cause | dependency-upgrade-review |
-| dependency-upgrade-review | CVE looks exploitable in this codebase's actual usage | security-review |
-| performance-review | Finding means the service needs re-forecasted capacity | capacity-planner |
-| capacity-planner | Forecast should be checked against live rightsizing data | k8s-overprovisioning-datadog |
-| observability-review | Gap directly explains slow incident detection | incident-rca |
+| migration-program-manager | Caller wants one workspace's own migration status, not an org-wide rollup | mysql-to-postgres-sql |
+| migration-program-manager | A workspace in the rollup has no `SQUAD_MAP.md` (services join as `squad: UNKNOWN`) | squad-map |
+| cost-optimization-sprint-planner | Caller wants one deployment's own rightsizing question, not a sweep | k8s-overprovisioning-datadog |
+| cost-optimization-sprint-planner | A deployment in the rollup has no `SQUAD_MAP.md`/`ownership.datadog.service_aliases` match | squad-map |
+| weekly-squad-digest | Caller wants a fresh single-source migration rollup, not the combined digest | migration-program-manager |
+| weekly-squad-digest | Caller wants a fresh single-source cost/waste sweep, not the combined digest | cost-optimization-sprint-planner |
+| unit/integration/contract/e2e/api-test-creator | Generated/verified test surfaces a probable production bug (any of the five `*-test-creator` skills) | loop-task-implementer |
+| unit/integration/contract/e2e/api-test-creator | Generated/verified test surfaces a probable production bug on an MR under review | pr-review |
+| pr-review | Caller wants the *existing* test suite reviewed for quality, not new tests written | test-writer |
+| loop-task-implementer | Task implementation needs generated tests for a subsystem it just touched | test-writer |
+| test-writer | test-writer classified the request's level (its own dispatch, not a suggestion) | unit/integration/contract/e2e/api-test-creator |
+| unit-test-creator | Caller wants a real adjacent dependency tested, not a mocked unit | integration-test-creator |
+| integration-test-creator | Caller wants the full user journey through the UI, not just the API/service seam | e2e-test-creator |
+| integration-test-creator | Caller wants a consumer/provider interaction agreement, not a live integration test | contract-test-creator |
+| integration-test-creator | Caller wants a standalone black-box HTTP suite, not an in-process/testcontainers-backed test | api-test-creator |
+| contract-test-creator | Caller wants a black-box request/response suite, not a consumer/provider interaction agreement | api-test-creator |
+| api-test-creator | Caller wants a consumer/provider interaction agreement, not a standalone black-box suite | contract-test-creator |
+| prd-architect | PRD Ready; caller wants implementation | loop-task-implementer |
+| prd-architect | PRD depends on unfamiliar existing system behavior | domain-comprehension |
+| prd-architect | PRD defines critical paths needing test coverage | test-writer |
+| prd-architect | PRD security finding needs review of existing code on an MR | pr-review |
+| loop-task-implementer | Task needs a PRD before implementation | prd-architect |
+| domain-comprehension | Domain map suggests a new product initiative | prd-architect |
+| prd-architect | Ready PRD needs implementation-level design | system-design |
+| system-design | Implementation-level design needs architecture validation | architecture-review |
+| architecture-review | Architecture decision approved, needs implementation-level design | system-design |
+| architecture-review | Architecture decision approved and ready to build | loop-task-implementer |
+| architecture-review | A specific security/trust-boundary concern needs a deep audit | security-review |
+| architecture-review | The PRD itself has gaps, not the architecture | prd-architect |
+| system-design | System design defines an API surface needing contract review | api-design-review |
+| system-design | System design defines a data model needing schema review | database-review |
+| system-design | System design ready, needs an observability plan review | observability-review |
+| api-design-review | API design finding looks exploitable | security-review |
+| api-design-review | Reviewing one already-merged MR's API change, not a standalone design | pr-review |
+| api-design-review | The API's underlying data model needs review | database-review |
+| database-review | Review request is actually a MySQL→Postgres dialect migration, not a general schema review | mysql-to-postgres-sql |
+| database-review | Reviewing one MR's migration, not a standalone schema review | pr-review |
+| database-review | Database review finding suggests a broader performance problem | performance-review |
+| pr-review | Security-sensitive finding on an MR under review | security-review |
+| security-review | Vulnerable dependency is the root cause of a security finding | dependency-upgrade-review |
+| dependency-upgrade-review | Upgrade CVE looks exploitable in this codebase's actual usage | security-review |
+| performance-review | Performance finding means the service needs re-forecasted capacity | capacity-planner |
+| capacity-planner | Capacity forecast should be checked against live rightsizing data | k8s-overprovisioning-datadog |
+| observability-review | Observability gap directly explains slow incident detection | incident-rca |
+| observability-review | Gaps found ahead of an upcoming release | deployment-risk-review |
 | deployment-risk-review | Caller wants the full multi-repo release go/no-go sweep, not one change | release-readiness-checker |
 | deployment-risk-review | Deploy already happened and something broke | incident-triage-agent |
-| tech-debt-assessor | A top-priority item is really a multi-service migration | migration-program-manager |
-| tech-debt-assessor | A top-priority item is really a resource/cost problem | cost-optimization-sprint-planner |
+| tech-debt-assessor | A "Now" priority debt item is really a multi-service migration | migration-program-manager |
+| tech-debt-assessor | A "Now" priority debt item is really a resource/cost problem | cost-optimization-sprint-planner |
+| production-readiness-review | Caller wants one specific dimension deep-dived, not the aggregated readiness rollup | deployment-risk-review / change-impact-analyzer / the applicable specialist |
+| production-readiness-review | Caller wants the multi-repo release go/no-go sweep, not one candidate's readiness | release-readiness-checker |
+| production-readiness-review | Production readiness review needs exact-head PR/MR code-review evidence | pr-review (no-post, chat-only result consumed) |
+<!-- cross-skill-routing:end -->
 
 Full symmetric matrix (forward + reverse escalations):
 [docs/skill-framework/shared/cross-skill-escalation.md](skill-framework/shared/cross-skill-escalation.md).

@@ -831,3 +831,154 @@ def test_parse_registry_stops_at_first_bad_field_within_one_skill(tmp_path: Path
     assert len(excinfo.value.errors) == 1
     assert "skills.broken-both.invocation invalid: 'nonsense'" in excinfo.value.errors[0]
     assert "cursor.discovery" not in excinfo.value.errors[0]
+
+
+def _one_skill_registry() -> "Registry":
+    from scripts.registry.models import (
+        HostClaude,
+        HostCursor,
+        HostKiro,
+        Hosts,
+        InstallSpec,
+        LintSpec,
+        Registry,
+        SkillEntry,
+    )
+
+    return Registry(
+        schema_version=1,
+        skills={
+            "pr-review": SkillEntry(
+                path="pr-review",
+                category="review",
+                invocation="ambient",
+                hosts=Hosts(
+                    cursor=HostCursor("rule"),
+                    claude=HostClaude(True),
+                    kiro=HostKiro("manual"),
+                ),
+                install=InstallSpec(requires=[]),
+                lint=LintSpec(180, "pr-review"),
+            ),
+        },
+    )
+
+
+def test_render_doc_links_table_links_all_three_files() -> None:
+    from scripts.registry.generate_docs import render_doc_links_table
+
+    table = render_doc_links_table(_one_skill_registry())
+
+    assert "| **pr-review** |" in table
+    assert "[pr-review/README.md](../pr-review/README.md)" in table
+    assert "[pr-review/SKILL.md](../pr-review/SKILL.md)" in table
+    assert "[pr-review/SETUP.md](../pr-review/SETUP.md)" in table
+
+
+def test_update_readme_doc_links_replaces_marker_block_only() -> None:
+    from scripts.registry.generate_docs import (
+        README_LINKS_END,
+        README_LINKS_START,
+        update_readme_doc_links,
+    )
+
+    readme = f"intro\n\n{README_LINKS_START}\nstale\n{README_LINKS_END}\n\noutro\n"
+    updated = update_readme_doc_links(readme, _one_skill_registry())
+
+    assert "stale" not in updated
+    assert "pr-review" in updated
+    assert "intro" in updated and "outro" in updated
+
+
+_ESCALATION_MATRIX_MD = """# Cross-skill escalation (shared)
+
+## 1. Symmetric matrix (forward escalations)
+
+| Trigger | From → To | Handoff artifact | User prompt template |
+|---------|-----------|------------------|----------------------|
+| Critical security finding | pr-review → incident-rca | MR link | "RCA for..." |
+| Deploy regression confirmed | incident-rca → pr-review | MR URL | "Review MR..." |
+
+## 2. Reverse escalations
+
+| After skill completes | Next action | User prompt template |
+|-----------------------|-------------|----------------------|
+| k8s recommends Ready cut applied | Re-run k8s in **7d** | "Re-run..." |
+"""
+
+
+def test_parse_forward_escalation_matrix_extracts_edges() -> None:
+    from scripts.registry.cross_skill_routing import parse_forward_escalation_matrix
+
+    edges = parse_forward_escalation_matrix(_ESCALATION_MATRIX_MD)
+
+    assert edges == [
+        ("Critical security finding", "pr-review", "incident-rca"),
+        ("Deploy regression confirmed", "incident-rca", "pr-review"),
+    ]
+
+
+def test_parse_forward_escalation_matrix_ignores_other_sections() -> None:
+    # Section 2's table has no arrow at all and a different header shape — the parser must
+    # stop at the next "## " heading rather than reading past it.
+    from scripts.registry.cross_skill_routing import parse_forward_escalation_matrix
+
+    edges = parse_forward_escalation_matrix(_ESCALATION_MATRIX_MD)
+
+    assert all("k8s recommends" not in trigger for trigger, _, _ in edges)
+
+
+def test_parse_forward_escalation_matrix_fails_loudly_on_missing_heading() -> None:
+    from scripts.registry.cross_skill_routing import parse_forward_escalation_matrix
+
+    with pytest.raises(ValueError, match="missing section heading"):
+        parse_forward_escalation_matrix("# no matrix section here\n")
+
+
+def test_parse_forward_escalation_matrix_fails_loudly_on_bad_arrow_count() -> None:
+    from scripts.registry.cross_skill_routing import parse_forward_escalation_matrix
+
+    broken = """## 1. Symmetric matrix (forward escalations)
+
+| Trigger | From → To | Handoff artifact | User prompt template |
+|---------|-----------|------------------|----------------------|
+| Some trigger | pr-review incident-rca | MR link | "RCA for..." |
+"""
+    with pytest.raises(ValueError, match="exactly one"):
+        parse_forward_escalation_matrix(broken)
+
+
+def test_parse_forward_escalation_matrix_reanchors_relative_links_in_trigger() -> None:
+    # Regression test: cross-skill-escalation.md lives 3 directories deep, so its relative
+    # links (e.g. "../../../who-owns-x-bot/...") are anchored there. Copied verbatim into
+    # docs/README.md (1 directory deep), the same link would resolve outside the repo entirely.
+    from scripts.registry.cross_skill_routing import parse_forward_escalation_matrix
+
+    markdown = """## 1. Symmetric matrix (forward escalations)
+
+| Trigger | From → To | Handoff artifact | User prompt template |
+|---------|-----------|------------------|----------------------|
+| See [detail](../../../who-owns-x-bot/reference/slack-format.md#anchor) for exact wording | who-owns-x-bot → incident-rca | Service name | "RCA for..." |
+"""
+    edges = parse_forward_escalation_matrix(markdown)
+
+    trigger, _source, _target = edges[0]
+    assert "(../who-owns-x-bot/reference/slack-format.md#anchor)" in trigger
+    assert "../../../" not in trigger
+
+
+def test_update_readme_routing_table_renders_trimmed_columns() -> None:
+    from scripts.registry.generate_docs import (
+        README_ROUTING_END,
+        README_ROUTING_START,
+        update_readme_routing_table,
+    )
+
+    readme = f"intro\n\n{README_ROUTING_START}\nstale\n{README_ROUTING_END}\n\noutro\n"
+    updated = update_readme_routing_table(readme, _ESCALATION_MATRIX_MD)
+
+    assert "stale" not in updated
+    assert "| pr-review | Critical security finding | incident-rca |" in updated
+    # trimmed shape: no handoff-artifact/prompt-template columns from the source table
+    assert "Handoff artifact" not in updated
+    assert "MR link" not in updated
