@@ -1,12 +1,22 @@
-"""Golden tests for the legacy install.sh CLI behavior."""
+"""Golden tests for the legacy install.sh CLI behavior.
+
+Candidate 0 of the universal-agent-compatibility rollout
+(docs/superpowers/specs/2026-08-31-universal-agent-compatibility-design.md) requires this behavior to
+be frozen as executable evidence before any registry-driven resolver replaces install.sh's hard-coded
+destination logic. Every test in this file must set HOME to an isolated tmp_path via run_installer --
+never the real environment HOME -- since a real (non---dry-run) install mutates whatever directory HOME
+points at.
+"""
 
 from __future__ import annotations
 
+import json
 import subprocess
 import os
 from pathlib import Path
 
 from scripts.install_support import registry_skill_ids
+from scripts.reference_utils import MANIFEST_NAME
 
 ROOT = Path(__file__).resolve().parents[2]
 INSTALLER = ROOT / "scripts" / "install.sh"
@@ -85,3 +95,106 @@ def test_legacy_unknown_agent_fails_in_stderr(tmp_path: Path) -> None:
     result = run_installer("--agent", "unknown-agent", home=tmp_path / "home")
     assert result.returncode != 0
     assert "unknown --agent" in result.stderr
+
+
+def test_legacy_real_install_writes_manifest_with_expected_shape(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    result = run_installer("--agent", "cursor", "pr-review", home=home)
+    assert result.returncode == 0, result.stderr
+    dest = home / ".cursor" / "skills" / "pr-review"
+    stdout_lines = result.stdout.splitlines()
+    # validate_references.py's own "ok: <staging-dir>" line carries a random mktemp suffix,
+    # so it can't be matched literally -- only its prefix and the two deterministic lines are golden.
+    assert len(stdout_lines) == 3
+    assert stdout_lines[0].startswith("ok: ")
+    assert stdout_lines[1:] == [
+        f"Installed pr-review → {dest}",
+        "Restart Cursor to load the skill(s).",
+    ]
+    assert (dest / "SKILL.md").is_file()
+
+    manifest = json.loads((dest / MANIFEST_NAME).read_text(encoding="utf-8"))
+    # Golden shape as of Phase 1 (pre universal-agent-compatibility): exactly these eight
+    # top-level keys, no manifest_schema_version/target_id/package_format yet. §18 of the
+    # design spec plans to add those fields additively while keeping `host` readable --
+    # this test is the baseline this repo commits to not silently reshaping.
+    assert set(manifest) == {
+        "skill",
+        "distribution_version",
+        "source_repo",
+        "source_sha",
+        "installed_at",
+        "host",
+        "framework_files",
+        "files",
+    }
+    assert manifest["skill"] == "pr-review"
+    assert manifest["host"] == "cursor"
+    assert isinstance(manifest["files"], dict)
+    assert "SKILL.md" in manifest["files"]
+    assert all(isinstance(value, str) and value for value in manifest["files"].values())
+
+
+def test_legacy_verify_succeeds_on_a_real_install(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    install_result = run_installer("--agent", "claude-user", "pr-review", home=home)
+    assert install_result.returncode == 0, install_result.stderr
+    dest = home / ".claude" / "skills" / "pr-review"
+
+    verify_result = run_installer("--verify", str(dest), home=home)
+    assert verify_result.returncode == 0, verify_result.stderr
+    assert verify_result.stdout.splitlines() == [f"ok: {dest} (pr-review)"]
+    assert verify_result.stderr == ""
+
+
+def test_legacy_uninstall_removes_installed_skill_and_reports(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    install_result = run_installer("--agent", "cursor", "pr-review", home=home)
+    assert install_result.returncode == 0, install_result.stderr
+    dest = home / ".cursor" / "skills" / "pr-review"
+    assert dest.is_dir()
+
+    uninstall_result = run_installer("--agent", "cursor", "--uninstall", "pr-review", home=home)
+    assert uninstall_result.returncode == 0, uninstall_result.stderr
+    assert uninstall_result.stdout.splitlines() == [f"Uninstalled pr-review from {dest}"]
+    assert not dest.exists()
+
+
+def test_legacy_uninstall_of_absent_skill_warns_without_failing(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    result = run_installer("--agent", "cursor", "--uninstall", "pr-review", home=home)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == ""
+    dest = home / ".cursor" / "skills" / "pr-review"
+    assert f"warning: not installed: {dest}" in result.stderr
+
+
+def test_legacy_uninstall_refuses_to_remove_a_symlink(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    skills_dir = home / ".cursor" / "skills"
+    skills_dir.mkdir(parents=True)
+    real_target = tmp_path / "outside-target"
+    real_target.mkdir()
+    symlink_dest = skills_dir / "pr-review"
+    symlink_dest.symlink_to(real_target)
+
+    result = run_installer("--agent", "cursor", "--uninstall", "pr-review", home=home)
+    assert result.returncode != 0
+    assert f"refusing to remove symlink at {symlink_dest}" in result.stderr
+    assert symlink_dest.is_symlink()
+    assert real_target.is_dir()
+
+
+def test_legacy_install_refuses_to_replace_a_symlink_destination(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    skills_dir = home / ".cursor" / "skills"
+    skills_dir.mkdir(parents=True)
+    real_target = tmp_path / "outside-target"
+    real_target.mkdir()
+    symlink_dest = skills_dir / "pr-review"
+    symlink_dest.symlink_to(real_target)
+
+    result = run_installer("--agent", "cursor", "pr-review", home=home)
+    assert result.returncode != 0
+    assert f"refusing to replace symlink at {symlink_dest}" in result.stderr
+    assert symlink_dest.is_symlink()
