@@ -5,6 +5,7 @@
 # run resolves identical versions. Bump a version here, then regenerate requirements.lock
 # in the same PR.
 pytest>=9.1.1
+pytest-xdist>=3.8.0
 packaging>=26.3
 PyYAML>=6.0.3
 ruamel.yaml>=0.19.1
