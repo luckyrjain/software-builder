@@ -87,7 +87,7 @@ jobs:
           python3 -m pip install --require-hashes -r requirements.lock
 
       - name: make lint-suites
-        run: make lint-suites
+        run: make -j"$(nproc)" lint-suites
 
   install-macos:
     # macOS ships bash 3.2 (last GPLv2 release) as /bin/bash and scripts/install.sh runs under
