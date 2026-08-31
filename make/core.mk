@@ -12,6 +12,12 @@
 .PHONY: install-claude-implementation-planner
 .PHONY: install-claude-resilience-review
 .PHONY: lint-python
+.PHONY: lint-static lint-suites lint-framework-tests lint-scripts-shellcheck
+
+# Parallelize the larger pytest suites with pytest-xdist when it's installed (it's pinned
+# in requirements.lock). Falls back to serial execution so `make lint` still works in a
+# bare pytest environment -- xdist's -n flag would otherwise error as unrecognized.
+PYTEST_XDIST_FLAG := $(shell python3 -c "import xdist" >/dev/null 2>&1 && echo "-n auto" || true)
 
 install:
 	bash scripts/install.sh
@@ -421,7 +427,16 @@ define require_safe_output_link
 		{ echo "error: $(1)/SKILL.md must link to shared safe-output" >&2; exit 1; }
 endef
 
-lint: validate-registry backfill-capabilities-check generate-check validate-evals validate-operational-upkeep lint-framework lint-pr-review lint-pr-gatekeeper lint-k8s-skill lint-incident-rca lint-incident-triage-agent lint-domain-comprehension lint-squad-map lint-who-owns-x-bot lint-new-hire-guide lint-release-readiness-checker lint-migration-program-manager lint-cost-optimization-sprint-planner lint-mysql-to-postgres-sql lint-loop-task-implementer lint-backlog-runner lint-weekly-squad-digest lint-unit-test-creator lint-integration-test-creator lint-contract-test-creator lint-e2e-test-creator lint-api-test-creator lint-test-writer lint-prd-architect lint-architecture-review lint-system-design lint-api-design-review lint-database-review lint-security-review lint-performance-review lint-capacity-planner lint-observability-review lint-deployment-risk-review lint-dependency-upgrade-review lint-tech-debt-assessor lint-requirements-lock lint-python lint-actions-pinning lint-actions-security verify-install verify-install-all
+lint: lint-static lint-suites
+
+# CI (.github/workflows/lint.yml) runs lint-static and lint-suites as two parallel jobs:
+# lint-static is pure grep/structural checks (no pytest) and fails fast; lint-suites is
+# every pytest-bearing target -- the dominant test cost -- and parallelizes it two ways,
+# across skills via `make -jN` and within the larger suites via pytest-xdist (see
+# PYTEST_XDIST_FLAG above). `make lint` still runs both groups locally, in this order.
+lint-static: validate-registry backfill-capabilities-check generate-check validate-evals validate-operational-upkeep lint-framework lint-incident-triage-agent lint-who-owns-x-bot lint-new-hire-guide lint-release-readiness-checker lint-cost-optimization-sprint-planner lint-loop-task-implementer lint-backlog-runner lint-test-writer lint-prd-architect lint-architecture-review lint-system-design lint-api-design-review lint-database-review lint-security-review lint-performance-review lint-capacity-planner lint-observability-review lint-deployment-risk-review lint-dependency-upgrade-review lint-tech-debt-assessor lint-requirements-lock lint-python lint-actions-pinning lint-actions-security verify-install verify-install-all validate-review-contracts lint-scripts-shellcheck
+
+lint-scripts-shellcheck:
 	@for f in scripts/*.sh; do \
 		echo "shellcheck $$f"; \
 		if command -v shellcheck >/dev/null 2>&1; then \
@@ -433,6 +448,8 @@ lint: validate-registry backfill-capabilities-check generate-check validate-eval
 			exit 1; \
 		fi; \
 	done
+
+lint-suites: lint-pr-review lint-pr-gatekeeper lint-k8s-skill lint-incident-rca lint-domain-comprehension lint-squad-map lint-migration-program-manager lint-mysql-to-postgres-sql lint-weekly-squad-digest lint-unit-test-creator lint-integration-test-creator lint-contract-test-creator lint-e2e-test-creator lint-api-test-creator lint-change-impact-analyzer lint-resilience-review lint-implementation-planner lint-production-readiness-review lint-framework-tests
 
 lint-pr-review: lint-pr-review-skill lint-pr-review-scripts
 
@@ -447,7 +464,7 @@ lint-pr-review-scripts:
 	python3 -m py_compile pr-review/scripts/github-comment-recovery.py || exit 1; \
 	python3 -m py_compile pr-review/scripts/pr_review_policy_guards.py || exit 1; \
 	if python3 -c "import pytest" >/dev/null 2>&1; then \
-		python3 -m pytest -p no:cacheprovider pr-review/tests/ -q || exit 1; \
+		python3 -m pytest -p no:cacheprovider $(PYTEST_XDIST_FLAG) pr-review/tests/ -q || exit 1; \
 	else \
 		echo "pytest not installed — install with 'python3 -m pip install pytest' to run script tests" >&2; \
 		exit 1; \
@@ -593,7 +610,7 @@ lint-k8s-skill:
 			echo "error: PyYAML required for k8s tests — python3 -m pip install pyyaml" >&2; \
 			exit 1; \
 		fi; \
-		python3 -m pytest -p no:cacheprovider k8s-overprovisioning-datadog/tests/ -q || exit 1; \
+		python3 -m pytest -p no:cacheprovider $(PYTEST_XDIST_FLAG) k8s-overprovisioning-datadog/tests/ -q || exit 1; \
 	else \
 		echo "pytest not installed — install with 'python3 -m pip install pytest' to run k8s script tests" >&2; \
 		exit 1; \
@@ -655,7 +672,7 @@ lint-incident-rca:
 		incident-rca/reference/evidence.example.json \
 		incident-rca/reference/evidence.example.opensearch-query-governance.json || exit 1; \
 	if python3 -c "import pytest" >/dev/null 2>&1; then \
-		python3 -m pytest -p no:cacheprovider incident-rca/tests/ -q || exit 1; \
+		python3 -m pytest -p no:cacheprovider $(PYTEST_XDIST_FLAG) incident-rca/tests/ -q || exit 1; \
 	else \
 		echo "pytest not installed — install with 'python3 -m pip install pytest' to run schema tests" >&2; \
 		exit 1; \
@@ -702,7 +719,7 @@ lint-domain-comprehension-scripts:
 	if python3 -c "import yaml" >/dev/null 2>&1; then PY=python3; \
 	elif [ -x "$(CURDIR)/.venv/bin/python3" ] && "$(CURDIR)/.venv/bin/python3" -c "import yaml" >/dev/null 2>&1; then PY="$(CURDIR)/.venv/bin/python3"; \
 	elif [ -x "$$venv/bin/python3" ]; then PY="$$venv/bin/python3"; \
-	else python3 -m venv "$$venv" && "$$venv/bin/pip" install -q pyyaml pytest && PY="$$venv/bin/python3"; fi; \
+	else python3 -m venv "$$venv" && "$$venv/bin/pip" install -q pyyaml pytest pytest-xdist && PY="$$venv/bin/python3"; fi; \
 	"$$PY" -m py_compile domain-comprehension/scripts/validate_manifest_yaml.py || exit 1; \
 	"$$PY" -m py_compile domain-comprehension/scripts/validate_sub_agent_merge.py || exit 1; \
 	"$$PY" domain-comprehension/scripts/validate_manifest_yaml.py \
@@ -716,7 +733,8 @@ lint-domain-comprehension-scripts:
 	"$$PY" domain-comprehension/scripts/validate_sub_agent_merge.py \
 		domain-comprehension/tests/fixtures/sub-agent-merge/valid.json || exit 1; \
 	if "$$PY" -c "import pytest" >/dev/null 2>&1; then \
-		"$$PY" -m pytest -p no:cacheprovider domain-comprehension/tests/ -q || exit 1; \
+		xdist_flag=""; "$$PY" -c "import xdist" >/dev/null 2>&1 && xdist_flag="-n auto"; \
+		"$$PY" -m pytest -p no:cacheprovider $$xdist_flag domain-comprehension/tests/ -q || exit 1; \
 	else \
 		echo "pytest not installed — install with 'python3 -m pip install pytest' to run manifest tests" >&2; \
 		exit 1; \
@@ -799,7 +817,7 @@ lint-squad-map:
 	trap 'rm -rf "$$cache"' EXIT; \
 	python3 -m py_compile squad-map/scripts/squad_mapping.py || exit 1; \
 	if python3 -c "import pytest" >/dev/null 2>&1; then \
-		python3 -m pytest -p no:cacheprovider squad-map/tests/ -q || exit 1; \
+		python3 -m pytest -p no:cacheprovider $(PYTEST_XDIST_FLAG) squad-map/tests/ -q || exit 1; \
 	else \
 		echo "pytest not installed — install with 'python3 -m pip install pytest' to run squad-map tests" >&2; \
 		exit 1; \
@@ -898,7 +916,7 @@ lint-migration-program-manager:
 		{ echo "error: report-format.md must sanitize untrusted rendered fields per prompt-injection and safe-output" >&2; exit 1; }
 	@echo "lint-migration-program-manager: aggregator pytest"
 	@if python3 -c "import pytest" >/dev/null 2>&1; then \
-		python3 -m pytest -p no:cacheprovider migration-program-manager/tests/ -q || exit 1; \
+		python3 -m pytest -p no:cacheprovider $(PYTEST_XDIST_FLAG) migration-program-manager/tests/ -q || exit 1; \
 	else \
 		echo "pytest not installed — install with 'python3 -m pip install pytest' to run migration-program-manager tests" >&2; \
 	fi
@@ -1818,15 +1836,22 @@ lint-framework:
 		docs/skill-framework/shared/examples/review-metadata.example.yaml \
 		docs/skill-framework/shared/examples/assessment-metadata-rca.example.yaml \
 		docs/skill-framework/shared/examples/assessment-metadata-k8s.example.yaml \
-		pr-review/tests/fixtures/phase5-review-metadata.yaml || exit 1; \
-	if python3 -c "import pytest" >/dev/null 2>&1; then \
-		python3 -m pytest -p no:cacheprovider scripts/tests/ -q || exit 1; \
-	else \
-		echo "pytest not installed — install with 'python3 -m pip install pytest' to run metadata footer tests" >&2; \
-	fi
+		pr-review/tests/fixtures/phase5-review-metadata.yaml || exit 1
 	@echo "lint-framework: source-tree reference validation (anchors + local links, cross-cutting docs)"
 	@python3 scripts/validate_references.py --source-tree . --exclude docs/superpowers --exclude docs/skill-framework --exclude .claude/worktrees || exit 1
 	@echo "lint-framework: ok"
+
+# Split out from lint-framework: this is the repo's dominant test cost (the shared
+# scripts/tests/ suite, ~1700 tests covering registry/eval/operational-upkeep/metadata
+# logic) so CI can schedule it as its own parallel job instead of serializing it after
+# lint-framework's cheap doc/structure checks.
+lint-framework-tests:
+	@echo "lint-framework-tests: scripts/tests/ suite"
+	@if python3 -c "import pytest" >/dev/null 2>&1; then \
+		python3 -m pytest -p no:cacheprovider $(PYTEST_XDIST_FLAG) scripts/tests/ -q || exit 1; \
+	else \
+		echo "pytest not installed — install with 'python3 -m pip install pytest' to run metadata footer tests" >&2; \
+	fi
 
 # Fetch KubeSense error logs with full body via SPL REST API.
 # Example: make kubesense-errors WORKLOAD=autodebit-service CLUSTER=acme-neo-prod-eks-cluster
