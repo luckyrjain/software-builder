@@ -66,8 +66,57 @@ def _coerce_int(value: Any, *, label: str) -> int:
         raise ValueError(f"{label} must be an integer") from exc
 
 
+def resolve_registry_profiles(raw: Any) -> Any:
+    """Merge each skill's `extends:` profile into its entry; strip `profiles`.
+
+    Consumers that read skills.yaml's raw dict (with or without going through
+    this module) should never see `extends`/`profiles` -- they see the same
+    fully-inlined shape the registry had before profiles existed.
+    """
+    if not isinstance(raw, dict) or raw.get("profiles") is None:
+        return raw
+    profiles = raw["profiles"]
+    if not isinstance(profiles, dict):
+        raise ValueError("skills.yaml profiles must be a mapping")
+    skills = raw.get("skills")
+    if not isinstance(skills, dict):
+        return raw
+    resolved: dict[str, Any] = {}
+    for skill_id, entry in skills.items():
+        if isinstance(entry, dict) and "extends" in entry:
+            profile_name = entry["extends"]
+            profile = profiles.get(profile_name) if isinstance(profile_name, str) else None
+            if not isinstance(profile, dict):
+                raise ValueError(f"skills.{skill_id}.extends: unknown profile {profile_name!r}")
+            resolved[skill_id] = _deep_merge(
+                profile,
+                {key: value for key, value in entry.items() if key != "extends"},
+            )
+        else:
+            resolved[skill_id] = entry
+    result = dict(raw)
+    result["skills"] = resolved
+    del result["profiles"]
+    return result
+
+
+def _deep_merge(base: dict, override: dict) -> dict:
+    merged = dict(base)
+    for key, value in override.items():
+        if isinstance(value, dict) and isinstance(merged.get(key), dict):
+            merged[key] = _deep_merge(merged[key], value)
+        else:
+            merged[key] = value
+    return merged
+
+
+def load_registry_raw(path: Path) -> Any:
+    """Load skills.yaml's raw dict with `extends:` profile inheritance resolved."""
+    return resolve_registry_profiles(load_unique_yaml_file(path))
+
+
 def parse_registry(path: Path) -> Registry:
-    raw = load_unique_yaml_file(path)
+    raw = load_registry_raw(path)
     root = _require_mapping(raw, "skills.yaml root")
     schema_version = _coerce_int(root.get("schema_version", 0), label="schema_version")
     if schema_version != 1:
