@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from scripts.evals.batch3_contract import run_batch3_contract_checks
+from scripts.evals.contract_lint import lint_contracts
 from scripts.evals.golden import (
     find_oversized_descriptions,
     find_vacuous_anchored_patterns,
@@ -313,6 +314,20 @@ def main(argv: list[str] | None = None) -> int:
         for checker in (find_vacuous_anchored_patterns, find_oversized_descriptions):
             for warning in checker(golden_cases, skill_filter=args.skill, tier_filter=args.tier):
                 print(f"warning: {warning}", file=sys.stderr)
+
+        # Runs unconditionally, independent of --skill/--tier: eval_contracts.yaml
+        # and mutation_anchors.yaml reference cases across many skills by design
+        # (see contract_lint.py), so a --skill-filtered run must still catch a ref
+        # it broke in another skill's gate -- the full-suite-only checks below
+        # (run_batch3_contract_checks et al.) skip entirely under a filter and
+        # would otherwise let that breakage through until unfiltered CI.
+        lint_errors = lint_contracts(args.repo_root, golden_cases=golden_cases)
+        if lint_errors:
+            for lint_error in lint_errors:
+                print(f"error: {lint_error}", file=sys.stderr)
+            print(f"error: {len(lint_errors)} eval contract reference error(s)", file=sys.stderr)
+            return 1
+
         results = run_all(
             args.repo_root, skill_filter=args.skill, tier_filter=args.tier, golden_cases=golden_cases,
         )

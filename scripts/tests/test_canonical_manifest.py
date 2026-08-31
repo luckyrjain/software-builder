@@ -15,6 +15,33 @@ from scripts.registry.frontmatter import load_skill_frontmatter
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def test_load_canonical_manifest_resolves_extends_profile(tmp_path: Path):
+    (tmp_path / "skills.yaml").write_text(
+        """
+schema_version: 1
+manifest_kind: canonical
+contracts: {}
+profiles:
+  read-only-leaf-review:
+    authority: read-only
+    entrypoint: SKILL.md
+skills:
+  squad-map:
+    path: squad-map
+    extends: read-only-leaf-review
+    category: architecture
+""",
+        encoding="utf-8",
+    )
+
+    manifest = load_canonical_manifest(tmp_path)
+
+    assert "profiles" not in manifest
+    assert manifest["skills"]["squad-map"]["authority"] == "read-only"
+    assert manifest["skills"]["squad-map"]["entrypoint"] == "SKILL.md"
+    assert manifest["skills"]["squad-map"]["category"] == "architecture"
+
+
 def test_semver_rejects_empty_prerelease_and_build_identifiers():
     assert not is_semver("1.2.3-")
     assert not is_semver("1.2.3+")
