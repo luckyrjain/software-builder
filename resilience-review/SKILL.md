@@ -3,7 +3,7 @@ name: resilience-review
 description: >-
   Review a proposed design or current implementation for timeout budgets, retries,
   circuit breaking, load shedding, backpressure, queues, idempotency, downstream
-  failures, partial failures, and recovery. Use for resilience review or failure-mode
+  failures, partial failures, and recovery. Keywords: resilience review or failure-mode
   review outside a live incident. Not for incident diagnosis, capacity forecasting,
   Kubernetes rightsizing, or generic PR review.
 ---

@@ -30,6 +30,8 @@ from scripts.registry.generate_cursor import generate_cursor_rules
 from scripts.registry.generate_docs import (
     render_install_mermaid,
     update_readme_badge,
+    update_readme_doc_links,
+    update_readme_routing_table,
     update_repository_table,
 )
 from scripts.registry.generate_kiro import generate_kiro_steering
@@ -60,6 +62,21 @@ def _collect_outputs(root: Path) -> dict[Path, str]:
         (root / "docs" / "REPOSITORY.md").read_text(encoding="utf-8"),
         registry,
     )
+    docs_readme_path = root / "docs" / "README.md"
+    if docs_readme_path.is_file():
+        docs_readme = update_readme_doc_links(
+            docs_readme_path.read_text(encoding="utf-8"),
+            registry,
+        )
+        escalation_matrix_path = (
+            root / "docs" / "skill-framework" / "shared" / "cross-skill-escalation.md"
+        )
+        if escalation_matrix_path.is_file():
+            docs_readme = update_readme_routing_table(
+                docs_readme,
+                escalation_matrix_path.read_text(encoding="utf-8"),
+            )
+        outputs[docs_readme_path] = docs_readme
     outputs[root / "generated" / "catalogue" / "install-deps.mmd"] = render_install_mermaid(
         registry,
     )

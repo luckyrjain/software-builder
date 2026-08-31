@@ -1,4 +1,4 @@
-"""Tests for the shared MANIFEST_NAME reader (scripts/reference_utils.py)."""
+"""Tests for scripts/reference_utils.py: the shared MANIFEST_NAME reader and markdown-link regex."""
 
 from __future__ import annotations
 
@@ -8,7 +8,13 @@ from pathlib import Path
 
 import pytest
 
-from scripts.reference_utils import MANIFEST_NAME, ManifestError, read_manifest_file
+from scripts.reference_utils import (
+    MANIFEST_NAME,
+    ManifestError,
+    extract_markdown_links,
+    read_manifest_file,
+    rewrite_framework_links,
+)
 
 
 def test_read_manifest_file_parses_valid_manifest(tmp_path: Path) -> None:
@@ -80,3 +86,45 @@ def test_manifest_error_is_a_value_error(tmp_path: Path) -> None:
     # degrades to None; confirm it also satisfies any broader `except
     # ValueError` a caller might use.
     assert issubclass(ManifestError, ValueError)
+
+
+def test_extract_markdown_links_preserves_parens_in_target() -> None:
+    # Regression test: a plain "[^)]+" target class truncates at the FIRST ")", corrupting any
+    # link whose target legitimately contains one (e.g. a Wikipedia-style URL ending "_(bar)").
+    # This is the same bug class fixed in scripts/registry/cross_skill_routing.py's own markdown
+    # link regex, found live here too during a full-system review.
+    text = "See [wiki](https://en.wikipedia.org/wiki/Foo_(bar)) for detail"
+
+    links = extract_markdown_links(text)
+
+    assert links == ["https://en.wikipedia.org/wiki/Foo_(bar)"]
+
+
+def test_rewrite_framework_links_preserves_parens_in_untouched_target(tmp_path: Path) -> None:
+    # A link the rewriter doesn't touch (no docs/skill-framework/ marker) must still round-trip
+    # intact. Note: replace_link() returns match.group(0) verbatim on this early-return path, so
+    # this specific case can't discriminate old vs. new regex behavior on its own (a truncated
+    # match's leftover text recombines into the same original string either way) -- it guards
+    # against a *different* mutation (e.g. .sub() dropping/mangling untouched text), not the
+    # paren-truncation bug. See the sibling test below for the discriminating case.
+    content = "See [wiki](https://en.wikipedia.org/wiki/Foo_(bar)) for detail"
+    source_file = tmp_path / "SKILL.md"
+    package_root = tmp_path / "package"
+
+    result = rewrite_framework_links(content, source_file, package_root)
+
+    assert result == content
+
+
+def test_rewrite_framework_links_preserves_parens_in_rewritten_target(tmp_path: Path) -> None:
+    # Discriminating version: a framework-marked link actually gets rewritten (goes through
+    # framework_relative_path + os.path.relpath), so a truncated target here produces a visibly
+    # different (unresolved "/../") result versus the correctly-collapsed path -- same technique
+    # as test_reanchor_relative_links_preserves_parens_in_relative_link_target in test_registry.py.
+    content = "[x](docs/skill-framework/shared/foo_(bar)/../other.md)"
+    source_file = tmp_path / "sub" / "SKILL.md"
+    package_root = tmp_path
+
+    result = rewrite_framework_links(content, source_file, package_root)
+
+    assert result == "[x](../docs/skill-framework/shared/other.md)"

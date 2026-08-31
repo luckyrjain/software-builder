@@ -2,7 +2,7 @@
 name: change-impact-analyzer
 description: >-
   Read-only analysis contract for identifying the services, contracts, data, dependencies, owners,
-  tests, and operational surfaces affected by a proposed design or exact PR/MR change. Use for
+  tests, and operational surfaces affected by a proposed design or exact PR/MR change. Keywords:
   change impact, caller/consumer, or affected-service questions; use deployment-risk-review for
   deployed blast-radius or rollback-risk questions and pr-review for generic correctness review.
 ---

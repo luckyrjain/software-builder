@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from scripts.evals.golden import GoldenCase
-from scripts.evals.types import EvalResult
+from scripts.evals.types import EvalResult, missing_and_failing
 from scripts.registry.schema import Registry
 from scripts.yaml_safety import load_unique_yaml_file
 from scripts.yaml_safety import require_mapping as _as_mapping
@@ -134,10 +134,7 @@ def _referenced_case_results(
         if key == "adversarial_classes" and (not isinstance(mutation, str) or not mutation.strip()):
             messages.append("mutation payload is required")
         case_refs = _as_string_list(config.get("case_refs"), f"{key}.{item_id}.case_refs")
-        missing = sorted(set(case_refs) - set(case_results))
-        failed = sorted(
-            ref for ref in case_refs if ref in case_results and not case_results[ref].passed
-        )
+        missing, failed = missing_and_failing(case_refs, case_results)
         if missing:
             messages.append("missing referenced eval cases: " + ", ".join(missing))
         if failed:
@@ -162,10 +159,7 @@ def _golden_coverage_result(
 
     missing = sorted(required - covered)
     unknown = sorted(covered - required)
-    missing_results = sorted(coverage_refs - set(case_results))
-    failed_results = sorted(
-        ref for ref in coverage_refs if ref in case_results and not case_results[ref].passed
-    )
+    missing_results, failed_results = missing_and_failing(coverage_refs, case_results)
     messages: list[str] = []
     if not coverage_refs:
         messages.append("no golden fixture declares contract_coverage")
@@ -199,10 +193,7 @@ def _dimension_result(
         case_refs = config.get("case_refs", [])
         if case_refs:
             refs_for_dimension = _as_string_list(case_refs, f"dimension_coverage.{dimension}.case_refs")
-            missing = sorted(set(refs_for_dimension) - set(case_results))
-            failed = sorted(
-                ref for ref in refs_for_dimension if ref in case_results and not case_results[ref].passed
-            )
+            missing, failed = missing_and_failing(refs_for_dimension, case_results)
             if missing:
                 messages.append(f"{dimension}: missing eval case refs: {', '.join(missing)}")
             if failed:

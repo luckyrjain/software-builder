@@ -13,7 +13,12 @@ import re
 from pathlib import Path
 from typing import Any
 
-MARKDOWN_LINK_RE = re.compile(r"\]\(([^)]+)\)")
+# Allows exactly one level of nested parens in the target (e.g. a Wikipedia-style URL ending
+# "_(bar)") so the match doesn't truncate at that inner ")" and silently corrupt the captured
+# target -- a plain "[^)]+" class does exactly that. Same fix as
+# scripts/registry/cross_skill_routing.py's _MARKDOWN_LINK, applied here independently since this
+# regex's target class intentionally still allows whitespace (unlike that one).
+MARKDOWN_LINK_RE = re.compile(r"\]\(((?:[^()]|\([^()]*\))*)\)")
 FRAMEWORK_MARKER = "docs/skill-framework/"
 
 MANIFEST_NAME = ".software-builder-manifest.json"

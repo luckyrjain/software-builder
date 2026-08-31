@@ -3,7 +3,7 @@ name: domain-comprehension
 description: >-
   Build a verifiable, evidence-backed representation of a business domain and an
   as-built PRD for the in-scope service(s) and/or domain. Executable source code
-  is primary truth; runtime telemetry validates behavior, not intent. Use for
+  is primary truth; runtime telemetry validates behavior, not intent. Keywords:
   subsystem onboarding, multi-repo architecture ground truth, bounded-context
   mapping, current-state requirements reconstruction, and engineering-leader
   summaries. Not for ownership lookup only (squad-map), MR review (pr-review),

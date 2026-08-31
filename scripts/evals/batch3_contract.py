@@ -18,7 +18,7 @@ from typing import Any
 from scripts.evals.dispatcher import dispatch_prompt
 from scripts.evals.golden import GoldenCase, field_matches_pattern, golden_case_index
 from scripts.evals.scenario_harness import DIMENSIONS
-from scripts.evals.types import EvalResult
+from scripts.evals.types import EvalResult, missing_and_failing
 from scripts.registry.schema import Registry
 from scripts.yaml_safety import load_unique_yaml_file, require_mapping
 
@@ -185,12 +185,9 @@ def _referenced_matrix(
         if not isinstance(refs, list) or not refs or not all(isinstance(ref, str) and ref for ref in refs):
             messages.append(f"{item_id}: case_refs must be a non-empty list")
             continue
-        for ref in refs:
-            result = results.get(ref)
-            if result is None:
-                messages.append(f"{item_id}: missing regression case {ref}")
-            elif not result.passed:
-                messages.append(f"{item_id}: regression case is failing: {ref}")
+        missing, failing = missing_and_failing(refs, results)
+        messages.extend(f"{item_id}: missing regression case {ref}" for ref in missing)
+        messages.extend(f"{item_id}: regression case is failing: {ref}" for ref in failing)
     return _result(case_id, messages)
 
 
@@ -270,16 +267,22 @@ def run_batch3_contract_checks(
     registry: Registry,
     *,
     case_results: Iterable[EvalResult],
+    mutation_results: Iterable[EvalResult],
     golden_cases: Iterable[GoldenCase],
 ) -> list[EvalResult]:
     result_map = _result_map(case_results)
+    # Mutation results get their own map rather than relying on the caller having already
+    # merged them into case_results in the right order -- see the regression this caused in
+    # commit 80e588a ("dedupe mutation evals"): an implicit "case_results must already contain
+    # batch3-mutation/* by now" requirement enforced only by call order, not the signature.
+    mutation_map = _result_map(mutation_results)
     golden_list = list(golden_cases)
     return [
         _all_skill_scenarios(registry, result_map),
         _all_skill_golden(registry, result_map, golden_list),
         _behavior_scenario_matrix(root, result_map),
         _routing_matrix(root, registry),
-        _mutation_matrix(root, result_map),
+        _mutation_matrix(root, mutation_map),
         _mutation_anchor_matrix(root, result_map, golden_list),
         _referenced_matrix(root, result_map, key="untrusted_surfaces", case_id="untrusted-surface-matrix"),
         _referenced_matrix(root, result_map, key="degraded_host_cases", case_id="degraded-host-matrix"),

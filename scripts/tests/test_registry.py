@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 if TYPE_CHECKING:
-    from scripts.registry.models import SkillEntry
+    from scripts.registry.models import Registry, SkillEntry
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -228,6 +228,78 @@ skills:
     assert any("description must be a non-empty string" in error for error in errors)
 
 
+def test_crosscheck_rejects_description_missing_keywords(tmp_path: Path) -> None:
+    skill_dir = tmp_path / "foo"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text(
+        "---\nname: foo\ndescription: Use for foo things, not bar things.\n---\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "skills.yaml").write_text(
+        """
+schema_version: 1
+skills:
+  foo:
+    path: foo
+    category: testing
+    invocation: ambient
+    hosts:
+      cursor: {discovery: rule}
+      claude: {install: true}
+      kiro: {discovery: manual}
+    install:
+      requires: []
+    capabilities:
+      required: [host.repository.read]
+    lint:
+      skill_md_max_lines: 180
+      target: foo
+    risk_class: [read-only]
+""",
+        encoding="utf-8",
+    )
+    from scripts.registry.crosscheck import validate_registry
+
+    errors = validate_registry(tmp_path)
+    assert any("missing 'Keywords:'" in error for error in errors)
+
+
+def test_crosscheck_accepts_description_with_keywords(tmp_path: Path) -> None:
+    skill_dir = tmp_path / "foo"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text(
+        "---\nname: foo\ndescription: >-\n  Keywords: foo things, not bar things.\n---\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "skills.yaml").write_text(
+        """
+schema_version: 1
+skills:
+  foo:
+    path: foo
+    category: testing
+    invocation: ambient
+    hosts:
+      cursor: {discovery: rule}
+      claude: {install: true}
+      kiro: {discovery: manual}
+    install:
+      requires: []
+    capabilities:
+      required: [host.repository.read]
+    lint:
+      skill_md_max_lines: 180
+      target: foo
+    risk_class: [read-only]
+""",
+        encoding="utf-8",
+    )
+    from scripts.registry.crosscheck import validate_registry
+
+    errors = validate_registry(tmp_path)
+    assert not any("Keywords" in error for error in errors)
+
+
 def test_crosscheck_rejects_automation_only_with_always_discovery(tmp_path: Path) -> None:
     skill_dir = tmp_path / "bot"
     skill_dir.mkdir()
@@ -268,7 +340,7 @@ def test_generate_prunes_stale_generated_adapter(tmp_path: Path, monkeypatch: py
     skill_dir = tmp_path / "solo"
     skill_dir.mkdir()
     (skill_dir / "SKILL.md").write_text(
-        "---\nname: solo\nskill_version: 1.0\ndescription: Solo skill.\n---\n## Framework\n\nskill_result action_gates definition_of_done required_artifacts required_checks blocked_conditions partial_result_behavior runtime-contract.md\n",
+        "---\nname: solo\nskill_version: 1.0\ndescription: 'Keywords: solo skill.'\n---\n## Framework\n\nskill_result action_gates definition_of_done required_artifacts required_checks blocked_conditions partial_result_behavior runtime-contract.md\n",
         encoding="utf-8",
     )
     (tmp_path / "skills.yaml").write_text(
@@ -318,6 +390,104 @@ skills:
     assert stale_rule.exists()
     assert cmd_generate(tmp_path, check_only=False) == 0
     assert not stale_rule.exists()
+
+
+def _write_minimal_registry_fixture(tmp_path: Path) -> None:
+    skill_dir = tmp_path / "solo"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text(
+        "---\nname: solo\nskill_version: 1.0\ndescription: 'Keywords: solo skill.'\n---\n## Framework\n\nskill_result action_gates definition_of_done required_artifacts required_checks blocked_conditions partial_result_behavior runtime-contract.md\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "skills.yaml").write_text(
+        """
+schema_version: 1
+skills:
+  solo:
+    path: solo
+    category: testing
+    invocation: ambient
+    hosts:
+      cursor: {discovery: rule}
+      claude: {install: true}
+      kiro: {discovery: manual}
+    install: {requires: []}
+    capabilities:
+      required: [host.repository.read]
+    lint: {skill_md_max_lines: 180, target: solo}
+    risk_class: [read-only]
+""",
+        encoding="utf-8",
+    )
+    (tmp_path / "README.md").write_text(
+        "badge <!-- skills-count:start -->0<!-- skills-count:end -->\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "docs").mkdir(exist_ok=True)
+    (tmp_path / "docs" / "REPOSITORY.md").write_text(
+        "table\n<!-- registry-skills-table:start -->\n<!-- registry-skills-table:end -->\n",
+        encoding="utf-8",
+    )
+    (tmp_path / ".cursor" / "rules").mkdir(parents=True, exist_ok=True)
+    (tmp_path / ".kiro" / "steering").mkdir(parents=True, exist_ok=True)
+
+
+def test_cmd_generate_populates_docs_readme_link_table(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Regression test: cli.py's _collect_outputs only gates docs/README.md generation on the
+    # file *existing* (`.is_file()`), not on it already containing the marker blocks -- a fixture
+    # without them must fail loudly (via update_marker_block's own check), not crash uncaught.
+    _write_minimal_registry_fixture(tmp_path)
+    (tmp_path / "docs" / "README.md").write_text(
+        "intro\n<!-- skill-doc-links:start -->\n<!-- skill-doc-links:end -->\n",
+        encoding="utf-8",
+    )
+    contracts_path = _write_minimal_composition_contracts(tmp_path)
+    monkeypatch.setattr("scripts.registry.composition_contracts.CONTRACTS_PATH", contracts_path)
+    monkeypatch.setattr("scripts.registry.cli.ROOT", tmp_path)
+
+    from scripts.registry.cli import cmd_generate
+
+    assert cmd_generate(tmp_path, check_only=False) == 0
+    docs_readme = (tmp_path / "docs" / "README.md").read_text(encoding="utf-8")
+    # Exact row, not just "solo" in docs_readme -- a mutation that broke the link paths, column
+    # order, or file extensions would still leave "solo" present and pass a looser assertion.
+    assert (
+        "| **solo** | [solo/README.md](../solo/README.md) | [solo/SKILL.md](../solo/SKILL.md) | "
+        "[solo/SETUP.md](../solo/SETUP.md) |"
+    ) in docs_readme
+    assert cmd_generate(tmp_path, check_only=True) == 0
+
+
+def test_cmd_generate_populates_docs_readme_routing_table_when_escalation_matrix_present(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _write_minimal_registry_fixture(tmp_path)
+    (tmp_path / "docs" / "README.md").write_text(
+        "intro\n"
+        "<!-- skill-doc-links:start -->\n<!-- skill-doc-links:end -->\n"
+        "<!-- cross-skill-routing:start -->\n<!-- cross-skill-routing:end -->\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "docs" / "skill-framework" / "shared").mkdir(parents=True)
+    (tmp_path / "docs" / "skill-framework" / "shared" / "cross-skill-escalation.md").write_text(
+        "## 1. Symmetric matrix (forward escalations)\n\n"
+        "| Trigger | From → To | Handoff artifact | User prompt template |\n"
+        "|---------|-----------|------------------|----------------------|\n"
+        "| A thing happens | solo → solo | n/a | \"...\" |\n",
+        encoding="utf-8",
+    )
+    contracts_path = _write_minimal_composition_contracts(tmp_path)
+    monkeypatch.setattr("scripts.registry.composition_contracts.CONTRACTS_PATH", contracts_path)
+    monkeypatch.setattr("scripts.registry.cli.ROOT", tmp_path)
+
+    from scripts.registry.cli import cmd_generate
+
+    assert cmd_generate(tmp_path, check_only=False) == 0
+    docs_readme = (tmp_path / "docs" / "README.md").read_text(encoding="utf-8")
+    assert "| solo | A thing happens | solo |" in docs_readme
+    assert cmd_generate(tmp_path, check_only=True) == 0
 
 
 def test_validate_returns_tooling_exit_code_for_bad_yaml(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -631,6 +801,23 @@ def test_render_kiro_steering_thin_wrapper() -> None:
     assert "inclusion: manual" in text
 
 
+def test_update_marker_block_does_not_interpret_backreferences_in_content() -> None:
+    # Regression test: re.sub treats a *string* repl's backslash-escapes (\g<0>, \1, ...) as
+    # backreferences. update_marker_block's content can be free-text prose copied out of a repo
+    # markdown file (a cross-skill-escalation.md Trigger cell), not just controlled registry
+    # strings, so a stray "\g<0>" in that prose must not silently splice the old block content
+    # back into the new one.
+    from scripts.registry.generate_docs import update_marker_block
+
+    text = "before\n<!-- x:start -->OLD<!-- x:end -->\nafter"
+    content = "contains a backslash trick: \\g<0> and \\1 here"
+
+    updated = update_marker_block(text, "<!-- x:start -->", "<!-- x:end -->", content)
+
+    assert updated == f"before\n<!-- x:start -->{content}<!-- x:end -->\nafter"
+    assert "OLD" not in updated
+
+
 def test_update_readme_badge_keeps_markers_outside_the_image_url() -> None:
     # Regression test: the generated count previously sat *inside* the badge's image destination
     # (`...skills-<!-- skills-count:start -->23<!-- skills-count:end -->-blue)`). CommonMark's
@@ -706,7 +893,7 @@ def test_generate_check_fails_when_cursor_rule_drift(tmp_path: Path, monkeypatch
     skill_dir = tmp_path / "solo"
     skill_dir.mkdir()
     (skill_dir / "SKILL.md").write_text(
-        "---\nname: solo\nskill_version: 1.0\ndescription: Solo skill.\n---\n## Framework\n\nskill_result action_gates definition_of_done required_artifacts required_checks blocked_conditions partial_result_behavior runtime-contract.md\n",
+        "---\nname: solo\nskill_version: 1.0\ndescription: 'Keywords: solo skill.'\n---\n## Framework\n\nskill_result action_gates definition_of_done required_artifacts required_checks blocked_conditions partial_result_behavior runtime-contract.md\n",
         encoding="utf-8",
     )
     (tmp_path / "skills.yaml").write_text(
@@ -831,6 +1018,203 @@ def test_parse_registry_stops_at_first_bad_field_within_one_skill(tmp_path: Path
     assert len(excinfo.value.errors) == 1
     assert "skills.broken-both.invocation invalid: 'nonsense'" in excinfo.value.errors[0]
     assert "cursor.discovery" not in excinfo.value.errors[0]
+
+
+def _one_skill_registry() -> "Registry":
+    from scripts.registry.models import (
+        HostClaude,
+        HostCursor,
+        HostKiro,
+        Hosts,
+        InstallSpec,
+        LintSpec,
+        Registry,
+        SkillEntry,
+    )
+
+    return Registry(
+        schema_version=1,
+        skills={
+            "pr-review": SkillEntry(
+                path="pr-review",
+                category="review",
+                invocation="ambient",
+                hosts=Hosts(
+                    cursor=HostCursor("rule"),
+                    claude=HostClaude(True),
+                    kiro=HostKiro("manual"),
+                ),
+                install=InstallSpec(requires=[]),
+                lint=LintSpec(180, "pr-review"),
+            ),
+        },
+    )
+
+
+def test_render_doc_links_table_links_all_three_files() -> None:
+    from scripts.registry.generate_docs import render_doc_links_table
+
+    table = render_doc_links_table(_one_skill_registry())
+
+    assert "| **pr-review** |" in table
+    assert "[pr-review/README.md](../pr-review/README.md)" in table
+    assert "[pr-review/SKILL.md](../pr-review/SKILL.md)" in table
+    assert "[pr-review/SETUP.md](../pr-review/SETUP.md)" in table
+
+
+def test_update_readme_doc_links_replaces_marker_block_only() -> None:
+    from scripts.registry.generate_docs import (
+        README_LINKS_END,
+        README_LINKS_START,
+        update_readme_doc_links,
+    )
+
+    readme = f"intro\n\n{README_LINKS_START}\nstale\n{README_LINKS_END}\n\noutro\n"
+    updated = update_readme_doc_links(readme, _one_skill_registry())
+
+    assert "stale" not in updated
+    assert "pr-review" in updated
+    assert "intro" in updated and "outro" in updated
+
+
+_ESCALATION_MATRIX_MD = """# Cross-skill escalation (shared)
+
+## 1. Symmetric matrix (forward escalations)
+
+| Trigger | From → To | Handoff artifact | User prompt template |
+|---------|-----------|------------------|----------------------|
+| Critical security finding | pr-review → incident-rca | MR link | "RCA for..." |
+| Deploy regression confirmed | incident-rca → pr-review | MR URL | "Review MR..." |
+
+## 2. Reverse escalations
+
+| After skill completes | Next action | User prompt template |
+|-----------------------|-------------|----------------------|
+| k8s recommends Ready cut applied | Re-run k8s in **7d** | "Re-run..." |
+"""
+
+
+def test_parse_forward_escalation_matrix_extracts_edges() -> None:
+    from scripts.registry.cross_skill_routing import parse_forward_escalation_matrix
+
+    edges = parse_forward_escalation_matrix(_ESCALATION_MATRIX_MD)
+
+    assert edges == [
+        ("Critical security finding", "pr-review", "incident-rca"),
+        ("Deploy regression confirmed", "incident-rca", "pr-review"),
+    ]
+
+
+def test_parse_forward_escalation_matrix_ignores_other_sections() -> None:
+    # Section 2's table has no arrow at all and a different header shape — the parser must
+    # stop at the next "## " heading rather than reading past it.
+    from scripts.registry.cross_skill_routing import parse_forward_escalation_matrix
+
+    edges = parse_forward_escalation_matrix(_ESCALATION_MATRIX_MD)
+
+    assert all("k8s recommends" not in trigger for trigger, _, _ in edges)
+
+
+def test_parse_forward_escalation_matrix_fails_loudly_on_missing_heading() -> None:
+    from scripts.registry.cross_skill_routing import parse_forward_escalation_matrix
+
+    with pytest.raises(ValueError, match="missing section heading"):
+        parse_forward_escalation_matrix("# no matrix section here\n")
+
+
+def test_parse_forward_escalation_matrix_fails_loudly_on_bad_arrow_count() -> None:
+    from scripts.registry.cross_skill_routing import parse_forward_escalation_matrix
+
+    broken = """## 1. Symmetric matrix (forward escalations)
+
+| Trigger | From → To | Handoff artifact | User prompt template |
+|---------|-----------|------------------|----------------------|
+| Some trigger | pr-review incident-rca | MR link | "RCA for..." |
+"""
+    with pytest.raises(ValueError, match="exactly one"):
+        parse_forward_escalation_matrix(broken)
+
+
+def test_parse_forward_escalation_matrix_reanchors_relative_links_in_trigger() -> None:
+    # Regression test: cross-skill-escalation.md lives 3 directories deep, so its relative
+    # links (e.g. "../../../who-owns-x-bot/...") are anchored there. Copied verbatim into
+    # docs/README.md (1 directory deep), the same link would resolve outside the repo entirely.
+    from scripts.registry.cross_skill_routing import parse_forward_escalation_matrix
+
+    markdown = """## 1. Symmetric matrix (forward escalations)
+
+| Trigger | From → To | Handoff artifact | User prompt template |
+|---------|-----------|------------------|----------------------|
+| See [detail](../../../who-owns-x-bot/reference/slack-format.md#anchor) for exact wording | who-owns-x-bot → incident-rca | Service name | "RCA for..." |
+"""
+    edges = parse_forward_escalation_matrix(markdown)
+
+    trigger, _source, _target = edges[0]
+    assert "(../who-owns-x-bot/reference/slack-format.md#anchor)" in trigger
+    assert "../../../" not in trigger
+
+
+def test_markdown_link_regex_captures_full_target_with_nested_parens() -> None:
+    # Regression test: a naive "[^)]+"/"[^)\s]+" target class truncates at the FIRST ")", which
+    # corrupts any link whose target legitimately contains one (e.g. a Wikipedia-style URL ending
+    # in "_(bar)"). Asserts on the regex's own capture group directly rather than end-to-end
+    # through reanchor_relative_links() -- for an http(s) target specifically, _reanchor_link_target
+    # returns whatever it's given unchanged, and the leftover unmatched text after a truncated
+    # match happens to recombine into the original string either way, masking the bug end-to-end.
+    from scripts.registry.cross_skill_routing import _MARKDOWN_LINK
+
+    match = _MARKDOWN_LINK.search("[wiki](https://en.wikipedia.org/wiki/Foo_(bar))")
+
+    assert match is not None
+    assert match.group(2) == "https://en.wikipedia.org/wiki/Foo_(bar)"
+
+
+def test_reanchor_relative_links_preserves_parens_in_relative_link_target() -> None:
+    # End-to-end version of the regression above. Many inputs with parens don't actually
+    # discriminate old vs. new regex behavior here: a truncated target's dropped suffix often
+    # reappends as untouched leftover text and coincidentally reconstructs the same final string.
+    # This input does discriminate: the truncated old capture drops a trailing "/../other.md"
+    # segment from what posixpath.normpath sees, leaving an un-collapsed ".." in the output
+    # instead of correctly resolving to "other.md".
+    from scripts.registry.cross_skill_routing import reanchor_relative_links
+
+    text = "See [x](../shared/foo_(bar)/../other.md) end"
+
+    result = reanchor_relative_links(text)
+
+    assert result == "See [x](skill-framework/shared/other.md) end"
+
+
+def test_reanchor_relative_links_leaves_absolute_paths_unchanged() -> None:
+    # Regression test: an absolute-path target isn't anchored to _SOURCE_DIR, and rewriting it
+    # via posixpath.relpath against the relative _DEST_DIR would resolve against the invoking
+    # process's actual cwd -- producing output that depends on where `make generate` is run from,
+    # not just file content. No such link exists in cross-skill-escalation.md today; this guards
+    # against one being added later.
+    from scripts.registry.cross_skill_routing import reanchor_relative_links
+
+    text = "See [x](/some/absolute/path.md) for detail"
+
+    result = reanchor_relative_links(text)
+
+    assert result == text
+
+
+def test_update_readme_routing_table_renders_trimmed_columns() -> None:
+    from scripts.registry.generate_docs import (
+        README_ROUTING_END,
+        README_ROUTING_START,
+        update_readme_routing_table,
+    )
+
+    readme = f"intro\n\n{README_ROUTING_START}\nstale\n{README_ROUTING_END}\n\noutro\n"
+    updated = update_readme_routing_table(readme, _ESCALATION_MATRIX_MD)
+
+    assert "stale" not in updated
+    assert "| pr-review | Critical security finding | incident-rca |" in updated
+    # trimmed shape: no handoff-artifact/prompt-template columns from the source table
+    assert "Handoff artifact" not in updated
+    assert "MR link" not in updated
 
 
 def test_parse_registry_resolves_extends_profile(tmp_path: Path) -> None:

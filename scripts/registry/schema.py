@@ -138,6 +138,17 @@ def parse_registry(path: Path) -> Registry:
     return Registry(schema_version=schema_version, skills=skills)
 
 
+def registered_skill_ids(path: Path) -> set[str]:
+    """The set of skill ids skills.yaml declares.
+
+    Thin wrapper around `parse_registry` for callers (validators, health reports) that only need
+    the id set, not the full typed registry — reuses the one correct, validated read of
+    skills.yaml instead of a second hand-rolled `raw.get("skills", {})` with its own error
+    handling that can silently diverge from this one.
+    """
+    return set(parse_registry(path).skills)
+
+
 def _parse_skill_entry(skill_id: str, entry_raw: Any) -> SkillEntry:
     entry = _require_mapping(entry_raw, f"skills.{skill_id}")
     invocation = str(entry.get("invocation", ""))

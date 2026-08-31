@@ -3,7 +3,7 @@ name: implementation-planner
 description: >-
   Turn approved system design, architecture, change-impact, and triggered specialist evidence into
   a deterministic single-repository implementation plan with dependency-aware tasks, traceability,
-  execution waves, and loop-task resume compatibility. Use for implementation decomposition and DAG
+  execution waves, and loop-task resume compatibility. Keywords: implementation decomposition and DAG
   planning; use loop-task-implementer to execute the resulting plan.
 ---
 

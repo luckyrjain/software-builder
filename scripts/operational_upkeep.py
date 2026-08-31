@@ -332,8 +332,7 @@ def build_health_report(root: Path = ROOT, revision: str | None = None) -> dict[
 
     policy = load_policy(root / "scripts" / "operational_upkeep.yaml")
     skills_file = resolve_registry_profiles(_yaml_mapping(root / "skills.yaml"))
-    skills = skills_file.get("skills", {})
-    skills = skills if isinstance(skills, dict) else {}
+    skills = _registered_skills(root)
     composition = _canonical_contract(
         root, "composition", "scripts/registry/composition_contracts.yaml"
     )

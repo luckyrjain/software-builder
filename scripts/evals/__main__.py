@@ -264,18 +264,20 @@ def run_all(
         # _mutation_anchor_matrix below, which only checks the anchor's
         # static raw_pattern -- this actually mutates fixtures and reruns
         # golden assertions against them). Must run through the real eval
-        # CLI, not just pytest, or a broken guardrail is invisible here. Runs
-        # before run_batch3_contract_checks() because that check's own
-        # behavior-scenario-matrix cross-references these "batch3-mutation/*"
-        # result IDs inside case_results -- they must already be present by
-        # the time it runs, not added afterward.
-        results.extend(run_guardrail_mutation_checks(root, golden_cases))
+        # CLI, not just pytest, or a broken guardrail is invisible here.
+        # Passed to run_batch3_contract_checks() as its own mutation_results
+        # argument (not folded into case_results first) so its "batch3-mutation/*"
+        # lookup doesn't depend on call order -- see 80e588a ("dedupe mutation
+        # evals"), a real incident caused by that implicit ordering requirement.
+        mutation_results = run_guardrail_mutation_checks(root, golden_cases)
+        results.extend(mutation_results)
 
         results.extend(
             run_batch3_contract_checks(
                 root,
                 registry,
                 case_results=results,
+                mutation_results=mutation_results,
                 golden_cases=golden_cases,
             ),
         )

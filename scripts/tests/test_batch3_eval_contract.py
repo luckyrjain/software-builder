@@ -11,6 +11,10 @@ from scripts.registry.schema import parse_registry
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def _mutation_results(case_results):
+    return [result for result in case_results if result.skill == "batch3-mutation"]
+
+
 @lru_cache(maxsize=1)
 def _baseline():
     registry = parse_registry(ROOT / "skills.yaml")
@@ -41,6 +45,7 @@ def test_batch3_repository_matrices_and_golden_coverage_pass() -> None:
         ROOT,
         registry,
         case_results=results,
+        mutation_results=_mutation_results(results),
         golden_cases=golden,
     )
     assert {result.case_id for result in checks} == {
@@ -69,6 +74,7 @@ def test_batch3_scenario_gate_fails_when_one_skill_loses_a_dimension() -> None:
         ROOT,
         registry,
         case_results=filtered,
+        mutation_results=_mutation_results(filtered),
         golden_cases=golden,
     )
     gate = next(result for result in checks if result.case_id == "all-skill-five-dimension-scenarios")
@@ -83,6 +89,7 @@ def test_batch3_golden_gate_fails_when_a_skill_loses_all_golden_coverage() -> No
         ROOT,
         registry,
         case_results=results,
+        mutation_results=_mutation_results(results),
         golden_cases=reduced,
     )
     gate = next(result for result in checks if result.case_id == "all-skill-golden")
@@ -101,6 +108,7 @@ def test_batch3_mutation_gate_fails_when_executable_mutation_is_missing() -> Non
         ROOT,
         registry,
         case_results=filtered,
+        mutation_results=_mutation_results(filtered),
         golden_cases=golden,
     )
     gate = next(result for result in checks if result.case_id == "mutation-matrix")
@@ -119,8 +127,31 @@ def test_batch3_mutation_anchor_requires_passing_dangerous_fixture() -> None:
         ROOT,
         registry,
         case_results=filtered,
+        mutation_results=_mutation_results(filtered),
         golden_cases=golden,
     )
     gate = next(result for result in checks if result.case_id == "mutation-anchor-matrix")
     assert not gate.passed
     assert any("pr-review/golden-injection-inert-render" in message for message in gate.messages)
+
+
+def test_batch3_mutation_matrix_does_not_depend_on_case_results_order() -> None:
+    # Regression test for 80e588a ("dedupe mutation evals"): mutation-matrix must pass off the
+    # explicit mutation_results argument alone, not off case_results having already been merged
+    # with them in the right order. case_results here deliberately omits every batch3-mutation/*
+    # entry -- if mutation-matrix silently fell back to reading them out of case_results, this
+    # would wrongly fail with "missing executable mutation result".
+    registry, golden, results = _baseline()
+    mutation_results = _mutation_results(results)
+    case_results_without_mutations = [
+        result for result in results if result.skill != "batch3-mutation"
+    ]
+    checks = run_batch3_contract_checks(
+        ROOT,
+        registry,
+        case_results=case_results_without_mutations,
+        mutation_results=mutation_results,
+        golden_cases=golden,
+    )
+    gate = next(result for result in checks if result.case_id == "mutation-matrix")
+    assert gate.passed, gate.messages
