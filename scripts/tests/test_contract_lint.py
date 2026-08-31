@@ -258,6 +258,8 @@ skills:
     hosts:
       cursor:
         discovery: manual
+      claude:
+        install: true
       kiro:
         discovery: manual
     install:

@@ -354,6 +354,7 @@ def test_release_manifest_rejects_registered_but_untracked_skill(tmp_path: Path)
         "    invocation: ambient\n"
         "    hosts:\n"
         "      cursor: {discovery: manual}\n"
+        "      claude: {install: true}\n"
         "      kiro: {discovery: manual}\n"
         "    install:\n"
         "      requires: []\n"

@@ -137,11 +137,11 @@ def render_compatibility_matrix(root: Path) -> str:
 
         lines.append(
             f"| {_cell(skill_id)} | {_cell(entry.invocation)} | "
-            f"{_cell(host_cell('cursor', entry.hosts.cursor.discovery))} | "
-            f"{_cell(host_cell('claude', 'yes' if entry.hosts.claude.install else 'no'))} | "
+            f"{_cell(host_cell('cursor', entry.hosts['cursor'].discovery))} | "
+            f"{_cell(host_cell('claude', 'yes' if entry.hosts['claude'].install else 'no'))} | "
             f"{_cell(host_cell('codex', host_surfaces['codex']))} | "
             f"{_cell(host_cell('chatgpt', host_surfaces['chatgpt']))} | "
-            f"{_cell(host_cell('kiro', entry.hosts.kiro.discovery))} | "
+            f"{_cell(host_cell('kiro', entry.hosts['kiro'].discovery))} | "
             f"{_cell(host_cell('generic', host_surfaces['generic']))} | "
             f"{_cell(support_profile)} | {_cell(required)} | {_cell(write_authority)} |",
         )

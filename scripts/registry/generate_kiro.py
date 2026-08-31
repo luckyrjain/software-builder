@@ -20,7 +20,7 @@ def generate_kiro_steering(root: Path, registry: Registry) -> dict[Path, str]:
     return {
         root / ".kiro" / "steering" / f"{skill_id}.md": render_kiro_steering(
             skill_id,
-            entry.hosts.kiro.discovery,
+            entry.hosts["kiro"].discovery,
         )
         for skill_id, entry in sorted(registry.skills.items())
     }
