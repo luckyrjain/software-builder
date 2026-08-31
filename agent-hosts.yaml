@@ -1,0 +1,98 @@
+# Declarative host/target/capability registry validated by
+# scripts/registry/host_registry.py (`make validate-hosts`).
+#
+# Capabilities here start UNVERIFIED/UNKNOWN by design: each capability must
+# earn AVAILABLE/VERIFIED through its own RUNTIME evidence entry rather than
+# inheriting the support levels already recorded in
+# scripts/registry/host_contracts.yaml (the pre-existing host/capability
+# matrix consumed by host_adapter.py and the P1 adapter-generation path).
+# The two files intentionally answer different questions -- host_contracts.yaml
+# is "what does the generated adapter support today", this file is "what has
+# been independently re-verified" -- so do not treat a mismatch between them
+# as a bug without checking which question is being asked. Host ids listed
+# here must still be a subset of host_adapter.HOSTS; `validate-hosts` checks
+# that automatically.
+schema_version: 1
+
+targets:
+  - id: cursor-user
+    scope: user
+    path: ~/.cursor/skills
+  - id: cursor-project
+    scope: project
+    path: "{project_root}/.cursor/skills"
+  - id: claude-user
+    scope: user
+    path: ~/.claude/skills
+  - id: claude-project
+    scope: project
+    path: "{project_root}/.claude/skills"
+  - id: kiro-user
+    scope: user
+    path: ~/.kiro/steering
+  - id: kiro-project
+    scope: project
+    path: "{project_root}/.kiro/steering"
+
+aliases: []
+
+hosts:
+  - id: cursor
+    surfaces:
+      - kind: LOCAL
+        discovery:
+          - target: cursor-project
+            mode: NATIVE
+            precedence: 10
+          - target: cursor-user
+            mode: NATIVE
+            precedence: 20
+    capabilities:
+      host.filesystem.read: UNKNOWN
+      host.repository.read_write: UNKNOWN
+    isolation:
+      mode: UNKNOWN
+    constraints: []
+    verification: UNVERIFIED
+    evidence: []
+    maintainer_support: BEST_EFFORT
+
+  - id: claude
+    surfaces:
+      - kind: LOCAL
+        discovery:
+          - target: claude-project
+            mode: NATIVE
+            precedence: 10
+          - target: claude-user
+            mode: NATIVE
+            precedence: 20
+    capabilities:
+      host.filesystem.read: UNKNOWN
+      host.repository.read_write: UNKNOWN
+    isolation:
+      mode: UNKNOWN
+    constraints: []
+    verification: UNVERIFIED
+    evidence: []
+    maintainer_support: BEST_EFFORT
+
+  - id: kiro
+    surfaces:
+      - kind: LOCAL
+        discovery:
+          - target: kiro-project
+            mode: ADAPTER
+            precedence: 10
+          - target: kiro-user
+            mode: ADAPTER
+            precedence: 20
+    capabilities:
+      host.filesystem.read: UNKNOWN
+      host.repository.read_write: UNKNOWN
+    isolation:
+      mode: UNKNOWN
+    constraints: []
+    verification: UNVERIFIED
+    evidence: []
+    maintainer_support: BEST_EFFORT

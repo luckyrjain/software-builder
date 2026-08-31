@@ -12,6 +12,8 @@
 .PHONY: install-claude-implementation-planner
 .PHONY: install-claude-resilience-review
 .PHONY: lint-python
+.PHONY: validate-agent-skills
+.PHONY: validate-hosts
 .PHONY: lint-static lint-suites lint-framework-tests lint-scripts-shellcheck
 
 # Parallelize the larger pytest suites with pytest-xdist when it's installed (it's pinned
@@ -307,6 +309,12 @@ verify-github-ruleset:
 validate-registry:
 	@python3 -m scripts.registry validate
 
+validate-agent-skills:
+	@python3 -m scripts.registry validate-agent-skills
+
+validate-hosts:
+	@python3 -m scripts.registry validate-hosts
+
 backfill-capabilities-check:
 	@python3 -m scripts.registry backfill-capabilities --check
 
@@ -434,7 +442,7 @@ lint: lint-static lint-suites
 # every pytest-bearing target -- the dominant test cost -- and parallelizes it two ways,
 # across skills via `make -jN` and within the larger suites via pytest-xdist (see
 # PYTEST_XDIST_FLAG above). `make lint` still runs both groups locally, in this order.
-lint-static: validate-registry backfill-capabilities-check generate-check validate-evals validate-operational-upkeep lint-framework lint-incident-triage-agent lint-who-owns-x-bot lint-new-hire-guide lint-release-readiness-checker lint-cost-optimization-sprint-planner lint-loop-task-implementer lint-backlog-runner lint-test-writer lint-prd-architect lint-architecture-review lint-system-design lint-api-design-review lint-database-review lint-security-review lint-performance-review lint-capacity-planner lint-observability-review lint-deployment-risk-review lint-dependency-upgrade-review lint-tech-debt-assessor lint-requirements-lock lint-python lint-actions-pinning lint-actions-security verify-install verify-install-all validate-review-contracts lint-scripts-shellcheck
+lint-static: validate-registry validate-agent-skills validate-hosts backfill-capabilities-check generate-check validate-evals validate-operational-upkeep lint-framework lint-incident-triage-agent lint-who-owns-x-bot lint-new-hire-guide lint-release-readiness-checker lint-cost-optimization-sprint-planner lint-loop-task-implementer lint-backlog-runner lint-test-writer lint-prd-architect lint-architecture-review lint-system-design lint-api-design-review lint-database-review lint-security-review lint-performance-review lint-capacity-planner lint-observability-review lint-deployment-risk-review lint-dependency-upgrade-review lint-tech-debt-assessor lint-requirements-lock lint-python lint-actions-pinning lint-actions-security verify-install verify-install-all validate-review-contracts lint-scripts-shellcheck
 
 lint-scripts-shellcheck:
 	@for f in scripts/*.sh; do \
