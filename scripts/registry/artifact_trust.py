@@ -38,6 +38,10 @@ class AssessmentContextTrust:
     _trusted_authorities: Mapping[str, str]
 
     def effective_authority(self, input_name: str) -> str:
+        # "caller" here covers three distinct causes (no handoff offered, a handoff that doesn't
+        # name this input, or a rejected/forged handoff) collapsed to one value on purpose: none
+        # of them may ever read as elevated, and the doctrine is UNKNOWN/least-trust over
+        # speculation about which cause applies.
         if self.acquisition != "runtime_handoff" or not self.parent_execution_validated or not self.parent_skill:
             return "caller"
         authority = self._trusted_authorities.get(input_name)
@@ -75,6 +79,8 @@ def classify_assessment_context_trust(
     *,
     runtime_metadata: object,
 ) -> AssessmentContextTrust:
+    # `context` is reserved for a future content-based check; trust is decided by
+    # `runtime_metadata` alone today. Don't shape a caller's context to try to influence this.
     del context
     if isinstance(runtime_metadata, _RuntimeHandoffMetadata) and runtime_metadata._token is _RUNTIME_HANDOFF_TOKEN:
         return AssessmentContextTrust(
