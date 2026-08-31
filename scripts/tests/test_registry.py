@@ -228,6 +228,78 @@ skills:
     assert any("description must be a non-empty string" in error for error in errors)
 
 
+def test_crosscheck_rejects_description_missing_keywords(tmp_path: Path) -> None:
+    skill_dir = tmp_path / "foo"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text(
+        "---\nname: foo\ndescription: Use for foo things, not bar things.\n---\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "skills.yaml").write_text(
+        """
+schema_version: 1
+skills:
+  foo:
+    path: foo
+    category: testing
+    invocation: ambient
+    hosts:
+      cursor: {discovery: rule}
+      claude: {install: true}
+      kiro: {discovery: manual}
+    install:
+      requires: []
+    capabilities:
+      required: [host.repository.read]
+    lint:
+      skill_md_max_lines: 180
+      target: foo
+    risk_class: [read-only]
+""",
+        encoding="utf-8",
+    )
+    from scripts.registry.crosscheck import validate_registry
+
+    errors = validate_registry(tmp_path)
+    assert any("missing 'Keywords:'" in error for error in errors)
+
+
+def test_crosscheck_accepts_description_with_keywords(tmp_path: Path) -> None:
+    skill_dir = tmp_path / "foo"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text(
+        "---\nname: foo\ndescription: >-\n  Keywords: foo things, not bar things.\n---\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "skills.yaml").write_text(
+        """
+schema_version: 1
+skills:
+  foo:
+    path: foo
+    category: testing
+    invocation: ambient
+    hosts:
+      cursor: {discovery: rule}
+      claude: {install: true}
+      kiro: {discovery: manual}
+    install:
+      requires: []
+    capabilities:
+      required: [host.repository.read]
+    lint:
+      skill_md_max_lines: 180
+      target: foo
+    risk_class: [read-only]
+""",
+        encoding="utf-8",
+    )
+    from scripts.registry.crosscheck import validate_registry
+
+    errors = validate_registry(tmp_path)
+    assert not any("Keywords" in error for error in errors)
+
+
 def test_crosscheck_rejects_automation_only_with_always_discovery(tmp_path: Path) -> None:
     skill_dir = tmp_path / "bot"
     skill_dir.mkdir()
@@ -268,7 +340,7 @@ def test_generate_prunes_stale_generated_adapter(tmp_path: Path, monkeypatch: py
     skill_dir = tmp_path / "solo"
     skill_dir.mkdir()
     (skill_dir / "SKILL.md").write_text(
-        "---\nname: solo\nskill_version: 1.0\ndescription: Solo skill.\n---\n## Framework\n\nskill_result action_gates definition_of_done required_artifacts required_checks blocked_conditions partial_result_behavior runtime-contract.md\n",
+        "---\nname: solo\nskill_version: 1.0\ndescription: 'Keywords: solo skill.'\n---\n## Framework\n\nskill_result action_gates definition_of_done required_artifacts required_checks blocked_conditions partial_result_behavior runtime-contract.md\n",
         encoding="utf-8",
     )
     (tmp_path / "skills.yaml").write_text(
@@ -706,7 +778,7 @@ def test_generate_check_fails_when_cursor_rule_drift(tmp_path: Path, monkeypatch
     skill_dir = tmp_path / "solo"
     skill_dir.mkdir()
     (skill_dir / "SKILL.md").write_text(
-        "---\nname: solo\nskill_version: 1.0\ndescription: Solo skill.\n---\n## Framework\n\nskill_result action_gates definition_of_done required_artifacts required_checks blocked_conditions partial_result_behavior runtime-contract.md\n",
+        "---\nname: solo\nskill_version: 1.0\ndescription: 'Keywords: solo skill.'\n---\n## Framework\n\nskill_result action_gates definition_of_done required_artifacts required_checks blocked_conditions partial_result_behavior runtime-contract.md\n",
         encoding="utf-8",
     )
     (tmp_path / "skills.yaml").write_text(

@@ -147,6 +147,15 @@ def _validate_skill_frontmatter_shape(root: Path, registry: Registry) -> list[st
             description = frontmatter.get("description", "")
             if not isinstance(description, str) or not description.strip():
                 errors.append(f"error: {skill_id}: description must be a non-empty string")
+            elif "Keywords:" not in description:
+                # Every skill's ambient-routing surface is its frontmatter description — the
+                # thing a host actually reads to decide whether to invoke it. "Keywords: ..." is
+                # this repo's convention for making that surface greppable/consistent; skipping it
+                # is how 4 skills quietly drifted from the other 34 before this check existed.
+                errors.append(
+                    f"error: {skill_id}: description missing 'Keywords:' — see skill-routing.md "
+                    f"convention (every other skill's description states its routing keywords)",
+                )
 
         errors.extend(
             validate_skill_frontmatter_fields(
