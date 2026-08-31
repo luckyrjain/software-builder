@@ -17,7 +17,7 @@ from scripts.registry.canonical_manifest import (
 from scripts.registry.composition_contracts import load_contracts
 from scripts.registry.frontmatter import load_skill_frontmatter
 from scripts.registry.models import Registry
-from scripts.registry.schema import parse_registry
+from scripts.registry.schema import load_registry_raw, parse_registry
 from scripts.yaml_safety import YAML_SAFETY_ERRORS, load_unique_yaml_file, require_mapping
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -146,7 +146,7 @@ def build_manifest(root: Path = ROOT) -> dict[str, Any]:
 
 def skill_versions(root: Path = ROOT, *, registry: Registry | None = None) -> dict[str, str]:
     raw = require_mapping(
-        load_unique_yaml_file(root / "skills.yaml"),
+        load_registry_raw(root / "skills.yaml"),
         "skills.yaml root",
     )
     if not has_canonical_manifest_shape(raw):

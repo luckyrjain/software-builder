@@ -3,12 +3,13 @@ from __future__ import annotations
 from pathlib import Path
 
 from scripts.registry.backfill_capabilities import _capabilities_equal
+from scripts.registry.schema import load_registry_raw
 from scripts.yaml_safety import YAML_SAFETY_ERRORS, load_unique_yaml_file, require_mapping
 
 
 def validate_capability_catalog_sync(root: Path) -> list[str]:
     try:
-        registry_raw = require_mapping(load_unique_yaml_file(root / "skills.yaml"), "skills.yaml root")
+        registry_raw = require_mapping(load_registry_raw(root / "skills.yaml"), "skills.yaml root")
         registry_skills = require_mapping(registry_raw.get("skills"), "skills.yaml skills")
         catalog_raw = require_mapping(
             load_unique_yaml_file(root / "scripts" / "registry" / "capability_catalog.yaml"),
