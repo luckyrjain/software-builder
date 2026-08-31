@@ -30,8 +30,11 @@ echo "domain-comprehension pressure tests"
 # #14 — Makefile wires --check-content (static). Root Makefile may delegate to
 # a checked-in literal include, so inspect the repository's public Make entry
 # point plus its canonical core include.
-if makefile_text | grep -q 'check-content' && \
-   makefile_text | grep -q 'fixtures/check-content'; then
+# Captured into a variable (not piped) so an early-matching `grep -q` can't
+# SIGPIPE a still-writing `cat` and trip `set -o pipefail` into a false fail.
+MAKEFILE_TEXT="$(makefile_text)"
+if grep -q 'check-content' <<<"$MAKEFILE_TEXT" && \
+   grep -q 'fixtures/check-content' <<<"$MAKEFILE_TEXT"; then
   pass "#14 Makefile lint runs --check-content on fixture"
 else
   fail "#14 Makefile must run validator with --check-content on check-content fixture"
