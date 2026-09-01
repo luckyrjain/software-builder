@@ -297,7 +297,33 @@ install_skill() {
   install_succeeded=true
   clear_install_trap
   rm -rf "${backup_dir}"
-  echo "Installed ${skill} → ${skill_dest}"
+
+  # Shadow check (Candidate 8): a divergent copy at a higher-precedence discovery root for this
+  # host means the host will actually load THAT copy, not the one just written here -- the
+  # completion message must say so instead of unconditionally claiming success. This is a report,
+  # not a refusal: the write above already succeeded and stands regardless of what this finds.
+  local shadow_args=("check-shadow" "${host_label}" "${skill_dest}" "--home" "${HOME}")
+  if [[ -n "${TARGET_DIR}" ]]; then
+    shadow_args+=("--target-dir" "${TARGET_DIR}")
+  fi
+  local shadow_output
+  shadow_output="$(run_python "${REPO_ROOT}/scripts/install_support.py" "${shadow_args[@]}")"
+  local shadow_status="${shadow_output%%$'\n'*}"
+  case "${shadow_status}" in
+  SHADOWED)
+    local shadow_path="${shadow_output#*$'\n'}"
+    echo "Installed ${skill} → ${skill_dest}"
+    echo "warning: this install may be shadowed by a higher-precedence, divergent copy at ${shadow_path} -- ${host_label%%-*} will likely load that one instead" >&2
+    ;;
+  UNKNOWN_PRECEDENCE)
+    local shadow_path="${shadow_output#*$'\n'}"
+    echo "Installed ${skill} → ${skill_dest}"
+    echo "warning: a higher-precedence root at ${shadow_path} exists but its install manifest could not be read, so it's unknown whether this install is shadowed" >&2
+    ;;
+  *)
+    echo "Installed ${skill} → ${skill_dest}"
+    ;;
+  esac
 }
 
 if [[ "${MODE}" == "uninstall" ]]; then

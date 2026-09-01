@@ -17,6 +17,7 @@ from scripts.reference_utils import (
 )
 from scripts.registry.host_registry import HostRegistryParseError, parse_host_registry
 from scripts.registry.legacy_install_resolver import resolve_legacy_install_destinations
+from scripts.registry.shadow_detector import HOST_LABEL_TO_HOST_AND_TARGET, SHADOW_NONE, detect_shadow
 from scripts.registry.universal_install_resolver import (
     UNIVERSAL_AGENT_SELECTOR,
     resolve_universal_install_destination,
@@ -147,6 +148,36 @@ def cmd_resolve_targets(root: Path, agent: str, *, home: Path, target_dir: Path 
     return 0
 
 
+def cmd_check_shadow(
+    root: Path, host_label: str, written_dest: Path, *, home: Path, target_dir: Path | None
+) -> int:
+    """Print NONE/SHADOWED/DUPLICATE_IDENTICAL/UNKNOWN_PRECEDENCE (and, on the second line, the
+    shadowing path if not NONE) for install.sh to build an accurate completion message from
+    instead of unconditionally claiming the new install is what the host will run (Candidate 8).
+    """
+    host_and_target = HOST_LABEL_TO_HOST_AND_TARGET.get(host_label)
+    if host_and_target is None:
+        # No host entry to check against (e.g. the universal agents-user/agents-project
+        # labels) -- see shadow_detector.py's module docstring for why this is a scoped gap,
+        # not a bug.
+        print(SHADOW_NONE)
+        return 0
+    host_id, target_id = host_and_target
+    try:
+        host_registry = parse_host_registry(root / "agent-hosts.yaml")
+    except HostRegistryParseError as exc:
+        for error in exc.errors:
+            print(f"error: {error}", file=sys.stderr)
+        return 1
+    result = detect_shadow(
+        host_registry, host_id, target_id, written_dest, home=home, target_dir=target_dir
+    )
+    print(result.status)
+    if result.shadowing_path is not None:
+        print(result.shadowing_path)
+    return 0
+
+
 def cmd_verify(installed_path: Path) -> int:
     if not installed_path.is_dir():
         print(f"error: not a directory: {installed_path}", file=sys.stderr)
@@ -204,6 +235,15 @@ def main(argv: list[str] | None = None) -> int:
     classify_parser.add_argument("dest", type=Path)
     classify_parser.add_argument("skill_id")
 
+    shadow_parser = sub.add_parser(
+        "check-shadow", help="check whether an install is shadowed by a higher-precedence root"
+    )
+    shadow_parser.add_argument("host_label")
+    shadow_parser.add_argument("written_dest", type=Path)
+    shadow_parser.add_argument("--repo-root", type=Path, default=ROOT)
+    shadow_parser.add_argument("--home", type=Path, default=Path.home())
+    shadow_parser.add_argument("--target-dir", type=Path, default=None)
+
     args = parser.parse_args(argv)
     try:
         if args.command == "list":
@@ -218,6 +258,14 @@ def main(argv: list[str] | None = None) -> int:
             )
         if args.command == "classify-destination":
             return cmd_classify_destination(args.dest, args.skill_id)
+        if args.command == "check-shadow":
+            return cmd_check_shadow(
+                args.repo_root,
+                args.host_label,
+                args.written_dest,
+                home=args.home,
+                target_dir=args.target_dir,
+            )
     except YAML_SAFETY_ERRORS as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2

@@ -369,3 +369,53 @@ def test_legacy_agents_selector_respects_ownership_hardening(tmp_path: Path) -> 
     assert result.returncode != 0
     assert f"refusing to replace unowned directory at {dest}" in result.stderr
     assert (dest / "README.md").read_text(encoding="utf-8") == "installed by some other tool"
+
+
+def test_legacy_install_warns_when_shadowed_by_a_divergent_higher_precedence_root(
+    tmp_path: Path,
+) -> None:
+    """claude-user ignores --target-dir for its own destination (the quirk Candidate 5
+    preserves), but a project root explicitly passed via --target-dir is still exactly where a
+    higher-precedence claude-project copy could live -- Candidate 8 must warn when it does and
+    diverges, since Claude would load that copy instead of the one just installed."""
+    home = tmp_path / "home"
+    project = tmp_path / "project"
+
+    project_result = run_installer(
+        "--agent", "claude-project", "--target-dir", str(project), "pr-review", home=home
+    )
+    assert project_result.returncode == 0, project_result.stderr
+    project_manifest_path = project / ".claude" / "skills" / "pr-review" / MANIFEST_NAME
+    manifest = json.loads(project_manifest_path.read_text(encoding="utf-8"))
+    manifest["files"]["SKILL.md"] = "deliberately-different-hash"
+    project_manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    user_result = run_installer(
+        "--agent", "claude-user", "--target-dir", str(project), "pr-review", home=home
+    )
+    assert user_result.returncode == 0, user_result.stderr
+    user_dest = home / ".claude" / "skills" / "pr-review"
+    assert f"Installed pr-review → {user_dest}" in user_result.stdout
+    assert (
+        f"warning: this install may be shadowed by a higher-precedence, divergent copy at "
+        f"{project / '.claude' / 'skills' / 'pr-review'}" in user_result.stderr
+    )
+
+
+def test_legacy_install_no_shadow_warning_when_higher_precedence_root_matches(
+    tmp_path: Path,
+) -> None:
+    home = tmp_path / "home"
+    project = tmp_path / "project"
+
+    project_result = run_installer(
+        "--agent", "claude-project", "--target-dir", str(project), "pr-review", home=home
+    )
+    assert project_result.returncode == 0, project_result.stderr
+
+    user_result = run_installer(
+        "--agent", "claude-user", "--target-dir", str(project), "pr-review", home=home
+    )
+    assert user_result.returncode == 0, user_result.stderr
+    assert "shadowed" not in user_result.stderr
+    assert "warning" not in user_result.stderr
