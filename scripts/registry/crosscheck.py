@@ -12,13 +12,13 @@ from scripts.registry.install_targets_sync import validate_install_targets
 from scripts.registry.load import load_deprecated_skills
 from scripts.registry.models import Registry
 from scripts.registry.routing_sync import validate_skill_routing_references
-from scripts.registry.schema import AUTOMATION_ONLY_INVOCATION, parse_registry
+from scripts.registry.schema import AUTOMATION_ONLY_INVOCATION, load_registry_raw, parse_registry
 from scripts.registry.skill_contract_adoption_sync import validate_skill_contract_adoption
 from scripts.registry.skill_frontmatter_schema import (
     automation_only_guard_errors,
     validate_skill_frontmatter_fields,
 )
-from scripts.yaml_safety import YAML_SAFETY_ERRORS, load_unique_yaml_file
+from scripts.yaml_safety import YAML_SAFETY_ERRORS
 
 _SKILL_ID_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 _GENERATED_MARKER = "GENERATED from skills.yaml"
@@ -144,7 +144,7 @@ def _validate_invoke_skill_references(registry: Registry) -> list[str]:
 def _validate_skill_frontmatter_shape(root: Path, registry: Registry) -> list[str]:
     """Per-skill SKILL.md frontmatter checks against the registry."""
     errors: list[str] = []
-    raw_manifest = load_unique_yaml_file(root / "skills.yaml")
+    raw_manifest = load_registry_raw(root / "skills.yaml")
     legacy_manifest = not has_canonical_manifest_shape(raw_manifest)
     for skill_id, entry in registry.skills.items():
         skill_md = root / entry.path / "SKILL.md"

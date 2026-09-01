@@ -12,6 +12,7 @@ from scripts.registry.composition_contracts import load_contracts
 from scripts.registry.generate_docs import escape_table_cell
 from scripts.registry.host_adapter import HOSTS, capability_support, validate_host_adapter_interface
 from scripts.registry.load import load_registry
+from scripts.registry.schema import load_registry_raw
 from scripts.release_info import read_distribution_version
 from scripts.yaml_safety import load_unique_yaml_file, require_mapping
 
@@ -91,7 +92,7 @@ def _load_optional_canonical_manifest(root: Path) -> dict | None:
     path = root / "skills.yaml"
     if not path.is_file():
         return None
-    raw = require_mapping(load_unique_yaml_file(path), "skills.yaml root")
+    raw = require_mapping(load_registry_raw(path), "skills.yaml root")
     canonical_marker = has_canonical_manifest_shape(raw)
     if not canonical_marker:
         return None

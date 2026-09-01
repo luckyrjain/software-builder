@@ -154,7 +154,7 @@ def _deep_merge(base: dict, override: dict) -> dict:
     return merged
 
 
-_registry_raw_cache: dict[Path, Any] = {}
+_registry_raw_cache: dict[tuple[Path, str], Any] = {}
 
 
 def clear_registry_cache() -> None:
@@ -166,11 +166,21 @@ def clear_registry_cache() -> None:
     re-reading and re-parsing the same skills.yaml, re-merging the same
     scripts/registry/skills.d/ fragments, and re-running the same
     has_canonical_manifest_shape check on the result. `load_registry_raw` caches
-    per resolved root path instead, since nothing in this process writes to
-    skills.yaml or its fragments mid-invocation except `cli.py`'s own final write
-    step -- which calls this to invalidate the entry it just made stale, so a
-    later read in the same invocation (e.g. a second `_prune_stale_adapters` pass)
-    sees the just-written state rather than a pre-write cache entry.
+    per resolved root path instead.
+
+    The real CLI (`python3 -m scripts.registry ...`) only ever writes to
+    skills.yaml from two places within one process: `cmd_generate`'s own
+    `_write_outputs` step (which calls this to invalidate the entry it just made
+    stale, so a later read in the same invocation -- e.g. a second
+    `_prune_stale_adapters` pass -- sees the just-written state) and
+    `cmd_backfill`'s `write_text` in backfill_capabilities.py. `cmd_backfill`
+    never invalidates, but it doesn't need to: `backfill-capabilities` is its own
+    top-level subcommand (see cli.py's argument dispatch) and every real
+    invocation is one subcommand per process, so nothing in that same process
+    reads the cache again after the write. This does mean `load_registry_raw` is
+    not safe to reuse as a long-lived library call across multiple writes within
+    one process without also calling this function -- only the one-shot-CLI usage
+    pattern this codebase actually has is exempt from that hazard.
     """
     _registry_raw_cache.clear()
 
@@ -194,27 +204,29 @@ def load_registry_raw(path: Path) -> Any:
     canonical_manifest.load_canonical_manifest) mutate the dict they get back,
     and must not corrupt the shared cache entry by doing so.
 
-    Keyed on `path.parent.resolve()` (the root directory's identity), not
-    `path.resolve()` (the file's identity) -- the cached value depends on BOTH
-    `path` itself AND `skills_fragments_dir(path.parent)`, which is derived from
-    the *root*, not the file. If only `skills.yaml` were symlinked across two
-    otherwise-distinct roots with their own, different `skills.d/` fragments,
-    keying on the file's resolved identity alone would conflate them: root B's
-    first read would populate the shared entry, and root A's read would then
-    silently return root B's fragment-merged skills instead of its own. Keying
-    on the root's own resolved identity means two genuinely different roots
-    always get different cache entries even if they happen to share one
-    symlinked file.
+    Keyed on `(path.parent.resolve(), path.name)` -- the root directory's
+    identity plus the filename -- not `path.resolve()` (the file's identity)
+    alone. The root half guards the symlink case: the cached value depends on
+    BOTH `path` itself AND `skills_fragments_dir(path.parent)`, which is derived
+    from the *root*, not the file, so if only `skills.yaml` were symlinked
+    across two otherwise-distinct roots with their own, different `skills.d/`
+    fragments, keying on the file's resolved identity alone would conflate
+    them -- root B's first read would populate the shared entry, and root A's
+    read would then silently return root B's fragment-merged skills instead of
+    its own. The filename half guards the sibling case: every current caller
+    only ever passes `root / "skills.yaml"`, but the function itself accepts
+    any `path`, and keying on the directory alone would silently return one
+    file's content for a different file requested from the same directory.
     """
-    root = path.parent.resolve()
-    if root not in _registry_raw_cache:
+    cache_key = (path.parent.resolve(), path.name)
+    if cache_key not in _registry_raw_cache:
         raw = load_unique_yaml_file(path)
         fragments_dir = skills_fragments_dir(path.parent)
         if fragments_dir.is_dir():
             raw = dict(_require_mapping(raw, str(path)))
             raw["skills"] = load_fragment_skills(path.parent)
-        _registry_raw_cache[root] = resolve_registry_profiles(raw)
-    return copy.deepcopy(_registry_raw_cache[root])
+        _registry_raw_cache[cache_key] = resolve_registry_profiles(raw)
+    return copy.deepcopy(_registry_raw_cache[cache_key])
 
 
 def parse_registry(path: Path) -> Registry:

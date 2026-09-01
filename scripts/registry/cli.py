@@ -55,7 +55,6 @@ from scripts.registry.p1_validation import validate_p1_contracts
 from scripts.registry.runtime_manifest import validate_runtime_manifest
 from scripts.registry.schema import clear_registry_cache, load_registry_raw
 from scripts.release_contract import validate_release_contract
-from scripts.yaml_safety import load_unique_yaml_file
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -510,7 +509,7 @@ def cmd_explain(root: Path, skill_id: str) -> int:
 
 
 def _validated_canonical_manifest(root: Path) -> dict:
-    raw = load_unique_yaml_file(root / "skills.yaml")
+    raw = load_registry_raw(root / "skills.yaml")
     if not isinstance(raw, dict) or raw.get("manifest_kind") != "canonical":
         raise ValueError("canonical manifest required for this command")
     errors = validate_canonical_manifest(root)
