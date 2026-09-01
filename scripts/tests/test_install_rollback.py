@@ -62,6 +62,11 @@ def test_install_restores_previous_package_when_validation_fails(tmp_path: Path)
     dest.mkdir()
     marker = dest / "KEEP_ME.txt"
     marker.write_text("previous install\n", encoding="utf-8")
+    # A real previous install always carries its own manifest (install.sh writes one for every
+    # skill it installs) -- without it, Candidate 6's ownership hardening correctly refuses to
+    # touch this directory at all as UNOWNED, before ever reaching the rollback path this test
+    # means to exercise. This is what marks it SOFTWARE_BUILDER_OWNED for "broken-skill".
+    (dest / ".software-builder-manifest.json").write_text('{"skill": "broken-skill"}', encoding="utf-8")
 
     result = subprocess.run(
         ["bash", str(repo / "scripts" / "install.sh"), "--agent", "cursor", "broken-skill"],

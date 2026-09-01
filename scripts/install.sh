@@ -121,6 +121,14 @@ validate_skill_name_format() {
   return 0
 }
 
+# Ownership classification (Candidate 6): only a directory this repository itself installed --
+# proven by a valid .software-builder-manifest.json naming the same skill -- is safe to replace or
+# remove. ABSENT/SOFTWARE_BUILDER_OWNED/UNOWNED/CORRUPT_OWNERSHIP/SYMLINK; see
+# scripts/reference_utils.py's classify_install_destination for the full state definitions.
+classify_destination() {
+  run_python "${REPO_ROOT}/scripts/install_support.py" classify-destination "$1" "$2"
+}
+
 uninstall_skill() {
   local skill="$1"
   local dest_root="$2"
@@ -130,14 +138,26 @@ uninstall_skill() {
 
   registry_check_skill "${skill}"
 
-  if [[ ! -e "${skill_dest}" ]]; then
+  local ownership
+  ownership="$(classify_destination "${skill_dest}" "${skill}")"
+  case "${ownership}" in
+  ABSENT)
     echo "warning: not installed: ${skill_dest}" >&2
     return 0
-  fi
-  if [[ -L "${skill_dest}" ]]; then
+    ;;
+  SYMLINK)
     echo "error: refusing to remove symlink at ${skill_dest}" >&2
     return 1
-  fi
+    ;;
+  UNOWNED)
+    echo "error: refusing to remove unowned directory at ${skill_dest} (not installed by software-builder)" >&2
+    return 1
+    ;;
+  CORRUPT_OWNERSHIP)
+    echo "error: refusing to remove ${skill_dest}: install manifest is missing, unreadable, or names a different skill" >&2
+    return 1
+    ;;
+  esac
 
   if [[ "${DRY_RUN}" == true ]]; then
     echo "dry-run: would remove ${skill_dest}"
@@ -165,10 +185,27 @@ install_skill() {
     return 1
   fi
 
-  if [[ -e "${skill_dest}" && -L "${skill_dest}" ]]; then
+  # Early ownership check: fail fast before staging work (package_skill.py,
+  # validate_references.py) starts, and gives --dry-run an accurate preview. Re-checked fresh
+  # immediately before the actual replace below, since staging takes real time and this is a
+  # check-then-act sequence -- mirrors this function's pre-existing early/late symlink
+  # double-check pattern.
+  local ownership
+  ownership="$(classify_destination "${skill_dest}" "${skill}")"
+  case "${ownership}" in
+  SYMLINK)
     echo "error: refusing to replace symlink at ${skill_dest}" >&2
     return 1
-  fi
+    ;;
+  UNOWNED)
+    echo "error: refusing to replace unowned directory at ${skill_dest} (not installed by software-builder)" >&2
+    return 1
+    ;;
+  CORRUPT_OWNERSHIP)
+    echo "error: refusing to replace ${skill_dest}: install manifest is missing, unreadable, or names a different skill" >&2
+    return 1
+    ;;
+  esac
 
   if [[ "${DRY_RUN}" == true ]]; then
     echo "dry-run: would install ${skill} → ${skill_dest} (host=${host_label})"
@@ -221,17 +258,32 @@ install_skill() {
     return 1
   fi
 
-  if [[ -e "${skill_dest}" ]]; then
-    if [[ -L "${skill_dest}" ]]; then
-      rm -rf "${stage_dir}"
-      clear_install_trap
-      echo "error: refusing to replace symlink at ${skill_dest}" >&2
-      return 1
-    fi
+  ownership="$(classify_destination "${skill_dest}" "${skill}")"
+  case "${ownership}" in
+  SYMLINK)
+    rm -rf "${stage_dir}"
+    clear_install_trap
+    echo "error: refusing to replace symlink at ${skill_dest}" >&2
+    return 1
+    ;;
+  UNOWNED)
+    rm -rf "${stage_dir}"
+    clear_install_trap
+    echo "error: refusing to replace unowned directory at ${skill_dest} (not installed by software-builder)" >&2
+    return 1
+    ;;
+  CORRUPT_OWNERSHIP)
+    rm -rf "${stage_dir}"
+    clear_install_trap
+    echo "error: refusing to replace ${skill_dest}: install manifest is missing, unreadable, or names a different skill" >&2
+    return 1
+    ;;
+  SOFTWARE_BUILDER_OWNED)
     echo "warning: replacing existing install at ${skill_dest}" >&2
     backup_dir="$(mktemp -d)"
     mv "${skill_dest}" "${backup_dir}/skill"
-  fi
+    ;;
+  esac
 
   if ! mv "${stage_dir}" "${skill_dest}"; then
     cleanup_failed_install

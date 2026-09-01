@@ -258,3 +258,68 @@ def test_legacy_install_refuses_to_replace_a_symlink_destination(tmp_path: Path)
     assert result.returncode != 0
     assert f"refusing to replace symlink at {symlink_dest}" in result.stderr
     assert symlink_dest.is_symlink()
+
+
+def test_legacy_install_refuses_to_replace_an_unowned_directory(tmp_path: Path) -> None:
+    """Candidate 6 ownership hardening: a directory with no .software-builder-manifest.json --
+    unrelated third-party content that happens to share the skill's name -- must never be
+    silently overwritten."""
+    home = tmp_path / "home"
+    dest = home / ".cursor" / "skills" / "pr-review"
+    dest.mkdir(parents=True)
+    (dest / "README.md").write_text("not ours", encoding="utf-8")
+
+    result = run_installer("--agent", "cursor", "pr-review", home=home)
+    assert result.returncode != 0
+    assert f"refusing to replace unowned directory at {dest}" in result.stderr
+    assert (dest / "README.md").read_text(encoding="utf-8") == "not ours"
+    assert not (dest / "SKILL.md").exists()
+
+
+def test_legacy_install_refuses_to_replace_a_directory_with_corrupt_manifest(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    dest = home / ".cursor" / "skills" / "pr-review"
+    dest.mkdir(parents=True)
+    (dest / MANIFEST_NAME).write_text("{not valid json", encoding="utf-8")
+
+    result = run_installer("--agent", "cursor", "pr-review", home=home)
+    assert result.returncode != 0
+    assert f"refusing to replace {dest}: install manifest is missing, unreadable, or names a different skill" in result.stderr
+
+
+def test_legacy_install_replaces_a_previous_software_builder_owned_install(tmp_path: Path) -> None:
+    """Reinstalling the same skill -- the normal upgrade/refresh path -- must keep working: a
+    destination whose manifest already names this skill is SOFTWARE_BUILDER_OWNED, not UNOWNED."""
+    home = tmp_path / "home"
+    first = run_installer("--agent", "cursor", "pr-review", home=home)
+    assert first.returncode == 0, first.stderr
+
+    second = run_installer("--agent", "cursor", "pr-review", home=home)
+    assert second.returncode == 0, second.stderr
+    assert "warning: replacing existing install" in second.stderr
+    dest = home / ".cursor" / "skills" / "pr-review"
+    assert (dest / "SKILL.md").is_file()
+
+
+def test_legacy_uninstall_refuses_to_remove_an_unowned_directory(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    dest = home / ".cursor" / "skills" / "pr-review"
+    dest.mkdir(parents=True)
+    (dest / "README.md").write_text("not ours", encoding="utf-8")
+
+    result = run_installer("--agent", "cursor", "--uninstall", "pr-review", home=home)
+    assert result.returncode != 0
+    assert f"refusing to remove unowned directory at {dest}" in result.stderr
+    assert (dest / "README.md").is_file()
+
+
+def test_legacy_uninstall_refuses_to_remove_a_directory_with_corrupt_manifest(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    dest = home / ".cursor" / "skills" / "pr-review"
+    dest.mkdir(parents=True)
+    (dest / MANIFEST_NAME).write_text('{"skill": "some-other-skill"}', encoding="utf-8")
+
+    result = run_installer("--agent", "cursor", "--uninstall", "pr-review", home=home)
+    assert result.returncode != 0
+    assert f"refusing to remove {dest}: install manifest is missing, unreadable, or names a different skill" in result.stderr
+    assert dest.is_dir()

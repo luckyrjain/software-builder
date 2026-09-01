@@ -10,6 +10,7 @@ from pathlib import Path
 from scripts.reference_utils import (
     MANIFEST_NAME,
     ManifestError,
+    classify_install_destination,
     is_ignored_package_path,
     read_manifest_file,
     sha256_file,
@@ -108,6 +109,13 @@ def _verify_manifest_files(installed_path: Path, manifest: dict) -> list[str]:
     return errors
 
 
+def cmd_classify_destination(dest: Path, skill_id: str) -> int:
+    """Print one of ABSENT/SOFTWARE_BUILDER_OWNED/UNOWNED/CORRUPT_OWNERSHIP/SYMLINK for install.sh's
+    ownership-hardened install_skill()/uninstall_skill() to branch on (Candidate 6)."""
+    print(classify_install_destination(dest, skill_id=skill_id))
+    return 0
+
+
 def cmd_resolve_targets(root: Path, agent: str, *, home: Path, target_dir: Path | None) -> int:
     """Print `<dest_root>\\t<host_label>` per line for install.sh's dest_roots()/
     host_label_for_dest() to consume, resolved from agent-hosts.yaml instead of Bash's own
@@ -181,6 +189,12 @@ def main(argv: list[str] | None = None) -> int:
     resolve_parser.add_argument("--home", type=Path, default=Path.home())
     resolve_parser.add_argument("--target-dir", type=Path, default=None)
 
+    classify_parser = sub.add_parser(
+        "classify-destination", help="classify an install destination's ownership state"
+    )
+    classify_parser.add_argument("dest", type=Path)
+    classify_parser.add_argument("skill_id")
+
     args = parser.parse_args(argv)
     try:
         if args.command == "list":
@@ -193,6 +207,8 @@ def main(argv: list[str] | None = None) -> int:
             return cmd_resolve_targets(
                 args.repo_root, args.agent, home=args.home, target_dir=args.target_dir
             )
+        if args.command == "classify-destination":
+            return cmd_classify_destination(args.dest, args.skill_id)
     except YAML_SAFETY_ERRORS as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
