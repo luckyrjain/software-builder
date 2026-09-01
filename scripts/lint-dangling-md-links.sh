@@ -56,7 +56,14 @@ for f in "$@"; do
 		if [[ "$ref" == *#* ]]; then
 			anchor=$(printf '%s' "${ref##*#}" | tr '[:upper:]' '[:lower:]')
 			slugs=$(grep -E '^#{1,6} ' "$target" | sed -E 's/^#+ +//' | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9 -]//g; s/ +/ /g; s/ /-/g')
-			if ! printf '%s\n' "$slugs" | grep -qx "$anchor"; then
+			# Pure-bash exact-line match, not `printf ... | grep -qx` -- grep -q exits the
+			# instant it finds a match, which can SIGPIPE printf before it finishes writing;
+			# under `set -o pipefail` that non-zero printf exit status poisons the pipeline
+			# even though grep DID find the match, producing an intermittent false "dangling
+			# anchor" report (observed flaking in CI). $anchor is regex-constrained to
+			# [a-zA-Z0-9_-] by the capture on line 43, so it can't contain glob metacharacters
+			# and this pattern match is safe.
+			if [[ $'\n'"$slugs"$'\n' != *$'\n'"$anchor"$'\n'* ]]; then
 				echo "  dangling anchor: $ref referenced in $f" >&2
 				fail=1
 			fi
