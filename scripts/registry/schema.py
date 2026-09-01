@@ -168,19 +168,16 @@ def clear_registry_cache() -> None:
     has_canonical_manifest_shape check on the result. `load_registry_raw` caches
     per resolved root path instead.
 
-    The real CLI (`python3 -m scripts.registry ...`) only ever writes to
-    skills.yaml from two places within one process: `cmd_generate`'s own
-    `_write_outputs` step (which calls this to invalidate the entry it just made
-    stale, so a later read in the same invocation -- e.g. a second
-    `_prune_stale_adapters` pass -- sees the just-written state) and
-    `cmd_backfill`'s `write_text` in backfill_capabilities.py. `cmd_backfill`
-    never invalidates, but it doesn't need to: `backfill-capabilities` is its own
-    top-level subcommand (see cli.py's argument dispatch) and every real
-    invocation is one subcommand per process, so nothing in that same process
-    reads the cache again after the write. This does mean `load_registry_raw` is
-    not safe to reuse as a long-lived library call across multiple writes within
-    one process without also calling this function -- only the one-shot-CLI usage
-    pattern this codebase actually has is exempt from that hazard.
+    The two places that write to skills.yaml both call this immediately after:
+    `cmd_generate`'s own `_write_outputs` step (so a later read in the same
+    invocation -- e.g. a second `_prune_stale_adapters` pass -- sees the
+    just-written state rather than a pre-write cache entry) and
+    `cmd_backfill`'s `write_text` in backfill_capabilities.py. Neither call is
+    load-bearing for the CLI's own real usage today -- every invocation is one
+    subcommand per process, so nothing reads the cache again after `cmd_backfill`
+    writes regardless -- but calling it there means `load_registry_raw` doesn't
+    depend on that one-shot-process invariant to stay correct if a future caller
+    (a library user, a batch script chaining subcommands in-process) breaks it.
     """
     _registry_raw_cache.clear()
 

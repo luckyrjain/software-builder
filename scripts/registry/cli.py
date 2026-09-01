@@ -201,7 +201,13 @@ def _composition_runtime_path(root: Path) -> Path:
         # re-read-and-reparse cost that cache was built to eliminate, just for
         # shape detection instead of registry content (full canonical-shape
         # detection is unaffected: load_registry_raw only adds/merges the
-        # `skills` key, never touches `manifest_kind`/`contracts`).
+        # `skills` key, never touches `manifest_kind`/`contracts`). Unlike
+        # load_unique_yaml_file, load_registry_raw can also raise ValueError
+        # (a malformed `profiles:`/`extends:` elsewhere in skills.yaml) -- left
+        # uncaught here deliberately, since every caller of this function
+        # reaches _run_command's catch-all, which already handles ValueError
+        # the same way it handles the manifest errors validate_registry raises
+        # a few lines later regardless.
         raw = load_registry_raw(manifest_path)
     except FileNotFoundError:
         return root / "scripts" / "registry" / "composition_runtime.yaml"

@@ -106,6 +106,53 @@ def test_clear_registry_cache_forces_a_fresh_read(tmp_path: Path, monkeypatch: p
     assert set(raw["skills"]) == {"renamed"}
 
 
+def test_different_filenames_in_the_same_directory_do_not_collide(tmp_path: Path) -> None:
+    """Regression test: the cache key is (root, filename), not just root. Before this,
+    two different files requested from the same directory would silently share one
+    cache entry -- unreachable through any real call site (every caller passes
+    root / "skills.yaml"), but a real contract violation the key alone should prevent.
+    """
+    skills_path = _write_skills_yaml(tmp_path, skill_id="solo")
+    other_path = tmp_path / "other.yaml"
+    other_path.write_text("schema_version: 1\nskills:\n  different:\n    path: different\n", encoding="utf-8")
+
+    first = load_registry_raw(skills_path)
+    second = load_registry_raw(other_path)
+
+    assert set(first["skills"]) == {"solo"}
+    assert set(second["skills"]) == {"different"}
+
+
+def test_backfill_write_invalidates_the_registry_cache(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regression test: cmd_backfill's write to skills.yaml must not leave a stale
+    load_registry_raw entry behind for whatever reads that path next in the same
+    process. Stubs out backfill_skills_yaml_text's catalog-matching logic (already
+    covered by scripts/tests/test_backfill_capabilities.py) so this test isolates
+    exactly the write-then-invalidate contract cmd_backfill itself owns.
+    """
+    from scripts.registry import backfill_capabilities
+
+    path = _write_skills_yaml(tmp_path, skill_id="solo")
+    load_registry_raw(path)  # primes the cache with the pre-write content
+
+    monkeypatch.setattr(
+        backfill_capabilities,
+        "backfill_skills_yaml_text",
+        lambda text, *, overwrite, render: (
+            "schema_version: 1\nskills:\n  renamed:\n    path: renamed\n",
+            ["solo"],
+        ),
+    )
+
+    result = backfill_capabilities.cmd_backfill(check_only=False, overwrite=False, skills_path=path)
+
+    assert result == 0
+    raw = load_registry_raw(path)
+    assert set(raw["skills"]) == {"renamed"}, "stale cache entry survived cmd_backfill's write"
+
+
 def test_fragments_are_still_re_merged_correctly_through_the_cache(tmp_path: Path) -> None:
     from scripts.registry.manifest_merge import skills_fragments_dir
 
