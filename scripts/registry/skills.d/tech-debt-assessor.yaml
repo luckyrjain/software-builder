@@ -1,0 +1,32 @@
+tech-debt-assessor:
+  path: tech-debt-assessor
+  category: platform
+  extends: read-only-leaf-review
+  install:
+    requires: []
+  composition:
+    escalation_targets:
+    - migration-program-manager
+    - cost-optimization-sprint-planner
+  capabilities:
+    required:
+    - host.report.write
+    optional: []
+  lint:
+    skill_md_max_lines: 180
+    target: tech-debt-assessor
+  version: 1.0.0
+  type: leaf
+  permissions:
+    repository: read
+    external_actions: none
+    unattended: false
+    merge: false
+  output_contract:
+    produces:
+    - tech_debt_assessment
+    produce_fields:
+      tech_debt_assessment:
+      - title
+      - items
+  dependencies: []

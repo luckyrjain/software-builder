@@ -1,0 +1,62 @@
+weekly-squad-digest:
+  path: weekly-squad-digest
+  category: migration
+  invocation: automation-only
+  hosts:
+    cursor:
+      discovery: rule
+    claude:
+      install: true
+    kiro:
+      discovery: manual
+  install:
+    requires:
+    - migration-program-manager
+    - cost-optimization-sprint-planner
+  composition:
+    mode: aggregate
+    escalation_targets:
+    - migration-program-manager
+    - cost-optimization-sprint-planner
+  capabilities:
+    required:
+    - scheduler.cron.trigger
+    optional:
+    - name: slack.post.message
+      enables: scheduled digest delivery
+    degraded_modes:
+      slack.post.message: WEEKLY_SQUAD_DIGEST.md is still written; the digest simply
+        is not delivered via Slack
+  lint:
+    skill_md_max_lines: 180
+    target: weekly-squad-digest
+  risk_class:
+  - unattended
+  version: 1.0.0
+  type: trigger
+  authority: read-only
+  permissions:
+    repository: read
+    external_actions: write
+    unattended: true
+    merge: false
+  supported_hosts:
+  - chatgpt
+  - claude
+  - codex
+  - cursor
+  - generic
+  - kiro
+  entrypoint: SKILL.md
+  output_contract:
+    produces:
+    - digest_report
+    produce_fields:
+      digest_report:
+      - sections
+      - generated_at
+      - source_revisions
+  dependencies:
+  - migration-program-manager
+  - cost-optimization-sprint-planner
+  version_source: skill_frontmatter_legacy_numeric

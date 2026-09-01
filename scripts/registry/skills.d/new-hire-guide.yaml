@@ -1,0 +1,52 @@
+new-hire-guide:
+  path: new-hire-guide
+  category: architecture
+  invocation: ambient
+  hosts:
+    cursor:
+      discovery: rule
+    claude:
+      install: true
+    kiro:
+      discovery: manual
+  install:
+    requires:
+    - domain-comprehension
+    - squad-map
+  capabilities:
+    required:
+    - host.repository.read
+    optional:
+    - name: domain-comprehension.invoke
+      enables: full domain map tour
+    - name: squad-map.invoke
+      enables: ownership lookups during tour
+  lint:
+    skill_md_max_lines: 180
+    target: new-hire-guide
+  risk_class:
+  - read-only
+  version: 1.0.0
+  type: orchestrator
+  authority: read-only
+  permissions:
+    repository: read
+    external_actions: read
+    unattended: false
+    merge: false
+  supported_hosts:
+  - chatgpt
+  - claude
+  - codex
+  - cursor
+  - generic
+  - kiro
+  entrypoint: SKILL.md
+  output_contract:
+    produces:
+    - digest_report
+    produce_fields: {}
+  dependencies:
+  - domain-comprehension
+  - squad-map
+  version_source: skill_frontmatter_legacy_numeric

@@ -35,7 +35,8 @@ host agent.
 ### To use the skills
 
 - **Git** to clone this repository and access target repositories.
-- **Bash** to use `scripts/install.sh` (macOS, Linux, or WSL).
+- **Bash** and **Python 3** to run `scripts/install.sh` (macOS, Linux, or WSL) — the installer shells
+  out to `python3` for every install path, including the quickstart below.
 - A supported **repository-capable coding agent**: Cursor, Claude Code, ChatGPT/Codex, Kiro, or a
   generic agent that can read a `SKILL.md` file.
 - Read access to the repositories being analyzed. Workflows that implement changes also need branch

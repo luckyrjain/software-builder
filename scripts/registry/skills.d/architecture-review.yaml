@@ -1,0 +1,40 @@
+architecture-review:
+  path: architecture-review
+  category: review
+  extends: read-only-leaf-review
+  install:
+    requires: []
+  composition:
+    escalation_targets:
+    - system-design
+    - security-review
+    - loop-task-implementer
+    - prd-architect
+  capabilities:
+    required:
+    - host.report.write
+    optional: []
+  lint:
+    skill_md_max_lines: 180
+    target: architecture-review
+  version: 1.2.0
+  type: leaf
+  permissions:
+    repository: read
+    external_actions: none
+    unattended: false
+    merge: false
+  output_contract:
+    produces:
+    - architecture_review_report
+    produce_fields:
+      architecture_review_report:
+      - title
+      - decision
+      - assessment_target
+      - normalized_decision
+      - findings
+      - conditions
+      - required_actions
+      - evidence_refs
+  dependencies: []

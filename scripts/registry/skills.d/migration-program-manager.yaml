@@ -1,0 +1,60 @@
+migration-program-manager:
+  path: migration-program-manager
+  category: migration
+  invocation: ambient
+  hosts:
+    cursor:
+      discovery: rule
+    claude:
+      install: true
+    kiro:
+      discovery: manual
+  install:
+    requires:
+    - mysql-to-postgres-sql
+    - squad-map
+  composition:
+    mode: aggregate
+    escalation_targets:
+    - mysql-to-postgres-sql
+    - squad-map
+    - pr-review
+  capabilities:
+    required:
+    - host.filesystem.read
+    optional:
+    - name: mysql-to-postgres-sql.invoke
+      enables: single-workspace migration status refresh
+  lint:
+    skill_md_max_lines: 180
+    target: migration-program-manager
+  risk_class:
+  - read-only
+  version: 1.0.0
+  type: orchestrator
+  authority: read-only
+  permissions:
+    repository: read
+    external_actions: none
+    unattended: false
+    merge: false
+  supported_hosts:
+  - chatgpt
+  - claude
+  - codex
+  - cursor
+  - generic
+  - kiro
+  entrypoint: SKILL.md
+  output_contract:
+    produces:
+    - migration_status_rollup
+    produce_fields:
+      migration_status_rollup:
+      - items
+      - generated_at
+      - source_revision
+  dependencies:
+  - mysql-to-postgres-sql
+  - squad-map
+  version_source: skill_frontmatter_legacy_numeric
