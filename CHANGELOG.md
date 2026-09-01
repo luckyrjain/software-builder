@@ -43,6 +43,32 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 
 ## Platform
 
+### Universal coding-agent compatibility: host registry, capability resolver, GitHub Copilot (2026-09-01)
+
+- New declarative host/target registry (`agent-hosts.yaml`, validated by
+  `scripts/registry/host_registry.py`) replaces install.sh's hard-coded Cursor/Claude/Kiro
+  destination and discovery logic. Adds a capability resolution engine
+  (`scripts/registry/compatibility_resolver.py`, `capability_engine.py`) that answers "is
+  capability X available on host Y" against host verification state (VERIFIED/STALE/UNVERIFIED/
+  CONFLICTED) and each capability's own required/optional/any_of contract; `doctor.py` gained
+  `--agent`/`--surface` flags to query it.
+- `github-copilot` added as a fourth host, backed by cited GitHub Docs evidence — every skill's
+  `hosts:` block now declares it (`discovery: manual` by default).
+- New universal `--agent agents` install target (`.agents/skills`) alongside the legacy
+  Cursor/Claude selectors, for hosts that read the shared, multi-tool Agent Skills convention
+  directly instead of needing a dedicated adapter.
+- Install/uninstall hardening: ownership classification (only a directory this repo's own
+  manifest claims is safe to replace or remove — `scripts/reference_utils.py`), discovery-
+  precedence shadow detection (warns when a divergent copy at a higher-precedence root will
+  actually be what the host loads), and a per-(skill, destination) advisory lock around
+  `install.sh`'s mutating section so two concurrent installs of the same skill can't corrupt the
+  destination.
+- `docs/agent-compatibility.md` (new, generated) and a README "Verification status" section give
+  the full per-host/per-skill support matrix; both are generated from `agent-hosts.yaml` +
+  `skills.yaml` and checked for drift by `make generate --check`.
+- Full design rationale, scope decisions, and the anti-guessing evidence rules this was built
+  under: `docs/superpowers/specs/2026-08-31-universal-agent-compatibility-design.md`.
+
 ### Architecture deepening: generated docs, registry dedup, eval-framework fixes (2026-08-31)
 
 - `docs/README.md`: the per-skill README/SKILL.md/SETUP.md link table and the "Cross-skill routing"
