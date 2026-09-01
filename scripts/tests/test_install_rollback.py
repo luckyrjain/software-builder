@@ -33,6 +33,7 @@ def test_install_restores_previous_package_when_validation_fails(tmp_path: Path)
     hosts:
       cursor: {discovery: rule}
       claude: {install: true}
+      github-copilot: {discovery: manual}
       kiro: {discovery: manual}
     install:
       requires: []
@@ -57,6 +58,7 @@ broken-skill:
   hosts:
     cursor: {discovery: rule}
     claude: {install: true}
+    github-copilot: {discovery: manual}
     kiro: {discovery: manual}
   install:
     requires: []
@@ -124,6 +126,11 @@ def test_install_list_does_not_write_skills(tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     shutil.copytree(ROOT / "scripts", repo / "scripts")
     shutil.copy2(ROOT / "skills.yaml", repo / "skills.yaml")
+    # The real skills.yaml's skill fragments declare every host in the real agent-hosts.yaml
+    # (Candidate 3: the host set is data-driven, not hard-coded) -- without this copy, schema.py
+    # falls back to its 3-host default and every skill's real 4-host declaration looks like an
+    # unknown host.
+    shutil.copy2(ROOT / "agent-hosts.yaml", repo / "agent-hosts.yaml")
     (repo / "VERSION").write_text("0.0.0\n", encoding="utf-8")
     shutil.copytree(ROOT / "unit-test-creator", repo / "unit-test-creator")
     shutil.copytree(ROOT / "docs" / "skill-framework", repo / "docs" / "skill-framework")

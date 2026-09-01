@@ -144,6 +144,7 @@ Each skill directory has three entry points:
 | **Cursor** | `bash scripts/install.sh --agent cursor` (global) or `--target-dir <repo>` for `<repo>/.cursor/skills/`; in-repo `.cursor/rules/` also works | Background agents, separate chats, or worktrees | Restart Cursor after installation. |
 | **Claude Code** | `--agent claude-user`, `--agent claude-project`, or `make install-claude` | Subagents, fresh sessions, or worktrees | Start a new session after installation. |
 | **ChatGPT / Codex** | Copy selected skills to the runtime's supported directory, commonly `~/.agents/skills/` | Separate tasks or fresh agent sessions; worktrees where available | Use repository connectors for remote state and local Git for implementation when available. |
+| **GitHub Copilot** | Copy skills to `.github/skills/` (project) or `~/.copilot/skills/` (personal); `.claude/skills/` and `~/.agents/skills/` also work per GitHub's docs | Separate tasks or fresh agent sessions | Discovery is documented, not yet independently verified — see [docs/agent-compatibility.md](docs/agent-compatibility.md). |
 | **Kiro** | Open this repository and use `.kiro/steering/<skill>.md` | Kiro specs plus separate role contexts | No installer copy is required for in-repo use. |
 | **Generic repository agent** | Point the agent directly at `<skill>/SKILL.md` | Host-dependent; otherwise use the documented sequential fallback | State the active role and provide only that role's input package. |
 
@@ -159,6 +160,7 @@ Canonical, evidence-gated host compatibility (see [docs/agent-compatibility.md](
 |------|--------------|---------------------|
 | claude | UNVERIFIED | BEST_EFFORT |
 | cursor | UNVERIFIED | BEST_EFFORT |
+| github-copilot | UNVERIFIED | BEST_EFFORT |
 | kiro | UNVERIFIED | BEST_EFFORT |
 <!-- agent-compatibility:end -->
 

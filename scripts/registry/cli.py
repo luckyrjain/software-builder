@@ -45,7 +45,7 @@ from scripts.registry.generate_kiro import generate_kiro_steering
 from scripts.registry.generate_makefile_roster import generate_makefile_roster
 from scripts.registry.generic_package import build_generic_package
 from scripts.registry.host_portability import validate_host_portability
-from scripts.registry.host_adapter import HOSTS, validate_host_adapter_identities, validate_host_adapter_interface
+from scripts.registry.host_adapter import validate_host_adapter_identities, validate_host_adapter_interface
 from scripts.registry.host_registry import HostRegistryParseError, parse_host_registry
 from scripts.registry.load import load_deprecated_skills, load_descriptions, load_registry
 from scripts.registry.manifest import validate_manifest
@@ -296,21 +296,21 @@ def cmd_validate_agent_skills(root: Path) -> int:
 
 
 def cmd_validate_hosts(root: Path) -> int:
+    # No longer cross-checks agent-hosts.yaml's host ids against host_adapter.HOSTS as a subset
+    # relationship (Candidate 2's original check, added before this registry had grown past
+    # cursor/claude/kiro -- all of which happened to already be in HOSTS). Candidate 12 (spec
+    # Section 64, "add other agents based on evidence") revealed that constraint to be wrong:
+    # agent-hosts.yaml is the canonical, evidence-gated host-identity registry (spec Section 13),
+    # and is explicitly meant to grow independently of host_adapter.py's older,
+    # adapter-generation-focused HOSTS set -- github-copilot is real evidence-backed data here
+    # (see agent-hosts.yaml's own comment) with no host_contracts.yaml/host_adapter.py entry, and
+    # requiring one would mean fabricating that older system's per-capability-family support
+    # levels with zero evidence, which is exactly what this registry exists to avoid.
     try:
-        registry = parse_host_registry(root / "agent-hosts.yaml")
+        parse_host_registry(root / "agent-hosts.yaml")
     except HostRegistryParseError as exc:
         for error in exc.errors:
             print(f"error: {error}", file=sys.stderr)
-        return 1
-    errors = [
-        f"error: agent-hosts.yaml: hosts.{host_id} is not a known host adapter id "
-        f"(expected one of {sorted(HOSTS)})"
-        for host_id in sorted(registry.hosts)
-        if host_id not in HOSTS
-    ]
-    if errors:
-        for error in errors:
-            print(error, file=sys.stderr)
         return 1
     print("ok: agent host registry validates")
     return 0

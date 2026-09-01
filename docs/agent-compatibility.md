@@ -24,6 +24,14 @@ what is declared in `agent-hosts.yaml`, verified by whatever evidence is actuall
 - **Capabilities:** host.filesystem.read=UNKNOWN, host.repository.read_write=UNKNOWN
 - **Evidence:** none recorded
 
+### github-copilot
+- **Verification:** UNVERIFIED
+- **Maintainer support:** BEST_EFFORT
+- **Isolation:** UNKNOWN
+- **Discovery surfaces:** LOCAL \(github-copilot-project, github-copilot-user\)
+- **Capabilities:** host.filesystem.read=UNKNOWN, host.repository.read_write=UNKNOWN
+- **Evidence:** DOCUMENTATION: https://docs.github.com/en/copilot/how-tos/copilot-on-github/customize-copilot/customize-cloud-agent/add-skills
+
 ### kiro
 - **Verification:** UNVERIFIED
 - **Maintainer support:** BEST_EFFORT
@@ -117,6 +125,44 @@ concrete missing capability (`BLOCKED`) always takes precedence, matching
 | cursor | unit-test-creator | BLOCKED | host.repository.read_write |
 | cursor | weekly-squad-digest | BLOCKED | scheduler.cron.trigger |
 | cursor | who-owns-x-bot | BLOCKED | slack.slash_command.receive |
+| github-copilot | api-design-review | BLOCKED | host.report.write |
+| github-copilot | api-test-creator | BLOCKED | host.repository.read_write |
+| github-copilot | architecture-review | BLOCKED | host.report.write |
+| github-copilot | backlog-runner | BLOCKED | scheduler.cron.trigger, host.issue_tracker.read |
+| github-copilot | capacity-planner | BLOCKED | host.report.write |
+| github-copilot | change-impact-analyzer | BLOCKED | host.report.write |
+| github-copilot | contract-test-creator | BLOCKED | host.repository.read_write |
+| github-copilot | cost-optimization-sprint-planner | BLOCKED | host.filesystem.read |
+| github-copilot | database-review | BLOCKED | host.report.write |
+| github-copilot | dependency-upgrade-review | BLOCKED | host.report.write |
+| github-copilot | deployment-risk-review | BLOCKED | host.report.write |
+| github-copilot | domain-comprehension | BLOCKED | host.repository.read |
+| github-copilot | e2e-test-creator | BLOCKED | host.repository.read_write |
+| github-copilot | implementation-planner | BLOCKED | host.report.write, host.repository.read |
+| github-copilot | incident-rca | BLOCKED | telemetry.logs.query |
+| github-copilot | incident-triage-agent | BLOCKED | pager.webhook.receive |
+| github-copilot | integration-test-creator | BLOCKED | host.repository.read_write |
+| github-copilot | k8s-overprovisioning-datadog | BLOCKED | kubernetes.metrics.history |
+| github-copilot | loop-task-implementer | BLOCKED | host.repository.read_write, host.role.isolation, host.ci.status, host.pull_request.write |
+| github-copilot | migration-program-manager | BLOCKED | host.filesystem.read |
+| github-copilot | mysql-to-postgres-sql | BLOCKED | host.repository.read_write |
+| github-copilot | new-hire-guide | BLOCKED | host.repository.read |
+| github-copilot | observability-review | BLOCKED | host.report.write |
+| github-copilot | performance-review | BLOCKED | host.report.write |
+| github-copilot | pr-gatekeeper | BLOCKED | gitlab.get_merge_request |
+| github-copilot | pr-review | BLOCKED | gitlab.get_merge_request, gitlab.get_merge_request_diffs |
+| github-copilot | prd-architect | BLOCKED | host.report.write |
+| github-copilot | production-readiness-review | BLOCKED | host.report.write |
+| github-copilot | release-readiness-checker | BLOCKED | host.report.write |
+| github-copilot | resilience-review | BLOCKED | host.report.write |
+| github-copilot | security-review | BLOCKED | host.report.write |
+| github-copilot | squad-map | BLOCKED | gitlab.list_projects |
+| github-copilot | system-design | BLOCKED | host.report.write |
+| github-copilot | tech-debt-assessor | BLOCKED | host.report.write |
+| github-copilot | test-writer | BLOCKED | host.repository.read |
+| github-copilot | unit-test-creator | BLOCKED | host.repository.read_write |
+| github-copilot | weekly-squad-digest | BLOCKED | scheduler.cron.trigger |
+| github-copilot | who-owns-x-bot | BLOCKED | slack.slash_command.receive |
 | kiro | api-design-review | BLOCKED | host.report.write |
 | kiro | api-test-creator | BLOCKED | host.repository.read_write |
 | kiro | architecture-review | BLOCKED | host.report.write |

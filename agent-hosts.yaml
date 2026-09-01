@@ -9,9 +9,10 @@
 # The two files intentionally answer different questions -- host_contracts.yaml
 # is "what does the generated adapter support today", this file is "what has
 # been independently re-verified" -- so do not treat a mismatch between them
-# as a bug without checking which question is being asked. Host ids listed
-# here must still be a subset of host_adapter.HOSTS; `validate-hosts` checks
-# that automatically.
+# as a bug without checking which question is being asked. This registry is
+# the canonical, evidence-gated host-identity source (spec Section 13) and
+# grows independently of host_adapter.HOSTS -- a host may exist here with no
+# host_contracts.yaml/host_adapter.py entry at all (see github-copilot below).
 schema_version: 1
 
 targets:
@@ -42,6 +43,19 @@ targets:
   - id: kiro-project
     scope: project
     path: "{project_root}/.kiro/steering"
+  # GitHub Copilot's own dedicated discovery paths (Candidate 12), per GitHub's official docs
+  # (see the copilot host's evidence entry below). Copilot's docs also state it recognizes
+  # .claude/skills, .agents/skills (project) and ~/.agents/skills (user) as alternatives, with no
+  # stated precedence order among them -- only Copilot's own dedicated paths are modeled as
+  # discovery bindings here, to avoid inventing a precedence order the source doesn't state. A
+  # user who wants a Copilot-discoverable install today can already use --agent agents
+  # (Candidate 7) for that documented alternative.
+  - id: github-copilot-user
+    scope: user
+    path: ~/.copilot/skills
+  - id: github-copilot-project
+    scope: project
+    path: "{project_root}/.github/skills"
 
 aliases: []
 
@@ -84,6 +98,36 @@ hosts:
     constraints: []
     verification: UNVERIFIED
     evidence: []
+    maintainer_support: BEST_EFFORT
+
+  # verification stays UNVERIFIED and capabilities stay UNKNOWN, matching every other host here:
+  # the evidence below is DOCUMENTATION-kind only (GitHub's own published discovery mechanism),
+  # not RUNTIME evidence -- host_registry.py's own schema requires RUNTIME evidence before
+  # verification may become VERIFIED (spec Section 26), and this repo has not run Copilot to
+  # confirm the documented behavior actually holds. maintainer_support is BEST_EFFORT rather than
+  # the FIRST_CLASS spec Section 27 would technically permit for a documented host, to stay
+  # consistent with cursor/claude/kiro's own baseline above rather than introduce an unexplained
+  # inconsistency across hosts that are all equally UNVERIFIED.
+  - id: github-copilot
+    surfaces:
+      - kind: LOCAL
+        discovery:
+          - target: github-copilot-project
+            mode: NATIVE
+            precedence: 10
+          - target: github-copilot-user
+            mode: NATIVE
+            precedence: 20
+    capabilities:
+      host.filesystem.read: UNKNOWN
+      host.repository.read_write: UNKNOWN
+    isolation:
+      mode: UNKNOWN
+    constraints: []
+    verification: UNVERIFIED
+    evidence:
+      - kind: DOCUMENTATION
+        reference: "https://docs.github.com/en/copilot/how-tos/copilot-on-github/customize-copilot/customize-cloud-agent/add-skills"
     maintainer_support: BEST_EFFORT
 
   - id: kiro

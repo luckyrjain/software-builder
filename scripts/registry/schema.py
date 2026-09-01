@@ -25,6 +25,11 @@ AUTOMATION_ONLY_INVOCATION = "automation-only"
 ALLOWED_INVOCATION = {"ambient", AUTOMATION_ONLY_INVOCATION}
 ALLOWED_CURSOR_DISCOVERY = {"rule", "manual", "always"}
 ALLOWED_KIRO_DISCOVERY = {"manual", "always"}
+# GitHub Copilot's documented behavior ("Skills are loaded when relevant based on the user's
+# prompt and the skill's description") is an on-demand/semantic-match model, not an
+# always-in-context one by default -- closer to Kiro's manual/always split than Cursor's three-way
+# rule/manual/always vocabulary, so this reuses that narrower set rather than inventing a third.
+ALLOWED_GITHUB_COPILOT_DISCOVERY = {"manual", "always"}
 ALLOWED_COMPOSITION_MODE = {"invoke", "aggregate"}
 
 # Fallback host set used only when a skills.yaml has no sibling agent-hosts.yaml (isolated test
@@ -40,6 +45,7 @@ _HOST_FIELD_KIND = {"cursor": "discovery", "kiro": "discovery", "claude": "insta
 _PER_HOST_ALLOWED_DISCOVERY: dict[str, frozenset[str]] = {
     "cursor": frozenset(ALLOWED_CURSOR_DISCOVERY),
     "kiro": frozenset(ALLOWED_KIRO_DISCOVERY),
+    "github-copilot": frozenset(ALLOWED_GITHUB_COPILOT_DISCOVERY),
 }
 
 

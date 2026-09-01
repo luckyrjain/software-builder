@@ -374,9 +374,21 @@ def test_rejects_unsupported_schema_version(tmp_path: Path) -> None:
 def test_checked_in_host_registry_validates() -> None:
     registry = parse_host_registry(ROOT / "agent-hosts.yaml")
 
-    assert sorted(registry.hosts) == ["claude", "cursor", "kiro"]
+    assert sorted(registry.hosts) == ["claude", "cursor", "github-copilot", "kiro"]
     assert all(host.verification == "UNVERIFIED" for host in registry.hosts.values())
     assert all(host.maintainer_support == "BEST_EFFORT" for host in registry.hosts.values())
+
+
+def test_checked_in_github_copilot_host_has_documentation_evidence() -> None:
+    """Candidate 12: github-copilot is the first host added on documentation-tier evidence
+    (spec Section 27) rather than being present since Phase 1 -- pins that its evidence entry is
+    real, not empty like cursor/claude/kiro's placeholder UNVERIFIED baseline."""
+    registry = parse_host_registry(ROOT / "agent-hosts.yaml")
+
+    host = registry.hosts["github-copilot"]
+    assert len(host.evidence) == 1
+    assert host.evidence[0].kind == "DOCUMENTATION"
+    assert host.evidence[0].reference.startswith("https://docs.github.com/")
 
 
 def test_registry_cli_validates_hosts() -> None:
