@@ -1,0 +1,57 @@
+api-test-creator:
+  path: api-test-creator
+  category: testing
+  invocation: ambient
+  hosts:
+    cursor:
+      discovery: rule
+    claude:
+      install: true
+    kiro:
+      discovery: manual
+  install:
+    requires: []
+  capabilities:
+    required:
+    - host.repository.read_write
+    optional:
+    - name: host.api.reachable
+      enables: black-box HTTP suite against running API
+    - name: host.test_runner.execute
+      enables: Newman or equivalent runner
+    degraded_modes:
+      host.api.reachable: generate the request/assertion collection but skip execution;
+        mark status UNVERIFIED
+      host.test_runner.execute: collection is generated but hand off for manual/CI
+        execution instead of iterating to green locally
+  lint:
+    skill_md_max_lines: 180
+    target: api-test-creator
+  risk_class:
+  - repository-write
+  version: 1.1.0
+  type: leaf
+  authority: repository-write
+  permissions:
+    repository: write
+    external_actions: read
+    unattended: false
+    merge: false
+  supported_hosts:
+  - chatgpt
+  - claude
+  - codex
+  - cursor
+  - generic
+  - kiro
+  entrypoint: SKILL.md
+  output_contract:
+    produces:
+    - test_suite
+    produce_fields:
+      test_suite:
+      - tests
+      - framework
+      - target_path
+  dependencies: []
+  version_source: skill_frontmatter_legacy_numeric

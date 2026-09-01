@@ -87,7 +87,12 @@ jobs:
           python3 -m pip install --require-hashes -r requirements.lock
 
       - name: make lint-suites
-        run: make -j"$(nproc)" lint-suites
+        # --output-sync=target keeps each target's output contiguous instead of interleaving
+        # lines from ~19 concurrent lint-* recipes, which otherwise makes a failure's log
+        # unreadable. Oversubscription itself is handled at the Makefile level: only the
+        # dominant scripts/tests/ suite uses pytest-xdist (see PYTEST_XDIST_FLAG in
+        # make/core.mk) -- the smaller per-skill suites rely on this outer `make -j` alone.
+        run: make -j"$(nproc)" --output-sync=target lint-suites
 
   install-macos:
     # macOS ships bash 3.2 (last GPLv2 release) as /bin/bash and scripts/install.sh runs under

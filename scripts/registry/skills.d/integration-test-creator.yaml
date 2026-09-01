@@ -1,0 +1,57 @@
+integration-test-creator:
+  path: integration-test-creator
+  category: testing
+  invocation: ambient
+  hosts:
+    cursor:
+      discovery: rule
+    claude:
+      install: true
+    kiro:
+      discovery: manual
+  install:
+    requires: []
+  capabilities:
+    required:
+    - host.repository.read_write
+    optional:
+    - name: host.test_runner.execute
+      enables: generated test verification loop
+    - name: host.dependency.reachable
+      enables: real adjacent dependency under test
+    degraded_modes:
+      host.test_runner.execute: tests are written but left UNVERIFIED; run-until-green
+        iteration cannot happen locally
+      host.dependency.reachable: no real adjacent dependency to test against; escalate
+        or skip the target rather than fall back to mocking (that belongs to unit-test-creator)
+  lint:
+    skill_md_max_lines: 180
+    target: integration-test-creator
+  risk_class:
+  - repository-write
+  version: 1.1.0
+  type: leaf
+  authority: repository-write
+  permissions:
+    repository: write
+    external_actions: read
+    unattended: false
+    merge: false
+  supported_hosts:
+  - chatgpt
+  - claude
+  - codex
+  - cursor
+  - generic
+  - kiro
+  entrypoint: SKILL.md
+  output_contract:
+    produces:
+    - test_suite
+    produce_fields:
+      test_suite:
+      - tests
+      - framework
+      - target_path
+  dependencies: []
+  version_source: skill_frontmatter_legacy_numeric

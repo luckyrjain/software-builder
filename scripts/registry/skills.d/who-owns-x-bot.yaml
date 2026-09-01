@@ -1,0 +1,48 @@
+who-owns-x-bot:
+  path: who-owns-x-bot
+  category: architecture
+  invocation: automation-only
+  hosts:
+    cursor:
+      discovery: rule
+    claude:
+      install: true
+    kiro:
+      discovery: manual
+  install:
+    requires:
+    - squad-map
+  capabilities:
+    required:
+    - slack.slash_command.receive
+    optional:
+    - name: squad-map.invoke
+      enables: full mapping table instead of one-shot lookup
+  lint:
+    skill_md_max_lines: 180
+    target: who-owns-x-bot
+  risk_class:
+  - unattended
+  version: 1.0.0
+  type: router
+  authority: read-only
+  permissions:
+    repository: read
+    external_actions: write
+    unattended: true
+    merge: false
+  supported_hosts:
+  - chatgpt
+  - claude
+  - codex
+  - cursor
+  - generic
+  - kiro
+  entrypoint: SKILL.md
+  output_contract:
+    produces:
+    - ownership_lookup
+    produce_fields: {}
+  dependencies:
+  - squad-map
+  version_source: skill_frontmatter_legacy_numeric

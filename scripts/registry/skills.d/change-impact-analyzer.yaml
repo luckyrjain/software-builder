@@ -1,0 +1,50 @@
+change-impact-analyzer:
+  path: change-impact-analyzer
+  category: analysis
+  extends: read-only-leaf-review
+  install:
+    requires: []
+  composition:
+    invokes: []
+    escalation_targets: []
+  capabilities:
+    required:
+    - host.report.write
+    optional:
+    - name: host.repository.read
+      enables: repository-grounded diff/caller/consumer/config discovery
+    - name: host.scm.change.read
+      enables: exact-head remote PR/MR metadata + diff retrieval
+  lint:
+    skill_md_max_lines: 180
+    target: change-impact-analyzer
+  version: 1.0.0
+  type: leaf
+  permissions:
+    repository: read
+    external_actions: none
+    unattended: false
+    merge: false
+  output_contract:
+    produces:
+    - change_impact_report
+    produce_fields:
+      change_impact_report:
+      - title
+      - assessment_target
+      - coverage_status
+      - material_unknowns
+      - impacted_repositories
+      - criticality
+      - change_classes
+      - impacted_services
+      - impacted_contracts
+      - impacted_data
+      - impacted_dependencies
+      - impacted_owners
+      - required_tests
+      - operational_impacts
+      - review_triggers
+      - unknowns
+      - evidence_refs
+  dependencies: []

@@ -44,6 +44,15 @@ Please read and follow our [Code of Conduct](CODE_OF_CONDUCT.md).
 - **SETUP.md freshness:** when you change pinned MCP versions or verify install steps, bump
   `**Last reviewed**` in that skill's `SETUP.md` freshness table and keep `**External services**`
   aligned with `scripts/registry/setup_freshness.yaml`. `make lint-framework` enforces this.
+- **Registering a new skill in `skills.yaml`:** add a fragment file at
+  `scripts/registry/skills.d/<skill-id>.yaml` containing only that skill's own entry (keyed by its skill
+  id) instead of hand-editing the `skills:` mapping in root `skills.yaml` directly. Then run
+  `make generate` to merge every fragment back into `skills.yaml`'s `skills:` mapping (the same
+  generated-from-canonical-source pattern used for the Cursor/Kiro adapters). `make generate-check`
+  (part of `lint-static`) fails if `skills.yaml` drifts from what its fragments would produce, which
+  also catches anyone who edited `skills.yaml`'s `skills:` mapping by hand instead of its fragment.
+  Everything else in `skills.yaml` (`schema_version`, `manifest_kind`, `contracts:`, `profiles:`) is
+  still hand-edited directly in that file.
 - **GitHub topics/description:** maintainers with repo admin access run
   `bash scripts/apply_repo_metadata.sh` (canonical values in `.github/repo-metadata.yaml`).
 - **Tier-3 golden fixtures:** refresh recorded outputs per
@@ -51,6 +60,17 @@ Please read and follow our [Code of Conduct](CODE_OF_CONDUCT.md).
   fixture's `description` to plain test intent; put per-assertion coverage caveats or regression
   history in a `# CAVEAT: ...` YAML comment directly above the assertion or field it explains
   (`python3 -m scripts.evals` warns, non-fatally, past 1200 chars).
+- **GitHub branch-protection drift:** `make verify-github-ruleset` (`scripts/check_github_ruleset.py`)
+  diffs the live `main` ruleset against `docs/github-ruleset-main.json` via
+  `gh api repos/<repo>/rulesets/<id>`. That endpoint requires the repository **Administration: Read**
+  permission, which GitHub Actions' default `GITHUB_TOKEN` cannot be granted — so this is a
+  maintainer-run, local-only tool, deliberately **not** wired into `lint`, `lint-static`, or any
+  workflow. Automating it would mean minting and rotating a standing admin-scoped PAT as a CI secret
+  purely to catch drift that only a repo admin can introduce in the first place, through the GitHub UI
+  (see [docs/REPOSITORY.md § Merge gate](docs/REPOSITORY.md#merge-gate-repo-admin-settings-github-ui-only))
+  — disproportionate machinery for a solo-maintainer repo. Run it after any change to branch-protection
+  settings: `gh auth login` as the repo owner, then `make verify-github-ruleset` (see
+  [docs/REPOSITORY.md's one-time setup checklist, step 4](docs/REPOSITORY.md#one-time-setup-checklist)).
 7. **Record user-visible changes** in the skill's own `CHANGELOG.md` (or the root one for cross-cutting
    changes), newest entry first.
 8. **Open a pull request** describing what changed and why, and the validation you ran (which

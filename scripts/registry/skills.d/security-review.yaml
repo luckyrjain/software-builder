@@ -1,0 +1,37 @@
+security-review:
+  path: security-review
+  category: review
+  extends: read-only-leaf-review
+  install:
+    requires: []
+  composition:
+    escalation_targets:
+    - dependency-upgrade-review
+  capabilities:
+    required:
+    - host.report.write
+    optional: []
+  lint:
+    skill_md_max_lines: 180
+    target: security-review
+  version: 1.1.0
+  type: leaf
+  permissions:
+    repository: read
+    external_actions: none
+    unattended: false
+    merge: false
+  output_contract:
+    produces:
+    - security_review_report
+    produce_fields:
+      security_review_report:
+      - title
+      - verdict
+      - assessment_target
+      - normalized_decision
+      - findings
+      - conditions
+      - required_actions
+      - evidence_refs
+  dependencies: []

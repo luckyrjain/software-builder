@@ -2363,6 +2363,1270 @@ profiles:
     - kiro
     version_source: skill_frontmatter_legacy_numeric
 skills:
+  api-design-review:
+    path: api-design-review
+    category: review
+    extends: read-only-leaf-review
+    install:
+      requires: []
+    composition:
+      escalation_targets:
+      - security-review
+      - pr-review
+      - database-review
+    capabilities:
+      required:
+      - host.report.write
+      optional: []
+    lint:
+      skill_md_max_lines: 180
+      target: api-design-review
+    version: 1.1.0
+    type: leaf
+    permissions:
+      repository: read
+      external_actions: none
+      unattended: false
+      merge: false
+    output_contract:
+      produces:
+      - api_design_review_report
+      produce_fields:
+        api_design_review_report:
+        - title
+        - verdict
+        - assessment_target
+        - normalized_decision
+        - findings
+        - conditions
+        - required_actions
+        - evidence_refs
+    dependencies: []
+  api-test-creator:
+    path: api-test-creator
+    category: testing
+    invocation: ambient
+    hosts:
+      cursor:
+        discovery: rule
+      claude:
+        install: true
+      kiro:
+        discovery: manual
+    install:
+      requires: []
+    capabilities:
+      required:
+      - host.repository.read_write
+      optional:
+      - name: host.api.reachable
+        enables: black-box HTTP suite against running API
+      - name: host.test_runner.execute
+        enables: Newman or equivalent runner
+      degraded_modes:
+        host.api.reachable: generate the request/assertion collection but skip execution;
+          mark status UNVERIFIED
+        host.test_runner.execute: collection is generated but hand off for manual/CI
+          execution instead of iterating to green locally
+    lint:
+      skill_md_max_lines: 180
+      target: api-test-creator
+    risk_class:
+    - repository-write
+    version: 1.1.0
+    type: leaf
+    authority: repository-write
+    permissions:
+      repository: write
+      external_actions: read
+      unattended: false
+      merge: false
+    supported_hosts:
+    - chatgpt
+    - claude
+    - codex
+    - cursor
+    - generic
+    - kiro
+    entrypoint: SKILL.md
+    output_contract:
+      produces:
+      - test_suite
+      produce_fields:
+        test_suite:
+        - tests
+        - framework
+        - target_path
+    dependencies: []
+    version_source: skill_frontmatter_legacy_numeric
+  architecture-review:
+    path: architecture-review
+    category: review
+    extends: read-only-leaf-review
+    install:
+      requires: []
+    composition:
+      escalation_targets:
+      - system-design
+      - security-review
+      - loop-task-implementer
+      - prd-architect
+    capabilities:
+      required:
+      - host.report.write
+      optional: []
+    lint:
+      skill_md_max_lines: 180
+      target: architecture-review
+    version: 1.2.0
+    type: leaf
+    permissions:
+      repository: read
+      external_actions: none
+      unattended: false
+      merge: false
+    output_contract:
+      produces:
+      - architecture_review_report
+      produce_fields:
+        architecture_review_report:
+        - title
+        - decision
+        - assessment_target
+        - normalized_decision
+        - findings
+        - conditions
+        - required_actions
+        - evidence_refs
+    dependencies: []
+  backlog-runner:
+    path: backlog-runner
+    category: automation
+    invocation: automation-only
+    hosts:
+      cursor:
+        discovery: rule
+      claude:
+        install: true
+      kiro:
+        discovery: manual
+    install:
+      requires:
+      - loop-task-implementer
+    capabilities:
+      required:
+      - scheduler.cron.trigger
+      - host.issue_tracker.read
+      optional:
+      - name: loop-task-implementer.invoke
+        enables: interactive single-task mode
+    lint:
+      skill_md_max_lines: 180
+      target: backlog-runner
+    risk_class:
+    - unattended
+    - merge
+    version: 1.0.0
+    type: trigger
+    authority: read-only
+    permissions:
+      repository: write
+      external_actions: write
+      unattended: true
+      merge: true
+    supported_hosts:
+    - chatgpt
+    - claude
+    - codex
+    - cursor
+    - generic
+    - kiro
+    entrypoint: SKILL.md
+    output_contract:
+      produces:
+      - implementation_pr
+      produce_fields: {}
+    dependencies:
+    - loop-task-implementer
+    version_source: skill_frontmatter_legacy_numeric
+  capacity-planner:
+    path: capacity-planner
+    category: platform
+    extends: read-only-leaf-review
+    install:
+      requires: []
+    composition:
+      escalation_targets:
+      - k8s-overprovisioning-datadog
+    capabilities:
+      required:
+      - host.report.write
+      optional: []
+    lint:
+      skill_md_max_lines: 180
+      target: capacity-planner
+    version: 1.1.0
+    type: leaf
+    permissions:
+      repository: read
+      external_actions: none
+      unattended: false
+      merge: false
+    output_contract:
+      produces:
+      - capacity_plan
+      produce_fields:
+        capacity_plan:
+        - title
+        - headroom
+        - assessment_target
+        - normalized_decision
+        - findings
+        - conditions
+        - required_actions
+        - evidence_refs
+    dependencies: []
+  change-impact-analyzer:
+    path: change-impact-analyzer
+    category: analysis
+    extends: read-only-leaf-review
+    install:
+      requires: []
+    composition:
+      invokes: []
+      escalation_targets: []
+    capabilities:
+      required:
+      - host.report.write
+      optional:
+      - name: host.repository.read
+        enables: repository-grounded diff/caller/consumer/config discovery
+      - name: host.scm.change.read
+        enables: exact-head remote PR/MR metadata + diff retrieval
+    lint:
+      skill_md_max_lines: 180
+      target: change-impact-analyzer
+    version: 1.0.0
+    type: leaf
+    permissions:
+      repository: read
+      external_actions: none
+      unattended: false
+      merge: false
+    output_contract:
+      produces:
+      - change_impact_report
+      produce_fields:
+        change_impact_report:
+        - title
+        - assessment_target
+        - coverage_status
+        - material_unknowns
+        - impacted_repositories
+        - criticality
+        - change_classes
+        - impacted_services
+        - impacted_contracts
+        - impacted_data
+        - impacted_dependencies
+        - impacted_owners
+        - required_tests
+        - operational_impacts
+        - review_triggers
+        - unknowns
+        - evidence_refs
+    dependencies: []
+  contract-test-creator:
+    path: contract-test-creator
+    category: testing
+    invocation: ambient
+    hosts:
+      cursor:
+        discovery: rule
+      claude:
+        install: true
+      kiro:
+        discovery: manual
+    install:
+      requires: []
+    capabilities:
+      required:
+      - host.repository.read_write
+      optional:
+      - name: host.test_runner.execute
+        enables: generated contract test verification
+      degraded_modes:
+        host.test_runner.execute: contract tests are written but left UNVERIFIED;
+          run-until-green iteration cannot happen locally
+    lint:
+      skill_md_max_lines: 180
+      target: contract-test-creator
+    risk_class:
+    - repository-write
+    version: 1.1.0
+    type: leaf
+    authority: repository-write
+    permissions:
+      repository: write
+      external_actions: none
+      unattended: false
+      merge: false
+    supported_hosts:
+    - chatgpt
+    - claude
+    - codex
+    - cursor
+    - generic
+    - kiro
+    entrypoint: SKILL.md
+    output_contract:
+      produces:
+      - test_suite
+      produce_fields:
+        test_suite:
+        - tests
+        - framework
+        - target_path
+    dependencies: []
+    version_source: skill_frontmatter_legacy_numeric
+  cost-optimization-sprint-planner:
+    path: cost-optimization-sprint-planner
+    category: platform
+    invocation: ambient
+    hosts:
+      cursor:
+        discovery: rule
+      claude:
+        install: true
+      kiro:
+        discovery: manual
+    install:
+      requires:
+      - k8s-overprovisioning-datadog
+      - squad-map
+    capabilities:
+      required:
+      - host.filesystem.read
+      optional:
+      - name: k8s-overprovisioning-datadog.invoke
+        enables: single-deployment rightsizing refresh
+    lint:
+      skill_md_max_lines: 180
+      target: cost-optimization-sprint-planner
+    risk_class:
+    - read-only
+    version: 1.0.0
+    type: orchestrator
+    authority: read-only
+    permissions:
+      repository: read
+      external_actions: none
+      unattended: false
+      merge: false
+    supported_hosts:
+    - chatgpt
+    - claude
+    - codex
+    - cursor
+    - generic
+    - kiro
+    entrypoint: SKILL.md
+    output_contract:
+      produces:
+      - cost_sweep_rollup
+      produce_fields:
+        cost_sweep_rollup:
+        - items
+        - generated_at
+        - source_revision
+    dependencies:
+    - k8s-overprovisioning-datadog
+    - squad-map
+    version_source: skill_frontmatter_legacy_numeric
+  database-review:
+    path: database-review
+    category: review
+    extends: read-only-leaf-review
+    install:
+      requires: []
+    composition:
+      escalation_targets:
+      - performance-review
+      - mysql-to-postgres-sql
+      - pr-review
+    capabilities:
+      required:
+      - host.report.write
+      optional: []
+    lint:
+      skill_md_max_lines: 180
+      target: database-review
+    version: 1.1.0
+    type: leaf
+    permissions:
+      repository: read
+      external_actions: none
+      unattended: false
+      merge: false
+    output_contract:
+      produces:
+      - database_review_report
+      produce_fields:
+        database_review_report:
+        - title
+        - verdict
+        - assessment_target
+        - normalized_decision
+        - findings
+        - conditions
+        - required_actions
+        - evidence_refs
+    dependencies: []
+  dependency-upgrade-review:
+    path: dependency-upgrade-review
+    category: review
+    extends: read-only-leaf-review
+    install:
+      requires: []
+    composition:
+      escalation_targets:
+      - security-review
+    capabilities:
+      required:
+      - host.report.write
+      optional: []
+    lint:
+      skill_md_max_lines: 180
+      target: dependency-upgrade-review
+    version: 1.1.0
+    type: leaf
+    permissions:
+      repository: read
+      external_actions: none
+      unattended: false
+      merge: false
+    output_contract:
+      produces:
+      - dependency_upgrade_report
+      produce_fields:
+        dependency_upgrade_report:
+        - title
+        - verdict
+        - assessment_target
+        - normalized_decision
+        - findings
+        - conditions
+        - required_actions
+        - evidence_refs
+    dependencies: []
+  deployment-risk-review:
+    path: deployment-risk-review
+    category: review
+    extends: read-only-leaf-review
+    install:
+      requires: []
+    composition:
+      escalation_targets:
+      - release-readiness-checker
+      - incident-triage-agent
+    capabilities:
+      required:
+      - host.report.write
+      optional: []
+    lint:
+      skill_md_max_lines: 180
+      target: deployment-risk-review
+    version: 1.1.0
+    type: leaf
+    permissions:
+      repository: read
+      external_actions: none
+      unattended: false
+      merge: false
+    output_contract:
+      produces:
+      - deployment_risk_report
+      produce_fields:
+        deployment_risk_report:
+        - title
+        - risk
+        - deployment_confidence
+        - assessment_target
+        - normalized_decision
+        - findings
+        - conditions
+        - required_actions
+        - evidence_refs
+    dependencies: []
+  domain-comprehension:
+    path: domain-comprehension
+    category: architecture
+    invocation: ambient
+    hosts:
+      cursor:
+        discovery: rule
+      claude:
+        install: true
+      kiro:
+        discovery: manual
+    install:
+      requires:
+      - squad-map
+    capabilities:
+      required:
+      - host.repository.read
+      optional:
+      - name: gitlab.search_code
+        enables: repository census without local checkout
+      - name: datadog.query_metrics
+        enables: runtime validation passes
+      - name: telemetry.logs.query
+        enables: KubeSense/log corroboration
+      degraded_modes:
+        gitlab.search_code: fall back to local checkout traversal for the repository
+          census
+        datadog.query_metrics: skip the runtime validation pass; mark runtime-dependent
+          claims UNKNOWN instead of inferring from static evidence
+        telemetry.logs.query: skip KubeSense/log corroboration; mark log-dependent
+          claims UNKNOWN
+    lint:
+      skill_md_max_lines: 180
+      target: domain-comprehension
+    risk_class:
+    - read-only
+    version: 1.1.0
+    type: orchestrator
+    authority: read-only
+    permissions:
+      repository: read
+      external_actions: read
+      unattended: false
+      merge: false
+    supported_hosts:
+    - chatgpt
+    - claude
+    - codex
+    - cursor
+    - generic
+    - kiro
+    entrypoint: SKILL.md
+    output_contract:
+      produces:
+      - squad_map
+      produce_fields: {}
+    dependencies:
+    - squad-map
+    version_source: skill_frontmatter_legacy_numeric
+  e2e-test-creator:
+    path: e2e-test-creator
+    category: testing
+    invocation: ambient
+    hosts:
+      cursor:
+        discovery: rule
+      claude:
+        install: true
+      kiro:
+        discovery: manual
+    install:
+      requires: []
+    capabilities:
+      required:
+      - host.repository.read_write
+      optional:
+      - name: host.browser.automation
+        enables: UI journey execution
+      - name: host.test_runner.execute
+        enables: generated e2e verification
+      degraded_modes:
+        host.browser.automation: cannot execute generated browser journeys locally;
+          ship them UNVERIFIED
+        host.test_runner.execute: tests are written but left UNVERIFIED; run-until-green
+          iteration cannot happen locally
+    lint:
+      skill_md_max_lines: 180
+      target: e2e-test-creator
+    risk_class:
+    - repository-write
+    version: 1.1.0
+    type: leaf
+    authority: repository-write
+    permissions:
+      repository: write
+      external_actions: read
+      unattended: false
+      merge: false
+    supported_hosts:
+    - chatgpt
+    - claude
+    - codex
+    - cursor
+    - generic
+    - kiro
+    entrypoint: SKILL.md
+    output_contract:
+      produces:
+      - test_suite
+      produce_fields:
+        test_suite:
+        - tests
+        - framework
+        - target_path
+    dependencies: []
+    version_source: skill_frontmatter_legacy_numeric
+  implementation-planner:
+    path: implementation-planner
+    category: automation
+    extends: read-only-leaf-review
+    install:
+      requires: []
+    composition:
+      invokes: []
+      escalation_targets:
+      - loop-task-implementer
+    capabilities:
+      required:
+      - host.report.write
+      - host.repository.read
+      optional: []
+    lint:
+      skill_md_max_lines: 180
+      target: implementation-planner
+    version: 1.0.0
+    type: leaf
+    permissions:
+      repository: read
+      external_actions: none
+      unattended: false
+      merge: false
+    output_contract:
+      produces:
+      - implementation_plan
+      produce_fields:
+        implementation_plan:
+        - plan_set_id
+        - plan_id
+        - title
+        - readiness
+        - assessment_target
+        - target_repo
+        - external_dependencies
+        - source_refs
+        - tasks
+        - execution_waves
+        - sequencing_constraints
+        - verification_gates
+        - traceability
+    dependencies: []
+  incident-rca:
+    path: incident-rca
+    category: incident
+    invocation: ambient
+    hosts:
+      cursor:
+        discovery: rule
+      claude:
+        install: true
+      kiro:
+        discovery: manual
+    install:
+      requires: []
+    composition:
+      escalation_targets:
+      - pr-review
+      - k8s-overprovisioning-datadog
+      - squad-map
+    capabilities:
+      required:
+      - telemetry.logs.query
+      optional:
+      - name: datadog.query_metrics
+        enables: metric corroboration paths
+      - name: gitlab.get_merge_request
+        enables: deploy-regression MR handoff
+      degraded_modes:
+        datadog.query_metrics: rely on logs alone for corroboration; cap confidence
+          below what a matching metric signal would support
+        gitlab.get_merge_request: treat deploy-regression hypothesis as UNKNOWN rather
+          than ruled in or out, not as absence of evidence
+    lint:
+      skill_md_max_lines: 180
+      target: incident-rca
+    risk_class:
+    - read-only
+    version: 2.0.0
+    type: leaf
+    authority: read-only
+    permissions:
+      repository: read
+      external_actions: read
+      unattended: false
+      merge: false
+    supported_hosts:
+    - chatgpt
+    - claude
+    - codex
+    - cursor
+    - generic
+    - kiro
+    entrypoint: SKILL.md
+    output_contract:
+      produces:
+      - rca_report
+      produce_fields: {}
+    dependencies: []
+    version_source: skill_frontmatter
+  incident-triage-agent:
+    path: incident-triage-agent
+    category: incident
+    invocation: automation-only
+    hosts:
+      cursor:
+        discovery: rule
+      claude:
+        install: true
+      kiro:
+        discovery: manual
+    install:
+      requires:
+      - incident-rca
+      - squad-map
+    composition:
+      invokes:
+      - incident-rca
+      - squad-map
+      escalation_targets:
+      - incident-rca
+      - squad-map
+    capabilities:
+      required:
+      - pager.webhook.receive
+      optional:
+      - name: slack.post.message
+        enables: paging summary delivery when configured
+      degraded_modes:
+        slack.post.message: still produce the triage_doc/postmortem_draft artifact;
+          paging summary is simply not delivered to Slack
+    lint:
+      skill_md_max_lines: 180
+      target: incident-triage-agent
+    risk_class:
+    - unattended
+    version: 1.0.0
+    type: trigger
+    authority: read-only
+    permissions:
+      repository: read
+      external_actions: write
+      unattended: true
+      merge: false
+    supported_hosts:
+    - chatgpt
+    - claude
+    - codex
+    - cursor
+    - generic
+    - kiro
+    entrypoint: SKILL.md
+    output_contract:
+      produces:
+      - rca_report
+      - ownership_lookup
+      produce_fields:
+        rca_report:
+        - assessment_metadata
+        - root_cause
+        - confidence
+        ownership_lookup:
+        - query
+        - squad
+        - confidence
+    dependencies:
+    - incident-rca
+    - squad-map
+    version_source: skill_frontmatter_legacy_numeric
+  integration-test-creator:
+    path: integration-test-creator
+    category: testing
+    invocation: ambient
+    hosts:
+      cursor:
+        discovery: rule
+      claude:
+        install: true
+      kiro:
+        discovery: manual
+    install:
+      requires: []
+    capabilities:
+      required:
+      - host.repository.read_write
+      optional:
+      - name: host.test_runner.execute
+        enables: generated test verification loop
+      - name: host.dependency.reachable
+        enables: real adjacent dependency under test
+      degraded_modes:
+        host.test_runner.execute: tests are written but left UNVERIFIED; run-until-green
+          iteration cannot happen locally
+        host.dependency.reachable: no real adjacent dependency to test against; escalate
+          or skip the target rather than fall back to mocking (that belongs to unit-test-creator)
+    lint:
+      skill_md_max_lines: 180
+      target: integration-test-creator
+    risk_class:
+    - repository-write
+    version: 1.1.0
+    type: leaf
+    authority: repository-write
+    permissions:
+      repository: write
+      external_actions: read
+      unattended: false
+      merge: false
+    supported_hosts:
+    - chatgpt
+    - claude
+    - codex
+    - cursor
+    - generic
+    - kiro
+    entrypoint: SKILL.md
+    output_contract:
+      produces:
+      - test_suite
+      produce_fields:
+        test_suite:
+        - tests
+        - framework
+        - target_path
+    dependencies: []
+    version_source: skill_frontmatter_legacy_numeric
+  k8s-overprovisioning-datadog:
+    path: k8s-overprovisioning-datadog
+    category: platform
+    invocation: ambient
+    hosts:
+      cursor:
+        discovery: rule
+      claude:
+        install: true
+      kiro:
+        discovery: manual
+    install:
+      requires: []
+    composition:
+      escalation_targets:
+      - incident-rca
+      - pr-review
+    capabilities:
+      required: []
+      optional:
+      - name: kubernetes.workloads.read
+        enables: live workload, autoscaler, policy, and pod-state truth
+      - name: datadog.list_monitors
+        enables: monitor cross-check sections
+      any_of:
+      - name: Kubernetes history-capable evidence
+        required:
+        - kubernetes.metrics.history
+      - name: Datadog historical evidence
+        required:
+        - datadog.query_metrics
+      degraded_modes:
+        kubernetes.workloads.read: use Git provider manifests or user-provided configuration
+          for live-state checks
+        kubernetes.metrics.history: use Datadog history when available; otherwise
+          defer historical sizing dimensions
+        datadog.query_metrics: continue only when Kubernetes exposes equivalent historical
+          metrics and aggregation
+        datadog.list_monitors: omit monitor cross-checks and reduce confidence where
+          applicable
+    lint:
+      skill_md_max_lines: 150
+      target: k8s-skill
+    risk_class:
+    - read-only
+    version: 1.0.0
+    type: leaf
+    authority: read-only
+    permissions:
+      repository: read
+      external_actions: read
+      unattended: false
+      merge: false
+    supported_hosts:
+    - chatgpt
+    - claude
+    - codex
+    - cursor
+    - generic
+    - kiro
+    entrypoint: SKILL.md
+    output_contract:
+      produces:
+      - k8s_rightsizing_report
+      produce_fields: {}
+    dependencies: []
+    version_source: skill_frontmatter_legacy_numeric
+  loop-task-implementer:
+    path: loop-task-implementer
+    category: automation
+    invocation: ambient
+    hosts:
+      cursor:
+        discovery: rule
+      claude:
+        install: true
+      kiro:
+        discovery: manual
+    install:
+      requires: []
+    capabilities:
+      required:
+      - host.repository.read_write
+      - host.role.isolation
+      - host.ci.status
+      - host.pull_request.write
+      optional:
+      - name: host.issue_tracker.read
+        enables: task sourced from tracker instead of user text
+      degraded_modes:
+        host.issue_tracker.read: task must be supplied as direct user text; cannot
+          autonomously source tasks from a tracker query
+    lint:
+      skill_md_max_lines: 180
+      target: loop-task-implementer
+    risk_class:
+    - merge
+    - repository-write
+    version: 1.4.0
+    type: orchestrator
+    authority: repository-write
+    permissions:
+      repository: write
+      external_actions: write
+      unattended: false
+      merge: true
+    supported_hosts:
+    - chatgpt
+    - claude
+    - codex
+    - cursor
+    - generic
+    - kiro
+    entrypoint: SKILL.md
+    output_contract:
+      produces:
+      - implementation_pr
+      produce_fields: {}
+    dependencies: []
+    version_source: skill_frontmatter_legacy_numeric
+  migration-program-manager:
+    path: migration-program-manager
+    category: migration
+    invocation: ambient
+    hosts:
+      cursor:
+        discovery: rule
+      claude:
+        install: true
+      kiro:
+        discovery: manual
+    install:
+      requires:
+      - mysql-to-postgres-sql
+      - squad-map
+    composition:
+      mode: aggregate
+      escalation_targets:
+      - mysql-to-postgres-sql
+      - squad-map
+      - pr-review
+    capabilities:
+      required:
+      - host.filesystem.read
+      optional:
+      - name: mysql-to-postgres-sql.invoke
+        enables: single-workspace migration status refresh
+    lint:
+      skill_md_max_lines: 180
+      target: migration-program-manager
+    risk_class:
+    - read-only
+    version: 1.0.0
+    type: orchestrator
+    authority: read-only
+    permissions:
+      repository: read
+      external_actions: none
+      unattended: false
+      merge: false
+    supported_hosts:
+    - chatgpt
+    - claude
+    - codex
+    - cursor
+    - generic
+    - kiro
+    entrypoint: SKILL.md
+    output_contract:
+      produces:
+      - migration_status_rollup
+      produce_fields:
+        migration_status_rollup:
+        - items
+        - generated_at
+        - source_revision
+    dependencies:
+    - mysql-to-postgres-sql
+    - squad-map
+    version_source: skill_frontmatter_legacy_numeric
+  mysql-to-postgres-sql:
+    path: mysql-to-postgres-sql
+    category: migration
+    invocation: ambient
+    hosts:
+      cursor:
+        discovery: rule
+      claude:
+        install: true
+      kiro:
+        discovery: manual
+    install:
+      requires: []
+    capabilities:
+      required:
+      - host.repository.read_write
+      optional:
+      - name: gitlab.get_merge_request
+        enables: migration MR review handoff
+      degraded_modes:
+        gitlab.get_merge_request: skip the migration MR review handoff; still produce
+          the SQL rewrite/scan report standalone
+    lint:
+      skill_md_max_lines: 180
+      target: mysql-to-postgres-sql
+    risk_class:
+    - repository-write
+    version: 1.6.0
+    type: leaf
+    authority: repository-write
+    permissions:
+      repository: write
+      external_actions: read
+      unattended: false
+      merge: false
+    supported_hosts:
+    - chatgpt
+    - claude
+    - codex
+    - cursor
+    - generic
+    - kiro
+    entrypoint: SKILL.md
+    output_contract:
+      produces:
+      - implementation_pr
+      produce_fields: {}
+    dependencies: []
+    version_source: skill_frontmatter_legacy_numeric
+  new-hire-guide:
+    path: new-hire-guide
+    category: architecture
+    invocation: ambient
+    hosts:
+      cursor:
+        discovery: rule
+      claude:
+        install: true
+      kiro:
+        discovery: manual
+    install:
+      requires:
+      - domain-comprehension
+      - squad-map
+    capabilities:
+      required:
+      - host.repository.read
+      optional:
+      - name: domain-comprehension.invoke
+        enables: full domain map tour
+      - name: squad-map.invoke
+        enables: ownership lookups during tour
+    lint:
+      skill_md_max_lines: 180
+      target: new-hire-guide
+    risk_class:
+    - read-only
+    version: 1.0.0
+    type: orchestrator
+    authority: read-only
+    permissions:
+      repository: read
+      external_actions: read
+      unattended: false
+      merge: false
+    supported_hosts:
+    - chatgpt
+    - claude
+    - codex
+    - cursor
+    - generic
+    - kiro
+    entrypoint: SKILL.md
+    output_contract:
+      produces:
+      - digest_report
+      produce_fields: {}
+    dependencies:
+    - domain-comprehension
+    - squad-map
+    version_source: skill_frontmatter_legacy_numeric
+  observability-review:
+    path: observability-review
+    category: review
+    extends: read-only-leaf-review
+    install:
+      requires: []
+    composition:
+      escalation_targets:
+      - incident-rca
+      - deployment-risk-review
+    capabilities:
+      required:
+      - host.report.write
+      optional: []
+    lint:
+      skill_md_max_lines: 180
+      target: observability-review
+    version: 1.1.0
+    type: leaf
+    permissions:
+      repository: read
+      external_actions: none
+      unattended: false
+      merge: false
+    output_contract:
+      produces:
+      - observability_review_report
+      produce_fields:
+        observability_review_report:
+        - title
+        - coverage
+        - assessment_target
+        - normalized_decision
+        - findings
+        - conditions
+        - required_actions
+        - evidence_refs
+    dependencies: []
+  performance-review:
+    path: performance-review
+    category: review
+    extends: read-only-leaf-review
+    install:
+      requires: []
+    composition:
+      escalation_targets:
+      - capacity-planner
+    capabilities:
+      required:
+      - host.report.write
+      optional: []
+    lint:
+      skill_md_max_lines: 180
+      target: performance-review
+    version: 1.1.0
+    type: leaf
+    permissions:
+      repository: read
+      external_actions: none
+      unattended: false
+      merge: false
+    output_contract:
+      produces:
+      - performance_review_report
+      produce_fields:
+        performance_review_report:
+        - title
+        - verdict
+        - assessment_target
+        - normalized_decision
+        - findings
+        - conditions
+        - required_actions
+        - evidence_refs
+    dependencies: []
+  pr-gatekeeper:
+    path: pr-gatekeeper
+    category: review
+    invocation: automation-only
+    hosts:
+      cursor:
+        discovery: rule
+      claude:
+        install: true
+      kiro:
+        discovery: manual
+    install:
+      requires:
+      - pr-review
+    composition:
+      invokes:
+      - pr-review
+      escalation_targets:
+      - pr-review
+    capabilities:
+      required:
+      - gitlab.get_merge_request
+      optional:
+      - name: gitlab.create_merge_request_thread
+        enables: unattended inline posting when policy allows
+      degraded_modes:
+        gitlab.create_merge_request_thread: fall back to summary-only or chat-only
+          posting per auto-post-policy.md
+    lint:
+      skill_md_max_lines: 180
+      target: pr-gatekeeper
+    risk_class:
+    - posting
+    - unattended
+    version: 1.1.0
+    type: trigger
+    authority: comment
+    permissions:
+      repository: read
+      external_actions: write
+      unattended: true
+      merge: false
+    supported_hosts:
+    - chatgpt
+    - claude
+    - codex
+    - cursor
+    - generic
+    - kiro
+    entrypoint: SKILL.md
+    output_contract:
+      produces:
+      - mr_review_report
+      produce_fields:
+        mr_review_report:
+        - review_metadata
+        - posted
+        - head_sha
+        - posting_mode
+        - integrated_revision
+        - assessment_target
+        - normalized_decision
+        - findings
+        - conditions
+        - required_actions
+        - evidence_refs
+    dependencies:
+    - pr-review
+    version_source: skill_frontmatter_legacy_numeric
   pr-review:
     path: pr-review
     category: review
@@ -2453,1149 +3717,6 @@ skills:
         - evidence_refs
     dependencies: []
     version_source: skill_frontmatter_legacy_numeric
-  pr-gatekeeper:
-    path: pr-gatekeeper
-    category: review
-    invocation: automation-only
-    hosts:
-      cursor:
-        discovery: rule
-      claude:
-        install: true
-      kiro:
-        discovery: manual
-    install:
-      requires:
-      - pr-review
-    composition:
-      invokes:
-      - pr-review
-      escalation_targets:
-      - pr-review
-    capabilities:
-      required:
-      - gitlab.get_merge_request
-      optional:
-      - name: gitlab.create_merge_request_thread
-        enables: unattended inline posting when policy allows
-      degraded_modes:
-        gitlab.create_merge_request_thread: fall back to summary-only or chat-only posting per auto-post-policy.md
-    lint:
-      skill_md_max_lines: 180
-      target: pr-gatekeeper
-    risk_class:
-    - posting
-    - unattended
-    version: 1.1.0
-    type: trigger
-    authority: comment
-    permissions:
-      repository: read
-      external_actions: write
-      unattended: true
-      merge: false
-    supported_hosts:
-    - chatgpt
-    - claude
-    - codex
-    - cursor
-    - generic
-    - kiro
-    entrypoint: SKILL.md
-    output_contract:
-      produces:
-      - mr_review_report
-      produce_fields:
-        mr_review_report:
-        - review_metadata
-        - posted
-        - head_sha
-        - posting_mode
-        - integrated_revision
-        - assessment_target
-        - normalized_decision
-        - findings
-        - conditions
-        - required_actions
-        - evidence_refs
-    dependencies:
-    - pr-review
-    version_source: skill_frontmatter_legacy_numeric
-  k8s-overprovisioning-datadog:
-    path: k8s-overprovisioning-datadog
-    category: platform
-    invocation: ambient
-    hosts:
-      cursor:
-        discovery: rule
-      claude:
-        install: true
-      kiro:
-        discovery: manual
-    install:
-      requires: []
-    composition:
-      escalation_targets:
-      - incident-rca
-      - pr-review
-    capabilities:
-      required: []
-      optional:
-      - name: kubernetes.workloads.read
-        enables: live workload, autoscaler, policy, and pod-state truth
-      - name: datadog.list_monitors
-        enables: monitor cross-check sections
-      any_of:
-      - name: Kubernetes history-capable evidence
-        required:
-        - kubernetes.metrics.history
-      - name: Datadog historical evidence
-        required:
-        - datadog.query_metrics
-      degraded_modes:
-        kubernetes.workloads.read: use Git provider manifests or user-provided configuration for live-state checks
-        kubernetes.metrics.history: use Datadog history when available; otherwise defer historical sizing dimensions
-        datadog.query_metrics: continue only when Kubernetes exposes equivalent historical metrics and aggregation
-        datadog.list_monitors: omit monitor cross-checks and reduce confidence where applicable
-    lint:
-      skill_md_max_lines: 150
-      target: k8s-skill
-    risk_class:
-    - read-only
-    version: 1.0.0
-    type: leaf
-    authority: read-only
-    permissions:
-      repository: read
-      external_actions: read
-      unattended: false
-      merge: false
-    supported_hosts:
-    - chatgpt
-    - claude
-    - codex
-    - cursor
-    - generic
-    - kiro
-    entrypoint: SKILL.md
-    output_contract:
-      produces:
-      - k8s_rightsizing_report
-      produce_fields: {}
-    dependencies: []
-    version_source: skill_frontmatter_legacy_numeric
-  incident-rca:
-    path: incident-rca
-    category: incident
-    invocation: ambient
-    hosts:
-      cursor:
-        discovery: rule
-      claude:
-        install: true
-      kiro:
-        discovery: manual
-    install:
-      requires: []
-    composition:
-      escalation_targets:
-      - pr-review
-      - k8s-overprovisioning-datadog
-      - squad-map
-    capabilities:
-      required:
-      - telemetry.logs.query
-      optional:
-      - name: datadog.query_metrics
-        enables: metric corroboration paths
-      - name: gitlab.get_merge_request
-        enables: deploy-regression MR handoff
-      degraded_modes:
-        datadog.query_metrics: rely on logs alone for corroboration; cap confidence below what a matching metric signal would support
-        gitlab.get_merge_request: treat deploy-regression hypothesis as UNKNOWN rather than ruled in or out, not as absence of evidence
-    lint:
-      skill_md_max_lines: 180
-      target: incident-rca
-    risk_class:
-    - read-only
-    version: 2.0.0
-    type: leaf
-    authority: read-only
-    permissions:
-      repository: read
-      external_actions: read
-      unattended: false
-      merge: false
-    supported_hosts:
-    - chatgpt
-    - claude
-    - codex
-    - cursor
-    - generic
-    - kiro
-    entrypoint: SKILL.md
-    output_contract:
-      produces:
-      - rca_report
-      produce_fields: {}
-    dependencies: []
-    version_source: skill_frontmatter
-  incident-triage-agent:
-    path: incident-triage-agent
-    category: incident
-    invocation: automation-only
-    hosts:
-      cursor:
-        discovery: rule
-      claude:
-        install: true
-      kiro:
-        discovery: manual
-    install:
-      requires:
-      - incident-rca
-      - squad-map
-    composition:
-      invokes:
-      - incident-rca
-      - squad-map
-      escalation_targets:
-      - incident-rca
-      - squad-map
-    capabilities:
-      required:
-      - pager.webhook.receive
-      optional:
-      - name: slack.post.message
-        enables: paging summary delivery when configured
-      degraded_modes:
-        slack.post.message: still produce the triage_doc/postmortem_draft artifact; paging summary is simply not delivered to Slack
-    lint:
-      skill_md_max_lines: 180
-      target: incident-triage-agent
-    risk_class:
-    - unattended
-    version: 1.0.0
-    type: trigger
-    authority: read-only
-    permissions:
-      repository: read
-      external_actions: write
-      unattended: true
-      merge: false
-    supported_hosts:
-    - chatgpt
-    - claude
-    - codex
-    - cursor
-    - generic
-    - kiro
-    entrypoint: SKILL.md
-    output_contract:
-      produces:
-      - rca_report
-      - ownership_lookup
-      produce_fields:
-        rca_report:
-        - assessment_metadata
-        - root_cause
-        - confidence
-        ownership_lookup:
-        - query
-        - squad
-        - confidence
-    dependencies:
-    - incident-rca
-    - squad-map
-    version_source: skill_frontmatter_legacy_numeric
-  domain-comprehension:
-    path: domain-comprehension
-    category: architecture
-    invocation: ambient
-    hosts:
-      cursor:
-        discovery: rule
-      claude:
-        install: true
-      kiro:
-        discovery: manual
-    install:
-      requires:
-      - squad-map
-    capabilities:
-      required:
-      - host.repository.read
-      optional:
-      - name: gitlab.search_code
-        enables: repository census without local checkout
-      - name: datadog.query_metrics
-        enables: runtime validation passes
-      - name: telemetry.logs.query
-        enables: KubeSense/log corroboration
-      degraded_modes:
-        gitlab.search_code: fall back to local checkout traversal for the repository census
-        datadog.query_metrics: skip the runtime validation pass; mark runtime-dependent claims UNKNOWN instead of inferring from static evidence
-        telemetry.logs.query: skip KubeSense/log corroboration; mark log-dependent claims UNKNOWN
-    lint:
-      skill_md_max_lines: 180
-      target: domain-comprehension
-    risk_class:
-    - read-only
-    version: 1.1.0
-    type: orchestrator
-    authority: read-only
-    permissions:
-      repository: read
-      external_actions: read
-      unattended: false
-      merge: false
-    supported_hosts:
-    - chatgpt
-    - claude
-    - codex
-    - cursor
-    - generic
-    - kiro
-    entrypoint: SKILL.md
-    output_contract:
-      produces:
-      - squad_map
-      produce_fields: {}
-    dependencies:
-    - squad-map
-    version_source: skill_frontmatter_legacy_numeric
-  squad-map:
-    path: squad-map
-    category: architecture
-    invocation: ambient
-    hosts:
-      cursor:
-        discovery: rule
-      claude:
-        install: true
-      kiro:
-        discovery: manual
-    install:
-      requires: []
-    capabilities:
-      required:
-      - gitlab.list_projects
-      optional:
-      - name: gitlab.get_repository_file
-        enables: CODEOWNERS and ownership file reads
-      - name: datadog.list_service_definitions
-        enables: service alias crosswalk
-      degraded_modes:
-        gitlab.get_repository_file: ownership falls back to fuzzy/contributor-based signals only, confidence capped at LOW
-        datadog.list_service_definitions: skip the service alias crosswalk; ownership stays repo-level only
-    lint:
-      skill_md_max_lines: 180
-      target: squad-map
-    risk_class:
-    - read-only
-    version: 1.0.0
-    type: leaf
-    authority: read-only
-    permissions:
-      repository: read
-      external_actions: read
-      unattended: false
-      merge: false
-    supported_hosts:
-    - chatgpt
-    - claude
-    - codex
-    - cursor
-    - generic
-    - kiro
-    entrypoint: SKILL.md
-    output_contract:
-      produces:
-      - squad_map
-      - ownership_lookup
-      produce_fields: {}
-    dependencies: []
-    version_source: skill_frontmatter_legacy_numeric
-  who-owns-x-bot:
-    path: who-owns-x-bot
-    category: architecture
-    invocation: automation-only
-    hosts:
-      cursor:
-        discovery: rule
-      claude:
-        install: true
-      kiro:
-        discovery: manual
-    install:
-      requires:
-      - squad-map
-    capabilities:
-      required:
-      - slack.slash_command.receive
-      optional:
-      - name: squad-map.invoke
-        enables: full mapping table instead of one-shot lookup
-    lint:
-      skill_md_max_lines: 180
-      target: who-owns-x-bot
-    risk_class:
-    - unattended
-    version: 1.0.0
-    type: router
-    authority: read-only
-    permissions:
-      repository: read
-      external_actions: write
-      unattended: true
-      merge: false
-    supported_hosts:
-    - chatgpt
-    - claude
-    - codex
-    - cursor
-    - generic
-    - kiro
-    entrypoint: SKILL.md
-    output_contract:
-      produces:
-      - ownership_lookup
-      produce_fields: {}
-    dependencies:
-    - squad-map
-    version_source: skill_frontmatter_legacy_numeric
-  new-hire-guide:
-    path: new-hire-guide
-    category: architecture
-    invocation: ambient
-    hosts:
-      cursor:
-        discovery: rule
-      claude:
-        install: true
-      kiro:
-        discovery: manual
-    install:
-      requires:
-      - domain-comprehension
-      - squad-map
-    capabilities:
-      required:
-      - host.repository.read
-      optional:
-      - name: domain-comprehension.invoke
-        enables: full domain map tour
-      - name: squad-map.invoke
-        enables: ownership lookups during tour
-    lint:
-      skill_md_max_lines: 180
-      target: new-hire-guide
-    risk_class:
-    - read-only
-    version: 1.0.0
-    type: orchestrator
-    authority: read-only
-    permissions:
-      repository: read
-      external_actions: read
-      unattended: false
-      merge: false
-    supported_hosts:
-    - chatgpt
-    - claude
-    - codex
-    - cursor
-    - generic
-    - kiro
-    entrypoint: SKILL.md
-    output_contract:
-      produces:
-      - digest_report
-      produce_fields: {}
-    dependencies:
-    - domain-comprehension
-    - squad-map
-    version_source: skill_frontmatter_legacy_numeric
-  release-readiness-checker:
-    path: release-readiness-checker
-    category: release
-    invocation: ambient
-    hosts:
-      cursor:
-        discovery: rule
-      claude:
-        install: true
-      kiro:
-        discovery: manual
-    install:
-      requires:
-      - pr-review
-      - k8s-overprovisioning-datadog
-      - incident-rca
-    composition:
-      invokes:
-      - pr-review
-      - k8s-overprovisioning-datadog
-      - incident-rca
-      - production-readiness-review
-      escalation_targets:
-      - pr-review
-      - k8s-overprovisioning-datadog
-      - incident-rca
-    capabilities:
-      required:
-      - host.report.write
-      optional:
-      - name: gitlab.list_merge_requests
-        enables: release-candidate MR enumeration
-      - name: datadog.query_metrics
-        enables: per-service health slice
-      - name: telemetry.logs.query
-        enables: incident window cross-check
-      - name: production-readiness-review.conditional_invoke
-        enables: conditional v2 production-readiness refresh when no trusted deployable-scoped report is reusable
-      - name: host.scm.change_history.read
-        enables: authoritative commits/PRs/reverts/cherry-picks enumeration in the release range
-      - name: host.scm.policy.read
-        enables: authoritative review/approval/bypass policy evidence for release-candidate code-review coverage
-      - name: host.build.provenance.read
-        enables: source-revision to release-deployable-digest linkage when release_ref is an artifact digest
-      degraded_modes:
-        gitlab.list_merge_requests: require an explicit release_ref per manifest entry instead of auto-discovering MRs
-        datadog.query_metrics: per-service health slice becomes UNKNOWN rather than READY/NOT_READY for that dimension
-        telemetry.logs.query: incident window cross-check becomes UNKNOWN; falls through to incident-rca's own signal instead
-        production-readiness-review.conditional_invoke: a v2 entry requiring production readiness with no reusable trusted report becomes UNKNOWN rather than invoking the child
-        host.scm.change_history.read: v2 release-candidate code-review coverage cannot reach COMPLETE; the production-readiness dimension becomes UNKNOWN
-        host.scm.policy.read: release-candidate SCM policy evidence becomes UNKNOWN
-        host.build.provenance.read: a v2 entry whose release_ref is a non-source digest cannot establish candidate identity; production readiness is never invoked and stays UNKNOWN
-    lint:
-      skill_md_max_lines: 180
-      target: release-readiness-checker
-    risk_class:
-    - read-only
-    version: 1.1.0
-    type: orchestrator
-    authority: read-only
-    permissions:
-      repository: read
-      external_actions: read
-      unattended: false
-      merge: false
-    supported_hosts:
-    - chatgpt
-    - claude
-    - codex
-    - cursor
-    - generic
-    - kiro
-    entrypoint: SKILL.md
-    output_contract:
-      produces:
-      - digest_report
-      produce_fields:
-        digest_report:
-        - sections
-        - generated_at
-        - source_revisions
-    dependencies:
-    - pr-review
-    - k8s-overprovisioning-datadog
-    - incident-rca
-    version_source: skill_frontmatter_legacy_numeric
-  migration-program-manager:
-    path: migration-program-manager
-    category: migration
-    invocation: ambient
-    hosts:
-      cursor:
-        discovery: rule
-      claude:
-        install: true
-      kiro:
-        discovery: manual
-    install:
-      requires:
-      - mysql-to-postgres-sql
-      - squad-map
-    composition:
-      mode: aggregate
-      escalation_targets:
-      - mysql-to-postgres-sql
-      - squad-map
-      - pr-review
-    capabilities:
-      required:
-      - host.filesystem.read
-      optional:
-      - name: mysql-to-postgres-sql.invoke
-        enables: single-workspace migration status refresh
-    lint:
-      skill_md_max_lines: 180
-      target: migration-program-manager
-    risk_class:
-    - read-only
-    version: 1.0.0
-    type: orchestrator
-    authority: read-only
-    permissions:
-      repository: read
-      external_actions: none
-      unattended: false
-      merge: false
-    supported_hosts:
-    - chatgpt
-    - claude
-    - codex
-    - cursor
-    - generic
-    - kiro
-    entrypoint: SKILL.md
-    output_contract:
-      produces:
-      - migration_status_rollup
-      produce_fields:
-        migration_status_rollup:
-        - items
-        - generated_at
-        - source_revision
-    dependencies:
-    - mysql-to-postgres-sql
-    - squad-map
-    version_source: skill_frontmatter_legacy_numeric
-  cost-optimization-sprint-planner:
-    path: cost-optimization-sprint-planner
-    category: platform
-    invocation: ambient
-    hosts:
-      cursor:
-        discovery: rule
-      claude:
-        install: true
-      kiro:
-        discovery: manual
-    install:
-      requires:
-      - k8s-overprovisioning-datadog
-      - squad-map
-    capabilities:
-      required:
-      - host.filesystem.read
-      optional:
-      - name: k8s-overprovisioning-datadog.invoke
-        enables: single-deployment rightsizing refresh
-    lint:
-      skill_md_max_lines: 180
-      target: cost-optimization-sprint-planner
-    risk_class:
-    - read-only
-    version: 1.0.0
-    type: orchestrator
-    authority: read-only
-    permissions:
-      repository: read
-      external_actions: none
-      unattended: false
-      merge: false
-    supported_hosts:
-    - chatgpt
-    - claude
-    - codex
-    - cursor
-    - generic
-    - kiro
-    entrypoint: SKILL.md
-    output_contract:
-      produces:
-      - cost_sweep_rollup
-      produce_fields:
-        cost_sweep_rollup:
-        - items
-        - generated_at
-        - source_revision
-    dependencies:
-    - k8s-overprovisioning-datadog
-    - squad-map
-    version_source: skill_frontmatter_legacy_numeric
-  mysql-to-postgres-sql:
-    path: mysql-to-postgres-sql
-    category: migration
-    invocation: ambient
-    hosts:
-      cursor:
-        discovery: rule
-      claude:
-        install: true
-      kiro:
-        discovery: manual
-    install:
-      requires: []
-    capabilities:
-      required:
-      - host.repository.read_write
-      optional:
-      - name: gitlab.get_merge_request
-        enables: migration MR review handoff
-      degraded_modes:
-        gitlab.get_merge_request: skip the migration MR review handoff; still produce the SQL rewrite/scan report standalone
-    lint:
-      skill_md_max_lines: 180
-      target: mysql-to-postgres-sql
-    risk_class:
-    - repository-write
-    version: 1.6.0
-    type: leaf
-    authority: repository-write
-    permissions:
-      repository: write
-      external_actions: read
-      unattended: false
-      merge: false
-    supported_hosts:
-    - chatgpt
-    - claude
-    - codex
-    - cursor
-    - generic
-    - kiro
-    entrypoint: SKILL.md
-    output_contract:
-      produces:
-      - implementation_pr
-      produce_fields: {}
-    dependencies: []
-    version_source: skill_frontmatter_legacy_numeric
-  loop-task-implementer:
-    path: loop-task-implementer
-    category: automation
-    invocation: ambient
-    hosts:
-      cursor:
-        discovery: rule
-      claude:
-        install: true
-      kiro:
-        discovery: manual
-    install:
-      requires: []
-    capabilities:
-      required:
-      - host.repository.read_write
-      - host.role.isolation
-      - host.ci.status
-      - host.pull_request.write
-      optional:
-      - name: host.issue_tracker.read
-        enables: task sourced from tracker instead of user text
-      degraded_modes:
-        host.issue_tracker.read: task must be supplied as direct user text; cannot autonomously source tasks from a tracker query
-    lint:
-      skill_md_max_lines: 180
-      target: loop-task-implementer
-    risk_class:
-    - merge
-    - repository-write
-    version: 1.4.0
-    type: orchestrator
-    authority: repository-write
-    permissions:
-      repository: write
-      external_actions: write
-      unattended: false
-      merge: true
-    supported_hosts:
-    - chatgpt
-    - claude
-    - codex
-    - cursor
-    - generic
-    - kiro
-    entrypoint: SKILL.md
-    output_contract:
-      produces:
-      - implementation_pr
-      produce_fields: {}
-    dependencies: []
-    version_source: skill_frontmatter_legacy_numeric
-  backlog-runner:
-    path: backlog-runner
-    category: automation
-    invocation: automation-only
-    hosts:
-      cursor:
-        discovery: rule
-      claude:
-        install: true
-      kiro:
-        discovery: manual
-    install:
-      requires:
-      - loop-task-implementer
-    capabilities:
-      required:
-      - scheduler.cron.trigger
-      - host.issue_tracker.read
-      optional:
-      - name: loop-task-implementer.invoke
-        enables: interactive single-task mode
-    lint:
-      skill_md_max_lines: 180
-      target: backlog-runner
-    risk_class:
-    - unattended
-    - merge
-    version: 1.0.0
-    type: trigger
-    authority: read-only
-    permissions:
-      repository: write
-      external_actions: write
-      unattended: true
-      merge: true
-    supported_hosts:
-    - chatgpt
-    - claude
-    - codex
-    - cursor
-    - generic
-    - kiro
-    entrypoint: SKILL.md
-    output_contract:
-      produces:
-      - implementation_pr
-      produce_fields: {}
-    dependencies:
-    - loop-task-implementer
-    version_source: skill_frontmatter_legacy_numeric
-  weekly-squad-digest:
-    path: weekly-squad-digest
-    category: migration
-    invocation: automation-only
-    hosts:
-      cursor:
-        discovery: rule
-      claude:
-        install: true
-      kiro:
-        discovery: manual
-    install:
-      requires:
-      - migration-program-manager
-      - cost-optimization-sprint-planner
-    composition:
-      mode: aggregate
-      escalation_targets:
-      - migration-program-manager
-      - cost-optimization-sprint-planner
-    capabilities:
-      required:
-      - scheduler.cron.trigger
-      optional:
-      - name: slack.post.message
-        enables: scheduled digest delivery
-      degraded_modes:
-        slack.post.message: WEEKLY_SQUAD_DIGEST.md is still written; the digest simply is not delivered via Slack
-    lint:
-      skill_md_max_lines: 180
-      target: weekly-squad-digest
-    risk_class:
-    - unattended
-    version: 1.0.0
-    type: trigger
-    authority: read-only
-    permissions:
-      repository: read
-      external_actions: write
-      unattended: true
-      merge: false
-    supported_hosts:
-    - chatgpt
-    - claude
-    - codex
-    - cursor
-    - generic
-    - kiro
-    entrypoint: SKILL.md
-    output_contract:
-      produces:
-      - digest_report
-      produce_fields:
-        digest_report:
-        - sections
-        - generated_at
-        - source_revisions
-    dependencies:
-    - migration-program-manager
-    - cost-optimization-sprint-planner
-    version_source: skill_frontmatter_legacy_numeric
-  unit-test-creator:
-    path: unit-test-creator
-    category: testing
-    invocation: ambient
-    hosts:
-      cursor:
-        discovery: rule
-      claude:
-        install: true
-      kiro:
-        discovery: manual
-    install:
-      requires: []
-    capabilities:
-      required:
-      - host.repository.read_write
-      optional:
-      - name: host.test_runner.execute
-        enables: generated test verification loop
-      degraded_modes:
-        host.test_runner.execute: tests are written but left UNVERIFIED; run-until-green iteration cannot happen locally
-    lint:
-      skill_md_max_lines: 180
-      target: unit-test-creator
-    risk_class:
-    - repository-write
-    version: 1.1.0
-    type: leaf
-    authority: repository-write
-    permissions:
-      repository: write
-      external_actions: none
-      unattended: false
-      merge: false
-    supported_hosts:
-    - chatgpt
-    - claude
-    - codex
-    - cursor
-    - generic
-    - kiro
-    entrypoint: SKILL.md
-    output_contract:
-      produces:
-      - test_suite
-      produce_fields:
-        test_suite:
-        - tests
-        - framework
-        - target_path
-    dependencies: []
-    version_source: skill_frontmatter_legacy_numeric
-  integration-test-creator:
-    path: integration-test-creator
-    category: testing
-    invocation: ambient
-    hosts:
-      cursor:
-        discovery: rule
-      claude:
-        install: true
-      kiro:
-        discovery: manual
-    install:
-      requires: []
-    capabilities:
-      required:
-      - host.repository.read_write
-      optional:
-      - name: host.test_runner.execute
-        enables: generated test verification loop
-      - name: host.dependency.reachable
-        enables: real adjacent dependency under test
-      degraded_modes:
-        host.test_runner.execute: tests are written but left UNVERIFIED; run-until-green iteration cannot happen locally
-        host.dependency.reachable: no real adjacent dependency to test against; escalate or skip the target rather than fall back to mocking (that belongs to unit-test-creator)
-    lint:
-      skill_md_max_lines: 180
-      target: integration-test-creator
-    risk_class:
-    - repository-write
-    version: 1.1.0
-    type: leaf
-    authority: repository-write
-    permissions:
-      repository: write
-      external_actions: read
-      unattended: false
-      merge: false
-    supported_hosts:
-    - chatgpt
-    - claude
-    - codex
-    - cursor
-    - generic
-    - kiro
-    entrypoint: SKILL.md
-    output_contract:
-      produces:
-      - test_suite
-      produce_fields:
-        test_suite:
-        - tests
-        - framework
-        - target_path
-    dependencies: []
-    version_source: skill_frontmatter_legacy_numeric
-  contract-test-creator:
-    path: contract-test-creator
-    category: testing
-    invocation: ambient
-    hosts:
-      cursor:
-        discovery: rule
-      claude:
-        install: true
-      kiro:
-        discovery: manual
-    install:
-      requires: []
-    capabilities:
-      required:
-      - host.repository.read_write
-      optional:
-      - name: host.test_runner.execute
-        enables: generated contract test verification
-      degraded_modes:
-        host.test_runner.execute: contract tests are written but left UNVERIFIED; run-until-green iteration cannot happen locally
-    lint:
-      skill_md_max_lines: 180
-      target: contract-test-creator
-    risk_class:
-    - repository-write
-    version: 1.1.0
-    type: leaf
-    authority: repository-write
-    permissions:
-      repository: write
-      external_actions: none
-      unattended: false
-      merge: false
-    supported_hosts:
-    - chatgpt
-    - claude
-    - codex
-    - cursor
-    - generic
-    - kiro
-    entrypoint: SKILL.md
-    output_contract:
-      produces:
-      - test_suite
-      produce_fields:
-        test_suite:
-        - tests
-        - framework
-        - target_path
-    dependencies: []
-    version_source: skill_frontmatter_legacy_numeric
-  e2e-test-creator:
-    path: e2e-test-creator
-    category: testing
-    invocation: ambient
-    hosts:
-      cursor:
-        discovery: rule
-      claude:
-        install: true
-      kiro:
-        discovery: manual
-    install:
-      requires: []
-    capabilities:
-      required:
-      - host.repository.read_write
-      optional:
-      - name: host.browser.automation
-        enables: UI journey execution
-      - name: host.test_runner.execute
-        enables: generated e2e verification
-      degraded_modes:
-        host.browser.automation: cannot execute generated browser journeys locally; ship them UNVERIFIED
-        host.test_runner.execute: tests are written but left UNVERIFIED; run-until-green iteration cannot happen locally
-    lint:
-      skill_md_max_lines: 180
-      target: e2e-test-creator
-    risk_class:
-    - repository-write
-    version: 1.1.0
-    type: leaf
-    authority: repository-write
-    permissions:
-      repository: write
-      external_actions: read
-      unattended: false
-      merge: false
-    supported_hosts:
-    - chatgpt
-    - claude
-    - codex
-    - cursor
-    - generic
-    - kiro
-    entrypoint: SKILL.md
-    output_contract:
-      produces:
-      - test_suite
-      produce_fields:
-        test_suite:
-        - tests
-        - framework
-        - target_path
-    dependencies: []
-    version_source: skill_frontmatter_legacy_numeric
-  api-test-creator:
-    path: api-test-creator
-    category: testing
-    invocation: ambient
-    hosts:
-      cursor:
-        discovery: rule
-      claude:
-        install: true
-      kiro:
-        discovery: manual
-    install:
-      requires: []
-    capabilities:
-      required:
-      - host.repository.read_write
-      optional:
-      - name: host.api.reachable
-        enables: black-box HTTP suite against running API
-      - name: host.test_runner.execute
-        enables: Newman or equivalent runner
-      degraded_modes:
-        host.api.reachable: generate the request/assertion collection but skip execution; mark status UNVERIFIED
-        host.test_runner.execute: collection is generated but hand off for manual/CI execution instead of iterating to green locally
-    lint:
-      skill_md_max_lines: 180
-      target: api-test-creator
-    risk_class:
-    - repository-write
-    version: 1.1.0
-    type: leaf
-    authority: repository-write
-    permissions:
-      repository: write
-      external_actions: read
-      unattended: false
-      merge: false
-    supported_hosts:
-    - chatgpt
-    - claude
-    - codex
-    - cursor
-    - generic
-    - kiro
-    entrypoint: SKILL.md
-    output_contract:
-      produces:
-      - test_suite
-      produce_fields:
-        test_suite:
-        - tests
-        - framework
-        - target_path
-    dependencies: []
-    version_source: skill_frontmatter_legacy_numeric
   prd-architect:
     path: prd-architect
     category: product
@@ -3657,628 +3778,6 @@ skills:
         - evidence_refs
     dependencies: []
     version_source: skill_frontmatter_legacy_numeric
-  test-writer:
-    path: test-writer
-    category: product
-    invocation: ambient
-    hosts:
-      cursor:
-        discovery: rule
-      claude:
-        install: true
-      kiro:
-        discovery: manual
-    install:
-      requires:
-      - unit-test-creator
-      - integration-test-creator
-      - contract-test-creator
-      - e2e-test-creator
-      - api-test-creator
-    capabilities:
-      required:
-      - host.repository.read
-      optional:
-      - name: unit-test-creator.invoke
-        enables: routed unit-test generation
-      - name: integration-test-creator.invoke
-        enables: routed integration-test generation
-      - name: contract-test-creator.invoke
-        enables: routed contract-test generation
-      - name: e2e-test-creator.invoke
-        enables: routed e2e generation
-      - name: api-test-creator.invoke
-        enables: routed API-test generation
-      degraded_modes:
-        unit-test-creator.invoke: requested unit level is recorded as BLOCKED with child_invoke_unavailable; other planned levels remain accounted for
-        integration-test-creator.invoke: requested integration level is recorded as BLOCKED with child_invoke_unavailable; other planned levels remain accounted for
-        contract-test-creator.invoke: requested contract level is recorded as BLOCKED with child_invoke_unavailable; other planned levels remain accounted for
-        e2e-test-creator.invoke: requested e2e level is recorded as BLOCKED with child_invoke_unavailable; other planned levels remain accounted for
-        api-test-creator.invoke: requested API level is recorded as BLOCKED with child_invoke_unavailable; other planned levels remain accounted for
-    lint:
-      skill_md_max_lines: 180
-      target: test-writer
-    risk_class:
-    - read-only
-    version: 2.4.0
-    type: router
-    authority: read-only
-    permissions:
-      repository: read
-      external_actions: none
-      unattended: false
-      merge: false
-    supported_hosts:
-    - chatgpt
-    - claude
-    - codex
-    - cursor
-    - generic
-    - kiro
-    entrypoint: SKILL.md
-    output_contract:
-      produces:
-      - test_orchestration_result
-      produce_fields:
-        test_orchestration_result:
-        - test_plan
-        - orchestration_status
-        - unfinished_levels
-        - level_reports
-    dependencies:
-    - unit-test-creator
-    - integration-test-creator
-    - contract-test-creator
-    - e2e-test-creator
-    - api-test-creator
-    version_source: skill_frontmatter_legacy_numeric
-  architecture-review:
-    path: architecture-review
-    category: review
-    extends: read-only-leaf-review
-    install:
-      requires: []
-    composition:
-      escalation_targets:
-      - system-design
-      - security-review
-      - loop-task-implementer
-      - prd-architect
-    capabilities:
-      required:
-      - host.report.write
-      optional: []
-    lint:
-      skill_md_max_lines: 180
-      target: architecture-review
-    version: 1.2.0
-    type: leaf
-    permissions:
-      repository: read
-      external_actions: none
-      unattended: false
-      merge: false
-    output_contract:
-      produces:
-      - architecture_review_report
-      produce_fields:
-        architecture_review_report:
-        - title
-        - decision
-        - assessment_target
-        - normalized_decision
-        - findings
-        - conditions
-        - required_actions
-        - evidence_refs
-    dependencies: []
-  system-design:
-    path: system-design
-    category: architecture
-    extends: read-only-leaf-review
-    install:
-      requires: []
-    composition:
-      escalation_targets:
-      - api-design-review
-      - database-review
-      - observability-review
-    capabilities:
-      required:
-      - host.report.write
-      optional: []
-    lint:
-      skill_md_max_lines: 180
-      target: system-design
-    version: 1.2.0
-    type: leaf
-    permissions:
-      repository: read
-      external_actions: none
-      unattended: false
-      merge: false
-    output_contract:
-      produces:
-      - system_design_spec
-      produce_fields:
-        system_design_spec:
-        - title
-        - readiness
-        - assessment_target
-        - normalized_decision
-        - findings
-        - conditions
-        - required_actions
-        - evidence_refs
-    dependencies: []
-  api-design-review:
-    path: api-design-review
-    category: review
-    extends: read-only-leaf-review
-    install:
-      requires: []
-    composition:
-      escalation_targets:
-      - security-review
-      - pr-review
-      - database-review
-    capabilities:
-      required:
-      - host.report.write
-      optional: []
-    lint:
-      skill_md_max_lines: 180
-      target: api-design-review
-    version: 1.1.0
-    type: leaf
-    permissions:
-      repository: read
-      external_actions: none
-      unattended: false
-      merge: false
-    output_contract:
-      produces:
-      - api_design_review_report
-      produce_fields:
-        api_design_review_report:
-        - title
-        - verdict
-        - assessment_target
-        - normalized_decision
-        - findings
-        - conditions
-        - required_actions
-        - evidence_refs
-    dependencies: []
-  database-review:
-    path: database-review
-    category: review
-    extends: read-only-leaf-review
-    install:
-      requires: []
-    composition:
-      escalation_targets:
-      - performance-review
-      - mysql-to-postgres-sql
-      - pr-review
-    capabilities:
-      required:
-      - host.report.write
-      optional: []
-    lint:
-      skill_md_max_lines: 180
-      target: database-review
-    version: 1.1.0
-    type: leaf
-    permissions:
-      repository: read
-      external_actions: none
-      unattended: false
-      merge: false
-    output_contract:
-      produces:
-      - database_review_report
-      produce_fields:
-        database_review_report:
-        - title
-        - verdict
-        - assessment_target
-        - normalized_decision
-        - findings
-        - conditions
-        - required_actions
-        - evidence_refs
-    dependencies: []
-  security-review:
-    path: security-review
-    category: review
-    extends: read-only-leaf-review
-    install:
-      requires: []
-    composition:
-      escalation_targets:
-      - dependency-upgrade-review
-    capabilities:
-      required:
-      - host.report.write
-      optional: []
-    lint:
-      skill_md_max_lines: 180
-      target: security-review
-    version: 1.1.0
-    type: leaf
-    permissions:
-      repository: read
-      external_actions: none
-      unattended: false
-      merge: false
-    output_contract:
-      produces:
-      - security_review_report
-      produce_fields:
-        security_review_report:
-        - title
-        - verdict
-        - assessment_target
-        - normalized_decision
-        - findings
-        - conditions
-        - required_actions
-        - evidence_refs
-    dependencies: []
-  performance-review:
-    path: performance-review
-    category: review
-    extends: read-only-leaf-review
-    install:
-      requires: []
-    composition:
-      escalation_targets:
-      - capacity-planner
-    capabilities:
-      required:
-      - host.report.write
-      optional: []
-    lint:
-      skill_md_max_lines: 180
-      target: performance-review
-    version: 1.1.0
-    type: leaf
-    permissions:
-      repository: read
-      external_actions: none
-      unattended: false
-      merge: false
-    output_contract:
-      produces:
-      - performance_review_report
-      produce_fields:
-        performance_review_report:
-        - title
-        - verdict
-        - assessment_target
-        - normalized_decision
-        - findings
-        - conditions
-        - required_actions
-        - evidence_refs
-    dependencies: []
-  capacity-planner:
-    path: capacity-planner
-    category: platform
-    extends: read-only-leaf-review
-    install:
-      requires: []
-    composition:
-      escalation_targets:
-      - k8s-overprovisioning-datadog
-    capabilities:
-      required:
-      - host.report.write
-      optional: []
-    lint:
-      skill_md_max_lines: 180
-      target: capacity-planner
-    version: 1.1.0
-    type: leaf
-    permissions:
-      repository: read
-      external_actions: none
-      unattended: false
-      merge: false
-    output_contract:
-      produces:
-      - capacity_plan
-      produce_fields:
-        capacity_plan:
-        - title
-        - headroom
-        - assessment_target
-        - normalized_decision
-        - findings
-        - conditions
-        - required_actions
-        - evidence_refs
-    dependencies: []
-  observability-review:
-    path: observability-review
-    category: review
-    extends: read-only-leaf-review
-    install:
-      requires: []
-    composition:
-      escalation_targets:
-      - incident-rca
-      - deployment-risk-review
-    capabilities:
-      required:
-      - host.report.write
-      optional: []
-    lint:
-      skill_md_max_lines: 180
-      target: observability-review
-    version: 1.1.0
-    type: leaf
-    permissions:
-      repository: read
-      external_actions: none
-      unattended: false
-      merge: false
-    output_contract:
-      produces:
-      - observability_review_report
-      produce_fields:
-        observability_review_report:
-        - title
-        - coverage
-        - assessment_target
-        - normalized_decision
-        - findings
-        - conditions
-        - required_actions
-        - evidence_refs
-    dependencies: []
-  deployment-risk-review:
-    path: deployment-risk-review
-    category: review
-    extends: read-only-leaf-review
-    install:
-      requires: []
-    composition:
-      escalation_targets:
-      - release-readiness-checker
-      - incident-triage-agent
-    capabilities:
-      required:
-      - host.report.write
-      optional: []
-    lint:
-      skill_md_max_lines: 180
-      target: deployment-risk-review
-    version: 1.1.0
-    type: leaf
-    permissions:
-      repository: read
-      external_actions: none
-      unattended: false
-      merge: false
-    output_contract:
-      produces:
-      - deployment_risk_report
-      produce_fields:
-        deployment_risk_report:
-        - title
-        - risk
-        - deployment_confidence
-        - assessment_target
-        - normalized_decision
-        - findings
-        - conditions
-        - required_actions
-        - evidence_refs
-    dependencies: []
-  dependency-upgrade-review:
-    path: dependency-upgrade-review
-    category: review
-    extends: read-only-leaf-review
-    install:
-      requires: []
-    composition:
-      escalation_targets:
-      - security-review
-    capabilities:
-      required:
-      - host.report.write
-      optional: []
-    lint:
-      skill_md_max_lines: 180
-      target: dependency-upgrade-review
-    version: 1.1.0
-    type: leaf
-    permissions:
-      repository: read
-      external_actions: none
-      unattended: false
-      merge: false
-    output_contract:
-      produces:
-      - dependency_upgrade_report
-      produce_fields:
-        dependency_upgrade_report:
-        - title
-        - verdict
-        - assessment_target
-        - normalized_decision
-        - findings
-        - conditions
-        - required_actions
-        - evidence_refs
-    dependencies: []
-  tech-debt-assessor:
-    path: tech-debt-assessor
-    category: platform
-    extends: read-only-leaf-review
-    install:
-      requires: []
-    composition:
-      escalation_targets:
-      - migration-program-manager
-      - cost-optimization-sprint-planner
-    capabilities:
-      required:
-      - host.report.write
-      optional: []
-    lint:
-      skill_md_max_lines: 180
-      target: tech-debt-assessor
-    version: 1.0.0
-    type: leaf
-    permissions:
-      repository: read
-      external_actions: none
-      unattended: false
-      merge: false
-    output_contract:
-      produces:
-      - tech_debt_assessment
-      produce_fields:
-        tech_debt_assessment:
-        - title
-        - items
-    dependencies: []
-  change-impact-analyzer:
-    path: change-impact-analyzer
-    category: analysis
-    extends: read-only-leaf-review
-    install:
-      requires: []
-    composition:
-      invokes: []
-      escalation_targets: []
-    capabilities:
-      required:
-      - host.report.write
-      optional:
-      - name: host.repository.read
-        enables: repository-grounded diff/caller/consumer/config discovery
-      - name: host.scm.change.read
-        enables: exact-head remote PR/MR metadata + diff retrieval
-    lint:
-      skill_md_max_lines: 180
-      target: change-impact-analyzer
-    version: 1.0.0
-    type: leaf
-    permissions:
-      repository: read
-      external_actions: none
-      unattended: false
-      merge: false
-    output_contract:
-      produces:
-      - change_impact_report
-      produce_fields:
-        change_impact_report:
-        - title
-        - assessment_target
-        - coverage_status
-        - material_unknowns
-        - impacted_repositories
-        - criticality
-        - change_classes
-        - impacted_services
-        - impacted_contracts
-        - impacted_data
-        - impacted_dependencies
-        - impacted_owners
-        - required_tests
-        - operational_impacts
-        - review_triggers
-        - unknowns
-        - evidence_refs
-    dependencies: []
-  resilience-review:
-    path: resilience-review
-    category: review
-    extends: read-only-leaf-review
-    install:
-      requires: []
-    composition:
-      invokes: []
-      escalation_targets: []
-    capabilities:
-      required:
-      - host.report.write
-      optional:
-      - name: host.repository.read
-        enables: repository and runtime/config evidence discovery
-    lint:
-      skill_md_max_lines: 180
-      target: resilience-review
-    version: 1.0.0
-    type: leaf
-    permissions:
-      repository: read
-      external_actions: none
-      unattended: false
-      merge: false
-    output_contract:
-      produces:
-      - resilience_review_report
-      produce_fields:
-        resilience_review_report:
-        - title
-        - verdict
-        - assessment_target
-        - normalized_decision
-        - findings
-        - conditions
-        - required_actions
-        - evidence_refs
-    dependencies: []
-  implementation-planner:
-    path: implementation-planner
-    category: automation
-    extends: read-only-leaf-review
-    install:
-      requires: []
-    composition:
-      invokes: []
-      escalation_targets:
-      - loop-task-implementer
-    capabilities:
-      required:
-      - host.report.write
-      - host.repository.read
-      optional: []
-    lint:
-      skill_md_max_lines: 180
-      target: implementation-planner
-    version: 1.0.0
-    type: leaf
-    permissions:
-      repository: read
-      external_actions: none
-      unattended: false
-      merge: false
-    output_contract:
-      produces:
-      - implementation_plan
-      produce_fields:
-        implementation_plan:
-        - plan_set_id
-        - plan_id
-        - title
-        - readiness
-        - assessment_target
-        - target_repo
-        - external_dependencies
-        - source_refs
-        - tasks
-        - execution_waves
-        - sequencing_constraints
-        - verification_gates
-        - traceability
-    dependencies: []
   production-readiness-review:
     path: production-readiness-review
     category: release
@@ -4332,7 +3831,8 @@ skills:
       - name: host.scm.change.read
         enables: exact-head remote PR/MR/commit metadata + diff retrieval
       - name: host.scm.change_history.read
-        enables: authoritative material-change enumeration for direct release-candidate readiness
+        enables: authoritative material-change enumeration for direct release-candidate
+          readiness
       - name: host.ci.status
         enables: authoritative exact-source required-check evidence
       - name: host.scm.policy.read
@@ -4342,7 +3842,8 @@ skills:
       - name: host.service.metadata.read
         enables: criticality/ownership/on-call/recovery policy evidence
       - name: host.dependency.advisories.read
-        enables: current vulnerability/advisory evidence for changed dependencies at the exact source revision
+        enables: current vulnerability/advisory evidence for changed dependencies
+          at the exact source revision
       - name: host.runtime.metrics.read
         enables: authoritative current demand/history and capacity baseline evidence
       - name: change-impact-analyzer.invoke
@@ -4366,26 +3867,49 @@ skills:
       - name: dependency-upgrade-review.invoke
         enables: dependency dimension refresh
       degraded_modes:
-        pr-review.invoke: exact-head PR/MR review evidence remains UNKNOWN unless a fresh trusted mr_review_report is already available
-        host.repository.read: candidate diff/config collection becomes UNKNOWN for dimensions requiring it
-        host.scm.change.read: PR/MR exact-head metadata and diff retrieval become UNKNOWN
-        host.scm.change_history.read: release-candidate material-change enumeration becomes UNKNOWN; coverage_status cannot reach COMPLETE
+        pr-review.invoke: exact-head PR/MR review evidence remains UNKNOWN unless
+          a fresh trusted mr_review_report is already available
+        host.repository.read: candidate diff/config collection becomes UNKNOWN for
+          dimensions requiring it
+        host.scm.change.read: PR/MR exact-head metadata and diff retrieval become
+          UNKNOWN
+        host.scm.change_history.read: release-candidate material-change enumeration
+          becomes UNKNOWN; coverage_status cannot reach COMPLETE
         host.ci.status: CI dimension becomes UNKNOWN rather than PASS/FAIL
-        host.scm.policy.read: SCM policy gate (approvals/CODEOWNERS/threads) becomes UNKNOWN
-        host.build.provenance.read: build provenance becomes UNKNOWN for any candidate whose deployable differs from its source revision
-        host.service.metadata.read: ownership/criticality/recovery-policy dimensions become UNKNOWN
-        host.dependency.advisories.read: dependency dimension becomes UNKNOWN unless an authoritative required dependency-security CI check covers the exact source revision; absence never maps to PASS
-        host.runtime.metrics.read: capacity dimension becomes UNKNOWN for tier0/tier1/unknown criticality (caller-only demand/baseline cannot PASS at those tiers) and at most CONDITIONAL for tier2/tier3
-        change-impact-analyzer.invoke: change-impact prerequisite reuses a fresh trusted change_impact_report when present, otherwise the impact-dependent applicability determination is UNKNOWN
-        deployment-risk-review.invoke: deployment-risk prerequisite reuses a fresh trusted deployment_risk_report when present, otherwise that dimension is UNKNOWN
-        security-review.invoke: security dimension reuses a fresh trusted security_review_report when present, otherwise UNKNOWN
-        observability-review.invoke: observability dimension reuses a fresh trusted observability_review_report when present, otherwise UNKNOWN
-        resilience-review.invoke: resilience dimension reuses a fresh trusted resilience_review_report when present, otherwise UNKNOWN
-        api-design-review.invoke: API dimension reuses a fresh trusted api_design_review_report when present, otherwise UNKNOWN
-        database-review.invoke: database dimension reuses a fresh trusted database_review_report when present, otherwise UNKNOWN
-        performance-review.invoke: performance dimension reuses a fresh trusted performance_review_report when present, otherwise UNKNOWN
-        capacity-planner.invoke: capacity dimension reuses a fresh trusted capacity_plan when present, otherwise UNKNOWN
-        dependency-upgrade-review.invoke: dependency dimension reuses a fresh trusted dependency_upgrade_report when present, otherwise UNKNOWN
+        host.scm.policy.read: SCM policy gate (approvals/CODEOWNERS/threads) becomes
+          UNKNOWN
+        host.build.provenance.read: build provenance becomes UNKNOWN for any candidate
+          whose deployable differs from its source revision
+        host.service.metadata.read: ownership/criticality/recovery-policy dimensions
+          become UNKNOWN
+        host.dependency.advisories.read: dependency dimension becomes UNKNOWN unless
+          an authoritative required dependency-security CI check covers the exact
+          source revision; absence never maps to PASS
+        host.runtime.metrics.read: capacity dimension becomes UNKNOWN for tier0/tier1/unknown
+          criticality (caller-only demand/baseline cannot PASS at those tiers) and
+          at most CONDITIONAL for tier2/tier3
+        change-impact-analyzer.invoke: change-impact prerequisite reuses a fresh trusted
+          change_impact_report when present, otherwise the impact-dependent applicability
+          determination is UNKNOWN
+        deployment-risk-review.invoke: deployment-risk prerequisite reuses a fresh
+          trusted deployment_risk_report when present, otherwise that dimension is
+          UNKNOWN
+        security-review.invoke: security dimension reuses a fresh trusted security_review_report
+          when present, otherwise UNKNOWN
+        observability-review.invoke: observability dimension reuses a fresh trusted
+          observability_review_report when present, otherwise UNKNOWN
+        resilience-review.invoke: resilience dimension reuses a fresh trusted resilience_review_report
+          when present, otherwise UNKNOWN
+        api-design-review.invoke: API dimension reuses a fresh trusted api_design_review_report
+          when present, otherwise UNKNOWN
+        database-review.invoke: database dimension reuses a fresh trusted database_review_report
+          when present, otherwise UNKNOWN
+        performance-review.invoke: performance dimension reuses a fresh trusted performance_review_report
+          when present, otherwise UNKNOWN
+        capacity-planner.invoke: capacity dimension reuses a fresh trusted capacity_plan
+          when present, otherwise UNKNOWN
+        dependency-upgrade-review.invoke: dependency dimension reuses a fresh trusted
+          dependency_upgrade_report when present, otherwise UNKNOWN
     lint:
       skill_md_max_lines: 180
       target: production-readiness-review
@@ -4426,3 +3950,546 @@ skills:
     - performance-review
     - capacity-planner
     - dependency-upgrade-review
+  release-readiness-checker:
+    path: release-readiness-checker
+    category: release
+    invocation: ambient
+    hosts:
+      cursor:
+        discovery: rule
+      claude:
+        install: true
+      kiro:
+        discovery: manual
+    install:
+      requires:
+      - pr-review
+      - k8s-overprovisioning-datadog
+      - incident-rca
+    composition:
+      invokes:
+      - pr-review
+      - k8s-overprovisioning-datadog
+      - incident-rca
+      - production-readiness-review
+      escalation_targets:
+      - pr-review
+      - k8s-overprovisioning-datadog
+      - incident-rca
+    capabilities:
+      required:
+      - host.report.write
+      optional:
+      - name: gitlab.list_merge_requests
+        enables: release-candidate MR enumeration
+      - name: datadog.query_metrics
+        enables: per-service health slice
+      - name: telemetry.logs.query
+        enables: incident window cross-check
+      - name: production-readiness-review.conditional_invoke
+        enables: conditional v2 production-readiness refresh when no trusted deployable-scoped
+          report is reusable
+      - name: host.scm.change_history.read
+        enables: authoritative commits/PRs/reverts/cherry-picks enumeration in the
+          release range
+      - name: host.scm.policy.read
+        enables: authoritative review/approval/bypass policy evidence for release-candidate
+          code-review coverage
+      - name: host.build.provenance.read
+        enables: source-revision to release-deployable-digest linkage when release_ref
+          is an artifact digest
+      degraded_modes:
+        gitlab.list_merge_requests: require an explicit release_ref per manifest entry
+          instead of auto-discovering MRs
+        datadog.query_metrics: per-service health slice becomes UNKNOWN rather than
+          READY/NOT_READY for that dimension
+        telemetry.logs.query: incident window cross-check becomes UNKNOWN; falls through
+          to incident-rca's own signal instead
+        production-readiness-review.conditional_invoke: a v2 entry requiring production
+          readiness with no reusable trusted report becomes UNKNOWN rather than invoking
+          the child
+        host.scm.change_history.read: v2 release-candidate code-review coverage cannot
+          reach COMPLETE; the production-readiness dimension becomes UNKNOWN
+        host.scm.policy.read: release-candidate SCM policy evidence becomes UNKNOWN
+        host.build.provenance.read: a v2 entry whose release_ref is a non-source digest
+          cannot establish candidate identity; production readiness is never invoked
+          and stays UNKNOWN
+    lint:
+      skill_md_max_lines: 180
+      target: release-readiness-checker
+    risk_class:
+    - read-only
+    version: 1.1.0
+    type: orchestrator
+    authority: read-only
+    permissions:
+      repository: read
+      external_actions: read
+      unattended: false
+      merge: false
+    supported_hosts:
+    - chatgpt
+    - claude
+    - codex
+    - cursor
+    - generic
+    - kiro
+    entrypoint: SKILL.md
+    output_contract:
+      produces:
+      - digest_report
+      produce_fields:
+        digest_report:
+        - sections
+        - generated_at
+        - source_revisions
+    dependencies:
+    - pr-review
+    - k8s-overprovisioning-datadog
+    - incident-rca
+    version_source: skill_frontmatter_legacy_numeric
+  resilience-review:
+    path: resilience-review
+    category: review
+    extends: read-only-leaf-review
+    install:
+      requires: []
+    composition:
+      invokes: []
+      escalation_targets: []
+    capabilities:
+      required:
+      - host.report.write
+      optional:
+      - name: host.repository.read
+        enables: repository and runtime/config evidence discovery
+    lint:
+      skill_md_max_lines: 180
+      target: resilience-review
+    version: 1.0.0
+    type: leaf
+    permissions:
+      repository: read
+      external_actions: none
+      unattended: false
+      merge: false
+    output_contract:
+      produces:
+      - resilience_review_report
+      produce_fields:
+        resilience_review_report:
+        - title
+        - verdict
+        - assessment_target
+        - normalized_decision
+        - findings
+        - conditions
+        - required_actions
+        - evidence_refs
+    dependencies: []
+  security-review:
+    path: security-review
+    category: review
+    extends: read-only-leaf-review
+    install:
+      requires: []
+    composition:
+      escalation_targets:
+      - dependency-upgrade-review
+    capabilities:
+      required:
+      - host.report.write
+      optional: []
+    lint:
+      skill_md_max_lines: 180
+      target: security-review
+    version: 1.1.0
+    type: leaf
+    permissions:
+      repository: read
+      external_actions: none
+      unattended: false
+      merge: false
+    output_contract:
+      produces:
+      - security_review_report
+      produce_fields:
+        security_review_report:
+        - title
+        - verdict
+        - assessment_target
+        - normalized_decision
+        - findings
+        - conditions
+        - required_actions
+        - evidence_refs
+    dependencies: []
+  squad-map:
+    path: squad-map
+    category: architecture
+    invocation: ambient
+    hosts:
+      cursor:
+        discovery: rule
+      claude:
+        install: true
+      kiro:
+        discovery: manual
+    install:
+      requires: []
+    capabilities:
+      required:
+      - gitlab.list_projects
+      optional:
+      - name: gitlab.get_repository_file
+        enables: CODEOWNERS and ownership file reads
+      - name: datadog.list_service_definitions
+        enables: service alias crosswalk
+      degraded_modes:
+        gitlab.get_repository_file: ownership falls back to fuzzy/contributor-based
+          signals only, confidence capped at LOW
+        datadog.list_service_definitions: skip the service alias crosswalk; ownership
+          stays repo-level only
+    lint:
+      skill_md_max_lines: 180
+      target: squad-map
+    risk_class:
+    - read-only
+    version: 1.0.0
+    type: leaf
+    authority: read-only
+    permissions:
+      repository: read
+      external_actions: read
+      unattended: false
+      merge: false
+    supported_hosts:
+    - chatgpt
+    - claude
+    - codex
+    - cursor
+    - generic
+    - kiro
+    entrypoint: SKILL.md
+    output_contract:
+      produces:
+      - squad_map
+      - ownership_lookup
+      produce_fields: {}
+    dependencies: []
+    version_source: skill_frontmatter_legacy_numeric
+  system-design:
+    path: system-design
+    category: architecture
+    extends: read-only-leaf-review
+    install:
+      requires: []
+    composition:
+      escalation_targets:
+      - api-design-review
+      - database-review
+      - observability-review
+    capabilities:
+      required:
+      - host.report.write
+      optional: []
+    lint:
+      skill_md_max_lines: 180
+      target: system-design
+    version: 1.2.0
+    type: leaf
+    permissions:
+      repository: read
+      external_actions: none
+      unattended: false
+      merge: false
+    output_contract:
+      produces:
+      - system_design_spec
+      produce_fields:
+        system_design_spec:
+        - title
+        - readiness
+        - assessment_target
+        - normalized_decision
+        - findings
+        - conditions
+        - required_actions
+        - evidence_refs
+    dependencies: []
+  tech-debt-assessor:
+    path: tech-debt-assessor
+    category: platform
+    extends: read-only-leaf-review
+    install:
+      requires: []
+    composition:
+      escalation_targets:
+      - migration-program-manager
+      - cost-optimization-sprint-planner
+    capabilities:
+      required:
+      - host.report.write
+      optional: []
+    lint:
+      skill_md_max_lines: 180
+      target: tech-debt-assessor
+    version: 1.0.0
+    type: leaf
+    permissions:
+      repository: read
+      external_actions: none
+      unattended: false
+      merge: false
+    output_contract:
+      produces:
+      - tech_debt_assessment
+      produce_fields:
+        tech_debt_assessment:
+        - title
+        - items
+    dependencies: []
+  test-writer:
+    path: test-writer
+    category: product
+    invocation: ambient
+    hosts:
+      cursor:
+        discovery: rule
+      claude:
+        install: true
+      kiro:
+        discovery: manual
+    install:
+      requires:
+      - unit-test-creator
+      - integration-test-creator
+      - contract-test-creator
+      - e2e-test-creator
+      - api-test-creator
+    capabilities:
+      required:
+      - host.repository.read
+      optional:
+      - name: unit-test-creator.invoke
+        enables: routed unit-test generation
+      - name: integration-test-creator.invoke
+        enables: routed integration-test generation
+      - name: contract-test-creator.invoke
+        enables: routed contract-test generation
+      - name: e2e-test-creator.invoke
+        enables: routed e2e generation
+      - name: api-test-creator.invoke
+        enables: routed API-test generation
+      degraded_modes:
+        unit-test-creator.invoke: requested unit level is recorded as BLOCKED with
+          child_invoke_unavailable; other planned levels remain accounted for
+        integration-test-creator.invoke: requested integration level is recorded as
+          BLOCKED with child_invoke_unavailable; other planned levels remain accounted
+          for
+        contract-test-creator.invoke: requested contract level is recorded as BLOCKED
+          with child_invoke_unavailable; other planned levels remain accounted for
+        e2e-test-creator.invoke: requested e2e level is recorded as BLOCKED with child_invoke_unavailable;
+          other planned levels remain accounted for
+        api-test-creator.invoke: requested API level is recorded as BLOCKED with child_invoke_unavailable;
+          other planned levels remain accounted for
+    lint:
+      skill_md_max_lines: 180
+      target: test-writer
+    risk_class:
+    - read-only
+    version: 2.4.0
+    type: router
+    authority: read-only
+    permissions:
+      repository: read
+      external_actions: none
+      unattended: false
+      merge: false
+    supported_hosts:
+    - chatgpt
+    - claude
+    - codex
+    - cursor
+    - generic
+    - kiro
+    entrypoint: SKILL.md
+    output_contract:
+      produces:
+      - test_orchestration_result
+      produce_fields:
+        test_orchestration_result:
+        - test_plan
+        - orchestration_status
+        - unfinished_levels
+        - level_reports
+    dependencies:
+    - unit-test-creator
+    - integration-test-creator
+    - contract-test-creator
+    - e2e-test-creator
+    - api-test-creator
+    version_source: skill_frontmatter_legacy_numeric
+  unit-test-creator:
+    path: unit-test-creator
+    category: testing
+    invocation: ambient
+    hosts:
+      cursor:
+        discovery: rule
+      claude:
+        install: true
+      kiro:
+        discovery: manual
+    install:
+      requires: []
+    capabilities:
+      required:
+      - host.repository.read_write
+      optional:
+      - name: host.test_runner.execute
+        enables: generated test verification loop
+      degraded_modes:
+        host.test_runner.execute: tests are written but left UNVERIFIED; run-until-green
+          iteration cannot happen locally
+    lint:
+      skill_md_max_lines: 180
+      target: unit-test-creator
+    risk_class:
+    - repository-write
+    version: 1.1.0
+    type: leaf
+    authority: repository-write
+    permissions:
+      repository: write
+      external_actions: none
+      unattended: false
+      merge: false
+    supported_hosts:
+    - chatgpt
+    - claude
+    - codex
+    - cursor
+    - generic
+    - kiro
+    entrypoint: SKILL.md
+    output_contract:
+      produces:
+      - test_suite
+      produce_fields:
+        test_suite:
+        - tests
+        - framework
+        - target_path
+    dependencies: []
+    version_source: skill_frontmatter_legacy_numeric
+  weekly-squad-digest:
+    path: weekly-squad-digest
+    category: migration
+    invocation: automation-only
+    hosts:
+      cursor:
+        discovery: rule
+      claude:
+        install: true
+      kiro:
+        discovery: manual
+    install:
+      requires:
+      - migration-program-manager
+      - cost-optimization-sprint-planner
+    composition:
+      mode: aggregate
+      escalation_targets:
+      - migration-program-manager
+      - cost-optimization-sprint-planner
+    capabilities:
+      required:
+      - scheduler.cron.trigger
+      optional:
+      - name: slack.post.message
+        enables: scheduled digest delivery
+      degraded_modes:
+        slack.post.message: WEEKLY_SQUAD_DIGEST.md is still written; the digest simply
+          is not delivered via Slack
+    lint:
+      skill_md_max_lines: 180
+      target: weekly-squad-digest
+    risk_class:
+    - unattended
+    version: 1.0.0
+    type: trigger
+    authority: read-only
+    permissions:
+      repository: read
+      external_actions: write
+      unattended: true
+      merge: false
+    supported_hosts:
+    - chatgpt
+    - claude
+    - codex
+    - cursor
+    - generic
+    - kiro
+    entrypoint: SKILL.md
+    output_contract:
+      produces:
+      - digest_report
+      produce_fields:
+        digest_report:
+        - sections
+        - generated_at
+        - source_revisions
+    dependencies:
+    - migration-program-manager
+    - cost-optimization-sprint-planner
+    version_source: skill_frontmatter_legacy_numeric
+  who-owns-x-bot:
+    path: who-owns-x-bot
+    category: architecture
+    invocation: automation-only
+    hosts:
+      cursor:
+        discovery: rule
+      claude:
+        install: true
+      kiro:
+        discovery: manual
+    install:
+      requires:
+      - squad-map
+    capabilities:
+      required:
+      - slack.slash_command.receive
+      optional:
+      - name: squad-map.invoke
+        enables: full mapping table instead of one-shot lookup
+    lint:
+      skill_md_max_lines: 180
+      target: who-owns-x-bot
+    risk_class:
+    - unattended
+    version: 1.0.0
+    type: router
+    authority: read-only
+    permissions:
+      repository: read
+      external_actions: write
+      unattended: true
+      merge: false
+    supported_hosts:
+    - chatgpt
+    - claude
+    - codex
+    - cursor
+    - generic
+    - kiro
+    entrypoint: SKILL.md
+    output_contract:
+      produces:
+      - ownership_lookup
+      produce_fields: {}
+    dependencies:
+    - squad-map
+    version_source: skill_frontmatter_legacy_numeric

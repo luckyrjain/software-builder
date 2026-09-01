@@ -1,0 +1,44 @@
+implementation-planner:
+  path: implementation-planner
+  category: automation
+  extends: read-only-leaf-review
+  install:
+    requires: []
+  composition:
+    invokes: []
+    escalation_targets:
+    - loop-task-implementer
+  capabilities:
+    required:
+    - host.report.write
+    - host.repository.read
+    optional: []
+  lint:
+    skill_md_max_lines: 180
+    target: implementation-planner
+  version: 1.0.0
+  type: leaf
+  permissions:
+    repository: read
+    external_actions: none
+    unattended: false
+    merge: false
+  output_contract:
+    produces:
+    - implementation_plan
+    produce_fields:
+      implementation_plan:
+      - plan_set_id
+      - plan_id
+      - title
+      - readiness
+      - assessment_target
+      - target_repo
+      - external_dependencies
+      - source_refs
+      - tasks
+      - execution_waves
+      - sequencing_constraints
+      - verification_gates
+      - traceability
+  dependencies: []

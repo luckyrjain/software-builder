@@ -39,6 +39,31 @@ def test_install_restores_previous_package_when_validation_fails(tmp_path: Path)
     risk_class: [read-only]
 """
     skills_yaml.write_text(text, encoding="utf-8")
+    # scripts/ (copied wholesale above) carries scripts/registry/skills.d/ -- once that
+    # directory exists, it's the authoritative source for the `skills:` mapping (see
+    # scripts/registry/schema.py's load_registry_raw), so "broken-skill" also needs its
+    # own fragment here, not just the hand-appended skills.yaml entry above, or the
+    # registry silently won't see it at all.
+    fragment_dir = repo / "scripts" / "registry" / "skills.d"
+    (fragment_dir / "broken-skill.yaml").write_text(
+        """
+broken-skill:
+  path: broken-skill
+  category: testing
+  invocation: ambient
+  hosts:
+    cursor: {discovery: rule}
+    claude: {install: true}
+    kiro: {discovery: manual}
+  install:
+    requires: []
+  lint:
+    skill_md_max_lines: 180
+    target: broken-skill
+  risk_class: [read-only]
+""",
+        encoding="utf-8",
+    )
     skill_dir.mkdir(parents=True)
     (skill_dir / "SKILL.md").write_text(
         "---\nname: broken-skill\ndescription: Broken test skill.\n---\n\n"

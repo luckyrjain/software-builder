@@ -1,0 +1,37 @@
+capacity-planner:
+  path: capacity-planner
+  category: platform
+  extends: read-only-leaf-review
+  install:
+    requires: []
+  composition:
+    escalation_targets:
+    - k8s-overprovisioning-datadog
+  capabilities:
+    required:
+    - host.report.write
+    optional: []
+  lint:
+    skill_md_max_lines: 180
+    target: capacity-planner
+  version: 1.1.0
+  type: leaf
+  permissions:
+    repository: read
+    external_actions: none
+    unattended: false
+    merge: false
+  output_contract:
+    produces:
+    - capacity_plan
+    produce_fields:
+      capacity_plan:
+      - title
+      - headroom
+      - assessment_target
+      - normalized_decision
+      - findings
+      - conditions
+      - required_actions
+      - evidence_refs
+  dependencies: []

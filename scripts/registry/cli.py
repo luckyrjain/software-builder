@@ -30,18 +30,21 @@ from scripts.registry.generate_compatibility import render_compatibility_matrix
 from scripts.registry.generate_cursor import generate_cursor_rules
 from scripts.registry.generate_docs import (
     render_install_mermaid,
+    update_changelog_toc,
     update_readme_badge,
     update_readme_doc_links,
     update_readme_routing_table,
     update_repository_table,
 )
 from scripts.registry.generate_kiro import generate_kiro_steering
+from scripts.registry.generate_makefile_roster import generate_makefile_roster
 from scripts.registry.generic_package import build_generic_package
 from scripts.registry.host_portability import validate_host_portability
 from scripts.registry.host_adapter import HOSTS, validate_host_adapter_identities, validate_host_adapter_interface
 from scripts.registry.host_registry import HostRegistryParseError, parse_host_registry
-from scripts.registry.load import load_descriptions, load_registry
+from scripts.registry.load import load_deprecated_skills, load_descriptions, load_registry
 from scripts.registry.manifest import validate_manifest
+from scripts.registry.manifest_merge import merge_registry_yaml, skills_fragments_dir
 from scripts.registry.p1_validation import validate_p1_contracts
 from scripts.registry.runtime_manifest import validate_runtime_manifest
 from scripts.release_contract import validate_release_contract
@@ -53,9 +56,19 @@ ROOT = Path(__file__).resolve().parents[2]
 def _collect_outputs(root: Path) -> dict[Path, str]:
     registry = load_registry(root)
     descriptions = load_descriptions(root, registry)
+    deprecated = load_deprecated_skills(root, registry)
     outputs: dict[Path, str] = {}
-    outputs.update(generate_cursor_rules(root, registry, descriptions))
-    outputs.update(generate_kiro_steering(root, registry))
+    if skills_fragments_dir(root).is_dir():
+        # skills.yaml's `skills:` mapping is authored one-per-file under
+        # scripts/registry/skills.d/ (see manifest_merge.py); regenerate it here
+        # the same way generate_cursor_rules/generate_kiro_steering regenerate
+        # their own per-host outputs from the canonical registry. Repos/fixtures
+        # without a skills.d/ directory keep skills.yaml's own `skills:` mapping
+        # as the legacy, hand-edited source of truth untouched.
+        outputs[root / "skills.yaml"] = merge_registry_yaml(root)
+    outputs.update(generate_cursor_rules(root, registry, descriptions, deprecated))
+    outputs.update(generate_kiro_steering(root, registry, deprecated))
+    outputs.update(generate_makefile_roster(root, registry))
     outputs[root / "README.md"] = update_readme_badge(
         (root / "README.md").read_text(encoding="utf-8"),
         len(registry.skills),
@@ -63,12 +76,19 @@ def _collect_outputs(root: Path) -> dict[Path, str]:
     outputs[root / "docs" / "REPOSITORY.md"] = update_repository_table(
         (root / "docs" / "REPOSITORY.md").read_text(encoding="utf-8"),
         registry,
+        deprecated,
     )
+    changelog_path = root / "CHANGELOG.md"
+    if changelog_path.is_file():
+        outputs[changelog_path] = update_changelog_toc(
+            changelog_path.read_text(encoding="utf-8"),
+        )
     docs_readme_path = root / "docs" / "README.md"
     if docs_readme_path.is_file():
         docs_readme = update_readme_doc_links(
             docs_readme_path.read_text(encoding="utf-8"),
             registry,
+            deprecated,
         )
         escalation_matrix_path = (
             root / "docs" / "skill-framework" / "shared" / "cross-skill-escalation.md"
@@ -77,6 +97,7 @@ def _collect_outputs(root: Path) -> dict[Path, str]:
             docs_readme = update_readme_routing_table(
                 docs_readme,
                 escalation_matrix_path.read_text(encoding="utf-8"),
+                deprecated,
             )
         outputs[docs_readme_path] = docs_readme
     outputs[root / "generated" / "catalogue" / "install-deps.mmd"] = render_install_mermaid(

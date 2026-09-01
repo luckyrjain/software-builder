@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -37,3 +39,46 @@ def test_compatibility_matrix_distinguishes_all_required_from_any_of_paths() -> 
     assert "host.repository.read_write OR host.role.isolation" not in loop_task_row
     assert "GitLab read:" in pr_review_row
     assert " OR GitHub read:" in pr_review_row
+
+
+def test_compatibility_matrix_gates_kiro_cell_on_required_capability_family() -> None:
+    """Per-skill-per-host join regression test.
+
+    loop-task-implementer requires host.role.isolation (family:
+    task_isolation) and host.ci.status/host.pull_request.write (family: scm),
+    both of which host_contracts.yaml marks Kiro `degraded` on. The audited
+    gap was that host_cell rendered the same blanket host-profile string for
+    every skill regardless of what it actually required, hiding that. A
+    skill with no host.* required capability (pr-review) must keep the
+    blanket profile unchanged, proving the two cells are computed
+    differently rather than both happening to say "degraded".
+    """
+    from scripts.registry.generate_compatibility import render_compatibility_matrix
+
+    text = render_compatibility_matrix(ROOT)
+    loop_task_row = next(line for line in text.splitlines() if "| loop-task-implementer |" in line)
+    pr_review_row = next(line for line in text.splitlines() if "| pr-review |" in line)
+
+    assert "manual \\(degraded\\)" in loop_task_row
+    assert "manual \\(full/degraded\\)" in pr_review_row
+
+
+def test_required_host_families_maps_and_fails_closed() -> None:
+    from scripts.registry.generate_compatibility import _required_host_families
+
+    assert _required_host_families(
+        ["host.repository.read_write", "host.role.isolation", "host.ci.status", "host.pull_request.write"],
+    ) == {"read_repo", "write_repo", "task_isolation", "scm"}
+    assert _required_host_families(["gitlab.get_merge_request"]) == set()
+
+    with pytest.raises(ValueError, match="no entry in HOST_CAPABILITY_FAMILIES"):
+        _required_host_families(["host.does_not_exist"])
+
+
+def test_worst_required_support_picks_lowest_level_per_host() -> None:
+    from scripts.registry.generate_compatibility import _worst_required_support
+
+    assert _worst_required_support(ROOT, "kiro", set()) is None
+    assert _worst_required_support(ROOT, "kiro", {"read_repo"}) == "full"
+    assert _worst_required_support(ROOT, "kiro", {"read_repo", "task_isolation"}) == "degraded"
+    assert _worst_required_support(ROOT, "generic", {"task_isolation"}) == "unsupported"

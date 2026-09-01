@@ -1,0 +1,54 @@
+squad-map:
+  path: squad-map
+  category: architecture
+  invocation: ambient
+  hosts:
+    cursor:
+      discovery: rule
+    claude:
+      install: true
+    kiro:
+      discovery: manual
+  install:
+    requires: []
+  capabilities:
+    required:
+    - gitlab.list_projects
+    optional:
+    - name: gitlab.get_repository_file
+      enables: CODEOWNERS and ownership file reads
+    - name: datadog.list_service_definitions
+      enables: service alias crosswalk
+    degraded_modes:
+      gitlab.get_repository_file: ownership falls back to fuzzy/contributor-based
+        signals only, confidence capped at LOW
+      datadog.list_service_definitions: skip the service alias crosswalk; ownership
+        stays repo-level only
+  lint:
+    skill_md_max_lines: 180
+    target: squad-map
+  risk_class:
+  - read-only
+  version: 1.0.0
+  type: leaf
+  authority: read-only
+  permissions:
+    repository: read
+    external_actions: read
+    unattended: false
+    merge: false
+  supported_hosts:
+  - chatgpt
+  - claude
+  - codex
+  - cursor
+  - generic
+  - kiro
+  entrypoint: SKILL.md
+  output_contract:
+    produces:
+    - squad_map
+    - ownership_lookup
+    produce_fields: {}
+  dependencies: []
+  version_source: skill_frontmatter_legacy_numeric
