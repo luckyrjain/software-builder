@@ -177,6 +177,26 @@ def _check_outputs(root: Path, outputs: dict[Path, str]) -> list[str]:
 
 
 def _run_command(action: Callable[[], int]) -> int:
+    # Every _run_command-wrapped subcommand is the first (and only) reader of
+    # schema.py's load_registry_raw cache in its process today, so this clear is a
+    # no-op in practice when reached via main() -- but it makes that guarantee hold
+    # here, once, for every subcommand this function wraps, rather than depending on
+    # each one independently remembering to clear at its own entry. cmd_list,
+    # cmd_explain, cmd_validate_agent_skills, cmd_check_handoff, and
+    # cmd_validate_artifact never had their own entry-clear despite reading the same
+    # cache; this closes that gap for all of them at once. cmd_validate's own
+    # clear_registry_cache() call at its entry is now redundant with this one when
+    # reached through main() -- kept anyway since cmd_validate could plausibly be
+    # called directly in a test someday, the way cmd_generate already is (see its own
+    # comment). cmd_generate's entry clear is NOT redundant: scripts/tests/test_registry.py
+    # calls cmd_generate(...) directly, bypassing this function entirely, so its own
+    # clear is the only one those callers get; its second clear_registry_cache() call
+    # after _write_outputs is separately load-bearing invalidation for the write that
+    # just happened, unrelated to entry invalidation. cmd_backfill isn't wrapped by
+    # _run_command (see main()'s dispatch) and doesn't need this either: it never
+    # reads through load_registry_raw itself, and already clears the cache after its
+    # own write.
+    clear_registry_cache()
     try:
         return action()
     except (OSError, TypeError, ValueError, yaml.YAMLError) as exc:

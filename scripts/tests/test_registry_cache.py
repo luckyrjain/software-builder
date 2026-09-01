@@ -154,8 +154,6 @@ def test_backfill_write_invalidates_the_registry_cache(
 
 
 def test_fragments_are_still_re_merged_correctly_through_the_cache(tmp_path: Path) -> None:
-    from scripts.registry.manifest_merge import skills_fragments_dir
-
     _write_skills_yaml(tmp_path)
     fragments_dir = skills_fragments_dir(tmp_path)
     fragments_dir.mkdir(parents=True)
