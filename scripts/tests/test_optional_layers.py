@@ -1,4 +1,4 @@
-"""Tests for scripts/registry/cli.py's resolve_optional_layers/OptionalLayers."""
+"""Tests for scripts/registry/cli.py's detect_optional_layers/OptionalLayers."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from scripts.registry.cli import (
     _capability_catalog_path,
     _composition_runtime_path,
     _release_contract_path,
-    resolve_optional_layers,
+    detect_optional_layers,
 )
 
 
@@ -22,7 +22,7 @@ def _write_minimal_skills_yaml(tmp_path: Path) -> None:
 def test_all_layers_inactive_on_a_bare_minimal_repo(tmp_path: Path) -> None:
     _write_minimal_skills_yaml(tmp_path)
 
-    layers = resolve_optional_layers(tmp_path)
+    layers = detect_optional_layers(tmp_path)
 
     assert layers.host_contracts is None
     assert layers.capability_catalog is None
@@ -42,7 +42,7 @@ def test_capability_catalog_activates_independently_of_capability_families(tmp_p
     catalog_path.parent.mkdir(parents=True, exist_ok=True)
     catalog_path.write_text("capabilities: {}\n", encoding="utf-8")
 
-    layers = resolve_optional_layers(tmp_path)
+    layers = detect_optional_layers(tmp_path)
 
     assert layers.capability_catalog == catalog_path
     assert layers.capability_families is None
@@ -54,7 +54,7 @@ def test_p1_layer_active_when_any_one_of_its_five_files_exists(tmp_path: Path) -
     host_contracts.parent.mkdir(parents=True, exist_ok=True)
     host_contracts.write_text("hosts: {}\n", encoding="utf-8")
 
-    layers = resolve_optional_layers(tmp_path)
+    layers = detect_optional_layers(tmp_path)
 
     assert layers.p1_layer_active is True
     # p1_layer_active is a single bool covering all 5 files (any-of), not per-file paths --
@@ -68,22 +68,54 @@ def test_release_contract_active_flag(tmp_path: Path) -> None:
     release_contract.parent.mkdir(parents=True, exist_ok=True)
     release_contract.write_text("version: 1\n", encoding="utf-8")
 
-    layers = resolve_optional_layers(tmp_path)
+    layers = detect_optional_layers(tmp_path)
 
     assert layers.release_contract == release_contract
 
 
 def test_composition_runtime_matches_the_standalone_helper(tmp_path: Path) -> None:
-    """resolve_optional_layers must agree with _composition_runtime_path's own
+    """detect_optional_layers must agree with _composition_runtime_path's own
     canonical-vs-legacy resolution, not re-derive it a second, possibly-inconsistent way."""
     _write_minimal_skills_yaml(tmp_path)
     legacy_path = _composition_runtime_path(tmp_path)
     legacy_path.parent.mkdir(parents=True, exist_ok=True)
     legacy_path.write_text("schema_version: 1\n", encoding="utf-8")
 
-    layers = resolve_optional_layers(tmp_path)
+    layers = detect_optional_layers(tmp_path)
 
     assert layers.composition_runtime == legacy_path
+
+
+def test_composition_runtime_resolves_through_canonical_shape_with_skills_d_fragments(
+    tmp_path: Path,
+) -> None:
+    """Coverage gap closed after the full-system review: no prior test exercised
+    scripts/registry/skills.d/ fragments and detect_optional_layers together, even
+    though detect_optional_layers's composition_runtime field depends on
+    _composition_runtime_path's canonical-shape detection, which now reads through
+    schema.py's fragment-aware, cached load_registry_raw instead of a raw file read.
+    A canonical-shape skills.yaml with an EMPTY inline `skills:` mapping, whose only
+    real skill comes from a skills.d/ fragment, must still resolve composition_runtime
+    to skills.yaml itself (canonical shape), not fall back to the legacy standalone
+    composition_runtime.yaml path -- proving the fragment merge and the shape
+    detection agree with each other through the shared cache.
+    """
+    from scripts.registry.manifest_merge import skills_fragments_dir
+
+    (tmp_path / "skills.yaml").write_text(
+        "schema_version: 1\nmanifest_kind: canonical\ncontracts: {}\nskills: {}\n",
+        encoding="utf-8",
+    )
+    fragments_dir = skills_fragments_dir(tmp_path)
+    fragments_dir.mkdir(parents=True)
+    (fragments_dir / "fragment-skill.yaml").write_text(
+        "fragment-skill:\n  path: fragment-skill\n", encoding="utf-8"
+    )
+
+    layers = detect_optional_layers(tmp_path)
+
+    assert layers.composition_runtime == tmp_path / "skills.yaml"
+    assert layers.composition_contracts == tmp_path / "skills.yaml"
 
 
 def test_real_repo_has_every_optional_layer_active() -> None:
@@ -91,7 +123,7 @@ def test_real_repo_has_every_optional_layer_active() -> None:
     reflects reality, not just synthetic fixtures."""
     root = Path(__file__).resolve().parents[2]
 
-    layers = resolve_optional_layers(root)
+    layers = detect_optional_layers(root)
 
     assert layers.host_contracts is not None
     assert layers.capability_catalog is not None

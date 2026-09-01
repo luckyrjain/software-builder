@@ -53,7 +53,7 @@ from scripts.registry.manifest import validate_manifest
 from scripts.registry.manifest_merge import merge_registry_yaml, skills_fragments_dir
 from scripts.registry.p1_validation import validate_p1_contracts
 from scripts.registry.runtime_manifest import validate_runtime_manifest
-from scripts.registry.schema import clear_registry_cache
+from scripts.registry.schema import clear_registry_cache, load_registry_raw
 from scripts.release_contract import validate_release_contract
 from scripts.yaml_safety import load_unique_yaml_file
 
@@ -64,7 +64,7 @@ def _collect_outputs(root: Path) -> dict[Path, str]:
     registry = load_registry(root)
     descriptions = load_descriptions(root, registry)
     deprecated = load_deprecated_skills(root, registry)
-    layers = resolve_optional_layers(root)
+    layers = detect_optional_layers(root)
     outputs: dict[Path, str] = {}
     if skills_fragments_dir(root).is_dir():
         # skills.yaml's `skills:` mapping is authored one-per-file under
@@ -196,7 +196,14 @@ def _capability_families_path(root: Path) -> Path:
 def _composition_runtime_path(root: Path) -> Path:
     manifest_path = root / "skills.yaml"
     try:
-        raw = load_unique_yaml_file(manifest_path)
+        # load_registry_raw, not load_unique_yaml_file directly: this is the same
+        # skills.yaml read schema.py's cache already exists for -- reading it
+        # uncached here would silently reintroduce the exact per-invocation
+        # re-read-and-reparse cost that cache was built to eliminate, just for
+        # shape detection instead of registry content (full canonical-shape
+        # detection is unaffected: load_registry_raw only adds/merges the
+        # `skills` key, never touches `manifest_kind`/`contracts`).
+        raw = load_registry_raw(manifest_path)
     except FileNotFoundError:
         return root / "scripts" / "registry" / "composition_runtime.yaml"
     except (OSError, yaml.YAMLError):
@@ -241,6 +248,14 @@ class OptionalLayers:
 
     A `None` field means that layer is inactive for this root (an optional file it
     depends on doesn't exist); a `Path` means it's active, at that path.
+
+    Not memoized like schema.py's `load_registry_raw` cache -- `detect_optional_layers`
+    recomputes on every call (a handful of cheap `Path.is_file()` checks). It's named
+    "detect", not "resolve", specifically to avoid implying it shares that cache's
+    "computed once, invalidated via clear_registry_cache()" contract; it doesn't, and
+    doesn't need to for its own fields. Its one indirect dependency on the cache is
+    `_composition_runtime_path`, which reads skills.yaml's shape via the cached
+    `load_registry_raw` rather than a raw read of its own.
     """
 
     host_contracts: Path | None
@@ -252,7 +267,7 @@ class OptionalLayers:
     p1_layer_active: bool
 
 
-def resolve_optional_layers(root: Path) -> OptionalLayers:
+def detect_optional_layers(root: Path) -> OptionalLayers:
     def active(path: Path) -> Path | None:
         return path if path.is_file() else None
 
@@ -268,7 +283,7 @@ def resolve_optional_layers(root: Path) -> OptionalLayers:
 
 
 def _validate_for_generate(root: Path) -> list[str]:
-    layers = resolve_optional_layers(root)
+    layers = detect_optional_layers(root)
     errors = validate_registry(root)
     if layers.host_contracts is not None:
         errors.extend(validate_host_adapter_interface(root))
@@ -282,7 +297,7 @@ def _validate_for_generate(root: Path) -> list[str]:
                 families_path=layers.capability_families,
             )
         )
-    raw_manifest = load_unique_yaml_file(root / "skills.yaml")
+    raw_manifest = load_registry_raw(root / "skills.yaml")
     if has_canonical_manifest_shape(raw_manifest):
         errors.extend(validate_manifest(root))
     if layers.p1_layer_active:
@@ -303,7 +318,15 @@ def _validate_all(root: Path) -> list[str]:
     # plus integrated runtime and host-portability validation. Portability is
     # intentionally kept out of the mutating generate path because it checks
     # generated Cursor/Kiro surfaces that `generate` may need to repair.
-    layers = resolve_optional_layers(root)
+    #
+    # `layers` here and _validate_for_generate's own internal `layers` local are TWO
+    # independent detect_optional_layers(root) calls, not one value threaded through --
+    # same name, same call expression, deliberately not deduplicated (an earlier attempt
+    # to pass this one down as a parameter broke a test that monkeypatches
+    # _validate_for_generate with its original single-argument signature). Both compute
+    # the same result from an unchanged filesystem, so this is redundant but not a
+    # correctness risk -- don't read the shared name as evidence they're the same object.
+    layers = detect_optional_layers(root)
     errors = _validate_for_generate(root)
     if layers.p1_layer_active:
         errors.extend(validate_runtime_manifest(root))
