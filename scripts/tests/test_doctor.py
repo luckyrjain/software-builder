@@ -498,3 +498,135 @@ def test_doctor_ready_for_github_writes_with_paginated_readback(capsys) -> None:
 
     assert code == 0
     assert "pr-review: READY" in capsys.readouterr().out
+
+
+def test_apply_host_verification_downgrades_ready_to_unverified_host() -> None:
+    from scripts.doctor import SkillStatus, _apply_host_verification
+
+    entry = _make_entry(required=[])
+    status = SkillStatus(skill_id="demo", entry=entry, status="READY", capability_status="READY")
+
+    result = _apply_host_verification(status, host_id="cursor", host_verification="UNVERIFIED")
+
+    assert result.status == "UNVERIFIED_HOST"
+    assert result.capability_status == "READY"
+    assert result.host_id == "cursor"
+    assert result.host_verification == "UNVERIFIED"
+
+
+def test_apply_host_verification_downgrades_degraded_to_conflicted_host_evidence() -> None:
+    from scripts.doctor import SkillStatus, _apply_host_verification
+
+    entry = _make_entry(required=[])
+    status = SkillStatus(skill_id="demo", entry=entry, status="DEGRADED", capability_status="DEGRADED")
+
+    result = _apply_host_verification(status, host_id="cursor", host_verification="CONFLICTED")
+
+    assert result.status == "CONFLICTED_HOST_EVIDENCE"
+
+
+def test_apply_host_verification_leaves_verified_host_untouched() -> None:
+    from scripts.doctor import SkillStatus, _apply_host_verification
+
+    entry = _make_entry(required=[])
+    status = SkillStatus(skill_id="demo", entry=entry, status="READY", capability_status="READY")
+
+    result = _apply_host_verification(status, host_id="cursor", host_verification="VERIFIED")
+
+    assert result.status == "READY"
+    assert result.host_id == "cursor"
+
+
+def test_apply_host_verification_does_not_override_blocked() -> None:
+    """A concrete missing-capability BLOCKED is more informative than a vague host-unverified
+    note, and must not be masked by it."""
+    from scripts.doctor import SkillStatus, _apply_host_verification
+
+    entry = _make_entry(required=["some.capability"])
+    status = SkillStatus(
+        skill_id="demo",
+        entry=entry,
+        status="BLOCKED",
+        capability_status="BLOCKED",
+        missing_required=["some.capability"],
+    )
+
+    result = _apply_host_verification(status, host_id="cursor", host_verification="UNVERIFIED")
+
+    assert result.status == "BLOCKED"
+
+
+def test_apply_host_verification_does_not_override_version_mismatch() -> None:
+    from scripts.doctor import SkillStatus, _apply_host_verification
+
+    entry = _make_entry(required=[])
+    status = SkillStatus(
+        skill_id="demo", entry=entry, status="VERSION_MISMATCH", capability_status="READY"
+    )
+
+    result = _apply_host_verification(status, host_id="cursor", host_verification="UNVERIFIED")
+
+    assert result.status == "VERSION_MISMATCH"
+
+
+def test_render_skill_status_shows_host_and_capability_result_when_downgraded() -> None:
+    from scripts.doctor import SkillStatus, render_skill_status
+
+    entry = _make_entry(required=[])
+    status = SkillStatus(
+        skill_id="demo",
+        entry=entry,
+        status="UNVERIFIED_HOST",
+        capability_status="READY",
+        host_id="cursor",
+        host_verification="UNVERIFIED",
+    )
+
+    rendered = render_skill_status(status)
+
+    assert "host: cursor (verification: UNVERIFIED)" in rendered
+    assert "capability result: READY (host not yet verified)" in rendered
+
+
+def test_cmd_doctor_agent_flag_derives_available_and_verification_from_registry(capsys) -> None:
+    from scripts.doctor import cmd_doctor
+    from scripts.registry.compatibility_resolver import available_capabilities, resolve_host
+    from scripts.registry.host_registry import parse_host_registry
+
+    host_registry = parse_host_registry(ROOT / "agent-hosts.yaml")
+    host = resolve_host(host_registry, "cursor")
+
+    code = cmd_doctor(
+        ROOT,
+        skill_filter="pr-review",
+        available=set(available_capabilities(host)),
+        install_roots=[Path("/nonexistent")],
+        host_id="cursor",
+        host_verification=host.verification,
+    )
+
+    output = capsys.readouterr().out
+    assert "host: cursor (verification: UNVERIFIED)" in output
+    # Every capability is UNKNOWN in the checked-in agent-hosts.yaml today, so pr-review's real
+    # any-of GitHub/GitLab read requirement is never satisfiable -- this asserts BLOCKED wins
+    # over UNVERIFIED_HOST for a real skill with real capability requirements, exercised end to
+    # end against the actual registries rather than synthetic fixtures.
+    assert "pr-review: BLOCKED" in output
+    assert code == 1
+
+
+def test_main_rejects_agent_and_available_together() -> None:
+    from scripts.doctor import main
+
+    code = main(["--agent", "cursor", "--available", "host.repository.read"])
+
+    assert code == 2
+
+
+def test_main_agent_unknown_host_fails_with_message(capsys) -> None:
+    from scripts.doctor import main
+
+    code = main(["--agent", "not-a-real-host", "--skill", "pr-review"])
+
+    assert code == 2
+    assert "unknown host 'not-a-real-host'" in capsys.readouterr().err

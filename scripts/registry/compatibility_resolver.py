@@ -1,8 +1,10 @@
 """Host x skill compatibility resolution (Candidate 4 of the universal-agent-compatibility design,
 docs/superpowers/specs/2026-08-31-universal-agent-compatibility-design.md).
 
-Reuses doctor.py's existing `_capability_status` engine (skills.yaml's required/optional/any_of
-capability resolution semantics) rather than building a second one, per that spec's Section 11.
+Reuses scripts/registry/capability_engine.py's `capability_status` (skills.yaml's required/optional/
+any_of capability resolution semantics, originally doctor.py's private helper, extracted so this
+module and doctor.py -- which now imports this module directly for Candidate 10's --agent support --
+don't import each other) rather than building a second one, per that spec's Section 11.
 
 Scope of this first pass, deliberately bounded (documented rather than silently assumed):
 
@@ -24,7 +26,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from scripts.doctor import _capability_status
+from scripts.registry.capability_engine import capability_status as _capability_status
 from scripts.registry.host_registry import HostRegistry, HostSpec
 from scripts.registry.models import CapabilityPath, Registry, SkillEntry
 
