@@ -26,6 +26,11 @@ from scripts.registry.composition_runtime import (
     validate_composition_runtime,
 )
 from scripts.registry.crosscheck import find_stale_generated_adapters, validate_registry
+from scripts.registry.generate_agent_compatibility import (
+    load_host_registry_and_registry,
+    render_agent_compatibility_doc,
+    update_readme_agent_compatibility_section,
+)
 from scripts.registry.generate_compatibility import render_compatibility_matrix
 from scripts.registry.generate_cursor import generate_cursor_rules
 from scripts.registry.generate_docs import (
@@ -69,10 +74,18 @@ def _collect_outputs(root: Path) -> dict[Path, str]:
     outputs.update(generate_cursor_rules(root, registry, descriptions, deprecated))
     outputs.update(generate_kiro_steering(root, registry, deprecated))
     outputs.update(generate_makefile_roster(root, registry))
-    outputs[root / "README.md"] = update_readme_badge(
+    readme = update_readme_badge(
         (root / "README.md").read_text(encoding="utf-8"),
         len(registry.skills),
     )
+    agent_hosts_path = root / "agent-hosts.yaml"
+    if agent_hosts_path.is_file():
+        host_registry, agent_registry = load_host_registry_and_registry(root)
+        readme = update_readme_agent_compatibility_section(readme, host_registry)
+        outputs[root / "docs" / "agent-compatibility.md"] = render_agent_compatibility_doc(
+            host_registry, agent_registry
+        )
+    outputs[root / "README.md"] = readme
     outputs[root / "docs" / "REPOSITORY.md"] = update_repository_table(
         (root / "docs" / "REPOSITORY.md").read_text(encoding="utf-8"),
         registry,

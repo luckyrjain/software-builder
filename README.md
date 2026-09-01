@@ -150,6 +150,18 @@ Each skill directory has three entry points:
 The canonical cross-harness guidance, including the neutral handoff envelope, is in
 [loop-task-implementer/reference/platform-adapters.md](loop-task-implementer/reference/platform-adapters.md).
 
+### Verification status
+<!-- agent-compatibility:start -->
+
+Canonical, evidence-gated host compatibility (see [docs/agent-compatibility.md](docs/agent-compatibility.md) for full detail):
+
+| Host | Verification | Maintainer support |
+|------|--------------|---------------------|
+| claude | UNVERIFIED | BEST_EFFORT |
+| cursor | UNVERIFIED | BEST_EFFORT |
+| kiro | UNVERIFIED | BEST_EFFORT |
+<!-- agent-compatibility:end -->
+
 ## Install
 
 Install all skills or select only the workflow you need:

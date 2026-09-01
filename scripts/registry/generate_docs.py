@@ -21,6 +21,27 @@ CHANGELOG_TOC_START = "<!-- changelog-toc:start -->"
 CHANGELOG_TOC_END = "<!-- changelog-toc:end -->"
 
 
+def escape_table_cell(value: object) -> str:
+    """Escape a dynamic value for safe interpolation into a generated Markdown table cell, so
+    untrusted/dynamic content (a skill description, a free-text evidence reference, ...) cannot
+    change the table's shape or escape into Markdown link/image syntax. Shared by every
+    generate_*.py module that renders a table -- see generate_compatibility.py and
+    generate_agent_compatibility.py -- rather than each keeping its own copy.
+    """
+    escaped: list[str] = []
+    for char in str(value):
+        codepoint = ord(char)
+        if char == "\\":
+            escaped.append("\\\\")
+        elif char in {"|", "`", "[", "]", "(", ")", "<", ">"}:
+            escaped.append("\\" + char)
+        elif codepoint < 0x20 or codepoint == 0x7F:
+            escaped.append(f"\\x{codepoint:02x}")
+        else:
+            escaped.append(char)
+    return "".join(escaped)
+
+
 def update_marker_block(text: str, start: str, end: str, content: str) -> str:
     pattern = re.compile(re.escape(start) + r".*?" + re.escape(end), re.DOTALL)
     replacement = f"{start}{content}{end}"

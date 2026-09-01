@@ -9,6 +9,7 @@ from scripts.registry.canonical_manifest import (
     validate_canonical_manifest,
 )
 from scripts.registry.composition_contracts import load_contracts
+from scripts.registry.generate_docs import escape_table_cell
 from scripts.registry.host_adapter import HOSTS, capability_support, validate_host_adapter_interface
 from scripts.registry.load import load_registry
 from scripts.release_info import read_distribution_version
@@ -100,20 +101,7 @@ def _load_optional_canonical_manifest(root: Path) -> dict | None:
     return load_canonical_manifest(root)
 
 
-def _cell(value: object) -> str:
-    """Escape dynamic values so generated Markdown cannot change its table shape."""
-    escaped: list[str] = []
-    for char in str(value):
-        codepoint = ord(char)
-        if char == "\\":
-            escaped.append("\\\\")
-        elif char in {"|", "`", "[", "]", "(", ")", "<", ">"}:
-            escaped.append("\\" + char)
-        elif codepoint < 0x20 or codepoint == 0x7F:
-            escaped.append(f"\\x{codepoint:02x}")
-        else:
-            escaped.append(char)
-    return "".join(escaped)
+_cell = escape_table_cell
 
 
 def _required_host_families(required: list[str]) -> set[str]:
