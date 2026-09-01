@@ -1,0 +1,49 @@
+mysql-to-postgres-sql:
+  path: mysql-to-postgres-sql
+  category: migration
+  invocation: ambient
+  hosts:
+    cursor:
+      discovery: rule
+    claude:
+      install: true
+    kiro:
+      discovery: manual
+  install:
+    requires: []
+  capabilities:
+    required:
+    - host.repository.read_write
+    optional:
+    - name: gitlab.get_merge_request
+      enables: migration MR review handoff
+    degraded_modes:
+      gitlab.get_merge_request: skip the migration MR review handoff; still produce
+        the SQL rewrite/scan report standalone
+  lint:
+    skill_md_max_lines: 180
+    target: mysql-to-postgres-sql
+  risk_class:
+  - repository-write
+  version: 1.6.0
+  type: leaf
+  authority: repository-write
+  permissions:
+    repository: write
+    external_actions: read
+    unattended: false
+    merge: false
+  supported_hosts:
+  - chatgpt
+  - claude
+  - codex
+  - cursor
+  - generic
+  - kiro
+  entrypoint: SKILL.md
+  output_contract:
+    produces:
+    - implementation_pr
+    produce_fields: {}
+  dependencies: []
+  version_source: skill_frontmatter_legacy_numeric

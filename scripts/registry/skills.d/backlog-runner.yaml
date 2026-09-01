@@ -1,0 +1,50 @@
+backlog-runner:
+  path: backlog-runner
+  category: automation
+  invocation: automation-only
+  hosts:
+    cursor:
+      discovery: rule
+    claude:
+      install: true
+    kiro:
+      discovery: manual
+  install:
+    requires:
+    - loop-task-implementer
+  capabilities:
+    required:
+    - scheduler.cron.trigger
+    - host.issue_tracker.read
+    optional:
+    - name: loop-task-implementer.invoke
+      enables: interactive single-task mode
+  lint:
+    skill_md_max_lines: 180
+    target: backlog-runner
+  risk_class:
+  - unattended
+  - merge
+  version: 1.0.0
+  type: trigger
+  authority: read-only
+  permissions:
+    repository: write
+    external_actions: write
+    unattended: true
+    merge: true
+  supported_hosts:
+  - chatgpt
+  - claude
+  - codex
+  - cursor
+  - generic
+  - kiro
+  entrypoint: SKILL.md
+  output_contract:
+    produces:
+    - implementation_pr
+    produce_fields: {}
+  dependencies:
+  - loop-task-implementer
+  version_source: skill_frontmatter_legacy_numeric

@@ -1,0 +1,90 @@
+pr-review:
+  path: pr-review
+  category: review
+  invocation: ambient
+  hosts:
+    cursor:
+      discovery: rule
+    claude:
+      install: true
+    kiro:
+      discovery: manual
+  install:
+    requires: []
+  composition:
+    escalation_targets:
+    - incident-rca
+    - k8s-overprovisioning-datadog
+    - security-review
+  capabilities:
+    required: []
+    optional: []
+    any_of:
+    - name: GitLab read
+      required:
+      - gitlab.get_merge_request
+      - gitlab.get_merge_request_diffs
+      optional:
+      - name: gitlab.create_merge_request_thread
+        enables: inline diff posting
+      - name: gitlab.create_note
+        enables: summary-only MR posting
+    - name: GitHub read
+      required:
+      - github.get_pull_request
+      - github.get_pull_request_files
+      optional:
+      - name: github.list_pull_request_review_comments
+        enables: paginated complete review-comment readback required for safe posting
+      - name: github.list_issue_comments
+        enables: paginated complete issue-comment readback required for safe posting
+      - name: github.create_pull_request_comment
+        enables: GitHub inline PR comments
+      - name: github.create_issue_comment
+        enables: GitHub PR summary comments
+    degraded_modes:
+      gitlab.create_merge_request_thread: summary-only or chat-only posting
+      gitlab.create_note: chat-only posting
+      github.create_pull_request_comment: summary-only or chat-only posting
+      github.create_issue_comment: chat-only posting
+      github.list_pull_request_review_comments: chat-only posting
+      github.list_issue_comments: chat-only posting
+  lint:
+    skill_md_max_lines: 180
+    target: pr-review
+  risk_class:
+  - posting
+  version: 1.2.0
+  type: leaf
+  authority: comment
+  permissions:
+    repository: read
+    external_actions: write
+    unattended: false
+    merge: false
+  supported_hosts:
+  - chatgpt
+  - claude
+  - codex
+  - cursor
+  - generic
+  - kiro
+  entrypoint: SKILL.md
+  output_contract:
+    produces:
+    - mr_review_report
+    produce_fields:
+      mr_review_report:
+      - review_metadata
+      - posted
+      - head_sha
+      - posting_mode
+      - integrated_revision
+      - assessment_target
+      - normalized_decision
+      - findings
+      - conditions
+      - required_actions
+      - evidence_refs
+  dependencies: []
+  version_source: skill_frontmatter_legacy_numeric

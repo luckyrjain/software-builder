@@ -1,0 +1,39 @@
+deployment-risk-review:
+  path: deployment-risk-review
+  category: review
+  extends: read-only-leaf-review
+  install:
+    requires: []
+  composition:
+    escalation_targets:
+    - release-readiness-checker
+    - incident-triage-agent
+  capabilities:
+    required:
+    - host.report.write
+    optional: []
+  lint:
+    skill_md_max_lines: 180
+    target: deployment-risk-review
+  version: 1.1.0
+  type: leaf
+  permissions:
+    repository: read
+    external_actions: none
+    unattended: false
+    merge: false
+  output_contract:
+    produces:
+    - deployment_risk_report
+    produce_fields:
+      deployment_risk_report:
+      - title
+      - risk
+      - deployment_confidence
+      - assessment_target
+      - normalized_decision
+      - findings
+      - conditions
+      - required_actions
+      - evidence_refs
+  dependencies: []

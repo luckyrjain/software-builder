@@ -102,3 +102,26 @@ def parse_forward_escalation_matrix(markdown: str) -> list[tuple[str, str, str]]
             raise ValueError(f"cross-skill-escalation.md: empty From/To side in row: {row!r}")
         edges.append((reanchor_relative_links(trigger), source, target))
     return edges
+
+
+def filter_deprecated_edges(
+    edges: list[tuple[str, str, str]],
+    deprecated_skill_ids: set[str],
+) -> list[tuple[str, str, str]]:
+    """Drop any escalation edge that routes to or from a deprecated skill.
+
+    A deprecated skill is mid-removal (see docs/skill-framework/shared/deprecation-policy.md):
+    it is still registered and still directly invocable through its compatibility window, but
+    an ambient-invocation router must never actively dispatch or escalate to it, and a
+    still-active skill must never be advertised as an escalation target that immediately
+    hands off to something already scheduled for removal. Without this filter, a deprecated
+    skill stayed a full routing/escalation candidate for its entire 90-day removal window
+    (and beyond, since nothing ever re-checked it).
+    """
+    if not deprecated_skill_ids:
+        return edges
+    return [
+        (trigger, source, target)
+        for trigger, source, target in edges
+        if source not in deprecated_skill_ids and target not in deprecated_skill_ids
+    ]

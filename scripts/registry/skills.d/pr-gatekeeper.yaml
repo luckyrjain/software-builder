@@ -1,0 +1,69 @@
+pr-gatekeeper:
+  path: pr-gatekeeper
+  category: review
+  invocation: automation-only
+  hosts:
+    cursor:
+      discovery: rule
+    claude:
+      install: true
+    kiro:
+      discovery: manual
+  install:
+    requires:
+    - pr-review
+  composition:
+    invokes:
+    - pr-review
+    escalation_targets:
+    - pr-review
+  capabilities:
+    required:
+    - gitlab.get_merge_request
+    optional:
+    - name: gitlab.create_merge_request_thread
+      enables: unattended inline posting when policy allows
+    degraded_modes:
+      gitlab.create_merge_request_thread: fall back to summary-only or chat-only posting
+        per auto-post-policy.md
+  lint:
+    skill_md_max_lines: 180
+    target: pr-gatekeeper
+  risk_class:
+  - posting
+  - unattended
+  version: 1.1.0
+  type: trigger
+  authority: comment
+  permissions:
+    repository: read
+    external_actions: write
+    unattended: true
+    merge: false
+  supported_hosts:
+  - chatgpt
+  - claude
+  - codex
+  - cursor
+  - generic
+  - kiro
+  entrypoint: SKILL.md
+  output_contract:
+    produces:
+    - mr_review_report
+    produce_fields:
+      mr_review_report:
+      - review_metadata
+      - posted
+      - head_sha
+      - posting_mode
+      - integrated_revision
+      - assessment_target
+      - normalized_decision
+      - findings
+      - conditions
+      - required_actions
+      - evidence_refs
+  dependencies:
+  - pr-review
+  version_source: skill_frontmatter_legacy_numeric

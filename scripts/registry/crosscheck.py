@@ -9,6 +9,7 @@ from scripts.registry.frontmatter import load_skill_frontmatter
 from scripts.registry.canonical_manifest import has_canonical_manifest_shape
 from scripts.registry.graph import detect_cycles
 from scripts.registry.install_targets_sync import validate_install_targets
+from scripts.registry.load import load_deprecated_skills
 from scripts.registry.models import Registry
 from scripts.registry.routing_sync import validate_skill_routing_references
 from scripts.registry.schema import AUTOMATION_ONLY_INVOCATION, parse_registry
@@ -48,9 +49,26 @@ def _validate_skill_path(root: Path, skill_id: str, entry_path: str) -> list[str
     return errors
 
 
+def _adapter_active_skill_ids(root: Path, registry: Registry) -> set[str]:
+    """Registered skill ids that should still have generated Cursor/Kiro adapters.
+
+    A skill marked deprecated (docs/skill-framework/shared/deprecation-policy.md) stays
+    registered through its compatibility window, but loses its ambient-invocation surface
+    immediately -- generate_cursor.py/generate_kiro.py stop (re)emitting its adapter, and
+    this treats it the same as an unregistered skill so any copy already on disk gets
+    pruned. Reuses load_deprecated_skills's own tolerant frontmatter handling (a skill
+    whose SKILL.md can't be read or parsed is kept active, not pruned) rather than
+    re-walking the registry with separate, easily-inconsistent error handling -- that
+    mismatch is `validate`'s job to report, not this one's.
+    """
+    deprecated = load_deprecated_skills(root, registry)
+    return set(registry.skills) - set(deprecated)
+
+
 def find_stale_generated_adapters(root: Path, registry: Registry) -> list[Path]:
-    """Return generated adapter files whose skill id is no longer in the registry."""
-    active = set(registry.skills.keys())
+    """Return generated adapter files whose skill id is no longer in the registry, or
+    that belongs to a skill now marked deprecated (see _adapter_active_skill_ids)."""
+    active = _adapter_active_skill_ids(root, registry)
     stale: list[Path] = []
     for pattern in (".cursor/rules/*.mdc", ".kiro/steering/*.md"):
         for path in sorted(root.glob(pattern)):

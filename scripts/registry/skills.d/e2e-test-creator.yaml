@@ -1,0 +1,57 @@
+e2e-test-creator:
+  path: e2e-test-creator
+  category: testing
+  invocation: ambient
+  hosts:
+    cursor:
+      discovery: rule
+    claude:
+      install: true
+    kiro:
+      discovery: manual
+  install:
+    requires: []
+  capabilities:
+    required:
+    - host.repository.read_write
+    optional:
+    - name: host.browser.automation
+      enables: UI journey execution
+    - name: host.test_runner.execute
+      enables: generated e2e verification
+    degraded_modes:
+      host.browser.automation: cannot execute generated browser journeys locally;
+        ship them UNVERIFIED
+      host.test_runner.execute: tests are written but left UNVERIFIED; run-until-green
+        iteration cannot happen locally
+  lint:
+    skill_md_max_lines: 180
+    target: e2e-test-creator
+  risk_class:
+  - repository-write
+  version: 1.1.0
+  type: leaf
+  authority: repository-write
+  permissions:
+    repository: write
+    external_actions: read
+    unattended: false
+    merge: false
+  supported_hosts:
+  - chatgpt
+  - claude
+  - codex
+  - cursor
+  - generic
+  - kiro
+  entrypoint: SKILL.md
+  output_contract:
+    produces:
+    - test_suite
+    produce_fields:
+      test_suite:
+      - tests
+      - framework
+      - target_path
+  dependencies: []
+  version_source: skill_frontmatter_legacy_numeric

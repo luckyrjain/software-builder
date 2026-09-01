@@ -1321,3 +1321,67 @@ def test_resolve_registry_profiles_noop_without_profiles_key() -> None:
         "skills": {"squad-map": {"path": "squad-map", "invocation": "ambient"}},
     }
     assert resolve_registry_profiles(raw) is raw
+
+
+def test_parse_changelog_sections_lists_headings_in_order_and_skips_fenced_code() -> None:
+    from scripts.registry.generate_docs import parse_changelog_sections
+
+    changelog = """# Changelog
+
+## Platform
+
+### An entry (2026-01-01)
+
+```
+## not a real heading, inside a fence
+```
+
+- bullet
+
+## squad-map
+
+### Another entry (2026-01-02)
+
+- bullet
+
+## Platform
+"""
+    assert parse_changelog_sections(changelog) == ["Platform", "squad-map", "Platform"]
+
+
+def test_render_changelog_toc_disambiguates_repeated_section_names() -> None:
+    from scripts.registry.generate_docs import render_changelog_toc
+
+    toc = render_changelog_toc(["Platform", "squad-map", "Platform"])
+
+    assert toc == (
+        "- [Platform](#platform)\n"
+        "- [squad-map](#squad-map)\n"
+        "- [Platform](#platform-1)\n"
+    )
+
+
+def test_update_changelog_toc_replaces_marker_block_only() -> None:
+    from scripts.registry.generate_docs import (
+        CHANGELOG_TOC_END,
+        CHANGELOG_TOC_START,
+        update_changelog_toc,
+    )
+
+    changelog = (
+        f"# Changelog\n\nintro\n\n{CHANGELOG_TOC_START}\nstale\n{CHANGELOG_TOC_END}\n\n"
+        "## squad-map\n\n### v1 (2026-01-01)\n\n- did a thing\n"
+    )
+    updated = update_changelog_toc(changelog)
+
+    assert "stale" not in updated
+    assert "- [squad-map](#squad-map)" in updated
+    assert "intro" in updated
+    assert "## squad-map" in updated  # content outside the marker block is untouched
+
+
+def test_update_changelog_toc_raises_when_markers_missing() -> None:
+    from scripts.registry.generate_docs import update_changelog_toc
+
+    with pytest.raises(ValueError, match="missing marker block"):
+        update_changelog_toc("# Changelog\n\n## squad-map\n\n### v1 (2026-01-01)\n\n- x\n")
