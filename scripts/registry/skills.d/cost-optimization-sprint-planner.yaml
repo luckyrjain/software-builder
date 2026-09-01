@@ -1,0 +1,54 @@
+cost-optimization-sprint-planner:
+  path: cost-optimization-sprint-planner
+  category: platform
+  invocation: ambient
+  hosts:
+    cursor:
+      discovery: rule
+    claude:
+      install: true
+    kiro:
+      discovery: manual
+  install:
+    requires:
+    - k8s-overprovisioning-datadog
+    - squad-map
+  capabilities:
+    required:
+    - host.filesystem.read
+    optional:
+    - name: k8s-overprovisioning-datadog.invoke
+      enables: single-deployment rightsizing refresh
+  lint:
+    skill_md_max_lines: 180
+    target: cost-optimization-sprint-planner
+  risk_class:
+  - read-only
+  version: 1.0.0
+  type: orchestrator
+  authority: read-only
+  permissions:
+    repository: read
+    external_actions: none
+    unattended: false
+    merge: false
+  supported_hosts:
+  - chatgpt
+  - claude
+  - codex
+  - cursor
+  - generic
+  - kiro
+  entrypoint: SKILL.md
+  output_contract:
+    produces:
+    - cost_sweep_rollup
+    produce_fields:
+      cost_sweep_rollup:
+      - items
+      - generated_at
+      - source_revision
+  dependencies:
+  - k8s-overprovisioning-datadog
+  - squad-map
+  version_source: skill_frontmatter_legacy_numeric

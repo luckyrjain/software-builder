@@ -11,15 +11,34 @@ import argparse
 import fcntl
 import json
 import os
+import re
 import subprocess
 import sys
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
+_SLUG_MAX_LENGTH = 128
+
+
+def _safe_slug(value: str) -> str:
+    """Sanitize an untrusted string for use as a filename/path segment.
+
+    Follows docs/skill-framework/shared/safe-output.md Rule 1: keep only
+    ``[A-Za-z0-9._-]`` (replacing every other character, including path
+    separators and null bytes, with ``_``), collapse a result that is empty
+    or all dots, neutralize a leading ``-``, and cap the length.
+    """
+    slug = re.sub(r"[^A-Za-z0-9._-]", "_", value)
+    if not slug or set(slug) == {"."}:
+        slug = "_"
+    elif slug.startswith("-"):
+        slug = "_" + slug[1:]
+    return slug[:_SLUG_MAX_LENGTH]
+
 
 def _store_path(root: Path, project: str, merge_request_iid: int) -> Path:
-    safe_project = project.replace("/", "__")
+    safe_project = _safe_slug(project)
     return root / safe_project / f"mr-{merge_request_iid}.json"
 
 
@@ -27,7 +46,7 @@ def _store_path(root: Path, project: str, merge_request_iid: int) -> Path:
 def mr_lock(root: Path, project: str, merge_request_iid: int):
     lock_dir = root / ".locks"
     lock_dir.mkdir(parents=True, exist_ok=True)
-    safe_project = project.replace("/", "__")
+    safe_project = _safe_slug(project)
     lock_path = lock_dir / f"{safe_project}-mr-{merge_request_iid}.lock"
     with open(lock_path, "w", encoding="utf-8") as lock_fh:
         fcntl.flock(lock_fh.fileno(), fcntl.LOCK_EX)

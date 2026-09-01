@@ -1,0 +1,39 @@
+resilience-review:
+  path: resilience-review
+  category: review
+  extends: read-only-leaf-review
+  install:
+    requires: []
+  composition:
+    invokes: []
+    escalation_targets: []
+  capabilities:
+    required:
+    - host.report.write
+    optional:
+    - name: host.repository.read
+      enables: repository and runtime/config evidence discovery
+  lint:
+    skill_md_max_lines: 180
+    target: resilience-review
+  version: 1.0.0
+  type: leaf
+  permissions:
+    repository: read
+    external_actions: none
+    unattended: false
+    merge: false
+  output_contract:
+    produces:
+    - resilience_review_report
+    produce_fields:
+      resilience_review_report:
+      - title
+      - verdict
+      - assessment_target
+      - normalized_decision
+      - findings
+      - conditions
+      - required_actions
+      - evidence_refs
+  dependencies: []

@@ -14,7 +14,19 @@
 .PHONY: lint-python
 .PHONY: validate-agent-skills
 .PHONY: validate-hosts
-.PHONY: lint-static lint-suites lint-framework-tests lint-scripts-shellcheck
+.PHONY: lint-static lint-suites lint-framework-tests lint-scripts-shellcheck lint-platform-files
+
+# ALL_SKILLS (the full skill roster) is generated from skills.yaml -- see
+# scripts/registry/generate_makefile_roster.py. Regenerate with `make generate`;
+# `make generate-check` (part of lint-static) fails if this file drifts.
+#
+# `-include`, not `include`: a plain `include` on a missing file aborts Make
+# before any target (even `generate`, the documented recovery command) can
+# run at all -- deleting this generated file would then have no working
+# recovery path. `-include` lets Make continue with ALL_SKILLS undefined;
+# lint-framework's own guard below turns that into a clear, actionable error
+# instead of a silent empty-roster no-op.
+-include make/generated-roster.mk
 
 # Parallelize the dominant pytest suite (scripts/tests/, ~1500 tests) with pytest-xdist
 # when it's installed (it's pinned in requirements.lock). Falls back to serial execution
@@ -274,6 +286,9 @@ setup:
 		python3 -m pip install --user --break-system-packages --require-hashes -r requirements.lock
 	@$(MAKE) setup-hooks
 
+lint-platform-files:
+	@python3 scripts/check_platform_files.py
+
 lint-requirements-lock:
 	@python3 scripts/check_requirements_lock.py
 
@@ -341,6 +356,9 @@ validate-operational-upkeep:
 	@python3 scripts/operational_upkeep.py validate
 	@python3 -m scripts.deprecation_lifecycle
 	@python3 scripts/eval_tier_health.py --format markdown >/dev/null
+	@python3 scripts/check_changelog_placement.py
+	# Advisory only (ADR-0003/0004): always exits 0, never gates lint-static.
+	@python3 scripts/check_golden_staleness.py
 
 doctor:
 	@python3 scripts/doctor.py
@@ -453,7 +471,7 @@ lint: lint-static lint-suites
 # across skills via `make -jN` and, only for the dominant scripts/tests/ suite, within
 # it via pytest-xdist (see PYTEST_XDIST_FLAG above). `make lint` still runs both groups
 # locally, in this order.
-lint-static: validate-registry validate-agent-skills validate-hosts backfill-capabilities-check generate-check validate-evals validate-operational-upkeep lint-framework lint-incident-triage-agent lint-who-owns-x-bot lint-new-hire-guide lint-release-readiness-checker lint-cost-optimization-sprint-planner lint-loop-task-implementer lint-backlog-runner lint-test-writer lint-prd-architect lint-architecture-review lint-system-design lint-api-design-review lint-database-review lint-security-review lint-performance-review lint-capacity-planner lint-observability-review lint-deployment-risk-review lint-dependency-upgrade-review lint-tech-debt-assessor lint-requirements-lock lint-python lint-actions-pinning lint-actions-security verify-install verify-install-all validate-review-contracts lint-scripts-shellcheck
+lint-static: lint-platform-files validate-registry validate-agent-skills validate-hosts backfill-capabilities-check generate-check validate-evals validate-operational-upkeep lint-framework lint-incident-triage-agent lint-who-owns-x-bot lint-new-hire-guide lint-release-readiness-checker lint-cost-optimization-sprint-planner lint-loop-task-implementer lint-backlog-runner lint-test-writer lint-prd-architect lint-architecture-review lint-system-design lint-api-design-review lint-database-review lint-security-review lint-performance-review lint-capacity-planner lint-observability-review lint-deployment-risk-review lint-dependency-upgrade-review lint-tech-debt-assessor lint-requirements-lock lint-python lint-actions-pinning lint-actions-security verify-install verify-install-all validate-review-contracts lint-scripts-shellcheck
 
 lint-scripts-shellcheck:
 	@for f in scripts/*.sh; do \
@@ -1695,6 +1713,8 @@ lint-production-readiness-review:
 	@echo "  ok"
 
 lint-framework:
+	@test -n "$(ALL_SKILLS)" || \
+		{ echo "error: ALL_SKILLS is empty/undefined -- make/generated-roster.mk is missing or stale; run 'make generate' to regenerate it" >&2; exit 1; }
 	@echo "lint-framework: shared docs present"
 	@test -f docs/skill-framework/README.md
 	@for f in confidence-bands cross-skill-escalation post-action-templates \
@@ -1719,7 +1739,7 @@ lint-framework:
 	@grep -q '^## 1\. Required sections' docs/skill-framework/shared/examples-conventions.md
 	@grep -q '^## 2\. Scenario format' docs/skill-framework/shared/examples-conventions.md
 	@grep -q '^## 5\. Anti-patterns' docs/skill-framework/shared/examples-conventions.md
-	@for skill in pr-review pr-gatekeeper incident-rca incident-triage-agent k8s-overprovisioning-datadog domain-comprehension squad-map who-owns-x-bot new-hire-guide release-readiness-checker migration-program-manager mysql-to-postgres-sql loop-task-implementer backlog-runner cost-optimization-sprint-planner weekly-squad-digest prd-architect test-writer unit-test-creator integration-test-creator contract-test-creator e2e-test-creator api-test-creator architecture-review system-design api-design-review database-review security-review performance-review capacity-planner observability-review deployment-risk-review dependency-upgrade-review tech-debt-assessor change-impact-analyzer resilience-review implementation-planner production-readiness-review; do \
+	@for skill in $(ALL_SKILLS); do \
 		test -f $$skill/examples.md || \
 			{ echo "error: missing $$skill/examples.md (examples-conventions)" >&2; exit 1; }; \
 		grep -q '## Invocation' $$skill/examples.md || \
@@ -1768,7 +1788,7 @@ lint-framework:
 	done; \
 	if [ "$$fail" -ne 0 ]; then exit 1; fi
 	@grep -q '| Complete |' docs/skill-framework/README.md
-	@for skill in pr-review pr-gatekeeper incident-rca incident-triage-agent k8s-overprovisioning-datadog domain-comprehension squad-map who-owns-x-bot new-hire-guide release-readiness-checker migration-program-manager mysql-to-postgres-sql loop-task-implementer backlog-runner cost-optimization-sprint-planner weekly-squad-digest prd-architect test-writer unit-test-creator integration-test-creator contract-test-creator e2e-test-creator api-test-creator architecture-review system-design api-design-review database-review security-review performance-review capacity-planner observability-review deployment-risk-review dependency-upgrade-review tech-debt-assessor change-impact-analyzer resilience-review implementation-planner production-readiness-review; do \
+	@for skill in $(ALL_SKILLS); do \
 		grep -q 'skill-framework' $$skill/SETUP.md || \
 			{ echo "error: $$skill/SETUP.md must link to docs/skill-framework" >&2; exit 1; }; \
 		grep -q 'docs/skill-framework/shared/skill-routing.md' $$skill/SKILL.md || \
@@ -1832,7 +1852,7 @@ lint-framework:
 	@echo "lint-framework: all SETUP.md links ok"
 	@echo "lint-framework: cross-agent discovery files (.cursor/rules + .kiro/steering)"
 	@fail=0; \
-	for skill in pr-review pr-gatekeeper incident-rca incident-triage-agent k8s-overprovisioning-datadog domain-comprehension squad-map who-owns-x-bot new-hire-guide release-readiness-checker migration-program-manager mysql-to-postgres-sql loop-task-implementer backlog-runner cost-optimization-sprint-planner weekly-squad-digest prd-architect test-writer unit-test-creator integration-test-creator contract-test-creator e2e-test-creator api-test-creator architecture-review system-design api-design-review database-review security-review performance-review capacity-planner observability-review deployment-risk-review dependency-upgrade-review tech-debt-assessor change-impact-analyzer resilience-review implementation-planner production-readiness-review; do \
+	for skill in $(ALL_SKILLS); do \
 		test -f .cursor/rules/$$skill.mdc || \
 			{ echo "  missing .cursor/rules/$$skill.mdc" >&2; fail=1; }; \
 		test -f .kiro/steering/$$skill.md || \

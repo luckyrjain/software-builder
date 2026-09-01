@@ -1,0 +1,81 @@
+test-writer:
+  path: test-writer
+  category: product
+  invocation: ambient
+  hosts:
+    cursor:
+      discovery: rule
+    claude:
+      install: true
+    kiro:
+      discovery: manual
+  install:
+    requires:
+    - unit-test-creator
+    - integration-test-creator
+    - contract-test-creator
+    - e2e-test-creator
+    - api-test-creator
+  capabilities:
+    required:
+    - host.repository.read
+    optional:
+    - name: unit-test-creator.invoke
+      enables: routed unit-test generation
+    - name: integration-test-creator.invoke
+      enables: routed integration-test generation
+    - name: contract-test-creator.invoke
+      enables: routed contract-test generation
+    - name: e2e-test-creator.invoke
+      enables: routed e2e generation
+    - name: api-test-creator.invoke
+      enables: routed API-test generation
+    degraded_modes:
+      unit-test-creator.invoke: requested unit level is recorded as BLOCKED with child_invoke_unavailable;
+        other planned levels remain accounted for
+      integration-test-creator.invoke: requested integration level is recorded as
+        BLOCKED with child_invoke_unavailable; other planned levels remain accounted
+        for
+      contract-test-creator.invoke: requested contract level is recorded as BLOCKED
+        with child_invoke_unavailable; other planned levels remain accounted for
+      e2e-test-creator.invoke: requested e2e level is recorded as BLOCKED with child_invoke_unavailable;
+        other planned levels remain accounted for
+      api-test-creator.invoke: requested API level is recorded as BLOCKED with child_invoke_unavailable;
+        other planned levels remain accounted for
+  lint:
+    skill_md_max_lines: 180
+    target: test-writer
+  risk_class:
+  - read-only
+  version: 2.4.0
+  type: router
+  authority: read-only
+  permissions:
+    repository: read
+    external_actions: none
+    unattended: false
+    merge: false
+  supported_hosts:
+  - chatgpt
+  - claude
+  - codex
+  - cursor
+  - generic
+  - kiro
+  entrypoint: SKILL.md
+  output_contract:
+    produces:
+    - test_orchestration_result
+    produce_fields:
+      test_orchestration_result:
+      - test_plan
+      - orchestration_status
+      - unfinished_levels
+      - level_reports
+  dependencies:
+  - unit-test-creator
+  - integration-test-creator
+  - contract-test-creator
+  - e2e-test-creator
+  - api-test-creator
+  version_source: skill_frontmatter_legacy_numeric

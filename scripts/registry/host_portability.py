@@ -7,6 +7,7 @@ from typing import Any
 
 from scripts.registry.frontmatter import load_skill_frontmatter
 from scripts.registry.host_adapter import HOSTS, validate_host_adapter_interface
+from scripts.registry.load import load_deprecated_skills
 from scripts.registry.routing_sync import validate_skill_routing_references
 from scripts.registry.schema import parse_registry
 from scripts.registry.skill_frontmatter_schema import automation_only_guard_errors
@@ -115,6 +116,12 @@ def validate_host_portability(root: Path) -> list[str]:
     try:
         registry = parse_registry(root / "skills.yaml")
         skills = set(registry.skills)
+        # A deprecated skill (docs/skill-framework/shared/deprecation-policy.md) stays
+        # registered through its compatibility window but generate_cursor.py/generate_kiro.py
+        # deliberately stop emitting its per-skill adapter, so the surface-parity check below
+        # must expect it missing rather than flag it as drift.
+        deprecated_skills = load_deprecated_skills(root, registry)
+        generated_surface_skills = skills - set(deprecated_skills)
         contracts = require_mapping(load_unique_yaml_file(root / "scripts/registry/host_contracts.yaml"), "host contracts")
         host_map = require_mapping(contracts.get("hosts"), "hosts")
         expected = require_mapping(load_unique_yaml_file(root / "evals/host-parity/expected.yaml"), "host parity expected")
@@ -134,8 +141,12 @@ def validate_host_portability(root: Path) -> list[str]:
                     f"error: {host}: skill_surface must be {EXPECTED_SURFACES[host]!r}, got {snapshot.get('skill_surface')!r}",
                 )
 
-        errors.extend(_generated_surface_errors(root, root / ".cursor/rules", ".mdc", skills, "Cursor"))
-        errors.extend(_generated_surface_errors(root, root / ".kiro/steering", ".md", skills, "Kiro"))
+        errors.extend(
+            _generated_surface_errors(root, root / ".cursor/rules", ".mdc", generated_surface_skills, "Cursor"),
+        )
+        errors.extend(
+            _generated_surface_errors(root, root / ".kiro/steering", ".md", generated_surface_skills, "Kiro"),
+        )
         errors.extend(_plugin_errors(root / ".claude-plugin/plugin.json", "Claude"))
         errors.extend(_claude_marketplace_errors(root))
         errors.extend(_plugin_errors(root / ".codex-plugin/plugin.json", "Codex/ChatGPT"))

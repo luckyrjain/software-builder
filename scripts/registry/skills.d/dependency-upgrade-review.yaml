@@ -1,0 +1,37 @@
+dependency-upgrade-review:
+  path: dependency-upgrade-review
+  category: review
+  extends: read-only-leaf-review
+  install:
+    requires: []
+  composition:
+    escalation_targets:
+    - security-review
+  capabilities:
+    required:
+    - host.report.write
+    optional: []
+  lint:
+    skill_md_max_lines: 180
+    target: dependency-upgrade-review
+  version: 1.1.0
+  type: leaf
+  permissions:
+    repository: read
+    external_actions: none
+    unattended: false
+    merge: false
+  output_contract:
+    produces:
+    - dependency_upgrade_report
+    produce_fields:
+      dependency_upgrade_report:
+      - title
+      - verdict
+      - assessment_target
+      - normalized_decision
+      - findings
+      - conditions
+      - required_actions
+      - evidence_refs
+  dependencies: []

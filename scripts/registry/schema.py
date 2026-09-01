@@ -17,6 +17,7 @@ from scripts.registry.models import (
     Registry,
     SkillEntry,
 )
+from scripts.registry.manifest_merge import load_fragment_skills, skills_fragments_dir
 from scripts.yaml_safety import load_unique_yaml_file
 from scripts.yaml_safety import require_mapping as _require_mapping
 
@@ -111,8 +112,23 @@ def _deep_merge(base: dict, override: dict) -> dict:
 
 
 def load_registry_raw(path: Path) -> Any:
-    """Load skills.yaml's raw dict with `extends:` profile inheritance resolved."""
-    return resolve_registry_profiles(load_unique_yaml_file(path))
+    """Load skills.yaml's raw dict with `extends:` profile inheritance resolved.
+
+    When `scripts/registry/skills.d/` exists next to `path` (skills.yaml split into
+    per-skill authoring fragments, see manifest_merge.py), the `skills:` mapping is
+    loaded fresh from those fragments rather than trusting `path`'s own `skills:`
+    block, which may be stale until the next `make generate` writes the merged
+    projection back to disk. This is the single choke point resolving that
+    staleness for every parse_registry()/load_registry_raw() caller at once --
+    including a skill that only exists as a new fragment and has never yet been
+    merged into skills.yaml, which would otherwise be invisible to validation.
+    """
+    raw = load_unique_yaml_file(path)
+    fragments_dir = skills_fragments_dir(path.parent)
+    if fragments_dir.is_dir():
+        raw = dict(_require_mapping(raw, str(path)))
+        raw["skills"] = load_fragment_skills(path.parent)
+    return resolve_registry_profiles(raw)
 
 
 def parse_registry(path: Path) -> Registry:

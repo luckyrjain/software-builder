@@ -9,10 +9,35 @@ from scripts.registry.canonical_manifest import (
     validate_canonical_manifest,
 )
 from scripts.registry.composition_contracts import load_contracts
-from scripts.registry.host_adapter import HOSTS, validate_host_adapter_interface
+from scripts.registry.host_adapter import HOSTS, capability_support, validate_host_adapter_interface
 from scripts.registry.load import load_registry
 from scripts.release_info import read_distribution_version
 from scripts.yaml_safety import load_unique_yaml_file, require_mapping
+
+# `host.*` capability ids (from capability_catalog.yaml's global `required`
+# lists) mapped to the host_contracts.yaml capability family/families whose
+# per-host support level gates that requirement. capability_families.yaml
+# deliberately exempts `host.*` ids from its own (differently-scoped)
+# provider-resolution mapping -- see its module docstring -- so this is a
+# separate, purpose-built join for the compatibility matrix. Only ids that
+# actually appear in some skill's global `required` list need an entry: those
+# are exactly what's already surfaced in the "Required capabilities" column,
+# and none of the catalog's `any_of` alternative paths reference `host.*`
+# ids today. A `host.*` id that shows up in `required` without an entry here
+# fails the build (see `_required_host_families`) instead of silently
+# rendering the old blanket per-host profile.
+HOST_CAPABILITY_FAMILIES: dict[str, tuple[str, ...]] = {
+    "host.repository.read": ("read_repo",),
+    "host.repository.read_write": ("read_repo", "write_repo"),
+    "host.filesystem.read": ("read_repo",),
+    "host.report.write": ("write_repo",),
+    "host.role.isolation": ("task_isolation",),
+    "host.ci.status": ("scm",),
+    "host.pull_request.write": ("scm",),
+    "host.issue_tracker.read": ("connectors",),
+}
+
+_SUPPORT_RANK = {"full": 0, "degraded": 1, "unsupported": 2}
 
 HEADER = """# Compatibility matrix
 
@@ -91,6 +116,35 @@ def _cell(value: object) -> str:
     return "".join(escaped)
 
 
+def _required_host_families(required: list[str]) -> set[str]:
+    """Resolve a skill's global `required` capability ids to host_contracts families.
+
+    Non-`host.*` ids (gitlab.*, slack.*, telemetry.*, ...) aren't governed by
+    host_contracts.yaml's per-host family model, so they're skipped here.
+    """
+    families: set[str] = set()
+    for capability in required:
+        if not capability.startswith("host."):
+            continue
+        mapped = HOST_CAPABILITY_FAMILIES.get(capability)
+        if mapped is None:
+            raise ValueError(
+                f"host capability {capability!r} has no entry in "
+                "HOST_CAPABILITY_FAMILIES (scripts/registry/generate_compatibility.py); "
+                "add one so the compatibility matrix can gate it per host",
+            )
+        families.update(mapped)
+    return families
+
+
+def _worst_required_support(root: Path, host: str, families: set[str]) -> str | None:
+    """Worst (lowest) support level `host` offers across `families`, or None if empty."""
+    if not families:
+        return None
+    levels = [capability_support(root, host, family) for family in families]
+    return max(levels, key=lambda level: _SUPPORT_RANK[level])
+
+
 def render_compatibility_matrix(root: Path) -> str:
     registry = load_registry(root)
     capabilities = load_catalog(root / "scripts/registry/capability_catalog.yaml")
@@ -127,13 +181,20 @@ def render_compatibility_matrix(root: Path) -> str:
             if isinstance(canonical_skill, dict)
             else {"cursor", "claude", "kiro"}
         )
+        required_families = _required_host_families(required_list) if isinstance(required_list, list) else set()
 
         def host_cell(host: str, surface: str) -> str:
             if host not in supported_hosts:
                 return "unsupported"
             if support_profile == "legacy: unknown":
                 return surface
-            return f"{surface} ({host_profiles.get(host, 'unknown')})"
+            worst = _worst_required_support(root, host, required_families)
+            if worst is None or worst == "full":
+                return f"{surface} ({host_profiles.get(host, 'unknown')})"
+            # This skill requires a capability that `host` only offers below
+            # `full` (or not at all) -- surface that specific gap instead of
+            # the blanket all-families profile every skill used to render.
+            return f"{surface} ({worst})"
 
         lines.append(
             f"| {_cell(skill_id)} | {_cell(entry.invocation)} | "

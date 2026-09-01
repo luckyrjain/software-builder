@@ -1,0 +1,59 @@
+domain-comprehension:
+  path: domain-comprehension
+  category: architecture
+  invocation: ambient
+  hosts:
+    cursor:
+      discovery: rule
+    claude:
+      install: true
+    kiro:
+      discovery: manual
+  install:
+    requires:
+    - squad-map
+  capabilities:
+    required:
+    - host.repository.read
+    optional:
+    - name: gitlab.search_code
+      enables: repository census without local checkout
+    - name: datadog.query_metrics
+      enables: runtime validation passes
+    - name: telemetry.logs.query
+      enables: KubeSense/log corroboration
+    degraded_modes:
+      gitlab.search_code: fall back to local checkout traversal for the repository
+        census
+      datadog.query_metrics: skip the runtime validation pass; mark runtime-dependent
+        claims UNKNOWN instead of inferring from static evidence
+      telemetry.logs.query: skip KubeSense/log corroboration; mark log-dependent claims
+        UNKNOWN
+  lint:
+    skill_md_max_lines: 180
+    target: domain-comprehension
+  risk_class:
+  - read-only
+  version: 1.1.0
+  type: orchestrator
+  authority: read-only
+  permissions:
+    repository: read
+    external_actions: read
+    unattended: false
+    merge: false
+  supported_hosts:
+  - chatgpt
+  - claude
+  - codex
+  - cursor
+  - generic
+  - kiro
+  entrypoint: SKILL.md
+  output_contract:
+    produces:
+    - squad_map
+    produce_fields: {}
+  dependencies:
+  - squad-map
+  version_source: skill_frontmatter_legacy_numeric

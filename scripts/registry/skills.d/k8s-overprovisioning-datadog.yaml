@@ -1,0 +1,67 @@
+k8s-overprovisioning-datadog:
+  path: k8s-overprovisioning-datadog
+  category: platform
+  invocation: ambient
+  hosts:
+    cursor:
+      discovery: rule
+    claude:
+      install: true
+    kiro:
+      discovery: manual
+  install:
+    requires: []
+  composition:
+    escalation_targets:
+    - incident-rca
+    - pr-review
+  capabilities:
+    required: []
+    optional:
+    - name: kubernetes.workloads.read
+      enables: live workload, autoscaler, policy, and pod-state truth
+    - name: datadog.list_monitors
+      enables: monitor cross-check sections
+    any_of:
+    - name: Kubernetes history-capable evidence
+      required:
+      - kubernetes.metrics.history
+    - name: Datadog historical evidence
+      required:
+      - datadog.query_metrics
+    degraded_modes:
+      kubernetes.workloads.read: use Git provider manifests or user-provided configuration
+        for live-state checks
+      kubernetes.metrics.history: use Datadog history when available; otherwise defer
+        historical sizing dimensions
+      datadog.query_metrics: continue only when Kubernetes exposes equivalent historical
+        metrics and aggregation
+      datadog.list_monitors: omit monitor cross-checks and reduce confidence where
+        applicable
+  lint:
+    skill_md_max_lines: 150
+    target: k8s-skill
+  risk_class:
+  - read-only
+  version: 1.0.0
+  type: leaf
+  authority: read-only
+  permissions:
+    repository: read
+    external_actions: read
+    unattended: false
+    merge: false
+  supported_hosts:
+  - chatgpt
+  - claude
+  - codex
+  - cursor
+  - generic
+  - kiro
+  entrypoint: SKILL.md
+  output_contract:
+    produces:
+    - k8s_rightsizing_report
+    produce_fields: {}
+  dependencies: []
+  version_source: skill_frontmatter_legacy_numeric
