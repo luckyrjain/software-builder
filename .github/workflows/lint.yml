@@ -89,10 +89,14 @@ jobs:
       - name: make lint-suites
         # --output-sync=target keeps each target's output contiguous instead of interleaving
         # lines from ~19 concurrent lint-* recipes, which otherwise makes a failure's log
-        # unreadable. Oversubscription itself is handled at the Makefile level: only the
-        # dominant scripts/tests/ suite uses pytest-xdist (see PYTEST_XDIST_FLAG in
-        # make/core.mk) -- the smaller per-skill suites rely on this outer `make -j` alone.
+        # unreadable. PYTEST_XDIST_WORKERS caps scripts/tests/'s own xdist worker pool
+        # (normally "-n auto", i.e. one per core) so it doesn't claim every core while ~18
+        # sibling lint-suites targets are also mid-flight under this same `make -j"$(nproc)"`
+        # -- the oversubscription class make/core.mk's PYTEST_XDIST_FLAG comment documents,
+        # previously the source of sporadic broken-pipe/flaky dangling-link failures.
         run: make -j"$(nproc)" --output-sync=target lint-suites
+        env:
+          PYTEST_XDIST_WORKERS: "2"
 
   install-macos:
     # macOS ships bash 3.2 (last GPLv2 release) as /bin/bash and scripts/install.sh runs under

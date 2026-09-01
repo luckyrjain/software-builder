@@ -41,7 +41,17 @@
 # source of sporadic broken-pipe/flaky failures in lint-dangling-md-links.sh after
 # lint-suites moved to `make -j`. Those suites are small enough that make-level
 # parallelism across targets is all the parallelism they need.
-PYTEST_XDIST_FLAG := $(shell python3 -c "import xdist" >/dev/null 2>&1 && echo "-n auto" || true)
+#
+# This suite itself still spawns "-n auto" (= nproc) workers, and it runs concurrently
+# with ~18 other lint-suites targets under `make -j"$(nproc)"` (.github/workflows/lint.yml)
+# -- so on a runner with N cores, this one target alone can already claim all N workers
+# while several sibling targets are also mid-flight, reproducing the same oversubscription
+# class the paragraph above fixed for the smaller suites, just for this one instead.
+# PYTEST_XDIST_WORKERS lets a caller that's already parallelizing across lint-suites (the
+# CI workflow) cap this suite's own worker count instead of always claiming every core;
+# plain local `make lint` (no outer -j) leaves it at "auto" and keeps full parallelism.
+PYTEST_XDIST_WORKERS ?= auto
+PYTEST_XDIST_FLAG := $(shell python3 -c "import xdist" >/dev/null 2>&1 && echo "-n $(PYTEST_XDIST_WORKERS)" || true)
 
 install:
 	bash scripts/install.sh
