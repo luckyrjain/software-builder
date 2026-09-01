@@ -17,6 +17,9 @@ def test_install_restores_previous_package_when_validation_fails(tmp_path: Path)
     skill_dir = repo / "broken-skill"
     shutil.copytree(ROOT / "scripts", repo / "scripts")
     shutil.copy2(ROOT / "skills.yaml", repo / "skills.yaml")
+    # install.sh's destination resolution (Candidate 5) reads agent-hosts.yaml as a sibling of
+    # skills.yaml -- this fixture invokes the copied install.sh, so it needs its own copy too.
+    shutil.copy2(ROOT / "agent-hosts.yaml", repo / "agent-hosts.yaml")
     (repo / "VERSION").write_text("0.0.0\n", encoding="utf-8")
     # Append a registry entry so install.sh allowlist permits the skill.
     skills_yaml = repo / "skills.yaml"

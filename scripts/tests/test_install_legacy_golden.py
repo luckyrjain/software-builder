@@ -11,6 +11,7 @@ points at.
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 import os
 from pathlib import Path
@@ -135,6 +136,29 @@ def test_legacy_real_install_writes_manifest_with_expected_shape(tmp_path: Path)
     assert all(isinstance(value, str) and value for value in manifest["files"].values())
 
 
+def test_legacy_real_install_agent_all_writes_both_destinations(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    result = run_installer("--agent", "all", "pr-review", home=home)
+    assert result.returncode == 0, result.stderr
+
+    cursor_dest = home / ".cursor" / "skills" / "pr-review"
+    claude_dest = home / ".claude" / "skills" / "pr-review"
+    assert (cursor_dest / "SKILL.md").is_file()
+    assert (claude_dest / "SKILL.md").is_file()
+
+    cursor_manifest = json.loads((cursor_dest / MANIFEST_NAME).read_text(encoding="utf-8"))
+    claude_manifest = json.loads((claude_dest / MANIFEST_NAME).read_text(encoding="utf-8"))
+    assert cursor_manifest["host"] == "cursor"
+    assert claude_manifest["host"] == "claude-user"
+
+    stdout_lines = [line for line in result.stdout.splitlines() if not line.startswith("ok: ")]
+    assert stdout_lines == [
+        f"Installed pr-review → {cursor_dest}",
+        f"Installed pr-review → {claude_dest}",
+        "Restart Cursor and start a new Claude Code session to load the skill(s).",
+    ]
+
+
 def test_legacy_verify_succeeds_on_a_real_install(tmp_path: Path) -> None:
     home = tmp_path / "home"
     install_result = run_installer("--agent", "claude-user", "pr-review", home=home)
@@ -183,6 +207,42 @@ def test_legacy_uninstall_refuses_to_remove_a_symlink(tmp_path: Path) -> None:
     assert f"refusing to remove symlink at {symlink_dest}" in result.stderr
     assert symlink_dest.is_symlink()
     assert real_target.is_dir()
+
+
+def test_legacy_install_aborts_loudly_when_destination_resolution_fails(tmp_path: Path) -> None:
+    """Regression test for a real bug found while building Candidate 5: destination resolution
+    used to run inside `< <(resolve_targets)` process substitution, whose internal failure only
+    killed that subshell -- the main script's `while read` loop just saw zero lines and fell
+    through to a false "Restart Cursor..." success message with exit 0. Now resolve_targets is
+    captured via command substitution first and explicitly checked, so a failure aborts the
+    script loudly instead of silently installing nothing. Exercised here via a repo copy that's
+    missing agent-hosts.yaml -- a real (if unusual) way destination resolution can fail."""
+    home = tmp_path / "home"
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    for name in ("scripts", "skills.yaml", "VERSION", "pr-review"):
+        source = ROOT / name
+        destination = repo / name
+        if source.is_dir():
+            shutil.copytree(source, destination)
+        else:
+            destination.write_bytes(source.read_bytes())
+    # Deliberately no agent-hosts.yaml copied.
+
+    env = os.environ.copy()
+    env.update({"HOME": str(home), "PYTHONPATH": str(repo)})
+    result = subprocess.run(
+        ["bash", str(repo / "scripts" / "install.sh"), "--agent", "cursor", "pr-review"],
+        cwd=repo,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode != 0
+    assert "Restart Cursor" not in result.stdout
+    assert "Installed" not in result.stdout
+    assert not (home / ".cursor" / "skills" / "pr-review").exists()
 
 
 def test_legacy_install_refuses_to_replace_a_symlink_destination(tmp_path: Path) -> None:

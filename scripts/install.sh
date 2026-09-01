@@ -92,59 +92,15 @@ esac
 
 # --target-dir <repo> → project-local skills dir(s).
 # No --target-dir → global user install (~/.cursor/skills and/or ~/.claude/skills).
-dest_roots() {
-  case "${AGENT}" in
-  cursor)
-    if [[ -n "${TARGET_DIR}" ]]; then
-      echo "${TARGET_DIR}/.cursor/skills"
-    else
-      echo "${HOME}/.cursor/skills"
-    fi
-    ;;
-  cursor-project)
-    # Project-local Cursor discovery. Without --target-dir, same as global cursor.
-    if [[ -n "${TARGET_DIR}" ]]; then
-      echo "${TARGET_DIR}/.cursor/skills"
-    else
-      echo "${HOME}/.cursor/skills"
-    fi
-    ;;
-  claude-user)
-    echo "${HOME}/.claude/skills"
-    ;;
-  claude-project)
-    if [[ -n "${TARGET_DIR}" ]]; then
-      echo "${TARGET_DIR}/.claude/skills"
-    else
-      echo "${HOME}/.claude/skills"
-    fi
-    ;;
-  all)
-    if [[ -n "${TARGET_DIR}" ]]; then
-      printf '%s\n%s\n' "${TARGET_DIR}/.cursor/skills" "${TARGET_DIR}/.claude/skills"
-    else
-      printf '%s\n%s\n' "${HOME}/.cursor/skills" "${HOME}/.claude/skills"
-    fi
-    ;;
-  esac
-}
-
-host_label_for_dest() {
-  local dest_root="$1"
-  case "${dest_root}" in
-  "${HOME}/.cursor/skills")
-    echo "cursor"
-    ;;
-  "${HOME}/.claude/skills")
-    echo "claude-user"
-    ;;
-  */.cursor/skills)
-    echo "cursor-project"
-    ;;
-  *)
-    echo "claude-project"
-    ;;
-  esac
+# Destination + host-label resolution is driven by agent-hosts.yaml via
+# scripts/registry/legacy_install_resolver.py, not hard-coded here -- one call per install.sh
+# invocation (not per skill/destination) prints "<dest_root>\t<host_label>" per line.
+resolve_targets() {
+  local args=("resolve-targets" "${AGENT}" "--home" "${HOME}")
+  if [[ -n "${TARGET_DIR}" ]]; then
+    args+=("--target-dir" "${TARGET_DIR}")
+  fi
+  run_python "${REPO_ROOT}/scripts/install_support.py" "${args[@]}"
 }
 
 registry_check_skill() {
@@ -152,15 +108,25 @@ registry_check_skill() {
   run_python "${REPO_ROOT}/scripts/install_support.py" check "${skill}" --repo-root "${REPO_ROOT}"
 }
 
+# Pure-Bash, no-subprocess format check, callable before anything that shells out to Python
+# (registry_check_skill, resolve_targets) so a malformed skill name is rejected as cheaply and
+# early as possible -- not just as defense in depth inside install_skill/uninstall_skill below,
+# but as the actual first gate the SKILLS array goes through, before destination resolution.
+validate_skill_name_format() {
+  local skill="$1"
+  if [[ "${skill}" == *"/"* || "${skill}" == "." || "${skill}" == ".." ]]; then
+    echo "error: invalid skill name '${skill}' (must be a single directory name, no path separators)" >&2
+    return 1
+  fi
+  return 0
+}
+
 uninstall_skill() {
   local skill="$1"
   local dest_root="$2"
   local skill_dest="${dest_root}/${skill}"
 
-  if [[ "${skill}" == *"/"* || "${skill}" == "." || "${skill}" == ".." ]]; then
-    echo "error: invalid skill name '${skill}'" >&2
-    return 1
-  fi
+  validate_skill_name_format "${skill}" || return 1
 
   registry_check_skill "${skill}"
 
@@ -185,18 +151,14 @@ uninstall_skill() {
 install_skill() {
   local skill="$1"
   local dest_root="$2"
+  local host_label="$3"
 
-  if [[ "${skill}" == *"/"* || "${skill}" == "." || "${skill}" == ".." ]]; then
-    echo "error: invalid skill name '${skill}' (must be a single directory name, no path separators)" >&2
-    return 1
-  fi
+  validate_skill_name_format "${skill}" || return 1
 
   registry_check_skill "${skill}"
 
   local skill_src="${REPO_ROOT}/${skill}"
   local skill_dest="${dest_root}/${skill}"
-  local host_label
-  host_label="$(host_label_for_dest "${dest_root}")"
 
   if [[ ! -f "${skill_src}/SKILL.md" ]]; then
     echo "error: skill not found at ${skill_src}/SKILL.md" >&2
@@ -288,11 +250,23 @@ if [[ "${MODE}" == "uninstall" ]]; then
     echo "error: --uninstall requires a skill name" >&2
     exit 1
   fi
-  while IFS= read -r dest_root; do
+  for skill in "${SKILLS[@]}"; do
+    validate_skill_name_format "${skill}" || exit 1
+  done
+  # Command substitution (not < <(resolve_targets) process substitution): a process
+  # substitution's internal failure only kills that subshell, not this script -- with
+  # set -e/-o pipefail unable to see it, install.sh would silently do nothing and still exit
+  # 0. Capturing into a variable first, exactly like the LIST_OUTPUT pattern below, makes a
+  # resolve_targets failure abort this script instead of silently skipping every destination.
+  if ! RESOLVED_TARGETS="$(resolve_targets)"; then
+    echo "${RESOLVED_TARGETS}" >&2
+    exit 1
+  fi
+  while IFS=$'\t' read -r dest_root host_label; do
     for skill in "${SKILLS[@]}"; do
       uninstall_skill "${skill}" "${dest_root}"
     done
-  done < <(dest_roots)
+  done <<< "${RESOLVED_TARGETS}"
   exit 0
 fi
 
@@ -311,11 +285,21 @@ if [[ ${#SKILLS[@]} -eq 0 ]]; then
   done <<< "${LIST_OUTPUT}"
 fi
 
-while IFS= read -r dest_root; do
+for skill in "${SKILLS[@]}"; do
+  validate_skill_name_format "${skill}" || exit 1
+done
+
+# See the matching comment in the uninstall branch above for why this is a command
+# substitution, not < <(resolve_targets).
+if ! RESOLVED_TARGETS="$(resolve_targets)"; then
+  echo "${RESOLVED_TARGETS}" >&2
+  exit 1
+fi
+while IFS=$'\t' read -r dest_root host_label; do
   for skill in "${SKILLS[@]}"; do
-    install_skill "${skill}" "${dest_root}"
+    install_skill "${skill}" "${dest_root}" "${host_label}"
   done
-done < <(dest_roots)
+done <<< "${RESOLVED_TARGETS}"
 
 if [[ "${DRY_RUN}" == true ]]; then
   exit 0
