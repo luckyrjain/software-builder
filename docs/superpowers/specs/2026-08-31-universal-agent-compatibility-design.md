@@ -1586,14 +1586,21 @@ runtime smoke evidence attached
 **Blocked as of Candidate 8** (2026-09-01): this candidate's exit bar requires runtime smoke
 evidence -- actually launching a host and observing its discovery/invocation behavior -- which an
 agent working from a terminal cannot obtain. Fabricating it would violate Section 26's promotion
-gate and AD-11 directly. A second, independent problem surfaced investigating this: the existing
-`kiro-user`/`kiro-project` targets in `agent-hosts.yaml` (Phase 1) model Kiro as if it were a 5th
-`install.sh` destination like Cursor/Claude, but `scripts/registry/generate_kiro.py`'s actual
-mechanism only ever writes steering files at the *repo's own root* via `make generate` -- a
-checked-in generated-docs artifact, never a per-user install target. `--agent kiro` does not exist
-in the CLI; there is no install.sh wiring to evidence in the first place. Resuming this candidate
-needs both a human who can run Kiro/Cline and observe real behavior, and a decision on whether to
-correct the target/mechanism mismatch as its own prerequisite fix.
+gate and AD-11 directly. Resuming this candidate needs a human who can run Kiro/Cline and observe
+real behavior.
+
+A second, independent problem surfaced investigating this and was fixed separately (2026-09-01,
+outside the candidate sequence): the existing `kiro-user`/`kiro-project` targets in
+`agent-hosts.yaml` (Phase 1) modeled Kiro as if it were a 5th `install.sh` destination like
+Cursor/Claude, but `scripts/registry/generate_kiro.py`'s actual mechanism only ever writes
+steering files at the *repo's own root* via `make generate` -- a checked-in generated-docs
+artifact, never a per-user install target. `--agent kiro` does not exist in the CLI; there was no
+install.sh wiring to evidence in the first place, and `kiro-user` (`~/.kiro/steering`) was pure
+fiction -- nothing ever read or wrote there. Corrected to a single `kiro-generated` target with an
+explicit `constraints` entry documenting it is not install.sh-resolvable (see
+`scripts/tests/test_host_registry.py::test_checked_in_kiro_host_has_no_install_resolvable_target`).
+This clears the target/mechanism-mismatch half of the blocker; the runtime-evidence half above
+still stands.
 ---
 ## Candidate 10 — Doctor integration
 Make doctor host/surface aware.
