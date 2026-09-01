@@ -7,6 +7,68 @@ run_python() {
   PYTHONDONTWRITEBYTECODE=1 PYTHONPATH="${REPO_ROOT}" python3 "$@"
 }
 
+# Advisory locking (Candidate 13 concurrency fix; spec S37/S37.1): install_skill/uninstall_skill
+# hold a per-(skill, dest_root) lock for their whole mutating section, so two concurrent install.sh
+# invocations targeting the same destination can't race the classify-then-mv sequence or the final
+# staged-directory replace. A single global EXIT trap is the release-of-last-resort for a crash or
+# an interrupt; each function additionally releases explicitly on every one of its own return paths
+# so a later skill/destination in the same run isn't held up by an earlier one's lock.
+CURRENT_LOCK_DIR=""
+
+release_current_lock() {
+  if [[ -n "${CURRENT_LOCK_DIR}" ]]; then
+    rm -rf "${CURRENT_LOCK_DIR}"
+    CURRENT_LOCK_DIR=""
+  fi
+}
+trap release_current_lock EXIT
+
+# Overridable via environment so tests can exercise timeout/staleness behavior without actually
+# waiting out real-world-sized delays.
+LOCK_WAIT_TIMEOUT_SECONDS="${LOCK_WAIT_TIMEOUT_SECONDS:-30}"
+LOCK_STALE_SECONDS="${LOCK_STALE_SECONDS:-300}"
+
+# mkdir is atomic and, unlike a symlink, can't be pre-planted to redirect a later write into it --
+# it just fails EEXIST if anything (including a symlink) already occupies the path (spec S37.1's
+# lock-path symlink hardening). Staleness is decided first by PID liveness (kill -0), falling back
+# to a wall-clock age threshold for a lock left by a process this host can't check (e.g. after a
+# reboot changed PID numbering).
+acquire_lock() {
+  local skill="$1" dest_root="$2"
+  local lock_dir="${dest_root}/.${skill}.lock"
+  local waited=0
+  while true; do
+    if mkdir "${lock_dir}" 2>/dev/null; then
+      echo "$$" >"${lock_dir}/pid"
+      date +%s >"${lock_dir}/acquired_at"
+      CURRENT_LOCK_DIR="${lock_dir}"
+      return 0
+    fi
+    local lock_pid=""
+    if [[ -f "${lock_dir}/pid" ]]; then
+      lock_pid="$(cat "${lock_dir}/pid" 2>/dev/null || echo "")"
+      if [[ -n "${lock_pid}" ]] && ! kill -0 "${lock_pid}" 2>/dev/null; then
+        rm -rf "${lock_dir}"
+        continue
+      fi
+    fi
+    local age=0
+    if [[ -f "${lock_dir}/acquired_at" ]]; then
+      age=$(($(date +%s) - $(cat "${lock_dir}/acquired_at" 2>/dev/null || echo 0)))
+    fi
+    if ((age > LOCK_STALE_SECONDS)); then
+      rm -rf "${lock_dir}"
+      continue
+    fi
+    if ((waited >= LOCK_WAIT_TIMEOUT_SECONDS)); then
+      echo "error: timed out waiting for lock on ${skill} at ${lock_dir} (held by pid ${lock_pid:-unknown})" >&2
+      return 1
+    fi
+    sleep 1
+    waited=$((waited + 1))
+  done
+}
+
 AGENT="all"
 TARGET_DIR=""
 DRY_RUN=false
@@ -20,7 +82,10 @@ Usage: install.sh [options] [skill ...]
 Install portable skill packages to Cursor/Claude skill directories.
 
 Options:
-  --agent <cursor|claude-user|claude-project|all>  Target host (default: all)
+  --agent <cursor|claude-user|claude-project|all|agents>  Target host (default: all)
+                                                    "agents" installs to the universal
+                                                    Agent Skills target (.agents/skills)
+                                                    instead of a host-specific directory
   --target-dir <path>                              Project root for claude-project
   --dry-run                                        Print actions without writing
   --list                                           Print registry skill ids and exit
@@ -83,68 +148,24 @@ verify)
 esac
 
 case "${AGENT}" in
-cursor | cursor-project | claude-user | claude-project | all) ;;
+cursor | cursor-project | claude-user | claude-project | all | agents) ;;
 *)
-  echo "error: unknown --agent '${AGENT}' (expected cursor|cursor-project|claude-user|claude-project|all)" >&2
+  echo "error: unknown --agent '${AGENT}' (expected cursor|cursor-project|claude-user|claude-project|all|agents)" >&2
   exit 1
   ;;
 esac
 
 # --target-dir <repo> → project-local skills dir(s).
 # No --target-dir → global user install (~/.cursor/skills and/or ~/.claude/skills).
-dest_roots() {
-  case "${AGENT}" in
-  cursor)
-    if [[ -n "${TARGET_DIR}" ]]; then
-      echo "${TARGET_DIR}/.cursor/skills"
-    else
-      echo "${HOME}/.cursor/skills"
-    fi
-    ;;
-  cursor-project)
-    # Project-local Cursor discovery. Without --target-dir, same as global cursor.
-    if [[ -n "${TARGET_DIR}" ]]; then
-      echo "${TARGET_DIR}/.cursor/skills"
-    else
-      echo "${HOME}/.cursor/skills"
-    fi
-    ;;
-  claude-user)
-    echo "${HOME}/.claude/skills"
-    ;;
-  claude-project)
-    if [[ -n "${TARGET_DIR}" ]]; then
-      echo "${TARGET_DIR}/.claude/skills"
-    else
-      echo "${HOME}/.claude/skills"
-    fi
-    ;;
-  all)
-    if [[ -n "${TARGET_DIR}" ]]; then
-      printf '%s\n%s\n' "${TARGET_DIR}/.cursor/skills" "${TARGET_DIR}/.claude/skills"
-    else
-      printf '%s\n%s\n' "${HOME}/.cursor/skills" "${HOME}/.claude/skills"
-    fi
-    ;;
-  esac
-}
-
-host_label_for_dest() {
-  local dest_root="$1"
-  case "${dest_root}" in
-  "${HOME}/.cursor/skills")
-    echo "cursor"
-    ;;
-  "${HOME}/.claude/skills")
-    echo "claude-user"
-    ;;
-  */.cursor/skills)
-    echo "cursor-project"
-    ;;
-  *)
-    echo "claude-project"
-    ;;
-  esac
+# Destination + host-label resolution is driven by agent-hosts.yaml via
+# scripts/registry/legacy_install_resolver.py, not hard-coded here -- one call per install.sh
+# invocation (not per skill/destination) prints "<dest_root>\t<host_label>" per line.
+resolve_targets() {
+  local args=("resolve-targets" "${AGENT}" "--home" "${HOME}")
+  if [[ -n "${TARGET_DIR}" ]]; then
+    args+=("--target-dir" "${TARGET_DIR}")
+  fi
+  run_python "${REPO_ROOT}/scripts/install_support.py" "${args[@]}"
 }
 
 registry_check_skill() {
@@ -152,61 +173,115 @@ registry_check_skill() {
   run_python "${REPO_ROOT}/scripts/install_support.py" check "${skill}" --repo-root "${REPO_ROOT}"
 }
 
+# Pure-Bash, no-subprocess format check, callable before anything that shells out to Python
+# (registry_check_skill, resolve_targets) so a malformed skill name is rejected as cheaply and
+# early as possible -- not just as defense in depth inside install_skill/uninstall_skill below,
+# but as the actual first gate the SKILLS array goes through, before destination resolution.
+validate_skill_name_format() {
+  local skill="$1"
+  if [[ "${skill}" == *"/"* || "${skill}" == "." || "${skill}" == ".." ]]; then
+    echo "error: invalid skill name '${skill}' (must be a single directory name, no path separators)" >&2
+    return 1
+  fi
+  return 0
+}
+
+# Ownership classification (Candidate 6): only a directory this repository itself installed --
+# proven by a valid .software-builder-manifest.json naming the same skill -- is safe to replace or
+# remove. ABSENT/SOFTWARE_BUILDER_OWNED/UNOWNED/CORRUPT_OWNERSHIP/SYMLINK; see
+# scripts/reference_utils.py's classify_install_destination for the full state definitions.
+classify_destination() {
+  run_python "${REPO_ROOT}/scripts/install_support.py" classify-destination "$1" "$2"
+}
+
 uninstall_skill() {
   local skill="$1"
   local dest_root="$2"
   local skill_dest="${dest_root}/${skill}"
 
-  if [[ "${skill}" == *"/"* || "${skill}" == "." || "${skill}" == ".." ]]; then
-    echo "error: invalid skill name '${skill}'" >&2
+  validate_skill_name_format "${skill}" || return 1
+
+  mkdir -p "${dest_root}"
+  if ! acquire_lock "${skill}" "${dest_root}"; then
     return 1
   fi
 
   registry_check_skill "${skill}"
 
-  if [[ ! -e "${skill_dest}" ]]; then
+  local ownership
+  ownership="$(classify_destination "${skill_dest}" "${skill}")"
+  case "${ownership}" in
+  ABSENT)
     echo "warning: not installed: ${skill_dest}" >&2
+    release_current_lock
     return 0
-  fi
-  if [[ -L "${skill_dest}" ]]; then
+    ;;
+  SYMLINK)
     echo "error: refusing to remove symlink at ${skill_dest}" >&2
+    release_current_lock
     return 1
-  fi
+    ;;
+  UNOWNED)
+    echo "error: refusing to remove unowned directory at ${skill_dest} (not installed by software-builder)" >&2
+    release_current_lock
+    return 1
+    ;;
+  CORRUPT_OWNERSHIP)
+    echo "error: refusing to remove ${skill_dest}: install manifest is missing, unreadable, or names a different skill" >&2
+    release_current_lock
+    return 1
+    ;;
+  esac
 
   if [[ "${DRY_RUN}" == true ]]; then
     echo "dry-run: would remove ${skill_dest}"
+    release_current_lock
     return 0
   fi
 
   rm -rf "${skill_dest}"
   echo "Uninstalled ${skill} from ${skill_dest}"
+  release_current_lock
 }
 
 install_skill() {
   local skill="$1"
   local dest_root="$2"
+  local host_label="$3"
 
-  if [[ "${skill}" == *"/"* || "${skill}" == "." || "${skill}" == ".." ]]; then
-    echo "error: invalid skill name '${skill}' (must be a single directory name, no path separators)" >&2
-    return 1
-  fi
+  validate_skill_name_format "${skill}" || return 1
 
   registry_check_skill "${skill}"
 
   local skill_src="${REPO_ROOT}/${skill}"
   local skill_dest="${dest_root}/${skill}"
-  local host_label
-  host_label="$(host_label_for_dest "${dest_root}")"
 
   if [[ ! -f "${skill_src}/SKILL.md" ]]; then
     echo "error: skill not found at ${skill_src}/SKILL.md" >&2
     return 1
   fi
 
-  if [[ -e "${skill_dest}" && -L "${skill_dest}" ]]; then
+  # Early ownership check: fail fast before staging work (package_skill.py,
+  # validate_references.py) starts, and gives --dry-run an accurate preview. Re-checked fresh
+  # immediately before the actual replace below, since staging takes real time and this is a
+  # check-then-act sequence -- mirrors this function's pre-existing early/late symlink
+  # double-check pattern.
+  local ownership
+  ownership="$(classify_destination "${skill_dest}" "${skill}")"
+  case "${ownership}" in
+  SYMLINK)
     echo "error: refusing to replace symlink at ${skill_dest}" >&2
     return 1
-  fi
+    ;;
+  UNOWNED)
+    echo "error: refusing to replace unowned directory at ${skill_dest} (not installed by software-builder)" >&2
+    return 1
+    ;;
+  CORRUPT_OWNERSHIP)
+    echo "error: refusing to replace ${skill_dest}: install manifest is missing, unreadable, or names a different skill" >&2
+    return 1
+    ;;
+  esac
 
   if [[ "${DRY_RUN}" == true ]]; then
     echo "dry-run: would install ${skill} → ${skill_dest} (host=${host_label})"
@@ -214,6 +289,10 @@ install_skill() {
   fi
 
   mkdir -p "${dest_root}"
+  if ! acquire_lock "${skill}" "${dest_root}"; then
+    return 1
+  fi
+
   local backup_dir=""
   local stage_dir
   local install_succeeded=false
@@ -249,6 +328,7 @@ install_skill() {
     --host "${host_label}"; then
     cleanup_failed_install
     clear_install_trap
+    release_current_lock
     return 1
   fi
 
@@ -256,31 +336,96 @@ install_skill() {
     --installed-package "${stage_dir}"; then
     cleanup_failed_install
     clear_install_trap
+    release_current_lock
     return 1
   fi
 
-  if [[ -e "${skill_dest}" ]]; then
-    if [[ -L "${skill_dest}" ]]; then
-      rm -rf "${stage_dir}"
+  ownership="$(classify_destination "${skill_dest}" "${skill}")"
+  case "${ownership}" in
+  SYMLINK)
+    rm -rf "${stage_dir}"
+    clear_install_trap
+    release_current_lock
+    echo "error: refusing to replace symlink at ${skill_dest}" >&2
+    return 1
+    ;;
+  UNOWNED)
+    rm -rf "${stage_dir}"
+    clear_install_trap
+    release_current_lock
+    echo "error: refusing to replace unowned directory at ${skill_dest} (not installed by software-builder)" >&2
+    return 1
+    ;;
+  CORRUPT_OWNERSHIP)
+    rm -rf "${stage_dir}"
+    clear_install_trap
+    release_current_lock
+    echo "error: refusing to replace ${skill_dest}: install manifest is missing, unreadable, or names a different skill" >&2
+    return 1
+    ;;
+  SOFTWARE_BUILDER_OWNED)
+    echo "warning: replacing existing install at ${skill_dest}" >&2
+    # Same filesystem as dest_root/stage_dir (not the system tmp dir) so the mv below is an
+    # atomic rename, matching stage_dir's own discipline -- a cross-filesystem mv falls back to
+    # copy-then-delete, which a hard kill mid-copy can catch with neither the old nor the new
+    # install intact and the real content stranded, unrecorded, in an untracked /tmp directory.
+    backup_dir="$(mktemp -d "${dest_root}/.${skill}.backup.XXXXXX")"
+    if ! mv "${skill_dest}" "${backup_dir}/skill"; then
+      rm -rf "${stage_dir}" "${backup_dir}"
       clear_install_trap
-      echo "error: refusing to replace symlink at ${skill_dest}" >&2
+      release_current_lock
+      echo "error: failed to back up existing install at ${skill_dest}" >&2
       return 1
     fi
-    echo "warning: replacing existing install at ${skill_dest}" >&2
-    backup_dir="$(mktemp -d)"
-    mv "${skill_dest}" "${backup_dir}/skill"
-  fi
+    ;;
+  esac
 
   if ! mv "${stage_dir}" "${skill_dest}"; then
     cleanup_failed_install
     clear_install_trap
+    release_current_lock
     return 1
   fi
 
   install_succeeded=true
   clear_install_trap
   rm -rf "${backup_dir}"
-  echo "Installed ${skill} → ${skill_dest}"
+  release_current_lock
+
+  # Shadow check (Candidate 8): a divergent copy at a higher-precedence discovery root for this
+  # host means the host will actually load THAT copy, not the one just written here -- the
+  # completion message must say so instead of unconditionally claiming success. This is a report,
+  # not a refusal: the write above already succeeded and stands regardless of what this finds.
+  local shadow_args=("check-shadow" "${host_label}" "${skill_dest}" "--home" "${HOME}")
+  if [[ -n "${TARGET_DIR}" ]]; then
+    shadow_args+=("--target-dir" "${TARGET_DIR}")
+  fi
+  # Guarded, not a bare assignment: this runs after the install already succeeded, so a failure
+  # here (e.g. an unexpected exception inside detect_shadow) must not abort the script under
+  # set -e and discard the "Installed" confirmation for a write that already landed -- it's
+  # downgraded to an unknown-shadow-status warning instead.
+  local shadow_output
+  if ! shadow_output="$(run_python "${REPO_ROOT}/scripts/install_support.py" "${shadow_args[@]}")"; then
+    echo "Installed ${skill} → ${skill_dest}"
+    echo "warning: could not determine shadow status for ${skill_dest}" >&2
+    return 0
+  fi
+  local shadow_status="${shadow_output%%$'\n'*}"
+  case "${shadow_status}" in
+  SHADOWED)
+    local shadow_path="${shadow_output#*$'\n'}"
+    echo "Installed ${skill} → ${skill_dest}"
+    echo "warning: this install may be shadowed by a higher-precedence, divergent copy at ${shadow_path} -- ${host_label%%-*} will likely load that one instead" >&2
+    ;;
+  UNKNOWN_PRECEDENCE)
+    local shadow_path="${shadow_output#*$'\n'}"
+    echo "Installed ${skill} → ${skill_dest}"
+    echo "warning: a higher-precedence root at ${shadow_path} exists but its install manifest could not be read, so it's unknown whether this install is shadowed" >&2
+    ;;
+  *)
+    echo "Installed ${skill} → ${skill_dest}"
+    ;;
+  esac
 }
 
 if [[ "${MODE}" == "uninstall" ]]; then
@@ -288,11 +433,23 @@ if [[ "${MODE}" == "uninstall" ]]; then
     echo "error: --uninstall requires a skill name" >&2
     exit 1
   fi
-  while IFS= read -r dest_root; do
+  for skill in "${SKILLS[@]}"; do
+    validate_skill_name_format "${skill}" || exit 1
+  done
+  # Command substitution (not < <(resolve_targets) process substitution): a process
+  # substitution's internal failure only kills that subshell, not this script -- with
+  # set -e/-o pipefail unable to see it, install.sh would silently do nothing and still exit
+  # 0. Capturing into a variable first, exactly like the LIST_OUTPUT pattern below, makes a
+  # resolve_targets failure abort this script instead of silently skipping every destination.
+  if ! RESOLVED_TARGETS="$(resolve_targets)"; then
+    echo "${RESOLVED_TARGETS}" >&2
+    exit 1
+  fi
+  while IFS=$'\t' read -r dest_root host_label; do
     for skill in "${SKILLS[@]}"; do
       uninstall_skill "${skill}" "${dest_root}"
     done
-  done < <(dest_roots)
+  done <<< "${RESOLVED_TARGETS}"
   exit 0
 fi
 
@@ -311,11 +468,21 @@ if [[ ${#SKILLS[@]} -eq 0 ]]; then
   done <<< "${LIST_OUTPUT}"
 fi
 
-while IFS= read -r dest_root; do
+for skill in "${SKILLS[@]}"; do
+  validate_skill_name_format "${skill}" || exit 1
+done
+
+# See the matching comment in the uninstall branch above for why this is a command
+# substitution, not < <(resolve_targets).
+if ! RESOLVED_TARGETS="$(resolve_targets)"; then
+  echo "${RESOLVED_TARGETS}" >&2
+  exit 1
+fi
+while IFS=$'\t' read -r dest_root host_label; do
   for skill in "${SKILLS[@]}"; do
-    install_skill "${skill}" "${dest_root}"
+    install_skill "${skill}" "${dest_root}" "${host_label}"
   done
-done < <(dest_roots)
+done <<< "${RESOLVED_TARGETS}"
 
 if [[ "${DRY_RUN}" == true ]]; then
   exit 0
@@ -338,5 +505,8 @@ all)
   else
     echo "Restart Cursor and start a new Claude Code session to load the skill(s)."
   fi
+  ;;
+agents)
+  echo "Skill(s) installed to the universal Agent Skills target. Restart your agent to load them."
   ;;
 esac

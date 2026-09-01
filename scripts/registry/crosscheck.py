@@ -195,11 +195,13 @@ def _validate_automation_only_rules(registry: Registry) -> list[str]:
     for skill_id, entry in registry.skills.items():
         if entry.invocation != AUTOMATION_ONLY_INVOCATION:
             continue
-        if entry.hosts.cursor.discovery == "always":
+        cursor_host = entry.hosts.get("cursor")
+        if cursor_host is not None and cursor_host.discovery == "always":
             errors.append(
                 f"error: {skill_id}: automation-only skills cannot use cursor discovery always",
             )
-        if entry.hosts.kiro.discovery == "always":
+        kiro_host = entry.hosts.get("kiro")
+        if kiro_host is not None and kiro_host.discovery == "always":
             errors.append(
                 f"error: {skill_id}: automation-only skills cannot use kiro discovery always",
             )

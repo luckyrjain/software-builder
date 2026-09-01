@@ -104,6 +104,11 @@ def test_generate_collects_all_legacy_projections_from_canonical():
 
 def _copy_manifest_fixture(tmp_path: Path) -> Path:
     shutil.copy2(ROOT / "skills.yaml", tmp_path / "skills.yaml")
+    # skills.yaml's own skill entries declare every host in the real agent-hosts.yaml (Candidate
+    # 3: the host set is data-driven) -- without this copy, schema.py falls back to its 3-host
+    # default and every skill's real 4-host declaration looks like an unknown host, drowning out
+    # whatever specific drift error each test below means to exercise.
+    shutil.copy2(ROOT / "agent-hosts.yaml", tmp_path / "agent-hosts.yaml")
     for skill_id in load_canonical_manifest(ROOT)["skills"]:
         skill_dir = tmp_path / skill_id
         skill_dir.mkdir()

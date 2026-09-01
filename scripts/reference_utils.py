@@ -55,6 +55,43 @@ def read_manifest_file(path: Path) -> dict[str, Any]:
     return data
 
 
+# Ownership classification for an install/uninstall destination (spec Sections 15-16 of
+# docs/superpowers/specs/2026-08-31-universal-agent-compatibility-design.md, Candidate 6). Determines
+# whether install.sh may safely replace or remove a directory at a destination path: only a directory
+# this repository itself installed (proven by a valid manifest naming the same skill) is safe to
+# touch. Anything else -- absent, a symlink, unrecognized content, or a manifest that fails to parse
+# or names a different skill -- must block rather than guess, so a shared or third-party-owned
+# directory (increasingly likely once a universal target like .agents/skills exists, per Candidate 7)
+# is never silently clobbered or deleted.
+OWNERSHIP_ABSENT = "ABSENT"
+OWNERSHIP_SOFTWARE_BUILDER_OWNED = "SOFTWARE_BUILDER_OWNED"
+OWNERSHIP_UNOWNED = "UNOWNED"
+OWNERSHIP_CORRUPT_OWNERSHIP = "CORRUPT_OWNERSHIP"
+OWNERSHIP_SYMLINK = "SYMLINK"
+
+
+def classify_install_destination(dest: Path, *, skill_id: str) -> str:
+    """Classify dest's ownership state for `skill_id`. See the OWNERSHIP_* constants above.
+
+    Checked in this order because Path.exists() follows symlinks -- a *broken* symlink would
+    otherwise report ABSENT instead of SYMLINK, since the target it points at doesn't exist.
+    """
+    if dest.is_symlink():
+        return OWNERSHIP_SYMLINK
+    if not dest.exists():
+        return OWNERSHIP_ABSENT
+    if not dest.is_dir():
+        return OWNERSHIP_UNOWNED
+    manifest_path = dest / MANIFEST_NAME
+    try:
+        manifest = read_manifest_file(manifest_path)
+    except ManifestError:
+        return OWNERSHIP_UNOWNED if not manifest_path.exists() else OWNERSHIP_CORRUPT_OWNERSHIP
+    if manifest.get("skill") != skill_id:
+        return OWNERSHIP_CORRUPT_OWNERSHIP
+    return OWNERSHIP_SOFTWARE_BUILDER_OWNED
+
+
 # Filesystem noise that can legitimately appear after a skill is packaged/installed and
 # used (running a bundled script writes __pycache__, editors/OS write dotfiles) -- shared
 # by package_skill.py (excluded when copying source into a package) and install_support.py

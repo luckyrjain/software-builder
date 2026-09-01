@@ -47,6 +47,6 @@ def generate_cursor_rules(
         outputs[out_path] = render_cursor_rule(
             skill_id,
             descriptions[skill_id],
-            entry.hosts.cursor.discovery,
+            entry.hosts["cursor"].discovery,
         )
     return outputs

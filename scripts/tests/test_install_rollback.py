@@ -17,6 +17,9 @@ def test_install_restores_previous_package_when_validation_fails(tmp_path: Path)
     skill_dir = repo / "broken-skill"
     shutil.copytree(ROOT / "scripts", repo / "scripts")
     shutil.copy2(ROOT / "skills.yaml", repo / "skills.yaml")
+    # install.sh's destination resolution (Candidate 5) reads agent-hosts.yaml as a sibling of
+    # skills.yaml -- this fixture invokes the copied install.sh, so it needs its own copy too.
+    shutil.copy2(ROOT / "agent-hosts.yaml", repo / "agent-hosts.yaml")
     (repo / "VERSION").write_text("0.0.0\n", encoding="utf-8")
     # Append a registry entry so install.sh allowlist permits the skill.
     skills_yaml = repo / "skills.yaml"
@@ -30,6 +33,7 @@ def test_install_restores_previous_package_when_validation_fails(tmp_path: Path)
     hosts:
       cursor: {discovery: rule}
       claude: {install: true}
+      github-copilot: {discovery: manual}
       kiro: {discovery: manual}
     install:
       requires: []
@@ -54,6 +58,7 @@ broken-skill:
   hosts:
     cursor: {discovery: rule}
     claude: {install: true}
+    github-copilot: {discovery: manual}
     kiro: {discovery: manual}
   install:
     requires: []
@@ -84,6 +89,11 @@ broken-skill:
     dest.mkdir()
     marker = dest / "KEEP_ME.txt"
     marker.write_text("previous install\n", encoding="utf-8")
+    # A real previous install always carries its own manifest (install.sh writes one for every
+    # skill it installs) -- without it, Candidate 6's ownership hardening correctly refuses to
+    # touch this directory at all as UNOWNED, before ever reaching the rollback path this test
+    # means to exercise. This is what marks it SOFTWARE_BUILDER_OWNED for "broken-skill".
+    (dest / ".software-builder-manifest.json").write_text('{"skill": "broken-skill"}', encoding="utf-8")
 
     result = subprocess.run(
         ["bash", str(repo / "scripts" / "install.sh"), "--agent", "cursor", "broken-skill"],
@@ -116,6 +126,11 @@ def test_install_list_does_not_write_skills(tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     shutil.copytree(ROOT / "scripts", repo / "scripts")
     shutil.copy2(ROOT / "skills.yaml", repo / "skills.yaml")
+    # The real skills.yaml's skill fragments declare every host in the real agent-hosts.yaml
+    # (Candidate 3: the host set is data-driven, not hard-coded) -- without this copy, schema.py
+    # falls back to its 3-host default and every skill's real 4-host declaration looks like an
+    # unknown host.
+    shutil.copy2(ROOT / "agent-hosts.yaml", repo / "agent-hosts.yaml")
     (repo / "VERSION").write_text("0.0.0\n", encoding="utf-8")
     shutil.copytree(ROOT / "unit-test-creator", repo / "unit-test-creator")
     shutil.copytree(ROOT / "docs" / "skill-framework", repo / "docs" / "skill-framework")

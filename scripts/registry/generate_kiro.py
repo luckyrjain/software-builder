@@ -31,7 +31,7 @@ def generate_kiro_steering(
     return {
         root / ".kiro" / "steering" / f"{skill_id}.md": render_kiro_steering(
             skill_id,
-            entry.hosts.kiro.discovery,
+            entry.hosts["kiro"].discovery,
         )
         for skill_id, entry in sorted(registry.skills.items())
         if skill_id not in deprecated
