@@ -6,7 +6,6 @@ from pathlib import Path
 
 from scripts.registry.cli import (
     _capability_catalog_path,
-    _capability_families_path,
     _composition_runtime_path,
     _release_contract_path,
     resolve_optional_layers,
