@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
 
 from scripts.registry import schema
+from scripts.registry.manifest_merge import skills_fragments_dir
 from scripts.registry.schema import clear_registry_cache, load_registry_raw
 
 
@@ -118,3 +120,38 @@ def test_fragments_are_still_re_merged_correctly_through_the_cache(tmp_path: Pat
     raw = load_registry_raw(tmp_path / "skills.yaml")
 
     assert set(raw["skills"]) == {"fragment-skill"}
+
+
+def test_symlinked_skills_yaml_across_two_roots_does_not_cross_contaminate(
+    tmp_path: Path,
+) -> None:
+    """Regression test: the cache is keyed on the root directory's resolved identity,
+    not the skills.yaml file's resolved identity. A file-level symlink between two
+    otherwise-distinct roots must not make one root's fragment-merged content leak
+    into the other's read -- the cached *value* depends on skills_fragments_dir(root),
+    which is a property of the root, not of wherever skills.yaml physically lives.
+    """
+    root_a = tmp_path / "a"
+    root_b = tmp_path / "b"
+    root_a.mkdir()
+    root_b.mkdir()
+    _write_skills_yaml(root_a, skill_id="inline-only")
+    # root_b's skills.yaml is a symlink to root_a's file, but root_b has its OWN,
+    # separate skills.d/ fragment root_a doesn't have.
+    os.symlink(root_a / "skills.yaml", root_b / "skills.yaml")
+    fragments_dir = skills_fragments_dir(root_b)
+    fragments_dir.mkdir(parents=True)
+    (fragments_dir / "root-b-fragment.yaml").write_text(
+        "root-b-fragment:\n  path: root-b-fragment\n", encoding="utf-8"
+    )
+
+    raw_a = load_registry_raw(root_a / "skills.yaml")
+    raw_b = load_registry_raw(root_b / "skills.yaml")
+
+    assert set(raw_a["skills"]) == {"inline-only"}
+    assert set(raw_b["skills"]) == {"root-b-fragment"}
+
+    # Order matters for this bug class: re-reading root_a after root_b must still
+    # see root_a's own data, not something root_b's read left behind.
+    raw_a_again = load_registry_raw(root_a / "skills.yaml")
+    assert set(raw_a_again["skills"]) == {"inline-only"}

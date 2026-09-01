@@ -145,22 +145,34 @@ def load_registry_raw(path: Path) -> Any:
     including a skill that only exists as a new fragment and has never yet been
     merged into skills.yaml, which would otherwise be invisible to validation.
 
-    Cached per resolved root path (see clear_registry_cache) so the ~28 call
-    sites that share this one path within a single invocation don't each pay
-    their own disk read + YAML parse + fragment merge. Every caller gets an
+    Cached per resolved *root directory* (see clear_registry_cache) so the ~28
+    call sites that share this one path within a single invocation don't each
+    pay their own disk read + YAML parse + fragment merge. Every caller gets an
     independent deep copy of the cached value -- some callers (e.g.
     canonical_manifest.load_canonical_manifest) mutate the dict they get back,
     and must not corrupt the shared cache entry by doing so.
+
+    Keyed on `path.parent.resolve()` (the root directory's identity), not
+    `path.resolve()` (the file's identity) -- the cached value depends on BOTH
+    `path` itself AND `skills_fragments_dir(path.parent)`, which is derived from
+    the *root*, not the file. If only `skills.yaml` were symlinked across two
+    otherwise-distinct roots with their own, different `skills.d/` fragments,
+    keying on the file's resolved identity alone would conflate them: root B's
+    first read would populate the shared entry, and root A's read would then
+    silently return root B's fragment-merged skills instead of its own. Keying
+    on the root's own resolved identity means two genuinely different roots
+    always get different cache entries even if they happen to share one
+    symlinked file.
     """
-    resolved = path.resolve()
-    if resolved not in _registry_raw_cache:
+    root = path.parent.resolve()
+    if root not in _registry_raw_cache:
         raw = load_unique_yaml_file(path)
         fragments_dir = skills_fragments_dir(path.parent)
         if fragments_dir.is_dir():
             raw = dict(_require_mapping(raw, str(path)))
             raw["skills"] = load_fragment_skills(path.parent)
-        _registry_raw_cache[resolved] = resolve_registry_profiles(raw)
-    return copy.deepcopy(_registry_raw_cache[resolved])
+        _registry_raw_cache[root] = resolve_registry_profiles(raw)
+    return copy.deepcopy(_registry_raw_cache[root])
 
 
 def parse_registry(path: Path) -> Registry:
