@@ -10,9 +10,9 @@ architecture discovery, Kubernetes optimization, migrations, release readiness, 
 implementation with independent review.
 
 `software-builder` is a **skills and workflow library**, not another agent runtime or SDK. It gives
-Cursor, Claude Code, ChatGPT/Codex, Kiro, and other repository-capable agents shared instructions,
-role boundaries, evidence rules, and reusable outputs while leaving model choice and execution to the
-host agent.
+Cursor, Claude Code, ChatGPT/Codex, Kiro, GitHub Copilot, and other repository-capable agents shared
+instructions, role boundaries, evidence rules, and reusable outputs while leaving model choice and
+execution to the host agent.
 
 **Start here:** [Prerequisites](#prerequisites) · [3-minute quickstart](#3-minute-quickstart) ·
 [How it works](#how-it-works) · [Agent support](#install-for-your-specific-coding-agent) · [Skills](#skills) ·
@@ -37,8 +37,8 @@ host agent.
 - **Git** to clone this repository and access target repositories.
 - **Bash** and **Python 3** to run `scripts/install.sh` (macOS, Linux, or WSL) — the installer shells
   out to `python3` for every install path, including the quickstart below.
-- A supported **repository-capable coding agent**: Cursor, Claude Code, ChatGPT/Codex, Kiro, or a
-  generic agent that can read a `SKILL.md` file.
+- A supported **repository-capable coding agent**: Cursor, Claude Code, ChatGPT/Codex, Kiro, GitHub
+  Copilot, or a generic agent that can read a `SKILL.md` file.
 - Read access to the repositories being analyzed. Workflows that implement changes also need branch
   write access; merge remains opt-in unless repository policy explicitly authorizes it.
 - Only the external services required by the skill you plan to run. There is no repository-wide MCP

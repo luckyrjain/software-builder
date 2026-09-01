@@ -29,6 +29,12 @@ def resolve_universal_install_destination(
     itself (agents-user/agents-project) rather than a product name, since this destination isn't
     tied to any one host's identity."""
     target_id = "agents-project" if target_dir is not None else "agents-user"
-    target = host_registry.targets[target_id]
+    try:
+        target = host_registry.targets[target_id]
+    except KeyError:
+        raise ValueError(
+            f"agent-hosts.yaml has no {target_id!r} target -- the universal `agents` selector"
+            " requires it (spec Section 31)"
+        ) from None
     dest = resolve_target_path(target, home=home, target_dir=target_dir)
     return dest, target_id

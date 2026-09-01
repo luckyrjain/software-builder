@@ -53,18 +53,23 @@ def _skill_host_ids(skills_yaml_path: Path) -> frozenset[str]:
     """The set of host ids a skill's `hosts:` block may/must declare.
 
     Driven by agent-hosts.yaml (the canonical host-identity registry, Candidate 2) when it exists next
-    to the parsed skills.yaml; falls back to this repository's current host set otherwise, so isolated
-    test fixtures that construct a bare skills.yaml with no sibling registry keep working unchanged.
+    to the parsed skills.yaml; falls back to this repository's current host set only when no such file
+    is present at all, so isolated test fixtures that construct a bare skills.yaml with no sibling
+    registry keep working unchanged. A sibling agent-hosts.yaml that exists but fails to parse is a
+    broken registry, not an absent one -- AD-11's fail-closed rule means that must surface as an error,
+    not silently downgrade every skill's required host set to the stale 3-host default.
     """
     agent_hosts_path = skills_yaml_path.parent / "agent-hosts.yaml"
     if not agent_hosts_path.is_file():
         return _DEFAULT_HOST_IDS
+    import yaml
+
     from scripts.registry.host_registry import HostRegistryParseError, parse_host_registry
 
     try:
         registry = parse_host_registry(agent_hosts_path)
-    except (HostRegistryParseError, OSError, ValueError):
-        return _DEFAULT_HOST_IDS
+    except (HostRegistryParseError, OSError, ValueError, yaml.YAMLError) as exc:
+        raise RegistryParseError([f"{agent_hosts_path}: failed to parse: {exc}"]) from exc
     return frozenset(registry.hosts) or _DEFAULT_HOST_IDS
 
 

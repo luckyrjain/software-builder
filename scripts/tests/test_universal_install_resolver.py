@@ -41,3 +41,21 @@ def test_agents_targets_exist_in_the_real_registry(host_registry) -> None:
     assert "agents-project" in host_registry.targets
     assert host_registry.targets["agents-user"].path == "~/.agents/skills"
     assert host_registry.targets["agents-project"].path == "{project_root}/.agents/skills"
+
+
+def test_raises_a_clear_error_when_the_universal_target_is_missing_from_the_registry() -> None:
+    """A registry that lacks agents-user/agents-project (unlike the real repo's) must fail with a
+    clear error, not an unguarded KeyError -- mirrors legacy_install_resolver.py's own unknown-agent
+    ValueError rather than leaking an implementation-detail exception type."""
+    from scripts.registry.host_registry import HostRegistry
+    from scripts.registry.universal_install_resolver import resolve_universal_install_destination
+
+    empty_registry = HostRegistry(schema_version=1, targets={}, hosts={}, aliases={})
+
+    with pytest.raises(ValueError, match="agents-user"):
+        resolve_universal_install_destination(empty_registry, home=Path("/home/u"), target_dir=None)
+
+    with pytest.raises(ValueError, match="agents-project"):
+        resolve_universal_install_destination(
+            empty_registry, home=Path("/home/u"), target_dir=Path("/repo")
+        )

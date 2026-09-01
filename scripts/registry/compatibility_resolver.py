@@ -30,12 +30,18 @@ from scripts.registry.capability_engine import capability_status as _capability_
 from scripts.registry.host_registry import HostRegistry, HostSpec
 from scripts.registry.models import CapabilityPath, Registry, SkillEntry
 
-# Maps scripts/registry/host_adapter.py's coarser adapter-generation capability vocabulary
-# (host_contracts.yaml's capability_families) onto the finer-grained host.* vocabulary
-# skills.yaml's per-skill capabilities and agent-hosts.yaml's HostSpec.capabilities already share.
-# Every host_adapter.CAPABILITIES entry has an explicit home here -- none are left unmapped -- so the
-# two vocabularies are no longer parallel, unreconciled sources (Candidate 2's deferred exit bar,
-# closed here per Candidate 4's own text).
+# Documents the correspondence between scripts/registry/host_adapter.py's coarser adapter-generation
+# capability vocabulary (host_contracts.yaml's capability_families) and the finer-grained host.*
+# vocabulary skills.yaml's per-skill capabilities and agent-hosts.yaml's HostSpec.capabilities already
+# share. Every host_adapter.CAPABILITIES entry has an explicit mapping here -- none are left unmapped.
+#
+# This is a documented correspondence, not a wired reconciliation: nothing in this module or
+# host_adapter.py reads this map at runtime today (only its own test asserts the mapping's shape).
+# Candidate 2's "no duplicate capability source of truth" exit bar is not yet closed by this table
+# alone -- the two vocabularies remain functionally parallel until a later candidate actually
+# threads this map through host_adapter.py's generation path or this resolver's own
+# available_capabilities()/resolve(). Recorded here so that future work has one place to start,
+# per AD-11: this file must not claim the reconciliation is done when only its shape is captured.
 #
 # discover_files/read_repo/write_repo/browser reuse names skills.yaml's capability requirements
 # already use. git/scm/subagents/task_isolation/terminal/connectors have no pre-existing skills.yaml

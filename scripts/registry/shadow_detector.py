@@ -67,7 +67,19 @@ def detect_shadow(
     install's own recorded file hashes) what was just written.
     """
     host = resolve_host(host_registry, host_id)
-    bindings = [binding for surface in host.surfaces for binding in surface.discovery]
+    # Scoped to the one surface written_target_id actually belongs to, not flattened across every
+    # surface the host has. host_registry.py only guarantees precedence numbers are unique *within
+    # a surface* (each surface parses its own `seen_precedence` set); a host with more than one
+    # surface kind (e.g. a future LOCAL + CLOUD split) could otherwise have two bindings on
+    # different, non-comparable surfaces carry identical or interleaved precedence numbers with no
+    # parse-time error, which this function would then wrongly treat as one global ordering.
+    surface = next(
+        (s for s in host.surfaces if any(b.target.id == written_target_id for b in s.discovery)),
+        None,
+    )
+    if surface is None:
+        return ShadowResult(SHADOW_NONE)
+    bindings = surface.discovery
     written_precedence = next(
         (binding.precedence for binding in bindings if binding.target.id == written_target_id),
         None,

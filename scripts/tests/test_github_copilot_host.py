@@ -133,6 +133,42 @@ skills:
     assert any("hosts.github-copilot" in error for error in excinfo.value.errors)
 
 
+def test_broken_sibling_agent_hosts_yaml_fails_closed_instead_of_falling_back(tmp_path: Path) -> None:
+    """A sibling agent-hosts.yaml that exists but fails to parse is a broken registry, not an
+    absent one -- Candidate 13 final-review fix. Regression for a bug where _skill_host_ids
+    silently downgraded to the stale 3-host default (cursor/claude/kiro) on ANY parse failure,
+    which would have made a skill missing its required hosts.github-copilot block pass validation
+    instead of failing, exactly when the registry most needs it to fail loudly."""
+    from scripts.registry.schema import RegistryParseError, parse_registry
+
+    (tmp_path / "agent-hosts.yaml").write_text("not: [valid, host, registry", encoding="utf-8")
+    skills_path = tmp_path / "skills.yaml"
+    skills_path.write_text(
+        """
+schema_version: 1
+skills:
+  demo:
+    path: demo
+    category: testing
+    invocation: ambient
+    hosts:
+      cursor: {discovery: rule}
+      claude: {install: true}
+      kiro: {discovery: manual}
+    install:
+      requires: []
+    lint:
+      skill_md_max_lines: 180
+      target: demo
+    risk_class: [read-only]
+""",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(RegistryParseError):
+        parse_registry(skills_path)
+
+
 def test_real_repo_skills_all_declare_github_copilot_discovery() -> None:
     """End-to-end: every one of the 38 checked-in skills already migrated for the new host, not
     just a representative sample."""
