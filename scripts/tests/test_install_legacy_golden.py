@@ -323,3 +323,49 @@ def test_legacy_uninstall_refuses_to_remove_a_directory_with_corrupt_manifest(tm
     assert result.returncode != 0
     assert f"refusing to remove {dest}: install manifest is missing, unreadable, or names a different skill" in result.stderr
     assert dest.is_dir()
+
+
+def test_legacy_dry_run_agents_selector_previews_universal_target(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    project = tmp_path / "project"
+
+    user_result = run_installer("--agent", "agents", "--dry-run", "pr-review", home=home)
+    assert user_result.returncode == 0, user_result.stderr
+    assert user_result.stdout.splitlines() == [
+        f"dry-run: would install pr-review → {home / '.agents' / 'skills' / 'pr-review'} (host=agents-user)"
+    ]
+
+    project_result = run_installer(
+        "--agent", "agents", "--target-dir", str(project), "--dry-run", "pr-review", home=home
+    )
+    assert project_result.returncode == 0, project_result.stderr
+    assert project_result.stdout.splitlines() == [
+        f"dry-run: would install pr-review → {project / '.agents' / 'skills' / 'pr-review'} "
+        "(host=agents-project)"
+    ]
+
+
+def test_legacy_real_install_agents_selector_writes_to_universal_target(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    result = run_installer("--agent", "agents", "pr-review", home=home)
+    assert result.returncode == 0, result.stderr
+
+    dest = home / ".agents" / "skills" / "pr-review"
+    assert (dest / "SKILL.md").is_file()
+    manifest = json.loads((dest / MANIFEST_NAME).read_text(encoding="utf-8"))
+    assert manifest["host"] == "agents-user"
+    assert "Skill(s) installed to the universal Agent Skills target." in result.stdout
+
+
+def test_legacy_agents_selector_respects_ownership_hardening(tmp_path: Path) -> None:
+    """The universal target is explicitly a shared, multi-tool directory (spec Section 15) --
+    Candidate 6's ownership hardening must already protect it, with no extra wiring needed."""
+    home = tmp_path / "home"
+    dest = home / ".agents" / "skills" / "pr-review"
+    dest.mkdir(parents=True)
+    (dest / "README.md").write_text("installed by some other tool", encoding="utf-8")
+
+    result = run_installer("--agent", "agents", "pr-review", home=home)
+    assert result.returncode != 0
+    assert f"refusing to replace unowned directory at {dest}" in result.stderr
+    assert (dest / "README.md").read_text(encoding="utf-8") == "installed by some other tool"

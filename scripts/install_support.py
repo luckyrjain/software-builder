@@ -17,6 +17,10 @@ from scripts.reference_utils import (
 )
 from scripts.registry.host_registry import HostRegistryParseError, parse_host_registry
 from scripts.registry.legacy_install_resolver import resolve_legacy_install_destinations
+from scripts.registry.universal_install_resolver import (
+    UNIVERSAL_AGENT_SELECTOR,
+    resolve_universal_install_destination,
+)
 from scripts.registry.schema import parse_registry
 from scripts.yaml_safety import YAML_SAFETY_ERRORS
 
@@ -119,7 +123,7 @@ def cmd_classify_destination(dest: Path, skill_id: str) -> int:
 def cmd_resolve_targets(root: Path, agent: str, *, home: Path, target_dir: Path | None) -> int:
     """Print `<dest_root>\\t<host_label>` per line for install.sh's dest_roots()/
     host_label_for_dest() to consume, resolved from agent-hosts.yaml instead of Bash's own
-    hard-coded case statements (Candidate 5)."""
+    hard-coded case statements (Candidate 5), plus the universal `agents` selector (Candidate 7)."""
     try:
         host_registry = parse_host_registry(root / "agent-hosts.yaml")
     except HostRegistryParseError as exc:
@@ -127,9 +131,14 @@ def cmd_resolve_targets(root: Path, agent: str, *, home: Path, target_dir: Path 
             print(f"error: {error}", file=sys.stderr)
         return 1
     try:
-        destinations = resolve_legacy_install_destinations(
-            host_registry, agent, home=home, target_dir=target_dir
-        )
+        if agent == UNIVERSAL_AGENT_SELECTOR:
+            destinations = [
+                resolve_universal_install_destination(host_registry, home=home, target_dir=target_dir)
+            ]
+        else:
+            destinations = resolve_legacy_install_destinations(
+                host_registry, agent, home=home, target_dir=target_dir
+            )
     except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1

@@ -20,7 +20,10 @@ Usage: install.sh [options] [skill ...]
 Install portable skill packages to Cursor/Claude skill directories.
 
 Options:
-  --agent <cursor|claude-user|claude-project|all>  Target host (default: all)
+  --agent <cursor|claude-user|claude-project|all|agents>  Target host (default: all)
+                                                    "agents" installs to the universal
+                                                    Agent Skills target (.agents/skills)
+                                                    instead of a host-specific directory
   --target-dir <path>                              Project root for claude-project
   --dry-run                                        Print actions without writing
   --list                                           Print registry skill ids and exit
@@ -83,9 +86,9 @@ verify)
 esac
 
 case "${AGENT}" in
-cursor | cursor-project | claude-user | claude-project | all) ;;
+cursor | cursor-project | claude-user | claude-project | all | agents) ;;
 *)
-  echo "error: unknown --agent '${AGENT}' (expected cursor|cursor-project|claude-user|claude-project|all)" >&2
+  echo "error: unknown --agent '${AGENT}' (expected cursor|cursor-project|claude-user|claude-project|all|agents)" >&2
   exit 1
   ;;
 esac
@@ -374,5 +377,8 @@ all)
   else
     echo "Restart Cursor and start a new Claude Code session to load the skill(s)."
   fi
+  ;;
+agents)
+  echo "Skill(s) installed to the universal Agent Skills target. Restart your agent to load them."
   ;;
 esac

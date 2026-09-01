@@ -15,6 +15,15 @@
 schema_version: 1
 
 targets:
+  # Universal Agent Skills target (Candidate 7): a shared, multi-tool discovery directory rather
+  # than a single host's own. --agent agents installs here directly, not routed through any
+  # specific host's target list -- see scripts/registry/universal_install_resolver.py.
+  - id: agents-user
+    scope: user
+    path: ~/.agents/skills
+  - id: agents-project
+    scope: project
+    path: "{project_root}/.agents/skills"
   - id: cursor-user
     scope: user
     path: ~/.cursor/skills

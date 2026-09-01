@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from scripts.registry.host_registry import HostRegistry, TargetSpec
+from scripts.registry.host_registry import HostRegistry, resolve_target_path
 
 LEGACY_AGENT_SELECTORS = frozenset({"cursor", "cursor-project", "claude-user", "claude-project", "all"})
 
@@ -35,15 +35,6 @@ _SINGLE_DEST_ROUTING: dict[str, tuple[str, str]] = {
 }
 
 
-def _resolve_target_path(target: TargetSpec, *, home: Path, target_dir: Path | None) -> Path:
-    if target.scope == "user":
-        # host_registry.py's own _validate_target_path already guarantees a user-scope path
-        # starts with exactly "~/" -- see host_registry.py's ALLOWED_SCOPES validation.
-        return home / target.path[len("~/") :]
-    base = target_dir if target_dir is not None else home
-    return base / target.path[len("{project_root}/") :]
-
-
 def _resolve_single_destination(
     host_registry: HostRegistry,
     routing: tuple[str, str],
@@ -54,7 +45,7 @@ def _resolve_single_destination(
     no_dir_target_id, with_dir_target_id = routing
     target_id = with_dir_target_id if target_dir is not None else no_dir_target_id
     target = host_registry.targets[target_id]
-    return _resolve_target_path(target, home=home, target_dir=target_dir)
+    return resolve_target_path(target, home=home, target_dir=target_dir)
 
 
 def host_label_for_dest(dest_root: Path, *, home: Path) -> str:
