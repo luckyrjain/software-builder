@@ -4,6 +4,7 @@ import argparse
 import json
 import sys
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 
 import yaml
@@ -63,6 +64,7 @@ def _collect_outputs(root: Path) -> dict[Path, str]:
     registry = load_registry(root)
     descriptions = load_descriptions(root, registry)
     deprecated = load_deprecated_skills(root, registry)
+    layers = resolve_optional_layers(root)
     outputs: dict[Path, str] = {}
     if skills_fragments_dir(root).is_dir():
         # skills.yaml's `skills:` mapping is authored one-per-file under
@@ -120,9 +122,7 @@ def _collect_outputs(root: Path) -> dict[Path, str]:
     outputs[root / "generated" / "catalogue" / "composition-deps.mmd"] = render_composition_mermaid(
         registry,
     )
-    compatibility_catalog = root / "scripts" / "registry" / "capability_catalog.yaml"
-    composition_contracts = root / "skills.yaml"
-    if compatibility_catalog.is_file() and composition_contracts.is_file():
+    if layers.capability_catalog is not None and layers.composition_contracts is not None:
         outputs[root / "generated" / "catalogue" / "compatibility-matrix.md"] = (
             render_compatibility_matrix(root)
         )
@@ -138,12 +138,11 @@ def _collect_outputs(root: Path) -> dict[Path, str]:
         }
         for section, path in projection_paths.items():
             outputs[path] = render_legacy_projection(root, section)
-    composition_runtime = _composition_runtime_path(root)
-    if composition_runtime.is_file() and composition_contracts.is_file():
+    if layers.composition_runtime is not None and layers.composition_contracts is not None:
         outputs[root / "generated" / "catalogue" / "composition-runtime.mmd"] = render_dependency_graph(
             registry,
-            runtime_path=composition_runtime,
-            contracts_path=composition_contracts,
+            runtime_path=layers.composition_runtime,
+            contracts_path=layers.composition_contracts,
         )
     return outputs
 
@@ -194,10 +193,6 @@ def _capability_families_path(root: Path) -> Path:
     return root / "scripts" / "registry" / "capability_families.yaml"
 
 
-def _platform_contracts_path(root: Path) -> Path:
-    return root / "scripts" / "registry" / "platform_contracts.yaml"
-
-
 def _composition_runtime_path(root: Path) -> Path:
     manifest_path = root / "skills.yaml"
     try:
@@ -228,31 +223,75 @@ def _p1_layer_paths(root: Path) -> list[Path]:
     ]
 
 
+@dataclass(frozen=True)
+class OptionalLayers:
+    """Which optional contract/generation layers are active for one repository root.
+
+    `scripts/registry/cli.py`'s generate and validate flows both need the same answer
+    to "is capability_catalog / composition_runtime / release_contract / the P1 layer
+    active here" -- before this existed, each of `_collect_outputs`,
+    `_validate_for_generate`, and `_validate_all` answered it separately via ad hoc
+    `Path.is_file()` checks and inline path literals, duplicated up to three times per
+    layer. That drift already produced one dead helper (a prior `_platform_contracts_path`
+    was defined and never called by anything -- removed). This dataclass is the one
+    place that answers the question, composed from the individual path-construction
+    helpers above (kept standalone: they're pure path arithmetic, independently useful
+    and independently tested); every consumer below reads a field here instead of
+    re-deriving it.
+
+    A `None` field means that layer is inactive for this root (an optional file it
+    depends on doesn't exist); a `Path` means it's active, at that path.
+    """
+
+    host_contracts: Path | None
+    capability_catalog: Path | None
+    capability_families: Path | None
+    composition_runtime: Path | None
+    release_contract: Path | None
+    composition_contracts: Path | None
+    p1_layer_active: bool
+
+
+def resolve_optional_layers(root: Path) -> OptionalLayers:
+    def active(path: Path) -> Path | None:
+        return path if path.is_file() else None
+
+    return OptionalLayers(
+        host_contracts=active(root / "scripts" / "registry" / "host_contracts.yaml"),
+        capability_catalog=active(_capability_catalog_path(root)),
+        capability_families=active(_capability_families_path(root)),
+        composition_runtime=active(_composition_runtime_path(root)),
+        release_contract=active(_release_contract_path(root)),
+        composition_contracts=active(root / "skills.yaml"),
+        p1_layer_active=any(path.is_file() for path in _p1_layer_paths(root)),
+    )
+
+
 def _validate_for_generate(root: Path) -> list[str]:
+    layers = resolve_optional_layers(root)
     errors = validate_registry(root)
-    host_contracts = root / "scripts" / "registry" / "host_contracts.yaml"
-    if host_contracts.is_file():
+    if layers.host_contracts is not None:
         errors.extend(validate_host_adapter_interface(root))
         errors.extend(validate_host_adapter_identities(root))
-    if _capability_catalog_path(root).is_file():
+    if layers.capability_catalog is not None:
         errors.extend(validate_capability_catalog_sync(root))
-    if _capability_catalog_path(root).is_file() and _capability_families_path(root).is_file():
+    if layers.capability_catalog is not None and layers.capability_families is not None:
         errors.extend(
             validate_capability_families(
-                catalog_path=_capability_catalog_path(root),
-                families_path=_capability_families_path(root),
+                catalog_path=layers.capability_catalog,
+                families_path=layers.capability_families,
             )
         )
     raw_manifest = load_unique_yaml_file(root / "skills.yaml")
     if has_canonical_manifest_shape(raw_manifest):
         errors.extend(validate_manifest(root))
-    if any(path.is_file() for path in _p1_layer_paths(root)):
+    if layers.p1_layer_active:
         errors.extend(validate_p1_contracts(root))
-    if _composition_runtime_path(root).is_file():
+    if layers.composition_runtime is not None:
         errors.extend(
             validate_composition_runtime(
                 load_registry(root),
-                runtime_path=_composition_runtime_path(root),
+                runtime_path=layers.composition_runtime,
                 contracts_path=root / "skills.yaml",
             )
         )
@@ -264,11 +303,12 @@ def _validate_all(root: Path) -> list[str]:
     # plus integrated runtime and host-portability validation. Portability is
     # intentionally kept out of the mutating generate path because it checks
     # generated Cursor/Kiro surfaces that `generate` may need to repair.
+    layers = resolve_optional_layers(root)
     errors = _validate_for_generate(root)
-    if any(path.is_file() for path in _p1_layer_paths(root)):
+    if layers.p1_layer_active:
         errors.extend(validate_runtime_manifest(root))
     errors.extend(validate_host_portability(root))
-    if _release_contract_path(root).is_file():
+    if layers.release_contract is not None:
         errors.extend(validate_release_contract(root))
     return errors
 
