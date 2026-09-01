@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import argparse
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -13,10 +13,28 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from scripts.reference_utils import ManifestError, MANIFEST_NAME, read_manifest_file
+from scripts.registry.capability_engine import capability_status as _capability_status
+from scripts.registry.compatibility_resolver import (
+    UnknownHostError,
+    available_capabilities,
+    resolve_host,
+)
+from scripts.registry.host_registry import HostRegistryParseError, parse_host_registry
 from scripts.registry.models import CapabilityPath, SkillEntry
 from scripts.registry.schema import parse_registry
 from scripts.yaml_safety import YAML_SAFETY_ERRORS
 from scripts.release_info import read_distribution_version
+
+# Combined with a skill's own capability_status by _apply_host_verification below (spec Section
+# 10/26): a host that hasn't earned VERIFIED status can't make a READY/DEGRADED claim credible.
+# Named per Section 41's doctor status vocabulary (UNVERIFIED_HOST/CONFLICTED_HOST_EVIDENCE), not
+# scripts/registry/compatibility_resolver.py's bare UNVERIFIED/CONFLICTED -- doctor's own status
+# space has other reasons a skill can be unverified (VERSION_MISMATCH, etc.), so the host-specific
+# ones need their own names to stay unambiguous in rendered output.
+_HOST_VERIFICATION_STATUS = {
+    "UNVERIFIED": "UNVERIFIED_HOST",
+    "CONFLICTED": "CONFLICTED_HOST_EVIDENCE",
+}
 
 
 def _installed_manifest(skill_dest: Path) -> dict[str, object] | None:
@@ -26,44 +44,6 @@ def _installed_manifest(skill_dest: Path) -> dict[str, object] | None:
         # A missing or corrupt manifest just means "can't determine install
         # status" for this skill -- not a doctor-run failure.
         return None
-
-
-def _capability_status(
-    entry_required: list[str],
-    entry_optional: list[str],
-    entry_any_of: list[CapabilityPath],
-    available: set[str] | None,
-) -> tuple[list[str], list[str], str, CapabilityPath | None]:
-    if available is None:
-        return [], [], "UNSPECIFIED", None
-    missing_required = [cap for cap in entry_required if cap not in available]
-    if missing_required:
-        return missing_required, [], "BLOCKED", None
-
-    active_path: CapabilityPath | None = None
-    if entry_any_of:
-        complete_paths = [
-            path for path in entry_any_of if all(cap in available for cap in path.required)
-        ]
-        if not complete_paths:
-            closest_path = min(
-                entry_any_of,
-                key=lambda path: sum(cap not in available for cap in path.required),
-            )
-            missing_required = [cap for cap in closest_path.required if cap not in available]
-            return missing_required, [], "BLOCKED", None
-        active_path = min(
-            complete_paths,
-            key=lambda path: sum(item.name not in available for item in path.optional),
-        )
-
-    active_optional = list(entry_optional)
-    if active_path is not None:
-        active_optional.extend(item.name for item in active_path.optional)
-    missing_optional = [cap for cap in active_optional if cap not in available]
-    if missing_optional:
-        return missing_required, missing_optional, "DEGRADED", active_path
-    return missing_required, missing_optional, "READY", active_path
 
 
 @dataclass(frozen=True)
@@ -78,6 +58,9 @@ class SkillStatus:
     installed_label: str = "not installed"
     active_path: CapabilityPath | None = None
     available: frozenset[str] | None = None
+    host_id: str | None = None
+    host_verification: str | None = None
+    capability_status: str | None = None
 
 
 def _skill_status(
@@ -95,6 +78,7 @@ def _skill_status(
         entry.capabilities.any_of,
         available,
     )
+    capability_status = status
 
     installed_label = "not installed"
     for install_root in install_roots:
@@ -120,12 +104,38 @@ def _skill_status(
         installed_label=installed_label,
         active_path=active_path,
         available=frozenset(available) if available is not None else None,
+        capability_status=capability_status,
     )
+
+
+def _apply_host_verification(status: SkillStatus, *, host_id: str, host_verification: str) -> SkillStatus:
+    """Downgrade a READY/DEGRADED capability result per the host's own verification state (spec
+    Section 10/26), matching scripts/registry/compatibility_resolver.py's combine logic exactly --
+    reused conceptually rather than by direct call, since doctor.py already computed
+    capability_status/missing_required/etc. via its own `_capability_status` engine (the one
+    compatibility_resolver.py itself reuses) and VERSION_MISMATCH is a doctor-only precedence tier
+    that engine doesn't know about.
+
+    BLOCKED and VERSION_MISMATCH are already the most informative signal available and are left
+    untouched; only a would-be READY/DEGRADED claim is downgraded, and only for a host that hasn't
+    earned VERIFIED status. See _HOST_VERIFICATION_STATUS for why the displayed name differs from
+    compatibility_resolver.py's bare UNVERIFIED/CONFLICTED.
+    """
+    display_status = status.status
+    if status.status in {"READY", "DEGRADED"}:
+        override = _HOST_VERIFICATION_STATUS.get(host_verification)
+        if override is not None:
+            display_status = override
+    return replace(status, status=display_status, host_id=host_id, host_verification=host_verification)
 
 
 def render_skill_status(status: SkillStatus) -> str:
     entry = status.entry
     lines = [f"\n{status.skill_id}: {status.status}"]
+    if status.host_id is not None:
+        lines.append(f"  host: {status.host_id} (verification: {status.host_verification})")
+        if status.status != status.capability_status:
+            lines.append(f"  capability result: {status.capability_status} (host not yet verified)")
     lines.append(f"  invocation: {entry.invocation}")
     lines.append(f"  composition.mode: {entry.composition.mode}")
     if entry.composition.invokes:
@@ -181,6 +191,8 @@ def cmd_doctor(
     skill_filter: str | None,
     available: set[str] | None,
     install_roots: list[Path],
+    host_id: str | None = None,
+    host_verification: str | None = None,
 ) -> int:
     registry = parse_registry(root / "skills.yaml")
     distribution_version = read_distribution_version(root)
@@ -198,6 +210,8 @@ def cmd_doctor(
             install_roots=install_roots,
             distribution_version=distribution_version,
         )
+        if host_id is not None:
+            status = _apply_host_verification(status, host_id=host_id, host_verification=host_verification)
         print(render_skill_status(status))
 
         if status.status in {"BLOCKED", "VERSION_MISMATCH"}:
@@ -212,7 +226,19 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--skill", help="limit output to one skill id")
     parser.add_argument(
         "--available",
-        help="comma-separated capability names present in the host environment",
+        help="comma-separated capability names present in the host environment "
+        "(mutually exclusive with --agent, which derives this from agent-hosts.yaml)",
+    )
+    parser.add_argument(
+        "--agent",
+        help="host id or alias from agent-hosts.yaml; derives available capabilities and "
+        "verification state from the registry instead of --available (Candidate 10)",
+    )
+    parser.add_argument(
+        "--surface",
+        help="informational only for now: agent-hosts.yaml's HostSpec.capabilities is not yet "
+        "nested per surface (see scripts/registry/compatibility_resolver.py), so this does not "
+        "yet change which capabilities are considered available",
     )
     parser.add_argument(
         "--install-root",
@@ -223,8 +249,35 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
+    if args.agent is not None and args.available is not None:
+        print("error: --agent and --available are mutually exclusive", file=sys.stderr)
+        return 2
+
+    host_id: str | None = None
+    host_verification: str | None = None
     available: set[str] | None = None
-    if args.available is not None:
+    if args.agent is not None:
+        try:
+            host_registry = parse_host_registry(args.repo_root / "agent-hosts.yaml")
+        except HostRegistryParseError as exc:
+            for error in exc.errors:
+                print(f"error: {error}", file=sys.stderr)
+            return 2
+        try:
+            host = resolve_host(host_registry, args.agent)
+        except UnknownHostError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        host_id = args.agent
+        host_verification = host.verification
+        available = set(available_capabilities(host))
+        if args.surface is not None:
+            print(
+                f"note: --surface {args.surface!r} does not yet affect capability resolution "
+                "(agent-hosts.yaml capabilities are host-level, not per-surface)",
+                file=sys.stderr,
+            )
+    elif args.available is not None:
         available = {item.strip() for item in args.available.split(",") if item.strip()}
 
     install_roots = list(args.install_root)
@@ -237,6 +290,8 @@ def main(argv: list[str] | None = None) -> int:
             skill_filter=args.skill,
             available=available,
             install_roots=install_roots,
+            host_id=host_id,
+            host_verification=host_verification,
         )
     except YAML_SAFETY_ERRORS as exc:
         print(f"error: {exc}", file=sys.stderr)

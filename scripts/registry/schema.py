@@ -8,10 +8,7 @@ from scripts.registry.models import (
     CapabilityOptional,
     CapabilityPath,
     CompositionSpec,
-    HostClaude,
-    HostCursor,
-    HostKiro,
-    Hosts,
+    HostDiscoverySpec,
     InstallSpec,
     LintSpec,
     Registry,
@@ -28,7 +25,52 @@ AUTOMATION_ONLY_INVOCATION = "automation-only"
 ALLOWED_INVOCATION = {"ambient", AUTOMATION_ONLY_INVOCATION}
 ALLOWED_CURSOR_DISCOVERY = {"rule", "manual", "always"}
 ALLOWED_KIRO_DISCOVERY = {"manual", "always"}
+# GitHub Copilot's documented behavior ("Skills are loaded when relevant based on the user's
+# prompt and the skill's description") is an on-demand/semantic-match model, not an
+# always-in-context one by default -- closer to Kiro's manual/always split than Cursor's three-way
+# rule/manual/always vocabulary, so this reuses that narrower set rather than inventing a third.
+ALLOWED_GITHUB_COPILOT_DISCOVERY = {"manual", "always"}
 ALLOWED_COMPOSITION_MODE = {"invoke", "aggregate"}
+
+# Fallback host set used only when a skills.yaml has no sibling agent-hosts.yaml (isolated test
+# fixtures, mainly) -- matches this repository's real host set today so no existing fixture needs to
+# change. Real callers (load_registry(root) against the actual repo root) always resolve the live set
+# from agent-hosts.yaml instead, per Candidate 3 of the universal-agent-compatibility design.
+_DEFAULT_HOST_IDS = frozenset({"cursor", "claude", "kiro"})
+
+# Which field of HostDiscoverySpec a given host's `hosts.<id>` block populates. A host reusing an
+# existing field kind (e.g. a future host with cursor/kiro-style discovery modes) needs only a new
+# agent-hosts.yaml entry and, if it has its own discovery vocabulary, one entry here -- no new class.
+_HOST_FIELD_KIND = {"cursor": "discovery", "kiro": "discovery", "claude": "install"}
+_PER_HOST_ALLOWED_DISCOVERY: dict[str, frozenset[str]] = {
+    "cursor": frozenset(ALLOWED_CURSOR_DISCOVERY),
+    "kiro": frozenset(ALLOWED_KIRO_DISCOVERY),
+    "github-copilot": frozenset(ALLOWED_GITHUB_COPILOT_DISCOVERY),
+}
+
+
+def _skill_host_ids(skills_yaml_path: Path) -> frozenset[str]:
+    """The set of host ids a skill's `hosts:` block may/must declare.
+
+    Driven by agent-hosts.yaml (the canonical host-identity registry, Candidate 2) when it exists next
+    to the parsed skills.yaml; falls back to this repository's current host set only when no such file
+    is present at all, so isolated test fixtures that construct a bare skills.yaml with no sibling
+    registry keep working unchanged. A sibling agent-hosts.yaml that exists but fails to parse is a
+    broken registry, not an absent one -- AD-11's fail-closed rule means that must surface as an error,
+    not silently downgrade every skill's required host set to the stale 3-host default.
+    """
+    agent_hosts_path = skills_yaml_path.parent / "agent-hosts.yaml"
+    if not agent_hosts_path.is_file():
+        return _DEFAULT_HOST_IDS
+    import yaml
+
+    from scripts.registry.host_registry import HostRegistryParseError, parse_host_registry
+
+    try:
+        registry = parse_host_registry(agent_hosts_path)
+    except (HostRegistryParseError, OSError, ValueError, yaml.YAMLError) as exc:
+        raise RegistryParseError([f"{agent_hosts_path}: failed to parse: {exc}"]) from exc
+    return frozenset(registry.hosts) or _DEFAULT_HOST_IDS
 
 
 class RegistryParseError(ValueError):
@@ -138,6 +180,8 @@ def parse_registry(path: Path) -> Registry:
     if schema_version != 1:
         raise ValueError(f"unsupported schema_version: {schema_version}")
 
+    host_ids = _skill_host_ids(path)
+
     skills_raw = _require_mapping(root.get("skills"), "skills")
     skills: dict[str, SkillEntry] = {}
     errors: list[str] = []
@@ -146,7 +190,7 @@ def parse_registry(path: Path) -> Registry:
             errors.append(f"skills.{skill_id!r}: skill id must be a string")
             continue
         try:
-            skills[skill_id] = _parse_skill_entry(skill_id, entry_raw)
+            skills[skill_id] = _parse_skill_entry(skill_id, entry_raw, host_ids)
         except ValueError as exc:
             errors.append(str(exc))
     if errors:
@@ -165,24 +209,39 @@ def registered_skill_ids(path: Path) -> set[str]:
     return set(parse_registry(path).skills)
 
 
-def _parse_skill_entry(skill_id: str, entry_raw: Any) -> SkillEntry:
+def _parse_hosts(
+    skill_id: str,
+    hosts_raw: Any,
+    host_ids: frozenset[str],
+) -> dict[str, HostDiscoverySpec]:
+    mapping = _require_mapping(hosts_raw, f"skills.{skill_id}.hosts")
+    unknown = sorted(set(mapping) - host_ids)
+    if unknown:
+        raise ValueError(
+            f"skills.{skill_id}.hosts declares host(s) not present in agent-hosts.yaml: {unknown}"
+        )
+    hosts: dict[str, HostDiscoverySpec] = {}
+    for host_id in sorted(host_ids):
+        label = f"skills.{skill_id}.hosts.{host_id}"
+        host_raw = _require_mapping(mapping.get(host_id), label)
+        if _HOST_FIELD_KIND.get(host_id, "discovery") == "install":
+            hosts[host_id] = HostDiscoverySpec(install=bool(host_raw.get("install", True)))
+            continue
+        discovery = str(host_raw.get("discovery", ""))
+        allowed = _PER_HOST_ALLOWED_DISCOVERY.get(host_id)
+        if allowed is not None and discovery not in allowed:
+            raise ValueError(f"{label}.discovery invalid: {discovery!r}")
+        hosts[host_id] = HostDiscoverySpec(discovery=discovery)
+    return hosts
+
+
+def _parse_skill_entry(skill_id: str, entry_raw: Any, host_ids: frozenset[str]) -> SkillEntry:
     entry = _require_mapping(entry_raw, f"skills.{skill_id}")
     invocation = str(entry.get("invocation", ""))
     if invocation not in ALLOWED_INVOCATION:
         raise ValueError(f"skills.{skill_id}.invocation invalid: {invocation!r}")
 
-    hosts_raw = _require_mapping(entry.get("hosts"), f"skills.{skill_id}.hosts")
-    cursor_raw = _require_mapping(hosts_raw.get("cursor"), f"skills.{skill_id}.hosts.cursor")
-    kiro_raw = _require_mapping(hosts_raw.get("kiro"), f"skills.{skill_id}.hosts.kiro")
-    claude_raw = hosts_raw.get("claude", {"install": True})
-    claude_map = _require_mapping(claude_raw, f"skills.{skill_id}.hosts.claude")
-
-    cursor_discovery = str(cursor_raw.get("discovery", ""))
-    kiro_discovery = str(kiro_raw.get("discovery", ""))
-    if cursor_discovery not in ALLOWED_CURSOR_DISCOVERY:
-        raise ValueError(f"skills.{skill_id}.hosts.cursor.discovery invalid: {cursor_discovery!r}")
-    if kiro_discovery not in ALLOWED_KIRO_DISCOVERY:
-        raise ValueError(f"skills.{skill_id}.hosts.kiro.discovery invalid: {kiro_discovery!r}")
+    hosts = _parse_hosts(skill_id, entry.get("hosts"), host_ids)
 
     install_raw = _require_mapping(entry.get("install"), f"skills.{skill_id}.install")
     requires = install_raw.get("requires", [])
@@ -204,11 +263,7 @@ def _parse_skill_entry(skill_id: str, entry_raw: Any) -> SkillEntry:
         path=str(entry.get("path", skill_id)),
         category=str(entry.get("category", "")),
         invocation=invocation,
-        hosts=Hosts(
-            cursor=HostCursor(discovery=cursor_discovery),
-            claude=HostClaude(install=bool(claude_map.get("install", True))),
-            kiro=HostKiro(discovery=kiro_discovery),
-        ),
+        hosts=hosts,
         install=InstallSpec(requires=[str(item) for item in requires]),
         lint=LintSpec(
             skill_md_max_lines=_coerce_int(

@@ -7,6 +7,8 @@ test-writer:
       discovery: rule
     claude:
       install: true
+    github-copilot:
+      discovery: manual
     kiro:
       discovery: manual
   install:

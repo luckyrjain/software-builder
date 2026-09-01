@@ -11,6 +11,9 @@ export PYTHONDONTWRITEBYTECODE=1
 
 cp -a "${REPO_ROOT}/scripts" "${TMP_REPO}/scripts"
 cp -a "${REPO_ROOT}/skills.yaml" "${TMP_REPO}/skills.yaml"
+# install.sh's destination resolution reads agent-hosts.yaml as skills.yaml's sibling
+# (scripts/registry/legacy_install_resolver.py).
+cp -a "${REPO_ROOT}/agent-hosts.yaml" "${TMP_REPO}/agent-hosts.yaml"
 cp -a "${REPO_ROOT}/unit-test-creator" "${TMP_REPO}/unit-test-creator"
 cp -a "${REPO_ROOT}/weekly-squad-digest" "${TMP_REPO}/weekly-squad-digest"
 mkdir -p "${TMP_REPO}/docs"

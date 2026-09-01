@@ -10,7 +10,13 @@ import pytest
 
 from scripts.reference_utils import (
     MANIFEST_NAME,
+    OWNERSHIP_ABSENT,
+    OWNERSHIP_CORRUPT_OWNERSHIP,
+    OWNERSHIP_SOFTWARE_BUILDER_OWNED,
+    OWNERSHIP_SYMLINK,
+    OWNERSHIP_UNOWNED,
     ManifestError,
+    classify_install_destination,
     extract_markdown_links,
     read_manifest_file,
     rewrite_framework_links,
@@ -86,6 +92,61 @@ def test_manifest_error_is_a_value_error(tmp_path: Path) -> None:
     # degrades to None; confirm it also satisfies any broader `except
     # ValueError` a caller might use.
     assert issubclass(ManifestError, ValueError)
+
+
+def test_classify_install_destination_absent_when_path_does_not_exist(tmp_path: Path) -> None:
+    dest = tmp_path / "does-not-exist"
+    assert classify_install_destination(dest, skill_id="demo") == OWNERSHIP_ABSENT
+
+
+def test_classify_install_destination_symlink_before_checking_existence(tmp_path: Path) -> None:
+    # A broken symlink (target doesn't exist) must still classify as SYMLINK, not ABSENT --
+    # Path.exists() follows symlinks and would report False for a broken one.
+    dest = tmp_path / "broken-link"
+    dest.symlink_to(tmp_path / "nonexistent-target")
+    assert classify_install_destination(dest, skill_id="demo") == OWNERSHIP_SYMLINK
+
+
+def test_classify_install_destination_symlink_to_real_directory(tmp_path: Path) -> None:
+    real_dir = tmp_path / "real"
+    real_dir.mkdir()
+    dest = tmp_path / "link"
+    dest.symlink_to(real_dir)
+    assert classify_install_destination(dest, skill_id="demo") == OWNERSHIP_SYMLINK
+
+
+def test_classify_install_destination_unowned_when_a_plain_file(tmp_path: Path) -> None:
+    dest = tmp_path / "not-a-directory"
+    dest.write_text("surprise", encoding="utf-8")
+    assert classify_install_destination(dest, skill_id="demo") == OWNERSHIP_UNOWNED
+
+
+def test_classify_install_destination_unowned_when_directory_has_no_manifest(tmp_path: Path) -> None:
+    dest = tmp_path / "third-party"
+    dest.mkdir()
+    (dest / "README.md").write_text("not ours", encoding="utf-8")
+    assert classify_install_destination(dest, skill_id="demo") == OWNERSHIP_UNOWNED
+
+
+def test_classify_install_destination_corrupt_when_manifest_is_invalid_json(tmp_path: Path) -> None:
+    dest = tmp_path / "corrupt"
+    dest.mkdir()
+    (dest / MANIFEST_NAME).write_text("{not valid json", encoding="utf-8")
+    assert classify_install_destination(dest, skill_id="demo") == OWNERSHIP_CORRUPT_OWNERSHIP
+
+
+def test_classify_install_destination_corrupt_when_manifest_names_a_different_skill(tmp_path: Path) -> None:
+    dest = tmp_path / "wrong-skill"
+    dest.mkdir()
+    (dest / MANIFEST_NAME).write_text('{"skill": "other-skill"}', encoding="utf-8")
+    assert classify_install_destination(dest, skill_id="demo") == OWNERSHIP_CORRUPT_OWNERSHIP
+
+
+def test_classify_install_destination_owned_when_manifest_names_this_skill(tmp_path: Path) -> None:
+    dest = tmp_path / "demo"
+    dest.mkdir()
+    (dest / MANIFEST_NAME).write_text('{"skill": "demo"}', encoding="utf-8")
+    assert classify_install_destination(dest, skill_id="demo") == OWNERSHIP_SOFTWARE_BUILDER_OWNED
 
 
 def test_extract_markdown_links_preserves_parens_in_target() -> None:

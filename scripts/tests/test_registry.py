@@ -626,10 +626,7 @@ def _skill_entry(
 ) -> SkillEntry:
     from scripts.registry.models import (
         CompositionSpec,
-        HostClaude,
-        HostCursor,
-        HostKiro,
-        Hosts,
+        HostDiscoverySpec,
         InstallSpec,
         LintSpec,
         SkillEntry,
@@ -639,11 +636,11 @@ def _skill_entry(
         path="demo",
         category="testing",
         invocation=invocation,
-        hosts=Hosts(
-            cursor=HostCursor(discovery=cursor_discovery),
-            claude=HostClaude(),
-            kiro=HostKiro(discovery=kiro_discovery),
-        ),
+        hosts={
+            "cursor": HostDiscoverySpec(discovery=cursor_discovery),
+            "claude": HostDiscoverySpec(install=True),
+            "kiro": HostDiscoverySpec(discovery=kiro_discovery),
+        },
         install=InstallSpec(requires=requires or []),
         lint=LintSpec(skill_md_max_lines=180, target="demo"),
         composition=CompositionSpec(),
@@ -846,16 +843,18 @@ def test_update_readme_badge_keeps_markers_outside_the_image_url() -> None:
 def test_render_install_mermaid_includes_edge() -> None:
     from scripts.registry.generate_docs import render_install_mermaid
     from scripts.registry.models import (
-        HostClaude,
-        HostCursor,
-        HostKiro,
-        Hosts,
+        HostDiscoverySpec,
         InstallSpec,
         LintSpec,
         Registry,
         SkillEntry,
     )
 
+    minimal_hosts = {
+        "cursor": HostDiscoverySpec(discovery="rule"),
+        "claude": HostDiscoverySpec(install=True),
+        "kiro": HostDiscoverySpec(discovery="manual"),
+    }
     registry = Registry(
         schema_version=1,
         skills={
@@ -863,11 +862,7 @@ def test_render_install_mermaid_includes_edge() -> None:
                 path="child",
                 category="testing",
                 invocation="ambient",
-                hosts=Hosts(
-                    cursor=HostCursor("rule"),
-                    claude=HostClaude(True),
-                    kiro=HostKiro("manual"),
-                ),
+                hosts=minimal_hosts,
                 install=InstallSpec(requires=["parent"]),
                 lint=LintSpec(180, "child"),
             ),
@@ -875,11 +870,7 @@ def test_render_install_mermaid_includes_edge() -> None:
                 path="parent",
                 category="testing",
                 invocation="ambient",
-                hosts=Hosts(
-                    cursor=HostCursor("rule"),
-                    claude=HostClaude(True),
-                    kiro=HostKiro("manual"),
-                ),
+                hosts=minimal_hosts,
                 install=InstallSpec(requires=[]),
                 lint=LintSpec(180, "parent"),
             ),
@@ -1022,10 +1013,7 @@ def test_parse_registry_stops_at_first_bad_field_within_one_skill(tmp_path: Path
 
 def _one_skill_registry() -> "Registry":
     from scripts.registry.models import (
-        HostClaude,
-        HostCursor,
-        HostKiro,
-        Hosts,
+        HostDiscoverySpec,
         InstallSpec,
         LintSpec,
         Registry,
@@ -1039,11 +1027,11 @@ def _one_skill_registry() -> "Registry":
                 path="pr-review",
                 category="review",
                 invocation="ambient",
-                hosts=Hosts(
-                    cursor=HostCursor("rule"),
-                    claude=HostClaude(True),
-                    kiro=HostKiro("manual"),
-                ),
+                hosts={
+                    "cursor": HostDiscoverySpec(discovery="rule"),
+                    "claude": HostDiscoverySpec(install=True),
+                    "kiro": HostDiscoverySpec(discovery="manual"),
+                },
                 install=InstallSpec(requires=[]),
                 lint=LintSpec(180, "pr-review"),
             ),
@@ -1251,7 +1239,7 @@ skills:
     registry = parse_registry(registry_file)
     entry = registry.skills["squad-map"]
     assert entry.invocation == "ambient"
-    assert entry.hosts.cursor.discovery == "rule"
+    assert entry.hosts["cursor"].discovery == "rule"
     assert entry.risk_class == ["read-only"]
     assert entry.install.requires == []
 
@@ -1320,9 +1308,9 @@ skills:
 
     registry = parse_registry(registry_file)
     entry = registry.skills["squad-map"]
-    assert entry.hosts.cursor.discovery == "always"
-    assert entry.hosts.claude.install is True
-    assert entry.hosts.kiro.discovery == "manual"
+    assert entry.hosts["cursor"].discovery == "always"
+    assert entry.hosts["claude"].install is True
+    assert entry.hosts["kiro"].discovery == "manual"
 
 
 def test_resolve_registry_profiles_noop_without_profiles_key() -> None:

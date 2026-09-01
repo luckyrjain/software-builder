@@ -1,0 +1,203 @@
+# Agent compatibility
+
+<!-- GENERATED from agent-hosts.yaml + skills.yaml — do not edit; run make generate -->
+
+This document is the detailed companion to README.md's compatibility summary. It states only
+what is declared in `agent-hosts.yaml`, verified by whatever evidence is actually recorded there
+-- not invented compatibility percentages (spec Section 43).
+
+## Hosts
+
+### claude
+- **Verification:** UNVERIFIED
+- **Maintainer support:** BEST_EFFORT
+- **Isolation:** UNKNOWN
+- **Discovery surfaces:** LOCAL \(claude-project, claude-user\)
+- **Capabilities:** host.filesystem.read=UNKNOWN, host.repository.read_write=UNKNOWN
+- **Evidence:** none recorded
+
+### cursor
+- **Verification:** UNVERIFIED
+- **Maintainer support:** BEST_EFFORT
+- **Isolation:** UNKNOWN
+- **Discovery surfaces:** LOCAL \(cursor-project, cursor-user\)
+- **Capabilities:** host.filesystem.read=UNKNOWN, host.repository.read_write=UNKNOWN
+- **Evidence:** none recorded
+
+### github-copilot
+- **Verification:** UNVERIFIED
+- **Maintainer support:** BEST_EFFORT
+- **Isolation:** UNKNOWN
+- **Discovery surfaces:** LOCAL \(github-copilot-project, github-copilot-user\)
+- **Capabilities:** host.filesystem.read=UNKNOWN, host.repository.read_write=UNKNOWN
+- **Evidence:** DOCUMENTATION: https://docs.github.com/en/copilot/how-tos/copilot-on-github/customize-copilot/customize-cloud-agent/add-skills
+
+### kiro
+- **Verification:** UNVERIFIED
+- **Maintainer support:** BEST_EFFORT
+- **Isolation:** UNKNOWN
+- **Discovery surfaces:** LOCAL \(kiro-project, kiro-user\)
+- **Capabilities:** host.filesystem.read=UNKNOWN, host.repository.read_write=UNKNOWN
+- **Evidence:** none recorded
+
+## Host × skill compatibility
+
+`READY`/`DEGRADED` require both a satisfied capability requirement and a `VERIFIED` host; an
+`UNVERIFIED` or `CONFLICTED` host downgrades what would otherwise be READY/DEGRADED, and a
+concrete missing capability (`BLOCKED`) always takes precedence, matching
+`scripts/registry/compatibility_resolver.py`'s combination rule.
+
+| Host | Skill | Status | Missing capability |
+|------|-------|--------|---------------------|
+| claude | api-design-review | BLOCKED | host.report.write |
+| claude | api-test-creator | BLOCKED | host.repository.read_write |
+| claude | architecture-review | BLOCKED | host.report.write |
+| claude | backlog-runner | BLOCKED | scheduler.cron.trigger, host.issue_tracker.read |
+| claude | capacity-planner | BLOCKED | host.report.write |
+| claude | change-impact-analyzer | BLOCKED | host.report.write |
+| claude | contract-test-creator | BLOCKED | host.repository.read_write |
+| claude | cost-optimization-sprint-planner | BLOCKED | host.filesystem.read |
+| claude | database-review | BLOCKED | host.report.write |
+| claude | dependency-upgrade-review | BLOCKED | host.report.write |
+| claude | deployment-risk-review | BLOCKED | host.report.write |
+| claude | domain-comprehension | BLOCKED | host.repository.read |
+| claude | e2e-test-creator | BLOCKED | host.repository.read_write |
+| claude | implementation-planner | BLOCKED | host.report.write, host.repository.read |
+| claude | incident-rca | BLOCKED | telemetry.logs.query |
+| claude | incident-triage-agent | BLOCKED | pager.webhook.receive |
+| claude | integration-test-creator | BLOCKED | host.repository.read_write |
+| claude | k8s-overprovisioning-datadog | BLOCKED | kubernetes.metrics.history |
+| claude | loop-task-implementer | BLOCKED | host.repository.read_write, host.role.isolation, host.ci.status, host.pull_request.write |
+| claude | migration-program-manager | BLOCKED | host.filesystem.read |
+| claude | mysql-to-postgres-sql | BLOCKED | host.repository.read_write |
+| claude | new-hire-guide | BLOCKED | host.repository.read |
+| claude | observability-review | BLOCKED | host.report.write |
+| claude | performance-review | BLOCKED | host.report.write |
+| claude | pr-gatekeeper | BLOCKED | gitlab.get_merge_request |
+| claude | pr-review | BLOCKED | gitlab.get_merge_request, gitlab.get_merge_request_diffs |
+| claude | prd-architect | BLOCKED | host.report.write |
+| claude | production-readiness-review | BLOCKED | host.report.write |
+| claude | release-readiness-checker | BLOCKED | host.report.write |
+| claude | resilience-review | BLOCKED | host.report.write |
+| claude | security-review | BLOCKED | host.report.write |
+| claude | squad-map | BLOCKED | gitlab.list_projects |
+| claude | system-design | BLOCKED | host.report.write |
+| claude | tech-debt-assessor | BLOCKED | host.report.write |
+| claude | test-writer | BLOCKED | host.repository.read |
+| claude | unit-test-creator | BLOCKED | host.repository.read_write |
+| claude | weekly-squad-digest | BLOCKED | scheduler.cron.trigger |
+| claude | who-owns-x-bot | BLOCKED | slack.slash_command.receive |
+| cursor | api-design-review | BLOCKED | host.report.write |
+| cursor | api-test-creator | BLOCKED | host.repository.read_write |
+| cursor | architecture-review | BLOCKED | host.report.write |
+| cursor | backlog-runner | BLOCKED | scheduler.cron.trigger, host.issue_tracker.read |
+| cursor | capacity-planner | BLOCKED | host.report.write |
+| cursor | change-impact-analyzer | BLOCKED | host.report.write |
+| cursor | contract-test-creator | BLOCKED | host.repository.read_write |
+| cursor | cost-optimization-sprint-planner | BLOCKED | host.filesystem.read |
+| cursor | database-review | BLOCKED | host.report.write |
+| cursor | dependency-upgrade-review | BLOCKED | host.report.write |
+| cursor | deployment-risk-review | BLOCKED | host.report.write |
+| cursor | domain-comprehension | BLOCKED | host.repository.read |
+| cursor | e2e-test-creator | BLOCKED | host.repository.read_write |
+| cursor | implementation-planner | BLOCKED | host.report.write, host.repository.read |
+| cursor | incident-rca | BLOCKED | telemetry.logs.query |
+| cursor | incident-triage-agent | BLOCKED | pager.webhook.receive |
+| cursor | integration-test-creator | BLOCKED | host.repository.read_write |
+| cursor | k8s-overprovisioning-datadog | BLOCKED | kubernetes.metrics.history |
+| cursor | loop-task-implementer | BLOCKED | host.repository.read_write, host.role.isolation, host.ci.status, host.pull_request.write |
+| cursor | migration-program-manager | BLOCKED | host.filesystem.read |
+| cursor | mysql-to-postgres-sql | BLOCKED | host.repository.read_write |
+| cursor | new-hire-guide | BLOCKED | host.repository.read |
+| cursor | observability-review | BLOCKED | host.report.write |
+| cursor | performance-review | BLOCKED | host.report.write |
+| cursor | pr-gatekeeper | BLOCKED | gitlab.get_merge_request |
+| cursor | pr-review | BLOCKED | gitlab.get_merge_request, gitlab.get_merge_request_diffs |
+| cursor | prd-architect | BLOCKED | host.report.write |
+| cursor | production-readiness-review | BLOCKED | host.report.write |
+| cursor | release-readiness-checker | BLOCKED | host.report.write |
+| cursor | resilience-review | BLOCKED | host.report.write |
+| cursor | security-review | BLOCKED | host.report.write |
+| cursor | squad-map | BLOCKED | gitlab.list_projects |
+| cursor | system-design | BLOCKED | host.report.write |
+| cursor | tech-debt-assessor | BLOCKED | host.report.write |
+| cursor | test-writer | BLOCKED | host.repository.read |
+| cursor | unit-test-creator | BLOCKED | host.repository.read_write |
+| cursor | weekly-squad-digest | BLOCKED | scheduler.cron.trigger |
+| cursor | who-owns-x-bot | BLOCKED | slack.slash_command.receive |
+| github-copilot | api-design-review | BLOCKED | host.report.write |
+| github-copilot | api-test-creator | BLOCKED | host.repository.read_write |
+| github-copilot | architecture-review | BLOCKED | host.report.write |
+| github-copilot | backlog-runner | BLOCKED | scheduler.cron.trigger, host.issue_tracker.read |
+| github-copilot | capacity-planner | BLOCKED | host.report.write |
+| github-copilot | change-impact-analyzer | BLOCKED | host.report.write |
+| github-copilot | contract-test-creator | BLOCKED | host.repository.read_write |
+| github-copilot | cost-optimization-sprint-planner | BLOCKED | host.filesystem.read |
+| github-copilot | database-review | BLOCKED | host.report.write |
+| github-copilot | dependency-upgrade-review | BLOCKED | host.report.write |
+| github-copilot | deployment-risk-review | BLOCKED | host.report.write |
+| github-copilot | domain-comprehension | BLOCKED | host.repository.read |
+| github-copilot | e2e-test-creator | BLOCKED | host.repository.read_write |
+| github-copilot | implementation-planner | BLOCKED | host.report.write, host.repository.read |
+| github-copilot | incident-rca | BLOCKED | telemetry.logs.query |
+| github-copilot | incident-triage-agent | BLOCKED | pager.webhook.receive |
+| github-copilot | integration-test-creator | BLOCKED | host.repository.read_write |
+| github-copilot | k8s-overprovisioning-datadog | BLOCKED | kubernetes.metrics.history |
+| github-copilot | loop-task-implementer | BLOCKED | host.repository.read_write, host.role.isolation, host.ci.status, host.pull_request.write |
+| github-copilot | migration-program-manager | BLOCKED | host.filesystem.read |
+| github-copilot | mysql-to-postgres-sql | BLOCKED | host.repository.read_write |
+| github-copilot | new-hire-guide | BLOCKED | host.repository.read |
+| github-copilot | observability-review | BLOCKED | host.report.write |
+| github-copilot | performance-review | BLOCKED | host.report.write |
+| github-copilot | pr-gatekeeper | BLOCKED | gitlab.get_merge_request |
+| github-copilot | pr-review | BLOCKED | gitlab.get_merge_request, gitlab.get_merge_request_diffs |
+| github-copilot | prd-architect | BLOCKED | host.report.write |
+| github-copilot | production-readiness-review | BLOCKED | host.report.write |
+| github-copilot | release-readiness-checker | BLOCKED | host.report.write |
+| github-copilot | resilience-review | BLOCKED | host.report.write |
+| github-copilot | security-review | BLOCKED | host.report.write |
+| github-copilot | squad-map | BLOCKED | gitlab.list_projects |
+| github-copilot | system-design | BLOCKED | host.report.write |
+| github-copilot | tech-debt-assessor | BLOCKED | host.report.write |
+| github-copilot | test-writer | BLOCKED | host.repository.read |
+| github-copilot | unit-test-creator | BLOCKED | host.repository.read_write |
+| github-copilot | weekly-squad-digest | BLOCKED | scheduler.cron.trigger |
+| github-copilot | who-owns-x-bot | BLOCKED | slack.slash_command.receive |
+| kiro | api-design-review | BLOCKED | host.report.write |
+| kiro | api-test-creator | BLOCKED | host.repository.read_write |
+| kiro | architecture-review | BLOCKED | host.report.write |
+| kiro | backlog-runner | BLOCKED | scheduler.cron.trigger, host.issue_tracker.read |
+| kiro | capacity-planner | BLOCKED | host.report.write |
+| kiro | change-impact-analyzer | BLOCKED | host.report.write |
+| kiro | contract-test-creator | BLOCKED | host.repository.read_write |
+| kiro | cost-optimization-sprint-planner | BLOCKED | host.filesystem.read |
+| kiro | database-review | BLOCKED | host.report.write |
+| kiro | dependency-upgrade-review | BLOCKED | host.report.write |
+| kiro | deployment-risk-review | BLOCKED | host.report.write |
+| kiro | domain-comprehension | BLOCKED | host.repository.read |
+| kiro | e2e-test-creator | BLOCKED | host.repository.read_write |
+| kiro | implementation-planner | BLOCKED | host.report.write, host.repository.read |
+| kiro | incident-rca | BLOCKED | telemetry.logs.query |
+| kiro | incident-triage-agent | BLOCKED | pager.webhook.receive |
+| kiro | integration-test-creator | BLOCKED | host.repository.read_write |
+| kiro | k8s-overprovisioning-datadog | BLOCKED | kubernetes.metrics.history |
+| kiro | loop-task-implementer | BLOCKED | host.repository.read_write, host.role.isolation, host.ci.status, host.pull_request.write |
+| kiro | migration-program-manager | BLOCKED | host.filesystem.read |
+| kiro | mysql-to-postgres-sql | BLOCKED | host.repository.read_write |
+| kiro | new-hire-guide | BLOCKED | host.repository.read |
+| kiro | observability-review | BLOCKED | host.report.write |
+| kiro | performance-review | BLOCKED | host.report.write |
+| kiro | pr-gatekeeper | BLOCKED | gitlab.get_merge_request |
+| kiro | pr-review | BLOCKED | gitlab.get_merge_request, gitlab.get_merge_request_diffs |
+| kiro | prd-architect | BLOCKED | host.report.write |
+| kiro | production-readiness-review | BLOCKED | host.report.write |
+| kiro | release-readiness-checker | BLOCKED | host.report.write |
+| kiro | resilience-review | BLOCKED | host.report.write |
+| kiro | security-review | BLOCKED | host.report.write |
+| kiro | squad-map | BLOCKED | gitlab.list_projects |
+| kiro | system-design | BLOCKED | host.report.write |
+| kiro | tech-debt-assessor | BLOCKED | host.report.write |
+| kiro | test-writer | BLOCKED | host.repository.read |
+| kiro | unit-test-creator | BLOCKED | host.repository.read_write |
+| kiro | weekly-squad-digest | BLOCKED | scheduler.cron.trigger |
+| kiro | who-owns-x-bot | BLOCKED | slack.slash_command.receive |

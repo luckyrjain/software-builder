@@ -18,25 +18,23 @@ def test_composition_detects_cycle(tmp_path: Path) -> None:
     from scripts.registry.composition import validate_composition_graph
     from scripts.registry.models import (
         CompositionSpec,
-        HostClaude,
-        HostCursor,
-        HostKiro,
-        Hosts,
+        HostDiscoverySpec,
         InstallSpec,
         LintSpec,
         Registry,
         SkillEntry,
     )
 
+    minimal_hosts = {
+        "cursor": HostDiscoverySpec(discovery="rule"),
+        "claude": HostDiscoverySpec(install=True),
+        "kiro": HostDiscoverySpec(discovery="manual"),
+    }
     entry = SkillEntry(
         path="a",
         category="testing",
         invocation="ambient",
-        hosts=Hosts(
-            cursor=HostCursor(discovery="rule"),
-            claude=HostClaude(),
-            kiro=HostKiro(discovery="manual"),
-        ),
+        hosts=minimal_hosts,
         install=InstallSpec(requires=[]),
         lint=LintSpec(skill_md_max_lines=180, target="a"),
         composition=CompositionSpec(invokes=["b"]),
@@ -45,11 +43,7 @@ def test_composition_detects_cycle(tmp_path: Path) -> None:
         path="b",
         category="testing",
         invocation="ambient",
-        hosts=Hosts(
-            cursor=HostCursor(discovery="rule"),
-            claude=HostClaude(),
-            kiro=HostKiro(discovery="manual"),
-        ),
+        hosts=minimal_hosts,
         install=InstallSpec(requires=[]),
         lint=LintSpec(skill_md_max_lines=180, target="b"),
         composition=CompositionSpec(invokes=["a"]),

@@ -40,6 +40,20 @@ class TargetSpec:
     path: str
 
 
+def resolve_target_path(target: TargetSpec, *, home: Path, target_dir: Path | None) -> Path:
+    """Resolve a TargetSpec's `~/...`/`{project_root}/...` path template against a concrete home
+    directory and (optional) project root. `_validate_target_path` already guarantees every
+    user-scope path starts with exactly "~/" and every project-scope path starts with exactly
+    "{project_root}/", so stripping those literal prefixes is safe. A missing `target_dir` for a
+    project-scope target falls back to resolving against `home` instead -- the caller's choice,
+    not this function's; see scripts/registry/legacy_install_resolver.py for why that fallback
+    exists for some selectors."""
+    if target.scope == "user":
+        return home / target.path[len("~/") :]
+    base = target_dir if target_dir is not None else home
+    return base / target.path[len("{project_root}/") :]
+
+
 @dataclass(frozen=True)
 class DiscoveryBinding:
     target: TargetSpec

@@ -4,25 +4,18 @@ from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True)
-class HostCursor:
-    discovery: str
+class HostDiscoverySpec:
+    """One host's entry in a skill's `hosts:` block.
 
+    Generic across host types instead of one dataclass per host (see
+    docs/superpowers/specs/2026-08-31-universal-agent-compatibility-design.md Candidate 3): a host using
+    discovery-mode semantics (cursor, kiro) populates `discovery`; a host using install-flag semantics
+    (claude) populates `install`. Which field a given host uses is schema.py's HOST_FIELD_KIND table, not
+    a property of this class -- adding a host that reuses an existing field kind needs no new class.
+    """
 
-@dataclass(frozen=True)
-class HostClaude:
-    install: bool = True
-
-
-@dataclass(frozen=True)
-class HostKiro:
-    discovery: str
-
-
-@dataclass(frozen=True)
-class Hosts:
-    cursor: HostCursor
-    claude: HostClaude
-    kiro: HostKiro
+    discovery: str | None = None
+    install: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -69,7 +62,7 @@ class SkillEntry:
     path: str
     category: str
     invocation: str
-    hosts: Hosts
+    hosts: dict[str, HostDiscoverySpec]
     install: InstallSpec
     lint: LintSpec
     composition: CompositionSpec = field(default_factory=CompositionSpec)

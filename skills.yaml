@@ -2349,6 +2349,8 @@ profiles:
         discovery: rule
       claude:
         install: true
+      github-copilot:
+        discovery: manual
       kiro:
         discovery: manual
     invocation: ambient
@@ -2411,6 +2413,8 @@ skills:
         discovery: rule
       claude:
         install: true
+      github-copilot:
+        discovery: manual
       kiro:
         discovery: manual
     install:
@@ -2508,6 +2512,8 @@ skills:
         discovery: rule
       claude:
         install: true
+      github-copilot:
+        discovery: manual
       kiro:
         discovery: manual
     install:
@@ -2645,6 +2651,8 @@ skills:
         discovery: rule
       claude:
         install: true
+      github-copilot:
+        discovery: manual
       kiro:
         discovery: manual
     install:
@@ -2698,6 +2706,8 @@ skills:
         discovery: rule
       claude:
         install: true
+      github-copilot:
+        discovery: manual
       kiro:
         discovery: manual
     install:
@@ -2867,6 +2877,8 @@ skills:
         discovery: rule
       claude:
         install: true
+      github-copilot:
+        discovery: manual
       kiro:
         discovery: manual
     install:
@@ -2926,6 +2938,8 @@ skills:
         discovery: rule
       claude:
         install: true
+      github-copilot:
+        discovery: manual
       kiro:
         discovery: manual
     install:
@@ -3027,6 +3041,8 @@ skills:
         discovery: rule
       claude:
         install: true
+      github-copilot:
+        discovery: manual
       kiro:
         discovery: manual
     install:
@@ -3085,6 +3101,8 @@ skills:
         discovery: rule
       claude:
         install: true
+      github-copilot:
+        discovery: manual
       kiro:
         discovery: manual
     install:
@@ -3154,6 +3172,8 @@ skills:
         discovery: rule
       claude:
         install: true
+      github-copilot:
+        discovery: manual
       kiro:
         discovery: manual
     install:
@@ -3211,6 +3231,8 @@ skills:
         discovery: rule
       claude:
         install: true
+      github-copilot:
+        discovery: manual
       kiro:
         discovery: manual
     install:
@@ -3278,6 +3300,8 @@ skills:
         discovery: rule
       claude:
         install: true
+      github-copilot:
+        discovery: manual
       kiro:
         discovery: manual
     install:
@@ -3331,6 +3355,8 @@ skills:
         discovery: rule
       claude:
         install: true
+      github-copilot:
+        discovery: manual
       kiro:
         discovery: manual
     install:
@@ -3391,6 +3417,8 @@ skills:
         discovery: rule
       claude:
         install: true
+      github-copilot:
+        discovery: manual
       kiro:
         discovery: manual
     install:
@@ -3440,6 +3468,8 @@ skills:
         discovery: rule
       claude:
         install: true
+      github-copilot:
+        discovery: manual
       kiro:
         discovery: manual
     install:
@@ -3567,6 +3597,8 @@ skills:
         discovery: rule
       claude:
         install: true
+      github-copilot:
+        discovery: manual
       kiro:
         discovery: manual
     install:
@@ -3636,6 +3668,8 @@ skills:
         discovery: rule
       claude:
         install: true
+      github-copilot:
+        discovery: manual
       kiro:
         discovery: manual
     install:
@@ -3726,6 +3760,8 @@ skills:
         discovery: rule
       claude:
         install: true
+      github-copilot:
+        discovery: manual
       kiro:
         discovery: manual
     install:
@@ -3959,6 +3995,8 @@ skills:
         discovery: rule
       claude:
         install: true
+      github-copilot:
+        discovery: manual
       kiro:
         discovery: manual
     install:
@@ -4133,6 +4171,8 @@ skills:
         discovery: rule
       claude:
         install: true
+      github-copilot:
+        discovery: manual
       kiro:
         discovery: manual
     install:
@@ -4258,6 +4298,8 @@ skills:
         discovery: rule
       claude:
         install: true
+      github-copilot:
+        discovery: manual
       kiro:
         discovery: manual
     install:
@@ -4339,6 +4381,8 @@ skills:
         discovery: rule
       claude:
         install: true
+      github-copilot:
+        discovery: manual
       kiro:
         discovery: manual
     install:
@@ -4392,6 +4436,8 @@ skills:
         discovery: rule
       claude:
         install: true
+      github-copilot:
+        discovery: manual
       kiro:
         discovery: manual
     install:
@@ -4454,6 +4500,8 @@ skills:
         discovery: rule
       claude:
         install: true
+      github-copilot:
+        discovery: manual
       kiro:
         discovery: manual
     install:
