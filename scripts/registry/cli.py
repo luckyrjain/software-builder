@@ -47,6 +47,7 @@ from scripts.registry.manifest import validate_manifest
 from scripts.registry.manifest_merge import merge_registry_yaml, skills_fragments_dir
 from scripts.registry.p1_validation import validate_p1_contracts
 from scripts.registry.runtime_manifest import validate_runtime_manifest
+from scripts.registry.schema import clear_registry_cache
 from scripts.release_contract import validate_release_contract
 from scripts.yaml_safety import load_unique_yaml_file
 
@@ -260,6 +261,7 @@ def _validate_all(root: Path) -> list[str]:
 
 
 def cmd_validate(root: Path) -> int:
+    clear_registry_cache()
     errors = _validate_all(root)
     if errors:
         for error in errors:
@@ -304,6 +306,10 @@ def cmd_validate_hosts(root: Path) -> int:
 
 
 def cmd_generate(root: Path, check_only: bool) -> int:
+    # A fresh invocation must never inherit another invocation's cached skills.yaml read
+    # (schema.py's load_registry_raw cache) -- e.g. two cmd_generate calls against the
+    # same root within one process, as several tests do.
+    clear_registry_cache()
     if not check_only:
         _prune_stale_adapters(root)
 
@@ -325,6 +331,10 @@ def cmd_generate(root: Path, check_only: bool) -> int:
         return 0
 
     _write_outputs(outputs)
+    # skills.yaml may be among the just-written outputs (the skills.d/ fragment-merge
+    # projection) -- invalidate before the second _prune_stale_adapters read below, so it
+    # sees the just-written state rather than the pre-write cache entry from this same call.
+    clear_registry_cache()
     removed = _prune_stale_adapters(root)
     print(f"ok: generated {len(outputs)} files; removed {removed} stale adapters")
     return 0
