@@ -4,6 +4,7 @@ import argparse
 import json
 import sys
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 
 import yaml
@@ -52,9 +53,8 @@ from scripts.registry.manifest import validate_manifest
 from scripts.registry.manifest_merge import merge_registry_yaml, skills_fragments_dir
 from scripts.registry.p1_validation import validate_p1_contracts
 from scripts.registry.runtime_manifest import validate_runtime_manifest
-from scripts.registry.schema import clear_registry_cache
+from scripts.registry.schema import clear_registry_cache, load_registry_raw
 from scripts.release_contract import validate_release_contract
-from scripts.yaml_safety import load_unique_yaml_file
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -63,6 +63,7 @@ def _collect_outputs(root: Path) -> dict[Path, str]:
     registry = load_registry(root)
     descriptions = load_descriptions(root, registry)
     deprecated = load_deprecated_skills(root, registry)
+    layers = detect_optional_layers(root)
     outputs: dict[Path, str] = {}
     if skills_fragments_dir(root).is_dir():
         # skills.yaml's `skills:` mapping is authored one-per-file under
@@ -120,9 +121,7 @@ def _collect_outputs(root: Path) -> dict[Path, str]:
     outputs[root / "generated" / "catalogue" / "composition-deps.mmd"] = render_composition_mermaid(
         registry,
     )
-    compatibility_catalog = root / "scripts" / "registry" / "capability_catalog.yaml"
-    composition_contracts = root / "skills.yaml"
-    if compatibility_catalog.is_file() and composition_contracts.is_file():
+    if layers.capability_catalog is not None and layers.composition_contracts is not None:
         outputs[root / "generated" / "catalogue" / "compatibility-matrix.md"] = (
             render_compatibility_matrix(root)
         )
@@ -138,12 +137,11 @@ def _collect_outputs(root: Path) -> dict[Path, str]:
         }
         for section, path in projection_paths.items():
             outputs[path] = render_legacy_projection(root, section)
-    composition_runtime = _composition_runtime_path(root)
-    if composition_runtime.is_file() and composition_contracts.is_file():
+    if layers.composition_runtime is not None and layers.composition_contracts is not None:
         outputs[root / "generated" / "catalogue" / "composition-runtime.mmd"] = render_dependency_graph(
             registry,
-            runtime_path=composition_runtime,
-            contracts_path=composition_contracts,
+            runtime_path=layers.composition_runtime,
+            contracts_path=layers.composition_contracts,
         )
     return outputs
 
@@ -179,6 +177,26 @@ def _check_outputs(root: Path, outputs: dict[Path, str]) -> list[str]:
 
 
 def _run_command(action: Callable[[], int]) -> int:
+    # Every _run_command-wrapped subcommand is the first (and only) reader of
+    # schema.py's load_registry_raw cache in its process today, so this clear is a
+    # no-op in practice when reached via main() -- but it makes that guarantee hold
+    # here, once, for every subcommand this function wraps, rather than depending on
+    # each one independently remembering to clear at its own entry. cmd_list,
+    # cmd_explain, cmd_validate_agent_skills, cmd_check_handoff, and
+    # cmd_validate_artifact never had their own entry-clear despite reading the same
+    # cache; this closes that gap for all of them at once. cmd_validate's own
+    # clear_registry_cache() call at its entry is now redundant with this one when
+    # reached through main() -- kept anyway since cmd_validate could plausibly be
+    # called directly in a test someday, the way cmd_generate already is (see its own
+    # comment). cmd_generate's entry clear is NOT redundant: scripts/tests/test_registry.py
+    # calls cmd_generate(...) directly, bypassing this function entirely, so its own
+    # clear is the only one those callers get; its second clear_registry_cache() call
+    # after _write_outputs is separately load-bearing invalidation for the write that
+    # just happened, unrelated to entry invalidation. cmd_backfill isn't wrapped by
+    # _run_command (see main()'s dispatch) and doesn't need this either: it never
+    # reads through load_registry_raw itself, and already clears the cache after its
+    # own write.
+    clear_registry_cache()
     try:
         return action()
     except (OSError, TypeError, ValueError, yaml.YAMLError) as exc:
@@ -194,14 +212,23 @@ def _capability_families_path(root: Path) -> Path:
     return root / "scripts" / "registry" / "capability_families.yaml"
 
 
-def _platform_contracts_path(root: Path) -> Path:
-    return root / "scripts" / "registry" / "platform_contracts.yaml"
-
-
 def _composition_runtime_path(root: Path) -> Path:
     manifest_path = root / "skills.yaml"
     try:
-        raw = load_unique_yaml_file(manifest_path)
+        # load_registry_raw, not load_unique_yaml_file directly: this is the same
+        # skills.yaml read schema.py's cache already exists for -- reading it
+        # uncached here would silently reintroduce the exact per-invocation
+        # re-read-and-reparse cost that cache was built to eliminate, just for
+        # shape detection instead of registry content (full canonical-shape
+        # detection is unaffected: load_registry_raw only adds/merges the
+        # `skills` key, never touches `manifest_kind`/`contracts`). Unlike
+        # load_unique_yaml_file, load_registry_raw can also raise ValueError
+        # (a malformed `profiles:`/`extends:` elsewhere in skills.yaml) -- left
+        # uncaught here deliberately, since every caller of this function
+        # reaches _run_command's catch-all, which already handles ValueError
+        # the same way it handles the manifest errors validate_registry raises
+        # a few lines later regardless.
+        raw = load_registry_raw(manifest_path)
     except FileNotFoundError:
         return root / "scripts" / "registry" / "composition_runtime.yaml"
     except (OSError, yaml.YAMLError):
@@ -228,31 +255,83 @@ def _p1_layer_paths(root: Path) -> list[Path]:
     ]
 
 
+@dataclass(frozen=True)
+class OptionalLayers:
+    """Which optional contract/generation layers are active for one repository root.
+
+    `scripts/registry/cli.py`'s generate and validate flows both need the same answer
+    to "is capability_catalog / composition_runtime / release_contract / the P1 layer
+    active here" -- before this existed, each of `_collect_outputs`,
+    `_validate_for_generate`, and `_validate_all` answered it separately via ad hoc
+    `Path.is_file()` checks and inline path literals, duplicated up to three times per
+    layer. That drift already produced one dead helper (a prior `_platform_contracts_path`
+    was defined and never called by anything -- removed). This dataclass is the one
+    place that answers the question, composed from the individual path-construction
+    helpers above (kept standalone: they're pure path arithmetic, independently useful
+    and independently tested); every consumer below reads a field here instead of
+    re-deriving it.
+
+    A `None` field means that layer is inactive for this root (an optional file it
+    depends on doesn't exist); a `Path` means it's active, at that path.
+
+    Not memoized like schema.py's `load_registry_raw` cache -- `detect_optional_layers`
+    recomputes on every call (a handful of cheap `Path.is_file()` checks). It's named
+    "detect", not "resolve", specifically to avoid implying it shares that cache's
+    "computed once, invalidated via clear_registry_cache()" contract; it doesn't, and
+    doesn't need to for its own fields. Its one indirect dependency on the cache is
+    `_composition_runtime_path`, which reads skills.yaml's shape via the cached
+    `load_registry_raw` rather than a raw read of its own.
+    """
+
+    host_contracts: Path | None
+    capability_catalog: Path | None
+    capability_families: Path | None
+    composition_runtime: Path | None
+    release_contract: Path | None
+    composition_contracts: Path | None
+    p1_layer_active: bool
+
+
+def detect_optional_layers(root: Path) -> OptionalLayers:
+    def active(path: Path) -> Path | None:
+        return path if path.is_file() else None
+
+    return OptionalLayers(
+        host_contracts=active(root / "scripts" / "registry" / "host_contracts.yaml"),
+        capability_catalog=active(_capability_catalog_path(root)),
+        capability_families=active(_capability_families_path(root)),
+        composition_runtime=active(_composition_runtime_path(root)),
+        release_contract=active(_release_contract_path(root)),
+        composition_contracts=active(root / "skills.yaml"),
+        p1_layer_active=any(path.is_file() for path in _p1_layer_paths(root)),
+    )
+
+
 def _validate_for_generate(root: Path) -> list[str]:
+    layers = detect_optional_layers(root)
     errors = validate_registry(root)
-    host_contracts = root / "scripts" / "registry" / "host_contracts.yaml"
-    if host_contracts.is_file():
+    if layers.host_contracts is not None:
         errors.extend(validate_host_adapter_interface(root))
         errors.extend(validate_host_adapter_identities(root))
-    if _capability_catalog_path(root).is_file():
+    if layers.capability_catalog is not None:
         errors.extend(validate_capability_catalog_sync(root))
-    if _capability_catalog_path(root).is_file() and _capability_families_path(root).is_file():
+    if layers.capability_catalog is not None and layers.capability_families is not None:
         errors.extend(
             validate_capability_families(
-                catalog_path=_capability_catalog_path(root),
-                families_path=_capability_families_path(root),
+                catalog_path=layers.capability_catalog,
+                families_path=layers.capability_families,
             )
         )
-    raw_manifest = load_unique_yaml_file(root / "skills.yaml")
+    raw_manifest = load_registry_raw(root / "skills.yaml")
     if has_canonical_manifest_shape(raw_manifest):
         errors.extend(validate_manifest(root))
-    if any(path.is_file() for path in _p1_layer_paths(root)):
+    if layers.p1_layer_active:
         errors.extend(validate_p1_contracts(root))
-    if _composition_runtime_path(root).is_file():
+    if layers.composition_runtime is not None:
         errors.extend(
             validate_composition_runtime(
                 load_registry(root),
-                runtime_path=_composition_runtime_path(root),
+                runtime_path=layers.composition_runtime,
                 contracts_path=root / "skills.yaml",
             )
         )
@@ -264,11 +343,20 @@ def _validate_all(root: Path) -> list[str]:
     # plus integrated runtime and host-portability validation. Portability is
     # intentionally kept out of the mutating generate path because it checks
     # generated Cursor/Kiro surfaces that `generate` may need to repair.
+    #
+    # `layers` here and _validate_for_generate's own internal `layers` local are TWO
+    # independent detect_optional_layers(root) calls, not one value threaded through --
+    # same name, same call expression, deliberately not deduplicated (an earlier attempt
+    # to pass this one down as a parameter broke a test that monkeypatches
+    # _validate_for_generate with its original single-argument signature). Both compute
+    # the same result from an unchanged filesystem, so this is redundant but not a
+    # correctness risk -- don't read the shared name as evidence they're the same object.
+    layers = detect_optional_layers(root)
     errors = _validate_for_generate(root)
-    if any(path.is_file() for path in _p1_layer_paths(root)):
+    if layers.p1_layer_active:
         errors.extend(validate_runtime_manifest(root))
     errors.extend(validate_host_portability(root))
-    if _release_contract_path(root).is_file():
+    if layers.release_contract is not None:
         errors.extend(validate_release_contract(root))
     return errors
 
@@ -447,7 +535,7 @@ def cmd_explain(root: Path, skill_id: str) -> int:
 
 
 def _validated_canonical_manifest(root: Path) -> dict:
-    raw = load_unique_yaml_file(root / "skills.yaml")
+    raw = load_registry_raw(root / "skills.yaml")
     if not isinstance(raw, dict) or raw.get("manifest_kind") != "canonical":
         raise ValueError("canonical manifest required for this command")
     errors = validate_canonical_manifest(root)

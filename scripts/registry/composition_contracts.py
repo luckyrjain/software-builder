@@ -7,6 +7,7 @@ from pathlib import Path
 
 from scripts.registry.canonical_manifest import has_canonical_manifest_shape, load_canonical_manifest
 from scripts.registry.models import Registry
+from scripts.registry.schema import load_registry_raw
 from scripts.test_creator_catalog import TEST_CREATOR_SKILLS
 from scripts.yaml_safety import YAML_SAFETY_ERRORS, load_unique_yaml_file
 
@@ -19,7 +20,7 @@ DEFAULT_CONTRACTS_PATH = CONTRACTS_PATH
 def _load_contract_document(path: Path | None = None) -> dict[str, object]:
     if path is None or path.name == "skills.yaml":
         manifest_root = path.parent if path is not None else ROOT
-        raw_manifest = load_unique_yaml_file(manifest_root / "skills.yaml")
+        raw_manifest = load_registry_raw(manifest_root / "skills.yaml")
         if has_canonical_manifest_shape(raw_manifest):
             manifest = load_canonical_manifest(manifest_root)
             contracts = manifest["contracts"]

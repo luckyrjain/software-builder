@@ -11,8 +11,8 @@ import yaml
 from scripts.registry.canonical_manifest import has_canonical_manifest_shape
 from scripts.registry.frontmatter import load_skill_frontmatter
 from scripts.registry.load import load_registry
+from scripts.registry.schema import load_registry_raw
 from scripts.registry.skill_frontmatter_schema import validate_skill_frontmatter_fields
-from scripts.yaml_safety import load_unique_yaml_file
 
 MAX_NAME_LENGTH = 64
 MAX_DESCRIPTION_LENGTH = 1024
@@ -100,7 +100,7 @@ def validate_skill(skill_dir: Path, *, require_legacy_platform_fields: bool = Fa
 def validate_agent_skills(root: Path) -> list[str]:
     """Validate the SKILL.md files for every canonical registered skill."""
     registry = load_registry(root)
-    raw_manifest = load_unique_yaml_file(root / "skills.yaml")
+    raw_manifest = load_registry_raw(root / "skills.yaml")
     legacy_manifest = not has_canonical_manifest_shape(raw_manifest)
     errors: list[str] = []
     for _skill_id, entry in sorted(registry.skills.items()):

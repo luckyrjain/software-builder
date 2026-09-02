@@ -13,7 +13,7 @@ from ruamel.yaml import YAML
 from ruamel.yaml import YAMLError as RuamelYAMLError
 from ruamel.yaml.comments import CommentedMap
 
-from scripts.registry.schema import load_registry_raw
+from scripts.registry.schema import clear_registry_cache, load_registry_raw
 
 ROOT = Path(__file__).resolve().parents[2]
 CATALOG_PATH = Path(__file__).resolve().parent / "capability_catalog.yaml"
@@ -311,6 +311,11 @@ def cmd_backfill(*, check_only: bool, overwrite: bool, skills_path: Path) -> int
         return 0
 
     skills_path.write_text(updated, encoding="utf-8")
+    # This write makes any load_registry_raw entry for skills_path's directory stale.
+    # No current caller re-reads it in this same process (backfill-capabilities is its
+    # own one-shot subcommand -- see cli.py's dispatch), but invalidating here removes
+    # the dependency on that invariant instead of just documenting it.
+    clear_registry_cache()
     if changes:
         print(f"ok: backfilled capabilities for {len(changes)} skill(s): {', '.join(changes)}")
     else:
