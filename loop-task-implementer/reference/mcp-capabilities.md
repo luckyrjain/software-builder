@@ -1,7 +1,7 @@
 # Capability matrix
 
 This skill has **no Datadog/GitLab/Jira MCP dependency** — it is host-agent-agnostic by design so it
-can run inside Cursor, Claude Code, ChatGPT/Codex, or Kiro. What it *does* require is repository and
+can run inside Cursor, Claude Code, ChatGPT/Codex, GitHub Copilot, or Kiro. What it *does* require is repository and
 isolation capability from whichever host agent is running it.
 
 | Capability | Required / Optional | Source | Degraded path when absent |

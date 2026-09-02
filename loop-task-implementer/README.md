@@ -6,7 +6,8 @@ verified, PR-ready repository state — separating implementation (Builder), ind
 own homework.
 
 Platform-neutral by design: works the same way whether the active agent is Cursor, ChatGPT/Codex,
-Claude Code, Kiro, or another repository-capable agent. No Datadog/GitLab/Jira MCP dependency.
+Claude Code, GitHub Copilot, Kiro, or another repository-capable agent. No Datadog/GitLab/Jira MCP
+dependency.
 
 Core principle: **claims are advisory; repository evidence is authoritative.** Review and completion
 freshness are bound to the shared `change_identity` / `review_evidence` contracts rather than a head
@@ -77,7 +78,7 @@ make install-loop-task-implementer
 ```
 
 Restart Cursor / start a new Claude Code session. Full setup, including in-repo discovery for
-Cursor/Kiro and the ChatGPT/Codex/generic-fallback paths: [SETUP.md](SETUP.md).
+Cursor/Kiro and the ChatGPT/Codex/GitHub-Copilot/generic-fallback paths: [SETUP.md](SETUP.md).
 
 ## Related skills
 

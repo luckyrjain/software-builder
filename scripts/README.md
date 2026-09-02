@@ -18,9 +18,10 @@ Copies skill directories from this repository into the coding agent's skills ins
 4. Replaces any existing install at each destination (`rm -rf` then `cp -r`).
 5. Prints a restart/session reminder appropriate to the chosen `--agent`.
 
-Kiro and ChatGPT/Codex are **not** handled by this script — Kiro needs no install step at all (see
-`.kiro/steering/`), and Codex's skills-directory convention isn't uniform across setups, so copy
-manually (`cp -R <skill> ~/.agents/skills/<skill>`). See root
+Kiro, ChatGPT/Codex, and GitHub Copilot are **not** handled by this script — Kiro needs no install
+step at all (see `.kiro/steering/`), and Codex's and Copilot's skills-directory conventions aren't
+uniform across setups, so copy manually (`cp -R <skill> ~/.agents/skills/<skill>`, or Copilot's own
+`.github/skills/`/`~/.copilot/skills/`). See root
 [README.md § Install for your specific coding agent](../README.md#install-for-your-specific-coding-agent).
 
 ## Usage
