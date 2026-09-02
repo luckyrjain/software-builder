@@ -37,10 +37,21 @@ targets:
   - id: claude-project
     scope: project
     path: "{project_root}/.claude/skills"
-  - id: kiro-user
-    scope: user
-    path: ~/.kiro/steering
-  - id: kiro-project
+  # Kiro has exactly one real surface, and it isn't an install.sh destination: unlike every other
+  # target above, scripts/registry/generate_kiro.py writes `.kiro/steering/<skill>.md` at a fixed
+  # repo-root path via `make generate` -- a checked-in, versioned artifact of software-builder's
+  # own checkout, never a per-user ($HOME) or per-target-repo (`install.sh --target-dir`) copy.
+  # There is no `--agent kiro` in install.sh; nothing in this repo ever calls resolve_target_path
+  # against this target, and no future addition should either -- it exists here only so the `kiro`
+  # host entry below can carry a schema-valid discovery binding. `scope: project` /
+  # `{project_root}/` is reused only because it's the closest-shaped existing schema primitive
+  # (path template + validation); for this one target, `{project_root}` always means "the
+  # software-builder checkout `make generate` ran in", never install.sh's `--target-dir`.
+  # (A prior version of this file additionally declared `kiro-user` at `~/.kiro/steering`, implying
+  # a second, $HOME-scoped destination -- purely fictional; nothing has ever read or written there.
+  # See Candidate 9's blocker note in
+  # docs/superpowers/specs/2026-08-31-universal-agent-compatibility-design.md for the full story.)
+  - id: kiro-generated
     scope: project
     path: "{project_root}/.kiro/steering"
   # GitHub Copilot's own dedicated discovery paths (Candidate 12), per GitHub's official docs
@@ -134,18 +145,19 @@ hosts:
     surfaces:
       - kind: LOCAL
         discovery:
-          - target: kiro-project
+          - target: kiro-generated
             mode: ADAPTER
             precedence: 10
-          - target: kiro-user
-            mode: ADAPTER
-            precedence: 20
     capabilities:
       host.filesystem.read: UNKNOWN
       host.repository.read_write: UNKNOWN
     isolation:
       mode: UNKNOWN
-    constraints: []
+    constraints:
+      - "not install.sh-resolvable: kiro-generated is a fixed, repo-root-only artifact regenerated
+        by `make generate` (scripts/registry/generate_kiro.py), not a per-user or per-target-repo
+        install destination -- there is no `--agent kiro` selector and none should be added without
+        first correcting this constraint"
     verification: UNVERIFIED
     evidence: []
     maintainer_support: BEST_EFFORT

@@ -379,6 +379,32 @@ def test_checked_in_host_registry_validates() -> None:
     assert all(host.maintainer_support == "BEST_EFFORT" for host in registry.hosts.values())
 
 
+def test_checked_in_kiro_host_has_no_install_resolvable_target() -> None:
+    """Regression for a real target/mechanism mismatch found investigating Candidate 9: a prior
+    version of this file modeled Kiro with kiro-user (~/.kiro/steering) and kiro-project
+    ({project_root}/.kiro/steering) targets, as if Kiro were a 5th install.sh destination like
+    Cursor/Claude. In reality scripts/registry/generate_kiro.py only ever writes steering files at
+    this repository's own fixed root via `make generate` -- a checked-in generated-docs artifact,
+    never a per-user or per-target-repo install -- and there is no `--agent kiro` in install.sh to
+    even reach one. kiro-user was pure fiction (nothing ever read or wrote ~/.kiro/steering); this
+    pins the corrected single-target, non-install-resolvable shape so it can't silently regress."""
+    registry = parse_host_registry(ROOT / "agent-hosts.yaml")
+
+    assert "kiro-user" not in registry.targets
+    kiro = registry.hosts["kiro"]
+    bindings = [binding for surface in kiro.surfaces for binding in surface.discovery]
+    assert len(bindings) == 1
+    assert bindings[0].target.id == "kiro-generated"
+    assert kiro.constraints.values, "kiro must document why it's not install.sh-resolvable"
+    assert "not install.sh-resolvable" in kiro.constraints.values[0]
+
+    # install.sh genuinely has no --agent kiro selector -- confirms the constraint's own claim,
+    # not just that the registry says so.
+    from scripts.registry.legacy_install_resolver import LEGACY_AGENT_SELECTORS
+
+    assert "kiro" not in LEGACY_AGENT_SELECTORS
+
+
 def test_checked_in_github_copilot_host_has_documentation_evidence() -> None:
     """Candidate 12: github-copilot is the first host added on documentation-tier evidence
     (spec Section 27) rather than being present since Phase 1 -- pins that its evidence entry is
