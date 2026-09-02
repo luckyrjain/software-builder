@@ -68,7 +68,7 @@ parent checkout.
 
 ## 1. Requirements
 
-- A repository-capable host agent: Cursor, Claude Code, ChatGPT/Codex, Kiro, or the generic adapter path.
+- A repository-capable host agent: Cursor, Claude Code, ChatGPT/Codex, GitHub Copilot, Kiro, or the generic adapter path.
 - Repository access appropriate to the authorized actions. Reviewer contexts remain read-only.
 - Visibility of authoritative required CI/checks for the exact current head. Without it, the workflow may
   implement/review but cannot reach verified readiness.

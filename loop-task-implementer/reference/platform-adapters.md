@@ -55,6 +55,32 @@ Natural-language examples:
 
 Use background agents, separate chats, or worktrees as available. Do not pass implementation chat history into Reviewer chats.
 
+## GitHub Copilot
+
+Copy the skill folder to Copilot's dedicated skills directory:
+
+```bash
+mkdir -p .github/skills
+cp -R loop-task-implementer .github/skills/loop-task-implementer
+```
+
+or, for a personal (non-repository) install:
+
+```bash
+mkdir -p ~/.copilot/skills
+cp -R loop-task-implementer ~/.copilot/skills/loop-task-implementer
+```
+
+`.claude/skills/` and `~/.agents/skills/` also work per GitHub's own documentation.
+
+Natural-language examples:
+
+- “Use the loop-task-implementer skill for issue 42.”
+- “Resume loop-task-implementer on the current branch.”
+- “Act as the read-only Lens A reviewer using loop-task-implementer.”
+
+Use separate tasks or fresh agent sessions for role isolation.
+
 ## Kiro
 
 Keep the canonical skill folder in the repository and use `.kiro/steering/loop-task-implementer.md` for discovery.

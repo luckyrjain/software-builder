@@ -12,7 +12,7 @@ description: >-
 
 ## Overview
 
-Use this skill to take software tasks from requirements to verified repository completion while separating implementation, review, and orchestration responsibilities. Core principle: **claims are advisory; repository evidence is authoritative.** This skill is platform-neutral — the active coding agent may be Cursor, ChatGPT/Codex, Claude Code, Kiro, or another repository-capable agent.
+Use this skill to take software tasks from requirements to verified repository completion while separating implementation, review, and orchestration responsibilities. Core principle: **claims are advisory; repository evidence is authoritative.** This skill is platform-neutral — the active coding agent may be Cursor, ChatGPT/Codex, Claude Code, GitHub Copilot, Kiro, or another repository-capable agent.
 
 In addition to legacy `implementation_task`, this skill accepts a validated `implementation_plan`.
 For plan execution, select exactly one dependency-satisfied task from the earliest incomplete wave,
@@ -127,7 +127,7 @@ A reviewer rerun is a new review generation even when code is unchanged: increme
 
 ## Platform behavior
 
-Use the strongest isolation primitive available: (1) native subagents, (2) separate fresh sessions, (3) separate disposable worktrees, (4) sequential role simulation with explicit context resets, last resort. Read [reference/platform-adapters.md](reference/platform-adapters.md) for Cursor, ChatGPT/Codex, Claude Code, and Kiro setup. Preserve the actual `isolation_status`; explicit human acceptance of degraded isolation is recorded separately with provenance and is bound to both the exact `reviewed_change_identity` and current `review_generation`, never by relabeling a review as isolated.
+Use the strongest isolation primitive available: (1) native subagents, (2) separate fresh sessions, (3) separate disposable worktrees, (4) sequential role simulation with explicit context resets, last resort. Read [reference/platform-adapters.md](reference/platform-adapters.md) for Cursor, ChatGPT/Codex, Claude Code, GitHub Copilot, and Kiro setup. Preserve the actual `isolation_status`; explicit human acceptance of degraded isolation is recorded separately with provenance and is bound to both the exact `reviewed_change_identity` and current `review_generation`, never by relabeling a review as isolated.
 
 ## Required state
 
