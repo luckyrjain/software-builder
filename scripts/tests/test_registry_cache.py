@@ -123,6 +123,29 @@ def test_different_filenames_in_the_same_directory_do_not_collide(tmp_path: Path
     assert set(second["skills"]) == {"different"}
 
 
+def test_run_command_centralizes_cache_invalidation(tmp_path: Path) -> None:
+    """Regression test: cli.py's _run_command clears the registry cache before
+    running the subcommand it wraps -- the fix that closes the gap left by
+    cmd_list, cmd_explain, cmd_validate_agent_skills, cmd_check_handoff, and
+    cmd_validate_artifact never clearing at their own entry (unlike cmd_generate
+    and cmd_validate, which already did and still do independently). Exercises
+    _run_command directly with a no-op action, decoupled from any one
+    subcommand's own parsing logic, so it isolates exactly the invalidation
+    _run_command itself is responsible for.
+    """
+    from scripts.registry.cli import _run_command
+
+    path = _write_skills_yaml(tmp_path, skill_id="solo")
+    load_registry_raw(path)  # primes the cache, as if an earlier subcommand already ran
+
+    _write_skills_yaml(tmp_path, skill_id="renamed")  # simulates a write between two subcommands
+
+    assert _run_command(lambda: 0) == 0
+
+    raw = load_registry_raw(path)
+    assert set(raw["skills"]) == {"renamed"}, "_run_command did not clear the stale cache entry"
+
+
 def test_backfill_write_invalidates_the_registry_cache(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
