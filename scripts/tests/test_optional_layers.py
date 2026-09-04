@@ -1,14 +1,14 @@
-"""Tests for scripts/registry/cli.py's detect_optional_layers/OptionalLayers."""
+"""Tests for scripts/registry/layers.py's detect_optional_layers/OptionalLayers."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
 from scripts.registry.canonical_manifest import legacy_projection_path
-from scripts.registry.cli import (
-    _capability_catalog_path,
-    _release_contract_path,
+from scripts.registry.layers import (
+    capability_catalog_path,
     detect_optional_layers,
+    release_contract_path,
 )
 
 
@@ -38,7 +38,7 @@ def test_all_layers_inactive_on_a_bare_minimal_repo(tmp_path: Path) -> None:
 
 def test_capability_catalog_activates_independently_of_capability_families(tmp_path: Path) -> None:
     _write_minimal_skills_yaml(tmp_path)
-    catalog_path = _capability_catalog_path(tmp_path)
+    catalog_path = capability_catalog_path(tmp_path)
     catalog_path.parent.mkdir(parents=True, exist_ok=True)
     catalog_path.write_text("capabilities: {}\n", encoding="utf-8")
 
@@ -64,7 +64,7 @@ def test_p1_layer_active_when_any_one_of_its_five_files_exists(tmp_path: Path) -
 
 def test_release_contract_active_flag(tmp_path: Path) -> None:
     _write_minimal_skills_yaml(tmp_path)
-    release_contract = _release_contract_path(tmp_path)
+    release_contract = release_contract_path(tmp_path)
     release_contract.parent.mkdir(parents=True, exist_ok=True)
     release_contract.write_text("version: 1\n", encoding="utf-8")
 

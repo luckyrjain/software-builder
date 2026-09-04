@@ -125,6 +125,7 @@ Makefile wrappers: `make install`, `make install-<skill>` (per skill), `make ins
 | `install-incident-rca-deps.sh` | Install incident-rca's prerequisite skills before incident-rca itself. |
 | `install.sh` | The installer itself, documented in full above. |
 | `install_support.py` | Helpers for scripts/install.sh: registry allowlist and installed-package verify. |
+| `lint_skills.py` | Run the shared per-skill structural lint checks (SKILL.md length, workflow frontmatter, dangling links, required reference files, framework wiring, render-surface sanitization) over one skill or the whole registry. |
 | `operational_upkeep.py` | Prompt-system upkeep policy: file-role classification, ownership, health report, and diff-risk gating. |
 | `package_release.py` | Create a byte-reproducible, checksummed release bundle for software-builder. |
 | `package_skill.py` | Package a skill directory into a self-contained install bundle. |
@@ -155,11 +156,10 @@ Makefile wrappers: `make install`, `make install-<skill>` (per skill), `make ins
 | `artifact_contracts.py` | Validate durable artifact contracts and runtime result envelopes. |
 | `artifact_trust.py` | Execution-owned trust classification for artifacts and embedded contexts. |
 | `assessment_target.py` | Canonical identity and digest helpers for composable assessments. |
-| `backfill_capabilities.py` | Backfill skills.yaml capabilities blocks from capability_catalog.yaml. |
+| `backfill_capabilities.py` | Read the generated capability catalogue; validate every skill's capabilities block. |
 | `canonical_manifest.py` | Canonical versioned manifest loader and legacy projection renderer. |
 | `capability_engine.py` | The single required/optional/any_of capability-resolution engine skills.yaml's capability contracts are evaluated against. |
 | `capability_family_sync.py` | Validate that provider-branded capability ids resolve to an abstract family. |
-| `capability_sync.py` | Validate that every skill's declared capabilities exist in the capability catalogue. |
 | `cli.py` | The `python3 -m scripts.registry` command surface: generate, validate, package, check-handoff, validate-artifact. |
 | `compatibility_resolver.py` | Host x skill compatibility resolution (Candidate 4 of the universal-agent-compatibility design, docs/superpowers/specs/2026-08-31-universal-agent-compatibility-design.md). |
 | `composition.py` | Validate the composition graph and render its Mermaid diagram. |

@@ -265,6 +265,14 @@ def package_skill(
     if dest.exists():
         shutil.rmtree(dest)
 
+    # Selects from the working tree, not from Git's index -- deliberately, and unlike the
+    # two archive builders (registry/generic_package.py and package_release.py) which both
+    # source their inputs from `git ls-files`. install.sh supports two flows (docs/RELEASE.md):
+    # a .git checkout, and an *extracted release bundle*, which carries RELEASE-MANIFEST.json
+    # and no .git at all. An index-based selector here would package zero files in the second
+    # flow, breaking the primary end-user install path. Containment is enforced instead by
+    # reject_symlinks() above plus is_ignored_package_path() via copytree_ignore(), which is
+    # the same exclusion decision `--verify` re-applies to the installed tree.
     shutil.copytree(
         skill_src,
         dest,

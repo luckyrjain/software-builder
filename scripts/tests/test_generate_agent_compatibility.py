@@ -121,9 +121,10 @@ def test_update_readme_agent_compatibility_section_raises_without_marker(registr
 def test_generate_check_covers_docs_agent_compatibility_and_readme() -> None:
     """End-to-end: `generate --check` against the real repo must be clean, and must actually
     catch drift when the generated doc is hand-edited -- not just report success unconditionally."""
-    from scripts.registry.cli import _check_outputs, _collect_outputs
+    from scripts.registry.cli import _check_outputs
+    from scripts.registry.generators import collect_outputs
 
-    outputs = _collect_outputs(ROOT)
+    outputs = collect_outputs(ROOT)
     doc_path = ROOT / "docs" / "agent-compatibility.md"
     assert doc_path in outputs
     assert outputs[doc_path] == doc_path.read_text(encoding="utf-8")
