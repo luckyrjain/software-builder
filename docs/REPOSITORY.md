@@ -48,6 +48,8 @@ software-builder/
 ├── implementation-planner/    # Dependency-ordered implementation plan feeding loop-task-implementer
 ├── production-readiness-review/ # Read-only rollup verdict for one exact PR/MR/release candidate
 ├── architecture-review/       # Architecture decision, risks, scale limits, failure modes, alternatives
+├── codebase-architecture-review/ # Bounded, evidence-backed review of an existing codebase's architecture friction
+├── module-design/              # Evidence-backed design for one concrete module's contract, seams, dependencies, tests
 ├── system-design/             # Implementation-level design: components, APIs, data model, rollout
 ├── api-design-review/         # REST/GraphQL/gRPC/async-event design review
 ├── database-review/           # Schema, indexing, locking, transactions, migrations, query plans

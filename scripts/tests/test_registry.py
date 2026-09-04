@@ -1476,6 +1476,48 @@ _ESCALATION_DOC = (
 )
 
 
+def test_repository_doc_layout_tree_reports_a_skill_missing_from_the_tree(tmp_path: Path) -> None:
+    # docs/REPOSITORY.md's hand-typed Layout tree and its generated registry-skills-table
+    # are two statements of "what skills exist" -- a skill added to the registry without
+    # updating the tree leaves the file contradicting itself (this happened for real in
+    # commit 9d6b726, which added codebase-architecture-review/module-design to the
+    # generated table but not the tree above it).
+    from scripts.registry.repository_doc_sync import validate_repository_doc_layout_tree
+
+    doc = tmp_path / "docs" / "REPOSITORY.md"
+    doc.parent.mkdir(parents=True)
+    doc.write_text(
+        "# Repository guide\n\n## Layout\n\n```\nsoftware-builder/\n"
+        "├── README.md              # Top-level install + usage\n"
+        "├── pr-review/             # PR review skill\n"
+        "└── squad-map/             # Ownership mapping skill\n"
+        "```\n",
+        encoding="utf-8",
+    )
+    registry = _registry_with_escalations({"pr-review": [], "squad-map": [], "incident-rca": []})
+
+    errors = validate_repository_doc_layout_tree(tmp_path, registry)
+
+    assert any("missing registered skill(s)" in e and "incident-rca" in e for e in errors)
+
+
+def test_repository_doc_layout_tree_passes_when_every_skill_is_listed(tmp_path: Path) -> None:
+    from scripts.registry.repository_doc_sync import validate_repository_doc_layout_tree
+
+    doc = tmp_path / "docs" / "REPOSITORY.md"
+    doc.parent.mkdir(parents=True)
+    doc.write_text(
+        "# Repository guide\n\n## Layout\n\n```\nsoftware-builder/\n"
+        "├── pr-review/             # PR review skill\n"
+        "└── squad-map/             # Ownership mapping skill\n"
+        "```\n",
+        encoding="utf-8",
+    )
+    registry = _registry_with_escalations({"pr-review": [], "squad-map": []})
+
+    assert validate_repository_doc_layout_tree(tmp_path, registry) == []
+
+
 def test_escalation_sync_reports_registry_edges_the_doc_never_documents(tmp_path: Path) -> None:
     from scripts.registry.escalation_sync import validate_escalation_matrix
 
