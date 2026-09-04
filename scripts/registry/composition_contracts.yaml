@@ -17,6 +17,8 @@ artifact_types:
 - prd_report
 - architecture_review_report
 - system_design_spec
+- module_design_spec
+- codebase_architecture_report
 - api_design_review_report
 - database_review_report
 - security_review_report
@@ -157,6 +159,34 @@ artifact_schemas:
     - conditions
     - required_actions
     - evidence_refs
+  module_design_spec:
+    fields:
+    - title
+    - module_scope
+    - responsibility
+    - callers
+    - contract_surface
+    - invariants
+    - dependency_direction
+    - seams
+    - adapters
+    - errors
+    - state_model
+    - concurrency_expectations
+    - performance_sensitive_behavior
+    - test_surface
+    - migration_plan
+    - alternatives_rejected
+    - unresolved_questions
+  codebase_architecture_report:
+    fields:
+    - title
+    - scope
+    - analysis_budget
+    - evidence_summary
+    - candidates
+    - top_recommendation
+    - limitations
   api_design_review_report:
     fields:
     - title
@@ -483,6 +513,20 @@ skills:
       - input_provenance
       - evidence_refs
       - unresolved
+    write_authority: read-only
+  codebase-architecture-review:
+    produces:
+    - codebase_architecture_report
+    consumes: []
+    produce_fields:
+      codebase_architecture_report:
+      - title
+      - scope
+      - analysis_budget
+      - evidence_summary
+      - candidates
+      - top_recommendation
+      - limitations
     write_authority: read-only
   contract-test-creator:
     produces:
@@ -842,6 +886,30 @@ skills:
       - items
       - generated_at
       - source_revision
+    write_authority: read-only
+  module-design:
+    produces:
+    - module_design_spec
+    consumes: []
+    produce_fields:
+      module_design_spec:
+      - title
+      - module_scope
+      - responsibility
+      - callers
+      - contract_surface
+      - invariants
+      - dependency_direction
+      - seams
+      - adapters
+      - errors
+      - state_model
+      - concurrency_expectations
+      - performance_sensitive_behavior
+      - test_surface
+      - migration_plan
+      - alternatives_rejected
+      - unresolved_questions
     write_authority: read-only
   mysql-to-postgres-sql:
     produces:

@@ -1,0 +1,21 @@
+schema_version: 1
+skill: codebase-architecture-review
+case_id: evidence-gated-zero-candidate-report
+tier: 1
+description: An existing-code review is bounded, can validly return zero candidates, and never refactors automatically.
+assertions:
+  - type: registry_invocation
+    expected: ambient
+  - type: skill_md_contains
+    pattern: read-only
+  - type: skill_md_contains
+    pattern: zero candidates
+  - type: path_contains
+    path: reference/smoke-test.md
+    pattern: no source writes, and no automatic refactor
+  - type: path_contains
+    path: reference/pressure-tests.md
+    pattern: Do not silently expand work
+  - type: path_contains
+    path: reference/report-format.md
+    pattern: "recommended_next_skill: null"

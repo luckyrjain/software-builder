@@ -30,7 +30,9 @@ Routing table: [skill-routing.md](../docs/skill-framework/shared/skill-routing.m
 | Use | Not |
 |-----|-----|
 | "Should we build it this way?" with a PRD/proposal + design | Authoring the PRD itself → **prd-architect** |
-| Pre-implementation architecture decision (risks, scale, failure modes, security, operability) | Implementation-level component/API/data-model design → **system-design** |
+| Pre-implementation architecture decision (risks, scale, failure modes, security, operability) | Existing-code architecture friction/refactoring candidates → **codebase-architecture-review** |
+| Proposed architecture correctness | One code-level module/interface/seam/package/test surface → **module-design** |
+| Architecture-wide decision, risk, scale, or trade-off verdict | Implementation-level component/API/data-model design → **system-design** |
 | Alternatives-considered review before build starts | Reviewing an already-merged PR's code → **pr-review** |
 
 ## Deliverable

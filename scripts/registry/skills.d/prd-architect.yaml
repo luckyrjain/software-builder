@@ -72,3 +72,4 @@ prd-architect:
     - \b(PRD|product requirements?|requirements document|build readiness)\b
     exclude_patterns:
     - \bready PRD\b.*\bimplementation design\b
+    - \bready PRD\b.*\bsystem design\b

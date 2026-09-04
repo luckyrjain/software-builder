@@ -1,0 +1,60 @@
+module-design:
+  path: module-design
+  category: architecture
+  extends: read-only-leaf-review
+  install:
+    requires: []
+  composition:
+    invokes: []
+    escalation_targets:
+    - system-design
+    - architecture-review
+  capabilities:
+    required:
+    - host.report.write
+    - host.repository.read
+    optional: []
+  lint:
+    skill_md_max_lines: 180
+    target: module-design
+  version: 1.0.0
+  type: leaf
+  permissions:
+    repository: read
+    external_actions: none
+    unattended: false
+    merge: false
+  output_contract:
+    produces:
+    - module_design_spec
+    produce_fields:
+      module_design_spec:
+      - title
+      - module_scope
+      - responsibility
+      - callers
+      - contract_surface
+      - invariants
+      - dependency_direction
+      - seams
+      - adapters
+      - errors
+      - state_model
+      - concurrency_expectations
+      - performance_sensitive_behavior
+      - test_surface
+      - migration_plan
+      - alternatives_rejected
+      - unresolved_questions
+  dependencies: []
+  degraded_behavior:
+    missing_capability: host.repository.read
+    available_capabilities:
+    - host.report.write
+    behavior: BLOCKED
+  setup_freshness:
+    external_services: None — reads repository and caller-provided context only
+  routing:
+    patterns:
+    - \b(one|single|concrete)\b.*\b(code[- ]level )?(module|interface|seam|package|test surface)\b
+    - \b(module design|module boundary|seam design|adapter design|interface design)\b

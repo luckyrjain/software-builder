@@ -3,6 +3,7 @@
 .PHONY: lint-implementation-planner
 .PHONY: lint-resilience-review
 .PHONY: lint-production-readiness-review
+.PHONY: lint-module-design lint-codebase-architecture-review
 .PHONY: lint-python
 .PHONY: validate-agent-skills
 .PHONY: validate-hosts
@@ -256,8 +257,14 @@ endef
 
 # $(call forbid_disable_model_invocation,<skill-dir>)
 define forbid_disable_model_invocation
-	@grep -q '^disable-model-invocation:' $(1)/SKILL.md && \
-		{ echo "error: $(1)/SKILL.md must NOT set disable-model-invocation" >&2; exit 1; } || true
+	@if grep -q '^disable-model-invocation:' $(1)/SKILL.md; then \
+		echo "error: $(1)/SKILL.md must NOT set disable-model-invocation" >&2; exit 1; \
+	fi
+endef
+
+# $(call check_balanced_fenced_code_blocks,<markdown-file>)
+define check_balanced_fenced_code_blocks
+	@python3 -c 'import sys; from pathlib import Path; from scripts.reference_utils import has_unclosed_fenced_code_block; path = Path(sys.argv[1]); sys.exit(f"error: {path}: unclosed fenced code block" if has_unclosed_fenced_code_block(path.read_text()) else 0)' "$(1)"
 endef
 
 # $(call require_setup_links_framework,<skill-dir>)
@@ -286,7 +293,7 @@ lint: lint-static lint-suites
 # across skills via `make -jN` and, only for the dominant scripts/tests/ suite, within
 # it via pytest-xdist (see PYTEST_XDIST_FLAG above). `make lint` still runs both groups
 # locally, in this order.
-lint-static: lint-platform-files validate-registry validate-agent-skills validate-hosts backfill-capabilities-check generate-check validate-evals validate-operational-upkeep lint-framework lint-incident-triage-agent lint-who-owns-x-bot lint-new-hire-guide lint-release-readiness-checker lint-cost-optimization-sprint-planner lint-backlog-runner lint-test-writer lint-prd-architect lint-architecture-review lint-system-design lint-api-design-review lint-database-review lint-security-review lint-performance-review lint-capacity-planner lint-observability-review lint-deployment-risk-review lint-dependency-upgrade-review lint-tech-debt-assessor lint-requirements-lock lint-python lint-actions-pinning lint-actions-security verify-install verify-install-all validate-review-contracts lint-scripts-shellcheck
+lint-static: lint-platform-files validate-registry validate-agent-skills validate-hosts backfill-capabilities-check generate-check validate-evals validate-operational-upkeep lint-framework lint-incident-triage-agent lint-who-owns-x-bot lint-new-hire-guide lint-release-readiness-checker lint-cost-optimization-sprint-planner lint-loop-task-implementer lint-backlog-runner lint-test-writer lint-prd-architect lint-architecture-review lint-system-design lint-api-design-review lint-database-review lint-security-review lint-performance-review lint-capacity-planner lint-observability-review lint-deployment-risk-review lint-dependency-upgrade-review lint-tech-debt-assessor lint-module-design lint-codebase-architecture-review lint-requirements-lock lint-python lint-actions-pinning lint-actions-security verify-install verify-install-all validate-review-contracts lint-scripts-shellcheck
 
 lint-scripts-shellcheck:
 	@for f in scripts/*.sh; do \
@@ -1547,6 +1554,70 @@ lint-production-readiness-review:
 	@python3 -m py_compile scripts/production_readiness.py
 	@python3 -m pytest scripts/tests/test_production_readiness_contract.py -q
 	@echo "  ok"
+
+lint-module-design:
+	@echo "lint-module-design: SKILL.md line count (<= 180)"
+	$(call check_skill_md_length,module-design,180,keep orchestrator thin; detail in workflow/)
+	@echo "lint-module-design: disable-model-invocation NOT set (ambiently invocable)"
+	$(call forbid_disable_model_invocation,module-design)
+	@echo "  ok"
+	@echo "lint-module-design: required SKILL.md headings"
+	@for heading in \
+		"## When to use / NOT to use" "## Deliverable" "## Required inputs" \
+		"## Prerequisites" "## Workflow" "## Boundary rules" \
+		"## Cross-skill escalation" "## Framework" "## Begin"; do \
+		grep -Fqx "$$heading" module-design/SKILL.md || \
+			{ echo "error: module-design/SKILL.md must contain heading $$heading" >&2; exit 1; }; \
+	done
+	@echo "lint-module-design: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
+	$(call check_workflow_frontmatter,module-design)
+	@echo "lint-module-design: dangling markdown links"
+	$(call check_dangling_links,module-design/*.md module-design/reference/*.md module-design/workflow/*.md)
+	$(call require_ref_files,module-design/reference,phase-index lazy-load-index report-format smoke-test pressure-tests)
+	$(call require_setup_links_framework,module-design)
+	@grep -q 'docs/skill-framework/shared/prompt-injection.md' module-design/SKILL.md || \
+		{ echo "error: module-design/SKILL.md must link to shared prompt-injection" >&2; exit 1; }
+	$(call require_cross_skill_escalation,module-design)
+	$(call require_safe_output_link,module-design)
+	@grep -q 'docs/skill-framework/shared/prompt-injection.md' module-design/reference/report-format.md && \
+	 grep -q 'docs/skill-framework/shared/safe-output.md' module-design/reference/report-format.md && \
+	 grep -qiE 'escape|fence|backtick' module-design/reference/report-format.md && \
+	 grep -qi 'redact' module-design/reference/report-format.md || \
+		{ echo "error: module-design/reference/report-format.md must sanitize untrusted rendered fields per prompt-injection and safe-output" >&2; exit 1; }
+	@echo "  ok (framework refs)"
+
+lint-codebase-architecture-review:
+	@echo "lint-codebase-architecture-review: SKILL.md line count (<= 180)"
+	$(call check_skill_md_length,codebase-architecture-review,180,keep orchestrator thin; detail in workflow/)
+	@echo "lint-codebase-architecture-review: disable-model-invocation NOT set (ambiently invocable)"
+	$(call forbid_disable_model_invocation,codebase-architecture-review)
+	@echo "  ok"
+	@echo "lint-codebase-architecture-review: required SKILL.md headings"
+	@for heading in \
+		"## When to use / NOT to use" "## Deliverable" "## Scope and prerequisites" \
+		"## Workflow" "## Candidate rules" "## Cross-skill boundary" \
+		"## Framework" "## Begin"; do \
+		grep -Fqx "$$heading" codebase-architecture-review/SKILL.md || \
+			{ echo "error: codebase-architecture-review/SKILL.md must contain heading $$heading" >&2; exit 1; }; \
+	done
+	@echo "lint-codebase-architecture-review: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
+	$(call check_workflow_frontmatter,codebase-architecture-review)
+	@echo "lint-codebase-architecture-review: dangling markdown links"
+	$(call check_dangling_links,codebase-architecture-review/*.md codebase-architecture-review/reference/*.md codebase-architecture-review/workflow/*.md)
+	$(call require_ref_files,codebase-architecture-review/reference,phase-index lazy-load-index report-format smoke-test pressure-tests)
+	$(call require_setup_links_framework,codebase-architecture-review)
+	@grep -q 'docs/skill-framework/shared/prompt-injection.md' codebase-architecture-review/SKILL.md || \
+		{ echo "error: codebase-architecture-review/SKILL.md must link to shared prompt-injection" >&2; exit 1; }
+	$(call require_cross_skill_escalation,codebase-architecture-review)
+	$(call require_safe_output_link,codebase-architecture-review)
+	@grep -q 'docs/skill-framework/shared/prompt-injection.md' codebase-architecture-review/reference/report-format.md && \
+	 grep -q 'docs/skill-framework/shared/safe-output.md' codebase-architecture-review/reference/report-format.md && \
+	 grep -qiE 'escape|fence|backtick' codebase-architecture-review/reference/report-format.md && \
+	 grep -qi 'redact' codebase-architecture-review/reference/report-format.md || \
+		{ echo "error: codebase-architecture-review/reference/report-format.md must sanitize untrusted rendered fields per prompt-injection and safe-output" >&2; exit 1; }
+	@echo "lint-codebase-architecture-review: balanced report-format fenced code blocks"
+	$(call check_balanced_fenced_code_blocks,codebase-architecture-review/reference/report-format.md)
+	@echo "  ok (framework refs)"
 
 lint-framework:
 	@test -n "$(ALL_SKILLS)" || \

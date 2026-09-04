@@ -55,6 +55,7 @@ Skills reference these files by relative link from `SETUP.md` or `SKILL.md`. Do 
 | [shared/claude-code-setup.md](shared/claude-code-setup.md) | Claude Code install paths + MCP config location, mapped from the Cursor equivalents used throughout each skill's `SETUP.md` |
 | [shared/org-rollup-schema.md](shared/org-rollup-schema.md) | Normalized cross-repo rollup item shape — implemented by migration-program-manager (#8), cost-optimization-sprint-planner (#10), and weekly-squad-digest (#11) |
 | [shared/test-creation-principles.md](shared/test-creation-principles.md) | Test-first evidence, test-quality rules, refactor limits, and the shared report skeleton for unit/integration/contract/e2e/api-test-creator |
+| [shared/codebase-design-principles.md](shared/codebase-design-principles.md) | Normative design concepts and evidence rules for codebase architecture work |
 | [shared/terminology-glossary.md](shared/terminology-glossary.md) | Platform implementation vocabulary — registry, capability, risk class, eval tiers; domain terms in [CONTEXT.md](../../CONTEXT.md) |
 | [shared/setup-freshness.md](shared/setup-freshness.md) | SETUP.md review ownership, last-reviewed dates, external-service inventory |
 
@@ -109,6 +110,7 @@ committed to the repository.
 | claude-code-setup.md | Complete |
 | org-rollup-schema.md | Complete — implemented by migration-program-manager (#8), cost-optimization-sprint-planner (#10), and weekly-squad-digest (#11), the last three items of the team-facing agents roadmap |
 | test-creation-principles.md | Complete — implemented by unit/integration/contract/e2e/api-test-creator, dispatched to by the test-writer router |
+| codebase-design-principles.md | Complete — normative shared doctrine for codebase architecture work |
 | terminology-glossary.md | Complete — platform vocabulary for registry, capabilities, risk classes, and eval tiers |
 
 ## Deferred (P3 roadmap)

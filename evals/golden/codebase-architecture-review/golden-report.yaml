@@ -1,0 +1,65 @@
+schema_version: 1
+skill: codebase-architecture-review
+case_id: golden-report
+tier: 3
+description: A bounded review with unavailable history may return zero candidates without inventing churn evidence or applying a refactor.
+recorded_output:
+  artifact: codebase_architecture_report
+  repository_write_action: none
+  automatic_refactor: false
+  scope:
+    paths:
+      - src/checkout
+  analysis_budget:
+    fully_read_files: 12
+    fully_read_file_limit: 200
+    hotspots: 1
+    hotspot_limit: 3
+  history:
+    status: degraded
+    reason: shallow clone has no relevant history
+    claims_omitted:
+      - churn
+      - co-change
+  candidates: []
+  candidate_count: 0
+  top_recommendation:
+    status: none
+  recommended_next_skill: null
+assertions:
+  - type: field_equals
+    path: artifact
+    value: codebase_architecture_report
+  - type: field_equals
+    path: repository_write_action
+    value: none
+  - type: field_equals
+    path: automatic_refactor
+    value: false
+  - type: field_equals
+    path: analysis_budget.fully_read_files
+    value: 12
+  - type: field_equals
+    path: analysis_budget.fully_read_file_limit
+    value: 200
+  - type: field_equals
+    path: analysis_budget.hotspots
+    value: 1
+  - type: field_equals
+    path: analysis_budget.hotspot_limit
+    value: 3
+  - type: field_equals
+    path: history.status
+    value: degraded
+  - type: field_equals
+    path: history.claims_omitted
+    value: [churn, co-change]
+  - type: field_equals
+    path: candidates
+    value: []
+  - type: field_equals
+    path: candidate_count
+    value: 0
+  - type: field_equals
+    path: recommended_next_skill
+    value: null

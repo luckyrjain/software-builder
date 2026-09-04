@@ -8,6 +8,8 @@ graph TD
   architecture-review -.->|escalates| prd-architect
   backlog-runner -->|invokes| loop-task-implementer
   capacity-planner -.->|escalates| k8s-overprovisioning-datadog
+  codebase-architecture-review -.->|escalates| module-design
+  codebase-architecture-review -.->|escalates| domain-comprehension
   cost-optimization-sprint-planner -->|invokes| k8s-overprovisioning-datadog
   cost-optimization-sprint-planner -->|invokes| squad-map
   database-review -.->|escalates| performance-review
@@ -30,6 +32,8 @@ graph TD
   migration-program-manager -.->|escalates| mysql-to-postgres-sql
   migration-program-manager -.->|escalates| squad-map
   migration-program-manager -.->|escalates| pr-review
+  module-design -.->|escalates| system-design
+  module-design -.->|escalates| architecture-review
   new-hire-guide -->|invokes| domain-comprehension
   new-hire-guide -->|invokes| squad-map
   observability-review -.->|escalates| incident-rca

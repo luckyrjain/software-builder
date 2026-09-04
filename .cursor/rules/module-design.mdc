@@ -1,0 +1,9 @@
+---
+description: Use when one concrete module in an existing repository needs an evidence-backed design for its contract, ownership, seams, dependencies, state, errors, and tests before implementation. Keywords: module design, module boundary, seam design, adapter design, dependency direction, interface design. Not for a multi-module/system design (system-design), or an architecture-wide decision/risk review (architecture-review).
+alwaysApply: false
+---
+
+<!-- GENERATED from skills.yaml + SKILL.md — do not edit; run make generate -->
+
+Invoke the module-design skill. Read `module-design/SKILL.md` and follow it.
+Phase index: `module-design/reference/phase-index.md` when present under the skill directory.

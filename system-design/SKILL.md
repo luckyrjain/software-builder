@@ -30,6 +30,7 @@ Routing table: [skill-routing.md](../docs/skill-framework/shared/skill-routing.m
 | Use | Not |
 |-----|-----|
 | Turn a ready PRD or approved architecture decision into components/APIs/data model | **architecture-review** — decide whether the resulting architecture itself is sound |
+| System/component/API/event/data implementation design | **module-design** — one code-level module/interface/seam/package/test surface |
 | Design a state machine, consistency model, or retry/idempotency strategy | **architecture-review** — architecture-level risk/scale/security verdict |
 | Produce a rollout/migration plan for a new implementation | **prd-architect** — write the PRD itself |
 | Draft an API surface as part of a broader design | **api-design-review** — review an existing API's contract in isolation |

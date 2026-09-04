@@ -25,6 +25,8 @@ cases:
   - {skill: prd-architect, missing_capability: host.report.write, available_capabilities: [], expected_behavior: BLOCKED}
   - {skill: test-writer, missing_capability: host.repository.read, available_capabilities: [], expected_behavior: BLOCKED}
   - {skill: architecture-review, missing_capability: host.report.write, available_capabilities: [], expected_behavior: BLOCKED}
+  - {skill: codebase-architecture-review, missing_capability: host.repository.read, available_capabilities: [host.report.write], expected_behavior: BLOCKED}
+  - {skill: module-design, missing_capability: host.repository.read, available_capabilities: [host.report.write], expected_behavior: BLOCKED}
   - {skill: system-design, missing_capability: host.report.write, available_capabilities: [], expected_behavior: BLOCKED}
   - {skill: api-design-review, missing_capability: host.report.write, available_capabilities: [], expected_behavior: BLOCKED}
   - {skill: database-review, missing_capability: host.report.write, available_capabilities: [], expected_behavior: BLOCKED}

@@ -56,6 +56,7 @@ concrete missing capability (`BLOCKED`) always takes precedence, matching
 | claude | backlog-runner | BLOCKED | scheduler.cron.trigger, host.issue_tracker.read |
 | claude | capacity-planner | BLOCKED | host.report.write |
 | claude | change-impact-analyzer | BLOCKED | host.report.write |
+| claude | codebase-architecture-review | BLOCKED | host.report.write, host.repository.read |
 | claude | contract-test-creator | BLOCKED | host.repository.read_write |
 | claude | cost-optimization-sprint-planner | BLOCKED | host.filesystem.read |
 | claude | database-review | BLOCKED | host.report.write |
@@ -70,6 +71,7 @@ concrete missing capability (`BLOCKED`) always takes precedence, matching
 | claude | k8s-overprovisioning-datadog | BLOCKED | kubernetes.metrics.history |
 | claude | loop-task-implementer | BLOCKED | host.repository.read_write, host.role.isolation, host.ci.status, host.pull_request.write |
 | claude | migration-program-manager | BLOCKED | host.filesystem.read |
+| claude | module-design | BLOCKED | host.report.write, host.repository.read |
 | claude | mysql-to-postgres-sql | BLOCKED | host.repository.read_write |
 | claude | new-hire-guide | BLOCKED | host.repository.read |
 | claude | observability-review | BLOCKED | host.report.write |
@@ -94,6 +96,7 @@ concrete missing capability (`BLOCKED`) always takes precedence, matching
 | cursor | backlog-runner | BLOCKED | scheduler.cron.trigger, host.issue_tracker.read |
 | cursor | capacity-planner | BLOCKED | host.report.write |
 | cursor | change-impact-analyzer | BLOCKED | host.report.write |
+| cursor | codebase-architecture-review | BLOCKED | host.report.write, host.repository.read |
 | cursor | contract-test-creator | BLOCKED | host.repository.read_write |
 | cursor | cost-optimization-sprint-planner | BLOCKED | host.filesystem.read |
 | cursor | database-review | BLOCKED | host.report.write |
@@ -108,6 +111,7 @@ concrete missing capability (`BLOCKED`) always takes precedence, matching
 | cursor | k8s-overprovisioning-datadog | BLOCKED | kubernetes.metrics.history |
 | cursor | loop-task-implementer | BLOCKED | host.repository.read_write, host.role.isolation, host.ci.status, host.pull_request.write |
 | cursor | migration-program-manager | BLOCKED | host.filesystem.read |
+| cursor | module-design | BLOCKED | host.report.write, host.repository.read |
 | cursor | mysql-to-postgres-sql | BLOCKED | host.repository.read_write |
 | cursor | new-hire-guide | BLOCKED | host.repository.read |
 | cursor | observability-review | BLOCKED | host.report.write |
@@ -132,6 +136,7 @@ concrete missing capability (`BLOCKED`) always takes precedence, matching
 | github-copilot | backlog-runner | BLOCKED | scheduler.cron.trigger, host.issue_tracker.read |
 | github-copilot | capacity-planner | BLOCKED | host.report.write |
 | github-copilot | change-impact-analyzer | BLOCKED | host.report.write |
+| github-copilot | codebase-architecture-review | BLOCKED | host.report.write, host.repository.read |
 | github-copilot | contract-test-creator | BLOCKED | host.repository.read_write |
 | github-copilot | cost-optimization-sprint-planner | BLOCKED | host.filesystem.read |
 | github-copilot | database-review | BLOCKED | host.report.write |
@@ -146,6 +151,7 @@ concrete missing capability (`BLOCKED`) always takes precedence, matching
 | github-copilot | k8s-overprovisioning-datadog | BLOCKED | kubernetes.metrics.history |
 | github-copilot | loop-task-implementer | BLOCKED | host.repository.read_write, host.role.isolation, host.ci.status, host.pull_request.write |
 | github-copilot | migration-program-manager | BLOCKED | host.filesystem.read |
+| github-copilot | module-design | BLOCKED | host.report.write, host.repository.read |
 | github-copilot | mysql-to-postgres-sql | BLOCKED | host.repository.read_write |
 | github-copilot | new-hire-guide | BLOCKED | host.repository.read |
 | github-copilot | observability-review | BLOCKED | host.report.write |
@@ -170,6 +176,7 @@ concrete missing capability (`BLOCKED`) always takes precedence, matching
 | kiro | backlog-runner | BLOCKED | scheduler.cron.trigger, host.issue_tracker.read |
 | kiro | capacity-planner | BLOCKED | host.report.write |
 | kiro | change-impact-analyzer | BLOCKED | host.report.write |
+| kiro | codebase-architecture-review | BLOCKED | host.report.write, host.repository.read |
 | kiro | contract-test-creator | BLOCKED | host.repository.read_write |
 | kiro | cost-optimization-sprint-planner | BLOCKED | host.filesystem.read |
 | kiro | database-review | BLOCKED | host.report.write |
@@ -184,6 +191,7 @@ concrete missing capability (`BLOCKED`) always takes precedence, matching
 | kiro | k8s-overprovisioning-datadog | BLOCKED | kubernetes.metrics.history |
 | kiro | loop-task-implementer | BLOCKED | host.repository.read_write, host.role.isolation, host.ci.status, host.pull_request.write |
 | kiro | migration-program-manager | BLOCKED | host.filesystem.read |
+| kiro | module-design | BLOCKED | host.report.write, host.repository.read |
 | kiro | mysql-to-postgres-sql | BLOCKED | host.repository.read_write |
 | kiro | new-hire-guide | BLOCKED | host.repository.read |
 | kiro | observability-review | BLOCKED | host.report.write |

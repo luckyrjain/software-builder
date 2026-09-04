@@ -14,6 +14,7 @@ routes:
     patterns:
     - \b(architecture review|ADR|architecture decision record|architecture design
       review)\b
+    - \bproposed architecture\b
   backlog-runner:
     patterns:
     - \b(backlog|tickets?)\b.*\b(overnight|scheduled|nightly|queue runner)\b
@@ -31,6 +32,10 @@ routes:
     exclude_patterns:
     - \b(review|regression|correctness|blast radius|rollback risk|deployment risk|release
       risk)\b
+  codebase-architecture-review:
+    patterns:
+    - \b(existing codebase architecture|codebase architecture friction|architecture
+      friction|refactoring opportunit(?:y|ies)|change locality)\b
   contract-test-creator:
     patterns:
     - \b(contract tests?|consumer[- ]driven contract|pact tests?)\b
@@ -83,6 +88,11 @@ routes:
     patterns:
     - \b(migration program|migration portfolio|migration status rollup|migration program
       status)\b
+  module-design:
+    patterns:
+    - \b(one|single|concrete)\b.*\b(code[- ]level )?(module|interface|seam|package|test
+      surface)\b
+    - \b(module design|module boundary|seam design|adapter design|interface design)\b
   mysql-to-postgres-sql:
     patterns:
     - \b(MySQL|mysql)\b.*\b(Postgres|PostgreSQL|postgresql)\b
@@ -114,6 +124,7 @@ routes:
     - \b(PRD|product requirements?|requirements document|build readiness)\b
     exclude_patterns:
     - \bready PRD\b.*\bimplementation design\b
+    - \bready PRD\b.*\bsystem design\b
   production-readiness-review:
     patterns:
     - \b(PR|MR|pull request|merge request)\s*[#!]?\d+\b.*\b(production ready|production

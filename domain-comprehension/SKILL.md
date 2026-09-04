@@ -43,6 +43,7 @@ Routing: [skill-routing.md](../docs/skill-framework/shared/skill-routing.md).
 | Domain/subsystem map, onboarding | **incident-rca** for time-window incidents |
 | Bounded contexts, data ownership, critical path | **pr-review** for MR review |
 | Reverse-engineer current-state requirements/PRD | **prd-architect** for future-state/MVP/build readiness |
+| Current-state domain reconstruction | **codebase-architecture-review** for existing-code architecture friction/refactoring candidates |
 | Runtime architecture corroboration | **k8s-overprovisioning-datadog** for sizing |
 | Squad/repo ownership only | **squad-map** |
 | Onboarding a named new hire | **new-hire-guide** |

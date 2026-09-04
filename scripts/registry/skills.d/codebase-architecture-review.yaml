@@ -1,0 +1,49 @@
+codebase-architecture-review:
+  path: codebase-architecture-review
+  category: architecture
+  extends: read-only-leaf-review
+  install:
+    requires: []
+  composition:
+    invokes: []
+    escalation_targets:
+    - module-design
+    - domain-comprehension
+  capabilities:
+    required:
+    - host.report.write
+    - host.repository.read
+    optional: []
+  lint:
+    skill_md_max_lines: 180
+    target: codebase-architecture-review
+  version: 1.0.0
+  type: leaf
+  permissions:
+    repository: read
+    external_actions: none
+    unattended: false
+    merge: false
+  output_contract:
+    produces:
+    - codebase_architecture_report
+    produce_fields:
+      codebase_architecture_report:
+      - title
+      - scope
+      - analysis_budget
+      - evidence_summary
+      - candidates
+      - top_recommendation
+      - limitations
+  dependencies: []
+  degraded_behavior:
+    missing_capability: host.repository.read
+    available_capabilities:
+    - host.report.write
+    behavior: BLOCKED
+  setup_freshness:
+    external_services: None — reads repository and caller-provided context only
+  routing:
+    patterns:
+    - \b(existing codebase architecture|codebase architecture friction|architecture friction|refactoring opportunit(?:y|ies)|change locality)\b

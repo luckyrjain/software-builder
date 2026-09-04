@@ -333,6 +333,12 @@ skills:
   system-design:
     required: [host.report.write]
     optional: []
+  module-design:
+    required: [host.report.write, host.repository.read]
+    optional: []
+  codebase-architecture-review:
+    required: [host.report.write, host.repository.read]
+    optional: []
   api-design-review:
     required: [host.report.write]
     optional: []

@@ -1,0 +1,39 @@
+schema_version: 1
+skill: module-design
+case_id: golden-contract
+tier: 3
+description: A concrete module contract is a report-only design with an evidence-earned boundary, not a repository change.
+recorded_output:
+  artifact: module_design_spec
+  repository_write_action: none
+  automatic_downstream_invocation: false
+  module_scope: src/payments/charge.py
+  evidence_status: bounded
+  contract_surface:
+    - create_charge(command)
+    - charge_status(charge_id)
+  adapter_decision: translate vendor gateway failures into module-owned errors
+  alternatives_rejected:
+    - mock-only Gateway interface
+assertions:
+  - type: field_equals
+    path: artifact
+    value: module_design_spec
+  - type: field_equals
+    path: repository_write_action
+    value: none
+  - type: forbid_field_value
+    path: repository_write_action
+    value: apply_patch
+  - type: field_equals
+    path: automatic_downstream_invocation
+    value: false
+  - type: field_equals
+    path: evidence_status
+    value: bounded
+  - type: require_pattern
+    path: adapter_decision
+    pattern: module-owned errors
+  - type: require_pattern
+    path: alternatives_rejected
+    pattern: mock-only

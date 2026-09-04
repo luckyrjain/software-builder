@@ -25,6 +25,8 @@ cases:
   - {skill: prd-architect, prompt: "Understand the existing payments service and its current-state domain and bounded contexts.", expected_status: selected, expected_owner: domain-comprehension, forbidden_owner: prd-architect}
   - {skill: test-writer, prompt: "Review this PRD and improve the product requirements document for build readiness.", expected_status: selected, expected_owner: prd-architect, forbidden_owner: test-writer}
   - {skill: architecture-review, prompt: "Write a PRD for the new payments platform.", expected_status: selected, expected_owner: prd-architect, forbidden_owner: architecture-review}
+  - {skill: codebase-architecture-review, prompt: "Review this proposed architecture and its failure modes before implementation.", expected_status: selected, expected_owner: architecture-review, forbidden_owner: codebase-architecture-review}
+  - {skill: module-design, prompt: "Review this existing codebase architecture and find evidence-backed refactoring opportunities.", expected_status: selected, expected_owner: codebase-architecture-review, forbidden_owner: module-design}
   - {skill: system-design, prompt: "API contract review for the new /orders endpoint.", expected_status: selected, expected_owner: api-design-review, forbidden_owner: system-design}
   - {skill: api-design-review, prompt: "Review this pull request for correctness and regressions.", expected_status: selected, expected_owner: pr-review, forbidden_owner: api-design-review}
   - {skill: database-review, prompt: "Migrate this MySQL query to PostgreSQL dialect.", expected_status: selected, expected_owner: mysql-to-postgres-sql, forbidden_owner: database-review}

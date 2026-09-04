@@ -31,6 +31,11 @@ skills:
     - host.report.write
     - host.scm.change.read
     behavior: DEGRADED
+  codebase-architecture-review:
+    missing_capability: host.repository.read
+    available_capabilities:
+    - host.report.write
+    behavior: BLOCKED
   contract-test-creator:
     missing_capability: host.repository.read_write
     available_capabilities: []
@@ -88,6 +93,11 @@ skills:
   migration-program-manager:
     missing_capability: host.filesystem.read
     available_capabilities: []
+    behavior: BLOCKED
+  module-design:
+    missing_capability: host.repository.read
+    available_capabilities:
+    - host.report.write
     behavior: BLOCKED
   mysql-to-postgres-sql:
     missing_capability: host.repository.read_write

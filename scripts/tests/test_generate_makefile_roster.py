@@ -20,8 +20,54 @@ ROOT = Path(__file__).resolve().parents[2]
 def test_render_matches_frozen_order_on_real_repo() -> None:
     registry = load_registry(ROOT)
     rendered = render_makefile_roster(registry)
-    assert f"ALL_SKILLS := {' '.join(ALL_SKILLS_ORDER)}\n" in rendered
-    assert set(registry.skills) == set(ALL_SKILLS_ORDER)
+    registry_skills = set(registry.skills)
+    historical_prefix = (
+        "pr-review",
+        "pr-gatekeeper",
+        "incident-rca",
+        "incident-triage-agent",
+        "k8s-overprovisioning-datadog",
+        "domain-comprehension",
+        "squad-map",
+        "who-owns-x-bot",
+        "new-hire-guide",
+        "release-readiness-checker",
+        "migration-program-manager",
+        "mysql-to-postgres-sql",
+        "loop-task-implementer",
+        "backlog-runner",
+        "cost-optimization-sprint-planner",
+        "weekly-squad-digest",
+        "prd-architect",
+        "test-writer",
+        "unit-test-creator",
+        "integration-test-creator",
+        "contract-test-creator",
+        "e2e-test-creator",
+        "api-test-creator",
+        "architecture-review",
+        "system-design",
+        "api-design-review",
+        "database-review",
+        "security-review",
+        "performance-review",
+        "capacity-planner",
+        "observability-review",
+        "deployment-risk-review",
+        "dependency-upgrade-review",
+        "tech-debt-assessor",
+        "change-impact-analyzer",
+        "resilience-review",
+        "implementation-planner",
+        "production-readiness-review",
+    )
+    assert tuple(ALL_SKILLS_ORDER) == historical_prefix
+
+    assert "codebase-architecture-review" in registry_skills
+    assert "module-design" in registry_skills
+    extras = sorted(registry_skills - set(historical_prefix))
+    expected_order = (*historical_prefix, *extras)
+    assert f"ALL_SKILLS := {' '.join(expected_order)}\n" in rendered
 
 
 def test_unknown_skill_appends_after_frozen_order_instead_of_raising(tmp_path: Path) -> None:
@@ -55,6 +101,76 @@ skills:
     assert "ALL_SKILLS := solo\n" in rendered
     assert "install-solo:\n\tbash scripts/install.sh solo\n" in rendered
     assert "install-claude-solo:\n\tbash scripts/install.sh --agent claude-user solo\n" in rendered
+
+
+def test_registry_extras_render_sorted_after_frozen_prefix(tmp_path: Path) -> None:
+    from scripts.registry.schema import parse_registry
+
+    registry_file = tmp_path / "skills.yaml"
+    registry_file.write_text(
+        """
+schema_version: 1
+skills:
+  pr-review:
+    path: pr-review
+    category: review
+    invocation: ambient
+    hosts:
+      cursor: {discovery: rule}
+      claude: {install: true}
+      kiro: {discovery: manual}
+    install: {requires: []}
+    capabilities:
+      required: [host.repository.read]
+    lint: {skill_md_max_lines: 180, target: pr-review}
+    risk_class: [read-only]
+  architecture-review:
+    path: architecture-review
+    category: architecture
+    invocation: ambient
+    hosts:
+      cursor: {discovery: rule}
+      claude: {install: true}
+      kiro: {discovery: manual}
+    install: {requires: []}
+    capabilities:
+      required: [host.repository.read]
+    lint: {skill_md_max_lines: 180, target: architecture-review}
+    risk_class: [read-only]
+  zulu-extra:
+    path: zulu-extra
+    category: testing
+    invocation: ambient
+    hosts:
+      cursor: {discovery: rule}
+      claude: {install: true}
+      kiro: {discovery: manual}
+    install: {requires: []}
+    capabilities:
+      required: [host.repository.read]
+    lint: {skill_md_max_lines: 180, target: zulu-extra}
+    risk_class: [read-only]
+  alpha-extra:
+    path: alpha-extra
+    category: testing
+    invocation: ambient
+    hosts:
+      cursor: {discovery: rule}
+      claude: {install: true}
+      kiro: {discovery: manual}
+    install: {requires: []}
+    capabilities:
+      required: [host.repository.read]
+    lint: {skill_md_max_lines: 180, target: alpha-extra}
+    risk_class: [read-only]
+""",
+        encoding="utf-8",
+    )
+    registry = parse_registry(registry_file)
+
+    rendered = render_makefile_roster(registry)
+
+    assert "ALL_SKILLS := pr-review architecture-review alpha-extra zulu-extra\n" in rendered
 
 
 def test_generate_makefile_roster_writes_expected_path(tmp_path: Path) -> None:
