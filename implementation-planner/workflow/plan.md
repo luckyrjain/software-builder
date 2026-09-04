@@ -22,9 +22,12 @@ repository. A missing or stale source is a planning blocker.
 
 ## 2. Build
 
-Call `build_implementation_plan` from `scripts/implementation_plan.py`. It derives the plan-set and
-repository plan identities, creates only repository-grounded tasks, preserves cross-repository work as
-explicit external dependencies, and assigns deterministic task waves.
+Derive the plan-set and repository plan identities from a canonical digest of the immutable source
+set, create only repository-grounded tasks, preserve cross-repository work as explicit external
+dependencies, and assign task waves deterministically from the dependency DAG — identical inputs must
+yield identical identities and identical wave assignments. A Software Builder checkout implements
+exactly this as `build_implementation_plan` in `<checkout>/scripts/implementation_plan.py`; that module
+is not part of an installed package, so apply the rule directly when it is unavailable.
 
 Unresolved `external_dependencies` keep the plan `PARTIAL` until repository evidence records each
 dependency as `READY`, `COMPLETE`, or `SUCCESS`; a requirement declaration is never treated as proof
@@ -32,7 +35,8 @@ that the dependency is satisfied.
 
 ## 3. Validate
 
-Run `validate_implementation_plan` before emitting output. Check all dependencies, cycles, wave order,
+Validate before emitting output — `validate_implementation_plan` in the same checkout module does
+this, and the same checks are required without it. Check all dependencies, cycles, wave order,
 source traceability, required tests, target paths, executor identity, and size estimates. `READY` is
 forbidden for failed/unknown mandatory evidence or unknown estimates.
 

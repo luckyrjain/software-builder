@@ -28,3 +28,8 @@ htmlcov/
 # Build/dist artifacts
 dist/
 build/
+
+# architecture-review skill output. The skill writes its report to this exact repo-root path
+# (architecture-review/workflow/report.md), so running it against this repository would otherwise
+# overwrite a committed file. Dated historical runs live in docs/history/ instead.
+/ARCHITECTURE_REVIEW_REPORT.md

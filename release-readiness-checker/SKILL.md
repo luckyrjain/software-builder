@@ -70,8 +70,9 @@ Parse per [workflow/inputs.md](workflow/inputs.md).
 
 A v1 entry (no `production_readiness_required`) behaves exactly as before. A v2 entry with
 `production_readiness_required: true` additionally gates on production readiness — see
-[reference/report-format.md § Manifest v2](reference/report-format.md) and
-[scripts/release_readiness_v2.py](../scripts/release_readiness_v2.py).
+[reference/report-format.md § Manifest v2](reference/report-format.md). A Software Builder checkout
+carries the same parsing and reuse rules as executable code at
+`<checkout>/scripts/release_readiness_v2.py`; it is not part of this package.
 
 ## Prerequisites
 

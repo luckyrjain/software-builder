@@ -1,5 +1,11 @@
 # Architecture review — Universal Coding-Agent Compatibility
 
+> **Historical output of the `architecture-review` skill** against the Universal Agent
+> Compatibility design spec, run 2026-08-31. Not current architecture documentation — it
+> records one review's verdict at that date, not the shipped design. For current platform
+> decisions see [../adr/README.md](../adr/README.md); for the spec it reviews see
+> [../superpowers/specs/2026-08-31-universal-agent-compatibility-design.md](../superpowers/specs/2026-08-31-universal-agent-compatibility-design.md).
+
 **Decision: Needs rework**
 
 Needs rework — unquantified host×skill/evidence scale growth (see Scale limits), undefined stale-lock

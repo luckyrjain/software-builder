@@ -457,7 +457,7 @@ is documentation of who owns sensitive paths, not a merge gate.
 
 1. **Settings → Rules → Rulesets** → edit (or create) the ruleset targeting `main`.
 2. Apply the solo-maintainer settings above — or match the canonical spec in
-   [`docs/github-ruleset-main.json`](../github-ruleset-main.json) (enforcement `active`, required
+   [`docs/github-ruleset-main.json`](github-ruleset-main.json) (enforcement `active`, required
    status check `lint`, squash-only merges, zero required approvals, no CODEOWNER review).
 3. **Settings → General → Pull Requests** → pick one merge strategy (squash recommended) and enable
    **Automatically delete head branches**.

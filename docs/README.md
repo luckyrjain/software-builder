@@ -12,6 +12,7 @@ Human-readable guide to everything in the **software-builder** repository. Agent
 | [../domain-comprehension/CONTEXT.md](../domain-comprehension/CONTEXT.md) | Target-system vocabulary (bounded contexts, as-built PRD, squads) |
 | [../README.md](../README.md) | Install, invoke, and quick usage for all skills |
 | [REPOSITORY.md](REPOSITORY.md) | Repo layout, `Makefile`, `scripts/`, lint targets, git hooks |
+| [OPERATIONS.md](OPERATIONS.md) | Operator runbook — stale install lock, host-evidence refresh, `VERSION` bump trigger, generated-roster recovery |
 | [skill-framework/README.md](skill-framework/README.md) | Shared normative conventions every skill follows (confidence bands, escalation, routing, phase glossary, …) |
 | [history/README.md](history/README.md) | Historical specs and plans (`docs/superpowers/`) vs. normative framework docs |
 | [adr/README.md](adr/README.md) | Platform architecture decision records |

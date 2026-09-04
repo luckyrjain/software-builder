@@ -45,7 +45,13 @@ RETRY_DELAY = 5s (timeout), 30s (rate_limited)
 
 ## 4. Degraded mode patterns
 
-When an MCP server is unavailable, each skill follows a defined fallback:
+When an MCP server is unavailable, each skill follows a defined fallback.
+
+`scripts/registry/degraded_behavior.yaml` is the machine-checked source of that policy: it covers all
+38 skills, names abstract capability ids rather than MCP-server brands, and is what the eval scenario
+harness actually exercises. **The table below is an illustrative subset**, kept in provider terms
+because that is how the failure presents to a user. It is written by hand and is not generated from
+the YAML — when the two differ, the YAML is authoritative.
 
 | Skill | MCP unavailable | Degraded behavior |
 |-------|-----------------|-------------------|

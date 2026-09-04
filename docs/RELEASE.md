@@ -113,6 +113,9 @@ python3 scripts/doctor.py --available gitlab.get_merge_request,gitlab.get_merge_
 
 ## Breaking changes
 
+Which change requires which bump — and what to do when a release or install goes wrong — is in
+[OPERATIONS.md](OPERATIONS.md).
+
 - Increment the major version in `VERSION` when registry schema, install packaging, or a skill's
   workflow contract changes incompatibly.
 - Ship migration notes in `CHANGELOG.md` and the per-skill changelog when applicable.
