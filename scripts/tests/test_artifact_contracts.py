@@ -5,6 +5,7 @@ import shutil
 from dataclasses import replace
 from pathlib import Path
 
+import pytest
 import yaml
 
 import scripts.registry.artifact_contracts as artifact_contracts
@@ -656,3 +657,20 @@ def test_result_rejects_non_string_blocker_elements() -> None:
     errors = _validate(result)
 
     assert any("result.blockers must be a list of strings" in error for error in errors)
+
+
+def test_artifact_schema_version_reads_the_declared_version_and_fails_closed() -> None:
+    """Producers must read the version rather than literal it: the versions are per-artifact
+    and already diverge, so a hard-coded value silently emits artifacts the validator rejects
+    at the next bump."""
+    from scripts.registry.artifact_contracts import artifact_schema_version
+
+    manifest = load_canonical_manifest(ROOT)
+    declared = manifest["contracts"]["platform"]["artifact_runtime"]["artifact_schema_versions"]
+    assert declared, "the canonical manifest must declare at least one artifact schema version"
+
+    for artifact_type, version in declared.items():
+        assert artifact_schema_version(ROOT, artifact_type) == version
+
+    with pytest.raises(ValueError, match="no positive integer version"):
+        artifact_schema_version(ROOT, "not-a-declared-artifact")

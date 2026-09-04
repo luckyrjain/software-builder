@@ -4,7 +4,7 @@ scripts/registry/eval_contracts.yaml and mutation_anchors.yaml reference golden
 fixtures by "skill/case_id" string and, for mutation anchors, by dotted paths
 into a specific fixture's recorded_output. Today those references are only
 proven valid as a side effect of executing the full eval suite
-(mutation_guard.py, batch3_contract.py, platform_contract.py) -- a typo'd
+(mutation_guard.py, eval_coverage_contract.py, platform_contract.py) -- a typo'd
 case_ref or a recorded_output shape change under an anchor's raw_path/
 unsafe_path surfaces as a KeyError/failure message in a file the author never
 touched, and only on a full `python3 -m scripts.evals` run.
@@ -25,6 +25,7 @@ from typing import Any
 
 from scripts.evals.golden import GoldenCase, golden_case_index, load_golden_fixtures, resolve_path
 from scripts.evals.transcript import load_transcript_fixtures
+from scripts.evals.types import eval_contract_path, load_eval_contract
 from scripts.registry.schema import parse_registry
 from scripts.yaml_safety import YAML_SAFETY_ERRORS, load_unique_yaml_file, require_mapping
 
@@ -333,7 +334,11 @@ def _lint_mutation_anchors(
     return errors
 
 
-def lint_contracts(root: Path, golden_cases: list[GoldenCase] | None = None) -> list[str]:
+def lint_contracts(
+    root: Path,
+    golden_cases: list[GoldenCase] | None = None,
+    contract: dict[str, Any] | None = None,
+) -> list[str]:
     """Return a list of referential-integrity errors, empty if clean.
 
     Pure structural check -- no assertion execution, no fixture mutation.
@@ -341,13 +346,16 @@ def lint_contracts(root: Path, golden_cases: list[GoldenCase] | None = None) -> 
 
     Pass golden_cases when the caller already loaded them (__main__.py loads
     them anyway for the eval run itself) so this doesn't parse the fixture
-    tree a second time; omitted, it loads evals/golden itself.
+    tree a second time; omitted, it loads evals/golden itself. Same for
+    contract: one run of the eval CLI reads eval_contracts.yaml once and hands
+    the document to all three checkers that need it.
     """
-    contract_path = root / "scripts" / "registry" / "eval_contracts.yaml"
-    try:
-        contract = require_mapping(load_unique_yaml_file(contract_path), str(contract_path))
-    except (OSError, ValueError, *YAML_SAFETY_ERRORS) as exc:
-        return [f"{contract_path}: {exc}"]
+    contract_path = eval_contract_path(root)
+    if contract is None:
+        try:
+            contract = load_eval_contract(root)
+        except (OSError, ValueError, *YAML_SAFETY_ERRORS) as exc:
+            return [f"{contract_path}: {exc}"]
 
     if golden_cases is None:
         try:

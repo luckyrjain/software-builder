@@ -7,7 +7,7 @@ run_python() {
   PYTHONDONTWRITEBYTECODE=1 PYTHONPATH="${REPO_ROOT}" python3 "$@"
 }
 
-# Advisory locking (Candidate 13 concurrency fix; spec S37/S37.1): install_skill/uninstall_skill
+# Advisory locking: install_skill/uninstall_skill
 # hold a per-(skill, dest_root) lock for their whole mutating section, so two concurrent install.sh
 # invocations targeting the same destination can't race the classify-then-mv sequence or the final
 # staged-directory replace. A single global EXIT trap is the release-of-last-resort for a crash or
@@ -28,11 +28,24 @@ trap release_current_lock EXIT
 LOCK_WAIT_TIMEOUT_SECONDS="${LOCK_WAIT_TIMEOUT_SECONDS:-30}"
 LOCK_STALE_SECONDS="${LOCK_STALE_SECONDS:-300}"
 
-# mkdir is atomic and, unlike a symlink, can't be pre-planted to redirect a later write into it --
-# it just fails EEXIST if anything (including a symlink) already occupies the path (spec S37.1's
-# lock-path symlink hardening). Staleness is decided first by PID liveness (kill -0), falling back
-# to a wall-clock age threshold for a lock left by a process this host can't check (e.g. after a
-# reboot changed PID numbering).
+# The lock is a directory, not a file or a symlink: mkdir is atomic and, unlike a symlink, can't be
+# pre-planted to redirect a later write into it -- it just fails EEXIST if anything (including a
+# symlink) already occupies the path. Staleness is decided first by PID liveness (kill -0), falling
+# back to a wall-clock age threshold for a lock left by a process this host can't check (e.g. after
+# a reboot changed PID numbering).
+# Reclaiming a stale lock is a check-then-act sequence across two waiters, so it must not be
+# "rm -rf then mkdir": both waiters can read the same dead PID, and the loser's rm -rf can delete
+# the *winner's* freshly created live lock, after which both proceed into the section the lock
+# exists to serialize. Renaming first makes the reclaim atomic -- exactly one waiter can win the
+# mv, and only the winner deletes anything.
+reclaim_stale_lock() {
+  local lock_dir="$1"
+  local stale_dir="${lock_dir}.stale.$$"
+  if mv "${lock_dir}" "${stale_dir}" 2>/dev/null; then
+    rm -rf "${stale_dir}"
+  fi
+}
+
 acquire_lock() {
   local skill="$1" dest_root="$2"
   local lock_dir="${dest_root}/.${skill}.lock"
@@ -48,7 +61,7 @@ acquire_lock() {
     if [[ -f "${lock_dir}/pid" ]]; then
       lock_pid="$(cat "${lock_dir}/pid" 2>/dev/null || echo "")"
       if [[ -n "${lock_pid}" ]] && ! kill -0 "${lock_pid}" 2>/dev/null; then
-        rm -rf "${lock_dir}"
+        reclaim_stale_lock "${lock_dir}"
         continue
       fi
     fi
@@ -57,7 +70,7 @@ acquire_lock() {
       age=$(($(date +%s) - $(cat "${lock_dir}/acquired_at" 2>/dev/null || echo 0)))
     fi
     if ((age > LOCK_STALE_SECONDS)); then
-      rm -rf "${lock_dir}"
+      reclaim_stale_lock "${lock_dir}"
       continue
     fi
     if ((waited >= LOCK_WAIT_TIMEOUT_SECONDS)); then
@@ -147,18 +160,30 @@ verify)
   ;;
 esac
 
-case "${AGENT}" in
-cursor | cursor-project | claude-user | claude-project | all | agents) ;;
-*)
-  echo "error: unknown --agent '${AGENT}' (expected cursor|cursor-project|claude-user|claude-project|all|agents)" >&2
-  exit 1
-  ;;
-esac
+# The valid selectors come from scripts/registry/install_resolver.py's own routing table rather
+# than a Bash `case` repeating it -- one list, so a selector added there is immediately accepted
+# here and can never drift out of sync with what resolve-targets can actually resolve. Called
+# only just before destination resolution, after the pure-Bash skill-name gate below, so a
+# malformed skill name is still rejected without spawning a Python process.
+validate_agent_selector() {
+  local selectors selector
+  if ! selectors="$(run_python "${REPO_ROOT}/scripts/install_support.py" list-selectors)"; then
+    echo "${selectors}" >&2
+    return 1
+  fi
+  while IFS= read -r selector; do
+    if [[ "${AGENT}" == "${selector}" ]]; then
+      return 0
+    fi
+  done <<< "${selectors}"
+  echo "error: unknown --agent '${AGENT}' (expected $(printf '%s' "${selectors}" | tr '\n' '|'))" >&2
+  return 1
+}
 
 # --target-dir <repo> → project-local skills dir(s).
 # No --target-dir → global user install (~/.cursor/skills and/or ~/.claude/skills).
 # Destination + host-label resolution is driven by agent-hosts.yaml via
-# scripts/registry/legacy_install_resolver.py, not hard-coded here -- one call per install.sh
+# scripts/registry/install_resolver.py, not hard-coded here -- one call per install.sh
 # invocation (not per skill/destination) prints "<dest_root>\t<host_label>" per line.
 resolve_targets() {
   local args=("resolve-targets" "${AGENT}" "--home" "${HOME}")
@@ -201,15 +226,23 @@ uninstall_skill() {
 
   validate_skill_name_format "${skill}" || return 1
 
-  mkdir -p "${dest_root}"
+  mkdir -p "${dest_root}" || return 1
   if ! acquire_lock "${skill}" "${dest_root}"; then
     return 1
   fi
 
-  registry_check_skill "${skill}"
+  # Explicit `|| ...` rather than relying on `set -e`: the callers below invoke this function
+  # from an `if`, which disables errexit for everything it calls.
+  if ! registry_check_skill "${skill}"; then
+    release_current_lock
+    return 1
+  fi
 
   local ownership
-  ownership="$(classify_destination "${skill_dest}" "${skill}")"
+  if ! ownership="$(classify_destination "${skill_dest}" "${skill}")"; then
+    release_current_lock
+    return 1
+  fi
   case "${ownership}" in
   ABSENT)
     echo "warning: not installed: ${skill_dest}" >&2
@@ -239,7 +272,10 @@ uninstall_skill() {
     return 0
   fi
 
-  rm -rf "${skill_dest}"
+  if ! rm -rf "${skill_dest}"; then
+    release_current_lock
+    return 1
+  fi
   echo "Uninstalled ${skill} from ${skill_dest}"
   release_current_lock
 }
@@ -251,7 +287,10 @@ install_skill() {
 
   validate_skill_name_format "${skill}" || return 1
 
-  registry_check_skill "${skill}"
+  # Explicit `|| return 1` rather than relying on `set -e`: the install loop invokes this
+  # function from an `if` so one failure no longer aborts the run, and errexit is disabled for
+  # everything an `if` condition calls.
+  registry_check_skill "${skill}" || return 1
 
   local skill_src="${REPO_ROOT}/${skill}"
   local skill_dest="${dest_root}/${skill}"
@@ -267,7 +306,7 @@ install_skill() {
   # check-then-act sequence -- mirrors this function's pre-existing early/late symlink
   # double-check pattern.
   local ownership
-  ownership="$(classify_destination "${skill_dest}" "${skill}")"
+  ownership="$(classify_destination "${skill_dest}" "${skill}")" || return 1
   case "${ownership}" in
   SYMLINK)
     echo "error: refusing to replace symlink at ${skill_dest}" >&2
@@ -288,7 +327,7 @@ install_skill() {
     return 0
   fi
 
-  mkdir -p "${dest_root}"
+  mkdir -p "${dest_root}" || return 1
   if ! acquire_lock "${skill}" "${dest_root}"; then
     return 1
   fi
@@ -296,7 +335,10 @@ install_skill() {
   local backup_dir=""
   local stage_dir
   local install_succeeded=false
-  stage_dir="$(mktemp -d "${dest_root}/.${skill}.staging.XXXXXX")"
+  if ! stage_dir="$(mktemp -d "${dest_root}/.${skill}.staging.XXXXXX")"; then
+    release_current_lock
+    return 1
+  fi
 
   cleanup_failed_install() {
     rm -rf "${stage_dir}"
@@ -340,7 +382,12 @@ install_skill() {
     return 1
   fi
 
-  ownership="$(classify_destination "${skill_dest}" "${skill}")"
+  if ! ownership="$(classify_destination "${skill_dest}" "${skill}")"; then
+    cleanup_failed_install
+    clear_install_trap
+    release_current_lock
+    return 1
+  fi
   case "${ownership}" in
   SYMLINK)
     rm -rf "${stage_dir}"
@@ -428,6 +475,21 @@ install_skill() {
   esac
 }
 
+# A run spans every (skill × destination) pair, and one failing pair used to abort the whole run
+# under `set -e`: earlier pairs were already written, later ones never attempted, and nothing said
+# which was which. Each pair now runs to completion and the run reports its own outcome. Per-skill
+# atomicity is unchanged -- install_skill still stages, backs up and rolls back individually.
+report_run_summary() {
+  local verb="$1" succeeded="$2"
+  shift 2
+  local failed=("$@")
+  if ((${#failed[@]} == 0)); then
+    return 0
+  fi
+  echo "${verb}: ${succeeded}, failed: ${#failed[@]} (${failed[*]})" >&2
+  return 1
+}
+
 if [[ "${MODE}" == "uninstall" ]]; then
   if [[ ${#SKILLS[@]} -eq 0 ]]; then
     echo "error: --uninstall requires a skill name" >&2
@@ -436,6 +498,7 @@ if [[ "${MODE}" == "uninstall" ]]; then
   for skill in "${SKILLS[@]}"; do
     validate_skill_name_format "${skill}" || exit 1
   done
+  validate_agent_selector || exit 1
   # Command substitution (not < <(resolve_targets) process substitution): a process
   # substitution's internal failure only kills that subshell, not this script -- with
   # set -e/-o pipefail unable to see it, install.sh would silently do nothing and still exit
@@ -445,12 +508,21 @@ if [[ "${MODE}" == "uninstall" ]]; then
     echo "${RESOLVED_TARGETS}" >&2
     exit 1
   fi
+  UNINSTALLED_COUNT=0
+  FAILED_UNINSTALLS=()
   while IFS=$'\t' read -r dest_root host_label; do
     for skill in "${SKILLS[@]}"; do
-      uninstall_skill "${skill}" "${dest_root}"
+      if uninstall_skill "${skill}" "${dest_root}"; then
+        UNINSTALLED_COUNT=$((UNINSTALLED_COUNT + 1))
+      else
+        FAILED_UNINSTALLS+=("${skill} → ${dest_root}")
+      fi
     done
   done <<< "${RESOLVED_TARGETS}"
-  exit 0
+  if report_run_summary "uninstalled" "${UNINSTALLED_COUNT}" "${FAILED_UNINSTALLS[@]+"${FAILED_UNINSTALLS[@]}"}"; then
+    exit 0
+  fi
+  exit 1
 fi
 
 if [[ ${#SKILLS[@]} -eq 0 ]]; then
@@ -472,17 +544,29 @@ for skill in "${SKILLS[@]}"; do
   validate_skill_name_format "${skill}" || exit 1
 done
 
+validate_agent_selector || exit 1
+
 # See the matching comment in the uninstall branch above for why this is a command
 # substitution, not < <(resolve_targets).
 if ! RESOLVED_TARGETS="$(resolve_targets)"; then
   echo "${RESOLVED_TARGETS}" >&2
   exit 1
 fi
+INSTALLED_COUNT=0
+FAILED_INSTALLS=()
 while IFS=$'\t' read -r dest_root host_label; do
   for skill in "${SKILLS[@]}"; do
-    install_skill "${skill}" "${dest_root}" "${host_label}"
+    if install_skill "${skill}" "${dest_root}" "${host_label}"; then
+      INSTALLED_COUNT=$((INSTALLED_COUNT + 1))
+    else
+      FAILED_INSTALLS+=("${skill} → ${dest_root}")
+    fi
   done
 done <<< "${RESOLVED_TARGETS}"
+
+if ! report_run_summary "installed" "${INSTALLED_COUNT}" "${FAILED_INSTALLS[@]+"${FAILED_INSTALLS[@]}"}"; then
+  exit 1
+fi
 
 if [[ "${DRY_RUN}" == true ]]; then
   exit 0

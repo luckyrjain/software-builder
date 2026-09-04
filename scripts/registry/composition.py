@@ -1,11 +1,8 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 from scripts.registry.composition_contracts import validate_composition_contracts
 from scripts.registry.graph import detect_cycles
 from scripts.registry.models import Registry
-from scripts.registry.schema import parse_registry
 
 
 def validate_composition_graph(registry: Registry) -> list[str]:
@@ -48,8 +45,3 @@ def render_composition_mermaid(registry: Registry) -> str:
     if edges == 0:
         lines.append("  empty[No composition edges]")
     return "\n".join(lines) + "\n"
-
-
-def validate_composition_file(root: Path) -> list[str]:
-    registry = parse_registry(root / "skills.yaml")
-    return validate_composition_graph(registry)

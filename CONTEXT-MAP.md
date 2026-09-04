@@ -19,6 +19,13 @@ How domain language is split across this repository. Platform concepts describe 
 | Question | Context |
 |----------|---------|
 | What is a wrapper vs router vs aggregator? | [CONTEXT.md § Skill shapes](./CONTEXT.md#skill-shapes) |
+| Why does the registry say `leaf`/`orchestrator` when CONTEXT.md says specialist/composer? | [CONTEXT.md § Composition topology](./CONTEXT.md#composition-topology-type-in-skillsyaml) |
+| What does `evidence_status` or `state_semantic` mean on a result? | [CONTEXT.md § Verification and evidence](./CONTEXT.md#verification-and-evidence) |
+| Which sense of "ownership" is this? | [CONTEXT.md § Ownership](./CONTEXT.md#ownership-three-senses) |
 | What is a bounded context or as-built PRD? | [domain-comprehension/CONTEXT.md](./domain-comprehension/CONTEXT.md) |
 | What do `skills.yaml` fields mean? | [terminology-glossary.md](./docs/skill-framework/shared/terminology-glossary.md) |
+| What is a profile / `extends:` / an optional layer / a shadow? | [terminology-glossary.md](./docs/skill-framework/shared/terminology-glossary.md) |
 | Why was the registry canonical? | [ADR 0001](./docs/adr/0001-skills-registry.md) |
+| Where is a skill's registry entry authored? | [ADR 0005](./docs/adr/0005-registry-authoring-model.md) |
+| How does a host earn `VERIFIED`, and why are there two host files? | [ADR 0006](./docs/adr/0006-host-registry-and-evidence-model.md) |
+| What do I do when an install lock or the generated roster breaks? | [docs/OPERATIONS.md](./docs/OPERATIONS.md) |

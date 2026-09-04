@@ -16,12 +16,13 @@ from scripts.reference_utils import (
     sha256_file,
 )
 from scripts.registry.host_registry import HostRegistryParseError, parse_host_registry
-from scripts.registry.legacy_install_resolver import resolve_legacy_install_destinations
-from scripts.registry.shadow_detector import HOST_LABEL_TO_HOST_AND_TARGET, SHADOW_NONE, detect_shadow
-from scripts.registry.universal_install_resolver import (
-    UNIVERSAL_AGENT_SELECTOR,
-    resolve_universal_install_destination,
+from scripts.registry.install_resolver import (
+    check_target_reachability,
+    host_and_target_for_label,
+    install_selectors,
+    resolve_install_destinations,
 )
+from scripts.registry.shadow_detector import SHADOW_NONE, detect_shadow
 from scripts.registry.schema import parse_registry
 from scripts.yaml_safety import YAML_SAFETY_ERRORS
 
@@ -44,7 +45,31 @@ def cmd_check(skill_id: str, root: Path) -> int:
     if skill_id not in set(registry_skill_ids(root)):
         print(f"error: {skill_id!r} is not in skills.yaml", file=sys.stderr)
         return 1
+    return _check_selector_coverage(root)
+
+
+def cmd_list_selectors() -> int:
+    """Print one valid --agent selector per line so install.sh validates against this module's
+    routing table instead of repeating it in a Bash `case`."""
+    for selector in install_selectors():
+        print(selector)
     return 0
+
+
+def _check_selector_coverage(root: Path) -> int:
+    """Fail when agent-hosts.yaml declares a target no selector reaches and that isn't recorded
+    as deliberately unreachable -- otherwise adding a host to the registry produces a destination
+    nothing can install to, silently."""
+    try:
+        host_registry = parse_host_registry(root / "agent-hosts.yaml")
+    except HostRegistryParseError as exc:
+        for error in exc.errors:
+            print(f"error: {error}", file=sys.stderr)
+        return 1
+    errors = check_target_reachability(host_registry)
+    for error in errors:
+        print(f"error: {error}", file=sys.stderr)
+    return 1 if errors else 0
 
 
 def _verify_manifest_files(installed_path: Path, manifest: dict) -> list[str]:
@@ -122,9 +147,9 @@ def cmd_classify_destination(dest: Path, skill_id: str) -> int:
 
 
 def cmd_resolve_targets(root: Path, agent: str, *, home: Path, target_dir: Path | None) -> int:
-    """Print `<dest_root>\\t<host_label>` per line for install.sh's dest_roots()/
-    host_label_for_dest() to consume, resolved from agent-hosts.yaml instead of Bash's own
-    hard-coded case statements (Candidate 5), plus the universal `agents` selector (Candidate 7)."""
+    """Print `<dest_root>\\t<host_label>` per line for install.sh's install/uninstall loops to
+    consume, resolved from agent-hosts.yaml plus install_resolver.SELECTORS rather than from
+    Bash's own hard-coded destination and label logic."""
     try:
         host_registry = parse_host_registry(root / "agent-hosts.yaml")
     except HostRegistryParseError as exc:
@@ -132,14 +157,9 @@ def cmd_resolve_targets(root: Path, agent: str, *, home: Path, target_dir: Path 
             print(f"error: {error}", file=sys.stderr)
         return 1
     try:
-        if agent == UNIVERSAL_AGENT_SELECTOR:
-            destinations = [
-                resolve_universal_install_destination(host_registry, home=home, target_dir=target_dir)
-            ]
-        else:
-            destinations = resolve_legacy_install_destinations(
-                host_registry, agent, home=home, target_dir=target_dir
-            )
+        destinations = resolve_install_destinations(
+            host_registry, agent, home=home, target_dir=target_dir
+        )
     except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
@@ -155,7 +175,13 @@ def cmd_check_shadow(
     shadowing path if not NONE) for install.sh to build an accurate completion message from
     instead of unconditionally claiming the new install is what the host will run (Candidate 8).
     """
-    host_and_target = HOST_LABEL_TO_HOST_AND_TARGET.get(host_label)
+    try:
+        host_registry = parse_host_registry(root / "agent-hosts.yaml")
+    except HostRegistryParseError as exc:
+        for error in exc.errors:
+            print(f"error: {error}", file=sys.stderr)
+        return 1
+    host_and_target = host_and_target_for_label(host_registry, host_label)
     if host_and_target is None:
         # No host entry to check against (e.g. the universal agents-user/agents-project
         # labels) -- see shadow_detector.py's module docstring for why this is a scoped gap,
@@ -163,12 +189,6 @@ def cmd_check_shadow(
         print(SHADOW_NONE)
         return 0
     host_id, target_id = host_and_target
-    try:
-        host_registry = parse_host_registry(root / "agent-hosts.yaml")
-    except HostRegistryParseError as exc:
-        for error in exc.errors:
-            print(f"error: {error}", file=sys.stderr)
-        return 1
     result = detect_shadow(
         host_registry, host_id, target_id, written_dest, home=home, target_dir=target_dir
     )
@@ -218,11 +238,13 @@ def main(argv: list[str] | None = None) -> int:
     check_parser.add_argument("skill_id")
     check_parser.add_argument("--repo-root", type=Path, default=ROOT)
 
+    sub.add_parser("list-selectors", help="print valid --agent selectors")
+
     verify_parser = sub.add_parser("verify", help="verify an installed skill package")
     verify_parser.add_argument("installed_path", type=Path)
 
     resolve_parser = sub.add_parser(
-        "resolve-targets", help="resolve a legacy --agent selector's install destinations"
+        "resolve-targets", help="resolve an --agent selector's install destinations"
     )
     resolve_parser.add_argument("agent")
     resolve_parser.add_argument("--repo-root", type=Path, default=ROOT)
@@ -250,6 +272,8 @@ def main(argv: list[str] | None = None) -> int:
             return cmd_list(args.repo_root)
         if args.command == "check":
             return cmd_check(args.skill_id, args.repo_root)
+        if args.command == "list-selectors":
+            return cmd_list_selectors()
         if args.command == "verify":
             return cmd_verify(args.installed_path)
         if args.command == "resolve-targets":

@@ -96,6 +96,10 @@ Maintainer pressure scenarios: [pressure-tests.md](pressure-tests.md).
 | dependency-upgrade-review | `Review upgrading <dependency> from <current> to <target>` | Inputs parsed, before Analyze starts |
 | tech-debt-assessor | `Rank this tech debt backlog` + debt-item list | Inputs parsed, before Analyze starts |
 | change-impact-analyzer | `What services/contracts are affected by PR #123?` | Exact target/diff and capability profile announced before Analyze |
+| prd-architect | `request: "<one-sentence product ask>"` | `Depth: Lite\|Standard\|Deep — <reason>` header, before the PRD body |
+| implementation-planner | READY system design + PASS architecture review + change-impact report for one repository | Immutable source set and source digests announced, before any task is created |
+| resilience-review | `state_semantic` + the ten documented controls, one dependency path, and repository evidence | Resolved `state_semantic` and evidence authority announced, before any control is assessed |
+| production-readiness-review | `assessment_target: {project: <project>, merge_request_iid: <iid>}` | `assessment_target` and resolved `criticality` announced, before any child invocation starts |
 
 ## 4. Output checklist template
 
@@ -161,6 +165,9 @@ A correct minimal output should contain:
 | dependency-upgrade-review | `make lint-dependency-upgrade-review` |
 | tech-debt-assessor | `make lint-tech-debt-assessor` |
 | change-impact-analyzer | `make lint-change-impact-analyzer` |
+| implementation-planner | `make lint-implementation-planner` (includes pytest) |
+| resilience-review | `make lint-resilience-review` (includes pytest) |
+| production-readiness-review | `make lint-production-readiness-review` (includes pytest) |
 | Framework | `make lint-framework` |
 | All | `make lint` |
 

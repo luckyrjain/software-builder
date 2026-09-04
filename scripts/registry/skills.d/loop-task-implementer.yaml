@@ -39,17 +39,40 @@ loop-task-implementer:
     external_actions: write
     unattended: false
     merge: true
-  supported_hosts:
-  - chatgpt
-  - claude
-  - codex
-  - cursor
-  - generic
-  - kiro
-  entrypoint: SKILL.md
   output_contract:
     produces:
     - implementation_pr
     produce_fields: {}
   dependencies: []
   version_source: skill_frontmatter_legacy_numeric
+  composition:
+    consumes:
+    - implementation_task
+    - prd_report
+    - implementation_plan
+    consume_fields:
+      implementation_plan:
+      - plan_set_id
+      - plan_id
+      - title
+      - readiness
+      - assessment_target
+      - target_repo
+      - external_dependencies
+      - source_refs
+      - tasks
+      - execution_waves
+      - sequencing_constraints
+      - verification_gates
+      - traceability
+  degraded_behavior:
+    missing_capability: host.repository.read_write
+    available_capabilities: []
+    behavior: BLOCKED
+  setup_freshness:
+    external_services: Git provider/API, CI provider (both repo-specific; no fixed
+      MCP)
+  routing:
+    patterns:
+    - \bimplement\b.*\b(task|ticket|change)\b.*\b(review|fix|until|loop)\b
+    - \brepeat\b.*\b(review|fix)\b.*\b(0 issues|zero issues)\b

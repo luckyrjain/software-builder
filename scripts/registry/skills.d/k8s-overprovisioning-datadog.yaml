@@ -17,6 +17,8 @@ k8s-overprovisioning-datadog:
     escalation_targets:
     - incident-rca
     - pr-review
+    consumes:
+    - mr_context
   capabilities:
     required: []
     optional:
@@ -53,17 +55,21 @@ k8s-overprovisioning-datadog:
     external_actions: read
     unattended: false
     merge: false
-  supported_hosts:
-  - chatgpt
-  - claude
-  - codex
-  - cursor
-  - generic
-  - kiro
-  entrypoint: SKILL.md
   output_contract:
     produces:
     - k8s_rightsizing_report
     produce_fields: {}
   dependencies: []
   version_source: skill_frontmatter_legacy_numeric
+  degraded_behavior:
+    missing_capability: kubernetes.metrics.history
+    available_capabilities:
+    - datadog.query_metrics
+    behavior: FALLBACK
+  setup_freshness:
+    external_services: Kubernetes MCP, Datadog MCP
+  routing:
+    patterns:
+    - \b(k8s|kubernetes|pod|deployment)\b.*\b(overprovision\w*|right-?siz\w*|requests?|limits?|CPU|memory)\b
+    - \b(overprovision\w*|right-?siz\w*)\b.*\b(k8s|kubernetes|pod|deployment|CPU|memory)\b
+    - \boverprovisioned\b.*\bCPU\b.*\bmemory\b

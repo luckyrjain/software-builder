@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field, fields
+from dataclasses import dataclass, field, fields, replace
+from datetime import date
 from functools import cached_property
 from pathlib import Path
 from typing import Any
@@ -21,6 +22,13 @@ ALLOWED_MAINTAINER_SUPPORT = frozenset(
     {"BEST_EFFORT", "COMMUNITY", "DEPRECATED", "FIRST_CLASS", "MANUAL_ONLY"}
 )
 
+# How long a host's RUNTIME evidence stays current before its VERIFIED claim expires. The
+# registry's own `defaults.evidence_max_age_days` overrides this; the value here is the design
+# spec's (docs/superpowers/specs/2026-08-31-universal-agent-compatibility-design.md Section 13)
+# so a registry that declares no defaults block still ages its evidence.
+DEFAULT_EVIDENCE_MAX_AGE_DAYS = 90
+
+_ISO_DATE_RE = re.compile(r"\A(\d{4})-(\d{2})-(\d{2})\Z")
 _PATH_VARIABLE_RE = re.compile(r"\{([^{}]+)\}")
 _SAFE_PATH_LITERAL_RE = re.compile(r"[A-Za-z0-9._/@+=,: \-]+\Z")
 
@@ -46,7 +54,7 @@ def resolve_target_path(target: TargetSpec, *, home: Path, target_dir: Path | No
     user-scope path starts with exactly "~/" and every project-scope path starts with exactly
     "{project_root}/", so stripping those literal prefixes is safe. A missing `target_dir` for a
     project-scope target falls back to resolving against `home` instead -- the caller's choice,
-    not this function's; see scripts/registry/legacy_install_resolver.py for why that fallback
+    not this function's; see scripts/registry/install_resolver.py for why that fallback
     exists for some selectors."""
     if target.scope == "user":
         return home / target.path[len("~/") :]
@@ -95,8 +103,21 @@ class ConstraintsSpec:
 
 @dataclass(frozen=True)
 class EvidenceSpec:
+    """One piece of evidence for a host's capability claims.
+
+    `observed_at` is the ISO date the evidence was last checked against the real host. It is
+    optional: evidence recorded before this field existed carries no date and is never treated
+    as stale, because "we do not know when this was observed" is not the same claim as "this
+    was observed and has since expired".
+    """
+
     kind: str
     reference: str
+    observed_at: str | None = None
+
+    def is_stale(self, *, today: date, max_age_days: int) -> bool:
+        observed = parse_iso_date(self.observed_at) if self.observed_at else None
+        return observed is not None and (today - observed).days > max_age_days
 
 
 @dataclass(frozen=True)
@@ -117,6 +138,7 @@ class HostRegistry:
     targets: dict[str, TargetSpec]
     hosts: dict[str, HostSpec]
     aliases: dict[str, HostSpec]
+    evidence_max_age_days: int = DEFAULT_EVIDENCE_MAX_AGE_DAYS
 
 
 @dataclass(frozen=True)
@@ -446,7 +468,7 @@ def _parse_evidence(raw: Any, host_label: str, errors: list[str]) -> list[Eviden
         item = _mapping(raw_item, item_label, errors)
         if item is None:
             continue
-        _unknown_fields(item, frozenset({"kind", "reference"}), item_label, errors)
+        _unknown_fields(item, frozenset({"kind", "observed_at", "reference"}), item_label, errors)
         kind = _enum(
             item.get("kind"),
             ALLOWED_EVIDENCE_KINDS,
@@ -454,9 +476,31 @@ def _parse_evidence(raw: Any, host_label: str, errors: list[str]) -> list[Eviden
             errors,
         )
         reference = _required_string(item.get("reference"), f"{item_label}.reference", errors)
+        observed_at = item.get("observed_at")
+        if observed_at is not None:
+            if not isinstance(observed_at, str) or parse_iso_date(observed_at) is None:
+                errors.append(f"{item_label}.observed_at must be an ISO date (YYYY-MM-DD)")
+                observed_at = None
         if kind is not None and reference is not None:
-            evidence.append(EvidenceSpec(kind=kind, reference=reference))
+            evidence.append(
+                EvidenceSpec(kind=kind, reference=reference, observed_at=observed_at)
+            )
     return evidence
+
+
+def parse_iso_date(value: str) -> date | None:
+    """The date `value` names, or None when it is not a well-formed ISO calendar date.
+
+    `date.fromisoformat` accepts several other ISO 8601 spellings on 3.11+; the registry stores
+    exactly one, so the shape is pinned before parsing rather than left to the stdlib's
+    leniency.
+    """
+    if _ISO_DATE_RE.match(value) is None:
+        return None
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        return None
 
 
 def _resolve_aliases(
@@ -495,8 +539,46 @@ def _resolve_aliases(
     return resolved
 
 
-def parse_host_registry(path: Path) -> HostRegistry:
-    """Parse schema version 1 of the declarative agent-host registry."""
+def _parse_defaults(raw: Any, errors: list[str]) -> int:
+    """The registry's `defaults.evidence_max_age_days`, or the built-in default."""
+    if raw is None:
+        return DEFAULT_EVIDENCE_MAX_AGE_DAYS
+    item = _mapping(raw, "defaults", errors)
+    if item is None:
+        return DEFAULT_EVIDENCE_MAX_AGE_DAYS
+    _unknown_fields(item, frozenset({"evidence_max_age_days"}), "defaults", errors)
+    max_age = item.get("evidence_max_age_days", DEFAULT_EVIDENCE_MAX_AGE_DAYS)
+    if isinstance(max_age, bool) or not isinstance(max_age, int) or max_age < 1:
+        errors.append("defaults.evidence_max_age_days must be a positive integer")
+        return DEFAULT_EVIDENCE_MAX_AGE_DAYS
+    return max_age
+
+
+def _age_verification(host: HostSpec, *, today: date, max_age_days: int) -> HostSpec:
+    """Downgrade a VERIFIED host to STALE once its RUNTIME evidence has aged out.
+
+    VERIFIED is the one state that requires RUNTIME evidence (`_parse_host` enforces that), so
+    RUNTIME evidence is what expiry is measured against: fresh documentation does not re-verify
+    a host nobody has run the skills on for `max_age_days`. A host whose RUNTIME evidence
+    carries no `observed_at` at all is left exactly as declared -- an undated claim is not a
+    claim that has expired.
+    """
+    if host.verification != "VERIFIED":
+        return host
+    dated = [entry for entry in host.evidence if entry.kind == "RUNTIME" and entry.observed_at]
+    if not dated:
+        return host
+    if all(entry.is_stale(today=today, max_age_days=max_age_days) for entry in dated):
+        return replace(host, verification="STALE")
+    return host
+
+
+def parse_host_registry(path: Path, *, today: date | None = None) -> HostRegistry:
+    """Parse schema version 1 of the declarative agent-host registry.
+
+    `today` is the date evidence freshness is measured against; it defaults to the real one and
+    exists so evidence ageing can be exercised without a fixture that rots.
+    """
     raw = load_unique_yaml_file(path)
     errors: list[str] = []
     root = _mapping(raw, "agent-hosts.yaml", errors)
@@ -504,10 +586,11 @@ def parse_host_registry(path: Path) -> HostRegistry:
         raise HostRegistryParseError(errors)
     _unknown_fields(
         root,
-        frozenset({"aliases", "hosts", "schema_version", "targets"}),
+        frozenset({"aliases", "defaults", "hosts", "schema_version", "targets"}),
         "agent-hosts.yaml",
         errors,
     )
+    evidence_max_age_days = _parse_defaults(root.get("defaults"), errors)
 
     schema_version = root.get("schema_version")
     if isinstance(schema_version, bool) or not isinstance(schema_version, int):
@@ -566,7 +649,11 @@ def parse_host_registry(path: Path) -> HostRegistry:
         passthrough = {
             f.name: getattr(raw_host, f.name) for f in fields(raw_host) if f.name != "surfaces"
         }
-        hosts[host_id] = HostSpec(surfaces=tuple(surfaces), **passthrough)
+        hosts[host_id] = _age_verification(
+            HostSpec(surfaces=tuple(surfaces), **passthrough),
+            today=today if today is not None else date.today(),
+            max_age_days=evidence_max_age_days,
+        )
 
     resolved_aliases = _resolve_aliases(aliases, hosts, errors)
     if errors:
@@ -576,4 +663,5 @@ def parse_host_registry(path: Path) -> HostRegistry:
         targets=targets,
         hosts=hosts,
         aliases=resolved_aliases,
+        evidence_max_age_days=evidence_max_age_days,
     )

@@ -8,12 +8,11 @@ lower-precedence root while a *different* copy already sits at a higher-preceden
 host will actually load that other copy, not the one just installed -- install.sh must not claim
 success as if the new install is what will run (spec Section 35, this candidate's exit bar).
 
-Scope: only the four legacy single-target selectors (cursor, cursor-project, claude-user,
-claude-project) are checked -- the universal `agents` target (Candidate 7) has no corresponding
-host entry in agent-hosts.yaml (it's target-only, not host-modeled), so there is no discovery
-precedence to check it against yet; `all` installs both cursor and claude destinations, each
-individually checkable the same way as their single-selector counterparts, but is not wired in
-this candidate to keep scope bounded to what install.sh's actual call site needs today.
+Scope: a written destination is checkable whenever some host in agent-hosts.yaml declares its
+target as a discovery root -- scripts/registry/install_resolver.host_and_target_for_label() maps
+the printed host label to that (host, target) pair rather than this module re-declaring the
+mapping. The universal `agents` target is target-only (no host models it), so it has no discovery
+precedence to be checked against and resolves to None there.
 
 This warns rather than blocks: spec Section 35 does say a shadowed higher-precedence copy *may*
 block, but a deliberate two-tier setup (an intentional project-level override on top of a
@@ -36,15 +35,6 @@ SHADOW_NONE = "NONE"
 SHADOW_SHADOWED = "SHADOWED"
 SHADOW_DUPLICATE_IDENTICAL = "DUPLICATE_IDENTICAL"
 SHADOW_UNKNOWN_PRECEDENCE = "UNKNOWN_PRECEDENCE"
-
-# host_label (as install.sh's resolver already prints it) -> (host id, target id) -- only the
-# four legacy single-target selectors have both a host entry and a fixed target id to check.
-HOST_LABEL_TO_HOST_AND_TARGET: dict[str, tuple[str, str]] = {
-    "cursor": ("cursor", "cursor-user"),
-    "cursor-project": ("cursor", "cursor-project"),
-    "claude-user": ("claude", "claude-user"),
-    "claude-project": ("claude", "claude-project"),
-}
 
 
 @dataclass(frozen=True)

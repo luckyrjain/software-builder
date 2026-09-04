@@ -1,6 +1,6 @@
-"""Shared "found ids vs registered ids" two-way diff, used by the doc/Makefile
-sync validators (routing_sync.py, install_targets_sync.py) so the dangling
-vs. missing wording and set-diff semantics can't drift between them.
+"""Shared "found ids vs registered ids" two-way diff, used by the doc sync
+validators (routing_sync.py) so the dangling vs. missing wording and set-diff
+semantics can't drift between them.
 """
 from __future__ import annotations
 

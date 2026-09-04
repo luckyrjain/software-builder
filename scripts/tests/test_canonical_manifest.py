@@ -9,7 +9,8 @@ from scripts.registry.canonical_manifest import (
     render_legacy_projection,
     validate_canonical_manifest,
 )
-from scripts.registry.frontmatter import load_skill_frontmatter
+from scripts.registry.host_adapter import HOSTS
+from scripts.yaml_safety import load_unique_frontmatter
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -80,10 +81,6 @@ def test_legacy_projections_are_derived_from_canonical():
     assert not validate_canonical_manifest(ROOT)
 
     assert (
-        (ROOT / "scripts/registry/platform_contracts.yaml").read_text()
-        == render_legacy_projection(ROOT, "platform")
-    )
-    assert (
         (ROOT / "scripts/registry/composition_runtime.yaml").read_text()
         == render_legacy_projection(ROOT, "composition_runtime")
     )
@@ -97,7 +94,6 @@ def test_generate_collects_all_legacy_projections_from_canonical():
     from scripts.registry.cli import _collect_outputs
 
     outputs = _collect_outputs(ROOT)
-    assert outputs[ROOT / "scripts/registry/platform_contracts.yaml"] == render_legacy_projection(ROOT, "platform")
     assert outputs[ROOT / "scripts/registry/composition_runtime.yaml"] == render_legacy_projection(ROOT, "composition_runtime")
     assert outputs[ROOT / "scripts/registry/composition_contracts.yaml"] == render_legacy_projection(ROOT, "composition")
 
@@ -117,14 +113,17 @@ def _copy_manifest_fixture(tmp_path: Path) -> Path:
 
 
 def test_canonical_manifest_rejects_skill_metadata_drift(tmp_path: Path):
+    """`dependencies` is one of the per-skill fields that is NOT derived from the same entry it
+    is checked against -- it must match the registry's own `install.requires` -- so the drift
+    check is still load-bearing here."""
     root = _copy_manifest_fixture(tmp_path)
     manifest = yaml.safe_load((root / "skills.yaml").read_text())
-    manifest["skills"]["pr-review"]["authority"] = "read-only"
+    manifest["skills"]["pr-review"]["dependencies"] = ["squad-map"]
     (root / "skills.yaml").write_text(yaml.safe_dump(manifest, sort_keys=False))
 
     errors = validate_canonical_manifest(root)
 
-    assert any("pr-review" in error and "authority" in error for error in errors)
+    assert any("pr-review" in error and "dependency" in error for error in errors)
 
 
 def test_canonical_manifest_requires_versioned_artifact_runtime_contract(tmp_path: Path):
@@ -138,17 +137,33 @@ def test_canonical_manifest_requires_versioned_artifact_runtime_contract(tmp_pat
     assert any("artifact_runtime" in error for error in errors)
 
 
-def test_canonical_manifest_rejects_output_and_host_projection_drift(tmp_path: Path):
+def test_canonical_manifest_rejects_host_projection_drift(tmp_path: Path):
+    """A skill may omit `supported_hosts` and take the full-roster default, but declaring a
+    narrower set than the host roster is still drift, not an opt-out."""
     root = _copy_manifest_fixture(tmp_path)
     manifest = yaml.safe_load((root / "skills.yaml").read_text())
-    manifest["skills"]["pr-review"]["output_contract"]["produces"] = ["rca_report"]
     manifest["skills"]["pr-review"]["supported_hosts"] = ["cursor"]
     (root / "skills.yaml").write_text(yaml.safe_dump(manifest, sort_keys=False))
 
     errors = validate_canonical_manifest(root)
 
-    assert any("pr-review" in error and "output contract artifact" in error for error in errors)
     assert any("pr-review" in error and "supported host" in error for error in errors)
+
+
+def test_canonical_manifest_defaults_entrypoint_and_supported_hosts(tmp_path: Path):
+    """Neither field has to be restated per skill: omitting both resolves to `SKILL.md` and the
+    full host roster, and the manifest still validates."""
+    root = _copy_manifest_fixture(tmp_path)
+    manifest = yaml.safe_load((root / "skills.yaml").read_text())
+    manifest["skills"]["pr-review"].pop("entrypoint", None)
+    manifest["skills"]["pr-review"].pop("supported_hosts", None)
+    (root / "skills.yaml").write_text(yaml.safe_dump(manifest, sort_keys=False))
+
+    resolved = load_canonical_manifest(root)["skills"]["pr-review"]
+
+    assert resolved["entrypoint"] == "SKILL.md"
+    assert resolved["supported_hosts"] == sorted(HOSTS)
+    assert not validate_canonical_manifest(root)
 
 
 def test_canonical_manifest_normalizes_quoted_schema_version(tmp_path: Path):
@@ -162,6 +177,37 @@ def test_canonical_manifest_normalizes_quoted_schema_version(tmp_path: Path):
 
 def test_skill_frontmatter_contains_discovery_metadata_only():
     for skill_id in load_canonical_manifest(ROOT)["skills"]:
-        frontmatter = load_skill_frontmatter(ROOT / skill_id / "SKILL.md")
+        frontmatter = load_unique_frontmatter(ROOT / skill_id / "SKILL.md")
         assert "skill_version" not in frontmatter
         assert "platform_contract" not in frontmatter
+
+
+def test_projections_carry_the_generated_marker_and_stay_loadable():
+    """The projections are machine-written; marking them says so to a maintainer who
+    opens one, and the loader must still read a marked file (comments are not data)."""
+    from scripts.registry.canonical_manifest import (
+        GENERATED_MARKER,
+        LEGACY_PROJECTION_FILENAMES,
+        legacy_projection_path,
+        load_contract_section,
+    )
+
+    for section in LEGACY_PROJECTION_FILENAMES:
+        text = legacy_projection_path(ROOT, section).read_text(encoding="utf-8")
+        assert text.startswith(GENERATED_MARKER + "\n"), section
+
+    # Reading a marked projection must produce the same document as the canonical section.
+    for section in LEGACY_PROJECTION_FILENAMES:
+        projection = yaml.safe_load(legacy_projection_path(ROOT, section).read_text(encoding="utf-8"))
+        assert projection == load_contract_section(ROOT, section), section
+
+
+def test_render_legacy_projection_is_idempotent():
+    """generate --check compares rendered text against the file on disk, so re-rendering an
+    already-marked projection must not stack a second marker."""
+    from scripts.registry.canonical_manifest import LEGACY_PROJECTION_FILENAMES, render_legacy_projection
+
+    for section in LEGACY_PROJECTION_FILENAMES:
+        first = render_legacy_projection(ROOT, section)
+        assert first == render_legacy_projection(ROOT, section)
+        assert first.count("# GENERATED from skills.yaml contracts") == 1

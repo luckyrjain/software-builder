@@ -1,3 +1,4 @@
+# GENERATED from skills.yaml contracts — do not edit; run make generate
 artifact_types:
 - mr_context
 - assessment_context
@@ -336,341 +337,29 @@ write_authority_levels:
   repository-write: 2
   automation-unattended: 3
 skills:
-  pr-review:
+  api-design-review:
     produces:
-    - mr_review_report
+    - api_design_review_report
     consumes:
-    - mr_context
+    - assessment_context
     produce_fields:
-      mr_review_report:
-      - review_metadata
-      - posted
-      - head_sha
-      - posting_mode
-      - integrated_revision
-      - assessment_target
-      - normalized_decision
-      - findings
-      - conditions
-      - required_actions
-      - evidence_refs
-    consume_fields:
-      mr_context:
-      - project
-      - merge_request_iid
-      - head_sha
-    write_authority: comment
-  pr-gatekeeper:
-    produces:
-    - mr_review_report
-    consumes:
-    - mr_context
-    produce_fields:
-      mr_review_report:
-      - review_metadata
-      - posted
-      - head_sha
-      - posting_mode
-      - integrated_revision
-      - assessment_target
-      - normalized_decision
-      - findings
-      - conditions
-      - required_actions
-      - evidence_refs
-    consume_fields:
-      mr_context:
-      - project
-      - merge_request_iid
-      - head_sha
-    write_authority: comment
-  k8s-overprovisioning-datadog:
-    produces:
-    - k8s_rightsizing_report
-    consumes:
-    - mr_context
-    write_authority: read-only
-  incident-rca:
-    produces:
-    - rca_report
-    consumes:
-    - mr_context
-    write_authority: read-only
-  incident-triage-agent:
-    produces:
-    - rca_report
-    - ownership_lookup
-    consumes:
-    - mr_context
-    produce_fields:
-      rca_report:
-      - assessment_metadata
-      - root_cause
-      - confidence
-      ownership_lookup:
-      - query
-      - squad
-      - confidence
-    consume_fields:
-      mr_context:
-      - project
-      - head_sha
-    write_authority: read-only
-  domain-comprehension:
-    produces:
-    - squad_map
-    consumes:
-    - mr_context
-    write_authority: read-only
-  squad-map:
-    produces:
-    - squad_map
-    - ownership_lookup
-    consumes:
-    - mr_context
-    write_authority: read-only
-  who-owns-x-bot:
-    produces:
-    - ownership_lookup
-    consumes:
-    - mr_context
-    write_authority: read-only
-  new-hire-guide:
-    produces:
-    - digest_report
-    consumes:
-    - mr_context
-    write_authority: read-only
-  release-readiness-checker:
-    produces:
-    - digest_report
-    consumes:
-    - mr_context
-    - mr_review_report
-    - k8s_rightsizing_report
-    - rca_report
-    - production_readiness_report
-    produce_fields:
-      digest_report:
-      - sections
-      - generated_at
-      - source_revisions
-    consume_fields:
-      production_readiness_report:
-      - assessment_target
-      - source_revision
-      - verdict
-      - dimension_statuses
-      - conditions
-      - waivers
-      - evidence_refs
-      mr_context:
-      - project
-      - merge_request_iid
-      - head_sha
-      - posting_policy
-      - review_mode
-      - audit_type
-      - expected_head_sha
-      mr_review_report:
-      - review_metadata
-      - posted
-      - head_sha
-      - integrated_revision
-      - assessment_target
-      - normalized_decision
-      - findings
-      - conditions
-      - required_actions
-      - evidence_refs
-      k8s_rightsizing_report:
-      - assessment_metadata
-      - recommendations
-      rca_report:
-      - assessment_metadata
-      - root_cause
-      - confidence
-    write_authority: read-only
-  migration-program-manager:
-    produces:
-    - migration_status_rollup
-    consumes: []
-    produce_fields:
-      migration_status_rollup:
-      - items
-      - generated_at
-      - source_revision
-    write_authority: read-only
-  cost-optimization-sprint-planner:
-    produces:
-    - cost_sweep_rollup
-    consumes: []
-    produce_fields:
-      cost_sweep_rollup:
-      - items
-      - generated_at
-      - source_revision
-    write_authority: read-only
-  mysql-to-postgres-sql:
-    produces:
-    - implementation_pr
-    consumes:
-    - implementation_task
-    write_authority: repository-write
-  loop-task-implementer:
-    produces:
-    - implementation_pr
-    consumes:
-    - implementation_task
-    - prd_report
-    - implementation_plan
-    consume_fields:
-      implementation_plan:
-      - plan_set_id
-      - plan_id
+      api_design_review_report:
       - title
-      - readiness
+      - verdict
       - assessment_target
-      - target_repo
-      - external_dependencies
-      - source_refs
-      - tasks
-      - execution_waves
-      - sequencing_constraints
-      - verification_gates
-      - traceability
-    write_authority: repository-write
-  backlog-runner:
-    produces:
-    - implementation_pr
-    consumes:
-    - implementation_task
+      - normalized_decision
+      - findings
+      - conditions
+      - required_actions
+      - evidence_refs
+    consume_fields:
+      assessment_context:
+      - assessment_target
+      - inputs
+      - input_provenance
+      - evidence_refs
+      - unresolved
     write_authority: read-only
-  weekly-squad-digest:
-    produces:
-    - digest_report
-    consumes:
-    - migration_status_rollup
-    - cost_sweep_rollup
-    produce_fields:
-      digest_report:
-      - sections
-      - generated_at
-      - source_revisions
-    consume_fields:
-      migration_status_rollup:
-      - items
-      - generated_at
-      - source_revision
-      cost_sweep_rollup:
-      - items
-      - generated_at
-      - source_revision
-    write_authority: read-only
-  unit-test-creator:
-    produces:
-    - test_suite
-    consumes:
-    - implementation_task
-    produce_fields:
-      test_suite:
-      - tests
-      - framework
-      - target_path
-    consume_fields:
-      implementation_task:
-      - task_id
-      - scope
-      - acceptance_criteria
-      - request
-      - repo_root
-      - target
-      - test_framework_hint
-      - run_tests
-      - max_files_per_run
-      - deadline
-      - session_token_budget
-      - output_dir
-      - specialist_inputs
-    write_authority: repository-write
-  integration-test-creator:
-    produces:
-    - test_suite
-    consumes:
-    - implementation_task
-    produce_fields:
-      test_suite:
-      - tests
-      - framework
-      - target_path
-    consume_fields:
-      implementation_task:
-      - task_id
-      - scope
-      - acceptance_criteria
-      - request
-      - repo_root
-      - target
-      - test_framework_hint
-      - run_tests
-      - max_files_per_run
-      - deadline
-      - session_token_budget
-      - output_dir
-      - specialist_inputs
-    write_authority: repository-write
-  contract-test-creator:
-    produces:
-    - test_suite
-    consumes:
-    - implementation_task
-    produce_fields:
-      test_suite:
-      - tests
-      - framework
-      - target_path
-    consume_fields:
-      implementation_task:
-      - task_id
-      - scope
-      - acceptance_criteria
-      - request
-      - repo_root
-      - target
-      - test_framework_hint
-      - run_tests
-      - max_files_per_run
-      - deadline
-      - session_token_budget
-      - output_dir
-      - specialist_inputs
-    write_authority: repository-write
-  e2e-test-creator:
-    produces:
-    - test_suite
-    consumes:
-    - implementation_task
-    produce_fields:
-      test_suite:
-      - tests
-      - framework
-      - target_path
-    consume_fields:
-      implementation_task:
-      - task_id
-      - scope
-      - acceptance_criteria
-      - request
-      - repo_root
-      - target
-      - test_framework_hint
-      - run_tests
-      - max_files_per_run
-      - deadline
-      - session_token_budget
-      - output_dir
-      - specialist_inputs
-    write_authority: repository-write
   api-test-creator:
     produces:
     - test_suite
@@ -697,56 +386,6 @@ skills:
       - output_dir
       - specialist_inputs
     write_authority: repository-write
-  test-writer:
-    produces:
-    - test_orchestration_result
-    consumes:
-    - implementation_task
-    produce_fields:
-      test_orchestration_result:
-      - test_plan
-      - orchestration_status
-      - unfinished_levels
-      - level_reports
-    consume_fields:
-      implementation_task:
-      - task_id
-      - scope
-      - acceptance_criteria
-      - request
-      - repo_root
-      - target
-      - test_framework_hint
-      - run_tests
-      - max_files_per_run
-      - deadline
-      - session_token_budget
-      - output_dir
-      - specialist_inputs
-    write_authority: read-only
-  prd-architect:
-    produces:
-    - prd_report
-    consumes:
-    - implementation_task
-    produce_fields:
-      prd_report:
-      - title
-      - build_readiness
-      - depth
-      - response_mode
-      - assessment_target
-      - normalized_decision
-      - findings
-      - conditions
-      - required_actions
-      - evidence_refs
-    consume_fields:
-      implementation_task:
-      - task_id
-      - scope
-      - acceptance_criteria
-    write_authority: read-only
   architecture-review:
     produces:
     - architecture_review_report
@@ -779,129 +418,11 @@ skills:
       - normalized_decision
       - evidence_refs
     write_authority: read-only
-  system-design:
+  backlog-runner:
     produces:
-    - system_design_spec
+    - implementation_pr
     consumes:
-    - prd_report
-    - architecture_review_report
-    produce_fields:
-      system_design_spec:
-      - title
-      - readiness
-      - assessment_target
-      - normalized_decision
-      - findings
-      - conditions
-      - required_actions
-      - evidence_refs
-    consume_fields:
-      prd_report:
-      - title
-      - build_readiness
-      - depth
-      - response_mode
-      - assessment_target
-      - normalized_decision
-      - evidence_refs
-      architecture_review_report:
-      - title
-      - decision
-      - assessment_target
-      - normalized_decision
-      - evidence_refs
-    write_authority: read-only
-  api-design-review:
-    produces:
-    - api_design_review_report
-    consumes:
-    - assessment_context
-    produce_fields:
-      api_design_review_report:
-      - title
-      - verdict
-      - assessment_target
-      - normalized_decision
-      - findings
-      - conditions
-      - required_actions
-      - evidence_refs
-    consume_fields:
-      assessment_context:
-      - assessment_target
-      - inputs
-      - input_provenance
-      - evidence_refs
-      - unresolved
-    write_authority: read-only
-  database-review:
-    produces:
-    - database_review_report
-    consumes:
-    - assessment_context
-    produce_fields:
-      database_review_report:
-      - title
-      - verdict
-      - assessment_target
-      - normalized_decision
-      - findings
-      - conditions
-      - required_actions
-      - evidence_refs
-    consume_fields:
-      assessment_context:
-      - assessment_target
-      - inputs
-      - input_provenance
-      - evidence_refs
-      - unresolved
-    write_authority: read-only
-  security-review:
-    produces:
-    - security_review_report
-    consumes:
-    - assessment_context
-    produce_fields:
-      security_review_report:
-      - title
-      - verdict
-      - assessment_target
-      - normalized_decision
-      - findings
-      - conditions
-      - required_actions
-      - evidence_refs
-    consume_fields:
-      assessment_context:
-      - assessment_target
-      - inputs
-      - input_provenance
-      - evidence_refs
-      - unresolved
-    write_authority: read-only
-  performance-review:
-    produces:
-    - performance_review_report
-    consumes:
-    - assessment_context
-    produce_fields:
-      performance_review_report:
-      - title
-      - verdict
-      - assessment_target
-      - normalized_decision
-      - findings
-      - conditions
-      - required_actions
-      - evidence_refs
-    consume_fields:
-      assessment_context:
-      - assessment_target
-      - inputs
-      - input_provenance
-      - evidence_refs
-      - unresolved
+    - implementation_task
     write_authority: read-only
   capacity-planner:
     produces:
@@ -925,85 +446,6 @@ skills:
       - input_provenance
       - evidence_refs
       - unresolved
-    write_authority: read-only
-  observability-review:
-    produces:
-    - observability_review_report
-    consumes:
-    - assessment_context
-    produce_fields:
-      observability_review_report:
-      - title
-      - coverage
-      - assessment_target
-      - normalized_decision
-      - findings
-      - conditions
-      - required_actions
-      - evidence_refs
-    consume_fields:
-      assessment_context:
-      - assessment_target
-      - inputs
-      - input_provenance
-      - evidence_refs
-      - unresolved
-    write_authority: read-only
-  deployment-risk-review:
-    produces:
-    - deployment_risk_report
-    consumes:
-    - assessment_context
-    produce_fields:
-      deployment_risk_report:
-      - title
-      - risk
-      - deployment_confidence
-      - assessment_target
-      - normalized_decision
-      - findings
-      - conditions
-      - required_actions
-      - evidence_refs
-    consume_fields:
-      assessment_context:
-      - assessment_target
-      - inputs
-      - input_provenance
-      - evidence_refs
-      - unresolved
-    write_authority: read-only
-  dependency-upgrade-review:
-    produces:
-    - dependency_upgrade_report
-    consumes:
-    - assessment_context
-    produce_fields:
-      dependency_upgrade_report:
-      - title
-      - verdict
-      - assessment_target
-      - normalized_decision
-      - findings
-      - conditions
-      - required_actions
-      - evidence_refs
-    consume_fields:
-      assessment_context:
-      - assessment_target
-      - inputs
-      - input_provenance
-      - evidence_refs
-      - unresolved
-    write_authority: read-only
-  tech-debt-assessor:
-    produces:
-    - tech_debt_assessment
-    consumes: []
-    produce_fields:
-      tech_debt_assessment:
-      - title
-      - items
     write_authority: read-only
   change-impact-analyzer:
     produces:
@@ -1042,13 +484,49 @@ skills:
       - evidence_refs
       - unresolved
     write_authority: read-only
-  resilience-review:
+  contract-test-creator:
     produces:
-    - resilience_review_report
+    - test_suite
+    consumes:
+    - implementation_task
+    produce_fields:
+      test_suite:
+      - tests
+      - framework
+      - target_path
+    consume_fields:
+      implementation_task:
+      - task_id
+      - scope
+      - acceptance_criteria
+      - request
+      - repo_root
+      - target
+      - test_framework_hint
+      - run_tests
+      - max_files_per_run
+      - deadline
+      - session_token_budget
+      - output_dir
+      - specialist_inputs
+    write_authority: repository-write
+  cost-optimization-sprint-planner:
+    produces:
+    - cost_sweep_rollup
+    consumes: []
+    produce_fields:
+      cost_sweep_rollup:
+      - items
+      - generated_at
+      - source_revision
+    write_authority: read-only
+  database-review:
+    produces:
+    - database_review_report
     consumes:
     - assessment_context
     produce_fields:
-      resilience_review_report:
+      database_review_report:
       - title
       - verdict
       - assessment_target
@@ -1065,6 +543,85 @@ skills:
       - evidence_refs
       - unresolved
     write_authority: read-only
+  dependency-upgrade-review:
+    produces:
+    - dependency_upgrade_report
+    consumes:
+    - assessment_context
+    produce_fields:
+      dependency_upgrade_report:
+      - title
+      - verdict
+      - assessment_target
+      - normalized_decision
+      - findings
+      - conditions
+      - required_actions
+      - evidence_refs
+    consume_fields:
+      assessment_context:
+      - assessment_target
+      - inputs
+      - input_provenance
+      - evidence_refs
+      - unresolved
+    write_authority: read-only
+  deployment-risk-review:
+    produces:
+    - deployment_risk_report
+    consumes:
+    - assessment_context
+    produce_fields:
+      deployment_risk_report:
+      - title
+      - risk
+      - deployment_confidence
+      - assessment_target
+      - normalized_decision
+      - findings
+      - conditions
+      - required_actions
+      - evidence_refs
+    consume_fields:
+      assessment_context:
+      - assessment_target
+      - inputs
+      - input_provenance
+      - evidence_refs
+      - unresolved
+    write_authority: read-only
+  domain-comprehension:
+    produces:
+    - squad_map
+    consumes:
+    - mr_context
+    write_authority: read-only
+  e2e-test-creator:
+    produces:
+    - test_suite
+    consumes:
+    - implementation_task
+    produce_fields:
+      test_suite:
+      - tests
+      - framework
+      - target_path
+    consume_fields:
+      implementation_task:
+      - task_id
+      - scope
+      - acceptance_criteria
+      - request
+      - repo_root
+      - target
+      - test_framework_hint
+      - run_tests
+      - max_files_per_run
+      - deadline
+      - session_token_budget
+      - output_dir
+      - specialist_inputs
+    write_authority: repository-write
   implementation-planner:
     produces:
     - implementation_plan
@@ -1194,6 +751,226 @@ skills:
       - conditions
       - required_actions
       - evidence_refs
+    write_authority: read-only
+  incident-rca:
+    produces:
+    - rca_report
+    consumes:
+    - mr_context
+    write_authority: read-only
+  incident-triage-agent:
+    produces:
+    - rca_report
+    - ownership_lookup
+    consumes:
+    - mr_context
+    produce_fields:
+      rca_report:
+      - assessment_metadata
+      - root_cause
+      - confidence
+      ownership_lookup:
+      - query
+      - squad
+      - confidence
+    consume_fields:
+      mr_context:
+      - project
+      - head_sha
+    write_authority: read-only
+  integration-test-creator:
+    produces:
+    - test_suite
+    consumes:
+    - implementation_task
+    produce_fields:
+      test_suite:
+      - tests
+      - framework
+      - target_path
+    consume_fields:
+      implementation_task:
+      - task_id
+      - scope
+      - acceptance_criteria
+      - request
+      - repo_root
+      - target
+      - test_framework_hint
+      - run_tests
+      - max_files_per_run
+      - deadline
+      - session_token_budget
+      - output_dir
+      - specialist_inputs
+    write_authority: repository-write
+  k8s-overprovisioning-datadog:
+    produces:
+    - k8s_rightsizing_report
+    consumes:
+    - mr_context
+    write_authority: read-only
+  loop-task-implementer:
+    produces:
+    - implementation_pr
+    consumes:
+    - implementation_task
+    - prd_report
+    - implementation_plan
+    consume_fields:
+      implementation_plan:
+      - plan_set_id
+      - plan_id
+      - title
+      - readiness
+      - assessment_target
+      - target_repo
+      - external_dependencies
+      - source_refs
+      - tasks
+      - execution_waves
+      - sequencing_constraints
+      - verification_gates
+      - traceability
+    write_authority: repository-write
+  migration-program-manager:
+    produces:
+    - migration_status_rollup
+    consumes: []
+    produce_fields:
+      migration_status_rollup:
+      - items
+      - generated_at
+      - source_revision
+    write_authority: read-only
+  mysql-to-postgres-sql:
+    produces:
+    - implementation_pr
+    consumes:
+    - implementation_task
+    write_authority: repository-write
+  new-hire-guide:
+    produces:
+    - digest_report
+    consumes:
+    - mr_context
+    write_authority: read-only
+  observability-review:
+    produces:
+    - observability_review_report
+    consumes:
+    - assessment_context
+    produce_fields:
+      observability_review_report:
+      - title
+      - coverage
+      - assessment_target
+      - normalized_decision
+      - findings
+      - conditions
+      - required_actions
+      - evidence_refs
+    consume_fields:
+      assessment_context:
+      - assessment_target
+      - inputs
+      - input_provenance
+      - evidence_refs
+      - unresolved
+    write_authority: read-only
+  performance-review:
+    produces:
+    - performance_review_report
+    consumes:
+    - assessment_context
+    produce_fields:
+      performance_review_report:
+      - title
+      - verdict
+      - assessment_target
+      - normalized_decision
+      - findings
+      - conditions
+      - required_actions
+      - evidence_refs
+    consume_fields:
+      assessment_context:
+      - assessment_target
+      - inputs
+      - input_provenance
+      - evidence_refs
+      - unresolved
+    write_authority: read-only
+  pr-gatekeeper:
+    produces:
+    - mr_review_report
+    consumes:
+    - mr_context
+    produce_fields:
+      mr_review_report:
+      - review_metadata
+      - posted
+      - head_sha
+      - posting_mode
+      - integrated_revision
+      - assessment_target
+      - normalized_decision
+      - findings
+      - conditions
+      - required_actions
+      - evidence_refs
+    consume_fields:
+      mr_context:
+      - project
+      - merge_request_iid
+      - head_sha
+    write_authority: comment
+  pr-review:
+    produces:
+    - mr_review_report
+    consumes:
+    - mr_context
+    produce_fields:
+      mr_review_report:
+      - review_metadata
+      - posted
+      - head_sha
+      - posting_mode
+      - integrated_revision
+      - assessment_target
+      - normalized_decision
+      - findings
+      - conditions
+      - required_actions
+      - evidence_refs
+    consume_fields:
+      mr_context:
+      - project
+      - merge_request_iid
+      - head_sha
+    write_authority: comment
+  prd-architect:
+    produces:
+    - prd_report
+    consumes:
+    - implementation_task
+    produce_fields:
+      prd_report:
+      - title
+      - build_readiness
+      - depth
+      - response_mode
+      - assessment_target
+      - normalized_decision
+      - findings
+      - conditions
+      - required_actions
+      - evidence_refs
+    consume_fields:
+      implementation_task:
+      - task_id
+      - scope
+      - acceptance_criteria
     write_authority: read-only
   production-readiness-review:
     produces:
@@ -1338,4 +1115,228 @@ skills:
       - conditions
       - required_actions
       - evidence_refs
+    write_authority: read-only
+  release-readiness-checker:
+    produces:
+    - digest_report
+    consumes:
+    - mr_context
+    - mr_review_report
+    - k8s_rightsizing_report
+    - rca_report
+    - production_readiness_report
+    produce_fields:
+      digest_report:
+      - sections
+      - generated_at
+      - source_revisions
+    consume_fields:
+      production_readiness_report:
+      - assessment_target
+      - source_revision
+      - verdict
+      - dimension_statuses
+      - conditions
+      - waivers
+      - evidence_refs
+      mr_context:
+      - project
+      - merge_request_iid
+      - head_sha
+      - posting_policy
+      - review_mode
+      - audit_type
+      - expected_head_sha
+      mr_review_report:
+      - review_metadata
+      - posted
+      - head_sha
+      - integrated_revision
+      - assessment_target
+      - normalized_decision
+      - findings
+      - conditions
+      - required_actions
+      - evidence_refs
+      k8s_rightsizing_report:
+      - assessment_metadata
+      - recommendations
+      rca_report:
+      - assessment_metadata
+      - root_cause
+      - confidence
+    write_authority: read-only
+  resilience-review:
+    produces:
+    - resilience_review_report
+    consumes:
+    - assessment_context
+    produce_fields:
+      resilience_review_report:
+      - title
+      - verdict
+      - assessment_target
+      - normalized_decision
+      - findings
+      - conditions
+      - required_actions
+      - evidence_refs
+    consume_fields:
+      assessment_context:
+      - assessment_target
+      - inputs
+      - input_provenance
+      - evidence_refs
+      - unresolved
+    write_authority: read-only
+  security-review:
+    produces:
+    - security_review_report
+    consumes:
+    - assessment_context
+    produce_fields:
+      security_review_report:
+      - title
+      - verdict
+      - assessment_target
+      - normalized_decision
+      - findings
+      - conditions
+      - required_actions
+      - evidence_refs
+    consume_fields:
+      assessment_context:
+      - assessment_target
+      - inputs
+      - input_provenance
+      - evidence_refs
+      - unresolved
+    write_authority: read-only
+  squad-map:
+    produces:
+    - squad_map
+    - ownership_lookup
+    consumes:
+    - mr_context
+    write_authority: read-only
+  system-design:
+    produces:
+    - system_design_spec
+    consumes:
+    - prd_report
+    - architecture_review_report
+    produce_fields:
+      system_design_spec:
+      - title
+      - readiness
+      - assessment_target
+      - normalized_decision
+      - findings
+      - conditions
+      - required_actions
+      - evidence_refs
+    consume_fields:
+      prd_report:
+      - title
+      - build_readiness
+      - depth
+      - response_mode
+      - assessment_target
+      - normalized_decision
+      - evidence_refs
+      architecture_review_report:
+      - title
+      - decision
+      - assessment_target
+      - normalized_decision
+      - evidence_refs
+    write_authority: read-only
+  tech-debt-assessor:
+    produces:
+    - tech_debt_assessment
+    consumes: []
+    produce_fields:
+      tech_debt_assessment:
+      - title
+      - items
+    write_authority: read-only
+  test-writer:
+    produces:
+    - test_orchestration_result
+    consumes:
+    - implementation_task
+    produce_fields:
+      test_orchestration_result:
+      - test_plan
+      - orchestration_status
+      - unfinished_levels
+      - level_reports
+    consume_fields:
+      implementation_task:
+      - task_id
+      - scope
+      - acceptance_criteria
+      - request
+      - repo_root
+      - target
+      - test_framework_hint
+      - run_tests
+      - max_files_per_run
+      - deadline
+      - session_token_budget
+      - output_dir
+      - specialist_inputs
+    write_authority: read-only
+  unit-test-creator:
+    produces:
+    - test_suite
+    consumes:
+    - implementation_task
+    produce_fields:
+      test_suite:
+      - tests
+      - framework
+      - target_path
+    consume_fields:
+      implementation_task:
+      - task_id
+      - scope
+      - acceptance_criteria
+      - request
+      - repo_root
+      - target
+      - test_framework_hint
+      - run_tests
+      - max_files_per_run
+      - deadline
+      - session_token_budget
+      - output_dir
+      - specialist_inputs
+    write_authority: repository-write
+  weekly-squad-digest:
+    produces:
+    - digest_report
+    consumes:
+    - migration_status_rollup
+    - cost_sweep_rollup
+    produce_fields:
+      digest_report:
+      - sections
+      - generated_at
+      - source_revisions
+    consume_fields:
+      migration_status_rollup:
+      - items
+      - generated_at
+      - source_revision
+      cost_sweep_rollup:
+      - items
+      - generated_at
+      - source_revision
+    write_authority: read-only
+  who-owns-x-bot:
+    produces:
+    - ownership_lookup
+    consumes:
+    - mr_context
     write_authority: read-only

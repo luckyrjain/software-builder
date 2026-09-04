@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from scripts.registry.canonical_manifest import legacy_projection_path
 from scripts.registry.cli import (
     _capability_catalog_path,
-    _composition_runtime_path,
     _release_contract_path,
     detect_optional_layers,
 )
@@ -29,10 +29,10 @@ def test_all_layers_inactive_on_a_bare_minimal_repo(tmp_path: Path) -> None:
     assert layers.capability_families is None
     assert layers.release_contract is None
     assert layers.p1_layer_active is False
-    # skills.yaml itself always exists in this fixture, so composition_contracts is active.
+    # No canonical shape and no standalone projection: the composition contract document
+    # falls all the way back to skills.yaml itself (which is what keeps minimal fixtures
+    # readable), while composition_runtime has no document at all and stays inactive.
     assert layers.composition_contracts == tmp_path / "skills.yaml"
-    # No canonical shape -> composition_runtime falls back to the legacy standalone file,
-    # which doesn't exist in this minimal fixture either.
     assert layers.composition_runtime is None
 
 
@@ -73,11 +73,12 @@ def test_release_contract_active_flag(tmp_path: Path) -> None:
     assert layers.release_contract == release_contract
 
 
-def test_composition_runtime_matches_the_standalone_helper(tmp_path: Path) -> None:
-    """detect_optional_layers must agree with _composition_runtime_path's own
-    canonical-vs-legacy resolution, not re-derive it a second, possibly-inconsistent way."""
+def test_composition_runtime_matches_the_shared_section_resolution(tmp_path: Path) -> None:
+    """detect_optional_layers must agree with canonical_manifest's own canonical-vs-legacy
+    resolution -- the same one every contract-section reader takes -- not re-derive it a
+    second, possibly-inconsistent way."""
     _write_minimal_skills_yaml(tmp_path)
-    legacy_path = _composition_runtime_path(tmp_path)
+    legacy_path = legacy_projection_path(tmp_path, "composition_runtime")
     legacy_path.parent.mkdir(parents=True, exist_ok=True)
     legacy_path.write_text("schema_version: 1\n", encoding="utf-8")
 
@@ -92,7 +93,7 @@ def test_composition_runtime_resolves_through_canonical_shape_with_skills_d_frag
     """Coverage gap closed after the full-system review: no prior test exercised
     scripts/registry/skills.d/ fragments and detect_optional_layers together, even
     though detect_optional_layers's composition_runtime field depends on
-    _composition_runtime_path's canonical-shape detection, which now reads through
+    canonical_manifest's shared canonical-shape detection, which reads through
     schema.py's fragment-aware, cached load_registry_raw instead of a raw file read.
     A canonical-shape skills.yaml with an EMPTY inline `skills:` mapping, whose only
     real skill comes from a skills.d/ fragment, must still resolve composition_runtime
@@ -132,3 +133,35 @@ def test_real_repo_has_every_optional_layer_active() -> None:
     assert layers.release_contract is not None
     assert layers.composition_contracts is not None
     assert layers.p1_layer_active is True
+
+
+def test_composition_contracts_is_the_document_that_will_be_read(tmp_path: Path) -> None:
+    """The field names the composition contract's source, not skills.yaml's mere existence
+    -- so a repository carrying the standalone projection points at the projection."""
+    _write_minimal_skills_yaml(tmp_path)
+    projection = legacy_projection_path(tmp_path, "composition")
+    projection.parent.mkdir(parents=True, exist_ok=True)
+    projection.write_text("artifact_types: []\n", encoding="utf-8")
+
+    layers = detect_optional_layers(tmp_path)
+
+    assert layers.composition_contracts == projection
+
+
+def test_every_active_layer_field_names_a_file_that_exists() -> None:
+    """A `Path` field means "active, at that path" -- it must never be a path that is not
+    there, which is what a caller handing it to a loader relies on."""
+    root = Path(__file__).resolve().parents[2]
+
+    layers = detect_optional_layers(root)
+
+    for field in (
+        "host_contracts",
+        "capability_catalog",
+        "capability_families",
+        "composition_runtime",
+        "release_contract",
+        "composition_contracts",
+    ):
+        value = getattr(layers, field)
+        assert value is None or value.is_file(), field

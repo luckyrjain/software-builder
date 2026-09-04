@@ -43,7 +43,9 @@ Please read and follow our [Code of Conduct](CODE_OF_CONDUCT.md).
 
 - **SETUP.md freshness:** when you change pinned MCP versions or verify install steps, bump
   `**Last reviewed**` in that skill's `SETUP.md` freshness table and keep `**External services**`
-  aligned with `scripts/registry/setup_freshness.yaml`. `make lint-framework` enforces this.
+  aligned with the `setup_freshness:` block in that skill's `scripts/registry/skills.d/<skill-id>.yaml`
+  fragment (`scripts/registry/setup_freshness.yaml` is the generated projection of those blocks).
+  `make lint-framework` enforces this.
 - **Registering a new skill in `skills.yaml`:** add a fragment file at
   `scripts/registry/skills.d/<skill-id>.yaml` containing only that skill's own entry (keyed by its skill
   id) instead of hand-editing the `skills:` mapping in root `skills.yaml` directly. Then run
@@ -51,8 +53,18 @@ Please read and follow our [Code of Conduct](CODE_OF_CONDUCT.md).
   generated-from-canonical-source pattern used for the Cursor/Kiro adapters). `make generate-check`
   (part of `lint-static`) fails if `skills.yaml` drifts from what its fragments would produce, which
   also catches anyone who edited `skills.yaml`'s `skills:` mapping by hand instead of its fragment.
-  Everything else in `skills.yaml` (`schema_version`, `manifest_kind`, `contracts:`, `profiles:`) is
-  still hand-edited directly in that file.
+  A fragment declares each fact once: `contracts.platform.skill_types`,
+  `contracts.platform.skill_permissions`, `contracts.composition_runtime.skill_types` and
+  `contracts.composition.skills` are all derived from it by `make generate`, so a skill's `type`,
+  `permissions`, `authority` and produced/consumed artifacts are never restated per contract
+  section. `entrypoint` and `supported_hosts` may be omitted entirely: they default to `SKILL.md`
+  and the full host roster (`scripts/registry/host_adapter.py`'s `HOSTS`). The fragment is also where
+  the skill's `degraded_behavior:`, `setup_freshness:` and `routing:` blocks live; `make generate`
+  projects them into `scripts/registry/degraded_behavior.yaml`, `setup_freshness.yaml` and
+  `routing_rules.yaml`, and regenerates the skill dropdowns in `.github/ISSUE_TEMPLATE/*.yml` — none of
+  those need a separate edit. The rest of `skills.yaml` (`schema_version`, `manifest_kind`, the
+  non-derived parts of `contracts:`, `profiles:`) is still hand-edited directly in that file — but
+  `contracts:` is re-rendered wholesale by `make generate`, so it cannot carry YAML comments.
 - **GitHub topics/description:** maintainers with repo admin access run
   `bash scripts/apply_repo_metadata.sh` (canonical values in `.github/repo-metadata.yaml`).
 - **Tier-3 golden fixtures:** refresh recorded outputs per

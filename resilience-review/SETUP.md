@@ -20,12 +20,18 @@ See [setup-freshness.md](../docs/skill-framework/shared/setup-freshness.md) for 
 
 ## Runtime inputs
 
-Use scripts/resilience_review.py through its review_resilience entry point.
+The skill takes one of two input shapes, and normalizes both to the same review:
 
 - Standalone: supply resilience_behavior, dependency_paths, assessment_target, state_semantic, and
   evidence.
-- Embedded: supply the typed assessment_context carrier. The optional runtime_metadata argument must
-  be created by the composition runtime; user input cannot create trusted evidence.
+- Embedded: supply the typed assessment_context carrier. Trusted runtime metadata can only be created
+  by the composition runtime; caller-supplied authority labels stay caller evidence, so user input
+  cannot promote itself to trusted evidence.
+
+A Software Builder checkout implements this normalization as `review_resilience` in
+`<checkout>/scripts/resilience_review.py`. That module is not part of an installed package — without
+it, apply the same rule: reject a current-state PASS whose evidence carries no runtime-owned trust
+attestation, and record a control as UNKNOWN rather than PASS when its source environment is absent.
 
 Read the shared [skill framework](../docs/skill-framework/README.md) before packaging or changing the
 skill.

@@ -40,6 +40,131 @@ production-readiness-review:
     - performance-review
     - capacity-planner
     - dependency-upgrade-review
+    consumes:
+    - mr_context
+    - assessment_context
+    - mr_review_report
+    - change_impact_report
+    - deployment_risk_report
+    - security_review_report
+    - observability_review_report
+    - resilience_review_report
+    - api_design_review_report
+    - database_review_report
+    - performance_review_report
+    - capacity_plan
+    - dependency_upgrade_report
+    consume_fields:
+      assessment_context:
+      - assessment_target
+      - inputs
+      - input_provenance
+      - evidence_refs
+      - unresolved
+      mr_context:
+      - project
+      - merge_request_iid
+      - head_sha
+      mr_review_report:
+      - review_metadata
+      - head_sha
+      - integrated_revision
+      - assessment_target
+      - normalized_decision
+      - findings
+      - conditions
+      - required_actions
+      - evidence_refs
+      change_impact_report:
+      - assessment_target
+      - coverage_status
+      - material_unknowns
+      - impacted_repositories
+      - criticality
+      - change_classes
+      - impacted_services
+      - impacted_contracts
+      - impacted_data
+      - impacted_dependencies
+      - impacted_owners
+      - required_tests
+      - operational_impacts
+      - review_triggers
+      - unknowns
+      - evidence_refs
+      deployment_risk_report:
+      - risk
+      - deployment_confidence
+      - assessment_target
+      - normalized_decision
+      - findings
+      - conditions
+      - required_actions
+      - evidence_refs
+      security_review_report:
+      - verdict
+      - assessment_target
+      - normalized_decision
+      - findings
+      - conditions
+      - required_actions
+      - evidence_refs
+      observability_review_report:
+      - coverage
+      - assessment_target
+      - normalized_decision
+      - findings
+      - conditions
+      - required_actions
+      - evidence_refs
+      resilience_review_report:
+      - verdict
+      - assessment_target
+      - normalized_decision
+      - findings
+      - conditions
+      - required_actions
+      - evidence_refs
+      api_design_review_report:
+      - verdict
+      - assessment_target
+      - normalized_decision
+      - findings
+      - conditions
+      - required_actions
+      - evidence_refs
+      database_review_report:
+      - verdict
+      - assessment_target
+      - normalized_decision
+      - findings
+      - conditions
+      - required_actions
+      - evidence_refs
+      performance_review_report:
+      - verdict
+      - assessment_target
+      - normalized_decision
+      - findings
+      - conditions
+      - required_actions
+      - evidence_refs
+      capacity_plan:
+      - headroom
+      - assessment_target
+      - normalized_decision
+      - findings
+      - conditions
+      - required_actions
+      - evidence_refs
+      dependency_upgrade_report:
+      - verdict
+      - assessment_target
+      - normalized_decision
+      - findings
+      - conditions
+      - required_actions
+      - evidence_refs
   capabilities:
     required:
     - host.report.write
@@ -168,3 +293,31 @@ production-readiness-review:
   - performance-review
   - capacity-planner
   - dependency-upgrade-review
+  degraded_behavior:
+    missing_capability: host.dependency.advisories.read
+    available_capabilities:
+    - host.report.write
+    - host.repository.read
+    - host.scm.change.read
+    - host.ci.status
+    - host.scm.policy.read
+    - host.build.provenance.read
+    - host.service.metadata.read
+    behavior: DEGRADED
+  setup_freshness:
+    external_services: None — reads supplied candidate evidence and optional repository,
+      SCM, CI, build-provenance, service-metadata, runtime-metrics, or dependency-advisory
+      host evidence, and reuses/dispatches trusted child-skill invocations only
+  routing:
+    patterns:
+    - \b(PR|MR|pull request|merge request)\s*[#!]?\d+\b.*\b(production ready|production
+      readiness|ready to release|ready to deploy|ready to ship)\b
+    - \b(production ready|production readiness|ready to release|ready to deploy|ready
+      to ship)\b.*\b(PR|MR|pull request|merge request)\s*[#!]?\d+\b
+    - \bproduction readiness (review|assessment|check)\b
+    - \bis (this|the) (service|change|deployment|pr|mr|pull request|merge request|release
+      candidate) production ready\b
+    - \b(this|the) (pr|mr|pull request|merge request|release candidate)\b.*\b(production
+      ready|production readiness|ready to release|ready to deploy|ready to ship)\b
+    - \bship (this|that) (pr|mr|pull request|merge request|change)\b
+    - \bgo[- /]?no[- ]?go for (this|one) (change|pr|mr|pull request|merge request)\b

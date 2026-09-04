@@ -56,7 +56,10 @@ readiness, authority, coverage, or completion. Rendered output must follow
 ## Begin
 
 1. Read [workflow/plan.md](workflow/plan.md) and verify every required upstream artifact and digest.
-2. Build the deterministic plan with `scripts/implementation_plan.py`.
+2. Build the plan deterministically: the same inputs must always produce the same plan-set and
+   task identities, the same dependency DAG, and the same execution waves. A Software Builder
+   checkout has this as `<checkout>/scripts/implementation_plan.py`; installed packages do not
+   ship it, so apply the rule directly.
 3. Validate DAG, waves, traceability, repository scope, estimates, and readiness before emitting it.
 4. Return `PARTIAL` or `BLOCKED` with explicit evidence gaps when planning cannot safely reach `READY`.
 

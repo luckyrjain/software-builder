@@ -4,7 +4,6 @@ from pathlib import Path
 
 from scripts.yaml_safety import load_unique_yaml_file, require_mapping
 
-HOSTS = {"cursor", "claude", "codex", "chatgpt", "kiro", "generic"}
 SUPPORT = {"full", "degraded", "unsupported"}
 CAPABILITIES = {
     "discover_files",
@@ -19,10 +18,63 @@ CAPABILITIES = {
     "connectors",
 }
 
+# The one roster of hosts this adapter layer generates for, and the skill surface each
+# one expects. `HOSTS` is derived from it rather than restated, so adding a host is one
+# edit here instead of one here plus one in host_portability.py; every drift validator
+# below (host_contracts.yaml, evals/host-parity/expected.yaml) then keys off this set.
+EXPECTED_SURFACES = {
+    "cursor": "per_skill_generated",
+    "claude": "canonical_root",
+    "codex": "canonical_root",
+    "chatgpt": "canonical_root",
+    "kiro": "per_skill_generated",
+    "generic": "canonical_root",
+}
+HOSTS = frozenset(EXPECTED_SURFACES)
+
+# The bridge between this module's coarse adapter-generation capability families and the
+# finer-grained `host.*` capability ids skills.yaml's per-skill capabilities and
+# agent-hosts.yaml's HostSpec.capabilities share. One direction only (`host.* -> families`)
+# and one location: the two halves of the correspondence live beside each other here, so
+# "which family gates this host.* id" has a single answer.
+#
+# capability_families.yaml deliberately exempts `host.*` ids from its own
+# (differently-scoped) provider-resolution mapping -- see its module docstring -- so this
+# is a separate, purpose-built join for the compatibility matrix. Only ids that actually
+# appear in some skill's global `required` list need an entry; an unmapped `host.*` id in
+# `required` fails the build (see generate_compatibility._required_host_families) instead
+# of silently rendering the old blanket per-host profile.
+HOST_CAPABILITY_FAMILIES: dict[str, tuple[str, ...]] = {
+    "host.repository.read": ("read_repo",),
+    "host.repository.read_write": ("read_repo", "write_repo"),
+    "host.filesystem.read": ("read_repo",),
+    "host.report.write": ("write_repo",),
+    "host.role.isolation": ("task_isolation",),
+    "host.ci.status": ("scm",),
+    "host.pull_request.write": ("scm",),
+    "host.issue_tracker.read": ("connectors",),
+}
+
+
+def host_contracts_path(root: Path) -> Path:
+    """The one construction of the host contract path shared across scripts/registry."""
+    return root / "scripts" / "registry" / "host_contracts.yaml"
+
+
+def expected_surface(host: str) -> str:
+    """The skill surface `host` must declare, with a named error for an unrostered host."""
+    try:
+        return EXPECTED_SURFACES[host]
+    except KeyError:
+        raise ValueError(
+            f"host {host!r} has no expected skill surface; add it to "
+            f"host_adapter.EXPECTED_SURFACES (known hosts: {sorted(EXPECTED_SURFACES)})"
+        ) from None
+
 
 def _contracts(root: Path) -> dict:
     return require_mapping(
-        load_unique_yaml_file(root / "scripts/registry/host_contracts.yaml"),
+        load_unique_yaml_file(host_contracts_path(root)),
         "host contracts",
     )
 

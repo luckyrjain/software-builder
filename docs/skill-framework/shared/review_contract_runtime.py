@@ -26,7 +26,22 @@ _FINDING_FIELDS = {"id", "category", "summary", "evidence"}
 _EFFECTIVE_PATCH_FIELDS = (
     "changed_paths", "generated_paths", "dependency_changes", "config_changes",
 )
+_REVIEW_MODES = ("normal", "exhaustive")
+_INSPECTION_STATUSES = ("complete", "partial", "unable")
 _UNSET = object()
+
+# Public view of the field vocabulary for the repository-side contract-drift checker
+# (scripts/validate_review_contracts.py), which reconciles the YAML contract documents against
+# this runtime rather than keeping a third copy of the same field lists. The tuples carry the
+# order the contract documents declare; the frozensets carry membership only.
+REQUIRED_IDENTITY_FIELDS = frozenset(_REQUIRED_IDENTITY)
+REQUIRED_EVIDENCE_FIELDS = frozenset(_REQUIRED_EVIDENCE)
+FINDING_CATEGORIES = ("defect", "suggestion", "question")
+UNABLE_TO_INSPECT_FIELDS = ("surface", "reason", "mandatory")
+FINDING_FIELDS = ("id", "category", "summary", "evidence")
+REVIEW_MODES = _REVIEW_MODES
+INSPECTION_STATUSES = _INSPECTION_STATUSES
+MAX_NESTING_DEPTH = _MAX_NESTING_DEPTH
 
 
 def _portable_scalar(value: object) -> bool:
@@ -262,12 +277,12 @@ def validate_review_evidence(
 
     mode = payload.get("review_mode")
     if "review_mode" in payload and (
-        not isinstance(mode, str) or mode not in {"normal", "exhaustive"}
+        not isinstance(mode, str) or mode not in _REVIEW_MODES
     ):
         errors.append("review_mode must be normal or exhaustive")
     status = payload.get("inspection_status")
     if "inspection_status" in payload and (
-        not isinstance(status, str) or status not in {"complete", "partial", "unable"}
+        not isinstance(status, str) or status not in _INSPECTION_STATUSES
     ):
         errors.append("inspection_status must be complete, partial, or unable")
     inspected = payload.get("inspected_surfaces")

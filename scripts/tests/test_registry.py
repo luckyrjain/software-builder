@@ -1385,3 +1385,190 @@ def test_update_changelog_toc_raises_when_markers_missing() -> None:
 
     with pytest.raises(ValueError, match="missing marker block"):
         update_changelog_toc("# Changelog\n\n## squad-map\n\n### v1 (2026-01-01)\n\n- x\n")
+
+
+def test_issue_template_skill_dropdown_is_regenerated_from_the_registry() -> None:
+    from scripts.registry.generate_issue_templates import render_issue_template
+
+    form = (
+        "name: Bug report\n"
+        "body:\n"
+        "  - type: dropdown\n"
+        "    id: skill\n"
+        "    attributes:\n"
+        "      label: Affected skill\n"
+        "      options:\n"
+        "        - pr-review\n"
+        "        - retired-skill\n"
+        "        - Other / not sure\n"
+        "    validations:\n"
+        "      required: true\n"
+    )
+
+    rendered = render_issue_template(form, ["squad-map", "pr-review"])
+
+    options = [line.strip() for line in rendered.splitlines() if line.startswith("        - ")]
+    # Registered ids in sorted order; every option that is not a registered id (the form's own
+    # extra choices, and a skill that has since left the registry) keeps its place after them.
+    assert options == ["- pr-review", "- squad-map", "- retired-skill", "- Other / not sure"]
+    assert "# GENERATED from skills.yaml" in rendered
+    assert "    validations:\n      required: true\n" in rendered
+
+    # Idempotent: a second pass over generated output reproduces it exactly.
+    assert render_issue_template(rendered, ["squad-map", "pr-review"]) == rendered
+
+
+def test_issue_template_without_a_skill_dropdown_is_not_generated() -> None:
+    from scripts.registry.generate_issue_templates import render_issue_template
+
+    form = "name: New skill proposal\nbody:\n  - type: input\n    id: name\n"
+
+    assert render_issue_template(form, ["squad-map"]) is None
+
+
+def _registry_with_escalations(targets: dict[str, list[str]]):
+    from scripts.registry.models import (
+        CompositionSpec,
+        InstallSpec,
+        LintSpec,
+        Registry,
+        SkillEntry,
+    )
+
+    return Registry(
+        schema_version=1,
+        skills={
+            skill_id: SkillEntry(
+                path=skill_id,
+                category="review",
+                invocation="ambient",
+                hosts={},
+                install=InstallSpec(),
+                lint=LintSpec(skill_md_max_lines=180, target=skill_id),
+                composition=CompositionSpec(escalation_targets=list(escalations)),
+            )
+            for skill_id, escalations in targets.items()
+        },
+    )
+
+
+_ESCALATION_DOC = (
+    "# Cross-skill escalation (shared)\n\n"
+    "## 1. Symmetric matrix (forward escalations)\n\n"
+    "| Trigger | From → To | Handoff artifact | User prompt template |\n"
+    "|---|---|---|---|\n"
+    "{rows}"
+    "\n## 2. Reverse escalations\n"
+)
+
+
+def test_escalation_sync_reports_registry_edges_the_doc_never_documents(tmp_path: Path) -> None:
+    from scripts.registry.escalation_sync import validate_escalation_matrix
+
+    doc = tmp_path / "docs" / "skill-framework" / "shared" / "cross-skill-escalation.md"
+    doc.parent.mkdir(parents=True)
+    doc.write_text(
+        _ESCALATION_DOC.format(rows="| t | pr-review → squad-map | a | p |\n"),
+        encoding="utf-8",
+    )
+    registry = _registry_with_escalations({"pr-review": ["squad-map", "incident-rca"], "squad-map": [], "incident-rca": []})
+
+    errors = validate_escalation_matrix(tmp_path, registry)
+
+    assert any("missing registry escalation edges: pr-review → incident-rca" in e for e in errors)
+
+
+def test_escalation_sync_resolves_shorthand_and_multi_target_rows(tmp_path: Path) -> None:
+    """`k8s` is the matrix's long-standing shorthand, and one From → To cell can name several
+    destinations -- both must resolve to registered ids rather than read as dangling."""
+    from scripts.registry.escalation_sync import validate_escalation_matrix
+
+    doc = tmp_path / "docs" / "skill-framework" / "shared" / "cross-skill-escalation.md"
+    doc.parent.mkdir(parents=True)
+    doc.write_text(
+        _ESCALATION_DOC.format(rows="| t | pr-review → k8s + incident-rca | a | p |\n"),
+        encoding="utf-8",
+    )
+    registry = _registry_with_escalations(
+        {
+            "pr-review": ["k8s-overprovisioning-datadog", "incident-rca"],
+            "k8s-overprovisioning-datadog": [],
+            "incident-rca": [],
+        }
+    )
+
+    assert validate_escalation_matrix(tmp_path, registry) == []
+
+
+def test_escalation_sync_rejects_an_endpoint_that_is_not_a_registered_skill(tmp_path: Path) -> None:
+    from scripts.registry.escalation_sync import validate_escalation_matrix
+
+    doc = tmp_path / "docs" / "skill-framework" / "shared" / "cross-skill-escalation.md"
+    doc.parent.mkdir(parents=True)
+    doc.write_text(
+        _ESCALATION_DOC.format(rows="| t | pr-review → renamed-skill | a | p |\n"),
+        encoding="utf-8",
+    )
+    registry = _registry_with_escalations({"pr-review": []})
+
+    errors = validate_escalation_matrix(tmp_path, registry)
+
+    assert any("routes to unregistered skills" in e and "renamed-skill" in e for e in errors)
+
+
+def _routing_doc(rows: str) -> str:
+    return (
+        "# Skill Routing (shared)\n\n"
+        "## Routing table\n\n"
+        "| User intent / keywords | Route to | NOT these |\n"
+        "|---|---|---|\n" + rows + "\n## Next section\n"
+    )
+
+
+def test_skill_md_not_these_must_be_a_subset_of_the_shared_routing_row(tmp_path: Path) -> None:
+    from scripts.registry.routing_sync import validate_skill_not_these_subsets
+
+    doc = tmp_path / "docs" / "skill-framework" / "shared" / "skill-routing.md"
+    doc.parent.mkdir(parents=True)
+    doc.write_text(_routing_doc("| kw | **pr-review** | incident-rca |\n"), encoding="utf-8")
+    (tmp_path / "pr-review").mkdir()
+    (tmp_path / "pr-review" / "SKILL.md").write_text(
+        "# pr-review\n\n## When NOT to use\n\n"
+        "| Request | Use instead |\n|---|---|\n"
+        "| Outage window | **incident-rca** |\n"
+        "| Webhook-triggered run | **pr-gatekeeper** |\n",
+        encoding="utf-8",
+    )
+    registry = _registry_with_escalations({"pr-review": []})
+
+    errors = validate_skill_not_these_subsets(tmp_path, registry)
+
+    assert len(errors) == 1
+    assert "pr-review: SKILL.md routes away to pr-gatekeeper" in errors[0]
+
+
+def test_skill_not_these_subset_unions_every_row_the_skill_owns(tmp_path: Path) -> None:
+    """A skill can own several routing rows (one per mode); the exclusions of all of them
+    together are what its own table may draw from."""
+    from scripts.registry.routing_sync import validate_skill_not_these_subsets
+
+    doc = tmp_path / "docs" / "skill-framework" / "shared" / "skill-routing.md"
+    doc.parent.mkdir(parents=True)
+    doc.write_text(
+        _routing_doc(
+            "| kw | **prd-architect** | pr-review |\n"
+            "| kw | **prd-architect** Review Mode | test-writer (generate tests) |\n"
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "prd-architect").mkdir()
+    (tmp_path / "prd-architect" / "SKILL.md").write_text(
+        "# prd-architect\n\n## When to use / NOT to use\n\n"
+        "| Use | Not |\n|---|---|\n"
+        "| Define MVP | **test-writer** — generate tests |\n"
+        "| Review a diff | **pr-review** |\n",
+        encoding="utf-8",
+    )
+    registry = _registry_with_escalations({"prd-architect": []})
+
+    assert validate_skill_not_these_subsets(tmp_path, registry) == []

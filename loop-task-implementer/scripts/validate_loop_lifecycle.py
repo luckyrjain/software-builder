@@ -12,36 +12,53 @@ from types import ModuleType
 
 
 SKILL_ROOT = Path(__file__).resolve().parents[1]
+_SCRIPT_DIR = Path(__file__).resolve().parent
 _INSTALL_MANIFEST = ".software-builder-manifest.json"
+_RUNTIME_DESCRIPTION = "shared review runtime"
 _UNSET = object()
 
 
+def _shared_runtime_loader() -> ModuleType:
+    """Import shared_runtime_loader, which owns the containment policy for every module this
+    script executes out of docs/skill-framework/shared/.
+
+    Only locating the loader itself is handled here, and it needs no policy of its own: an
+    installed package carries the loader beside this script (package_skill.py vendors it), so the
+    lookup never leaves the package, and the install manifest is what proves a missing vendored
+    copy is a packaging fault rather than an invitation to read a sibling path.
+    """
+    beside = _SCRIPT_DIR / "shared_runtime_loader.py"
+    if beside.is_file():
+        path = beside
+    elif (SKILL_ROOT / _INSTALL_MANIFEST).is_file():
+        raise RuntimeError(f"unable to load packaged {_RUNTIME_DESCRIPTION} loader: {beside}")
+    else:
+        path = SKILL_ROOT.parent / "docs/skill-framework/shared/shared_runtime_loader.py"
+    if not path.is_file():
+        raise RuntimeError(f"unable to load packaged {_RUNTIME_DESCRIPTION} loader: {path}")
+    spec = importlib.util.spec_from_file_location("software_builder_shared_runtime_loader", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"unable to load packaged {_RUNTIME_DESCRIPTION} loader: {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def _shared_runtime_path() -> Path:
-    """Resolve the shared runtime for installed packages or this source repository."""
-    vendored = SKILL_ROOT / "docs/skill-framework/shared/review_contract_runtime.py"
-    if vendored.is_file():
-        return vendored
-    if (SKILL_ROOT / _INSTALL_MANIFEST).is_file():
-        raise RuntimeError(f"unable to load packaged shared review runtime: {vendored}")
-    repo_root = SKILL_ROOT.parent
-    source_runtime = repo_root / "docs/skill-framework/shared/review_contract_runtime.py"
-    source_markers = (repo_root / "skills.yaml", repo_root / "scripts/package_skill.py")
-    if all(marker.is_file() for marker in source_markers) and source_runtime.is_file():
-        return source_runtime
-    raise RuntimeError(
-        "unable to load packaged shared review runtime or verified source-checkout runtime: "
-        f"{vendored}"
+    """The one path this skill may execute docs/skill-framework/shared/review_contract_runtime.py
+    from -- the vendored copy inside an installed package, or a verified source checkout's."""
+    return _shared_runtime_loader().shared_runtime_path(
+        SKILL_ROOT, "review_contract_runtime", description=_RUNTIME_DESCRIPTION
     )
 
 
 def _load_shared_runtime() -> ModuleType:
-    path = _shared_runtime_path()
-    spec = importlib.util.spec_from_file_location("loop_shared_review_contract_runtime", path)
-    if spec is None or spec.loader is None:
-        raise RuntimeError(f"unable to load packaged shared review runtime: {path}")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+    return _shared_runtime_loader().load_shared_runtime(
+        SKILL_ROOT,
+        "review_contract_runtime",
+        alias="loop_shared_review_contract_runtime",
+        description=_RUNTIME_DESCRIPTION,
+    )
 
 
 def _mapping(value: object) -> dict[str, object]:

@@ -9,6 +9,24 @@ system-design:
     - api-design-review
     - database-review
     - observability-review
+    consumes:
+    - prd_report
+    - architecture_review_report
+    consume_fields:
+      prd_report:
+      - title
+      - build_readiness
+      - depth
+      - response_mode
+      - assessment_target
+      - normalized_decision
+      - evidence_refs
+      architecture_review_report:
+      - title
+      - decision
+      - assessment_target
+      - normalized_decision
+      - evidence_refs
   capabilities:
     required:
     - host.report.write
@@ -37,3 +55,16 @@ system-design:
       - required_actions
       - evidence_refs
   dependencies: []
+  degraded_behavior:
+    missing_capability: host.report.write
+    available_capabilities: []
+    behavior: BLOCKED
+  setup_freshness:
+    external_services: None — reads supplied architecture decision/PRD content and
+      repository only
+  routing:
+    patterns:
+    - \b(system design|technical design doc|component design|data model design)\b
+    - \bready PRD\b.*\bimplementation design\b
+    exclude_patterns:
+    - \bwhat\b.*\bservices?\b.*\b(touch|affected|impact)\b

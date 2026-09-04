@@ -5,9 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from scripts.registry.canonical_manifest import has_canonical_manifest_shape, load_canonical_manifest
+from scripts.registry.canonical_manifest import load_contract_section
 from scripts.registry.models import Registry
-from scripts.registry.schema import load_registry_raw
 from scripts.test_creator_catalog import TEST_CREATOR_SKILLS
 from scripts.yaml_safety import YAML_SAFETY_ERRORS, load_unique_yaml_file
 
@@ -18,18 +17,15 @@ DEFAULT_CONTRACTS_PATH = CONTRACTS_PATH
 
 
 def _load_contract_document(path: Path | None = None) -> dict[str, object]:
+    """The `composition` contract document, canonical or projected.
+
+    A path naming skills.yaml (or no path at all) delegates the canonical-vs-projection
+    decision to canonical_manifest.load_contract_section, which owns that rule for all three
+    contract sections; an explicit path to some other file is read as-is, which is how tests
+    and legacy callers point at a standalone document.
+    """
     if path is None or path.name == "skills.yaml":
-        manifest_root = path.parent if path is not None else ROOT
-        raw_manifest = load_registry_raw(manifest_root / "skills.yaml")
-        if has_canonical_manifest_shape(raw_manifest):
-            manifest = load_canonical_manifest(manifest_root)
-            contracts = manifest["contracts"]
-            if not isinstance(contracts, dict) or not isinstance(contracts.get("composition"), dict):
-                raise ValueError("canonical manifest contracts.composition must be a mapping")
-            return contracts["composition"]
-        legacy = manifest_root / "scripts" / "registry" / "composition_contracts.yaml"
-        if legacy.is_file():
-            path = legacy
+        return load_contract_section(path.parent if path is not None else ROOT, "composition")
     raw = load_unique_yaml_file(path)
     if not isinstance(raw, dict):
         raise ValueError(f"{path}: root must be a mapping")

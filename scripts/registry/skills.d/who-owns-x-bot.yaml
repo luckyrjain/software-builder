@@ -33,14 +33,6 @@ who-owns-x-bot:
     external_actions: write
     unattended: true
     merge: false
-  supported_hosts:
-  - chatgpt
-  - claude
-  - codex
-  - cursor
-  - generic
-  - kiro
-  entrypoint: SKILL.md
   output_contract:
     produces:
     - ownership_lookup
@@ -48,3 +40,16 @@ who-owns-x-bot:
   dependencies:
   - squad-map
   version_source: skill_frontmatter_legacy_numeric
+  composition:
+    consumes:
+    - mr_context
+  degraded_behavior:
+    missing_capability: slack.slash_command.receive
+    available_capabilities: []
+    behavior: BLOCKED
+  setup_freshness:
+    external_services: squad-map (Slack handler is host infra)
+  routing:
+    patterns:
+    - \bwho owns\b
+    - \bownership lookup\b.*\b(slack|slash command|bot)\b

@@ -12,6 +12,7 @@ Human-readable guide to everything in the **software-builder** repository. Agent
 | [../domain-comprehension/CONTEXT.md](../domain-comprehension/CONTEXT.md) | Target-system vocabulary (bounded contexts, as-built PRD, squads) |
 | [../README.md](../README.md) | Install, invoke, and quick usage for all skills |
 | [REPOSITORY.md](REPOSITORY.md) | Repo layout, `Makefile`, `scripts/`, lint targets, git hooks |
+| [OPERATIONS.md](OPERATIONS.md) | Operator runbook — stale install lock, host-evidence refresh, `VERSION` bump trigger, generated-roster recovery |
 | [skill-framework/README.md](skill-framework/README.md) | Shared normative conventions every skill follows (confidence bands, escalation, routing, phase glossary, …) |
 | [history/README.md](history/README.md) | Historical specs and plans (`docs/superpowers/`) vs. normative framework docs |
 | [adr/README.md](adr/README.md) | Platform architecture decision records |
@@ -110,7 +111,7 @@ Skills reference each other when a finding belongs in another workflow:
 | domain-comprehension | Architecture smell needs RCA context | incident-rca |
 | domain-comprehension | Domain map reveals overprovisioned service | k8s |
 | domain-comprehension | Domain analysis produced `MYSQL_TO_PG_SQL_REWRITES.md` | mysql-to-postgres-sql |
-| domain-comprehension | `RISK_MAP.md` § Change risk flags a critical/high-fan-out path with weak `Test signal` | unit-test-creator / integration-test-creator (per whether the flagged path is isolated or crosses a real dependency) |
+| domain-comprehension | `RISK_MAP.md` § Change risk flags a critical/high-fan-out path with weak `Test signal` | unit-test-creator / integration-test-creator |
 | domain-comprehension | `BUSINESS_FLOWS.md` documents a journey with no e2e coverage | e2e-test-creator |
 | domain-comprehension | `API_CATALOG.md` documents an endpoint with `exercise: none` | api-test-creator |
 | mysql-to-postgres-sql | Migration MR needs review | pr-review |
@@ -170,9 +171,11 @@ Skills reference each other when a finding belongs in another workflow:
 | deployment-risk-review | Deploy already happened and something broke | incident-triage-agent |
 | tech-debt-assessor | A "Now" priority debt item is really a multi-service migration | migration-program-manager |
 | tech-debt-assessor | A "Now" priority debt item is really a resource/cost problem | cost-optimization-sprint-planner |
-| production-readiness-review | Caller wants one specific dimension deep-dived, not the aggregated readiness rollup | deployment-risk-review / change-impact-analyzer / the applicable specialist |
+| implementation-planner | Plan is approved and its tasks are ready to execute | loop-task-implementer |
+| migration-program-manager | A blocked service's migration MR needs reviewing, not the portfolio rollup | pr-review |
+| production-readiness-review | Caller wants one specific dimension deep-dived, not the aggregated readiness rollup | pr-review / change-impact-analyzer / deployment-risk-review / security-review / observability-review / resilience-review / api-design-review / database-review / performance-review / capacity-planner / dependency-upgrade-review |
 | production-readiness-review | Caller wants the multi-repo release go/no-go sweep, not one candidate's readiness | release-readiness-checker |
-| production-readiness-review | Production readiness review needs exact-head PR/MR code-review evidence | pr-review (no-post, chat-only result consumed) |
+| production-readiness-review | Production readiness review needs exact-head PR/MR code-review evidence | pr-review |
 <!-- cross-skill-routing:end -->
 
 Full symmetric matrix (forward + reverse escalations):

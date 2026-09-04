@@ -7,6 +7,15 @@ resilience-review:
   composition:
     invokes: []
     escalation_targets: []
+    consumes:
+    - assessment_context
+    consume_fields:
+      assessment_context:
+      - assessment_target
+      - inputs
+      - input_provenance
+      - evidence_refs
+      - unresolved
   capabilities:
     required:
     - host.report.write
@@ -37,3 +46,19 @@ resilience-review:
       - required_actions
       - evidence_refs
   dependencies: []
+  degraded_behavior:
+    missing_capability: host.repository.read
+    available_capabilities:
+    - host.report.write
+    behavior: DEGRADED
+  setup_freshness:
+    external_services: None — reads supplied resilience content and optional repository
+      or runtime/config evidence only
+  routing:
+    patterns:
+    - \b(resilience|failure[- ]mode|fault[- ]toleran)\w*\b.*\b(review|assessment|analysis|controls?)\b
+    - \b(timeout budgets?|retry polic(?:y|ies)|circuit breakers?|load shedding|backpressure|queue
+      handling|idempotency|partial failures?|recovery reconciliation)\b
+    exclude_patterns:
+    - \b(incident|outage|postmortem|root cause|RCA)\b
+    - \b(capacity|headroom|forecast|sizing)\b

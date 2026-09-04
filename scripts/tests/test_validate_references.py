@@ -9,7 +9,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from validate_references import github_style_slug, heading_slugs, validate_tree  # noqa: E402
+from validate_references import (  # noqa: E402
+    github_style_slug,
+    heading_slugs,
+    main,
+    validate_files,
+    validate_tree,
+)
 
 
 def test_slug_preserves_hyphens_within_heading_text() -> None:
@@ -233,3 +239,52 @@ def test_validate_markdown_file_flags_unclosed_fenced_code_block(tmp_path: Path)
     )
     errors = validate_tree(tmp_path, check_anchors=True)
     assert any("unclosed fenced code block" in error for error in errors)
+
+
+def test_validate_files_uses_the_same_anchor_algorithm_as_the_tree_walk(tmp_path: Path) -> None:
+    target = tmp_path / "target.md"
+    target.write_text("# Test-first evidence\n", encoding="utf-8")
+    source = tmp_path / "source.md"
+    source.write_text("[ok](target.md#test-first-evidence)\n", encoding="utf-8")
+
+    assert validate_files([source]) == []
+    assert validate_tree(tmp_path) == []
+
+
+def test_validate_files_reports_dangling_links_and_anchors(tmp_path: Path) -> None:
+    target = tmp_path / "target.md"
+    target.write_text("# Present\n", encoding="utf-8")
+    source = tmp_path / "source.md"
+    source.write_text(
+        "[gone](missing.md)\n[bad anchor](target.md#absent)\n",
+        encoding="utf-8",
+    )
+
+    errors = validate_files([source])
+
+    assert len(errors) == 2
+    assert any("dangling link" in error for error in errors)
+    assert any("dangling anchor" in error for error in errors)
+
+
+def test_validate_files_skips_paths_that_are_not_files(tmp_path: Path) -> None:
+    """An unmatched shell glob reaches the CLI as a literal path, not an error."""
+    assert validate_files([tmp_path / "never-created.md"]) == []
+
+
+def test_files_mode_exits_nonzero_only_on_a_real_dangling_reference(tmp_path: Path) -> None:
+    clean = tmp_path / "clean.md"
+    clean.write_text("# Heading\n[self](clean.md#heading)\n", encoding="utf-8")
+    broken = tmp_path / "broken.md"
+    broken.write_text("[gone](missing.md)\n", encoding="utf-8")
+
+    assert main(["--files", str(clean)]) == 0
+    assert main(["--files", str(clean), str(broken)]) == 1
+
+
+def test_module_is_importable_through_the_scripts_package() -> None:
+    """install_support.cmd_verify imports it this way; packaging tests import it the other."""
+    import importlib
+
+    module = importlib.import_module("scripts.validate_references")
+    assert module.validate_tree is not None

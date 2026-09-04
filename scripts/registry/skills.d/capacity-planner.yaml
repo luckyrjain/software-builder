@@ -7,6 +7,15 @@ capacity-planner:
   composition:
     escalation_targets:
     - k8s-overprovisioning-datadog
+    consumes:
+    - assessment_context
+    consume_fields:
+      assessment_context:
+      - assessment_target
+      - inputs
+      - input_provenance
+      - evidence_refs
+      - unresolved
   capabilities:
     required:
     - host.report.write
@@ -35,3 +44,12 @@ capacity-planner:
       - required_actions
       - evidence_refs
   dependencies: []
+  degraded_behavior:
+    missing_capability: host.report.write
+    available_capabilities: []
+    behavior: BLOCKED
+  setup_freshness:
+    external_services: None — reads supplied historical demand data only
+  routing:
+    patterns:
+    - \b(capacity plan(?:ning)?|capacity forecast|scaling requirements)\b

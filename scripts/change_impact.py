@@ -14,6 +14,9 @@ from typing import Any
 
 from scripts.registry.artifact_trust import classify_assessment_context_trust
 from scripts.registry.assessment_target import normalize_repo_identity
+from scripts.registry.result_envelope import build_result_envelope
+from scripts.registry.skill_result import SkillResult, derive_execution_status
+from scripts.registry.validation_primitives import as_mapping
 
 CHANGE_CLASSES = (
     "docs_only",
@@ -27,7 +30,14 @@ CHANGE_CLASSES = (
     "operational",
 )
 
-_DIFF_PATH = re.compile(r"^diff --git a/(\S+) b/(\S+)", re.MULTILINE)
+_DIFF_HEADER_PREFIX = "diff --git "
+# A `diff --git` header is not a whitespace-delimited grammar: Git does not quote a path merely
+# because it contains a space, so `diff --git a/my file.py b/my file.py` is ambiguous until the
+# record's own rename/`---`/`+++` metadata binds it. These bounds keep the disambiguation linear
+# in the header length -- a pathological header full of " b/" tokens is discarded, not searched.
+_MAX_DIFF_HEADER_CHARS = 4_096
+_MAX_PATH_SEPARATORS = 32
+_GIT_QUOTE_ESCAPES = {"a": 7, "b": 8, "t": 9, "n": 10, "v": 11, "f": 12, "r": 13, '"': 34, "\\": 92}
 _HYPHEN_VARIANTS = str.maketrans(
     {
         "‐": "-",
@@ -105,13 +115,6 @@ class NormalizedDecision:
 
 
 @dataclass(frozen=True)
-class SkillExecutionResult:
-    status: str
-    blockers: list[str] | None = None
-    state_semantic: str = "proposed_state"
-
-
-@dataclass(frozen=True)
 class AssessmentTarget:
     source_type: str | None = None
     repo: str | None = None
@@ -125,7 +128,7 @@ class AssessmentTarget:
 class ImpactResult:
     payload: dict[str, Any]
     normalized_decision: NormalizedDecision
-    skill_result: SkillExecutionResult
+    skill_result: SkillResult
     provenance: dict[str, Any] | None = None
 
     @property
@@ -178,47 +181,29 @@ class ImpactResult:
             if payload[field] is None:
                 payload[field] = [] if field in list_fields else {} if field == "assessment_target" else "UNKNOWN"
         completed_checks = self._completed_dod_checks(coverage)
-        return {
-            "skill_result": {
-                "skill": "change-impact-analyzer",
-                "version": "1.0.0",
-                "status": self.skill_result.status,
-                "confidence": confidence,
-                "source_revision": source_revision,
-                "evidence_status": "OBSERVED" if sources else "UNKNOWN",
-                "artifacts": ["change_impact_report"],
-                "blockers": self.skill_result.blockers or [],
-                "recommended_next_skill": None,
-                "artifact_schema_version": 1,
-                "state_semantic": self.skill_result.state_semantic,
-            },
-            "provenance": {
-                "source_revision": source_revision,
-                # change_impact_report is registered as a v1 non-machine-summary artifact;
-                # its envelope stores root refs as strings. Internal provenance retains typed
-                # authority metadata for callers that need it before serialization.
-                "sources": [
-                    item["ref"] for item in sources if isinstance(item, Mapping) and item.get("ref")
-                ],
-            },
-            "freshness": {
-                "observed_at": observed_at,
-                "source_revision": source_revision,
-                "source_environment": target.environment or "UNKNOWN",
-            },
-            "definition_of_done": {
-                "required_artifacts": ["change_impact_report"],
-                "required_checks": ["target_normalized", "change_classes_evaluated", "surfaces_and_unknowns_recorded"],
-                "completed_checks": completed_checks,
-                "blocked_conditions": self.skill_result.blockers or [],
-                "partial_result_behavior": "return PARTIAL or UNKNOWN with explicit evidence gaps",
-            },
-            "authority": {
-                "write_authority": "read-only",
-                "canonical_owner": "change-impact-analyzer",
-            },
-            "payload": payload,
-        }
+        return build_result_envelope(
+            skill="change-impact-analyzer",
+            version="1.0.0",
+            artifact_type="change_impact_report",
+            status=self.skill_result.status,
+            confidence=confidence,
+            evidence_status="OBSERVED" if sources else "UNKNOWN",
+            state_semantic=self.skill_result.state_semantic,
+            source_revision=source_revision,
+            blockers=self.skill_result.blockers,
+            sources=sources,
+            observed_at=observed_at,
+            source_environment=target.environment,
+            required_checks=[
+                "target_normalized", "change_classes_evaluated", "surfaces_and_unknowns_recorded",
+            ],
+            completed_checks=completed_checks,
+            partial_result_behavior="return PARTIAL or UNKNOWN with explicit evidence gaps",
+            canonical_owner="change-impact-analyzer",
+            payload=payload,
+        )
+
+
 _DOC_SUFFIXES = (".md", ".mdx", ".rst", ".adoc", ".txt")
 _TEST_MARKERS = ("/test/", "/tests/", "_test.", ".test.", ".spec.")
 _CRITICALITY_TIERS = {"tier0", "tier1", "tier2", "tier3"}
@@ -228,10 +213,6 @@ REPORT_FIELDS = (
     "impacted_contracts", "impacted_data", "impacted_dependencies", "impacted_owners",
     "required_tests", "operational_impacts", "review_triggers", "unknowns", "evidence_refs",
 )
-
-
-def _as_mapping(value: object) -> Mapping[str, Any]:
-    return value if isinstance(value, Mapping) else {}
 
 
 def _unique_strings(values: Iterable[object]) -> list[str]:
@@ -262,9 +243,158 @@ def _source_mapping(source: object) -> dict[str, Any]:
     return {}
 
 
+def _decode_git_path(raw: str) -> str | None:
+    """Decode one Git path field, including C-quoted octal UTF-8 bytes. None when malformed."""
+    if not raw.startswith('"'):
+        return raw
+    if len(raw) < 2 or not raw.endswith('"'):
+        return None
+    decoded = bytearray()
+    cursor = 1
+    while cursor < len(raw) - 1:
+        character = raw[cursor]
+        if character != "\\":
+            decoded.extend(character.encode("utf-8"))
+            cursor += 1
+            continue
+        cursor += 1
+        if cursor >= len(raw) - 1:
+            return None
+        escaped = raw[cursor]
+        if escaped in _GIT_QUOTE_ESCAPES:
+            decoded.append(_GIT_QUOTE_ESCAPES[escaped])
+            cursor += 1
+            continue
+        if escaped not in "01234567":
+            return None
+        end = cursor
+        while end < min(cursor + 3, len(raw) - 1) and raw[end] in "01234567":
+            end += 1
+        value = int(raw[cursor:end], 8)
+        if value > 255:
+            return None
+        decoded.append(value)
+        cursor = end
+    try:
+        return decoded.decode("utf-8")
+    except UnicodeDecodeError:
+        return None
+
+
+def _quoted_field_end(raw: str) -> int | None:
+    escaped = False
+    for index in range(1, len(raw)):
+        if raw[index] == '"' and not escaped:
+            return index + 1
+        escaped = raw[index] == "\\" and not escaped
+    return None
+
+
+def _separator_positions_outside_quotes(raw: str, tokens: tuple[str, ...]) -> list[int] | None:
+    """Find a bounded number of candidate field separators that are outside C quotes."""
+    positions: list[int] = []
+    quoted = False
+    escaped = False
+    for index, character in enumerate(raw):
+        if character == '"' and not escaped:
+            quoted = not quoted
+        if not quoted and any(raw.startswith(token, index) for token in tokens):
+            positions.append(index)
+            if len(positions) > _MAX_PATH_SEPARATORS:
+                return None
+        escaped = quoted and character == "\\" and not escaped
+    return None if quoted else positions
+
+
+def _strip_side_prefix(path: str | None, side: str) -> str | None:
+    return path[2:] if isinstance(path, str) and path.startswith(f"{side}/") else None
+
+
+def _diff_header_paths(header: str, *, old_hint: str | None, new_hint: str | None) -> tuple[str, str] | None:
+    """Resolve one `diff --git` header to its (old, new) paths, or None when still ambiguous."""
+    if len(header) > _MAX_DIFF_HEADER_CHARS or not header.startswith(_DIFF_HEADER_PREFIX):
+        return None
+    fields = header[len(_DIFF_HEADER_PREFIX):]
+    if fields.startswith('"'):
+        end = _quoted_field_end(fields)
+        if end is None or end >= len(fields) or fields[end] != " ":
+            return None
+        splits = [(fields[:end], fields[end + 1:])]
+    else:
+        # Spaces are not quoted by Git, so every ` b/` token is only a candidate boundary until
+        # the record's own metadata (a rename pair, or the --- / +++ markers) binds it.
+        separators = _separator_positions_outside_quotes(fields, (" b/", ' "b/'))
+        if separators is None:
+            return None
+        splits = [(fields[:index], fields[index + 1:]) for index in separators]
+    candidates: list[tuple[str, str]] = []
+    for old_raw, new_raw in splits:
+        old_path = _strip_side_prefix(_decode_git_path(old_raw), "a")
+        new_path = _strip_side_prefix(_decode_git_path(new_raw), "b")
+        if old_path is None or new_path is None:
+            continue
+        if old_hint is not None and old_path != old_hint:
+            continue
+        if new_hint is not None and new_path != new_hint:
+            continue
+        candidates.append((old_path, new_path))
+    if old_hint is None and new_hint is None:
+        # With no metadata to bind an ambiguous split, only an unchanged path is unambiguous.
+        same = [candidate for candidate in candidates if candidate[0] == candidate[1]]
+        if same:
+            candidates = same
+    return candidates[0] if len(candidates) == 1 else None
+
+
+# Within one diff record, these lines name a path unambiguously and so bind an otherwise
+# ambiguous header. A rename/copy operand carries no side prefix; a --- / +++ marker does.
+_OLD_PATH_HINTS = (("rename from ", False), ("copy from ", False), ("--- ", True))
+_NEW_PATH_HINTS = (("rename to ", False), ("copy to ", False), ("+++ ", True))
+
+
+def _record_path_hint(line: str, hints: tuple[tuple[str, bool], ...], side: str) -> str | None:
+    for prefix, side_prefixed in hints:
+        if not line.startswith(prefix):
+            continue
+        operand = line[len(prefix):].strip()
+        if operand == "/dev/null":
+            return None
+        decoded = _decode_git_path(operand)
+        return _strip_side_prefix(decoded, side) if side_prefixed else decoded
+    return None
+
+
 def _diff_paths(text: str) -> list[str]:
+    """Every path named by a unified diff's `diff --git` headers.
+
+    Handles the three shapes the previous whitespace-delimited pattern silently dropped: paths
+    containing spaces, C-quoted paths, and renames whose old/new sides differ. A header that
+    stays ambiguous after its own record's metadata is consulted contributes nothing, rather
+    than contributing a truncated path.
+    """
+    headers: list[tuple[str, str | None, str | None]] = []
+    header: str | None = None
+    old_hint: str | None = None
+    new_hint: str | None = None
+    for line in text.splitlines():
+        if line.startswith(_DIFF_HEADER_PREFIX):
+            if header is not None:
+                headers.append((header, old_hint, new_hint))
+            header, old_hint, new_hint = line, None, None
+            continue
+        if header is None:
+            continue
+        old_hint = _record_path_hint(line, _OLD_PATH_HINTS, "a") or old_hint
+        new_hint = _record_path_hint(line, _NEW_PATH_HINTS, "b") or new_hint
+    if header is not None:
+        headers.append((header, old_hint, new_hint))
+
     paths: list[str] = []
-    for left, right in _DIFF_PATH.findall(text):
+    for raw_header, old, new in headers:
+        resolved = _diff_header_paths(raw_header, old_hint=old, new_hint=new)
+        if resolved is None:
+            continue
+        left, right = resolved
         if left == right:
             paths.append(right)
         else:
@@ -523,7 +653,7 @@ def _result_provenance(
     source: object, repository_evidence: object, *, runtime_metadata: object = None
 ) -> dict[str, Any]:
     source_map = _source_mapping(source)
-    repository = _as_mapping(repository_evidence)
+    repository = as_mapping(repository_evidence)
     context = source.get("assessment_context") if isinstance(source, Mapping) else None
     trust = classify_assessment_context_trust(context, runtime_metadata=runtime_metadata)
     sources: list[dict[str, Any]] = []
@@ -603,7 +733,7 @@ def analyze_change(
 ) -> dict[str, Any]:
     """Analyze one supplied change/design using bounded evidence only."""
     source_map = _source_mapping(source)
-    repository = _as_mapping(repository_evidence)
+    repository = as_mapping(repository_evidence)
     paths = _changed_paths(source_map)
     text, ignored_instructions = _safe_source_text(source_map)
     classes = _classify_paths(paths, text)
@@ -645,7 +775,7 @@ def analyze_change(
         unknowns.append("affected dependency names are not identified by authoritative evidence")
     if not tests:
         unknowns.append("required test evidence is unavailable")
-    embedded_target = _as_mapping(source_map.get("assessment_target"))
+    embedded_target = as_mapping(source_map.get("assessment_target"))
     target = {
         "source_type": str(source_map.get("source_type") or embedded_target.get("source_type") or "change"),
         "repo": source_map.get("repo") or embedded_target.get("repo"),
@@ -684,8 +814,8 @@ def analyze_pr_impact(
     runtime_metadata: object = None,
 ) -> ImpactResult:
     """Analyze a remote PR/MR only at the supplied exact head revision."""
-    context = _as_mapping(mr_context)
-    scm = _as_mapping(scm_change_read)
+    context = as_mapping(mr_context)
+    scm = as_mapping(scm_change_read)
     head_sha = context.get("head_sha") if isinstance(context.get("head_sha"), str) else None
     source: dict[str, Any] = {
         "source_type": "pull_request",
@@ -736,14 +866,34 @@ def analyze_pr_impact(
         return ImpactResult(
             payload=result.payload,
             normalized_decision=NormalizedDecision("UNKNOWN", "MISSING_EXACT_SCM_MATERIAL"),
-            skill_result=SkillExecutionResult(
-                "BLOCKED",
-                ["exact remote SCM change material is unavailable"],
-                "current_state",
+            skill_result=SkillResult(
+                status="BLOCKED",
+                blockers=("exact remote SCM change material is unavailable",),
+                state_semantic="current_state",
             ),
             provenance=result.provenance,
         )
     return result
+
+
+def _impact_result(
+    payload: dict[str, Any],
+    status: str,
+    raw_verdict: str,
+    state_semantic: str,
+    *,
+    blockers: tuple[str, ...] | list[str] = (),
+    unknowns: tuple[str, ...] = (),
+) -> ImpactResult:
+    """Pair one coverage decision with the shared execution-status axis."""
+    execution_status, _ = derive_execution_status(blockers=blockers, unknowns=unknowns)
+    return ImpactResult(
+        payload=payload,
+        normalized_decision=NormalizedDecision(status, raw_verdict),
+        skill_result=SkillResult(
+            status=execution_status, blockers=tuple(blockers), state_semantic=state_semantic
+        ),
+    )
 
 
 def finalize_impact(impact: Mapping[str, Any]) -> ImpactResult:
@@ -769,45 +919,47 @@ def finalize_impact(impact: Mapping[str, Any]) -> ImpactResult:
     coverage = payload.get("coverage_status")
     state_semantic = "current_state" if str(payload.get("assessment_target", {}).get("source_type", "")).lower() in {"pull_request", "merge_request", "pr", "mr"} else "proposed_state"
     if normalized_blockers:
-        return ImpactResult(
-            payload=payload,
-            normalized_decision=NormalizedDecision("UNKNOWN", "BLOCKED"),
-            skill_result=SkillExecutionResult("BLOCKED", normalized_blockers, state_semantic),
-        )
-    if coverage == "COMPLETE" and impact_blockers:
-        return ImpactResult(
-            payload=payload,
-            normalized_decision=NormalizedDecision("FAIL", "IMPACT_BLOCKER"),
-            skill_result=SkillExecutionResult("SUCCESS", [], state_semantic),
-        )
-    if coverage == "COMPLETE" and payload.get("material_unknowns"):
-        return ImpactResult(
-            payload=payload,
-            normalized_decision=NormalizedDecision("UNKNOWN", "MATERIAL_UNKNOWNS"),
-            skill_result=SkillExecutionResult("PARTIAL", [], state_semantic),
-        )
+        return _impact_result(payload, "UNKNOWN", "BLOCKED", state_semantic, blockers=normalized_blockers)
     if coverage == "COMPLETE":
+        # Evidence refs come first: a conclusion drawn from no recorded evidence is UNKNOWN under
+        # this module's own evidence doctrine, whether the conclusion is favourable or an impact
+        # blocker, and a SUCCESS whose `surfaces_and_unknowns_recorded` check never completed is
+        # rejected by the artifact contract anyway.
         if not payload.get("evidence_refs"):
-            return ImpactResult(
-                payload=payload,
-                normalized_decision=NormalizedDecision("UNKNOWN", "MISSING_EVIDENCE_REFS"),
-                skill_result=SkillExecutionResult("PARTIAL", [], state_semantic),
+            return _impact_result(
+                payload, "UNKNOWN", "MISSING_EVIDENCE_REFS", state_semantic, unknowns=("evidence_refs",)
             )
-        return ImpactResult(
-            payload=payload,
-            normalized_decision=NormalizedDecision("PASS", "COMPLETE"),
-            skill_result=SkillExecutionResult("SUCCESS", [], state_semantic),
-        )
+        if impact_blockers:
+            # A proven impact blocker outranks material unknowns on the DECISION axis, but it
+            # does not resolve them: unknowns still leave `surfaces_and_unknowns_recorded`
+            # incomplete, so execution stays PARTIAL exactly as it would without the blocker.
+            return _impact_result(
+                payload,
+                "FAIL",
+                "IMPACT_BLOCKER",
+                state_semantic,
+                unknowns=("material_unknowns",) if payload.get("material_unknowns") else (),
+            )
+        if payload.get("material_unknowns"):
+            return _impact_result(
+                payload, "UNKNOWN", "MATERIAL_UNKNOWNS", state_semantic, unknowns=("material_unknowns",)
+            )
+        return _impact_result(payload, "PASS", "COMPLETE", state_semantic)
     if coverage in {"PARTIAL", "UNKNOWN"}:
-        return ImpactResult(
-            payload=payload,
-            normalized_decision=NormalizedDecision("UNKNOWN", str(coverage)),
-            skill_result=SkillExecutionResult("PARTIAL", [], state_semantic),
+        return _impact_result(
+            payload, "UNKNOWN", str(coverage), state_semantic, unknowns=("coverage_status",)
         )
+    # An unrecognized coverage value is this module's own internal error, not an evidence gap:
+    # FAILED, not the BLOCKED/PARTIAL the shared axis split would otherwise derive. The contract
+    # requires every non-success result to name its blockers, so the failure states itself.
     return ImpactResult(
         payload=payload,
         normalized_decision=NormalizedDecision("UNKNOWN", "INVALID_COVERAGE"),
-        skill_result=SkillExecutionResult("FAILED", [], state_semantic),
+        skill_result=SkillResult(
+            status="FAILED",
+            blockers=(f"unrecognized coverage_status: {coverage!r}",),
+            state_semantic=state_semantic,
+        ),
     )
 
 

@@ -16,11 +16,12 @@ permissions:
 
 jobs:
   # Split from a single serial `make lint` job: lint-static is every grep/structural
-  # check (no pytest, runs in well under a minute) and lint-suites is every pytest-
-  # bearing target -- dominated by scripts/tests/'s ~1700 tests, parallelized with
-  # pytest-xdist (see PYTEST_XDIST_FLAG in make/core.mk). Running them as separate
-  # jobs means a structural error surfaces fast instead of waiting behind ~10 minutes
-  # of test suites, and the two workloads no longer share one runner's single core.
+  # check plus the registry validators and verify-install-all (no pytest; the install
+  # sweep, not the structural checks, dominates its runtime) and lint-suites is every
+  # pytest-bearing target -- dominated by scripts/tests/'s ~2000 tests, parallelized
+  # with pytest-xdist (see PYTEST_XDIST_FLAG in make/core.mk). Running them as separate
+  # jobs means a structural error surfaces fast instead of waiting behind the test
+  # suites, and the two workloads no longer share one runner's single core.
   lint-static:
     runs-on: ubuntu-latest
     steps:

@@ -2,7 +2,7 @@ from pathlib import Path
 
 from scripts.evals.dispatcher import dispatch_prompt
 from scripts.registry.canonical_manifest import load_canonical_manifest
-from scripts.registry.frontmatter import load_skill_frontmatter
+from scripts.yaml_safety import load_unique_frontmatter
 from scripts.registry.load import load_registry
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -70,7 +70,7 @@ def test_implementation_plan_v1_contract_fields() -> None:
 
 
 def test_planner_skill_package_declares_read_only_contract() -> None:
-    frontmatter = load_skill_frontmatter(ROOT / "implementation-planner" / "SKILL.md")
+    frontmatter = load_unique_frontmatter(ROOT / "implementation-planner" / "SKILL.md")
     skill_text = (ROOT / "implementation-planner" / "SKILL.md").read_text(encoding="utf-8")
     assert frontmatter["name"] == "implementation-planner"
     for required_text in (

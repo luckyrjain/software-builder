@@ -1,6 +1,6 @@
 """Every skill must reference the shared result/authorization/completion contracts.
 
-platform_contracts.yaml and runtime-contract.md define skill_result,
+skills.yaml's `contracts.platform` section and runtime-contract.md define skill_result,
 action_gates, and definition_of_done once, centrally. This validator makes
 sure every registered skill's own SKILL.md actually points back to them,
 instead of the contracts existing only as unreferenced scaffolding that no

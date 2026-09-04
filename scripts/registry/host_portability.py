@@ -5,22 +5,18 @@ import re
 from pathlib import Path
 from typing import Any
 
-from scripts.registry.frontmatter import load_skill_frontmatter
-from scripts.registry.host_adapter import HOSTS, validate_host_adapter_interface
+from scripts.registry.host_adapter import (
+    HOSTS,
+    expected_surface,
+    host_contracts_path,
+    validate_host_adapter_interface,
+)
 from scripts.registry.load import load_deprecated_skills
 from scripts.registry.routing_sync import validate_skill_routing_references
 from scripts.registry.schema import parse_registry
 from scripts.registry.skill_frontmatter_schema import automation_only_guard_errors
-from scripts.yaml_safety import load_unique_yaml_file, require_mapping
+from scripts.yaml_safety import load_unique_frontmatter, load_unique_yaml_file, require_mapping
 
-EXPECTED_SURFACES = {
-    "cursor": "per_skill_generated",
-    "claude": "canonical_root",
-    "codex": "canonical_root",
-    "chatgpt": "canonical_root",
-    "kiro": "per_skill_generated",
-    "generic": "canonical_root",
-}
 # Flag actual host-specific execution branches while allowing neutral prose that
 # merely lists supported hosts or links to host setup guidance.
 _HOST = r"(?:Cursor|Claude(?: Code)?|Codex|ChatGPT|Kiro)"
@@ -122,7 +118,7 @@ def validate_host_portability(root: Path) -> list[str]:
         # must expect it missing rather than flag it as drift.
         deprecated_skills = load_deprecated_skills(root, registry)
         generated_surface_skills = skills - set(deprecated_skills)
-        contracts = require_mapping(load_unique_yaml_file(root / "scripts/registry/host_contracts.yaml"), "host contracts")
+        contracts = require_mapping(load_unique_yaml_file(host_contracts_path(root)), "host contracts")
         host_map = require_mapping(contracts.get("hosts"), "hosts")
         expected = require_mapping(load_unique_yaml_file(root / "evals/host-parity/expected.yaml"), "host parity expected")
         if expected.get("schema_version") != 1:
@@ -136,9 +132,10 @@ def validate_host_portability(root: Path) -> list[str]:
             snapshot = require_mapping(snapshots[host], f"expected.hosts.{host}")
             if actual.get("adapter") != snapshot.get("adapter"):
                 errors.append(f"error: {host}: adapter identity drift")
-            if snapshot.get("skill_surface") != EXPECTED_SURFACES[host]:
+            surface = expected_surface(host)
+            if snapshot.get("skill_surface") != surface:
                 errors.append(
-                    f"error: {host}: skill_surface must be {EXPECTED_SURFACES[host]!r}, got {snapshot.get('skill_surface')!r}",
+                    f"error: {host}: skill_surface must be {surface!r}, got {snapshot.get('skill_surface')!r}",
                 )
 
         errors.extend(
@@ -162,7 +159,7 @@ def validate_host_portability(root: Path) -> list[str]:
                 if directive in text:
                     errors.append(f"error: canonical skill {skill_id} leaks host-adapter directive {directive!r}")
             errors.extend(_runtime_host_branch_errors(skill_root, skill_id))
-            frontmatter = load_skill_frontmatter(skill_md)
+            frontmatter = load_unique_frontmatter(skill_md)
             for error in automation_only_guard_errors(entry.invocation, frontmatter):
                 errors.append(f"error: host invocation semantics {skill_id}: {error}")
 

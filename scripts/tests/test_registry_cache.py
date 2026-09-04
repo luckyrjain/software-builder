@@ -1,4 +1,4 @@
-"""Tests for load_registry_raw's per-root cache (scripts/registry/schema.py)."""
+"""Tests for the per-root registry caches (scripts/registry/schema.py)."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ import pytest
 
 from scripts.registry import schema
 from scripts.registry.manifest_merge import skills_fragments_dir
-from scripts.registry.schema import clear_registry_cache, load_registry_raw
+from scripts.registry.schema import clear_registry_cache, load_registry_raw, parse_registry
 
 
 @pytest.fixture(autouse=True)
@@ -26,6 +26,34 @@ def _write_skills_yaml(tmp_path: Path, skill_id: str = "solo") -> Path:
         encoding="utf-8",
     )
     return path
+
+
+def _write_parseable_skills_yaml(tmp_path: Path, skill_id: str = "solo") -> Path:
+    """A skills.yaml minimal enough to stay readable but complete enough for parse_registry
+    (which, unlike load_registry_raw, validates every skill entry's shape)."""
+    path = tmp_path / "skills.yaml"
+    path.write_text(
+        f"""schema_version: 1
+skills:
+  {skill_id}:
+    path: {skill_id}
+    category: architecture
+    invocation: ambient
+    hosts:
+      cursor: {{discovery: rule}}
+      claude: {{install: true}}
+      kiro: {{discovery: manual}}
+    install:
+      requires: []
+    lint:
+      skill_md_max_lines: 180
+      target: {skill_id}
+    risk_class: [read-only]
+""",
+        encoding="utf-8",
+    )
+    return path
+
 
 
 def test_second_read_does_not_touch_disk(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -223,3 +251,53 @@ def test_symlinked_skills_yaml_across_two_roots_does_not_cross_contaminate(
     # see root_a's own data, not something root_b's read left behind.
     raw_a_again = load_registry_raw(root_a / "skills.yaml")
     assert set(raw_a_again["skills"]) == {"inline-only"}
+
+
+def test_parse_registry_returns_the_cached_registry_on_a_second_call(tmp_path: Path) -> None:
+    """The memo sits on the derivation that actually repeats: before this, every caller
+    rebuilt the whole Registry/SkillEntry graph on top of an already-cached raw read."""
+    path = _write_parseable_skills_yaml(tmp_path)
+
+    first = parse_registry(path)
+    second = parse_registry(path)
+
+    assert first is second
+
+
+def test_clear_registry_cache_invalidates_the_parsed_registry(tmp_path: Path) -> None:
+    path = _write_parseable_skills_yaml(tmp_path)
+    first = parse_registry(path)
+
+    clear_registry_cache()
+    _write_parseable_skills_yaml(tmp_path, skill_id="renamed")
+    second = parse_registry(path)
+
+    assert second is not first
+    assert set(second.skills) == {"renamed"}
+
+
+def test_parse_registry_does_not_cache_a_failed_parse(tmp_path: Path) -> None:
+    """A repaired skills.yaml must reparse -- caching only successes keeps the memo from
+    turning a transient authoring error into a sticky one."""
+    path = tmp_path / "skills.yaml"
+    path.write_text("schema_version: 2\nskills: {}\n", encoding="utf-8")
+    with pytest.raises(ValueError):
+        parse_registry(path)
+
+    clear_registry_cache()
+    _write_parseable_skills_yaml(tmp_path)
+
+    assert set(parse_registry(path).skills) == {"solo"}
+
+
+def test_parsed_registries_are_keyed_per_root(tmp_path: Path) -> None:
+    root_a = tmp_path / "a"
+    root_b = tmp_path / "b"
+    root_a.mkdir()
+    root_b.mkdir()
+    _write_parseable_skills_yaml(root_a, skill_id="from-a")
+    _write_parseable_skills_yaml(root_b, skill_id="from-b")
+
+    assert set(parse_registry(root_a / "skills.yaml").skills) == {"from-a"}
+    assert set(parse_registry(root_b / "skills.yaml").skills) == {"from-b"}
+    assert set(parse_registry(root_a / "skills.yaml").skills) == {"from-a"}

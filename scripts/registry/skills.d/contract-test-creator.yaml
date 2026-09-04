@@ -35,14 +35,6 @@ contract-test-creator:
     external_actions: none
     unattended: false
     merge: false
-  supported_hosts:
-  - chatgpt
-  - claude
-  - codex
-  - cursor
-  - generic
-  - kiro
-  entrypoint: SKILL.md
   output_contract:
     produces:
     - test_suite
@@ -53,3 +45,30 @@ contract-test-creator:
       - target_path
   dependencies: []
   version_source: skill_frontmatter_legacy_numeric
+  composition:
+    consumes:
+    - implementation_task
+    consume_fields:
+      implementation_task:
+      - task_id
+      - scope
+      - acceptance_criteria
+      - request
+      - repo_root
+      - target
+      - test_framework_hint
+      - run_tests
+      - max_files_per_run
+      - deadline
+      - session_token_budget
+      - output_dir
+      - specialist_inputs
+  degraded_behavior:
+    missing_capability: host.repository.read_write
+    available_capabilities: []
+    behavior: BLOCKED
+  setup_freshness:
+    external_services: Pact Broker (optional, repo-specific)
+  routing:
+    patterns:
+    - \b(contract tests?|consumer[- ]driven contract|pact tests?)\b

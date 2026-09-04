@@ -59,8 +59,9 @@ therefore the overall verdict) is `UNKNOWN`, old and new evidence never combined
 causes the existing pr-review/k8s/incident-rca checks to be skipped, and its verdict only ever caps the
 release verdict
 worse (`NOT_READY`/`UNKNOWN`/`CONDITIONAL`), never better. See
-[scripts/release_readiness_v2.py](../scripts/release_readiness_v2.py) and
-[reference/report-format.md](reference/report-format.md).
+[reference/report-format.md](reference/report-format.md); a Software Builder checkout implements the
+same manifest-v2 parsing, trusted-report reuse, and conditional-invocation rules in
+`<checkout>/scripts/release_readiness_v2.py`, which is not shipped in this package.
 
 ## When to use
 

@@ -13,7 +13,9 @@ import dataclasses
 from types import MappingProxyType
 from typing import Any, Callable, Mapping, MutableMapping, Optional, Sequence
 
-from scripts.registry.assessment_target import same_environment
+from scripts.registry.assessment_target import safe_same_environment, target_of
+from scripts.registry.skill_result import SkillResult, derive_execution_status
+from scripts.registry.validation_primitives import as_mapping
 
 # ---------------------------------------------------------------------------
 # Canonical vocab
@@ -21,9 +23,9 @@ from scripts.registry.assessment_target import same_environment
 
 DIMENSION_STATUSES = ("PASS", "CONDITIONAL", "FAIL", "UNKNOWN", "NOT_APPLICABLE")
 
+# The strong half of `artifact_trust.AUTHORITIES`; the rest ("caller", "model_knowledge") are
+# weak by definition, so this module names only the half its gates actually test membership in.
 STRONG_AUTHORITIES = frozenset({"repository", "authoritative_host", "trusted_runtime"})
-WEAK_AUTHORITIES = frozenset({"caller", "model_knowledge"})
-_ALL_AUTHORITIES = STRONG_AUTHORITIES | WEAK_AUTHORITIES
 
 ENV_SENSITIVE_DIMENSIONS = frozenset(
     {
@@ -99,27 +101,6 @@ def _authority_set(value: Any) -> set:
         return set()
 
 
-def _as_authority_map(value: Any) -> Mapping[str, Any]:
-    """Coerce a claimed evidence_authorities value to a mapping, or {} for any other shape.
-
-    A malformed shape (a list, a string, ...) from an untrusted or buggy child must degrade to
-    "no authoritative evidence", never raise -- a crash here would take down the whole aggregation
-    instead of failing closed on just the affected dimension.
-    """
-    return value if isinstance(value, Mapping) else {}
-
-
-def _as_mapping(value: Any) -> Mapping[str, Any]:
-    """Coerce any top-level argument to a mapping, or {} for any other shape.
-
-    Same invariant as `_as_authority_map`, applied to a gate/validator's own top-level argument
-    (a report, a candidate, a plan, ...) rather than a nested evidence_authorities value -- a
-    malformed shape (a list, a string, None passed where a Mapping was expected) must degrade to
-    "empty evidence," never crash with AttributeError on the first `.get()` call.
-    """
-    return value if isinstance(value, Mapping) else {}
-
-
 def _is_strong_authority(value: Any) -> bool:
     """True only when value is a hashable string naming a strong authority.
 
@@ -131,7 +112,7 @@ def _is_strong_authority(value: Any) -> bool:
     return isinstance(value, str) and value in STRONG_AUTHORITIES
 
 
-def _is_host_or_runtime_acquisition(value: Any) -> bool:
+def is_host_or_runtime_acquisition(value: Any) -> bool:
     """True only when value is a hashable string naming authoritative_host or trusted_runtime.
 
     CI and code-review coverage evidence specifically excludes "repository" acquisition (a static
@@ -162,7 +143,10 @@ def _minimum_authority_met(evidence_authorities: Optional[Mapping[str, Any]]) ->
     evidence downgrades the whole entry, so each entry's authority set must be a *subset* of
     `STRONG_AUTHORITIES`, not merely intersect it.
     """
-    evidence_authorities = _as_authority_map(evidence_authorities)
+    # A malformed evidence_authorities shape (a list, a string, ...) from an untrusted or buggy
+    # child degrades to "no authoritative evidence" rather than raising: a crash here would take
+    # down the whole aggregation instead of failing closed on just the affected dimension.
+    evidence_authorities = as_mapping(evidence_authorities)
     if not evidence_authorities:
         return False
     for authorities in evidence_authorities.values():
@@ -309,9 +293,8 @@ def aggregate_readiness(
 ) -> ReadinessResult:
     verdict = aggregate_verdict(required_dimensions, waivers=waivers)
     required = [d for d in required_dimensions if _is_required(d)]
-    any_unknown_evidence = any(d.evidence_status == "UNKNOWN" or d.status == "UNKNOWN" for d in required)
-    skill_result_status = "PARTIAL" if any_unknown_evidence else "SUCCESS"
-    evidence_status = "UNKNOWN" if any_unknown_evidence else "OBSERVED"
+    unresolved = [d for d in required if d.evidence_status == "UNKNOWN" or d.status == "UNKNOWN"]
+    skill_result_status, evidence_status = derive_execution_status(unknowns=unresolved)
     return ReadinessResult(
         verdict=verdict,
         skill_result_status=skill_result_status,
@@ -321,7 +304,7 @@ def aggregate_readiness(
 
 
 # ---------------------------------------------------------------------------
-# Evidence-authority policy (Task 7.2) + assessment_context trust (slice 4)
+# Evidence-authority policy: child-result acceptance
 # ---------------------------------------------------------------------------
 
 
@@ -332,32 +315,8 @@ class AcceptedChildResult:
     reason: str = ""
 
 
-def _target_of(obj: Any) -> Optional[Mapping[str, Any]]:
-    """Resolve a child artifact's own declared identity carrier.
-
-    Every readiness-relevant artifact schema (scripts/registry/composition_contracts.yaml) carries
-    its identity in `assessment_target` (`security_review_report`, `change_impact_report`,
-    `deployment_risk_report`, etc. all declare it); a bare `target` key is this module's own
-    test-fixture convention. Either is checked BEFORE any flat top-level source_revision/
-    head_revision_or_digest/head_sha field the child might also carry -- a child's own declared,
-    nested identity must never be shadowed by (or silently preferred over) a flat field that could
-    disagree with it. A malformed nested value (a bare string/list/int instead of a mapping)
-    degrades to "keep looking," never crashes -- a caller downstream calls .get() on the result
-    unconditionally.
-    """
-    if not isinstance(obj, Mapping):
-        return None
-    for key in ("assessment_target", "target"):
-        nested = obj.get(key)
-        if isinstance(nested, Mapping):
-            return nested
-    if "source_revision" in obj or "head_revision_or_digest" in obj or "head_sha" in obj:
-        return obj
-    return None
-
-
 def _effective_source_revision(obj: Mapping[str, Any]) -> Optional[str]:
-    """Best-effort revision identity, resolved through the same nested-first precedence `_target_of`
+    """Best-effort revision identity, resolved through the same nested-first precedence `target_of`
     gives every other identity comparison: a nested `assessment_target`/`target`'s own
     source_revision/head_sha/head_revision_or_digest is checked before any flat top-level field.
 
@@ -379,8 +338,8 @@ def _effective_source_revision(obj: Mapping[str, Any]) -> Optional[str]:
     Coerces a non-Mapping `obj` to `{}` up front -- some callers (e.g. `_identity_mismatch`'s
     `expected` side, sourced from a caller-supplied `candidate`) may not have pre-validated it.
     """
-    obj = _as_mapping(obj)
-    target = _target_of(obj) or {}
+    obj = as_mapping(obj)
+    target = target_of(obj) or {}
     revision = target.get("source_revision") or target.get("head_sha") or target.get("head_revision_or_digest")
     if revision is None:
         revision = obj.get("source_revision") or obj.get("head_sha") or obj.get("head_revision_or_digest")
@@ -391,8 +350,8 @@ def _effective_head_digest(obj: Mapping[str, Any]) -> Optional[str]:
     """Best-effort `head_revision_or_digest` read, nested-first with the same per-field flat
     fallback `_effective_source_revision` gives the sibling identity fields.
     """
-    obj = _as_mapping(obj)
-    target = _target_of(obj) or {}
+    obj = as_mapping(obj)
+    target = target_of(obj) or {}
     digest = target.get("head_revision_or_digest")
     if digest is None:
         digest = obj.get("head_revision_or_digest")
@@ -431,7 +390,7 @@ def accept_child_result(
     dimension: Optional[str] = None,
     criticality: Optional[str] = None,
 ) -> AcceptedChildResult:
-    child = _as_mapping(child)
+    child = as_mapping(child)
     target_ref = expected_target if expected_target is not None else candidate
     if target_ref is not None and _identity_mismatch(child, target_ref):
         return AcceptedChildResult(status="UNKNOWN", trusted_for_gate=False, reason="target_mismatch")
@@ -469,36 +428,6 @@ def accept_child_result(
     return AcceptedChildResult(status=status, trusted_for_gate=True, reason="")
 
 
-@dataclasses.dataclass(frozen=True)
-class AssessmentContextTrust:
-    context: Mapping[str, Any]
-    acquisition: str
-
-    def effective_authority(self, field: str) -> str:
-        if not _is_strong_authority(self.acquisition):
-            return "caller"
-        # input_provenance (and each field's own entry within it) is a caller/child-populated
-        # carrier -- a malformed shape at any level (a bare string/list instead of a mapping, a
-        # non-str authority value) must degrade to "caller," never raise and take down the whole
-        # aggregation over one bad nested field.
-        input_provenance = _as_mapping(self.context).get("input_provenance")
-        if not isinstance(input_provenance, Mapping):
-            return "caller"
-        provenance = input_provenance.get(field)
-        if not isinstance(provenance, Mapping):
-            return "caller"
-        authority = provenance.get("authority", "caller")
-        if not isinstance(authority, str):
-            return "caller"
-        return authority if authority in _ALL_AUTHORITIES else "caller"
-
-
-def classify_assessment_context_trust(
-    ctx: Mapping[str, Any], acquisition: str = "caller_supplied"
-) -> AssessmentContextTrust:
-    return AssessmentContextTrust(context=ctx, acquisition=acquisition)
-
-
 # ---------------------------------------------------------------------------
 # Trusted prerequisite resolution (slice 4)
 # ---------------------------------------------------------------------------
@@ -516,7 +445,7 @@ def _child_mandatory_inputs_satisfied(child_name: str, inputs: Mapping[str, Any]
 
 
 def _mandatory_inputs_available(artifact_type: str, mandatory_inputs: Optional[Mapping[str, Any]]) -> bool:
-    mandatory_inputs = _as_mapping(mandatory_inputs) if mandatory_inputs is not None else {}
+    mandatory_inputs = as_mapping(mandatory_inputs) if mandatory_inputs is not None else {}
     if not mandatory_inputs:
         return False
     child_name = {
@@ -539,9 +468,9 @@ def resolve_prerequisite(
     if candidate is None:
         # No candidate identity to bind reuse/refresh to -- never resolve a prerequisite blind.
         return {"status": "UNKNOWN", "mode": None}
-    candidate = _as_mapping(candidate)
+    candidate = as_mapping(candidate)
     if supplied is not None:
-        supplied = _as_mapping(supplied)
+        supplied = as_mapping(supplied)
         accepted = accept_child_result(supplied, candidate=candidate)
         # coverage_status is a change_impact_report-specific field (composition_contracts.yaml);
         # other prerequisite artifacts (e.g. deployment_risk_report) have no such field and must
@@ -577,13 +506,13 @@ def resolve_prerequisite(
 def validate_ci(candidate: Mapping[str, Any], ci: Optional[Mapping[str, Any]]) -> MutableMapping[str, Any]:
     if ci is None:
         return {"status": "UNKNOWN", "reason": "missing_ci_evidence"}
-    candidate = _as_mapping(candidate)
-    ci = _as_mapping(ci)
+    candidate = as_mapping(candidate)
+    ci = as_mapping(ci)
     source_revision = _effective_source_revision(candidate)
     head_revision = ci.get("head_revision")
     if not source_revision or not head_revision or head_revision != source_revision:
         return {"status": "UNKNOWN", "reason": "scope_mismatch"}
-    if not _is_host_or_runtime_acquisition(ci.get("acquisition")):
+    if not is_host_or_runtime_acquisition(ci.get("acquisition")):
         return {"status": "UNKNOWN", "reason": "untrusted_acquisition"}
     all_required_green = ci.get("all_required_green")
     if all_required_green is not True and all_required_green is not False:
@@ -600,20 +529,20 @@ def validate_code_review_coverage(
 ) -> MutableMapping[str, Any]:
     if coverage is None:
         return {"status": "UNKNOWN", "reason": "missing_coverage_evidence"}
-    coverage = _as_mapping(coverage)
-    candidate = _as_mapping(candidate)
+    coverage = as_mapping(coverage)
+    candidate = as_mapping(candidate)
     # Mandatory scope fence, matching validate_ci/validate_build_provenance's own contract: code
     # review evidence computed for a different revision (e.g. the pre-force-push head) must never
     # validate as this candidate's own coverage. Making `candidate` optional here (as an earlier
     # fix did) left the fence opt-in and unused by every real caller -- exactly the same class of
-    # gap round 7 found and fixed for _target_of.
+    # gap round 7 found and fixed for target_of.
     candidate_rev = _effective_source_revision(candidate)
     if not candidate_rev or coverage.get("candidate_source_revision") != candidate_rev:
         return {"status": "UNKNOWN", "reason": "scope_mismatch"}
     if (
         coverage.get("status") == "COMPLETE"
         and not coverage.get("uncovered_change_refs")
-        and _is_host_or_runtime_acquisition(coverage.get("acquisition"))
+        and is_host_or_runtime_acquisition(coverage.get("acquisition"))
     ):
         return {"status": "PASS"}
     return {"status": "UNKNOWN", "reason": "incomplete_coverage"}
@@ -622,16 +551,16 @@ def validate_code_review_coverage(
 def validate_build_provenance(
     candidate: Mapping[str, Any], provenance: Optional[Mapping[str, Any]]
 ) -> MutableMapping[str, Any]:
-    candidate = _as_mapping(candidate)
-    provenance = _as_mapping(provenance) if provenance is not None else None
+    candidate = as_mapping(candidate)
+    provenance = as_mapping(provenance) if provenance is not None else None
     source_revision = _effective_source_revision(candidate)
-    # Mirrors _has_minimum_candidate_identity's exact MR-shape test: nested-first via _target_of
+    # Mirrors _has_minimum_candidate_identity's exact MR-shape test: nested-first via target_of
     # (a candidate declaring its MR identity only under assessment_target must not be treated as
     # having no separate deployable-digest concept, landing on the wrong UNKNOWN-forever branch
     # below), then ALL THREE fields with a truthy (not merely non-None) project/head_sha --
     # `is not None` alone would accept junk like head_sha="" or merge_request_iid=0 with no
     # project at all as "MR-shaped."
-    mr_probe = _target_of(candidate) or candidate
+    mr_probe = target_of(candidate) or candidate
     is_mr_shaped = any(
         bool(probe.get("project") and probe.get("merge_request_iid") is not None and probe.get("head_sha"))
         for probe in (mr_probe, candidate)
@@ -678,7 +607,7 @@ def validate_build_provenance(
         return {"status": "UNKNOWN", "reason": "source_mismatch"}
     if provenance.get("deployable_digest") != head_revision_or_digest:
         return {"status": "UNKNOWN", "reason": "digest_mismatch"}
-    if not _is_host_or_runtime_acquisition(provenance.get("acquisition")):
+    if not is_host_or_runtime_acquisition(provenance.get("acquisition")):
         # Matching validate_ci/validate_code_review_coverage's own acquisition gate: a
         # caller-asserted (or acquisition-less) build-success claim is not itself proof a build
         # actually ran and succeeded -- gates both PASS and FAIL uniformly, the same as CI's own
@@ -696,7 +625,7 @@ def validate_build_provenance(
 
 
 def evaluate_build_provenance(fixture: Mapping[str, Any]) -> GateResult:
-    fixture = _as_mapping(fixture)
+    fixture = as_mapping(fixture)
     policy_requires_attestation = fixture.get("policy_requires_attestation")
     if not isinstance(policy_requires_attestation, bool):
         # A non-boolean value (None, an absent key) means the attestation policy itself was never
@@ -734,9 +663,9 @@ _SCM_POLICY_KEYS = ("required_approvals", "codeowners_required", "blocking_threa
 def evaluate_scm_policy(
     policy: Mapping[str, Any], observed: Mapping[str, Any], candidate: Optional[Mapping[str, Any]] = None
 ) -> GateResult:
-    policy = _as_mapping(policy)
-    observed = _as_mapping(observed)
-    candidate = _as_mapping(candidate) if candidate is not None else None
+    policy = as_mapping(policy)
+    observed = as_mapping(observed)
+    candidate = as_mapping(candidate) if candidate is not None else None
     if not policy or not observed:
         return GateResult("UNKNOWN", "missing_scm_policy_evidence")
     if any(key not in policy for key in _SCM_POLICY_KEYS):
@@ -825,13 +754,6 @@ def evaluate_scm_policy(
 # ---------------------------------------------------------------------------
 
 
-def _safe_same_environment(candidate_env: Any, artifact_env: Any) -> bool:
-    try:
-        return same_environment(candidate_env, artifact_env)
-    except (TypeError, AttributeError):
-        return False
-
-
 def _effective_environment(obj: Any) -> Any:
     """Best-effort environment read: a nested assessment_target/target's own `environment` first,
     falling back to the object's own flat top-level field when the nested target doesn't declare
@@ -848,8 +770,8 @@ def _effective_environment(obj: Any) -> Any:
     so this fallback is applied identically everywhere, rather than re-derived (and inevitably
     missed somewhere) at each call site.
     """
-    obj = _as_mapping(obj)
-    target = _target_of(obj) or {}
+    obj = as_mapping(obj)
+    target = target_of(obj) or {}
     env = target.get("environment")
     if env is None:
         env = obj.get("environment")
@@ -877,7 +799,7 @@ def _environment_conflict(fixture: Any, candidate: Optional[Mapping[str, Any]]) 
     candidate_env = _effective_environment(candidate)
     if fixture_env is None or candidate_env is None:
         return False
-    return not _safe_same_environment(candidate_env, fixture_env)
+    return not safe_same_environment(candidate_env, fixture_env)
 
 
 def match_dimension_evidence(
@@ -886,15 +808,15 @@ def match_dimension_evidence(
     candidate: Mapping[str, Any],
     artifact: Mapping[str, Any],
 ) -> GateResult:
-    candidate = _as_mapping(candidate)
-    artifact = _as_mapping(artifact)
-    # Same nested-first resolution _target_of gives identity: the canonical assessment_target
+    candidate = as_mapping(candidate)
+    artifact = as_mapping(artifact)
+    # Same nested-first resolution target_of gives identity: the canonical assessment_target
     # carrier declares `environment` alongside source_revision/head_revision_or_digest, and a
     # flat top-level field must never be read in preference to (or in ignorance of) it -- identity
     # already resolves nested via accept_child_result below, so environment must agree.
     candidate_env = _effective_environment(candidate)
     artifact_env = _effective_environment(artifact)
-    artifact_target = _target_of(artifact) or artifact
+    artifact_target = target_of(artifact) or artifact
     # Same nested-first-with-flat-fallback resolution as the environment fields themselves --
     # a nested target's silence on `environment_specific` must not shadow a real flat declaration.
     env_specific = bool(artifact_target.get("environment_specific"))
@@ -906,7 +828,7 @@ def match_dimension_evidence(
         # Two explicitly-declared environments that conflict are never silently accepted, even
         # for a dimension that is otherwise environment-agnostic -- a directly conflicting field
         # is evidence of the wrong target, not something applicability rules get to ignore.
-        if not _safe_same_environment(candidate_env, artifact_env):
+        if not safe_same_environment(candidate_env, artifact_env):
             return GateResult("UNKNOWN", "environment_mismatch")
     elif env_sensitive:
         return GateResult("UNKNOWN", "environment_mismatch")
@@ -925,7 +847,7 @@ def match_dimension_evidence(
 def evaluate_ownership(
     owner: Mapping[str, Any], criticality: str = "unknown", candidate: Optional[Mapping[str, Any]] = None
 ) -> GateResult:
-    owner = _as_mapping(owner)
+    owner = as_mapping(owner)
     if _environment_conflict(owner, candidate):
         return GateResult("UNKNOWN", "environment_mismatch")
     authority = owner.get("owner_authority", "caller")
@@ -955,7 +877,7 @@ _ROLLBACK_REQUIRED_FIELDS = frozenset({"trigger", "action", "actor", "decision_w
 def evaluate_rollback_abort(
     plan: Mapping[str, Any], criticality: str = "unknown", candidate: Optional[Mapping[str, Any]] = None
 ) -> GateResult:
-    plan = _as_mapping(plan)
+    plan = as_mapping(plan)
     if _environment_conflict(plan, candidate):
         return GateResult("UNKNOWN", "environment_mismatch")
     authority = plan.get("authority", "caller")
@@ -992,7 +914,7 @@ _POST_DEPLOY_REQUIRED_FIELDS = frozenset(
 def evaluate_post_deploy_plan(
     plan: Mapping[str, Any], criticality: str = "unknown", candidate: Optional[Mapping[str, Any]] = None
 ) -> GateResult:
-    plan = _as_mapping(plan)
+    plan = as_mapping(plan)
     if _environment_conflict(plan, candidate):
         return GateResult("UNKNOWN", "environment_mismatch")
     if not plan or not all(plan.get(field) for field in _POST_DEPLOY_REQUIRED_FIELDS):
@@ -1011,7 +933,7 @@ def evaluate_post_deploy_plan(
 def evaluate_recovery(
     fixture: Mapping[str, Any], criticality: str = "unknown", candidate: Optional[Mapping[str, Any]] = None
 ) -> GateResult:
-    fixture = _as_mapping(fixture)
+    fixture = as_mapping(fixture)
     if _environment_conflict(fixture, candidate):
         return GateResult("UNKNOWN", "environment_mismatch")
     mechanism_authority = fixture.get("mechanism_authority", "caller")
@@ -1065,7 +987,7 @@ def evaluate_recovery(
 def evaluate_capacity_gate(
     report: Mapping[str, Any], criticality: str = "unknown", candidate: Optional[Mapping[str, Any]] = None
 ) -> GateResult:
-    report = _as_mapping(report)
+    report = as_mapping(report)
     if _environment_conflict(report, candidate):
         return GateResult("UNKNOWN", "environment_mismatch")
     if report.get("producer_trusted", True) is not True:
@@ -1079,7 +1001,7 @@ def evaluate_capacity_gate(
         # PASS/CONDITIONAL from being trusted, not to re-score a status the child already reported.
         return GateResult(status)
 
-    evidence_authorities = _as_authority_map(report.get("evidence_authorities"))
+    evidence_authorities = as_mapping(report.get("evidence_authorities"))
     # `_minimum_authority_met` checks EVERY entry in the map, not just "demand"/"baseline" -- a
     # third weakly-authoritative entry (e.g. "headroom_model": {"caller"}) must not be ignored
     # just because the two named keys happen to be strong.
@@ -1108,10 +1030,10 @@ def evaluate_dependency_gate(
     dependency_ci: Optional[Mapping[str, Any]] = None,
     candidate: Optional[Mapping[str, Any]] = None,
 ) -> GateResult:
-    report = _as_mapping(report)
-    advisory_evidence = _as_mapping(advisory_evidence) if advisory_evidence is not None else None
-    dependency_ci = _as_mapping(dependency_ci) if dependency_ci is not None else None
-    candidate = _as_mapping(candidate) if candidate is not None else None
+    report = as_mapping(report)
+    advisory_evidence = as_mapping(advisory_evidence) if advisory_evidence is not None else None
+    dependency_ci = as_mapping(dependency_ci) if dependency_ci is not None else None
+    candidate = as_mapping(candidate) if candidate is not None else None
     if report.get("producer_trusted", True) is not True:
         return GateResult("UNKNOWN", "untrusted_producer")
     status = report.get("status", "UNKNOWN")
@@ -1123,7 +1045,7 @@ def evaluate_dependency_gate(
         # does not re-score a status the child already reported.
         return GateResult(status)
 
-    evidence_authorities = _as_authority_map(report.get("evidence_authorities"))
+    evidence_authorities = as_mapping(report.get("evidence_authorities"))
     # Same all-entries rule as the capacity gate above: a weak entry elsewhere in the map (e.g.
     # "version_delta": {"caller"}) must not be ignored just because "cve" itself is strong.
     has_cve_key = "cve" in evidence_authorities
@@ -1283,7 +1205,7 @@ def dispatch_child(
     expected_target: Optional[Mapping[str, Any]] = None,
     candidate: Optional[Mapping[str, Any]] = None,
 ) -> DispatchResult:
-    inputs = _as_mapping(inputs) if inputs is not None else {}
+    inputs = as_mapping(inputs) if inputs is not None else {}
     if not _child_mandatory_inputs_satisfied(child_name, inputs):
         return DispatchResult(dispatched=False, dimension_status="UNKNOWN")
 
@@ -1318,12 +1240,6 @@ def dispatch_child(
 
 
 @dataclasses.dataclass(frozen=True)
-class SkillResult:
-    status: str
-    evidence_status: str = "UNKNOWN"
-
-
-@dataclasses.dataclass(frozen=True)
 class ProductionReadinessResult:
     verdict: str
     skill_result: SkillResult
@@ -1335,16 +1251,16 @@ class ProductionReadinessResult:
 
 
 def _has_minimum_candidate_identity(candidate: Mapping[str, Any]) -> bool:
-    candidate = _as_mapping(candidate)
+    candidate = as_mapping(candidate)
     if not candidate:
         return False
-    # Nested-first, matching _target_of/_effective_source_revision: a candidate whose identity
+    # Nested-first, matching target_of/_effective_source_revision: a candidate whose identity
     # lives entirely in its own declared assessment_target must not be BLOCKED at the entry gate
     # just because it carries no flat top-level identity field. Falls back to the flat candidate
     # itself when the nested target doesn't declare either identity shape -- a nested carrier that
     # legitimately declares OTHER fields (e.g. `environment`) without declaring identity must not
     # shadow a real flat identity and get treated as "no identity at all."
-    target = _target_of(candidate) or candidate
+    target = target_of(candidate) or candidate
     for probe in (target, candidate):
         if probe.get("source_revision") or probe.get("head_revision_or_digest"):
             return True
@@ -1369,10 +1285,10 @@ def production_readiness(
     # Any ONE of these fields, not all three, marks the candidate as MR-shaped: a caller must not
     # be able to skip the live scm_change_read fence just by omitting one of them while still
     # supplying enough identity (e.g. head_sha + source_revision) to pass the check above. Nested-
-    # first via _target_of, matching _has_minimum_candidate_identity immediately above -- an MR
+    # first via target_of, matching _has_minimum_candidate_identity immediately above -- an MR
     # expressed through the canonical assessment_target carrier must not skip this fence just
     # because these fields aren't also duplicated at the candidate's own flat top level.
-    mr_probe = _target_of(candidate) or candidate
+    mr_probe = target_of(candidate) or candidate
     is_remote_mr = any(
         bool(probe.get("project") or probe.get("merge_request_iid") is not None or probe.get("head_sha"))
         for probe in (mr_probe, candidate)
@@ -1420,8 +1336,8 @@ def check_final_freshness(
 ) -> GateResult:
     """Compare identity/CI/policy snapshots taken before dispatch vs immediately before report emission."""
 
-    initial = _as_mapping(initial)
-    final = _as_mapping(final)
+    initial = as_mapping(initial)
+    final = as_mapping(final)
     if not initial or not final:
         return GateResult("UNKNOWN", "missing_freshness_snapshot")
 

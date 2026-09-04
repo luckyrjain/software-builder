@@ -10,6 +10,9 @@ from types import ModuleType
 
 
 SKILL_ROOT = Path(__file__).resolve().parents[1]
+_SCRIPT_DIR = Path(__file__).resolve().parent
+_INSTALL_MANIFEST = ".software-builder-manifest.json"
+_RUNTIME_DESCRIPTION = "shared review runtime"
 SURFACES = (
     "cross_file_impact",
     "hidden_consumers",
@@ -24,21 +27,39 @@ _DEFECT_ID_RE = re.compile(r"^PRR-(?:[A-Z][A-Z0-9]*-)?\d{3}$")
 _UNSET = object()
 
 
-def _load_shared_validator() -> ModuleType:
-    candidates = (
-        SKILL_ROOT / "docs/skill-framework/shared/review_contract_runtime.py",
-        SKILL_ROOT.parent / "docs/skill-framework/shared/review_contract_runtime.py",
-    )
-    path = next((candidate for candidate in candidates if candidate.is_file()), None)
-    if path is None:
-        rendered = ", ".join(str(candidate) for candidate in candidates)
-        raise RuntimeError(f"unable to load shared review validator; checked: {rendered}")
-    spec = importlib.util.spec_from_file_location("shared_review_contract_runtime", path)
+def _shared_runtime_loader() -> ModuleType:
+    """Import shared_runtime_loader, which owns the containment policy for every module this
+    script executes out of docs/skill-framework/shared/.
+
+    Only locating the loader itself is handled here, and it needs no policy of its own: an
+    installed package carries the loader beside this script (package_skill.py vendors it), so the
+    lookup never leaves the package, and the install manifest is what proves a missing vendored
+    copy is a packaging fault rather than an invitation to read a sibling path.
+    """
+    beside = _SCRIPT_DIR / "shared_runtime_loader.py"
+    if beside.is_file():
+        path = beside
+    elif (SKILL_ROOT / _INSTALL_MANIFEST).is_file():
+        raise RuntimeError(f"unable to load packaged {_RUNTIME_DESCRIPTION} loader: {beside}")
+    else:
+        path = SKILL_ROOT.parent / "docs/skill-framework/shared/shared_runtime_loader.py"
+    if not path.is_file():
+        raise RuntimeError(f"unable to load packaged {_RUNTIME_DESCRIPTION} loader: {path}")
+    spec = importlib.util.spec_from_file_location("software_builder_shared_runtime_loader", path)
     if spec is None or spec.loader is None:
-        raise RuntimeError(f"unable to load shared review validator: {path}")
+        raise RuntimeError(f"unable to load packaged {_RUNTIME_DESCRIPTION} loader: {path}")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def _load_shared_validator() -> ModuleType:
+    return _shared_runtime_loader().load_shared_runtime(
+        SKILL_ROOT,
+        "review_contract_runtime",
+        alias="shared_review_contract_runtime",
+        description=_RUNTIME_DESCRIPTION,
+    )
 
 
 def _normalize_summary(value: str) -> str:

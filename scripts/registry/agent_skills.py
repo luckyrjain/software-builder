@@ -9,7 +9,7 @@ from typing import Any
 import yaml
 
 from scripts.registry.canonical_manifest import has_canonical_manifest_shape
-from scripts.registry.frontmatter import load_skill_frontmatter
+from scripts.yaml_safety import load_unique_frontmatter
 from scripts.registry.load import load_registry
 from scripts.registry.schema import load_registry_raw
 from scripts.registry.skill_frontmatter_schema import validate_skill_frontmatter_fields
@@ -78,7 +78,7 @@ def validate_skill(skill_dir: Path, *, require_legacy_platform_fields: bool = Fa
         return [_error(skill_dir, "missing SKILL.md")]
 
     try:
-        frontmatter = load_skill_frontmatter(skill_md)
+        frontmatter = load_unique_frontmatter(skill_md)
     except yaml.YAMLError as exc:
         return [_error(skill_dir, f"invalid YAML frontmatter: {exc}")]
     except ValueError as exc:

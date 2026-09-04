@@ -45,9 +45,7 @@ A result that relies on evidence whose relevant revision or observation time is 
 ## 4. Evidence conflicts
 
 Use the portable evidence states from the canonical manifest's
-`contracts.platform` section in `skills.yaml`. `scripts/registry/platform_contracts.yaml`
-is a generated projection for consumers that need the standalone view; it is not an
-independent authoring surface.
+`contracts.platform` section in `skills.yaml`, which is the only place they are declared.
 
 - `OBSERVED`
 - `INFERRED`
@@ -154,18 +152,28 @@ of its values resolves to exactly one typed `provenance.sources` item. A `PASS`,
 sources retain the authorities of their ultimate sources; `derived_from` references
 must resolve and must not form cycles.
 
-The registry validates this envelope and the payload schema with:
+**The rule the agent applies.** Before emitting or consuming a durable result, check the
+envelope itself: every required field present, every item family's IDs unique, the root
+`evidence_refs` a de-duplicated superset of every nested reference, each of its values
+resolving to exactly one typed `provenance.sources` item, no `derived_from` cycle, and at
+least one root reference behind any `PASS`/`CONDITIONAL`/`FAIL` decision. An envelope that
+fails any of these is not usable evidence — report the gap rather than proceeding on it.
+
+The producer identity in the envelope is **caller context, not an attestation**. A host that
+needs authenticated producer identity must inject it from its trusted execution context; a
+document that names its own producer does not thereby authenticate it. Producer minor/patch
+versions remain readable within the same major version, while the explicit artifact schema
+version controls payload compatibility.
+
+*Optional verification, when working from a Software Builder checkout:*
 
 ```bash
 python3 -m scripts.registry validate-artifact <artifact_type> <result.json> --producer-skill <trusted_skill_id>
 ```
 
-The `--producer-skill` value is caller context. A host that needs authenticated producer
-identity must inject that value from its trusted execution context; the JSON document and
-the CLI argument alone do not authenticate one another. The validator checks that the
-context and document agree, but does not create an attestation mechanism. Producer
-minor/patch versions remain readable within the same major version while the explicit
-artifact schema version controls payload compatibility.
+This CLI ships only with the repository, not inside an installed skill package. It is a
+convenience for authors and CI — the obligation above is the agent's own, and applies
+identically where the command cannot be run.
 
 Human-readable reports may render this differently, but must preserve the semantics. Internal phase names, lens names, or implementation-only control markers should not leak into user-facing output unless they help the user act.
 
@@ -197,15 +205,28 @@ execution_context:
   depth: 0
 ```
 
-Default maximum handoff depth is **3**. A skill must block or return control to the parent when the next handoff would revisit a skill already in `visited_skills` or exceed the maximum depth, unless a named orchestrator contract explicitly permits the cycle.
+Default maximum handoff depth is **3** (`recursion_guard.default_max_depth`).
 
-Before performing a handoff, run the guard rather than reasoning about depth/revisits by hand:
+**The rule the agent applies**, before every handoff, from the `execution_context` it was given:
+
+1. If `depth` is already at the maximum, the handoff is **blocked** — do not perform it.
+2. If `target_skill` already appears in `visited_skills`, the handoff is **blocked** — a revisit is
+   refused by default.
+3. Otherwise perform the handoff, passing `depth + 1` and `visited_skills` extended with the current
+   skill.
+
+A named orchestrator contract may explicitly permit a cycle; nothing else may. When a handoff is
+blocked, say which rule blocked it and return control to the parent rather than continuing with a
+degraded substitute.
+
+*Optional verification, when working from a Software Builder checkout:*
 
 ```bash
 python3 -m scripts.registry.cli check-handoff <target_skill> --depth <execution_context.depth> --visited <comma-separated execution_context.visited_skills>
 ```
 
-A non-zero exit means the handoff is blocked; print the reason and return control to the parent instead of proceeding.
+A non-zero exit means the handoff is blocked. This CLI ships only with the repository, not inside an
+installed skill package — the rule above is what an agent is obliged to apply, with or without it.
 
 ## 9. Artifact ownership and state semantics
 

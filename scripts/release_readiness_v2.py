@@ -17,12 +17,16 @@ import dataclasses
 import re
 from typing import Any, Callable, Mapping, MutableMapping, Optional, Sequence
 
-from scripts import production_readiness as pr
+from scripts.production_readiness import is_host_or_runtime_acquisition
 from scripts.registry.assessment_target import (
     normalize_environment_identity,
     normalize_repo_identity,
     normalize_service_identity,
+    safe_same_environment,
+    target_of,
 )
+from scripts.registry.skill_result import SkillResult, derive_execution_status
+from scripts.registry.validation_primitives import as_mapping
 
 # ---------------------------------------------------------------------------
 # Shared helpers
@@ -143,7 +147,7 @@ def _as_str(value: Any) -> Optional[str]:
 
 
 def parse_release_entry(entry: Mapping[str, Any]) -> ReleaseEntry:
-    entry = pr._as_mapping(entry)
+    entry = as_mapping(entry)
     return ReleaseEntry(
         repo=_as_str(entry.get("repo")),
         service=_as_str(entry.get("service")),
@@ -185,7 +189,7 @@ def classify_report_for_release(report: Mapping[str, Any]) -> MutableMapping[str
     a caller-supplied or repository-file artifact is discovery evidence only, per
     the design's "no generic artifact store / file self-attestation" invariant.
     """
-    report = pr._as_mapping(report)
+    report = as_mapping(report)
     if report.get("producer_trusted", True) is not True:
         return {"trusted_for_gate": False, "reason": "untrusted_producer"}
     acquisition = report.get("acquisition")
@@ -223,8 +227,8 @@ def match_release_report(entry: Any, report: Mapping[str, Any]) -> MutableMappin
     a mutable tag) somewhere in that identity. No fuzzy matching.
     """
     parsed = entry if isinstance(entry, ReleaseEntry) else parse_release_entry(entry)
-    report = pr._as_mapping(report)
-    target = pr._target_of(report) or report
+    report = as_mapping(report)
+    target = target_of(report) or report
 
     if not parsed.repo or not parsed.service:
         return {"status": "UNKNOWN", "reason": "missing_candidate_identity"}
@@ -244,10 +248,10 @@ def match_release_report(entry: Any, report: Mapping[str, Any]) -> MutableMappin
         # `environment` must never silently reuse a report produced for SOME
         # OTHER declared environment. Only "neither side declares one" is a
         # harmless match; any other combination (one side null, or both
-        # non-null but different) is a mismatch. `pr._safe_same_environment`
+        # non-null but different) is a mismatch. `safe_same_environment`
         # (not the raw `same_environment`) because `report_env` is external
         # data that need not be a string.
-        if parsed.environment is None or report_env is None or not pr._safe_same_environment(parsed.environment, report_env):
+        if parsed.environment is None or report_env is None or not safe_same_environment(parsed.environment, report_env):
             return {"status": "UNKNOWN", "reason": "environment_mismatch"}
 
     if not parsed.release_ref:
@@ -448,7 +452,7 @@ def _coverage_is_trustworthy_and_complete(coverage: Optional[Mapping[str, Any]])
     which is deliberately kept separate from the parsed manifest entry) -- but
     even so, this checks the acquisition field defensively, the same way
     `scripts/production_readiness.py`'s `validate_code_review_coverage` gates its
-    own `coverage.get("acquisition")` via `_is_host_or_runtime_acquisition`. A
+    own `coverage.get("acquisition")` via `is_host_or_runtime_acquisition`. A
     bundle claiming `status: COMPLETE` with no (or a weak) acquisition is never
     trusted merely because it claims completeness -- that is exactly the
     self-attestation this whole module exists to prevent. A bundle that is
@@ -459,14 +463,14 @@ def _coverage_is_trustworthy_and_complete(coverage: Optional[Mapping[str, Any]])
     `build_code_review_coverage` itself produces already satisfies by
     construction, but a hand-built or otherwise-produced bundle might not.
     """
-    coverage = pr._as_mapping(coverage) if coverage is not None else None
+    coverage = as_mapping(coverage) if coverage is not None else None
     if not coverage:
         return False
     if coverage.get("status") != "COMPLETE":
         return False
     if coverage.get("uncovered_change_refs"):
         return False
-    return pr._is_host_or_runtime_acquisition(coverage.get("acquisition"))
+    return is_host_or_runtime_acquisition(coverage.get("acquisition"))
 
 
 def _coverage_for_entry(
@@ -497,7 +501,7 @@ def _coverage_for_entry(
     but untrustworthy" -- production-readiness-review remains free to derive
     its own coverage).
     """
-    coverage = pr._as_mapping(coverage) if coverage is not None else None
+    coverage = as_mapping(coverage) if coverage is not None else None
     if not coverage:
         return None
     if not entry.source_revision or coverage.get("candidate_source_revision") != entry.source_revision:
@@ -569,7 +573,7 @@ def build_assessment_context(
         # flip a later entry's (or a later run's) resolved verdict.
         code_review_coverage = copy.deepcopy(code_review_coverage) if isinstance(code_review_coverage, Mapping) else code_review_coverage
         inputs["code_review_coverage"] = code_review_coverage
-        coverage_mapping = pr._as_mapping(code_review_coverage)
+        coverage_mapping = as_mapping(code_review_coverage)
         trustworthy = _coverage_is_trustworthy_and_complete(code_review_coverage)
         authority = "trusted_runtime" if trustworthy else "caller"
         # When the bundle is trustworthy, propagate refs from
@@ -839,12 +843,6 @@ def build_code_review_coverage(
 # ---------------------------------------------------------------------------
 
 
-@dataclasses.dataclass(frozen=True)
-class SkillResult:
-    status: str
-    evidence_status: str = "UNKNOWN"
-
-
 @dataclasses.dataclass
 class ReleaseResult:
     verdict: str
@@ -886,16 +884,17 @@ class ReleaseResult:
 
 
 def finalize_release(pre: Mapping[str, Any]) -> ReleaseResult:
-    """Execution status vs decision status, mirroring production_readiness.py's own
-    axis split: a resolved NOT_READY is a SUCCESSFUL analysis; an unresolved
-    required dimension makes the result PARTIAL regardless of what the (possibly
-    already-worst-case) verdict is; an empty manifest is BLOCKED, never FAILED.
+    """Attach the shared execution-status axis to a release decision.
+
+    The release verdict is this skill's own vocabulary; the execution axis is
+    `derive_execution_status`'s doctrine -- a resolved NOT_READY is a SUCCESSFUL analysis, and an
+    unresolved required dimension makes the result PARTIAL regardless of what the (possibly
+    already-worst-case) verdict is. An empty manifest is BLOCKED, never FAILED (see `run_release`).
     """
-    pre = pr._as_mapping(pre)
+    pre = as_mapping(pre)
     overall = pre.get("overall", "UNKNOWN")
     unknown_dimensions = list(pre.get("unknown_dimensions") or [])
-    status = "PARTIAL" if unknown_dimensions else "SUCCESS"
-    evidence_status = "UNKNOWN" if unknown_dimensions else "OBSERVED"
+    status, evidence_status = derive_execution_status(unknowns=unknown_dimensions)
     return ReleaseResult(
         verdict=overall,
         skill_result=SkillResult(status=status, evidence_status=evidence_status),

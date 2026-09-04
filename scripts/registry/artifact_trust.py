@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
 
-_AUTHORITIES = {"authoritative_host", "repository", "trusted_runtime", "caller", "model_knowledge"}
+AUTHORITIES = {"authoritative_host", "repository", "trusted_runtime", "caller", "model_knowledge"}
 _RUNTIME_HANDOFF_TOKEN = object()
 
 
@@ -45,7 +45,7 @@ class AssessmentContextTrust:
         if self.acquisition != "runtime_handoff" or not self.parent_execution_validated or not self.parent_skill:
             return "caller"
         authority = self._trusted_authorities.get(input_name)
-        return authority if authority in _AUTHORITIES else "caller"
+        return authority if authority in AUTHORITIES else "caller"
 
 
 @dataclass(frozen=True)
@@ -65,7 +65,7 @@ def _issue_runtime_handoff_metadata(
     authorities = {
         name: authority
         for name, authority in supplied.items()
-        if isinstance(name, str) and isinstance(authority, str) and authority in _AUTHORITIES
+        if isinstance(name, str) and isinstance(authority, str) and authority in AUTHORITIES
     }
     return _RuntimeHandoffMetadata(
         parent_skill=parent_skill,

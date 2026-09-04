@@ -2,160 +2,180 @@ schema_version: 1
 
 # Deterministic routing oracle used by Batch 3 scenario evals. These rules model
 # intent ownership; host/model routing quality is still measured separately by live evals.
+# GENERATED from scripts/registry/skills.d/*.yaml — do not edit the routes: mapping; run make generate
 routes:
-  pr-review:
-    patterns:
-      - '\b(review|inspect|analy[sz]e)\b.*\b(PR|MR|pull request|merge request|diff)\b'
-      - '\b(PR|MR|pull request|merge request)\b.*\b(review|regression|correctness)\b'
-    exclude_patterns:
-      - '\b(no|without)\s+(PR|MR|pull request|merge request)\b'
-      - '\bthere is no\s+(PR|MR|pull request|merge request)\b'
-      - '\b(production ready|production readiness|ready to release|ready to deploy|ready to ship)\b'
-  pr-gatekeeper:
-    patterns:
-      - '\b(PR|MR|pull request|merge request)\b.*\b(webhook|gatekeeper|automation gate|opened event)\b'
-  k8s-overprovisioning-datadog:
-    patterns:
-      - '\b(k8s|kubernetes|pod|deployment)\b.*\b(overprovision\w*|right-?siz\w*|requests?|limits?|CPU|memory)\b'
-      - '\b(overprovision\w*|right-?siz\w*)\b.*\b(k8s|kubernetes|pod|deployment|CPU|memory)\b'
-      - '\boverprovisioned\b.*\bCPU\b.*\bmemory\b'
-  incident-rca:
-    patterns:
-      - '\b(RCA|root cause|postmortem|production incident|incident investigation)\b'
-      - '\b(5xx|error|latency)\b.*\b(spike|incident|production)\b'
-  incident-triage-agent:
-    patterns:
-      - '\b(pager|page|alert webhook|incident webhook)\b.*\b(triage|automation|route|owner)\b'
-      - '\btriage\b.*\b(pager|page|alert webhook|incident webhook)\b'
-  domain-comprehension:
-    patterns:
-      - '\b(domain comprehension|bounded contexts?|current[- ]state domain|understand the existing .* service)\b'
-      - '\barchitecture\b.*\bbounded contexts?\b'
-      - '\bunderstand\b.*\bcurrent domain\b'
-  squad-map:
-    patterns:
-      - '\b(squad map|ownership map|CODEOWNERS|service ownership map)\b'
-  who-owns-x-bot:
-    patterns:
-      - '\bwho owns\b'
-      - '\bownership lookup\b.*\b(slack|slash command|bot)\b'
-  new-hire-guide:
-    patterns:
-      - '\b(new hire|onboarding)\b.*\b(guide|tour|first week|service map)\b'
-  release-readiness-checker:
-    patterns:
-      - '\b(release readiness|go[- /]?no[- ]?go|ready to release|ready to ship|release candidate)\b'
-    exclude_patterns:
-      - '\b(PR|MR|pull request|merge request)\s*[#!]?\d+\b.*\b(ready to release|ready to ship|production ready|production readiness)\b'
-      - '\b(ready to release|ready to ship|production ready|production readiness)\b.*\b(PR|MR|pull request|merge request)\s*[#!]?\d+\b'
-      - '\b(this|the) (pr|mr|pull request|merge request|release candidate)\b.*\b(production ready|production readiness|ready to release|ready to deploy|ready to ship)\b'
-      - '\b(production ready|production readiness|ready to release|ready to deploy|ready to ship)\b.*\b(this|the) (pr|mr|pull request|merge request|release candidate)\b'
-      - '\bgo[- /]?no[- ]?go for (this|one) (change|pr|mr|pull request|merge request)\b'
-      - '\bgo[- /]?no[- ]?go\b.*\bdeployment risk\b'
-  migration-program-manager:
-    patterns:
-      - '\b(migration program|migration portfolio|migration status rollup|migration program status)\b'
-  cost-optimization-sprint-planner:
-    patterns:
-      - '\b(cost optimization|cost reduction)\b.*\b(sprint|backlog|prioriti[sz]|plan)\b'
-  mysql-to-postgres-sql:
-    patterns:
-      - '\b(MySQL|mysql)\b.*\b(Postgres|PostgreSQL|postgresql)\b'
-      - '\bmigrate\b.*\bSQL dialect\b'
-  loop-task-implementer:
-    patterns:
-      - '\bimplement\b.*\b(task|ticket|change)\b.*\b(review|fix|until|loop)\b'
-      - '\brepeat\b.*\b(review|fix)\b.*\b(0 issues|zero issues)\b'
-  backlog-runner:
-    patterns:
-      - '\b(backlog|tickets?)\b.*\b(overnight|scheduled|nightly|queue runner)\b'
-  weekly-squad-digest:
-    patterns:
-      - '\bweekly\b.*\b(squad|team)\b.*\b(digest|summary|rollup)\b'
-  unit-test-creator:
-    patterns:
-      - '\b(unit tests?|unit-test)\b'
-  integration-test-creator:
-    patterns:
-      - '\b(integration tests?|integration-test)\b'
-  contract-test-creator:
-    patterns:
-      - '\b(contract tests?|consumer[- ]driven contract|pact tests?)\b'
-  e2e-test-creator:
-    patterns:
-      - '\b(e2e|end[- ]to[- ]end)\b.*\b(tests?|testing)\b'
-  api-test-creator:
-    patterns:
-      - '\b(API|HTTP|REST)\b.*\b(tests?|testing suite)\b'
-  prd-architect:
-    patterns:
-      - '\b(PRD|product requirements?|requirements document|build readiness)\b'
-    exclude_patterns:
-      - '\bready PRD\b.*\bimplementation design\b'
-  architecture-review:
-    patterns:
-      - '\b(architecture review|ADR|architecture decision record|architecture design review)\b'
-  system-design:
-    patterns:
-      - '\b(system design|technical design doc|component design|data model design)\b'
-      - '\bready PRD\b.*\bimplementation design\b'
-    exclude_patterns:
-      - '\bwhat\b.*\bservices?\b.*\b(touch|affected|impact)\b'
   api-design-review:
     patterns:
-      - '\b(API design review|API contract review|API versioning review)\b'
-  database-review:
+    - \b(API design review|API contract review|API versioning review)\b
+  api-test-creator:
     patterns:
-      - '\b(database review|schema review|migration review|query plan review)\b'
-  security-review:
+    - \b(API|HTTP|REST)\b.*\b(tests?|testing suite)\b
+  architecture-review:
     patterns:
-      - '\b(security review|authN|authZ|SSRF|tenant isolation review|cryptography review)\b'
-  performance-review:
+    - \b(architecture review|ADR|architecture decision record|architecture design
+      review)\b
+  backlog-runner:
     patterns:
-      - '\b(performance review|N\+1|slow query review|concurrency review)\b'
+    - \b(backlog|tickets?)\b.*\b(overnight|scheduled|nightly|queue runner)\b
   capacity-planner:
     patterns:
-      - '\b(capacity plan(?:ning)?|capacity forecast|scaling requirements)\b'
-  observability-review:
-    patterns:
-      - '\b(observability review|SLO review|alert coverage|tracing coverage)\b'
-  deployment-risk-review:
-    patterns:
-      - '\b(deployment risk|release risk|blast radius)\b'
-  dependency-upgrade-review:
-    patterns:
-      - '\b(dependency upgrade review|version bump review|CVE review)\b'
-  tech-debt-assessor:
-    patterns:
-      - '\b(tech(?:nical)? debt (?:assess|priorit|rank)|debt backlog)\b'
+    - \b(capacity plan(?:ning)?|capacity forecast|scaling requirements)\b
   change-impact-analyzer:
     patterns:
-      - '\b(change impact|impact analysis|affected surface)\b'
-      - '\bwhat does this change touch\b'
-      - '\bwhat\b.*\b(services?|contracts?|data|tests?)\b.*\b(change|affected|impact|touch)\b'
-      - '\b(services?|contracts?|data|tests?)\b.*\b(affected|impact|change|touch)\b.*\b(PR|MR|pull request|merge request|design|proposal|change)\b'
-      - '\b(PR|MR|pull request|merge request)\s*[#!]?\d+\b.*\b(services?|contracts?|data|tests?|dependencies?)\b.*\b(affected|impact|change|touch)\b'
+    - \b(change impact|impact analysis|affected surface)\b
+    - \bwhat does this change touch\b
+    - \bwhat\b.*\b(services?|contracts?|data|tests?)\b.*\b(change|affected|impact|touch)\b
+    - \b(services?|contracts?|data|tests?)\b.*\b(affected|impact|change|touch)\b.*\b(PR|MR|pull
+      request|merge request|design|proposal|change)\b
+    - \b(PR|MR|pull request|merge request)\s*[#!]?\d+\b.*\b(services?|contracts?|data|tests?|dependencies?)\b.*\b(affected|impact|change|touch)\b
     exclude_patterns:
-      - '\b(review|regression|correctness|blast radius|rollback risk|deployment risk|release risk)\b'
-  resilience-review:
+    - \b(review|regression|correctness|blast radius|rollback risk|deployment risk|release
+      risk)\b
+  contract-test-creator:
     patterns:
-      - '\b(resilience|failure[- ]mode|fault[- ]toleran)\w*\b.*\b(review|assessment|analysis|controls?)\b'
-      - '\b(timeout budgets?|retry polic(?:y|ies)|circuit breakers?|load shedding|backpressure|queue handling|idempotency|partial failures?|recovery reconciliation)\b'
-    exclude_patterns:
-      - '\b(incident|outage|postmortem|root cause|RCA)\b'
-      - '\b(capacity|headroom|forecast|sizing)\b'
+    - \b(contract tests?|consumer[- ]driven contract|pact tests?)\b
+  cost-optimization-sprint-planner:
+    patterns:
+    - \b(cost optimization|cost reduction)\b.*\b(sprint|backlog|prioriti[sz]|plan)\b
+  database-review:
+    patterns:
+    - \b(database review|schema review|migration review|query plan review)\b
+  dependency-upgrade-review:
+    patterns:
+    - \b(dependency upgrade review|version bump review|CVE review)\b
+  deployment-risk-review:
+    patterns:
+    - \b(deployment risk|release risk|blast radius)\b
+  domain-comprehension:
+    patterns:
+    - \b(domain comprehension|bounded contexts?|current[- ]state domain|understand
+      the existing .* service)\b
+    - \barchitecture\b.*\bbounded contexts?\b
+    - \bunderstand\b.*\bcurrent domain\b
+  e2e-test-creator:
+    patterns:
+    - \b(e2e|end[- ]to[- ]end)\b.*\b(tests?|testing)\b
   implementation-planner:
     patterns:
-      - '\b(implementation plan|implementation planning|implementation task DAG|task decomposition|dependency[- ]aware plan|execution waves)\b'
-  test-writer:
+    - \b(implementation plan|implementation planning|implementation task DAG|task
+      decomposition|dependency[- ]aware plan|execution waves)\b
+  incident-rca:
     patterns:
-      - '\b(write|generate|add)\b\s+(tests?|test coverage)\b(?!.*\b(unit|integration|contract|e2e|end[- ]to[- ]end|API|HTTP|REST)\b)'
+    - \b(RCA|root cause|postmortem|production incident|incident investigation)\b
+    - \b(5xx|error|latency)\b.*\b(spike|incident|production)\b
+  incident-triage-agent:
+    patterns:
+    - \b(pager|page|alert webhook|incident webhook)\b.*\b(triage|automation|route|owner)\b
+    - \btriage\b.*\b(pager|page|alert webhook|incident webhook)\b
+  integration-test-creator:
+    patterns:
+    - \b(integration tests?|integration-test)\b
+  k8s-overprovisioning-datadog:
+    patterns:
+    - \b(k8s|kubernetes|pod|deployment)\b.*\b(overprovision\w*|right-?siz\w*|requests?|limits?|CPU|memory)\b
+    - \b(overprovision\w*|right-?siz\w*)\b.*\b(k8s|kubernetes|pod|deployment|CPU|memory)\b
+    - \boverprovisioned\b.*\bCPU\b.*\bmemory\b
+  loop-task-implementer:
+    patterns:
+    - \bimplement\b.*\b(task|ticket|change)\b.*\b(review|fix|until|loop)\b
+    - \brepeat\b.*\b(review|fix)\b.*\b(0 issues|zero issues)\b
+  migration-program-manager:
+    patterns:
+    - \b(migration program|migration portfolio|migration status rollup|migration program
+      status)\b
+  mysql-to-postgres-sql:
+    patterns:
+    - \b(MySQL|mysql)\b.*\b(Postgres|PostgreSQL|postgresql)\b
+    - \bmigrate\b.*\bSQL dialect\b
+  new-hire-guide:
+    patterns:
+    - \b(new hire|onboarding)\b.*\b(guide|tour|first week|service map)\b
+  observability-review:
+    patterns:
+    - \b(observability review|SLO review|alert coverage|tracing coverage)\b
+  performance-review:
+    patterns:
+    - \b(performance review|N\+1|slow query review|concurrency review)\b
+  pr-gatekeeper:
+    patterns:
+    - \b(PR|MR|pull request|merge request)\b.*\b(webhook|gatekeeper|automation gate|opened
+      event)\b
+  pr-review:
+    patterns:
+    - \b(review|inspect|analy[sz]e)\b.*\b(PR|MR|pull request|merge request|diff)\b
+    - \b(PR|MR|pull request|merge request)\b.*\b(review|regression|correctness)\b
+    exclude_patterns:
+    - \b(no|without)\s+(PR|MR|pull request|merge request)\b
+    - \bthere is no\s+(PR|MR|pull request|merge request)\b
+    - \b(production ready|production readiness|ready to release|ready to deploy|ready
+      to ship)\b
+  prd-architect:
+    patterns:
+    - \b(PRD|product requirements?|requirements document|build readiness)\b
+    exclude_patterns:
+    - \bready PRD\b.*\bimplementation design\b
   production-readiness-review:
     patterns:
-      - '\b(PR|MR|pull request|merge request)\s*[#!]?\d+\b.*\b(production ready|production readiness|ready to release|ready to deploy|ready to ship)\b'
-      - '\b(production ready|production readiness|ready to release|ready to deploy|ready to ship)\b.*\b(PR|MR|pull request|merge request)\s*[#!]?\d+\b'
-      - '\bproduction readiness (review|assessment|check)\b'
-      - '\bis (this|the) (service|change|deployment|pr|mr|pull request|merge request|release candidate) production ready\b'
-      - '\b(this|the) (pr|mr|pull request|merge request|release candidate)\b.*\b(production ready|production readiness|ready to release|ready to deploy|ready to ship)\b'
-      - '\bship (this|that) (pr|mr|pull request|merge request|change)\b'
-      - '\bgo[- /]?no[- ]?go for (this|one) (change|pr|mr|pull request|merge request)\b'
+    - \b(PR|MR|pull request|merge request)\s*[#!]?\d+\b.*\b(production ready|production
+      readiness|ready to release|ready to deploy|ready to ship)\b
+    - \b(production ready|production readiness|ready to release|ready to deploy|ready
+      to ship)\b.*\b(PR|MR|pull request|merge request)\s*[#!]?\d+\b
+    - \bproduction readiness (review|assessment|check)\b
+    - \bis (this|the) (service|change|deployment|pr|mr|pull request|merge request|release
+      candidate) production ready\b
+    - \b(this|the) (pr|mr|pull request|merge request|release candidate)\b.*\b(production
+      ready|production readiness|ready to release|ready to deploy|ready to ship)\b
+    - \bship (this|that) (pr|mr|pull request|merge request|change)\b
+    - \bgo[- /]?no[- ]?go for (this|one) (change|pr|mr|pull request|merge request)\b
+  release-readiness-checker:
+    patterns:
+    - \b(release readiness|go[- /]?no[- ]?go|ready to release|ready to ship|release
+      candidate)\b
+    exclude_patterns:
+    - \b(PR|MR|pull request|merge request)\s*[#!]?\d+\b.*\b(ready to release|ready
+      to ship|production ready|production readiness)\b
+    - \b(ready to release|ready to ship|production ready|production readiness)\b.*\b(PR|MR|pull
+      request|merge request)\s*[#!]?\d+\b
+    - \b(this|the) (pr|mr|pull request|merge request|release candidate)\b.*\b(production
+      ready|production readiness|ready to release|ready to deploy|ready to ship)\b
+    - \b(production ready|production readiness|ready to release|ready to deploy|ready
+      to ship)\b.*\b(this|the) (pr|mr|pull request|merge request|release candidate)\b
+    - \bgo[- /]?no[- ]?go for (this|one) (change|pr|mr|pull request|merge request)\b
+    - \bgo[- /]?no[- ]?go\b.*\bdeployment risk\b
+  resilience-review:
+    patterns:
+    - \b(resilience|failure[- ]mode|fault[- ]toleran)\w*\b.*\b(review|assessment|analysis|controls?)\b
+    - \b(timeout budgets?|retry polic(?:y|ies)|circuit breakers?|load shedding|backpressure|queue
+      handling|idempotency|partial failures?|recovery reconciliation)\b
+    exclude_patterns:
+    - \b(incident|outage|postmortem|root cause|RCA)\b
+    - \b(capacity|headroom|forecast|sizing)\b
+  security-review:
+    patterns:
+    - \b(security review|authN|authZ|SSRF|tenant isolation review|cryptography review)\b
+  squad-map:
+    patterns:
+    - \b(squad map|ownership map|CODEOWNERS|service ownership map)\b
+  system-design:
+    patterns:
+    - \b(system design|technical design doc|component design|data model design)\b
+    - \bready PRD\b.*\bimplementation design\b
+    exclude_patterns:
+    - \bwhat\b.*\bservices?\b.*\b(touch|affected|impact)\b
+  tech-debt-assessor:
+    patterns:
+    - \b(tech(?:nical)? debt (?:assess|priorit|rank)|debt backlog)\b
+  test-writer:
+    patterns:
+    - \b(write|generate|add)\b\s+(tests?|test coverage)\b(?!.*\b(unit|integration|contract|e2e|end[-
+      ]to[- ]end|API|HTTP|REST)\b)
+  unit-test-creator:
+    patterns:
+    - \b(unit tests?|unit-test)\b
+  weekly-squad-digest:
+    patterns:
+    - \bweekly\b.*\b(squad|team)\b.*\b(digest|summary|rollup)\b
+  who-owns-x-bot:
+    patterns:
+    - \bwho owns\b
+    - \bownership lookup\b.*\b(slack|slash command|bot)\b

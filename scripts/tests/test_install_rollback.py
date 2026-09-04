@@ -198,3 +198,89 @@ def test_package_skill_writes_manifest(tmp_path: Path) -> None:
     manifest = json.loads((dest / ".software-builder-manifest.json").read_text(encoding="utf-8"))
     assert manifest["skill"] == "unit-test-creator"
     assert "SKILL.md" in manifest["files"]
+
+
+def test_multi_skill_run_continues_past_a_failure_and_reports_a_summary(tmp_path: Path) -> None:
+    """A failing skill used to abort the whole run under `set -e`: everything after it was
+    silently skipped and nothing said what had landed. Each skill now runs to completion and the
+    run reports `installed: N, failed: M (...)` before exiting non-zero."""
+    home = tmp_path / "home"
+    skills = ("squad-map", "new-hire-guide", "who-owns-x-bot")
+
+    # An unowned directory at the middle skill's destination is refused by the ownership check --
+    # a real, non-contrived way for exactly one skill in a run to fail.
+    blocked = home / ".cursor" / "skills" / skills[1]
+    blocked.mkdir(parents=True)
+    (blocked / "README.md").write_text("not ours", encoding="utf-8")
+
+    result = subprocess.run(
+        ["bash", str(ROOT / "scripts" / "install.sh"), "--agent", "cursor", *skills],
+        cwd=ROOT,
+        env={
+            "HOME": str(home),
+            "PYTHONDONTWRITEBYTECODE": "1",
+            "PATH": os.environ.get("PATH", ""),
+        },
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert f"refusing to replace unowned directory at {blocked}" in result.stderr
+    assert "installed: 2, failed: 1" in result.stderr
+    assert skills[1] in result.stderr
+
+    # The skill after the failure still installed.
+    assert (home / ".cursor" / "skills" / skills[0] / "SKILL.md").is_file()
+    assert (home / ".cursor" / "skills" / skills[2] / "SKILL.md").is_file()
+    assert not (blocked / "SKILL.md").exists()
+
+
+def test_multi_skill_uninstall_continues_past_a_failure_and_reports_a_summary(
+    tmp_path: Path,
+) -> None:
+    home = tmp_path / "home"
+    skills = ("squad-map", "new-hire-guide")
+    env = {
+        "HOME": str(home),
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "PATH": os.environ.get("PATH", ""),
+    }
+
+    install = subprocess.run(
+        ["bash", str(ROOT / "scripts" / "install.sh"), "--agent", "cursor", *skills],
+        cwd=ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert install.returncode == 0, install.stderr
+
+    # Corrupt the first skill's ownership marker so only that one refuses to be removed.
+    manifest = home / ".cursor" / "skills" / skills[0] / ".software-builder-manifest.json"
+    manifest.write_text('{"skill": "some-other-skill"}', encoding="utf-8")
+
+    result = subprocess.run(
+        [
+            "bash",
+            str(ROOT / "scripts" / "install.sh"),
+            "--agent",
+            "cursor",
+            "--uninstall",
+            skills[0],
+            "--uninstall",
+            skills[1],
+        ],
+        cwd=ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert "uninstalled: 1, failed: 1" in result.stderr
+    assert (home / ".cursor" / "skills" / skills[0]).is_dir()
+    assert not (home / ".cursor" / "skills" / skills[1]).exists()

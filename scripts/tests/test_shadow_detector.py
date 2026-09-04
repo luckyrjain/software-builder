@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import json
+import os
 import re
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -233,23 +236,35 @@ def test_shadow_precedence_is_scoped_to_the_written_bindings_own_surface(
     assert result.status == SHADOW_NONE
 
 
-def test_host_label_map_stays_in_sync_with_the_legacy_resolvers_label_set() -> None:
-    """HOST_LABEL_TO_HOST_AND_TARGET (this module), legacy_install_resolver.py's
-    _SINGLE_DEST_ROUTING, and install.sh's own --agent case statement are three independent copies
-    of the same "which legacy selectors/labels exist" fact (Candidate 13 maintainability finding) --
-    nothing previously asserted they agree. A future selector added to one and forgotten in another
-    would otherwise fail silently: shadow_detector.HOST_LABEL_TO_HOST_AND_TARGET.get(label) would
-    return None and cmd_check_shadow would report SHADOW_NONE for that host forever, with no error."""
-    from scripts.registry.legacy_install_resolver import _SINGLE_DEST_ROUTING
-    from scripts.registry.shadow_detector import HOST_LABEL_TO_HOST_AND_TARGET
+def test_install_sh_validates_selectors_against_the_resolver_instead_of_its_own_case() -> None:
+    """The label -> (host, target) map, the selector -> target routing and install.sh's --agent
+    allowlist used to be three independent copies of the same fact, kept in step only by this
+    test. There is now one table: shadow detection derives the host from the registry, and
+    install.sh asks install_support for the selector list rather than repeating it in Bash."""
+    from scripts.registry.install_resolver import TARGET_ID_BY_LABEL, install_selectors
 
-    assert set(HOST_LABEL_TO_HOST_AND_TARGET) == set(_SINGLE_DEST_ROUTING)
+    installer = INSTALLER.read_text(encoding="utf-8")
+    assert "list-selectors" in installer
+    assert not re.search(r'^cursor \| cursor-project \|', installer, re.MULTILINE)
 
-    agent_case_line = re.search(
-        r'^case "\$\{AGENT\}" in\n([a-z][a-z0-9 |-]*)\)',
-        INSTALLER.read_text(encoding="utf-8"),
-        re.MULTILINE,
-    )
-    assert agent_case_line is not None, "could not find install.sh's --agent validation case line"
-    installer_agents = {token.strip() for token in agent_case_line.group(1).split("|")}
-    assert installer_agents == set(_SINGLE_DEST_ROUTING) | {"all", "agents"}
+    selectors = subprocess.run(
+        [sys.executable, str(ROOT / "scripts/install_support.py"), "list-selectors"],
+        capture_output=True,
+        text=True,
+        check=True,
+        env={**os.environ, "PYTHONPATH": str(ROOT)},
+    ).stdout.splitlines()
+    assert selectors == install_selectors()
+
+    registry = parse_host_registry(ROOT / "agent-hosts.yaml")
+    for label, target_id in TARGET_ID_BY_LABEL.items():
+        assert target_id in registry.targets, label
+
+
+def test_universal_labels_have_no_host_to_check_precedence_against() -> None:
+    from scripts.registry.install_resolver import host_and_target_for_label
+
+    registry = parse_host_registry(ROOT / "agent-hosts.yaml")
+    assert host_and_target_for_label(registry, "agents-user") is None
+    assert host_and_target_for_label(registry, "cursor") == ("cursor", "cursor-user")
+    assert host_and_target_for_label(registry, "claude-project") == ("claude", "claude-project")

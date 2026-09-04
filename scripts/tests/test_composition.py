@@ -8,9 +8,10 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_composition_graph_valid_on_real_repo() -> None:
-    from scripts.registry.composition import validate_composition_file
+    from scripts.registry.composition import validate_composition_graph
+    from scripts.registry.schema import parse_registry
 
-    errors = validate_composition_file(ROOT)
+    errors = validate_composition_graph(parse_registry(ROOT / "skills.yaml"))
     assert errors == [], errors
 
 

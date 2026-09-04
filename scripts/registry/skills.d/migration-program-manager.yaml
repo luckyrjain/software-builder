@@ -21,6 +21,7 @@ migration-program-manager:
     - mysql-to-postgres-sql
     - squad-map
     - pr-review
+    consumes: []
   capabilities:
     required:
     - host.filesystem.read
@@ -40,14 +41,6 @@ migration-program-manager:
     external_actions: none
     unattended: false
     merge: false
-  supported_hosts:
-  - chatgpt
-  - claude
-  - codex
-  - cursor
-  - generic
-  - kiro
-  entrypoint: SKILL.md
   output_contract:
     produces:
     - migration_status_rollup
@@ -60,3 +53,13 @@ migration-program-manager:
   - mysql-to-postgres-sql
   - squad-map
   version_source: skill_frontmatter_legacy_numeric
+  degraded_behavior:
+    missing_capability: host.filesystem.read
+    available_capabilities: []
+    behavior: BLOCKED
+  setup_freshness:
+    external_services: None (reads MIGRATION_STATUS.yaml + SQUAD_MAP.md on disk)
+  routing:
+    patterns:
+    - \b(migration program|migration portfolio|migration status rollup|migration program
+      status)\b

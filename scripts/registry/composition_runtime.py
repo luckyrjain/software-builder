@@ -2,15 +2,15 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from scripts.registry.canonical_manifest import load_canonical_manifest
+from scripts.registry.canonical_manifest import load_contract_section
 from scripts.registry.composition_contracts import load_contracts
+from scripts.registry.envelope_contract import SKILL_TYPES
 from scripts.registry.models import Registry
 from scripts.yaml_safety import YAML_SAFETY_ERRORS, load_unique_yaml_file
 
 ROOT = Path(__file__).resolve().parents[2]
 RUNTIME_PATH = Path(__file__).resolve().parent / "composition_runtime.yaml"
 CANONICAL_RUNTIME_PATH = ROOT / "skills.yaml"
-_ALLOWED_TYPES = {"leaf", "router", "orchestrator", "trigger"}
 _ALLOWED_OWNERSHIP_MODES = {"canonical", "shared", "external"}
 _LOAD_ERRORS = (OSError, ValueError) + YAML_SAFETY_ERRORS
 
@@ -41,12 +41,15 @@ def _report_id_coverage(
 
 
 def load_composition_runtime(path: Path | None = None) -> dict[str, object]:
+    """The `composition_runtime` contract document, canonical or projected.
+
+    Shares canonical_manifest.load_contract_section's decision with the other two contract
+    sections instead of resolving the canonical shape a second way, so a half-migrated
+    repository behaves identically for all three.
+    """
     resolved = path or CANONICAL_RUNTIME_PATH
     if path is None or path.name == "skills.yaml":
-        manifest_root = path.parent if path is not None else ROOT
-        manifest = load_canonical_manifest(manifest_root)
-        contracts = manifest.get("contracts")
-        raw = contracts.get("composition_runtime") if isinstance(contracts, dict) else None
+        raw = load_contract_section(path.parent if path is not None else ROOT, "composition_runtime")
     else:
         raw = load_unique_yaml_file(resolved)
     if not isinstance(raw, dict):
@@ -106,7 +109,7 @@ def validate_composition_runtime(
         )
     )
     for skill_id, skill_type in skill_types.items():
-        if skill_type not in _ALLOWED_TYPES:
+        if skill_type not in SKILL_TYPES:
             errors.append(f"error: {skill_id}: invalid skill type {skill_type!r}")
             continue
         if skill_id not in registry.skills:

@@ -7,21 +7,42 @@ from typing import Any
 
 import yaml
 
-from scripts.registry.frontmatter import load_skill_frontmatter
+from scripts.registry.envelope_contract import SKILL_TYPES
 from scripts.registry.host_adapter import HOSTS
-from scripts.registry.schema import load_registry_raw
-from scripts.yaml_safety import require_mapping
+from scripts.registry.schema import load_registry_raw, parse_registry
+from scripts.yaml_safety import load_unique_frontmatter, load_unique_yaml_file, require_mapping
 
 ROOT = Path(__file__).resolve().parents[2]
 CANONICAL_PATH = ROOT / "skills.yaml"
 REQUIRED_CONTRACTS = {"platform", "composition_runtime", "composition"}
 MANIFEST_KIND = "canonical"
-ALLOWED_TYPES = {"leaf", "router", "orchestrator", "trigger"}
+# The standalone file each contract section is projected to for repositories that predate
+# the canonical shape. One table drives both the writer (`render_legacy_projection`) and the
+# reader (`load_contract_section`), so the two sides cannot name different files. A section
+# absent from this table has no standalone projection at all and is only ever read out of
+# skills.yaml -- which is the `platform` section's situation: nothing outside skills.yaml
+# ever read platform_contracts.yaml, so the file was deleted rather than kept generated.
+LEGACY_PROJECTION_FILENAMES = {
+    "composition_runtime": "composition_runtime.yaml",
+    "composition": "composition_contracts.yaml",
+}
+# Marks the projections as machine-written, the same way the generated Cursor/Kiro
+# adapters are marked -- a maintainer opening a 1,300-line projection must be able to see
+# that `make generate` will overwrite it.
+GENERATED_MARKER = "# GENERATED from skills.yaml contracts — do not edit; run make generate"
 
 
 def has_canonical_manifest_shape(raw: object) -> bool:
     """Return whether a skills.yaml claims the reserved canonical shape."""
     return isinstance(raw, dict) and ("manifest_kind" in raw or "contracts" in raw)
+
+
+def _raw_manifest(root: Path) -> object:
+    """skills.yaml's raw mapping, or None when this root has no skills.yaml at all."""
+    try:
+        return load_registry_raw(root / "skills.yaml")
+    except FileNotFoundError:
+        return None
 
 
 def is_semver(value: str) -> bool:
@@ -112,25 +133,18 @@ def validate_canonical_manifest(root: Path = ROOT) -> list[str]:
             errors.append("error: canonical manifest missing contracts.platform.artifact_runtime")
         elif artifact_runtime.get("schema_version") != 1:
             errors.append("error: canonical manifest artifact_runtime.schema_version must be 1")
-        platform_types = _mapping(platform.get("skill_types"), "contracts.platform.skill_types")
-        runtime_types = _mapping(runtime.get("skill_types"), "contracts.composition_runtime.skill_types")
-        platform_permissions = _mapping(
-            platform.get("skill_permissions"),
-            "contracts.platform.skill_permissions",
-        )
-        composition_skills = _mapping(composition.get("skills"), "contracts.composition.skills")
-        from scripts.registry.schema import parse_registry
-
+        # The per-skill sub-mappings of these three sections (skill_types, skill_permissions,
+        # composition.skills) are derived from the same skill entries this function validates --
+        # manifest_merge.derive_contract_sections regenerates them on every `make generate`, so
+        # the coverage and per-field equality checks that used to live here could only ever fail
+        # on a skills.yaml someone hand-edited past the generator. `make generate-check` catches
+        # that case for the whole file at once. What remains here is the shape of the sections
+        # themselves, which is not derived.
+        _mapping(platform.get("skill_types"), "contracts.platform.skill_types")
+        _mapping(runtime.get("skill_types"), "contracts.composition_runtime.skill_types")
+        _mapping(platform.get("skill_permissions"), "contracts.platform.skill_permissions")
+        _mapping(composition.get("skills"), "contracts.composition.skills")
         registry = parse_registry(root / "skills.yaml")
-
-        if set(skills) != set(platform_types):
-            errors.append("error: canonical skill/type coverage drift")
-        if set(skills) != set(runtime_types):
-            errors.append("error: canonical skill/runtime type coverage drift")
-        if set(skills) != set(platform_permissions):
-            errors.append("error: canonical skill/permission coverage drift")
-        if set(skills) != set(composition_skills):
-            errors.append("error: canonical skill/composition coverage drift")
 
         required = {
             "version",
@@ -156,30 +170,14 @@ def validate_canonical_manifest(root: Path = ROOT) -> list[str]:
             if not isinstance(version, str) or not is_semver(version):
                 errors.append(f"error: {skill_id}: version must be semantic version")
             skill_type = skill.get("type")
-            if skill_type not in ALLOWED_TYPES:
+            if skill_type not in SKILL_TYPES:
                 errors.append(f"error: {skill_id}: invalid type {skill_type!r}")
             for field in ("category", "invocation"):
                 value = skill.get(field)
                 if not isinstance(value, str) or not value.strip():
                     errors.append(f"error: {skill_id}: {field} must be a non-empty string")
-            if platform_types.get(skill_id) != skill_type:
-                errors.append(f"error: {skill_id}: platform type projection drift")
-            if runtime_types.get(skill_id) != skill_type:
-                errors.append(f"error: {skill_id}: runtime type projection drift")
-            permissions = _mapping(skill.get("permissions"), f"skills.{skill_id}.permissions")
-            if platform_permissions.get(skill_id) != permissions:
-                errors.append(f"error: {skill_id}: permission projection drift")
-            composition_entry = _mapping(
-                composition_skills.get(skill_id),
-                f"contracts.composition.skills.{skill_id}",
-            )
-            if composition_entry.get("write_authority") != skill.get("authority"):
-                errors.append(f"error: {skill_id}: authority projection drift")
-            output_contract = _mapping(skill.get("output_contract"), f"skills.{skill_id}.output_contract")
-            if output_contract.get("produces") != composition_entry.get("produces", []):
-                errors.append(f"error: {skill_id}: output contract artifact projection drift")
-            if output_contract.get("produce_fields", {}) != composition_entry.get("produce_fields", {}):
-                errors.append(f"error: {skill_id}: output contract field projection drift")
+            _mapping(skill.get("permissions"), f"skills.{skill_id}.permissions")
+            _mapping(skill.get("output_contract"), f"skills.{skill_id}.output_contract")
             dependencies = skill.get("dependencies")
             if not isinstance(dependencies, list) or not all(isinstance(item, str) for item in dependencies):
                 errors.append(f"error: {skill_id}: dependencies must be a list of strings")
@@ -208,7 +206,7 @@ def validate_canonical_manifest(root: Path = ROOT) -> list[str]:
             if not entrypoint.is_file():
                 errors.append(f"error: {skill_id}: missing entrypoint {entrypoint}")
             else:
-                frontmatter = load_skill_frontmatter(entrypoint)
+                frontmatter = load_unique_frontmatter(entrypoint)
                 if "skill_version" in frontmatter or "platform_contract" in frontmatter:
                     errors.append(f"error: {skill_id}: legacy platform metadata remains in frontmatter")
                 if frontmatter.get("name") != skill_id:
@@ -218,10 +216,61 @@ def validate_canonical_manifest(root: Path = ROOT) -> list[str]:
     return errors
 
 
+def legacy_projection_path(root: Path, section: str) -> Path:
+    """Where `section` is projected to for repositories that have not adopted the canonical shape."""
+    if section not in LEGACY_PROJECTION_FILENAMES:
+        raise ValueError(f"unknown legacy projection: {section}")
+    return root / "scripts" / "registry" / LEGACY_PROJECTION_FILENAMES[section]
+
+
+def contract_section_source(root: Path, section: str) -> Path | None:
+    """The file `root` reads `section` from, or None when neither source exists.
+
+    One rule for every contract section, mirroring `render_legacy_projection`'s single
+    writer: a repository that has opted into the canonical shape owns every section in
+    skills.yaml, and one that has not reads the standalone projection. Returning None (rather
+    than a path that does not exist) lets callers use this directly as the layer-active test,
+    and is also the answer for a section that has no standalone projection at all.
+    """
+    if has_canonical_manifest_shape(_raw_manifest(root)):
+        return root / "skills.yaml"
+    if section not in LEGACY_PROJECTION_FILENAMES:
+        return None
+    projection = legacy_projection_path(root, section)
+    return projection if projection.is_file() else None
+
+
+def contract_document_path(root: Path, section: str) -> Path:
+    """The file `load_contract_section` will actually read for `section`.
+
+    Differs from `contract_section_source` only in the last case: with neither a canonical
+    manifest nor a projection, skills.yaml itself is read as the contract document. Callers
+    asking "is there a dedicated source for this section" want `contract_section_source`;
+    callers asking "which file will be read" want this.
+    """
+    return contract_section_source(root, section) or root / "skills.yaml"
+
+
+def load_contract_section(root: Path, section: str) -> dict[str, Any]:
+    """Read one contract section through `contract_section_source`'s decision.
+
+    The forgiving fallback is deliberate and shared by all three sections: when a repository
+    is neither canonical nor carrying a projection, skills.yaml itself is read as the contract
+    document, which is what keeps the deliberately minimal registry fixtures working.
+    """
+    if has_canonical_manifest_shape(_raw_manifest(root)):
+        manifest = load_canonical_manifest(root)
+        contracts = _mapping(manifest.get("contracts"), "canonical manifest.contracts")
+        return _mapping(contracts.get(section), f"contracts.{section}")
+    source = contract_document_path(root, section)
+    return _mapping(load_unique_yaml_file(source), f"{source}: {section} contracts")
+
+
 def render_legacy_projection(root: Path, section: str) -> str:
-    if section not in REQUIRED_CONTRACTS:
+    if section not in LEGACY_PROJECTION_FILENAMES:
         raise ValueError(f"unknown legacy projection: {section}")
     manifest = load_canonical_manifest(root)
     contracts = _mapping(manifest.get("contracts"), "canonical manifest.contracts")
     value = _mapping(contracts.get(section), f"contracts.{section}")
-    return yaml.safe_dump(value, sort_keys=False, default_flow_style=False, allow_unicode=True)
+    body = yaml.safe_dump(value, sort_keys=False, default_flow_style=False, allow_unicode=True)
+    return f"{GENERATED_MARKER}\n{body}"

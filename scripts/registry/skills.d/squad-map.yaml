@@ -39,14 +39,6 @@ squad-map:
     external_actions: read
     unattended: false
     merge: false
-  supported_hosts:
-  - chatgpt
-  - claude
-  - codex
-  - cursor
-  - generic
-  - kiro
-  entrypoint: SKILL.md
   output_contract:
     produces:
     - squad_map
@@ -54,3 +46,15 @@ squad-map:
     produce_fields: {}
   dependencies: []
   version_source: skill_frontmatter_legacy_numeric
+  composition:
+    consumes:
+    - mr_context
+  degraded_behavior:
+    missing_capability: gitlab.list_projects
+    available_capabilities: []
+    behavior: BLOCKED
+  setup_freshness:
+    external_services: GitLab MCP, Datadog MCP
+  routing:
+    patterns:
+    - \b(squad map|ownership map|CODEOWNERS|service ownership map)\b

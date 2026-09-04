@@ -40,6 +40,32 @@ from scripts.yaml_safety import (
 
 CONTRACT_PATH = Path(__file__).resolve().parent / "release_contract.yaml"
 
+# `tag_pattern` is repository-controlled data that this validator compiles and runs.
+# A tag shape is a handful of anchored literals and digit classes, so anything long
+# or self-nesting is not a tag shape -- it is a pattern whose backtracking cost the
+# validator would pay on every run. Both limits are shape checks on the declaration,
+# refused before re.fullmatch() ever sees it.
+TAG_PATTERN_MAX_LENGTH = 200
+# A quantified group that is itself quantified -- `(a+)*`, `(\d{1,3})+` -- is the
+# catastrophic-backtracking shape. Deliberately a heuristic: it over-refuses some
+# safe patterns, which for a hand-written tag shape costs nothing to rewrite.
+_NESTED_QUANTIFIER_RE = re.compile(r"(\+|\*|\{)[^)]*\)[+*{]")
+
+
+def _tag_pattern_shape_errors(tag_pattern: str) -> list[str]:
+    """Refuse a tag_pattern whose size or nesting makes it a backtracking risk."""
+    if len(tag_pattern) > TAG_PATTERN_MAX_LENGTH:
+        return [
+            f"error: release contract: tag_pattern must be at most {TAG_PATTERN_MAX_LENGTH} "
+            f"characters, got {len(tag_pattern)}",
+        ]
+    if _NESTED_QUANTIFIER_RE.search(tag_pattern):
+        return [
+            f"error: release contract: tag_pattern {tag_pattern!r} contains a nested quantifier; "
+            "a tag shape must not quantify an already-quantified group",
+        ]
+    return []
+
 
 def _load_contract(path: Path = CONTRACT_PATH) -> dict:
     raw = require_mapping(load_unique_yaml_file(path), "release contract")
@@ -129,6 +155,8 @@ def validate_release_contract(root: Path = ROOT) -> list[str]:
     tag_pattern = contract.get("tag_pattern")
     if not isinstance(tag_pattern, str):
         errors.append("error: release contract: tag_pattern must be a string")
+    elif shape_errors := _tag_pattern_shape_errors(tag_pattern):
+        errors.extend(shape_errors)
     else:
         try:
             tag_matches = re.fullmatch(tag_pattern, f"v{version}")

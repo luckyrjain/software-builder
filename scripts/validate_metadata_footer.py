@@ -3,21 +3,55 @@
 
 from __future__ import annotations
 
+import importlib.util
 import sys
 from pathlib import Path
+from types import ModuleType
 from typing import Any
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 try:
     import yaml
+
+    from scripts.yaml_safety import load_unique_yaml_file
 except ImportError:  # pragma: no cover - exercised when PyYAML missing
     yaml = None  # type: ignore[assignment]
+    load_unique_yaml_file = None  # type: ignore[assignment]
+
+
+def _load_confidence_bands() -> ModuleType:
+    """The shared band vocabulary, loaded from this checkout's own framework tree.
+
+    Loaded by path rather than imported: it lives under docs/ so it can be vendored verbatim into
+    installed skill packages, which must not depend on this repository's `scripts.*` import graph.
+    """
+    path = ROOT / "docs/skill-framework/shared/confidence_bands.py"
+    spec = importlib.util.spec_from_file_location("shared_confidence_bands", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"unable to load shared confidence bands: {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+_confidence_bands = _load_confidence_bands()
 
 ROOT_KEYS = frozenset({"review_metadata", "assessment_metadata"})
 
 REVIEW_TYPE_VALUES = frozenset({"full", "incremental"})
 RECOMMENDATION_VALUES = frozenset({"approve", "comment", "request_changes"})
-CONFIDENCE_VALUES = frozenset({"high", "medium", "low"})
-INVESTIGATION_CONFIDENCE_VALUES = frozenset({"very_high", "high", "medium", "low"})
+# The footer is a published wire format: lowercase, and with no UNKNOWN band (a document either
+# carries a confidence or omits the field). The band *names* come from the shared vocabulary so
+# the serialization and the type cannot drift apart.
+CONFIDENCE_VALUES = frozenset(
+    band.lower() for band in _confidence_bands.BANDS if band != "UNKNOWN"
+)
+# very_high is footer-only -- the shared vocabulary tops out at HIGH, and inventing a fifth band
+# there to mirror this document schema would be the wire format leaking into the type.
+INVESTIGATION_CONFIDENCE_VALUES = frozenset({"very_high"}) | CONFIDENCE_VALUES
 SEVERITY_VALUES = frozenset({"critical", "high", "medium", "low", "none"})
 
 
@@ -256,7 +290,7 @@ def load_yaml(path: Path) -> tuple[Any | None, str | None]:
     if yaml is None:
         return None, "PyYAML is required — pip install PyYAML"
     try:
-        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+        data = load_unique_yaml_file(path)
     except OSError as exc:
         return None, str(exc)
     except yaml.YAMLError as exc:

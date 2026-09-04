@@ -170,3 +170,25 @@ def test_reinstall_backup_survives_a_missing_system_tmp_dir(tmp_path: Path) -> N
     assert not bogus_tmpdir.exists()
     dest = home / ".cursor" / "skills" / SKILL
     assert (dest / "SKILL.md").is_file()
+
+
+def test_stale_lock_reclaim_renames_before_removing(tmp_path: Path) -> None:
+    """Reclaim must not be "check, rm -rf, mkdir": two waiters that read the same dead PID could
+    both remove the lock directory, with the loser's rm -rf deleting the winner's freshly created
+    live lock and both then entering the section the lock serializes. Renaming first makes the
+    reclaim atomic -- only the winner of the mv removes anything -- and leaves no `.stale.<pid>`
+    directory behind."""
+    installer = (ROOT / "scripts" / "install.sh").read_text(encoding="utf-8")
+    assert 'mv "${lock_dir}" "${stale_dir}"' in installer
+
+    home = tmp_path / "home"
+    lock_dir = _lock_dir(home)
+    lock_dir.mkdir(parents=True)
+    (lock_dir / "pid").write_text("999999999\n", encoding="utf-8")
+    (lock_dir / "acquired_at").write_text(str(int(time.time())), encoding="utf-8")
+
+    result = run_installer("--agent", "cursor", SKILL, home=home, LOCK_WAIT_TIMEOUT_SECONDS="20")
+
+    assert result.returncode == 0, result.stderr
+    leftovers = list((home / ".cursor" / "skills").glob(f".{SKILL}.lock.stale.*"))
+    assert leftovers == []

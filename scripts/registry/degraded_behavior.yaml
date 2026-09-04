@@ -3,42 +3,171 @@ schema_version: 1
 # Explicit per-skill behavior when a representative capability disappears.
 # Every registered skill must appear exactly once. BLOCKED is a valid safe
 # degraded outcome when the missing capability is required to do the job.
+# GENERATED from scripts/registry/skills.d/*.yaml — do not edit the skills: mapping; run make generate
 skills:
-  pr-review: {missing_capability: gitlab.get_merge_request, available_capabilities: [github.get_pull_request, github.get_pull_request_files], behavior: FALLBACK}
-  pr-gatekeeper: {missing_capability: gitlab.get_merge_request, available_capabilities: [], behavior: BLOCKED}
-  k8s-overprovisioning-datadog: {missing_capability: kubernetes.metrics.history, available_capabilities: [datadog.query_metrics], behavior: FALLBACK}
-  incident-rca: {missing_capability: telemetry.logs.query, available_capabilities: [], behavior: BLOCKED}
-  incident-triage-agent: {missing_capability: pager.webhook.receive, available_capabilities: [], behavior: BLOCKED}
-  domain-comprehension: {missing_capability: host.repository.read, available_capabilities: [], behavior: BLOCKED}
-  squad-map: {missing_capability: gitlab.list_projects, available_capabilities: [], behavior: BLOCKED}
-  who-owns-x-bot: {missing_capability: slack.slash_command.receive, available_capabilities: [], behavior: BLOCKED}
-  new-hire-guide: {missing_capability: host.repository.read, available_capabilities: [], behavior: BLOCKED}
-  release-readiness-checker: {missing_capability: host.report.write, available_capabilities: [], behavior: BLOCKED}
-  migration-program-manager: {missing_capability: host.filesystem.read, available_capabilities: [], behavior: BLOCKED}
-  cost-optimization-sprint-planner: {missing_capability: host.filesystem.read, available_capabilities: [], behavior: BLOCKED}
-  mysql-to-postgres-sql: {missing_capability: host.repository.read_write, available_capabilities: [], behavior: BLOCKED}
-  loop-task-implementer: {missing_capability: host.repository.read_write, available_capabilities: [], behavior: BLOCKED}
-  backlog-runner: {missing_capability: scheduler.cron.trigger, available_capabilities: [], behavior: BLOCKED}
-  weekly-squad-digest: {missing_capability: scheduler.cron.trigger, available_capabilities: [], behavior: BLOCKED}
-  unit-test-creator: {missing_capability: host.repository.read_write, available_capabilities: [], behavior: BLOCKED}
-  integration-test-creator: {missing_capability: host.repository.read_write, available_capabilities: [], behavior: BLOCKED}
-  contract-test-creator: {missing_capability: host.repository.read_write, available_capabilities: [], behavior: BLOCKED}
-  e2e-test-creator: {missing_capability: host.repository.read_write, available_capabilities: [], behavior: BLOCKED}
-  api-test-creator: {missing_capability: host.repository.read_write, available_capabilities: [], behavior: BLOCKED}
-  prd-architect: {missing_capability: host.report.write, available_capabilities: [], behavior: BLOCKED}
-  test-writer: {missing_capability: host.repository.read, available_capabilities: [], behavior: BLOCKED}
-  architecture-review: {missing_capability: host.report.write, available_capabilities: [], behavior: BLOCKED}
-  system-design: {missing_capability: host.report.write, available_capabilities: [], behavior: BLOCKED}
-  api-design-review: {missing_capability: host.report.write, available_capabilities: [], behavior: BLOCKED}
-  database-review: {missing_capability: host.report.write, available_capabilities: [], behavior: BLOCKED}
-  security-review: {missing_capability: host.report.write, available_capabilities: [], behavior: BLOCKED}
-  performance-review: {missing_capability: host.report.write, available_capabilities: [], behavior: BLOCKED}
-  capacity-planner: {missing_capability: host.report.write, available_capabilities: [], behavior: BLOCKED}
-  observability-review: {missing_capability: host.report.write, available_capabilities: [], behavior: BLOCKED}
-  deployment-risk-review: {missing_capability: host.report.write, available_capabilities: [], behavior: BLOCKED}
-  dependency-upgrade-review: {missing_capability: host.report.write, available_capabilities: [], behavior: BLOCKED}
-  tech-debt-assessor: {missing_capability: host.report.write, available_capabilities: [], behavior: BLOCKED}
-  change-impact-analyzer: {missing_capability: host.repository.read, available_capabilities: [host.report.write, host.scm.change.read], behavior: DEGRADED}
-  resilience-review: {missing_capability: host.repository.read, available_capabilities: [host.report.write], behavior: DEGRADED}
-  implementation-planner: {missing_capability: host.repository.read, available_capabilities: [host.report.write], behavior: BLOCKED}
-  production-readiness-review: {missing_capability: host.dependency.advisories.read, available_capabilities: [host.report.write, host.repository.read, host.scm.change.read, host.ci.status, host.scm.policy.read, host.build.provenance.read, host.service.metadata.read], behavior: DEGRADED}
+  api-design-review:
+    missing_capability: host.report.write
+    available_capabilities: []
+    behavior: BLOCKED
+  api-test-creator:
+    missing_capability: host.repository.read_write
+    available_capabilities: []
+    behavior: BLOCKED
+  architecture-review:
+    missing_capability: host.report.write
+    available_capabilities: []
+    behavior: BLOCKED
+  backlog-runner:
+    missing_capability: scheduler.cron.trigger
+    available_capabilities: []
+    behavior: BLOCKED
+  capacity-planner:
+    missing_capability: host.report.write
+    available_capabilities: []
+    behavior: BLOCKED
+  change-impact-analyzer:
+    missing_capability: host.repository.read
+    available_capabilities:
+    - host.report.write
+    - host.scm.change.read
+    behavior: DEGRADED
+  contract-test-creator:
+    missing_capability: host.repository.read_write
+    available_capabilities: []
+    behavior: BLOCKED
+  cost-optimization-sprint-planner:
+    missing_capability: host.filesystem.read
+    available_capabilities: []
+    behavior: BLOCKED
+  database-review:
+    missing_capability: host.report.write
+    available_capabilities: []
+    behavior: BLOCKED
+  dependency-upgrade-review:
+    missing_capability: host.report.write
+    available_capabilities: []
+    behavior: BLOCKED
+  deployment-risk-review:
+    missing_capability: host.report.write
+    available_capabilities: []
+    behavior: BLOCKED
+  domain-comprehension:
+    missing_capability: host.repository.read
+    available_capabilities: []
+    behavior: BLOCKED
+  e2e-test-creator:
+    missing_capability: host.repository.read_write
+    available_capabilities: []
+    behavior: BLOCKED
+  implementation-planner:
+    missing_capability: host.repository.read
+    available_capabilities:
+    - host.report.write
+    behavior: BLOCKED
+  incident-rca:
+    missing_capability: telemetry.logs.query
+    available_capabilities: []
+    behavior: BLOCKED
+  incident-triage-agent:
+    missing_capability: pager.webhook.receive
+    available_capabilities: []
+    behavior: BLOCKED
+  integration-test-creator:
+    missing_capability: host.repository.read_write
+    available_capabilities: []
+    behavior: BLOCKED
+  k8s-overprovisioning-datadog:
+    missing_capability: kubernetes.metrics.history
+    available_capabilities:
+    - datadog.query_metrics
+    behavior: FALLBACK
+  loop-task-implementer:
+    missing_capability: host.repository.read_write
+    available_capabilities: []
+    behavior: BLOCKED
+  migration-program-manager:
+    missing_capability: host.filesystem.read
+    available_capabilities: []
+    behavior: BLOCKED
+  mysql-to-postgres-sql:
+    missing_capability: host.repository.read_write
+    available_capabilities: []
+    behavior: BLOCKED
+  new-hire-guide:
+    missing_capability: host.repository.read
+    available_capabilities: []
+    behavior: BLOCKED
+  observability-review:
+    missing_capability: host.report.write
+    available_capabilities: []
+    behavior: BLOCKED
+  performance-review:
+    missing_capability: host.report.write
+    available_capabilities: []
+    behavior: BLOCKED
+  pr-gatekeeper:
+    missing_capability: gitlab.get_merge_request
+    available_capabilities: []
+    behavior: BLOCKED
+  pr-review:
+    missing_capability: gitlab.get_merge_request
+    available_capabilities:
+    - github.get_pull_request
+    - github.get_pull_request_files
+    behavior: FALLBACK
+  prd-architect:
+    missing_capability: host.report.write
+    available_capabilities: []
+    behavior: BLOCKED
+  production-readiness-review:
+    missing_capability: host.dependency.advisories.read
+    available_capabilities:
+    - host.report.write
+    - host.repository.read
+    - host.scm.change.read
+    - host.ci.status
+    - host.scm.policy.read
+    - host.build.provenance.read
+    - host.service.metadata.read
+    behavior: DEGRADED
+  release-readiness-checker:
+    missing_capability: host.report.write
+    available_capabilities: []
+    behavior: BLOCKED
+  resilience-review:
+    missing_capability: host.repository.read
+    available_capabilities:
+    - host.report.write
+    behavior: DEGRADED
+  security-review:
+    missing_capability: host.report.write
+    available_capabilities: []
+    behavior: BLOCKED
+  squad-map:
+    missing_capability: gitlab.list_projects
+    available_capabilities: []
+    behavior: BLOCKED
+  system-design:
+    missing_capability: host.report.write
+    available_capabilities: []
+    behavior: BLOCKED
+  tech-debt-assessor:
+    missing_capability: host.report.write
+    available_capabilities: []
+    behavior: BLOCKED
+  test-writer:
+    missing_capability: host.repository.read
+    available_capabilities: []
+    behavior: BLOCKED
+  unit-test-creator:
+    missing_capability: host.repository.read_write
+    available_capabilities: []
+    behavior: BLOCKED
+  weekly-squad-digest:
+    missing_capability: scheduler.cron.trigger
+    available_capabilities: []
+    behavior: BLOCKED
+  who-owns-x-bot:
+    missing_capability: slack.slash_command.receive
+    available_capabilities: []
+    behavior: BLOCKED

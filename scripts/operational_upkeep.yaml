@@ -68,20 +68,20 @@ stable_ids:
   stop_conditions:
     - id: stop.insufficient-evidence
       owner: runtime-contract
-      source_path: scripts/registry/platform_contracts.yaml
-      source_key: evidence.insufficient_evidence_status
+      source_path: skills.yaml
+      source_key: contracts.platform.evidence.insufficient_evidence_status
     - id: stop.missing-authorization
       owner: runtime-contract
-      source_path: scripts/registry/platform_contracts.yaml
-      source_key: action_gates
+      source_path: skills.yaml
+      source_key: contracts.platform.action_gates
     - id: stop.prompt-injection
       owner: prompt-injection
       source_path: docs/skill-framework/shared/prompt-injection.md
       source_key: Rule
     - id: stop.failed-required-check
       owner: runtime-contract
-      source_path: scripts/registry/platform_contracts.yaml
-      source_key: definition_of_done.required_fields
+      source_path: skills.yaml
+      source_key: contracts.platform.definition_of_done.required_fields
     - id: stop.cancellation
       owner: runtime-contract
       source_path: scripts/registry/eval_contracts.yaml
@@ -159,7 +159,6 @@ prompt_diff_risk:
     schema:
       - "skills.yaml"
       - "scripts/registry/composition_contracts.yaml"
-      - "scripts/registry/platform_contracts.yaml"
       - "scripts/registry/skill_frontmatter_schema.py"
       - "scripts/operational_upkeep.yaml"
       - "scripts/operational_upkeep.py"

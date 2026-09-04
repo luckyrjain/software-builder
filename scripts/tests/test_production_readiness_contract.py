@@ -12,8 +12,13 @@ from __future__ import annotations
 from pathlib import Path
 
 from scripts.evals.dispatcher import dispatch_prompt
+from scripts.registry.artifact_trust import (
+    _issue_runtime_handoff_metadata,
+    classify_assessment_context_trust,
+)
 from scripts.registry.load import load_registry
 from scripts import production_readiness as pr
+from scripts.tests.envelope_fixtures import consumes
 from scripts.tests.production_readiness_fixtures import (
     assessment_context_fixture,
     authoritative_unowned,
@@ -25,7 +30,6 @@ from scripts.tests.production_readiness_fixtures import (
     ci_failed,
     ci_green,
     code_review_coverage,
-    consumes,
     dependency_ci_fixture,
     deterministic_permutations,
     dim,
@@ -241,7 +245,7 @@ def test_direct_caller_assessment_context_cannot_forge_host_authority() -> None:
     ctx = assessment_context_fixture(
         input_provenance={"observability_material": {"authority": "authoritative_host", "evidence_refs": ["fake:obs"]}}
     )
-    trust = pr.classify_assessment_context_trust(ctx, acquisition="caller_supplied")
+    trust = classify_assessment_context_trust(ctx, runtime_metadata=None)
     assert trust.effective_authority("observability_material") == "caller"
 
 
@@ -911,10 +915,17 @@ def test_check_final_freshness_unreconfirmed_approvals_is_unknown_not_pass() -> 
     assert result.status == "UNKNOWN"
 
 
-def test_assessment_context_trust_honors_authoritative_host_acquisition() -> None:
+def test_assessment_context_trust_elevates_only_on_a_runtime_issued_handoff() -> None:
+    # A context's own claimed acquisition is caller-controlled data, so only metadata the
+    # composition runtime issued after validating the parent may name an input's authority.
     ctx = assessment_context_fixture(input_provenance={"x": {"authority": "repository"}})
-    trust = pr.classify_assessment_context_trust(ctx, acquisition="authoritative_host")
-    assert trust.effective_authority("x") == "repository"
+    claimed = {"acquisition": "authoritative_host", "parent_execution_validated": True}
+    assert classify_assessment_context_trust(ctx, runtime_metadata=claimed).effective_authority("x") == "caller"
+    issued = _issue_runtime_handoff_metadata(
+        parent_skill="production-readiness-review",
+        trusted_authorities={"x": "repository"},
+    )
+    assert classify_assessment_context_trust(ctx, runtime_metadata=issued).effective_authority("x") == "repository"
 
 
 def test_dispatch_child_unmapped_child_name_never_dispatches() -> None:
@@ -1566,15 +1577,22 @@ def test_capacity_and_dependency_gates_reject_caller_only_not_applicable_claim()
     assert pr.evaluate_dependency_gate(weak_report).status == "UNKNOWN"
 
 
-def test_assessment_context_trust_degrades_on_malformed_nested_provenance() -> None:
+def test_assessment_context_trust_never_reads_authority_out_of_the_context_payload() -> None:
+    # Well-formed and malformed input_provenance alike are caller-controlled: neither may raise,
+    # and neither may name an authority the runtime handoff itself did not.
     cases = [
+        {"input_provenance": {"ci": {"authority": "repository"}}},
         {"input_provenance": {"ci": "repository"}},
         {"input_provenance": {"ci": {"authority": ["repository"]}}},
         {"input_provenance": ["ci"]},
     ]
+    issued = _issue_runtime_handoff_metadata(
+        parent_skill="production-readiness-review",
+        trusted_authorities={"unrelated": "repository"},
+    )
     for ctx in cases:
-        trust = pr.classify_assessment_context_trust(ctx, "authoritative_host")
-        assert trust.effective_authority("ci") == "caller", ctx
+        assert classify_assessment_context_trust(ctx, runtime_metadata=None).effective_authority("ci") == "caller", ctx
+        assert classify_assessment_context_trust(ctx, runtime_metadata=issued).effective_authority("ci") == "caller", ctx
 
 
 def test_dimension_rejects_pass_with_unknown_evidence_status() -> None:
@@ -2168,8 +2186,7 @@ def test_dispatch_child_rejects_a_result_scoped_to_a_conflicting_environment() -
 def test_more_non_mapping_top_level_arguments_degrade_without_crashing() -> None:
     assert pr.evaluate_build_provenance([]).status == "UNKNOWN"
     assert pr.check_final_freshness("a", "b").status == "UNKNOWN"
-    trust = pr.classify_assessment_context_trust([], "authoritative_host")
-    assert trust.effective_authority("svc") == "caller"
+    assert classify_assessment_context_trust([], runtime_metadata=None).effective_authority("svc") == "caller"
     result = pr.resolve_prerequisite(
         "change_impact_report",
         candidate={"source_revision": "a" * 40},
@@ -2598,11 +2615,15 @@ def test_dimension_fail_status_permits_unknown_evidence_status() -> None:
 
 
 def test_assessment_context_trust_returns_model_knowledge_authority_as_is() -> None:
-    # A validly-weak `model_knowledge` authority value must pass through unchanged, not be silently
-    # downgraded to "caller" -- distinguishes the full _ALL_AUTHORITIES membership check from a
-    # narrower STRONG_AUTHORITIES-only mutation.
+    # A validly-weak `model_knowledge` authority the runtime handoff itself names must pass through
+    # unchanged, not be silently downgraded to "caller" -- this distinguishes the full authority
+    # membership check from a narrower strong-authorities-only mutation.
     ctx = assessment_context_fixture(input_provenance={"x": {"authority": "model_knowledge"}})
-    trust = pr.classify_assessment_context_trust(ctx, acquisition="authoritative_host")
+    issued = _issue_runtime_handoff_metadata(
+        parent_skill="production-readiness-review",
+        trusted_authorities={"x": "model_knowledge"},
+    )
+    trust = classify_assessment_context_trust(ctx, runtime_metadata=issued)
     assert trust.effective_authority("x") == "model_knowledge"
 
 
@@ -2832,16 +2853,15 @@ def test_is_valid_waiver_rejects_missing_evidence_ref_even_with_accepted_by() ->
     assert pr._is_valid_waiver({"accepted_by": "release-owner", "evidence_ref": ""}) is False
 
 
-def test_assessment_context_trust_recognizes_trusted_runtime_and_repository_acquisition() -> None:
-    # Every existing test used only "caller_supplied" or "authoritative_host" as the acquisition
-    # value -- the other two STRONG_AUTHORITIES members were never exercised, leaving
-    # _is_strong_authority's full membership set unpinned here.
+def test_assessment_context_trust_refuses_every_claimed_strong_acquisition() -> None:
+    # No caller-declared acquisition value elevates a context, so the whole strong-authority
+    # vocabulary must read back as "caller" -- not just the two values other tests happen to use.
     ctx = assessment_context_fixture(input_provenance={"ci": {"authority": "repository"}})
-    trust = pr.classify_assessment_context_trust(ctx, acquisition="trusted_runtime")
-    assert trust.effective_authority("ci") == "repository"
-
-    trust2 = pr.classify_assessment_context_trust(ctx, acquisition="repository")
-    assert trust2.effective_authority("ci") == "repository"
+    for acquisition in sorted(pr.STRONG_AUTHORITIES) + ["runtime_handoff"]:
+        trust = classify_assessment_context_trust(
+            ctx, runtime_metadata={"acquisition": acquisition, "parent_execution_validated": True}
+        )
+        assert trust.effective_authority("ci") == "caller", acquisition
 
 
 def test_dispatch_child_result_carries_the_actual_child_payload() -> None:
@@ -3055,7 +3075,7 @@ def test_scm_policy_requires_observed_evidence_to_match_candidate_scope() -> Non
 def test_validate_build_provenance_requires_authoritative_acquisition() -> None:
     # validate_build_provenance never checked WHO produced the provenance record at all -- unlike
     # its siblings validate_ci and validate_code_review_coverage, which both gate on
-    # _is_host_or_runtime_acquisition. A caller could simply assert build success with a
+    # is_host_or_runtime_acquisition. A caller could simply assert build success with a
     # self-declared matching digest/evidence_ref and no acquisition field at all.
     candidate = {"source_revision": "a" * 40, "head_revision_or_digest": "sha256:" + "b" * 64}
     caller_asserted = {

@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import unicodedata
+from collections.abc import Mapping
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
@@ -50,3 +51,40 @@ def normalize_environment_identity(value: str) -> str:
 
 def same_environment(left: str, right: str) -> bool:
     return normalize_environment_identity(left) == normalize_environment_identity(right)
+
+
+def target_of(obj: Any) -> Mapping[str, Any] | None:
+    """Resolve an artifact's own declared identity carrier.
+
+    Every readiness-relevant artifact schema (scripts/registry/composition_contracts.yaml) carries
+    its identity in `assessment_target` (`security_review_report`, `change_impact_report`,
+    `deployment_risk_report`, etc. all declare it); a bare `target` key is the assessment modules'
+    own test-fixture convention. Either is checked BEFORE any flat top-level source_revision/
+    head_revision_or_digest/head_sha field the artifact might also carry -- an artifact's own
+    declared, nested identity must never be shadowed by (or silently preferred over) a flat field
+    that could disagree with it. A malformed nested value (a bare string/list/int instead of a
+    mapping) degrades to "keep looking," never crashes -- a caller downstream calls .get() on the
+    result unconditionally.
+    """
+    if not isinstance(obj, Mapping):
+        return None
+    for key in ("assessment_target", "target"):
+        nested = obj.get(key)
+        if isinstance(nested, Mapping):
+            return nested
+    if "source_revision" in obj or "head_revision_or_digest" in obj or "head_sha" in obj:
+        return obj
+    return None
+
+
+def safe_same_environment(left: Any, right: Any) -> bool:
+    """`same_environment` that fails closed on a malformed operand instead of raising.
+
+    Environment comparison runs against caller- and child-supplied values, so a non-string
+    operand must read as "not the same environment" (the fail-closed answer) rather than take
+    down the whole assessment with a TypeError.
+    """
+    try:
+        return same_environment(left, right)
+    except (TypeError, AttributeError):
+        return False

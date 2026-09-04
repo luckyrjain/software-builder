@@ -15,11 +15,11 @@
 # is independently load-bearing elsewhere with DIFFERENT meanings that a rename would risk
 # conflating or breaking: scripts/registry/eval_contracts.yaml's `adversarial_classes` /
 # `contract_gate: adversarial_matrix` (the real mutation-based golden-injection matrix — see
-# scripts/evals/mutation_guard.py and scripts/evals/batch3_contract.py), and
+# scripts/evals/mutation_guard.py and scripts/evals/eval_coverage_contract.py), and
 # evals/fixtures/_global.yaml's `adversarial` Tier-1 template (blanket automation/guardrail
 # assertions for every skill). Those two mechanisms — plus each skill's own
 # evals/golden/<skill>/golden-injection.yaml fixtures gated by
-# scripts/evals/batch3_contract.py's REQUIRED_BEHAVIOR_SCENARIOS — are what actually test
+# scripts/evals/eval_coverage_contract.py's REQUIRED_BEHAVIOR_SCENARIOS — are what actually test
 # prompt-injection/redaction behavior, and are unaffected by this file.
 #
 # Each case below DOES carry a `golden_ref` pointing at that skill's real golden-injection

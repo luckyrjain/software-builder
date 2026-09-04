@@ -154,10 +154,32 @@ def build_per_skill_golden_coverage(root: Path = ROOT) -> dict[str, Any]:
 
 def is_healthy(report: dict[str, Any]) -> bool:
     """Return deterministic CI health; the live model harness is visibility-only."""
-    return (
-        report["covered_tiers"] == report["required_tiers"]
-        and not report["unexpected_static_tiers"]
-    )
+    return not unhealthy_reasons(report)
+
+
+def unhealthy_reasons(report: dict[str, Any]) -> list[str]:
+    """Name every condition that makes `report` unhealthy, one line each.
+
+    The gate that consumes this (`make validate-operational-upkeep`) wants the
+    exit code, not the rendered report, so it sends stdout to /dev/null. These
+    lines go to stderr instead, so the reason survives that redirection --
+    otherwise a failing gate says only "Error 1".
+    """
+    reasons: list[str] = []
+    tiers = report["tiers"]
+    empty = [name for name, count in tiers.items() if not count]
+    if report["covered_tiers"] != report["required_tiers"]:
+        reasons.append(
+            f"deterministic tier coverage is {report['covered_tiers']}/{report['required_tiers']}: "
+            f"no cases found for {', '.join(empty) or 'one or more required tiers'}",
+        )
+    unexpected = report["unexpected_static_tiers"]
+    if unexpected:
+        detail = ", ".join(f"tier {tier} ({count} case(s))" for tier, count in sorted(unexpected.items()))
+        reasons.append(
+            f"fixtures declare tier(s) outside the contract's 1/2/3: {detail}",
+        )
+    return reasons
 
 
 def render_markdown(report: dict[str, Any]) -> str:
@@ -204,7 +226,10 @@ def main() -> int:
     args = parser.parse_args()
     report = build_eval_tier_health()
     print(render_markdown(report) if args.format == "markdown" else json.dumps(report, sort_keys=True, indent=2))
-    return 0 if is_healthy(report) else 1
+    reasons = unhealthy_reasons(report)
+    for reason in reasons:
+        print(f"error: eval tier health: {reason}", file=sys.stderr)
+    return 1 if reasons else 0
 
 
 if __name__ == "__main__":

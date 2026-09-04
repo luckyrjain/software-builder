@@ -94,7 +94,7 @@ def resolve_path(data: dict[str, Any], dotted_path: str) -> Any:
 
     Shared by every module that needs to read or compare a nested field in a
     recorded golden output (this file's own assertions, mutation_guard.py's
-    mutation targeting, batch3_contract.py's anchor checks) -- one copy so
+    mutation targeting, eval_coverage_contract.py's anchor checks) -- one copy so
     path-resolution semantics can't quietly diverge between them.
     """
     current: Any = data

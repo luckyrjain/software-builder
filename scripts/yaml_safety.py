@@ -103,13 +103,44 @@ def load_unique_yaml(text: str) -> Any:
         raise yaml.YAMLError("YAML nesting exceeds safe decoder limits") from exc
 
 
+def _named_yaml_error(exc: yaml.YAMLError, path: Path) -> yaml.YAMLError:
+    """Re-word a parse error so it names the file it came from.
+
+    PyYAML reports positions against the *string* it was handed
+    (``in "<unicode string>", line 4``), so every caller that funnels through
+    load_unique_yaml_file() would otherwise hand a maintainer a line number
+    into an unnamed file. The original exception type is preserved where its
+    constructor accepts a single message argument -- MarkedYAMLError renders a
+    lone ``context`` verbatim -- so callers matching on DuplicateKeyError (or
+    on YAML_SAFETY_ERRORS) still catch what they caught before.
+    """
+    message = f"{path}: {exc}"
+    try:
+        return type(exc)(message)
+    except Exception:  # pragma: no cover - defensive: an exotic YAMLError subclass
+        return yaml.YAMLError(message)
+
+
 def load_unique_yaml_file(path: Path) -> Any:
-    """Read and parse a YAML file via load_unique_yaml."""
-    return load_unique_yaml(path.read_text(encoding="utf-8"))
+    """Read and parse a YAML file via load_unique_yaml, naming `path` in any parse error."""
+    text = path.read_text(encoding="utf-8")
+    try:
+        return load_unique_yaml(text)
+    except yaml.YAMLError as exc:
+        raise _named_yaml_error(exc, path) from exc
 
 
 def require_mapping(value: Any, label: str) -> dict[str, Any]:
-    """Return value if it's a mapping, else raise ValueError naming the offending field."""
+    """Return value if it's a `dict`, else raise ValueError naming the offending field.
+
+    Kept here, and kept narrow, so this module stays importable with nothing but PyYAML -- it is
+    vendored verbatim into installed skill packages, which have no `scripts.registry` to import.
+    The general shape guard for the repo's own validators is
+    `scripts.registry.validation_primitives.as_mapping`, which is the one to reach for outside
+    this module: it accepts any `Mapping`, degrades to `{}` by default, and raises `TypeError`
+    rather than `ValueError` under `strict=True`. The two are deliberately not interchangeable --
+    callers here catch `YAML_SAFETY_ERRORS`, which is `ValueError` plus `yaml.YAMLError`.
+    """
     if not isinstance(value, dict):
         raise ValueError(f"{label} must be a mapping")
     return value

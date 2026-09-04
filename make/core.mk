@@ -1,24 +1,21 @@
-.PHONY: install install-pr-review install-pr-gatekeeper install-k8s-overprovisioning install-incident-rca install-incident-rca-deps install-incident-triage-agent install-domain-comprehension install-squad-map install-who-owns-x-bot install-new-hire-guide install-release-readiness-checker install-migration-program-manager install-cost-optimization-sprint-planner install-mysql-to-postgres-sql install-loop-task-implementer install-backlog-runner install-weekly-squad-digest install-unit-test-creator install-integration-test-creator install-contract-test-creator install-e2e-test-creator install-api-test-creator install-test-writer install-prd-architect install-architecture-review install-system-design install-api-design-review install-database-review install-security-review install-performance-review install-capacity-planner install-observability-review install-deployment-risk-review install-dependency-upgrade-review install-tech-debt-assessor install-claude install-claude-pr-review install-claude-pr-gatekeeper install-claude-k8s-overprovisioning install-claude-incident-rca install-claude-incident-triage-agent install-claude-domain-comprehension install-claude-squad-map install-claude-who-owns-x-bot install-claude-new-hire-guide install-claude-release-readiness-checker install-claude-migration-program-manager install-claude-cost-optimization-sprint-planner install-claude-mysql-to-postgres-sql install-claude-loop-task-implementer install-claude-backlog-runner install-claude-weekly-squad-digest install-claude-unit-test-creator install-claude-integration-test-creator install-claude-contract-test-creator install-claude-e2e-test-creator install-claude-api-test-creator install-claude-prd-architect install-claude-test-writer install-claude-architecture-review install-claude-system-design install-claude-api-design-review install-claude-database-review install-claude-security-review install-claude-performance-review install-claude-capacity-planner install-claude-observability-review install-claude-deployment-risk-review install-claude-dependency-upgrade-review install-claude-tech-debt-assessor lint lint-framework lint-pr-review lint-pr-gatekeeper lint-k8s-skill lint-k8s lint-incident-rca lint-incident-triage-agent lint-domain-comprehension lint-squad-map lint-who-owns-x-bot lint-new-hire-guide lint-release-readiness-checker lint-migration-program-manager lint-cost-optimization-sprint-planner lint-mysql-to-postgres-sql lint-loop-task-implementer lint-backlog-runner lint-weekly-squad-digest lint-unit-test-creator lint-integration-test-creator lint-contract-test-creator lint-e2e-test-creator lint-api-test-creator lint-test-writer lint-architecture-review lint-system-design lint-api-design-review lint-database-review lint-security-review lint-performance-review lint-capacity-planner lint-observability-review lint-deployment-risk-review lint-dependency-upgrade-review lint-tech-debt-assessor setup-hooks setup validate-registry validate-operational-upkeep generate generate-check verify-github-ruleset kubesense-errors
-.PHONY: install-change-impact-analyzer
+.PHONY: install install-incident-rca-deps install-claude lint lint-framework lint-pr-review lint-pr-gatekeeper lint-k8s-skill lint-k8s lint-incident-rca lint-incident-triage-agent lint-domain-comprehension lint-squad-map lint-who-owns-x-bot lint-new-hire-guide lint-release-readiness-checker lint-migration-program-manager lint-cost-optimization-sprint-planner lint-mysql-to-postgres-sql lint-loop-task-implementer lint-backlog-runner lint-weekly-squad-digest lint-unit-test-creator lint-integration-test-creator lint-contract-test-creator lint-e2e-test-creator lint-api-test-creator lint-test-writer lint-architecture-review lint-system-design lint-api-design-review lint-database-review lint-security-review lint-performance-review lint-capacity-planner lint-observability-review lint-deployment-risk-review lint-dependency-upgrade-review lint-tech-debt-assessor setup-hooks setup validate-registry validate-operational-upkeep generate generate-check verify-github-ruleset kubesense-errors
 .PHONY: lint-change-impact-analyzer
-.PHONY: install-implementation-planner
 .PHONY: lint-implementation-planner
 .PHONY: lint-resilience-review
-.PHONY: install-resilience-review
-.PHONY: install-production-readiness-review
 .PHONY: lint-production-readiness-review
-.PHONY: install-claude-production-readiness-review
-.PHONY: install-claude-change-impact-analyzer
-.PHONY: install-claude-implementation-planner
-.PHONY: install-claude-resilience-review
 .PHONY: lint-python
 .PHONY: validate-agent-skills
 .PHONY: validate-hosts
 .PHONY: lint-static lint-suites lint-framework-tests lint-scripts-shellcheck lint-platform-files
+.PHONY: lint-loop-task-implementer-skill lint-loop-task-implementer-scripts
 
-# ALL_SKILLS (the full skill roster) is generated from skills.yaml -- see
+# ALL_SKILLS (the full skill roster) and every per-skill install-<skill> /
+# install-claude-<skill> rule are generated from skills.yaml -- see
 # scripts/registry/generate_makefile_roster.py. Regenerate with `make generate`;
-# `make generate-check` (part of lint-static) fails if this file drifts.
+# `make generate-check` (part of lint-static) fails if this file drifts. That
+# check is the whole drift guard: a generated rule cannot disagree with the
+# registry it is generated from, so no separate Makefile-vs-registry validator
+# is needed.
 #
 # `-include`, not `include`: a plain `include` on a missing file aborts Make
 # before any target (even `generate`, the documented recovery command) can
@@ -26,6 +23,10 @@
 # recovery path. `-include` lets Make continue with ALL_SKILLS undefined;
 # lint-framework's own guard below turns that into a clear, actionable error
 # instead of a silent empty-roster no-op.
+#
+# The default goal is pinned before the include: the generated file now carries
+# rules, and Make takes its default goal from the first target it reads.
+.DEFAULT_GOAL := install
 -include make/generated-roster.mk
 
 # Parallelize the dominant pytest suite (scripts/tests/, ~1500 tests) with pytest-xdist
@@ -38,7 +39,7 @@
 # migration-program-manager/tests/): those targets already run concurrently with each
 # other and with this one under `make -j` (lint-suites), so each also spawning its own
 # `-n auto` (= nproc) worker pool oversubscribes CI runners by up to 6x and was the
-# source of sporadic broken-pipe/flaky failures in lint-dangling-md-links.sh after
+# source of sporadic broken-pipe/flaky failures in the dangling-link checker after
 # lint-suites moved to `make -j`. Those suites are small enough that make-level
 # parallelism across targets is all the parallelism they need.
 #
@@ -51,244 +52,19 @@
 # CI workflow) cap this suite's own worker count instead of always claiming every core;
 # plain local `make lint` (no outer -j) leaves it at "auto" and keeps full parallelism.
 PYTEST_XDIST_WORKERS ?= auto
-PYTEST_XDIST_FLAG := $(shell python3 -c "import xdist" >/dev/null 2>&1 && echo "-n $(PYTEST_XDIST_WORKERS)" || true)
+# Recursively (not immediately) expanded: the probe spawns a Python interpreter,
+# and only the pytest recipe at lint-framework-tests references this. `:=` made
+# every `make` invocation pay it, `make install-pr-review` included.
+PYTEST_XDIST_FLAG = $(shell python3 -c "import xdist" >/dev/null 2>&1 && echo "-n $(PYTEST_XDIST_WORKERS)" || true)
 
 install:
 	bash scripts/install.sh
 
-install-pr-review:
-	bash scripts/install.sh pr-review
-
-install-pr-gatekeeper: install-pr-review
-	bash scripts/install.sh pr-gatekeeper
-
-install-k8s-overprovisioning:
-	bash scripts/install.sh k8s-overprovisioning-datadog
-
 install-incident-rca-deps:
 	bash scripts/install-incident-rca-deps.sh
 
-install-incident-rca: install-incident-rca-deps
-	bash scripts/install.sh incident-rca
-
-install-incident-triage-agent: install-incident-rca install-squad-map
-	bash scripts/install.sh incident-triage-agent
-
-install-domain-comprehension: install-squad-map
-	bash scripts/install.sh domain-comprehension
-
-install-squad-map:
-	bash scripts/install.sh squad-map
-
-install-who-owns-x-bot: install-squad-map
-	bash scripts/install.sh who-owns-x-bot
-
-install-new-hire-guide: install-domain-comprehension install-squad-map
-	bash scripts/install.sh new-hire-guide
-
-install-release-readiness-checker: install-pr-review install-k8s-overprovisioning install-incident-rca
-	bash scripts/install.sh release-readiness-checker
-
-install-migration-program-manager: install-mysql-to-postgres-sql install-squad-map
-	bash scripts/install.sh migration-program-manager
-
-install-cost-optimization-sprint-planner: install-k8s-overprovisioning install-squad-map
-	bash scripts/install.sh cost-optimization-sprint-planner
-
-install-mysql-to-postgres-sql:
-	bash scripts/install.sh mysql-to-postgres-sql
-
-install-loop-task-implementer:
-	bash scripts/install.sh loop-task-implementer
-
-install-backlog-runner: install-loop-task-implementer
-	bash scripts/install.sh backlog-runner
-
-install-weekly-squad-digest: install-migration-program-manager install-cost-optimization-sprint-planner
-	bash scripts/install.sh weekly-squad-digest
-
-install-unit-test-creator:
-	bash scripts/install.sh unit-test-creator
-
-install-integration-test-creator:
-	bash scripts/install.sh integration-test-creator
-
-install-contract-test-creator:
-	bash scripts/install.sh contract-test-creator
-
-install-e2e-test-creator:
-	bash scripts/install.sh e2e-test-creator
-
-install-api-test-creator:
-	bash scripts/install.sh api-test-creator
-
-install-prd-architect:
-	bash scripts/install.sh prd-architect
-
-install-test-writer: install-unit-test-creator install-integration-test-creator install-contract-test-creator install-e2e-test-creator install-api-test-creator
-	bash scripts/install.sh test-writer
-
 install-claude:
 	bash scripts/install.sh --agent claude-user
-
-install-claude-pr-review:
-	bash scripts/install.sh --agent claude-user pr-review
-
-install-claude-pr-gatekeeper: install-claude-pr-review
-	bash scripts/install.sh --agent claude-user pr-gatekeeper
-
-install-claude-k8s-overprovisioning:
-	bash scripts/install.sh --agent claude-user k8s-overprovisioning-datadog
-
-install-claude-incident-rca: install-incident-rca-deps
-	bash scripts/install.sh --agent claude-user incident-rca
-
-install-claude-incident-triage-agent: install-claude-incident-rca install-claude-squad-map
-	bash scripts/install.sh --agent claude-user incident-triage-agent
-
-install-claude-domain-comprehension: install-claude-squad-map
-	bash scripts/install.sh --agent claude-user domain-comprehension
-
-install-claude-squad-map:
-	bash scripts/install.sh --agent claude-user squad-map
-
-install-claude-who-owns-x-bot: install-claude-squad-map
-	bash scripts/install.sh --agent claude-user who-owns-x-bot
-
-install-claude-new-hire-guide: install-claude-domain-comprehension install-claude-squad-map
-	bash scripts/install.sh --agent claude-user new-hire-guide
-
-install-claude-release-readiness-checker: install-claude-pr-review install-claude-k8s-overprovisioning install-claude-incident-rca
-	bash scripts/install.sh --agent claude-user release-readiness-checker
-
-install-claude-migration-program-manager: install-claude-mysql-to-postgres-sql install-claude-squad-map
-	bash scripts/install.sh --agent claude-user migration-program-manager
-
-install-claude-cost-optimization-sprint-planner: install-claude-k8s-overprovisioning install-claude-squad-map
-	bash scripts/install.sh --agent claude-user cost-optimization-sprint-planner
-
-install-claude-mysql-to-postgres-sql:
-	bash scripts/install.sh --agent claude-user mysql-to-postgres-sql
-
-install-claude-loop-task-implementer:
-	bash scripts/install.sh --agent claude-user loop-task-implementer
-
-install-claude-backlog-runner: install-claude-loop-task-implementer
-	bash scripts/install.sh --agent claude-user backlog-runner
-
-install-claude-weekly-squad-digest: install-claude-migration-program-manager install-claude-cost-optimization-sprint-planner
-	bash scripts/install.sh --agent claude-user weekly-squad-digest
-
-install-claude-unit-test-creator:
-	bash scripts/install.sh --agent claude-user unit-test-creator
-
-install-claude-integration-test-creator:
-	bash scripts/install.sh --agent claude-user integration-test-creator
-
-install-claude-contract-test-creator:
-	bash scripts/install.sh --agent claude-user contract-test-creator
-
-install-claude-e2e-test-creator:
-	bash scripts/install.sh --agent claude-user e2e-test-creator
-
-install-claude-api-test-creator:
-	bash scripts/install.sh --agent claude-user api-test-creator
-
-install-claude-prd-architect:
-	bash scripts/install.sh --agent claude-user prd-architect
-
-install-claude-test-writer: install-claude-unit-test-creator install-claude-integration-test-creator install-claude-contract-test-creator install-claude-e2e-test-creator install-claude-api-test-creator
-	bash scripts/install.sh --agent claude-user test-writer
-
-install-claude-change-impact-analyzer:
-	bash scripts/install.sh --agent claude-user change-impact-analyzer
-
-install-claude-implementation-planner:
-	bash scripts/install.sh --agent claude-user implementation-planner
-
-install-claude-resilience-review:
-	bash scripts/install.sh --agent claude-user resilience-review
-
-install-claude-production-readiness-review:
-	bash scripts/install.sh --agent claude-user production-readiness-review
-
-install-architecture-review:
-	bash scripts/install.sh architecture-review
-
-install-system-design:
-	bash scripts/install.sh system-design
-
-install-api-design-review:
-	bash scripts/install.sh api-design-review
-
-install-database-review:
-	bash scripts/install.sh database-review
-
-install-security-review:
-	bash scripts/install.sh security-review
-
-install-performance-review:
-	bash scripts/install.sh performance-review
-
-install-capacity-planner:
-	bash scripts/install.sh capacity-planner
-
-install-observability-review:
-	bash scripts/install.sh observability-review
-
-install-deployment-risk-review:
-	bash scripts/install.sh deployment-risk-review
-
-install-dependency-upgrade-review:
-	bash scripts/install.sh dependency-upgrade-review
-
-install-tech-debt-assessor:
-	bash scripts/install.sh tech-debt-assessor
-
-install-change-impact-analyzer:
-	bash scripts/install.sh change-impact-analyzer
-
-install-implementation-planner:
-	bash scripts/install.sh implementation-planner
-
-install-resilience-review:
-	bash scripts/install.sh resilience-review
-
-install-production-readiness-review: install-pr-review install-change-impact-analyzer install-deployment-risk-review install-security-review install-observability-review install-resilience-review install-api-design-review install-database-review install-performance-review install-capacity-planner install-dependency-upgrade-review
-	bash scripts/install.sh production-readiness-review
-
-install-claude-architecture-review:
-	bash scripts/install.sh --agent claude-user architecture-review
-
-install-claude-system-design:
-	bash scripts/install.sh --agent claude-user system-design
-
-install-claude-api-design-review:
-	bash scripts/install.sh --agent claude-user api-design-review
-
-install-claude-database-review:
-	bash scripts/install.sh --agent claude-user database-review
-
-install-claude-security-review:
-	bash scripts/install.sh --agent claude-user security-review
-
-install-claude-performance-review:
-	bash scripts/install.sh --agent claude-user performance-review
-
-install-claude-capacity-planner:
-	bash scripts/install.sh --agent claude-user capacity-planner
-
-install-claude-observability-review:
-	bash scripts/install.sh --agent claude-user observability-review
-
-install-claude-deployment-risk-review:
-	bash scripts/install.sh --agent claude-user deployment-risk-review
-
-install-claude-dependency-upgrade-review:
-	bash scripts/install.sh --agent claude-user dependency-upgrade-review
-
-install-claude-tech-debt-assessor:
-	bash scripts/install.sh --agent claude-user tech-debt-assessor
 
 setup:
 	@echo "setup: installing Python dev dependencies (requirements.lock)"
@@ -303,8 +79,8 @@ lint-requirements-lock:
 	@python3 scripts/check_requirements_lock.py
 
 lint-python:
-	@echo "lint-python: ruff (pyflakes + syntax errors) over scripts/"
-	@python3 -m ruff check scripts/ && echo "  ok"
+	@echo "lint-python: ruff (pyflakes + syntax errors) over the repository"
+	@python3 -m ruff check . && echo "  ok"
 
 lint-actions-pinning:
 	@python3 scripts/check_pinned_actions.py
@@ -430,9 +206,38 @@ define check_workflow_frontmatter
 endef
 
 # $(call check_dangling_links,<space-separated glob(s)>)
+#
+# One process per call site, not one per link: validate_references.py --files
+# takes the whole expanded glob at once. It is the same checker (and the same
+# anchor algorithm) `lint-framework` runs over the whole tree, so a link cannot
+# pass one gate and fail the other.
 define check_dangling_links
-	@bash scripts/lint-dangling-md-links.sh $(1) && echo "  ok" || \
+	@python3 scripts/validate_references.py --files $(1) && echo "  ok" || \
 		{ echo "error: dangling reference link(s) found" >&2; exit 1; }
+endef
+
+# The three helpers below exist so a failing structural assertion says what it
+# wanted. A bare `@grep -q PATTERN FILE` recipe line fails with nothing but
+# `make: *** [lint-<skill>] Error 1` -- the `@` suppresses the command echo, so
+# neither the file, the pattern, nor the rule is named, and an operator has to
+# read this file to find out what broke.
+
+# $(call require_heading,<file>,<quoted grep pattern>,<heading name>)
+define require_heading
+	@grep -q $(2) $(1) || \
+		{ echo "error: $(1) is missing its $(3) heading" >&2; exit 1; }
+endef
+
+# $(call require_content,<file>,<quoted grep pattern>,<what the pattern proves>)
+define require_content
+	@grep -q $(2) $(1) || \
+		{ echo "error: $(1) must document $(3)" >&2; exit 1; }
+endef
+
+# $(call require_file,<path>,<why it is required>)
+define require_file
+	@test -f $(1) || \
+		{ echo "error: missing $(1) ($(2))" >&2; exit 1; }
 endef
 
 # $(call require_ref_files,<dir>,<space-separated basenames, no .md ext>)
@@ -481,7 +286,7 @@ lint: lint-static lint-suites
 # across skills via `make -jN` and, only for the dominant scripts/tests/ suite, within
 # it via pytest-xdist (see PYTEST_XDIST_FLAG above). `make lint` still runs both groups
 # locally, in this order.
-lint-static: lint-platform-files validate-registry validate-agent-skills validate-hosts backfill-capabilities-check generate-check validate-evals validate-operational-upkeep lint-framework lint-incident-triage-agent lint-who-owns-x-bot lint-new-hire-guide lint-release-readiness-checker lint-cost-optimization-sprint-planner lint-loop-task-implementer lint-backlog-runner lint-test-writer lint-prd-architect lint-architecture-review lint-system-design lint-api-design-review lint-database-review lint-security-review lint-performance-review lint-capacity-planner lint-observability-review lint-deployment-risk-review lint-dependency-upgrade-review lint-tech-debt-assessor lint-requirements-lock lint-python lint-actions-pinning lint-actions-security verify-install verify-install-all validate-review-contracts lint-scripts-shellcheck
+lint-static: lint-platform-files validate-registry validate-agent-skills validate-hosts backfill-capabilities-check generate-check validate-evals validate-operational-upkeep lint-framework lint-incident-triage-agent lint-who-owns-x-bot lint-new-hire-guide lint-release-readiness-checker lint-cost-optimization-sprint-planner lint-backlog-runner lint-test-writer lint-prd-architect lint-architecture-review lint-system-design lint-api-design-review lint-database-review lint-security-review lint-performance-review lint-capacity-planner lint-observability-review lint-deployment-risk-review lint-dependency-upgrade-review lint-tech-debt-assessor lint-requirements-lock lint-python lint-actions-pinning lint-actions-security verify-install verify-install-all validate-review-contracts lint-scripts-shellcheck
 
 lint-scripts-shellcheck:
 	@for f in scripts/*.sh; do \
@@ -496,7 +301,7 @@ lint-scripts-shellcheck:
 		fi; \
 	done
 
-lint-suites: lint-pr-review lint-pr-gatekeeper lint-k8s-skill lint-incident-rca lint-domain-comprehension lint-squad-map lint-migration-program-manager lint-mysql-to-postgres-sql lint-weekly-squad-digest lint-unit-test-creator lint-integration-test-creator lint-contract-test-creator lint-e2e-test-creator lint-api-test-creator lint-change-impact-analyzer lint-resilience-review lint-implementation-planner lint-production-readiness-review lint-framework-tests
+lint-suites: lint-pr-review lint-loop-task-implementer lint-pr-gatekeeper lint-k8s-skill lint-incident-rca lint-domain-comprehension lint-squad-map lint-migration-program-manager lint-mysql-to-postgres-sql lint-weekly-squad-digest lint-unit-test-creator lint-integration-test-creator lint-contract-test-creator lint-e2e-test-creator lint-api-test-creator lint-change-impact-analyzer lint-resilience-review lint-implementation-planner lint-production-readiness-review lint-framework-tests
 
 lint-pr-review: lint-pr-review-skill lint-pr-review-scripts
 
@@ -511,7 +316,7 @@ lint-pr-review-scripts:
 	python3 -m py_compile pr-review/scripts/github-comment-recovery.py || exit 1; \
 	python3 -m py_compile pr-review/scripts/pr_review_policy_guards.py || exit 1; \
 	if python3 -c "import pytest" >/dev/null 2>&1; then \
-		python3 -m pytest -p no:cacheprovider pr-review/tests/ -q || exit 1; \
+		python3 -m pytest pr-review/tests/ -q || exit 1; \
 	else \
 		echo "pytest not installed — install with 'python3 -m pip install pytest' to run script tests" >&2; \
 		exit 1; \
@@ -569,7 +374,7 @@ lint-pr-gatekeeper:
 		{ echo "error: auto-post-policy.md must sanitize untrusted rendered fields per prompt-injection and safe-output" >&2; exit 1; }
 	@echo "lint-pr-gatekeeper: script pytest suite"
 	@if python3 -c "import pytest" >/dev/null 2>&1; then \
-		python3 -m pytest -p no:cacheprovider pr-gatekeeper/tests/ -q || exit 1; \
+		python3 -m pytest pr-gatekeeper/tests/ -q || exit 1; \
 	else \
 		echo "pytest not installed — install with 'python3 -m pip install pytest' to run pr-gatekeeper tests" >&2; \
 	fi
@@ -657,7 +462,7 @@ lint-k8s-skill:
 			echo "error: PyYAML required for k8s tests — python3 -m pip install pyyaml" >&2; \
 			exit 1; \
 		fi; \
-		python3 -m pytest -p no:cacheprovider k8s-overprovisioning-datadog/tests/ -q || exit 1; \
+		python3 -m pytest k8s-overprovisioning-datadog/tests/ -q || exit 1; \
 	else \
 		echo "pytest not installed — install with 'python3 -m pip install pytest' to run k8s script tests" >&2; \
 		exit 1; \
@@ -684,7 +489,7 @@ lint-incident-rca:
 	$(call require_ref_files,incident-rca/reference,phase-index lazy-load-index smoke-test mcp-capabilities)
 	$(call require_setup_links_framework,incident-rca)
 	$(call require_cross_skill_escalation,incident-rca)
-	@python3 -c "from pathlib import Path; import yaml; data = yaml.safe_load(Path('skills.yaml').read_text(encoding='utf-8')); assert data['skills']['incident-rca']['entrypoint'] == 'SKILL.md'" || \
+	@python3 -c "from pathlib import Path; from scripts.registry.schema import load_registry_raw; assert load_registry_raw(Path('skills.yaml'))['skills']['incident-rca']['entrypoint'] == 'SKILL.md'" || \
 		{ echo "error: canonical manifest must own incident-rca entrypoint metadata" >&2; exit 1; }
 	@grep -q 'dependency_chain' incident-rca/reference/evidence-schema.md || \
 		{ echo "error: evidence-schema.md must document dependency_chain" >&2; exit 1; }
@@ -719,7 +524,7 @@ lint-incident-rca:
 		incident-rca/reference/evidence.example.json \
 		incident-rca/reference/evidence.example.opensearch-query-governance.json || exit 1; \
 	if python3 -c "import pytest" >/dev/null 2>&1; then \
-		python3 -m pytest -p no:cacheprovider incident-rca/tests/ -q || exit 1; \
+		python3 -m pytest incident-rca/tests/ -q || exit 1; \
 	else \
 		echo "pytest not installed — install with 'python3 -m pip install pytest' to run schema tests" >&2; \
 		exit 1; \
@@ -780,7 +585,7 @@ lint-domain-comprehension-scripts:
 	"$$PY" domain-comprehension/scripts/validate_sub_agent_merge.py \
 		domain-comprehension/tests/fixtures/sub-agent-merge/valid.json || exit 1; \
 	if "$$PY" -c "import pytest" >/dev/null 2>&1; then \
-		"$$PY" -m pytest -p no:cacheprovider domain-comprehension/tests/ -q || exit 1; \
+		"$$PY" -m pytest domain-comprehension/tests/ -q || exit 1; \
 	else \
 		echo "pytest not installed — install with 'python3 -m pip install pytest' to run manifest tests" >&2; \
 		exit 1; \
@@ -863,7 +668,7 @@ lint-squad-map:
 	trap 'rm -rf "$$cache"' EXIT; \
 	python3 -m py_compile squad-map/scripts/squad_mapping.py || exit 1; \
 	if python3 -c "import pytest" >/dev/null 2>&1; then \
-		python3 -m pytest -p no:cacheprovider squad-map/tests/ -q || exit 1; \
+		python3 -m pytest squad-map/tests/ -q || exit 1; \
 	else \
 		echo "pytest not installed — install with 'python3 -m pip install pytest' to run squad-map tests" >&2; \
 		exit 1; \
@@ -962,7 +767,7 @@ lint-migration-program-manager:
 		{ echo "error: report-format.md must sanitize untrusted rendered fields per prompt-injection and safe-output" >&2; exit 1; }
 	@echo "lint-migration-program-manager: aggregator pytest"
 	@if python3 -c "import pytest" >/dev/null 2>&1; then \
-		python3 -m pytest -p no:cacheprovider migration-program-manager/tests/ -q || exit 1; \
+		python3 -m pytest migration-program-manager/tests/ -q || exit 1; \
 	else \
 		echo "pytest not installed — install with 'python3 -m pip install pytest' to run migration-program-manager tests" >&2; \
 	fi
@@ -1041,9 +846,9 @@ lint-mysql-to-postgres-sql:
 	trap 'rm -rf "$$cache"' EXIT; \
 	python3 -m py_compile mysql-to-postgres-sql/scripts/ast_check_mysql_dialect.py || exit 1; \
 	if python3 -c "import pytest" >/dev/null 2>&1; then \
-		python3 -m pytest -p no:cacheprovider mysql-to-postgres-sql/tests/test_pressure_policy.py -q || exit 1; \
+		python3 -m pytest mysql-to-postgres-sql/tests/test_pressure_policy.py -q || exit 1; \
 		if python3 -c "import sqlglot" >/dev/null 2>&1; then \
-			python3 -m pytest -p no:cacheprovider mysql-to-postgres-sql/tests/test_ast_check_mysql_dialect.py -q || exit 1; \
+			python3 -m pytest mysql-to-postgres-sql/tests/test_ast_check_mysql_dialect.py -q || exit 1; \
 		else \
 			echo "sqlglot not installed — install with 'python3 -m pip install sqlglot' to run the AST secondary-checker tests" >&2; \
 			exit 1; \
@@ -1066,7 +871,25 @@ lint-mysql-to-postgres-sql:
 	fi
 	@echo "  ok (framework refs + shellcheck)"
 
-lint-loop-task-implementer:
+lint-loop-task-implementer: lint-loop-task-implementer-skill lint-loop-task-implementer-scripts
+
+# Mirrors lint-pr-review-scripts: the skill ships a validator, so its own tests are
+# co-located with it and run from the target that lints it.
+lint-loop-task-implementer-scripts:
+	@echo "py_compile loop-task-implementer/scripts/validate_loop_lifecycle.py"
+	@echo "pytest loop-task-implementer/tests/"
+	@cache="$(CURDIR)/.pycache-lint"; \
+	export PYTHONDONTWRITEBYTECODE=1 PYTHONPYCACHEPREFIX="$$cache"; \
+	trap 'rm -rf "$$cache"' EXIT; \
+	python3 -m py_compile loop-task-implementer/scripts/validate_loop_lifecycle.py || exit 1; \
+	if python3 -c "import pytest" >/dev/null 2>&1; then \
+		python3 -m pytest loop-task-implementer/tests/ -q || exit 1; \
+	else \
+		echo "pytest not installed — install with 'python3 -m pip install pytest' to run script tests" >&2; \
+		exit 1; \
+	fi
+
+lint-loop-task-implementer-skill:
 	@echo "lint-loop-task-implementer: SKILL.md line count (<= 180)"
 	$(call check_skill_md_length,loop-task-implementer,180,)
 	@echo "lint-loop-task-implementer: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
@@ -1140,7 +963,7 @@ lint-weekly-squad-digest:
 		{ echo "error: missing weekly-squad-digest/scripts/digest_grouping.py" >&2; exit 1; }
 	@echo "lint-weekly-squad-digest: digest_grouping pytest"
 	@if python3 -c "import pytest" >/dev/null 2>&1; then \
-		python3 -m pytest -p no:cacheprovider weekly-squad-digest/tests/ -q || exit 1; \
+		python3 -m pytest weekly-squad-digest/tests/ -q || exit 1; \
 	else \
 		echo "pytest not installed — install with 'python3 -m pip install pytest' to run weekly-squad-digest tests" >&2; \
 	fi
@@ -1194,8 +1017,7 @@ lint-$(1):
 		{ echo "error: $(1)/reference/skill-contract.md must link to shared test-creation-principles" >&2; exit 1; }
 	@echo "  ok (framework refs)"
 	@echo "lint-$(1): dangling markdown links"
-	@bash scripts/lint-dangling-md-links.sh $(1)/*.md $(1)/reference/*.md $(1)/workflow/*.md && echo "  ok" || \
-		{ echo "error: dangling reference link(s) found" >&2; exit 1; }
+	$(call check_dangling_links,$(1)/*.md $(1)/reference/*.md $(1)/workflow/*.md)
 	@echo "lint-$(1): shellcheck scan"
 	@if command -v shellcheck >/dev/null 2>&1; then \
 		shellcheck -x -P SCRIPTDIR $(1)/scripts/*.sh; \
@@ -1211,7 +1033,7 @@ lint-$(1):
 	export PYTHONDONTWRITEBYTECODE=1 PYTHONPYCACHEPREFIX="$$$$cache"; \
 	trap 'rm -rf "$$$$cache"' EXIT; \
 	if python3 -c "import pytest" >/dev/null 2>&1; then \
-		python3 -m pytest -p no:cacheprovider $(1)/tests/$(3) -q || exit 1; \
+		python3 -m pytest $(1)/tests/$(3) -q || exit 1; \
 	else \
 		echo "pytest not installed — install with 'python3 -m pip install pytest' to run $(1)'s own suite" >&2; \
 		exit 1; \
@@ -1642,17 +1464,18 @@ lint-change-impact-analyzer:
 	$(call check_workflow_frontmatter,change-impact-analyzer)
 	$(call check_dangling_links,change-impact-analyzer/*.md change-impact-analyzer/reference/*.md change-impact-analyzer/workflow/*.md)
 	$(call require_ref_files,change-impact-analyzer/reference,phase-index lazy-load-index report-format smoke-test pressure-tests)
-	@grep -q 'pressure-tests' change-impact-analyzer/reference/smoke-test.md
-	@grep -q '## Invocation' change-impact-analyzer/examples.md
+	$(call require_content,change-impact-analyzer/reference/smoke-test.md,'pressure-tests',its pressure-tests companion)
+	$(call require_heading,change-impact-analyzer/examples.md,'## Invocation',Invocation)
 	$(call require_setup_links_framework,change-impact-analyzer)
 	$(call require_cross_skill_escalation,change-impact-analyzer)
 	$(call require_safe_output_link,change-impact-analyzer)
 	@grep -q 'docs/skill-framework/shared/prompt-injection.md' change-impact-analyzer/reference/report-format.md && \
 	 grep -q 'docs/skill-framework/shared/safe-output.md' change-impact-analyzer/reference/report-format.md && \
 	 grep -qiE 'escape|fence|backtick' change-impact-analyzer/reference/report-format.md && \
-	 grep -qi 'redact' change-impact-analyzer/reference/report-format.md
+	 grep -qi 'redact' change-impact-analyzer/reference/report-format.md || \
+		{ echo "error: change-impact-analyzer/reference/report-format.md must sanitize untrusted rendered fields per prompt-injection and safe-output" >&2; exit 1; }
 	@python3 -m py_compile scripts/change_impact.py
-	@python3 -m pytest -p no:cacheprovider scripts/tests/test_change_impact_analyzer.py -q
+	@python3 -m pytest scripts/tests/test_change_impact_analyzer.py -q
 	@echo "  ok"
 
 lint: lint-change-impact-analyzer
@@ -1667,17 +1490,18 @@ lint-implementation-planner:
 	$(call check_workflow_frontmatter,implementation-planner)
 	$(call check_dangling_links,implementation-planner/*.md implementation-planner/reference/*.md implementation-planner/workflow/*.md)
 	$(call require_ref_files,implementation-planner/reference,phase-index lazy-load-index report-format smoke-test pressure-tests)
-	@grep -q 'pressure-tests' implementation-planner/reference/smoke-test.md
-	@grep -q '## Invocation' implementation-planner/examples.md
+	$(call require_content,implementation-planner/reference/smoke-test.md,'pressure-tests',its pressure-tests companion)
+	$(call require_heading,implementation-planner/examples.md,'## Invocation',Invocation)
 	$(call require_setup_links_framework,implementation-planner)
 	$(call require_cross_skill_escalation,implementation-planner)
 	$(call require_safe_output_link,implementation-planner)
 	@grep -q 'docs/skill-framework/shared/prompt-injection.md' implementation-planner/reference/report-format.md && \
 	 grep -q 'docs/skill-framework/shared/safe-output.md' implementation-planner/reference/report-format.md && \
 	 grep -qiE 'escape|fence|backtick' implementation-planner/reference/report-format.md && \
-	 grep -qi 'redact' implementation-planner/reference/report-format.md
+	 grep -qi 'redact' implementation-planner/reference/report-format.md || \
+		{ echo "error: implementation-planner/reference/report-format.md must sanitize untrusted rendered fields per prompt-injection and safe-output" >&2; exit 1; }
 	@python3 -m py_compile scripts/implementation_plan.py
-	@python3 -m pytest -p no:cacheprovider scripts/tests/test_implementation_plan.py -q
+	@python3 -m pytest scripts/tests/test_implementation_plan.py -q
 	@echo "  ok"
 
 lint-resilience-review:
@@ -1687,17 +1511,18 @@ lint-resilience-review:
 	$(call check_workflow_frontmatter,resilience-review)
 	$(call check_dangling_links,resilience-review/*.md resilience-review/reference/*.md resilience-review/workflow/*.md)
 	$(call require_ref_files,resilience-review/reference,phase-index lazy-load-index report-format smoke-test pressure-tests)
-	@grep -q 'pressure-tests' resilience-review/reference/smoke-test.md
-	@grep -q '## Invocation' resilience-review/examples.md
+	$(call require_content,resilience-review/reference/smoke-test.md,'pressure-tests',its pressure-tests companion)
+	$(call require_heading,resilience-review/examples.md,'## Invocation',Invocation)
 	$(call require_setup_links_framework,resilience-review)
 	$(call require_cross_skill_escalation,resilience-review)
 	$(call require_safe_output_link,resilience-review)
 	@grep -q 'docs/skill-framework/shared/prompt-injection.md' resilience-review/reference/report-format.md && \
 	 grep -q 'docs/skill-framework/shared/safe-output.md' resilience-review/reference/report-format.md && \
 	 grep -qiE 'escape|fence|backtick' resilience-review/reference/report-format.md && \
-	 grep -qi 'redact' resilience-review/reference/report-format.md
+	 grep -qi 'redact' resilience-review/reference/report-format.md || \
+		{ echo "error: resilience-review/reference/report-format.md must sanitize untrusted rendered fields per prompt-injection and safe-output" >&2; exit 1; }
 	@python3 -m py_compile scripts/resilience_review.py
-	@python3 -m pytest -p no:cacheprovider scripts/tests/test_resilience_review.py -q
+	@python3 -m pytest scripts/tests/test_resilience_review.py -q
 	@echo "  ok"
 
 lint: lint-production-readiness-review
@@ -1709,24 +1534,25 @@ lint-production-readiness-review:
 	$(call check_workflow_frontmatter,production-readiness-review)
 	$(call check_dangling_links,production-readiness-review/*.md production-readiness-review/reference/*.md production-readiness-review/workflow/*.md)
 	$(call require_ref_files,production-readiness-review/reference,phase-index lazy-load-index report-format smoke-test pressure-tests)
-	@grep -q 'pressure-tests' production-readiness-review/reference/smoke-test.md
-	@grep -q '## Invocation' production-readiness-review/examples.md
+	$(call require_content,production-readiness-review/reference/smoke-test.md,'pressure-tests',its pressure-tests companion)
+	$(call require_heading,production-readiness-review/examples.md,'## Invocation',Invocation)
 	$(call require_setup_links_framework,production-readiness-review)
 	$(call require_cross_skill_escalation,production-readiness-review)
 	$(call require_safe_output_link,production-readiness-review)
 	@grep -q 'docs/skill-framework/shared/prompt-injection.md' production-readiness-review/reference/report-format.md && \
 	 grep -q 'docs/skill-framework/shared/safe-output.md' production-readiness-review/reference/report-format.md && \
 	 grep -qiE 'escape|fence|backtick' production-readiness-review/reference/report-format.md && \
-	 grep -qi 'redact' production-readiness-review/reference/report-format.md
+	 grep -qi 'redact' production-readiness-review/reference/report-format.md || \
+		{ echo "error: production-readiness-review/reference/report-format.md must sanitize untrusted rendered fields per prompt-injection and safe-output" >&2; exit 1; }
 	@python3 -m py_compile scripts/production_readiness.py
-	@python3 -m pytest -p no:cacheprovider scripts/tests/test_production_readiness_contract.py -q
+	@python3 -m pytest scripts/tests/test_production_readiness_contract.py -q
 	@echo "  ok"
 
 lint-framework:
 	@test -n "$(ALL_SKILLS)" || \
 		{ echo "error: ALL_SKILLS is empty/undefined -- make/generated-roster.mk is missing or stale; run 'make generate' to regenerate it" >&2; exit 1; }
 	@echo "lint-framework: shared docs present"
-	@test -f docs/skill-framework/README.md
+	$(call require_file,docs/skill-framework/README.md,the shared framework index)
 	@for f in confidence-bands cross-skill-escalation post-action-templates \
 		smoke-test-conventions examples-conventions phase-glossary review-metadata-schema \
 		skill-routing prompt-injection claude-code-setup org-rollup-schema test-creation-principles \
@@ -1735,58 +1561,58 @@ lint-framework:
 		test -s docs/skill-framework/shared/$$f.md || \
 			{ echo "error: docs/skill-framework/shared/$$f.md is empty" >&2; exit 1; }; \
 	done
-	@grep -q 'confidence-bands' docs/skill-framework/README.md
+	$(call require_content,docs/skill-framework/README.md,'confidence-bands',the confidence-bands contract)
 	@echo "lint-framework: required sections"
-	@grep -q '^## 1\. Purpose' docs/skill-framework/shared/confidence-bands.md
-	@grep -q '^## 7\. Anti-patterns' docs/skill-framework/shared/confidence-bands.md
-	@grep -q '^## 1\. Symmetric matrix' docs/skill-framework/shared/cross-skill-escalation.md
-	@grep -q 'User prompt template' docs/skill-framework/shared/cross-skill-escalation.md
-	@grep -q '^## 7\. Confirmation gates' docs/skill-framework/shared/post-action-templates.md
-	@grep -q 'Jira ticket update fields' docs/skill-framework/shared/post-action-templates.md
-	@grep -q '^## 5\. Failure diagnosis' docs/skill-framework/shared/smoke-test-conventions.md
-	@grep -q 'Invocation string' docs/skill-framework/shared/smoke-test-conventions.md
-	@grep -q 'Invocation table template' docs/skill-framework/shared/examples-conventions.md
-	@grep -q '^## 1\. Required sections' docs/skill-framework/shared/examples-conventions.md
-	@grep -q '^## 2\. Scenario format' docs/skill-framework/shared/examples-conventions.md
-	@grep -q '^## 5\. Anti-patterns' docs/skill-framework/shared/examples-conventions.md
+	$(call require_heading,docs/skill-framework/shared/confidence-bands.md,'^## 1\. Purpose',1. Purpose)
+	$(call require_heading,docs/skill-framework/shared/confidence-bands.md,'^## 7\. Anti-patterns',7. Anti-patterns)
+	$(call require_heading,docs/skill-framework/shared/cross-skill-escalation.md,'^## 1\. Symmetric matrix',1. Symmetric matrix)
+	$(call require_content,docs/skill-framework/shared/cross-skill-escalation.md,'User prompt template',the user prompt template)
+	$(call require_heading,docs/skill-framework/shared/post-action-templates.md,'^## 7\. Confirmation gates',7. Confirmation gates)
+	$(call require_content,docs/skill-framework/shared/post-action-templates.md,'Jira ticket update fields',the Jira ticket update fields)
+	$(call require_heading,docs/skill-framework/shared/smoke-test-conventions.md,'^## 5\. Failure diagnosis',5. Failure diagnosis)
+	$(call require_content,docs/skill-framework/shared/smoke-test-conventions.md,'Invocation string',the invocation string convention)
+	$(call require_content,docs/skill-framework/shared/examples-conventions.md,'Invocation table template',the invocation table template)
+	$(call require_heading,docs/skill-framework/shared/examples-conventions.md,'^## 1\. Required sections',1. Required sections)
+	$(call require_heading,docs/skill-framework/shared/examples-conventions.md,'^## 2\. Scenario format',2. Scenario format)
+	$(call require_heading,docs/skill-framework/shared/examples-conventions.md,'^## 5\. Anti-patterns',5. Anti-patterns)
 	@for skill in $(ALL_SKILLS); do \
 		test -f $$skill/examples.md || \
 			{ echo "error: missing $$skill/examples.md (examples-conventions)" >&2; exit 1; }; \
 		grep -q '## Invocation' $$skill/examples.md || \
 			{ echo "error: $$skill/examples.md must have Invocation section" >&2; exit 1; }; \
 	done
-	@grep -q '^## 5\. Cross-skill analogies' docs/skill-framework/shared/phase-glossary.md
-	@grep -q 'MCP profile' docs/skill-framework/shared/phase-glossary.md
-	@grep -q 'Minimum evidence gate' docs/skill-framework/shared/phase-glossary.md
-	@grep -q '^## 3\. `history` block' docs/skill-framework/shared/review-metadata-schema.md
-	@grep -q '^## 8\. `assessment_metadata`' docs/skill-framework/shared/review-metadata-schema.md
-	@grep -q 'investigation_quality' docs/skill-framework/shared/review-metadata-schema.md
-	@grep -q 'repository_health' docs/skill-framework/shared/review-metadata-schema.md
-	@grep -q '^## Rule' docs/skill-framework/shared/prompt-injection.md
-	@grep -q 'incident-rca.*Phase 2' docs/skill-framework/shared/review-metadata-schema.md
-	@grep -q 'domain-comprehension' docs/skill-framework/shared/confidence-bands.md
-	@grep -q 'mysql-to-postgres-sql' docs/skill-framework/shared/confidence-bands.md
-	@grep -q 'risk tier' docs/skill-framework/shared/confidence-bands.md
-	@grep -q '### 8.3 domain-comprehension' docs/skill-framework/shared/review-metadata-schema.md
-	@grep -q '### 8.4 squad-map' docs/skill-framework/shared/review-metadata-schema.md
-	@grep -q '### 8.5 mysql-to-postgres-sql' docs/skill-framework/shared/review-metadata-schema.md
-	@grep -q 'mysql-to-postgres-sql mapping' docs/skill-framework/shared/phase-glossary.md
-	@grep -q 'squad map complete' docs/skill-framework/shared/post-action-templates.md
+	$(call require_heading,docs/skill-framework/shared/phase-glossary.md,'^## 5\. Cross-skill analogies',5. Cross-skill analogies)
+	$(call require_content,docs/skill-framework/shared/phase-glossary.md,'MCP profile',the MCP profile)
+	$(call require_content,docs/skill-framework/shared/phase-glossary.md,'Minimum evidence gate',the minimum evidence gate)
+	$(call require_heading,docs/skill-framework/shared/review-metadata-schema.md,'^## 3\. `history` block',3. history block)
+	$(call require_heading,docs/skill-framework/shared/review-metadata-schema.md,'^## 8\. `assessment_metadata`',8. assessment_metadata)
+	$(call require_content,docs/skill-framework/shared/review-metadata-schema.md,'investigation_quality',the investigation_quality field)
+	$(call require_content,docs/skill-framework/shared/review-metadata-schema.md,'repository_health',the repository_health field)
+	$(call require_heading,docs/skill-framework/shared/prompt-injection.md,'^## Rule',Rule)
+	$(call require_content,docs/skill-framework/shared/review-metadata-schema.md,'incident-rca.*Phase 2',incident-rca's Phase 2 metadata)
+	$(call require_content,docs/skill-framework/shared/confidence-bands.md,'domain-comprehension',domain-comprehension's bands)
+	$(call require_content,docs/skill-framework/shared/confidence-bands.md,'mysql-to-postgres-sql',mysql-to-postgres-sql's bands)
+	$(call require_content,docs/skill-framework/shared/confidence-bands.md,'risk tier',the risk tier mapping)
+	$(call require_heading,docs/skill-framework/shared/review-metadata-schema.md,'### 8.3 domain-comprehension',8.3 domain-comprehension)
+	$(call require_heading,docs/skill-framework/shared/review-metadata-schema.md,'### 8.4 squad-map',8.4 squad-map)
+	$(call require_heading,docs/skill-framework/shared/review-metadata-schema.md,'### 8.5 mysql-to-postgres-sql',8.5 mysql-to-postgres-sql)
+	$(call require_content,docs/skill-framework/shared/phase-glossary.md,'mysql-to-postgres-sql mapping',the mysql-to-postgres-sql mapping)
+	$(call require_content,docs/skill-framework/shared/post-action-templates.md,'squad map complete',the squad-map completion template)
 	@grep -q 'kubesense-alerts' docs/skill-framework/shared/cross-skill-escalation.md || \
 		{ echo "error: cross-skill-escalation must include kubesense-alerts handoff" >&2; exit 1; }
 	@grep -q 'MYSQL_TO_PG_SQL_REWRITES' docs/skill-framework/shared/cross-skill-escalation.md || \
 		{ echo "error: cross-skill-escalation must include mysql artifact handoff block" >&2; exit 1; }
 	@grep -q 'Approach B' docs/skill-framework/README.md || \
 		{ echo "error: skill-framework README must document deferred Approach B" >&2; exit 1; }
-	@test -f domain-comprehension/reference/assessment-metadata.md
-	@test -f squad-map/reference/assessment-metadata.md
-	@test -f mysql-to-postgres-sql/reference/assessment-metadata.md
-	@grep -q 'review-metadata-schema' docs/skill-framework/README.md
+	$(call require_file,domain-comprehension/reference/assessment-metadata.md,assessment-metadata contract)
+	$(call require_file,squad-map/reference/assessment-metadata.md,assessment-metadata contract)
+	$(call require_file,mysql-to-postgres-sql/reference/assessment-metadata.md,assessment-metadata contract)
+	$(call require_content,docs/skill-framework/README.md,'review-metadata-schema',the review-metadata schema)
 	@echo "lint-framework: SETUP.md freshness tables"
 	@python3 scripts/validate_setup_freshness.py
 	@echo "  ok"
 	@echo "lint-framework: dangling markdown links"
-	@bash scripts/lint-dangling-md-links.sh docs/skill-framework/README.md docs/skill-framework/shared/*.md && echo "  ok" || \
+	@python3 scripts/validate_references.py --files docs/skill-framework/README.md docs/skill-framework/shared/*.md && echo "  ok" || \
 		{ echo "error: dangling reference link(s) in docs/skill-framework" >&2; exit 1; }
 	@fail=0; \
 	for f in confidence-bands cross-skill-escalation post-action-templates \
@@ -1797,7 +1623,7 @@ lint-framework:
 		fi; \
 	done; \
 	if [ "$$fail" -ne 0 ]; then exit 1; fi
-	@grep -q '| Complete |' docs/skill-framework/README.md
+	$(call require_content,docs/skill-framework/README.md,'| Complete |',a Complete status row)
 	@for skill in $(ALL_SKILLS); do \
 		grep -q 'skill-framework' $$skill/SETUP.md || \
 			{ echo "error: $$skill/SETUP.md must link to docs/skill-framework" >&2; exit 1; }; \
@@ -1886,7 +1712,7 @@ lint-framework:
 		docs/skill-framework/shared/examples/assessment-metadata-k8s.example.yaml \
 		pr-review/tests/fixtures/phase5-review-metadata.yaml || exit 1
 	@echo "lint-framework: source-tree reference validation (anchors + local links, cross-cutting docs)"
-	@python3 scripts/validate_references.py --source-tree . --exclude docs/superpowers --exclude docs/skill-framework --exclude .claude/worktrees || exit 1
+	@python3 scripts/validate_references.py --source-tree . --exclude docs/superpowers --exclude .claude/worktrees || exit 1
 	@echo "lint-framework: ok"
 
 # Split out from lint-framework: this is the repo's dominant test cost (the shared
@@ -1896,7 +1722,7 @@ lint-framework:
 lint-framework-tests:
 	@echo "lint-framework-tests: scripts/tests/ suite"
 	@if python3 -c "import pytest" >/dev/null 2>&1; then \
-		python3 -m pytest -p no:cacheprovider $(PYTEST_XDIST_FLAG) scripts/tests/ -q || exit 1; \
+		python3 -m pytest $(PYTEST_XDIST_FLAG) scripts/tests/ -q || exit 1; \
 	else \
 		echo "pytest not installed — install with 'python3 -m pip install pytest' to run metadata footer tests" >&2; \
 	fi

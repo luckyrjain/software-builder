@@ -1,0 +1,26 @@
+# The repository root is the only supported working directory for this
+# toolchain: `python3 -m scripts.registry validate`, `python3 -m scripts.evals`
+# and every test import resolve `scripts.` as a top-level package rooted here.
+# Nothing declared that before this file existed, so each shell caller had to
+# rediscover it (scripts/tests/test_install_all_skills.sh still exports
+# PYTHONPATH="${REPO_ROOT}" by hand). This file states it once.
+#
+# Deliberately no build backend: the toolchain is run from a checkout, not
+# installed. Runtime dependencies stay in requirements.txt / requirements.lock,
+# which `make setup` installs with --require-hashes.
+#
+# Ruff config stays in ruff.toml, which takes precedence over any [tool.ruff]
+# here -- one file, one place to look.
+[project]
+name = "software-builder-tooling"
+version = "0.0.0"
+description = "Repository tooling for the software-builder skill registry (not a distributable package)."
+requires-python = ">=3.12"
+
+[tool.pytest.ini_options]
+# -p no:cacheprovider was repeated in every pytest recipe in make/core.mk: the
+# suites are repository-conformance checks whose .pytest_cache would be a
+# tracked-tree side effect of running lint. Declared once here so every
+# invocation from the repository root gets it, recipes and ad-hoc runs alike.
+addopts = "-p no:cacheprovider"
+testpaths = ["scripts/tests"]

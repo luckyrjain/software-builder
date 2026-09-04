@@ -35,14 +35,6 @@ backlog-runner:
     external_actions: write
     unattended: true
     merge: true
-  supported_hosts:
-  - chatgpt
-  - claude
-  - codex
-  - cursor
-  - generic
-  - kiro
-  entrypoint: SKILL.md
   output_contract:
     produces:
     - implementation_pr
@@ -50,3 +42,15 @@ backlog-runner:
   dependencies:
   - loop-task-implementer
   version_source: skill_frontmatter_legacy_numeric
+  composition:
+    consumes:
+    - implementation_task
+  degraded_behavior:
+    missing_capability: scheduler.cron.trigger
+    available_capabilities: []
+    behavior: BLOCKED
+  setup_freshness:
+    external_services: Jira or GitHub Issues API, loop-task-implementer
+  routing:
+    patterns:
+    - \b(backlog|tickets?)\b.*\b(overnight|scheduled|nightly|queue runner)\b

@@ -16,7 +16,6 @@ from kubesense_logs import (  # noqa: E402
     find_workload_locations,
     redact_secrets,
     spl_rows_to_logs,
-    unique_sample_messages,
 )
 
 HIERARCHY = [

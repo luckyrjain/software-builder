@@ -4,6 +4,10 @@ import copy
 from pathlib import Path
 from typing import Any
 
+import yaml
+
+from scripts.registry.host_adapter import HOSTS
+from scripts.registry.host_registry import HostRegistryParseError, parse_host_registry
 from scripts.registry.models import (
     CapabilitiesSpec,
     CapabilityOptional,
@@ -63,10 +67,6 @@ def _skill_host_ids(skills_yaml_path: Path) -> frozenset[str]:
     agent_hosts_path = skills_yaml_path.parent / "agent-hosts.yaml"
     if not agent_hosts_path.is_file():
         return _DEFAULT_HOST_IDS
-    import yaml
-
-    from scripts.registry.host_registry import HostRegistryParseError, parse_host_registry
-
     try:
         registry = parse_host_registry(agent_hosts_path)
     except (HostRegistryParseError, OSError, ValueError, yaml.YAMLError) as exc:
@@ -144,6 +144,39 @@ def resolve_registry_profiles(raw: Any) -> Any:
     return result
 
 
+DEFAULT_ENTRYPOINT = "SKILL.md"
+
+
+def apply_skill_defaults(raw: Any) -> Any:
+    """Fill in the per-skill fields whose value is the same for every skill.
+
+    `entrypoint` is `SKILL.md` for all 38 skills (`validate_canonical_manifest` rejects
+    anything else), and `supported_hosts` is the full host roster (`host_adapter.HOSTS`, which
+    the same validator already checks each skill against). Restating both in every fragment
+    made them look like per-skill decisions and gave a new skill two more lines to copy
+    wrongly. Declaring them stays legal and wins -- a skill that genuinely narrows its host
+    set says so -- but omitting them now means "the default", resolved here so every consumer
+    of the raw dict sees the same fully-inlined shape, exactly as `resolve_registry_profiles`
+    does for `extends`.
+    """
+    if not isinstance(raw, dict) or not isinstance(raw.get("skills"), dict):
+        return raw
+    defaults = {"entrypoint": DEFAULT_ENTRYPOINT, "supported_hosts": sorted(HOSTS)}
+
+    def with_defaults(entry: Any) -> Any:
+        if not isinstance(entry, dict):
+            return entry
+        filled = dict(entry)
+        for key, value in defaults.items():
+            filled.setdefault(key, value)
+        return filled
+
+    skills = {skill_id: with_defaults(entry) for skill_id, entry in raw["skills"].items()}
+    result = dict(raw)
+    result["skills"] = skills
+    return result
+
+
 def _deep_merge(base: dict, override: dict) -> dict:
     merged = dict(base)
     for key, value in override.items():
@@ -155,10 +188,11 @@ def _deep_merge(base: dict, override: dict) -> dict:
 
 
 _registry_raw_cache: dict[tuple[Path, str], Any] = {}
+_registry_cache: dict[tuple[Path, str], Registry] = {}
 
 
 def clear_registry_cache() -> None:
-    """Drop every cached `load_registry_raw` result.
+    """Drop every cached `load_registry_raw` and `parse_registry` result.
 
     A single `make generate`/`make validate` invocation calls `parse_registry`/
     `load_registry_raw`/`load_canonical_manifest` (directly or transitively) at
@@ -180,6 +214,7 @@ def clear_registry_cache() -> None:
     (a library user, a batch script chaining subcommands in-process) breaks it.
     """
     _registry_raw_cache.clear()
+    _registry_cache.clear()
 
 
 def load_registry_raw(path: Path) -> Any:
@@ -222,11 +257,25 @@ def load_registry_raw(path: Path) -> Any:
         if fragments_dir.is_dir():
             raw = dict(_require_mapping(raw, str(path)))
             raw["skills"] = load_fragment_skills(path.parent)
-        _registry_raw_cache[cache_key] = resolve_registry_profiles(raw)
+        _registry_raw_cache[cache_key] = apply_skill_defaults(resolve_registry_profiles(raw))
     return copy.deepcopy(_registry_raw_cache[cache_key])
 
 
 def parse_registry(path: Path) -> Registry:
+    """The typed registry for one skills.yaml, memoized on the same key as its raw read.
+
+    `load_registry_raw`'s cache removed the repeated disk read and fragment merge, but every
+    caller still rebuilt the whole Registry/SkillEntry graph on top of it -- roughly nine
+    full rebuilds per `registry validate`. The models are frozen dataclasses and nothing
+    mutates `Registry.skills`, so callers can share one instance instead of each paying for
+    how many times the registry is asked for. Invalidated by `clear_registry_cache`, the
+    same seam that invalidates the raw layer; a parse that raises is not cached, so a
+    repaired skills.yaml still reparses.
+    """
+    cache_key = (path.parent.resolve(), path.name)
+    cached = _registry_cache.get(cache_key)
+    if cached is not None:
+        return cached
     raw = load_registry_raw(path)
     root = _require_mapping(raw, "skills.yaml root")
     schema_version = _coerce_int(root.get("schema_version", 0), label="schema_version")
@@ -248,7 +297,9 @@ def parse_registry(path: Path) -> Registry:
             errors.append(str(exc))
     if errors:
         raise RegistryParseError(errors)
-    return Registry(schema_version=schema_version, skills=skills)
+    registry = Registry(schema_version=schema_version, skills=skills)
+    _registry_cache[cache_key] = registry
+    return registry
 
 
 def registered_skill_ids(path: Path) -> set[str]:

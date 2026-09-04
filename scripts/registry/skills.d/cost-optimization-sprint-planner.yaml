@@ -34,14 +34,6 @@ cost-optimization-sprint-planner:
     external_actions: none
     unattended: false
     merge: false
-  supported_hosts:
-  - chatgpt
-  - claude
-  - codex
-  - cursor
-  - generic
-  - kiro
-  entrypoint: SKILL.md
   output_contract:
     produces:
     - cost_sweep_rollup
@@ -54,3 +46,14 @@ cost-optimization-sprint-planner:
   - k8s-overprovisioning-datadog
   - squad-map
   version_source: skill_frontmatter_legacy_numeric
+  composition:
+    consumes: []
+  degraded_behavior:
+    missing_capability: host.filesystem.read
+    available_capabilities: []
+    behavior: BLOCKED
+  setup_freshness:
+    external_services: Kubernetes MCP, Datadog MCP (via k8s-overprovisioning-datadog)
+  routing:
+    patterns:
+    - \b(cost optimization|cost reduction)\b.*\b(sprint|backlog|prioriti[sz]|plan)\b

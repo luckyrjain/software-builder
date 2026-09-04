@@ -15,7 +15,6 @@ from pr_review_policy_guards import (  # noqa: E402
     execute_guarded_write_batch,
     gitlab_ambiguous_write_decision,
     highest_severity,
-    is_github_remote,
     neutralize_provider_control_lines,
     parse_review_url,
     provider_from_remote,

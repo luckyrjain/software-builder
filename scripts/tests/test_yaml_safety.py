@@ -88,6 +88,23 @@ def test_load_unique_yaml_file_propagates_duplicate_key(tmp_path: Path) -> None:
         load_unique_yaml_file(path)
 
 
+def test_load_unique_yaml_file_names_the_file_in_duplicate_key_errors(tmp_path: Path) -> None:
+    path = tmp_path / "fragment.yaml"
+    path.write_text("a: 1\na: 2\n", encoding="utf-8")
+    with pytest.raises(DuplicateKeyError) as excinfo:
+        load_unique_yaml_file(path)
+    assert str(path) in str(excinfo.value)
+    assert "duplicate YAML mapping key" in str(excinfo.value)
+
+
+def test_load_unique_yaml_file_names_the_file_in_syntax_errors(tmp_path: Path) -> None:
+    path = tmp_path / "fragment.yaml"
+    path.write_text("a: 1\n  b: [\n", encoding="utf-8")
+    with pytest.raises(yaml.YAMLError) as excinfo:
+        load_unique_yaml_file(path)
+    assert str(path) in str(excinfo.value)
+
+
 def test_load_unique_frontmatter_parses_valid_block(tmp_path: Path) -> None:
     path = tmp_path / "SKILL.md"
     path.write_text("---\nname: demo\n---\nbody\n", encoding="utf-8")

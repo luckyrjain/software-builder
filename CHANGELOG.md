@@ -43,6 +43,83 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 
 ## Platform
 
+### Architecture review: deep modules, single sources, one link checker (2026-09-04)
+
+Exhaustive architecture review (Matt Pocock `improve-codebase-architecture` plus a 26-facet sweep,
+A–Z) over the registry, installer, assessment scripts, evals, build graph and docs. 58 candidates
+were grilled; the accepted ones landed across three waves. Highlights:
+
+**Registry and data ownership**
+- Each skill's `type`, `permissions`, write `authority`, produced/consumed artifacts, degraded
+  behaviour, SETUP.md freshness row and routing patterns are declared once, in its
+  `scripts/registry/skills.d/` fragment. `contracts.platform.skill_types` / `skill_permissions`,
+  `contracts.composition_runtime.skill_types`, `contracts.composition.skills`,
+  `degraded_behavior.yaml`, `setup_freshness.yaml`, `routing_rules.yaml` and the three GitHub issue
+  forms' skill dropdowns are generated projections; the nine drift validators that policed the
+  restatement are gone. `skills.yaml`'s generated regions carry a banner.
+- `entrypoint` and `supported_hosts` are optional per-skill fields with schema defaults.
+- One host roster (`host_adapter.HOSTS`, derived from the surface table); an unmapped host is an
+  error, not a `KeyError`. One capability-vocabulary bridge. One contract-section loader
+  (`canonical_manifest.load_contract_section`). One envelope vocabulary
+  (`scripts/registry/envelope_contract.py`). The skill-type enum is one constant.
+- `escalation_sync` cross-checks `cross-skill-escalation.md` against the registry's escalation
+  edges (33 pre-existing disagreements reconciled); `routing_sync` enforces `skill-routing.md`'s
+  own "When NOT to use" subset rule (15 rows reconciled).
+- Host evidence entries accept `observed_at`; `agent-hosts.yaml` declares
+  `defaults.evidence_max_age_days: 90`; `STALE` is derived at parse time instead of hand-set.
+- `parse_registry` is memoized on the raw-load cache key. The three contract projections carry a
+  generated marker and `make generate` fails loudly on a malformed canonical manifest.
+- Deleted: `embedded_context.py` (no callers), `platform_contracts.yaml` (no readers),
+  `frontmatter.py` (alias), `runtime_manifest.py` (folded into `manifest.py`),
+  `install_targets_sync.py` (generated files cannot drift), the legacy/universal install-resolver
+  pair (replaced by one `install_resolver.py`), `HOST_ADAPTER_CAPABILITY_MAP`,
+  production_readiness's duplicate `AssessmentContextTrust`, and test-only pass-throughs.
+
+**Installer, packaging and security seams**
+- `scripts/registry/install_resolver.py` owns selector routing: one table, one function returning
+  `(destination, host label)`, a reachability crosscheck for registry targets no selector reaches,
+  and `install_support.py list-selectors` feeding the Bash allowlist.
+- `docs/skill-framework/shared/shared_runtime_loader.py` is the one containment policy for skills
+  that execute vendored framework Python; an installed package can no longer fall back to the shared
+  skills root. `scripts/validate_review_contracts.py` imports the vendored
+  `review_contract_runtime.py` instead of duplicating it (~220 lines removed).
+- `docs/skill-framework/shared/confidence_bands.py` holds the band order and the capping rule;
+  incident-rca and pr-review are thin adapters.
+- Workspace-supplied YAML is parsed through the hardened loader, vendored into the four skills that
+  read it; a repo test blocks new bare `yaml.safe_load` calls. YAML errors name their file.
+- Multi-skill installs continue past a failed skill and end with an `installed: N, failed: M`
+  summary; stale locks are reclaimed by rename; install manifests carry `manifest_version: 1`.
+- `validate_references.py --installed-package` still allowlists `docs/superpowers/` history links; the
+  five skill docs that pointed at repo-only scripts now say so.
+
+**Assessment scripts**
+- `scripts/registry/result_envelope.py` builds the six-section result envelope and validates its
+  own output; `scripts/registry/skill_result.py` implements the axis-split rule once for five
+  `finalize_*` paths; `scripts/registry/validation_primitives.py` replaces per-script copies.
+  Producers read `artifact_schema_version` from the contract. change_impact's diff parser handles
+  spaced and quoted paths.
+
+**Build, lint, tests and performance**
+- `scripts/lint-dangling-md-links.sh` is deleted; `validate_references.py --files` replaces it
+  in-process. One test dropped from 206s to 10s; `make lint` no longer spawns ~3,850 Python
+  interpreters; `docs/skill-framework` is covered by the same anchor algorithm as everything else.
+- Per-skill `install-*`/`install-claude-*` recipes and their `.PHONY` line are generated into
+  `make/generated-roster.mk`. Every silent `grep -q`/`test -f` assertion in `make/core.mk` has a
+  failure message. `eval_tier_health` reports its unhealthy reasons on stderr.
+- `ruff` runs over the whole repository; `pyproject.toml` declares pytest defaults; the xdist probe
+  is lazy. Eval policy sets live in `scripts/evals/eval_coverage_contract.py` (renamed from
+  `batch3_contract.py`); `eval_contracts.yaml` is read once per run.
+- Test files are named after the behaviour they exercise instead of delivery batches;
+  loop-task-implementer's tests live in `loop-task-implementer/tests/`.
+
+**Documentation**
+- ADR 0001 amended; ADR 0005 (registry authoring model) and ADR 0006 (host registry and evidence
+  model) added. `CONTEXT.md` names the composition-topology axis behind `type:` and adds the
+  verification/evidence vocabulary. `docs/OPERATIONS.md` covers stale locks, evidence refresh,
+  VERSION bumps and roster recovery. `scripts/README.md` describes the real staged/atomic install
+  and carries a module index. The architecture-review skill's own output moved from the repo root
+  to `docs/history/`.
+
 ### Universal coding-agent compatibility: host registry, capability resolver, GitHub Copilot (2026-09-01)
 
 - New declarative host/target registry (`agent-hosts.yaml`, validated by
