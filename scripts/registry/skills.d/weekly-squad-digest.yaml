@@ -20,6 +20,18 @@ weekly-squad-digest:
     escalation_targets:
     - migration-program-manager
     - cost-optimization-sprint-planner
+    consumes:
+    - migration_status_rollup
+    - cost_sweep_rollup
+    consume_fields:
+      migration_status_rollup:
+      - items
+      - generated_at
+      - source_revision
+      cost_sweep_rollup:
+      - items
+      - generated_at
+      - source_revision
   capabilities:
     required:
     - scheduler.cron.trigger
@@ -42,14 +54,6 @@ weekly-squad-digest:
     external_actions: write
     unattended: true
     merge: false
-  supported_hosts:
-  - chatgpt
-  - claude
-  - codex
-  - cursor
-  - generic
-  - kiro
-  entrypoint: SKILL.md
   output_contract:
     produces:
     - digest_report
@@ -62,3 +66,12 @@ weekly-squad-digest:
   - migration-program-manager
   - cost-optimization-sprint-planner
   version_source: skill_frontmatter_legacy_numeric
+  degraded_behavior:
+    missing_capability: scheduler.cron.trigger
+    available_capabilities: []
+    behavior: BLOCKED
+  setup_freshness:
+    external_services: None (reads rollup JSON artifacts)
+  routing:
+    patterns:
+    - \bweekly\b.*\b(squad|team)\b.*\b(digest|summary|rollup)\b

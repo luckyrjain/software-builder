@@ -15,10 +15,17 @@
 # host_contracts.yaml/host_adapter.py entry at all (see github-copilot below).
 schema_version: 1
 
+defaults:
+  # How long a host's RUNTIME evidence keeps its VERIFIED claim current (spec Section 13). Past
+  # this, the parser reports that host as STALE rather than VERIFIED. Only evidence carrying an
+  # `observed_at:` date ages -- an undated entry is not a claim that has expired -- so no host
+  # here is affected today.
+  evidence_max_age_days: 90
+
 targets:
   # Universal Agent Skills target (Candidate 7): a shared, multi-tool discovery directory rather
   # than a single host's own. --agent agents installs here directly, not routed through any
-  # specific host's target list -- see scripts/registry/universal_install_resolver.py.
+  # specific host's target list -- see scripts/registry/install_resolver.py.
   - id: agents-user
     scope: user
     path: ~/.agents/skills

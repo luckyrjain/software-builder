@@ -6,6 +6,7 @@ from typing import Any
 
 import yaml
 
+from scripts.registry.host_adapter import HOSTS
 from scripts.registry.host_registry import HostRegistryParseError, parse_host_registry
 from scripts.registry.models import (
     CapabilitiesSpec,
@@ -143,6 +144,39 @@ def resolve_registry_profiles(raw: Any) -> Any:
     return result
 
 
+DEFAULT_ENTRYPOINT = "SKILL.md"
+
+
+def apply_skill_defaults(raw: Any) -> Any:
+    """Fill in the per-skill fields whose value is the same for every skill.
+
+    `entrypoint` is `SKILL.md` for all 38 skills (`validate_canonical_manifest` rejects
+    anything else), and `supported_hosts` is the full host roster (`host_adapter.HOSTS`, which
+    the same validator already checks each skill against). Restating both in every fragment
+    made them look like per-skill decisions and gave a new skill two more lines to copy
+    wrongly. Declaring them stays legal and wins -- a skill that genuinely narrows its host
+    set says so -- but omitting them now means "the default", resolved here so every consumer
+    of the raw dict sees the same fully-inlined shape, exactly as `resolve_registry_profiles`
+    does for `extends`.
+    """
+    if not isinstance(raw, dict) or not isinstance(raw.get("skills"), dict):
+        return raw
+    defaults = {"entrypoint": DEFAULT_ENTRYPOINT, "supported_hosts": sorted(HOSTS)}
+
+    def with_defaults(entry: Any) -> Any:
+        if not isinstance(entry, dict):
+            return entry
+        filled = dict(entry)
+        for key, value in defaults.items():
+            filled.setdefault(key, value)
+        return filled
+
+    skills = {skill_id: with_defaults(entry) for skill_id, entry in raw["skills"].items()}
+    result = dict(raw)
+    result["skills"] = skills
+    return result
+
+
 def _deep_merge(base: dict, override: dict) -> dict:
     merged = dict(base)
     for key, value in override.items():
@@ -223,7 +257,7 @@ def load_registry_raw(path: Path) -> Any:
         if fragments_dir.is_dir():
             raw = dict(_require_mapping(raw, str(path)))
             raw["skills"] = load_fragment_skills(path.parent)
-        _registry_raw_cache[cache_key] = resolve_registry_profiles(raw)
+        _registry_raw_cache[cache_key] = apply_skill_defaults(resolve_registry_profiles(raw))
     return copy.deepcopy(_registry_raw_cache[cache_key])
 
 

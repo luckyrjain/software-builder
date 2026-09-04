@@ -58,16 +58,9 @@ def _split_top_level(value: str, separators: str = ",/") -> list[str]:
     return parts
 
 
-def _not_these_mentions(text: str) -> set[str]:
-    """Extract skill-id mentions from the routing table's bare "NOT these" column.
-
-    Route-to mentions are always bold (caught by _SKILL_MENTION_RE); "NOT
-    these" is bare comma/slash-separated text like "incident-rca, squad-map
-    (that's what it delegates to internally...)" -- covering it needs table
-    structure, not just a bold-span scan, since it's most of the document's
-    actual skill references.
-    """
-    mentioned: set[str] = set()
+def _routing_table_rows(text: str) -> list[list[str]]:
+    """The routing table's data rows, each as its list of trimmed cells."""
+    rows: list[list[str]] = []
     in_table = False
     for line in text.splitlines():
         stripped = line.strip()
@@ -79,16 +72,107 @@ def _not_these_mentions(text: str) -> set[str]:
         if not in_table or not stripped.startswith("|"):
             continue
         cells = [cell.strip() for cell in stripped.strip("|").split("|")]
-        if len(cells) < 3:
+        if len(cells) >= 3 and cells[2] != "NOT these":
+            rows.append(cells)
+    return rows
+
+
+def _excluded_ids(not_these: str) -> set[str]:
+    """The skill ids one "NOT these" cell names.
+
+    The column is bare comma/slash-separated text like "incident-rca, squad-map (that's what
+    it delegates to internally...)", so each fragment's leading token is the id and the rest is
+    prose explaining the distinction.
+    """
+    if set(not_these) <= {"-"}:
+        return set()
+    ids: set[str] = set()
+    for fragment in _split_top_level(not_these):
+        token = re.split(r"[\s(]", fragment.strip(), maxsplit=1)[0].strip("*")
+        if _TABLE_TOKEN_RE.match(token):
+            ids.add(token)
+    return ids
+
+
+def _not_these_mentions(text: str) -> set[str]:
+    """Every skill-id mention in the routing table's bare "NOT these" column.
+
+    Route-to mentions are always bold (caught by _SKILL_MENTION_RE); covering "NOT these"
+    needs table structure, not just a bold-span scan, since it's most of the document's actual
+    skill references.
+    """
+    return {skill_id for cells in _routing_table_rows(text) for skill_id in _excluded_ids(cells[2])}
+
+
+def routing_exclusions_by_skill(text: str) -> dict[str, set[str]]:
+    """For each skill the routing table routes to, the union of its rows' "NOT these" ids.
+
+    A skill can own several rows (prd-architect has one per mode), and the exclusions of all of
+    them together are what that skill's own documentation may draw from.
+    """
+    exclusions: dict[str, set[str]] = {}
+    for cells in _routing_table_rows(text):
+        excluded = _excluded_ids(cells[2])
+        for skill_id in _SKILL_MENTION_RE.findall(cells[1]):
+            exclusions.setdefault(skill_id, set()).update(excluded)
+    return exclusions
+
+
+def skill_md_exclusions(skill_md: str) -> set[str] | None:
+    """The skill ids a SKILL.md's own "NOT to use" table routes away to, or None if it has none.
+
+    Two heading shapes are in use -- `## When NOT to use` with a Request/Use-instead table, and
+    `## When to use / NOT to use` with a Use/Not table -- but in both the last column is the
+    one naming other skills, and it names them in bold.
+    """
+    lines = skill_md.splitlines()
+    start = next(
+        (i for i, line in enumerate(lines) if line.startswith("## ") and "NOT to use" in line),
+        None,
+    )
+    if start is None:
+        return None
+    ids: set[str] = set()
+    for line in lines[start + 1 :]:
+        stripped = line.strip()
+        if stripped.startswith("## "):
+            break
+        if not stripped.startswith("|"):
             continue
-        not_these = cells[2]
-        if not_these == "NOT these" or set(not_these) <= {"-"}:
+        cells = [cell.strip() for cell in stripped.strip("|").split("|")]
+        if len(cells) >= 2:
+            ids.update(_SKILL_MENTION_RE.findall(cells[-1]))
+    return ids
+
+
+def validate_skill_not_these_subsets(root: Path, registry: Registry) -> list[str]:
+    """Enforce skill-routing.md's own rule: a skill's "NOT to use" table is a subset of its row.
+
+    The document states this ("Each skill's 'When NOT to use' table MUST be a subset of this
+    routing table -- do not maintain independent routing logic per skill") and nothing checked
+    it, so 15 skills had grown per-skill routing decisions the shared table never learned about.
+    """
+    path = routing_doc_path(root)
+    if not path.is_file():
+        return []
+
+    exclusions = routing_exclusions_by_skill(path.read_text(encoding="utf-8"))
+    errors: list[str] = []
+    for skill_id, entry in sorted(registry.skills.items()):
+        skill_md = root / entry.path / "SKILL.md"
+        if not skill_md.is_file():
             continue
-        for fragment in _split_top_level(not_these):
-            token = re.split(r"[\s(]", fragment.strip(), maxsplit=1)[0].strip("*")
-            if _TABLE_TOKEN_RE.match(token):
-                mentioned.add(token)
-    return mentioned
+        named = skill_md_exclusions(skill_md.read_text(encoding="utf-8"))
+        if named is None:
+            continue
+        extra = sorted(named - exclusions.get(skill_id, set()))
+        if extra:
+            errors.append(
+                f"error: {skill_id}: SKILL.md routes away to {', '.join(extra)}, which "
+                f"skill-routing.md's own row for {skill_id} does not list under 'NOT these' "
+                "(add them there — the shared table is the superset, not the per-skill one)",
+            )
+    return errors
 
 
 def validate_skill_routing_references(root: Path, registry: Registry) -> list[str]:

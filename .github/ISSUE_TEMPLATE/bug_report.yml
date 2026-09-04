@@ -8,20 +8,43 @@ body:
       label: Affected skill
       description: Which skill (or shared framework file) does this concern?
       options:
+        # GENERATED from skills.yaml — run make generate
+        - api-design-review
+        - api-test-creator
+        - architecture-review
         - backlog-runner
+        - capacity-planner
+        - change-impact-analyzer
+        - contract-test-creator
         - cost-optimization-sprint-planner
+        - database-review
+        - dependency-upgrade-review
+        - deployment-risk-review
         - domain-comprehension
+        - e2e-test-creator
+        - implementation-planner
         - incident-rca
         - incident-triage-agent
+        - integration-test-creator
         - k8s-overprovisioning-datadog
         - loop-task-implementer
         - migration-program-manager
         - mysql-to-postgres-sql
         - new-hire-guide
+        - observability-review
+        - performance-review
         - pr-gatekeeper
         - pr-review
+        - prd-architect
+        - production-readiness-review
         - release-readiness-checker
+        - resilience-review
+        - security-review
         - squad-map
+        - system-design
+        - tech-debt-assessor
+        - test-writer
+        - unit-test-creator
         - weekly-squad-digest
         - who-owns-x-bot
         - docs/skill-framework (shared framework)

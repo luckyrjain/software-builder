@@ -44,14 +44,6 @@ domain-comprehension:
     external_actions: read
     unattended: false
     merge: false
-  supported_hosts:
-  - chatgpt
-  - claude
-  - codex
-  - cursor
-  - generic
-  - kiro
-  entrypoint: SKILL.md
   output_contract:
     produces:
     - squad_map
@@ -59,3 +51,18 @@ domain-comprehension:
   dependencies:
   - squad-map
   version_source: skill_frontmatter_legacy_numeric
+  composition:
+    consumes:
+    - mr_context
+  degraded_behavior:
+    missing_capability: host.repository.read
+    available_capabilities: []
+    behavior: BLOCKED
+  setup_freshness:
+    external_services: GitLab MCP (optional), Datadog MCP (optional)
+  routing:
+    patterns:
+    - \b(domain comprehension|bounded contexts?|current[- ]state domain|understand
+      the existing .* service)\b
+    - \barchitecture\b.*\bbounded contexts?\b
+    - \bunderstand\b.*\bcurrent domain\b

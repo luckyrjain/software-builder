@@ -19,8 +19,10 @@ exist, how are they invoked, and what do they require?”
   platform metadata. `skill_version` and `platform_contract` are legacy frontmatter fields and are
   rejected for the canonical repository.
 - Generate thin `.cursor/rules/*.mdc` and `.kiro/steering/*` adapters from the registry (`make generate`).
-- Generate `scripts/registry/platform_contracts.yaml`, `composition_contracts.yaml`, and
-  `composition_runtime.yaml` as projections; they are not independent authoring surfaces.
+- Generate `scripts/registry/composition_contracts.yaml` and `composition_runtime.yaml` as
+  projections; they are not independent authoring surfaces. (A third projection,
+  `platform_contracts.yaml`, was generated alongside them until nothing outside `skills.yaml`
+  was left reading it; the `contracts.platform` section is now read from `skills.yaml` only.)
 - Gate merges with `make validate-registry` and `make generate --check`.
 
 ## Consequences
@@ -48,8 +50,8 @@ changed and one gate command was never spelled correctly.
   fixtures and forks predating the split still validate.
 - **The rest of `skills.yaml` is still hand-authored** — `schema_version`, `manifest_kind`,
   `contracts:`, and `profiles:`. Only the `skills:` mapping is a generated projection, so the list of
-  projections above (`platform_contracts.yaml`, `composition_contracts.yaml`,
-  `composition_runtime.yaml`) is incomplete rather than wrong.
+  projections above (`composition_contracts.yaml`, `composition_runtime.yaml`) is incomplete
+  rather than wrong.
 - **The merge gate is `make generate-check`**, not `make generate --check`. No such flag exists; the
   literal command in the Decision section fails. `make generate-check` is part of `lint-static` and
   fails when any generated output — including the merged `skills:` mapping — drifts from what its

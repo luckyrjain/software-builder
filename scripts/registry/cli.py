@@ -46,6 +46,10 @@ from scripts.registry.generate_docs import (
     update_readme_routing_table,
     update_repository_table,
 )
+from scripts.registry.generate_issue_templates import (
+    generate_issue_templates,
+    issue_template_dir,
+)
 from scripts.registry.generate_kiro import generate_kiro_steering
 from scripts.registry.generate_makefile_roster import generate_makefile_roster
 from scripts.registry.generic_package import build_generic_package
@@ -58,7 +62,13 @@ from scripts.registry.host_adapter import (
 from scripts.registry.host_registry import HostRegistryParseError, parse_host_registry
 from scripts.registry.load import load_deprecated_skills, load_descriptions, load_registry
 from scripts.registry.manifest import validate_manifest, validate_runtime_manifest
-from scripts.registry.manifest_merge import merge_registry_yaml, skills_fragments_dir
+from scripts.registry.manifest_merge import (
+    SIDE_FILE_PROJECTIONS,
+    merge_registry_yaml,
+    render_side_file,
+    side_file_path,
+    skills_fragments_dir,
+)
 from scripts.registry.p1_validation import validate_p1_contracts
 from scripts.registry.schema import clear_registry_cache, load_registry_raw
 from scripts.release_contract import validate_release_contract
@@ -80,9 +90,18 @@ def _collect_outputs(root: Path) -> dict[Path, str]:
         # without a skills.d/ directory keep skills.yaml's own `skills:` mapping
         # as the legacy, hand-edited source of truth untouched.
         outputs[root / "skills.yaml"] = merge_registry_yaml(root)
+        # The same fragments also own the per-skill rows of the three aggregate side-files
+        # (degraded behavior, SETUP.md freshness, routing rules); each is regenerated here as a
+        # projection so its readers keep opening the same file with the same shape.
+        for projection in SIDE_FILE_PROJECTIONS:
+            path = side_file_path(root, projection)
+            if path.is_file():
+                outputs[path] = render_side_file(root, projection)
     outputs.update(generate_cursor_rules(root, registry, descriptions, deprecated))
     outputs.update(generate_kiro_steering(root, registry, deprecated))
     outputs.update(generate_makefile_roster(root, registry))
+    if issue_template_dir(root).is_dir():
+        outputs.update(generate_issue_templates(root, registry))
     readme = update_readme_badge(
         (root / "README.md").read_text(encoding="utf-8"),
         len(registry.skills),
@@ -133,10 +152,10 @@ def _collect_outputs(root: Path) -> dict[Path, str]:
             render_compatibility_matrix(root)
         )
     if has_canonical_manifest_shape(load_registry_raw(root / "skills.yaml")):
-        # Once a repository opts into the canonical shape it owns all three contract
-        # sections, so a malformed manifest must fail the generate rather than quietly
-        # leaving three stale projections on disk. A repository that never opted in has no
-        # canonical source to project from, which is not an error.
+        # Once a repository opts into the canonical shape it owns every contract section, so a
+        # malformed manifest must fail the generate rather than quietly leaving stale
+        # projections on disk. A repository that never opted in has no canonical source to
+        # project from, which is not an error.
         for section in LEGACY_PROJECTION_FILENAMES:
             outputs[legacy_projection_path(root, section)] = render_legacy_projection(root, section)
     if layers.composition_runtime is not None and layers.composition_contracts is not None:

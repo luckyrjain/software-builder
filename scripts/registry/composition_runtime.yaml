@@ -1,44 +1,44 @@
 # GENERATED from skills.yaml contracts — do not edit; run make generate
 schema_version: 1
 skill_types:
-  pr-review: leaf
-  pr-gatekeeper: trigger
-  k8s-overprovisioning-datadog: leaf
+  api-design-review: leaf
+  api-test-creator: leaf
+  architecture-review: leaf
+  backlog-runner: trigger
+  capacity-planner: leaf
+  change-impact-analyzer: leaf
+  contract-test-creator: leaf
+  cost-optimization-sprint-planner: orchestrator
+  database-review: leaf
+  dependency-upgrade-review: leaf
+  deployment-risk-review: leaf
+  domain-comprehension: orchestrator
+  e2e-test-creator: leaf
+  implementation-planner: leaf
   incident-rca: leaf
   incident-triage-agent: trigger
-  domain-comprehension: orchestrator
-  squad-map: leaf
-  who-owns-x-bot: router
-  new-hire-guide: orchestrator
-  release-readiness-checker: orchestrator
-  migration-program-manager: orchestrator
-  cost-optimization-sprint-planner: orchestrator
-  mysql-to-postgres-sql: leaf
-  loop-task-implementer: orchestrator
-  backlog-runner: trigger
-  weekly-squad-digest: trigger
-  unit-test-creator: leaf
   integration-test-creator: leaf
-  contract-test-creator: leaf
-  e2e-test-creator: leaf
-  api-test-creator: leaf
-  prd-architect: leaf
-  test-writer: router
-  architecture-review: leaf
-  system-design: leaf
-  api-design-review: leaf
-  database-review: leaf
-  security-review: leaf
-  performance-review: leaf
-  capacity-planner: leaf
+  k8s-overprovisioning-datadog: leaf
+  loop-task-implementer: orchestrator
+  migration-program-manager: orchestrator
+  mysql-to-postgres-sql: leaf
+  new-hire-guide: orchestrator
   observability-review: leaf
-  deployment-risk-review: leaf
-  dependency-upgrade-review: leaf
-  tech-debt-assessor: leaf
-  change-impact-analyzer: leaf
-  resilience-review: leaf
-  implementation-planner: leaf
+  performance-review: leaf
+  pr-gatekeeper: trigger
+  pr-review: leaf
+  prd-architect: leaf
   production-readiness-review: orchestrator
+  release-readiness-checker: orchestrator
+  resilience-review: leaf
+  security-review: leaf
+  squad-map: leaf
+  system-design: leaf
+  tech-debt-assessor: leaf
+  test-writer: router
+  unit-test-creator: leaf
+  weekly-squad-digest: trigger
+  who-owns-x-bot: router
 handoff_schema:
   required_fields:
   - target_skill

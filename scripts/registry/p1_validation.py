@@ -12,14 +12,13 @@ from scripts.registry.envelope_contract import (
     RESULT_FIELDS,
     STATE_VALUES,
 )
-from scripts.registry.frontmatter import load_skill_frontmatter
 from scripts.registry.host_adapter import CAPABILITIES as HOST_CAPABILITIES
 from scripts.registry.host_adapter import HOSTS
 from scripts.registry.host_adapter import SUPPORT as SUPPORT_VALUES
 from scripts.registry.host_adapter import host_contracts_path
 from scripts.registry.models import Registry
 from scripts.registry.schema import parse_registry
-from scripts.yaml_safety import YAML_SAFETY_ERRORS, load_unique_yaml_file, require_mapping
+from scripts.yaml_safety import YAML_SAFETY_ERRORS, load_unique_frontmatter, load_unique_yaml_file, require_mapping
 
 RUNTIME_DOCS = {"runtime-contract.md", "host-adapter-contract.md", "eval-contract.md"}
 PERMISSION_FIELDS = {"repository", "external_actions", "unattended", "merge"}
@@ -44,7 +43,7 @@ def _validate_platform_markers(root: Path, registry: Registry) -> list[str]:
     """Ensure platform metadata is not duplicated in SKILL.md frontmatter."""
     errors: list[str] = []
     for skill_id, entry in sorted(registry.skills.items()):
-        frontmatter = load_skill_frontmatter(root / entry.path / "SKILL.md")
+        frontmatter = load_unique_frontmatter(root / entry.path / "SKILL.md")
         for key in ("skill_version", "platform_contract"):
             if key in frontmatter:
                 errors.append(f"error: {skill_id}: legacy {key} remains in frontmatter")

@@ -19,6 +19,13 @@ prd-architect:
     - domain-comprehension
     - test-writer
     - pr-review
+    consumes:
+    - implementation_task
+    consume_fields:
+      implementation_task:
+      - task_id
+      - scope
+      - acceptance_criteria
   capabilities:
     required:
     - host.report.write
@@ -36,14 +43,6 @@ prd-architect:
     external_actions: none
     unattended: false
     merge: false
-  supported_hosts:
-  - chatgpt
-  - claude
-  - codex
-  - cursor
-  - generic
-  - kiro
-  entrypoint: SKILL.md
   output_contract:
     produces:
     - prd_report
@@ -61,3 +60,15 @@ prd-architect:
       - evidence_refs
   dependencies: []
   version_source: skill_frontmatter_legacy_numeric
+  degraded_behavior:
+    missing_capability: host.report.write
+    available_capabilities: []
+    behavior: BLOCKED
+  setup_freshness:
+    external_services: Optional web search for material unknowns (generalized queries
+      only)
+  routing:
+    patterns:
+    - \b(PRD|product requirements?|requirements document|build readiness)\b
+    exclude_patterns:
+    - \bready PRD\b.*\bimplementation design\b

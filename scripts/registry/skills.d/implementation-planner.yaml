@@ -8,6 +8,117 @@ implementation-planner:
     invokes: []
     escalation_targets:
     - loop-task-implementer
+    consumes:
+    - system_design_spec
+    - architecture_review_report
+    - change_impact_report
+    - api_design_review_report
+    - database_review_report
+    - security_review_report
+    - performance_review_report
+    - capacity_plan
+    - observability_review_report
+    - resilience_review_report
+    - dependency_upgrade_report
+    consume_fields:
+      system_design_spec:
+      - title
+      - readiness
+      - assessment_target
+      - normalized_decision
+      - conditions
+      - required_actions
+      - evidence_refs
+      architecture_review_report:
+      - title
+      - decision
+      - assessment_target
+      - normalized_decision
+      - conditions
+      - required_actions
+      - evidence_refs
+      change_impact_report:
+      - title
+      - assessment_target
+      - coverage_status
+      - material_unknowns
+      - impacted_repositories
+      - criticality
+      - change_classes
+      - impacted_services
+      - impacted_contracts
+      - impacted_data
+      - impacted_dependencies
+      - impacted_owners
+      - required_tests
+      - operational_impacts
+      - review_triggers
+      - unknowns
+      - evidence_refs
+      api_design_review_report:
+      - title
+      - verdict
+      - assessment_target
+      - normalized_decision
+      - conditions
+      - required_actions
+      - evidence_refs
+      database_review_report:
+      - title
+      - verdict
+      - assessment_target
+      - normalized_decision
+      - conditions
+      - required_actions
+      - evidence_refs
+      security_review_report:
+      - title
+      - verdict
+      - assessment_target
+      - normalized_decision
+      - conditions
+      - required_actions
+      - evidence_refs
+      performance_review_report:
+      - title
+      - verdict
+      - assessment_target
+      - normalized_decision
+      - conditions
+      - required_actions
+      - evidence_refs
+      capacity_plan:
+      - title
+      - headroom
+      - assessment_target
+      - normalized_decision
+      - conditions
+      - required_actions
+      - evidence_refs
+      observability_review_report:
+      - title
+      - coverage
+      - assessment_target
+      - normalized_decision
+      - conditions
+      - required_actions
+      - evidence_refs
+      resilience_review_report:
+      - title
+      - verdict
+      - assessment_target
+      - normalized_decision
+      - conditions
+      - required_actions
+      - evidence_refs
+      dependency_upgrade_report:
+      - title
+      - verdict
+      - assessment_target
+      - normalized_decision
+      - conditions
+      - required_actions
+      - evidence_refs
   capabilities:
     required:
     - host.report.write
@@ -42,3 +153,15 @@ implementation-planner:
       - verification_gates
       - traceability
   dependencies: []
+  degraded_behavior:
+    missing_capability: host.repository.read
+    available_capabilities:
+    - host.report.write
+    behavior: BLOCKED
+  setup_freshness:
+    external_services: None — reads supplied design/review artifacts and optional
+      repository evidence only
+  routing:
+    patterns:
+    - \b(implementation plan|implementation planning|implementation task DAG|task
+      decomposition|dependency[- ]aware plan|execution waves)\b

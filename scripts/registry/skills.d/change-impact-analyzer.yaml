@@ -7,6 +7,20 @@ change-impact-analyzer:
   composition:
     invokes: []
     escalation_targets: []
+    consumes:
+    - mr_context
+    - assessment_context
+    consume_fields:
+      mr_context:
+      - project
+      - merge_request_iid
+      - head_sha
+      assessment_context:
+      - assessment_target
+      - inputs
+      - input_provenance
+      - evidence_refs
+      - unresolved
   capabilities:
     required:
     - host.report.write
@@ -48,3 +62,23 @@ change-impact-analyzer:
       - unknowns
       - evidence_refs
   dependencies: []
+  degraded_behavior:
+    missing_capability: host.repository.read
+    available_capabilities:
+    - host.report.write
+    - host.scm.change.read
+    behavior: DEGRADED
+  setup_freshness:
+    external_services: None — reads supplied design/change content and optional repository
+      or exact-head SCM evidence only
+  routing:
+    patterns:
+    - \b(change impact|impact analysis|affected surface)\b
+    - \bwhat does this change touch\b
+    - \bwhat\b.*\b(services?|contracts?|data|tests?)\b.*\b(change|affected|impact|touch)\b
+    - \b(services?|contracts?|data|tests?)\b.*\b(affected|impact|change|touch)\b.*\b(PR|MR|pull
+      request|merge request|design|proposal|change)\b
+    - \b(PR|MR|pull request|merge request)\s*[#!]?\d+\b.*\b(services?|contracts?|data|tests?|dependencies?)\b.*\b(affected|impact|change|touch)\b
+    exclude_patterns:
+    - \b(review|regression|correctness|blast radius|rollback risk|deployment risk|release
+      risk)\b

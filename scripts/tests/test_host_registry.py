@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -72,10 +73,10 @@ def _valid_registry() -> dict[str, Any]:
     }
 
 
-def _parse(tmp_path: Path, raw: dict[str, Any]):
+def _parse(tmp_path: Path, raw: dict[str, Any], *, today: date | None = None):
     registry_file = tmp_path / "agent-hosts.yaml"
     registry_file.write_text(yaml.safe_dump(raw, sort_keys=False), encoding="utf-8")
-    return parse_host_registry(registry_file)
+    return parse_host_registry(registry_file, today=today)
 
 
 def _error(tmp_path: Path, raw: dict[str, Any]) -> str:
@@ -400,9 +401,9 @@ def test_checked_in_kiro_host_has_no_install_resolvable_target() -> None:
 
     # install.sh genuinely has no --agent kiro selector -- confirms the constraint's own claim,
     # not just that the registry says so.
-    from scripts.registry.legacy_install_resolver import LEGACY_AGENT_SELECTORS
+    from scripts.registry.install_resolver import install_selectors
 
-    assert "kiro" not in LEGACY_AGENT_SELECTORS
+    assert "kiro" not in install_selectors()
 
 
 def test_checked_in_github_copilot_host_has_documentation_evidence() -> None:
@@ -419,3 +420,88 @@ def test_checked_in_github_copilot_host_has_documentation_evidence() -> None:
 
 def test_registry_cli_validates_hosts() -> None:
     assert cli.main(["validate-hosts"]) == 0
+
+
+def _verified_host(raw: dict[str, Any], evidence: list[dict[str, Any]]) -> dict[str, Any]:
+    raw["hosts"][0]["verification"] = "VERIFIED"
+    raw["hosts"][0]["evidence"] = evidence
+    return raw
+
+
+def test_evidence_max_age_days_defaults_and_is_overridable(tmp_path: Path) -> None:
+    from scripts.registry.host_registry import DEFAULT_EVIDENCE_MAX_AGE_DAYS
+
+    assert _parse(tmp_path, _valid_registry()).evidence_max_age_days == DEFAULT_EVIDENCE_MAX_AGE_DAYS
+
+    raw = _valid_registry()
+    raw["defaults"] = {"evidence_max_age_days": 30}
+
+    assert _parse(tmp_path, raw).evidence_max_age_days == 30
+
+
+def test_evidence_max_age_days_must_be_a_positive_integer(tmp_path: Path) -> None:
+    raw = _valid_registry()
+    raw["defaults"] = {"evidence_max_age_days": 0}
+
+    assert "defaults.evidence_max_age_days must be a positive integer" in _error(tmp_path, raw)
+
+
+def test_verified_host_goes_stale_once_its_runtime_evidence_ages_out(tmp_path: Path) -> None:
+    raw = _verified_host(
+        _valid_registry(),
+        [{"kind": "RUNTIME", "reference": "ran the suite", "observed_at": "2026-01-01"}],
+    )
+    raw["defaults"] = {"evidence_max_age_days": 90}
+
+    fresh = _parse(tmp_path, raw, today=date(2026, 3, 1))
+    aged = _parse(tmp_path, raw, today=date(2026, 6, 1))
+
+    assert fresh.hosts["cursor"].verification == "VERIFIED"
+    assert aged.hosts["cursor"].verification == "STALE"
+
+
+def test_one_fresh_runtime_observation_keeps_a_host_verified(tmp_path: Path) -> None:
+    raw = _verified_host(
+        _valid_registry(),
+        [
+            {"kind": "RUNTIME", "reference": "old run", "observed_at": "2026-01-01"},
+            {"kind": "RUNTIME", "reference": "recent run", "observed_at": "2026-05-20"},
+        ],
+    )
+
+    assert _parse(tmp_path, raw, today=date(2026, 6, 1)).hosts["cursor"].verification == "VERIFIED"
+
+
+def test_undated_runtime_evidence_never_goes_stale(tmp_path: Path) -> None:
+    """An undated claim is "we do not know when this was observed", not "this has expired" --
+    every evidence entry checked in before observed_at existed must keep its declared state."""
+    raw = _verified_host(_valid_registry(), [{"kind": "RUNTIME", "reference": "ran the suite"}])
+
+    assert _parse(tmp_path, raw, today=date(2099, 1, 1)).hosts["cursor"].verification == "VERIFIED"
+
+
+def test_documentation_evidence_does_not_keep_a_host_verified(tmp_path: Path) -> None:
+    """VERIFIED is the state that requires RUNTIME evidence, so freshness is measured against
+    RUNTIME entries only -- re-reading the docs does not re-verify a host."""
+    raw = _verified_host(
+        _valid_registry(),
+        [
+            {"kind": "RUNTIME", "reference": "ran the suite", "observed_at": "2026-01-01"},
+            {"kind": "DOCUMENTATION", "reference": "https://example.test", "observed_at": "2026-05-30"},
+        ],
+    )
+
+    assert _parse(tmp_path, raw, today=date(2026, 6, 1)).hosts["cursor"].verification == "STALE"
+
+
+def test_observed_at_must_be_an_iso_date(tmp_path: Path) -> None:
+    raw = _verified_host(
+        _valid_registry(),
+        [{"kind": "RUNTIME", "reference": "ran the suite", "observed_at": "May 2026"}],
+    )
+
+    assert "observed_at must be an ISO date" in _error(tmp_path, raw)
+
+
+def test_checked_in_registry_declares_an_evidence_max_age(tmp_path: Path) -> None:
+    assert parse_host_registry(ROOT / "agent-hosts.yaml").evidence_max_age_days == 90

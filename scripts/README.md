@@ -168,7 +168,6 @@ Makefile wrappers: `make install`, `make install-<skill>` (per skill), `make ins
 | `cross_skill_routing.py` | Parse the escalation matrix out of cross-skill-escalation.md and re-anchor its relative links for docs/README.md. |
 | `crosscheck.py` | Whole-registry validation and stale-generated-adapter detection. |
 | `envelope_contract.py` | The canonical runtime vocabularies every contract validator checks the registry against. |
-| `frontmatter.py` | Load a SKILL.md's YAML frontmatter with duplicate-key rejection. |
 | `generate_agent_compatibility.py` | Generated agent-compatibility documentation (Candidate 11 of docs/superpowers/specs/2026-08-31-universal-agent-compatibility-design.md). |
 | `generate_compatibility.py` | Render the generated host x skill compatibility matrix. |
 | `generate_cursor.py` | Render the generated `.cursor/rules/*.mdc` discovery adapters. |
@@ -180,19 +179,19 @@ Makefile wrappers: `make install`, `make install-<skill>` (per skill), `make ins
 | `host_adapter.py` | Host capability support lookup and host-adapter interface/identity validation. |
 | `host_portability.py` | Validate that every skill declares a workable path on every supported host. |
 | `host_registry.py` | Typed parsing and fail-closed validation for agent-hosts.yaml. |
-| `id_diff.py` | Shared "found ids vs registered ids" two-way diff, used by the doc/Makefile sync validators (routing_sync.py, install_targets_sync.py) so the dangling vs. |
+| `id_diff.py` | Shared "found ids vs registered ids" two-way diff, used by the doc sync validators (routing_sync.py) so the dangling vs. |
 | `install_resolver.py` | One module answering "where does `install.sh --agent X` write, and under what host label". |
-| `install_targets_sync.py` | Cross-check Makefile install-<skill> targets against the registry. |
-| `legacy_install_resolver.py` | Compatibility shim: selector routing now lives in scripts/registry/install_resolver.py. |
 | `load.py` | Load skill descriptions, deprecation markers, and the parsed registry. |
 | `machine_summary.py` | Pure validators for the common artifact-v2 machine summary. |
+| `makefile_graph.py` | Read the root Makefile plus its literal includes as one text blob. |
 | `manifest.py` | Build the normalized runtime manifest from the canonical skills.yaml. |
 | `manifest_merge.py` | Merge per-skill authoring fragments into the generated root skills.yaml. |
 | `models.py` | Typed registry records: `SkillEntry`, `InstallSpec`, `CapabilitiesSpec`, and friends. |
 | `p1_validation.py` | Validate the P1 contract layer: result/handoff/execution envelope fields, host matrices, permissions. |
 | `result_envelope.py` | One builder for the runtime result envelope every assessment skill returns. |
 | `routing_sync.py` | Cross-check skill-id mentions in shared framework docs against the registry. |
-| `runtime_manifest.py` | Build and validate the runtime manifest derived from the canonical registry. |
+| `escalation_sync.py` | Cross-check cross-skill-escalation.md's matrix against the registry's escalation edges. |
+| `generate_issue_templates.py` | Regenerate the skill dropdowns in .github/ISSUE_TEMPLATE/*.yml from the registry. |
 | `schema.py` | Parse and cache skills.yaml, resolving `profiles:`/`extends:` before any consumer sees it. |
 | `semantic_document.py` | Fail-closed identity binding for machine summaries and semantic documents. |
 | `shadow_detector.py` | Discovery-precedence shadow detection for install.sh (Candidate 8 of docs/superpowers/specs/2026-08-31-universal-agent-compatibility-design.md). |

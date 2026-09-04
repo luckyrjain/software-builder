@@ -83,24 +83,70 @@ def _write_base_skills_yaml(tmp_path: Path, body: str) -> None:
     (tmp_path / "skills.yaml").write_text(body, encoding="utf-8")
 
 
-def test_merge_preserves_header_verbatim_including_comments(tmp_path: Path) -> None:
-    header = (
+def test_merge_preserves_non_generated_sections_verbatim_including_comments(
+    tmp_path: Path,
+) -> None:
+    profiles = (
+        "profiles:\n"
+        "  # a hand-written comment a full YAML round-trip would drop\n"
+        "  base: {}\n"
+    )
+    _write_base_skills_yaml(
+        tmp_path,
         "schema_version: 1\n"
         "manifest_kind: canonical\n"
-        "contracts:\n"
-        "  # a hand-written comment a full YAML round-trip would drop\n"
-        "  composition: {}\n"
-        "profiles: {}\n"
+        "contracts:\n  composition: {}\n"
+        + profiles
+        + "skills:\n  stale-skill:\n    path: stale-skill\n",
     )
-    _write_base_skills_yaml(tmp_path, header + "skills:\n  stale-skill:\n    path: stale-skill\n")
     _write_fragment(skills_fragments_dir(tmp_path), "fresh-skill")
 
     merged = merge_registry_yaml(tmp_path)
 
-    assert merged.startswith(header)
-    assert "# a hand-written comment a full YAML round-trip would drop" in merged
+    assert profiles in merged
     parsed = yaml.safe_load(merged)
     assert set(parsed["skills"]) == {"fresh-skill"}
+
+
+def test_merge_derives_the_per_skill_contract_sub_mappings(tmp_path: Path) -> None:
+    """`contracts.composition.skills` restates facts each fragment already declares, so it is
+    regenerated from the fragments rather than hand-maintained -- including dropping an entry
+    for a skill that no longer exists."""
+    _write_base_skills_yaml(
+        tmp_path,
+        "schema_version: 1\n"
+        "contracts:\n"
+        "  composition:\n"
+        "    artifact_types: [report]\n"
+        "    skills:\n"
+        "      stale-skill:\n"
+        "        produces: []\n"
+        "        consumes: []\n"
+        "        write_authority: read-only\n"
+        "skills:\n  stale-skill:\n    path: stale-skill\n",
+    )
+    fragments_dir = skills_fragments_dir(tmp_path)
+    _write_fragment(fragments_dir, "fresh-skill")
+    (fragments_dir / "fresh-skill.yaml").write_text(
+        FRAGMENT_TEMPLATE.format(skill_id="fresh-skill")
+        + "  authority: read-only\n"
+        + "  output_contract: {produces: [report], produce_fields: {report: [title]}}\n"
+        + "  composition: {consumes: [report]}\n",
+        encoding="utf-8",
+    )
+
+    composition = yaml.safe_load(merge_registry_yaml(tmp_path))["contracts"]["composition"]
+
+    # The hand-authored half of the section is carried through untouched.
+    assert composition["artifact_types"] == ["report"]
+    assert composition["skills"] == {
+        "fresh-skill": {
+            "produces": ["report"],
+            "consumes": ["report"],
+            "produce_fields": {"report": ["title"]},
+            "write_authority": "read-only",
+        }
+    }
 
 
 def test_merge_finds_real_top_level_skills_key_not_a_quoted_scalar_continuation(

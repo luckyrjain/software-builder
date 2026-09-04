@@ -7,6 +7,15 @@ security-review:
   composition:
     escalation_targets:
     - dependency-upgrade-review
+    consumes:
+    - assessment_context
+    consume_fields:
+      assessment_context:
+      - assessment_target
+      - inputs
+      - input_provenance
+      - evidence_refs
+      - unresolved
   capabilities:
     required:
     - host.report.write
@@ -35,3 +44,12 @@ security-review:
       - required_actions
       - evidence_refs
   dependencies: []
+  degraded_behavior:
+    missing_capability: host.report.write
+    available_capabilities: []
+    behavior: BLOCKED
+  setup_freshness:
+    external_services: None — reads supplied code/design content and repository only
+  routing:
+    patterns:
+    - \b(security review|authN|authZ|SSRF|tenant isolation review|cryptography review)\b

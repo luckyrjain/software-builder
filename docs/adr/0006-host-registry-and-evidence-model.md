@@ -36,13 +36,22 @@ Every host carries `verification`, `evidence`, and `maintainer_support`:
 
 - `verification` ∈ {`UNVERIFIED`, `VERIFIED`, `STALE`, `CONFLICTED`}. `UNVERIFIED` is the deliberate
   default: nothing inherits a support level, it must earn one.
-- `evidence` is a list of `{kind, reference}` entries, `kind` ∈ {`DOCUMENTATION`, `REPOSITORY`,
-  `RUNTIME`}.
+- `evidence` is a list of `{kind, reference, observed_at?}` entries, `kind` ∈ {`DOCUMENTATION`,
+  `REPOSITORY`, `RUNTIME`}. `observed_at` is the ISO date the evidence was last checked against the
+  real host.
 - The load-bearing rule, enforced in `host_registry.py`: **`verification: VERIFIED` requires at least
   one `RUNTIME` evidence entry.** A vendor's published documentation is real evidence and is recorded
   as such, but it cannot promote a host on its own — `github-copilot` carries a `DOCUMENTATION` entry
   pointing at GitHub's own skills docs and still sits at `UNVERIFIED` because this repository has never
   run Copilot to confirm the documented behavior holds.
+- **`STALE` is derived, not hand-set.** `defaults.evidence_max_age_days` (90) is how long a `RUNTIME`
+  observation keeps a host's `VERIFIED` claim current; once every dated `RUNTIME` entry for a
+  `VERIFIED` host is older than that, `host_registry.py` reports the host as `STALE` at parse time.
+  Freshness is measured against `RUNTIME` evidence only, because that is the kind `VERIFIED` requires
+  — re-reading a vendor's documentation does not re-verify a host. Evidence with no `observed_at` never
+  ages: "we do not know when this was observed" is a different claim from "this was observed and has
+  since expired", and every entry checked in before this field existed makes the former. That is why no
+  host's state changes today.
 - Capability states are separately `AVAILABLE` | `UNAVAILABLE` | `UNKNOWN`, and start `UNKNOWN` for the
   same reason.
 - `maintainer_support` ∈ {`FIRST_CLASS`, `BEST_EFFORT`, `COMMUNITY`, `MANUAL_ONLY`, `DEPRECATED`}
@@ -102,9 +111,8 @@ requirement is only that the installer must not claim an install is what will ru
   reader knows the split. This ADR and the header comment in `agent-hosts.yaml` are the only places that
   say so.
 - **Negative:** Every host is `UNVERIFIED` with `UNKNOWN` capabilities, so the registry currently records
-  the *absence* of runtime verification rather than its results. Nothing yet schedules re-verification,
-  and `STALE` has no clock behind it: evidence freshness is a maintainer decision today, not an
-  automated one. Operational guidance is in [docs/OPERATIONS.md](../OPERATIONS.md).
-- **Follow-ups:** Give evidence entries an observation timestamp and a maximum age so `STALE` can be
-  derived rather than hand-set, and decide whether `maintainer_support` should be allowed to exceed the
-  verification state.
+  the *absence* of runtime verification rather than its results. Nothing yet schedules re-verification;
+  the `STALE` clock only starts once a maintainer records a dated `RUNTIME` observation. Operational
+  guidance is in [docs/OPERATIONS.md](../OPERATIONS.md).
+- **Follow-ups:** Decide whether `maintainer_support` should be allowed to exceed the verification
+  state.

@@ -35,17 +35,22 @@ mysql-to-postgres-sql:
     external_actions: read
     unattended: false
     merge: false
-  supported_hosts:
-  - chatgpt
-  - claude
-  - codex
-  - cursor
-  - generic
-  - kiro
-  entrypoint: SKILL.md
   output_contract:
     produces:
     - implementation_pr
     produce_fields: {}
   dependencies: []
   version_source: skill_frontmatter_legacy_numeric
+  composition:
+    consumes:
+    - implementation_task
+  degraded_behavior:
+    missing_capability: host.repository.read_write
+    available_capabilities: []
+    behavior: BLOCKED
+  setup_freshness:
+    external_services: None (local scan scripts and domain packs)
+  routing:
+    patterns:
+    - \b(MySQL|mysql)\b.*\b(Postgres|PostgreSQL|postgresql)\b
+    - \bmigrate\b.*\bSQL dialect\b

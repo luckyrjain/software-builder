@@ -36,14 +36,6 @@ new-hire-guide:
     external_actions: read
     unattended: false
     merge: false
-  supported_hosts:
-  - chatgpt
-  - claude
-  - codex
-  - cursor
-  - generic
-  - kiro
-  entrypoint: SKILL.md
   output_contract:
     produces:
     - digest_report
@@ -52,3 +44,15 @@ new-hire-guide:
   - domain-comprehension
   - squad-map
   version_source: skill_frontmatter_legacy_numeric
+  composition:
+    consumes:
+    - mr_context
+  degraded_behavior:
+    missing_capability: host.repository.read
+    available_capabilities: []
+    behavior: BLOCKED
+  setup_freshness:
+    external_services: squad-map, domain-comprehension
+  routing:
+    patterns:
+    - \b(new hire|onboarding)\b.*\b(guide|tour|first week|service map)\b

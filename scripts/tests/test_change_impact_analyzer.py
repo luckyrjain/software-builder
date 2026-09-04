@@ -5,7 +5,7 @@ from scripts.evals.dispatcher import dispatch_prompt
 from scripts.registry.artifact_contracts import validate_artifact_result
 from scripts.registry.load import load_registry
 from scripts.registry.canonical_manifest import load_canonical_manifest
-from scripts.registry.frontmatter import load_skill_frontmatter
+from scripts.yaml_safety import load_unique_frontmatter
 from scripts.change_impact import (
     _diff_paths,
     analyze_change,
@@ -157,7 +157,7 @@ def composition_fields() -> list[str]:
 
 
 def test_change_impact_skill_package_declares_contract() -> None:
-    frontmatter = load_skill_frontmatter(ROOT / "change-impact-analyzer" / "SKILL.md")
+    frontmatter = load_unique_frontmatter(ROOT / "change-impact-analyzer" / "SKILL.md")
     skill_text = (ROOT / "change-impact-analyzer" / "SKILL.md").read_text(encoding="utf-8")
     assert frontmatter["name"] == "change-impact-analyzer"
     for required_text in (

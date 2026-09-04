@@ -24,10 +24,9 @@ from scripts.registry.envelope_contract import (
     EVIDENCE_STATUSES,
     SKILL_TYPES,
 )
-from scripts.registry.frontmatter import load_skill_frontmatter
 from scripts.registry.models import Registry
 from scripts.registry.schema import load_registry_raw, parse_registry
-from scripts.yaml_safety import YAML_SAFETY_ERRORS, load_unique_yaml_file, require_mapping
+from scripts.yaml_safety import YAML_SAFETY_ERRORS, load_unique_frontmatter, load_unique_yaml_file, require_mapping
 
 ROOT = Path(__file__).resolve().parents[2]
 CONTRACTS_PATH = ROOT / "skills.yaml"
@@ -160,7 +159,7 @@ def skill_versions(root: Path = ROOT, *, registry: Registry | None = None) -> di
         versions: dict[str, str] = {}
         for skill_id, entry in legacy_registry.skills.items():
             skill_md = root / entry.path / "SKILL.md"
-            frontmatter = load_skill_frontmatter(skill_md)
+            frontmatter = load_unique_frontmatter(skill_md)
             versions[skill_id] = _normalize_version(
                 _version_input(skill_md, frontmatter.get("skill_version"))
             )
@@ -209,25 +208,23 @@ def build_runtime_manifest(root: Path = ROOT) -> dict[str, Any]:
     manifest, platform = _build_manifest(root)
     contracts = manifest.get("contracts")
     skills = manifest.get("skills")
-    permissions = platform.get("skill_permissions")
     if not isinstance(contracts, dict):
         raise ValueError("platform manifest contracts must be a mapping")
     if not isinstance(skills, dict):
         raise ValueError("platform manifest skills must be a mapping")
-    if not isinstance(permissions, dict):
-        raise ValueError("platform contracts skill_permissions must be a mapping")
 
     for key in P1_CONTRACT_KEYS:
         if key not in platform:
             raise ValueError(f"platform contracts missing P1 section: {key}")
         contracts[key] = platform[key]
 
-    if set(skills) != set(permissions):
-        raise ValueError("runtime manifest skill/permission coverage drift")
+    # Each skill's `permissions` is already the one this manifest publishes: `skill_permissions`
+    # is derived from it by manifest_merge.derive_contract_sections, so re-copying it back over
+    # the skill (and cross-checking the two for coverage drift) restated a generator invariant.
+    # `make generate-check` is what catches a skills.yaml hand-edited past that generator.
     for skill_id, skill in skills.items():
         if not isinstance(skill, dict):
             raise ValueError(f"runtime manifest skill must be a mapping: {skill_id}")
-        skill["permissions"] = permissions[skill_id]
     return manifest
 
 

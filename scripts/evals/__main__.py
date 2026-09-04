@@ -22,10 +22,9 @@ from scripts.evals.platform_contract import run_platform_contract_checks
 from scripts.evals.scenario_harness import run_per_skill_scenarios
 from scripts.evals.transcript import load_transcript_fixtures, run_transcript_case
 from scripts.evals.types import EvalResult, eval_contract_path, load_eval_contract
-from scripts.registry.frontmatter import load_skill_frontmatter
 from scripts.registry.schema import Registry, parse_registry
 from scripts.registry.skill_frontmatter_schema import automation_only_guard_errors
-from scripts.yaml_safety import YAML_SAFETY_ERRORS, load_unique_yaml_file
+from scripts.yaml_safety import YAML_SAFETY_ERRORS, load_unique_frontmatter, load_unique_yaml_file
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -109,7 +108,7 @@ def _run_assertion(
         errors: list[str] = []
         for workflow_file in sorted(workflow_dir.glob("*.md")):
             try:
-                frontmatter = load_skill_frontmatter(workflow_file)
+                frontmatter = load_unique_frontmatter(workflow_file)
             except YAML_SAFETY_ERRORS as exc:
                 errors.append(f"{workflow_file.name}: {exc}")
                 continue
@@ -139,7 +138,7 @@ def _run_assertion(
     if atype == "automation_only_guard":
         registry = parse_registry(root / "skills.yaml")
         entry = registry.skills[skill_id]
-        frontmatter = load_skill_frontmatter(_skill_dir(root, skill_id) / "SKILL.md")
+        frontmatter = load_unique_frontmatter(_skill_dir(root, skill_id) / "SKILL.md")
         return automation_only_guard_errors(entry.invocation, frontmatter)
 
     raise ValueError(f"unknown assertion type: {atype!r}")

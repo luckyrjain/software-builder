@@ -5,7 +5,6 @@ import re
 from pathlib import Path
 from typing import Any
 
-from scripts.registry.frontmatter import load_skill_frontmatter
 from scripts.registry.host_adapter import (
     HOSTS,
     expected_surface,
@@ -16,7 +15,7 @@ from scripts.registry.load import load_deprecated_skills
 from scripts.registry.routing_sync import validate_skill_routing_references
 from scripts.registry.schema import parse_registry
 from scripts.registry.skill_frontmatter_schema import automation_only_guard_errors
-from scripts.yaml_safety import load_unique_yaml_file, require_mapping
+from scripts.yaml_safety import load_unique_frontmatter, load_unique_yaml_file, require_mapping
 
 # Flag actual host-specific execution branches while allowing neutral prose that
 # merely lists supported hosts or links to host setup guidance.
@@ -160,7 +159,7 @@ def validate_host_portability(root: Path) -> list[str]:
                 if directive in text:
                     errors.append(f"error: canonical skill {skill_id} leaks host-adapter directive {directive!r}")
             errors.extend(_runtime_host_branch_errors(skill_root, skill_id))
-            frontmatter = load_skill_frontmatter(skill_md)
+            frontmatter = load_unique_frontmatter(skill_md)
             for error in automation_only_guard_errors(entry.invocation, frontmatter):
                 errors.append(f"error: host invocation semantics {skill_id}: {error}")
 

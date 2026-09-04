@@ -60,7 +60,8 @@ def test_contract_section_source_does_not_fallback_to_projection_for_malformed_m
 
 def test_contract_sections_share_one_canonical_vs_projection_decision(tmp_path: Path) -> None:
     """The three sections resolved three different ways before; lock in that they now agree,
-    including the forgiving projection fallback for a non-canonical repository."""
+    including the forgiving projection fallback for a non-canonical repository. `platform` has
+    no standalone projection, so it stays unresolved until the manifest itself is canonical."""
     from scripts.registry.canonical_manifest import (
         contract_section_source,
         legacy_projection_path,
@@ -77,11 +78,12 @@ def test_contract_sections_share_one_canonical_vs_projection_decision(tmp_path: 
         None,
     ]
 
-    for section in ("platform", "composition_runtime", "composition"):
+    for section in ("composition_runtime", "composition"):
         projection = legacy_projection_path(tmp_path, section)
         projection.parent.mkdir(parents=True, exist_ok=True)
         projection.write_text("schema_version: 1\n", encoding="utf-8")
         assert contract_section_source(tmp_path, section) == projection
+    assert contract_section_source(tmp_path, "platform") is None
 
     (tmp_path / "skills.yaml").write_text(
         "schema_version: 1\nmanifest_kind: canonical\ncontracts: {}\nskills: {}\n",

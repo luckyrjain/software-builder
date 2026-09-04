@@ -18,8 +18,10 @@ Each `*/SETUP.md` must include a `## Freshness` table immediately after the docu
 | **External services** | <comma-separated list, or `None (local tooling only)`> |
 ```
 
-Normative values for **External services** are listed in
-[`scripts/registry/setup_freshness.yaml`](../../../scripts/registry/setup_freshness.yaml) per skill.
+Normative values for **External services** are authored in each skill's own registry fragment,
+`scripts/registry/skills.d/<skill-id>.yaml`, under `setup_freshness:`. `make generate` projects them
+into [`scripts/registry/setup_freshness.yaml`](../../../scripts/registry/setup_freshness.yaml), which
+is what the validator reads — edit the fragment, not the projection.
 
 ## When to bump **Last reviewed**
 

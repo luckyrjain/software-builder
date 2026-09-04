@@ -5,80 +5,97 @@ defaults:
   last_reviewed: "2026-08-09"
   max_age_days: 120
 
+# GENERATED from scripts/registry/skills.d/*.yaml — do not edit the skills: mapping; run make generate
 skills:
-  pr-review:
-    external_services: GitLab MCP or GitHub App/MCP or gh, Jira MCP (optional)
-  pr-gatekeeper:
-    external_services: GitLab MCP (via pr-review), webhook receiver (host infra)
-  k8s-overprovisioning-datadog:
-    external_services: Kubernetes MCP, Datadog MCP
+  api-design-review:
+    external_services: None — reads supplied API design/contract content and repository
+      only
+  api-test-creator:
+    external_services: Newman CLI + reachable API base URL
+  architecture-review:
+    external_services: None — reads supplied PRD/design content and repository only
+  backlog-runner:
+    external_services: Jira or GitHub Issues API, loop-task-implementer
+  capacity-planner:
+    external_services: None — reads supplied historical demand data only
+  change-impact-analyzer:
+    external_services: None — reads supplied design/change content and optional repository
+      or exact-head SCM evidence only
+  contract-test-creator:
+    external_services: Pact Broker (optional, repo-specific)
+  cost-optimization-sprint-planner:
+    external_services: Kubernetes MCP, Datadog MCP (via k8s-overprovisioning-datadog)
+  database-review:
+    external_services: None — reads supplied schema/migration content and repository
+      only
+  dependency-upgrade-review:
+    external_services: None — reads supplied dependency manifest/changelog content
+      and repository only
+  deployment-risk-review:
+    external_services: None — reads supplied release/change content and repository
+      only
+  domain-comprehension:
+    external_services: GitLab MCP (optional), Datadog MCP (optional)
+  e2e-test-creator:
+    external_services: Browser driver + reachable app URL (local/CI)
+  implementation-planner:
+    external_services: None — reads supplied design/review artifacts and optional
+      repository evidence only
   incident-rca:
     external_services: Datadog MCP, Jira MCP, KubeSense CLI (optional)
   incident-triage-agent:
-    external_services: PagerDuty/Opsgenie webhook (host infra), incident-rca MCPs, squad-map
-  domain-comprehension:
-    external_services: GitLab MCP (optional), Datadog MCP (optional)
-  squad-map:
-    external_services: GitLab MCP, Datadog MCP
-  who-owns-x-bot:
-    external_services: squad-map (Slack handler is host infra)
-  new-hire-guide:
-    external_services: squad-map, domain-comprehension
-  release-readiness-checker:
-    external_services: GitLab MCP, Kubernetes MCP, Datadog MCP (via composed skills); optional SCM history/policy and build-provenance host evidence for v2 conditional production-readiness invocation
+    external_services: PagerDuty/Opsgenie webhook (host infra), incident-rca MCPs,
+      squad-map
+  integration-test-creator:
+    external_services: Docker / testcontainers (local)
+  k8s-overprovisioning-datadog:
+    external_services: Kubernetes MCP, Datadog MCP
+  loop-task-implementer:
+    external_services: Git provider/API, CI provider (both repo-specific; no fixed
+      MCP)
   migration-program-manager:
     external_services: None (reads MIGRATION_STATUS.yaml + SQUAD_MAP.md on disk)
-  cost-optimization-sprint-planner:
-    external_services: Kubernetes MCP, Datadog MCP (via k8s-overprovisioning-datadog)
   mysql-to-postgres-sql:
     external_services: None (local scan scripts and domain packs)
-  loop-task-implementer:
-    external_services: Git provider/API, CI provider (both repo-specific; no fixed MCP)
-  backlog-runner:
-    external_services: Jira or GitHub Issues API, loop-task-implementer
-  weekly-squad-digest:
-    external_services: None (reads rollup JSON artifacts)
+  new-hire-guide:
+    external_services: squad-map, domain-comprehension
+  observability-review:
+    external_services: None — reads supplied metrics/logs/dashboard/alert configuration
+      and repository only
+  performance-review:
+    external_services: None — reads supplied code/query content and repository only
+  pr-gatekeeper:
+    external_services: GitLab MCP (via pr-review), webhook receiver (host infra)
+  pr-review:
+    external_services: GitLab MCP or GitHub App/MCP or gh, Jira MCP (optional)
+  prd-architect:
+    external_services: Optional web search for material unknowns (generalized queries
+      only)
+  production-readiness-review:
+    external_services: None — reads supplied candidate evidence and optional repository,
+      SCM, CI, build-provenance, service-metadata, runtime-metrics, or dependency-advisory
+      host evidence, and reuses/dispatches trusted child-skill invocations only
+  release-readiness-checker:
+    external_services: GitLab MCP, Kubernetes MCP, Datadog MCP (via composed skills);
+      optional SCM history/policy and build-provenance host evidence for v2 conditional
+      production-readiness invocation
+  resilience-review:
+    external_services: None — reads supplied resilience content and optional repository
+      or runtime/config evidence only
+  security-review:
+    external_services: None — reads supplied code/design content and repository only
+  squad-map:
+    external_services: GitLab MCP, Datadog MCP
+  system-design:
+    external_services: None — reads supplied architecture decision/PRD content and
+      repository only
+  tech-debt-assessor:
+    external_services: None — reads repository content and supplied backlog data only
   test-writer:
     external_services: None (router only — dispatches to test-creation skills)
   unit-test-creator:
     external_services: None (local test runners)
-  integration-test-creator:
-    external_services: Docker / testcontainers (local)
-  contract-test-creator:
-    external_services: Pact Broker (optional, repo-specific)
-  e2e-test-creator:
-    external_services: Browser driver + reachable app URL (local/CI)
-  api-test-creator:
-    external_services: Newman CLI + reachable API base URL
-  prd-architect:
-    external_services: Optional web search for material unknowns (generalized queries only)
-  architecture-review:
-    external_services: None — reads supplied PRD/design content and repository only
-  system-design:
-    external_services: None — reads supplied architecture decision/PRD content and repository only
-  api-design-review:
-    external_services: None — reads supplied API design/contract content and repository only
-  database-review:
-    external_services: None — reads supplied schema/migration content and repository only
-  security-review:
-    external_services: None — reads supplied code/design content and repository only
-  performance-review:
-    external_services: None — reads supplied code/query content and repository only
-  capacity-planner:
-    external_services: None — reads supplied historical demand data only
-  observability-review:
-    external_services: None — reads supplied metrics/logs/dashboard/alert configuration and repository only
-  deployment-risk-review:
-    external_services: None — reads supplied release/change content and repository only
-  dependency-upgrade-review:
-    external_services: None — reads supplied dependency manifest/changelog content and repository only
-  tech-debt-assessor:
-    external_services: None — reads repository content and supplied backlog data only
-  change-impact-analyzer:
-    external_services: None — reads supplied design/change content and optional repository or exact-head SCM evidence only
-  resilience-review:
-    external_services: None — reads supplied resilience content and optional repository or runtime/config evidence only
-  implementation-planner:
-    external_services: None — reads supplied design/review artifacts and optional repository evidence only
-  production-readiness-review:
-    external_services: None — reads supplied candidate evidence and optional repository, SCM, CI, build-provenance, service-metadata, runtime-metrics, or dependency-advisory host evidence, and reuses/dispatches trusted child-skill invocations only
+  weekly-squad-digest:
+    external_services: None (reads rollup JSON artifacts)
+  who-owns-x-bot:
+    external_services: squad-map (Slack handler is host infra)

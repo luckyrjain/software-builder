@@ -5,19 +5,22 @@ from pathlib import Path
 
 from scripts.registry.backfill_capabilities import validate_capabilities_present
 from scripts.registry.composition import validate_composition_graph
-from scripts.registry.frontmatter import load_skill_frontmatter
+from scripts.registry.escalation_sync import validate_escalation_matrix
 from scripts.registry.canonical_manifest import has_canonical_manifest_shape
 from scripts.registry.graph import detect_cycles
 from scripts.registry.load import load_deprecated_skills
 from scripts.registry.models import Registry
-from scripts.registry.routing_sync import validate_skill_routing_references
+from scripts.registry.routing_sync import (
+    validate_skill_not_these_subsets,
+    validate_skill_routing_references,
+)
 from scripts.registry.schema import AUTOMATION_ONLY_INVOCATION, load_registry_raw, parse_registry
 from scripts.registry.skill_contract_adoption_sync import validate_skill_contract_adoption
 from scripts.registry.skill_frontmatter_schema import (
     automation_only_guard_errors,
     validate_skill_frontmatter_fields,
 )
-from scripts.yaml_safety import YAML_SAFETY_ERRORS
+from scripts.yaml_safety import YAML_SAFETY_ERRORS, load_unique_frontmatter
 
 _SKILL_ID_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 _GENERATED_MARKER = "GENERATED from skills.yaml"
@@ -148,7 +151,7 @@ def _validate_skill_frontmatter_shape(root: Path, registry: Registry) -> list[st
     for skill_id, entry in registry.skills.items():
         skill_md = root / entry.path / "SKILL.md"
         try:
-            frontmatter = load_skill_frontmatter(skill_md)
+            frontmatter = load_unique_frontmatter(skill_md)
         except YAML_SAFETY_ERRORS as exc:
             errors.append(f"error: {skill_id}: {exc}")
             continue
@@ -233,5 +236,7 @@ def validate_registry(root: Path) -> list[str]:
     errors.extend(_validate_automation_only_rules(registry))
     errors.extend(_validate_stale_adapters(root, registry))
     errors.extend(validate_skill_routing_references(root, registry))
+    errors.extend(validate_skill_not_these_subsets(root, registry))
+    errors.extend(validate_escalation_matrix(root, registry))
     errors.extend(validate_skill_contract_adoption(root, registry))
     return errors

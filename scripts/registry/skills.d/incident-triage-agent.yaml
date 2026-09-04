@@ -22,6 +22,12 @@ incident-triage-agent:
     escalation_targets:
     - incident-rca
     - squad-map
+    consumes:
+    - mr_context
+    consume_fields:
+      mr_context:
+      - project
+      - head_sha
   capabilities:
     required:
     - pager.webhook.receive
@@ -44,14 +50,6 @@ incident-triage-agent:
     external_actions: write
     unattended: true
     merge: false
-  supported_hosts:
-  - chatgpt
-  - claude
-  - codex
-  - cursor
-  - generic
-  - kiro
-  entrypoint: SKILL.md
   output_contract:
     produces:
     - rca_report
@@ -69,3 +67,14 @@ incident-triage-agent:
   - incident-rca
   - squad-map
   version_source: skill_frontmatter_legacy_numeric
+  degraded_behavior:
+    missing_capability: pager.webhook.receive
+    available_capabilities: []
+    behavior: BLOCKED
+  setup_freshness:
+    external_services: PagerDuty/Opsgenie webhook (host infra), incident-rca MCPs,
+      squad-map
+  routing:
+    patterns:
+    - \b(pager|page|alert webhook|incident webhook)\b.*\b(triage|automation|route|owner)\b
+    - \btriage\b.*\b(pager|page|alert webhook|incident webhook)\b

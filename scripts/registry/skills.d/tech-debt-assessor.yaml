@@ -8,6 +8,7 @@ tech-debt-assessor:
     escalation_targets:
     - migration-program-manager
     - cost-optimization-sprint-planner
+    consumes: []
   capabilities:
     required:
     - host.report.write
@@ -30,3 +31,12 @@ tech-debt-assessor:
       - title
       - items
   dependencies: []
+  degraded_behavior:
+    missing_capability: host.report.write
+    available_capabilities: []
+    behavior: BLOCKED
+  setup_freshness:
+    external_services: None — reads repository content and supplied backlog data only
+  routing:
+    patterns:
+    - \b(tech(?:nical)? debt (?:assess|priorit|rank)|debt backlog)\b

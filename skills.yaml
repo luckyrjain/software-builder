@@ -1,5 +1,9 @@
 schema_version: 1
 manifest_kind: canonical
+# GENERATED in part from scripts/registry/skills.d/*.yaml — run make generate.
+# Derived per skill, do not edit: platform.skill_types, platform.skill_permissions,
+# composition_runtime.skill_types, composition.skills. The rest of this section is
+# authored here, but the whole block is re-rendered, so it cannot carry comments.
 contracts:
   platform:
     schema_version: 1
@@ -501,19 +505,74 @@ contracts:
       - read
       - write
     skill_permissions:
-      pr-review:
+      api-design-review:
         repository: read
-        external_actions: write
+        external_actions: none
         unattended: false
         merge: false
-      pr-gatekeeper:
+      api-test-creator:
+        repository: write
+        external_actions: read
+        unattended: false
+        merge: false
+      architecture-review:
         repository: read
+        external_actions: none
+        unattended: false
+        merge: false
+      backlog-runner:
+        repository: write
         external_actions: write
         unattended: true
+        merge: true
+      capacity-planner:
+        repository: read
+        external_actions: none
+        unattended: false
         merge: false
-      k8s-overprovisioning-datadog:
+      change-impact-analyzer:
+        repository: read
+        external_actions: none
+        unattended: false
+        merge: false
+      contract-test-creator:
+        repository: write
+        external_actions: none
+        unattended: false
+        merge: false
+      cost-optimization-sprint-planner:
+        repository: read
+        external_actions: none
+        unattended: false
+        merge: false
+      database-review:
+        repository: read
+        external_actions: none
+        unattended: false
+        merge: false
+      dependency-upgrade-review:
+        repository: read
+        external_actions: none
+        unattended: false
+        merge: false
+      deployment-risk-review:
+        repository: read
+        external_actions: none
+        unattended: false
+        merge: false
+      domain-comprehension:
         repository: read
         external_actions: read
+        unattended: false
+        merge: false
+      e2e-test-creator:
+        repository: write
+        external_actions: read
+        unattended: false
+        merge: false
+      implementation-planner:
+        repository: read
+        external_actions: none
         unattended: false
         merge: false
       incident-rca:
@@ -526,37 +585,22 @@ contracts:
         external_actions: write
         unattended: true
         merge: false
-      domain-comprehension:
+      integration-test-creator:
+        repository: write
+        external_actions: read
+        unattended: false
+        merge: false
+      k8s-overprovisioning-datadog:
         repository: read
         external_actions: read
         unattended: false
         merge: false
-      squad-map:
-        repository: read
-        external_actions: read
-        unattended: false
-        merge: false
-      who-owns-x-bot:
-        repository: read
+      loop-task-implementer:
+        repository: write
         external_actions: write
-        unattended: true
-        merge: false
-      new-hire-guide:
-        repository: read
-        external_actions: read
         unattended: false
-        merge: false
-      release-readiness-checker:
-        repository: read
-        external_actions: read
-        unattended: false
-        merge: false
+        merge: true
       migration-program-manager:
-        repository: read
-        external_actions: none
-        unattended: false
-        merge: false
-      cost-optimization-sprint-planner:
         repository: read
         external_actions: none
         unattended: false
@@ -566,77 +610,12 @@ contracts:
         external_actions: read
         unattended: false
         merge: false
-      loop-task-implementer:
-        repository: write
-        external_actions: write
-        unattended: false
-        merge: true
-      backlog-runner:
-        repository: write
-        external_actions: write
-        unattended: true
-        merge: true
-      weekly-squad-digest:
+      new-hire-guide:
         repository: read
-        external_actions: write
-        unattended: true
-        merge: false
-      unit-test-creator:
-        repository: write
-        external_actions: none
-        unattended: false
-        merge: false
-      integration-test-creator:
-        repository: write
         external_actions: read
         unattended: false
         merge: false
-      contract-test-creator:
-        repository: write
-        external_actions: none
-        unattended: false
-        merge: false
-      e2e-test-creator:
-        repository: write
-        external_actions: read
-        unattended: false
-        merge: false
-      api-test-creator:
-        repository: write
-        external_actions: read
-        unattended: false
-        merge: false
-      prd-architect:
-        repository: read
-        external_actions: none
-        unattended: false
-        merge: false
-      test-writer:
-        repository: read
-        external_actions: none
-        unattended: false
-        merge: false
-      architecture-review:
-        repository: read
-        external_actions: none
-        unattended: false
-        merge: false
-      system-design:
-        repository: read
-        external_actions: none
-        unattended: false
-        merge: false
-      api-design-review:
-        repository: read
-        external_actions: none
-        unattended: false
-        merge: false
-      database-review:
-        repository: read
-        external_actions: none
-        unattended: false
-        merge: false
-      security-review:
+      observability-review:
         repository: read
         external_actions: none
         unattended: false
@@ -646,42 +625,17 @@ contracts:
         external_actions: none
         unattended: false
         merge: false
-      capacity-planner:
+      pr-gatekeeper:
         repository: read
-        external_actions: none
+        external_actions: write
+        unattended: true
+        merge: false
+      pr-review:
+        repository: read
+        external_actions: write
         unattended: false
         merge: false
-      observability-review:
-        repository: read
-        external_actions: none
-        unattended: false
-        merge: false
-      deployment-risk-review:
-        repository: read
-        external_actions: none
-        unattended: false
-        merge: false
-      dependency-upgrade-review:
-        repository: read
-        external_actions: none
-        unattended: false
-        merge: false
-      tech-debt-assessor:
-        repository: read
-        external_actions: none
-        unattended: false
-        merge: false
-      change-impact-analyzer:
-        repository: read
-        external_actions: none
-        unattended: false
-        merge: false
-      resilience-review:
-        repository: read
-        external_actions: none
-        unattended: false
-        merge: false
-      implementation-planner:
+      prd-architect:
         repository: read
         external_actions: none
         unattended: false
@@ -691,86 +645,136 @@ contracts:
         external_actions: read
         unattended: false
         merge: false
+      release-readiness-checker:
+        repository: read
+        external_actions: read
+        unattended: false
+        merge: false
+      resilience-review:
+        repository: read
+        external_actions: none
+        unattended: false
+        merge: false
+      security-review:
+        repository: read
+        external_actions: none
+        unattended: false
+        merge: false
+      squad-map:
+        repository: read
+        external_actions: read
+        unattended: false
+        merge: false
+      system-design:
+        repository: read
+        external_actions: none
+        unattended: false
+        merge: false
+      tech-debt-assessor:
+        repository: read
+        external_actions: none
+        unattended: false
+        merge: false
+      test-writer:
+        repository: read
+        external_actions: none
+        unattended: false
+        merge: false
+      unit-test-creator:
+        repository: write
+        external_actions: none
+        unattended: false
+        merge: false
+      weekly-squad-digest:
+        repository: read
+        external_actions: write
+        unattended: true
+        merge: false
+      who-owns-x-bot:
+        repository: read
+        external_actions: write
+        unattended: true
+        merge: false
     skill_types:
-      pr-review: leaf
-      pr-gatekeeper: trigger
-      k8s-overprovisioning-datadog: leaf
+      api-design-review: leaf
+      api-test-creator: leaf
+      architecture-review: leaf
+      backlog-runner: trigger
+      capacity-planner: leaf
+      change-impact-analyzer: leaf
+      contract-test-creator: leaf
+      cost-optimization-sprint-planner: orchestrator
+      database-review: leaf
+      dependency-upgrade-review: leaf
+      deployment-risk-review: leaf
+      domain-comprehension: orchestrator
+      e2e-test-creator: leaf
+      implementation-planner: leaf
       incident-rca: leaf
       incident-triage-agent: trigger
-      domain-comprehension: orchestrator
-      squad-map: leaf
-      who-owns-x-bot: router
-      new-hire-guide: orchestrator
-      release-readiness-checker: orchestrator
-      migration-program-manager: orchestrator
-      cost-optimization-sprint-planner: orchestrator
-      mysql-to-postgres-sql: leaf
-      loop-task-implementer: orchestrator
-      backlog-runner: trigger
-      weekly-squad-digest: trigger
-      unit-test-creator: leaf
       integration-test-creator: leaf
-      contract-test-creator: leaf
-      e2e-test-creator: leaf
-      api-test-creator: leaf
-      prd-architect: leaf
-      test-writer: router
-      architecture-review: leaf
-      system-design: leaf
-      api-design-review: leaf
-      database-review: leaf
-      security-review: leaf
-      performance-review: leaf
-      capacity-planner: leaf
+      k8s-overprovisioning-datadog: leaf
+      loop-task-implementer: orchestrator
+      migration-program-manager: orchestrator
+      mysql-to-postgres-sql: leaf
+      new-hire-guide: orchestrator
       observability-review: leaf
-      deployment-risk-review: leaf
-      dependency-upgrade-review: leaf
-      tech-debt-assessor: leaf
-      change-impact-analyzer: leaf
-      resilience-review: leaf
-      implementation-planner: leaf
+      performance-review: leaf
+      pr-gatekeeper: trigger
+      pr-review: leaf
+      prd-architect: leaf
       production-readiness-review: orchestrator
+      release-readiness-checker: orchestrator
+      resilience-review: leaf
+      security-review: leaf
+      squad-map: leaf
+      system-design: leaf
+      tech-debt-assessor: leaf
+      test-writer: router
+      unit-test-creator: leaf
+      weekly-squad-digest: trigger
+      who-owns-x-bot: router
   composition_runtime:
     schema_version: 1
     skill_types:
-      pr-review: leaf
-      pr-gatekeeper: trigger
-      k8s-overprovisioning-datadog: leaf
+      api-design-review: leaf
+      api-test-creator: leaf
+      architecture-review: leaf
+      backlog-runner: trigger
+      capacity-planner: leaf
+      change-impact-analyzer: leaf
+      contract-test-creator: leaf
+      cost-optimization-sprint-planner: orchestrator
+      database-review: leaf
+      dependency-upgrade-review: leaf
+      deployment-risk-review: leaf
+      domain-comprehension: orchestrator
+      e2e-test-creator: leaf
+      implementation-planner: leaf
       incident-rca: leaf
       incident-triage-agent: trigger
-      domain-comprehension: orchestrator
-      squad-map: leaf
-      who-owns-x-bot: router
-      new-hire-guide: orchestrator
-      release-readiness-checker: orchestrator
-      migration-program-manager: orchestrator
-      cost-optimization-sprint-planner: orchestrator
-      mysql-to-postgres-sql: leaf
-      loop-task-implementer: orchestrator
-      backlog-runner: trigger
-      weekly-squad-digest: trigger
-      unit-test-creator: leaf
       integration-test-creator: leaf
-      contract-test-creator: leaf
-      e2e-test-creator: leaf
-      api-test-creator: leaf
-      prd-architect: leaf
-      test-writer: router
-      architecture-review: leaf
-      system-design: leaf
-      api-design-review: leaf
-      database-review: leaf
-      security-review: leaf
-      performance-review: leaf
-      capacity-planner: leaf
+      k8s-overprovisioning-datadog: leaf
+      loop-task-implementer: orchestrator
+      migration-program-manager: orchestrator
+      mysql-to-postgres-sql: leaf
+      new-hire-guide: orchestrator
       observability-review: leaf
-      deployment-risk-review: leaf
-      dependency-upgrade-review: leaf
-      tech-debt-assessor: leaf
-      change-impact-analyzer: leaf
-      resilience-review: leaf
-      implementation-planner: leaf
+      performance-review: leaf
+      pr-gatekeeper: trigger
+      pr-review: leaf
+      prd-architect: leaf
       production-readiness-review: orchestrator
+      release-readiness-checker: orchestrator
+      resilience-review: leaf
+      security-review: leaf
+      squad-map: leaf
+      system-design: leaf
+      tech-debt-assessor: leaf
+      test-writer: router
+      unit-test-creator: leaf
+      weekly-squad-digest: trigger
+      who-owns-x-bot: router
     handoff_schema:
       required_fields:
       - target_skill
@@ -1337,341 +1341,29 @@ contracts:
       repository-write: 2
       automation-unattended: 3
     skills:
-      pr-review:
+      api-design-review:
         produces:
-        - mr_review_report
+        - api_design_review_report
         consumes:
-        - mr_context
+        - assessment_context
         produce_fields:
-          mr_review_report:
-          - review_metadata
-          - posted
-          - head_sha
-          - posting_mode
-          - integrated_revision
-          - assessment_target
-          - normalized_decision
-          - findings
-          - conditions
-          - required_actions
-          - evidence_refs
-        consume_fields:
-          mr_context:
-          - project
-          - merge_request_iid
-          - head_sha
-        write_authority: comment
-      pr-gatekeeper:
-        produces:
-        - mr_review_report
-        consumes:
-        - mr_context
-        produce_fields:
-          mr_review_report:
-          - review_metadata
-          - posted
-          - head_sha
-          - posting_mode
-          - integrated_revision
-          - assessment_target
-          - normalized_decision
-          - findings
-          - conditions
-          - required_actions
-          - evidence_refs
-        consume_fields:
-          mr_context:
-          - project
-          - merge_request_iid
-          - head_sha
-        write_authority: comment
-      k8s-overprovisioning-datadog:
-        produces:
-        - k8s_rightsizing_report
-        consumes:
-        - mr_context
-        write_authority: read-only
-      incident-rca:
-        produces:
-        - rca_report
-        consumes:
-        - mr_context
-        write_authority: read-only
-      incident-triage-agent:
-        produces:
-        - rca_report
-        - ownership_lookup
-        consumes:
-        - mr_context
-        produce_fields:
-          rca_report:
-          - assessment_metadata
-          - root_cause
-          - confidence
-          ownership_lookup:
-          - query
-          - squad
-          - confidence
-        consume_fields:
-          mr_context:
-          - project
-          - head_sha
-        write_authority: read-only
-      domain-comprehension:
-        produces:
-        - squad_map
-        consumes:
-        - mr_context
-        write_authority: read-only
-      squad-map:
-        produces:
-        - squad_map
-        - ownership_lookup
-        consumes:
-        - mr_context
-        write_authority: read-only
-      who-owns-x-bot:
-        produces:
-        - ownership_lookup
-        consumes:
-        - mr_context
-        write_authority: read-only
-      new-hire-guide:
-        produces:
-        - digest_report
-        consumes:
-        - mr_context
-        write_authority: read-only
-      release-readiness-checker:
-        produces:
-        - digest_report
-        consumes:
-        - mr_context
-        - mr_review_report
-        - k8s_rightsizing_report
-        - rca_report
-        - production_readiness_report
-        produce_fields:
-          digest_report:
-          - sections
-          - generated_at
-          - source_revisions
-        consume_fields:
-          production_readiness_report:
-          - assessment_target
-          - source_revision
-          - verdict
-          - dimension_statuses
-          - conditions
-          - waivers
-          - evidence_refs
-          mr_context:
-          - project
-          - merge_request_iid
-          - head_sha
-          - posting_policy
-          - review_mode
-          - audit_type
-          - expected_head_sha
-          mr_review_report:
-          - review_metadata
-          - posted
-          - head_sha
-          - integrated_revision
-          - assessment_target
-          - normalized_decision
-          - findings
-          - conditions
-          - required_actions
-          - evidence_refs
-          k8s_rightsizing_report:
-          - assessment_metadata
-          - recommendations
-          rca_report:
-          - assessment_metadata
-          - root_cause
-          - confidence
-        write_authority: read-only
-      migration-program-manager:
-        produces:
-        - migration_status_rollup
-        consumes: []
-        produce_fields:
-          migration_status_rollup:
-          - items
-          - generated_at
-          - source_revision
-        write_authority: read-only
-      cost-optimization-sprint-planner:
-        produces:
-        - cost_sweep_rollup
-        consumes: []
-        produce_fields:
-          cost_sweep_rollup:
-          - items
-          - generated_at
-          - source_revision
-        write_authority: read-only
-      mysql-to-postgres-sql:
-        produces:
-        - implementation_pr
-        consumes:
-        - implementation_task
-        write_authority: repository-write
-      loop-task-implementer:
-        produces:
-        - implementation_pr
-        consumes:
-        - implementation_task
-        - prd_report
-        - implementation_plan
-        consume_fields:
-          implementation_plan:
-          - plan_set_id
-          - plan_id
+          api_design_review_report:
           - title
-          - readiness
+          - verdict
           - assessment_target
-          - target_repo
-          - external_dependencies
-          - source_refs
-          - tasks
-          - execution_waves
-          - sequencing_constraints
-          - verification_gates
-          - traceability
-        write_authority: repository-write
-      backlog-runner:
-        produces:
-        - implementation_pr
-        consumes:
-        - implementation_task
+          - normalized_decision
+          - findings
+          - conditions
+          - required_actions
+          - evidence_refs
+        consume_fields:
+          assessment_context:
+          - assessment_target
+          - inputs
+          - input_provenance
+          - evidence_refs
+          - unresolved
         write_authority: read-only
-      weekly-squad-digest:
-        produces:
-        - digest_report
-        consumes:
-        - migration_status_rollup
-        - cost_sweep_rollup
-        produce_fields:
-          digest_report:
-          - sections
-          - generated_at
-          - source_revisions
-        consume_fields:
-          migration_status_rollup:
-          - items
-          - generated_at
-          - source_revision
-          cost_sweep_rollup:
-          - items
-          - generated_at
-          - source_revision
-        write_authority: read-only
-      unit-test-creator:
-        produces:
-        - test_suite
-        consumes:
-        - implementation_task
-        produce_fields:
-          test_suite:
-          - tests
-          - framework
-          - target_path
-        consume_fields:
-          implementation_task:
-          - task_id
-          - scope
-          - acceptance_criteria
-          - request
-          - repo_root
-          - target
-          - test_framework_hint
-          - run_tests
-          - max_files_per_run
-          - deadline
-          - session_token_budget
-          - output_dir
-          - specialist_inputs
-        write_authority: repository-write
-      integration-test-creator:
-        produces:
-        - test_suite
-        consumes:
-        - implementation_task
-        produce_fields:
-          test_suite:
-          - tests
-          - framework
-          - target_path
-        consume_fields:
-          implementation_task:
-          - task_id
-          - scope
-          - acceptance_criteria
-          - request
-          - repo_root
-          - target
-          - test_framework_hint
-          - run_tests
-          - max_files_per_run
-          - deadline
-          - session_token_budget
-          - output_dir
-          - specialist_inputs
-        write_authority: repository-write
-      contract-test-creator:
-        produces:
-        - test_suite
-        consumes:
-        - implementation_task
-        produce_fields:
-          test_suite:
-          - tests
-          - framework
-          - target_path
-        consume_fields:
-          implementation_task:
-          - task_id
-          - scope
-          - acceptance_criteria
-          - request
-          - repo_root
-          - target
-          - test_framework_hint
-          - run_tests
-          - max_files_per_run
-          - deadline
-          - session_token_budget
-          - output_dir
-          - specialist_inputs
-        write_authority: repository-write
-      e2e-test-creator:
-        produces:
-        - test_suite
-        consumes:
-        - implementation_task
-        produce_fields:
-          test_suite:
-          - tests
-          - framework
-          - target_path
-        consume_fields:
-          implementation_task:
-          - task_id
-          - scope
-          - acceptance_criteria
-          - request
-          - repo_root
-          - target
-          - test_framework_hint
-          - run_tests
-          - max_files_per_run
-          - deadline
-          - session_token_budget
-          - output_dir
-          - specialist_inputs
-        write_authority: repository-write
       api-test-creator:
         produces:
         - test_suite
@@ -1698,56 +1390,6 @@ contracts:
           - output_dir
           - specialist_inputs
         write_authority: repository-write
-      test-writer:
-        produces:
-        - test_orchestration_result
-        consumes:
-        - implementation_task
-        produce_fields:
-          test_orchestration_result:
-          - test_plan
-          - orchestration_status
-          - unfinished_levels
-          - level_reports
-        consume_fields:
-          implementation_task:
-          - task_id
-          - scope
-          - acceptance_criteria
-          - request
-          - repo_root
-          - target
-          - test_framework_hint
-          - run_tests
-          - max_files_per_run
-          - deadline
-          - session_token_budget
-          - output_dir
-          - specialist_inputs
-        write_authority: read-only
-      prd-architect:
-        produces:
-        - prd_report
-        consumes:
-        - implementation_task
-        produce_fields:
-          prd_report:
-          - title
-          - build_readiness
-          - depth
-          - response_mode
-          - assessment_target
-          - normalized_decision
-          - findings
-          - conditions
-          - required_actions
-          - evidence_refs
-        consume_fields:
-          implementation_task:
-          - task_id
-          - scope
-          - acceptance_criteria
-        write_authority: read-only
       architecture-review:
         produces:
         - architecture_review_report
@@ -1780,129 +1422,11 @@ contracts:
           - normalized_decision
           - evidence_refs
         write_authority: read-only
-      system-design:
+      backlog-runner:
         produces:
-        - system_design_spec
+        - implementation_pr
         consumes:
-        - prd_report
-        - architecture_review_report
-        produce_fields:
-          system_design_spec:
-          - title
-          - readiness
-          - assessment_target
-          - normalized_decision
-          - findings
-          - conditions
-          - required_actions
-          - evidence_refs
-        consume_fields:
-          prd_report:
-          - title
-          - build_readiness
-          - depth
-          - response_mode
-          - assessment_target
-          - normalized_decision
-          - evidence_refs
-          architecture_review_report:
-          - title
-          - decision
-          - assessment_target
-          - normalized_decision
-          - evidence_refs
-        write_authority: read-only
-      api-design-review:
-        produces:
-        - api_design_review_report
-        consumes:
-        - assessment_context
-        produce_fields:
-          api_design_review_report:
-          - title
-          - verdict
-          - assessment_target
-          - normalized_decision
-          - findings
-          - conditions
-          - required_actions
-          - evidence_refs
-        consume_fields:
-          assessment_context:
-          - assessment_target
-          - inputs
-          - input_provenance
-          - evidence_refs
-          - unresolved
-        write_authority: read-only
-      database-review:
-        produces:
-        - database_review_report
-        consumes:
-        - assessment_context
-        produce_fields:
-          database_review_report:
-          - title
-          - verdict
-          - assessment_target
-          - normalized_decision
-          - findings
-          - conditions
-          - required_actions
-          - evidence_refs
-        consume_fields:
-          assessment_context:
-          - assessment_target
-          - inputs
-          - input_provenance
-          - evidence_refs
-          - unresolved
-        write_authority: read-only
-      security-review:
-        produces:
-        - security_review_report
-        consumes:
-        - assessment_context
-        produce_fields:
-          security_review_report:
-          - title
-          - verdict
-          - assessment_target
-          - normalized_decision
-          - findings
-          - conditions
-          - required_actions
-          - evidence_refs
-        consume_fields:
-          assessment_context:
-          - assessment_target
-          - inputs
-          - input_provenance
-          - evidence_refs
-          - unresolved
-        write_authority: read-only
-      performance-review:
-        produces:
-        - performance_review_report
-        consumes:
-        - assessment_context
-        produce_fields:
-          performance_review_report:
-          - title
-          - verdict
-          - assessment_target
-          - normalized_decision
-          - findings
-          - conditions
-          - required_actions
-          - evidence_refs
-        consume_fields:
-          assessment_context:
-          - assessment_target
-          - inputs
-          - input_provenance
-          - evidence_refs
-          - unresolved
+        - implementation_task
         write_authority: read-only
       capacity-planner:
         produces:
@@ -1926,85 +1450,6 @@ contracts:
           - input_provenance
           - evidence_refs
           - unresolved
-        write_authority: read-only
-      observability-review:
-        produces:
-        - observability_review_report
-        consumes:
-        - assessment_context
-        produce_fields:
-          observability_review_report:
-          - title
-          - coverage
-          - assessment_target
-          - normalized_decision
-          - findings
-          - conditions
-          - required_actions
-          - evidence_refs
-        consume_fields:
-          assessment_context:
-          - assessment_target
-          - inputs
-          - input_provenance
-          - evidence_refs
-          - unresolved
-        write_authority: read-only
-      deployment-risk-review:
-        produces:
-        - deployment_risk_report
-        consumes:
-        - assessment_context
-        produce_fields:
-          deployment_risk_report:
-          - title
-          - risk
-          - deployment_confidence
-          - assessment_target
-          - normalized_decision
-          - findings
-          - conditions
-          - required_actions
-          - evidence_refs
-        consume_fields:
-          assessment_context:
-          - assessment_target
-          - inputs
-          - input_provenance
-          - evidence_refs
-          - unresolved
-        write_authority: read-only
-      dependency-upgrade-review:
-        produces:
-        - dependency_upgrade_report
-        consumes:
-        - assessment_context
-        produce_fields:
-          dependency_upgrade_report:
-          - title
-          - verdict
-          - assessment_target
-          - normalized_decision
-          - findings
-          - conditions
-          - required_actions
-          - evidence_refs
-        consume_fields:
-          assessment_context:
-          - assessment_target
-          - inputs
-          - input_provenance
-          - evidence_refs
-          - unresolved
-        write_authority: read-only
-      tech-debt-assessor:
-        produces:
-        - tech_debt_assessment
-        consumes: []
-        produce_fields:
-          tech_debt_assessment:
-          - title
-          - items
         write_authority: read-only
       change-impact-analyzer:
         produces:
@@ -2043,13 +1488,49 @@ contracts:
           - evidence_refs
           - unresolved
         write_authority: read-only
-      resilience-review:
+      contract-test-creator:
         produces:
-        - resilience_review_report
+        - test_suite
+        consumes:
+        - implementation_task
+        produce_fields:
+          test_suite:
+          - tests
+          - framework
+          - target_path
+        consume_fields:
+          implementation_task:
+          - task_id
+          - scope
+          - acceptance_criteria
+          - request
+          - repo_root
+          - target
+          - test_framework_hint
+          - run_tests
+          - max_files_per_run
+          - deadline
+          - session_token_budget
+          - output_dir
+          - specialist_inputs
+        write_authority: repository-write
+      cost-optimization-sprint-planner:
+        produces:
+        - cost_sweep_rollup
+        consumes: []
+        produce_fields:
+          cost_sweep_rollup:
+          - items
+          - generated_at
+          - source_revision
+        write_authority: read-only
+      database-review:
+        produces:
+        - database_review_report
         consumes:
         - assessment_context
         produce_fields:
-          resilience_review_report:
+          database_review_report:
           - title
           - verdict
           - assessment_target
@@ -2066,6 +1547,85 @@ contracts:
           - evidence_refs
           - unresolved
         write_authority: read-only
+      dependency-upgrade-review:
+        produces:
+        - dependency_upgrade_report
+        consumes:
+        - assessment_context
+        produce_fields:
+          dependency_upgrade_report:
+          - title
+          - verdict
+          - assessment_target
+          - normalized_decision
+          - findings
+          - conditions
+          - required_actions
+          - evidence_refs
+        consume_fields:
+          assessment_context:
+          - assessment_target
+          - inputs
+          - input_provenance
+          - evidence_refs
+          - unresolved
+        write_authority: read-only
+      deployment-risk-review:
+        produces:
+        - deployment_risk_report
+        consumes:
+        - assessment_context
+        produce_fields:
+          deployment_risk_report:
+          - title
+          - risk
+          - deployment_confidence
+          - assessment_target
+          - normalized_decision
+          - findings
+          - conditions
+          - required_actions
+          - evidence_refs
+        consume_fields:
+          assessment_context:
+          - assessment_target
+          - inputs
+          - input_provenance
+          - evidence_refs
+          - unresolved
+        write_authority: read-only
+      domain-comprehension:
+        produces:
+        - squad_map
+        consumes:
+        - mr_context
+        write_authority: read-only
+      e2e-test-creator:
+        produces:
+        - test_suite
+        consumes:
+        - implementation_task
+        produce_fields:
+          test_suite:
+          - tests
+          - framework
+          - target_path
+        consume_fields:
+          implementation_task:
+          - task_id
+          - scope
+          - acceptance_criteria
+          - request
+          - repo_root
+          - target
+          - test_framework_hint
+          - run_tests
+          - max_files_per_run
+          - deadline
+          - session_token_budget
+          - output_dir
+          - specialist_inputs
+        write_authority: repository-write
       implementation-planner:
         produces:
         - implementation_plan
@@ -2195,6 +1755,226 @@ contracts:
           - conditions
           - required_actions
           - evidence_refs
+        write_authority: read-only
+      incident-rca:
+        produces:
+        - rca_report
+        consumes:
+        - mr_context
+        write_authority: read-only
+      incident-triage-agent:
+        produces:
+        - rca_report
+        - ownership_lookup
+        consumes:
+        - mr_context
+        produce_fields:
+          rca_report:
+          - assessment_metadata
+          - root_cause
+          - confidence
+          ownership_lookup:
+          - query
+          - squad
+          - confidence
+        consume_fields:
+          mr_context:
+          - project
+          - head_sha
+        write_authority: read-only
+      integration-test-creator:
+        produces:
+        - test_suite
+        consumes:
+        - implementation_task
+        produce_fields:
+          test_suite:
+          - tests
+          - framework
+          - target_path
+        consume_fields:
+          implementation_task:
+          - task_id
+          - scope
+          - acceptance_criteria
+          - request
+          - repo_root
+          - target
+          - test_framework_hint
+          - run_tests
+          - max_files_per_run
+          - deadline
+          - session_token_budget
+          - output_dir
+          - specialist_inputs
+        write_authority: repository-write
+      k8s-overprovisioning-datadog:
+        produces:
+        - k8s_rightsizing_report
+        consumes:
+        - mr_context
+        write_authority: read-only
+      loop-task-implementer:
+        produces:
+        - implementation_pr
+        consumes:
+        - implementation_task
+        - prd_report
+        - implementation_plan
+        consume_fields:
+          implementation_plan:
+          - plan_set_id
+          - plan_id
+          - title
+          - readiness
+          - assessment_target
+          - target_repo
+          - external_dependencies
+          - source_refs
+          - tasks
+          - execution_waves
+          - sequencing_constraints
+          - verification_gates
+          - traceability
+        write_authority: repository-write
+      migration-program-manager:
+        produces:
+        - migration_status_rollup
+        consumes: []
+        produce_fields:
+          migration_status_rollup:
+          - items
+          - generated_at
+          - source_revision
+        write_authority: read-only
+      mysql-to-postgres-sql:
+        produces:
+        - implementation_pr
+        consumes:
+        - implementation_task
+        write_authority: repository-write
+      new-hire-guide:
+        produces:
+        - digest_report
+        consumes:
+        - mr_context
+        write_authority: read-only
+      observability-review:
+        produces:
+        - observability_review_report
+        consumes:
+        - assessment_context
+        produce_fields:
+          observability_review_report:
+          - title
+          - coverage
+          - assessment_target
+          - normalized_decision
+          - findings
+          - conditions
+          - required_actions
+          - evidence_refs
+        consume_fields:
+          assessment_context:
+          - assessment_target
+          - inputs
+          - input_provenance
+          - evidence_refs
+          - unresolved
+        write_authority: read-only
+      performance-review:
+        produces:
+        - performance_review_report
+        consumes:
+        - assessment_context
+        produce_fields:
+          performance_review_report:
+          - title
+          - verdict
+          - assessment_target
+          - normalized_decision
+          - findings
+          - conditions
+          - required_actions
+          - evidence_refs
+        consume_fields:
+          assessment_context:
+          - assessment_target
+          - inputs
+          - input_provenance
+          - evidence_refs
+          - unresolved
+        write_authority: read-only
+      pr-gatekeeper:
+        produces:
+        - mr_review_report
+        consumes:
+        - mr_context
+        produce_fields:
+          mr_review_report:
+          - review_metadata
+          - posted
+          - head_sha
+          - posting_mode
+          - integrated_revision
+          - assessment_target
+          - normalized_decision
+          - findings
+          - conditions
+          - required_actions
+          - evidence_refs
+        consume_fields:
+          mr_context:
+          - project
+          - merge_request_iid
+          - head_sha
+        write_authority: comment
+      pr-review:
+        produces:
+        - mr_review_report
+        consumes:
+        - mr_context
+        produce_fields:
+          mr_review_report:
+          - review_metadata
+          - posted
+          - head_sha
+          - posting_mode
+          - integrated_revision
+          - assessment_target
+          - normalized_decision
+          - findings
+          - conditions
+          - required_actions
+          - evidence_refs
+        consume_fields:
+          mr_context:
+          - project
+          - merge_request_iid
+          - head_sha
+        write_authority: comment
+      prd-architect:
+        produces:
+        - prd_report
+        consumes:
+        - implementation_task
+        produce_fields:
+          prd_report:
+          - title
+          - build_readiness
+          - depth
+          - response_mode
+          - assessment_target
+          - normalized_decision
+          - findings
+          - conditions
+          - required_actions
+          - evidence_refs
+        consume_fields:
+          implementation_task:
+          - task_id
+          - scope
+          - acceptance_criteria
         write_authority: read-only
       production-readiness-review:
         produces:
@@ -2340,6 +2120,230 @@ contracts:
           - required_actions
           - evidence_refs
         write_authority: read-only
+      release-readiness-checker:
+        produces:
+        - digest_report
+        consumes:
+        - mr_context
+        - mr_review_report
+        - k8s_rightsizing_report
+        - rca_report
+        - production_readiness_report
+        produce_fields:
+          digest_report:
+          - sections
+          - generated_at
+          - source_revisions
+        consume_fields:
+          production_readiness_report:
+          - assessment_target
+          - source_revision
+          - verdict
+          - dimension_statuses
+          - conditions
+          - waivers
+          - evidence_refs
+          mr_context:
+          - project
+          - merge_request_iid
+          - head_sha
+          - posting_policy
+          - review_mode
+          - audit_type
+          - expected_head_sha
+          mr_review_report:
+          - review_metadata
+          - posted
+          - head_sha
+          - integrated_revision
+          - assessment_target
+          - normalized_decision
+          - findings
+          - conditions
+          - required_actions
+          - evidence_refs
+          k8s_rightsizing_report:
+          - assessment_metadata
+          - recommendations
+          rca_report:
+          - assessment_metadata
+          - root_cause
+          - confidence
+        write_authority: read-only
+      resilience-review:
+        produces:
+        - resilience_review_report
+        consumes:
+        - assessment_context
+        produce_fields:
+          resilience_review_report:
+          - title
+          - verdict
+          - assessment_target
+          - normalized_decision
+          - findings
+          - conditions
+          - required_actions
+          - evidence_refs
+        consume_fields:
+          assessment_context:
+          - assessment_target
+          - inputs
+          - input_provenance
+          - evidence_refs
+          - unresolved
+        write_authority: read-only
+      security-review:
+        produces:
+        - security_review_report
+        consumes:
+        - assessment_context
+        produce_fields:
+          security_review_report:
+          - title
+          - verdict
+          - assessment_target
+          - normalized_decision
+          - findings
+          - conditions
+          - required_actions
+          - evidence_refs
+        consume_fields:
+          assessment_context:
+          - assessment_target
+          - inputs
+          - input_provenance
+          - evidence_refs
+          - unresolved
+        write_authority: read-only
+      squad-map:
+        produces:
+        - squad_map
+        - ownership_lookup
+        consumes:
+        - mr_context
+        write_authority: read-only
+      system-design:
+        produces:
+        - system_design_spec
+        consumes:
+        - prd_report
+        - architecture_review_report
+        produce_fields:
+          system_design_spec:
+          - title
+          - readiness
+          - assessment_target
+          - normalized_decision
+          - findings
+          - conditions
+          - required_actions
+          - evidence_refs
+        consume_fields:
+          prd_report:
+          - title
+          - build_readiness
+          - depth
+          - response_mode
+          - assessment_target
+          - normalized_decision
+          - evidence_refs
+          architecture_review_report:
+          - title
+          - decision
+          - assessment_target
+          - normalized_decision
+          - evidence_refs
+        write_authority: read-only
+      tech-debt-assessor:
+        produces:
+        - tech_debt_assessment
+        consumes: []
+        produce_fields:
+          tech_debt_assessment:
+          - title
+          - items
+        write_authority: read-only
+      test-writer:
+        produces:
+        - test_orchestration_result
+        consumes:
+        - implementation_task
+        produce_fields:
+          test_orchestration_result:
+          - test_plan
+          - orchestration_status
+          - unfinished_levels
+          - level_reports
+        consume_fields:
+          implementation_task:
+          - task_id
+          - scope
+          - acceptance_criteria
+          - request
+          - repo_root
+          - target
+          - test_framework_hint
+          - run_tests
+          - max_files_per_run
+          - deadline
+          - session_token_budget
+          - output_dir
+          - specialist_inputs
+        write_authority: read-only
+      unit-test-creator:
+        produces:
+        - test_suite
+        consumes:
+        - implementation_task
+        produce_fields:
+          test_suite:
+          - tests
+          - framework
+          - target_path
+        consume_fields:
+          implementation_task:
+          - task_id
+          - scope
+          - acceptance_criteria
+          - request
+          - repo_root
+          - target
+          - test_framework_hint
+          - run_tests
+          - max_files_per_run
+          - deadline
+          - session_token_budget
+          - output_dir
+          - specialist_inputs
+        write_authority: repository-write
+      weekly-squad-digest:
+        produces:
+        - digest_report
+        consumes:
+        - migration_status_rollup
+        - cost_sweep_rollup
+        produce_fields:
+          digest_report:
+          - sections
+          - generated_at
+          - source_revisions
+        consume_fields:
+          migration_status_rollup:
+          - items
+          - generated_at
+          - source_revision
+          cost_sweep_rollup:
+          - items
+          - generated_at
+          - source_revision
+        write_authority: read-only
+      who-owns-x-bot:
+        produces:
+        - ownership_lookup
+        consumes:
+        - mr_context
+        write_authority: read-only
 profiles:
   read-only-leaf-review:
     authority: read-only
@@ -2364,6 +2368,7 @@ profiles:
     - generic
     - kiro
     version_source: skill_frontmatter_legacy_numeric
+# GENERATED from scripts/registry/skills.d/*.yaml — do not edit the skills: mapping; run make generate
 skills:
   api-design-review:
     path: api-design-review
@@ -2376,6 +2381,15 @@ skills:
       - security-review
       - pr-review
       - database-review
+      consumes:
+      - assessment_context
+      consume_fields:
+        assessment_context:
+        - assessment_target
+        - inputs
+        - input_provenance
+        - evidence_refs
+        - unresolved
     capabilities:
       required:
       - host.report.write
@@ -2404,6 +2418,16 @@ skills:
         - required_actions
         - evidence_refs
     dependencies: []
+    degraded_behavior:
+      missing_capability: host.report.write
+      available_capabilities: []
+      behavior: BLOCKED
+    setup_freshness:
+      external_services: None — reads supplied API design/contract content and repository
+        only
+    routing:
+      patterns:
+      - \b(API design review|API contract review|API versioning review)\b
   api-test-creator:
     path: api-test-creator
     category: testing
@@ -2445,14 +2469,6 @@ skills:
       external_actions: read
       unattended: false
       merge: false
-    supported_hosts:
-    - chatgpt
-    - claude
-    - codex
-    - cursor
-    - generic
-    - kiro
-    entrypoint: SKILL.md
     output_contract:
       produces:
       - test_suite
@@ -2463,6 +2479,33 @@ skills:
         - target_path
     dependencies: []
     version_source: skill_frontmatter_legacy_numeric
+    composition:
+      consumes:
+      - implementation_task
+      consume_fields:
+        implementation_task:
+        - task_id
+        - scope
+        - acceptance_criteria
+        - request
+        - repo_root
+        - target
+        - test_framework_hint
+        - run_tests
+        - max_files_per_run
+        - deadline
+        - session_token_budget
+        - output_dir
+        - specialist_inputs
+    degraded_behavior:
+      missing_capability: host.repository.read_write
+      available_capabilities: []
+      behavior: BLOCKED
+    setup_freshness:
+      external_services: Newman CLI + reachable API base URL
+    routing:
+      patterns:
+      - \b(API|HTTP|REST)\b.*\b(tests?|testing suite)\b
   architecture-review:
     path: architecture-review
     category: review
@@ -2475,6 +2518,24 @@ skills:
       - security-review
       - loop-task-implementer
       - prd-architect
+      consumes:
+      - system_design_spec
+      - prd_report
+      consume_fields:
+        system_design_spec:
+        - title
+        - readiness
+        - assessment_target
+        - normalized_decision
+        - evidence_refs
+        prd_report:
+        - title
+        - build_readiness
+        - depth
+        - response_mode
+        - assessment_target
+        - normalized_decision
+        - evidence_refs
     capabilities:
       required:
       - host.report.write
@@ -2503,6 +2564,16 @@ skills:
         - required_actions
         - evidence_refs
     dependencies: []
+    degraded_behavior:
+      missing_capability: host.report.write
+      available_capabilities: []
+      behavior: BLOCKED
+    setup_freshness:
+      external_services: None — reads supplied PRD/design content and repository only
+    routing:
+      patterns:
+      - \b(architecture review|ADR|architecture decision record|architecture design
+        review)\b
   backlog-runner:
     path: backlog-runner
     category: automation
@@ -2540,14 +2611,6 @@ skills:
       external_actions: write
       unattended: true
       merge: true
-    supported_hosts:
-    - chatgpt
-    - claude
-    - codex
-    - cursor
-    - generic
-    - kiro
-    entrypoint: SKILL.md
     output_contract:
       produces:
       - implementation_pr
@@ -2555,6 +2618,18 @@ skills:
     dependencies:
     - loop-task-implementer
     version_source: skill_frontmatter_legacy_numeric
+    composition:
+      consumes:
+      - implementation_task
+    degraded_behavior:
+      missing_capability: scheduler.cron.trigger
+      available_capabilities: []
+      behavior: BLOCKED
+    setup_freshness:
+      external_services: Jira or GitHub Issues API, loop-task-implementer
+    routing:
+      patterns:
+      - \b(backlog|tickets?)\b.*\b(overnight|scheduled|nightly|queue runner)\b
   capacity-planner:
     path: capacity-planner
     category: platform
@@ -2564,6 +2639,15 @@ skills:
     composition:
       escalation_targets:
       - k8s-overprovisioning-datadog
+      consumes:
+      - assessment_context
+      consume_fields:
+        assessment_context:
+        - assessment_target
+        - inputs
+        - input_provenance
+        - evidence_refs
+        - unresolved
     capabilities:
       required:
       - host.report.write
@@ -2592,6 +2676,15 @@ skills:
         - required_actions
         - evidence_refs
     dependencies: []
+    degraded_behavior:
+      missing_capability: host.report.write
+      available_capabilities: []
+      behavior: BLOCKED
+    setup_freshness:
+      external_services: None — reads supplied historical demand data only
+    routing:
+      patterns:
+      - \b(capacity plan(?:ning)?|capacity forecast|scaling requirements)\b
   change-impact-analyzer:
     path: change-impact-analyzer
     category: analysis
@@ -2601,6 +2694,20 @@ skills:
     composition:
       invokes: []
       escalation_targets: []
+      consumes:
+      - mr_context
+      - assessment_context
+      consume_fields:
+        mr_context:
+        - project
+        - merge_request_iid
+        - head_sha
+        assessment_context:
+        - assessment_target
+        - inputs
+        - input_provenance
+        - evidence_refs
+        - unresolved
     capabilities:
       required:
       - host.report.write
@@ -2642,6 +2749,26 @@ skills:
         - unknowns
         - evidence_refs
     dependencies: []
+    degraded_behavior:
+      missing_capability: host.repository.read
+      available_capabilities:
+      - host.report.write
+      - host.scm.change.read
+      behavior: DEGRADED
+    setup_freshness:
+      external_services: None — reads supplied design/change content and optional
+        repository or exact-head SCM evidence only
+    routing:
+      patterns:
+      - \b(change impact|impact analysis|affected surface)\b
+      - \bwhat does this change touch\b
+      - \bwhat\b.*\b(services?|contracts?|data|tests?)\b.*\b(change|affected|impact|touch)\b
+      - \b(services?|contracts?|data|tests?)\b.*\b(affected|impact|change|touch)\b.*\b(PR|MR|pull
+        request|merge request|design|proposal|change)\b
+      - \b(PR|MR|pull request|merge request)\s*[#!]?\d+\b.*\b(services?|contracts?|data|tests?|dependencies?)\b.*\b(affected|impact|change|touch)\b
+      exclude_patterns:
+      - \b(review|regression|correctness|blast radius|rollback risk|deployment risk|release
+        risk)\b
   contract-test-creator:
     path: contract-test-creator
     category: testing
@@ -2679,14 +2806,6 @@ skills:
       external_actions: none
       unattended: false
       merge: false
-    supported_hosts:
-    - chatgpt
-    - claude
-    - codex
-    - cursor
-    - generic
-    - kiro
-    entrypoint: SKILL.md
     output_contract:
       produces:
       - test_suite
@@ -2697,6 +2816,33 @@ skills:
         - target_path
     dependencies: []
     version_source: skill_frontmatter_legacy_numeric
+    composition:
+      consumes:
+      - implementation_task
+      consume_fields:
+        implementation_task:
+        - task_id
+        - scope
+        - acceptance_criteria
+        - request
+        - repo_root
+        - target
+        - test_framework_hint
+        - run_tests
+        - max_files_per_run
+        - deadline
+        - session_token_budget
+        - output_dir
+        - specialist_inputs
+    degraded_behavior:
+      missing_capability: host.repository.read_write
+      available_capabilities: []
+      behavior: BLOCKED
+    setup_freshness:
+      external_services: Pact Broker (optional, repo-specific)
+    routing:
+      patterns:
+      - \b(contract tests?|consumer[- ]driven contract|pact tests?)\b
   cost-optimization-sprint-planner:
     path: cost-optimization-sprint-planner
     category: platform
@@ -2733,14 +2879,6 @@ skills:
       external_actions: none
       unattended: false
       merge: false
-    supported_hosts:
-    - chatgpt
-    - claude
-    - codex
-    - cursor
-    - generic
-    - kiro
-    entrypoint: SKILL.md
     output_contract:
       produces:
       - cost_sweep_rollup
@@ -2753,6 +2891,17 @@ skills:
     - k8s-overprovisioning-datadog
     - squad-map
     version_source: skill_frontmatter_legacy_numeric
+    composition:
+      consumes: []
+    degraded_behavior:
+      missing_capability: host.filesystem.read
+      available_capabilities: []
+      behavior: BLOCKED
+    setup_freshness:
+      external_services: Kubernetes MCP, Datadog MCP (via k8s-overprovisioning-datadog)
+    routing:
+      patterns:
+      - \b(cost optimization|cost reduction)\b.*\b(sprint|backlog|prioriti[sz]|plan)\b
   database-review:
     path: database-review
     category: review
@@ -2764,6 +2913,15 @@ skills:
       - performance-review
       - mysql-to-postgres-sql
       - pr-review
+      consumes:
+      - assessment_context
+      consume_fields:
+        assessment_context:
+        - assessment_target
+        - inputs
+        - input_provenance
+        - evidence_refs
+        - unresolved
     capabilities:
       required:
       - host.report.write
@@ -2792,6 +2950,16 @@ skills:
         - required_actions
         - evidence_refs
     dependencies: []
+    degraded_behavior:
+      missing_capability: host.report.write
+      available_capabilities: []
+      behavior: BLOCKED
+    setup_freshness:
+      external_services: None — reads supplied schema/migration content and repository
+        only
+    routing:
+      patterns:
+      - \b(database review|schema review|migration review|query plan review)\b
   dependency-upgrade-review:
     path: dependency-upgrade-review
     category: review
@@ -2801,6 +2969,15 @@ skills:
     composition:
       escalation_targets:
       - security-review
+      consumes:
+      - assessment_context
+      consume_fields:
+        assessment_context:
+        - assessment_target
+        - inputs
+        - input_provenance
+        - evidence_refs
+        - unresolved
     capabilities:
       required:
       - host.report.write
@@ -2829,6 +3006,16 @@ skills:
         - required_actions
         - evidence_refs
     dependencies: []
+    degraded_behavior:
+      missing_capability: host.report.write
+      available_capabilities: []
+      behavior: BLOCKED
+    setup_freshness:
+      external_services: None — reads supplied dependency manifest/changelog content
+        and repository only
+    routing:
+      patterns:
+      - \b(dependency upgrade review|version bump review|CVE review)\b
   deployment-risk-review:
     path: deployment-risk-review
     category: review
@@ -2839,6 +3026,15 @@ skills:
       escalation_targets:
       - release-readiness-checker
       - incident-triage-agent
+      consumes:
+      - assessment_context
+      consume_fields:
+        assessment_context:
+        - assessment_target
+        - inputs
+        - input_provenance
+        - evidence_refs
+        - unresolved
     capabilities:
       required:
       - host.report.write
@@ -2868,6 +3064,16 @@ skills:
         - required_actions
         - evidence_refs
     dependencies: []
+    degraded_behavior:
+      missing_capability: host.report.write
+      available_capabilities: []
+      behavior: BLOCKED
+    setup_freshness:
+      external_services: None — reads supplied release/change content and repository
+        only
+    routing:
+      patterns:
+      - \b(deployment risk|release risk|blast radius)\b
   domain-comprehension:
     path: domain-comprehension
     category: architecture
@@ -2914,14 +3120,6 @@ skills:
       external_actions: read
       unattended: false
       merge: false
-    supported_hosts:
-    - chatgpt
-    - claude
-    - codex
-    - cursor
-    - generic
-    - kiro
-    entrypoint: SKILL.md
     output_contract:
       produces:
       - squad_map
@@ -2929,6 +3127,21 @@ skills:
     dependencies:
     - squad-map
     version_source: skill_frontmatter_legacy_numeric
+    composition:
+      consumes:
+      - mr_context
+    degraded_behavior:
+      missing_capability: host.repository.read
+      available_capabilities: []
+      behavior: BLOCKED
+    setup_freshness:
+      external_services: GitLab MCP (optional), Datadog MCP (optional)
+    routing:
+      patterns:
+      - \b(domain comprehension|bounded contexts?|current[- ]state domain|understand
+        the existing .* service)\b
+      - \barchitecture\b.*\bbounded contexts?\b
+      - \bunderstand\b.*\bcurrent domain\b
   e2e-test-creator:
     path: e2e-test-creator
     category: testing
@@ -2970,14 +3183,6 @@ skills:
       external_actions: read
       unattended: false
       merge: false
-    supported_hosts:
-    - chatgpt
-    - claude
-    - codex
-    - cursor
-    - generic
-    - kiro
-    entrypoint: SKILL.md
     output_contract:
       produces:
       - test_suite
@@ -2988,6 +3193,33 @@ skills:
         - target_path
     dependencies: []
     version_source: skill_frontmatter_legacy_numeric
+    composition:
+      consumes:
+      - implementation_task
+      consume_fields:
+        implementation_task:
+        - task_id
+        - scope
+        - acceptance_criteria
+        - request
+        - repo_root
+        - target
+        - test_framework_hint
+        - run_tests
+        - max_files_per_run
+        - deadline
+        - session_token_budget
+        - output_dir
+        - specialist_inputs
+    degraded_behavior:
+      missing_capability: host.repository.read_write
+      available_capabilities: []
+      behavior: BLOCKED
+    setup_freshness:
+      external_services: Browser driver + reachable app URL (local/CI)
+    routing:
+      patterns:
+      - \b(e2e|end[- ]to[- ]end)\b.*\b(tests?|testing)\b
   implementation-planner:
     path: implementation-planner
     category: automation
@@ -2998,6 +3230,117 @@ skills:
       invokes: []
       escalation_targets:
       - loop-task-implementer
+      consumes:
+      - system_design_spec
+      - architecture_review_report
+      - change_impact_report
+      - api_design_review_report
+      - database_review_report
+      - security_review_report
+      - performance_review_report
+      - capacity_plan
+      - observability_review_report
+      - resilience_review_report
+      - dependency_upgrade_report
+      consume_fields:
+        system_design_spec:
+        - title
+        - readiness
+        - assessment_target
+        - normalized_decision
+        - conditions
+        - required_actions
+        - evidence_refs
+        architecture_review_report:
+        - title
+        - decision
+        - assessment_target
+        - normalized_decision
+        - conditions
+        - required_actions
+        - evidence_refs
+        change_impact_report:
+        - title
+        - assessment_target
+        - coverage_status
+        - material_unknowns
+        - impacted_repositories
+        - criticality
+        - change_classes
+        - impacted_services
+        - impacted_contracts
+        - impacted_data
+        - impacted_dependencies
+        - impacted_owners
+        - required_tests
+        - operational_impacts
+        - review_triggers
+        - unknowns
+        - evidence_refs
+        api_design_review_report:
+        - title
+        - verdict
+        - assessment_target
+        - normalized_decision
+        - conditions
+        - required_actions
+        - evidence_refs
+        database_review_report:
+        - title
+        - verdict
+        - assessment_target
+        - normalized_decision
+        - conditions
+        - required_actions
+        - evidence_refs
+        security_review_report:
+        - title
+        - verdict
+        - assessment_target
+        - normalized_decision
+        - conditions
+        - required_actions
+        - evidence_refs
+        performance_review_report:
+        - title
+        - verdict
+        - assessment_target
+        - normalized_decision
+        - conditions
+        - required_actions
+        - evidence_refs
+        capacity_plan:
+        - title
+        - headroom
+        - assessment_target
+        - normalized_decision
+        - conditions
+        - required_actions
+        - evidence_refs
+        observability_review_report:
+        - title
+        - coverage
+        - assessment_target
+        - normalized_decision
+        - conditions
+        - required_actions
+        - evidence_refs
+        resilience_review_report:
+        - title
+        - verdict
+        - assessment_target
+        - normalized_decision
+        - conditions
+        - required_actions
+        - evidence_refs
+        dependency_upgrade_report:
+        - title
+        - verdict
+        - assessment_target
+        - normalized_decision
+        - conditions
+        - required_actions
+        - evidence_refs
     capabilities:
       required:
       - host.report.write
@@ -3032,6 +3375,18 @@ skills:
         - verification_gates
         - traceability
     dependencies: []
+    degraded_behavior:
+      missing_capability: host.repository.read
+      available_capabilities:
+      - host.report.write
+      behavior: BLOCKED
+    setup_freshness:
+      external_services: None — reads supplied design/review artifacts and optional
+        repository evidence only
+    routing:
+      patterns:
+      - \b(implementation plan|implementation planning|implementation task DAG|task
+        decomposition|dependency[- ]aware plan|execution waves)\b
   incident-rca:
     path: incident-rca
     category: incident
@@ -3052,6 +3407,8 @@ skills:
       - pr-review
       - k8s-overprovisioning-datadog
       - squad-map
+      consumes:
+      - mr_context
     capabilities:
       required:
       - telemetry.logs.query
@@ -3078,20 +3435,22 @@ skills:
       external_actions: read
       unattended: false
       merge: false
-    supported_hosts:
-    - chatgpt
-    - claude
-    - codex
-    - cursor
-    - generic
-    - kiro
-    entrypoint: SKILL.md
     output_contract:
       produces:
       - rca_report
       produce_fields: {}
     dependencies: []
     version_source: skill_frontmatter
+    degraded_behavior:
+      missing_capability: telemetry.logs.query
+      available_capabilities: []
+      behavior: BLOCKED
+    setup_freshness:
+      external_services: Datadog MCP, Jira MCP, KubeSense CLI (optional)
+    routing:
+      patterns:
+      - \b(RCA|root cause|postmortem|production incident|incident investigation)\b
+      - \b(5xx|error|latency)\b.*\b(spike|incident|production)\b
   incident-triage-agent:
     path: incident-triage-agent
     category: incident
@@ -3116,6 +3475,12 @@ skills:
       escalation_targets:
       - incident-rca
       - squad-map
+      consumes:
+      - mr_context
+      consume_fields:
+        mr_context:
+        - project
+        - head_sha
     capabilities:
       required:
       - pager.webhook.receive
@@ -3138,14 +3503,6 @@ skills:
       external_actions: write
       unattended: true
       merge: false
-    supported_hosts:
-    - chatgpt
-    - claude
-    - codex
-    - cursor
-    - generic
-    - kiro
-    entrypoint: SKILL.md
     output_contract:
       produces:
       - rca_report
@@ -3163,6 +3520,17 @@ skills:
     - incident-rca
     - squad-map
     version_source: skill_frontmatter_legacy_numeric
+    degraded_behavior:
+      missing_capability: pager.webhook.receive
+      available_capabilities: []
+      behavior: BLOCKED
+    setup_freshness:
+      external_services: PagerDuty/Opsgenie webhook (host infra), incident-rca MCPs,
+        squad-map
+    routing:
+      patterns:
+      - \b(pager|page|alert webhook|incident webhook)\b.*\b(triage|automation|route|owner)\b
+      - \btriage\b.*\b(pager|page|alert webhook|incident webhook)\b
   integration-test-creator:
     path: integration-test-creator
     category: testing
@@ -3204,14 +3572,6 @@ skills:
       external_actions: read
       unattended: false
       merge: false
-    supported_hosts:
-    - chatgpt
-    - claude
-    - codex
-    - cursor
-    - generic
-    - kiro
-    entrypoint: SKILL.md
     output_contract:
       produces:
       - test_suite
@@ -3222,6 +3582,33 @@ skills:
         - target_path
     dependencies: []
     version_source: skill_frontmatter_legacy_numeric
+    composition:
+      consumes:
+      - implementation_task
+      consume_fields:
+        implementation_task:
+        - task_id
+        - scope
+        - acceptance_criteria
+        - request
+        - repo_root
+        - target
+        - test_framework_hint
+        - run_tests
+        - max_files_per_run
+        - deadline
+        - session_token_budget
+        - output_dir
+        - specialist_inputs
+    degraded_behavior:
+      missing_capability: host.repository.read_write
+      available_capabilities: []
+      behavior: BLOCKED
+    setup_freshness:
+      external_services: Docker / testcontainers (local)
+    routing:
+      patterns:
+      - \b(integration tests?|integration-test)\b
   k8s-overprovisioning-datadog:
     path: k8s-overprovisioning-datadog
     category: platform
@@ -3241,6 +3628,8 @@ skills:
       escalation_targets:
       - incident-rca
       - pr-review
+      consumes:
+      - mr_context
     capabilities:
       required: []
       optional:
@@ -3277,20 +3666,24 @@ skills:
       external_actions: read
       unattended: false
       merge: false
-    supported_hosts:
-    - chatgpt
-    - claude
-    - codex
-    - cursor
-    - generic
-    - kiro
-    entrypoint: SKILL.md
     output_contract:
       produces:
       - k8s_rightsizing_report
       produce_fields: {}
     dependencies: []
     version_source: skill_frontmatter_legacy_numeric
+    degraded_behavior:
+      missing_capability: kubernetes.metrics.history
+      available_capabilities:
+      - datadog.query_metrics
+      behavior: FALLBACK
+    setup_freshness:
+      external_services: Kubernetes MCP, Datadog MCP
+    routing:
+      patterns:
+      - \b(k8s|kubernetes|pod|deployment)\b.*\b(overprovision\w*|right-?siz\w*|requests?|limits?|CPU|memory)\b
+      - \b(overprovision\w*|right-?siz\w*)\b.*\b(k8s|kubernetes|pod|deployment|CPU|memory)\b
+      - \boverprovisioned\b.*\bCPU\b.*\bmemory\b
   loop-task-implementer:
     path: loop-task-implementer
     category: automation
@@ -3332,20 +3725,43 @@ skills:
       external_actions: write
       unattended: false
       merge: true
-    supported_hosts:
-    - chatgpt
-    - claude
-    - codex
-    - cursor
-    - generic
-    - kiro
-    entrypoint: SKILL.md
     output_contract:
       produces:
       - implementation_pr
       produce_fields: {}
     dependencies: []
     version_source: skill_frontmatter_legacy_numeric
+    composition:
+      consumes:
+      - implementation_task
+      - prd_report
+      - implementation_plan
+      consume_fields:
+        implementation_plan:
+        - plan_set_id
+        - plan_id
+        - title
+        - readiness
+        - assessment_target
+        - target_repo
+        - external_dependencies
+        - source_refs
+        - tasks
+        - execution_waves
+        - sequencing_constraints
+        - verification_gates
+        - traceability
+    degraded_behavior:
+      missing_capability: host.repository.read_write
+      available_capabilities: []
+      behavior: BLOCKED
+    setup_freshness:
+      external_services: Git provider/API, CI provider (both repo-specific; no fixed
+        MCP)
+    routing:
+      patterns:
+      - \bimplement\b.*\b(task|ticket|change)\b.*\b(review|fix|until|loop)\b
+      - \brepeat\b.*\b(review|fix)\b.*\b(0 issues|zero issues)\b
   migration-program-manager:
     path: migration-program-manager
     category: migration
@@ -3369,6 +3785,7 @@ skills:
       - mysql-to-postgres-sql
       - squad-map
       - pr-review
+      consumes: []
     capabilities:
       required:
       - host.filesystem.read
@@ -3388,14 +3805,6 @@ skills:
       external_actions: none
       unattended: false
       merge: false
-    supported_hosts:
-    - chatgpt
-    - claude
-    - codex
-    - cursor
-    - generic
-    - kiro
-    entrypoint: SKILL.md
     output_contract:
       produces:
       - migration_status_rollup
@@ -3408,6 +3817,16 @@ skills:
     - mysql-to-postgres-sql
     - squad-map
     version_source: skill_frontmatter_legacy_numeric
+    degraded_behavior:
+      missing_capability: host.filesystem.read
+      available_capabilities: []
+      behavior: BLOCKED
+    setup_freshness:
+      external_services: None (reads MIGRATION_STATUS.yaml + SQUAD_MAP.md on disk)
+    routing:
+      patterns:
+      - \b(migration program|migration portfolio|migration status rollup|migration
+        program status)\b
   mysql-to-postgres-sql:
     path: mysql-to-postgres-sql
     category: migration
@@ -3445,20 +3864,25 @@ skills:
       external_actions: read
       unattended: false
       merge: false
-    supported_hosts:
-    - chatgpt
-    - claude
-    - codex
-    - cursor
-    - generic
-    - kiro
-    entrypoint: SKILL.md
     output_contract:
       produces:
       - implementation_pr
       produce_fields: {}
     dependencies: []
     version_source: skill_frontmatter_legacy_numeric
+    composition:
+      consumes:
+      - implementation_task
+    degraded_behavior:
+      missing_capability: host.repository.read_write
+      available_capabilities: []
+      behavior: BLOCKED
+    setup_freshness:
+      external_services: None (local scan scripts and domain packs)
+    routing:
+      patterns:
+      - \b(MySQL|mysql)\b.*\b(Postgres|PostgreSQL|postgresql)\b
+      - \bmigrate\b.*\bSQL dialect\b
   new-hire-guide:
     path: new-hire-guide
     category: architecture
@@ -3497,14 +3921,6 @@ skills:
       external_actions: read
       unattended: false
       merge: false
-    supported_hosts:
-    - chatgpt
-    - claude
-    - codex
-    - cursor
-    - generic
-    - kiro
-    entrypoint: SKILL.md
     output_contract:
       produces:
       - digest_report
@@ -3513,6 +3929,18 @@ skills:
     - domain-comprehension
     - squad-map
     version_source: skill_frontmatter_legacy_numeric
+    composition:
+      consumes:
+      - mr_context
+    degraded_behavior:
+      missing_capability: host.repository.read
+      available_capabilities: []
+      behavior: BLOCKED
+    setup_freshness:
+      external_services: squad-map, domain-comprehension
+    routing:
+      patterns:
+      - \b(new hire|onboarding)\b.*\b(guide|tour|first week|service map)\b
   observability-review:
     path: observability-review
     category: review
@@ -3523,6 +3951,15 @@ skills:
       escalation_targets:
       - incident-rca
       - deployment-risk-review
+      consumes:
+      - assessment_context
+      consume_fields:
+        assessment_context:
+        - assessment_target
+        - inputs
+        - input_provenance
+        - evidence_refs
+        - unresolved
     capabilities:
       required:
       - host.report.write
@@ -3551,6 +3988,16 @@ skills:
         - required_actions
         - evidence_refs
     dependencies: []
+    degraded_behavior:
+      missing_capability: host.report.write
+      available_capabilities: []
+      behavior: BLOCKED
+    setup_freshness:
+      external_services: None — reads supplied metrics/logs/dashboard/alert configuration
+        and repository only
+    routing:
+      patterns:
+      - \b(observability review|SLO review|alert coverage|tracing coverage)\b
   performance-review:
     path: performance-review
     category: review
@@ -3560,6 +4007,15 @@ skills:
     composition:
       escalation_targets:
       - capacity-planner
+      consumes:
+      - assessment_context
+      consume_fields:
+        assessment_context:
+        - assessment_target
+        - inputs
+        - input_provenance
+        - evidence_refs
+        - unresolved
     capabilities:
       required:
       - host.report.write
@@ -3588,6 +4044,15 @@ skills:
         - required_actions
         - evidence_refs
     dependencies: []
+    degraded_behavior:
+      missing_capability: host.report.write
+      available_capabilities: []
+      behavior: BLOCKED
+    setup_freshness:
+      external_services: None — reads supplied code/query content and repository only
+    routing:
+      patterns:
+      - \b(performance review|N\+1|slow query review|concurrency review)\b
   pr-gatekeeper:
     path: pr-gatekeeper
     category: review
@@ -3609,6 +4074,13 @@ skills:
       - pr-review
       escalation_targets:
       - pr-review
+      consumes:
+      - mr_context
+      consume_fields:
+        mr_context:
+        - project
+        - merge_request_iid
+        - head_sha
     capabilities:
       required:
       - gitlab.get_merge_request
@@ -3632,14 +4104,6 @@ skills:
       external_actions: write
       unattended: true
       merge: false
-    supported_hosts:
-    - chatgpt
-    - claude
-    - codex
-    - cursor
-    - generic
-    - kiro
-    entrypoint: SKILL.md
     output_contract:
       produces:
       - mr_review_report
@@ -3659,6 +4123,16 @@ skills:
     dependencies:
     - pr-review
     version_source: skill_frontmatter_legacy_numeric
+    degraded_behavior:
+      missing_capability: gitlab.get_merge_request
+      available_capabilities: []
+      behavior: BLOCKED
+    setup_freshness:
+      external_services: GitLab MCP (via pr-review), webhook receiver (host infra)
+    routing:
+      patterns:
+      - \b(PR|MR|pull request|merge request)\b.*\b(webhook|gatekeeper|automation gate|opened
+        event)\b
   pr-review:
     path: pr-review
     category: review
@@ -3679,6 +4153,13 @@ skills:
       - incident-rca
       - k8s-overprovisioning-datadog
       - security-review
+      consumes:
+      - mr_context
+      consume_fields:
+        mr_context:
+        - project
+        - merge_request_iid
+        - head_sha
     capabilities:
       required: []
       optional: []
@@ -3725,14 +4206,6 @@ skills:
       external_actions: write
       unattended: false
       merge: false
-    supported_hosts:
-    - chatgpt
-    - claude
-    - codex
-    - cursor
-    - generic
-    - kiro
-    entrypoint: SKILL.md
     output_contract:
       produces:
       - mr_review_report
@@ -3751,6 +4224,23 @@ skills:
         - evidence_refs
     dependencies: []
     version_source: skill_frontmatter_legacy_numeric
+    degraded_behavior:
+      missing_capability: gitlab.get_merge_request
+      available_capabilities:
+      - github.get_pull_request
+      - github.get_pull_request_files
+      behavior: FALLBACK
+    setup_freshness:
+      external_services: GitLab MCP or GitHub App/MCP or gh, Jira MCP (optional)
+    routing:
+      patterns:
+      - \b(review|inspect|analy[sz]e)\b.*\b(PR|MR|pull request|merge request|diff)\b
+      - \b(PR|MR|pull request|merge request)\b.*\b(review|regression|correctness)\b
+      exclude_patterns:
+      - \b(no|without)\s+(PR|MR|pull request|merge request)\b
+      - \bthere is no\s+(PR|MR|pull request|merge request)\b
+      - \b(production ready|production readiness|ready to release|ready to deploy|ready
+        to ship)\b
   prd-architect:
     path: prd-architect
     category: product
@@ -3772,6 +4262,13 @@ skills:
       - domain-comprehension
       - test-writer
       - pr-review
+      consumes:
+      - implementation_task
+      consume_fields:
+        implementation_task:
+        - task_id
+        - scope
+        - acceptance_criteria
     capabilities:
       required:
       - host.report.write
@@ -3789,14 +4286,6 @@ skills:
       external_actions: none
       unattended: false
       merge: false
-    supported_hosts:
-    - chatgpt
-    - claude
-    - codex
-    - cursor
-    - generic
-    - kiro
-    entrypoint: SKILL.md
     output_contract:
       produces:
       - prd_report
@@ -3814,6 +4303,18 @@ skills:
         - evidence_refs
     dependencies: []
     version_source: skill_frontmatter_legacy_numeric
+    degraded_behavior:
+      missing_capability: host.report.write
+      available_capabilities: []
+      behavior: BLOCKED
+    setup_freshness:
+      external_services: Optional web search for material unknowns (generalized queries
+        only)
+    routing:
+      patterns:
+      - \b(PRD|product requirements?|requirements document|build readiness)\b
+      exclude_patterns:
+      - \bready PRD\b.*\bimplementation design\b
   production-readiness-review:
     path: production-readiness-review
     category: release
@@ -3856,6 +4357,131 @@ skills:
       - performance-review
       - capacity-planner
       - dependency-upgrade-review
+      consumes:
+      - mr_context
+      - assessment_context
+      - mr_review_report
+      - change_impact_report
+      - deployment_risk_report
+      - security_review_report
+      - observability_review_report
+      - resilience_review_report
+      - api_design_review_report
+      - database_review_report
+      - performance_review_report
+      - capacity_plan
+      - dependency_upgrade_report
+      consume_fields:
+        assessment_context:
+        - assessment_target
+        - inputs
+        - input_provenance
+        - evidence_refs
+        - unresolved
+        mr_context:
+        - project
+        - merge_request_iid
+        - head_sha
+        mr_review_report:
+        - review_metadata
+        - head_sha
+        - integrated_revision
+        - assessment_target
+        - normalized_decision
+        - findings
+        - conditions
+        - required_actions
+        - evidence_refs
+        change_impact_report:
+        - assessment_target
+        - coverage_status
+        - material_unknowns
+        - impacted_repositories
+        - criticality
+        - change_classes
+        - impacted_services
+        - impacted_contracts
+        - impacted_data
+        - impacted_dependencies
+        - impacted_owners
+        - required_tests
+        - operational_impacts
+        - review_triggers
+        - unknowns
+        - evidence_refs
+        deployment_risk_report:
+        - risk
+        - deployment_confidence
+        - assessment_target
+        - normalized_decision
+        - findings
+        - conditions
+        - required_actions
+        - evidence_refs
+        security_review_report:
+        - verdict
+        - assessment_target
+        - normalized_decision
+        - findings
+        - conditions
+        - required_actions
+        - evidence_refs
+        observability_review_report:
+        - coverage
+        - assessment_target
+        - normalized_decision
+        - findings
+        - conditions
+        - required_actions
+        - evidence_refs
+        resilience_review_report:
+        - verdict
+        - assessment_target
+        - normalized_decision
+        - findings
+        - conditions
+        - required_actions
+        - evidence_refs
+        api_design_review_report:
+        - verdict
+        - assessment_target
+        - normalized_decision
+        - findings
+        - conditions
+        - required_actions
+        - evidence_refs
+        database_review_report:
+        - verdict
+        - assessment_target
+        - normalized_decision
+        - findings
+        - conditions
+        - required_actions
+        - evidence_refs
+        performance_review_report:
+        - verdict
+        - assessment_target
+        - normalized_decision
+        - findings
+        - conditions
+        - required_actions
+        - evidence_refs
+        capacity_plan:
+        - headroom
+        - assessment_target
+        - normalized_decision
+        - findings
+        - conditions
+        - required_actions
+        - evidence_refs
+        dependency_upgrade_report:
+        - verdict
+        - assessment_target
+        - normalized_decision
+        - findings
+        - conditions
+        - required_actions
+        - evidence_refs
     capabilities:
       required:
       - host.report.write
@@ -3986,6 +4612,34 @@ skills:
     - performance-review
     - capacity-planner
     - dependency-upgrade-review
+    degraded_behavior:
+      missing_capability: host.dependency.advisories.read
+      available_capabilities:
+      - host.report.write
+      - host.repository.read
+      - host.scm.change.read
+      - host.ci.status
+      - host.scm.policy.read
+      - host.build.provenance.read
+      - host.service.metadata.read
+      behavior: DEGRADED
+    setup_freshness:
+      external_services: None — reads supplied candidate evidence and optional repository,
+        SCM, CI, build-provenance, service-metadata, runtime-metrics, or dependency-advisory
+        host evidence, and reuses/dispatches trusted child-skill invocations only
+    routing:
+      patterns:
+      - \b(PR|MR|pull request|merge request)\s*[#!]?\d+\b.*\b(production ready|production
+        readiness|ready to release|ready to deploy|ready to ship)\b
+      - \b(production ready|production readiness|ready to release|ready to deploy|ready
+        to ship)\b.*\b(PR|MR|pull request|merge request)\s*[#!]?\d+\b
+      - \bproduction readiness (review|assessment|check)\b
+      - \bis (this|the) (service|change|deployment|pr|mr|pull request|merge request|release
+        candidate) production ready\b
+      - \b(this|the) (pr|mr|pull request|merge request|release candidate)\b.*\b(production
+        ready|production readiness|ready to release|ready to deploy|ready to ship)\b
+      - \bship (this|that) (pr|mr|pull request|merge request|change)\b
+      - \bgo[- /]?no[- ]?go for (this|one) (change|pr|mr|pull request|merge request)\b
   release-readiness-checker:
     path: release-readiness-checker
     category: release
@@ -4014,6 +4668,47 @@ skills:
       - pr-review
       - k8s-overprovisioning-datadog
       - incident-rca
+      consumes:
+      - mr_context
+      - mr_review_report
+      - k8s_rightsizing_report
+      - rca_report
+      - production_readiness_report
+      consume_fields:
+        production_readiness_report:
+        - assessment_target
+        - source_revision
+        - verdict
+        - dimension_statuses
+        - conditions
+        - waivers
+        - evidence_refs
+        mr_context:
+        - project
+        - merge_request_iid
+        - head_sha
+        - posting_policy
+        - review_mode
+        - audit_type
+        - expected_head_sha
+        mr_review_report:
+        - review_metadata
+        - posted
+        - head_sha
+        - integrated_revision
+        - assessment_target
+        - normalized_decision
+        - findings
+        - conditions
+        - required_actions
+        - evidence_refs
+        k8s_rightsizing_report:
+        - assessment_metadata
+        - recommendations
+        rca_report:
+        - assessment_metadata
+        - root_cause
+        - confidence
     capabilities:
       required:
       - host.report.write
@@ -4065,14 +4760,6 @@ skills:
       external_actions: read
       unattended: false
       merge: false
-    supported_hosts:
-    - chatgpt
-    - claude
-    - codex
-    - cursor
-    - generic
-    - kiro
-    entrypoint: SKILL.md
     output_contract:
       produces:
       - digest_report
@@ -4086,6 +4773,29 @@ skills:
     - k8s-overprovisioning-datadog
     - incident-rca
     version_source: skill_frontmatter_legacy_numeric
+    degraded_behavior:
+      missing_capability: host.report.write
+      available_capabilities: []
+      behavior: BLOCKED
+    setup_freshness:
+      external_services: GitLab MCP, Kubernetes MCP, Datadog MCP (via composed skills);
+        optional SCM history/policy and build-provenance host evidence for v2 conditional
+        production-readiness invocation
+    routing:
+      patterns:
+      - \b(release readiness|go[- /]?no[- ]?go|ready to release|ready to ship|release
+        candidate)\b
+      exclude_patterns:
+      - \b(PR|MR|pull request|merge request)\s*[#!]?\d+\b.*\b(ready to release|ready
+        to ship|production ready|production readiness)\b
+      - \b(ready to release|ready to ship|production ready|production readiness)\b.*\b(PR|MR|pull
+        request|merge request)\s*[#!]?\d+\b
+      - \b(this|the) (pr|mr|pull request|merge request|release candidate)\b.*\b(production
+        ready|production readiness|ready to release|ready to deploy|ready to ship)\b
+      - \b(production ready|production readiness|ready to release|ready to deploy|ready
+        to ship)\b.*\b(this|the) (pr|mr|pull request|merge request|release candidate)\b
+      - \bgo[- /]?no[- ]?go for (this|one) (change|pr|mr|pull request|merge request)\b
+      - \bgo[- /]?no[- ]?go\b.*\bdeployment risk\b
   resilience-review:
     path: resilience-review
     category: review
@@ -4095,6 +4805,15 @@ skills:
     composition:
       invokes: []
       escalation_targets: []
+      consumes:
+      - assessment_context
+      consume_fields:
+        assessment_context:
+        - assessment_target
+        - inputs
+        - input_provenance
+        - evidence_refs
+        - unresolved
     capabilities:
       required:
       - host.report.write
@@ -4125,6 +4844,22 @@ skills:
         - required_actions
         - evidence_refs
     dependencies: []
+    degraded_behavior:
+      missing_capability: host.repository.read
+      available_capabilities:
+      - host.report.write
+      behavior: DEGRADED
+    setup_freshness:
+      external_services: None — reads supplied resilience content and optional repository
+        or runtime/config evidence only
+    routing:
+      patterns:
+      - \b(resilience|failure[- ]mode|fault[- ]toleran)\w*\b.*\b(review|assessment|analysis|controls?)\b
+      - \b(timeout budgets?|retry polic(?:y|ies)|circuit breakers?|load shedding|backpressure|queue
+        handling|idempotency|partial failures?|recovery reconciliation)\b
+      exclude_patterns:
+      - \b(incident|outage|postmortem|root cause|RCA)\b
+      - \b(capacity|headroom|forecast|sizing)\b
   security-review:
     path: security-review
     category: review
@@ -4134,6 +4869,15 @@ skills:
     composition:
       escalation_targets:
       - dependency-upgrade-review
+      consumes:
+      - assessment_context
+      consume_fields:
+        assessment_context:
+        - assessment_target
+        - inputs
+        - input_provenance
+        - evidence_refs
+        - unresolved
     capabilities:
       required:
       - host.report.write
@@ -4162,6 +4906,16 @@ skills:
         - required_actions
         - evidence_refs
     dependencies: []
+    degraded_behavior:
+      missing_capability: host.report.write
+      available_capabilities: []
+      behavior: BLOCKED
+    setup_freshness:
+      external_services: None — reads supplied code/design content and repository
+        only
+    routing:
+      patterns:
+      - \b(security review|authN|authZ|SSRF|tenant isolation review|cryptography review)\b
   squad-map:
     path: squad-map
     category: architecture
@@ -4203,14 +4957,6 @@ skills:
       external_actions: read
       unattended: false
       merge: false
-    supported_hosts:
-    - chatgpt
-    - claude
-    - codex
-    - cursor
-    - generic
-    - kiro
-    entrypoint: SKILL.md
     output_contract:
       produces:
       - squad_map
@@ -4218,6 +4964,18 @@ skills:
       produce_fields: {}
     dependencies: []
     version_source: skill_frontmatter_legacy_numeric
+    composition:
+      consumes:
+      - mr_context
+    degraded_behavior:
+      missing_capability: gitlab.list_projects
+      available_capabilities: []
+      behavior: BLOCKED
+    setup_freshness:
+      external_services: GitLab MCP, Datadog MCP
+    routing:
+      patterns:
+      - \b(squad map|ownership map|CODEOWNERS|service ownership map)\b
   system-design:
     path: system-design
     category: architecture
@@ -4229,6 +4987,24 @@ skills:
       - api-design-review
       - database-review
       - observability-review
+      consumes:
+      - prd_report
+      - architecture_review_report
+      consume_fields:
+        prd_report:
+        - title
+        - build_readiness
+        - depth
+        - response_mode
+        - assessment_target
+        - normalized_decision
+        - evidence_refs
+        architecture_review_report:
+        - title
+        - decision
+        - assessment_target
+        - normalized_decision
+        - evidence_refs
     capabilities:
       required:
       - host.report.write
@@ -4257,6 +5033,19 @@ skills:
         - required_actions
         - evidence_refs
     dependencies: []
+    degraded_behavior:
+      missing_capability: host.report.write
+      available_capabilities: []
+      behavior: BLOCKED
+    setup_freshness:
+      external_services: None — reads supplied architecture decision/PRD content and
+        repository only
+    routing:
+      patterns:
+      - \b(system design|technical design doc|component design|data model design)\b
+      - \bready PRD\b.*\bimplementation design\b
+      exclude_patterns:
+      - \bwhat\b.*\bservices?\b.*\b(touch|affected|impact)\b
   tech-debt-assessor:
     path: tech-debt-assessor
     category: platform
@@ -4267,6 +5056,7 @@ skills:
       escalation_targets:
       - migration-program-manager
       - cost-optimization-sprint-planner
+      consumes: []
     capabilities:
       required:
       - host.report.write
@@ -4289,6 +5079,16 @@ skills:
         - title
         - items
     dependencies: []
+    degraded_behavior:
+      missing_capability: host.report.write
+      available_capabilities: []
+      behavior: BLOCKED
+    setup_freshness:
+      external_services: None — reads repository content and supplied backlog data
+        only
+    routing:
+      patterns:
+      - \b(tech(?:nical)? debt (?:assess|priorit|rank)|debt backlog)\b
   test-writer:
     path: test-writer
     category: product
@@ -4348,14 +5148,6 @@ skills:
       external_actions: none
       unattended: false
       merge: false
-    supported_hosts:
-    - chatgpt
-    - claude
-    - codex
-    - cursor
-    - generic
-    - kiro
-    entrypoint: SKILL.md
     output_contract:
       produces:
       - test_orchestration_result
@@ -4372,6 +5164,34 @@ skills:
     - e2e-test-creator
     - api-test-creator
     version_source: skill_frontmatter_legacy_numeric
+    composition:
+      consumes:
+      - implementation_task
+      consume_fields:
+        implementation_task:
+        - task_id
+        - scope
+        - acceptance_criteria
+        - request
+        - repo_root
+        - target
+        - test_framework_hint
+        - run_tests
+        - max_files_per_run
+        - deadline
+        - session_token_budget
+        - output_dir
+        - specialist_inputs
+    degraded_behavior:
+      missing_capability: host.repository.read
+      available_capabilities: []
+      behavior: BLOCKED
+    setup_freshness:
+      external_services: None (router only — dispatches to test-creation skills)
+    routing:
+      patterns:
+      - \b(write|generate|add)\b\s+(tests?|test coverage)\b(?!.*\b(unit|integration|contract|e2e|end[-
+        ]to[- ]end|API|HTTP|REST)\b)
   unit-test-creator:
     path: unit-test-creator
     category: testing
@@ -4409,14 +5229,6 @@ skills:
       external_actions: none
       unattended: false
       merge: false
-    supported_hosts:
-    - chatgpt
-    - claude
-    - codex
-    - cursor
-    - generic
-    - kiro
-    entrypoint: SKILL.md
     output_contract:
       produces:
       - test_suite
@@ -4427,6 +5239,33 @@ skills:
         - target_path
     dependencies: []
     version_source: skill_frontmatter_legacy_numeric
+    composition:
+      consumes:
+      - implementation_task
+      consume_fields:
+        implementation_task:
+        - task_id
+        - scope
+        - acceptance_criteria
+        - request
+        - repo_root
+        - target
+        - test_framework_hint
+        - run_tests
+        - max_files_per_run
+        - deadline
+        - session_token_budget
+        - output_dir
+        - specialist_inputs
+    degraded_behavior:
+      missing_capability: host.repository.read_write
+      available_capabilities: []
+      behavior: BLOCKED
+    setup_freshness:
+      external_services: None (local test runners)
+    routing:
+      patterns:
+      - \b(unit tests?|unit-test)\b
   weekly-squad-digest:
     path: weekly-squad-digest
     category: migration
@@ -4449,6 +5288,18 @@ skills:
       escalation_targets:
       - migration-program-manager
       - cost-optimization-sprint-planner
+      consumes:
+      - migration_status_rollup
+      - cost_sweep_rollup
+      consume_fields:
+        migration_status_rollup:
+        - items
+        - generated_at
+        - source_revision
+        cost_sweep_rollup:
+        - items
+        - generated_at
+        - source_revision
     capabilities:
       required:
       - scheduler.cron.trigger
@@ -4471,14 +5322,6 @@ skills:
       external_actions: write
       unattended: true
       merge: false
-    supported_hosts:
-    - chatgpt
-    - claude
-    - codex
-    - cursor
-    - generic
-    - kiro
-    entrypoint: SKILL.md
     output_contract:
       produces:
       - digest_report
@@ -4491,6 +5334,15 @@ skills:
     - migration-program-manager
     - cost-optimization-sprint-planner
     version_source: skill_frontmatter_legacy_numeric
+    degraded_behavior:
+      missing_capability: scheduler.cron.trigger
+      available_capabilities: []
+      behavior: BLOCKED
+    setup_freshness:
+      external_services: None (reads rollup JSON artifacts)
+    routing:
+      patterns:
+      - \bweekly\b.*\b(squad|team)\b.*\b(digest|summary|rollup)\b
   who-owns-x-bot:
     path: who-owns-x-bot
     category: architecture
@@ -4526,14 +5378,6 @@ skills:
       external_actions: write
       unattended: true
       merge: false
-    supported_hosts:
-    - chatgpt
-    - claude
-    - codex
-    - cursor
-    - generic
-    - kiro
-    entrypoint: SKILL.md
     output_contract:
       produces:
       - ownership_lookup
@@ -4541,3 +5385,16 @@ skills:
     dependencies:
     - squad-map
     version_source: skill_frontmatter_legacy_numeric
+    composition:
+      consumes:
+      - mr_context
+    degraded_behavior:
+      missing_capability: slack.slash_command.receive
+      available_capabilities: []
+      behavior: BLOCKED
+    setup_freshness:
+      external_services: squad-map (Slack handler is host infra)
+    routing:
+      patterns:
+      - \bwho owns\b
+      - \bownership lookup\b.*\b(slack|slash command|bot)\b

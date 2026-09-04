@@ -45,9 +45,7 @@ A result that relies on evidence whose relevant revision or observation time is 
 ## 4. Evidence conflicts
 
 Use the portable evidence states from the canonical manifest's
-`contracts.platform` section in `skills.yaml`. `scripts/registry/platform_contracts.yaml`
-is a generated projection for consumers that need the standalone view; it is not an
-independent authoring surface.
+`contracts.platform` section in `skills.yaml`, which is the only place they are declared.
 
 - `OBSERVED`
 - `INFERRED`

@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from scripts.evals.__main__ import run_all
-from scripts.registry.frontmatter import load_skill_frontmatter
+from scripts.yaml_safety import load_unique_frontmatter
 from scripts.registry.schema import parse_registry
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -34,7 +34,7 @@ def test_every_registered_skill_keeps_platform_metadata_in_manifest() -> None:
     assert set(manifest["skills"]) == set(registry.skills)
 
     for skill_id, entry in registry.skills.items():
-        frontmatter = load_skill_frontmatter(ROOT / entry.path / "SKILL.md")
+        frontmatter = load_unique_frontmatter(ROOT / entry.path / "SKILL.md")
         assert "platform_contract" not in frontmatter
         assert "skill_version" not in frontmatter
         assert manifest["skills"][skill_id]["entrypoint"] == "SKILL.md"

@@ -3,16 +3,15 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from scripts.registry.frontmatter import load_skill_frontmatter
 from scripts.registry.models import Registry
 from scripts.registry.schema import parse_registry
-from scripts.yaml_safety import YAML_SAFETY_ERRORS
+from scripts.yaml_safety import YAML_SAFETY_ERRORS, load_unique_frontmatter
 
 
 def load_descriptions(root: Path, registry: Registry) -> dict[str, str]:
     descriptions: dict[str, str] = {}
     for skill_id, entry in registry.skills.items():
-        frontmatter = load_skill_frontmatter(root / entry.path / "SKILL.md")
+        frontmatter = load_unique_frontmatter(root / entry.path / "SKILL.md")
         description = frontmatter.get("description", "")
         if not isinstance(description, str) or not description.strip():
             raise ValueError(f"error: {skill_id}: description must be a non-empty string")
@@ -49,7 +48,7 @@ def load_deprecated_skills(root: Path, registry: Registry) -> dict[str, dict[str
     deprecated: dict[str, dict[str, Any]] = {}
     for skill_id, entry in registry.skills.items():
         try:
-            frontmatter = load_skill_frontmatter(root / entry.path / "SKILL.md")
+            frontmatter = load_unique_frontmatter(root / entry.path / "SKILL.md")
         except (OSError, *YAML_SAFETY_ERRORS):
             continue
         if is_deprecated_frontmatter(frontmatter):

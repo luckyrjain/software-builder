@@ -19,6 +19,13 @@ pr-gatekeeper:
     - pr-review
     escalation_targets:
     - pr-review
+    consumes:
+    - mr_context
+    consume_fields:
+      mr_context:
+      - project
+      - merge_request_iid
+      - head_sha
   capabilities:
     required:
     - gitlab.get_merge_request
@@ -42,14 +49,6 @@ pr-gatekeeper:
     external_actions: write
     unattended: true
     merge: false
-  supported_hosts:
-  - chatgpt
-  - claude
-  - codex
-  - cursor
-  - generic
-  - kiro
-  entrypoint: SKILL.md
   output_contract:
     produces:
     - mr_review_report
@@ -69,3 +68,13 @@ pr-gatekeeper:
   dependencies:
   - pr-review
   version_source: skill_frontmatter_legacy_numeric
+  degraded_behavior:
+    missing_capability: gitlab.get_merge_request
+    available_capabilities: []
+    behavior: BLOCKED
+  setup_freshness:
+    external_services: GitLab MCP (via pr-review), webhook receiver (host infra)
+  routing:
+    patterns:
+    - \b(PR|MR|pull request|merge request)\b.*\b(webhook|gatekeeper|automation gate|opened
+      event)\b

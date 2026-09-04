@@ -185,9 +185,9 @@ adding a new skill directory needs no script change to be picked up.
 
 The registry CLI reads the versioned canonical `skills.yaml` manifest and exposes the same metadata
 used by validation and generated documentation. The standalone files under `scripts/registry/`
-(`platform_contracts.yaml`, `composition_contracts.yaml`, and `composition_runtime.yaml`) are
-generated projections; update `skills.yaml` and run `make generate` rather than editing those files
-directly:
+(`composition_contracts.yaml` and `composition_runtime.yaml`) are generated projections; update
+`skills.yaml` and run `make generate` rather than editing those files directly. The
+`contracts.platform` section has no standalone projection — it is read from `skills.yaml`:
 
 ```bash
 python3 -m scripts.registry list

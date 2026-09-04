@@ -57,14 +57,6 @@ test-writer:
     external_actions: none
     unattended: false
     merge: false
-  supported_hosts:
-  - chatgpt
-  - claude
-  - codex
-  - cursor
-  - generic
-  - kiro
-  entrypoint: SKILL.md
   output_contract:
     produces:
     - test_orchestration_result
@@ -81,3 +73,31 @@ test-writer:
   - e2e-test-creator
   - api-test-creator
   version_source: skill_frontmatter_legacy_numeric
+  composition:
+    consumes:
+    - implementation_task
+    consume_fields:
+      implementation_task:
+      - task_id
+      - scope
+      - acceptance_criteria
+      - request
+      - repo_root
+      - target
+      - test_framework_hint
+      - run_tests
+      - max_files_per_run
+      - deadline
+      - session_token_budget
+      - output_dir
+      - specialist_inputs
+  degraded_behavior:
+    missing_capability: host.repository.read
+    available_capabilities: []
+    behavior: BLOCKED
+  setup_freshness:
+    external_services: None (router only — dispatches to test-creation skills)
+  routing:
+    patterns:
+    - \b(write|generate|add)\b\s+(tests?|test coverage)\b(?!.*\b(unit|integration|contract|e2e|end[-
+      ]to[- ]end|API|HTTP|REST)\b)

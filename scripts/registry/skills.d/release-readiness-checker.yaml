@@ -26,6 +26,47 @@ release-readiness-checker:
     - pr-review
     - k8s-overprovisioning-datadog
     - incident-rca
+    consumes:
+    - mr_context
+    - mr_review_report
+    - k8s_rightsizing_report
+    - rca_report
+    - production_readiness_report
+    consume_fields:
+      production_readiness_report:
+      - assessment_target
+      - source_revision
+      - verdict
+      - dimension_statuses
+      - conditions
+      - waivers
+      - evidence_refs
+      mr_context:
+      - project
+      - merge_request_iid
+      - head_sha
+      - posting_policy
+      - review_mode
+      - audit_type
+      - expected_head_sha
+      mr_review_report:
+      - review_metadata
+      - posted
+      - head_sha
+      - integrated_revision
+      - assessment_target
+      - normalized_decision
+      - findings
+      - conditions
+      - required_actions
+      - evidence_refs
+      k8s_rightsizing_report:
+      - assessment_metadata
+      - recommendations
+      rca_report:
+      - assessment_metadata
+      - root_cause
+      - confidence
   capabilities:
     required:
     - host.report.write
@@ -77,14 +118,6 @@ release-readiness-checker:
     external_actions: read
     unattended: false
     merge: false
-  supported_hosts:
-  - chatgpt
-  - claude
-  - codex
-  - cursor
-  - generic
-  - kiro
-  entrypoint: SKILL.md
   output_contract:
     produces:
     - digest_report
@@ -98,3 +131,26 @@ release-readiness-checker:
   - k8s-overprovisioning-datadog
   - incident-rca
   version_source: skill_frontmatter_legacy_numeric
+  degraded_behavior:
+    missing_capability: host.report.write
+    available_capabilities: []
+    behavior: BLOCKED
+  setup_freshness:
+    external_services: GitLab MCP, Kubernetes MCP, Datadog MCP (via composed skills);
+      optional SCM history/policy and build-provenance host evidence for v2 conditional
+      production-readiness invocation
+  routing:
+    patterns:
+    - \b(release readiness|go[- /]?no[- ]?go|ready to release|ready to ship|release
+      candidate)\b
+    exclude_patterns:
+    - \b(PR|MR|pull request|merge request)\s*[#!]?\d+\b.*\b(ready to release|ready
+      to ship|production ready|production readiness)\b
+    - \b(ready to release|ready to ship|production ready|production readiness)\b.*\b(PR|MR|pull
+      request|merge request)\s*[#!]?\d+\b
+    - \b(this|the) (pr|mr|pull request|merge request|release candidate)\b.*\b(production
+      ready|production readiness|ready to release|ready to deploy|ready to ship)\b
+    - \b(production ready|production readiness|ready to release|ready to deploy|ready
+      to ship)\b.*\b(this|the) (pr|mr|pull request|merge request|release candidate)\b
+    - \bgo[- /]?no[- ]?go for (this|one) (change|pr|mr|pull request|merge request)\b
+    - \bgo[- /]?no[- ]?go\b.*\bdeployment risk\b

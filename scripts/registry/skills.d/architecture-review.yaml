@@ -10,6 +10,24 @@ architecture-review:
     - security-review
     - loop-task-implementer
     - prd-architect
+    consumes:
+    - system_design_spec
+    - prd_report
+    consume_fields:
+      system_design_spec:
+      - title
+      - readiness
+      - assessment_target
+      - normalized_decision
+      - evidence_refs
+      prd_report:
+      - title
+      - build_readiness
+      - depth
+      - response_mode
+      - assessment_target
+      - normalized_decision
+      - evidence_refs
   capabilities:
     required:
     - host.report.write
@@ -38,3 +56,13 @@ architecture-review:
       - required_actions
       - evidence_refs
   dependencies: []
+  degraded_behavior:
+    missing_capability: host.report.write
+    available_capabilities: []
+    behavior: BLOCKED
+  setup_freshness:
+    external_services: None — reads supplied PRD/design content and repository only
+  routing:
+    patterns:
+    - \b(architecture review|ADR|architecture decision record|architecture design
+      review)\b

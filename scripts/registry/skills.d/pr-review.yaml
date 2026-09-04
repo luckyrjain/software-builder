@@ -18,6 +18,13 @@ pr-review:
     - incident-rca
     - k8s-overprovisioning-datadog
     - security-review
+    consumes:
+    - mr_context
+    consume_fields:
+      mr_context:
+      - project
+      - merge_request_iid
+      - head_sha
   capabilities:
     required: []
     optional: []
@@ -64,14 +71,6 @@ pr-review:
     external_actions: write
     unattended: false
     merge: false
-  supported_hosts:
-  - chatgpt
-  - claude
-  - codex
-  - cursor
-  - generic
-  - kiro
-  entrypoint: SKILL.md
   output_contract:
     produces:
     - mr_review_report
@@ -90,3 +89,20 @@ pr-review:
       - evidence_refs
   dependencies: []
   version_source: skill_frontmatter_legacy_numeric
+  degraded_behavior:
+    missing_capability: gitlab.get_merge_request
+    available_capabilities:
+    - github.get_pull_request
+    - github.get_pull_request_files
+    behavior: FALLBACK
+  setup_freshness:
+    external_services: GitLab MCP or GitHub App/MCP or gh, Jira MCP (optional)
+  routing:
+    patterns:
+    - \b(review|inspect|analy[sz]e)\b.*\b(PR|MR|pull request|merge request|diff)\b
+    - \b(PR|MR|pull request|merge request)\b.*\b(review|regression|correctness)\b
+    exclude_patterns:
+    - \b(no|without)\s+(PR|MR|pull request|merge request)\b
+    - \bthere is no\s+(PR|MR|pull request|merge request)\b
+    - \b(production ready|production readiness|ready to release|ready to deploy|ready
+      to ship)\b

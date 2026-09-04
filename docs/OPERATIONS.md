@@ -38,13 +38,18 @@ is safe to delete once no install is running.
 host to `verification: VERIFIED` requires at least one `RUNTIME` evidence entry; vendor documentation is
 recorded as `DOCUMENTATION` evidence and cannot promote a host on its own.
 
-Refreshing evidence is a **maintainer decision, not an automated one**. There is no freshness clock:
-`STALE` is a state a maintainer sets, not one the tooling derives, and nothing schedules
-re-verification. Re-verify when a host ships a change to where or how it discovers skills, when a
-capability claim is contradicted in practice, or before making a stronger `maintainer_support` claim.
-Record the run as a `RUNTIME` evidence entry rather than editing the state alone, and run
-`make validate-hosts`. See [ADR 0006](adr/0006-host-registry-and-evidence-model.md) for the model and
-its known gaps.
+Record each run as a `RUNTIME` evidence entry with the date you observed it — `{kind: RUNTIME,
+reference: ..., observed_at: YYYY-MM-DD}` — rather than editing `verification` alone, and run
+`make validate-hosts`. `defaults.evidence_max_age_days` (90) then ages the claim for you: once every
+dated `RUNTIME` entry for a `VERIFIED` host is older than that, the parser reports it as `STALE`, and a
+fresh dated run is what restores `VERIFIED`. An entry with no `observed_at` never ages, so evidence
+recorded before that field existed keeps its declared state until someone re-verifies it.
+
+**Nothing schedules re-verification** — the clock only tells you a past observation has expired, it
+does not go and make a new one. Re-verify when a host ships a change to where or how it discovers
+skills, when a capability claim is contradicted in practice, or before making a stronger
+`maintainer_support` claim. See [ADR 0006](adr/0006-host-registry-and-evidence-model.md) for the model
+and its known gaps.
 
 ## When to bump `VERSION`
 

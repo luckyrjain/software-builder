@@ -9,6 +9,15 @@ database-review:
     - performance-review
     - mysql-to-postgres-sql
     - pr-review
+    consumes:
+    - assessment_context
+    consume_fields:
+      assessment_context:
+      - assessment_target
+      - inputs
+      - input_provenance
+      - evidence_refs
+      - unresolved
   capabilities:
     required:
     - host.report.write
@@ -37,3 +46,13 @@ database-review:
       - required_actions
       - evidence_refs
   dependencies: []
+  degraded_behavior:
+    missing_capability: host.report.write
+    available_capabilities: []
+    behavior: BLOCKED
+  setup_freshness:
+    external_services: None — reads supplied schema/migration content and repository
+      only
+  routing:
+    patterns:
+    - \b(database review|schema review|migration review|query plan review)\b
