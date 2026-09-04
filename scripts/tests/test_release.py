@@ -31,7 +31,7 @@ def _minimal_release_repo(tmp_path: Path) -> Path:
     # a minimal one of its own too.
     (root / "scripts" / "release_contract.yaml").write_text(
         "schema_version: 1\n"
-        "tag_pattern: '^v\\d+\\.\\d+\\.\\d+$'\n"
+        'tag_template: "v{version}"\n'
         "artifact_name_templates:\n"
         '  - "software-builder-{version}.tar.gz"\n'
         "compatibility:\n"
