@@ -8,7 +8,7 @@ from pathlib import Path
 
 import yaml
 
-from scripts.registry.backfill_capabilities import cmd_check_capabilities
+from scripts.registry.capability_catalog import cmd_check_capabilities
 from scripts.registry.agent_skills import validate_agent_skills
 from scripts.registry.artifact_contracts import validate_artifact_result
 from scripts.registry.canonical_manifest import (

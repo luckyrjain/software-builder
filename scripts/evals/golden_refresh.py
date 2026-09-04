@@ -36,14 +36,14 @@ from scripts.evals.golden import load_golden_fixtures, run_golden_case
 
 
 def _make_yaml() -> YAML:
-    # Round-trip loader/dumper (matches scripts/registry/backfill_capabilities.py's
+    # Round-trip loader/dumper (matches scripts/registry/capability_catalog.py's
     # convention) so a fixture's `# CAVEAT: ...` comments survive a refresh instead of
     # being silently dropped, which plain yaml.safe_load/safe_dump would do.
     rt_yaml = YAML(typ="rt")
     rt_yaml.preserve_quotes = True
     rt_yaml.width = 100000
     # golden fixtures indent sequence dashes two spaces under their key (`assertions:\n  - type: ...`),
-    # unlike skills.yaml's flush-left convention that scripts/registry/backfill_capabilities.py matches.
+    # unlike skills.yaml's flush-left convention that scripts/registry/capability_catalog.py matches.
     rt_yaml.indent(mapping=2, sequence=4, offset=2)
     return rt_yaml
 

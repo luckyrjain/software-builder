@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from scripts.registry.backfill_capabilities import validate_capabilities_present
+from scripts.registry.capability_catalog import validate_capabilities_present
 from scripts.registry.composition import validate_composition_graph
 from scripts.registry.escalation_sync import validate_escalation_matrix
 from scripts.registry.canonical_manifest import has_canonical_manifest_shape

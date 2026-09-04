@@ -37,10 +37,13 @@ from pathlib import Path
 from types import ModuleType
 from typing import Iterator, Optional, Tuple
 
+_RUNTIME_DESCRIPTION = "shared unified-diff runtime"
+
+
+# GENERATED shared-runtime-bootstrap:start -- do not edit; run `make generate`. See scripts/registry/generate_shared_runtime_bootstrap.py
 SKILL_ROOT = Path(__file__).resolve().parents[1]
 _SCRIPT_DIR = Path(__file__).resolve().parent
 _INSTALL_MANIFEST = ".software-builder-manifest.json"
-_RUNTIME_DESCRIPTION = "shared unified-diff runtime"
 
 
 def _shared_runtime_loader() -> ModuleType:
@@ -67,6 +70,7 @@ def _shared_runtime_loader() -> ModuleType:
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+# GENERATED shared-runtime-bootstrap:end
 
 
 _unified_diff = _shared_runtime_loader().load_shared_runtime(

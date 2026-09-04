@@ -54,6 +54,9 @@ from scripts.registry.generate_docs import (
 from scripts.registry.generate_issue_templates import generate_issue_templates, issue_template_dir
 from scripts.registry.generate_kiro import generate_kiro_steering
 from scripts.registry.generate_makefile_roster import generate_makefile_roster
+from scripts.registry.generate_shared_runtime_bootstrap import (
+    generate_shared_runtime_bootstrap,
+)
 from scripts.registry.host_registry import HostRegistry
 from scripts.registry.layers import OptionalLayers, detect_optional_layers
 from scripts.registry.load import load_deprecated_skills, load_descriptions, load_registry
@@ -144,6 +147,10 @@ def _generate_kiro(ctx: GenerateContext) -> dict[Path, str]:
 
 def _generate_makefile_roster(ctx: GenerateContext) -> dict[Path, str]:
     return generate_makefile_roster(ctx.root, ctx.registry)
+
+
+def _generate_shared_runtime_bootstrap(ctx: GenerateContext) -> dict[Path, str]:
+    return generate_shared_runtime_bootstrap(ctx.root)
 
 
 def _generate_issue_templates(ctx: GenerateContext) -> dict[Path, str]:
@@ -282,6 +289,7 @@ GENERATORS: tuple[Generator, ...] = (
     _generate_cursor,
     _generate_kiro,
     _generate_makefile_roster,
+    _generate_shared_runtime_bootstrap,
     _generate_issue_templates,
     _generate_agent_compatibility_doc,
     _generate_readme,

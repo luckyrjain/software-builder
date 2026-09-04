@@ -10,7 +10,8 @@ so the fragment is the one place a skill's capability contract is authored and
 
 What remains here is the reading half: `load_catalog` for the catalogue's readers, and
 `validate_capabilities_present` for the shape every registered skill's own block must
-have. The module keeps its name because `crosscheck.py` imports from it.
+have. The `backfill-capabilities` CLI subcommand and Makefile targets keep their names
+as the stable external interface; this module is renamed to match what it now does.
 """
 
 from __future__ import annotations
