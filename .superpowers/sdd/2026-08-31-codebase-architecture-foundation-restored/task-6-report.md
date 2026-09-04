@@ -1,5 +1,11 @@
 # Task 6 — Make integration report
 
+> **Final status (branch as submitted in PR #201):** the blockers recorded below were intermediate.
+> Later tasks added the missing Framework references, registry rows, generated adapters, and Make
+> targets. At the PR head `make generate-check`, `make validate-registry`, `make validate-evals`,
+> `make lint-static`, and the full `scripts/tests` suite all pass. Read the command output below as a
+> record of the state at the time this task ran, not of the branch.
+
 ## Scope
 
 Implemented only the Task 6 Make integration in `make/core.mk`:
@@ -85,7 +91,7 @@ lint-codebase-architecture-review: required reference files
 lint-framework: shared docs present
 lint-framework: required sections
 lint-framework: SETUP.md freshness tables
-ok — SETUP.md freshness validated for /workspace/scratch/9733ba304959/software-builder-worktree
+ok — SETUP.md freshness validated for <repo>
   ok
 lint-framework: dangling markdown links
   ok
@@ -101,26 +107,26 @@ docs/skill-framework/shared/examples/assessment-metadata-rca.example.yaml: ok
 docs/skill-framework/shared/examples/assessment-metadata-k8s.example.yaml: ok
 pr-review/tests/fixtures/phase5-review-metadata.yaml: ok
 lint-framework: source-tree reference validation (anchors + local links, cross-cutting docs)
-/workspace/scratch/9733ba304959/software-builder-worktree/.superpowers/sdd/2026-08-31-codebase-architecture-foundation-restored/task-2-review.md: dangling anchor '../../../module-design/SKILL.md#L58-L66' in /workspace/scratch/9733ba304959/software-builder-worktree/module-design/SKILL.md
-/workspace/scratch/9733ba304959/software-builder-worktree/.superpowers/sdd/2026-08-31-codebase-architecture-foundation-restored/task-2-review.md: dangling anchor '../../../CONTRIBUTING.md#L26-L30' in /workspace/scratch/9733ba304959/software-builder-worktree/CONTRIBUTING.md
-/workspace/scratch/9733ba304959/software-builder-worktree/.superpowers/sdd/2026-08-31-codebase-architecture-foundation-restored/task-2-review.md: dangling anchor '../../../module-design/SKILL.md#L20-L24' in /workspace/scratch/9733ba304959/software-builder-worktree/module-design/SKILL.md
-/workspace/scratch/9733ba304959/software-builder-worktree/.superpowers/sdd/2026-08-31-codebase-architecture-foundation-restored/task-2-review.md: dangling anchor '../../../module-design/reference/report-format.md#L6-L15' in /workspace/scratch/9733ba304959/software-builder-worktree/module-design/reference/report-format.md
-/workspace/scratch/9733ba304959/software-builder-worktree/.superpowers/sdd/2026-08-31-codebase-architecture-foundation-restored/task-2-review.md: dangling anchor '../../../module-design/workflow/inputs.md#L13-L24' in /workspace/scratch/9733ba304959/software-builder-worktree/module-design/workflow/inputs.md
-/workspace/scratch/9733ba304959/software-builder-worktree/.superpowers/sdd/2026-08-31-codebase-architecture-foundation-restored/task-2-review.md: dangling anchor '../../../module-design/workflow/design.md#L16-L19' in /workspace/scratch/9733ba304959/software-builder-worktree/module-design/workflow/design.md
-/workspace/scratch/9733ba304959/software-builder-worktree/.superpowers/sdd/2026-08-31-codebase-architecture-foundation-restored/task-2-review.md: dangling anchor '../../../module-design/reference/phase-index.md#L1-L11' in /workspace/scratch/9733ba304959/software-builder-worktree/module-design/reference/phase-index.md
-/workspace/scratch/9733ba304959/software-builder-worktree/.superpowers/sdd/2026-08-31-codebase-architecture-foundation-restored/task-2-review.md: dangling anchor '../../../module-design/reference/lazy-load-index.md#L1-L14' in /workspace/scratch/9733ba304959/software-builder-worktree/module-design/reference/lazy-load-index.md
-/workspace/scratch/9733ba304959/software-builder-worktree/.superpowers/sdd/2026-08-31-codebase-architecture-foundation-restored/task-2-review.md: dangling anchor '../../../module-design/SKILL.md#L13-L15' in /workspace/scratch/9733ba304959/software-builder-worktree/module-design/SKILL.md
-/workspace/scratch/9733ba304959/software-builder-worktree/.superpowers/sdd/2026-08-31-codebase-architecture-foundation-restored/task-2-review.md: dangling anchor '../../../module-design/SKILL.md#L40-L46' in /workspace/scratch/9733ba304959/software-builder-worktree/module-design/SKILL.md
-/workspace/scratch/9733ba304959/software-builder-worktree/.superpowers/sdd/2026-08-31-codebase-architecture-foundation-restored/task-2-review.md: dangling anchor '../../../module-design/workflow/report.md#L13-L21' in /workspace/scratch/9733ba304959/software-builder-worktree/module-design/workflow/report.md
-/workspace/scratch/9733ba304959/software-builder-worktree/.superpowers/sdd/2026-08-31-codebase-architecture-foundation-restored/task-2-review.md: dangling anchor '../../../module-design/reference/report-format.md#L17-L89' in /workspace/scratch/9733ba304959/software-builder-worktree/module-design/reference/report-format.md
-/workspace/scratch/9733ba304959/software-builder-worktree/.superpowers/sdd/2026-08-31-codebase-architecture-foundation-restored/task-2-review.md: dangling anchor '../../../module-design/SKILL.md#L68-L76' in /workspace/scratch/9733ba304959/software-builder-worktree/module-design/SKILL.md
-/workspace/scratch/9733ba304959/software-builder-worktree/.superpowers/sdd/2026-08-31-codebase-architecture-foundation-restored/task-2-review.md: dangling anchor '../../../module-design/SETUP.md#L30-L40' in /workspace/scratch/9733ba304959/software-builder-worktree/module-design/SETUP.md
-/workspace/scratch/9733ba304959/software-builder-worktree/.superpowers/sdd/2026-08-31-codebase-architecture-foundation-restored/task-2-review.md: dangling anchor '../../../module-design/reference/smoke-test.md#L16-L34' in /workspace/scratch/9733ba304959/software-builder-worktree/module-design/reference/smoke-test.md
-/workspace/scratch/9733ba304959/software-builder-worktree/.superpowers/sdd/2026-08-31-codebase-architecture-foundation-restored/task-2-review.md: dangling anchor '../../../module-design/reference/pressure-tests.md#L5-L30' in /workspace/scratch/9733ba304959/software-builder-worktree/module-design/reference/pressure-tests.md
-/workspace/scratch/9733ba304959/software-builder-worktree/.superpowers/sdd/2026-08-31-codebase-architecture-foundation-restored/task-2-review.md: dangling anchor '../../../module-design/examples.md#L5-L32' in /workspace/scratch/9733ba304959/software-builder-worktree/module-design/examples.md
-/workspace/scratch/9733ba304959/software-builder-worktree/.superpowers/sdd/2026-08-31-codebase-architecture-foundation-restored/task-2-review.md: dangling anchor '../../../module-design/SKILL.md#L13-L15' in /workspace/scratch/9733ba304959/software-builder-worktree/module-design/SKILL.md
-/workspace/scratch/9733ba304959/software-builder-worktree/.superpowers/sdd/2026-08-31-codebase-architecture-foundation-restored/task-2-review.md: dangling anchor '../../../module-design/reference/report-format.md#L80-L89' in /workspace/scratch/9733ba304959/software-builder-worktree/module-design/reference/report-format.md
-/workspace/scratch/9733ba304959/software-builder-worktree/codebase-architecture-review/reference/report-format.md: unclosed fenced code block (a ``` marker opens a fence that's never closed before EOF — check for a stray or unmatched ``` elsewhere in the file)
+<repo>/.superpowers/sdd/2026-08-31-codebase-architecture-foundation-restored/task-2-review.md: dangling anchor '../../../module-design/SKILL.md#L58-L66' in <repo>/module-design/SKILL.md
+<repo>/.superpowers/sdd/2026-08-31-codebase-architecture-foundation-restored/task-2-review.md: dangling anchor '../../../CONTRIBUTING.md#L26-L30' in <repo>/CONTRIBUTING.md
+<repo>/.superpowers/sdd/2026-08-31-codebase-architecture-foundation-restored/task-2-review.md: dangling anchor '../../../module-design/SKILL.md#L20-L24' in <repo>/module-design/SKILL.md
+<repo>/.superpowers/sdd/2026-08-31-codebase-architecture-foundation-restored/task-2-review.md: dangling anchor '../../../module-design/reference/report-format.md#L6-L15' in <repo>/module-design/reference/report-format.md
+<repo>/.superpowers/sdd/2026-08-31-codebase-architecture-foundation-restored/task-2-review.md: dangling anchor '../../../module-design/workflow/inputs.md#L13-L24' in <repo>/module-design/workflow/inputs.md
+<repo>/.superpowers/sdd/2026-08-31-codebase-architecture-foundation-restored/task-2-review.md: dangling anchor '../../../module-design/workflow/design.md#L16-L19' in <repo>/module-design/workflow/design.md
+<repo>/.superpowers/sdd/2026-08-31-codebase-architecture-foundation-restored/task-2-review.md: dangling anchor '../../../module-design/reference/phase-index.md#L1-L11' in <repo>/module-design/reference/phase-index.md
+<repo>/.superpowers/sdd/2026-08-31-codebase-architecture-foundation-restored/task-2-review.md: dangling anchor '../../../module-design/reference/lazy-load-index.md#L1-L14' in <repo>/module-design/reference/lazy-load-index.md
+<repo>/.superpowers/sdd/2026-08-31-codebase-architecture-foundation-restored/task-2-review.md: dangling anchor '../../../module-design/SKILL.md#L13-L15' in <repo>/module-design/SKILL.md
+<repo>/.superpowers/sdd/2026-08-31-codebase-architecture-foundation-restored/task-2-review.md: dangling anchor '../../../module-design/SKILL.md#L40-L46' in <repo>/module-design/SKILL.md
+<repo>/.superpowers/sdd/2026-08-31-codebase-architecture-foundation-restored/task-2-review.md: dangling anchor '../../../module-design/workflow/report.md#L13-L21' in <repo>/module-design/workflow/report.md
+<repo>/.superpowers/sdd/2026-08-31-codebase-architecture-foundation-restored/task-2-review.md: dangling anchor '../../../module-design/reference/report-format.md#L17-L89' in <repo>/module-design/reference/report-format.md
+<repo>/.superpowers/sdd/2026-08-31-codebase-architecture-foundation-restored/task-2-review.md: dangling anchor '../../../module-design/SKILL.md#L68-L76' in <repo>/module-design/SKILL.md
+<repo>/.superpowers/sdd/2026-08-31-codebase-architecture-foundation-restored/task-2-review.md: dangling anchor '../../../module-design/SETUP.md#L30-L40' in <repo>/module-design/SETUP.md
+<repo>/.superpowers/sdd/2026-08-31-codebase-architecture-foundation-restored/task-2-review.md: dangling anchor '../../../module-design/reference/smoke-test.md#L16-L34' in <repo>/module-design/reference/smoke-test.md
+<repo>/.superpowers/sdd/2026-08-31-codebase-architecture-foundation-restored/task-2-review.md: dangling anchor '../../../module-design/reference/pressure-tests.md#L5-L30' in <repo>/module-design/reference/pressure-tests.md
+<repo>/.superpowers/sdd/2026-08-31-codebase-architecture-foundation-restored/task-2-review.md: dangling anchor '../../../module-design/examples.md#L5-L32' in <repo>/module-design/examples.md
+<repo>/.superpowers/sdd/2026-08-31-codebase-architecture-foundation-restored/task-2-review.md: dangling anchor '../../../module-design/SKILL.md#L13-L15' in <repo>/module-design/SKILL.md
+<repo>/.superpowers/sdd/2026-08-31-codebase-architecture-foundation-restored/task-2-review.md: dangling anchor '../../../module-design/reference/report-format.md#L80-L89' in <repo>/module-design/reference/report-format.md
+<repo>/codebase-architecture-review/reference/report-format.md: unclosed fenced code block (a ``` marker opens a fence that's never closed before EOF — check for a stray or unmatched ``` elsewhere in the file)
 make: *** [make/core.mk:1871: lint-framework] Error 1
 ```
 

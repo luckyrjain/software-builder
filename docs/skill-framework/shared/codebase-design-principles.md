@@ -86,9 +86,8 @@ across layers without an observed need.
 
 ## Evidence threshold
 
-Static smells alone, including file size, dependency counts, duplication reports, or
-directory shape, do not independently prove that refactoring is warranted: a static smell
-does not independently prove that a refactoring is warranted. They
+A static smell alone, such as file size, dependency counts, duplication reports, or
+directory shape, does not independently prove that refactoring is warranted. Smells
 may prompt investigation, but a refactoring decision **MUST** connect evidence to an
 observed cost, a production contract, and an expected improvement in change locality
 or behavioral leverage.

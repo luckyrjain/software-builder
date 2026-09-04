@@ -1,5 +1,11 @@
 # Task 5 — Routing and escalation report
 
+> **Final status (branch as submitted in PR #201):** the blockers recorded below were intermediate.
+> Later tasks added the missing Framework references, registry rows, generated adapters, and Make
+> targets. At the PR head `make generate-check`, `make validate-registry`, `make validate-evals`,
+> `make lint-static`, and the full `scripts/tests` suite all pass. Read the command output below as a
+> record of the state at the time this task ran, not of the branch.
+
 ## Scope completed
 
 - Added deterministic dispatcher rules for the registered `codebase-architecture-review` and

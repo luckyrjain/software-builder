@@ -1,5 +1,11 @@
 # Task 8 — Generation projections report
 
+> **Final status (branch as submitted in PR #201):** the blockers recorded below were intermediate.
+> Later tasks added the missing Framework references, registry rows, generated adapters, and Make
+> targets. At the PR head `make generate-check`, `make validate-registry`, `make validate-evals`,
+> `make lint-static`, and the full `scripts/tests` suite all pass. Read the command output below as a
+> record of the state at the time this task ran, not of the branch.
+
 ## Scope
 
 Ran the canonical generation entry points from the current Task 7 branch state.
@@ -57,7 +63,7 @@ tar -tzf /tmp/.../generic-skills.tar.gz | rg '(^|/)(module-design|codebase-archi
 Exit code: `0`.
 
 ```text
-ok: wrote deterministic generic package to /tmp/tmp.oi6BwB0mju/generic-skills.tar.gz
+ok: wrote deterministic generic package to <tmpdir>/generic-skills.tar.gz
 software-builder/codebase-architecture-review/README.md
 software-builder/codebase-architecture-review/SKILL.md
 software-builder/docs/skill-framework/shared/codebase-design-principles.md
