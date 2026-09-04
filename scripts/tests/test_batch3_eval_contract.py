@@ -1,11 +1,18 @@
 from __future__ import annotations
 
+import copy
 from functools import lru_cache
 from pathlib import Path
 
 from scripts.evals.__main__ import run_all
-from scripts.evals.batch3_contract import REQUIRED_DIMENSIONS, run_batch3_contract_checks
+from scripts.evals.eval_coverage_contract import (
+    REQUIRED_DIMENSIONS,
+    REQUIRED_MUTATION_CLASSES,
+    REQUIRED_UNTRUSTED_SURFACES,
+    run_batch3_contract_checks,
+)
 from scripts.evals.golden import load_golden_fixtures
+from scripts.evals.types import load_eval_contract
 from scripts.registry.schema import parse_registry
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -155,3 +162,39 @@ def test_batch3_mutation_matrix_does_not_depend_on_case_results_order() -> None:
     )
     gate = next(result for result in checks if result.case_id == "mutation-matrix")
     assert gate.passed, gate.messages
+
+
+def _check(case_id, contract):
+    registry, golden, results = _baseline()
+    checks = run_batch3_contract_checks(
+        ROOT,
+        registry,
+        case_results=results,
+        mutation_results=_mutation_results(results),
+        golden_cases=golden,
+        contract=contract,
+    )
+    return next(check for check in checks if check.case_id == case_id)
+
+
+def test_a_supplied_contract_is_the_one_checked() -> None:
+    """The document passed in is used verbatim -- the checker does not re-read the file."""
+    contract = copy.deepcopy(load_eval_contract(ROOT))
+    dropped_class = sorted(REQUIRED_MUTATION_CLASSES)[0]
+    dropped_surface = sorted(REQUIRED_UNTRUSTED_SURFACES)[0]
+    contract["adversarial_classes"].pop(dropped_class)
+    contract["untrusted_surfaces"].pop(dropped_surface)
+
+    mutation = _check("mutation-matrix", contract)
+    surfaces = _check("untrusted-surface-matrix", contract)
+
+    assert not mutation.passed
+    assert any(dropped_class in message for message in mutation.messages)
+    assert not surfaces.passed
+    assert any(dropped_surface in message for message in surfaces.messages)
+
+
+def test_required_policy_sets_pass_against_the_real_contract() -> None:
+    contract = load_eval_contract(ROOT)
+    assert set(contract["adversarial_classes"]) == REQUIRED_MUTATION_CLASSES
+    assert set(contract["untrusted_surfaces"]) == REQUIRED_UNTRUSTED_SURFACES

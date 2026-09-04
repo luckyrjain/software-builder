@@ -23,7 +23,7 @@ from scripts.operational_upkeep import (
     validate_diff_risk,
     validate_policy,
 )
-from scripts.registry.install_targets_sync import _read_makefile_graph
+from scripts.registry.makefile_graph import read_makefile_graph as _read_makefile_graph
 from scripts.yaml_safety import YAML_SAFETY_ERRORS
 
 

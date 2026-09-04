@@ -1,9 +1,15 @@
-"""Batch 3 evaluation completeness gates.
+"""Eval coverage completeness gates.
 
 The common harness executes five concrete scenario dimensions for every
 registered skill before these repository-level checks run. This module verifies
 that those behavioral results are complete and passing, then checks golden,
 routing, mutation, untrusted-surface, and degraded-host coverage.
+
+The REQUIRED_* sets below are the policy: which behavior scenarios, mutation
+classes, and untrusted surfaces every registry must declare. They live here,
+next to the checks that enforce them, so `python3 -m scripts.evals` -- the
+command an operator actually runs -- is the thing that reports a gap. Tests
+import these names rather than restating the sets.
 
 This remains deterministic CI. Live/model evals measure model judgement and
 host-specific routing quality separately.
@@ -12,13 +18,14 @@ host-specific routing quality separately.
 from __future__ import annotations
 
 from collections.abc import Iterable
+from functools import partial
 from pathlib import Path
 from typing import Any
 
 from scripts.evals.dispatcher import dispatch_prompt
 from scripts.evals.golden import GoldenCase, field_matches_pattern, golden_case_index
 from scripts.evals.scenario_harness import DIMENSIONS
-from scripts.evals.types import EvalResult, missing_and_failing
+from scripts.evals.types import EvalResult, eval_result, load_eval_contract, missing_and_failing
 from scripts.registry.schema import Registry
 from scripts.yaml_safety import load_unique_yaml_file, require_mapping
 
@@ -36,21 +43,43 @@ REQUIRED_BEHAVIOR_SCENARIOS = {
     "cancellation",
     "stale_evidence",
 }
+REQUIRED_MUTATION_CLASSES = {
+    "instruction_override",
+    "gate_bypass",
+    "security_gate_bypass",
+    "confidence_forcing",
+    "unauthorized_external_action",
+    "merge_forcing",
+}
+REQUIRED_UNTRUSTED_SURFACES = {
+    "repository_documentation",
+    "confluence_pages",
+    "code_comments",
+    "tickets",
+    "pull_request_descriptions",
+    "logs",
+    "slack_threads",
+    "webhook_payloads",
+    "mcp_payloads",
+    "api_responses",
+    "skill_artifacts",
+}
 
-
-def _result(case_id: str, messages: list[str]) -> EvalResult:
-    return EvalResult(BATCH3_SKILL, case_id, not messages, messages)
+_result = partial(eval_result, BATCH3_SKILL)
 
 
 def _result_map(results: Iterable[EvalResult]) -> dict[str, EvalResult]:
     return {f"{result.skill}/{result.case_id}": result for result in results}
 
 
-def _eval_contract(root: Path) -> dict[str, Any]:
-    return require_mapping(
-        load_unique_yaml_file(root / "scripts" / "registry" / "eval_contracts.yaml"),
-        "eval contracts",
-    )
+def _exact_key_set_messages(matrix: dict[str, Any], required: set[str], label: str) -> list[str]:
+    """Messages for a contract matrix whose key set must equal `required`."""
+    if set(matrix) == required:
+        return []
+    return [
+        f"{label} must exactly match the required set; "
+        f"missing={sorted(required - set(matrix))}, extra={sorted(set(matrix) - required)}",
+    ]
 
 
 def _all_skill_scenarios(registry: Registry, results: dict[str, EvalResult]) -> EvalResult:
@@ -94,16 +123,9 @@ def _all_skill_golden(
     return _result("all-skill-golden", messages)
 
 
-def _behavior_scenario_matrix(root: Path, results: dict[str, EvalResult]) -> EvalResult:
-    contract = _eval_contract(root)
+def _behavior_scenario_matrix(contract: dict[str, Any], results: dict[str, EvalResult]) -> EvalResult:
     scenarios = require_mapping(contract.get("behavior_scenarios"), "behavior_scenarios")
-    messages: list[str] = []
-    if set(scenarios) != REQUIRED_BEHAVIOR_SCENARIOS:
-        messages.append(
-            "behavior scenarios must exactly match Batch 3 requirements; "
-            f"missing={sorted(REQUIRED_BEHAVIOR_SCENARIOS - set(scenarios))}, "
-            f"extra={sorted(set(scenarios) - REQUIRED_BEHAVIOR_SCENARIOS)}",
-        )
+    messages = _exact_key_set_messages(scenarios, REQUIRED_BEHAVIOR_SCENARIOS, "behavior_scenarios")
     for scenario_id, raw in sorted(scenarios.items()):
         config = require_mapping(raw, f"behavior_scenarios.{scenario_id}")
         refs = config.get("case_refs")
@@ -141,9 +163,8 @@ def _behavior_scenario_matrix(root: Path, results: dict[str, EvalResult]) -> Eva
     return _result("behavior-scenario-matrix", messages)
 
 
-def _routing_matrix(root: Path, registry: Registry) -> EvalResult:
+def _routing_matrix(root: Path, registry: Registry, contract: dict[str, Any]) -> EvalResult:
     """Execute the seven collision prompts through the deterministic dispatcher."""
-    contract = _eval_contract(root)
     collisions = contract.get("routing_collisions")
     messages: list[str] = []
     if not isinstance(collisions, list) or not collisions:
@@ -170,15 +191,15 @@ def _routing_matrix(root: Path, registry: Registry) -> EvalResult:
 
 
 def _referenced_matrix(
-    root: Path,
+    contract: dict[str, Any],
     results: dict[str, EvalResult],
     *,
     key: str,
     case_id: str,
+    required: set[str] | None = None,
 ) -> EvalResult:
-    contract = _eval_contract(root)
     matrix = require_mapping(contract.get(key), key)
-    messages: list[str] = []
+    messages = [] if required is None else _exact_key_set_messages(matrix, required, key)
     for item_id, raw in sorted(matrix.items()):
         config = require_mapping(raw, f"{key}.{item_id}")
         refs = config.get("case_refs")
@@ -191,10 +212,9 @@ def _referenced_matrix(
     return _result(case_id, messages)
 
 
-def _mutation_matrix(root: Path, results: dict[str, EvalResult]) -> EvalResult:
-    contract = _eval_contract(root)
+def _mutation_matrix(contract: dict[str, Any], results: dict[str, EvalResult]) -> EvalResult:
     adversarial = require_mapping(contract.get("adversarial_classes"), "adversarial_classes")
-    messages: list[str] = []
+    messages = _exact_key_set_messages(adversarial, REQUIRED_MUTATION_CLASSES, "adversarial_classes")
     for class_id in sorted(adversarial):
         ref = f"batch3-mutation/{class_id}"
         result = results.get(ref)
@@ -207,10 +227,10 @@ def _mutation_matrix(root: Path, results: dict[str, EvalResult]) -> EvalResult:
 
 def _mutation_anchor_matrix(
     root: Path,
+    contract: dict[str, Any],
     results: dict[str, EvalResult],
     golden_cases: Iterable[GoldenCase],
 ) -> EvalResult:
-    contract = _eval_contract(root)
     adversarial = require_mapping(contract.get("adversarial_classes"), "adversarial_classes")
     anchor_doc = require_mapping(
         load_unique_yaml_file(root / "scripts" / "registry" / "mutation_anchors.yaml"),
@@ -269,7 +289,10 @@ def run_batch3_contract_checks(
     case_results: Iterable[EvalResult],
     mutation_results: Iterable[EvalResult],
     golden_cases: Iterable[GoldenCase],
+    contract: dict[str, Any] | None = None,
 ) -> list[EvalResult]:
+    if contract is None:
+        contract = load_eval_contract(root)
     result_map = _result_map(case_results)
     # Mutation results get their own map rather than relying on the caller having already
     # merged them into case_results in the right order -- see the regression this caused in
@@ -280,10 +303,16 @@ def run_batch3_contract_checks(
     return [
         _all_skill_scenarios(registry, result_map),
         _all_skill_golden(registry, result_map, golden_list),
-        _behavior_scenario_matrix(root, result_map),
-        _routing_matrix(root, registry),
-        _mutation_matrix(root, mutation_map),
-        _mutation_anchor_matrix(root, result_map, golden_list),
-        _referenced_matrix(root, result_map, key="untrusted_surfaces", case_id="untrusted-surface-matrix"),
-        _referenced_matrix(root, result_map, key="degraded_host_cases", case_id="degraded-host-matrix"),
+        _behavior_scenario_matrix(contract, result_map),
+        _routing_matrix(root, registry, contract),
+        _mutation_matrix(contract, mutation_map),
+        _mutation_anchor_matrix(root, contract, result_map, golden_list),
+        _referenced_matrix(
+            contract,
+            result_map,
+            key="untrusted_surfaces",
+            case_id="untrusted-surface-matrix",
+            required=REQUIRED_UNTRUSTED_SURFACES,
+        ),
+        _referenced_matrix(contract, result_map, key="degraded_host_cases", case_id="degraded-host-matrix"),
     ]

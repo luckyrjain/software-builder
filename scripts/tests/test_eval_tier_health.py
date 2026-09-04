@@ -9,6 +9,7 @@ from scripts.eval_tier_health import (
     build_per_skill_golden_coverage,
     is_healthy,
     render_markdown,
+    unhealthy_reasons,
 )
 from scripts.registry.schema import parse_registry
 
@@ -270,3 +271,64 @@ def test_per_skill_golden_coverage_covers_every_registered_skill_on_real_repo() 
     # is_healthy() must stay indifferent to this new field on the real repo too.
     report = build_eval_tier_health(ROOT)
     assert is_healthy(report) is True
+
+
+def test_healthy_report_has_no_reasons() -> None:
+    assert unhealthy_reasons(build_eval_tier_health()) == []
+
+
+def test_missing_tier_coverage_names_the_empty_tier() -> None:
+    report = build_eval_tier_health()
+    report["tiers"]["tier_3_golden"] = 0
+    report["covered_tiers"] = 2
+
+    reasons = unhealthy_reasons(report)
+
+    assert len(reasons) == 1
+    assert "2/3" in reasons[0]
+    assert "tier_3_golden" in reasons[0]
+    assert is_healthy(report) is False
+
+
+def test_unexpected_tier_names_the_tier_and_case_count() -> None:
+    report = build_eval_tier_health()
+    report["unexpected_static_tiers"] = {"4": 2}
+
+    reasons = unhealthy_reasons(report)
+
+    assert reasons == [
+        "fixtures declare tier(s) outside the contract's 1/2/3: tier 4 (2 case(s))",
+    ]
+    assert is_healthy(report) is False
+
+
+def test_cli_writes_reasons_to_stderr_so_a_quiet_gate_still_explains_itself(tmp_path: Path) -> None:
+    """make/core.mk's validate-operational-upkeep discards stdout and keeps the exit code."""
+    script = tmp_path / "unhealthy.py"
+    script.write_text(
+        "import sys\n"
+        f"sys.path.insert(0, {str(ROOT)!r})\n"
+        "import scripts.eval_tier_health as m\n"
+        "real = m.build_eval_tier_health\n"
+        "def fake(root=m.ROOT):\n"
+        "    report = real(root)\n"
+        "    report['tiers']['tier_3_golden'] = 0\n"
+        "    report['covered_tiers'] = 2\n"
+        "    return report\n"
+        "m.build_eval_tier_health = fake\n"
+        "sys.argv = ['eval_tier_health.py', '--format', 'markdown']\n"
+        "raise SystemExit(m.main())\n",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [sys.executable, str(script)],
+        capture_output=True,
+        text=True,
+        check=False,
+        cwd=ROOT,
+    )
+
+    assert result.returncode == 1
+    assert "error: eval tier health:" in result.stderr
+    assert "tier_3_golden" in result.stderr

@@ -16,7 +16,7 @@ import json
 import os
 import sys
 from contextlib import contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -25,6 +25,36 @@ try:
     import yaml
 except ImportError:  # pragma: no cover - exercised when PyYAML missing
     yaml = None  # type: ignore
+
+_SCRIPT_DIR = Path(__file__).resolve().parent
+if str(_SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPT_DIR))
+# A source checkout resolves this repository's own scripts/yaml_safety.py; an installed package
+# -- proved by its manifest -- may only ever load the copy vendored beside this script, never a
+# path in the shared skills root that another tool could have written.
+if not (_SCRIPT_DIR.parent / ".software-builder-manifest.json").is_file():
+    _REPO_ROOT = _SCRIPT_DIR.parents[1]
+    if (_REPO_ROOT / "skills.yaml").is_file() and str(_REPO_ROOT) not in sys.path:
+        sys.path.append(str(_REPO_ROOT))
+
+try:
+    # This script parses YAML written by the target workspace rather than by this repository, so
+    # it wants the shared loader's duplicate-key rejection and size/nesting caps: a duplicate key
+    # in a workspace file silently last-key-wins under plain safe_load.
+    from yaml_safety import load_unique_yaml_file
+except ImportError:
+    try:
+        from scripts.yaml_safety import load_unique_yaml_file
+    except ImportError:  # pragma: no cover - bare environment; falls back to plain safe_load
+        load_unique_yaml_file = None  # type: ignore[assignment]
+
+
+def _parse_yaml_file(path: Path) -> Any:
+    """Parse `path`, preferring the hardened loader when it is available."""
+    if load_unique_yaml_file is not None:
+        return load_unique_yaml_file(path)
+    return yaml.safe_load(path.read_text(encoding="utf-8"))
+
 
 MIGRATION_STATUS_SCHEMA_VERSION = 1
 SERVICE_REQUIRED_FIELDS = ("name", "scan_gate", "shadow_compare", "config_cutover")
@@ -151,7 +181,7 @@ def validate_services(raw_services: list[Any]) -> tuple[list[dict[str, Any]], li
         if not isinstance(svc, dict):
             warnings.append(f"services[{index}]: skipped non-mapping entry")
             continue
-        missing = [field for field in SERVICE_REQUIRED_FIELDS if field not in svc]
+        missing = [name for name in SERVICE_REQUIRED_FIELDS if name not in svc]
         if missing:
             label = coerce_str(svc.get("name", f"index-{index}")) or f"index-{index}"
             warnings.append(
@@ -180,8 +210,7 @@ def parse_migration_status(workspace_root: str) -> tuple[list[dict[str, Any]], G
     if yaml is None:  # pragma: no cover - exercised only without PyYAML installed
         return [], Gap(workspace_root, "PyYAML not installed — cannot parse MIGRATION_STATUS.yaml"), []
     try:
-        with open(status_path, encoding="utf-8") as fh:
-            data = yaml.safe_load(fh) or {}
+        data = _parse_yaml_file(status_path) or {}
     except yaml.YAMLError as exc:
         return [], Gap(workspace_root, f"MIGRATION_STATUS.yaml is not valid YAML: {exc}"), []
     if not isinstance(data, dict):

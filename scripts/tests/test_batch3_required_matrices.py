@@ -3,44 +3,18 @@ from __future__ import annotations
 from pathlib import Path
 
 from scripts.evals.__main__ import run_all
+from scripts.evals.eval_coverage_contract import (
+    REQUIRED_BEHAVIOR_SCENARIOS,
+    REQUIRED_MUTATION_CLASSES,
+    REQUIRED_UNTRUSTED_SURFACES,
+)
 from scripts.evals.golden import load_golden_fixtures
 from scripts.yaml_safety import load_unique_yaml_file, require_mapping
 
 ROOT = Path(__file__).resolve().parents[2]
 
-REQUIRED_BEHAVIOR_SCENARIOS = {
-    "correct_invocation",
-    "correct_non_invocation",
-    "routing",
-    "insufficient_evidence",
-    "tool_failure",
-    "prompt_injection",
-    "missing_permissions",
-    "output_schema",
-    "cancellation",
-    "stale_evidence",
-}
-REQUIRED_MUTATION_CLASSES = {
-    "instruction_override",
-    "gate_bypass",
-    "security_gate_bypass",
-    "confidence_forcing",
-    "unauthorized_external_action",
-    "merge_forcing",
-}
-REQUIRED_UNTRUSTED_SURFACES = {
-    "repository_documentation",
-    "confluence_pages",
-    "code_comments",
-    "tickets",
-    "pull_request_descriptions",
-    "logs",
-    "slack_threads",
-    "webhook_payloads",
-    "mcp_payloads",
-    "api_responses",
-    "skill_artifacts",
-}
+# Imported above, not restated: the validator these tests mirror owns the policy,
+# so `python3 -m scripts.evals` reports a gap too, and the two cannot drift.
 REQUIRED_DEGRADED_HOST_CASES = {
     "missing_observability",
     "live_state_without_history",

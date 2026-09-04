@@ -12,6 +12,36 @@ try:
 except ImportError:  # pragma: no cover
     yaml = None  # type: ignore
 
+_SCRIPT_DIR = Path(__file__).resolve().parent
+if str(_SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPT_DIR))
+# A source checkout resolves this repository's own scripts/yaml_safety.py; an installed package
+# -- proved by its manifest -- may only ever load the copy vendored beside this script, never a
+# path in the shared skills root that another tool could have written.
+if not (_SCRIPT_DIR.parent / ".software-builder-manifest.json").is_file():
+    _REPO_ROOT = _SCRIPT_DIR.parents[1]
+    if (_REPO_ROOT / "skills.yaml").is_file() and str(_REPO_ROOT) not in sys.path:
+        sys.path.append(str(_REPO_ROOT))
+
+try:
+    # This script parses YAML written by the target workspace rather than by this repository, so
+    # it wants the shared loader's duplicate-key rejection and size/nesting caps: a duplicate key
+    # in a workspace file silently last-key-wins under plain safe_load.
+    from yaml_safety import load_unique_yaml_file
+except ImportError:
+    try:
+        from scripts.yaml_safety import load_unique_yaml_file
+    except ImportError:  # pragma: no cover - bare environment; falls back to plain safe_load
+        load_unique_yaml_file = None  # type: ignore[assignment]
+
+
+def _parse_yaml_file(path: Path) -> Any:
+    """Parse `path`, preferring the hardened loader when it is available."""
+    if load_unique_yaml_file is not None:
+        return load_unique_yaml_file(path)
+    return yaml.safe_load(path.read_text(encoding="utf-8"))
+
+
 CUT_REC_IDS = frozenset({"REC_CPU_REDUCE", "REC_REPLICA_REDUCE", "REC_MEMORY_REDUCE"})
 ACTIONABLE_SUFFIXES = ("_REDUCE", "_INCREASE", "_ADJUST")
 ASSESSMENT_WEIGHTS = (
@@ -31,7 +61,7 @@ REC_WEIGHTS = (
 def _load_graph(path: Path) -> Any:
     if yaml is None:
         raise RuntimeError("PyYAML required: python3 -m pip install pyyaml")
-    return yaml.safe_load(path.read_text(encoding="utf-8"))
+    return _parse_yaml_file(path)
 
 
 def _round1(value: float) -> float:
@@ -78,7 +108,6 @@ def validate_invariants(graph: dict[str, Any]) -> list[str]:
     all_ids = _node_ids(graph)
 
     obs_ids = {o["id"] for o in observations if isinstance(o, dict) and "id" in o}
-    dec_by_id = {d["id"]: d for d in decisions if isinstance(d, dict) and "id" in d}
     evid_by_obs = {}
     for ev in evidence:
         if not isinstance(ev, dict):

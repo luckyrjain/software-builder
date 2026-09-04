@@ -8,7 +8,18 @@ import re
 import sys
 from pathlib import Path
 
-from reference_utils import (
+# Importable both as a script (`python3 scripts/validate_references.py`) and as a
+# module (`from scripts.validate_references import validate_tree`, which
+# install_support.cmd_verify does). The bare `from reference_utils import ...`
+# this used to carry only resolved under the former, so the latter raised
+# ModuleNotFoundError whenever the repository root -- rather than scripts/ --
+# was the sys.path entry. Bootstrapping the root and importing through the
+# `scripts.` package makes one spelling work under both.
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from scripts.reference_utils import (  # noqa: E402
     extract_markdown_links,
     has_unclosed_fenced_code_block,
     is_local_markdown_link,
@@ -22,10 +33,10 @@ _SLUG_SPACE_RUN_RE = re.compile(r" +")
 
 def github_style_slug(heading: str) -> str:
     # Keep letters/digits/space/hyphen, collapse runs of whitespace to one
-    # space, THEN replace every remaining space with a hyphen — matching both
-    # GitHub's real anchor algorithm and scripts/lint-dangling-md-links.sh's
-    # sed pipeline (`s/[^a-z0-9 -]//g; s/ +/ /g; s/ /-/g`), which the repo's
-    # whole existing anchor corpus is already written against.
+    # space, THEN replace every remaining space with a hyphen — matching
+    # GitHub's real anchor algorithm, and equivalent to the `s/[^a-z0-9 -]//g;
+    # s/ +/ /g; s/ /-/g` sed pipeline of the retired shell checker that the
+    # repo's whole existing anchor corpus was first written against.
     #
     # The keep step uses Unicode-aware `str.isalnum()` rather than an
     # ASCII-only `[a-z0-9 -]` regex class: GitHub's renderer preserves
@@ -40,10 +51,10 @@ def github_style_slug(heading: str) -> str:
     # emoji) leave a real trailing space behind after the keep step, e.g.
     # "5. Slack — PR review 🔴" must slugify to "5-slack-pr-review-" (trailing
     # hyphen), matching the already-verified link in pr-review/examples.md and
-    # confirmed by directly running lint-dangling-md-links.sh's sed pipeline
-    # on that exact heading. The prior implementation also dropped hyphen from
-    # its keep-set entirely, mangling compound-word headings like "Test-first
-    # evidence" into "testfirst-evidence" instead of "test-first-evidence".
+    # confirmed by running that sed pipeline directly on that exact heading.
+    # The prior implementation also dropped hyphen from its keep-set entirely,
+    # mangling compound-word headings like "Test-first evidence" into
+    # "testfirst-evidence" instead of "test-first-evidence".
     slug = heading.lstrip("#").strip().lower()
     cleaned = "".join(ch for ch in slug if ch.isalnum() or ch in " -")
     cleaned = _SLUG_SPACE_RUN_RE.sub(" ", cleaned)
@@ -170,6 +181,28 @@ def validate_tree(
     return errors
 
 
+def validate_files(
+    files: list[Path],
+    *,
+    check_anchors: bool = True,
+) -> list[str]:
+    """Validate an explicit file list with the same rules as validate_tree.
+
+    The tree walk is one way to choose sources; a caller-supplied list is the
+    other. Both funnel into validate_markdown_file, so a link checked through a
+    glob and the same link checked through a tree walk cannot disagree -- the
+    previous shell-based checker for explicit file lists had its own anchor
+    algorithm, which is why docs/skill-framework/ had to be excluded from the
+    tree walk to keep the two from contradicting each other.
+    """
+    errors: list[str] = []
+    for md_file in files:
+        if not md_file.is_file():
+            continue
+        errors.extend(validate_markdown_file(md_file, check_anchors=check_anchors))
+    return errors
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Validate local Markdown references.")
     mode = parser.add_mutually_exclusive_group(required=True)
@@ -183,6 +216,17 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=Path,
         help="Validate an installed self-contained skill package",
     )
+    mode.add_argument(
+        "--files",
+        type=Path,
+        nargs="+",
+        metavar="FILE",
+        help=(
+            "Validate an explicit list of Markdown files (shell globs expand into this). "
+            "Paths that are not existing files are skipped, so an unmatched glob is not "
+            "an error."
+        ),
+    )
     parser.add_argument(
         "--exclude",
         action="append",
@@ -190,11 +234,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         metavar="RELATIVE_DIR",
         help=(
             "Directory (relative to the validated root) whose Markdown files are skipped as "
-            "link sources. Repeatable. Two independent reasons to exclude a directory: (1) "
-            "historical/superseded doc trees exempt from active reference upkeep (see "
-            "docs/history/README.md), or (2) actively-maintained trees already covered by "
-            "another checker whose anchor algorithm may disagree with this one (e.g. an "
-            "ASCII-only sed script) — excluding avoids contradictory results, not upkeep."
+            "link sources. Repeatable. The one legitimate reason to exclude a directory is "
+            "that it is a historical/superseded doc tree exempt from active reference upkeep "
+            "(see docs/history/README.md). An actively-maintained tree is never excluded: "
+            "this module is now the only anchor algorithm in the repository, so no exclusion "
+            "is needed to keep two checkers from contradicting each other."
         ),
     )
     return parser.parse_args(argv)
@@ -202,6 +246,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
+
+    if args.files:
+        errors = validate_files(args.files)
+        if errors:
+            for error in errors:
+                print(error, file=sys.stderr)
+            return 1
+        return 0
+
     root = (args.source_tree or args.installed_package).resolve()
     if not root.is_dir():
         print(f"error: path not found: {root}", file=sys.stderr)

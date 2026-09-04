@@ -3,6 +3,7 @@ from __future__ import annotations
 import shutil
 import subprocess
 import tarfile
+from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
 import pytest
@@ -31,6 +32,7 @@ from scripts.registry.host_portability import (
     validate_host_portability,
 )
 from scripts.registry.schema import parse_registry
+from scripts.validate_references import validate_files
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -120,7 +122,7 @@ def test_host_manifests_fail_closed_on_non_object_json(tmp_path: Path) -> None:
 
 
 def test_registry_validate_includes_host_portability(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(registry_cli, "_validate_for_generate", lambda root: [])
+    monkeypatch.setattr(registry_cli, "_validate_for_generate", lambda root, *args, **kwargs: [])
     monkeypatch.setattr(registry_cli, "validate_runtime_manifest", lambda root: [])
     monkeypatch.setattr(
         registry_cli,
@@ -217,40 +219,80 @@ def test_generic_package_refuses_ci_sensitive_and_self_including_paths(tmp_path:
     _validate_output_path(tmp_path, tmp_path.parent / "outside.tar.gz")
 
 
-def test_generic_package_is_deterministic_complete_and_link_safe(tmp_path: Path) -> None:
+@dataclass(frozen=True)
+class _BuiltGenericPackage:
+    """One build of the generic package, shared by the assertions below."""
+
+    first_bytes: bytes
+    second_bytes: bytes
+    member_names: frozenset[str]
+    all_members_are_files: bool
+    packaged_root: Path
+
+
+@pytest.fixture(scope="module")
+def generic_package(tmp_path_factory: pytest.TempPathFactory) -> _BuiltGenericPackage:
+    """Build and extract the generic package once for the assertions that read it.
+
+    Building costs ~2.5s, so the five independent properties below share one
+    build rather than each paying for their own -- but they stay five separate
+    tests, so a determinism regression is reported as a determinism failure
+    instead of being hidden behind whichever assertion happens to run first.
+    """
+    tmp_path = tmp_path_factory.mktemp("generic-package")
     first = tmp_path / "first.tar.gz"
     second = tmp_path / "second.tar.gz"
     build_generic_package(ROOT, first)
     build_generic_package(ROOT, second)
-    assert first.read_bytes() == second.read_bytes()
 
-    registry = parse_registry(ROOT / "skills.yaml")
     extract_root = tmp_path / "extract"
     with tarfile.open(first, "r:gz") as archive:
         members = archive.getmembers()
-        names = {member.name for member in members}
-        assert all(member.isfile() for member in members)
-        assert all(not PurePosixPath(name).is_absolute() and ".." not in PurePosixPath(name).parts for name in names)
+        names = frozenset(member.name for member in members)
+        all_files = all(member.isfile() for member in members)
         archive.extractall(extract_root, filter="data")
+
+    return _BuiltGenericPackage(
+        first_bytes=first.read_bytes(),
+        second_bytes=second.read_bytes(),
+        member_names=names,
+        all_members_are_files=all_files,
+        packaged_root=extract_root / "software-builder",
+    )
+
+
+def test_generic_package_build_is_byte_deterministic(generic_package: _BuiltGenericPackage) -> None:
+    assert generic_package.first_bytes == generic_package.second_bytes
+
+
+def test_generic_package_members_are_plain_relative_files(generic_package: _BuiltGenericPackage) -> None:
+    assert generic_package.all_members_are_files
+    assert all(
+        not PurePosixPath(name).is_absolute() and ".." not in PurePosixPath(name).parts
+        for name in generic_package.member_names
+    )
+
+
+def test_generic_package_carries_every_registered_skill(generic_package: _BuiltGenericPackage) -> None:
+    registry = parse_registry(ROOT / "skills.yaml")
+    names = generic_package.member_names
     for skill_id, entry in registry.skills.items():
         assert f"software-builder/{entry.path}/SKILL.md" in names, skill_id
     assert "software-builder/README.md" in names
     assert "software-builder/skills.yaml" in names
     assert "software-builder/docs/skill-framework/shared/skill-routing.md" in names
     assert "software-builder/docs/skill-framework/shared/runtime-contract.md" in names
+
+
+def test_generic_package_excludes_non_runtime_paths(generic_package: _BuiltGenericPackage) -> None:
+    names = generic_package.member_names
     assert not any("/.git/" in f"/{name}/" or "/.github/" in f"/{name}/" for name in names)
     assert not any("/dist/" in f"/{name}/" for name in names)
     assert not any("/tests/" in f"/{name}/" for name in names)
     assert not any("__pycache__" in name or name.endswith(".pyc") for name in names)
     assert not any(PurePosixPath(name).name.lower() == "changelog.md" for name in names)
 
-    packaged_root = extract_root / "software-builder"
-    markdown_files = sorted(str(path) for path in packaged_root.rglob("*.md"))
-    result = subprocess.run(
-        ["bash", str(ROOT / "scripts/lint-dangling-md-links.sh"), *markdown_files],
-        cwd=packaged_root,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert result.returncode == 0, result.stderr or result.stdout
+
+def test_generic_package_markdown_links_resolve(generic_package: _BuiltGenericPackage) -> None:
+    markdown_files = sorted(generic_package.packaged_root.rglob("*.md"))
+    assert validate_files(markdown_files) == []

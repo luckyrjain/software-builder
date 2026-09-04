@@ -8,7 +8,6 @@ from scripts.registry.composition import validate_composition_graph
 from scripts.registry.frontmatter import load_skill_frontmatter
 from scripts.registry.canonical_manifest import has_canonical_manifest_shape
 from scripts.registry.graph import detect_cycles
-from scripts.registry.install_targets_sync import validate_install_targets
 from scripts.registry.load import load_deprecated_skills
 from scripts.registry.models import Registry
 from scripts.registry.routing_sync import validate_skill_routing_references
@@ -234,6 +233,5 @@ def validate_registry(root: Path) -> list[str]:
     errors.extend(_validate_automation_only_rules(registry))
     errors.extend(_validate_stale_adapters(root, registry))
     errors.extend(validate_skill_routing_references(root, registry))
-    errors.extend(validate_install_targets(root, registry))
     errors.extend(validate_skill_contract_adoption(root, registry))
     return errors

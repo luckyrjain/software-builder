@@ -9,8 +9,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from scripts.evals.batch3_contract import run_batch3_contract_checks
 from scripts.evals.contract_lint import lint_contracts
+from scripts.evals.eval_coverage_contract import run_batch3_contract_checks
 from scripts.evals.golden import (
     find_oversized_descriptions,
     find_vacuous_anchored_patterns,
@@ -21,7 +21,7 @@ from scripts.evals.mutation_guard import run_guardrail_mutation_checks
 from scripts.evals.platform_contract import run_platform_contract_checks
 from scripts.evals.scenario_harness import run_per_skill_scenarios
 from scripts.evals.transcript import load_transcript_fixtures, run_transcript_case
-from scripts.evals.types import EvalResult
+from scripts.evals.types import EvalResult, eval_contract_path, load_eval_contract
 from scripts.registry.frontmatter import load_skill_frontmatter
 from scripts.registry.schema import Registry, parse_registry
 from scripts.registry.skill_frontmatter_schema import automation_only_guard_errors
@@ -200,6 +200,7 @@ def run_all(
     skill_filter: str | None = None,
     tier_filter: int | None = None,
     golden_cases: list[Any] | None = None,
+    contract: dict[str, Any] | None = None,
 ) -> list[EvalResult]:
     registry = parse_registry(root / "skills.yaml")
     cases = load_fixtures(root / "evals" / "fixtures")
@@ -244,6 +245,8 @@ def run_all(
     # harness. Focused --skill/--tier runs stay focused and do not claim full
     # platform coverage.
     if skill_filter is None and tier_filter is None:
+        if contract is None:
+            contract = load_eval_contract(root)
         scenario_results = run_per_skill_scenarios(
             root,
             registry,
@@ -257,6 +260,7 @@ def run_all(
             registry,
             case_results=results,
             golden_cases=golden_cases,
+            contract=contract,
         )
         results.extend(platform_results)
 
@@ -279,6 +283,7 @@ def run_all(
                 case_results=results,
                 mutation_results=mutation_results,
                 golden_cases=golden_cases,
+                contract=contract,
             ),
         )
     return results
@@ -323,7 +328,19 @@ def main(argv: list[str] | None = None) -> int:
         # it broke in another skill's gate -- the full-suite-only checks below
         # (run_batch3_contract_checks et al.) skip entirely under a filter and
         # would otherwise let that breakage through until unfiltered CI.
-        lint_errors = lint_contracts(args.repo_root, golden_cases=golden_cases)
+        # eval_contracts.yaml is read once here and handed to all three checkers
+        # that need it (contract_lint below, then platform_contract and
+        # eval_coverage_contract inside run_all) instead of each parsing it again.
+        try:
+            contract = load_eval_contract(args.repo_root)
+        except (OSError, ValueError, *YAML_SAFETY_ERRORS) as exc:
+            # Report a malformed contract exactly as contract_lint would have,
+            # so the CLI's exit code and message don't depend on who read it.
+            print(f"error: {eval_contract_path(args.repo_root)}: {exc}", file=sys.stderr)
+            print("error: 1 eval contract reference error(s)", file=sys.stderr)
+            return 1
+
+        lint_errors = lint_contracts(args.repo_root, golden_cases=golden_cases, contract=contract)
         if lint_errors:
             for lint_error in lint_errors:
                 print(f"error: {lint_error}", file=sys.stderr)
@@ -331,7 +348,11 @@ def main(argv: list[str] | None = None) -> int:
             return 1
 
         results = run_all(
-            args.repo_root, skill_filter=args.skill, tier_filter=args.tier, golden_cases=golden_cases,
+            args.repo_root,
+            skill_filter=args.skill,
+            tier_filter=args.tier,
+            golden_cases=golden_cases,
+            contract=contract,
         )
     except (OSError, ValueError, *YAML_SAFETY_ERRORS) as exc:
         print(f"error: {exc}", file=sys.stderr)
