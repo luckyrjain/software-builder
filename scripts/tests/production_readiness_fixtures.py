@@ -8,16 +8,14 @@ module-level helper functions rather than pytest fixtures.
 from __future__ import annotations
 
 import itertools
-from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 from scripts.registry.canonical_manifest import load_canonical_manifest
 from scripts.registry.load import load_registry
 from scripts import production_readiness as pr
+from scripts.tests.envelope_fixtures import DEFAULT_REVISION as _DEFAULT_REVISION
+from scripts.tests.envelope_fixtures import ROOT, assessment_context
 
-ROOT = Path(__file__).resolve().parents[2]
-
-_DEFAULT_REVISION = "a" * 40
 
 
 # ---------------------------------------------------------------------------
@@ -106,13 +104,14 @@ def assessment_context_fixture(
     evidence_refs: Sequence[str] | None = None,
     unresolved: Sequence[str] | None = None,
 ) -> dict[str, Any]:
-    return {
-        "assessment_target": dict(assessment_target or source_candidate()),
-        "inputs": dict(inputs or {}),
-        "input_provenance": dict(input_provenance or {}),
-        "evidence_refs": list(evidence_refs or []),
-        "unresolved": list(unresolved or []),
-    }
+    """The shared assessment-context envelope, defaulted to this skill's own candidate target."""
+    return assessment_context(
+        assessment_target=assessment_target or source_candidate(),
+        inputs=inputs,
+        input_provenance=input_provenance,
+        evidence_refs=evidence_refs,
+        unresolved=unresolved,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -418,12 +417,6 @@ def runtime_handoff_artifacts(parent: str, child: str) -> list[str]:
     manifest = load_canonical_manifest(ROOT)
     handoffs = manifest["contracts"]["composition_runtime"]["handoffs"]
     return list(handoffs.get(parent, {}).get(child, []))
-
-
-def consumes(skill_id: str, artifact_type: str) -> bool:
-    manifest = load_canonical_manifest(ROOT)
-    contract = manifest["contracts"]["composition"]["skills"].get(skill_id, {})
-    return artifact_type in contract.get("consumes", [])
 
 
 # ---------------------------------------------------------------------------

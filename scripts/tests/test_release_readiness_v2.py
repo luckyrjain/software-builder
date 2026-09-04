@@ -23,6 +23,7 @@ from scripts.release_readiness_v2 import (
     run_release,
 )
 from scripts import production_readiness as pr
+from scripts.tests.envelope_fixtures import consumes
 from scripts.tests.release_readiness_v2_fixtures import (
     child_context,
     default_max_depth,
@@ -32,7 +33,6 @@ from scripts.tests.release_readiness_v2_fixtures import (
     invoked_skills,
     legacy_parse,
     max_release_v2_composition_depth,
-    consumes,
     registry,
     release_check_spy,
     release_fixture,

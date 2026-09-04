@@ -8,7 +8,10 @@ from datetime import datetime
 from typing import Any
 
 from scripts.registry.assessment_target import normalize_environment_identity
-from scripts.registry.artifact_trust import _AUTHORITIES, classify_assessment_context_trust
+from scripts.registry.artifact_trust import AUTHORITIES, classify_assessment_context_trust
+from scripts.registry.result_envelope import build_result_envelope
+from scripts.registry.skill_result import derive_execution_status
+from scripts.registry.validation_primitives import non_empty_str
 
 DIMENSIONS = (
     "timeout_budgets", "retry_policy", "circuit_breaking", "load_shedding",
@@ -16,7 +19,7 @@ DIMENSIONS = (
     "partial_failure_consistency", "recovery_reconciliation",
 )
 ALLOWED_STATE_SEMANTICS = frozenset({"proposed_state", "current_state"})
-ALLOWED_AUTHORITIES = frozenset(_AUTHORITIES)
+ALLOWED_AUTHORITIES = frozenset(AUTHORITIES)
 ALLOWED_KINDS = frozenset(
     {"scm", "repo_content", "ci", "runtime_metric", "service_metadata", "build_provenance",
      "artifact", "caller_input", "model_knowledge"}
@@ -54,10 +57,6 @@ SOURCE_CODE_DECLARATION = re.compile(
 SOURCE_CODE_SUFFIX_PATTERN = re.compile(r"\.(?:" + "|".join(SOURCE_CODE_SUFFIXES) + r")(?:$|[\s:#?])")
 _MAX_UNTRUSTED_VALUE_DEPTH = 32
 _MAX_UNTRUSTED_VALUE_NODES = 4_096
-
-
-def _non_empty(value: object) -> bool:
-    return isinstance(value, str) and bool(value.strip())
 
 
 def _empty_target() -> dict[str, str]:
@@ -164,7 +163,7 @@ def _source_defined_application_code(value: Mapping[str, Any], metadata_markers:
 
 
 def _normalized_source(value: object, *, trusted_authority: str = "caller") -> dict[str, Any] | None:
-    if not isinstance(value, Mapping) or not _non_empty(value.get("ref")):
+    if not isinstance(value, Mapping) or not non_empty_str(value.get("ref")):
         return None
     dimensions = value.get("dimensions", [])
     sensitive = value.get("environment_sensitive_dimensions", [])
@@ -177,10 +176,10 @@ def _normalized_source(value: object, *, trusted_authority: str = "caller") -> d
         "ref": value["ref"].strip(),
         "authority": trusted_authority if trusted_authority in ALLOWED_AUTHORITIES else "caller",
         "kind": kind if isinstance(kind, str) and kind in ALLOWED_KINDS else "caller_input",
-        "observed_at": value.get("observed_at") if _non_empty(value.get("observed_at")) else None,
-        "source_revision": value.get("source_revision") if _non_empty(value.get("source_revision")) else "UNKNOWN",
-        "source_environment": value.get("source_environment") if _non_empty(value.get("source_environment")) else None,
-        "derived_from": list(derived_from) if isinstance(derived_from, list) and all(_non_empty(ref) for ref in derived_from) else [],
+        "observed_at": value.get("observed_at") if non_empty_str(value.get("observed_at")) else None,
+        "source_revision": value.get("source_revision") if non_empty_str(value.get("source_revision")) else "UNKNOWN",
+        "source_environment": value.get("source_environment") if non_empty_str(value.get("source_environment")) else None,
+        "derived_from": list(derived_from) if isinstance(derived_from, list) and all(non_empty_str(ref) for ref in derived_from) else [],
         "dimensions": [item for item in dimensions if item in DIMENSIONS] if isinstance(dimensions, list) else [],
         "environment_sensitive_dimensions": [item for item in sensitive if item in DIMENSIONS] if isinstance(sensitive, list) else [],
         "source_defined_application_code": _source_defined_application_code(value, metadata_markers),
@@ -229,7 +228,7 @@ def _resolve_inputs(
         for field in ("resilience_behavior", "dependency_paths", "assessment_target")
         if field in context["unresolved"]
     )
-    resolved["_context_evidence_refs"] = [ref for ref in context["evidence_refs"] if _non_empty(ref)]
+    resolved["_context_evidence_refs"] = [ref for ref in context["evidence_refs"] if non_empty_str(ref)]
     resolved["_input_provenance"] = dict(context["input_provenance"])
     trust = classify_assessment_context_trust(context, runtime_metadata=runtime_metadata)
     return resolved, dict(target), blockers, trust.effective_authority("evidence")
@@ -246,10 +245,10 @@ def _source_supports(
         return False
     target_revision = target.get("head_revision_or_digest")
     if state_semantic == "current_state" and (
-        not _non_empty(target_revision) or source["source_revision"] != target_revision
+        not non_empty_str(target_revision) or source["source_revision"] != target_revision
     ):
         return False
-    if state_semantic == "proposed_state" and _non_empty(target_revision) and source["source_revision"] != target_revision:
+    if state_semantic == "proposed_state" and non_empty_str(target_revision) and source["source_revision"] != target_revision:
         return False
     target_environment = target.get("environment")
     source_environment = source["source_environment"]
@@ -266,10 +265,10 @@ def _source_supports(
             and not source["source_defined_application_code"]
         )
     )
-    if sensitive and (not _non_empty(target_environment) or not _non_empty(source_environment)):
+    if sensitive and (not non_empty_str(target_environment) or not non_empty_str(source_environment)):
         return False
-    if _non_empty(source_environment):
-        if not _non_empty(target_environment) or normalize_environment_identity(source_environment) != normalize_environment_identity(target_environment):
+    if non_empty_str(source_environment):
+        if not non_empty_str(target_environment) or normalize_environment_identity(source_environment) != normalize_environment_identity(target_environment):
             return False
     return state_semantic != "current_state" or source["authority"] in {"repository", "authoritative_host"}
 
@@ -300,7 +299,7 @@ def _runtime_config_dimensions(inputs: Mapping[str, Any], behavior: object) -> s
 
 
 def _valid_observed_at(value: object) -> str | None:
-    if not _non_empty(value):
+    if not non_empty_str(value):
         return None
     try:
         if datetime.fromisoformat(value.replace("Z", "+00:00")).tzinfo is None:
@@ -349,31 +348,28 @@ def to_envelope(
     state_semantic: str,
     completed_checks: list[str],
 ) -> dict[str, Any]:
-    """Build the complete canonical runtime envelope for a resilience report."""
-    return {
-        "skill_result": {
-            "skill": "resilience-review", "version": "1.0.0", "status": completion_status,
-            "confidence": confidence, "source_revision": source_revision,
-            "evidence_status": evidence_status, "artifacts": ["resilience_review_report"],
-            "blockers": blockers, "recommended_next_skill": None, "artifact_schema_version": 1,
-            "state_semantic": state_semantic,
-        },
-        "provenance": {
-            "source_revision": source_revision,
-            "sources": [{key: source[key] for key in ("ref", "authority", "kind", "observed_at", "source_revision", "source_environment", "derived_from")} for source in sources],
-        },
-        "freshness": {
-            "observed_at": observed_at, "source_revision": source_revision,
-            "source_environment": source_environment if _non_empty(source_environment) else None,
-        },
-        "definition_of_done": {
-            "required_artifacts": ["resilience_review_report"], "required_checks": list(DIMENSIONS),
-            "completed_checks": completed_checks, "blocked_conditions": blockers,
-            "partial_result_behavior": "Unresolved dimensions remain explicit UNKNOWN conditions and required actions.",
-        },
-        "authority": {"write_authority": "read-only", "canonical_owner": "resilience-review"},
-        "payload": payload,
-    }
+    """Build the canonical runtime envelope for a resilience report."""
+    return build_result_envelope(
+        skill="resilience-review",
+        version="1.0.0",
+        artifact_type="resilience_review_report",
+        status=completion_status,
+        confidence=confidence,
+        evidence_status=evidence_status,
+        state_semantic=state_semantic,
+        source_revision=source_revision,
+        blockers=blockers,
+        sources=sources,
+        observed_at=observed_at,
+        source_environment=source_environment,
+        required_checks=list(DIMENSIONS),
+        completed_checks=completed_checks,
+        partial_result_behavior=(
+            "Unresolved dimensions remain explicit UNKNOWN conditions and required actions."
+        ),
+        canonical_owner="resilience-review",
+        payload=payload,
+    )
 
 
 def review_resilience(invocation: Mapping[str, Any], *, runtime_metadata: object = None) -> dict[str, Any]:
@@ -388,10 +384,10 @@ def review_resilience(invocation: Mapping[str, Any], *, runtime_metadata: object
         blockers.append("state_semantic")
     if not isinstance(behavior, Mapping) or not behavior:
         blockers.append("resilience_behavior")
-    if not (isinstance(dependency_paths, list) and dependency_paths and all(_non_empty(path) for path in dependency_paths)):
+    if not (isinstance(dependency_paths, list) and dependency_paths and all(non_empty_str(path) for path in dependency_paths)):
         blockers.append("dependency_paths")
     if state_semantic == "current_state" and (
-        target == _empty_target() or not _non_empty(target.get("head_revision_or_digest"))
+        target == _empty_target() or not non_empty_str(target.get("head_revision_or_digest"))
     ):
         blockers.append("assessment_target")
 
@@ -413,7 +409,7 @@ def review_resilience(invocation: Mapping[str, Any], *, runtime_metadata: object
         if not isinstance(field, str) or not isinstance(metadata, Mapping):
             continue
         derived_from = metadata.get("evidence_refs", [])
-        if not isinstance(derived_from, list) or not all(_non_empty(ref) for ref in derived_from):
+        if not isinstance(derived_from, list) or not all(non_empty_str(ref) for ref in derived_from):
             continue
         for ref in derived_from:
             if ref not in known_refs:
@@ -451,7 +447,7 @@ def review_resilience(invocation: Mapping[str, Any], *, runtime_metadata: object
             supported_dimensions_by_ref.setdefault(source["ref"], set()).add(dimension)
         configured = assessments.get(dimension, "PASS")
         dimension_status = configured if (
-            isinstance(behavior, Mapping) and _non_empty(behavior.get(dimension))
+            isinstance(behavior, Mapping) and non_empty_str(behavior.get(dimension))
             and supported_sources and isinstance(configured, str) and configured in ASSESSMENT_STATUSES
         ) else "UNKNOWN"
         refs = [source["ref"] for source in sources if dimension in source["dimensions"]] or [fallback_ref]
@@ -478,12 +474,7 @@ def review_resilience(invocation: Mapping[str, Any], *, runtime_metadata: object
                                      "verification": f"Re-run resilience review with evidence covering {label}.",
                                      "evidence_refs": refs})
 
-    if blockers:
-        completion_status = "BLOCKED"
-    elif unknown:
-        completion_status = "PARTIAL"
-    else:
-        completion_status = "SUCCESS"
+    completion_status, evidence_status = derive_execution_status(blockers=blockers, unknowns=unknown)
     if failed:
         verdict = "Changes required"
     elif blockers or unknown:
@@ -503,11 +494,11 @@ def review_resilience(invocation: Mapping[str, Any], *, runtime_metadata: object
                            "required_before": "IMPLEMENTATION", "evidence_refs": [ref]})
 
     source_revision = target.get("head_revision_or_digest")
-    source_revision = source_revision if _non_empty(source_revision) else "UNKNOWN"
+    source_revision = source_revision if non_empty_str(source_revision) else "UNKNOWN"
     normalized_state = state_semantic if isinstance(state_semantic, str) and state_semantic in ALLOWED_STATE_SEMANTICS else "proposed_state"
     observed_at = _freshness_observed_at(sources, supported_dimensions_by_ref)
     source_environment = target.get("environment")
-    source_environment = source_environment if _non_empty(source_environment) else None
+    source_environment = source_environment if non_empty_str(source_environment) else None
     freshness_known = (
         source_revision not in (None, "UNKNOWN")
         and observed_at not in (None, "UNKNOWN")
@@ -521,7 +512,7 @@ def review_resilience(invocation: Mapping[str, Any], *, runtime_metadata: object
         observed_at=observed_at,
         completion_status=completion_status,
         confidence="HIGH" if not (unknown or blockers) and freshness_known else "UNKNOWN",
-        evidence_status="UNKNOWN" if unknown or blockers else "OBSERVED",
+        evidence_status=evidence_status,
         blockers=sorted(set(blockers)) if completion_status == "BLOCKED" else [],
         state_semantic=normalized_state,
         completed_checks=[dimension for dimension in DIMENSIONS if dimension not in unknown],

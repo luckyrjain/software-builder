@@ -11,6 +11,8 @@ from typing import Any, Iterable, Mapping, NamedTuple
 
 from scripts.registry.assessment_target import canonical_payload_digest, normalize_repo_identity
 from scripts.registry.semantic_document import is_sha256_digest
+from scripts.registry.skill_result import SkillResult
+from scripts.registry.validation_primitives import non_empty_str, string_list
 
 
 PLAN_FIELDS = {
@@ -92,15 +94,8 @@ LOOP_TASK_MAX_FILES = 40
 LOOP_TASK_MAX_LINES = 1500
 
 
-def _non_empty_string(value: object) -> bool:
-    return isinstance(value, str) and bool(value.strip())
-
-
 def _string_list(value: object, label: str, errors: list[str], *, allow_empty: bool = True) -> None:
-    if not isinstance(value, list) or not all(_non_empty_string(item) for item in value):
-        errors.append(f"error: {label} must be a list of non-empty strings")
-    elif not allow_empty and not value:
-        errors.append(f"error: {label} must not be empty")
+    errors.extend(string_list(value, label, allow_empty=allow_empty))
 
 
 def _safe_sorted(values: object) -> list[Any]:
@@ -414,12 +409,12 @@ def _items(source: object, field: str) -> list[Mapping[str, Any]]:
 
 def _item_ref(item: Mapping[str, Any], prefix: str, index: int) -> str:
     value = item.get("id") or item.get("ref") or item.get("key")
-    return f"{prefix}:{value}" if _non_empty_string(value) else f"{prefix}:{index + 1}"
+    return f"{prefix}:{value}" if non_empty_str(value) else f"{prefix}:{index + 1}"
 
 
 def _task_string_values(task: Mapping[str, Any], field: str) -> list[str]:
     value = task.get(field)
-    return [item for item in value if _non_empty_string(item)] if isinstance(value, list) else []
+    return [item for item in value if non_empty_str(item)] if isinstance(value, list) else []
 
 
 def build_implementation_plan(
@@ -452,13 +447,13 @@ def build_implementation_plan(
     # Preserve the other fields from whichever mapping actually contributed the resolved repo,
     # not just whichever mapping happens to be non-empty -- otherwise an unrelated field from the
     # "wrong" source could be attributed to the plan's assessment_target.
-    if _non_empty_string(impact_target.get("repo")):
+    if non_empty_str(impact_target.get("repo")):
         assessment_target_source = impact_target
-    elif _non_empty_string(target.get("repo")):
+    elif non_empty_str(target.get("repo")):
         assessment_target_source = target
     else:
         assessment_target_source = impact_target or target
-    if not _non_empty_string(target_repo):
+    if not non_empty_str(target_repo):
         errors.append("target repository is missing")
         target_repo = "UNKNOWN"
     normalized_repo = normalize_repo_identity(str(target_repo))
@@ -496,7 +491,7 @@ def build_implementation_plan(
         normalized_repositories = sorted({
             normalize_repo_identity(repository)
             for repository in impacted_repositories
-            if _non_empty_string(repository)
+            if non_empty_str(repository)
         })
         if len(normalized_repositories) > 1:
             errors.append("change impact names multiple repositories; invoke planner once per repository")
@@ -537,10 +532,10 @@ def build_implementation_plan(
         target_paths = repository_evidence.get("target_paths")
     if not isinstance(target_paths, list):
         target_paths = []
-    target_paths = sorted({path for path in target_paths if _non_empty_string(path)})
+    target_paths = sorted({path for path in target_paths if non_empty_str(path)})
     if not target_paths:
         errors.append("change impact report has no grounded target_paths")
-    required_tests = [test for test in impact.get("required_tests", []) if _non_empty_string(test)] if isinstance(impact.get("required_tests"), list) else []
+    required_tests = [test for test in impact.get("required_tests", []) if non_empty_str(test)] if isinstance(impact.get("required_tests"), list) else []
     conditions: list[str] = []
     actions: list[str] = []
     planning_sources: list[tuple[str, object]] = [
@@ -559,7 +554,7 @@ def build_implementation_plan(
     normalized_external_statuses = {
         normalize_repo_identity(str(repo)): str(status).upper()
         for repo, status in external_dependency_statuses.items()
-        if _non_empty_string(repo) and isinstance(status, str)
+        if non_empty_str(repo) and isinstance(status, str)
     }
     estimate = evidence.get("estimated_scope") if isinstance(evidence.get("estimated_scope"), Mapping) else None
     if estimate is None:
@@ -616,7 +611,7 @@ def build_implementation_plan(
     elif external_dependencies and any(
         normalized_external_statuses.get(normalize_repo_identity(str(dependency.get("repo")))) not in {"READY", "COMPLETE", "SUCCESS"}
         for dependency in external_dependencies
-        if isinstance(dependency, Mapping) and _non_empty_string(dependency.get("repo"))
+        if isinstance(dependency, Mapping) and non_empty_str(dependency.get("repo"))
     ):
         readiness = "PARTIAL"
     elif not repository_evidence or estimate.get("estimate_known") is not True:
@@ -716,11 +711,11 @@ def _validate_task(task: object, index: int, readiness: str, errors: list[str]) 
     if missing:
         errors.append(f"error: {label} missing fields: {', '.join(missing)}")
     task_id = task.get("task_id")
-    if not _non_empty_string(task_id):
+    if not non_empty_str(task_id):
         errors.append(f"error: {label}.task_id must be a non-empty string")
         task_id = None
     for field in ("title", "scope"):
-        if not _non_empty_string(task.get(field)):
+        if not non_empty_str(task.get(field)):
             errors.append(f"error: {label}.{field} must be a non-empty string")
     if not isinstance(task.get("task_type"), str) or task.get("task_type") not in TASK_TYPES:
         errors.append(f"error: {label}.task_type is invalid")
@@ -908,7 +903,7 @@ def validate_external_dependency_cycles(
     if sibling_plans is not None and not isinstance(sibling_plans, Mapping):
         return ["error: sibling_plans must be a mapping"]
     for repo, sibling in (sibling_plans or {}).items():
-        if isinstance(sibling, Mapping) and _non_empty_string(repo):
+        if isinstance(sibling, Mapping) and non_empty_str(repo):
             sibling_repo = sibling.get("target_repo") or repo
             normalized_sibling_repo = normalize_repo_identity(str(sibling_repo))
             # Never let a sibling entry that (incorrectly) shares the primary plan's own repo
@@ -963,11 +958,11 @@ def validate_implementation_plan(
         errors.append("error: readiness must be READY, PARTIAL, or BLOCKED")
         readiness = "BLOCKED"
     for field in ("plan_set_id", "plan_id", "title", "target_repo"):
-        if not _non_empty_string(plan.get(field)):
+        if not non_empty_str(plan.get(field)):
             errors.append(f"error: {field} must be a non-empty string")
     if not isinstance(plan.get("assessment_target"), Mapping):
         errors.append("error: assessment_target must be a mapping")
-    if _non_empty_string(plan.get("target_repo")):
+    if non_empty_str(plan.get("target_repo")):
         normalized = normalize_repo_identity(plan["target_repo"])
         expected_id = derive_plan_id(str(plan.get("plan_set_id")), normalized)
         if plan.get("plan_id") != expected_id:
@@ -1034,7 +1029,7 @@ def validate_implementation_plan(
                 errors.append(f"error: external_dependencies[{index}] must be a mapping")
                 continue
             for field in ("repo", "required_state_or_artifact", "reason", "evidence_ref"):
-                if not _non_empty_string(dependency.get(field)):
+                if not non_empty_str(dependency.get(field)):
                     errors.append(f"error: external_dependencies[{index}].{field} must be non-empty")
     _validate_traceability(
         plan,
@@ -1069,7 +1064,7 @@ def validate_plan_set(plans: list[Mapping[str, Any]]) -> list[str]:
     repo_names = [
         normalize_repo_identity(str(plan.get("target_repo")))
         for plan in valid_plans
-        if _non_empty_string(plan.get("target_repo"))
+        if non_empty_str(plan.get("target_repo"))
     ]
     if len(set(repo_names)) != len(repo_names):
         # A duplicate target_repo would otherwise silently collapse to one entry in
@@ -1079,12 +1074,12 @@ def validate_plan_set(plans: list[Mapping[str, Any]]) -> list[str]:
     siblings_by_repo = {
         normalize_repo_identity(str(plan.get("target_repo"))): plan
         for plan in valid_plans
-        if _non_empty_string(plan.get("target_repo"))
+        if non_empty_str(plan.get("target_repo"))
     }
     errors: list[str] = []
     for plan in valid_plans:
         own_repo = (
-            normalize_repo_identity(str(plan.get("target_repo"))) if _non_empty_string(plan.get("target_repo")) else None
+            normalize_repo_identity(str(plan.get("target_repo"))) if non_empty_str(plan.get("target_repo")) else None
         )
         siblings = {repo: sibling for repo, sibling in siblings_by_repo.items() if repo != own_repo}
         errors.extend(validate_implementation_plan(plan, sibling_plans=siblings))
@@ -1148,7 +1143,7 @@ def validate_plan_execution_state(
             errors.append("error: plan_execution_state.task_statuses disagrees with authoritative task state")
     if current_head is not None and state.get("observed_head_revision") != current_head:
         errors.append("error: plan_execution_state observed head is stale")
-    if not isinstance(state.get("completed_evidence_refs"), list) or not all(_non_empty_string(item) for item in state["completed_evidence_refs"]):
+    if not isinstance(state.get("completed_evidence_refs"), list) or not all(non_empty_str(item) for item in state["completed_evidence_refs"]):
         errors.append("error: plan_execution_state.completed_evidence_refs must be a list of strings")
     if state.get("current_task_id") is not None and state.get("current_task_id") not in task_ids:
         errors.append("error: plan_execution_state.current_task_id is not a plan task")
@@ -1160,7 +1155,7 @@ def validate_plan_execution_state(
             expected_current = active[0] if active else None
             if state.get("current_task_id") != expected_current:
                 errors.append("error: current_task_id must be the IN_PROGRESS task")
-    if not _non_empty_string(state.get("updated_at")):
+    if not non_empty_str(state.get("updated_at")):
         errors.append("error: plan_execution_state.updated_at must be a non-empty timestamp")
     return sorted(set(errors))
 
@@ -1457,7 +1452,7 @@ def reconcile_plan_execution_state(
         None,
     )
     normalized["completed_evidence_refs"] = sorted(
-        {ref for ref in (completed_evidence_refs or []) if _non_empty_string(ref)}
+        {ref for ref in (completed_evidence_refs or []) if non_empty_str(ref)}
     )
     normalized["observed_head_revision"] = current_head
     is_blocked = any(status == "BLOCKED" for status in normalized["task_statuses"].values())
@@ -1493,13 +1488,6 @@ def advance_plan_execution_state(
     normalized["state_generation"] = expected_generation + 1
     normalized["updated_at"] = updated_at
     return normalized, []
-
-
-class SkillResult(NamedTuple):
-    """The subset of the shared result envelope that carries execution status."""
-
-    status: str
-    blockers: tuple[str, ...] = ()
 
 
 class FinalizedPlan(NamedTuple):

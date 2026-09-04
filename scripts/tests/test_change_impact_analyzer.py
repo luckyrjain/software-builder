@@ -6,7 +6,13 @@ from scripts.registry.artifact_contracts import validate_artifact_result
 from scripts.registry.load import load_registry
 from scripts.registry.canonical_manifest import load_canonical_manifest
 from scripts.registry.frontmatter import load_skill_frontmatter
-from scripts.change_impact import analyze_change, analyze_pr_impact, finalize_impact, run_impact
+from scripts.change_impact import (
+    _diff_paths,
+    analyze_change,
+    analyze_pr_impact,
+    finalize_impact,
+    run_impact,
+)
 from scripts.registry.artifact_trust import _RuntimeHandoffMetadata, _issue_runtime_handoff_metadata
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -529,7 +535,11 @@ def test_proven_impact_blocker_outranks_material_unknowns() -> None:
         },
     )
     assert result.normalized_decision.status == "FAIL"
-    assert result.skill_result.status == "SUCCESS"
+    # The blocker outranks the unknowns on the decision axis only: the unknowns are still
+    # unresolved, so `surfaces_and_unknowns_recorded` is incomplete and execution is PARTIAL.
+    assert result.skill_result.status == "PARTIAL"
+    dod = result.to_envelope()["definition_of_done"]
+    assert "surfaces_and_unknowns_recorded" not in dod["completed_checks"]
 
 
 def test_partial_coverage_is_unknown_partial() -> None:
@@ -833,3 +843,62 @@ def test_authoritative_criticality_conflict_is_unknown() -> None:
         repository_evidence={"criticality": "tier0", "criticality_by_repository": {"svcA": "tier2"}},
     )
     assert result["criticality"] == "unknown"
+
+
+def test_diff_paths_reads_a_path_containing_spaces() -> None:
+    # The previous whitespace-delimited pattern matched nothing here, so a migration under a
+    # spaced path was invisible to change classification while coverage could still read COMPLETE.
+    assert _diff_paths("diff --git a/src/my file.py b/src/my file.py\n+change\n") == ["src/my file.py"]
+
+
+def test_diff_paths_reads_a_c_quoted_path() -> None:
+    assert _diff_paths('diff --git "a/x y.py" "b/x y.py"\n+change\n') == ["x y.py"]
+    assert _diff_paths('diff --git "a/caf\\303\\251.py" "b/caf\\303\\251.py"\n+change\n') == ["café.py"]
+
+
+def test_diff_paths_reads_both_sides_of_a_rename_including_spaced_ones() -> None:
+    assert _diff_paths("diff --git a/old.py b/new.py\nrename from old.py\nrename to new.py\n") == [
+        "new.py", "old.py",
+    ]
+    spaced = (
+        "diff --git a/old name.py b/new name.py\n"
+        "similarity index 100%\n"
+        "rename from old name.py\n"
+        "rename to new name.py\n"
+    )
+    assert _diff_paths(spaced) == ["new name.py", "old name.py"]
+
+
+def test_diff_paths_binds_a_spaced_header_through_its_marker_lines() -> None:
+    record = "diff --git a/spaced out.py b/spaced out.py\n--- a/spaced out.py\n+++ b/spaced out.py\n+change\n"
+    assert _diff_paths(record) == ["spaced out.py"]
+
+
+def test_diff_paths_reads_every_record_in_a_multi_file_diff() -> None:
+    text = (
+        "diff --git a/a.py b/a.py\n+x\n"
+        "diff --git a/db/migrate 001.sql b/db/migrate 001.sql\n+y\n"
+        "diff --git a/c.py b/c.py\n+z\n"
+    )
+    assert _diff_paths(text) == ["a.py", "c.py", "db/migrate 001.sql"]
+
+
+def test_spaced_migration_path_still_classifies_as_schema_or_data() -> None:
+    result = analyze_change(source=diff_text("diff --git a/db/migrations/add col.sql b/db/migrations/add col.sql\n+ALTER TABLE t;\n"))
+    assert "schema_or_data" in result["change_classes"]
+
+
+def test_diff_paths_drops_an_irrecoverably_ambiguous_header_rather_than_truncating() -> None:
+    # A spaced rename whose own paths contain a " b/" token is genuinely ambiguous without the
+    # record's rename metadata; emitting a truncated path would be worse than emitting nothing.
+    ambiguous = "diff --git a/x b/y b/p b/q\n+change\n"
+    assert _diff_paths(ambiguous) == []
+    assert _diff_paths(ambiguous.replace("+change", "rename from x b/y\nrename to p b/q")) == [
+        "p b/q", "x b/y",
+    ]
+    assert _diff_paths('diff --git "a/unterminated.py b/x.py\n+change\n') == []
+
+
+def test_diff_paths_reads_a_new_file_record_whose_old_marker_is_dev_null() -> None:
+    record = "diff --git a/new one.py b/new one.py\nnew file mode 100644\n--- /dev/null\n+++ b/new one.py\n"
+    assert _diff_paths(record) == ["new one.py"]

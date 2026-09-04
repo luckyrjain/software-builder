@@ -7,17 +7,15 @@ functions rather than pytest fixtures.
 
 from __future__ import annotations
 
-from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Mapping, Sequence
 
 from scripts.registry.canonical_manifest import load_canonical_manifest
 from scripts.registry.load import load_registry
 from scripts import release_readiness_v2
+from scripts.tests.envelope_fixtures import DEFAULT_REVISION as _DEFAULT_REVISION
+from scripts.tests.envelope_fixtures import ROOT
 
-ROOT = Path(__file__).resolve().parents[2]
-
-_DEFAULT_REVISION = "a" * 40
 _DEFAULT_DIGEST = "sha256:" + "b" * 64
 
 
@@ -185,12 +183,6 @@ def runtime_handoff_artifacts(parent: str, child: str) -> list[str]:
     manifest = load_canonical_manifest(ROOT)
     handoffs = manifest["contracts"]["composition_runtime"]["handoffs"]
     return list(handoffs.get(parent, {}).get(child, []))
-
-
-def consumes(skill_id: str, artifact_type: str) -> bool:
-    manifest = load_canonical_manifest(ROOT)
-    contract = manifest["contracts"]["composition"]["skills"].get(skill_id, {})
-    return artifact_type in contract.get("consumes", [])
 
 
 def default_max_depth() -> int:
