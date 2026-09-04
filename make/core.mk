@@ -1,4 +1,4 @@
-.PHONY: install install-incident-rca-deps install-claude lint lint-framework lint-pr-review lint-pr-gatekeeper lint-k8s-skill lint-k8s lint-incident-rca lint-incident-triage-agent lint-domain-comprehension lint-squad-map lint-who-owns-x-bot lint-new-hire-guide lint-release-readiness-checker lint-migration-program-manager lint-cost-optimization-sprint-planner lint-mysql-to-postgres-sql lint-loop-task-implementer lint-backlog-runner lint-weekly-squad-digest lint-unit-test-creator lint-integration-test-creator lint-contract-test-creator lint-e2e-test-creator lint-api-test-creator lint-test-writer lint-architecture-review lint-system-design lint-api-design-review lint-database-review lint-security-review lint-performance-review lint-capacity-planner lint-observability-review lint-deployment-risk-review lint-dependency-upgrade-review lint-tech-debt-assessor setup-hooks setup validate-registry validate-operational-upkeep generate generate-check verify-github-ruleset kubesense-errors
+.PHONY: install install-incident-rca-deps install-claude lint lint-framework lint-pr-review lint-pr-gatekeeper lint-k8s-skill lint-k8s lint-incident-rca lint-incident-triage-agent lint-domain-comprehension lint-squad-map lint-who-owns-x-bot lint-new-hire-guide lint-release-readiness-checker lint-migration-program-manager lint-cost-optimization-sprint-planner lint-mysql-to-postgres-sql lint-loop-task-implementer lint-backlog-runner lint-weekly-squad-digest lint-unit-test-creator lint-integration-test-creator lint-contract-test-creator lint-e2e-test-creator lint-api-test-creator lint-test-writer lint-architecture-review lint-system-design lint-api-design-review lint-database-review lint-security-review lint-performance-review lint-capacity-planner lint-observability-review lint-deployment-risk-review lint-dependency-upgrade-review lint-tech-debt-assessor lint-module-design lint-codebase-architecture-review setup-hooks setup validate-registry validate-operational-upkeep generate generate-check verify-github-ruleset kubesense-errors
 .PHONY: lint-change-impact-analyzer
 .PHONY: lint-implementation-planner
 .PHONY: lint-resilience-review
@@ -206,7 +206,7 @@ lint: lint-static lint-suites
 # across skills via `make -jN` and, only for the dominant scripts/tests/ suite, within
 # it via pytest-xdist (see PYTEST_XDIST_FLAG above). `make lint` still runs both groups
 # locally, in this order.
-lint-static: lint-platform-files validate-registry validate-agent-skills validate-hosts backfill-capabilities-check generate-check validate-evals validate-operational-upkeep lint-framework lint-incident-triage-agent lint-who-owns-x-bot lint-new-hire-guide lint-release-readiness-checker lint-cost-optimization-sprint-planner lint-backlog-runner lint-test-writer lint-prd-architect lint-architecture-review lint-system-design lint-api-design-review lint-database-review lint-security-review lint-performance-review lint-capacity-planner lint-observability-review lint-deployment-risk-review lint-dependency-upgrade-review lint-tech-debt-assessor lint-requirements-lock lint-python lint-actions-pinning lint-actions-security verify-install verify-install-all validate-review-contracts lint-scripts-shellcheck
+lint-static: lint-platform-files validate-registry validate-agent-skills validate-hosts backfill-capabilities-check generate-check validate-evals validate-operational-upkeep lint-framework lint-incident-triage-agent lint-who-owns-x-bot lint-new-hire-guide lint-release-readiness-checker lint-cost-optimization-sprint-planner lint-backlog-runner lint-test-writer lint-prd-architect lint-architecture-review lint-system-design lint-api-design-review lint-database-review lint-security-review lint-performance-review lint-capacity-planner lint-observability-review lint-deployment-risk-review lint-dependency-upgrade-review lint-tech-debt-assessor lint-module-design lint-codebase-architecture-review lint-requirements-lock lint-python lint-actions-pinning lint-actions-security verify-install verify-install-all validate-review-contracts lint-scripts-shellcheck
 
 lint-scripts-shellcheck:
 	@for f in scripts/*.sh; do \
@@ -746,6 +746,32 @@ lint-dependency-upgrade-review:
 
 lint-tech-debt-assessor:
 	@python3 scripts/lint_skills.py --skill tech-debt-assessor
+
+lint-module-design:
+	@python3 scripts/lint_skills.py --skill module-design
+	@echo "lint-module-design: required SKILL.md headings"
+	@for heading in \
+		"## When to use / NOT to use" "## Deliverable" "## Required inputs" \
+		"## Prerequisites" "## Workflow" "## Boundary rules" \
+		"## Cross-skill escalation" "## Framework" "## Begin"; do \
+		grep -Fqx "$$heading" module-design/SKILL.md || \
+			{ echo "error: module-design/SKILL.md must contain heading $$heading" >&2; exit 1; }; \
+	done
+	@echo "  ok"
+
+lint-codebase-architecture-review:
+	@python3 scripts/lint_skills.py --skill codebase-architecture-review
+	@echo "lint-codebase-architecture-review: required SKILL.md headings"
+	@for heading in \
+		"## When to use / NOT to use" "## Deliverable" "## Scope and prerequisites" \
+		"## Workflow" "## Candidate rules" "## Cross-skill boundary" \
+		"## Framework" "## Begin"; do \
+		grep -Fqx "$$heading" codebase-architecture-review/SKILL.md || \
+			{ echo "error: codebase-architecture-review/SKILL.md must contain heading $$heading" >&2; exit 1; }; \
+	done
+	@echo "lint-codebase-architecture-review: balanced report-format fenced code blocks"
+	@python3 -c 'import sys; from pathlib import Path; from scripts.reference_utils import has_unclosed_fenced_code_block; path = Path(sys.argv[1]); sys.exit(f"error: {path}: unclosed fenced code block" if has_unclosed_fenced_code_block(path.read_text()) else 0)' codebase-architecture-review/reference/report-format.md
+	@echo "  ok"
 
 lint-change-impact-analyzer:
 	@python3 scripts/lint_skills.py --skill change-impact-analyzer

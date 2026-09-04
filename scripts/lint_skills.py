@@ -93,6 +93,7 @@ _EXTRA_REFERENCE_FILES: dict[str, tuple[str, ...]] = {
     "backlog-runner": ("queue-policy", "morning-summary-format"),
     "capacity-planner": ("report-format",),
     "change-impact-analyzer": ("report-format",),
+    "codebase-architecture-review": ("report-format",),
     "contract-test-creator": _TEST_CREATOR_REFS,
     "cost-optimization-sprint-planner": ("gate-policy", "sweep-policy", "report-format"),
     "database-review": ("report-format",),
@@ -120,6 +121,7 @@ _EXTRA_REFERENCE_FILES: dict[str, tuple[str, ...]] = {
     "k8s-overprovisioning-datadog": ("mcp-capabilities",),
     "loop-task-implementer": ("mcp-capabilities", "platform-adapters"),
     "migration-program-manager": ("report-format",),
+    "module-design": ("report-format",),
     "mysql-to-postgres-sql": (
         "function-translations",
         "collection-domain-files",
@@ -194,6 +196,7 @@ _LENGTH_GUIDANCE: dict[str, str] = {
     "backlog-runner": "keep orchestrator thin; detail in workflow/",
     "capacity-planner": "keep orchestrator thin; detail in workflow/",
     "change-impact-analyzer": "keep the leaf bounded; detail in workflow/",
+    "codebase-architecture-review": "keep orchestrator thin; detail in workflow/",
     "cost-optimization-sprint-planner": "keep orchestrator thin; detail in workflow/",
     "database-review": "keep orchestrator thin; detail in workflow/",
     "dependency-upgrade-review": "keep orchestrator thin; detail in workflow/",
@@ -203,6 +206,7 @@ _LENGTH_GUIDANCE: dict[str, str] = {
     "incident-rca": "push detail into workflow/ and reference/",
     "incident-triage-agent": "keep orchestrator thin; detail in workflow/",
     "k8s-overprovisioning-datadog": "keep orchestrator thin; detail in workflow/",
+    "module-design": "keep orchestrator thin; detail in workflow/",
     "migration-program-manager": "keep orchestrator thin; detail in workflow/",
     "new-hire-guide": "keep orchestrator thin; detail in workflow/",
     "observability-review": "keep orchestrator thin; detail in workflow/",
@@ -260,6 +264,7 @@ _RENDER_SURFACES: dict[str, tuple[RenderSurface, ...]] = {
     ),
     "capacity-planner": (_REPORT_FORMAT,),
     "change-impact-analyzer": (_REPORT_FORMAT,),
+    "codebase-architecture-review": (_REPORT_FORMAT,),
     "contract-test-creator": (_TEST_CREATOR_SURFACE,),
     "cost-optimization-sprint-planner": (
         RenderSurface("reference/report-format.md", require_redact=False),
@@ -299,6 +304,7 @@ _RENDER_SURFACES: dict[str, tuple[RenderSurface, ...]] = {
         ),
     ),
     "loop-task-implementer": (RenderSurface("report-template.md"),),
+    "module-design": (_REPORT_FORMAT,),
     "migration-program-manager": (_REPORT_FORMAT,),
     "mysql-to-postgres-sql": (
         RenderSurface("workflow/migrate-service.md", require_redact=False),

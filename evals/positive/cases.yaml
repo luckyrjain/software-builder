@@ -25,6 +25,8 @@ cases:
   - {skill: prd-architect, prompt: "Review this PRD and improve the product requirements document for build readiness.", expected_status: selected, expected_owner: prd-architect}
   - {skill: test-writer, prompt: "Write tests for this change; the test level is not specified.", expected_status: selected, expected_owner: test-writer}
   - {skill: architecture-review, prompt: "Architecture review for the new payments platform before we start building.", expected_status: selected, expected_owner: architecture-review}
+  - {skill: codebase-architecture-review, prompt: "Review this existing codebase architecture and find evidence-backed refactoring opportunities.", expected_status: selected, expected_owner: codebase-architecture-review}
+  - {skill: module-design, prompt: "Design the contract and seam for this one code-level payment module.", expected_status: selected, expected_owner: module-design}
   - {skill: system-design, prompt: "Write the system design for the new payments platform's order service.", expected_status: selected, expected_owner: system-design}
   - {skill: api-design-review, prompt: "API design review for the new /orders endpoint before we build it.", expected_status: selected, expected_owner: api-design-review}
   - {skill: database-review, prompt: "Database review of the new orders schema migration.", expected_status: selected, expected_owner: database-review}

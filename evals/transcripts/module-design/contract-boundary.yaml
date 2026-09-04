@@ -1,0 +1,33 @@
+schema_version: 1
+skill: module-design
+case_id: contract-boundary
+tier: 2
+description: A concrete module design reads bounded evidence and emits a report without writing the repository or invoking a lifecycle step.
+events:
+  - type: tool
+    name: repository_read
+    args:
+      paths: [src/payments/charge.py, tests/test_charge.py]
+  - type: gate
+    name: contract_evidence
+    decision: sufficient_for_report
+  - type: tool
+    name: report_write
+    args:
+      artifact: module_design_spec
+  - type: outcome
+    status: complete
+assertions:
+  - type: tool_called
+    name: repository_read
+  - type: gate_decision
+    name: contract_evidence
+    decision: sufficient_for_report
+  - type: tool_called
+    name: report_write
+  - type: tool_not_called
+    name: repository_write
+  - type: tool_not_called
+    name: invoke_downstream_skill
+  - type: outcome_status
+    status: complete

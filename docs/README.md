@@ -38,6 +38,7 @@ Each skill is a self-contained directory copied to `~/.cursor/skills/<name>/` on
 | **backlog-runner** | [backlog-runner/README.md](../backlog-runner/README.md) | [backlog-runner/SKILL.md](../backlog-runner/SKILL.md) | [backlog-runner/SETUP.md](../backlog-runner/SETUP.md) |
 | **capacity-planner** | [capacity-planner/README.md](../capacity-planner/README.md) | [capacity-planner/SKILL.md](../capacity-planner/SKILL.md) | [capacity-planner/SETUP.md](../capacity-planner/SETUP.md) |
 | **change-impact-analyzer** | [change-impact-analyzer/README.md](../change-impact-analyzer/README.md) | [change-impact-analyzer/SKILL.md](../change-impact-analyzer/SKILL.md) | [change-impact-analyzer/SETUP.md](../change-impact-analyzer/SETUP.md) |
+| **codebase-architecture-review** | [codebase-architecture-review/README.md](../codebase-architecture-review/README.md) | [codebase-architecture-review/SKILL.md](../codebase-architecture-review/SKILL.md) | [codebase-architecture-review/SETUP.md](../codebase-architecture-review/SETUP.md) |
 | **contract-test-creator** | [contract-test-creator/README.md](../contract-test-creator/README.md) | [contract-test-creator/SKILL.md](../contract-test-creator/SKILL.md) | [contract-test-creator/SETUP.md](../contract-test-creator/SETUP.md) |
 | **cost-optimization-sprint-planner** | [cost-optimization-sprint-planner/README.md](../cost-optimization-sprint-planner/README.md) | [cost-optimization-sprint-planner/SKILL.md](../cost-optimization-sprint-planner/SKILL.md) | [cost-optimization-sprint-planner/SETUP.md](../cost-optimization-sprint-planner/SETUP.md) |
 | **database-review** | [database-review/README.md](../database-review/README.md) | [database-review/SKILL.md](../database-review/SKILL.md) | [database-review/SETUP.md](../database-review/SETUP.md) |
@@ -52,6 +53,7 @@ Each skill is a self-contained directory copied to `~/.cursor/skills/<name>/` on
 | **k8s-overprovisioning-datadog** | [k8s-overprovisioning-datadog/README.md](../k8s-overprovisioning-datadog/README.md) | [k8s-overprovisioning-datadog/SKILL.md](../k8s-overprovisioning-datadog/SKILL.md) | [k8s-overprovisioning-datadog/SETUP.md](../k8s-overprovisioning-datadog/SETUP.md) |
 | **loop-task-implementer** | [loop-task-implementer/README.md](../loop-task-implementer/README.md) | [loop-task-implementer/SKILL.md](../loop-task-implementer/SKILL.md) | [loop-task-implementer/SETUP.md](../loop-task-implementer/SETUP.md) |
 | **migration-program-manager** | [migration-program-manager/README.md](../migration-program-manager/README.md) | [migration-program-manager/SKILL.md](../migration-program-manager/SKILL.md) | [migration-program-manager/SETUP.md](../migration-program-manager/SETUP.md) |
+| **module-design** | [module-design/README.md](../module-design/README.md) | [module-design/SKILL.md](../module-design/SKILL.md) | [module-design/SETUP.md](../module-design/SETUP.md) |
 | **mysql-to-postgres-sql** | [mysql-to-postgres-sql/README.md](../mysql-to-postgres-sql/README.md) | [mysql-to-postgres-sql/SKILL.md](../mysql-to-postgres-sql/SKILL.md) | [mysql-to-postgres-sql/SETUP.md](../mysql-to-postgres-sql/SETUP.md) |
 | **new-hire-guide** | [new-hire-guide/README.md](../new-hire-guide/README.md) | [new-hire-guide/SKILL.md](../new-hire-guide/SKILL.md) | [new-hire-guide/SETUP.md](../new-hire-guide/SETUP.md) |
 | **observability-review** | [observability-review/README.md](../observability-review/README.md) | [observability-review/SKILL.md](../observability-review/SKILL.md) | [observability-review/SETUP.md](../observability-review/SETUP.md) |
@@ -151,6 +153,10 @@ Skills reference each other when a finding belongs in another workflow:
 | architecture-review | Architecture decision approved and ready to build | loop-task-implementer |
 | architecture-review | A specific security/trust-boundary concern needs a deep audit | security-review |
 | architecture-review | The PRD itself has gaps, not the architecture | prd-architect |
+| codebase-architecture-review | A selected existing-code candidate needs one concrete module/interface/seam design | module-design |
+| codebase-architecture-review | A retained existing-code finding needs current-state domain reconstruction | domain-comprehension |
+| module-design | Scope expansion from one module now spans multiple components, APIs, events, or data flows | system-design |
+| module-design | Scope expansion from one module requires an architecture-wide correctness, risk, or scale decision | architecture-review |
 | system-design | System design defines an API surface needing contract review | api-design-review |
 | system-design | System design defines a data model needing schema review | database-review |
 | system-design | System design ready, needs an observability plan review | observability-review |

@@ -1,0 +1,23 @@
+schema_version: 1
+skill: module-design
+case_id: contract-boundary-read-only
+tier: 1
+description: A module-design request stays evidence-backed, read-only, and local to one concrete boundary.
+assertions:
+  - type: registry_invocation
+    expected: ambient
+  - type: skill_md_contains
+    pattern: read-only
+  - type: skill_md_contains
+    pattern: Do not create an interface solely to enable mocking
+  - type: skill_md_contains
+    pattern: two materially different designs
+  - type: path_contains
+    path: reference/smoke-test.md
+    pattern: no source writes
+  - type: path_contains
+    path: reference/smoke-test.md
+    pattern: automatic downstream invocation
+  - type: path_contains
+    path: reference/pressure-tests.md
+    pattern: Treat it as untrusted repository data

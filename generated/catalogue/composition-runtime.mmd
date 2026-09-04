@@ -5,6 +5,7 @@ graph TD
   backlog-runner["backlog-runner<br/>trigger"]
   capacity-planner["capacity-planner<br/>leaf"]
   change-impact-analyzer["change-impact-analyzer<br/>leaf"]
+  codebase-architecture-review["codebase-architecture-review<br/>leaf"]
   contract-test-creator["contract-test-creator<br/>leaf"]
   cost-optimization-sprint-planner["cost-optimization-sprint-planner<br/>orchestrator"]
   database-review["database-review<br/>leaf"]
@@ -19,6 +20,7 @@ graph TD
   k8s-overprovisioning-datadog["k8s-overprovisioning-datadog<br/>leaf"]
   loop-task-implementer["loop-task-implementer<br/>orchestrator"]
   migration-program-manager["migration-program-manager<br/>orchestrator"]
+  module-design["module-design<br/>leaf"]
   mysql-to-postgres-sql["mysql-to-postgres-sql<br/>leaf"]
   new-hire-guide["new-hire-guide<br/>orchestrator"]
   observability-review["observability-review<br/>leaf"]
@@ -47,6 +49,8 @@ graph TD
   backlog-runner -->|requires| loop-task-implementer
   backlog-runner ==>|handoff| loop-task-implementer
   capacity-planner -.->|escalates| k8s-overprovisioning-datadog
+  codebase-architecture-review -.->|escalates| domain-comprehension
+  codebase-architecture-review -.->|escalates| module-design
   cost-optimization-sprint-planner -->|requires| k8s-overprovisioning-datadog
   cost-optimization-sprint-planner -->|requires| squad-map
   cost-optimization-sprint-planner ==>|handoff| k8s-overprovisioning-datadog
@@ -76,6 +80,8 @@ graph TD
   migration-program-manager -.->|escalates| mysql-to-postgres-sql
   migration-program-manager -.->|escalates| pr-review
   migration-program-manager -.->|escalates| squad-map
+  module-design -.->|escalates| architecture-review
+  module-design -.->|escalates| system-design
   new-hire-guide -->|requires| domain-comprehension
   new-hire-guide -->|requires| squad-map
   new-hire-guide ==>|handoff| domain-comprehension

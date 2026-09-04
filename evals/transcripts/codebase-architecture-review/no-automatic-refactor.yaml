@@ -1,0 +1,46 @@
+schema_version: 1
+skill: codebase-architecture-review
+case_id: no-automatic-refactor
+tier: 2
+description: A degraded-history local review can validly report zero candidates and must not start a refactor or downstream lifecycle action.
+events:
+  - type: tool
+    name: repository_read
+    args:
+      paths: [src/checkout, tests/checkout]
+  - type: tool
+    name: history_read
+    args:
+      available: false
+  - type: gate
+    name: candidate_falsification
+    decision: zero_candidates_valid
+  - type: tool
+    name: report_write
+    args:
+      artifact: codebase_architecture_report
+      recommended_next_skill: null
+  - type: outcome
+    status: complete
+assertions:
+  - type: tool_called
+    name: repository_read
+  - type: tool_args_match
+    name: history_read
+    args:
+      available: false
+  - type: gate_decision
+    name: candidate_falsification
+    decision: zero_candidates_valid
+  - type: tool_args_match
+    name: report_write
+    args:
+      recommended_next_skill: null
+  - type: tool_not_called
+    name: repository_write
+  - type: tool_not_called
+    name: apply_refactor
+  - type: tool_not_called
+    name: invoke_downstream_skill
+  - type: outcome_status
+    status: complete

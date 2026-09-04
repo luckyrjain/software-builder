@@ -21,6 +21,8 @@ skills:
   change-impact-analyzer:
     external_services: None — reads supplied design/change content and optional repository
       or exact-head SCM evidence only
+  codebase-architecture-review:
+    external_services: None — reads repository and caller-provided context only
   contract-test-creator:
     external_services: Pact Broker (optional, repo-specific)
   cost-optimization-sprint-planner:
@@ -55,6 +57,8 @@ skills:
       MCP)
   migration-program-manager:
     external_services: None (reads MIGRATION_STATUS.yaml + SQUAD_MAP.md on disk)
+  module-design:
+    external_services: None — reads repository and caller-provided context only
   mysql-to-postgres-sql:
     external_services: None (local scan scripts and domain packs)
   new-hire-guide:

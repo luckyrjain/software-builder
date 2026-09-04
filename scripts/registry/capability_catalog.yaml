@@ -45,6 +45,11 @@ skills:
       enables: repository-grounded diff/caller/consumer/config discovery
     - name: host.scm.change.read
       enables: exact-head remote PR/MR metadata + diff retrieval
+  codebase-architecture-review:
+    required:
+    - host.report.write
+    - host.repository.read
+    optional: []
   contract-test-creator:
     required:
     - host.repository.read_write
@@ -183,6 +188,11 @@ skills:
     optional:
     - name: mysql-to-postgres-sql.invoke
       enables: single-workspace migration status refresh
+  module-design:
+    required:
+    - host.report.write
+    - host.repository.read
+    optional: []
   mysql-to-postgres-sql:
     required:
     - host.repository.read_write

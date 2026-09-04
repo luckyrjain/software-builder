@@ -7,6 +7,7 @@ skill_types:
   backlog-runner: trigger
   capacity-planner: leaf
   change-impact-analyzer: leaf
+  codebase-architecture-review: leaf
   contract-test-creator: leaf
   cost-optimization-sprint-planner: orchestrator
   database-review: leaf
@@ -21,6 +22,7 @@ skill_types:
   k8s-overprovisioning-datadog: leaf
   loop-task-implementer: orchestrator
   migration-program-manager: orchestrator
+  module-design: leaf
   mysql-to-postgres-sql: leaf
   new-hire-guide: orchestrator
   observability-review: leaf
@@ -218,6 +220,14 @@ artifact_ownership:
     mode: canonical
     owners:
     - system-design
+  module_design_spec:
+    mode: canonical
+    owners:
+    - module-design
+  codebase_architecture_report:
+    mode: canonical
+    owners:
+    - codebase-architecture-review
   api_design_review_report:
     mode: canonical
     owners:

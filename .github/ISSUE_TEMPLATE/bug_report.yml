@@ -15,6 +15,7 @@ body:
         - backlog-runner
         - capacity-planner
         - change-impact-analyzer
+        - codebase-architecture-review
         - contract-test-creator
         - cost-optimization-sprint-planner
         - database-review
@@ -29,6 +30,7 @@ body:
         - k8s-overprovisioning-datadog
         - loop-task-implementer
         - migration-program-manager
+        - module-design
         - mysql-to-postgres-sql
         - new-hire-guide
         - observability-review

@@ -1,0 +1,9 @@
+---
+description: Use when an existing codebase needs a bounded, evidence-backed review of architecture friction and potential refactoring candidates. Keywords: codebase architecture review, architecture friction, refactoring opportunities, change locality, coupling, cohesion. Not for a proposed architecture (architecture-review), one module's design (module-design), or implementation work.
+alwaysApply: false
+---
+
+<!-- GENERATED from skills.yaml + SKILL.md — do not edit; run make generate -->
+
+Invoke the codebase-architecture-review skill. Read `codebase-architecture-review/SKILL.md` and follow it.
+Phase index: `codebase-architecture-review/reference/phase-index.md` when present under the skill directory.

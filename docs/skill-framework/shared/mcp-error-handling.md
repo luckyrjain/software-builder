@@ -68,6 +68,7 @@ column.
 | `backlog-runner` | `scheduler.cron.trigger` | — | BLOCKED | — |
 | `capacity-planner` | `host.report.write` | — | BLOCKED | — |
 | `change-impact-analyzer` | `host.repository.read` | — | DEGRADED | `host.report.write`, `host.scm.change.read` |
+| `codebase-architecture-review` | `host.repository.read` | — | BLOCKED | `host.report.write` |
 | `contract-test-creator` | `host.repository.read_write` | — | BLOCKED | — |
 | `cost-optimization-sprint-planner` | `host.filesystem.read` | — | BLOCKED | — |
 | `database-review` | `host.report.write` | — | BLOCKED | — |
@@ -82,6 +83,7 @@ column.
 | `k8s-overprovisioning-datadog` | **Kubernetes MCP ❌** `kubernetes.metrics.history` | observability.metrics.query | FALLBACK | `datadog.query_metrics` |
 | `loop-task-implementer` | `host.repository.read_write` | — | BLOCKED | — |
 | `migration-program-manager` | `host.filesystem.read` | — | BLOCKED | — |
+| `module-design` | `host.repository.read` | — | BLOCKED | `host.report.write` |
 | `mysql-to-postgres-sql` | `host.repository.read_write` | — | BLOCKED | — |
 | `new-hire-guide` | `host.repository.read` | — | BLOCKED | — |
 | `observability-review` | `host.report.write` | — | BLOCKED | — |

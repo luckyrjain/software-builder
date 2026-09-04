@@ -66,3 +66,4 @@ architecture-review:
     patterns:
     - \b(architecture review|ADR|architecture decision record|architecture design
       review)\b
+    - \bproposed architecture\b

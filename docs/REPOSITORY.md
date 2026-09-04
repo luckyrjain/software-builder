@@ -72,6 +72,7 @@ Each skill directory follows the same pattern:
 | `backlog-runner` | automation | automation-only | loop-task-implementer | `make lint-backlog-runner` |
 | `capacity-planner` | platform | ambient | — | `make lint-capacity-planner` |
 | `change-impact-analyzer` | analysis | ambient | — | `make lint-change-impact-analyzer` |
+| `codebase-architecture-review` | architecture | ambient | — | `make lint-codebase-architecture-review` |
 | `contract-test-creator` | testing | ambient | — | `make lint-contract-test-creator` |
 | `cost-optimization-sprint-planner` | platform | ambient | k8s-overprovisioning-datadog, squad-map | `make lint-cost-optimization-sprint-planner` |
 | `database-review` | review | ambient | — | `make lint-database-review` |
@@ -86,6 +87,7 @@ Each skill directory follows the same pattern:
 | `k8s-overprovisioning-datadog` | platform | ambient | — | `make lint-k8s-skill` |
 | `loop-task-implementer` | automation | ambient | — | `make lint-loop-task-implementer` |
 | `migration-program-manager` | migration | ambient | mysql-to-postgres-sql, squad-map | `make lint-migration-program-manager` |
+| `module-design` | architecture | ambient | — | `make lint-module-design` |
 | `mysql-to-postgres-sql` | migration | ambient | — | `make lint-mysql-to-postgres-sql` |
 | `new-hire-guide` | architecture | ambient | domain-comprehension, squad-map | `make lint-new-hire-guide` |
 | `observability-review` | review | ambient | — | `make lint-observability-review` |
