@@ -30,7 +30,7 @@ def _baseline():
     return registry, golden, results
 
 
-def test_batch3_all_registered_skills_execute_five_scenarios() -> None:
+def test_all_registered_skills_execute_five_scenarios() -> None:
     registry, _golden, results = _baseline()
     scenario_results = [
         result
@@ -46,7 +46,7 @@ def test_batch3_all_registered_skills_execute_five_scenarios() -> None:
     ]
 
 
-def test_batch3_repository_matrices_and_golden_coverage_pass() -> None:
+def test_repository_matrices_and_golden_coverage_pass() -> None:
     registry, golden, results = _baseline()
     checks = run_batch3_contract_checks(
         ROOT,
@@ -70,7 +70,7 @@ def test_batch3_repository_matrices_and_golden_coverage_pass() -> None:
     ]
 
 
-def test_batch3_scenario_gate_fails_when_one_skill_loses_a_dimension() -> None:
+def test_scenario_gate_fails_when_one_skill_loses_a_dimension() -> None:
     registry, golden, results = _baseline()
     filtered = [
         result
@@ -89,7 +89,7 @@ def test_batch3_scenario_gate_fails_when_one_skill_loses_a_dimension() -> None:
     assert any("pr-review: missing executable degraded scenario" in message for message in gate.messages)
 
 
-def test_batch3_golden_gate_fails_when_a_skill_loses_all_golden_coverage() -> None:
+def test_golden_gate_fails_when_a_skill_loses_all_golden_coverage() -> None:
     registry, golden, results = _baseline()
     reduced = [case for case in golden if case.skill != "pr-review"]
     checks = run_batch3_contract_checks(
@@ -104,7 +104,7 @@ def test_batch3_golden_gate_fails_when_a_skill_loses_all_golden_coverage() -> No
     assert any("pr-review: no golden fixture" in message for message in gate.messages)
 
 
-def test_batch3_mutation_gate_fails_when_executable_mutation_is_missing() -> None:
+def test_mutation_gate_fails_when_executable_mutation_is_missing() -> None:
     registry, golden, results = _baseline()
     filtered = [
         result
@@ -123,7 +123,7 @@ def test_batch3_mutation_gate_fails_when_executable_mutation_is_missing() -> Non
     assert any("batch3-mutation/unauthorized_external_action" in message for message in gate.messages)
 
 
-def test_batch3_mutation_anchor_requires_passing_dangerous_fixture() -> None:
+def test_mutation_anchor_requires_passing_dangerous_fixture() -> None:
     registry, golden, results = _baseline()
     filtered = [
         result
@@ -142,7 +142,7 @@ def test_batch3_mutation_anchor_requires_passing_dangerous_fixture() -> None:
     assert any("pr-review/golden-injection-inert-render" in message for message in gate.messages)
 
 
-def test_batch3_mutation_matrix_does_not_depend_on_case_results_order() -> None:
+def test_mutation_matrix_does_not_depend_on_case_results_order() -> None:
     # Regression test for 80e588a ("dedupe mutation evals"): mutation-matrix must pass off the
     # explicit mutation_results argument alone, not off case_results having already been merged
     # with them in the right order. case_results here deliberately omits every batch3-mutation/*

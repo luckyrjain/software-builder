@@ -7,7 +7,7 @@ from scripts.registry.schema import parse_registry
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_registered_skill_entrypoints_stay_within_p1_size_budget() -> None:
+def test_registered_skill_entrypoints_stay_within_the_size_budget() -> None:
     registry = parse_registry(ROOT / "skills.yaml")
     for skill_id, entry in registry.skills.items():
         assert entry.lint.skill_md_max_lines <= 180, skill_id

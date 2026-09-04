@@ -57,5 +57,5 @@ The directory/dimension is not renamed to something less overloaded (e.g. `routi
 "adversarial" is independently reused with different meanings in several load-bearing places —
 `eval_contracts.yaml`'s `adversarial_classes`/`adversarial_matrix` gate, `evals/fixtures/_global.yaml`'s
 `adversarial` Tier-1 template, `scripts/registry/p1_validation.py`'s `EVAL_DIMENSIONS`, and hardcoded
-assertions in `scripts/tests/test_p1_contracts.py` — and a partial rename would make the collision
+assertions in `scripts/tests/test_platform_contracts.py` — and a partial rename would make the collision
 worse, not better. This note is the documented scope boundary instead.

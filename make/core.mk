@@ -7,6 +7,7 @@
 .PHONY: validate-agent-skills
 .PHONY: validate-hosts
 .PHONY: lint-static lint-suites lint-framework-tests lint-scripts-shellcheck lint-platform-files
+.PHONY: lint-loop-task-implementer-skill lint-loop-task-implementer-scripts
 
 # ALL_SKILLS (the full skill roster) and every per-skill install-<skill> /
 # install-claude-<skill> rule are generated from skills.yaml -- see
@@ -285,7 +286,7 @@ lint: lint-static lint-suites
 # across skills via `make -jN` and, only for the dominant scripts/tests/ suite, within
 # it via pytest-xdist (see PYTEST_XDIST_FLAG above). `make lint` still runs both groups
 # locally, in this order.
-lint-static: lint-platform-files validate-registry validate-agent-skills validate-hosts backfill-capabilities-check generate-check validate-evals validate-operational-upkeep lint-framework lint-incident-triage-agent lint-who-owns-x-bot lint-new-hire-guide lint-release-readiness-checker lint-cost-optimization-sprint-planner lint-loop-task-implementer lint-backlog-runner lint-test-writer lint-prd-architect lint-architecture-review lint-system-design lint-api-design-review lint-database-review lint-security-review lint-performance-review lint-capacity-planner lint-observability-review lint-deployment-risk-review lint-dependency-upgrade-review lint-tech-debt-assessor lint-requirements-lock lint-python lint-actions-pinning lint-actions-security verify-install verify-install-all validate-review-contracts lint-scripts-shellcheck
+lint-static: lint-platform-files validate-registry validate-agent-skills validate-hosts backfill-capabilities-check generate-check validate-evals validate-operational-upkeep lint-framework lint-incident-triage-agent lint-who-owns-x-bot lint-new-hire-guide lint-release-readiness-checker lint-cost-optimization-sprint-planner lint-backlog-runner lint-test-writer lint-prd-architect lint-architecture-review lint-system-design lint-api-design-review lint-database-review lint-security-review lint-performance-review lint-capacity-planner lint-observability-review lint-deployment-risk-review lint-dependency-upgrade-review lint-tech-debt-assessor lint-requirements-lock lint-python lint-actions-pinning lint-actions-security verify-install verify-install-all validate-review-contracts lint-scripts-shellcheck
 
 lint-scripts-shellcheck:
 	@for f in scripts/*.sh; do \
@@ -300,7 +301,7 @@ lint-scripts-shellcheck:
 		fi; \
 	done
 
-lint-suites: lint-pr-review lint-pr-gatekeeper lint-k8s-skill lint-incident-rca lint-domain-comprehension lint-squad-map lint-migration-program-manager lint-mysql-to-postgres-sql lint-weekly-squad-digest lint-unit-test-creator lint-integration-test-creator lint-contract-test-creator lint-e2e-test-creator lint-api-test-creator lint-change-impact-analyzer lint-resilience-review lint-implementation-planner lint-production-readiness-review lint-framework-tests
+lint-suites: lint-pr-review lint-loop-task-implementer lint-pr-gatekeeper lint-k8s-skill lint-incident-rca lint-domain-comprehension lint-squad-map lint-migration-program-manager lint-mysql-to-postgres-sql lint-weekly-squad-digest lint-unit-test-creator lint-integration-test-creator lint-contract-test-creator lint-e2e-test-creator lint-api-test-creator lint-change-impact-analyzer lint-resilience-review lint-implementation-planner lint-production-readiness-review lint-framework-tests
 
 lint-pr-review: lint-pr-review-skill lint-pr-review-scripts
 
@@ -870,7 +871,25 @@ lint-mysql-to-postgres-sql:
 	fi
 	@echo "  ok (framework refs + shellcheck)"
 
-lint-loop-task-implementer:
+lint-loop-task-implementer: lint-loop-task-implementer-skill lint-loop-task-implementer-scripts
+
+# Mirrors lint-pr-review-scripts: the skill ships a validator, so its own tests are
+# co-located with it and run from the target that lints it.
+lint-loop-task-implementer-scripts:
+	@echo "py_compile loop-task-implementer/scripts/validate_loop_lifecycle.py"
+	@echo "pytest loop-task-implementer/tests/"
+	@cache="$(CURDIR)/.pycache-lint"; \
+	export PYTHONDONTWRITEBYTECODE=1 PYTHONPYCACHEPREFIX="$$cache"; \
+	trap 'rm -rf "$$cache"' EXIT; \
+	python3 -m py_compile loop-task-implementer/scripts/validate_loop_lifecycle.py || exit 1; \
+	if python3 -c "import pytest" >/dev/null 2>&1; then \
+		python3 -m pytest loop-task-implementer/tests/ -q || exit 1; \
+	else \
+		echo "pytest not installed — install with 'python3 -m pip install pytest' to run script tests" >&2; \
+		exit 1; \
+	fi
+
+lint-loop-task-implementer-skill:
 	@echo "lint-loop-task-implementer: SKILL.md line count (<= 180)"
 	$(call check_skill_md_length,loop-task-implementer,180,)
 	@echo "lint-loop-task-implementer: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"

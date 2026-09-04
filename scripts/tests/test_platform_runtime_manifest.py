@@ -17,7 +17,7 @@ def test_runtime_manifest_exposes_all_p1_contracts() -> None:
     assert contracts["artifact_ownership"]["consumers_may_silently_rewrite"] is False
 
 
-def test_batch1_all_skills_validate_against_one_manifest() -> None:
+def test_all_skills_validate_against_one_manifest() -> None:
     assert validate_registry(ROOT) == []
     assert validate_p1_contracts(ROOT) == []
     manifest = build_runtime_manifest(ROOT)
@@ -36,7 +36,7 @@ def test_batch1_all_skills_validate_against_one_manifest() -> None:
             assert target in skills, (skill_id, target)
 
 
-def test_batch1_permissions_match_high_impact_classes() -> None:
+def test_permissions_match_high_impact_classes() -> None:
     skills = build_runtime_manifest(ROOT)["skills"]
     for skill_id, skill in skills.items():
         permissions = skill["permissions"]

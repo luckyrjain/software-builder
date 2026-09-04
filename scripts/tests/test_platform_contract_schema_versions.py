@@ -7,7 +7,7 @@ from scripts.yaml_safety import load_unique_yaml_file
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_p1_contract_files_use_supported_schema_version() -> None:
+def test_platform_contract_files_use_supported_schema_version() -> None:
     for relative in (
         "scripts/registry/host_contracts.yaml",
         "scripts/registry/eval_contracts.yaml",

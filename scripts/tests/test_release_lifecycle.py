@@ -132,6 +132,63 @@ def test_release_contract_rejects_invalid_tag_pattern_regex(tmp_path: Path) -> N
     assert any("not a valid regex" in error for error in errors)
 
 
+def _write_contract_with_tag_pattern(root: Path, tag_pattern: str) -> None:
+    # Single-quoted YAML: the scalar is taken literally, so a regex's backslashes
+    # survive unescaped. None of the patterns below contain a single quote.
+    assert "'" not in tag_pattern
+    (root / "scripts" / "release_contract.yaml").write_text(
+        "schema_version: 1\n"
+        f"tag_pattern: '{tag_pattern}'\n"
+        "artifact_name_templates:\n"
+        '  - "software-builder-{version}.tar.gz"\n'
+        "compatibility:\n"
+        "  registry_schema_version: 1\n"
+        "  host_contract_schema_version: 1\n"
+        "provenance:\n"
+        "  required_fields: [schema_version]\n",
+        encoding="utf-8",
+    )
+
+
+@pytest.mark.parametrize(
+    ("tag_pattern", "expected"),
+    [
+        # Over the length cap: refused on size alone, before compilation.
+        (r"^v" + r"\d?" * 100 + r"$", "at most 200 characters"),
+        # Catastrophic-backtracking shapes: a quantified group, quantified again.
+        (r"^v(\d+)+$", "nested quantifier"),
+        (r"^v(a*)*$", "nested quantifier"),
+        (r"^v(\d{1,3})+$", "nested quantifier"),
+    ],
+)
+def test_release_contract_rejects_backtracking_prone_tag_pattern(
+    tmp_path: Path,
+    tag_pattern: str,
+    expected: str,
+) -> None:
+    from scripts.release_contract import validate_release_contract
+
+    root = tmp_path / "repo"
+    _write_contract_test_repo(root)
+    _write_contract_with_tag_pattern(root, tag_pattern)
+
+    errors = validate_release_contract(root)
+
+    assert any(expected in error for error in errors), errors
+    # The shape check replaces the match, so no confusing second complaint about VERSION.
+    assert not any("does not produce a tag matching" in error for error in errors), errors
+
+
+def test_release_contract_accepts_an_ordinary_tag_pattern(tmp_path: Path) -> None:
+    from scripts.release_contract import validate_release_contract
+
+    root = tmp_path / "repo"
+    _write_contract_test_repo(root)
+    _write_contract_with_tag_pattern(root, r"^v\d+\.\d+\.\d+$")
+
+    assert validate_release_contract(root) == []
+
+
 def test_release_contract_rejects_version_not_matching_tag_pattern(tmp_path: Path) -> None:
     from scripts.release_contract import validate_release_contract
 

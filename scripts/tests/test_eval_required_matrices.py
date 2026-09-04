@@ -45,7 +45,7 @@ def _contract() -> dict:
     return require_mapping(raw, "eval contracts")
 
 
-def test_batch3_behavior_scenario_matrix_is_complete_and_executable() -> None:
+def test_behavior_scenario_matrix_is_complete_and_executable() -> None:
     contract = _contract()
     scenarios = require_mapping(contract.get("behavior_scenarios"), "behavior_scenarios")
     assert set(scenarios) == REQUIRED_BEHAVIOR_SCENARIOS
@@ -77,7 +77,7 @@ def test_batch3_behavior_scenario_matrix_is_complete_and_executable() -> None:
             raise AssertionError(f"{scenario_id}: unknown contract_gate {gate!r}")
 
 
-def test_batch3_adversarial_and_surface_matrices_are_complete() -> None:
+def test_adversarial_and_surface_matrices_are_complete() -> None:
     contract = _contract()
     mutations = require_mapping(contract.get("adversarial_classes"), "adversarial_classes")
     surfaces = require_mapping(contract.get("untrusted_surfaces"), "untrusted_surfaces")
@@ -85,13 +85,13 @@ def test_batch3_adversarial_and_surface_matrices_are_complete() -> None:
     assert set(surfaces) == REQUIRED_UNTRUSTED_SURFACES
 
 
-def test_batch3_degraded_host_matrix_is_complete() -> None:
+def test_degraded_host_matrix_is_complete() -> None:
     contract = _contract()
     degraded = require_mapping(contract.get("degraded_host_cases"), "degraded_host_cases")
     assert set(degraded) == REQUIRED_DEGRADED_HOST_CASES
 
 
-def test_batch3_routing_collision_matrix_is_complete() -> None:
+def test_routing_collision_matrix_is_complete() -> None:
     contract = _contract()
     collisions = contract.get("routing_collisions")
     assert isinstance(collisions, list)

@@ -20,11 +20,11 @@ from scripts.yaml_safety import load_unique_yaml_file
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_p1_contracts_validate_repository() -> None:
+def test_platform_contracts_validate_repository() -> None:
     assert validate_p1_contracts(ROOT) == []
 
 
-def test_p1_portable_contract_sets_are_complete() -> None:
+def test_portable_contract_sets_are_complete() -> None:
     assert RESULT_FIELDS == {
         "skill",
         "version",
@@ -50,7 +50,7 @@ def test_p1_portable_contract_sets_are_complete() -> None:
     assert STATE_VALUES == {"current_state", "proposed_state", "desired_state", "transitional_state"}
 
 
-def test_p1_eval_and_host_coverage_are_explicit() -> None:
+def test_eval_and_host_coverage_are_explicit() -> None:
     assert EVAL_DIMENSIONS == {"positive", "negative", "ambiguous", "adversarial", "degraded"}
     assert HOSTS == {"cursor", "claude", "codex", "chatgpt", "kiro", "generic"}
     assert HOST_CAPABILITIES == {
@@ -67,7 +67,7 @@ def test_p1_eval_and_host_coverage_are_explicit() -> None:
     }
 
 
-def test_skill_routing_inherits_p1_contracts() -> None:
+def test_skill_routing_inherits_platform_contracts() -> None:
     routing = (ROOT / "docs/skill-framework/shared/skill-routing.md").read_text(encoding="utf-8")
     assert "runtime-contract.md" in routing
     assert "host-adapter-contract.md" in routing

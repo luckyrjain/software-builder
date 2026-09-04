@@ -1,4 +1,4 @@
-"""Behavioral and parity tests for Batch 6B test-creator safety contracts."""
+"""Behavioral and parity tests for the test-creator write-safety contracts."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ import yaml
 from scripts.test_creator_catalog import TEST_CREATOR_SKILLS
 
 ROOT = Path(__file__).resolve().parents[2]
-FIXTURE = ROOT / "scripts" / "tests" / "fixtures" / "batch6b_test_creator_write_safety.yaml"
+FIXTURE = ROOT / "scripts" / "tests" / "fixtures" / "test_creator_write_safety.yaml"
 CREATOR_ROOTS = list(TEST_CREATOR_SKILLS)
 COMMON_PHASES = (
     "workflow/inputs.md",
@@ -40,9 +40,9 @@ def _git_repo(tmp_path: Path) -> Path:
     _run("add", "README.md", cwd=repo)
     _run(
         "-c",
-        "user.name=Batch 6B",
+        "user.name=Test Creator",
         "-c",
-        "user.email=batch6b@example.invalid",
+        "user.email=creator@example.invalid",
         "commit",
         "-qm",
         "initial",
@@ -62,9 +62,9 @@ def _prepare_scenario(repo: Path, scenario: dict[str, object]) -> None:
         _run("add", dirty_file, cwd=repo)
         _run(
             "-c",
-            "user.name=Batch 6B",
+            "user.name=Test Creator",
             "-c",
-            "user.email=batch6b@example.invalid",
+            "user.email=creator@example.invalid",
             "commit",
             "-qm",
             "fixture file",
@@ -145,9 +145,9 @@ def test_all_creator_guards_normalise_git_status_paths_for_nested_repo_root(
     _run("add", "services/orders/generated_test.py", cwd=repo)
     _run(
         "-c",
-        "user.name=Batch 6B",
+        "user.name=Test Creator",
         "-c",
-        "user.email=batch6b@example.invalid",
+        "user.email=creator@example.invalid",
         "commit",
         "-qm",
         "nested target fixture",
@@ -178,9 +178,9 @@ def test_all_creator_guards_ignore_dirty_sibling_paths_in_a_monorepo(
     _run("add", "services/payments/existing_test.py", cwd=repo)
     _run(
         "-c",
-        "user.name=Batch 6B",
+        "user.name=Test Creator",
         "-c",
-        "user.email=batch6b@example.invalid",
+        "user.email=creator@example.invalid",
         "commit",
         "-qm",
         "sibling fixture",
@@ -273,9 +273,9 @@ def test_guard_fails_closed_for_an_existing_ignored_output(tmp_path: Path) -> No
     _run("add", ".gitignore", cwd=repo)
     _run(
         "-c",
-        "user.name=Batch 6B",
+        "user.name=Test Creator",
         "-c",
-        "user.email=batch6b@example.invalid",
+        "user.email=creator@example.invalid",
         "commit",
         "-qm",
         "ignore generated output",
@@ -298,9 +298,9 @@ def test_guard_fails_closed_for_a_hardlinked_planned_output(tmp_path: Path) -> N
     _run("add", "generated_test.py", cwd=repo)
     _run(
         "-c",
-        "user.name=Batch 6B",
+        "user.name=Test Creator",
         "-c",
-        "user.email=batch6b@example.invalid",
+        "user.email=creator@example.invalid",
         "commit",
         "-qm",
         "tracked output",
@@ -326,9 +326,9 @@ def test_guard_blocks_a_staged_overlap(tmp_path: Path) -> None:
     _run("add", "staged_test.py", cwd=repo)
     _run(
         "-c",
-        "user.name=Batch 6B",
+        "user.name=Test Creator",
         "-c",
-        "user.email=batch6b@example.invalid",
+        "user.email=creator@example.invalid",
         "commit",
         "-qm",
         "staged fixture",
@@ -353,9 +353,9 @@ def test_guard_blocks_both_sides_of_a_rename_overlap(tmp_path: Path) -> None:
     _run("add", "old_test.py", cwd=repo)
     _run(
         "-c",
-        "user.name=Batch 6B",
+        "user.name=Test Creator",
         "-c",
-        "user.email=batch6b@example.invalid",
+        "user.email=creator@example.invalid",
         "commit",
         "-qm",
         "rename fixture",

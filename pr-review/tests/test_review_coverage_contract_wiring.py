@@ -14,7 +14,7 @@ def _yaml(path: str):
     return yaml.safe_load(_text(path))
 
 
-def test_pr_review_has_machine_inspection_contract_for_batch5_2b_surfaces():
+def test_pr_review_has_machine_inspection_contract_for_every_surface():
     contract = _yaml("pr-review/reference/review-coverage-contract.yaml")
     assert contract["schema_version"] == 1
     assert contract["consumer"] == "pr-review"
@@ -125,7 +125,7 @@ def test_coverage_execution_emits_shared_review_evidence_and_classifies_findings
         assert token.lower() in execution.lower()
 
 
-def test_workflow_contract_sequences_batch5_2b_machine_state_phases():
+def test_workflow_contract_sequences_machine_state_phases():
     workflow = _yaml("pr-review/workflow-contract.yaml")
     for route in ("posting", "chat_only"):
         phases = workflow["routes"][route]["phases"]

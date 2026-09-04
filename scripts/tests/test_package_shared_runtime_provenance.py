@@ -1,4 +1,4 @@
-"""Packaging provenance regressions found during the PR 148 review."""
+"""A packaged skill's shared runtime must come from the repository being packaged."""
 
 from __future__ import annotations
 

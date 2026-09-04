@@ -1,4 +1,4 @@
-"""Adversarial regressions for the Batch 6B test-creator write guard."""
+"""Adversarial regressions for the test-creator write guard."""
 
 from __future__ import annotations
 
@@ -34,9 +34,9 @@ def _repo(root: Path) -> Path:
     _git(
         repo,
         "-c",
-        "user.name=Batch 6B",
+        "user.name=Write Guard",
         "-c",
-        "user.email=batch6b@example.invalid",
+        "user.email=guard@example.invalid",
         "commit",
         "-qm",
         "initial",
@@ -52,9 +52,9 @@ def _commit_file(repo: Path, rel: str) -> Path:
     _git(
         repo,
         "-c",
-        "user.name=Batch 6B",
+        "user.name=Write Guard",
         "-c",
-        "user.email=batch6b@example.invalid",
+        "user.email=guard@example.invalid",
         "commit",
         "-qm",
         f"add {rel}",

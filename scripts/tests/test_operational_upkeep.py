@@ -370,7 +370,7 @@ def test_high_risk_prompt_diff_requires_test_or_eval_evidence() -> None:
     risk, errors = validate_diff_risk(
         [
             "docs/skill-framework/shared/skill-routing.md",
-            "scripts/tests/test_batch5_operational_upkeep.py",
+            "scripts/tests/test_operational_upkeep.py",
         ],
         policy,
     )
