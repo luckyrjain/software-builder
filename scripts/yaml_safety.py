@@ -131,7 +131,16 @@ def load_unique_yaml_file(path: Path) -> Any:
 
 
 def require_mapping(value: Any, label: str) -> dict[str, Any]:
-    """Return value if it's a mapping, else raise ValueError naming the offending field."""
+    """Return value if it's a `dict`, else raise ValueError naming the offending field.
+
+    Kept here, and kept narrow, so this module stays importable with nothing but PyYAML -- it is
+    vendored verbatim into installed skill packages, which have no `scripts.registry` to import.
+    The general shape guard for the repo's own validators is
+    `scripts.registry.validation_primitives.as_mapping`, which is the one to reach for outside
+    this module: it accepts any `Mapping`, degrades to `{}` by default, and raises `TypeError`
+    rather than `ValueError` under `strict=True`. The two are deliberately not interchangeable --
+    callers here catch `YAML_SAFETY_ERRORS`, which is `ValueError` plus `yaml.YAMLError`.
+    """
     if not isinstance(value, dict):
         raise ValueError(f"{label} must be a mapping")
     return value

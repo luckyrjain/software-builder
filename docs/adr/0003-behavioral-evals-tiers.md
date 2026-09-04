@@ -45,10 +45,10 @@ host/model routing quality evals."
 
 Real injection-resistance and safe-output-redaction coverage lives in each skill's
 `evals/golden/<skill>/golden-injection*.yaml` fixtures (required for every skill via
-`scripts/evals/batch3_contract.py`'s `REQUIRED_BEHAVIOR_SCENARIOS` gate) and in the deeper
+`scripts/evals/eval_coverage_contract.py`'s `REQUIRED_BEHAVIOR_SCENARIOS` gate) and in the deeper
 `adversarial_classes` / `contract_gate: adversarial_matrix` mutation matrix in
 `scripts/registry/eval_contracts.yaml` (`scripts/evals/mutation_guard.py`,
-`scripts/evals/batch3_contract.py`) — those actually mutate a golden fixture's untrusted input and
+`scripts/evals/eval_coverage_contract.py`) — those actually mutate a golden fixture's untrusted input and
 reassert the recorded guardrail behavior still holds. Every `evals/adversarial/cases.yaml` entry
 carries a `golden_ref` into that real fixture set and the harness asserts it currently passes, so a
 routing-only pass here is coupled to, but is not a substitute for, that deeper coverage.

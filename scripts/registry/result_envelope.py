@@ -1,6 +1,6 @@
 """One builder for the runtime result envelope every assessment skill returns.
 
-`scripts/registry/platform_contracts.yaml` declares six invariant sections -- `skill_result`,
+skills.yaml's `contracts.platform` section declares six invariant sections -- `skill_result`,
 `provenance`, `freshness`, `definition_of_done`, `authority`, `payload` -- and
 `artifact_contracts.validate_artifact_result` checks them. Between those two lived one
 hand-written literal per producer, so the contract could drift silently in either direction.
@@ -28,8 +28,10 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
-from scripts.registry.artifact_contracts import validate_artifact_result
-from scripts.registry.canonical_manifest import load_canonical_manifest
+from scripts.registry.artifact_contracts import (
+    artifact_schema_version as _declared_artifact_schema_version,
+    validate_artifact_result,
+)
 from scripts.registry.composition_contracts import load_contracts
 from scripts.registry.machine_summary import COMMON_MACHINE_SUMMARY_FIELDS
 
@@ -51,17 +53,19 @@ class ResultEnvelopeError(RuntimeError):
 
 
 def artifact_schema_version(root: Path, artifact_type: str) -> int:
-    """Read an artifact's declared schema version from the canonical manifest.
+    """An artifact's declared schema version, as `ResultEnvelopeError`-flavoured lookup.
 
-    Producers must never literal this: the versions are per-artifact and already diverge, so a
-    hard-coded value silently produces artifacts the validator rejects at the next bump.
+    `artifact_contracts` owns the reading of
+    `contracts.platform.artifact_runtime.artifact_schema_versions` -- the same declaration
+    `validate_artifact_result` checks an envelope against, so there is one reader and a bump
+    cannot reach the validator without also reaching producers. This adapter only re-raises the
+    lookup's `ValueError` as this module's own error type, so a producer assembling an envelope
+    catches one exception class for every way the assembly can fail.
     """
-    manifest = load_canonical_manifest(root)
-    versions = manifest["contracts"]["platform"]["artifact_runtime"]["artifact_schema_versions"]
     try:
-        return versions[artifact_type]
-    except KeyError as exc:
-        raise ResultEnvelopeError(f"{artifact_type}: no declared artifact_schema_version") from exc
+        return _declared_artifact_schema_version(root, artifact_type)
+    except ValueError as exc:
+        raise ResultEnvelopeError(f"{artifact_type}: {exc}") from exc
 
 
 def _carries_machine_summary(root: Path, artifact_type: str) -> bool:

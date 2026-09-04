@@ -7,7 +7,7 @@ run_python() {
   PYTHONDONTWRITEBYTECODE=1 PYTHONPATH="${REPO_ROOT}" python3 "$@"
 }
 
-# Advisory locking (Candidate 13 concurrency fix; spec S37/S37.1): install_skill/uninstall_skill
+# Advisory locking: install_skill/uninstall_skill
 # hold a per-(skill, dest_root) lock for their whole mutating section, so two concurrent install.sh
 # invocations targeting the same destination can't race the classify-then-mv sequence or the final
 # staged-directory replace. A single global EXIT trap is the release-of-last-resort for a crash or
@@ -28,11 +28,11 @@ trap release_current_lock EXIT
 LOCK_WAIT_TIMEOUT_SECONDS="${LOCK_WAIT_TIMEOUT_SECONDS:-30}"
 LOCK_STALE_SECONDS="${LOCK_STALE_SECONDS:-300}"
 
-# mkdir is atomic and, unlike a symlink, can't be pre-planted to redirect a later write into it --
-# it just fails EEXIST if anything (including a symlink) already occupies the path (spec S37.1's
-# lock-path symlink hardening). Staleness is decided first by PID liveness (kill -0), falling back
-# to a wall-clock age threshold for a lock left by a process this host can't check (e.g. after a
-# reboot changed PID numbering).
+# The lock is a directory, not a file or a symlink: mkdir is atomic and, unlike a symlink, can't be
+# pre-planted to redirect a later write into it -- it just fails EEXIST if anything (including a
+# symlink) already occupies the path. Staleness is decided first by PID liveness (kill -0), falling
+# back to a wall-clock age threshold for a lock left by a process this host can't check (e.g. after
+# a reboot changed PID numbering).
 # Reclaiming a stale lock is a check-then-act sequence across two waiters, so it must not be
 # "rm -rf then mkdir": both waiters can read the same dead PID, and the loser's rm -rf can delete
 # the *winner's* freshly created live lock, after which both proceed into the section the lock
