@@ -366,10 +366,10 @@ def test_codebase_design_eval_admission_has_required_ids_and_dimension_coverage(
 
 
 def test_foundation_generation_projects_skills_and_shared_doctrine(tmp_path: Path) -> None:
-    from scripts.registry.cli import _collect_outputs
+    from scripts.registry.generators import collect_outputs
     from scripts.registry.generic_package import build_generic_package
 
-    outputs = _collect_outputs(ROOT)
+    outputs = collect_outputs(ROOT)
     skill_ids = ("module-design", "codebase-architecture-review")
 
     for directory, suffix in ((".cursor/rules", ".mdc"), (".kiro/steering", ".md")):
