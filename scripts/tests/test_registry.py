@@ -392,6 +392,69 @@ skills:
     assert not stale_rule.exists()
 
 
+def test_generate_does_not_prune_stale_adapters_when_an_unrelated_error_also_fails_validation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # cmd_generate used to prune stale adapters *before* running validation, so a real,
+    # unrelated validation failure (composition.escalation_targets here) still left the
+    # stale adapter file deleted even though the run reported failure -- a "failed" run
+    # that wasn't actually a no-op. Pin that a stale adapter now survives an unrelated
+    # validation failure: only a run that's clean of every OTHER error may prune.
+    skill_dir = tmp_path / "solo"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text(
+        "---\nname: solo\nskill_version: 1.0\ndescription: 'Keywords: solo skill.'\n---\n## Framework\n\nskill_result action_gates definition_of_done required_artifacts required_checks blocked_conditions partial_result_behavior runtime-contract.md\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "skills.yaml").write_text(
+        """
+schema_version: 1
+skills:
+  solo:
+    path: solo
+    category: testing
+    invocation: ambient
+    hosts:
+      cursor: {discovery: rule}
+      claude: {install: true}
+      kiro: {discovery: manual}
+    install: {requires: []}
+    capabilities:
+      required: [host.repository.read]
+    lint: {skill_md_max_lines: 180, target: solo}
+    risk_class: [read-only]
+    composition:
+      escalation_targets: [does-not-exist]
+""",
+        encoding="utf-8",
+    )
+    (tmp_path / "README.md").write_text(
+        "badge <!-- skills-count:start -->0<!-- skills-count:end -->\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs" / "REPOSITORY.md").write_text(
+        "table\n<!-- registry-skills-table:start -->\n<!-- registry-skills-table:end -->\n",
+        encoding="utf-8",
+    )
+    stale_rule = tmp_path / ".cursor" / "rules" / "removed-skill.mdc"
+    stale_rule.parent.mkdir(parents=True)
+    stale_rule.write_text(
+        "<!-- GENERATED from skills.yaml + SKILL.md -->\n",
+        encoding="utf-8",
+    )
+    (tmp_path / ".kiro" / "steering").mkdir(parents=True)
+
+    contracts_path = _write_minimal_composition_contracts(tmp_path)
+    monkeypatch.setattr("scripts.registry.composition_contracts.CONTRACTS_PATH", contracts_path)
+    monkeypatch.setattr("scripts.registry.cli.ROOT", tmp_path)
+
+    from scripts.registry.cli import cmd_generate
+
+    assert cmd_generate(tmp_path, check_only=False) == 1
+    assert stale_rule.exists()
+
+
 def _write_minimal_registry_fixture(tmp_path: Path) -> None:
     skill_dir = tmp_path / "solo"
     skill_dir.mkdir()

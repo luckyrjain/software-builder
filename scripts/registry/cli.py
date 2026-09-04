@@ -200,13 +200,34 @@ def cmd_validate_hosts(root: Path) -> int:
     return 0
 
 
+_STALE_ADAPTER_ERROR_PREFIX = "error: stale generated adapter:"
+
+
 def cmd_generate(root: Path, check_only: bool) -> int:
     # A fresh invocation must never inherit another invocation's cached skills.yaml read
     # (schema.py's load_registry_raw cache) -- e.g. two cmd_generate calls against the
     # same root within one process, as several tests do.
     clear_registry_cache()
+
+    # validate_registry (inside _validate_for_generate) reports a not-yet-pruned stale
+    # adapter as an error -- generate's own job, not a reason to refuse to run. Gate on
+    # every OTHER error first, before mutating anything, so a real validation failure
+    # (composition runtime, host contracts, ...) leaves the filesystem untouched instead
+    # of having already deleted stale adapter files that a failed run can't then write
+    # fresh replacements for.
+    pre_errors = [
+        error
+        for error in _validate_for_generate(root)
+        if not error.startswith(_STALE_ADAPTER_ERROR_PREFIX)
+    ]
+    if pre_errors:
+        for error in pre_errors:
+            print(error, file=sys.stderr)
+        return 1
+
     if not check_only:
         _prune_stale_adapters(root)
+        clear_registry_cache()
 
     validation_errors = _validate_for_generate(root)
     if validation_errors:
