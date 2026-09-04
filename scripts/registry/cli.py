@@ -8,6 +8,7 @@ from pathlib import Path
 
 import yaml
 
+from scripts.atomic_write import atomic_write_text
 from scripts.registry.capability_catalog import cmd_check_capabilities
 from scripts.registry.agent_skills import validate_agent_skills
 from scripts.registry.artifact_contracts import validate_artifact_result
@@ -43,8 +44,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def _write_outputs(outputs: dict[Path, str]) -> None:
     for path, content in outputs.items():
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(content, encoding="utf-8")
+        atomic_write_text(path, content)
 
 
 def _prune_stale_adapters(root: Path) -> int:
