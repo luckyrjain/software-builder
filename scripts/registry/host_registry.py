@@ -9,6 +9,7 @@ from functools import cached_property
 from pathlib import Path
 from typing import Any
 
+from scripts.registry.validation_primitives import non_empty_str, unknown_fields
 from scripts.yaml_safety import load_unique_yaml_file
 
 ALLOWED_SCOPES = frozenset({"project", "user"})
@@ -187,12 +188,13 @@ def _unknown_fields(
     label: str,
     errors: list[str],
 ) -> None:
-    for key in sorted(set(value) - allowed, key=str):
+    """Report undeclared keys in this registry's own error dialect."""
+    for key in unknown_fields(value, allowed):
         errors.append(f"{label}.{key} is unknown")
 
 
 def _required_string(value: Any, label: str, errors: list[str]) -> str | None:
-    if not isinstance(value, str) or not value.strip():
+    if not non_empty_str(value):
         errors.append(f"{label} must be a non-empty string")
         return None
     return value

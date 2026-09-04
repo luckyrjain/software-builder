@@ -48,6 +48,12 @@ def test_unknown_fields_lists_undeclared_keys_and_degrades_on_a_non_mapping() ->
     assert unknown_fields("not-a-mapping", {"a"}) == []
 
 
+def test_unknown_fields_reports_non_string_keys_instead_of_crashing() -> None:
+    """YAML admits non-string keys; an undeclared `1:` beside an undeclared `b:` is still a
+    finding, not an unorderable comparison."""
+    assert unknown_fields({"a": 1, "b": 2, 1: 3, None: 4}, {"a"}) == [1, None, "b"]
+
+
 def test_run_validator_cli_reports_per_path_and_returns_one_on_any_failure(capsys) -> None:
     documents = {"good.yaml": [], "bad.yaml": ["error: broken"]}
     exit_code = run_validator_cli(

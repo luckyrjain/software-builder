@@ -1767,14 +1767,16 @@ def test_separator_heavy_oversized_binary_summary_fails_closed_with_bounded_deco
     monkeypatch,
 ):
     decode_calls = 0
-    original_decode = MODULE._decode_git_path
+    # Path decoding now lives in the shared unified-diff grammar, so the counter is installed
+    # there -- the point of the test is that no decode happens at all, wherever it lives.
+    original_decode = MODULE._unified_diff.decode_git_path
 
     def counting_decode(raw):
         nonlocal decode_calls
         decode_calls += 1
         return original_decode(raw)
 
-    monkeypatch.setattr(MODULE, "_decode_git_path", counting_decode)
+    monkeypatch.setattr(MODULE._unified_diff, "decode_git_path", counting_decode)
     summary = "Binary files a/x" + " and a/x" * 20_000 + " differ"
     assert not MODULE._binary_summary_matches(summary, "x", "x")
     assert decode_calls <= 2
@@ -1797,14 +1799,16 @@ def test_under_limit_path_records_remain_accepted():
 
 def test_under_limit_separator_heavy_records_reject_before_path_decoding(monkeypatch):
     decode_calls = 0
-    original_decode = MODULE._decode_git_path
+    # Path decoding now lives in the shared unified-diff grammar, so the counter is installed
+    # there -- the point of the test is that no decode happens at all, wherever it lives.
+    original_decode = MODULE._unified_diff.decode_git_path
 
     def counting_decode(raw):
         nonlocal decode_calls
         decode_calls += 1
         return original_decode(raw)
 
-    monkeypatch.setattr(MODULE, "_decode_git_path", counting_decode)
+    monkeypatch.setattr(MODULE._unified_diff, "decode_git_path", counting_decode)
     header = "diff --git a/x" + " b/" * 15_000
     summary = "Binary files a/x" + " and " * 12_000 + " differ"
     assert len(header) < MODULE.MAX_DIFF_RECORD_CHARS
