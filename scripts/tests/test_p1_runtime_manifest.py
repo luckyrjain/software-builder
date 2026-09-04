@@ -4,7 +4,7 @@ from pathlib import Path
 
 from scripts.registry.crosscheck import validate_registry
 from scripts.registry.p1_validation import PERMISSION_FIELDS, validate_p1_contracts
-from scripts.registry.runtime_manifest import P1_CONTRACT_KEYS, build_runtime_manifest
+from scripts.registry.manifest import P1_CONTRACT_KEYS, build_runtime_manifest
 
 ROOT = Path(__file__).resolve().parents[2]
 

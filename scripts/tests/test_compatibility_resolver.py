@@ -88,12 +88,15 @@ def _skill_registry(*, required: list[str], optional: list[str] | None = None):
     return Registry(schema_version=1, skills={"demo": entry})
 
 
-def test_host_adapter_capability_map_covers_every_capability() -> None:
-    from scripts.registry.compatibility_resolver import HOST_ADAPTER_CAPABILITY_MAP
+def test_host_capability_families_bridge_stays_inside_both_vocabularies() -> None:
+    """The single `host.* -> capability family` bridge (host_adapter.py) must only ever
+    name families host_adapter itself declares -- an unmapped family would make the
+    compatibility matrix gate a requirement against a support level nothing publishes."""
+    from scripts.registry.host_adapter import HOST_CAPABILITY_FAMILIES
 
-    assert set(HOST_ADAPTER_CAPABILITY_MAP) == HOST_ADAPTER_CAPABILITIES
-    assert len(set(HOST_ADAPTER_CAPABILITY_MAP.values())) == len(HOST_ADAPTER_CAPABILITY_MAP)
-    assert all(name.startswith("host.") for name in HOST_ADAPTER_CAPABILITY_MAP.values())
+    assert all(name.startswith("host.") for name in HOST_CAPABILITY_FAMILIES)
+    mapped = {family for families in HOST_CAPABILITY_FAMILIES.values() for family in families}
+    assert mapped <= HOST_ADAPTER_CAPABILITIES
 
 
 def test_resolve_host_follows_one_alias_hop(tmp_path: Path) -> None:

@@ -12,9 +12,18 @@ from scripts.registry.canonical_manifest import (
     has_canonical_manifest_shape,
     is_semver,
     load_canonical_manifest,
+    load_contract_section,
     validate_canonical_manifest,
 )
 from scripts.registry.composition_contracts import load_contracts
+from scripts.registry.envelope_contract import (
+    COMPLETION_FIELDS,
+    COMPLETION_STATUSES,
+    DEFINITION_OF_DONE_FIELDS,
+    EVIDENCE_FIELDS,
+    EVIDENCE_STATUSES,
+    SKILL_TYPES,
+)
 from scripts.registry.frontmatter import load_skill_frontmatter
 from scripts.registry.models import Registry
 from scripts.registry.schema import load_registry_raw, parse_registry
@@ -58,10 +67,7 @@ def _normalize_version(raw: Any) -> str:
 
 def _load_platform_contracts(path: Path | None = None) -> dict[str, Any]:
     if path is None or path.name == "skills.yaml":
-        root = path.parent if path is not None else ROOT
-        manifest = load_canonical_manifest(root)
-        contracts = require_mapping(manifest.get("contracts"), "canonical manifest.contracts")
-        raw = require_mapping(contracts.get("platform"), "contracts.platform")
+        raw = load_contract_section(path.parent if path is not None else ROOT, "platform")
     else:
         raw = require_mapping(load_unique_yaml_file(path), "platform contracts")
 
@@ -79,19 +85,19 @@ def _load_platform_contracts(path: Path | None = None) -> dict[str, Any]:
             raise ValueError(f"{label} must define each canonical value exactly once")
 
     evidence = require_mapping(raw.get("evidence"), "platform contracts.evidence")
-    exact(evidence.get("statuses"), {"OBSERVED", "INFERRED", "UNKNOWN", "CONFLICTED", "NOT_APPLICABLE"}, "platform contracts.evidence.statuses")
-    exact(evidence.get("required_fields"), {"claim", "status", "provenance", "limitations"}, "platform contracts.evidence.required_fields")
+    exact(evidence.get("statuses"), EVIDENCE_STATUSES, "platform contracts.evidence.statuses")
+    exact(evidence.get("required_fields"), EVIDENCE_FIELDS, "platform contracts.evidence.required_fields")
     completion = require_mapping(raw.get("completion"), "platform contracts.completion")
-    exact(completion.get("statuses"), {"SUCCESS", "PARTIAL", "BLOCKED", "FAILED", "ESCALATED"}, "platform contracts.completion.statuses")
-    exact(completion.get("required_fields"), {"status", "evidence_status", "blockers", "artifacts", "recommended_next_skill"}, "platform contracts.completion.required_fields")
+    exact(completion.get("statuses"), COMPLETION_STATUSES, "platform contracts.completion.statuses")
+    exact(completion.get("required_fields"), COMPLETION_FIELDS, "platform contracts.completion.required_fields")
     dod = require_mapping(raw.get("definition_of_done"), "platform contracts.definition_of_done")
-    exact(dod.get("required_fields"), {"required_artifacts", "required_checks", "completed_checks", "blocked_conditions", "partial_result_behavior"}, "platform contracts.definition_of_done.required_fields")
+    exact(dod.get("required_fields"), DEFINITION_OF_DONE_FIELDS, "platform contracts.definition_of_done.required_fields")
     gates = require_mapping(raw.get("action_gates"), "platform contracts.action_gates")
     expected_gates = {"read_only": "none", "local_reversible_write": "explicit_task_authorization", "remote_non_destructive_write": "explicit_task_authorization", "destructive_or_high_impact": "explicit_action_authorization"}
     if {str(k): str(v) for k, v in gates.items()} != expected_gates:
         raise ValueError("platform contracts.action_gates must define the canonical authorization policy")
     skill_types = require_mapping(raw.get("skill_types"), "platform contracts.skill_types")
-    if set(map(str, skill_types.values())) - {"leaf", "router", "orchestrator", "trigger"}:
+    if set(map(str, skill_types.values())) - SKILL_TYPES:
         raise ValueError("platform contracts.skill_types has invalid types")
     return raw
 
@@ -176,6 +182,65 @@ def validate_manifest(root: Path = ROOT) -> list[str]:
     except (OSError, *YAML_SAFETY_ERRORS) as exc:
         return [f"error: platform manifest: {exc}"]
     return []
+
+
+P1_CONTRACT_KEYS = (
+    "result_envelope",
+    "artifact_runtime",
+    "input_resolution",
+    "source_precedence",
+    "freshness",
+    "handoff",
+    "execution_context",
+    "state_semantics",
+    "artifact_ownership",
+    "permission_schema",
+)
+
+
+def build_runtime_manifest(root: Path = ROOT) -> dict[str, Any]:
+    """Return one normalized manifest for every registered skill and P1 contract.
+
+    Lives here rather than in its own module because the platform manifest it splices the
+    P1 sections into is built here: keeping the two apart meant exporting `_build_manifest`
+    across a module boundary while `build_manifest` -- the public name -- discarded exactly
+    the half the other module needed.
+    """
+    manifest, platform = _build_manifest(root)
+    contracts = manifest.get("contracts")
+    skills = manifest.get("skills")
+    permissions = platform.get("skill_permissions")
+    if not isinstance(contracts, dict):
+        raise ValueError("platform manifest contracts must be a mapping")
+    if not isinstance(skills, dict):
+        raise ValueError("platform manifest skills must be a mapping")
+    if not isinstance(permissions, dict):
+        raise ValueError("platform contracts skill_permissions must be a mapping")
+
+    for key in P1_CONTRACT_KEYS:
+        if key not in platform:
+            raise ValueError(f"platform contracts missing P1 section: {key}")
+        contracts[key] = platform[key]
+
+    if set(skills) != set(permissions):
+        raise ValueError("runtime manifest skill/permission coverage drift")
+    for skill_id, skill in skills.items():
+        if not isinstance(skill, dict):
+            raise ValueError(f"runtime manifest skill must be a mapping: {skill_id}")
+        skill["permissions"] = permissions[skill_id]
+    return manifest
+
+
+def validate_runtime_manifest(root: Path = ROOT) -> list[str]:
+    """Validate the integrated manifest consumed by hosts and orchestrators."""
+    try:
+        manifest = build_runtime_manifest(root)
+        skills = manifest.get("skills")
+        if not isinstance(skills, dict) or not skills:
+            return ["error: runtime manifest must contain registered skills"]
+        return []
+    except (OSError, ValueError, *YAML_SAFETY_ERRORS) as exc:
+        return [f"error: runtime manifest: {exc}"]
 
 
 def main() -> int:

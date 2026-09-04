@@ -44,26 +44,35 @@ def test_missing_platform_files_empty_when_all_present(tmp_path: Path) -> None:
     assert missing_platform_files(tmp_path) == []
 
 
-def test_required_platform_files_matches_clis_actual_is_file_gates() -> None:
-    """REQUIRED_PLATFORM_FILES is a second, independent copy of the paths behind
-    scripts/registry/cli.py's `.is_file()` validation-layer gates -- it exists precisely
-    because those gates can't be hard-required in cli.py itself without breaking the
-    minimal test fixtures other registry tests rely on (see this module's docstring).
-    That means nothing forces this list to grow if cli.py ever grows a new gate the same
-    way; this test is that tripwire, asserting both lists name exactly the same files.
+def test_required_platform_files_covers_clis_actual_is_file_gates() -> None:
+    """REQUIRED_PLATFORM_FILES is derived from scripts/registry/cli.py's own
+    `optional_layer_paths` rather than hand-copied beside it, so a new `.is_file()` gate
+    joins this inventory automatically. This asserts that derivation still holds -- and
+    that the three generated contract projections, which no gate keys off of but which
+    `make generate` maintains, remain covered too.
     """
+    from scripts.registry.canonical_manifest import LEGACY_PROJECTION_FILENAMES, legacy_projection_path
     from scripts.registry import cli as registry_cli
 
-    cli_gate_paths = {
-        registry_cli._capability_catalog_path(ROOT),
-        registry_cli._capability_families_path(ROOT),
-        registry_cli._release_contract_path(ROOT),
-        *registry_cli._p1_layer_paths(ROOT),
+    gate_relpaths = {
+        str(path.relative_to(ROOT)) for path in registry_cli.optional_layer_paths(ROOT)
     }
-    cli_gate_relpaths = {str(path.relative_to(ROOT)) for path in cli_gate_paths}
+    projection_relpaths = {
+        str(legacy_projection_path(ROOT, section).relative_to(ROOT))
+        for section in LEGACY_PROJECTION_FILENAMES
+    }
 
-    assert cli_gate_relpaths == set(REQUIRED_PLATFORM_FILES), (
-        "cli.py's .is_file() gate paths and check_platform_files.py's "
-        "REQUIRED_PLATFORM_FILES have drifted apart -- update REQUIRED_PLATFORM_FILES "
-        "to match."
-    )
+    assert gate_relpaths | projection_relpaths == set(REQUIRED_PLATFORM_FILES)
+
+
+def test_deleting_a_generated_contract_projection_fails_the_check(tmp_path: Path) -> None:
+    """The inventory's whole purpose: a file whose absence disables or staleness-hides a
+    layer must fail loudly here. composition_runtime.yaml used to be absent from the
+    hand-maintained list and was caught only incidentally by `generate --check`."""
+    for relpath in REQUIRED_PLATFORM_FILES:
+        target = tmp_path / relpath
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("", encoding="utf-8")
+    (tmp_path / "scripts" / "registry" / "composition_runtime.yaml").unlink()
+
+    assert missing_platform_files(tmp_path) == ["scripts/registry/composition_runtime.yaml"]

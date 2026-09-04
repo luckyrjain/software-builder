@@ -43,13 +43,53 @@ def test_runtime_validation_defaults_to_canonical_manifest(monkeypatch: pytest.M
     assert validate_composition_runtime(registry, contracts_path=CONTRACTS) == []
 
 
-def test_cli_does_not_fallback_to_projection_for_malformed_canonical_manifest(tmp_path: Path) -> None:
-    from scripts.registry.cli import _composition_runtime_path
+def test_contract_section_source_does_not_fallback_to_projection_for_malformed_manifest(
+    tmp_path: Path,
+) -> None:
+    """A skills.yaml that cannot be parsed must fail closed rather than being silently
+    replaced by a stale projection -- for every contract section, since they now share one
+    resolution."""
+    from scripts.registry.canonical_manifest import contract_section_source
 
     (tmp_path / "skills.yaml").write_text("schema_version: [", encoding="utf-8")
 
-    with pytest.raises(yaml.YAMLError):
-        _composition_runtime_path(tmp_path)
+    for section in ("platform", "composition_runtime", "composition"):
+        with pytest.raises(yaml.YAMLError):
+            contract_section_source(tmp_path, section)
+
+
+def test_contract_sections_share_one_canonical_vs_projection_decision(tmp_path: Path) -> None:
+    """The three sections resolved three different ways before; lock in that they now agree,
+    including the forgiving projection fallback for a non-canonical repository."""
+    from scripts.registry.canonical_manifest import (
+        contract_section_source,
+        legacy_projection_path,
+    )
+    from scripts.registry.schema import clear_registry_cache
+
+    (tmp_path / "skills.yaml").write_text(
+        "schema_version: 1\nskills:\n  solo:\n    path: solo\n", encoding="utf-8"
+    )
+    clear_registry_cache()
+    assert [contract_section_source(tmp_path, s) for s in ("platform", "composition_runtime", "composition")] == [
+        None,
+        None,
+        None,
+    ]
+
+    for section in ("platform", "composition_runtime", "composition"):
+        projection = legacy_projection_path(tmp_path, section)
+        projection.parent.mkdir(parents=True, exist_ok=True)
+        projection.write_text("schema_version: 1\n", encoding="utf-8")
+        assert contract_section_source(tmp_path, section) == projection
+
+    (tmp_path / "skills.yaml").write_text(
+        "schema_version: 1\nmanifest_kind: canonical\ncontracts: {}\nskills: {}\n",
+        encoding="utf-8",
+    )
+    clear_registry_cache()
+    for section in ("platform", "composition_runtime", "composition"):
+        assert contract_section_source(tmp_path, section) == tmp_path / "skills.yaml"
 
 
 def test_missing_skill_type_fails_closed(tmp_path: Path) -> None:

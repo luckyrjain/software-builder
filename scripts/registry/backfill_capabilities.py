@@ -114,7 +114,7 @@ def _capability_path_equal(current: Any, catalog_value: Any) -> bool:
     )
 
 
-def _capabilities_equal(current: Any, catalog_value: dict[str, Any]) -> bool:
+def capabilities_equal(current: Any, catalog_value: dict[str, Any]) -> bool:
     # Never raises on malformed input (unhashable/non-string required items,
     # non-dict optional items) -- treats it as "not equal" so the skill gets
     # regenerated from the catalog instead of crashing the whole --overwrite run.
@@ -214,7 +214,7 @@ def backfill_skills_yaml_text(
 
         stray = _has_stray_capability_keys(entry)
         if overwrite:
-            if _capabilities_equal(entry.get("capabilities"), catalog[skill_id]) and not stray:
+            if capabilities_equal(entry.get("capabilities"), catalog[skill_id]) and not stray:
                 continue
         elif _capabilities_valid(entry) and not stray:
             continue

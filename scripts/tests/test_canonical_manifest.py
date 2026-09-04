@@ -165,3 +165,34 @@ def test_skill_frontmatter_contains_discovery_metadata_only():
         frontmatter = load_skill_frontmatter(ROOT / skill_id / "SKILL.md")
         assert "skill_version" not in frontmatter
         assert "platform_contract" not in frontmatter
+
+
+def test_projections_carry_the_generated_marker_and_stay_loadable():
+    """The three projections are machine-written; marking them says so to a maintainer who
+    opens one, and the loader must still read a marked file (comments are not data)."""
+    from scripts.registry.canonical_manifest import (
+        GENERATED_MARKER,
+        LEGACY_PROJECTION_FILENAMES,
+        legacy_projection_path,
+        load_contract_section,
+    )
+
+    for section in LEGACY_PROJECTION_FILENAMES:
+        text = legacy_projection_path(ROOT, section).read_text(encoding="utf-8")
+        assert text.startswith(GENERATED_MARKER + "\n"), section
+
+    # Reading a marked projection must produce the same document as the canonical section.
+    for section in LEGACY_PROJECTION_FILENAMES:
+        projection = yaml.safe_load(legacy_projection_path(ROOT, section).read_text(encoding="utf-8"))
+        assert projection == load_contract_section(ROOT, section), section
+
+
+def test_render_legacy_projection_is_idempotent():
+    """generate --check compares rendered text against the file on disk, so re-rendering an
+    already-marked projection must not stack a second marker."""
+    from scripts.registry.canonical_manifest import LEGACY_PROJECTION_FILENAMES, render_legacy_projection
+
+    for section in LEGACY_PROJECTION_FILENAMES:
+        first = render_legacy_projection(ROOT, section)
+        assert first == render_legacy_projection(ROOT, section)
+        assert first.count("# GENERATED from skills.yaml contracts") == 1

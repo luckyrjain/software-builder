@@ -1,3 +1,4 @@
+# GENERATED from skills.yaml contracts — do not edit; run make generate
 schema_version: 1
 skill_types:
   pr-review: leaf

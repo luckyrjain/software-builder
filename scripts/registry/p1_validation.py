@@ -5,20 +5,23 @@ from typing import Any
 
 from scripts.registry.artifact_contracts import validate_artifact_contracts
 from scripts.registry.canonical_manifest import load_canonical_manifest
+from scripts.registry.envelope_contract import (
+    EVAL_DIMENSIONS,
+    EXECUTION_FIELDS,
+    HANDOFF_FIELDS,
+    RESULT_FIELDS,
+    STATE_VALUES,
+)
 from scripts.registry.frontmatter import load_skill_frontmatter
+from scripts.registry.host_adapter import CAPABILITIES as HOST_CAPABILITIES
+from scripts.registry.host_adapter import HOSTS
+from scripts.registry.host_adapter import SUPPORT as SUPPORT_VALUES
+from scripts.registry.host_adapter import host_contracts_path
 from scripts.registry.models import Registry
 from scripts.registry.schema import parse_registry
 from scripts.yaml_safety import YAML_SAFETY_ERRORS, load_unique_yaml_file, require_mapping
 
 RUNTIME_DOCS = {"runtime-contract.md", "host-adapter-contract.md", "eval-contract.md"}
-RESULT_FIELDS = {"skill", "version", "status", "confidence", "source_revision", "evidence_status", "artifacts", "blockers", "recommended_next_skill", "artifact_schema_version", "state_semantic"}
-HANDOFF_FIELDS = {"target_skill", "reason", "inputs", "evidence_refs", "assumptions", "unresolved"}
-EXECUTION_FIELDS = {"invocation_id", "parent_skill", "visited_skills", "depth"}
-STATE_VALUES = {"current_state", "proposed_state", "desired_state", "transitional_state"}
-EVAL_DIMENSIONS = {"positive", "negative", "ambiguous", "adversarial", "degraded"}
-HOSTS = {"cursor", "claude", "codex", "chatgpt", "kiro", "generic"}
-HOST_CAPABILITIES = {"discover_files", "read_repo", "write_repo", "git", "scm", "subagents", "task_isolation", "terminal", "browser", "connectors"}
-SUPPORT_VALUES = {"full", "degraded", "unsupported"}
 PERMISSION_FIELDS = {"repository", "external_actions", "unattended", "merge"}
 REPOSITORY_PERMISSIONS = {"read", "write"}
 EXTERNAL_PERMISSIONS = {"none", "read", "write"}
@@ -121,7 +124,7 @@ def validate_p1_contracts(root: Path) -> list[str]:
         errors.extend(_validate_permissions(registry, platform))
         errors.extend(validate_artifact_contracts(root))
 
-        hosts = require_mapping(load_unique_yaml_file(root / "scripts/registry/host_contracts.yaml"), "host contracts")
+        hosts = require_mapping(load_unique_yaml_file(host_contracts_path(root)), "host contracts")
         _require_v1(hosts, "host contracts")
         if _strings(hosts.get("capability_families"), "host capability families") != HOST_CAPABILITIES:
             errors.append("error: P1 host capability families drift")

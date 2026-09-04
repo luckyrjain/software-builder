@@ -8,6 +8,15 @@ from typing import Any
 
 from scripts.registry.canonical_manifest import is_semver, load_canonical_manifest
 from scripts.registry.composition_contracts import load_contracts
+from scripts.registry.envelope_contract import (
+    COMPLETION_STATUSES,
+    CONFIDENCE_VALUES,
+    DEFINITION_OF_DONE_FIELDS,
+    EVIDENCE_STATUSES,
+    RESULT_FIELDS,
+    STATE_VALUES,
+    assert_no_drift,
+)
 from scripts.registry.machine_summary import COMMON_MACHINE_SUMMARY_FIELDS, validate_machine_summary
 from scripts.registry.semantic_document import validate_semantic_artifact_target
 from scripts.yaml_safety import YAML_SAFETY_ERRORS, require_mapping
@@ -15,35 +24,13 @@ from scripts.yaml_safety import YAML_SAFETY_ERRORS, require_mapping
 ROOT = Path(__file__).resolve().parents[2]
 
 _SECTION_FIELDS = {
-    "skill_result": {
-        "skill",
-        "version",
-        "status",
-        "confidence",
-        "source_revision",
-        "evidence_status",
-        "artifacts",
-        "blockers",
-        "recommended_next_skill",
-        "artifact_schema_version",
-        "state_semantic",
-    },
+    "skill_result": RESULT_FIELDS,
     "provenance": {"source_revision", "sources"},
     "freshness": {"observed_at", "source_revision", "source_environment"},
-    "definition_of_done": {
-        "required_artifacts",
-        "required_checks",
-        "completed_checks",
-        "blocked_conditions",
-        "partial_result_behavior",
-    },
+    "definition_of_done": DEFINITION_OF_DONE_FIELDS,
     "authority": {"write_authority", "canonical_owner"},
 }
-_COMPLETION_STATUSES = {"SUCCESS", "PARTIAL", "BLOCKED", "FAILED", "ESCALATED"}
-_CONFIDENCE_VALUES = {"HIGH", "MEDIUM", "LOW", "UNKNOWN"}
-_EVIDENCE_STATUSES = {"OBSERVED", "INFERRED", "UNKNOWN", "CONFLICTED", "NOT_APPLICABLE"}
 _PAYLOAD_TYPES = {"mapping", "list", "string", "boolean", "integer"}
-_STATE_VALUES = {"current_state", "proposed_state", "desired_state", "transitional_state"}
 
 
 def _strings(value: object, label: str) -> tuple[list[str] | None, str | None]:
@@ -106,13 +93,9 @@ def _validate_catalog(
         for section, expected in _SECTION_FIELDS.items():
             entry = required_sections.get(section)
             fields = entry.get("required_fields") if isinstance(entry, dict) else None
-            if (
-                not isinstance(fields, list)
-                or not all(isinstance(field, str) for field in fields)
-                or len(fields) != len(set(fields))
-                or set(fields) != expected
-            ):
-                errors.append(f"error: artifact runtime {section}.required_fields drift")
+            errors.extend(
+                assert_no_drift(fields, expected, f"artifact runtime {section}.required_fields")
+            )
 
     declared = set(external or []) | set(durable or [])
     if declared != artifact_types:
@@ -128,7 +111,7 @@ def _validate_catalog(
     state_semantics = artifact_runtime.get("state_semantics")
     if not isinstance(state_semantics, dict) or set(state_semantics) != set(durable or []):
         errors.append("error: artifact runtime state_semantics must cover every durable artifact exactly once")
-    elif any(not isinstance(value, str) or value not in _STATE_VALUES for value in state_semantics.values()):
+    elif any(not isinstance(value, str) or value not in STATE_VALUES for value in state_semantics.values()):
         errors.append("error: artifact runtime state_semantics contains an invalid value")
 
     allowed_state_semantics = artifact_runtime.get("allowed_state_semantics", {})
@@ -150,7 +133,7 @@ def _validate_catalog(
                 or len(allowed) != len(set(allowed))
             ):
                 errors.append(f"error: artifact runtime allowed_state_semantics.{artifact} must be a non-empty unique list")
-            elif any(value not in _STATE_VALUES for value in allowed):
+            elif any(value not in STATE_VALUES for value in allowed):
                 errors.append(f"error: artifact runtime allowed_state_semantics.{artifact} contains an invalid value")
             elif isinstance(state_semantics, dict) and state_semantics.get(artifact) not in allowed:
                 errors.append(f"error: artifact runtime allowed_state_semantics.{artifact} must include the default state semantic")
@@ -204,6 +187,31 @@ def _validate_catalog(
         if contract.write_authority not in authority_levels:
             errors.append(f"error: {skill_id}: unknown write authority {contract.write_authority!r}")
     return errors
+
+
+def artifact_schema_version(root: Path, artifact_type: str) -> int:
+    """The schema version producers must stamp on `artifact_type`'s durable artifact.
+
+    `contracts.platform.artifact_runtime.artifact_schema_versions` is the one declaration of
+    these versions, and `validate_artifact_result` rejects an envelope that disagrees with
+    it. Producers should read the version through this function rather than literal it, so a
+    bump reaches them instead of silently making everything they emit invalid.
+    """
+    manifest = load_canonical_manifest(root)
+    contracts = require_mapping(manifest.get("contracts"), "canonical manifest.contracts")
+    platform = require_mapping(contracts.get("platform"), "contracts.platform")
+    artifact_runtime = require_mapping(platform.get("artifact_runtime"), "platform.artifact_runtime")
+    versions = require_mapping(
+        artifact_runtime.get("artifact_schema_versions"),
+        "platform.artifact_runtime.artifact_schema_versions",
+    )
+    version = versions.get(artifact_type)
+    if type(version) is not int or version < 1:
+        raise ValueError(
+            f"artifact_schema_versions has no positive integer version for {artifact_type!r} "
+            f"(declared: {sorted(versions)})"
+        )
+    return version
 
 
 def validate_artifact_contracts(root: Path = ROOT) -> list[str]:
@@ -314,12 +322,12 @@ def validate_artifact_result(
                         errors.append(f"error: {artifact_type}: result.version major is incompatible with registered skill version")
             if not isinstance(envelope.get("version"), str) or not is_semver(envelope["version"]):
                 errors.append(f"error: {artifact_type}: result.version must be semantic version")
-            if not isinstance(envelope.get("status"), str) or envelope.get("status") not in _COMPLETION_STATUSES:
+            if not isinstance(envelope.get("status"), str) or envelope.get("status") not in COMPLETION_STATUSES:
                 errors.append(f"error: {artifact_type}: invalid result.status")
-            if not isinstance(envelope.get("confidence"), str) or envelope.get("confidence") not in _CONFIDENCE_VALUES:
+            if not isinstance(envelope.get("confidence"), str) or envelope.get("confidence") not in CONFIDENCE_VALUES:
                 errors.append(f"error: {artifact_type}: invalid result.confidence")
             evidence_status = envelope.get("evidence_status")
-            if not isinstance(evidence_status, str) or evidence_status not in _EVIDENCE_STATUSES:
+            if not isinstance(evidence_status, str) or evidence_status not in EVIDENCE_STATUSES:
                 errors.append(f"error: {artifact_type}: invalid result.evidence_status")
             elif evidence_status in {"UNKNOWN", "CONFLICTED"} and (
                 not isinstance(envelope.get("confidence"), str)

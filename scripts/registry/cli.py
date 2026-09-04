@@ -13,7 +13,11 @@ from scripts.registry.backfill_capabilities import cmd_backfill
 from scripts.registry.agent_skills import validate_agent_skills
 from scripts.registry.artifact_contracts import validate_artifact_result
 from scripts.registry.canonical_manifest import (
+    LEGACY_PROJECTION_FILENAMES,
+    contract_document_path,
+    contract_section_source,
     has_canonical_manifest_shape,
+    legacy_projection_path,
     load_canonical_manifest,
     render_legacy_projection,
     validate_canonical_manifest,
@@ -46,13 +50,16 @@ from scripts.registry.generate_kiro import generate_kiro_steering
 from scripts.registry.generate_makefile_roster import generate_makefile_roster
 from scripts.registry.generic_package import build_generic_package
 from scripts.registry.host_portability import validate_host_portability
-from scripts.registry.host_adapter import validate_host_adapter_identities, validate_host_adapter_interface
+from scripts.registry.host_adapter import (
+    host_contracts_path,
+    validate_host_adapter_identities,
+    validate_host_adapter_interface,
+)
 from scripts.registry.host_registry import HostRegistryParseError, parse_host_registry
 from scripts.registry.load import load_deprecated_skills, load_descriptions, load_registry
-from scripts.registry.manifest import validate_manifest
+from scripts.registry.manifest import validate_manifest, validate_runtime_manifest
 from scripts.registry.manifest_merge import merge_registry_yaml, skills_fragments_dir
 from scripts.registry.p1_validation import validate_p1_contracts
-from scripts.registry.runtime_manifest import validate_runtime_manifest
 from scripts.registry.schema import clear_registry_cache, load_registry_raw
 from scripts.release_contract import validate_release_contract
 
@@ -125,18 +132,13 @@ def _collect_outputs(root: Path) -> dict[Path, str]:
         outputs[root / "generated" / "catalogue" / "compatibility-matrix.md"] = (
             render_compatibility_matrix(root)
         )
-    try:
-        load_canonical_manifest(root)
-    except (OSError, ValueError, yaml.YAMLError):
-        pass
-    else:
-        projection_paths = {
-            "platform": root / "scripts" / "registry" / "platform_contracts.yaml",
-            "composition_runtime": root / "scripts" / "registry" / "composition_runtime.yaml",
-            "composition": root / "scripts" / "registry" / "composition_contracts.yaml",
-        }
-        for section, path in projection_paths.items():
-            outputs[path] = render_legacy_projection(root, section)
+    if has_canonical_manifest_shape(load_registry_raw(root / "skills.yaml")):
+        # Once a repository opts into the canonical shape it owns all three contract
+        # sections, so a malformed manifest must fail the generate rather than quietly
+        # leaving three stale projections on disk. A repository that never opted in has no
+        # canonical source to project from, which is not an error.
+        for section in LEGACY_PROJECTION_FILENAMES:
+            outputs[legacy_projection_path(root, section)] = render_legacy_projection(root, section)
     if layers.composition_runtime is not None and layers.composition_contracts is not None:
         outputs[root / "generated" / "catalogue" / "composition-runtime.mmd"] = render_dependency_graph(
             registry,
@@ -212,42 +214,13 @@ def _capability_families_path(root: Path) -> Path:
     return root / "scripts" / "registry" / "capability_families.yaml"
 
 
-def _composition_runtime_path(root: Path) -> Path:
-    manifest_path = root / "skills.yaml"
-    try:
-        # load_registry_raw, not load_unique_yaml_file directly: this is the same
-        # skills.yaml read schema.py's cache already exists for -- reading it
-        # uncached here would silently reintroduce the exact per-invocation
-        # re-read-and-reparse cost that cache was built to eliminate, just for
-        # shape detection instead of registry content (full canonical-shape
-        # detection is unaffected: load_registry_raw only adds/merges the
-        # `skills` key, never touches `manifest_kind`/`contracts`). Unlike
-        # load_unique_yaml_file, load_registry_raw can also raise ValueError
-        # (a malformed `profiles:`/`extends:` elsewhere in skills.yaml) -- left
-        # uncaught here deliberately, since every caller of this function
-        # reaches _run_command's catch-all, which already handles ValueError
-        # the same way it handles the manifest errors validate_registry raises
-        # a few lines later regardless.
-        raw = load_registry_raw(manifest_path)
-    except FileNotFoundError:
-        return root / "scripts" / "registry" / "composition_runtime.yaml"
-    except (OSError, yaml.YAMLError):
-        raise
-    if has_canonical_manifest_shape(raw):
-        # Once a repository opts into the canonical manifest shape, a malformed
-        # canonical contract must fail closed rather than being silently
-        # replaced by a stale compatibility projection.
-        return root / "skills.yaml"
-    return root / "scripts" / "registry" / "composition_runtime.yaml"
-
-
 def _release_contract_path(root: Path) -> Path:
     return root / "scripts" / "release_contract.yaml"
 
 
 def _p1_layer_paths(root: Path) -> list[Path]:
     return [
-        root / "scripts" / "registry" / "host_contracts.yaml",
+        host_contracts_path(root),
         root / "scripts" / "registry" / "eval_contracts.yaml",
         root / "docs" / "skill-framework" / "shared" / "runtime-contract.md",
         root / "docs" / "skill-framework" / "shared" / "host-adapter-contract.md",
@@ -279,8 +252,8 @@ class OptionalLayers:
     "detect", not "resolve", specifically to avoid implying it shares that cache's
     "computed once, invalidated via clear_registry_cache()" contract; it doesn't, and
     doesn't need to for its own fields. Its one indirect dependency on the cache is
-    `_composition_runtime_path`, which reads skills.yaml's shape via the cached
-    `load_registry_raw` rather than a raw read of its own.
+    `canonical_manifest.contract_section_source`, which reads skills.yaml's shape via the
+    cached `load_registry_raw` rather than a raw read of its own.
     """
 
     host_contracts: Path | None
@@ -288,8 +261,24 @@ class OptionalLayers:
     capability_families: Path | None
     composition_runtime: Path | None
     release_contract: Path | None
+    # Where the `composition` contract section is read from -- skills.yaml under the
+    # canonical shape, otherwise the standalone projection. Named for the section, not for
+    # skills.yaml's mere existence, which is what the field used to detect.
     composition_contracts: Path | None
     p1_layer_active: bool
+
+
+# The layer -> label pairs `cmd_validate` reports on, in the order it names them. Paired with
+# `OptionalLayers`' own fields, so a layer cannot be added without deciding how a run that
+# skipped it is reported.
+_LAYER_LABELS: tuple[tuple[str, str], ...] = (
+    ("host_contracts", "host adapter contract"),
+    ("capability_catalog", "capability catalogue"),
+    ("capability_families", "capability families"),
+    ("composition_runtime", "composition runtime"),
+    ("composition_contracts", "composition contracts"),
+    ("release_contract", "release contract"),
+)
 
 
 def detect_optional_layers(root: Path) -> OptionalLayers:
@@ -297,18 +286,35 @@ def detect_optional_layers(root: Path) -> OptionalLayers:
         return path if path.is_file() else None
 
     return OptionalLayers(
-        host_contracts=active(root / "scripts" / "registry" / "host_contracts.yaml"),
+        host_contracts=active(host_contracts_path(root)),
         capability_catalog=active(_capability_catalog_path(root)),
         capability_families=active(_capability_families_path(root)),
-        composition_runtime=active(_composition_runtime_path(root)),
+        composition_runtime=contract_section_source(root, "composition_runtime"),
         release_contract=active(_release_contract_path(root)),
-        composition_contracts=active(root / "skills.yaml"),
+        composition_contracts=active(contract_document_path(root, "composition")),
         p1_layer_active=any(path.is_file() for path in _p1_layer_paths(root)),
     )
 
 
-def _validate_for_generate(root: Path) -> list[str]:
-    layers = detect_optional_layers(root)
+def optional_layer_paths(root: Path) -> list[Path]:
+    """Every file an optional validation layer keys off of, for this root.
+
+    `detect_optional_layers` gates each layer behind `Path.is_file()`, which is what lets
+    the deliberately minimal registry fixtures skip layers they do not carry. That same
+    leniency means a deleted file silently disables its layer in the real repository, so
+    `scripts/check_platform_files.py` hard-asserts these paths exist there. Deriving that
+    inventory from this list -- rather than restating it -- is what keeps the two in step.
+    """
+    return [
+        _capability_catalog_path(root),
+        _capability_families_path(root),
+        _release_contract_path(root),
+        *_p1_layer_paths(root),
+    ]
+
+
+def _validate_for_generate(root: Path, layers: OptionalLayers | None = None) -> list[str]:
+    layers = layers if layers is not None else detect_optional_layers(root)
     errors = validate_registry(root)
     if layers.host_contracts is not None:
         errors.extend(validate_host_adapter_interface(root))
@@ -332,27 +338,19 @@ def _validate_for_generate(root: Path) -> list[str]:
             validate_composition_runtime(
                 load_registry(root),
                 runtime_path=layers.composition_runtime,
-                contracts_path=root / "skills.yaml",
+                contracts_path=layers.composition_contracts,
             )
         )
     return errors
 
 
-def _validate_all(root: Path) -> list[str]:
+def _validate_all(root: Path, layers: OptionalLayers | None = None) -> list[str]:
     # Strict superset of _validate_for_generate: same optional-layer gating,
     # plus integrated runtime and host-portability validation. Portability is
     # intentionally kept out of the mutating generate path because it checks
     # generated Cursor/Kiro surfaces that `generate` may need to repair.
-    #
-    # `layers` here and _validate_for_generate's own internal `layers` local are TWO
-    # independent detect_optional_layers(root) calls, not one value threaded through --
-    # same name, same call expression, deliberately not deduplicated (an earlier attempt
-    # to pass this one down as a parameter broke a test that monkeypatches
-    # _validate_for_generate with its original single-argument signature). Both compute
-    # the same result from an unchanged filesystem, so this is redundant but not a
-    # correctness risk -- don't read the shared name as evidence they're the same object.
-    layers = detect_optional_layers(root)
-    errors = _validate_for_generate(root)
+    layers = layers if layers is not None else detect_optional_layers(root)
+    errors = _validate_for_generate(root, layers)
     if layers.p1_layer_active:
         errors.extend(validate_runtime_manifest(root))
     errors.extend(validate_host_portability(root))
@@ -363,15 +361,27 @@ def _validate_all(root: Path) -> list[str]:
 
 def cmd_validate(root: Path) -> int:
     clear_registry_cache()
-    errors = _validate_all(root)
+    layers = detect_optional_layers(root)
+    errors = _validate_all(root, layers)
     if errors:
         for error in errors:
             print(error, file=sys.stderr)
         return 1
-    print(
-        "ok: skills registry, capability catalogue, integrated runtime manifest, "
-        "P1/composition contracts and host portability validate"
-    )
+    ran = [label for field, label in _LAYER_LABELS if getattr(layers, field) is not None]
+    skipped = [label for field, label in _LAYER_LABELS if getattr(layers, field) is None]
+    if layers.p1_layer_active:
+        ran.append("P1 contracts")
+        ran.append("integrated runtime manifest")
+    else:
+        skipped.append("P1 contracts")
+        skipped.append("integrated runtime manifest")
+    # Name only what actually ran: a success line that lists a layer this root skipped is
+    # indistinguishable from one that checked it, which is exactly what makes the
+    # `is_file()` gates dangerous.
+    message = "ok: skills registry, host portability, " + ", ".join(ran) + " validate"
+    if skipped:
+        message += " (skipped, not present: " + ", ".join(skipped) + ")"
+    print(message)
     return 0
 
 
@@ -452,7 +462,9 @@ def cmd_check_handoff(root: Path, target_skill: str, visited_skills: list[str], 
         target_skill,
         visited_skills=visited_skills,
         depth=depth,
-        runtime_path=_composition_runtime_path(root),
+        # load_composition_runtime resolves canonical-vs-projection itself for a
+        # skills.yaml path, so this stays the same decision every other reader takes.
+        runtime_path=root / "skills.yaml",
     )
     if allowed:
         print(f"ok: handoff to {target_skill!r} allowed at depth {depth}")

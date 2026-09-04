@@ -10,34 +10,17 @@ from scripts.registry.canonical_manifest import (
 )
 from scripts.registry.composition_contracts import load_contracts
 from scripts.registry.generate_docs import escape_table_cell
-from scripts.registry.host_adapter import HOSTS, capability_support, validate_host_adapter_interface
+from scripts.registry.host_adapter import (
+    HOST_CAPABILITY_FAMILIES,
+    HOSTS,
+    capability_support,
+    host_contracts_path,
+    validate_host_adapter_interface,
+)
 from scripts.registry.load import load_registry
 from scripts.registry.schema import load_registry_raw
 from scripts.release_info import read_distribution_version
 from scripts.yaml_safety import load_unique_yaml_file, require_mapping
-
-# `host.*` capability ids (from capability_catalog.yaml's global `required`
-# lists) mapped to the host_contracts.yaml capability family/families whose
-# per-host support level gates that requirement. capability_families.yaml
-# deliberately exempts `host.*` ids from its own (differently-scoped)
-# provider-resolution mapping -- see its module docstring -- so this is a
-# separate, purpose-built join for the compatibility matrix. Only ids that
-# actually appear in some skill's global `required` list need an entry: those
-# are exactly what's already surfaced in the "Required capabilities" column,
-# and none of the catalog's `any_of` alternative paths reference `host.*`
-# ids today. A `host.*` id that shows up in `required` without an entry here
-# fails the build (see `_required_host_families`) instead of silently
-# rendering the old blanket per-host profile.
-HOST_CAPABILITY_FAMILIES: dict[str, tuple[str, ...]] = {
-    "host.repository.read": ("read_repo",),
-    "host.repository.read_write": ("read_repo", "write_repo"),
-    "host.filesystem.read": ("read_repo",),
-    "host.report.write": ("write_repo",),
-    "host.role.isolation": ("task_isolation",),
-    "host.ci.status": ("scm",),
-    "host.pull_request.write": ("scm",),
-    "host.issue_tracker.read": ("connectors",),
-}
 
 _SUPPORT_RANK = {"full": 0, "degraded": 1, "unsupported": 2}
 
@@ -53,7 +36,7 @@ Distribution version: **{version}**
 
 
 def _host_profiles(root: Path, *, canonical: bool) -> tuple[dict[str, str], dict[str, str], str]:
-    path = root / "scripts/registry/host_contracts.yaml"
+    path = host_contracts_path(root)
     if not path.is_file():
         if canonical:
             raise ValueError("host contracts required for canonical compatibility output")
@@ -119,7 +102,7 @@ def _required_host_families(required: list[str]) -> set[str]:
         if mapped is None:
             raise ValueError(
                 f"host capability {capability!r} has no entry in "
-                "HOST_CAPABILITY_FAMILIES (scripts/registry/generate_compatibility.py); "
+                "HOST_CAPABILITY_FAMILIES (scripts/registry/host_adapter.py); "
                 "add one so the compatibility matrix can gate it per host",
             )
         families.update(mapped)

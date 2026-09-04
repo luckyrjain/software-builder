@@ -18,15 +18,35 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-REQUIRED_PLATFORM_FILES: tuple[str, ...] = (
-    "scripts/registry/host_contracts.yaml",
-    "scripts/registry/capability_catalog.yaml",
-    "scripts/registry/capability_families.yaml",
-    "scripts/registry/eval_contracts.yaml",
-    "docs/skill-framework/shared/runtime-contract.md",
-    "docs/skill-framework/shared/host-adapter-contract.md",
-    "docs/skill-framework/shared/eval-contract.md",
-    "scripts/release_contract.yaml",
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from scripts.registry.canonical_manifest import LEGACY_PROJECTION_FILENAMES, legacy_projection_path
+from scripts.registry.cli import optional_layer_paths
+
+# A root-agnostic stand-in, so the inventory below is a list of repository-relative paths
+# (what this check reports and what its callers assert on) while still being *derived* from
+# the gates it protects rather than restated beside them.
+_TEMPLATE_ROOT = Path("/repository-root")
+
+
+def _relative(path: Path) -> str:
+    return path.relative_to(_TEMPLATE_ROOT).as_posix()
+
+
+# Every file whose absence silently disables something: the optional-layer gates in
+# scripts/registry/cli.py, plus the three legacy contract projections `make generate`
+# maintains. Derived from both sources so a new layer or projection joins this inventory
+# automatically instead of waiting for someone to remember.
+REQUIRED_PLATFORM_FILES: tuple[str, ...] = tuple(
+    sorted(
+        {_relative(path) for path in optional_layer_paths(_TEMPLATE_ROOT)}
+        | {
+            _relative(legacy_projection_path(_TEMPLATE_ROOT, section))
+            for section in LEGACY_PROJECTION_FILENAMES
+        }
+    )
 )
 
 

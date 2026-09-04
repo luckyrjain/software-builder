@@ -1,3 +1,4 @@
+# GENERATED from skills.yaml contracts — do not edit; run make generate
 artifact_types:
 - mr_context
 - assessment_context

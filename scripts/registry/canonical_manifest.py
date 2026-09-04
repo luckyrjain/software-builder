@@ -7,21 +7,41 @@ from typing import Any
 
 import yaml
 
+from scripts.registry.envelope_contract import SKILL_TYPES
 from scripts.registry.frontmatter import load_skill_frontmatter
 from scripts.registry.host_adapter import HOSTS
-from scripts.registry.schema import load_registry_raw
-from scripts.yaml_safety import require_mapping
+from scripts.registry.schema import load_registry_raw, parse_registry
+from scripts.yaml_safety import load_unique_yaml_file, require_mapping
 
 ROOT = Path(__file__).resolve().parents[2]
 CANONICAL_PATH = ROOT / "skills.yaml"
 REQUIRED_CONTRACTS = {"platform", "composition_runtime", "composition"}
 MANIFEST_KIND = "canonical"
-ALLOWED_TYPES = {"leaf", "router", "orchestrator", "trigger"}
+# The standalone file each contract section is projected to for repositories that predate
+# the canonical shape. One table drives both the writer (`render_legacy_projection`) and the
+# reader (`load_contract_section`), so the two sides cannot name different files.
+LEGACY_PROJECTION_FILENAMES = {
+    "platform": "platform_contracts.yaml",
+    "composition_runtime": "composition_runtime.yaml",
+    "composition": "composition_contracts.yaml",
+}
+# Marks the three projections as machine-written, the same way the generated Cursor/Kiro
+# adapters are marked -- a maintainer opening a 1,300-line projection must be able to see
+# that `make generate` will overwrite it.
+GENERATED_MARKER = "# GENERATED from skills.yaml contracts — do not edit; run make generate"
 
 
 def has_canonical_manifest_shape(raw: object) -> bool:
     """Return whether a skills.yaml claims the reserved canonical shape."""
     return isinstance(raw, dict) and ("manifest_kind" in raw or "contracts" in raw)
+
+
+def _raw_manifest(root: Path) -> object:
+    """skills.yaml's raw mapping, or None when this root has no skills.yaml at all."""
+    try:
+        return load_registry_raw(root / "skills.yaml")
+    except FileNotFoundError:
+        return None
 
 
 def is_semver(value: str) -> bool:
@@ -119,8 +139,6 @@ def validate_canonical_manifest(root: Path = ROOT) -> list[str]:
             "contracts.platform.skill_permissions",
         )
         composition_skills = _mapping(composition.get("skills"), "contracts.composition.skills")
-        from scripts.registry.schema import parse_registry
-
         registry = parse_registry(root / "skills.yaml")
 
         if set(skills) != set(platform_types):
@@ -156,7 +174,7 @@ def validate_canonical_manifest(root: Path = ROOT) -> list[str]:
             if not isinstance(version, str) or not is_semver(version):
                 errors.append(f"error: {skill_id}: version must be semantic version")
             skill_type = skill.get("type")
-            if skill_type not in ALLOWED_TYPES:
+            if skill_type not in SKILL_TYPES:
                 errors.append(f"error: {skill_id}: invalid type {skill_type!r}")
             for field in ("category", "invocation"):
                 value = skill.get(field)
@@ -218,10 +236,58 @@ def validate_canonical_manifest(root: Path = ROOT) -> list[str]:
     return errors
 
 
+def legacy_projection_path(root: Path, section: str) -> Path:
+    """Where `section` is projected to for repositories that have not adopted the canonical shape."""
+    if section not in LEGACY_PROJECTION_FILENAMES:
+        raise ValueError(f"unknown legacy projection: {section}")
+    return root / "scripts" / "registry" / LEGACY_PROJECTION_FILENAMES[section]
+
+
+def contract_section_source(root: Path, section: str) -> Path | None:
+    """The file `root` reads `section` from, or None when neither source exists.
+
+    One rule for all three contract sections, mirroring `render_legacy_projection`'s single
+    writer: a repository that has opted into the canonical shape owns every section in
+    skills.yaml, and one that has not reads the standalone projection. Returning None (rather
+    than a path that does not exist) lets callers use this directly as the layer-active test.
+    """
+    if has_canonical_manifest_shape(_raw_manifest(root)):
+        return root / "skills.yaml"
+    projection = legacy_projection_path(root, section)
+    return projection if projection.is_file() else None
+
+
+def contract_document_path(root: Path, section: str) -> Path:
+    """The file `load_contract_section` will actually read for `section`.
+
+    Differs from `contract_section_source` only in the last case: with neither a canonical
+    manifest nor a projection, skills.yaml itself is read as the contract document. Callers
+    asking "is there a dedicated source for this section" want `contract_section_source`;
+    callers asking "which file will be read" want this.
+    """
+    return contract_section_source(root, section) or root / "skills.yaml"
+
+
+def load_contract_section(root: Path, section: str) -> dict[str, Any]:
+    """Read one contract section through `contract_section_source`'s decision.
+
+    The forgiving fallback is deliberate and shared by all three sections: when a repository
+    is neither canonical nor carrying a projection, skills.yaml itself is read as the contract
+    document, which is what keeps the deliberately minimal registry fixtures working.
+    """
+    if has_canonical_manifest_shape(_raw_manifest(root)):
+        manifest = load_canonical_manifest(root)
+        contracts = _mapping(manifest.get("contracts"), "canonical manifest.contracts")
+        return _mapping(contracts.get(section), f"contracts.{section}")
+    source = contract_document_path(root, section)
+    return _mapping(load_unique_yaml_file(source), f"{source}: {section} contracts")
+
+
 def render_legacy_projection(root: Path, section: str) -> str:
     if section not in REQUIRED_CONTRACTS:
         raise ValueError(f"unknown legacy projection: {section}")
     manifest = load_canonical_manifest(root)
     contracts = _mapping(manifest.get("contracts"), "canonical manifest.contracts")
     value = _mapping(contracts.get(section), f"contracts.{section}")
-    return yaml.safe_dump(value, sort_keys=False, default_flow_style=False, allow_unicode=True)
+    body = yaml.safe_dump(value, sort_keys=False, default_flow_style=False, allow_unicode=True)
+    return f"{GENERATED_MARKER}\n{body}"
