@@ -189,3 +189,33 @@ def test_rewrite_framework_links_preserves_parens_in_rewritten_target(tmp_path: 
     result = rewrite_framework_links(content, source_file, package_root)
 
     assert result == "[x](../docs/skill-framework/shared/other.md)"
+
+
+def test_manifest_without_a_version_key_reads_as_v1(tmp_path: Path) -> None:
+    """The already-installed population predates the field; absent means the shape v1 tooling
+    wrote, not an error."""
+    from scripts.reference_utils import MANIFEST_NAME, read_manifest_file
+
+    path = tmp_path / MANIFEST_NAME
+    path.write_text('{"skill": "pr-review", "files": {}}', encoding="utf-8")
+    assert read_manifest_file(path)["skill"] == "pr-review"
+
+
+def test_manifest_from_a_newer_major_is_rejected_by_name(tmp_path: Path) -> None:
+    from scripts.reference_utils import MANIFEST_NAME, ManifestError, read_manifest_file
+
+    path = tmp_path / MANIFEST_NAME
+    path.write_text('{"manifest_version": 2, "skill": "pr-review"}', encoding="utf-8")
+    with pytest.raises(ManifestError) as excinfo:
+        read_manifest_file(path)
+    assert "v2" in str(excinfo.value)
+    assert "v1" in str(excinfo.value)
+
+
+def test_manifest_with_a_non_integer_version_is_rejected(tmp_path: Path) -> None:
+    from scripts.reference_utils import MANIFEST_NAME, ManifestError, read_manifest_file
+
+    path = tmp_path / MANIFEST_NAME
+    path.write_text('{"manifest_version": "1", "skill": "pr-review"}', encoding="utf-8")
+    with pytest.raises(ManifestError, match="manifest_version must be an integer"):
+        read_manifest_file(path)

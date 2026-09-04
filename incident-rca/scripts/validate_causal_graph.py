@@ -20,6 +20,36 @@ try:
 except ImportError:  # pragma: no cover
     yaml = None
 
+_SCRIPT_DIR = Path(__file__).resolve().parent
+if str(_SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPT_DIR))
+# A source checkout resolves this repository's own scripts/yaml_safety.py; an installed package
+# -- proved by its manifest -- may only ever load the copy vendored beside this script, never a
+# path in the shared skills root that another tool could have written.
+if not (_SCRIPT_DIR.parent / ".software-builder-manifest.json").is_file():
+    _REPO_ROOT = _SCRIPT_DIR.parents[1]
+    if (_REPO_ROOT / "skills.yaml").is_file() and str(_REPO_ROOT) not in sys.path:
+        sys.path.append(str(_REPO_ROOT))
+
+try:
+    # This script parses YAML written by the target workspace rather than by this repository, so
+    # it wants the shared loader's duplicate-key rejection and size/nesting caps: a duplicate key
+    # in a workspace file silently last-key-wins under plain safe_load.
+    from yaml_safety import load_unique_yaml_file
+except ImportError:
+    try:
+        from scripts.yaml_safety import load_unique_yaml_file
+    except ImportError:  # pragma: no cover - bare environment; falls back to plain safe_load
+        load_unique_yaml_file = None  # type: ignore[assignment]
+
+
+def _parse_yaml_file(path: Path) -> Any:
+    """Parse `path`, preferring the hardened loader when it is available."""
+    if load_unique_yaml_file is not None:
+        return load_unique_yaml_file(path)
+    return yaml.safe_load(path.read_text(encoding="utf-8"))
+
+
 NODE_KINDS = ("event", "trigger", "root_cause", "contributing", "systemic")
 BAND_ORDER = {"UNKNOWN": 0, "LOW": 1, "MEDIUM": 2, "HIGH": 3}
 EVIDENCE_LIST_FIELDS = (
@@ -361,7 +391,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     graph_path, evidence_path = Path(args[0]), Path(args[1])
     try:
-        graph = yaml.safe_load(graph_path.read_text(encoding="utf-8"))
+        graph = _parse_yaml_file(graph_path)
     except (OSError, yaml.YAMLError) as exc:
         print(f"{graph_path}: {exc}", file=sys.stderr)
         return 1

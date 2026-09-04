@@ -15,7 +15,11 @@ import re
 import sys
 from pathlib import Path
 
-import yaml
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from scripts.yaml_safety import load_unique_yaml_file  # noqa: E402
 
 _SHA_RE = re.compile(r"^[0-9a-fA-F]{40}$")
 _ACTION_REF_RE = re.compile(r"^([^@]+)@([^\s@]+)$")
@@ -23,7 +27,7 @@ _ACTION_REF_RE = re.compile(r"^([^@]+)@([^\s@]+)$")
 
 def find_unpinned_actions(workflow_path: Path) -> list[str]:
     """Return one error string per `uses:` reference not pinned to a commit SHA."""
-    data = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
+    data = load_unique_yaml_file(workflow_path)
     if not isinstance(data, dict):
         return []
 

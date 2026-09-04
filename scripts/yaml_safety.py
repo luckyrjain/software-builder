@@ -103,9 +103,31 @@ def load_unique_yaml(text: str) -> Any:
         raise yaml.YAMLError("YAML nesting exceeds safe decoder limits") from exc
 
 
+def _named_yaml_error(exc: yaml.YAMLError, path: Path) -> yaml.YAMLError:
+    """Re-word a parse error so it names the file it came from.
+
+    PyYAML reports positions against the *string* it was handed
+    (``in "<unicode string>", line 4``), so every caller that funnels through
+    load_unique_yaml_file() would otherwise hand a maintainer a line number
+    into an unnamed file. The original exception type is preserved where its
+    constructor accepts a single message argument -- MarkedYAMLError renders a
+    lone ``context`` verbatim -- so callers matching on DuplicateKeyError (or
+    on YAML_SAFETY_ERRORS) still catch what they caught before.
+    """
+    message = f"{path}: {exc}"
+    try:
+        return type(exc)(message)
+    except Exception:  # pragma: no cover - defensive: an exotic YAMLError subclass
+        return yaml.YAMLError(message)
+
+
 def load_unique_yaml_file(path: Path) -> Any:
-    """Read and parse a YAML file via load_unique_yaml."""
-    return load_unique_yaml(path.read_text(encoding="utf-8"))
+    """Read and parse a YAML file via load_unique_yaml, naming `path` in any parse error."""
+    text = path.read_text(encoding="utf-8")
+    try:
+        return load_unique_yaml(text)
+    except yaml.YAMLError as exc:
+        raise _named_yaml_error(exc, path) from exc
 
 
 def require_mapping(value: Any, label: str) -> dict[str, Any]:

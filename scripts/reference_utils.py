@@ -23,17 +23,39 @@ FRAMEWORK_MARKER = "docs/skill-framework/"
 
 MANIFEST_NAME = ".software-builder-manifest.json"
 
+# The install manifest outlives the tooling that wrote it: it persists on user machines across
+# upgrades and rollbacks (docs/RELEASE.md's rollback is "check out the previous tag and
+# reinstall"), so older tooling routinely reads a manifest a newer version wrote. Without a
+# version, a reshaped manifest is indistinguishable from a corrupt one -- both surface as a
+# duck-typing failure like "manifest missing files map". Bump the major only for a change that
+# older readers cannot handle; an absent key means 1, the shape written before this field existed.
+MANIFEST_VERSION = 1
+
 
 class ManifestError(ValueError):
     """Raised when a MANIFEST_NAME file is missing, unreadable, or malformed."""
+
+
+def manifest_version_errors(manifest: dict[str, Any]) -> list[str]:
+    """Errors when a manifest's schema major is one this checkout cannot read."""
+    raw = manifest.get("manifest_version", MANIFEST_VERSION)
+    if isinstance(raw, bool) or not isinstance(raw, int):
+        return [f"manifest_version must be an integer, got {raw!r}"]
+    if raw != MANIFEST_VERSION:
+        return [
+            f"package written by manifest v{raw} tooling; this checkout reads "
+            f"v{MANIFEST_VERSION} -- reinstall from matching tooling or upgrade this checkout"
+        ]
+    return []
 
 
 def read_manifest_file(path: Path) -> dict[str, Any]:
     """Read and parse a MANIFEST_NAME file into its JSON object.
 
     Raises ManifestError with a specific, human-readable reason on any
-    failure (missing file, invalid JSON, JSON root not an object) -- callers
-    decide how to surface it.
+    failure (missing file, invalid JSON, JSON root not an object, or a
+    manifest_version this checkout does not understand) -- callers decide how
+    to surface it.
     """
     if not path.is_file():
         raise ManifestError(f"missing manifest: {path}")
@@ -52,6 +74,9 @@ def read_manifest_file(path: Path) -> dict[str, Any]:
         raise ManifestError(f"invalid manifest JSON: {exc}") from exc
     if not isinstance(data, dict):
         raise ManifestError("manifest is not a JSON object")
+    version_errors = manifest_version_errors(data)
+    if version_errors:
+        raise ManifestError(version_errors[0])
     return data
 
 

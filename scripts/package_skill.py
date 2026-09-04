@@ -18,6 +18,7 @@ from test_creator_catalog import TEST_CREATOR_SKILL_SET
 
 from reference_utils import (
     MANIFEST_NAME,
+    MANIFEST_VERSION,
     copytree_ignore,
     extract_markdown_links,
     framework_relative_path,
@@ -43,11 +44,50 @@ def collect_markdown_files(root: Path) -> list[Path]:
     return sorted(path for path in root.rglob("*.md") if path.is_file())
 
 
+# Modules under docs/skill-framework/shared/ that a skill's own scripts may execute. A skill whose
+# scripts name one of these needs the framework tree vendored regardless of what its markdown links
+# say -- see skill_loads_shared_runtime().
+SHARED_RUNTIME_DIR = "docs/skill-framework/shared"
+SHARED_RUNTIME_LOADER = "shared_runtime_loader.py"
+_SHARED_RUNTIME_MODULES = ("shared_runtime_loader", "review_contract_runtime")
+
+# Skills whose scripts parse YAML written by the target workspace rather than by this repository.
+# They get scripts/yaml_safety.py vendored so untrusted YAML goes through the same duplicate-key
+# rejection and size/nesting caps as this repository's own registry files.
+YAML_SAFETY_SKILL_SET = frozenset(
+    {
+        "domain-comprehension",
+        "incident-rca",
+        "k8s-overprovisioning-datadog",
+        "migration-program-manager",
+    }
+)
+
+
 def skill_references_framework(markdown_files: list[Path]) -> bool:
     for md_file in markdown_files:
         for link in extract_markdown_links(md_file.read_text(encoding="utf-8")):
             if framework_relative_path(link) is not None:
                 return True
+    return False
+
+
+def skill_loads_shared_runtime(package_root: Path) -> bool:
+    """Whether the skill's own scripts execute a module from the shared framework tree.
+
+    skill_references_framework() answers whether the *documentation* links to the framework;
+    this answers whether the *code* loads it, which is the fact that decides whether an installed
+    package is self-contained. Inferring the second from the first is how trimming a SKILL.md link
+    could silently stop vendoring a runtime the scripts still execute -- at which point the
+    loader's containment check is all that stands between the package and a sibling path.
+    """
+    scripts_dir = package_root / "scripts"
+    if not scripts_dir.is_dir():
+        return False
+    for path in sorted(scripts_dir.rglob("*.py")):
+        text = path.read_text(encoding="utf-8", errors="replace")
+        if any(module in text for module in _SHARED_RUNTIME_MODULES):
+            return True
     return False
 
 
@@ -170,6 +210,7 @@ def write_manifest(
 
     distribution_version, source_sha = _release_provenance(repo_root)
     manifest = {
+        "manifest_version": MANIFEST_VERSION,
         "skill": skill,
         "distribution_version": distribution_version,
         "source_repo": repo_root.name,
@@ -183,11 +224,11 @@ def write_manifest(
     manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
-def _shared_script(repo_root: Path, filename: str, description: str) -> Path:
+def _shared_script(repo_root: Path, filename: str, description: str, *, subdir: str = "scripts") -> Path:
     """Find a shared runtime script in the selected source repository."""
 
     selected_root = repo_root.resolve(strict=True)
-    candidate = selected_root / "scripts" / filename
+    candidate = selected_root / subdir / filename
     if not candidate.is_file():
         raise FileNotFoundError(f"{description} missing: {candidate}")
     try:
@@ -246,10 +287,31 @@ def package_skill(
         shutil.copy2(guard_src, guard_dest)
         shutil.copy2(helper_src, dest / "scripts" / "git_paths.py")
 
+    if skill in YAML_SAFETY_SKILL_SET:
+        yaml_safety_src = _shared_script(repo_root, "yaml_safety.py", "shared YAML safety loader")
+        yaml_safety_dest = dest / "scripts" / "yaml_safety.py"
+        yaml_safety_dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(yaml_safety_src, yaml_safety_dest)
+
     seed_files = collect_markdown_files(dest)
+    loads_shared_runtime = skill_loads_shared_runtime(dest)
     framework_files: list[str] = []
-    if skill_references_framework(seed_files):
+    if loads_shared_runtime or skill_references_framework(seed_files):
         framework_files = vendor_framework_tree(repo_root, dest)
+
+    if loads_shared_runtime:
+        # Vendored beside the skill's own scripts, so locating the loader itself never has to
+        # search outside the package -- the loader then owns the containment policy for every
+        # other module it loads out of the vendored framework tree.
+        loader_src = _shared_script(
+            repo_root,
+            SHARED_RUNTIME_LOADER,
+            "shared runtime loader",
+            subdir=SHARED_RUNTIME_DIR,
+        )
+        loader_dest = dest / "scripts" / SHARED_RUNTIME_LOADER
+        loader_dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(loader_src, loader_dest)
 
     rewrite_package_links(dest)
     write_manifest(

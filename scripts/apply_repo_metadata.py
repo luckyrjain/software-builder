@@ -9,16 +9,20 @@ import subprocess
 import sys
 from pathlib import Path
 
-import yaml
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from scripts.yaml_safety import load_unique_yaml_file  # noqa: E402
 
 
 def _repo_root() -> Path:
-    return Path(__file__).resolve().parents[1]
+    return ROOT
 
 
 def _load_metadata(root: Path) -> tuple[str, list[str]]:
     path = root / ".github/repo-metadata.yaml"
-    raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+    raw = load_unique_yaml_file(path)
     if not isinstance(raw, dict):
         raise ValueError(f"{path}: root must be a mapping")
     description = str(raw.get("description", "")).strip().replace("\n", " ")

@@ -418,3 +418,39 @@ def test_release_provenance_fails_closed_with_neither_git_nor_manifest(tmp_path:
     (repo / "SKILL.md").write_text("# demo\n", encoding="utf-8")
     with pytest.raises(ValueError, match="missing distribution VERSION file"):
         _release_provenance(repo)
+
+
+def test_workspace_yaml_skills_ship_the_hardened_loader(tmp_path: Path) -> None:
+    """These skills parse YAML written by the target workspace, so the duplicate-key rejection
+    and size/nesting caps have to travel with them rather than being a source-checkout luxury."""
+    from package_skill import YAML_SAFETY_SKILL_SET
+
+    dest = tmp_path / "incident-rca"
+    package_skill(skill="incident-rca", repo_root=ROOT, dest=dest, host="test")
+
+    assert "incident-rca" in YAML_SAFETY_SKILL_SET
+    vendored = dest / "scripts" / "yaml_safety.py"
+    assert vendored.is_file()
+    assert vendored.read_text(encoding="utf-8") == (ROOT / "scripts/yaml_safety.py").read_text(
+        encoding="utf-8"
+    )
+
+    manifest = json.loads((dest / ".software-builder-manifest.json").read_text(encoding="utf-8"))
+    assert "scripts/yaml_safety.py" in manifest["files"]
+
+
+def test_packaged_workspace_validator_rejects_a_duplicate_key(tmp_path: Path) -> None:
+    dest = tmp_path / "k8s-overprovisioning-datadog"
+    package_skill(skill="k8s-overprovisioning-datadog", repo_root=ROOT, dest=dest, host="test")
+
+    spec = importlib.util.spec_from_file_location(
+        "installed_k8s_graph", dest / "scripts/validate_decision_graph.py"
+    )
+    assert spec and spec.loader
+    validator = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(validator)
+    graph = tmp_path / "graph.yaml"
+    graph.write_text("schema_version: 1\nschema_version: 2\n", encoding="utf-8")
+
+    with pytest.raises(Exception, match="duplicate YAML mapping key"):
+        validator._load_graph(graph)

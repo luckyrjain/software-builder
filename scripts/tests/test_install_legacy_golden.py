@@ -115,11 +115,13 @@ def test_legacy_real_install_writes_manifest_with_expected_shape(tmp_path: Path)
     assert (dest / "SKILL.md").is_file()
 
     manifest = json.loads((dest / MANIFEST_NAME).read_text(encoding="utf-8"))
-    # Golden shape as of Phase 1 (pre universal-agent-compatibility): exactly these eight
-    # top-level keys, no manifest_schema_version/target_id/package_format yet. §18 of the
-    # design spec plans to add those fields additively while keeping `host` readable --
-    # this test is the baseline this repo commits to not silently reshaping.
+    # Golden shape: exactly these top-level keys, no target_id/package_format yet. §18 of the
+    # design spec plans to add those fields additively while keeping `host` readable -- this
+    # test is the baseline this repo commits to not silently reshaping. manifest_version was
+    # added deliberately (the manifest outlives the tooling that wrote it, so a reshape has to
+    # be distinguishable from corruption); a further key needs the same deliberate edit here.
     assert set(manifest) == {
+        "manifest_version",
         "skill",
         "distribution_version",
         "source_repo",
@@ -129,6 +131,7 @@ def test_legacy_real_install_writes_manifest_with_expected_shape(tmp_path: Path)
         "framework_files",
         "files",
     }
+    assert manifest["manifest_version"] == 1
     assert manifest["skill"] == "pr-review"
     assert manifest["host"] == "cursor"
     assert isinstance(manifest["files"], dict)

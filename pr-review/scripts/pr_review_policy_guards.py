@@ -6,10 +6,52 @@ reference/review-metrics.md and reference/finding-gates.md.
 """
 from __future__ import annotations
 
+import importlib.util
 import re
 from collections.abc import Callable
+from pathlib import Path
+from types import ModuleType
 from typing import Literal
 from urllib.parse import urlparse
+
+SKILL_ROOT = Path(__file__).resolve().parents[1]
+_SCRIPT_DIR = Path(__file__).resolve().parent
+_INSTALL_MANIFEST = ".software-builder-manifest.json"
+_RUNTIME_DESCRIPTION = "shared confidence-band runtime"
+
+
+def _shared_runtime_loader() -> ModuleType:
+    """Import shared_runtime_loader, which owns the containment policy for every module this
+    script executes out of docs/skill-framework/shared/.
+
+    Only locating the loader itself is handled here, and it needs no policy of its own: an
+    installed package carries the loader beside this script (package_skill.py vendors it), so the
+    lookup never leaves the package, and the install manifest is what proves a missing vendored
+    copy is a packaging fault rather than an invitation to read a sibling path.
+    """
+    beside = _SCRIPT_DIR / "shared_runtime_loader.py"
+    if beside.is_file():
+        path = beside
+    elif (SKILL_ROOT / _INSTALL_MANIFEST).is_file():
+        raise RuntimeError(f"unable to load packaged {_RUNTIME_DESCRIPTION} loader: {beside}")
+    else:
+        path = SKILL_ROOT.parent / "docs/skill-framework/shared/shared_runtime_loader.py"
+    if not path.is_file():
+        raise RuntimeError(f"unable to load packaged {_RUNTIME_DESCRIPTION} loader: {path}")
+    spec = importlib.util.spec_from_file_location("software_builder_shared_runtime_loader", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"unable to load packaged {_RUNTIME_DESCRIPTION} loader: {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+_confidence_bands = _shared_runtime_loader().load_shared_runtime(
+    SKILL_ROOT,
+    "confidence_bands",
+    alias="shared_confidence_bands",
+    description=_RUNTIME_DESCRIPTION,
+)
 
 Severity = Literal["critical", "high", "medium", "low", "none"]
 RecommendationSlug = Literal["request_changes", "comment", "approve"]
@@ -117,12 +159,18 @@ def apply_confidence_cap(
     unresolved_contradiction: bool = False,
     assumed_only: bool = False,
 ) -> Literal["high", "medium", "low"]:
-    """Cap per SKILL.md / evidence-quality norms."""
-    if assumed_only:
-        return "low"
-    if proposed == "high" and (single_source or unresolved_contradiction):
-        return "medium"
-    return proposed
+    """Cap per SKILL.md / evidence-quality norms.
+
+    A thin adapter over the shared rule: this skill's own documents publish lowercase bands, so
+    the case is normalized at this edge rather than forking the rule.
+    """
+    capped = _confidence_bands.apply_confidence_cap(
+        proposed,
+        single_source=single_source,
+        unresolved_contradiction=unresolved_contradiction,
+        assumed_only=assumed_only,
+    )
+    return capped.lower()  # type: ignore[return-value]
 
 
 _DEFAULT_PORTS = {"http": 80, "https": 443, "ssh": 22, "git": 9418}

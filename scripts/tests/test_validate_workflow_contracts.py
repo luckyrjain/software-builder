@@ -237,8 +237,12 @@ def test_accepts_selector_cartesian_space_at_documented_boundary(tmp_path: Path)
 
 
 def test_rejects_duplicate_route_id_at_nested_mapping_level() -> None:
+    # load_unique_yaml_file now names the file it failed on -- 43 call sites funnel through it and
+    # a bare "line 4, column 1" into an unnamed file is unactionable -- so the offending path
+    # appears between this validator's own label and the parse error.
+    contract = FIXTURES / "duplicate-route-id" / "workflow-contract.yaml"
     assert validate_skill_contract(FIXTURES / "duplicate-route-id") == [
-        "invalid workflow-contract.yaml: duplicate YAML mapping key 'default'",
+        f"invalid workflow-contract.yaml: {contract}: duplicate YAML mapping key 'default'",
     ]
 
 

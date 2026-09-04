@@ -9,14 +9,12 @@ import sys
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
-import yaml
-
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from scripts.registry.schema import RegistryParseError, registered_skill_ids  # noqa: E402
-from scripts.yaml_safety import YAML_SAFETY_ERRORS  # noqa: E402
+from scripts.yaml_safety import YAML_SAFETY_ERRORS, load_unique_yaml_file  # noqa: E402
 
 _FRESHNESS_HEADING = "## Freshness"
 _LAST_REVIEWED_RE = re.compile(
@@ -27,7 +25,7 @@ _EXTERNAL_RE = re.compile(r"\*\*External services\*\*\s*\|\s*(.+?)\s*\|")
 
 def _load_config(root: Path) -> tuple[dict, dict]:
     path = root / "scripts/registry/setup_freshness.yaml"
-    raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+    raw = load_unique_yaml_file(path)
     defaults = raw.get("defaults") or {}
     skills = raw.get("skills") or {}
     if not isinstance(skills, dict):
