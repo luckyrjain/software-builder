@@ -43,6 +43,47 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 
 ## Platform
 
+### Architecture review follow-up: the deferred candidates (2026-09-04)
+
+Closes the items the 2026-09-04 architecture review deferred.
+
+- **Shared per-skill lint checks moved from Make into Python.** `scripts/lint_skills.py` is a
+  registry-driven validator with one interface (`lint_skill` / `--skill` / `--all`) that performs
+  the six checks every `lint-<skill>` recipe used to restate (SKILL.md length, workflow
+  frontmatter, dangling links, required reference files, framework wiring, render-surface
+  sanitization). `make/core.mk` drops from 1745 to 980 lines and from 229 to 45 `grep -q`
+  assertions; every target name, its `lint-static`/`lint-suites` membership and `.PHONY` are
+  unchanged. Skill-unique content assertions and pytest steps stay in Make.
+- **The `make generate` seam is declared.** `scripts/registry/generators.py` defines
+  `GenerateContext` and an ordered `GENERATORS` list; adding a generated artifact appends to the
+  list instead of editing `cli.py`. Optional-layer resolution lives in `scripts/registry/layers.py`.
+  Generated output is byte-identical.
+- **`capability_catalog.yaml` is generated from the fragments.** Each skill's `capabilities:` block
+  in `scripts/registry/skills.d/` is the single source; the backfill write-direction and the
+  `capability_sync` drift validator are removed. The redundant `backfill-capabilities-drift-check`
+  Make target is gone (`generate-check` covers it).
+- **`mcp-error-handling.md` §4 is generated** from `degraded_behavior.yaml` +
+  `capability_families.yaml`, covering all 38 skills (was 5).
+- **One redaction table** (`docs/skill-framework/shared/redaction.py`) with a log profile and a
+  document profile; incident-rca and prd-architect select a profile instead of carrying private
+  regex families. incident-rca additionally masks GitHub/OpenAI/AWS tokens, JWTs, unquoted `Bearer`
+  and `client_secret=` values it previously emitted; contact PII stays document-only.
+- **One unified-diff grammar** (`docs/skill-framework/shared/unified_diff.py`) used by
+  `change_impact.py`, `github-comment-positions.py` and `diff-to-positions.py`; the one legitimate
+  difference (how an unbound ambiguous `diff --git` header is read) is a named parameter.
+- **`install-incident-rca-deps.sh` pins the `skills` CLI by sha512 integrity**
+  (`skills-lock.json` `skillsCliIntegrity`), verified via `npm pack` before anything executes.
+  Refresh procedure in `docs/OPERATIONS.md`. Known pre-existing gap: the pinned CLI cannot clone a
+  bare commit SHA, so the script still fails end-to-end after the integrity gate.
+- `yaml_safety` uses libyaml's C loader when available (5-9x faster on the registry; identical
+  safety semantics via the same pure-Python constructor). `machine_summary` and `host_registry`
+  use `validation_primitives` instead of local copies. Six `domain-comprehension` test files and
+  the module docs are named after what they exercise.
+- Refuted with evidence, not implemented: unifying the three packagers' file selectors
+  (`package_skill.py` must work from an extracted release bundle with no `.git`, and the two
+  git-based selectors have deliberately different, tested symlink policies) — documented in code
+  and pinned with a test.
+
 ### Architecture review: deep modules, single sources, one link checker (2026-09-04)
 
 Exhaustive architecture review (Matt Pocock `improve-codebase-architecture` plus a 26-facet sweep,

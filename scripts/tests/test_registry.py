@@ -435,7 +435,7 @@ skills:
 def test_cmd_generate_populates_docs_readme_link_table(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # Regression test: cli.py's _collect_outputs only gates docs/README.md generation on the
+    # Regression test: generators.py only gates docs/README.md generation on the
     # file *existing* (`.is_file()`), not on it already containing the marker blocks -- a fixture
     # without them must fail loudly (via update_marker_block's own check), not crash uncaught.
     _write_minimal_registry_fixture(tmp_path)

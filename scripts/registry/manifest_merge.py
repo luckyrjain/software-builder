@@ -12,7 +12,7 @@ generate_kiro.py already use for per-host adapters generated FROM the
 canonical source. skills.yaml itself stays the single file every existing
 consumer (validators, generators, tests, docs) reads unchanged; only its
 `skills:` mapping and the per-skill sub-mappings of its `contracts:` section
-become generated content, wired into cli.py's _collect_outputs/cmd_generate
+become generated content, wired into registry/generators.py's GENERATORS list
 the same way those adapters are.
 
 Those contract sub-mappings -- `contracts.platform.skill_types`,
@@ -27,7 +27,7 @@ authority and produced/consumed artifacts are declared.
 Repos/fixtures with no scripts/registry/skills.d/ directory are untouched:
 callers should only invoke merge_registry_yaml() when that directory exists,
 in which case skills.yaml's own `skills:` mapping is legacy/hand-edited and
-authoritative as-is (see cli.py's _collect_outputs).
+authoritative as-is (see registry/generators.py).
 """
 
 from __future__ import annotations
@@ -326,6 +326,13 @@ SIDE_FILE_PROJECTIONS: tuple[SideFileProjection, ...] = (
     SideFileProjection("degraded_behavior.yaml", "degraded_behavior", "skills"),
     SideFileProjection("setup_freshness.yaml", "setup_freshness", "skills"),
     SideFileProjection("routing_rules.yaml", "routing", "routes"),
+    # capability_catalog.yaml restated, verbatim, the `capabilities:` block every fragment
+    # already declares -- so a skill's capability contract had to be written twice and a
+    # drift validator (capability_sync.py) existed to police the copy. Projecting it here
+    # makes the fragment the single place that contract is authored; the catalog keeps its
+    # filename and shape, so its readers (generate_compatibility, capability_family_sync,
+    # doctor) are unaffected.
+    SideFileProjection("capability_catalog.yaml", "capabilities", "skills"),
 )
 
 

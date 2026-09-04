@@ -6,6 +6,8 @@ from collections.abc import Mapping
 from datetime import datetime
 from typing import Any
 
+from scripts.registry.validation_primitives import non_empty_str
+
 COMMON_MACHINE_SUMMARY_FIELDS = frozenset(
     {
         "assessment_target",
@@ -52,10 +54,6 @@ _SOURCE_KINDS = frozenset(
 )
 
 
-def _non_empty_string(value: object) -> bool:
-    return isinstance(value, str) and bool(value.strip())
-
-
 def _validate_exact_mapping(
     value: object, fields: frozenset[str], label: str
 ) -> tuple[dict[str, Any] | None, list[str]]:
@@ -74,7 +72,7 @@ def _validate_exact_mapping(
 def _validate_evidence_refs(
     value: object, label: str, *, allow_empty: bool
 ) -> tuple[list[str] | None, list[str]]:
-    if not isinstance(value, list) or not all(_non_empty_string(ref) for ref in value):
+    if not isinstance(value, list) or not all(non_empty_str(ref) for ref in value):
         return None, [f"error: {label} must be a list of non-empty strings"]
     errors: list[str] = []
     if not allow_empty and not value:
@@ -90,7 +88,7 @@ def _validate_item_strings(
     return [
         f"error: {label}.{field} must be a non-empty string"
         for field in fields
-        if not _non_empty_string(item.get(field))
+        if not non_empty_str(item.get(field))
     ]
 
 
@@ -159,7 +157,7 @@ def _validate_source(source: object) -> list[str]:
     parsed, errors = _validate_exact_mapping(source, _SOURCE_FIELDS, "provenance.sources item")
     if parsed is None:
         return errors
-    if not _non_empty_string(parsed.get("ref")):
+    if not non_empty_str(parsed.get("ref")):
         errors.append("error: provenance.sources item.ref must be a non-empty string")
     if parsed.get("authority") not in _AUTHORITIES:
         errors.append("error: provenance.sources item.authority has an invalid value")
@@ -167,13 +165,13 @@ def _validate_source(source: object) -> list[str]:
         errors.append("error: provenance.sources item.kind has an invalid value")
     for field in ("source_revision", "source_environment"):
         value = parsed.get(field)
-        if value not in (None, "UNKNOWN") and not _non_empty_string(value):
+        if value not in (None, "UNKNOWN") and not non_empty_str(value):
             errors.append(
                 f"error: provenance.sources item.{field} must be a non-empty string, null, or UNKNOWN"
             )
     observed_at = parsed.get("observed_at")
     if observed_at not in (None, "UNKNOWN"):
-        if not _non_empty_string(observed_at):
+        if not non_empty_str(observed_at):
             errors.append(
                 "error: provenance.sources item.observed_at must be an ISO-8601 "
                 "datetime with timezone, null, or UNKNOWN"
@@ -203,7 +201,7 @@ def _typed_sources(provenance: Mapping[str, Any], errors: list[str]) -> dict[str
         if extra:
             errors.append(f"error: provenance contains undeclared fields: {', '.join(extra)}")
     source_revision = provenance.get("source_revision")
-    if source_revision not in (None, "UNKNOWN") and not _non_empty_string(source_revision):
+    if source_revision not in (None, "UNKNOWN") and not non_empty_str(source_revision):
         errors.append(
             "error: provenance.source_revision must be a non-empty string, null, or UNKNOWN"
         )
@@ -214,7 +212,7 @@ def _typed_sources(provenance: Mapping[str, Any], errors: list[str]) -> dict[str
     parsed_sources: dict[str, dict[str, Any]] = {}
     for source in sources:
         errors.extend(_validate_source(source))
-        if isinstance(source, dict) and _non_empty_string(source.get("ref")):
+        if isinstance(source, dict) and non_empty_str(source.get("ref")):
             ref = source["ref"]
             if ref in parsed_sources:
                 errors.append("error: provenance.sources must not contain duplicate refs")
@@ -233,7 +231,7 @@ def _sanitized_adjacency(
         derived_from = source.get("derived_from")
         if (
             not isinstance(derived_from, list)
-            or not all(_non_empty_string(parent) for parent in derived_from)
+            or not all(non_empty_str(parent) for parent in derived_from)
             or len(derived_from) != len(set(derived_from))
         ):
             adjacency[ref] = ()
@@ -281,7 +279,7 @@ def _source_graph_errors(adjacency: Mapping[str, tuple[str, ...]]) -> list[str]:
 def effective_authorities(summary: object, ref: str) -> set[str]:
     """Return leaf-source authorities for one reference, preserving caller authority."""
     _payload, provenance, _errors = _machine_summary_parts(summary)
-    if provenance is None or not _non_empty_string(ref):
+    if provenance is None or not non_empty_str(ref):
         return set()
     sources = provenance.get("sources")
     if not isinstance(sources, list):
@@ -289,7 +287,7 @@ def effective_authorities(summary: object, ref: str) -> set[str]:
     source_by_ref = {
         source.get("ref"): source
         for source in sources
-        if isinstance(source, dict) and _non_empty_string(source.get("ref"))
+        if isinstance(source, dict) and non_empty_str(source.get("ref"))
     }
 
     adjacency, _errors = _sanitized_adjacency(source_by_ref)
@@ -337,7 +335,7 @@ def validate_machine_summary(summary: object) -> list[str]:
                 "error: normalized_decision.status must be "
                 "PASS|CONDITIONAL|FAIL|UNKNOWN|NOT_APPLICABLE"
             )
-        if not _non_empty_string(normalized_decision.get("raw_verdict")):
+        if not non_empty_str(normalized_decision.get("raw_verdict")):
             errors.append("error: normalized_decision.raw_verdict must be a non-empty string")
     root_refs, root_ref_errors = _validate_evidence_refs(
         payload.get("evidence_refs"), "evidence_refs", allow_empty=True
@@ -359,12 +357,12 @@ def validate_machine_summary(summary: object) -> list[str]:
             errors.extend(validator(item))
             if isinstance(item, dict):
                 identifier = item.get("id")
-                if _non_empty_string(identifier):
+                if non_empty_str(identifier):
                     if identifier in ids:
                         errors.append(f"error: {label} must not contain duplicate ids")
                     ids.add(identifier)
                 refs = item.get("evidence_refs")
-                if isinstance(refs, list) and all(_non_empty_string(ref) for ref in refs):
+                if isinstance(refs, list) and all(non_empty_str(ref) for ref in refs):
                     nested_refs.update(refs)
     if root_refs is not None:
         missing_nested_refs = sorted(nested_refs - set(root_refs))

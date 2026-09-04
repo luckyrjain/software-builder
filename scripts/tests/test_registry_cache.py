@@ -174,36 +174,6 @@ def test_run_command_centralizes_cache_invalidation(tmp_path: Path) -> None:
     assert set(raw["skills"]) == {"renamed"}, "_run_command did not clear the stale cache entry"
 
 
-def test_backfill_write_invalidates_the_registry_cache(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Regression test: cmd_backfill's write to skills.yaml must not leave a stale
-    load_registry_raw entry behind for whatever reads that path next in the same
-    process. Stubs out backfill_skills_yaml_text's catalog-matching logic (already
-    covered by scripts/tests/test_backfill_capabilities.py) so this test isolates
-    exactly the write-then-invalidate contract cmd_backfill itself owns.
-    """
-    from scripts.registry import backfill_capabilities
-
-    path = _write_skills_yaml(tmp_path, skill_id="solo")
-    load_registry_raw(path)  # primes the cache with the pre-write content
-
-    monkeypatch.setattr(
-        backfill_capabilities,
-        "backfill_skills_yaml_text",
-        lambda text, *, overwrite, render: (
-            "schema_version: 1\nskills:\n  renamed:\n    path: renamed\n",
-            ["solo"],
-        ),
-    )
-
-    result = backfill_capabilities.cmd_backfill(check_only=False, overwrite=False, skills_path=path)
-
-    assert result == 0
-    raw = load_registry_raw(path)
-    assert set(raw["skills"]) == {"renamed"}, "stale cache entry survived cmd_backfill's write"
-
-
 def test_fragments_are_still_re_merged_correctly_through_the_cache(tmp_path: Path) -> None:
     _write_skills_yaml(tmp_path)
     fragments_dir = skills_fragments_dir(tmp_path)

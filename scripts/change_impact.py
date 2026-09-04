@@ -7,9 +7,12 @@ unbounded dependency-graph crawl.
 
 from __future__ import annotations
 
+import importlib.util
 import re
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
+from pathlib import Path
+from types import ModuleType
 from typing import Any
 
 from scripts.registry.artifact_trust import classify_assessment_context_trust
@@ -30,14 +33,31 @@ CHANGE_CLASSES = (
     "operational",
 )
 
-_DIFF_HEADER_PREFIX = "diff --git "
-# A `diff --git` header is not a whitespace-delimited grammar: Git does not quote a path merely
-# because it contains a space, so `diff --git a/my file.py b/my file.py` is ambiguous until the
-# record's own rename/`---`/`+++` metadata binds it. These bounds keep the disambiguation linear
-# in the header length -- a pathological header full of " b/" tokens is discarded, not searched.
+_ROOT = Path(__file__).resolve().parents[1]
+
+
+def _load_unified_diff() -> ModuleType:
+    """The shared unified-diff grammar, loaded from this checkout's own framework tree.
+
+    Loaded by path rather than imported: it lives under docs/ so it can be vendored verbatim into
+    installed skill packages, which must not depend on this repository's `scripts.*` import graph.
+    """
+    path = _ROOT / "docs/skill-framework/shared/unified_diff.py"
+    spec = importlib.util.spec_from_file_location("shared_unified_diff", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"unable to load shared unified-diff grammar: {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+_unified_diff = _load_unified_diff()
+
+# This analyser reads a change description, not a whole PR patch, so it caps diff records well
+# below the shared default; and it prefers -- rather than requires -- an identical split for an
+# unbound header, because dropping a renamed path silently understates blast radius.
 _MAX_DIFF_HEADER_CHARS = 4_096
 _MAX_PATH_SEPARATORS = 32
-_GIT_QUOTE_ESCAPES = {"a": 7, "b": 8, "t": 9, "n": 10, "v": 11, "f": 12, "r": 13, '"': 34, "\\": 92}
 _HYPHEN_VARIANTS = str.maketrans(
     {
         "‐": "-",
@@ -243,162 +263,25 @@ def _source_mapping(source: object) -> dict[str, Any]:
     return {}
 
 
-def _decode_git_path(raw: str) -> str | None:
-    """Decode one Git path field, including C-quoted octal UTF-8 bytes. None when malformed."""
-    if not raw.startswith('"'):
-        return raw
-    if len(raw) < 2 or not raw.endswith('"'):
-        return None
-    decoded = bytearray()
-    cursor = 1
-    while cursor < len(raw) - 1:
-        character = raw[cursor]
-        if character != "\\":
-            decoded.extend(character.encode("utf-8"))
-            cursor += 1
-            continue
-        cursor += 1
-        if cursor >= len(raw) - 1:
-            return None
-        escaped = raw[cursor]
-        if escaped in _GIT_QUOTE_ESCAPES:
-            decoded.append(_GIT_QUOTE_ESCAPES[escaped])
-            cursor += 1
-            continue
-        if escaped not in "01234567":
-            return None
-        end = cursor
-        while end < min(cursor + 3, len(raw) - 1) and raw[end] in "01234567":
-            end += 1
-        value = int(raw[cursor:end], 8)
-        if value > 255:
-            return None
-        decoded.append(value)
-        cursor = end
-    try:
-        return decoded.decode("utf-8")
-    except UnicodeDecodeError:
-        return None
-
-
-def _quoted_field_end(raw: str) -> int | None:
-    escaped = False
-    for index in range(1, len(raw)):
-        if raw[index] == '"' and not escaped:
-            return index + 1
-        escaped = raw[index] == "\\" and not escaped
-    return None
-
-
-def _separator_positions_outside_quotes(raw: str, tokens: tuple[str, ...]) -> list[int] | None:
-    """Find a bounded number of candidate field separators that are outside C quotes."""
-    positions: list[int] = []
-    quoted = False
-    escaped = False
-    for index, character in enumerate(raw):
-        if character == '"' and not escaped:
-            quoted = not quoted
-        if not quoted and any(raw.startswith(token, index) for token in tokens):
-            positions.append(index)
-            if len(positions) > _MAX_PATH_SEPARATORS:
-                return None
-        escaped = quoted and character == "\\" and not escaped
-    return None if quoted else positions
-
-
-def _strip_side_prefix(path: str | None, side: str) -> str | None:
-    return path[2:] if isinstance(path, str) and path.startswith(f"{side}/") else None
-
-
-def _diff_header_paths(header: str, *, old_hint: str | None, new_hint: str | None) -> tuple[str, str] | None:
-    """Resolve one `diff --git` header to its (old, new) paths, or None when still ambiguous."""
-    if len(header) > _MAX_DIFF_HEADER_CHARS or not header.startswith(_DIFF_HEADER_PREFIX):
-        return None
-    fields = header[len(_DIFF_HEADER_PREFIX):]
-    if fields.startswith('"'):
-        end = _quoted_field_end(fields)
-        if end is None or end >= len(fields) or fields[end] != " ":
-            return None
-        splits = [(fields[:end], fields[end + 1:])]
-    else:
-        # Spaces are not quoted by Git, so every ` b/` token is only a candidate boundary until
-        # the record's own metadata (a rename pair, or the --- / +++ markers) binds it.
-        separators = _separator_positions_outside_quotes(fields, (" b/", ' "b/'))
-        if separators is None:
-            return None
-        splits = [(fields[:index], fields[index + 1:]) for index in separators]
-    candidates: list[tuple[str, str]] = []
-    for old_raw, new_raw in splits:
-        old_path = _strip_side_prefix(_decode_git_path(old_raw), "a")
-        new_path = _strip_side_prefix(_decode_git_path(new_raw), "b")
-        if old_path is None or new_path is None:
-            continue
-        if old_hint is not None and old_path != old_hint:
-            continue
-        if new_hint is not None and new_path != new_hint:
-            continue
-        candidates.append((old_path, new_path))
-    if old_hint is None and new_hint is None:
-        # With no metadata to bind an ambiguous split, only an unchanged path is unambiguous.
-        same = [candidate for candidate in candidates if candidate[0] == candidate[1]]
-        if same:
-            candidates = same
-    return candidates[0] if len(candidates) == 1 else None
-
-
-# Within one diff record, these lines name a path unambiguously and so bind an otherwise
-# ambiguous header. A rename/copy operand carries no side prefix; a --- / +++ marker does.
-_OLD_PATH_HINTS = (("rename from ", False), ("copy from ", False), ("--- ", True))
-_NEW_PATH_HINTS = (("rename to ", False), ("copy to ", False), ("+++ ", True))
-
-
-def _record_path_hint(line: str, hints: tuple[tuple[str, bool], ...], side: str) -> str | None:
-    for prefix, side_prefixed in hints:
-        if not line.startswith(prefix):
-            continue
-        operand = line[len(prefix):].strip()
-        if operand == "/dev/null":
-            return None
-        decoded = _decode_git_path(operand)
-        return _strip_side_prefix(decoded, side) if side_prefixed else decoded
-    return None
-
-
 def _diff_paths(text: str) -> list[str]:
     """Every path named by a unified diff's `diff --git` headers.
 
-    Handles the three shapes the previous whitespace-delimited pattern silently dropped: paths
-    containing spaces, C-quoted paths, and renames whose old/new sides differ. A header that
-    stays ambiguous after its own record's metadata is consulted contributes nothing, rather
-    than contributing a truncated path.
+    Handles the three shapes a whitespace-delimited pattern silently drops: paths containing
+    spaces, C-quoted paths, and renames whose old/new sides differ. A header that stays ambiguous
+    after its own record's metadata is consulted contributes nothing, rather than contributing a
+    truncated path.
     """
-    headers: list[tuple[str, str | None, str | None]] = []
-    header: str | None = None
-    old_hint: str | None = None
-    new_hint: str | None = None
-    for line in text.splitlines():
-        if line.startswith(_DIFF_HEADER_PREFIX):
-            if header is not None:
-                headers.append((header, old_hint, new_hint))
-            header, old_hint, new_hint = line, None, None
-            continue
-        if header is None:
-            continue
-        old_hint = _record_path_hint(line, _OLD_PATH_HINTS, "a") or old_hint
-        new_hint = _record_path_hint(line, _NEW_PATH_HINTS, "b") or new_hint
-    if header is not None:
-        headers.append((header, old_hint, new_hint))
-
     paths: list[str] = []
-    for raw_header, old, new in headers:
-        resolved = _diff_header_paths(raw_header, old_hint=old, new_hint=new)
-        if resolved is None:
-            continue
-        left, right = resolved
-        if left == right:
-            paths.append(right)
+    for header in _unified_diff.iter_file_headers(
+        text,
+        max_record_chars=_MAX_DIFF_HEADER_CHARS,
+        max_separators=_MAX_PATH_SEPARATORS,
+        require_identical_when_unbound=False,
+    ):
+        if header.is_rename:
+            paths.extend((header.old_path, header.new_path))
         else:
-            paths.extend((left, right))
+            paths.append(header.new_path)
     return _unique_strings(paths)
 
 

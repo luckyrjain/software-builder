@@ -1,30 +1,258 @@
 # Canonical capability contracts for skills.yaml (machine-readable doctor input).
 # Source: each skill's reference/mcp-capabilities.md, SETUP.md, or SKILL.md where no MCP doc exists.
-# Run: python3 -m scripts.registry backfill-capabilities [--check]
+# GENERATED from scripts/registry/skills.d/*.yaml — edit a fragment's capabilities: block,
+# then run make generate. Readers: generate_compatibility.py, capability_family_sync.py, doctor.
 
+# GENERATED from scripts/registry/skills.d/*.yaml — do not edit the skills: mapping; run make generate
 skills:
+  api-design-review:
+    required:
+    - host.report.write
+    optional: []
+  api-test-creator:
+    required:
+    - host.repository.read_write
+    optional:
+    - name: host.api.reachable
+      enables: black-box HTTP suite against running API
+    - name: host.test_runner.execute
+      enables: Newman or equivalent runner
+    degraded_modes:
+      host.api.reachable: generate the request/assertion collection but skip execution;
+        mark status UNVERIFIED
+      host.test_runner.execute: collection is generated but hand off for manual/CI
+        execution instead of iterating to green locally
+  architecture-review:
+    required:
+    - host.report.write
+    optional: []
+  backlog-runner:
+    required:
+    - scheduler.cron.trigger
+    - host.issue_tracker.read
+    optional:
+    - name: loop-task-implementer.invoke
+      enables: interactive single-task mode
+  capacity-planner:
+    required:
+    - host.report.write
+    optional: []
+  change-impact-analyzer:
+    required:
+    - host.report.write
+    optional:
+    - name: host.repository.read
+      enables: repository-grounded diff/caller/consumer/config discovery
+    - name: host.scm.change.read
+      enables: exact-head remote PR/MR metadata + diff retrieval
+  codebase-architecture-review:
+    required:
+    - host.report.write
+    - host.repository.read
+    optional: []
+  contract-test-creator:
+    required:
+    - host.repository.read_write
+    optional:
+    - name: host.test_runner.execute
+      enables: generated contract test verification
+    degraded_modes:
+      host.test_runner.execute: contract tests are written but left UNVERIFIED; run-until-green
+        iteration cannot happen locally
+  cost-optimization-sprint-planner:
+    required:
+    - host.filesystem.read
+    optional:
+    - name: k8s-overprovisioning-datadog.invoke
+      enables: single-deployment rightsizing refresh
+  database-review:
+    required:
+    - host.report.write
+    optional: []
+  dependency-upgrade-review:
+    required:
+    - host.report.write
+    optional: []
+  deployment-risk-review:
+    required:
+    - host.report.write
+    optional: []
+  domain-comprehension:
+    required:
+    - host.repository.read
+    optional:
+    - name: gitlab.search_code
+      enables: repository census without local checkout
+    - name: datadog.query_metrics
+      enables: runtime validation passes
+    - name: telemetry.logs.query
+      enables: KubeSense/log corroboration
+    degraded_modes:
+      gitlab.search_code: fall back to local checkout traversal for the repository
+        census
+      datadog.query_metrics: skip the runtime validation pass; mark runtime-dependent
+        claims UNKNOWN instead of inferring from static evidence
+      telemetry.logs.query: skip KubeSense/log corroboration; mark log-dependent claims
+        UNKNOWN
+  e2e-test-creator:
+    required:
+    - host.repository.read_write
+    optional:
+    - name: host.browser.automation
+      enables: UI journey execution
+    - name: host.test_runner.execute
+      enables: generated e2e verification
+    degraded_modes:
+      host.browser.automation: cannot execute generated browser journeys locally;
+        ship them UNVERIFIED
+      host.test_runner.execute: tests are written but left UNVERIFIED; run-until-green
+        iteration cannot happen locally
+  implementation-planner:
+    required:
+    - host.report.write
+    - host.repository.read
+    optional: []
+  incident-rca:
+    required:
+    - telemetry.logs.query
+    optional:
+    - name: datadog.query_metrics
+      enables: metric corroboration paths
+    - name: gitlab.get_merge_request
+      enables: deploy-regression MR handoff
+    degraded_modes:
+      datadog.query_metrics: rely on logs alone for corroboration; cap confidence
+        below what a matching metric signal would support
+      gitlab.get_merge_request: treat deploy-regression hypothesis as UNKNOWN rather
+        than ruled in or out, not as absence of evidence
+  incident-triage-agent:
+    required:
+    - pager.webhook.receive
+    optional:
+    - name: slack.post.message
+      enables: paging summary delivery when configured
+    degraded_modes:
+      slack.post.message: still produce the triage_doc/postmortem_draft artifact;
+        paging summary is simply not delivered to Slack
+  integration-test-creator:
+    required:
+    - host.repository.read_write
+    optional:
+    - name: host.test_runner.execute
+      enables: generated test verification loop
+    - name: host.dependency.reachable
+      enables: real adjacent dependency under test
+    degraded_modes:
+      host.test_runner.execute: tests are written but left UNVERIFIED; run-until-green
+        iteration cannot happen locally
+      host.dependency.reachable: no real adjacent dependency to test against; escalate
+        or skip the target rather than fall back to mocking (that belongs to unit-test-creator)
+  k8s-overprovisioning-datadog:
+    required: []
+    optional:
+    - name: kubernetes.workloads.read
+      enables: live workload, autoscaler, policy, and pod-state truth
+    - name: datadog.list_monitors
+      enables: monitor cross-check sections
+    any_of:
+    - name: Kubernetes history-capable evidence
+      required:
+      - kubernetes.metrics.history
+    - name: Datadog historical evidence
+      required:
+      - datadog.query_metrics
+    degraded_modes:
+      kubernetes.workloads.read: use Git provider manifests or user-provided configuration
+        for live-state checks
+      kubernetes.metrics.history: use Datadog history when available; otherwise defer
+        historical sizing dimensions
+      datadog.query_metrics: continue only when Kubernetes exposes equivalent historical
+        metrics and aggregation
+      datadog.list_monitors: omit monitor cross-checks and reduce confidence where
+        applicable
+  loop-task-implementer:
+    required:
+    - host.repository.read_write
+    - host.role.isolation
+    - host.ci.status
+    - host.pull_request.write
+    optional:
+    - name: host.issue_tracker.read
+      enables: task sourced from tracker instead of user text
+    degraded_modes:
+      host.issue_tracker.read: task must be supplied as direct user text; cannot autonomously
+        source tasks from a tracker query
+  migration-program-manager:
+    required:
+    - host.filesystem.read
+    optional:
+    - name: mysql-to-postgres-sql.invoke
+      enables: single-workspace migration status refresh
+  module-design:
+    required:
+    - host.report.write
+    - host.repository.read
+    optional: []
+  mysql-to-postgres-sql:
+    required:
+    - host.repository.read_write
+    optional:
+    - name: gitlab.get_merge_request
+      enables: migration MR review handoff
+    degraded_modes:
+      gitlab.get_merge_request: skip the migration MR review handoff; still produce
+        the SQL rewrite/scan report standalone
+  new-hire-guide:
+    required:
+    - host.repository.read
+    optional:
+    - name: domain-comprehension.invoke
+      enables: full domain map tour
+    - name: squad-map.invoke
+      enables: ownership lookups during tour
+  observability-review:
+    required:
+    - host.report.write
+    optional: []
+  performance-review:
+    required:
+    - host.report.write
+    optional: []
+  pr-gatekeeper:
+    required:
+    - gitlab.get_merge_request
+    optional:
+    - name: gitlab.create_merge_request_thread
+      enables: unattended inline posting when policy allows
+    degraded_modes:
+      gitlab.create_merge_request_thread: fall back to summary-only or chat-only posting
+        per auto-post-policy.md
   pr-review:
     required: []
     optional: []
     any_of:
-      - name: GitLab read
-        required: [gitlab.get_merge_request, gitlab.get_merge_request_diffs]
-        optional:
-          - name: gitlab.create_merge_request_thread
-            enables: inline diff posting
-          - name: gitlab.create_note
-            enables: summary-only MR posting
-      - name: GitHub read
-        required: [github.get_pull_request, github.get_pull_request_files]
-        optional:
-          - name: github.list_pull_request_review_comments
-            enables: paginated complete review-comment readback required for safe posting
-          - name: github.list_issue_comments
-            enables: paginated complete issue-comment readback required for safe posting
-          - name: github.create_pull_request_comment
-            enables: GitHub inline PR comments
-          - name: github.create_issue_comment
-            enables: GitHub PR summary comments
+    - name: GitLab read
+      required:
+      - gitlab.get_merge_request
+      - gitlab.get_merge_request_diffs
+      optional:
+      - name: gitlab.create_merge_request_thread
+        enables: inline diff posting
+      - name: gitlab.create_note
+        enables: summary-only MR posting
+    - name: GitHub read
+      required:
+      - github.get_pull_request
+      - github.get_pull_request_files
+      optional:
+      - name: github.list_pull_request_review_comments
+        enables: paginated complete review-comment readback required for safe posting
+      - name: github.list_issue_comments
+        enables: paginated complete issue-comment readback required for safe posting
+      - name: github.create_pull_request_comment
+        enables: GitHub inline PR comments
+      - name: github.create_issue_comment
+        enables: GitHub PR summary comments
     degraded_modes:
       gitlab.create_merge_request_thread: summary-only or chat-only posting
       gitlab.create_note: chat-only posting
@@ -32,355 +260,214 @@ skills:
       github.create_issue_comment: chat-only posting
       github.list_pull_request_review_comments: chat-only posting
       github.list_issue_comments: chat-only posting
-
-  production-readiness-review:
-    required: [host.report.write]
-    optional:
-      - name: pr-review.invoke
-        enables: exact-head PR/MR code-review refresh
-      - name: host.repository.read
-        enables: candidate diff/config/current-material collection
-      - name: host.scm.change.read
-        enables: exact-head remote PR/MR/commit metadata + diff retrieval
-      - name: host.scm.change_history.read
-        enables: authoritative material-change enumeration for direct release-candidate readiness
-      - name: host.ci.status
-        enables: authoritative exact-source required-check evidence
-      - name: host.scm.policy.read
-        enables: authoritative approvals/CODEOWNERS/branch-rule/thread evidence
-      - name: host.build.provenance.read
-        enables: source-revision to deployable-digest linkage
-      - name: host.service.metadata.read
-        enables: criticality/ownership/on-call/recovery policy evidence
-      - name: host.dependency.advisories.read
-        enables: current vulnerability/advisory evidence for changed dependencies at the exact source revision
-      - name: host.runtime.metrics.read
-        enables: authoritative current demand/history and capacity baseline evidence
-      - name: change-impact-analyzer.invoke
-        enables: missing/stale impact prerequisite refresh
-      - name: deployment-risk-review.invoke
-        enables: missing/stale deployment-risk prerequisite refresh
-      - name: security-review.invoke
-        enables: security dimension refresh
-      - name: observability-review.invoke
-        enables: observability dimension refresh
-      - name: resilience-review.invoke
-        enables: resilience dimension refresh
-      - name: api-design-review.invoke
-        enables: API dimension refresh
-      - name: database-review.invoke
-        enables: database dimension refresh
-      - name: performance-review.invoke
-        enables: performance dimension refresh
-      - name: capacity-planner.invoke
-        enables: capacity dimension refresh
-      - name: dependency-upgrade-review.invoke
-        enables: dependency dimension refresh
-    degraded_modes:
-      pr-review.invoke: exact-head PR/MR review evidence remains UNKNOWN unless a fresh trusted mr_review_report is already available
-      host.repository.read: candidate diff/config collection becomes UNKNOWN for dimensions requiring it
-      host.scm.change.read: PR/MR exact-head metadata and diff retrieval become UNKNOWN
-      host.scm.change_history.read: release-candidate material-change enumeration becomes UNKNOWN; coverage_status cannot reach COMPLETE
-      host.ci.status: CI dimension becomes UNKNOWN rather than PASS/FAIL
-      host.scm.policy.read: SCM policy gate (approvals/CODEOWNERS/threads) becomes UNKNOWN
-      host.build.provenance.read: build provenance becomes UNKNOWN for any candidate whose deployable differs from its source revision
-      host.service.metadata.read: ownership/criticality/recovery-policy dimensions become UNKNOWN
-      host.dependency.advisories.read: dependency dimension becomes UNKNOWN unless an authoritative required dependency-security CI check covers the exact source revision; absence never maps to PASS
-      host.runtime.metrics.read: capacity dimension becomes UNKNOWN for tier0/tier1/unknown criticality (caller-only demand/baseline cannot PASS at those tiers) and at most CONDITIONAL for tier2/tier3
-      change-impact-analyzer.invoke: change-impact prerequisite reuses a fresh trusted change_impact_report when present, otherwise the impact-dependent applicability determination is UNKNOWN
-      deployment-risk-review.invoke: deployment-risk prerequisite reuses a fresh trusted deployment_risk_report when present, otherwise that dimension is UNKNOWN
-      security-review.invoke: security dimension reuses a fresh trusted security_review_report when present, otherwise UNKNOWN
-      observability-review.invoke: observability dimension reuses a fresh trusted observability_review_report when present, otherwise UNKNOWN
-      resilience-review.invoke: resilience dimension reuses a fresh trusted resilience_review_report when present, otherwise UNKNOWN
-      api-design-review.invoke: API dimension reuses a fresh trusted api_design_review_report when present, otherwise UNKNOWN
-      database-review.invoke: database dimension reuses a fresh trusted database_review_report when present, otherwise UNKNOWN
-      performance-review.invoke: performance dimension reuses a fresh trusted performance_review_report when present, otherwise UNKNOWN
-      capacity-planner.invoke: capacity dimension reuses a fresh trusted capacity_plan when present, otherwise UNKNOWN
-      dependency-upgrade-review.invoke: dependency dimension reuses a fresh trusted dependency_upgrade_report when present, otherwise UNKNOWN
-
-  pr-gatekeeper:
-    required: [gitlab.get_merge_request]
-    optional:
-      - name: gitlab.create_merge_request_thread
-        enables: unattended inline posting when policy allows
-    degraded_modes:
-      gitlab.create_merge_request_thread: fall back to summary-only or chat-only posting per auto-post-policy.md
-
-  k8s-overprovisioning-datadog:
-    required: []
-    optional:
-      - name: kubernetes.workloads.read
-        enables: live workload, autoscaler, policy, and pod-state truth
-      - name: datadog.list_monitors
-        enables: monitor cross-check sections
-    any_of:
-      - name: Kubernetes history-capable evidence
-        required: [kubernetes.metrics.history]
-      - name: Datadog historical evidence
-        required: [datadog.query_metrics]
-    degraded_modes:
-      kubernetes.workloads.read: use Git provider manifests or user-provided configuration for live-state checks
-      kubernetes.metrics.history: use Datadog history when available; otherwise defer historical sizing dimensions
-      datadog.query_metrics: continue only when Kubernetes exposes equivalent historical metrics and aggregation
-      datadog.list_monitors: omit monitor cross-checks and reduce confidence where applicable
-
-  incident-rca:
-    required: [telemetry.logs.query]
-    optional:
-      - name: datadog.query_metrics
-        enables: metric corroboration paths
-      - name: gitlab.get_merge_request
-        enables: deploy-regression MR handoff
-    degraded_modes:
-      datadog.query_metrics: rely on logs alone for corroboration; cap confidence below what a matching metric signal would support
-      gitlab.get_merge_request: treat deploy-regression hypothesis as UNKNOWN rather than ruled in or out, not as absence of evidence
-
-  incident-triage-agent:
-    required: [pager.webhook.receive]
-    optional:
-      - name: slack.post.message
-        enables: paging summary delivery when configured
-    degraded_modes:
-      slack.post.message: still produce the triage_doc/postmortem_draft artifact; paging summary is simply not delivered to Slack
-
-  domain-comprehension:
-    required: [host.repository.read]
-    optional:
-      - name: gitlab.search_code
-        enables: repository census without local checkout
-      - name: datadog.query_metrics
-        enables: runtime validation passes
-      - name: telemetry.logs.query
-        enables: KubeSense/log corroboration
-    degraded_modes:
-      gitlab.search_code: fall back to local checkout traversal for the repository census
-      datadog.query_metrics: skip the runtime validation pass; mark runtime-dependent claims UNKNOWN instead of inferring from static evidence
-      telemetry.logs.query: skip KubeSense/log corroboration; mark log-dependent claims UNKNOWN
-
-  squad-map:
-    required: [gitlab.list_projects]
-    optional:
-      - name: gitlab.get_repository_file
-        enables: CODEOWNERS and ownership file reads
-      - name: datadog.list_service_definitions
-        enables: service alias crosswalk
-    degraded_modes:
-      gitlab.get_repository_file: ownership falls back to fuzzy/contributor-based signals only, confidence capped at LOW
-      datadog.list_service_definitions: skip the service alias crosswalk; ownership stays repo-level only
-
-  who-owns-x-bot:
-    required: [slack.slash_command.receive]
-    optional:
-      - name: squad-map.invoke
-        enables: full mapping table instead of one-shot lookup
-
-  new-hire-guide:
-    required: [host.repository.read]
-    optional:
-      - name: domain-comprehension.invoke
-        enables: full domain map tour
-      - name: squad-map.invoke
-        enables: ownership lookups during tour
-
-  release-readiness-checker:
-    required: [host.report.write]
-    optional:
-      - name: gitlab.list_merge_requests
-        enables: release-candidate MR enumeration
-      - name: datadog.query_metrics
-        enables: per-service health slice
-      - name: telemetry.logs.query
-        enables: incident window cross-check
-      - name: production-readiness-review.conditional_invoke
-        enables: conditional v2 production-readiness refresh when no trusted deployable-scoped report is reusable
-      - name: host.scm.change_history.read
-        enables: authoritative commits/PRs/reverts/cherry-picks enumeration in the release range
-      - name: host.scm.policy.read
-        enables: authoritative review/approval/bypass policy evidence for release-candidate code-review coverage
-      - name: host.build.provenance.read
-        enables: source-revision to release-deployable-digest linkage when release_ref is an artifact digest
-    degraded_modes:
-      gitlab.list_merge_requests: require an explicit release_ref per manifest entry instead of auto-discovering MRs
-      datadog.query_metrics: per-service health slice becomes UNKNOWN rather than READY/NOT_READY for that dimension
-      telemetry.logs.query: incident window cross-check becomes UNKNOWN; falls through to incident-rca's own signal instead
-      production-readiness-review.conditional_invoke: a v2 entry requiring production readiness with no reusable trusted report becomes UNKNOWN rather than invoking the child
-      host.scm.change_history.read: v2 release-candidate code-review coverage cannot reach COMPLETE; the production-readiness dimension becomes UNKNOWN
-      host.scm.policy.read: release-candidate SCM policy evidence becomes UNKNOWN
-      host.build.provenance.read: a v2 entry whose release_ref is a non-source digest cannot establish candidate identity; production readiness is never invoked and stays UNKNOWN
-
-  migration-program-manager:
-    required: [host.filesystem.read]
-    optional:
-      - name: mysql-to-postgres-sql.invoke
-        enables: single-workspace migration status refresh
-
-  cost-optimization-sprint-planner:
-    required: [host.filesystem.read]
-    optional:
-      - name: k8s-overprovisioning-datadog.invoke
-        enables: single-deployment rightsizing refresh
-
-  mysql-to-postgres-sql:
-    required: [host.repository.read_write]
-    optional:
-      - name: gitlab.get_merge_request
-        enables: migration MR review handoff
-    degraded_modes:
-      gitlab.get_merge_request: skip the migration MR review handoff; still produce the SQL rewrite/scan report standalone
-
-  loop-task-implementer:
-    required:
-      - host.repository.read_write
-      - host.role.isolation
-      - host.ci.status
-      - host.pull_request.write
-    optional:
-      - name: host.issue_tracker.read
-        enables: task sourced from tracker instead of user text
-    degraded_modes:
-      host.issue_tracker.read: task must be supplied as direct user text; cannot autonomously source tasks from a tracker query
-
-  backlog-runner:
-    required: [scheduler.cron.trigger, host.issue_tracker.read]
-    optional:
-      - name: loop-task-implementer.invoke
-        enables: interactive single-task mode
-
-  weekly-squad-digest:
-    required: [scheduler.cron.trigger]
-    optional:
-      - name: slack.post.message
-        enables: scheduled digest delivery
-    degraded_modes:
-      slack.post.message: WEEKLY_SQUAD_DIGEST.md is still written; the digest simply is not delivered via Slack
-
-  unit-test-creator:
-    required: [host.repository.read_write]
-    optional:
-      - name: host.test_runner.execute
-        enables: generated test verification loop
-    degraded_modes:
-      host.test_runner.execute: tests are written but left UNVERIFIED; run-until-green iteration cannot happen locally
-
-  integration-test-creator:
-    required: [host.repository.read_write]
-    optional:
-      - name: host.test_runner.execute
-        enables: generated test verification loop
-      - name: host.dependency.reachable
-        enables: real adjacent dependency under test
-    degraded_modes:
-      host.test_runner.execute: tests are written but left UNVERIFIED; run-until-green iteration cannot happen locally
-      host.dependency.reachable: no real adjacent dependency to test against; escalate or skip the target rather than fall back to mocking (that belongs to unit-test-creator)
-
-  contract-test-creator:
-    required: [host.repository.read_write]
-    optional:
-      - name: host.test_runner.execute
-        enables: generated contract test verification
-    degraded_modes:
-      host.test_runner.execute: contract tests are written but left UNVERIFIED; run-until-green iteration cannot happen locally
-
-  e2e-test-creator:
-    required: [host.repository.read_write]
-    optional:
-      - name: host.browser.automation
-        enables: UI journey execution
-      - name: host.test_runner.execute
-        enables: generated e2e verification
-    degraded_modes:
-      host.browser.automation: cannot execute generated browser journeys locally; ship them UNVERIFIED
-      host.test_runner.execute: tests are written but left UNVERIFIED; run-until-green iteration cannot happen locally
-
-  api-test-creator:
-    required: [host.repository.read_write]
-    optional:
-      - name: host.api.reachable
-        enables: black-box HTTP suite against running API
-      - name: host.test_runner.execute
-        enables: Newman or equivalent runner
-    degraded_modes:
-      host.api.reachable: generate the request/assertion collection but skip execution; mark status UNVERIFIED
-      host.test_runner.execute: collection is generated but hand off for manual/CI execution instead of iterating to green locally
-
-  test-writer:
-    required: [host.repository.read]
-    optional:
-      - name: unit-test-creator.invoke
-        enables: routed unit-test generation
-      - name: integration-test-creator.invoke
-        enables: routed integration-test generation
-      - name: contract-test-creator.invoke
-        enables: routed contract-test generation
-      - name: e2e-test-creator.invoke
-        enables: routed e2e generation
-      - name: api-test-creator.invoke
-        enables: routed API-test generation
-    degraded_modes:
-      unit-test-creator.invoke: requested unit level is recorded as BLOCKED with child_invoke_unavailable; other planned levels remain accounted for
-      integration-test-creator.invoke: requested integration level is recorded as BLOCKED with child_invoke_unavailable; other planned levels remain accounted for
-      contract-test-creator.invoke: requested contract level is recorded as BLOCKED with child_invoke_unavailable; other planned levels remain accounted for
-      e2e-test-creator.invoke: requested e2e level is recorded as BLOCKED with child_invoke_unavailable; other planned levels remain accounted for
-      api-test-creator.invoke: requested API level is recorded as BLOCKED with child_invoke_unavailable; other planned levels remain accounted for
-
   prd-architect:
-    required: [host.report.write]
+    required:
+    - host.report.write
     optional: []
-
-  architecture-review:
-    required: [host.report.write]
-    optional: []
-  system-design:
-    required: [host.report.write]
-    optional: []
-  module-design:
-    required: [host.report.write, host.repository.read]
-    optional: []
-  codebase-architecture-review:
-    required: [host.report.write, host.repository.read]
-    optional: []
-  api-design-review:
-    required: [host.report.write]
-    optional: []
-  database-review:
-    required: [host.report.write]
-    optional: []
+  production-readiness-review:
+    required:
+    - host.report.write
+    optional:
+    - name: pr-review.invoke
+      enables: exact-head PR/MR code-review refresh
+    - name: host.repository.read
+      enables: candidate diff/config/current-material collection
+    - name: host.scm.change.read
+      enables: exact-head remote PR/MR/commit metadata + diff retrieval
+    - name: host.scm.change_history.read
+      enables: authoritative material-change enumeration for direct release-candidate
+        readiness
+    - name: host.ci.status
+      enables: authoritative exact-source required-check evidence
+    - name: host.scm.policy.read
+      enables: authoritative approvals/CODEOWNERS/branch-rule/thread evidence
+    - name: host.build.provenance.read
+      enables: source-revision to deployable-digest linkage
+    - name: host.service.metadata.read
+      enables: criticality/ownership/on-call/recovery policy evidence
+    - name: host.dependency.advisories.read
+      enables: current vulnerability/advisory evidence for changed dependencies at
+        the exact source revision
+    - name: host.runtime.metrics.read
+      enables: authoritative current demand/history and capacity baseline evidence
+    - name: change-impact-analyzer.invoke
+      enables: missing/stale impact prerequisite refresh
+    - name: deployment-risk-review.invoke
+      enables: missing/stale deployment-risk prerequisite refresh
+    - name: security-review.invoke
+      enables: security dimension refresh
+    - name: observability-review.invoke
+      enables: observability dimension refresh
+    - name: resilience-review.invoke
+      enables: resilience dimension refresh
+    - name: api-design-review.invoke
+      enables: API dimension refresh
+    - name: database-review.invoke
+      enables: database dimension refresh
+    - name: performance-review.invoke
+      enables: performance dimension refresh
+    - name: capacity-planner.invoke
+      enables: capacity dimension refresh
+    - name: dependency-upgrade-review.invoke
+      enables: dependency dimension refresh
+    degraded_modes:
+      pr-review.invoke: exact-head PR/MR review evidence remains UNKNOWN unless a
+        fresh trusted mr_review_report is already available
+      host.repository.read: candidate diff/config collection becomes UNKNOWN for dimensions
+        requiring it
+      host.scm.change.read: PR/MR exact-head metadata and diff retrieval become UNKNOWN
+      host.scm.change_history.read: release-candidate material-change enumeration
+        becomes UNKNOWN; coverage_status cannot reach COMPLETE
+      host.ci.status: CI dimension becomes UNKNOWN rather than PASS/FAIL
+      host.scm.policy.read: SCM policy gate (approvals/CODEOWNERS/threads) becomes
+        UNKNOWN
+      host.build.provenance.read: build provenance becomes UNKNOWN for any candidate
+        whose deployable differs from its source revision
+      host.service.metadata.read: ownership/criticality/recovery-policy dimensions
+        become UNKNOWN
+      host.dependency.advisories.read: dependency dimension becomes UNKNOWN unless
+        an authoritative required dependency-security CI check covers the exact source
+        revision; absence never maps to PASS
+      host.runtime.metrics.read: capacity dimension becomes UNKNOWN for tier0/tier1/unknown
+        criticality (caller-only demand/baseline cannot PASS at those tiers) and at
+        most CONDITIONAL for tier2/tier3
+      change-impact-analyzer.invoke: change-impact prerequisite reuses a fresh trusted
+        change_impact_report when present, otherwise the impact-dependent applicability
+        determination is UNKNOWN
+      deployment-risk-review.invoke: deployment-risk prerequisite reuses a fresh trusted
+        deployment_risk_report when present, otherwise that dimension is UNKNOWN
+      security-review.invoke: security dimension reuses a fresh trusted security_review_report
+        when present, otherwise UNKNOWN
+      observability-review.invoke: observability dimension reuses a fresh trusted
+        observability_review_report when present, otherwise UNKNOWN
+      resilience-review.invoke: resilience dimension reuses a fresh trusted resilience_review_report
+        when present, otherwise UNKNOWN
+      api-design-review.invoke: API dimension reuses a fresh trusted api_design_review_report
+        when present, otherwise UNKNOWN
+      database-review.invoke: database dimension reuses a fresh trusted database_review_report
+        when present, otherwise UNKNOWN
+      performance-review.invoke: performance dimension reuses a fresh trusted performance_review_report
+        when present, otherwise UNKNOWN
+      capacity-planner.invoke: capacity dimension reuses a fresh trusted capacity_plan
+        when present, otherwise UNKNOWN
+      dependency-upgrade-review.invoke: dependency dimension reuses a fresh trusted
+        dependency_upgrade_report when present, otherwise UNKNOWN
+  release-readiness-checker:
+    required:
+    - host.report.write
+    optional:
+    - name: gitlab.list_merge_requests
+      enables: release-candidate MR enumeration
+    - name: datadog.query_metrics
+      enables: per-service health slice
+    - name: telemetry.logs.query
+      enables: incident window cross-check
+    - name: production-readiness-review.conditional_invoke
+      enables: conditional v2 production-readiness refresh when no trusted deployable-scoped
+        report is reusable
+    - name: host.scm.change_history.read
+      enables: authoritative commits/PRs/reverts/cherry-picks enumeration in the release
+        range
+    - name: host.scm.policy.read
+      enables: authoritative review/approval/bypass policy evidence for release-candidate
+        code-review coverage
+    - name: host.build.provenance.read
+      enables: source-revision to release-deployable-digest linkage when release_ref
+        is an artifact digest
+    degraded_modes:
+      gitlab.list_merge_requests: require an explicit release_ref per manifest entry
+        instead of auto-discovering MRs
+      datadog.query_metrics: per-service health slice becomes UNKNOWN rather than
+        READY/NOT_READY for that dimension
+      telemetry.logs.query: incident window cross-check becomes UNKNOWN; falls through
+        to incident-rca's own signal instead
+      production-readiness-review.conditional_invoke: a v2 entry requiring production
+        readiness with no reusable trusted report becomes UNKNOWN rather than invoking
+        the child
+      host.scm.change_history.read: v2 release-candidate code-review coverage cannot
+        reach COMPLETE; the production-readiness dimension becomes UNKNOWN
+      host.scm.policy.read: release-candidate SCM policy evidence becomes UNKNOWN
+      host.build.provenance.read: a v2 entry whose release_ref is a non-source digest
+        cannot establish candidate identity; production readiness is never invoked
+        and stays UNKNOWN
+  resilience-review:
+    required:
+    - host.report.write
+    optional:
+    - name: host.repository.read
+      enables: repository and runtime/config evidence discovery
   security-review:
-    required: [host.report.write]
+    required:
+    - host.report.write
     optional: []
-  performance-review:
-    required: [host.report.write]
-    optional: []
-  capacity-planner:
-    required: [host.report.write]
-    optional: []
-  observability-review:
-    required: [host.report.write]
-    optional: []
-  deployment-risk-review:
-    required: [host.report.write]
-    optional: []
-  dependency-upgrade-review:
-    required: [host.report.write]
+  squad-map:
+    required:
+    - gitlab.list_projects
+    optional:
+    - name: gitlab.get_repository_file
+      enables: CODEOWNERS and ownership file reads
+    - name: datadog.list_service_definitions
+      enables: service alias crosswalk
+    degraded_modes:
+      gitlab.get_repository_file: ownership falls back to fuzzy/contributor-based
+        signals only, confidence capped at LOW
+      datadog.list_service_definitions: skip the service alias crosswalk; ownership
+        stays repo-level only
+  system-design:
+    required:
+    - host.report.write
     optional: []
   tech-debt-assessor:
-    required: [host.report.write]
+    required:
+    - host.report.write
     optional: []
-
-  change-impact-analyzer:
-    required: [host.report.write]
+  test-writer:
+    required:
+    - host.repository.read
     optional:
-      - name: host.repository.read
-        enables: repository-grounded diff/caller/consumer/config discovery
-      - name: host.scm.change.read
-        enables: exact-head remote PR/MR metadata + diff retrieval
-
-  resilience-review:
-    required: [host.report.write]
+    - name: unit-test-creator.invoke
+      enables: routed unit-test generation
+    - name: integration-test-creator.invoke
+      enables: routed integration-test generation
+    - name: contract-test-creator.invoke
+      enables: routed contract-test generation
+    - name: e2e-test-creator.invoke
+      enables: routed e2e generation
+    - name: api-test-creator.invoke
+      enables: routed API-test generation
+    degraded_modes:
+      unit-test-creator.invoke: requested unit level is recorded as BLOCKED with child_invoke_unavailable;
+        other planned levels remain accounted for
+      integration-test-creator.invoke: requested integration level is recorded as
+        BLOCKED with child_invoke_unavailable; other planned levels remain accounted
+        for
+      contract-test-creator.invoke: requested contract level is recorded as BLOCKED
+        with child_invoke_unavailable; other planned levels remain accounted for
+      e2e-test-creator.invoke: requested e2e level is recorded as BLOCKED with child_invoke_unavailable;
+        other planned levels remain accounted for
+      api-test-creator.invoke: requested API level is recorded as BLOCKED with child_invoke_unavailable;
+        other planned levels remain accounted for
+  unit-test-creator:
+    required:
+    - host.repository.read_write
     optional:
-      - name: host.repository.read
-        enables: repository and runtime/config evidence discovery
-
-  implementation-planner:
-    required: [host.report.write, host.repository.read]
-    optional: []
+    - name: host.test_runner.execute
+      enables: generated test verification loop
+    degraded_modes:
+      host.test_runner.execute: tests are written but left UNVERIFIED; run-until-green
+        iteration cannot happen locally
+  weekly-squad-digest:
+    required:
+    - scheduler.cron.trigger
+    optional:
+    - name: slack.post.message
+      enables: scheduled digest delivery
+    degraded_modes:
+      slack.post.message: WEEKLY_SQUAD_DIGEST.md is still written; the digest simply
+        is not delivered via Slack
+  who-owns-x-bot:
+    required:
+    - slack.slash_command.receive
+    optional:
+    - name: squad-map.invoke
+      enables: full mapping table instead of one-shot lookup

@@ -20,3 +20,9 @@
 7abacf39fc1e79b08d52d09981602d6dd48dc7db:evals/golden/architecture-review/golden-injection.yaml:aws-access-token:30
 6236a541273e8a1f6d08af1e51d35fb2f7fdd034:evals/golden/tech-debt-assessor/golden-injection.yaml:aws-access-token:34
 6236a541273e8a1f6d08af1e51d35fb2f7fdd034:evals/golden/tech-debt-assessor/golden-injection.yaml:generic-api-key:29
+# scripts/tests/test_shared_redaction.py (PR #202) carried a Stripe-shaped placeholder in its
+# redaction fixtures for two commits; the fixture was swapped for a low-entropy placeholder in
+# the follow-up commit, but the introducing diff stays in history. Reviewed: synthetic.
+ec2da652d9d631043ee945794738b4dc4ae509a9:scripts/tests/test_shared_redaction.py:stripe-access-token:57
+ec2da652d9d631043ee945794738b4dc4ae509a9:scripts/tests/test_shared_redaction.py:generic-api-key:58
+ec2da652d9d631043ee945794738b4dc4ae509a9:scripts/tests/test_shared_redaction.py:stripe-access-token:58

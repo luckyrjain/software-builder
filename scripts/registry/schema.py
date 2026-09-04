@@ -202,16 +202,15 @@ def clear_registry_cache() -> None:
     has_canonical_manifest_shape check on the result. `load_registry_raw` caches
     per resolved root path instead.
 
-    The two places that write to skills.yaml both call this immediately after:
-    `cmd_generate`'s own `_write_outputs` step (so a later read in the same
+    The one place that writes skills.yaml calls this immediately after:
+    `cmd_generate`'s own `_write_outputs` step, so a later read in the same
     invocation -- e.g. a second `_prune_stale_adapters` pass -- sees the
-    just-written state rather than a pre-write cache entry) and
-    `cmd_backfill`'s `write_text` in backfill_capabilities.py. Neither call is
+    just-written state rather than a pre-write cache entry. That call is not
     load-bearing for the CLI's own real usage today -- every invocation is one
-    subcommand per process, so nothing reads the cache again after `cmd_backfill`
-    writes regardless -- but calling it there means `load_registry_raw` doesn't
-    depend on that one-shot-process invariant to stay correct if a future caller
-    (a library user, a batch script chaining subcommands in-process) breaks it.
+    subcommand per process -- but calling it there means `load_registry_raw`
+    doesn't depend on that one-shot-process invariant to stay correct if a future
+    caller (a library user, a batch script chaining subcommands in-process)
+    breaks it.
     """
     _registry_raw_cache.clear()
     _registry_cache.clear()

@@ -9,7 +9,7 @@ persistence or display.
 Use `redact_secrets()` from [scripts/kubesense_logs.py](../scripts/kubesense_logs.py) — do not
 re-implement ad hoc regex in workflow steps. The CLI and evidence exporters already call it; any new
 log source must too. Covers `Authorization`/`Bearer`/`Basic` auth headers, `api_key`/`x-api-key`,
-`password`/`passwd`/`pwd`, and PEM private-key/certificate blocks (JSON-quoted and `key=value` forms).
+`password`/`passwd`/`pwd`, PEM private-key/certificate blocks (JSON-quoted and `key=value` forms), plus GitHub/OpenAI/AWS token prefixes, JWTs and `client_secret` values — the log profile of the shared table in `docs/skill-framework/shared/redaction.py`.
 
 ## Sources that must redact
 

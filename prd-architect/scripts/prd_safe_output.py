@@ -2,52 +2,59 @@
 
 from __future__ import annotations
 
+import importlib.util
 import ipaddress
 import re
+from pathlib import Path
+from types import ModuleType
 
-_REDACTED_SECRET = "[REDACTED SECRET]"
-_SECRET_KEY = (
-    # Environment names may namespace a credential with separator-delimited
-    # identifier segments. Requiring those separators and a complete sensitive
-    # suffix avoids substring matches in ordinary names such as MONKEY/TURNKEY.
-    r"(?P<key>(?:[A-Za-z][A-Za-z0-9]*[_.-])*"
-    r"(?:api[_-]?key|access[_-]?key|private(?:[_-]?|\s+)key|key|token|password|passphrase|secret|"
-    r"client(?:[_.-]?|\s+)secret))(?![A-Za-z0-9_])"
+SKILL_ROOT = Path(__file__).resolve().parents[1]
+_SCRIPT_DIR = Path(__file__).resolve().parent
+_INSTALL_MANIFEST = ".software-builder-manifest.json"
+_RUNTIME_DESCRIPTION = "shared redaction runtime"
+
+
+def _shared_runtime_loader() -> ModuleType:
+    """Import shared_runtime_loader, which owns the containment policy for every module this
+    script executes out of docs/skill-framework/shared/.
+
+    Only locating the loader itself is handled here, and it needs no policy of its own: an
+    installed package carries the loader beside this script (package_skill.py vendors it), so the
+    lookup never leaves the package, and the install manifest is what proves a missing vendored
+    copy is a packaging fault rather than an invitation to read a sibling path.
+    """
+    beside = _SCRIPT_DIR / "shared_runtime_loader.py"
+    if beside.is_file():
+        path = beside
+    elif (SKILL_ROOT / _INSTALL_MANIFEST).is_file():
+        raise RuntimeError(f"unable to load packaged {_RUNTIME_DESCRIPTION} loader: {beside}")
+    else:
+        path = SKILL_ROOT.parent / "docs/skill-framework/shared/shared_runtime_loader.py"
+    if not path.is_file():
+        raise RuntimeError(f"unable to load packaged {_RUNTIME_DESCRIPTION} loader: {path}")
+    spec = importlib.util.spec_from_file_location("software_builder_shared_runtime_loader", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"unable to load packaged {_RUNTIME_DESCRIPTION} loader: {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+_redaction = _shared_runtime_loader().load_shared_runtime(
+    SKILL_ROOT,
+    "redaction",
+    alias="shared_redaction",
+    description=_RUNTIME_DESCRIPTION,
 )
-_SECRET_PATTERNS = (
-    re.compile(
-        r"-----BEGIN (?:[A-Z0-9]+ )?PRIVATE KEY-----.*?"
-        r"-----END (?:[A-Z0-9]+ )?PRIVATE KEY-----",
-        re.DOTALL,
-    ),
-    re.compile(r"(?<![A-Za-z0-9_])github_pat_[A-Za-z0-9_]{20,}(?![A-Za-z0-9_])"),
-    re.compile(r"(?<![A-Za-z0-9_])ghp_[A-Za-z0-9]{36}(?![A-Za-z0-9_])"),
-    re.compile(r"(?i)\bBearer\s+[A-Za-z0-9._~+/-]{8,}=*"),
-    re.compile(
-        r"(?<![A-Za-z0-9_-])[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}\."
-        r"[A-Za-z0-9_-]{16,}(?![A-Za-z0-9_-])"
-    ),
-    re.compile(r"(?<![A-Za-z0-9_-])sk-[A-Za-z0-9_-]{16,}(?![A-Za-z0-9_-])", re.IGNORECASE),
-    re.compile(r"(?<![A-Z0-9])AKIA[A-Z0-9]{16}(?![A-Z0-9])"),
-    re.compile(
-        r"(?i)\bclient(?:[_.-]?|\s+)secret\s*[:=]\s*"
-        r"[A-Za-z0-9+/_-]{16,}={0,2}(?![A-Za-z0-9+/_=-])"
-    ),
-)
-_QUOTED_SECRET_ASSIGNMENT_RE = re.compile(
-    rf"(?i)\b{_SECRET_KEY}\s*[:=]\s*"
-    r"(?P<quote>['\"])(?P<value>(?:\\[^\r\n]|(?!(?P=quote))[^\\\r\n])+)(?P=quote)"
-)
-_UNQUOTED_SECRET_ASSIGNMENT_RE = re.compile(
-    rf"(?i)\b{_SECRET_KEY}\s*[:=](?!\s*['\"])\s*"
-    # An explicit credential label makes spaces part of an unquoted value. Stop
-    # at a line end, a clear record delimiter, or the next bounded assignment
-    # field. All other punctuation is secret material: stopping at brackets,
-    # braces, parentheses, or ampersands can expose a credential suffix.
-    r"(?P<value>[^\r\n,;|]+?)"
-    r"(?=(?:[ \t]+(?=[A-Z][A-Z0-9_.-]*[ \t]*[:=]))|[\r\n,;|]|$)"
-)
-_EMAIL_RE = re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.IGNORECASE)
+
+# The document profile of the shared table: credential forms whose generic key names are gated by
+# value-shape predicates, plus contact PII. Phone numbers are not a table pattern -- telling a
+# phone from a date, a version, or a request id needs the structured-token segmentation below.
+REDACTION_PROFILE = _redaction.DOCUMENT_PATTERNS
+
+_REDACTED_SECRET = _redaction.SECRET_MARKER
+_REDACTED_EMAIL = _redaction.EMAIL_MARKER
+_REDACTED_PHONE = "[REDACTED PHONE]"
 _PHONE_RE = re.compile(r"(?<!\w)(?:\+?\d[\d .()-]{7,}\d)(?!\w)")
 _STRUCTURED_NUMERIC_RE = re.compile(
     r"(?<!\w)(?:"
@@ -86,72 +93,6 @@ _PROTOCOL_RELATIVE_RE = re.compile(r"(?<![:/])//(?=[A-Za-z0-9])")
 _WWW_URL_RE = re.compile(r"(?i)\bwww\.(?=[A-Za-z0-9])")
 
 
-def _is_secret_placeholder(value: str) -> bool:
-    return bool(
-        re.fullmatch(r"\$\{[A-Z0-9_]+\}", value, re.IGNORECASE)
-        or re.fullmatch(
-            r"(?:placeholder|example|sample|dummy|changeme|replace[-_.]?me)"
-            r"(?:[-_.]?(?:value|secret|token|key))?",
-            value,
-            re.IGNORECASE,
-        )
-    )
-
-
-def _is_generic_key_secret(value: str) -> bool:
-    """Require secret-shape evidence for ambiguous bare ``key`` assignments."""
-    if re.fullmatch(r"[0-9a-f]{24,}", value, re.IGNORECASE):
-        return True
-    if len(value) < 20 or not re.fullmatch(r"[A-Za-z0-9+/_=-]+", value):
-        return False
-    # Lowercase words joined as an identifier are commonly cache, database, and
-    # index keys. Mixed character classes are stronger credential evidence.
-    classes = sum(
-        bool(re.search(pattern, value))
-        for pattern in (r"[a-z]", r"[A-Z]", r"\d", r"[+/=]")
-    )
-    return classes >= 3
-
-
-def _is_secret_assignment(key: str, value: str) -> bool:
-    if len(value) < 12 or _is_secret_placeholder(value):
-        return False
-    key_parts = re.split(r"[_.-]", key.lower())
-    ambiguous_key_suffix = key_parts[-1] == "key" and not (
-        len(key_parts) > 1 and key_parts[-2] in {"api", "access", "private"}
-    )
-    return not ambiguous_key_suffix or _is_generic_key_secret(value)
-
-
-def _redact_secrets(source: str) -> tuple[str, bool]:
-    """Redact ordered, conservative credential forms without exposing matched values."""
-    normalized = source
-    redacted = False
-    for pattern in _SECRET_PATTERNS:
-        normalized, count = pattern.subn(_REDACTED_SECRET, normalized)
-        redacted = redacted or count > 0
-
-    def redact_quoted(match: re.Match[str]) -> str:
-        nonlocal redacted
-        value = match.group("value").strip()
-        if not _is_secret_assignment(match.group("key"), value):
-            return match.group(0)
-        redacted = True
-        return _REDACTED_SECRET
-
-    normalized = _QUOTED_SECRET_ASSIGNMENT_RE.sub(redact_quoted, normalized)
-
-    def redact_unquoted(match: re.Match[str]) -> str:
-        nonlocal redacted
-        value = match.group("value")
-        if not _is_secret_assignment(match.group("key"), value):
-            return match.group(0)
-        redacted = True
-        return _REDACTED_SECRET
-
-    return _UNQUOTED_SECRET_ASSIGNMENT_RE.sub(redact_unquoted, normalized), redacted
-
-
 def _redact_phone(match: re.Match[str]) -> str:
     """Redact plausible phones while preserving dates, versions, and numeric IDs."""
     candidate = match.group(0)
@@ -171,13 +112,13 @@ def _redact_phone(match: re.Match[str]) -> str:
     # Country prefixes, domestic formatting, and 10+ contiguous digits are strong
     # phone evidence. Keep identifier-style equal four-digit groups literal.
     if candidate.startswith("+") or "(" in candidate or ")" in candidate:
-        return "[REDACTED PHONE]"
+        return _REDACTED_PHONE
     if candidate.isdigit():
-        return "[REDACTED PHONE]"
+        return _REDACTED_PHONE
     if " " in candidate or "." in candidate:
         groups = re.split(r"[ .]+", candidate)
         if len(groups) >= 3 and not all(len(group) == 4 for group in groups):
-            return "[REDACTED PHONE]"
+            return _REDACTED_PHONE
         return candidate
     groups = candidate.split("-")
     if (
@@ -185,7 +126,7 @@ def _redact_phone(match: re.Match[str]) -> str:
         and len(groups[0]) <= 3
         and all(2 <= len(group) <= 4 for group in groups)
     ):
-        return "[REDACTED PHONE]"
+        return _REDACTED_PHONE
     return candidate
 
 
@@ -193,9 +134,10 @@ def normalize_untrusted_markdown(source: str) -> tuple[str, bool]:
     """Return one structurally inert Markdown paragraph and whether redaction occurred."""
     if not isinstance(source, str):
         raise TypeError("source must be a string")
-    normalized, redacted = _redact_secrets(source)
-    normalized, count = _EMAIL_RE.subn("[REDACTED EMAIL]", normalized)
-    redacted = redacted or count > 0
+    normalized, hits = _redaction.redact(
+        source, patterns=REDACTION_PROFILE, marker=_REDACTED_SECRET
+    )
+    redacted = bool(hits)
 
     phone_redacted = False
 
@@ -213,7 +155,7 @@ def normalize_untrusted_markdown(source: str) -> tuple[str, bool]:
         relative_end = phone_end - match.start()
         return (
             match.group(0)[:relative_start]
-            + "[REDACTED PHONE]"
+            + _REDACTED_PHONE
             + match.group(0)[relative_end:]
         )
 
@@ -268,7 +210,7 @@ def normalize_untrusted_markdown(source: str) -> tuple[str, bool]:
         )
         line = line.replace("`", "ˋ").replace("|", "\\|")
         line = _STRUCTURAL_PREFIX_RE.sub(r"\1\\\2", line)
-        for marker in (_REDACTED_SECRET, "[REDACTED EMAIL]", "[REDACTED PHONE]"):
+        for marker in (_REDACTED_SECRET, _REDACTED_EMAIL, _REDACTED_PHONE):
             line = line.replace(marker.replace("[", "［").replace("]", "］"), marker)
         lines.append(line)
     return " ⤶ ".join(lines), redacted

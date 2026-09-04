@@ -26,7 +26,14 @@ class DuplicateKeyError(yaml.YAMLError):
     """Raised when YAML would otherwise silently overwrite a mapping key."""
 
 
-class DuplicateKeySafeLoader(yaml.SafeLoader):
+# libyaml's C scanner/parser (CSafeLoader) is 5-9x faster on this repository's inputs
+# and shares the pure-Python constructor the duplicate-key check overrides below, so
+# the safety semantics are identical; fall back to the pure-Python loader where
+# PyYAML was built without libyaml.
+_BASE_SAFE_LOADER = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
+
+
+class DuplicateKeySafeLoader(_BASE_SAFE_LOADER):
     """SafeLoader variant that rejects duplicate keys recursively."""
 
 
@@ -90,7 +97,7 @@ def load_unique_yaml(text: str) -> Any:
     # Parser events distinguish real YAML collections from brackets in quoted or
     # block scalars and comments, while still running before recursive construction.
     depth = 0
-    for event in yaml.parse(text, Loader=yaml.SafeLoader):
+    for event in yaml.parse(text, Loader=_BASE_SAFE_LOADER):
         if isinstance(event, (yaml.MappingStartEvent, yaml.SequenceStartEvent)):
             depth += 1
             if depth > MAX_YAML_NESTING:

@@ -45,32 +45,64 @@ RETRY_DELAY = 5s (timeout), 30s (rate_limited)
 
 ## 4. Degraded mode patterns
 
-When an MCP server is unavailable, each skill follows a defined fallback.
+When an MCP server is unavailable, each skill follows a defined fallback. Each skill declares that
+policy in its own registry fragment (`scripts/registry/skills.d/<skill-id>.yaml`, under
+`degraded_behavior:`), which is the single place it is authored and the only place to edit it.
 
-Each skill declares that policy in its own registry fragment (`scripts/registry/skills.d/<skill-id>.yaml`,
-under `degraded_behavior:`), and `make generate` projects all 38 into
-`scripts/registry/degraded_behavior.yaml` — which names abstract capability ids rather than
-MCP-server brands, and is what the eval scenario harness actually exercises. **The table below is an
-illustrative subset**, kept in provider terms because that is how the failure presents to a user. It is
-written by hand and is not generated from the registry — when the two differ, the registry is
-authoritative.
+<!-- degraded-behavior-table:start -->
+Every row below is projected from `scripts/registry/degraded_behavior.yaml` — itself
+generated from each skill's `scripts/registry/skills.d/<skill-id>.yaml` fragment — and named
+against the families in `scripts/registry/capability_families.yaml`. A provider-branded
+capability is shown by provider, because that is how the failure presents to a user
+(`Datadog ❌`, `GitHub ❌`, `GitLab ❌`, `Kubernetes MCP ❌`); the capability id beside it is what the eval scenario harness exercises.
 
-| Skill | MCP unavailable | Degraded behavior |
-|-------|-----------------|-------------------|
-| **incident-rca** | Datadog ❌ | `oss-obs` path; user-supplied PromQL; cap confidence MEDIUM |
-| **incident-rca** | KubeSense ❌ | Datadog-only (if available); skip log body analysis; note in Gaps |
-| **incident-rca** | Both ❌ | Blocked — require at least one observability source |
-| **k8s** | Datadog ❌ | Continue with Kubernetes MCP when it supplies sufficient historical evidence; otherwise defer history-dependent sizing or emit `insufficient_metrics` |
-| **k8s** | Kubernetes MCP ❌ | Continue with Datadog telemetry; record the live-state verification gap |
-| **k8s** | All viable sources unauthorized | Blocked (`STOP_REASON: auth_failure`); report attempted sources and configure one usable source |
-| **k8s** | Git MCP ❌ | Skip manifest drift check; ask user to paste resource values |
-| **pr-review** | GitLab ❌ | Blocked — cannot fetch MR diffs without GitLab MCP |
-| **pr-review** | Jira ❌ | Skip AC check; note "no linked ticket" |
-| **domain-comprehension** | GitLab ❌ | Squad mapping degraded (CODEOWNERS fallback via squad-map) |
-| **domain-comprehension** | Datadog ❌ | Skip P2b runtime validation; note in KNOWN_OMISSIONS |
-| **squad-map** | GitLab ❌ | Datadog team only; GitLab squad = UNKNOWN |
-| **squad-map** | Datadog ❌ | GitLab squad only; Datadog team = UNKNOWN |
-| **squad-map** | Both ❌ | CODEOWNERS fallback; confidence capped at LOW |
+`BLOCKED` means all viable sources for that capability are gone and the skill must stop rather
+than guess. `FALLBACK` and `DEGRADED` continue on the remaining capabilities named in the last
+column.
+
+| Skill | Unavailable | Capability family | Behavior | Continues with |
+|-------|-------------|-------------------|----------|----------------|
+| `api-design-review` | `host.report.write` | — | BLOCKED | — |
+| `api-test-creator` | `host.repository.read_write` | — | BLOCKED | — |
+| `architecture-review` | `host.report.write` | — | BLOCKED | — |
+| `backlog-runner` | `scheduler.cron.trigger` | — | BLOCKED | — |
+| `capacity-planner` | `host.report.write` | — | BLOCKED | — |
+| `change-impact-analyzer` | `host.repository.read` | — | DEGRADED | `host.report.write`, `host.scm.change.read` |
+| `codebase-architecture-review` | `host.repository.read` | — | BLOCKED | `host.report.write` |
+| `contract-test-creator` | `host.repository.read_write` | — | BLOCKED | — |
+| `cost-optimization-sprint-planner` | `host.filesystem.read` | — | BLOCKED | — |
+| `database-review` | `host.report.write` | — | BLOCKED | — |
+| `dependency-upgrade-review` | `host.report.write` | — | BLOCKED | — |
+| `deployment-risk-review` | `host.report.write` | — | BLOCKED | — |
+| `domain-comprehension` | `host.repository.read` | — | BLOCKED | — |
+| `e2e-test-creator` | `host.repository.read_write` | — | BLOCKED | — |
+| `implementation-planner` | `host.repository.read` | — | BLOCKED | `host.report.write` |
+| `incident-rca` | `telemetry.logs.query` | — | BLOCKED | — |
+| `incident-triage-agent` | `pager.webhook.receive` | — | BLOCKED | — |
+| `integration-test-creator` | `host.repository.read_write` | — | BLOCKED | — |
+| `k8s-overprovisioning-datadog` | **Kubernetes MCP ❌** `kubernetes.metrics.history` | observability.metrics.query | FALLBACK | `datadog.query_metrics` |
+| `loop-task-implementer` | `host.repository.read_write` | — | BLOCKED | — |
+| `migration-program-manager` | `host.filesystem.read` | — | BLOCKED | — |
+| `module-design` | `host.repository.read` | — | BLOCKED | `host.report.write` |
+| `mysql-to-postgres-sql` | `host.repository.read_write` | — | BLOCKED | — |
+| `new-hire-guide` | `host.repository.read` | — | BLOCKED | — |
+| `observability-review` | `host.report.write` | — | BLOCKED | — |
+| `performance-review` | `host.report.write` | — | BLOCKED | — |
+| `pr-gatekeeper` | **GitLab ❌** `gitlab.get_merge_request` | scm.pull_request.read | BLOCKED | — |
+| `pr-review` | **GitLab ❌** `gitlab.get_merge_request` | scm.pull_request.read | FALLBACK | `github.get_pull_request`, `github.get_pull_request_files` |
+| `prd-architect` | `host.report.write` | — | BLOCKED | — |
+| `production-readiness-review` | `host.dependency.advisories.read` | — | DEGRADED | `host.report.write`, `host.repository.read`, `host.scm.change.read`, `host.ci.status`, `host.scm.policy.read`, `host.build.provenance.read`, `host.service.metadata.read` |
+| `release-readiness-checker` | `host.report.write` | — | BLOCKED | — |
+| `resilience-review` | `host.repository.read` | — | DEGRADED | `host.report.write` |
+| `security-review` | `host.report.write` | — | BLOCKED | — |
+| `squad-map` | **GitLab ❌** `gitlab.list_projects` | scm.merge_request.list | BLOCKED | — |
+| `system-design` | `host.report.write` | — | BLOCKED | — |
+| `tech-debt-assessor` | `host.report.write` | — | BLOCKED | — |
+| `test-writer` | `host.repository.read` | — | BLOCKED | — |
+| `unit-test-creator` | `host.repository.read_write` | — | BLOCKED | — |
+| `weekly-squad-digest` | `scheduler.cron.trigger` | — | BLOCKED | — |
+| `who-owns-x-bot` | `slack.slash_command.receive` | — | BLOCKED | — |
+<!-- degraded-behavior-table:end -->
 
 ## 5. Confidence impact
 
