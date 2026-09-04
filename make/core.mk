@@ -129,11 +129,6 @@ validate-hosts:
 backfill-capabilities-check:
 	@python3 -m scripts.registry backfill-capabilities --check
 
-# Not wired into `lint` -- catches capability_catalog.yaml drift from what's
-# committed in skills.yaml, which is a maintainer-triggered repair, not a
-# per-PR gate. Run manually: make backfill-capabilities-drift-check
-backfill-capabilities-drift-check:
-	@python3 -m scripts.registry backfill-capabilities --check --overwrite
 
 validate-evals:
 	@python3 -m scripts.evals
@@ -170,57 +165,20 @@ generate-check:
 	@python3 -m scripts.registry generate --check
 
 # ---------------------------------------------------------------------------
-# Shared lint helpers — used via $(call ...) inside per-skill lint targets
-# below. Each wraps a check that was previously duplicated verbatim (only
-# the skill dir / threshold / file list changed) across ~20 lint-<skill>
-# targets. Skill-specific content assertions stay inline at each call site.
-# ---------------------------------------------------------------------------
-
-# $(call check_skill_md_length,<skill-dir>,<max-lines>,<optional guidance suffix>)
-define check_skill_md_length
-	@test -f $(1)/SKILL.md || \
-		{ echo "error: missing $(1)/SKILL.md" >&2; exit 1; }
-	@lines=$$(wc -l < $(1)/SKILL.md | tr -d ' '); \
-	if [ -z "$$lines" ] || [ "$$lines" -eq 0 ]; then \
-		echo "error: $(1)/SKILL.md is empty" >&2; exit 1; \
-	elif [ "$$lines" -gt $(2) ]; then \
-		echo "error: $(1) SKILL.md $$lines lines (> $(2))$(if $(3), — $(3))" >&2; \
-		exit 1; \
-	fi; \
-	echo "  ok ($$lines lines)"
-endef
-
-# $(call check_workflow_frontmatter,<skill-dir>)
-define check_workflow_frontmatter
-	@fail=0; \
-	for f in $(1)/workflow/*.md; do \
-		fm=$$(awk '/^---$$/{c++; next} c==1' "$$f"); \
-		for key in workflow_version phase produces consumes; do \
-			if ! printf '%s\n' "$$fm" | grep -q "^$$key:"; then \
-				echo "  missing $$key frontmatter: $$f" >&2; fail=1; \
-			fi; \
-		done; \
-	done; \
-	if [ "$$fail" -ne 0 ]; then echo "error: $(1) workflow/*.md must declare workflow_version, phase, produces, consumes" >&2; exit 1; fi; \
-	echo "  ok"
-endef
-
-# $(call check_dangling_links,<space-separated glob(s)>)
+# Shared lint helpers — used via $(call ...) inside lint-framework below.
 #
-# One process per call site, not one per link: validate_references.py --files
-# takes the whole expanded glob at once. It is the same checker (and the same
-# anchor algorithm) `lint-framework` runs over the whole tree, so a link cannot
-# pass one gate and fail the other.
-define check_dangling_links
-	@python3 scripts/validate_references.py --files $(1) && echo "  ok" || \
-		{ echo "error: dangling reference link(s) found" >&2; exit 1; }
-endef
-
-# The three helpers below exist so a failing structural assertion says what it
+# The per-skill structural checks that used to live here as macros (SKILL.md
+# length, workflow frontmatter, dangling links, required reference files, the
+# framework/setup/safe-output/cross-skill-escalation links, the
+# disable-model-invocation gate) now live in scripts/lint_skills.py, which
+# drives them from the registry instead of from ~34 hand-written call sites.
+#
+# The three that remain exist so a failing structural assertion says what it
 # wanted. A bare `@grep -q PATTERN FILE` recipe line fails with nothing but
 # `make: *** [lint-<skill>] Error 1` -- the `@` suppresses the command echo, so
 # neither the file, the pattern, nor the rule is named, and an operator has to
 # read this file to find out what broke.
+# ---------------------------------------------------------------------------
 
 # $(call require_heading,<file>,<quoted grep pattern>,<heading name>)
 define require_heading
@@ -238,44 +196,6 @@ endef
 define require_file
 	@test -f $(1) || \
 		{ echo "error: missing $(1) ($(2))" >&2; exit 1; }
-endef
-
-# $(call require_ref_files,<dir>,<space-separated basenames, no .md ext>)
-define require_ref_files
-	@for f in $(2); do \
-		test -f $(1)/$$f.md || \
-			{ echo "error: missing $(1)/$$f.md" >&2; exit 1; }; \
-	done
-endef
-
-# $(call require_disable_model_invocation,<skill-dir>)
-define require_disable_model_invocation
-	@grep -q '^disable-model-invocation: true' $(1)/SKILL.md || \
-		{ echo "error: $(1)/SKILL.md must set disable-model-invocation: true" >&2; exit 1; }
-endef
-
-# $(call forbid_disable_model_invocation,<skill-dir>)
-define forbid_disable_model_invocation
-	@grep -q '^disable-model-invocation:' $(1)/SKILL.md && \
-		{ echo "error: $(1)/SKILL.md must NOT set disable-model-invocation" >&2; exit 1; } || true
-endef
-
-# $(call require_setup_links_framework,<skill-dir>)
-define require_setup_links_framework
-	@grep -q 'skill-framework' $(1)/SETUP.md || \
-		{ echo "error: $(1)/SETUP.md must link to docs/skill-framework" >&2; exit 1; }
-endef
-
-# $(call require_cross_skill_escalation,<skill-dir>)
-define require_cross_skill_escalation
-	@grep -q 'cross-skill-escalation' $(1)/SKILL.md || \
-		{ echo "error: $(1) SKILL.md must link to shared cross-skill-escalation" >&2; exit 1; }
-endef
-
-# $(call require_safe_output_link,<skill-dir>)
-define require_safe_output_link
-	@grep -q 'docs/skill-framework/shared/safe-output.md' $(1)/SKILL.md || \
-		{ echo "error: $(1)/SKILL.md must link to shared safe-output" >&2; exit 1; }
 endef
 
 lint: lint-static lint-suites
@@ -323,23 +243,11 @@ lint-pr-review-scripts:
 	fi
 
 lint-pr-review-skill:
-	@echo "lint-pr-review-skill: SKILL.md line count (<= 180)"
-	$(call check_skill_md_length,pr-review,180,keep orchestrator thin; detail in workflow/)
+	@python3 scripts/lint_skills.py --skill pr-review
 	@echo "lint-pr-review-skill: route-aware workflow contract (workflow_version, phase, produces, consumes checked here too)"
 	@python3 -m scripts.validate_workflow_contracts pr-review
-	@echo "lint-pr-review-skill: dangling markdown links"
-	$(call check_dangling_links,pr-review/*.md pr-review/reference/*.md pr-review/workflow/*.md)
-	$(call require_cross_skill_escalation,pr-review)
 	@grep -q 'smoke-test' pr-review/SKILL.md || \
 		{ echo "error: pr-review SKILL.md must link to reference/smoke-test.md" >&2; exit 1; }
-	$(call require_safe_output_link,pr-review)
-	@for f in pr-review/workflow/posting.md pr-review/workflow/phase-5.md; do \
-		grep -q 'docs/skill-framework/shared/prompt-injection.md' "$$f" && \
-		grep -q 'docs/skill-framework/shared/safe-output.md' "$$f" && \
-		grep -qiE 'escape|fence' "$$f" && \
-		grep -qi 'redact' "$$f" || \
-			{ echo "error: $$f must sanitize untrusted rendered fields per prompt-injection and safe-output" >&2; exit 1; }; \
-	done
 	@grep -q 'Merge gate' pr-review/workflow/phase-5.md || \
 		{ echo "error: phase-5.md must document merge gate checklist" >&2; exit 1; }
 	@test -f pr-review/reference/repository-health.md || \
@@ -353,25 +261,7 @@ lint-pr-review-skill:
 	@echo "  ok (framework refs)"
 
 lint-pr-gatekeeper:
-	@echo "lint-pr-gatekeeper: SKILL.md line count (<= 180)"
-	$(call check_skill_md_length,pr-gatekeeper,180,keep orchestrator thin; detail in workflow/)
-	@echo "lint-pr-gatekeeper: disable-model-invocation set (automation entry point, must not compete with pr-review's ambient invocation)"
-	$(call require_disable_model_invocation,pr-gatekeeper)
-	@echo "  ok"
-	@echo "lint-pr-gatekeeper: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
-	$(call check_workflow_frontmatter,pr-gatekeeper)
-	@echo "lint-pr-gatekeeper: dangling markdown links"
-	$(call check_dangling_links,pr-gatekeeper/*.md pr-gatekeeper/reference/*.md pr-gatekeeper/workflow/*.md)
-	@echo "lint-pr-gatekeeper: required reference files"
-	$(call require_ref_files,pr-gatekeeper/reference,phase-index lazy-load-index auto-post-policy smoke-test pressure-tests)
-	@grep -q 'pressure-tests' pr-gatekeeper/reference/smoke-test.md || \
-		{ echo "error: smoke-test.md must link to pressure-tests.md" >&2; exit 1; }
-	$(call require_setup_links_framework,pr-gatekeeper)
-	$(call require_safe_output_link,pr-gatekeeper)
-	@grep -q 'docs/skill-framework/shared/prompt-injection.md' pr-gatekeeper/reference/auto-post-policy.md && \
-	 grep -q 'docs/skill-framework/shared/safe-output.md' pr-gatekeeper/reference/auto-post-policy.md && \
-	 grep -qiE 'escape|fence|backtick' pr-gatekeeper/reference/auto-post-policy.md || \
-		{ echo "error: auto-post-policy.md must sanitize untrusted rendered fields per prompt-injection and safe-output" >&2; exit 1; }
+	@python3 scripts/lint_skills.py --skill pr-gatekeeper
 	@echo "lint-pr-gatekeeper: script pytest suite"
 	@if python3 -c "import pytest" >/dev/null 2>&1; then \
 		python3 -m pytest pr-gatekeeper/tests/ -q || exit 1; \
@@ -384,12 +274,9 @@ lint-pr-gatekeeper:
 		{ echo "error: pr-review ask-point drift detected — see pr-gatekeeper/reference/auto-post-policy.md" >&2; exit 1; }
 
 lint-k8s-skill:
-	@echo "lint-k8s-skill: SKILL.md line count (<= 150)"
-	$(call check_skill_md_length,k8s-overprovisioning-datadog,150,keep orchestrator thin; detail in workflow/)
+	@python3 scripts/lint_skills.py --skill k8s-overprovisioning-datadog
 	@echo "lint-k8s-skill: route-aware workflow contract (workflow_version, phase, produces, consumes checked here too)"
 	@python3 -m scripts.validate_workflow_contracts k8s-overprovisioning-datadog
-	@echo "lint-k8s-skill: dangling markdown links"
-	$(call check_dangling_links,k8s-overprovisioning-datadog/*.md k8s-overprovisioning-datadog/workflow/*.md k8s-overprovisioning-datadog/reference/*.md k8s-overprovisioning-datadog/render/*.md k8s-overprovisioning-datadog/templates/*.md)
 	@echo "lint-k8s-skill: p95 not positively asserted in memory-sizing section"
 	@sec=$$(awk '/^## Memory request utilization/{f=1;next} /^## /{f=0} f' k8s-overprovisioning-datadog/thresholds.md); \
 	bad=$$(printf '%s\n' "$$sec" | grep -in 'p95' | grep -ivE 'not|never' || true); \
@@ -417,13 +304,6 @@ lint-k8s-skill:
 		echo "error: expected >= 14 template files (incl. human-report.md), found $$count" >&2; exit 1; \
 	fi; \
 	echo "  ok ($$count files)"
-	@echo "lint-k8s-skill: framework reference files"
-	@for f in phase-index lazy-load-index smoke-test mcp-capabilities; do \
-		test -f k8s-overprovisioning-datadog/reference/$$f.md || \
-			{ echo "error: missing k8s-overprovisioning-datadog/reference/$$f.md" >&2; exit 1; }; \
-	done
-	$(call require_setup_links_framework,k8s-overprovisioning-datadog)
-	$(call require_cross_skill_escalation,k8s-overprovisioning-datadog)
 	@grep -q 'assessment_metadata' k8s-overprovisioning-datadog/workflow/report.md || \
 		{ echo "error: k8s workflow/report.md must document assessment_metadata footer" >&2; exit 1; }
 	@test -f k8s-overprovisioning-datadog/reference/gold-human-report-excerpt.md || exit 1
@@ -439,12 +319,6 @@ lint-k8s-skill:
 	@test -f k8s-overprovisioning-datadog/dependencies.md || exit 1
 	@grep -q 'next_assessment_due' k8s-overprovisioning-datadog/workflow/report.md || \
 		{ echo "error: report.md must document next_assessment_due in history" >&2; exit 1; }
-	@echo "  ok"
-	@echo "lint-k8s-skill: safe rendered-output boundary"
-	$(call require_safe_output_link,k8s-overprovisioning-datadog)
-	@grep -q 'docs/skill-framework/shared/safe-output.md' k8s-overprovisioning-datadog/render/markdown.md && \
-	 grep -qiE 'escape|backtick|code span' k8s-overprovisioning-datadog/render/markdown.md || \
-		{ echo "error: render/markdown.md must sanitize untrusted rendered fields per safe-output" >&2; exit 1; }
 	@echo "  ok"
 	@echo "lint-k8s-skill: decision graph invariant validator"
 	@cache="$(CURDIR)/.pycache-lint-k8s"; \
@@ -472,8 +346,7 @@ lint-k8s-skill:
 lint-k8s: lint-k8s-skill
 
 lint-incident-rca:
-	@echo "lint-incident-rca: SKILL.md line count (<= 180)"
-	$(call check_skill_md_length,incident-rca,180,push detail into workflow/ and reference/)
+	@python3 scripts/lint_skills.py --skill incident-rca
 	@echo "lint-incident-rca: route-aware workflow contract (workflow_version, phase, produces, consumes checked here too)"
 	@python3 -m scripts.validate_workflow_contracts incident-rca
 	@echo "lint-incident-rca: evidence.example.json parses as JSON"
@@ -483,12 +356,6 @@ lint-incident-rca:
 	python3 -c "import json,sys; json.load(open('incident-rca/reference/evidence.example.json'))" || \
 		{ echo "error: incident-rca/reference/evidence.example.json is not valid JSON" >&2; exit 1; }; \
 	echo "  ok"
-	@echo "lint-incident-rca: dangling markdown links"
-	$(call check_dangling_links,incident-rca/*.md incident-rca/reference/*.md incident-rca/workflow/*.md)
-	@echo "lint-incident-rca: framework reference files"
-	$(call require_ref_files,incident-rca/reference,phase-index lazy-load-index smoke-test mcp-capabilities)
-	$(call require_setup_links_framework,incident-rca)
-	$(call require_cross_skill_escalation,incident-rca)
 	@python3 -c "from pathlib import Path; from scripts.registry.schema import load_registry_raw; assert load_registry_raw(Path('skills.yaml'))['skills']['incident-rca']['entrypoint'] == 'SKILL.md'" || \
 		{ echo "error: canonical manifest must own incident-rca entrypoint metadata" >&2; exit 1; }
 	@grep -q 'dependency_chain' incident-rca/reference/evidence-schema.md || \
@@ -530,36 +397,12 @@ lint-incident-rca:
 		exit 1; \
 	fi; \
 	echo "  ok"
-	@echo "lint-incident-rca: safe rendered-output boundary"
-	$(call require_safe_output_link,incident-rca)
-	@grep -q 'docs/skill-framework/shared/safe-output.md' incident-rca/report-template.md && \
-	 grep -qiE 'escape|backtick|code span' incident-rca/report-template.md || \
-		{ echo "error: report-template.md must sanitize untrusted rendered fields per safe-output" >&2; exit 1; }
 	@echo "  ok"
 
 lint-incident-triage-agent:
-	@echo "lint-incident-triage-agent: SKILL.md line count (<= 180)"
-	$(call check_skill_md_length,incident-triage-agent,180,keep orchestrator thin; detail in workflow/)
-	@echo "lint-incident-triage-agent: disable-model-invocation set (automation entry point, must not compete with incident-rca/squad-map's ambient invocation)"
-	$(call require_disable_model_invocation,incident-triage-agent)
-	@echo "  ok"
+	@python3 scripts/lint_skills.py --skill incident-triage-agent
 	@echo "lint-incident-triage-agent: route-aware workflow contract (workflow_version, phase, produces, consumes checked here too)"
 	@python3 -m scripts.validate_workflow_contracts incident-triage-agent
-	@echo "lint-incident-triage-agent: dangling markdown links"
-	$(call check_dangling_links,incident-triage-agent/*.md incident-triage-agent/reference/*.md incident-triage-agent/workflow/*.md)
-	@echo "lint-incident-triage-agent: required reference files"
-	$(call require_ref_files,incident-triage-agent/reference,phase-index lazy-load-index unattended-gate-policy triage-doc-format postmortem-format smoke-test pressure-tests)
-	@grep -q 'pressure-tests' incident-triage-agent/reference/smoke-test.md || \
-		{ echo "error: smoke-test.md must link to pressure-tests.md" >&2; exit 1; }
-	$(call require_setup_links_framework,incident-triage-agent)
-	$(call require_safe_output_link,incident-triage-agent)
-	@for f in triage-doc-format postmortem-format; do \
-		grep -q 'docs/skill-framework/shared/prompt-injection.md' incident-triage-agent/reference/$$f.md && \
-		 grep -q 'docs/skill-framework/shared/safe-output.md' incident-triage-agent/reference/$$f.md && \
-		 grep -qiE 'escape|fence|backtick' incident-triage-agent/reference/$$f.md || \
-			{ echo "error: reference/$$f.md must sanitize untrusted rendered fields per prompt-injection and safe-output" >&2; exit 1; }; \
-	done
-	@echo "  ok (framework refs)"
 
 lint-domain-comprehension: lint-domain-comprehension-skill lint-domain-comprehension-scripts
 
@@ -602,20 +445,11 @@ lint-domain-comprehension-scripts:
 	echo "  ok (manifest validator)"
 
 lint-domain-comprehension-skill:
-	@echo "lint-domain-comprehension: SKILL.md line count (<= 180)"
-	$(call check_skill_md_length,domain-comprehension,180,keep orchestrator thin; detail in workflow/)
-	@echo "lint-domain-comprehension: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
-	$(call check_workflow_frontmatter,domain-comprehension)
-	@echo "lint-domain-comprehension: dangling markdown links"
-	$(call check_dangling_links,domain-comprehension/*.md domain-comprehension/reference/*.md domain-comprehension/workflow/*.md domain-comprehension/reference/domain-packs/*.md)
-	@echo "lint-domain-comprehension: framework reference files"
-	$(call require_ref_files,domain-comprehension/reference,phase-index lazy-load-index smoke-test mcp-capabilities phase-outputs manifest-schema repo-classification evidence-precedence evidence-summary business-flows large-scale-execution)
+	@python3 scripts/lint_skills.py --skill domain-comprehension
 	@test -f domain-comprehension/templates/manifest.yaml || \
 		{ echo "error: missing domain-comprehension/templates/manifest.yaml" >&2; exit 1; }
 	@test -f domain-comprehension/templates/BUSINESS_FLOWS.md || exit 1
 	@test -f domain-comprehension/templates/KNOWN_OMISSIONS.md || exit 1
-	$(call require_setup_links_framework,domain-comprehension)
-	$(call require_cross_skill_escalation,domain-comprehension)
 	@grep -q 'manifest.yaml' domain-comprehension/SKILL.md || \
 		{ echo "error: domain-comprehension SKILL.md must document manifest.yaml" >&2; exit 1; }
 	@test -f domain-comprehension/reference/pressure-tests.md || exit 1
@@ -629,35 +463,16 @@ lint-domain-comprehension-skill:
 		{ echo "error: manifest template must be schema_version 2" >&2; exit 1; }
 	@echo "lint-domain-comprehension: pressure harness"
 	@bash domain-comprehension/tests/run_pressure_tests.sh
-	@echo "  ok (framework refs)"
-	@echo "lint-domain-comprehension: safe rendered-output boundary"
-	$(call require_safe_output_link,domain-comprehension)
-	@grep -q 'docs/skill-framework/shared/safe-output.md' domain-comprehension/reference/deliverable-templates.md && \
-	 grep -qiE 'escape|backtick|code span' domain-comprehension/reference/deliverable-templates.md || \
-		{ echo "error: deliverable-templates.md must sanitize untrusted rendered fields per safe-output" >&2; exit 1; }
 	@echo "  ok"
 
 lint-squad-map:
-	@echo "lint-squad-map: SKILL.md line count (<= 180)"
-	$(call check_skill_md_length,squad-map,180,keep orchestrator thin; detail in workflow/)
-	@echo "lint-squad-map: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
-	$(call check_workflow_frontmatter,squad-map)
-	@echo "lint-squad-map: dangling markdown links"
-	$(call check_dangling_links,squad-map/*.md squad-map/reference/*.md squad-map/workflow/*.md)
-	@echo "lint-squad-map: required reference files"
-	$(call require_ref_files,squad-map/reference,squad-mapping mcp-capabilities config-schema smoke-test lazy-load-index phase-index)
+	@python3 scripts/lint_skills.py --skill squad-map
 	@test -f squad-map/templates/SQUAD_MAP.md || \
 		{ echo "error: missing squad-map/templates/SQUAD_MAP.md" >&2; exit 1; }
-	$(call require_setup_links_framework,squad-map)
 	@test -f squad-map/reference/pressure-tests.md || exit 1
 	@test -f squad-map/reference/gold-squad-map-excerpt.md || exit 1
 	@grep -q 'monorepo_service_dirs' squad-map/reference/config-schema.md || \
 		{ echo "error: config-schema.md must document monorepo_service_dirs mapping" >&2; exit 1; }
-	$(call require_safe_output_link,squad-map)
-	@grep -q 'docs/skill-framework/shared/prompt-injection.md' squad-map/reference/squad-mapping.md && \
-	 grep -q 'docs/skill-framework/shared/safe-output.md' squad-map/reference/squad-mapping.md && \
-	 grep -qiE 'escape|fence|backtick' squad-map/reference/squad-mapping.md || \
-		{ echo "error: squad-mapping.md must sanitize untrusted rendered fields per prompt-injection and safe-output" >&2; exit 1; }
 	@grep -q '<org_prefix>' squad-map/reference/smoke-test.md || \
 		{ echo "error: smoke-test.md must use portable org_prefix placeholder" >&2; exit 1; }
 	@grep -q 'Out of scope (archived)' squad-map/workflow/phase-1.md || \
@@ -676,95 +491,18 @@ lint-squad-map:
 	echo "  ok (framework refs + squad_mapping tests)"
 
 lint-who-owns-x-bot:
-	@echo "lint-who-owns-x-bot: SKILL.md line count (<= 180)"
-	$(call check_skill_md_length,who-owns-x-bot,180,keep orchestrator thin; detail in workflow/)
-	@echo "lint-who-owns-x-bot: disable-model-invocation set (automation entry point, must not compete with squad-map's ambient invocation)"
-	$(call require_disable_model_invocation,who-owns-x-bot)
-	@echo "  ok"
-	@echo "lint-who-owns-x-bot: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
-	$(call check_workflow_frontmatter,who-owns-x-bot)
-	@echo "lint-who-owns-x-bot: dangling markdown links"
-	$(call check_dangling_links,who-owns-x-bot/*.md who-owns-x-bot/reference/*.md who-owns-x-bot/workflow/*.md)
-	@echo "lint-who-owns-x-bot: required reference files"
-	$(call require_ref_files,who-owns-x-bot/reference,phase-index lazy-load-index slack-format smoke-test pressure-tests)
-	@grep -q 'pressure-tests' who-owns-x-bot/reference/smoke-test.md || \
-		{ echo "error: smoke-test.md must link to pressure-tests.md" >&2; exit 1; }
-	$(call require_setup_links_framework,who-owns-x-bot)
-	$(call require_safe_output_link,who-owns-x-bot)
-	@grep -q 'docs/skill-framework/shared/prompt-injection.md' who-owns-x-bot/reference/slack-format.md && \
-	 grep -q 'docs/skill-framework/shared/safe-output.md' who-owns-x-bot/reference/slack-format.md && \
-	 grep -qiE 'escape|strip' who-owns-x-bot/reference/slack-format.md || \
-		{ echo "error: slack-format.md must sanitize untrusted rendered fields per prompt-injection and safe-output" >&2; exit 1; }
-	@echo "  ok (framework refs)"
+	@python3 scripts/lint_skills.py --skill who-owns-x-bot
 
 lint-new-hire-guide:
-	@echo "lint-new-hire-guide: SKILL.md line count (<= 180)"
-	$(call check_skill_md_length,new-hire-guide,180,keep orchestrator thin; detail in workflow/)
-	@echo "lint-new-hire-guide: disable-model-invocation NOT set (ambiently invocable, unlike the webhook/schedule wrappers)"
-	$(call forbid_disable_model_invocation,new-hire-guide)
-	@echo "  ok"
-	@echo "lint-new-hire-guide: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
-	$(call check_workflow_frontmatter,new-hire-guide)
-	@echo "lint-new-hire-guide: dangling markdown links"
-	$(call check_dangling_links,new-hire-guide/*.md new-hire-guide/reference/*.md new-hire-guide/workflow/*.md)
-	@echo "lint-new-hire-guide: required reference files"
-	$(call require_ref_files,new-hire-guide/reference,phase-index lazy-load-index tour-format smoke-test pressure-tests)
-	@grep -q 'pressure-tests' new-hire-guide/reference/smoke-test.md || \
-		{ echo "error: smoke-test.md must link to pressure-tests.md" >&2; exit 1; }
-	$(call require_setup_links_framework,new-hire-guide)
-	$(call require_safe_output_link,new-hire-guide)
-	@grep -q 'docs/skill-framework/shared/prompt-injection.md' new-hire-guide/reference/tour-format.md && \
-	 grep -q 'docs/skill-framework/shared/safe-output.md' new-hire-guide/reference/tour-format.md && \
-	 grep -qiE 'escape|fence|backtick' new-hire-guide/reference/tour-format.md && \
-	 grep -qi 'redact' new-hire-guide/reference/tour-format.md || \
-		{ echo "error: tour-format.md must sanitize untrusted rendered fields per prompt-injection and safe-output" >&2; exit 1; }
-	@echo "  ok (framework refs)"
+	@python3 scripts/lint_skills.py --skill new-hire-guide
 
 lint-release-readiness-checker:
-	@echo "lint-release-readiness-checker: SKILL.md line count (<= 180)"
-	$(call check_skill_md_length,release-readiness-checker,180,keep orchestrator thin; detail in workflow/)
-	@echo "lint-release-readiness-checker: disable-model-invocation NOT set (ambiently invocable, unlike the webhook/schedule wrappers)"
-	$(call forbid_disable_model_invocation,release-readiness-checker)
-	@echo "  ok"
-	@echo "lint-release-readiness-checker: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
-	$(call check_workflow_frontmatter,release-readiness-checker)
-	@echo "lint-release-readiness-checker: dangling markdown links"
-	$(call check_dangling_links,release-readiness-checker/*.md release-readiness-checker/reference/*.md release-readiness-checker/workflow/*.md)
-	@echo "lint-release-readiness-checker: required reference files"
-	$(call require_ref_files,release-readiness-checker/reference,phase-index lazy-load-index gate-policy report-format smoke-test pressure-tests)
-	@grep -q 'pressure-tests' release-readiness-checker/reference/smoke-test.md || \
-		{ echo "error: smoke-test.md must link to pressure-tests.md" >&2; exit 1; }
-	$(call require_setup_links_framework,release-readiness-checker)
-	$(call require_safe_output_link,release-readiness-checker)
-	@grep -q 'docs/skill-framework/shared/prompt-injection.md' release-readiness-checker/reference/report-format.md && \
-	 grep -q 'docs/skill-framework/shared/safe-output.md' release-readiness-checker/reference/report-format.md && \
-	 grep -qiE 'escape|fence|backtick' release-readiness-checker/reference/report-format.md || \
-		{ echo "error: report-format.md must sanitize untrusted rendered fields per prompt-injection and safe-output" >&2; exit 1; }
-	@echo "  ok (framework refs)"
+	@python3 scripts/lint_skills.py --skill release-readiness-checker
 
 lint-migration-program-manager:
-	@echo "lint-migration-program-manager: SKILL.md line count (<= 180)"
-	$(call check_skill_md_length,migration-program-manager,180,keep orchestrator thin; detail in workflow/)
-	@echo "lint-migration-program-manager: disable-model-invocation NOT set (ambiently invocable, no live wrapped-skill invocation to gate)"
-	$(call forbid_disable_model_invocation,migration-program-manager)
-	@echo "  ok"
-	@echo "lint-migration-program-manager: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
-	$(call check_workflow_frontmatter,migration-program-manager)
-	@echo "lint-migration-program-manager: dangling markdown links"
-	$(call check_dangling_links,migration-program-manager/*.md migration-program-manager/reference/*.md migration-program-manager/workflow/*.md)
-	@echo "lint-migration-program-manager: required reference files"
-	$(call require_ref_files,migration-program-manager/reference,phase-index lazy-load-index report-format smoke-test pressure-tests)
-	@grep -q 'pressure-tests' migration-program-manager/reference/smoke-test.md || \
-		{ echo "error: smoke-test.md must link to pressure-tests.md" >&2; exit 1; }
+	@python3 scripts/lint_skills.py --skill migration-program-manager
 	@test -f migration-program-manager/scripts/aggregate_migration_status.py || \
 		{ echo "error: missing migration-program-manager/scripts/aggregate_migration_status.py" >&2; exit 1; }
-	$(call require_setup_links_framework,migration-program-manager)
-	$(call require_safe_output_link,migration-program-manager)
-	@grep -q 'docs/skill-framework/shared/prompt-injection.md' migration-program-manager/reference/report-format.md && \
-	 grep -q 'docs/skill-framework/shared/safe-output.md' migration-program-manager/reference/report-format.md && \
-	 grep -qiE 'escape|fence|backtick' migration-program-manager/reference/report-format.md && \
-	 grep -qi 'redact' migration-program-manager/reference/report-format.md || \
-		{ echo "error: report-format.md must sanitize untrusted rendered fields per prompt-injection and safe-output" >&2; exit 1; }
 	@echo "lint-migration-program-manager: aggregator pytest"
 	@if python3 -c "import pytest" >/dev/null 2>&1; then \
 		python3 -m pytest migration-program-manager/tests/ -q || exit 1; \
@@ -774,34 +512,10 @@ lint-migration-program-manager:
 	@echo "  ok (framework refs + aggregator tests)"
 
 lint-cost-optimization-sprint-planner:
-	@echo "lint-cost-optimization-sprint-planner: SKILL.md line count (<= 180)"
-	$(call check_skill_md_length,cost-optimization-sprint-planner,180,keep orchestrator thin; detail in workflow/)
-	@echo "lint-cost-optimization-sprint-planner: disable-model-invocation NOT set (ambiently invocable, unlike the webhook/schedule wrappers)"
-	$(call forbid_disable_model_invocation,cost-optimization-sprint-planner)
-	@echo "  ok"
-	@echo "lint-cost-optimization-sprint-planner: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
-	$(call check_workflow_frontmatter,cost-optimization-sprint-planner)
-	@echo "lint-cost-optimization-sprint-planner: dangling markdown links"
-	$(call check_dangling_links,cost-optimization-sprint-planner/*.md cost-optimization-sprint-planner/reference/*.md cost-optimization-sprint-planner/workflow/*.md)
-	@echo "lint-cost-optimization-sprint-planner: required reference files"
-	$(call require_ref_files,cost-optimization-sprint-planner/reference,phase-index lazy-load-index gate-policy sweep-policy report-format smoke-test pressure-tests)
-	@grep -q 'pressure-tests' cost-optimization-sprint-planner/reference/smoke-test.md || \
-		{ echo "error: smoke-test.md must link to pressure-tests.md" >&2; exit 1; }
-	$(call require_setup_links_framework,cost-optimization-sprint-planner)
-	$(call require_safe_output_link,cost-optimization-sprint-planner)
-	@grep -q 'docs/skill-framework/shared/prompt-injection.md' cost-optimization-sprint-planner/reference/report-format.md && \
-	 grep -q 'docs/skill-framework/shared/safe-output.md' cost-optimization-sprint-planner/reference/report-format.md && \
-	 grep -qiE 'escape|fence|backtick' cost-optimization-sprint-planner/reference/report-format.md || \
-		{ echo "error: report-format.md must sanitize untrusted rendered fields per prompt-injection and safe-output" >&2; exit 1; }
-	@echo "  ok (framework refs)"
+	@python3 scripts/lint_skills.py --skill cost-optimization-sprint-planner
 
 lint-mysql-to-postgres-sql:
-	@echo "lint-mysql-to-postgres-sql: SKILL.md line count (<= 180)"
-	$(call check_skill_md_length,mysql-to-postgres-sql,180,)
-	@echo "lint-mysql-to-postgres-sql: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
-	$(call check_workflow_frontmatter,mysql-to-postgres-sql)
-	@echo "lint-mysql-to-postgres-sql: required reference files"
-	$(call require_ref_files,mysql-to-postgres-sql/reference,function-translations collection-domain-files smoke-test org-migration-gaps timestamp-handling data-type-mapping case-sensitivity nodejs-migration python-migration migration-prompts shadow-migration lazy-load-index collection-checklist-refresh migration-edge-cases calibration-snippets)
+	@python3 scripts/lint_skills.py --skill mysql-to-postgres-sql
 	@test -f mysql-to-postgres-sql/scripts/scan-mysql-dialect.sh || \
 		{ echo "error: missing mysql-to-postgres-sql/scripts/scan-mysql-dialect.sh" >&2; exit 1; }
 	@test -f mysql-to-postgres-sql/scripts/scan-report.sh || \
@@ -810,8 +524,6 @@ lint-mysql-to-postgres-sql:
 		{ echo "error: missing mysql-to-postgres-sql/scripts/mysql-dialect-patterns.sh" >&2; exit 1; }
 	@test -f mysql-to-postgres-sql/reference/spring-datasource-example.yaml || \
 		{ echo "error: missing mysql-to-postgres-sql/reference/spring-datasource-example.yaml" >&2; exit 1; }
-	$(call require_setup_links_framework,mysql-to-postgres-sql)
-	$(call require_cross_skill_escalation,mysql-to-postgres-sql)
 	@test -f mysql-to-postgres-sql/reference/skill-contract.md || \
 		{ echo "error: missing mysql-to-postgres-sql/reference/skill-contract.md" >&2; exit 1; }
 	@test -f mysql-to-postgres-sql/reference/pressure-tests.md || \
@@ -830,14 +542,6 @@ lint-mysql-to-postgres-sql:
 		{ echo "error: mysql-to-postgres-sql SKILL.md must reference MIGRATION_STATUS.yaml" >&2; exit 1; }
 	@grep -q 'skill-contract' mysql-to-postgres-sql/SKILL.md || \
 		{ echo "error: mysql-to-postgres-sql SKILL.md must link to skill-contract.md" >&2; exit 1; }
-	@grep -q 'pressure-tests' mysql-to-postgres-sql/reference/smoke-test.md || \
-		{ echo "error: smoke-test.md must link to pressure-tests.md" >&2; exit 1; }
-	@echo "lint-mysql-to-postgres-sql: safe rendered-output boundary"
-	$(call require_safe_output_link,mysql-to-postgres-sql)
-	@grep -q 'docs/skill-framework/shared/prompt-injection.md' mysql-to-postgres-sql/workflow/migrate-service.md && \
-	 grep -q 'docs/skill-framework/shared/safe-output.md' mysql-to-postgres-sql/workflow/migrate-service.md && \
-	 grep -qiE 'escape|fence|backtick' mysql-to-postgres-sql/workflow/migrate-service.md || \
-		{ echo "error: workflow/migrate-service.md must sanitize untrusted rendered fields per prompt-injection and safe-output" >&2; exit 1; }
 	@echo "  ok"
 	@echo "lint-mysql-to-postgres-sql: scan fixture + pressure harness"
 	@bash mysql-to-postgres-sql/tests/run_pressure_tests.sh
@@ -858,8 +562,6 @@ lint-mysql-to-postgres-sql:
 		exit 1; \
 	fi; \
 	echo "  ok (pressure + pytest + AST checker)"
-	@echo "lint-mysql-to-postgres-sql: dangling markdown links"
-	$(call check_dangling_links,mysql-to-postgres-sql/*.md mysql-to-postgres-sql/reference/*.md mysql-to-postgres-sql/reference/domain-packs/*.md mysql-to-postgres-sql/workflow/*.md)
 	@echo "lint-mysql-to-postgres-sql: shellcheck scan + test scripts"
 	@if command -v shellcheck >/dev/null 2>&1; then \
 		shellcheck -x -P SCRIPTDIR mysql-to-postgres-sql/scripts/scan-mysql-dialect.sh mysql-to-postgres-sql/scripts/scan-report.sh mysql-to-postgres-sql/scripts/mysql-dialect-patterns.sh mysql-to-postgres-sql/tests/run_pressure_tests.sh; \
@@ -890,75 +592,20 @@ lint-loop-task-implementer-scripts:
 	fi
 
 lint-loop-task-implementer-skill:
-	@echo "lint-loop-task-implementer: SKILL.md line count (<= 180)"
-	$(call check_skill_md_length,loop-task-implementer,180,)
-	@echo "lint-loop-task-implementer: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
-	$(call check_workflow_frontmatter,loop-task-implementer)
-	@echo "lint-loop-task-implementer: dangling markdown links"
-	$(call check_dangling_links,loop-task-implementer/*.md loop-task-implementer/reference/*.md loop-task-implementer/workflow/*.md)
+	@python3 scripts/lint_skills.py --skill loop-task-implementer
 	@echo "lint-loop-task-implementer: required files"
 	@for f in SETUP.md README.md examples.md report-template.md; do \
 		test -f loop-task-implementer/$$f || \
 			{ echo "error: missing loop-task-implementer/$$f" >&2; exit 1; }; \
 	done
-	$(call require_ref_files,loop-task-implementer/reference,phase-index lazy-load-index mcp-capabilities smoke-test pressure-tests platform-adapters)
 	@test -f loop-task-implementer/reference/state-schema.yaml || \
 		{ echo "error: missing loop-task-implementer/reference/state-schema.yaml" >&2; exit 1; }
-	$(call require_setup_links_framework,loop-task-implementer)
-	$(call require_cross_skill_escalation,loop-task-implementer)
-	@echo "  ok"
-	@echo "lint-loop-task-implementer: safe rendered-output boundary"
-	$(call require_safe_output_link,loop-task-implementer)
-	@grep -q 'docs/skill-framework/shared/prompt-injection.md' loop-task-implementer/report-template.md && \
-	 grep -q 'docs/skill-framework/shared/safe-output.md' loop-task-implementer/report-template.md && \
-	 grep -qiE 'escape|fence|backtick' loop-task-implementer/report-template.md && \
-	 grep -qi 'redact' loop-task-implementer/report-template.md || \
-		{ echo "error: report-template.md must sanitize and redact untrusted rendered fields per prompt-injection and safe-output" >&2; exit 1; }
-	@echo "  ok"
 
 lint-backlog-runner:
-	@echo "lint-backlog-runner: SKILL.md line count (<= 180)"
-	$(call check_skill_md_length,backlog-runner,180,keep orchestrator thin; detail in workflow/)
-	@echo "lint-backlog-runner: disable-model-invocation set (automation entry point, must not compete with loop-task-implementer's ambient invocation)"
-	$(call require_disable_model_invocation,backlog-runner)
-	@echo "  ok"
-	@echo "lint-backlog-runner: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
-	$(call check_workflow_frontmatter,backlog-runner)
-	@echo "lint-backlog-runner: dangling markdown links"
-	$(call check_dangling_links,backlog-runner/*.md backlog-runner/reference/*.md backlog-runner/workflow/*.md)
-	@echo "lint-backlog-runner: required reference files"
-	$(call require_ref_files,backlog-runner/reference,phase-index lazy-load-index queue-policy morning-summary-format smoke-test pressure-tests)
-	@grep -q 'pressure-tests' backlog-runner/reference/smoke-test.md || \
-		{ echo "error: smoke-test.md must link to pressure-tests.md" >&2; exit 1; }
-	$(call require_safe_output_link,backlog-runner)
-	@grep -q 'docs/skill-framework/shared/prompt-injection.md' backlog-runner/reference/morning-summary-format.md && \
-	 grep -q 'docs/skill-framework/shared/safe-output.md' backlog-runner/reference/morning-summary-format.md && \
-	 grep -qiE 'escape|fence' backlog-runner/reference/morning-summary-format.md && \
-	 grep -qi 'redact' backlog-runner/reference/morning-summary-format.md || \
-		{ echo "error: morning-summary-format.md must sanitize untrusted rendered fields per prompt-injection and safe-output" >&2; exit 1; }
-	$(call require_setup_links_framework,backlog-runner)
-	@echo "  ok (framework refs)"
+	@python3 scripts/lint_skills.py --skill backlog-runner
 
 lint-weekly-squad-digest:
-	@echo "lint-weekly-squad-digest: SKILL.md line count (<= 180)"
-	$(call check_skill_md_length,weekly-squad-digest,180,keep orchestrator thin; detail in workflow/)
-	@echo "lint-weekly-squad-digest: disable-model-invocation set (automation entry point, must not compete with migration-program-manager's/cost-optimization-sprint-planner's ambient invocation)"
-	$(call require_disable_model_invocation,weekly-squad-digest)
-	@echo "  ok"
-	@echo "lint-weekly-squad-digest: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
-	$(call check_workflow_frontmatter,weekly-squad-digest)
-	@echo "lint-weekly-squad-digest: dangling markdown links"
-	$(call check_dangling_links,weekly-squad-digest/*.md weekly-squad-digest/reference/*.md weekly-squad-digest/workflow/*.md)
-	@echo "lint-weekly-squad-digest: required reference files"
-	$(call require_ref_files,weekly-squad-digest/reference,phase-index lazy-load-index report-format smoke-test pressure-tests)
-	@grep -q 'pressure-tests' weekly-squad-digest/reference/smoke-test.md || \
-		{ echo "error: smoke-test.md must link to pressure-tests.md" >&2; exit 1; }
-	$(call require_setup_links_framework,weekly-squad-digest)
-	$(call require_safe_output_link,weekly-squad-digest)
-	@grep -q 'docs/skill-framework/shared/prompt-injection.md' weekly-squad-digest/reference/report-format.md && \
-	 grep -q 'docs/skill-framework/shared/safe-output.md' weekly-squad-digest/reference/report-format.md && \
-	 grep -qiE 'escape|fence|backtick' weekly-squad-digest/reference/report-format.md || \
-		{ echo "error: report-format.md must sanitize untrusted rendered fields per prompt-injection and safe-output" >&2; exit 1; }
+	@python3 scripts/lint_skills.py --skill weekly-squad-digest
 	@test -f weekly-squad-digest/scripts/digest_grouping.py || \
 		{ echo "error: missing weekly-squad-digest/scripts/digest_grouping.py" >&2; exit 1; }
 	@echo "lint-weekly-squad-digest: digest_grouping pytest"
@@ -971,53 +618,15 @@ lint-weekly-squad-digest:
 
 define LINT_TEST_CREATOR_TARGET
 lint-$(1):
-	@echo "lint-$(1): SKILL.md line count (<= 180)"
-	@test -f $(1)/SKILL.md || \
-		{ echo "error: missing $(1)/SKILL.md" >&2; exit 1; }
-	@lines=$$$$(wc -l < $(1)/SKILL.md | tr -d ' '); \
-	if [ -z "$$$$lines" ] || [ "$$$$lines" -eq 0 ]; then \
-		echo "error: $(1)/SKILL.md is empty" >&2; exit 1; \
-	elif [ "$$$$lines" -gt 180 ]; then \
-		echo "error: $(1) SKILL.md $$$$lines lines (> 180)" >&2; \
-		exit 1; \
-	fi; \
-	echo "  ok ($$$$lines lines)"
-	@echo "lint-$(1): workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
-	@fail=0; \
-	for f in $(1)/workflow/*.md; do \
-		fm=$$$$(awk '/^---$$$$/{c++; next} c==1' "$$$$f"); \
-		for key in workflow_version phase produces consumes; do \
-			if ! printf '%s\n' "$$$$fm" | grep -q "^$$$$key:"; then \
-				echo "  missing $$$$key frontmatter: $$$$f" >&2; fail=1; \
-			fi; \
-		done; \
-	done; \
-	if [ "$$$$fail" -ne 0 ]; then echo "error: $(1) workflow/*.md must declare workflow_version, phase, produces, consumes" >&2; exit 1; fi; \
-	echo "  ok"
-	@echo "lint-$(1): required reference files"
-	@for f in skill-contract phase-index lazy-load-index gate-policy test-quality-deltas framework-detection report-format smoke-test pressure-tests; do \
-		test -f $(1)/reference/$$$$f.md || \
-			{ echo "error: missing $(1)/reference/$$$$f.md" >&2; exit 1; }; \
-	done
+	@python3 scripts/lint_skills.py --skill $(1)
+	@echo "lint-$(1): detection scripts + test-creation-principles contract"
 	@for f in $(2); do \
 		test -f $(1)/scripts/$$$$f || \
 			{ echo "error: missing $(1)/scripts/$$$$f" >&2; exit 1; }; \
 	done
-	@test -f $(1)/examples.md || \
-		{ echo "error: missing $(1)/examples.md" >&2; exit 1; }
-	@grep -q '## Invocation' $(1)/examples.md || \
-		{ echo "error: $(1)/examples.md must have Invocation section" >&2; exit 1; }
-	@grep -q 'skill-framework' $(1)/SETUP.md || \
-		{ echo "error: $(1)/SETUP.md must link to docs/skill-framework" >&2; exit 1; }
-	@grep -q 'docs/skill-framework/shared/skill-routing.md' $(1)/SKILL.md || \
-		{ echo "error: $(1)/SKILL.md must link to shared skill-routing" >&2; exit 1; }
-	@grep -q 'docs/skill-framework/shared/prompt-injection.md' $(1)/SKILL.md || \
-		{ echo "error: $(1)/SKILL.md must link to shared prompt-injection" >&2; exit 1; }
 	@grep -q 'docs/skill-framework/shared/test-creation-principles.md' $(1)/reference/skill-contract.md || \
 		{ echo "error: $(1)/reference/skill-contract.md must link to shared test-creation-principles" >&2; exit 1; }
 	@echo "  ok (framework refs)"
-	@echo "lint-$(1): dangling markdown links"
-	$(call check_dangling_links,$(1)/*.md $(1)/reference/*.md $(1)/workflow/*.md)
 	@echo "lint-$(1): shellcheck scan"
 	@if command -v shellcheck >/dev/null 2>&1; then \
 		shellcheck -x -P SCRIPTDIR $(1)/scripts/*.sh; \
@@ -1047,101 +656,53 @@ $(eval $(call LINT_TEST_CREATOR_TARGET,contract-test-creator,detect-pact-tooling
 $(eval $(call LINT_TEST_CREATOR_TARGET,e2e-test-creator,detect-e2e-tooling.sh e2e-markers.sh,test_detect_e2e_tooling.py))
 $(eval $(call LINT_TEST_CREATOR_TARGET,api-test-creator,detect-postman-tooling.sh postman-markers.sh,test_detect_postman_tooling.py))
 
-# All five test-creator skills (api, contract, e2e, integration, unit) now have a safe-output boundary
+# All five test-creator skills (api, contract, e2e, integration, unit) have a safe-output boundary
 # (their own *_TEST_REPORT.md render surface) — these are EXTRA prerequisites on top of the shared
 # LINT_TEST_CREATOR_TARGET macro above, not a change to the macro itself.
+#
+# scripts/lint_skills.py now owns that boundary along with the rest of the shared per-skill set, so
+# each of these is a thin alias for it. They are kept as their own targets because the names are
+# public API (scripts/README.md) and because a maintainer touching one skill's render surface can
+# still run just that skill's checks; the cost is that `make lint-<x>-test-creator` runs the shared
+# checker twice, once here and once from the macro-generated recipe.
 lint-api-test-creator: lint-api-test-creator-safe-output
 
 lint-api-test-creator-safe-output:
-	@echo "lint-api-test-creator: safe rendered-output boundary"
-	@grep -q 'docs/skill-framework/shared/safe-output.md' api-test-creator/SKILL.md || \
-		{ echo "error: api-test-creator/SKILL.md must link to shared safe-output" >&2; exit 1; }
-	@grep -q 'docs/skill-framework/shared/prompt-injection.md' api-test-creator/reference/report-format.md && \
-	 grep -q 'docs/skill-framework/shared/safe-output.md' api-test-creator/reference/report-format.md && \
-	 grep -qiE 'escape|backtick|code span' api-test-creator/reference/report-format.md || \
-		{ echo "error: reference/report-format.md must sanitize untrusted rendered fields per prompt-injection and safe-output" >&2; exit 1; }
-	@echo "  ok"
+	@python3 scripts/lint_skills.py --skill api-test-creator
 
 lint-contract-test-creator: lint-contract-test-creator-safe-output
 
 lint-contract-test-creator-safe-output:
-	@echo "lint-contract-test-creator: safe rendered-output boundary"
-	@grep -q 'docs/skill-framework/shared/safe-output.md' contract-test-creator/SKILL.md || \
-		{ echo "error: contract-test-creator/SKILL.md must link to shared safe-output" >&2; exit 1; }
-	@grep -q 'docs/skill-framework/shared/prompt-injection.md' contract-test-creator/reference/report-format.md && \
-	 grep -q 'docs/skill-framework/shared/safe-output.md' contract-test-creator/reference/report-format.md && \
-	 grep -qiE 'escape|backtick|code span' contract-test-creator/reference/report-format.md || \
-		{ echo "error: reference/report-format.md must sanitize untrusted rendered fields per prompt-injection and safe-output" >&2; exit 1; }
-	@echo "  ok"
+	@python3 scripts/lint_skills.py --skill contract-test-creator
 
 lint-e2e-test-creator: lint-e2e-test-creator-safe-output
 
 lint-e2e-test-creator-safe-output:
-	@echo "lint-e2e-test-creator: safe rendered-output boundary"
-	@grep -q 'docs/skill-framework/shared/safe-output.md' e2e-test-creator/SKILL.md || \
-		{ echo "error: e2e-test-creator/SKILL.md must link to shared safe-output" >&2; exit 1; }
-	@grep -q 'docs/skill-framework/shared/prompt-injection.md' e2e-test-creator/reference/report-format.md && \
-	 grep -q 'docs/skill-framework/shared/safe-output.md' e2e-test-creator/reference/report-format.md && \
-	 grep -qiE 'escape|backtick|code span' e2e-test-creator/reference/report-format.md || \
-		{ echo "error: reference/report-format.md must sanitize untrusted rendered fields per prompt-injection and safe-output" >&2; exit 1; }
-	@echo "  ok"
+	@python3 scripts/lint_skills.py --skill e2e-test-creator
 
 lint-integration-test-creator: lint-integration-test-creator-safe-output
 
 lint-integration-test-creator-safe-output:
-	@echo "lint-integration-test-creator: safe rendered-output boundary"
-	@grep -q 'docs/skill-framework/shared/safe-output.md' integration-test-creator/SKILL.md || \
-		{ echo "error: integration-test-creator/SKILL.md must link to shared safe-output" >&2; exit 1; }
-	@grep -q 'docs/skill-framework/shared/prompt-injection.md' integration-test-creator/reference/report-format.md && \
-	 grep -q 'docs/skill-framework/shared/safe-output.md' integration-test-creator/reference/report-format.md && \
-	 grep -qiE 'escape|backtick|code span' integration-test-creator/reference/report-format.md || \
-		{ echo "error: reference/report-format.md must sanitize untrusted rendered fields per prompt-injection and safe-output" >&2; exit 1; }
-	@echo "  ok"
+	@python3 scripts/lint_skills.py --skill integration-test-creator
 
 lint-unit-test-creator: lint-unit-test-creator-safe-output
 
 lint-unit-test-creator-safe-output:
-	@echo "lint-unit-test-creator: safe rendered-output boundary"
-	@grep -q 'docs/skill-framework/shared/safe-output.md' unit-test-creator/SKILL.md || \
-		{ echo "error: unit-test-creator/SKILL.md must link to shared safe-output" >&2; exit 1; }
-	@grep -q 'docs/skill-framework/shared/prompt-injection.md' unit-test-creator/reference/report-format.md && \
-	 grep -q 'docs/skill-framework/shared/safe-output.md' unit-test-creator/reference/report-format.md && \
-	 grep -qiE 'escape|backtick|code span' unit-test-creator/reference/report-format.md || \
-		{ echo "error: reference/report-format.md must sanitize untrusted rendered fields per prompt-injection and safe-output" >&2; exit 1; }
-	@echo "  ok"
+	@python3 scripts/lint_skills.py --skill unit-test-creator
 
 lint-test-writer:
-	@echo "lint-test-writer: SKILL.md line count (<= 180)"
-	$(call check_skill_md_length,test-writer,180,)
-	@echo "lint-test-writer: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
-	$(call check_workflow_frontmatter,test-writer)
+	@python3 scripts/lint_skills.py --skill test-writer
 	@echo "lint-test-writer: no detection/generation scripts (router only)"
 	@if [ -d test-writer/scripts ] || [ -d test-writer/tests ]; then \
 		echo "error: test-writer must not have scripts/ or tests/ — it is a router with no detection/generation logic of its own" >&2; exit 1; \
 	fi
-	@echo "  ok"
-	@echo "lint-test-writer: required reference files"
-	$(call require_ref_files,test-writer/reference,skill-contract phase-index lazy-load-index level-classification smoke-test pressure-tests)
 	@test -f test-writer/examples.md || \
 		{ echo "error: missing test-writer/examples.md" >&2; exit 1; }
-	@grep -q '## Invocation' test-writer/examples.md || \
-		{ echo "error: test-writer/examples.md must have Invocation section" >&2; exit 1; }
-	$(call require_setup_links_framework,test-writer)
-	@grep -q 'docs/skill-framework/shared/skill-routing.md' test-writer/SKILL.md || \
-		{ echo "error: test-writer/SKILL.md must link to shared skill-routing" >&2; exit 1; }
-	@grep -q 'docs/skill-framework/shared/prompt-injection.md' test-writer/SKILL.md || \
-		{ echo "error: test-writer/SKILL.md must link to shared prompt-injection" >&2; exit 1; }
-	@echo "  ok (framework refs)"
-	@echo "lint-test-writer: dangling markdown links"
-	$(call check_dangling_links,test-writer/*.md test-writer/reference/*.md test-writer/workflow/*.md unit-test-creator/SKILL.md integration-test-creator/SKILL.md contract-test-creator/SKILL.md e2e-test-creator/SKILL.md api-test-creator/SKILL.md unit-test-creator/workflow/*.md integration-test-creator/workflow/*.md contract-test-creator/workflow/*.md e2e-test-creator/workflow/*.md api-test-creator/workflow/*.md)
 
 lint-prd-architect:
-	@echo "lint-prd-architect: SKILL.md line count (<= 180)"
-	$(call check_skill_md_length,prd-architect,180,)
+	@python3 scripts/lint_skills.py --skill prd-architect
 	@echo "lint-prd-architect: route-aware workflow contract (workflow_version, phase, produces, consumes checked here too)"
 	@python3 -m scripts.validate_workflow_contracts prd-architect
-	@echo "lint-prd-architect: required reference files"
-	$(call require_ref_files,prd-architect/reference,skill-contract rationalization-guards phase-index lazy-load-index global-rules depth response-modes section-triggers requirements-format correctness-rules adversarial-review output-contract smoke-test pressure-tests)
 	@test -f prd-architect/report-template.md || \
 		{ echo "error: missing prd-architect/report-template.md" >&2; exit 1; }
 	@test -f prd-architect/prd-architect.eval.md || \
@@ -1150,330 +711,44 @@ lint-prd-architect:
 		{ echo "error: missing prd-architect safe-output renderer" >&2; exit 1; }
 	@test -f prd-architect/examples.md || \
 		{ echo "error: missing prd-architect/examples.md" >&2; exit 1; }
-	@grep -q '## Invocation' prd-architect/examples.md || \
-		{ echo "error: prd-architect/examples.md must have Invocation section" >&2; exit 1; }
-	$(call require_cross_skill_escalation,prd-architect)
 	@grep -q 'smoke-test' prd-architect/SKILL.md || \
 		{ echo "error: prd-architect/SKILL.md must link to reference/smoke-test.md" >&2; exit 1; }
-	$(call require_setup_links_framework,prd-architect)
-	@grep -q 'docs/skill-framework/shared/skill-routing.md' prd-architect/SKILL.md || \
-		{ echo "error: prd-architect/SKILL.md must link to shared skill-routing" >&2; exit 1; }
-	@grep -q 'docs/skill-framework/shared/prompt-injection.md' prd-architect/SKILL.md || \
-		{ echo "error: prd-architect/SKILL.md must link to shared prompt-injection" >&2; exit 1; }
-	$(call require_safe_output_link,prd-architect)
-	@grep -q 'docs/skill-framework/shared/prompt-injection.md' prd-architect/workflow/gate.md && \
-	 grep -q 'docs/skill-framework/shared/safe-output.md' prd-architect/workflow/gate.md && \
-	 grep -qi 'source_material' prd-architect/workflow/gate.md && \
-	 grep -qiE 'escape|fence' prd-architect/workflow/gate.md && \
-	 grep -qi 'redact' prd-architect/workflow/gate.md || \
-		{ echo "error: prd-architect Gate must sanitize untrusted rendered fields per prompt-injection and safe-output" >&2; exit 1; }
-	@echo "  ok (framework refs)"
-	@echo "lint-prd-architect: dangling markdown links"
-	$(call check_dangling_links,prd-architect/*.md prd-architect/reference/*.md prd-architect/workflow/*.md)
 
 lint-architecture-review:
-	@echo "lint-architecture-review: SKILL.md line count (<= 180)"
-	$(call check_skill_md_length,architecture-review,180,keep orchestrator thin; detail in workflow/)
-	@echo "lint-architecture-review: disable-model-invocation NOT set (ambiently invocable)"
-	$(call forbid_disable_model_invocation,architecture-review)
-	@echo "  ok"
-	@echo "lint-architecture-review: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
-	$(call check_workflow_frontmatter,architecture-review)
-	@echo "lint-architecture-review: dangling markdown links"
-	$(call check_dangling_links,architecture-review/*.md architecture-review/reference/*.md architecture-review/workflow/*.md)
-	@echo "lint-architecture-review: required reference files"
-	$(call require_ref_files,architecture-review/reference,phase-index lazy-load-index report-format smoke-test pressure-tests)
-	@grep -q 'pressure-tests' architecture-review/reference/smoke-test.md || \
-		{ echo "error: architecture-review/reference/smoke-test.md must link to pressure-tests.md" >&2; exit 1; }
-	@grep -q '## Invocation' architecture-review/examples.md || \
-		{ echo "error: architecture-review/examples.md must have Invocation section" >&2; exit 1; }
-	$(call require_setup_links_framework,architecture-review)
-	$(call require_cross_skill_escalation,architecture-review)
-	$(call require_safe_output_link,architecture-review)
-	@grep -q 'docs/skill-framework/shared/prompt-injection.md' architecture-review/reference/report-format.md && \
-	 grep -q 'docs/skill-framework/shared/safe-output.md' architecture-review/reference/report-format.md && \
-	 grep -qiE 'escape|fence|backtick' architecture-review/reference/report-format.md && \
-	 grep -qi 'redact' architecture-review/reference/report-format.md || \
-		{ echo "error: architecture-review/reference/report-format.md must sanitize untrusted rendered fields per prompt-injection and safe-output" >&2; exit 1; }
-	@echo "  ok (framework refs)"
+	@python3 scripts/lint_skills.py --skill architecture-review
 
 lint-system-design:
-	@echo "lint-system-design: SKILL.md line count (<= 180)"
-	$(call check_skill_md_length,system-design,180,keep orchestrator thin; detail in workflow/)
-	@echo "lint-system-design: disable-model-invocation NOT set (ambiently invocable)"
-	$(call forbid_disable_model_invocation,system-design)
-	@echo "  ok"
-	@echo "lint-system-design: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
-	$(call check_workflow_frontmatter,system-design)
-	@echo "lint-system-design: dangling markdown links"
-	$(call check_dangling_links,system-design/*.md system-design/reference/*.md system-design/workflow/*.md)
-	@echo "lint-system-design: required reference files"
-	$(call require_ref_files,system-design/reference,phase-index lazy-load-index report-format smoke-test pressure-tests)
-	@grep -q 'pressure-tests' system-design/reference/smoke-test.md || \
-		{ echo "error: system-design/reference/smoke-test.md must link to pressure-tests.md" >&2; exit 1; }
-	@grep -q '## Invocation' system-design/examples.md || \
-		{ echo "error: system-design/examples.md must have Invocation section" >&2; exit 1; }
-	$(call require_setup_links_framework,system-design)
-	$(call require_cross_skill_escalation,system-design)
-	$(call require_safe_output_link,system-design)
-	@grep -q 'docs/skill-framework/shared/prompt-injection.md' system-design/reference/report-format.md && \
-	 grep -q 'docs/skill-framework/shared/safe-output.md' system-design/reference/report-format.md && \
-	 grep -qiE 'escape|fence|backtick' system-design/reference/report-format.md && \
-	 grep -qi 'redact' system-design/reference/report-format.md || \
-		{ echo "error: system-design/reference/report-format.md must sanitize untrusted rendered fields per prompt-injection and safe-output" >&2; exit 1; }
-	@echo "  ok (framework refs)"
+	@python3 scripts/lint_skills.py --skill system-design
 
 lint-api-design-review:
-	@echo "lint-api-design-review: SKILL.md line count (<= 180)"
-	$(call check_skill_md_length,api-design-review,180,keep orchestrator thin; detail in workflow/)
-	@echo "lint-api-design-review: disable-model-invocation NOT set (ambiently invocable)"
-	$(call forbid_disable_model_invocation,api-design-review)
-	@echo "  ok"
-	@echo "lint-api-design-review: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
-	$(call check_workflow_frontmatter,api-design-review)
-	@echo "lint-api-design-review: dangling markdown links"
-	$(call check_dangling_links,api-design-review/*.md api-design-review/reference/*.md api-design-review/workflow/*.md)
-	@echo "lint-api-design-review: required reference files"
-	$(call require_ref_files,api-design-review/reference,phase-index lazy-load-index report-format smoke-test pressure-tests)
-	@grep -q 'pressure-tests' api-design-review/reference/smoke-test.md || \
-		{ echo "error: api-design-review/reference/smoke-test.md must link to pressure-tests.md" >&2; exit 1; }
-	@grep -q '## Invocation' api-design-review/examples.md || \
-		{ echo "error: api-design-review/examples.md must have Invocation section" >&2; exit 1; }
-	$(call require_setup_links_framework,api-design-review)
-	$(call require_cross_skill_escalation,api-design-review)
-	$(call require_safe_output_link,api-design-review)
-	@grep -q 'docs/skill-framework/shared/prompt-injection.md' api-design-review/reference/report-format.md && \
-	 grep -q 'docs/skill-framework/shared/safe-output.md' api-design-review/reference/report-format.md && \
-	 grep -qiE 'escape|fence|backtick' api-design-review/reference/report-format.md && \
-	 grep -qi 'redact' api-design-review/reference/report-format.md || \
-		{ echo "error: api-design-review/reference/report-format.md must sanitize untrusted rendered fields per prompt-injection and safe-output" >&2; exit 1; }
-	@echo "  ok (framework refs)"
+	@python3 scripts/lint_skills.py --skill api-design-review
 
 lint-database-review:
-	@echo "lint-database-review: SKILL.md line count (<= 180)"
-	$(call check_skill_md_length,database-review,180,keep orchestrator thin; detail in workflow/)
-	@echo "lint-database-review: disable-model-invocation NOT set (ambiently invocable)"
-	$(call forbid_disable_model_invocation,database-review)
-	@echo "  ok"
-	@echo "lint-database-review: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
-	$(call check_workflow_frontmatter,database-review)
-	@echo "lint-database-review: dangling markdown links"
-	$(call check_dangling_links,database-review/*.md database-review/reference/*.md database-review/workflow/*.md)
-	@echo "lint-database-review: required reference files"
-	$(call require_ref_files,database-review/reference,phase-index lazy-load-index report-format smoke-test pressure-tests)
-	@grep -q 'pressure-tests' database-review/reference/smoke-test.md || \
-		{ echo "error: database-review/reference/smoke-test.md must link to pressure-tests.md" >&2; exit 1; }
-	@grep -q '## Invocation' database-review/examples.md || \
-		{ echo "error: database-review/examples.md must have Invocation section" >&2; exit 1; }
-	$(call require_setup_links_framework,database-review)
-	$(call require_cross_skill_escalation,database-review)
-	$(call require_safe_output_link,database-review)
-	@grep -q 'docs/skill-framework/shared/prompt-injection.md' database-review/reference/report-format.md && \
-	 grep -q 'docs/skill-framework/shared/safe-output.md' database-review/reference/report-format.md && \
-	 grep -qiE 'escape|fence|backtick' database-review/reference/report-format.md && \
-	 grep -qi 'redact' database-review/reference/report-format.md || \
-		{ echo "error: database-review/reference/report-format.md must sanitize untrusted rendered fields per prompt-injection and safe-output" >&2; exit 1; }
-	@echo "  ok (framework refs)"
+	@python3 scripts/lint_skills.py --skill database-review
 
 lint-security-review:
-	@echo "lint-security-review: SKILL.md line count (<= 180)"
-	$(call check_skill_md_length,security-review,180,keep orchestrator thin; detail in workflow/)
-	@echo "lint-security-review: disable-model-invocation NOT set (ambiently invocable)"
-	$(call forbid_disable_model_invocation,security-review)
-	@echo "  ok"
-	@echo "lint-security-review: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
-	$(call check_workflow_frontmatter,security-review)
-	@echo "lint-security-review: dangling markdown links"
-	$(call check_dangling_links,security-review/*.md security-review/reference/*.md security-review/workflow/*.md)
-	@echo "lint-security-review: required reference files"
-	$(call require_ref_files,security-review/reference,phase-index lazy-load-index report-format smoke-test pressure-tests)
-	@grep -q 'pressure-tests' security-review/reference/smoke-test.md || \
-		{ echo "error: security-review/reference/smoke-test.md must link to pressure-tests.md" >&2; exit 1; }
-	@grep -q '## Invocation' security-review/examples.md || \
-		{ echo "error: security-review/examples.md must have Invocation section" >&2; exit 1; }
-	$(call require_setup_links_framework,security-review)
-	$(call require_cross_skill_escalation,security-review)
-	$(call require_safe_output_link,security-review)
-	@grep -q 'docs/skill-framework/shared/prompt-injection.md' security-review/reference/report-format.md && \
-	 grep -q 'docs/skill-framework/shared/safe-output.md' security-review/reference/report-format.md && \
-	 grep -qiE 'escape|fence|backtick' security-review/reference/report-format.md && \
-	 grep -qi 'redact' security-review/reference/report-format.md || \
-		{ echo "error: security-review/reference/report-format.md must sanitize untrusted rendered fields per prompt-injection and safe-output" >&2; exit 1; }
-	@echo "  ok (framework refs)"
+	@python3 scripts/lint_skills.py --skill security-review
 
 lint-performance-review:
-	@echo "lint-performance-review: SKILL.md line count (<= 180)"
-	$(call check_skill_md_length,performance-review,180,keep orchestrator thin; detail in workflow/)
-	@echo "lint-performance-review: disable-model-invocation NOT set (ambiently invocable)"
-	$(call forbid_disable_model_invocation,performance-review)
-	@echo "  ok"
-	@echo "lint-performance-review: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
-	$(call check_workflow_frontmatter,performance-review)
-	@echo "lint-performance-review: dangling markdown links"
-	$(call check_dangling_links,performance-review/*.md performance-review/reference/*.md performance-review/workflow/*.md)
-	@echo "lint-performance-review: required reference files"
-	$(call require_ref_files,performance-review/reference,phase-index lazy-load-index report-format smoke-test pressure-tests)
-	@grep -q 'pressure-tests' performance-review/reference/smoke-test.md || \
-		{ echo "error: performance-review/reference/smoke-test.md must link to pressure-tests.md" >&2; exit 1; }
-	@grep -q '## Invocation' performance-review/examples.md || \
-		{ echo "error: performance-review/examples.md must have Invocation section" >&2; exit 1; }
-	$(call require_setup_links_framework,performance-review)
-	$(call require_cross_skill_escalation,performance-review)
-	$(call require_safe_output_link,performance-review)
-	@grep -q 'docs/skill-framework/shared/prompt-injection.md' performance-review/reference/report-format.md && \
-	 grep -q 'docs/skill-framework/shared/safe-output.md' performance-review/reference/report-format.md && \
-	 grep -qiE 'escape|fence|backtick' performance-review/reference/report-format.md && \
-	 grep -qi 'redact' performance-review/reference/report-format.md || \
-		{ echo "error: performance-review/reference/report-format.md must sanitize untrusted rendered fields per prompt-injection and safe-output" >&2; exit 1; }
-	@echo "  ok (framework refs)"
+	@python3 scripts/lint_skills.py --skill performance-review
 
 lint-capacity-planner:
-	@echo "lint-capacity-planner: SKILL.md line count (<= 180)"
-	$(call check_skill_md_length,capacity-planner,180,keep orchestrator thin; detail in workflow/)
-	@echo "lint-capacity-planner: disable-model-invocation NOT set (ambiently invocable)"
-	$(call forbid_disable_model_invocation,capacity-planner)
-	@echo "  ok"
-	@echo "lint-capacity-planner: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
-	$(call check_workflow_frontmatter,capacity-planner)
-	@echo "lint-capacity-planner: dangling markdown links"
-	$(call check_dangling_links,capacity-planner/*.md capacity-planner/reference/*.md capacity-planner/workflow/*.md)
-	@echo "lint-capacity-planner: required reference files"
-	$(call require_ref_files,capacity-planner/reference,phase-index lazy-load-index report-format smoke-test pressure-tests)
-	@grep -q 'pressure-tests' capacity-planner/reference/smoke-test.md || \
-		{ echo "error: capacity-planner/reference/smoke-test.md must link to pressure-tests.md" >&2; exit 1; }
-	@grep -q '## Invocation' capacity-planner/examples.md || \
-		{ echo "error: capacity-planner/examples.md must have Invocation section" >&2; exit 1; }
-	$(call require_setup_links_framework,capacity-planner)
-	$(call require_cross_skill_escalation,capacity-planner)
-	$(call require_safe_output_link,capacity-planner)
-	@grep -q 'docs/skill-framework/shared/prompt-injection.md' capacity-planner/reference/report-format.md && \
-	 grep -q 'docs/skill-framework/shared/safe-output.md' capacity-planner/reference/report-format.md && \
-	 grep -qiE 'escape|fence|backtick' capacity-planner/reference/report-format.md && \
-	 grep -qi 'redact' capacity-planner/reference/report-format.md || \
-		{ echo "error: capacity-planner/reference/report-format.md must sanitize untrusted rendered fields per prompt-injection and safe-output" >&2; exit 1; }
-	@echo "  ok (framework refs)"
+	@python3 scripts/lint_skills.py --skill capacity-planner
 
 lint-observability-review:
-	@echo "lint-observability-review: SKILL.md line count (<= 180)"
-	$(call check_skill_md_length,observability-review,180,keep orchestrator thin; detail in workflow/)
-	@echo "lint-observability-review: disable-model-invocation NOT set (ambiently invocable)"
-	$(call forbid_disable_model_invocation,observability-review)
-	@echo "  ok"
-	@echo "lint-observability-review: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
-	$(call check_workflow_frontmatter,observability-review)
-	@echo "lint-observability-review: dangling markdown links"
-	$(call check_dangling_links,observability-review/*.md observability-review/reference/*.md observability-review/workflow/*.md)
-	@echo "lint-observability-review: required reference files"
-	$(call require_ref_files,observability-review/reference,phase-index lazy-load-index report-format smoke-test pressure-tests)
-	@grep -q 'pressure-tests' observability-review/reference/smoke-test.md || \
-		{ echo "error: observability-review/reference/smoke-test.md must link to pressure-tests.md" >&2; exit 1; }
-	@grep -q '## Invocation' observability-review/examples.md || \
-		{ echo "error: observability-review/examples.md must have Invocation section" >&2; exit 1; }
-	$(call require_setup_links_framework,observability-review)
-	$(call require_cross_skill_escalation,observability-review)
-	$(call require_safe_output_link,observability-review)
-	@grep -q 'docs/skill-framework/shared/prompt-injection.md' observability-review/reference/report-format.md && \
-	 grep -q 'docs/skill-framework/shared/safe-output.md' observability-review/reference/report-format.md && \
-	 grep -qiE 'escape|fence|backtick' observability-review/reference/report-format.md && \
-	 grep -qi 'redact' observability-review/reference/report-format.md || \
-		{ echo "error: observability-review/reference/report-format.md must sanitize untrusted rendered fields per prompt-injection and safe-output" >&2; exit 1; }
-	@echo "  ok (framework refs)"
+	@python3 scripts/lint_skills.py --skill observability-review
 
 lint-deployment-risk-review:
-	@echo "lint-deployment-risk-review: SKILL.md line count (<= 180)"
-	$(call check_skill_md_length,deployment-risk-review,180,keep orchestrator thin; detail in workflow/)
-	@echo "lint-deployment-risk-review: disable-model-invocation NOT set (ambiently invocable)"
-	$(call forbid_disable_model_invocation,deployment-risk-review)
-	@echo "  ok"
-	@echo "lint-deployment-risk-review: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
-	$(call check_workflow_frontmatter,deployment-risk-review)
-	@echo "lint-deployment-risk-review: dangling markdown links"
-	$(call check_dangling_links,deployment-risk-review/*.md deployment-risk-review/reference/*.md deployment-risk-review/workflow/*.md)
-	@echo "lint-deployment-risk-review: required reference files"
-	$(call require_ref_files,deployment-risk-review/reference,phase-index lazy-load-index report-format smoke-test pressure-tests)
-	@grep -q 'pressure-tests' deployment-risk-review/reference/smoke-test.md || \
-		{ echo "error: deployment-risk-review/reference/smoke-test.md must link to pressure-tests.md" >&2; exit 1; }
-	@grep -q '## Invocation' deployment-risk-review/examples.md || \
-		{ echo "error: deployment-risk-review/examples.md must have Invocation section" >&2; exit 1; }
-	$(call require_setup_links_framework,deployment-risk-review)
-	$(call require_cross_skill_escalation,deployment-risk-review)
-	$(call require_safe_output_link,deployment-risk-review)
-	@grep -q 'docs/skill-framework/shared/prompt-injection.md' deployment-risk-review/reference/report-format.md && \
-	 grep -q 'docs/skill-framework/shared/safe-output.md' deployment-risk-review/reference/report-format.md && \
-	 grep -qiE 'escape|fence|backtick' deployment-risk-review/reference/report-format.md && \
-	 grep -qi 'redact' deployment-risk-review/reference/report-format.md || \
-		{ echo "error: deployment-risk-review/reference/report-format.md must sanitize untrusted rendered fields per prompt-injection and safe-output" >&2; exit 1; }
-	@echo "  ok (framework refs)"
+	@python3 scripts/lint_skills.py --skill deployment-risk-review
 
 lint-dependency-upgrade-review:
-	@echo "lint-dependency-upgrade-review: SKILL.md line count (<= 180)"
-	$(call check_skill_md_length,dependency-upgrade-review,180,keep orchestrator thin; detail in workflow/)
-	@echo "lint-dependency-upgrade-review: disable-model-invocation NOT set (ambiently invocable)"
-	$(call forbid_disable_model_invocation,dependency-upgrade-review)
-	@echo "  ok"
-	@echo "lint-dependency-upgrade-review: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
-	$(call check_workflow_frontmatter,dependency-upgrade-review)
-	@echo "lint-dependency-upgrade-review: dangling markdown links"
-	$(call check_dangling_links,dependency-upgrade-review/*.md dependency-upgrade-review/reference/*.md dependency-upgrade-review/workflow/*.md)
-	@echo "lint-dependency-upgrade-review: required reference files"
-	$(call require_ref_files,dependency-upgrade-review/reference,phase-index lazy-load-index report-format smoke-test pressure-tests)
-	@grep -q 'pressure-tests' dependency-upgrade-review/reference/smoke-test.md || \
-		{ echo "error: dependency-upgrade-review/reference/smoke-test.md must link to pressure-tests.md" >&2; exit 1; }
-	@grep -q '## Invocation' dependency-upgrade-review/examples.md || \
-		{ echo "error: dependency-upgrade-review/examples.md must have Invocation section" >&2; exit 1; }
-	$(call require_setup_links_framework,dependency-upgrade-review)
-	$(call require_cross_skill_escalation,dependency-upgrade-review)
-	$(call require_safe_output_link,dependency-upgrade-review)
-	@grep -q 'docs/skill-framework/shared/prompt-injection.md' dependency-upgrade-review/reference/report-format.md && \
-	 grep -q 'docs/skill-framework/shared/safe-output.md' dependency-upgrade-review/reference/report-format.md && \
-	 grep -qiE 'escape|fence|backtick' dependency-upgrade-review/reference/report-format.md && \
-	 grep -qi 'redact' dependency-upgrade-review/reference/report-format.md || \
-		{ echo "error: dependency-upgrade-review/reference/report-format.md must sanitize untrusted rendered fields per prompt-injection and safe-output" >&2; exit 1; }
-	@echo "  ok (framework refs)"
+	@python3 scripts/lint_skills.py --skill dependency-upgrade-review
 
 lint-tech-debt-assessor:
-	@echo "lint-tech-debt-assessor: SKILL.md line count (<= 180)"
-	$(call check_skill_md_length,tech-debt-assessor,180,keep orchestrator thin; detail in workflow/)
-	@echo "lint-tech-debt-assessor: disable-model-invocation NOT set (ambiently invocable)"
-	$(call forbid_disable_model_invocation,tech-debt-assessor)
-	@echo "  ok"
-	@echo "lint-tech-debt-assessor: workflow frontmatter (workflow_version, phase, produces, consumes in each workflow/*.md)"
-	$(call check_workflow_frontmatter,tech-debt-assessor)
-	@echo "lint-tech-debt-assessor: dangling markdown links"
-	$(call check_dangling_links,tech-debt-assessor/*.md tech-debt-assessor/reference/*.md tech-debt-assessor/workflow/*.md)
-	@echo "lint-tech-debt-assessor: required reference files"
-	$(call require_ref_files,tech-debt-assessor/reference,phase-index lazy-load-index report-format smoke-test pressure-tests)
-	@grep -q 'pressure-tests' tech-debt-assessor/reference/smoke-test.md || \
-		{ echo "error: tech-debt-assessor/reference/smoke-test.md must link to pressure-tests.md" >&2; exit 1; }
-	@grep -q '## Invocation' tech-debt-assessor/examples.md || \
-		{ echo "error: tech-debt-assessor/examples.md must have Invocation section" >&2; exit 1; }
-	$(call require_setup_links_framework,tech-debt-assessor)
-	$(call require_cross_skill_escalation,tech-debt-assessor)
-	$(call require_safe_output_link,tech-debt-assessor)
-	@grep -q 'docs/skill-framework/shared/prompt-injection.md' tech-debt-assessor/reference/report-format.md && \
-	 grep -q 'docs/skill-framework/shared/safe-output.md' tech-debt-assessor/reference/report-format.md && \
-	 grep -qiE 'escape|fence|backtick' tech-debt-assessor/reference/report-format.md && \
-	 grep -qi 'redact' tech-debt-assessor/reference/report-format.md || \
-		{ echo "error: tech-debt-assessor/reference/report-format.md must sanitize untrusted rendered fields per prompt-injection and safe-output" >&2; exit 1; }
-	@echo "  ok (framework refs)"
+	@python3 scripts/lint_skills.py --skill tech-debt-assessor
 
 lint-change-impact-analyzer:
-	@echo "lint-change-impact-analyzer: SKILL.md line count (<= 180)"
-	$(call check_skill_md_length,change-impact-analyzer,180,keep the leaf bounded; detail in workflow/)
-	$(call forbid_disable_model_invocation,change-impact-analyzer)
-	$(call check_workflow_frontmatter,change-impact-analyzer)
-	$(call check_dangling_links,change-impact-analyzer/*.md change-impact-analyzer/reference/*.md change-impact-analyzer/workflow/*.md)
-	$(call require_ref_files,change-impact-analyzer/reference,phase-index lazy-load-index report-format smoke-test pressure-tests)
-	$(call require_content,change-impact-analyzer/reference/smoke-test.md,'pressure-tests',its pressure-tests companion)
-	$(call require_heading,change-impact-analyzer/examples.md,'## Invocation',Invocation)
-	$(call require_setup_links_framework,change-impact-analyzer)
-	$(call require_cross_skill_escalation,change-impact-analyzer)
-	$(call require_safe_output_link,change-impact-analyzer)
-	@grep -q 'docs/skill-framework/shared/prompt-injection.md' change-impact-analyzer/reference/report-format.md && \
-	 grep -q 'docs/skill-framework/shared/safe-output.md' change-impact-analyzer/reference/report-format.md && \
-	 grep -qiE 'escape|fence|backtick' change-impact-analyzer/reference/report-format.md && \
-	 grep -qi 'redact' change-impact-analyzer/reference/report-format.md || \
-		{ echo "error: change-impact-analyzer/reference/report-format.md must sanitize untrusted rendered fields per prompt-injection and safe-output" >&2; exit 1; }
+	@python3 scripts/lint_skills.py --skill change-impact-analyzer
 	@python3 -m py_compile scripts/change_impact.py
 	@python3 -m pytest scripts/tests/test_change_impact_analyzer.py -q
 	@echo "  ok"
@@ -1484,43 +759,13 @@ lint: lint-resilience-review
 lint: lint-implementation-planner
 
 lint-implementation-planner:
-	@echo "lint-implementation-planner: SKILL.md line count (<= 180)"
-	$(call check_skill_md_length,implementation-planner,180,keep the leaf bounded; detail in workflow/)
-	$(call forbid_disable_model_invocation,implementation-planner)
-	$(call check_workflow_frontmatter,implementation-planner)
-	$(call check_dangling_links,implementation-planner/*.md implementation-planner/reference/*.md implementation-planner/workflow/*.md)
-	$(call require_ref_files,implementation-planner/reference,phase-index lazy-load-index report-format smoke-test pressure-tests)
-	$(call require_content,implementation-planner/reference/smoke-test.md,'pressure-tests',its pressure-tests companion)
-	$(call require_heading,implementation-planner/examples.md,'## Invocation',Invocation)
-	$(call require_setup_links_framework,implementation-planner)
-	$(call require_cross_skill_escalation,implementation-planner)
-	$(call require_safe_output_link,implementation-planner)
-	@grep -q 'docs/skill-framework/shared/prompt-injection.md' implementation-planner/reference/report-format.md && \
-	 grep -q 'docs/skill-framework/shared/safe-output.md' implementation-planner/reference/report-format.md && \
-	 grep -qiE 'escape|fence|backtick' implementation-planner/reference/report-format.md && \
-	 grep -qi 'redact' implementation-planner/reference/report-format.md || \
-		{ echo "error: implementation-planner/reference/report-format.md must sanitize untrusted rendered fields per prompt-injection and safe-output" >&2; exit 1; }
+	@python3 scripts/lint_skills.py --skill implementation-planner
 	@python3 -m py_compile scripts/implementation_plan.py
 	@python3 -m pytest scripts/tests/test_implementation_plan.py -q
 	@echo "  ok"
 
 lint-resilience-review:
-	@echo "lint-resilience-review: SKILL.md line count (<= 180)"
-	$(call check_skill_md_length,resilience-review,180,keep the leaf bounded; detail in workflow/)
-	$(call forbid_disable_model_invocation,resilience-review)
-	$(call check_workflow_frontmatter,resilience-review)
-	$(call check_dangling_links,resilience-review/*.md resilience-review/reference/*.md resilience-review/workflow/*.md)
-	$(call require_ref_files,resilience-review/reference,phase-index lazy-load-index report-format smoke-test pressure-tests)
-	$(call require_content,resilience-review/reference/smoke-test.md,'pressure-tests',its pressure-tests companion)
-	$(call require_heading,resilience-review/examples.md,'## Invocation',Invocation)
-	$(call require_setup_links_framework,resilience-review)
-	$(call require_cross_skill_escalation,resilience-review)
-	$(call require_safe_output_link,resilience-review)
-	@grep -q 'docs/skill-framework/shared/prompt-injection.md' resilience-review/reference/report-format.md && \
-	 grep -q 'docs/skill-framework/shared/safe-output.md' resilience-review/reference/report-format.md && \
-	 grep -qiE 'escape|fence|backtick' resilience-review/reference/report-format.md && \
-	 grep -qi 'redact' resilience-review/reference/report-format.md || \
-		{ echo "error: resilience-review/reference/report-format.md must sanitize untrusted rendered fields per prompt-injection and safe-output" >&2; exit 1; }
+	@python3 scripts/lint_skills.py --skill resilience-review
 	@python3 -m py_compile scripts/resilience_review.py
 	@python3 -m pytest scripts/tests/test_resilience_review.py -q
 	@echo "  ok"
@@ -1528,22 +773,7 @@ lint-resilience-review:
 lint: lint-production-readiness-review
 
 lint-production-readiness-review:
-	@echo "lint-production-readiness-review: SKILL.md line count (<= 180)"
-	$(call check_skill_md_length,production-readiness-review,180,keep the orchestrator bounded; detail in workflow/)
-	$(call forbid_disable_model_invocation,production-readiness-review)
-	$(call check_workflow_frontmatter,production-readiness-review)
-	$(call check_dangling_links,production-readiness-review/*.md production-readiness-review/reference/*.md production-readiness-review/workflow/*.md)
-	$(call require_ref_files,production-readiness-review/reference,phase-index lazy-load-index report-format smoke-test pressure-tests)
-	$(call require_content,production-readiness-review/reference/smoke-test.md,'pressure-tests',its pressure-tests companion)
-	$(call require_heading,production-readiness-review/examples.md,'## Invocation',Invocation)
-	$(call require_setup_links_framework,production-readiness-review)
-	$(call require_cross_skill_escalation,production-readiness-review)
-	$(call require_safe_output_link,production-readiness-review)
-	@grep -q 'docs/skill-framework/shared/prompt-injection.md' production-readiness-review/reference/report-format.md && \
-	 grep -q 'docs/skill-framework/shared/safe-output.md' production-readiness-review/reference/report-format.md && \
-	 grep -qiE 'escape|fence|backtick' production-readiness-review/reference/report-format.md && \
-	 grep -qi 'redact' production-readiness-review/reference/report-format.md || \
-		{ echo "error: production-readiness-review/reference/report-format.md must sanitize untrusted rendered fields per prompt-injection and safe-output" >&2; exit 1; }
+	@python3 scripts/lint_skills.py --skill production-readiness-review
 	@python3 -m py_compile scripts/production_readiness.py
 	@python3 -m pytest scripts/tests/test_production_readiness_contract.py -q
 	@echo "  ok"
