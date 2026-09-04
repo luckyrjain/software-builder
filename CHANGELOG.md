@@ -43,6 +43,21 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 
 ## Platform
 
+### Release tooling: no regex from data, no tar extraction sink (2026-09-04)
+
+Closes the two Snyk Code findings the architecture review left as accepted risk, by removing the
+patterns rather than suppressing the scanner.
+
+- `scripts/release_contract.yaml` declares `tag_template: "v{version}"` instead of a `tag_pattern`
+  regex. `release_contract.release_tag_for_version()` renders it, and `verify_release_tag.py` now
+  requires the pushed tag to equal that rendering instead of carrying its own hard-coded copy of
+  the shape -- one declaration, and nothing in the repository compiles a pattern read from data.
+  The length/nested-quantifier guard added on 2026-09-04 is gone with the regex it guarded.
+- `verify_release_bundle._safe_extract` no longer calls `tarfile.extract`/`extractall`. Each
+  member is admitted only if it is a regular file or directory whose name resolves inside the
+  destination; admitted files are copied out with `extractfile` and given only their masked
+  permission bits, so the archive can never choose a path, a link target, or a setuid bit.
+
 ### Architecture review follow-up: the deferred candidates (2026-09-04)
 
 Closes the items the 2026-09-04 architecture review deferred.

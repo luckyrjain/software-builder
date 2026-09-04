@@ -9,12 +9,52 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def _write_release_contract(root: Path, tag_template: str = "v{version}") -> None:
+    (root / "scripts").mkdir(exist_ok=True)
+    (root / "scripts" / "release_contract.yaml").write_text(
+        "schema_version: 1\n"
+        f"tag_template: {tag_template!r}\n"
+        "artifact_name_templates:\n"
+        '  - "software-builder-{version}.tar.gz"\n'
+        "compatibility:\n"
+        "  registry_schema_version: 1\n"
+        "  host_contract_schema_version: 1\n"
+        "provenance:\n"
+        "  required_fields: [schema_version]\n",
+        encoding="utf-8",
+    )
+
+
 def test_verify_release_tag_matches_version(tmp_path: Path) -> None:
     (tmp_path / "VERSION").write_text("1.4.0\n", encoding="utf-8")
+    _write_release_contract(tmp_path)
     from scripts.verify_release_tag import main
 
     assert main(["v1.4.0", "--repo-root", str(tmp_path)]) == 0
     assert main(["v1.3.0", "--repo-root", str(tmp_path)]) == 1
+    # The shape comes from the contract, not from the verifier: no prefix, wrong prefix,
+    # and a trailing suffix are all rejected by string equality with the rendered template.
+    assert main(["1.4.0", "--repo-root", str(tmp_path)]) == 1
+    assert main(["release-1.4.0", "--repo-root", str(tmp_path)]) == 1
+    assert main(["v1.4.0-rc1", "--repo-root", str(tmp_path)]) == 1
+
+
+def test_verify_release_tag_follows_the_contract_template(tmp_path: Path, capsys) -> None:
+    (tmp_path / "VERSION").write_text("1.4.0\n", encoding="utf-8")
+    _write_release_contract(tmp_path, tag_template="release-{version}")
+    from scripts.verify_release_tag import main
+
+    assert main(["release-1.4.0", "--repo-root", str(tmp_path)]) == 0
+    assert main(["v1.4.0", "--repo-root", str(tmp_path)]) == 1
+    assert "maps it to 'release-1.4.0'" in capsys.readouterr().err
+
+
+def test_verify_release_tag_fails_closed_without_a_contract(tmp_path: Path, capsys) -> None:
+    (tmp_path / "VERSION").write_text("1.4.0\n", encoding="utf-8")
+    from scripts.verify_release_tag import main
+
+    assert main(["v1.4.0", "--repo-root", str(tmp_path)]) == 1
+    assert "release_contract.yaml" in capsys.readouterr().err
 
 
 def test_compatibility_matrix_lists_all_skills() -> None:

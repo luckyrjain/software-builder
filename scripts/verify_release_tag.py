@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-"""Verify git tag matches VERSION before release."""
+"""Verify a git tag is the one scripts/release_contract.yaml maps VERSION to."""
 
 from __future__ import annotations
 
 import argparse
-import re
 import sys
 from pathlib import Path
 
@@ -12,10 +11,10 @@ _SCRIPTS_DIR = Path(__file__).resolve().parent
 if str(_SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS_DIR))
 
+from release_contract import release_tag_for_version
 from release_info import read_distribution_version
 
 ROOT = Path(__file__).resolve().parents[1]
-_TAG_RE = re.compile(r"^v(?P<version>\d+\.\d+\.\d+)$")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -24,27 +23,28 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--repo-root", type=Path, default=ROOT)
     args = parser.parse_args(argv)
 
-    match = _TAG_RE.match(args.tag)
-    if not match:
-        print(f"error: tag must match vMAJOR.MINOR.PATCH, got {args.tag!r}", file=sys.stderr)
-        return 1
-
     try:
-        expected = read_distribution_version(args.repo_root)
+        expected_version = read_distribution_version(args.repo_root)
+        # The tag shape lives in the release contract, not here: one declaration for
+        # the validator that checks it renders and the gate that requires it.
+        expected_tag = release_tag_for_version(
+            expected_version, args.repo_root / "scripts" / "release_contract.yaml"
+        )
     except (OSError, ValueError) as exc:
         # OSError (not just ValueError) so a VERSION file that exists but isn't readable
         # (e.g. a permission error) prints a clean error instead of an uncaught traceback.
         print(f"error: {exc}", file=sys.stderr)
         return 1
-    actual = match.group("version")
-    if actual != expected:
+
+    if args.tag != expected_tag:
         print(
-            f"error: tag version {actual!r} does not match VERSION file ({expected!r})",
+            f"error: tag {args.tag!r} does not match VERSION file ({expected_version!r}); "
+            f"the release contract maps it to {expected_tag!r}",
             file=sys.stderr,
         )
         return 1
 
-    print(f"ok: tag {args.tag} matches VERSION {expected}")
+    print(f"ok: tag {args.tag} matches VERSION {expected_version}")
     return 0
 
 
