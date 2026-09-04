@@ -36,6 +36,8 @@ routes:
     patterns:
     - \b(existing codebase architecture|codebase architecture friction|architecture
       friction|refactoring opportunit(?:y|ies)|change locality)\b
+    exclude_patterns:
+    - \b(PR|MR|pull request|merge request)\s*[#!]?\d+\b
   contract-test-creator:
     patterns:
     - \b(contract tests?|consumer[- ]driven contract|pact tests?)\b
@@ -90,9 +92,14 @@ routes:
       status)\b
   module-design:
     patterns:
-    - \b(one|single|concrete)\b.*\b(code[- ]level )?(module|interface|seam|package|test
-      surface)\b
+    - \b(design|define|draft|specify)\b.*\b(one|single|concrete)\b.*\b(code[- ]level
+      )?(module|interface|seam|package|test surface)\b
     - \b(module design|module boundary|seam design|adapter design|interface design)\b
+    exclude_patterns:
+    - \b(unit|integration|contract|e2e|api) tests?\b
+    - \b(PR|MR|pull request|merge request)\b
+    - \b(security|performance|database|observability|dependency upgrade|deployment
+      risk) review\b
   mysql-to-postgres-sql:
     patterns:
     - \b(MySQL|mysql)\b.*\b(Postgres|PostgreSQL|postgresql)\b

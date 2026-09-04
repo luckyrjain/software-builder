@@ -47,3 +47,5 @@ codebase-architecture-review:
   routing:
     patterns:
     - \b(existing codebase architecture|codebase architecture friction|architecture friction|refactoring opportunit(?:y|ies)|change locality)\b
+    exclude_patterns:
+    - \b(PR|MR|pull request|merge request)\s*[#!]?\d+\b

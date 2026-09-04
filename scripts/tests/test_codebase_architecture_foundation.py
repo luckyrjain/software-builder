@@ -184,10 +184,30 @@ def test_implementation_level_design_still_routes_to_system_design() -> None:
 
 def test_routing_rules_cover_foundation_intents_without_collisions() -> None:
     routes = (ROOT / "docs/skill-framework/shared/skill-routing.md").read_text()
-    assert "codebase-architecture-review" in routes
-    assert "module-design" in routes
-    assert "architecture-review" in routes
-    assert "system-design" in routes
+    for skill_id in ("codebase-architecture-review", "module-design", "architecture-review", "system-design"):
+        assert skill_id in routes
+
+    # The foundation patterns must not steal ordinary "one module" / "single package"
+    # phrasing from the skills that owned it before these two were registered.
+    for prompt, owner in (
+        ("Generate unit tests for one module in src/payments.", "unit-test-creator"),
+        ("Write unit tests for a single package.", "unit-test-creator"),
+        ("Review this PR #12 that changes a single module.", "pr-review"),
+        ("Do a security review of one module handling auth.", "security-review"),
+        ("Do a performance review of one module that is slow.", "performance-review"),
+        (
+            "Create an integration test for a single interface between billing and ledger.",
+            "integration-test-creator",
+        ),
+    ):
+        result = _dispatch(prompt)
+        assert result.status == "selected", (prompt, result)
+        assert result.owner == owner, (prompt, result)
+
+    # A PR/MR reference is change-impact or review territory, not an existing-codebase
+    # architecture review, even when it mentions change locality.
+    result = _dispatch("What is the change locality of PR #44?")
+    assert "codebase-architecture-review" not in result.candidates, result
 
 
 def test_shared_codebase_design_doctrine_is_normative_and_complete() -> None:
