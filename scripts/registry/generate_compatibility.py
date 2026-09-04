@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from scripts.registry.backfill_capabilities import load_catalog
+from scripts.registry.capability_catalog import load_catalog
 from scripts.registry.canonical_manifest import (
     has_canonical_manifest_shape,
     load_canonical_manifest,

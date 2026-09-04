@@ -20,7 +20,7 @@ def test_capability_catalog_covers_all_registry_skills() -> None:
     fragments *before* `extends:` profile resolution, so a skill that inherited its
     capabilities from a profile would be silently absent from the catalogue.
     """
-    from scripts.registry.backfill_capabilities import load_catalog
+    from scripts.registry.capability_catalog import load_catalog
     from scripts.registry.schema import parse_registry
 
     catalog = load_catalog()
@@ -29,7 +29,7 @@ def test_capability_catalog_covers_all_registry_skills() -> None:
 
 
 def test_capability_catalog_matches_the_registry_capabilities_blocks() -> None:
-    from scripts.registry.backfill_capabilities import load_catalog
+    from scripts.registry.capability_catalog import load_catalog
     from scripts.registry.schema import load_registry_raw
 
     catalog = load_catalog()
@@ -39,19 +39,19 @@ def test_capability_catalog_matches_the_registry_capabilities_blocks() -> None:
 
 
 def test_all_skills_have_capabilities_block() -> None:
-    from scripts.registry.backfill_capabilities import validate_capabilities_present
+    from scripts.registry.capability_catalog import validate_capabilities_present
 
     assert validate_capabilities_present(ROOT / "skills.yaml") == []
 
 
 def test_capabilities_check_passes_on_repository() -> None:
-    from scripts.registry.backfill_capabilities import cmd_check_capabilities
+    from scripts.registry.capability_catalog import cmd_check_capabilities
 
     assert cmd_check_capabilities(skills_path=ROOT / "skills.yaml") == 0
 
 
 def test_capabilities_check_reports_a_missing_block(tmp_path: Path) -> None:
-    from scripts.registry.backfill_capabilities import cmd_check_capabilities
+    from scripts.registry.capability_catalog import cmd_check_capabilities
 
     skills_path = tmp_path / "skills.yaml"
     skills_path.write_text(
@@ -62,7 +62,7 @@ def test_capabilities_check_reports_a_missing_block(tmp_path: Path) -> None:
 
 
 def test_validate_capabilities_present_rejects_stray_top_level_keys(tmp_path: Path) -> None:
-    from scripts.registry.backfill_capabilities import validate_capabilities_present
+    from scripts.registry.capability_catalog import validate_capabilities_present
 
     skills_path = tmp_path / "skills.yaml"
     skills_path.write_text(
@@ -81,7 +81,7 @@ def test_validate_capabilities_present_rejects_stray_top_level_keys(tmp_path: Pa
 
 
 def test_load_catalog_rejects_non_mapping_entry(tmp_path: Path) -> None:
-    from scripts.registry.backfill_capabilities import load_catalog
+    from scripts.registry.capability_catalog import load_catalog
 
     catalog = tmp_path / "catalog.yaml"
     catalog.write_text("skills:\n  demo: null\n", encoding="utf-8")

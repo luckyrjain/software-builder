@@ -24,10 +24,13 @@ from typing import Any
 
 DEFAULT_BASE_URL = "https://kubesense.example.com"
 
+_RUNTIME_DESCRIPTION = "shared redaction runtime"
+
+
+# GENERATED shared-runtime-bootstrap:start -- do not edit; run `make generate`. See scripts/registry/generate_shared_runtime_bootstrap.py
 SKILL_ROOT = Path(__file__).resolve().parents[1]
 _SCRIPT_DIR = Path(__file__).resolve().parent
 _INSTALL_MANIFEST = ".software-builder-manifest.json"
-_RUNTIME_DESCRIPTION = "shared redaction runtime"
 
 
 def _shared_runtime_loader() -> ModuleType:
@@ -54,6 +57,7 @@ def _shared_runtime_loader() -> ModuleType:
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+# GENERATED shared-runtime-bootstrap:end
 
 
 _redaction = _shared_runtime_loader().load_shared_runtime(

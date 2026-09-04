@@ -14,10 +14,13 @@ from types import ModuleType
 from typing import Literal
 from urllib.parse import urlparse
 
+_RUNTIME_DESCRIPTION = "shared confidence-band runtime"
+
+
+# GENERATED shared-runtime-bootstrap:start -- do not edit; run `make generate`. See scripts/registry/generate_shared_runtime_bootstrap.py
 SKILL_ROOT = Path(__file__).resolve().parents[1]
 _SCRIPT_DIR = Path(__file__).resolve().parent
 _INSTALL_MANIFEST = ".software-builder-manifest.json"
-_RUNTIME_DESCRIPTION = "shared confidence-band runtime"
 
 
 def _shared_runtime_loader() -> ModuleType:
@@ -44,6 +47,7 @@ def _shared_runtime_loader() -> ModuleType:
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+# GENERATED shared-runtime-bootstrap:end
 
 
 _confidence_bands = _shared_runtime_loader().load_shared_runtime(
