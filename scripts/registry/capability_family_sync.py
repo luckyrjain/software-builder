@@ -14,7 +14,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from scripts.registry.backfill_capabilities import load_catalog
+from scripts.registry.capability_catalog import load_catalog
 from scripts.yaml_safety import YAML_SAFETY_ERRORS, load_unique_yaml_file
 
 FAMILIES_PATH = Path(__file__).resolve().parent / "capability_families.yaml"

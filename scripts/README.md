@@ -156,8 +156,8 @@ Makefile wrappers: `make install`, `make install-<skill>` (per skill), `make ins
 | `artifact_contracts.py` | Validate durable artifact contracts and runtime result envelopes. |
 | `artifact_trust.py` | Execution-owned trust classification for artifacts and embedded contexts. |
 | `assessment_target.py` | Canonical identity and digest helpers for composable assessments. |
-| `backfill_capabilities.py` | Read the generated capability catalogue; validate every skill's capabilities block. |
 | `canonical_manifest.py` | Canonical versioned manifest loader and legacy projection renderer. |
+| `capability_catalog.py` | Read the generated capability catalogue; validate every skill's capabilities block. |
 | `capability_engine.py` | The single required/optional/any_of capability-resolution engine skills.yaml's capability contracts are evaluated against. |
 | `capability_family_sync.py` | Validate that provider-branded capability ids resolve to an abstract family. |
 | `cli.py` | The `python3 -m scripts.registry` command surface: generate, validate, package, check-handoff, validate-artifact. |

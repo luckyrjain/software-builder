@@ -65,7 +65,7 @@ no longer a writer that has to preserve the unresolved `extends:` form on disk. 
 
 The one place this still matters: side-file projections read fragments *before* profile resolution, so
 a skill that inherited its `capabilities:` block from a profile would be absent from the generated
-catalogue. `scripts/tests/test_backfill_capabilities.py` asserts the catalogue covers every registered
+catalogue. `scripts/tests/test_capability_catalog.py` asserts the catalogue covers every registered
 skill, which is what catches that.
 
 **3. `OptionalLayers` is the single answer to "which contract layers are active in this root".**
