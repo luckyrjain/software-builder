@@ -454,3 +454,39 @@ def test_packaged_workspace_validator_rejects_a_duplicate_key(tmp_path: Path) ->
 
     with pytest.raises(Exception, match="duplicate YAML mapping key"):
         validator._load_graph(graph)
+
+
+def test_package_skill_works_without_a_git_index(tmp_path: Path) -> None:
+    """The documented extracted-bundle install flow has no .git (docs/RELEASE.md).
+
+    `package_skill` selects from the working tree rather than `git ls-files` precisely so
+    this flow works. Pinning it here so the selector is not "unified" with the two
+    index-based archive builders (generic_package.py, package_release.py), which would
+    silently package zero files for anyone installing from a downloaded release bundle.
+    """
+    repo = tmp_path / "bundle"
+    (repo / "demo-skill").mkdir(parents=True)
+    (repo / "demo-skill" / "SKILL.md").write_text(
+        "---\nname: demo-skill\ndescription: demo\n---\n\n# Demo\n", encoding="utf-8"
+    )
+    (repo / "demo-skill" / "reference").mkdir()
+    (repo / "demo-skill" / "reference" / "notes.md").write_text("# Notes\n", encoding="utf-8")
+    (repo / "RELEASE-MANIFEST.json").write_text(
+        json.dumps(
+            {
+                "distribution_version": "9.9.9",
+                "source_sha": "0123456789abcdef0123456789abcdef01234567",
+            }
+        ),
+        encoding="utf-8",
+    )
+    assert not (repo / ".git").exists()
+
+    dest = tmp_path / "out"
+    package_skill(skill="demo-skill", repo_root=repo, dest=dest, host="cursor")
+
+    assert (dest / "SKILL.md").is_file()
+    assert (dest / "reference" / "notes.md").is_file()
+    manifest = json.loads((dest / ".software-builder-manifest.json").read_text(encoding="utf-8"))
+    assert manifest["distribution_version"] == "9.9.9"
+    assert "reference/notes.md" in manifest["files"]

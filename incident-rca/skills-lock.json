@@ -1,6 +1,7 @@
 {
   "version": 1,
   "skillsCliVersion": "1.5.14",
+  "skillsCliIntegrity": "sha512-oA0Wv2cfUnLaFHeDU+IwHfrbfyP42H1UTjjEZYnOtgujkMGL6uXKzmmIx8/6jPhqJiK1v7HbvRPBmhowg9N2lA==",
   "skills": {
     "kubesense-mcp": {
       "source": "kubesense-ai/kubesense-mcp-skills",

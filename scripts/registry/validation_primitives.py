@@ -74,10 +74,15 @@ def enum_value(value: Any, allowed: Collection[str], label: str) -> list[str]:
     return [f"error: {label} must be one of: {', '.join(sorted(allowed))}"]
 
 
-def unknown_fields(value: Any, allowed: Iterable[str]) -> list[str]:
-    """Return the sorted keys of `value` that are not in `allowed`."""
+def unknown_fields(value: Any, allowed: Iterable[str]) -> list[Any]:
+    """Return the keys of `value` that are not in `allowed`, ordered by string form.
+
+    Ordered by string form rather than by the keys themselves: YAML admits non-string keys, and
+    an undeclared `1:` alongside an undeclared `a:` must be reported, not crash the validator on
+    an unorderable comparison. Keys come back as written, so a caller can render them.
+    """
     mapping = as_mapping(value)
-    return sorted(set(mapping) - set(allowed))
+    return sorted(set(mapping) - set(allowed), key=str)
 
 
 def run_validator_cli(

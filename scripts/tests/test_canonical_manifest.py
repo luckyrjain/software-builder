@@ -91,9 +91,9 @@ def test_legacy_projections_are_derived_from_canonical():
 
 
 def test_generate_collects_all_legacy_projections_from_canonical():
-    from scripts.registry.cli import _collect_outputs
+    from scripts.registry.generators import collect_outputs
 
-    outputs = _collect_outputs(ROOT)
+    outputs = collect_outputs(ROOT)
     assert outputs[ROOT / "scripts/registry/composition_runtime.yaml"] == render_legacy_projection(ROOT, "composition_runtime")
     assert outputs[ROOT / "scripts/registry/composition_contracts.yaml"] == render_legacy_projection(ROOT, "composition")
 

@@ -3,99 +3,63 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 from pathlib import Path
 import re
 import sys
+from types import ModuleType
 from typing import Literal
 import zlib
 
-INVALID_MARKER = object()
+SKILL_ROOT = Path(__file__).resolve().parents[1]
+_SCRIPT_DIR = Path(__file__).resolve().parent
+_INSTALL_MANIFEST = ".software-builder-manifest.json"
+_RUNTIME_DESCRIPTION = "shared unified-diff runtime"
+
+
+def _shared_runtime_loader() -> ModuleType:
+    """Import shared_runtime_loader, which owns the containment policy for every module this
+    script executes out of docs/skill-framework/shared/.
+
+    Only locating the loader itself is handled here, and it needs no policy of its own: an
+    installed package carries the loader beside this script (package_skill.py vendors it), so the
+    lookup never leaves the package, and the install manifest is what proves a missing vendored
+    copy is a packaging fault rather than an invitation to read a sibling path.
+    """
+    beside = _SCRIPT_DIR / "shared_runtime_loader.py"
+    if beside.is_file():
+        path = beside
+    elif (SKILL_ROOT / _INSTALL_MANIFEST).is_file():
+        raise RuntimeError(f"unable to load packaged {_RUNTIME_DESCRIPTION} loader: {beside}")
+    else:
+        path = SKILL_ROOT.parent / "docs/skill-framework/shared/shared_runtime_loader.py"
+    if not path.is_file():
+        raise RuntimeError(f"unable to load packaged {_RUNTIME_DESCRIPTION} loader: {path}")
+    spec = importlib.util.spec_from_file_location("software_builder_shared_runtime_loader", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"unable to load packaged {_RUNTIME_DESCRIPTION} loader: {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+_unified_diff = _shared_runtime_loader().load_shared_runtime(
+    SKILL_ROOT,
+    "unified_diff",
+    alias="shared_unified_diff",
+    description=_RUNTIME_DESCRIPTION,
+)
+
+INVALID_MARKER = _unified_diff.INVALID_PATH
+HUNK_HEADER = _unified_diff.HUNK_HEADER
 GIT_BASE85_ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz!#$%&()*+-;<=>?@^_`{|}~"
 GIT_BASE85_VALUES = {character: index for index, character in enumerate(GIT_BASE85_ALPHABET)}
 MAX_BINARY_BLOCK_BYTES = 8 * 1024 * 1024
+# An anchor is validated against a whole PR patch, so records are capped generously; an
+# unbound header is still only read as an unchanged path, which is the fail-closed reading.
 MAX_DIFF_RECORD_CHARS = 64 * 1024
 MAX_PATH_SEPARATORS = 64
-
-HUNK_HEADER = re.compile(
-    r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@"
-)
-
-
-def _decode_git_path(raw: str) -> str | object:
-    """Decode one Git path field, including C-quoted octal UTF-8 bytes."""
-    if not raw.startswith('"'):
-        return raw
-    if len(raw) < 2 or not raw.endswith('"'):
-        return INVALID_MARKER
-    decoded = bytearray()
-    cursor = 1
-    escapes = {
-        "a": 7, "b": 8, "t": 9, "n": 10, "v": 11, "f": 12, "r": 13,
-        '"': 34, "\\": 92,
-    }
-    while cursor < len(raw) - 1:
-        character = raw[cursor]
-        if character != "\\":
-            decoded.extend(character.encode("utf-8"))
-            cursor += 1
-            continue
-        cursor += 1
-        if cursor >= len(raw) - 1:
-            return INVALID_MARKER
-        escaped = raw[cursor]
-        if escaped in escapes:
-            decoded.append(escapes[escaped])
-            cursor += 1
-            continue
-        if escaped not in "01234567":
-            return INVALID_MARKER
-        end = cursor
-        while end < min(cursor + 3, len(raw) - 1) and raw[end] in "01234567":
-            end += 1
-        value = int(raw[cursor:end], 8)
-        if value > 255:
-            return INVALID_MARKER
-        decoded.append(value)
-        cursor = end
-    try:
-        return decoded.decode("utf-8")
-    except UnicodeDecodeError:
-        return INVALID_MARKER
-
-
-def _quoted_field_end(raw: str) -> int | None:
-    escaped = False
-    for index in range(1, len(raw)):
-        if raw[index] == '"' and not escaped:
-            return index + 1
-        if raw[index] == "\\" and not escaped:
-            escaped = True
-        else:
-            escaped = False
-    return None
-
-
-def _separator_positions_outside_quotes(
-    raw: str, tokens: tuple[str, ...]
-) -> list[int] | None:
-    """Find a bounded number of structural separators outside C quotes."""
-    positions: list[int] = []
-    quoted = False
-    escaped = False
-    for index, character in enumerate(raw):
-        if character == '"' and not escaped:
-            quoted = not quoted
-        if not quoted:
-            if any(raw.startswith(token, index) for token in tokens):
-                positions.append(index)
-                if len(positions) > MAX_PATH_SEPARATORS:
-                    return None
-        if quoted and character == "\\" and not escaped:
-            escaped = True
-        else:
-            escaped = False
-    return None if quoted else positions
 
 
 def _diff_paths(
@@ -106,46 +70,20 @@ def _diff_paths(
     binary_summary: str | None = None,
 ) -> tuple[str, str] | None:
     """Parse a ``diff --git`` header, binding ambiguous spaces to section paths."""
-    prefix = "diff --git "
-    if len(raw) > MAX_DIFF_RECORD_CHARS or not raw.startswith(prefix):
-        return None
-    fields = raw[len(prefix):]
-    if fields.startswith('"'):
-        end = _quoted_field_end(fields)
-        if end is None or end >= len(fields) or fields[end] != " ":
-            return None
-        raw_candidates = [(fields[:end], fields[end + 1:])]
-    else:
-        # Spaces are not quoted by Git. Every b/ token is therefore only a
-        # candidate boundary until markers or rename/copy metadata bind it.
-        separators = _separator_positions_outside_quotes(fields, (" b/", ' "b/'))
-        if separators is None:
-            return None
-        raw_candidates = [
-            (fields[:separator], fields[separator + 1:])
-            for separator in separators
-        ]
-    candidates: list[tuple[str, str]] = []
-    for old_raw, new_raw in raw_candidates:
-        old_path = _decode_git_path(old_raw)
-        new_path = _decode_git_path(new_raw)
-        if old_path is INVALID_MARKER or new_path is INVALID_MARKER:
-            continue
-        if not old_path.startswith("a/") or not new_path.startswith("b/"):
-            continue
-        candidate = old_path[2:], new_path[2:]
-        if old_hint is not None and candidate[0] != old_hint:
-            continue
-        if new_hint is not None and candidate[1] != new_hint:
-            continue
-        if binary_summary is not None and not _binary_summary_matches(
-            binary_summary, candidate[0], candidate[1]
-        ):
-            continue
-        candidates.append(candidate)
-    if old_hint is None and new_hint is None and binary_summary is None:
-        candidates = [candidate for candidate in candidates if candidate[0] == candidate[1]]
-    return candidates[0] if len(candidates) == 1 else None
+
+    def binary_summary_binds(old_path: str, new_path: str) -> bool:
+        return _binary_summary_matches(binary_summary, old_path, new_path)
+
+    accept = None if binary_summary is None else binary_summary_binds
+    return _unified_diff.parse_diff_git_header(
+        raw,
+        old_hint=old_hint,
+        new_hint=new_hint,
+        accept=accept,
+        max_record_chars=MAX_DIFF_RECORD_CHARS,
+        max_separators=MAX_PATH_SEPARATORS,
+        require_identical_when_unbound=True,
+    )
 
 
 def _marker_operand(raw: str) -> str | object:
@@ -156,13 +94,13 @@ def _marker_operand(raw: str) -> str | object:
     if not field:
         return INVALID_MARKER
     if field.startswith('"'):
-        end = _quoted_field_end(field)
+        end = _unified_diff.quoted_field_end(field)
         if end is None or (field[end:] and not field[end:].startswith("\t")):
             return INVALID_MARKER
         field = field[:end]
     else:
         field = field.split("\t", 1)[0]
-    return _decode_git_path(field)
+    return _unified_diff.decode_git_path(field)
 
 
 def _marker_path(raw: str) -> str | None | object:
@@ -191,8 +129,8 @@ def _move_metadata_paths(records: list[str]) -> tuple[str, str] | None:
         target_raw = records[2][len("copy to "):]
     else:
         return None
-    source = _decode_git_path(source_raw)
-    target = _decode_git_path(target_raw)
+    source = _unified_diff.decode_git_path(source_raw)
+    target = _unified_diff.decode_git_path(target_raw)
     if source is INVALID_MARKER or target is INVALID_MARKER:
         return None
     return source, target
@@ -212,15 +150,17 @@ def _binary_summary_matches(
     ):
         return False
     fields = raw[len(prefix):-len(suffix)]
-    separator_positions = _separator_positions_outside_quotes(fields, (" and ",))
+    separator_positions = _unified_diff.separator_positions_outside_quotes(
+        fields, (" and ",), max_separators=MAX_PATH_SEPARATORS
+    )
     if separator_positions is None:
         return False
     matches = 0
     for separator in separator_positions:
         old_raw = fields[:separator]
         new_raw = fields[separator + len(" and "):]
-        old_operand = _decode_git_path(old_raw)
-        new_operand = _decode_git_path(new_raw)
+        old_operand = _unified_diff.decode_git_path(old_raw)
+        new_operand = _unified_diff.decode_git_path(new_raw)
         if old_operand is INVALID_MARKER or new_operand is INVALID_MARKER:
             continue
         old_operand = None if old_operand == "/dev/null" else old_operand
@@ -243,11 +183,11 @@ def _binary_summary_null_hints(raw: str) -> tuple[str | None, str | None] | None
         return None
     fields = raw[len(prefix):-len(suffix)]
     if fields.startswith("/dev/null and "):
-        new_operand = _decode_git_path(fields[len("/dev/null and "):])
+        new_operand = _unified_diff.decode_git_path(fields[len("/dev/null and "):])
         if new_operand is not INVALID_MARKER and new_operand.startswith("b/"):
             return None, new_operand[2:]
     if fields.endswith(" and /dev/null"):
-        old_operand = _decode_git_path(fields[:-len(" and /dev/null")])
+        old_operand = _unified_diff.decode_git_path(fields[:-len(" and /dev/null")])
         if old_operand is not INVALID_MARKER and old_operand.startswith("a/"):
             return old_operand[2:], None
     return None
@@ -255,26 +195,7 @@ def _binary_summary_null_hints(raw: str) -> tuple[str | None, str | None] | None
 
 def _hunk_range(raw: str) -> tuple[int, int, int, int] | None:
     """Return old/new starts and counts for a syntactically valid hunk header."""
-    match = HUNK_HEADER.match(raw)
-    if not match:
-        return None
-    numeric_fields = [group for group in match.groups() if group is not None]
-    if any(len(group) > 12 for group in numeric_fields):
-        return None
-    try:
-        old_start = int(match.group(1))
-        old_count = int(match.group(2)) if match.group(2) is not None else 1
-        new_start = int(match.group(3))
-        new_count = int(match.group(4)) if match.group(4) is not None else 1
-    except ValueError:
-        return None
-    # A non-empty range cannot begin at line zero. Zero-count ranges may use
-    # zero (new/deleted files) or the insertion/deletion point used by git.
-    if (old_count > 0 and old_start == 0) or (new_count > 0 and new_start == 0):
-        return None
-    if old_count == 0 and new_count == 0:
-        return None
-    return old_start, old_count, new_start, new_count
+    return _unified_diff.hunk_range(raw)
 
 
 def _delta_program_complete(program: bytes) -> bool:

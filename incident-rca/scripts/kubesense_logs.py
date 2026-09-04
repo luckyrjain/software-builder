@@ -10,40 +10,68 @@ Requires KUBESENSE_API_KEY. Optional KUBESENSE_BASE_URL (default: https://kubese
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import os
-import re
 import sys
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from types import ModuleType
 from typing import Any
 
 DEFAULT_BASE_URL = "https://kubesense.example.com"
 
-REDACT_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
-    (re.compile(r'("Authorization"\s*:\s*")[^"]*(")', re.IGNORECASE), r'\1[REDACTED]\2'),
-    (re.compile(r'("Bearer\s+)[^"\\]+', re.IGNORECASE), r'\1[REDACTED]'),
-    (re.compile(r'(Authorization=\[REDACTED\])\s+\S+', re.IGNORECASE), r'\1'),
-    (re.compile(r'(Authorization=)[^,\]} ]+', re.IGNORECASE), r'\1[REDACTED]'),
-    (re.compile(r'(Basic\s+)[A-Za-z0-9+/=]{8,}', re.IGNORECASE), r'\1[REDACTED]'),
-    # api_key / x-api-key / apikey — JSON-quoted and key=value forms. reference/log-redaction.md's
-    # Phase 5 checklist has named this pattern from the start; the function just didn't cover it.
-    (re.compile(r'("(?:x-)?api[_-]?key"\s*:\s*")[^"]*(")', re.IGNORECASE), r'\1[REDACTED]\2'),
-    (re.compile(r'((?:x-)?api[_-]?key\s*=\s*)\S+', re.IGNORECASE), r'\1[REDACTED]'),
-    # password / passwd / pwd — same two forms.
-    (re.compile(r'("(?:password|passwd|pwd)"\s*:\s*")[^"]*(")', re.IGNORECASE), r'\1[REDACTED]\2'),
-    (re.compile(r'((?:password|passwd|pwd)\s*=\s*)\S+', re.IGNORECASE), r'\1[REDACTED]'),
-    # PEM blocks (private keys, certificates) — collapse the whole block, not just the header.
-    (
-        re.compile(
-            r'(-----BEGIN [A-Z ]*(?:PRIVATE KEY|CERTIFICATE)-----)[\s\S]*?'
-            r'(-----END [A-Z ]*(?:PRIVATE KEY|CERTIFICATE)-----)'
-        ),
-        r'\1\n[REDACTED]\n\2',
-    ),
+SKILL_ROOT = Path(__file__).resolve().parents[1]
+_SCRIPT_DIR = Path(__file__).resolve().parent
+_INSTALL_MANIFEST = ".software-builder-manifest.json"
+_RUNTIME_DESCRIPTION = "shared redaction runtime"
+
+
+def _shared_runtime_loader() -> ModuleType:
+    """Import shared_runtime_loader, which owns the containment policy for every module this
+    script executes out of docs/skill-framework/shared/.
+
+    Only locating the loader itself is handled here, and it needs no policy of its own: an
+    installed package carries the loader beside this script (package_skill.py vendors it), so the
+    lookup never leaves the package, and the install manifest is what proves a missing vendored
+    copy is a packaging fault rather than an invitation to read a sibling path.
+    """
+    beside = _SCRIPT_DIR / "shared_runtime_loader.py"
+    if beside.is_file():
+        path = beside
+    elif (SKILL_ROOT / _INSTALL_MANIFEST).is_file():
+        raise RuntimeError(f"unable to load packaged {_RUNTIME_DESCRIPTION} loader: {beside}")
+    else:
+        path = SKILL_ROOT.parent / "docs/skill-framework/shared/shared_runtime_loader.py"
+    if not path.is_file():
+        raise RuntimeError(f"unable to load packaged {_RUNTIME_DESCRIPTION} loader: {path}")
+    spec = importlib.util.spec_from_file_location("software_builder_shared_runtime_loader", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"unable to load packaged {_RUNTIME_DESCRIPTION} loader: {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+_redaction = _shared_runtime_loader().load_shared_runtime(
+    SKILL_ROOT,
+    "redaction",
+    alias="shared_redaction",
+    description=_RUNTIME_DESCRIPTION,
 )
+
+# The log profile of the shared table: credential forms with the key name preserved, plus the
+# vendor token prefixes the shared table also gives prd-architect. Contact PII is deliberately
+# absent -- see the profile rationale in redaction.py.
+REDACTION_PROFILE = _redaction.LOG_PATTERNS
+
+# Three passes because a replacement can expose the next pattern's shape: masking an
+# `Authorization=` value leaves a marker that the straggler pattern then uses to find the raw
+# token still trailing it.
+REDACTION_PASSES = 3
 
 
 @dataclass(frozen=True)
@@ -82,10 +110,13 @@ def _api_key(explicit: str | None = None) -> str:
 
 
 def redact_secrets(text: str) -> str:
-    redacted = text
-    for _ in range(3):
-        for pattern, replacement in REDACT_PATTERNS:
-            redacted = pattern.sub(replacement, redacted)
+    """Mask credential-shaped content in a log body, preserving the key names around it."""
+    redacted, _hits = _redaction.redact(
+        text,
+        patterns=REDACTION_PROFILE,
+        marker=_redaction.DEFAULT_MARKER,
+        passes=REDACTION_PASSES,
+    )
     return redacted
 
 

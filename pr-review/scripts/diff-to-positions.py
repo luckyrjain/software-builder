@@ -30,17 +30,59 @@ Emits the `position` JSON (omits diff_refs SHA keys when the SHAs are not suppli
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
-import re
 import sys
+from pathlib import Path
+from types import ModuleType
 from typing import Iterator, Optional, Tuple
 
-HUNK_RE = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
+SKILL_ROOT = Path(__file__).resolve().parents[1]
+_SCRIPT_DIR = Path(__file__).resolve().parent
+_INSTALL_MANIFEST = ".software-builder-manifest.json"
+_RUNTIME_DESCRIPTION = "shared unified-diff runtime"
+
+
+def _shared_runtime_loader() -> ModuleType:
+    """Import shared_runtime_loader, which owns the containment policy for every module this
+    script executes out of docs/skill-framework/shared/.
+
+    Only locating the loader itself is handled here, and it needs no policy of its own: an
+    installed package carries the loader beside this script (package_skill.py vendors it), so the
+    lookup never leaves the package, and the install manifest is what proves a missing vendored
+    copy is a packaging fault rather than an invitation to read a sibling path.
+    """
+    beside = _SCRIPT_DIR / "shared_runtime_loader.py"
+    if beside.is_file():
+        path = beside
+    elif (SKILL_ROOT / _INSTALL_MANIFEST).is_file():
+        raise RuntimeError(f"unable to load packaged {_RUNTIME_DESCRIPTION} loader: {beside}")
+    else:
+        path = SKILL_ROOT.parent / "docs/skill-framework/shared/shared_runtime_loader.py"
+    if not path.is_file():
+        raise RuntimeError(f"unable to load packaged {_RUNTIME_DESCRIPTION} loader: {path}")
+    spec = importlib.util.spec_from_file_location("software_builder_shared_runtime_loader", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"unable to load packaged {_RUNTIME_DESCRIPTION} loader: {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+_unified_diff = _shared_runtime_loader().load_shared_runtime(
+    SKILL_ROOT,
+    "unified_diff",
+    alias="shared_unified_diff",
+    description=_RUNTIME_DESCRIPTION,
+)
+
+HUNK_RE = _unified_diff.HUNK_HEADER
 # Real unified-diff file headers, not content lines that merely start with +++/---.
 # A `+++ b/path` / `+++ /dev/null` line is a header; an added line whose text begins
 # with `++ ` (rendered as `+++ …`) is content. Same for `--- a/path` / `--- /dev/null`.
-FILE_HEADER_NEW_RE = re.compile(r"^\+\+\+ (b/|/dev/null)")
-FILE_HEADER_OLD_RE = re.compile(r"^--- (a/|/dev/null)")
+# Position (between hunks, never inside one) settles the rest -- see _classify_diff_lines.
+FILE_HEADER_NEW_RE = _unified_diff.FILE_MARKER_NEW
+FILE_HEADER_OLD_RE = _unified_diff.FILE_MARKER_OLD
 
 
 def parse_args() -> argparse.Namespace:
@@ -64,8 +106,10 @@ def parse_args() -> argparse.Namespace:
 
 def _matches_target(path_token: str, target_path: str) -> bool:
     """Exact match on the diff's `a/<path>` or `b/<path>` token (prefix stripped)."""
-    if path_token.startswith(("a/", "b/")):
-        path_token = path_token[2:]
+    for side in ("a", "b"):
+        stripped = _unified_diff.strip_side_prefix(path_token, side)
+        if stripped is not None:
+            return stripped == target_path
     return path_token == target_path
 
 

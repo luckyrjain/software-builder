@@ -26,10 +26,19 @@ described, and `extends:` was documented in no markdown file at all.
 
 A skill's registry entry lives at `scripts/registry/skills.d/<skill-id>.yaml`, containing only that
 skill's own entry keyed by its skill id. `scripts/registry/manifest_merge.py` merges every fragment into
-`skills.yaml`'s `skills:` mapping, and `scripts/registry/cli.py`'s `_collect_outputs` emits the merged
-file as a generated output of `make generate` — the same pattern `generate_cursor.py` and
-`generate_kiro.py` already used for per-host adapters. `make generate-check` fails when the mapping
-drifts from what the fragments produce, which is also what catches a hand-edit of the mapping.
+`skills.yaml`'s `skills:` mapping, and `scripts/registry/generators.py` emits the merged file as a
+generated output of `make generate` — the same pattern `generate_cursor.py` and `generate_kiro.py`
+already used for per-host adapters. `make generate-check` fails when the mapping drifts from what the
+fragments produce, which is also what catches a hand-edit of the mapping.
+
+The fragment is also the single authoring place for the per-skill rows of four side-files, each
+projected by `manifest_merge.SIDE_FILE_PROJECTIONS`: `degraded_behavior.yaml`, `setup_freshness.yaml`,
+`routing_rules.yaml`, and `capability_catalog.yaml`. The capability catalogue was previously
+hand-authored *and* written back into `skills.yaml` by a `backfill-capabilities` command — an inverse
+projection that required every skill's capability contract to be written twice and a drift validator
+(`capability_sync.py`) to police the copy. Both are gone: edit the fragment's `capabilities:` block and
+run `make generate`. `capability_families.yaml` stays hand-authored, because the provider → family
+vocabulary is a separate decision from any one skill's contract.
 
 Everything else in `skills.yaml` stays hand-authored in that file: `schema_version`, `manifest_kind`,
 `contracts:`, and `profiles:`. A root with no `scripts/registry/skills.d/` directory is untouched — its
@@ -50,15 +59,20 @@ naming one with `extends: <profile-name>` inherits that block. `resolve_registry
 
 The contract is that **no consumer ever sees `extends` or `profiles`**. Every reader of the registry —
 whether it goes through `parse_registry` or reads the raw mapping — sees the same fully-inlined shape
-the registry had before profiles existed. The one deliberate exception is
-`scripts/registry/backfill_capabilities.py`, which is a *writer*: its round-trip must preserve the
-unresolved `extends:` form on disk. Today one profile (`read-only-leaf-review`) is inherited by 15
-skills.
+the registry had before profiles existed. Nothing writes back into `skills.yaml` any more, so there is
+no longer a writer that has to preserve the unresolved `extends:` form on disk. Today one profile
+(`read-only-leaf-review`) is inherited by 15 skills.
+
+The one place this still matters: side-file projections read fragments *before* profile resolution, so
+a skill that inherited its `capabilities:` block from a profile would be absent from the generated
+catalogue. `scripts/tests/test_backfill_capabilities.py` asserts the catalogue covers every registered
+skill, which is what catches that.
 
 **3. `OptionalLayers` is the single answer to "which contract layers are active in this root".**
 
-`scripts/registry/cli.py` defines a frozen `OptionalLayers` dataclass and a `detect_optional_layers(root)`
-function. Each field is `None` when that layer is inactive for the root and a `Path` when it is active
+`scripts/registry/layers.py` defines a frozen `OptionalLayers` dataclass and a `detect_optional_layers(root)`
+function (`cli.py` re-exports both; they moved out of it so the generator modules could read the answer
+without importing the command-line entrypoint). Each field is `None` when that layer is inactive for the root and a `Path` when it is active
 at that path (`p1_layer_active` is a plain bool). The generate flow, the per-generate validation flow,
 and the full validation flow all read fields off one `OptionalLayers` value instead of re-deriving the
 answer from inline path literals — the duplication that previously left a dead

@@ -82,3 +82,31 @@ The same command is the fix for any generated-file drift `make generate-check` r
 `skills.yaml`'s `skills:` mapping, which is merged from `scripts/registry/skills.d/*.yaml` fragments
 (see [ADR 0005](adr/0005-registry-authoring-model.md)). Never hand-edit a generated region to make the
 check pass — fix the source and regenerate.
+
+## Refreshing the pinned `skills` CLI
+
+**Symptom:** `error: skills CLI tarball integrity mismatch -- refusing to execute it`
+
+`scripts/install-incident-rca-deps.sh` installs incident-rca's one external skill dependency
+(`kubesense-mcp`) with the npm `skills` CLI. A version tag constrains which release npm is asked for,
+not which bytes npm returns, so the script downloads the CLI tarball with `npm pack` — which writes a
+file and runs no install scripts — checks its sha512 against `skillsCliIntegrity` in
+`incident-rca/skills-lock.json`, and only then executes it via `npx --package=<verified tarball>`.
+
+A mismatch means the bytes for the pinned version are not the bytes that were pinned. Do not bypass it.
+Either the pin is stale (someone bumped `skillsCliVersion` without its digest) or the published package
+changed — investigate before re-pinning.
+
+To move to CLI version `V`, in one commit:
+
+1. `npm view "skills@V" dist.integrity`
+2. In `incident-rca/skills-lock.json`, set `skillsCliVersion` to `V` and `skillsCliIntegrity` to the
+   exact `sha512-...` string from step 1. Both fields move together; a version without its matching
+   digest fails closed.
+3. Re-run `bash scripts/install-incident-rca-deps.sh`.
+4. If the upstream skill tree also moved, update `commitSha` and re-record `computedHash` from the
+   installed `SKILL.md` — the post-install hash check prints the observed value on mismatch.
+
+Residual risk, stated plainly: the verified tarball's own npm dependencies are still resolved at run
+time and are not covered by this digest. Closing that would require vendoring a full npm lockfile for
+the CLI. The digest closes the larger hole — a substituted or re-published `skills` package.

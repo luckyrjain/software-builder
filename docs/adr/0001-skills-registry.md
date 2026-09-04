@@ -43,7 +43,7 @@ changed and one gate command was never spelled correctly.
 - **`skills.yaml`'s `skills:` mapping is now generated, not hand-authored.** Each skill's entry is
   authored one-per-file at `scripts/registry/skills.d/<skill-id>.yaml`, and
   `scripts/registry/manifest_merge.py` merges every fragment back into the `skills:` mapping during
-  `make generate` (wired at `scripts/registry/cli.py`'s `_collect_outputs`). Hand-editing that mapping
+  `make generate` (wired in `scripts/registry/generators.py`'s `GENERATORS` list). Hand-editing that mapping
   is a drift error, not an authoring step: the "Skill authors must update `skills.yaml`" consequence
   recorded above now means "authors must add or edit their fragment, then run `make generate`". A checkout with
   no `scripts/registry/skills.d/` directory keeps the original hand-edited mapping untouched, so

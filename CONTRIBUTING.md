@@ -59,10 +59,15 @@ Please read and follow our [Code of Conduct](CODE_OF_CONDUCT.md).
   `permissions`, `authority` and produced/consumed artifacts are never restated per contract
   section. `entrypoint` and `supported_hosts` may be omitted entirely: they default to `SKILL.md`
   and the full host roster (`scripts/registry/host_adapter.py`'s `HOSTS`). The fragment is also where
-  the skill's `degraded_behavior:`, `setup_freshness:` and `routing:` blocks live; `make generate`
-  projects them into `scripts/registry/degraded_behavior.yaml`, `setup_freshness.yaml` and
-  `routing_rules.yaml`, and regenerates the skill dropdowns in `.github/ISSUE_TEMPLATE/*.yml` — none of
-  those need a separate edit. The rest of `skills.yaml` (`schema_version`, `manifest_kind`, the
+  the skill's `capabilities:`, `degraded_behavior:`, `setup_freshness:` and `routing:` blocks live;
+  `make generate` projects them into `scripts/registry/capability_catalog.yaml`,
+  `degraded_behavior.yaml`, `setup_freshness.yaml` and `routing_rules.yaml`, regenerates the skill
+  dropdowns in `.github/ISSUE_TEMPLATE/*.yml`, and rewrites the degraded-mode table in
+  `docs/skill-framework/shared/mcp-error-handling.md` §4 — none of those need a separate edit. In
+  particular, do **not** hand-edit `capability_catalog.yaml`: it used to be authored there and written
+  back into `skills.yaml` by `backfill-capabilities`, so every capability contract had to be kept in two
+  places; it is now a projection like the others. (`capability_families.yaml`, the provider → family
+  vocabulary, is still hand-authored.) The rest of `skills.yaml` (`schema_version`, `manifest_kind`, the
   non-derived parts of `contracts:`, `profiles:`) is still hand-edited directly in that file — but
   `contracts:` is re-rendered wholesale by `make generate`, so it cannot carry YAML comments.
 - **GitHub topics/description:** maintainers with repo admin access run

@@ -4,167 +4,41 @@ import argparse
 import json
 import sys
 from collections.abc import Callable
-from dataclasses import dataclass
 from pathlib import Path
 
 import yaml
 
-from scripts.registry.backfill_capabilities import cmd_backfill
+from scripts.registry.backfill_capabilities import cmd_check_capabilities
 from scripts.registry.agent_skills import validate_agent_skills
 from scripts.registry.artifact_contracts import validate_artifact_result
 from scripts.registry.canonical_manifest import (
-    LEGACY_PROJECTION_FILENAMES,
-    contract_document_path,
-    contract_section_source,
     has_canonical_manifest_shape,
-    legacy_projection_path,
     load_canonical_manifest,
-    render_legacy_projection,
     validate_canonical_manifest,
 )
 from scripts.registry.capability_family_sync import validate_capability_families
-from scripts.registry.capability_sync import validate_capability_catalog_sync
-from scripts.registry.composition import render_composition_mermaid
-from scripts.registry.composition_runtime import (
-    handoff_allowed,
-    render_dependency_graph,
-    validate_composition_runtime,
-)
+from scripts.registry.composition_runtime import handoff_allowed, validate_composition_runtime
 from scripts.registry.crosscheck import find_stale_generated_adapters, validate_registry
-from scripts.registry.generate_agent_compatibility import (
-    load_host_registry_and_registry,
-    render_agent_compatibility_doc,
-    update_readme_agent_compatibility_section,
-)
-from scripts.registry.generate_compatibility import render_compatibility_matrix
-from scripts.registry.generate_cursor import generate_cursor_rules
-from scripts.registry.generate_docs import (
-    render_install_mermaid,
-    update_changelog_toc,
-    update_readme_badge,
-    update_readme_doc_links,
-    update_readme_routing_table,
-    update_repository_table,
-)
-from scripts.registry.generate_issue_templates import (
-    generate_issue_templates,
-    issue_template_dir,
-)
-from scripts.registry.generate_kiro import generate_kiro_steering
-from scripts.registry.generate_makefile_roster import generate_makefile_roster
+from scripts.registry.generators import collect_outputs
 from scripts.registry.generic_package import build_generic_package
 from scripts.registry.host_portability import validate_host_portability
 from scripts.registry.host_adapter import (
-    host_contracts_path,
     validate_host_adapter_identities,
     validate_host_adapter_interface,
 )
 from scripts.registry.host_registry import HostRegistryParseError, parse_host_registry
-from scripts.registry.load import load_deprecated_skills, load_descriptions, load_registry
+from scripts.registry.layers import LAYER_LABELS, OptionalLayers, detect_optional_layers
+
+# Re-exported: scripts/check_platform_files.py and the optional-layer tests reach these
+# through this module, which owned them before layers.py existed.
+from scripts.registry.layers import optional_layer_paths as optional_layer_paths
+from scripts.registry.load import load_registry
 from scripts.registry.manifest import validate_manifest, validate_runtime_manifest
-from scripts.registry.manifest_merge import (
-    SIDE_FILE_PROJECTIONS,
-    merge_registry_yaml,
-    render_side_file,
-    side_file_path,
-    skills_fragments_dir,
-)
 from scripts.registry.p1_validation import validate_p1_contracts
 from scripts.registry.schema import clear_registry_cache, load_registry_raw
 from scripts.release_contract import validate_release_contract
 
 ROOT = Path(__file__).resolve().parents[2]
-
-
-def _collect_outputs(root: Path) -> dict[Path, str]:
-    registry = load_registry(root)
-    descriptions = load_descriptions(root, registry)
-    deprecated = load_deprecated_skills(root, registry)
-    layers = detect_optional_layers(root)
-    outputs: dict[Path, str] = {}
-    if skills_fragments_dir(root).is_dir():
-        # skills.yaml's `skills:` mapping is authored one-per-file under
-        # scripts/registry/skills.d/ (see manifest_merge.py); regenerate it here
-        # the same way generate_cursor_rules/generate_kiro_steering regenerate
-        # their own per-host outputs from the canonical registry. Repos/fixtures
-        # without a skills.d/ directory keep skills.yaml's own `skills:` mapping
-        # as the legacy, hand-edited source of truth untouched.
-        outputs[root / "skills.yaml"] = merge_registry_yaml(root)
-        # The same fragments also own the per-skill rows of the three aggregate side-files
-        # (degraded behavior, SETUP.md freshness, routing rules); each is regenerated here as a
-        # projection so its readers keep opening the same file with the same shape.
-        for projection in SIDE_FILE_PROJECTIONS:
-            path = side_file_path(root, projection)
-            if path.is_file():
-                outputs[path] = render_side_file(root, projection)
-    outputs.update(generate_cursor_rules(root, registry, descriptions, deprecated))
-    outputs.update(generate_kiro_steering(root, registry, deprecated))
-    outputs.update(generate_makefile_roster(root, registry))
-    if issue_template_dir(root).is_dir():
-        outputs.update(generate_issue_templates(root, registry))
-    readme = update_readme_badge(
-        (root / "README.md").read_text(encoding="utf-8"),
-        len(registry.skills),
-    )
-    agent_hosts_path = root / "agent-hosts.yaml"
-    if agent_hosts_path.is_file():
-        host_registry, agent_registry = load_host_registry_and_registry(root)
-        readme = update_readme_agent_compatibility_section(readme, host_registry)
-        outputs[root / "docs" / "agent-compatibility.md"] = render_agent_compatibility_doc(
-            host_registry, agent_registry
-        )
-    outputs[root / "README.md"] = readme
-    outputs[root / "docs" / "REPOSITORY.md"] = update_repository_table(
-        (root / "docs" / "REPOSITORY.md").read_text(encoding="utf-8"),
-        registry,
-        deprecated,
-    )
-    changelog_path = root / "CHANGELOG.md"
-    if changelog_path.is_file():
-        outputs[changelog_path] = update_changelog_toc(
-            changelog_path.read_text(encoding="utf-8"),
-        )
-    docs_readme_path = root / "docs" / "README.md"
-    if docs_readme_path.is_file():
-        docs_readme = update_readme_doc_links(
-            docs_readme_path.read_text(encoding="utf-8"),
-            registry,
-            deprecated,
-        )
-        escalation_matrix_path = (
-            root / "docs" / "skill-framework" / "shared" / "cross-skill-escalation.md"
-        )
-        if escalation_matrix_path.is_file():
-            docs_readme = update_readme_routing_table(
-                docs_readme,
-                escalation_matrix_path.read_text(encoding="utf-8"),
-                deprecated,
-            )
-        outputs[docs_readme_path] = docs_readme
-    outputs[root / "generated" / "catalogue" / "install-deps.mmd"] = render_install_mermaid(
-        registry,
-    )
-    outputs[root / "generated" / "catalogue" / "composition-deps.mmd"] = render_composition_mermaid(
-        registry,
-    )
-    if layers.capability_catalog is not None and layers.composition_contracts is not None:
-        outputs[root / "generated" / "catalogue" / "compatibility-matrix.md"] = (
-            render_compatibility_matrix(root)
-        )
-    if has_canonical_manifest_shape(load_registry_raw(root / "skills.yaml")):
-        # Once a repository opts into the canonical shape it owns every contract section, so a
-        # malformed manifest must fail the generate rather than quietly leaving stale
-        # projections on disk. A repository that never opted in has no canonical source to
-        # project from, which is not an error.
-        for section in LEGACY_PROJECTION_FILENAMES:
-            outputs[legacy_projection_path(root, section)] = render_legacy_projection(root, section)
-    if layers.composition_runtime is not None and layers.composition_contracts is not None:
-        outputs[root / "generated" / "catalogue" / "composition-runtime.mmd"] = render_dependency_graph(
-            registry,
-            runtime_path=layers.composition_runtime,
-            contracts_path=layers.composition_contracts,
-        )
-    return outputs
 
 
 def _write_outputs(outputs: dict[Path, str]) -> None:
@@ -213,10 +87,8 @@ def _run_command(action: Callable[[], int]) -> int:
     # calls cmd_generate(...) directly, bypassing this function entirely, so its own
     # clear is the only one those callers get; its second clear_registry_cache() call
     # after _write_outputs is separately load-bearing invalidation for the write that
-    # just happened, unrelated to entry invalidation. cmd_backfill isn't wrapped by
-    # _run_command (see main()'s dispatch) and doesn't need this either: it never
-    # reads through load_registry_raw itself, and already clears the cache after its
-    # own write.
+    # just happened, unrelated to entry invalidation. cmd_check_capabilities isn't wrapped
+    # by _run_command (see main()'s dispatch) and doesn't need to be: it only reads.
     clear_registry_cache()
     try:
         return action()
@@ -225,121 +97,12 @@ def _run_command(action: Callable[[], int]) -> int:
         return 2
 
 
-def _capability_catalog_path(root: Path) -> Path:
-    return root / "scripts" / "registry" / "capability_catalog.yaml"
-
-
-def _capability_families_path(root: Path) -> Path:
-    return root / "scripts" / "registry" / "capability_families.yaml"
-
-
-def _release_contract_path(root: Path) -> Path:
-    return root / "scripts" / "release_contract.yaml"
-
-
-def _p1_layer_paths(root: Path) -> list[Path]:
-    return [
-        host_contracts_path(root),
-        root / "scripts" / "registry" / "eval_contracts.yaml",
-        root / "docs" / "skill-framework" / "shared" / "runtime-contract.md",
-        root / "docs" / "skill-framework" / "shared" / "host-adapter-contract.md",
-        root / "docs" / "skill-framework" / "shared" / "eval-contract.md",
-    ]
-
-
-@dataclass(frozen=True)
-class OptionalLayers:
-    """Which optional contract/generation layers are active for one repository root.
-
-    `scripts/registry/cli.py`'s generate and validate flows both need the same answer
-    to "is capability_catalog / composition_runtime / release_contract / the P1 layer
-    active here" -- before this existed, each of `_collect_outputs`,
-    `_validate_for_generate`, and `_validate_all` answered it separately via ad hoc
-    `Path.is_file()` checks and inline path literals, duplicated up to three times per
-    layer. That drift already produced one dead helper (a prior `_platform_contracts_path`
-    was defined and never called by anything -- removed). This dataclass is the one
-    place that answers the question, composed from the individual path-construction
-    helpers above (kept standalone: they're pure path arithmetic, independently useful
-    and independently tested); every consumer below reads a field here instead of
-    re-deriving it.
-
-    A `None` field means that layer is inactive for this root (an optional file it
-    depends on doesn't exist); a `Path` means it's active, at that path.
-
-    Not memoized like schema.py's `load_registry_raw` cache -- `detect_optional_layers`
-    recomputes on every call (a handful of cheap `Path.is_file()` checks). It's named
-    "detect", not "resolve", specifically to avoid implying it shares that cache's
-    "computed once, invalidated via clear_registry_cache()" contract; it doesn't, and
-    doesn't need to for its own fields. Its one indirect dependency on the cache is
-    `canonical_manifest.contract_section_source`, which reads skills.yaml's shape via the
-    cached `load_registry_raw` rather than a raw read of its own.
-    """
-
-    host_contracts: Path | None
-    capability_catalog: Path | None
-    capability_families: Path | None
-    composition_runtime: Path | None
-    release_contract: Path | None
-    # Where the `composition` contract section is read from -- skills.yaml under the
-    # canonical shape, otherwise the standalone projection. Named for the section, not for
-    # skills.yaml's mere existence, which is what the field used to detect.
-    composition_contracts: Path | None
-    p1_layer_active: bool
-
-
-# The layer -> label pairs `cmd_validate` reports on, in the order it names them. Paired with
-# `OptionalLayers`' own fields, so a layer cannot be added without deciding how a run that
-# skipped it is reported.
-_LAYER_LABELS: tuple[tuple[str, str], ...] = (
-    ("host_contracts", "host adapter contract"),
-    ("capability_catalog", "capability catalogue"),
-    ("capability_families", "capability families"),
-    ("composition_runtime", "composition runtime"),
-    ("composition_contracts", "composition contracts"),
-    ("release_contract", "release contract"),
-)
-
-
-def detect_optional_layers(root: Path) -> OptionalLayers:
-    def active(path: Path) -> Path | None:
-        return path if path.is_file() else None
-
-    return OptionalLayers(
-        host_contracts=active(host_contracts_path(root)),
-        capability_catalog=active(_capability_catalog_path(root)),
-        capability_families=active(_capability_families_path(root)),
-        composition_runtime=contract_section_source(root, "composition_runtime"),
-        release_contract=active(_release_contract_path(root)),
-        composition_contracts=active(contract_document_path(root, "composition")),
-        p1_layer_active=any(path.is_file() for path in _p1_layer_paths(root)),
-    )
-
-
-def optional_layer_paths(root: Path) -> list[Path]:
-    """Every file an optional validation layer keys off of, for this root.
-
-    `detect_optional_layers` gates each layer behind `Path.is_file()`, which is what lets
-    the deliberately minimal registry fixtures skip layers they do not carry. That same
-    leniency means a deleted file silently disables its layer in the real repository, so
-    `scripts/check_platform_files.py` hard-asserts these paths exist there. Deriving that
-    inventory from this list -- rather than restating it -- is what keeps the two in step.
-    """
-    return [
-        _capability_catalog_path(root),
-        _capability_families_path(root),
-        _release_contract_path(root),
-        *_p1_layer_paths(root),
-    ]
-
-
 def _validate_for_generate(root: Path, layers: OptionalLayers | None = None) -> list[str]:
     layers = layers if layers is not None else detect_optional_layers(root)
     errors = validate_registry(root)
     if layers.host_contracts is not None:
         errors.extend(validate_host_adapter_interface(root))
         errors.extend(validate_host_adapter_identities(root))
-    if layers.capability_catalog is not None:
-        errors.extend(validate_capability_catalog_sync(root))
     if layers.capability_catalog is not None and layers.capability_families is not None:
         errors.extend(
             validate_capability_families(
@@ -386,8 +149,8 @@ def cmd_validate(root: Path) -> int:
         for error in errors:
             print(error, file=sys.stderr)
         return 1
-    ran = [label for field, label in _LAYER_LABELS if getattr(layers, field) is not None]
-    skipped = [label for field, label in _LAYER_LABELS if getattr(layers, field) is None]
+    ran = [label for field, label in LAYER_LABELS if getattr(layers, field) is not None]
+    skipped = [label for field, label in LAYER_LABELS if getattr(layers, field) is None]
     if layers.p1_layer_active:
         ran.append("P1 contracts")
         ran.append("integrated runtime manifest")
@@ -449,7 +212,7 @@ def cmd_generate(root: Path, check_only: bool) -> int:
             print(error, file=sys.stderr)
         return 1
 
-    outputs = _collect_outputs(root)
+    outputs = collect_outputs(root)
     if check_only:
         drift_errors = _check_outputs(root, outputs)
         if drift_errors:
@@ -635,18 +398,14 @@ def main(argv: list[str] | None = None) -> int:
 
     backfill_parser = subparsers.add_parser(
         "backfill-capabilities",
-        help="insert capabilities blocks from capability_catalog.yaml",
+        help="validate that every registered skill declares a capabilities block",
     )
-    backfill_parser.add_argument(
-        "--check",
-        action="store_true",
-        help="exit 1 if any skill is missing a capabilities block",
-    )
-    backfill_parser.add_argument(
-        "--overwrite",
-        action="store_true",
-        help="regenerate every skill's capabilities block from the catalog, even if already valid",
-    )
+    # capability_catalog.yaml is generated from the skills.d/ fragments now, so there is no
+    # write direction left to select and drift is a generate-check failure. Both flags are
+    # accepted, and ignored, so the make targets that pass them keep working while they are
+    # retired.
+    backfill_parser.add_argument("--check", action="store_true", help=argparse.SUPPRESS)
+    backfill_parser.add_argument("--overwrite", action="store_true", help=argparse.SUPPRESS)
 
     handoff_parser = subparsers.add_parser(
         "check-handoff",
@@ -689,11 +448,7 @@ def main(argv: list[str] | None = None) -> int:
         output = args.output if args.output.is_absolute() else ROOT / args.output
         return _run_command(lambda: cmd_package_generic(ROOT, output.resolve()))
     if args.command == "backfill-capabilities":
-        return cmd_backfill(
-            check_only=args.check,
-            overwrite=args.overwrite,
-            skills_path=ROOT / "skills.yaml",
-        )
+        return cmd_check_capabilities(skills_path=ROOT / "skills.yaml")
     if args.command == "check-handoff":
         visited = [skill_id for skill_id in args.visited.split(",") if skill_id]
         return _run_command(

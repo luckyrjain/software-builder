@@ -1,43 +1,36 @@
-"""Backfill skills.yaml capabilities blocks from capability_catalog.yaml."""
+"""Read the generated capability catalogue, and validate the registry's capability blocks.
+
+`capability_catalog.yaml` used to be hand-authored and this module wrote its contents
+back *into* skills.yaml -- an inverse projection, policed by a drift validator
+(`capability_sync.py`) that existed only because the same contract was written twice.
+The catalogue is now generated from the `capabilities:` block of each
+`scripts/registry/skills.d/*.yaml` fragment (see `manifest_merge.SIDE_FILE_PROJECTIONS`),
+so the fragment is the one place a skill's capability contract is authored and
+`make generate-check` is what detects drift.
+
+What remains here is the reading half: `load_catalog` for the catalogue's readers, and
+`validate_capabilities_present` for the shape every registered skill's own block must
+have. The module keeps its name because `crosscheck.py` imports from it.
+"""
 
 from __future__ import annotations
 
-import copy
-import io
 import sys
 from pathlib import Path
 from typing import Any
 
-import yaml
-from ruamel.yaml import YAML
-from ruamel.yaml import YAMLError as RuamelYAMLError
-from ruamel.yaml.comments import CommentedMap
-
-from scripts.registry.schema import clear_registry_cache, load_registry_raw
+from scripts.registry.schema import load_registry_raw
+from scripts.yaml_safety import load_unique_yaml_file
 
 ROOT = Path(__file__).resolve().parents[2]
 CATALOG_PATH = Path(__file__).resolve().parent / "capability_catalog.yaml"
 SKILLS_PATH = ROOT / "skills.yaml"
 
-# skills.yaml's own convention: sequence dashes sit at the same indent as their
-# parent key (37 of 41 existing required/optional blocks use this; the minority
-# get normalized to it on first write — see backfill_skills_yaml_text).
 _STRAY_CAPABILITY_KEYS = ("required", "optional", "any_of", "degraded_modes")
 
 
-def _make_yaml() -> YAML:
-    rt_yaml = YAML(typ="rt")
-    rt_yaml.preserve_quotes = True
-    rt_yaml.width = 100000
-    rt_yaml.indent(mapping=2, sequence=2, offset=0)
-    return rt_yaml
-
-
 def load_catalog(path: Path = CATALOG_PATH) -> dict[str, Any]:
-    # Loaded via the round-trip YAML so a catalog entry's own style choices
-    # (e.g. `required: [a, b]` written as flow style) survive into skills.yaml
-    # when a block is (re)generated, instead of being flattened to block style.
-    raw = _make_yaml().load(path.read_text(encoding="utf-8"))
+    raw = load_unique_yaml_file(path)
     if not isinstance(raw, dict):
         raise ValueError(f"{path}: root must be a mapping")
     skills = raw.get("skills")
@@ -47,199 +40,6 @@ def load_catalog(path: Path = CATALOG_PATH) -> dict[str, Any]:
         if not isinstance(entry, dict):
             raise ValueError(f"{path}: skills.{skill_id} must be a mapping")
     return {str(skill_id): entry for skill_id, entry in skills.items()}
-
-
-def _capabilities_valid(entry: dict[str, Any]) -> bool:
-    caps = entry.get("capabilities")
-    if not isinstance(caps, dict):
-        return False
-    required = caps.get("required")
-    optional = caps.get("optional")
-    any_of = caps.get("any_of", [])
-    if not (
-        isinstance(required, list)
-        and isinstance(optional, list)
-        and isinstance(any_of, list)
-    ):
-        return False
-    return isinstance(caps.get("degraded_modes", {}), dict)
-
-
-def _required_equal(current: Any, catalog_value: Any) -> bool:
-    if not (
-        isinstance(current, list)
-        and isinstance(catalog_value, list)
-        and all(isinstance(item, str) for item in current)
-        and all(isinstance(item, str) for item in catalog_value)
-    ):
-        return False
-    return len(current) == len(set(current)) and set(current) == set(catalog_value)
-
-
-def _optional_equal(current: Any, catalog_value: Any) -> bool:
-    if not (isinstance(current, list) and isinstance(catalog_value, list)):
-        return False
-    if not all(
-        isinstance(item, dict) and isinstance(item.get("name"), str)
-        for item in (*current, *catalog_value)
-    ):
-        return False
-    current_by_name = {item["name"]: item for item in current}
-    catalog_by_name = {item["name"]: item for item in catalog_value}
-    return (
-        len(current_by_name) == len(current)
-        and len(catalog_by_name) == len(catalog_value)
-        and current_by_name == catalog_by_name
-    )
-
-
-def _capability_path_equal(current: Any, catalog_value: Any) -> bool:
-    """Compare the schema-supported fields of one any_of capability path."""
-    if not (isinstance(current, dict) and isinstance(catalog_value, dict)):
-        return False
-    supported_keys = {"name", "required", "optional"}
-    if not set(current).issubset(supported_keys) or not set(catalog_value).issubset(supported_keys):
-        return False
-    if not (
-        isinstance(current.get("name"), str)
-        and current.get("name") == catalog_value.get("name")
-    ):
-        return False
-    return _required_equal(
-        current.get("required", []),
-        catalog_value.get("required", []),
-    ) and _optional_equal(
-        current.get("optional", []),
-        catalog_value.get("optional", []),
-    )
-
-
-def capabilities_equal(current: Any, catalog_value: dict[str, Any]) -> bool:
-    # Never raises on malformed input (unhashable/non-string required items,
-    # non-dict optional items) -- treats it as "not equal" so the skill gets
-    # regenerated from the catalog instead of crashing the whole --overwrite run.
-    if not isinstance(current, dict):
-        return False
-
-    if not _required_equal(current.get("required"), catalog_value.get("required")):
-        return False
-
-    if not _optional_equal(current.get("optional"), catalog_value.get("optional")):
-        return False
-
-    current_any_of = current.get("any_of", [])
-    catalog_any_of = catalog_value.get("any_of", [])
-    if not (isinstance(current_any_of, list) and isinstance(catalog_any_of, list)):
-        return False
-    if not all(
-        isinstance(item, dict) and isinstance(item.get("name"), str)
-        for item in (*current_any_of, *catalog_any_of)
-    ):
-        return False
-    current_paths = {item["name"]: item for item in current_any_of}
-    catalog_paths = {item["name"]: item for item in catalog_any_of}
-    if len(current_paths) != len(current_any_of) or len(catalog_paths) != len(catalog_any_of):
-        return False
-    if current_paths.keys() != catalog_paths.keys():
-        return False
-    if any(
-        not _capability_path_equal(current_paths[name], catalog_paths[name])
-        for name in current_paths
-    ):
-        return False
-
-    return (current.get("degraded_modes") or {}) == (catalog_value.get("degraded_modes") or {})
-
-
-def _has_stray_capability_keys(entry: dict[str, Any]) -> bool:
-    return any(key in entry for key in _STRAY_CAPABILITY_KEYS)
-
-
-def _apply_backfill(skill_map: CommentedMap, capabilities: Any) -> None:
-    for key in _STRAY_CAPABILITY_KEYS:
-        skill_map.pop(key, None)
-    skill_map.pop("capabilities", None)
-    try:
-        lint_index = list(skill_map.keys()).index("lint")
-    except ValueError as exc:
-        raise ValueError("skill block missing lint section") from exc
-    skill_map.insert(lint_index, "capabilities", capabilities)
-    # Matches this tool's existing convention: a freshly-generated capabilities
-    # block is followed by a blank line before `lint:`. Clear only the "before"
-    # comment slot (index 1) this tool may have attached on a prior backfill
-    # first -- yaml_set_comment_before_after_key appends rather than replaces,
-    # so skipping this would double the blank line on every re-backfill.
-    # Only index 1 is touched so an unrelated same-line comment on `lint:`
-    # (index 2) survives.
-    lint_comments = skill_map.ca.items.get("lint")
-    if lint_comments is not None:
-        lint_comments[1] = None
-    skill_map.yaml_set_comment_before_after_key("lint", before="\n")
-
-
-def backfill_skills_yaml_text(
-    text: str,
-    *,
-    catalog_path: Path = CATALOG_PATH,
-    overwrite: bool = False,
-    render: bool = True,
-) -> tuple[str, list[str]]:
-    catalog = load_catalog(catalog_path)
-    rt_yaml = _make_yaml()
-    raw = rt_yaml.load(text)
-    if not isinstance(raw, dict):
-        raise ValueError("skills.yaml root must be a mapping")
-    skills = raw.get("skills")
-    if not isinstance(skills, dict):
-        raise ValueError("skills.yaml skills must be a mapping")
-
-    registry_ids = set(skills.keys())
-    catalog_ids = set(catalog.keys())
-    missing_in_catalog = sorted(registry_ids - catalog_ids)
-    if missing_in_catalog:
-        raise ValueError(
-            f"capability catalog missing entries for: {', '.join(missing_in_catalog)}",
-        )
-    extra_in_catalog = sorted(catalog_ids - registry_ids)
-    if extra_in_catalog:
-        raise ValueError(
-            f"capability catalog has unknown skill ids: {', '.join(extra_in_catalog)}",
-        )
-
-    changes: list[str] = []
-    for skill_id in sorted(skills):
-        entry = skills[skill_id]
-        if not isinstance(entry, dict):
-            raise ValueError(f"skills.{skill_id} must be a mapping")
-
-        stray = _has_stray_capability_keys(entry)
-        if overwrite:
-            if capabilities_equal(entry.get("capabilities"), catalog[skill_id]) and not stray:
-                continue
-        elif _capabilities_valid(entry) and not stray:
-            continue
-
-        changes.append(skill_id)
-        if render:
-            # Deep-copied so two skills that ever share the same catalog
-            # entry object (e.g. a future YAML anchor/alias in the catalog)
-            # don't end up aliased to the same node in skills.yaml.
-            _apply_backfill(entry, copy.deepcopy(catalog[skill_id]))
-
-    if not render:
-        return "", changes
-
-    # Dumps the whole document, not just the skill(s) in `changes` -- intentional:
-    # any formatting drift elsewhere in skills.yaml self-heals on the next write
-    # instead of accumulating. See the PR that introduced this for the tradeoff.
-    buf = io.StringIO()
-    rt_yaml.dump(raw, buf)
-    updated = buf.getvalue()
-    if text.endswith("\n") and not updated.endswith("\n"):
-        updated += "\n"
-    elif not text.endswith("\n") and updated.endswith("\n"):
-        updated = updated[:-1]
-    return updated, changes
 
 
 def validate_capabilities_present(skills_path: Path = SKILLS_PATH) -> list[str]:
@@ -280,44 +80,23 @@ def validate_capabilities_present(skills_path: Path = SKILLS_PATH) -> list[str]:
     return errors
 
 
-def cmd_backfill(*, check_only: bool, overwrite: bool, skills_path: Path) -> int:
-    try:
-        original = skills_path.read_text(encoding="utf-8")
-        updated, changes = backfill_skills_yaml_text(
-            original, overwrite=overwrite, render=not check_only,
+def cmd_check_capabilities(*, skills_path: Path) -> int:
+    """Validate that every registered skill declares a well-shaped capabilities block.
+
+    Reached as the `backfill-capabilities` subcommand, whose name and `--check`/`--overwrite`
+    flags are kept so `make backfill-capabilities-check` and
+    `make backfill-capabilities-drift-check` keep working while those targets are retired.
+    Neither flag selects a direction any more: there is no write direction, and catalogue
+    drift is now a `make generate-check` failure.
+    """
+    errors = validate_capabilities_present(skills_path)
+    if errors:
+        for error in errors:
+            print(error, file=sys.stderr)
+        print(
+            "hint: edit the skill's scripts/registry/skills.d/<skill>.yaml fragment, then run make generate",
+            file=sys.stderr,
         )
-    except (ValueError, yaml.YAMLError, RuamelYAMLError, RecursionError) as exc:
-        print(f"error: {exc}", file=sys.stderr)
-        return 2
-
-    if check_only:
-        if changes:
-            reason = "capabilities out of date with the catalog" if overwrite else "missing capabilities"
-            print(
-                f"error: {len(changes)} skill(s) {reason}: {', '.join(changes)}",
-                file=sys.stderr,
-            )
-            hint_flag = " --overwrite" if overwrite else ""
-            print(
-                f"hint: run python3 -m scripts.registry backfill-capabilities{hint_flag}",
-                file=sys.stderr,
-            )
-            return 1
-        print("ok: all skills already have capabilities blocks")
-        return 0
-
-    if updated == original:
-        print("ok: all skills already have capabilities blocks")
-        return 0
-
-    skills_path.write_text(updated, encoding="utf-8")
-    # This write makes any load_registry_raw entry for skills_path's directory stale.
-    # No current caller re-reads it in this same process (backfill-capabilities is its
-    # own one-shot subcommand -- see cli.py's dispatch), but invalidating here removes
-    # the dependency on that invariant instead of just documenting it.
-    clear_registry_cache()
-    if changes:
-        print(f"ok: backfilled capabilities for {len(changes)} skill(s): {', '.join(changes)}")
-    else:
-        print("ok: normalized skills.yaml formatting (no capability changes)")
+        return 1
+    print("ok: all skills declare a capabilities block")
     return 0
