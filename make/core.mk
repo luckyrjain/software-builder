@@ -228,7 +228,7 @@ lint-pr-review: lint-pr-review-skill lint-pr-review-scripts
 lint-pr-review-scripts:
 	@echo "py_compile pr-review/scripts/diff-to-positions.py pr-review/scripts/github-comment-positions.py pr-review/scripts/github-comment-recovery.py pr-review/scripts/pr_review_policy_guards.py"
 	@echo "pytest pr-review/tests/"
-	@cache="$(CURDIR)/.pycache-lint"; \
+	@cache="$(CURDIR)/.pycache-lint-pr-review"; \
 	export PYTHONDONTWRITEBYTECODE=1 PYTHONPYCACHEPREFIX="$$cache"; \
 	trap 'rm -rf "$$cache"' EXIT; \
 	python3 -m py_compile pr-review/scripts/diff-to-positions.py || exit 1; \
@@ -580,7 +580,7 @@ lint-loop-task-implementer: lint-loop-task-implementer-skill lint-loop-task-impl
 lint-loop-task-implementer-scripts:
 	@echo "py_compile loop-task-implementer/scripts/validate_loop_lifecycle.py"
 	@echo "pytest loop-task-implementer/tests/"
-	@cache="$(CURDIR)/.pycache-lint"; \
+	@cache="$(CURDIR)/.pycache-lint-loop-task-implementer"; \
 	export PYTHONDONTWRITEBYTECODE=1 PYTHONPYCACHEPREFIX="$$cache"; \
 	trap 'rm -rf "$$cache"' EXIT; \
 	python3 -m py_compile loop-task-implementer/scripts/validate_loop_lifecycle.py || exit 1; \
@@ -958,7 +958,7 @@ lint-framework:
 		test -f docs/skill-framework/shared/examples/$$f || exit 1; \
 	done
 	@echo "lint-framework: metadata footer validator"
-	@cache="$(CURDIR)/.pycache-lint"; \
+	@cache="$(CURDIR)/.pycache-lint-framework"; \
 	export PYTHONDONTWRITEBYTECODE=1 PYTHONPYCACHEPREFIX="$$cache"; \
 	trap 'rm -rf "$$cache"' EXIT; \
 	python3 -m py_compile scripts/validate_metadata_footer.py || exit 1; \

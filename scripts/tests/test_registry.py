@@ -499,6 +499,20 @@ def test_validate_returns_tooling_exit_code_for_bad_yaml(tmp_path: Path, monkeyp
     assert main(["validate"]) == 2
 
 
+def test_backfill_capabilities_returns_tooling_exit_code_for_bad_yaml(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # backfill-capabilities used to bypass _run_command's uniform error handling and let a
+    # malformed skills.yaml raise an unhandled exception instead of the clean `error:`/exit-2
+    # contract every other subcommand gives Makefile/CI callers -- pin that it's wrapped now.
+    (tmp_path / "skills.yaml").write_text("schema_version: [", encoding="utf-8")
+    monkeypatch.setattr("scripts.registry.cli.ROOT", tmp_path)
+
+    from scripts.registry.cli import main
+
+    assert main(["backfill-capabilities"]) == 2
+
+
 def test_crosscheck_rejects_name_mismatch(tmp_path: Path) -> None:
     skill_dir = tmp_path / "foo"
     skill_dir.mkdir()

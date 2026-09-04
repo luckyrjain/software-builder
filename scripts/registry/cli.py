@@ -87,8 +87,10 @@ def _run_command(action: Callable[[], int]) -> int:
     # calls cmd_generate(...) directly, bypassing this function entirely, so its own
     # clear is the only one those callers get; its second clear_registry_cache() call
     # after _write_outputs is separately load-bearing invalidation for the write that
-    # just happened, unrelated to entry invalidation. cmd_check_capabilities isn't wrapped
-    # by _run_command (see main()'s dispatch) and doesn't need to be: it only reads.
+    # just happened, unrelated to entry invalidation. cmd_check_capabilities is wrapped too
+    # (see main()'s dispatch) so a malformed skills.d/*.yaml fragment gets the same clean
+    # `error:`/exit-2 contract every other subcommand gives Makefile/CI callers, instead of
+    # an unhandled traceback from load_registry_raw.
     clear_registry_cache()
     try:
         return action()
@@ -448,7 +450,7 @@ def main(argv: list[str] | None = None) -> int:
         output = args.output if args.output.is_absolute() else ROOT / args.output
         return _run_command(lambda: cmd_package_generic(ROOT, output.resolve()))
     if args.command == "backfill-capabilities":
-        return cmd_check_capabilities(skills_path=ROOT / "skills.yaml")
+        return _run_command(lambda: cmd_check_capabilities(skills_path=ROOT / "skills.yaml"))
     if args.command == "check-handoff":
         visited = [skill_id for skill_id in args.visited.split(",") if skill_id]
         return _run_command(

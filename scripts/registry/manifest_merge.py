@@ -39,9 +39,22 @@ from typing import Any
 
 import yaml
 
+from scripts.registry.fragments import (
+    FRAGMENTS_DIRNAME,
+    load_fragment_skills,
+    skills_fragments_dir,
+)
+from scripts.registry.schema import resolve_registry_profiles
 from scripts.yaml_safety import load_unique_yaml_file, require_mapping
 
-FRAGMENTS_DIRNAME = "skills.d"
+# Re-exported for existing importers (scripts/registry/generators.py, tests) — the
+# loaders themselves now live in fragments.py so schema.py can depend on them without
+# also depending on this module. See fragments.py's docstring for why.
+__all__ = [
+    "FRAGMENTS_DIRNAME",
+    "load_fragment_skills",
+    "skills_fragments_dir",
+]
 
 
 # Announces each generated block, the same way the generated Cursor/Kiro adapters and the
@@ -64,50 +77,6 @@ CONTRACTS_BANNER = "\n".join(
         "# authored here, but the whole block is re-rendered, so it cannot carry comments.",
     )
 )
-
-
-def skills_fragments_dir(root: Path) -> Path:
-    return root / "scripts" / "registry" / FRAGMENTS_DIRNAME
-
-
-def load_fragment_skills(root: Path) -> dict[str, Any]:
-    """Load and merge every scripts/registry/skills.d/*.yaml fragment.
-
-    Each fragment must be a mapping with exactly one key: the skill id, whose
-    value is that skill's own entry (the same shape it had inline under
-    skills.yaml's `skills:` mapping, `extends:` profile references included --
-    profile resolution happens later, against the merged document). The
-    fragment's filename (minus `.yaml`) must match its skill id, so a
-    misnamed or accidentally duplicated fragment fails loudly instead of
-    silently mismatching or shadowing another skill.
-    """
-    fragments_dir = skills_fragments_dir(root)
-    fragment_paths = sorted(fragments_dir.glob("*.yaml"))
-    if not fragment_paths:
-        raise ValueError(
-            f"{fragments_dir}: exists but contains no *.yaml fragments -- refusing to "
-            "merge an empty skill set (a bad rebase, partial checkout, or misconfigured "
-            ".gitignore could produce this; if the fragments directory itself is meant "
-            "to go away, remove it rather than leaving it present and empty)",
-        )
-    skills: dict[str, Any] = {}
-    for fragment_path in fragment_paths:
-        raw = require_mapping(load_unique_yaml_file(fragment_path), str(fragment_path))
-        if len(raw) != 1:
-            raise ValueError(
-                f"{fragment_path}: fragment must contain exactly one skill entry, got {len(raw)}",
-            )
-        ((skill_id, entry),) = raw.items()
-        if not isinstance(skill_id, str):
-            raise ValueError(f"{fragment_path}: skill id must be a string")
-        if skill_id != fragment_path.stem:
-            raise ValueError(
-                f"{fragment_path}: fragment key {skill_id!r} must match filename {fragment_path.stem!r}.yaml",
-            )
-        if skill_id in skills:
-            raise ValueError(f"duplicate skill id across fragments: {skill_id!r}")
-        skills[skill_id] = entry
-    return skills
 
 
 def _top_level_key_lines(text: str, label: str = "skills.yaml") -> list[tuple[str, int]]:
@@ -224,12 +193,6 @@ def merge_registry_yaml(root: Path) -> str:
     docstring for why an absent fragments directory is a distinct, legacy
     code path handled by the caller instead of here.
     """
-    # Deferred: schema.py imports this module at import time, so the dependency can only run
-    # the other way at call time. `resolve_registry_profiles` is the one seam that knows how an
-    # `extends:` profile merges into a skill entry, and re-deriving the contract sub-mappings
-    # needs the same resolved view every other consumer sees.
-    from scripts.registry.schema import resolve_registry_profiles
-
     manifest_path = root / "skills.yaml"
     original = manifest_path.read_text(encoding="utf-8")
     if not any(key == "skills" for key, _ in _top_level_key_lines(original)):
