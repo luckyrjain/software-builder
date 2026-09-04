@@ -6,11 +6,10 @@ from scripts.registry.canonical_manifest import load_contract_section
 from scripts.registry.composition_contracts import load_contracts
 from scripts.registry.envelope_contract import SKILL_TYPES
 from scripts.registry.models import Registry
+from scripts.registry.paths import ROOT, SKILLS_YAML_PATH as CANONICAL_RUNTIME_PATH
 from scripts.yaml_safety import YAML_SAFETY_ERRORS, load_unique_yaml_file
 
-ROOT = Path(__file__).resolve().parents[2]
 RUNTIME_PATH = Path(__file__).resolve().parent / "composition_runtime.yaml"
-CANONICAL_RUNTIME_PATH = ROOT / "skills.yaml"
 _ALLOWED_OWNERSHIP_MODES = {"canonical", "shared", "external"}
 _LOAD_ERRORS = (OSError, ValueError) + YAML_SAFETY_ERRORS
 

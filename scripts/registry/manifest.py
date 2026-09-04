@@ -29,7 +29,6 @@ from scripts.registry.schema import load_registry_raw, parse_registry
 from scripts.yaml_safety import YAML_SAFETY_ERRORS, load_unique_frontmatter, load_unique_yaml_file, require_mapping
 
 ROOT = Path(__file__).resolve().parents[2]
-CONTRACTS_PATH = ROOT / "skills.yaml"
 LEGACY_NUMERIC_VERSION_RE = re.compile(
     r"^skill_version:\s*([0-9]+\.[0-9]+)\s*(?:#.*)?$", re.MULTILINE
 )

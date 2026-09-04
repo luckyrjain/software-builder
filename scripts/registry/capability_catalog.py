@@ -20,12 +20,11 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from scripts.registry.paths import SKILLS_YAML_PATH as SKILLS_PATH
 from scripts.registry.schema import load_registry_raw
 from scripts.yaml_safety import load_unique_yaml_file
 
-ROOT = Path(__file__).resolve().parents[2]
 CATALOG_PATH = Path(__file__).resolve().parent / "capability_catalog.yaml"
-SKILLS_PATH = ROOT / "skills.yaml"
 
 _STRAY_CAPABILITY_KEYS = ("required", "optional", "any_of", "degraded_modes")
 
