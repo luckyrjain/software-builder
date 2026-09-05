@@ -10,19 +10,21 @@ verify_release_bundle.py's field check calls required_provenance_fields()
 directly -- so a field added here without also updating package_release.py's
 manifest_fields fails closed at build time with a message naming the actual
 mismatch, rather than surfacing later as a confusing verify-time failure.
-`tag_pattern` and
-`artifact_name_templates` are declarative policy checked here for
-well-formedness and consistency with VERSION, but -- unlike required_fields --
-nothing downstream derives its actual tag/filename strings from them yet;
-verify_release_tag.py and package_release.py/.github/workflows/release.yml
-still compute those independently. Keep that gap in mind when editing either
-field: this validator won't catch it drifting from what actually ships.
+`tag_template` is likewise consumed, not just checked: verify_release_tag.py
+renders it against VERSION through release_tag_for_version() and requires the
+pushed tag to equal the result, so the tag shape has one declaration.
+`artifact_name_templates` is declarative policy checked here for
+well-formedness and consistency with VERSION, but nothing downstream derives
+its actual filename strings from it yet; package_release.py and
+.github/workflows/release.yml still compute those independently. Keep that
+gap in mind when editing it: this validator won't catch it drifting from what
+actually ships.
 """
 
 from __future__ import annotations
 
 import argparse
-import re
+import string
 import sys
 from pathlib import Path
 
@@ -40,31 +42,32 @@ from scripts.yaml_safety import (
 
 CONTRACT_PATH = Path(__file__).resolve().parent / "release_contract.yaml"
 
-# `tag_pattern` is repository-controlled data that this validator compiles and runs.
-# A tag shape is a handful of anchored literals and digit classes, so anything long
-# or self-nesting is not a tag shape -- it is a pattern whose backtracking cost the
-# validator would pay on every run. Both limits are shape checks on the declaration,
-# refused before re.fullmatch() ever sees it.
-TAG_PATTERN_MAX_LENGTH = 200
-# A quantified group that is itself quantified -- `(a+)*`, `(\d{1,3})+` -- is the
-# catastrophic-backtracking shape. Deliberately a heuristic: it over-refuses some
-# safe patterns, which for a hand-written tag shape costs nothing to rewrite.
-_NESTED_QUANTIFIER_RE = re.compile(r"(\+|\*|\{)[^)]*\)[+*{]")
+def release_tag_from_contract(contract: dict, version: str) -> str:
+    """The release tag `version` maps to under the contract's `tag_template`.
+
+    The template is plain str.format text with exactly one `{version}` field and no
+    other replacement fields -- a tag shape is a literal prefix around the version, and
+    keeping it a template (never a pattern) means nothing here compiles data.
+    """
+    template = contract.get("tag_template")
+    if not isinstance(template, str) or not template:
+        raise ValueError("release contract.tag_template must be a non-empty string")
+    fields = [
+        field_name
+        for _literal, field_name, _spec, _conversion in string.Formatter().parse(template)
+        if field_name is not None
+    ]
+    if fields != ["version"]:
+        raise ValueError(
+            "release contract.tag_template must contain exactly one {version} placeholder "
+            f"and no other fields, got {template!r}",
+        )
+    return template.format(version=version)
 
 
-def _tag_pattern_shape_errors(tag_pattern: str) -> list[str]:
-    """Refuse a tag_pattern whose size or nesting makes it a backtracking risk."""
-    if len(tag_pattern) > TAG_PATTERN_MAX_LENGTH:
-        return [
-            f"error: release contract: tag_pattern must be at most {TAG_PATTERN_MAX_LENGTH} "
-            f"characters, got {len(tag_pattern)}",
-        ]
-    if _NESTED_QUANTIFIER_RE.search(tag_pattern):
-        return [
-            f"error: release contract: tag_pattern {tag_pattern!r} contains a nested quantifier; "
-            "a tag shape must not quantify an already-quantified group",
-        ]
-    return []
+def release_tag_for_version(version: str, path: Path = CONTRACT_PATH) -> str:
+    """Render the contract's tag_template for `version` (verify_release_tag.py's seam)."""
+    return release_tag_from_contract(_load_contract(path), version)
 
 
 def _load_contract(path: Path = CONTRACT_PATH) -> dict:
@@ -152,22 +155,10 @@ def validate_release_contract(root: Path = ROOT) -> list[str]:
         # read_distribution_version()'s read_text() call can raise either.
         return [f"error: release contract: {exc}"]
 
-    tag_pattern = contract.get("tag_pattern")
-    if not isinstance(tag_pattern, str):
-        errors.append("error: release contract: tag_pattern must be a string")
-    elif shape_errors := _tag_pattern_shape_errors(tag_pattern):
-        errors.extend(shape_errors)
-    else:
-        try:
-            tag_matches = re.fullmatch(tag_pattern, f"v{version}")
-        except re.error as exc:
-            errors.append(f"error: release contract: tag_pattern {tag_pattern!r} is not a valid regex: {exc}")
-        else:
-            if not tag_matches:
-                errors.append(
-                    f"error: release contract: VERSION {version!r} does not produce a tag matching "
-                    f"{tag_pattern!r}",
-                )
+    try:
+        release_tag_from_contract(contract, version)
+    except ValueError as exc:
+        errors.append(f"error: release contract: {exc}")
 
     templates = contract.get("artifact_name_templates")
     if not isinstance(templates, list) or not templates or not all(isinstance(item, str) for item in templates):

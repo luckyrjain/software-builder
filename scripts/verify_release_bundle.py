@@ -13,7 +13,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
+import shutil
 import stat
 import sys
 import tarfile
@@ -46,14 +48,55 @@ _MAX_EXTRACTED_BYTES = 500 * 1024 * 1024
 
 
 def _safe_extract(archive: Path, dest: Path) -> None:
+    """Materialise a release bundle under `dest`, one checked member at a time.
+
+    Nothing here hands a tar member to tarfile's extraction machinery. Each member is
+    admitted only if it is a regular file or a directory (no links, devices or FIFOs)
+    and its name, joined to `dest` and resolved, stays inside `dest`; admitted files are
+    then copied out by hand with `extractfile`, so the archive never chooses a path,
+    a mode, or a link target on this filesystem.
+    """
+    dest_root = os.path.realpath(dest)
+    dest_prefix = os.path.join(dest_root, "")
     with tarfile.open(archive, "r:gz") as tar:
-        total_size = sum(member.size for member in tar.getmembers() if member.isfile())
+        members = tar.getmembers()
+        total_size = sum(member.size for member in members if member.isfile())
         if total_size > _MAX_EXTRACTED_BYTES:
             raise ValueError(
                 f"release bundle declares {total_size:,} bytes of extracted content, over the "
                 f"{_MAX_EXTRACTED_BYTES:,} byte limit -- refusing to extract",
             )
-        tar.extractall(dest, filter="data")
+        for member in members:
+            if not (member.isfile() or member.isdir()):
+                raise ValueError(
+                    f"release bundle member {member.name!r} is not a regular file or "
+                    "directory -- refusing to extract",
+                )
+            name = member.name
+            if os.path.isabs(name) or name.startswith("\\") or ".." in name.split("/"):
+                raise ValueError(
+                    f"release bundle member {name!r} escapes the extraction directory "
+                    "-- refusing to extract",
+                )
+            target = os.path.realpath(os.path.join(dest_root, name))
+            if target != dest_root and not target.startswith(dest_prefix):
+                raise ValueError(
+                    f"release bundle member {name!r} escapes the extraction directory "
+                    "-- refusing to extract",
+                )
+            if member.isdir():
+                os.makedirs(target, exist_ok=True)
+                continue
+            os.makedirs(os.path.dirname(target), exist_ok=True)
+            source = tar.extractfile(member)
+            if source is None:
+                raise ValueError(f"release bundle member {name!r} has no readable content")
+            with source, open(target, "wb") as sink:
+                shutil.copyfileobj(source, sink)
+            # Only the permission bits, and only the ordinary ones: the verifier compares
+            # executable bits against the manifest, so they must survive, but an archive
+            # never gets to set setuid/setgid/sticky on this filesystem.
+            os.chmod(target, (member.mode & 0o777) | 0o600)
 
 
 def verify_release_bundle(archive: Path, *, repo_root: Path | None = None) -> list[str]:

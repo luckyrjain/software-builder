@@ -42,7 +42,7 @@ def _commit_all(root: Path) -> str:
 # the minimal skills.yaml/host_contracts.yaml fixtures below.
 _MINIMAL_RELEASE_CONTRACT = """\
 schema_version: 1
-tag_pattern: '^v\\d+\\.\\d+\\.\\d+$'
+tag_template: "v{version}"
 artifact_name_templates:
   - "software-builder-{version}.tar.gz"
 compatibility:
@@ -111,34 +111,10 @@ def _write_contract_test_repo(root: Path, *, version: str = "1.0.0") -> None:
     )
 
 
-def test_release_contract_rejects_invalid_tag_pattern_regex(tmp_path: Path) -> None:
-    from scripts.release_contract import validate_release_contract
-
-    root = tmp_path / "repo"
-    _write_contract_test_repo(root)
+def _write_contract_with_tag_template(root: Path, tag_template: str) -> None:
     (root / "scripts" / "release_contract.yaml").write_text(
         "schema_version: 1\n"
-        "tag_pattern: '['\n"
-        "artifact_name_templates:\n"
-        '  - "software-builder-{version}.tar.gz"\n'
-        "compatibility:\n"
-        "  registry_schema_version: 1\n"
-        "  host_contract_schema_version: 1\n"
-        "provenance:\n"
-        "  required_fields: [schema_version]\n",
-        encoding="utf-8",
-    )
-    errors = validate_release_contract(root)
-    assert any("not a valid regex" in error for error in errors)
-
-
-def _write_contract_with_tag_pattern(root: Path, tag_pattern: str) -> None:
-    # Single-quoted YAML: the scalar is taken literally, so a regex's backslashes
-    # survive unescaped. None of the patterns below contain a single quote.
-    assert "'" not in tag_pattern
-    (root / "scripts" / "release_contract.yaml").write_text(
-        "schema_version: 1\n"
-        f"tag_pattern: '{tag_pattern}'\n"
+        f"tag_template: {tag_template!r}\n"
         "artifact_name_templates:\n"
         '  - "software-builder-{version}.tar.gz"\n'
         "compatibility:\n"
@@ -151,52 +127,38 @@ def _write_contract_with_tag_pattern(root: Path, tag_pattern: str) -> None:
 
 
 @pytest.mark.parametrize(
-    ("tag_pattern", "expected"),
+    "tag_template",
     [
-        # Over the length cap: refused on size alone, before compilation.
-        (r"^v" + r"\d?" * 100 + r"$", "at most 200 characters"),
-        # Catastrophic-backtracking shapes: a quantified group, quantified again.
-        (r"^v(\d+)+$", "nested quantifier"),
-        (r"^v(a*)*$", "nested quantifier"),
-        (r"^v(\d{1,3})+$", "nested quantifier"),
+        # No placeholder: every VERSION would map to the same tag.
+        "release",
+        # A second field the contract cannot supply.
+        "v{version}-{build}",
+        # Wrong field name.
+        "v{tag}",
+        # Empty.
+        "",
     ],
 )
-def test_release_contract_rejects_backtracking_prone_tag_pattern(
-    tmp_path: Path,
-    tag_pattern: str,
-    expected: str,
-) -> None:
+def test_release_contract_rejects_malformed_tag_template(tmp_path: Path, tag_template: str) -> None:
     from scripts.release_contract import validate_release_contract
 
     root = tmp_path / "repo"
     _write_contract_test_repo(root)
-    _write_contract_with_tag_pattern(root, tag_pattern)
+    _write_contract_with_tag_template(root, tag_template)
 
     errors = validate_release_contract(root)
 
-    assert any(expected in error for error in errors), errors
-    # The shape check replaces the match, so no confusing second complaint about VERSION.
-    assert not any("does not produce a tag matching" in error for error in errors), errors
+    assert any("tag_template" in error for error in errors), errors
 
 
-def test_release_contract_accepts_an_ordinary_tag_pattern(tmp_path: Path) -> None:
+def test_release_contract_rejects_non_string_tag_template(tmp_path: Path) -> None:
     from scripts.release_contract import validate_release_contract
 
     root = tmp_path / "repo"
     _write_contract_test_repo(root)
-    _write_contract_with_tag_pattern(root, r"^v\d+\.\d+\.\d+$")
-
-    assert validate_release_contract(root) == []
-
-
-def test_release_contract_rejects_version_not_matching_tag_pattern(tmp_path: Path) -> None:
-    from scripts.release_contract import validate_release_contract
-
-    root = tmp_path / "repo"
-    _write_contract_test_repo(root, version="1.0.0")
     (root / "scripts" / "release_contract.yaml").write_text(
         "schema_version: 1\n"
-        "tag_pattern: '^rel-\\d+$'\n"
+        "tag_template: [v]\n"
         "artifact_name_templates:\n"
         '  - "software-builder-{version}.tar.gz"\n'
         "compatibility:\n"
@@ -207,7 +169,29 @@ def test_release_contract_rejects_version_not_matching_tag_pattern(tmp_path: Pat
         encoding="utf-8",
     )
     errors = validate_release_contract(root)
-    assert any("does not produce a tag matching" in error for error in errors)
+    assert any("tag_template must be a non-empty string" in error for error in errors), errors
+
+
+def test_release_contract_accepts_the_conventional_tag_template(tmp_path: Path) -> None:
+    from scripts.release_contract import release_tag_for_version, validate_release_contract
+
+    root = tmp_path / "repo"
+    _write_contract_test_repo(root, version="2.3.4")
+    _write_contract_with_tag_template(root, "v{version}")
+
+    assert validate_release_contract(root) == []
+    assert release_tag_for_version("2.3.4", root / "scripts" / "release_contract.yaml") == "v2.3.4"
+
+
+def test_release_contract_tag_template_prefix_is_literal(tmp_path: Path) -> None:
+    """A template is rendered, never interpreted: regex metacharacters are plain text."""
+    from scripts.release_contract import release_tag_for_version
+
+    root = tmp_path / "repo"
+    _write_contract_test_repo(root, version="1.0.0")
+    _write_contract_with_tag_template(root, "rel-(.*)+{version}")
+
+    assert release_tag_for_version("1.0.0", root / "scripts" / "release_contract.yaml") == "rel-(.*)+1.0.0"
 
 
 def test_release_contract_rejects_malformed_artifact_name_template(tmp_path: Path) -> None:
@@ -217,7 +201,7 @@ def test_release_contract_rejects_malformed_artifact_name_template(tmp_path: Pat
     _write_contract_test_repo(root)
     (root / "scripts" / "release_contract.yaml").write_text(
         "schema_version: 1\n"
-        "tag_pattern: '^v\\d+\\.\\d+\\.\\d+$'\n"
+        'tag_template: "v{version}"\n'
         "artifact_name_templates:\n"
         '  - "software-builder-{version.major}.tar.gz"\n'
         "compatibility:\n"
@@ -238,7 +222,7 @@ def test_release_contract_rejects_schema_version_mismatch(tmp_path: Path) -> Non
     _write_contract_test_repo(root)
     (root / "scripts" / "release_contract.yaml").write_text(
         "schema_version: 1\n"
-        "tag_pattern: '^v\\d+\\.\\d+\\.\\d+$'\n"
+        'tag_template: "v{version}"\n'
         "artifact_name_templates:\n"
         '  - "software-builder-{version}.tar.gz"\n'
         "compatibility:\n"
@@ -259,7 +243,7 @@ def test_release_contract_rejects_malformed_required_fields(tmp_path: Path) -> N
     _write_contract_test_repo(root)
     (root / "scripts" / "release_contract.yaml").write_text(
         "schema_version: 1\n"
-        "tag_pattern: '^v\\d+\\.\\d+\\.\\d+$'\n"
+        'tag_template: "v{version}"\n'
         "artifact_name_templates:\n"
         '  - "software-builder-{version}.tar.gz"\n'
         "compatibility:\n"

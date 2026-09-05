@@ -1,8 +1,11 @@
 schema_version: 1
 
-# Anchored regex a release tag must satisfy; verify_release_tag.py enforces
-# the same shape and cross-checks it against VERSION.
-tag_pattern: '^v\d+\.\d+\.\d+$'
+# The release tag for a VERSION, as a template with exactly one {version}
+# placeholder. verify_release_tag.py renders it against VERSION and requires the
+# pushed tag to equal the result; validate_release_contract() checks it renders.
+# A template, not a regex: nothing in this repository compiles a pattern read
+# from data.
+tag_template: "v{version}"
 
 # {version} is substituted with the repository VERSION value.
 artifact_name_templates:
