@@ -109,6 +109,7 @@ Makefile wrappers: `make install`, `make install-<skill>` (per skill), `make ins
 | `__init__.py` | Repository scripts package (enables `python3 -m scripts.registry`). |
 | `apply_repo_metadata.py` | Apply .github/repo-metadata.yaml to the GitHub repository via gh. |
 | `apply_repo_metadata.sh` | Thin shell wrapper around `apply_repo_metadata.py`. |
+| `atomic_write.py` | Atomic file writes: temp file + `os.replace`, so a failed write never leaves a truncated file at the real path. |
 | `change_impact.py` | Deterministic, bounded change-impact analysis primitives. |
 | `check_changelog_placement.py` | Flag root CHANGELOG.md entries that look like they duplicate a skill's own CHANGELOG.md. |
 | `check_github_ruleset.py` | Verify the live GitHub main-branch ruleset matches docs/github-ruleset-main.json. |
@@ -168,12 +169,16 @@ Makefile wrappers: `make install`, `make install-<skill>` (per skill), `make ins
 | `cross_skill_routing.py` | Parse the escalation matrix out of cross-skill-escalation.md and re-anchor its relative links for docs/README.md. |
 | `crosscheck.py` | Whole-registry validation and stale-generated-adapter detection. |
 | `envelope_contract.py` | The canonical runtime vocabularies every contract validator checks the registry against. |
+| `fragments.py` | Load per-skill authoring fragments from `scripts/registry/skills.d/`. |
 | `generate_agent_compatibility.py` | Generated agent-compatibility documentation (Candidate 11 of docs/superpowers/specs/2026-08-31-universal-agent-compatibility-design.md). |
 | `generate_compatibility.py` | Render the generated host x skill compatibility matrix. |
 | `generate_cursor.py` | Render the generated `.cursor/rules/*.mdc` discovery adapters. |
+| `generate_degraded_behavior_doc.py` | Project the normative degraded-mode table in `mcp-error-handling.md` §4 from `degraded_behavior.yaml`. |
 | `generate_docs.py` | Render the generated regions of README.md, docs/README.md, and docs/REPOSITORY.md. |
 | `generate_kiro.py` | Render the generated `.kiro/steering/*.md` discovery adapters. |
 | `generate_makefile_roster.py` | Render `make/generated-roster.mk`'s `ALL_SKILLS` from the registry. |
+| `generate_shared_runtime_bootstrap.py` | Project one canonical shared-runtime bootstrap into every entrypoint script that needs it. |
+| `generators.py` | The declared interface every `make generate` output is produced through. |
 | `generic_package.py` | Build a host-neutral skill package archive. |
 | `graph.py` | Cycle detection for the composition and dependency graphs. |
 | `host_adapter.py` | Host capability support lookup and host-adapter interface/identity validation. |
@@ -181,6 +186,7 @@ Makefile wrappers: `make install`, `make install-<skill>` (per skill), `make ins
 | `host_registry.py` | Typed parsing and fail-closed validation for agent-hosts.yaml. |
 | `id_diff.py` | Shared "found ids vs registered ids" two-way diff, used by the doc sync validators (routing_sync.py) so the dangling vs. |
 | `install_resolver.py` | One module answering "where does `install.sh --agent X` write, and under what host label". |
+| `layers.py` | Which optional contract/generation layers are active for one repository root. |
 | `load.py` | Load skill descriptions, deprecation markers, and the parsed registry. |
 | `machine_summary.py` | Pure validators for the common artifact-v2 machine summary. |
 | `makefile_graph.py` | Read the root Makefile plus its literal includes as one text blob. |
@@ -188,6 +194,8 @@ Makefile wrappers: `make install`, `make install-<skill>` (per skill), `make ins
 | `manifest_merge.py` | Merge per-skill authoring fragments into the generated root skills.yaml. |
 | `models.py` | Typed registry records: `SkillEntry`, `InstallSpec`, `CapabilitiesSpec`, and friends. |
 | `p1_validation.py` | Validate the P1 contract layer: result/handoff/execution envelope fields, host matrices, permissions. |
+| `paths.py` | The one shared constant for skills.yaml's location. |
+| `repository_doc_sync.py` | Cross-check docs/REPOSITORY.md's hand-written Layout tree against the registry. |
 | `result_envelope.py` | One builder for the runtime result envelope every assessment skill returns. |
 | `routing_sync.py` | Cross-check skill-id mentions in shared framework docs against the registry. |
 | `escalation_sync.py` | Cross-check cross-skill-escalation.md's matrix against the registry's escalation edges. |

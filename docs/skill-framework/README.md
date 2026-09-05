@@ -58,6 +58,16 @@ Skills reference these files by relative link from `SETUP.md` or `SKILL.md`. Do 
 | [shared/codebase-design-principles.md](shared/codebase-design-principles.md) | Normative design concepts and evidence rules for codebase architecture work |
 | [shared/terminology-glossary.md](shared/terminology-glossary.md) | Platform implementation vocabulary — registry, capability, risk class, eval tiers; domain terms in [CONTEXT.md](../../CONTEXT.md) |
 | [shared/setup-freshness.md](shared/setup-freshness.md) | SETUP.md review ownership, last-reviewed dates, external-service inventory |
+| [shared/runtime-contract.md](shared/runtime-contract.md) | Universal skill runtime contract — every registered skill inherits this by default |
+| [shared/safe-output.md](shared/safe-output.md) | Safe output (normative) — companion to prompt-injection.md; covers text written back out |
+| [shared/invocation-envelope.md](shared/invocation-envelope.md) | Invocation envelope / result envelope for composed wrapper skills |
+| [shared/host-adapter-contract.md](shared/host-adapter-contract.md) | Host Adapter Contract — capabilities, not product/provider names; host adapters translate |
+| [shared/deprecation-policy.md](shared/deprecation-policy.md) | Prompt module and artifact-schema deprecation policy — compatibility window + migration path |
+| [shared/eval-contract.md](shared/eval-contract.md) | Common Evaluation Contract — the five behavioral dimensions every skill is evaluated against |
+| [shared/domain-comprehension-integration.md](shared/domain-comprehension-integration.md) | Optional domain-comprehension enrichment contract for the five test-creator skills |
+| [shared/test-creator-common-workflow.md](shared/test-creator-common-workflow.md) | Canonical shared phase ordering for the five test-creator skills |
+| [shared/test-creator-write-safety.md](shared/test-creator-write-safety.md) | Shared write-safety contract for the five test-creator skills |
+| [shared/five-concept-separation-audit.md](shared/five-concept-separation-audit.md) | Five-concept separation audit — recommendation vs. authorization vs. execution never conflated |
 
 Platform ADRs: [docs/adr/README.md](../adr/README.md).
 

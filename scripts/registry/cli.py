@@ -8,6 +8,7 @@ from pathlib import Path
 
 import yaml
 
+from scripts.atomic_write import atomic_write_text
 from scripts.registry.capability_catalog import cmd_check_capabilities
 from scripts.registry.agent_skills import validate_agent_skills
 from scripts.registry.artifact_contracts import validate_artifact_result
@@ -43,8 +44,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def _write_outputs(outputs: dict[Path, str]) -> None:
     for path, content in outputs.items():
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(content, encoding="utf-8")
+        atomic_write_text(path, content)
 
 
 def _prune_stale_adapters(root: Path) -> int:
@@ -87,8 +87,10 @@ def _run_command(action: Callable[[], int]) -> int:
     # calls cmd_generate(...) directly, bypassing this function entirely, so its own
     # clear is the only one those callers get; its second clear_registry_cache() call
     # after _write_outputs is separately load-bearing invalidation for the write that
-    # just happened, unrelated to entry invalidation. cmd_check_capabilities isn't wrapped
-    # by _run_command (see main()'s dispatch) and doesn't need to be: it only reads.
+    # just happened, unrelated to entry invalidation. cmd_check_capabilities is wrapped too
+    # (see main()'s dispatch) so a malformed skills.d/*.yaml fragment gets the same clean
+    # `error:`/exit-2 contract every other subcommand gives Makefile/CI callers, instead of
+    # an unhandled traceback from load_registry_raw.
     clear_registry_cache()
     try:
         return action()
@@ -198,13 +200,34 @@ def cmd_validate_hosts(root: Path) -> int:
     return 0
 
 
+_STALE_ADAPTER_ERROR_PREFIX = "error: stale generated adapter:"
+
+
 def cmd_generate(root: Path, check_only: bool) -> int:
     # A fresh invocation must never inherit another invocation's cached skills.yaml read
     # (schema.py's load_registry_raw cache) -- e.g. two cmd_generate calls against the
     # same root within one process, as several tests do.
     clear_registry_cache()
+
+    # validate_registry (inside _validate_for_generate) reports a not-yet-pruned stale
+    # adapter as an error -- generate's own job, not a reason to refuse to run. Gate on
+    # every OTHER error first, before mutating anything, so a real validation failure
+    # (composition runtime, host contracts, ...) leaves the filesystem untouched instead
+    # of having already deleted stale adapter files that a failed run can't then write
+    # fresh replacements for.
+    pre_errors = [
+        error
+        for error in _validate_for_generate(root)
+        if not error.startswith(_STALE_ADAPTER_ERROR_PREFIX)
+    ]
+    if pre_errors:
+        for error in pre_errors:
+            print(error, file=sys.stderr)
+        return 1
+
     if not check_only:
         _prune_stale_adapters(root)
+        clear_registry_cache()
 
     validation_errors = _validate_for_generate(root)
     if validation_errors:
@@ -448,7 +471,7 @@ def main(argv: list[str] | None = None) -> int:
         output = args.output if args.output.is_absolute() else ROOT / args.output
         return _run_command(lambda: cmd_package_generic(ROOT, output.resolve()))
     if args.command == "backfill-capabilities":
-        return cmd_check_capabilities(skills_path=ROOT / "skills.yaml")
+        return _run_command(lambda: cmd_check_capabilities(skills_path=ROOT / "skills.yaml"))
     if args.command == "check-handoff":
         visited = [skill_id for skill_id in args.visited.split(",") if skill_id]
         return _run_command(

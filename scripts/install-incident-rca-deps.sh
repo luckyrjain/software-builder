@@ -69,9 +69,33 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# Neither network call below (npm pack, git fetch) had any retry -- a single transient
+# registry/GitHub hiccup aborted the whole script under set -e. The script is otherwise
+# safe to rerun (WORK_DIR is a fresh mktemp -d each time, cleaned by the trap above), so
+# a bounded retry with backoff turns "rerun the script by hand" into "usually just works."
+retry() {
+  local description="$1"
+  shift
+  local attempt
+  for attempt in 1 2 3; do
+    if "$@"; then
+      return 0
+    fi
+    if [[ "${attempt}" -lt 3 ]]; then
+      echo "warning: ${description} failed (attempt ${attempt}/3), retrying in $((attempt * 2))s..." >&2
+      sleep "$((attempt * 2))"
+    fi
+  done
+  echo "error: ${description} failed after 3 attempts" >&2
+  return 1
+}
+
 # `npm pack` writes the registry tarball verbatim and runs none of its scripts, so
 # this fetch is inert until the digest below has passed.
-(cd "${WORK_DIR}" && npm pack "skills@${SKILLS_CLI_VERSION}" >/dev/null)
+_npm_pack_skills_cli() {
+  (cd "${WORK_DIR}" && npm pack "skills@${SKILLS_CLI_VERSION}" >/dev/null)
+}
+retry "npm pack skills@${SKILLS_CLI_VERSION}" _npm_pack_skills_cli
 
 CLI_TARBALL="${WORK_DIR}/skills-${SKILLS_CLI_VERSION}.tgz"
 if [[ ! -f "${CLI_TARBALL}" ]]; then
@@ -114,7 +138,8 @@ echo "  CLI integrity ok (${actual_integrity})"
 SOURCE_DIR="${WORK_DIR}/source"
 mkdir -p "${SOURCE_DIR}"
 git -C "${SOURCE_DIR}" init -q
-git -C "${SOURCE_DIR}" fetch -q --depth 1 "${REPO_URL}" "${COMMIT_SHA}"
+retry "git fetch ${REPO_URL} ${COMMIT_SHA}" \
+  git -C "${SOURCE_DIR}" fetch -q --depth 1 "${REPO_URL}" "${COMMIT_SHA}"
 git -C "${SOURCE_DIR}" checkout -q FETCH_HEAD
 
 checked_out_sha="$(git -C "${SOURCE_DIR}" rev-parse HEAD)"

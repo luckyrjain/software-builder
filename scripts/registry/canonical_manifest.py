@@ -13,7 +13,6 @@ from scripts.registry.schema import load_registry_raw, parse_registry
 from scripts.yaml_safety import load_unique_frontmatter, load_unique_yaml_file, require_mapping
 
 ROOT = Path(__file__).resolve().parents[2]
-CANONICAL_PATH = ROOT / "skills.yaml"
 REQUIRED_CONTRACTS = {"platform", "composition_runtime", "composition"}
 MANIFEST_KIND = "canonical"
 # The standalone file each contract section is projected to for repositories that predate

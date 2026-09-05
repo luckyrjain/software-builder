@@ -18,7 +18,6 @@ destroys a prior successful artifact left over in the same output directory.
 from __future__ import annotations
 
 import argparse
-import contextlib
 import gzip
 import hashlib
 import io
@@ -27,7 +26,6 @@ import os
 import subprocess
 import sys
 import tarfile
-import tempfile
 from pathlib import Path, PurePosixPath
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -43,6 +41,7 @@ if str(ROOT) not in sys.path:
 # upside since every caller in this file already needs the `scripts.`-rooted
 # imports below anyway (host_adapter, manifest, schema, release_contract all
 # live under the scripts.registry/scripts package).
+from scripts.atomic_write import atomic_write
 from scripts.reference_utils import sha256_file
 from scripts.registry.host_adapter import supported_hosts
 from scripts.registry.manifest import skill_versions
@@ -308,34 +307,6 @@ def _tracked_files(root: Path) -> list[tuple[str, Path, int, str]]:
     return files
 
 
-@contextlib.contextmanager
-def _atomic_write(path: Path, *, mode: str = "wb"):
-    """Open a temp file in path's own directory; replace path with it atomically
-    on success, remove it and leave path untouched on any failure.
-
-    Without this, a failure partway through writing (a tracked file's archive
-    path exceeding tarfile's USTAR name-length limit, a tracked file that
-    shrinks between being listed and read, disk-full, a killed process) would
-    truncate/corrupt whatever file previously existed at `path` -- silently
-    destroying a prior, valid release artifact left over from an earlier
-    successful run in the same output directory -- instead of failing without
-    touching it. Matches scripts/registry/generic_package.py's existing
-    "build fully, then write only once complete" precedent for the same
-    "must never damage prior output" property.
-    """
-    fd, tmp_name = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
-    tmp_path = Path(tmp_name)
-    success = False
-    try:
-        with os.fdopen(fd, mode, encoding=None if "b" in mode else "utf-8") as handle:
-            yield handle
-        os.replace(tmp_path, path)
-        success = True
-    finally:
-        if not success:
-            tmp_path.unlink(missing_ok=True)
-
-
 def _tar_info(arcname: str, *, size: int, mode: int) -> tarfile.TarInfo:
     # Every field that could vary between two builds of the same Git tree
     # (mtime, ownership, names) is pinned so the resulting archive is
@@ -393,7 +364,7 @@ def _write_reproducible_archive(
     source_sha that no longer actually matches its content.
     """
     file_hashes: dict[str, str] = {}
-    with _atomic_write(archive_path) as raw:
+    with atomic_write(archive_path) as raw:
         # filename="" (not the default of raw.name) keeps the gzip header itself
         # reproducible regardless of the output path chosen; compresslevel is pinned
         # explicitly (matching zlib's own default) so it's a fixed input rather than
@@ -513,12 +484,12 @@ def package_release(root: Path, output_dir: Path) -> tuple[Path, Path]:
         [f"{digest}  {rel}" for rel, digest in file_hashes.items()]
         + [f"{manifest_digest}  {RELEASE_MANIFEST_NAME}"],
     )
-    with _atomic_write(output_dir / f"{bundle_name}.files.sha256", mode="w") as handle:
+    with atomic_write(output_dir / f"{bundle_name}.files.sha256", mode="w") as handle:
         handle.write("\n".join(checksum_lines) + "\n")
 
     archive_digest = sha256_file(archive_path)
     checksum_path = output_dir / f"{bundle_name}.sha256"
-    with _atomic_write(checksum_path, mode="w") as handle:
+    with atomic_write(checksum_path, mode="w") as handle:
         handle.write(f"{archive_digest}  {archive_path.name}\n")
 
     return archive_path, checksum_path

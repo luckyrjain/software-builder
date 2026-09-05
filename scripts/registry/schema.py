@@ -19,7 +19,7 @@ from scripts.registry.models import (
     Registry,
     SkillEntry,
 )
-from scripts.registry.manifest_merge import load_fragment_skills, skills_fragments_dir
+from scripts.registry.fragments import load_fragment_skills, skills_fragments_dir
 from scripts.yaml_safety import load_unique_yaml_file
 from scripts.yaml_safety import require_mapping as _require_mapping
 

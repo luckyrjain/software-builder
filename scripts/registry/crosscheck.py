@@ -10,6 +10,7 @@ from scripts.registry.canonical_manifest import has_canonical_manifest_shape
 from scripts.registry.graph import detect_cycles
 from scripts.registry.load import load_deprecated_skills
 from scripts.registry.models import Registry
+from scripts.registry.repository_doc_sync import validate_repository_doc_layout_tree
 from scripts.registry.routing_sync import (
     validate_skill_not_these_subsets,
     validate_skill_routing_references,
@@ -239,4 +240,5 @@ def validate_registry(root: Path) -> list[str]:
     errors.extend(validate_skill_not_these_subsets(root, registry))
     errors.extend(validate_escalation_matrix(root, registry))
     errors.extend(validate_skill_contract_adoption(root, registry))
+    errors.extend(validate_repository_doc_layout_tree(root, registry))
     return errors

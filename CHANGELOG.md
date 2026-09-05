@@ -58,6 +58,46 @@ patterns rather than suppressing the scanner.
   destination; admitted files are copied out with `extractfile` and given only their masked
   permission bits, so the archive can never choose a path, a link target, or a setuid bit.
 
+### Add codebase-architecture-review and module-design skills (2026-09-04)
+
+- Added two new framework-compliant, ambient, read-only skills: `codebase-architecture-review`
+  (bounded, evidence-backed review of an existing codebase's architecture friction and
+  refactoring candidates) and `module-design` (evidence-backed design for one concrete module's
+  contract, ownership, seams, dependencies, state, errors, and tests). Both defer shared
+  vocabulary to `docs/skill-framework/shared/codebase-design-principles.md` rather than
+  redefining it, and carry explicit "Not for X" cross-references disambiguating themselves from
+  `architecture-review` and `system-design`.
+- Fixed a routing regression the addition introduced: `module-design`'s first dispatch pattern
+  matched any prompt containing `one|single|concrete` followed by
+  `module|interface|seam|package|test surface`, hijacking prompts that previously resolved to
+  `unit-test-creator`, `pr-review`, `security-review`, `performance-review`, and
+  `integration-test-creator`. Anchored the pattern on design intent
+  (`design|define|draft|specify`) and excluded test-generation, PR/MR, and other-review phrasing;
+  excluded numbered PR/MR references from `codebase-architecture-review` routing too.
+
+### Fix incident-rca install script's clone step, rename backfill_capabilities.py, dedupe shared-runtime bootstrap (2026-09-04)
+
+- **`install-incident-rca-deps.sh`'s pinned `skills` CLI clone step fixed.** The CLI clones
+  non-allowlisted GitHub owners with `git clone --depth 1 --branch <ref>`, and `--branch` only
+  resolves ref names — it rejects a bare commit SHA (confirmed unfixed through CLI 1.5.23). The
+  script now does the pinned `git fetch <sha>` itself (verified against `COMMIT_SHA`) and hands
+  `skills add` a local checkout, skipping the CLI's clone step entirely. Also fixed the
+  post-install verification path list for this CLI version's actual install location
+  (`~/.agents/skills/`).
+- **`scripts/registry/backfill_capabilities.py` renamed to `capability_catalog.py`.** The module
+  had already become read-only (catalogue reader + capabilities-block validator, no longer
+  writing `skills.yaml`), so its old name no longer matched what it does. Renamed to match
+  `capability_catalog.yaml`, the file it reads; every importer, the test file, ADR 0005, and
+  `scripts/README.md` repointed. The `backfill-capabilities` CLI subcommand and Makefile target
+  names are unchanged, since those are the stable external interface.
+- **Shared-runtime bootstrap deduplicated.** Eight entrypoint scripts across four skills
+  (`incident-rca` x2, `pr-review` x4, `prd-architect`, `loop-task-implementer`) each hand-carried
+  a byte-identical ~30-line `_shared_runtime_loader()` function, since a script can't import
+  `shared_runtime_loader.py` to find `shared_runtime_loader.py`. Added
+  `generate_shared_runtime_bootstrap.py` as a new `make generate` generator projecting one
+  canonical copy into all eight files via marker comments, so `make generate-check` now catches
+  drift instead of relying on eight copies staying in sync by hand.
+
 ### Architecture review follow-up: the deferred candidates (2026-09-04)
 
 Closes the items the 2026-09-04 architecture review deferred.

@@ -7,12 +7,11 @@ from pathlib import Path
 
 from scripts.registry.canonical_manifest import load_contract_section
 from scripts.registry.models import Registry
+from scripts.registry.paths import ROOT, SKILLS_YAML_PATH as CANONICAL_CONTRACTS_PATH
 from scripts.test_creator_catalog import TEST_CREATOR_SKILLS
 from scripts.yaml_safety import YAML_SAFETY_ERRORS, load_unique_yaml_file
 
-ROOT = Path(__file__).resolve().parents[2]
 CONTRACTS_PATH = Path(__file__).resolve().parent / "composition_contracts.yaml"
-CANONICAL_CONTRACTS_PATH = ROOT / "skills.yaml"
 DEFAULT_CONTRACTS_PATH = CONTRACTS_PATH
 
 
