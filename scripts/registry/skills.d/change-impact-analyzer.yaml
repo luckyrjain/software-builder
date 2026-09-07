@@ -42,25 +42,6 @@ change-impact-analyzer:
   output_contract:
     produces:
     - change_impact_report
-    produce_fields:
-      change_impact_report:
-      - title
-      - assessment_target
-      - coverage_status
-      - material_unknowns
-      - impacted_repositories
-      - criticality
-      - change_classes
-      - impacted_services
-      - impacted_contracts
-      - impacted_data
-      - impacted_dependencies
-      - impacted_owners
-      - required_tests
-      - operational_impacts
-      - review_triggers
-      - unknowns
-      - evidence_refs
   dependencies: []
   degraded_behavior:
     missing_capability: host.repository.read

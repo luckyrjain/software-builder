@@ -15,7 +15,7 @@ from scripts.registry.canonical_manifest import (
     load_contract_section,
     validate_canonical_manifest,
 )
-from scripts.registry.composition_contracts import load_contracts
+from scripts.registry.composition_contracts import default_produce_fields, load_contracts
 from scripts.registry.envelope_contract import (
     COMPLETION_FIELDS,
     COMPLETION_STATUSES,
@@ -108,7 +108,7 @@ def _build_manifest(root: Path) -> tuple[dict[str, Any], dict[str, Any]]:
 
     registry = parse_registry(root / "skills.yaml")
     platform = _load_platform_contracts(root / "skills.yaml")
-    _, _, _, composition = load_contracts(root / "skills.yaml")
+    _, artifact_schemas, _, composition = load_contracts(root / "skills.yaml")
 
     canonical_skills = require_mapping(canonical.get("skills"), "canonical manifest.skills")
     skills: dict[str, Any] = {}
@@ -140,7 +140,17 @@ def _build_manifest(root: Path) -> tuple[dict[str, Any], dict[str, Any]]:
         skill["artifacts"] = {
             "produces": list(artifact.produces),
             "consumes": list(artifact.consumes),
-            "produce_fields": {name: list(fields) for name, fields in artifact.produce_fields.items()},
+            # Most producing skills declare only `produces`, not `produce_fields` -- an
+            # explicit override would duplicate `artifact_schemas[artifact].fields`. This
+            # runtime manifest is a *derived* view external readers rely on (`skill_result`
+            # payload validation, `cmd_explain`'s printed output contract), so it fills in
+            # the schema-derived field list here rather than exposing the fragment's own
+            # (possibly absent) override verbatim -- the same "declared override, else
+            # schema" rule `default_produce_fields` already applies at validation time.
+            "produce_fields": {
+                name: default_produce_fields(artifact, name, artifact_schemas)
+                for name in artifact.produces
+            },
             "consume_fields": {name: list(fields) for name, fields in artifact.consume_fields.items()},
         }
         skills[skill_id] = skill

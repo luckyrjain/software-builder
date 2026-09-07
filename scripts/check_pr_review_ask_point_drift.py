@@ -1,5 +1,13 @@
 #!/usr/bin/env python3
-"""check-ask-point-drift.py — heuristic drift check for pr-gatekeeper/reference/auto-post-policy.md.
+"""check_pr_review_ask_point_drift.py — heuristic drift check for
+pr-gatekeeper/reference/auto-post-policy.md.
+
+Lives here, in the root repository toolchain, rather than under
+pr-gatekeeper/scripts/ (which is packaged verbatim into every pr-gatekeeper install --
+see scripts/package_skill.py): this check is a repo-internal cross-skill consistency
+guard between pr-review's and pr-gatekeeper's own source trees, and pr-review/workflow/
+does not exist in a standalone pr-gatekeeper install, so it could never run correctly
+there.
 
 WHY THIS EXISTS
 ----------------
@@ -20,7 +28,7 @@ auto-post-policy.md, which is the specific failure mode that causes a silent han
 RUN THIS after any edit to pr-review/workflow/*.md, and after any edit to
 pr-gatekeeper/reference/auto-post-policy.md itself:
 
-    python3 pr-gatekeeper/scripts/check-ask-point-drift.py
+    python3 scripts/check_pr_review_ask_point_drift.py
 
 Exit code 0 = no new/uncovered ask-point-shaped text found (or only pre-approved exclusions).
 Exit code 1 = at least one pr-review paragraph looks ask-point-shaped but shares too little
@@ -59,7 +67,7 @@ import re
 import sys
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = Path(__file__).resolve().parents[1]
 PR_REVIEW_WORKFLOW_DIR = REPO_ROOT / "pr-review" / "workflow"
 AUTO_POST_POLICY = REPO_ROOT / "pr-gatekeeper" / "reference" / "auto-post-policy.md"
 

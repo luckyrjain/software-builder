@@ -85,6 +85,27 @@ class TestParseSquadMap:
     def test_missing_file_returns_empty(self, tmp_path):
         assert parse_squad_map(tmp_path / "nope.md") == []
 
+    def test_data_row_with_blank_and_dash_shaped_cells_is_not_misread_as_separator(self, tmp_path):
+        # Regression test: the separator check used to treat any row where every cell was
+        # EITHER empty OR made of only -/: as a separator, via `set(cells) <= {""} or
+        # all(set(c) <= {"-", ":"} for c in cells)` -- but `set("") <= {"-", ":"}` is
+        # vacuously true, so a data row with one blank cell alongside an otherwise
+        # dash-shaped cell (e.g. a squad literally named "--", or any other
+        # dash/colon-only value) was silently dropped as a false-positive separator
+        # instead of being parsed as a real row.
+        fixture = (
+            "## Repo -> squad\n\n"
+            "| Repo | GitLab squad |\n"
+            "|------|--------------|\n"
+            "| | -- |\n"  # blank first cell, dash-shaped second cell -- not a separator
+        )
+        p = tmp_path / "SQUAD_MAP.md"
+        p.write_text(fixture, encoding="utf-8")
+        rows = parse_squad_map(p)
+        assert len(rows) == 1
+        assert rows[0]["Repo"] == ""
+        assert rows[0]["GitLab squad"] == "--"
+
 
 class TestJoinSquad:
     def test_matches_by_path(self):

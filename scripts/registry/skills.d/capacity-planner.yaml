@@ -33,16 +33,6 @@ capacity-planner:
   output_contract:
     produces:
     - capacity_plan
-    produce_fields:
-      capacity_plan:
-      - title
-      - headroom
-      - assessment_target
-      - normalized_decision
-      - findings
-      - conditions
-      - required_actions
-      - evidence_refs
   dependencies: []
   degraded_behavior:
     missing_capability: host.report.write

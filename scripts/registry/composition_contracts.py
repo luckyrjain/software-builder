@@ -243,11 +243,19 @@ def load_contracts(
     return artifact_set, artifact_schemas, levels, contracts
 
 
-def _default_produce_fields(
+def default_produce_fields(
     contract: CompositionContract,
     artifact: str,
     artifact_schemas: dict[str, list[str]],
 ) -> list[str]:
+    """A producing skill's field list for `artifact`: its own override if declared, else
+    the artifact's schema. Most skill fragments omit `produce_fields` entirely (it would
+    otherwise be a byte-for-byte duplicate of `artifact_schemas[artifact].fields`), so
+    every reader of a producer's field list -- this module's own schema-matching check,
+    `artifact_contracts.py`'s runtime payload validation, and `manifest.py`'s derived
+    `artifacts.produce_fields` -- goes through this one function rather than each
+    re-deriving "declared override, else schema" independently.
+    """
     if artifact in contract.produce_fields:
         return list(contract.produce_fields[artifact])
     if artifact in contract.produces:
@@ -312,7 +320,7 @@ def _validate_schema_matching(
         available: set[str] = set()
         for producer_id in producers:
             producer_contract = contracts[producer_id]
-            available.update(_default_produce_fields(producer_contract, artifact, artifact_schemas))
+            available.update(default_produce_fields(producer_contract, artifact, artifact_schemas))
         missing = _fields_covered(required_fields, sorted(available))
         if missing:
             errors.append(

@@ -290,7 +290,7 @@ def test_known_case_refs_unions_fixtures_transcripts_golden_and_global_template(
     transcripts_dir.mkdir(parents=True)
     (transcripts_dir / "case.yaml").write_text(
         "skill: demo-skill\ncase_id: transcript-case\n"
-        "events:\n  - type: tool_call\nassertions:\n  - type: file_exists\n    path: SKILL.md\n",
+        "events:\n  - type: tool\n    name: some_tool\nassertions:\n  - type: file_exists\n    path: SKILL.md\n",
         encoding="utf-8",
     )
 

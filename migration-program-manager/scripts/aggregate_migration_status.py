@@ -262,7 +262,11 @@ def parse_squad_map(squad_map_path: Path) -> list[dict[str, str]]:
         if columns is None:
             columns = cells
             continue
-        if set(cells) <= {""} or all(set(c) <= {"-", ":"} for c in cells):
+        # Every cell non-empty AND made up solely of -/: — an empty cell must not vacuously
+        # satisfy this (set("") <= {"-", ":"} is trivially true), or a genuine data row that
+        # happens to have one blank cell alongside all-dash/colon cells would be misread as
+        # the table's separator and silently dropped instead of parsed as a row.
+        if cells and all(c and set(c) <= {"-", ":"} for c in cells):
             continue  # separator row (---|---|...)
         if len(cells) != len(columns):
             continue  # malformed row — skip rather than crash

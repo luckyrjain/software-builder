@@ -5,12 +5,12 @@ import json
 import re
 import sys
 from collections.abc import Callable, Iterable, Iterator
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from scripts.evals.contract_lint import lint_contracts
 from scripts.evals.eval_coverage_contract import run_batch3_contract_checks
+from scripts.evals.fixtures import EvalCase, load_fixtures, load_global_template_cases
 from scripts.evals.golden import (
     find_oversized_descriptions,
     find_vacuous_anchored_patterns,
@@ -24,49 +24,11 @@ from scripts.evals.transcript import load_transcript_fixtures, run_transcript_ca
 from scripts.evals.types import EvalResult, eval_contract_path, load_eval_contract
 from scripts.registry.schema import Registry, parse_registry
 from scripts.registry.skill_frontmatter_schema import automation_only_guard_errors
-from scripts.yaml_safety import YAML_SAFETY_ERRORS, load_unique_frontmatter, load_unique_yaml_file
+from scripts.yaml_safety import YAML_SAFETY_ERRORS, load_unique_frontmatter
 
 ROOT = Path(__file__).resolve().parents[2]
 
 WORKFLOW_REQUIRED_KEYS = ("workflow_version", "phase", "produces", "consumes")
-
-
-@dataclass(frozen=True)
-class EvalCase:
-    skill: str
-    case_id: str
-    tier: int
-    description: str
-    assertions: list[dict[str, Any]]
-    path: Path
-
-
-def load_fixtures(fixtures_dir: Path) -> list[EvalCase]:
-    cases: list[EvalCase] = []
-    for path in sorted(fixtures_dir.rglob("*.yaml")):
-        if path.name.startswith("_"):
-            continue
-        raw = load_unique_yaml_file(path)
-        if not isinstance(raw, dict):
-            raise ValueError(f"{path}: fixture root must be a mapping")
-        skill = str(raw.get("skill", ""))
-        case_id = str(raw.get("case_id", ""))
-        if not skill or not case_id:
-            raise ValueError(f"{path}: skill and case_id are required")
-        assertions = raw.get("assertions", [])
-        if not isinstance(assertions, list) or not assertions:
-            raise ValueError(f"{path}: assertions must be a non-empty list")
-        cases.append(
-            EvalCase(
-                skill=skill,
-                case_id=case_id,
-                tier=int(raw.get("tier", 1)),
-                description=str(raw.get("description", "")),
-                assertions=assertions,
-                path=path,
-            ),
-        )
-    return cases
 
 
 def _skill_dir(root: Path, skill_id: str) -> Path:
@@ -203,33 +165,10 @@ def run_all(
 ) -> list[EvalResult]:
     registry = parse_registry(root / "skills.yaml")
     cases = load_fixtures(root / "evals" / "fixtures")
+    cases.extend(load_global_template_cases(root, registry, skill_filter=skill_filter))
     transcript_cases = load_transcript_fixtures(root / "evals" / "transcripts")
     if golden_cases is None:
         golden_cases = load_golden_fixtures(root / "evals" / "golden")
-    global_fixture = root / "evals" / "fixtures" / "_global.yaml"
-    if global_fixture.is_file():
-        global_raw = load_unique_yaml_file(global_fixture)
-        if isinstance(global_raw, dict):
-            for skill_id in sorted(registry.skills):
-                if skill_filter and skill_id != skill_filter:
-                    continue
-                for template_name in ("happy", "adversarial"):
-                    template = global_raw.get(template_name)
-                    if not isinstance(template, dict):
-                        continue
-                    assertions = template.get("assertions", [])
-                    if not isinstance(assertions, list):
-                        continue
-                    cases.append(
-                        EvalCase(
-                            skill=skill_id,
-                            case_id=f"global-{template_name}",
-                            tier=int(template.get("tier", 1)),
-                            description=str(template.get("description", "")),
-                            assertions=assertions,
-                            path=global_fixture,
-                        ),
-                    )
 
     results: list[EvalResult] = []
     seen: set[tuple[str, str]] = set()
@@ -272,7 +211,7 @@ def run_all(
         # argument (not folded into case_results first) so its "batch3-mutation/*"
         # lookup doesn't depend on call order -- see 80e588a ("dedupe mutation
         # evals"), a real incident caused by that implicit ordering requirement.
-        mutation_results = run_guardrail_mutation_checks(root, golden_cases)
+        mutation_results = run_guardrail_mutation_checks(root, golden_cases, contract=contract)
         results.extend(mutation_results)
 
         results.extend(

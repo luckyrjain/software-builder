@@ -16,7 +16,7 @@ if str(ROOT) not in sys.path:
 
 from scripts.git_paths import tracked_relative_paths
 from scripts.registry.canonical_manifest import load_canonical_manifest
-from scripts.registry.schema import resolve_registry_profiles
+from scripts.registry.schema import load_registry_raw
 from scripts.yaml_safety import FRONTMATTER_RE, load_unique_yaml, load_unique_yaml_file
 
 POLICY_PATH = ROOT / "scripts" / "operational_upkeep.yaml"
@@ -195,7 +195,7 @@ def _deprecation_candidates(root: Path, skill_paths: Iterable[str]) -> Iterable[
 
 
 def _canonical_contract(root: Path, section: str, legacy_path: str) -> dict[str, Any]:
-    raw = load_unique_yaml_file(root / "skills.yaml")
+    raw = load_registry_raw(root / "skills.yaml")
     from scripts.registry.canonical_manifest import has_canonical_manifest_shape
 
     if not has_canonical_manifest_shape(raw):
@@ -208,8 +208,14 @@ def _canonical_contract(root: Path, section: str, legacy_path: str) -> dict[str,
 
 
 def _registered_skills(root: Path) -> dict[str, Any]:
-    manifest = resolve_registry_profiles(_yaml_mapping(root / "skills.yaml"))
-    skills = manifest.get("skills", {})
+    # Through schema.load_registry_raw -- the single choke point that merges
+    # scripts/registry/skills.d/*.yaml fragments into the skills: mapping before the
+    # next `make generate` writes them back to skills.yaml -- rather than reading
+    # skills.yaml directly, which would make a skill that exists only as a new
+    # fragment invisible to this module's checks (the exact staleness gap
+    # load_registry_raw's own docstring exists to close).
+    manifest = load_registry_raw(root / "skills.yaml")
+    skills = manifest.get("skills", {}) if isinstance(manifest, dict) else {}
     return skills if isinstance(skills, dict) else {}
 
 
@@ -331,7 +337,7 @@ def build_health_report(root: Path = ROOT, revision: str | None = None) -> dict[
     from scripts.eval_tier_health import build_eval_tier_health
 
     policy = load_policy(root / "scripts" / "operational_upkeep.yaml")
-    skills_file = resolve_registry_profiles(_yaml_mapping(root / "skills.yaml"))
+    skills_file = load_registry_raw(root / "skills.yaml")
     skills = _registered_skills(root)
     composition = _canonical_contract(
         root, "composition", "scripts/registry/composition_contracts.yaml"

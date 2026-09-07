@@ -126,6 +126,11 @@ validate-agent-skills:
 validate-hosts:
 	@python3 -m scripts.registry validate-hosts
 
+# Not a lint-static prerequisite: crosscheck.validate_registry (run by validate-registry,
+# already a lint-static prerequisite) calls this same validate_capabilities_present check
+# against the same skills.yaml path, so running it again here would just repeat the same
+# work and print the same "missing capabilities block" errors twice. Kept as a standalone,
+# independently-runnable target for anyone who wants just this one check.
 backfill-capabilities-check:
 	@python3 -m scripts.registry backfill-capabilities --check
 
@@ -206,15 +211,21 @@ lint: lint-static lint-suites
 # across skills via `make -jN` and, only for the dominant scripts/tests/ suite, within
 # it via pytest-xdist (see PYTEST_XDIST_FLAG above). `make lint` still runs both groups
 # locally, in this order.
-lint-static: lint-platform-files validate-registry validate-agent-skills validate-hosts backfill-capabilities-check generate-check validate-evals validate-operational-upkeep lint-framework lint-incident-triage-agent lint-who-owns-x-bot lint-new-hire-guide lint-release-readiness-checker lint-cost-optimization-sprint-planner lint-backlog-runner lint-test-writer lint-prd-architect lint-architecture-review lint-system-design lint-api-design-review lint-database-review lint-security-review lint-performance-review lint-capacity-planner lint-observability-review lint-deployment-risk-review lint-dependency-upgrade-review lint-tech-debt-assessor lint-module-design lint-codebase-architecture-review lint-requirements-lock lint-python lint-actions-pinning lint-actions-security verify-install verify-install-all validate-review-contracts lint-scripts-shellcheck
+lint-static: lint-platform-files validate-registry validate-agent-skills validate-hosts generate-check validate-evals validate-operational-upkeep lint-framework lint-incident-triage-agent lint-who-owns-x-bot lint-new-hire-guide lint-release-readiness-checker lint-cost-optimization-sprint-planner lint-backlog-runner lint-test-writer lint-prd-architect lint-architecture-review lint-system-design lint-api-design-review lint-database-review lint-security-review lint-performance-review lint-capacity-planner lint-observability-review lint-deployment-risk-review lint-dependency-upgrade-review lint-tech-debt-assessor lint-module-design lint-codebase-architecture-review lint-requirements-lock lint-python lint-actions-pinning lint-actions-security verify-install verify-install-all validate-review-contracts lint-scripts-shellcheck
 
+# koalaman/shellcheck-alpine below is pinned by digest, not the mutable :stable tag -- a Docker
+# tag can be silently repointed after review the same way a mutable git ref can, which is exactly
+# the risk lint-actions-pinning enforces for every uses: reference in this repo's workflows; a
+# `docker run` image reference isn't a uses: field, so that check can't cover these 4 sites (see
+# secret-scan.yml's zricethezav/gitleaks@sha256:... for the same pattern applied to a uses: field).
+# Digest resolved from the :stable tag's manifest on 2026-09-07; update all 4 sites together.
 lint-scripts-shellcheck:
 	@for f in scripts/*.sh; do \
 		echo "shellcheck $$f"; \
 		if command -v shellcheck >/dev/null 2>&1; then \
 			shellcheck "$$f"; \
 		elif command -v docker >/dev/null 2>&1; then \
-			docker run --rm -v "$(CURDIR):/mnt" -w /mnt koalaman/shellcheck-alpine:stable shellcheck "$$f"; \
+			docker run --rm -v "$(CURDIR):/mnt" -w /mnt koalaman/shellcheck-alpine@sha256:c82fe42504fbc9fc68f15d36638e5ee2324ebb8b94e96a3c4e395bf361c49183 shellcheck "$$f"; \
 		else \
 			echo "error: install shellcheck or docker" >&2; \
 			exit 1; \
@@ -270,7 +281,7 @@ lint-pr-gatekeeper:
 	fi
 	@echo "  ok (framework refs + idempotency tests)"
 	@echo "lint-pr-gatekeeper: ask-point drift check (pr-review workflow vs auto-post-policy.md)"
-	@python3 pr-gatekeeper/scripts/check-ask-point-drift.py || \
+	@python3 scripts/check_pr_review_ask_point_drift.py || \
 		{ echo "error: pr-review ask-point drift detected — see pr-gatekeeper/reference/auto-post-policy.md" >&2; exit 1; }
 
 lint-k8s-skill:
@@ -438,7 +449,7 @@ lint-domain-comprehension-scripts:
 		shellcheck domain-comprehension/tests/fixtures/check-content/prepare.sh \
 			domain-comprehension/tests/run_pressure_tests.sh; \
 	elif command -v docker >/dev/null 2>&1; then \
-		docker run --rm -v "$(CURDIR):/mnt" -w /mnt koalaman/shellcheck-alpine:stable \
+		docker run --rm -v "$(CURDIR):/mnt" -w /mnt koalaman/shellcheck-alpine@sha256:c82fe42504fbc9fc68f15d36638e5ee2324ebb8b94e96a3c4e395bf361c49183 \
 			shellcheck domain-comprehension/tests/fixtures/check-content/prepare.sh \
 			domain-comprehension/tests/run_pressure_tests.sh; \
 	fi; \
@@ -566,7 +577,7 @@ lint-mysql-to-postgres-sql:
 	@if command -v shellcheck >/dev/null 2>&1; then \
 		shellcheck -x -P SCRIPTDIR mysql-to-postgres-sql/scripts/scan-mysql-dialect.sh mysql-to-postgres-sql/scripts/scan-report.sh mysql-to-postgres-sql/scripts/mysql-dialect-patterns.sh mysql-to-postgres-sql/tests/run_pressure_tests.sh; \
 	elif command -v docker >/dev/null 2>&1; then \
-		docker run --rm -v "$(CURDIR):/mnt" -w /mnt koalaman/shellcheck-alpine:stable \
+		docker run --rm -v "$(CURDIR):/mnt" -w /mnt koalaman/shellcheck-alpine@sha256:c82fe42504fbc9fc68f15d36638e5ee2324ebb8b94e96a3c4e395bf361c49183 \
 			shellcheck -x -P SCRIPTDIR mysql-to-postgres-sql/scripts/scan-mysql-dialect.sh mysql-to-postgres-sql/scripts/scan-report.sh mysql-to-postgres-sql/scripts/mysql-dialect-patterns.sh mysql-to-postgres-sql/tests/run_pressure_tests.sh; \
 	else \
 		echo "error: install shellcheck or docker" >&2; exit 1; \
@@ -631,7 +642,7 @@ lint-$(1):
 	@if command -v shellcheck >/dev/null 2>&1; then \
 		shellcheck -x -P SCRIPTDIR $(1)/scripts/*.sh; \
 	elif command -v docker >/dev/null 2>&1; then \
-		docker run --rm -v "$(CURDIR):/mnt" -w /mnt koalaman/shellcheck-alpine:stable \
+		docker run --rm -v "$(CURDIR):/mnt" -w /mnt koalaman/shellcheck-alpine@sha256:c82fe42504fbc9fc68f15d36638e5ee2324ebb8b94e96a3c4e395bf361c49183 \
 			shellcheck -x -P SCRIPTDIR $(1)/scripts/*.sh; \
 	else \
 		echo "error: install shellcheck or docker" >&2; exit 1; \
@@ -769,8 +780,6 @@ lint-codebase-architecture-review:
 		grep -Fqx "$$heading" codebase-architecture-review/SKILL.md || \
 			{ echo "error: codebase-architecture-review/SKILL.md must contain heading $$heading" >&2; exit 1; }; \
 	done
-	@echo "lint-codebase-architecture-review: balanced report-format fenced code blocks"
-	@python3 -c 'import sys; from pathlib import Path; from scripts.reference_utils import has_unclosed_fenced_code_block; path = Path(sys.argv[1]); sys.exit(f"error: {path}: unclosed fenced code block" if has_unclosed_fenced_code_block(path.read_text()) else 0)' codebase-architecture-review/reference/report-format.md
 	@echo "  ok"
 
 lint-change-impact-analyzer:
@@ -778,11 +787,6 @@ lint-change-impact-analyzer:
 	@python3 -m py_compile scripts/change_impact.py
 	@python3 -m pytest scripts/tests/test_change_impact_analyzer.py -q
 	@echo "  ok"
-
-lint: lint-change-impact-analyzer
-lint: lint-resilience-review
-
-lint: lint-implementation-planner
 
 lint-implementation-planner:
 	@python3 scripts/lint_skills.py --skill implementation-planner
@@ -795,8 +799,6 @@ lint-resilience-review:
 	@python3 -m py_compile scripts/resilience_review.py
 	@python3 -m pytest scripts/tests/test_resilience_review.py -q
 	@echo "  ok"
-
-lint: lint-production-readiness-review
 
 lint-production-readiness-review:
 	@python3 scripts/lint_skills.py --skill production-readiness-review
@@ -927,7 +929,10 @@ lint-framework:
 		"change-impact-analyzer:workflow/inputs.md" \
 		"resilience-review:workflow/inputs.md" \
 		"implementation-planner:workflow/inputs.md" \
-		"production-readiness-review:workflow/inputs.md"; do \
+		"production-readiness-review:workflow/inputs.md" \
+		"prd-architect:workflow/inputs.md" \
+		"module-design:workflow/inputs.md" \
+		"codebase-architecture-review:workflow/scope.md"; do \
 		skill=$${pair%%:*}; file=$${pair#*:}; \
 		if ! grep -qiE 'untrusted|prompt-injection' $$skill/$$file; then \
 			echo "error: $$skill/$$file must declare untrusted-content guard" >&2; fail=1; \

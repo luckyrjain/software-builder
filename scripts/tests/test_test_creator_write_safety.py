@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 import yaml
 
+from scripts.registry.composition_contracts import default_produce_fields, load_contracts
 from scripts.test_creator_catalog import TEST_CREATOR_SKILLS
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -532,12 +533,13 @@ def test_shared_contract_defines_degraded_and_noninteractive_behavior() -> None:
 
 
 def test_all_creator_contracts_produce_the_compatible_test_suite_shape() -> None:
-    contracts = yaml.safe_load(
-        (ROOT / "scripts" / "registry" / "composition_contracts.yaml").read_text(encoding="utf-8"),
-    )
+    # No creator fragment declares an explicit produce_fields override for test_suite (it
+    # would duplicate artifact_schemas.test_suite.fields), so the compatible shape is
+    # checked via the same derivation every reader (validation, the runtime manifest) uses.
     expected = ["tests", "framework", "target_path"]
+    _, artifact_schemas, _, composition = load_contracts(ROOT / "skills.yaml")
     for creator in CREATOR_ROOTS:
-        assert contracts["skills"][creator]["produce_fields"]["test_suite"] == expected
+        assert default_produce_fields(composition[creator], "test_suite", artifact_schemas) == expected
 
 
 @pytest.mark.parametrize("creator", CREATOR_ROOTS)

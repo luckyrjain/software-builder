@@ -1,8 +1,20 @@
 # Five-concept separation audit
 
-Tracked from issue #53 (originally #20's roadmap). A repo-wide pass confirming five concepts are
-not conflated in any skill — a skill answering "what's my recommendation" should never be the same
-code path as "am I allowed to act on it" or "did I actually act."
+Tracked from issue #53 (originally #20's roadmap). Confirms five concepts are not conflated in an
+audited skill — a skill answering "what's my recommendation" should never be the same code path as
+"am I allowed to act on it" or "did I actually act."
+
+**Coverage:** the matrix below audits 23 of the 40 skills registered at the time of this note (18
+single-skill rows plus one row bundling the five `*-test-creator` skills) — coincidentally close to
+the 23 skills the repository had when this file was first written, which is why the original issue's
+framing reads as if it were repo-wide; it no longer is. The skills added since — the review family
+(`architecture-review`, `api-design-review`, `database-review`, `security-review`,
+`performance-review`, `capacity-planner`, `observability-review`, `deployment-risk-review`,
+`dependency-upgrade-review`, `tech-debt-assessor`, `system-design`), plus `change-impact-analyzer`,
+`resilience-review`, `implementation-planner`, `production-readiness-review`, `module-design`, and
+`codebase-architecture-review` (17 skills total) — have never been run through this audit. A skill's
+absence from the matrix is not evidence of correct separation; check its own artifact/field shape
+directly, or extend this audit, before relying on it for one of the missing skills.
 
 ## The five concepts
 
@@ -18,7 +30,7 @@ code path as "am I allowed to act on it" or "did I actually act."
 it never has external write authority to confuse with anything, by construction. `RR` is N/A for
 skills that don't evaluate a target's own readiness (pure lookups, generators, aggregators).
 
-## Matrix — all 23 skills
+## Matrix — 23 of 40 skills audited (see Coverage above)
 
 Each cell is either a pointer to where that concept is a *distinct, separately-named* artifact/field
 (so it can't silently collapse into another concept), or `N/A` with why.

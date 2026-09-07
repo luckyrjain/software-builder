@@ -61,12 +61,28 @@ def github_style_slug(heading: str) -> str:
     return cleaned.replace(" ", "-")
 
 
-def heading_slugs(markdown_path: Path) -> set[str]:
+def heading_slugs(markdown_path: Path, *, cache: dict[Path, set[str]] | None = None) -> set[str]:
+    """A markdown file's heading slugs, for anchor-link resolution.
+
+    `cache`, when given, is a plain dict keyed by resolved path and shared across every
+    call within one validate_tree()/validate_files() run: many source files commonly link
+    into the same handful of popular shared docs (e.g. every skill's SETUP.md into
+    docs/skill-framework/), so without it this re-reads and re-scans the same target file
+    once per *linking* file rather than once per distinct target. Scoped to the caller's own
+    dict rather than a module-level `functools.lru_cache` so nothing needs explicit
+    invalidation between independent calls (repeated runs in the same test process, or
+    against a path that legitimately changes between calls).
+    """
+    resolved = markdown_path.resolve()
+    if cache is not None and resolved in cache:
+        return cache[resolved]
     slugs: set[str] = set()
     text = strip_fenced_code_blocks(markdown_path.read_text(encoding="utf-8"))
     for line in text.splitlines():
         if line.startswith("#"):
             slugs.add(github_style_slug(line))
+    if cache is not None:
+        cache[resolved] = slugs
     return slugs
 
 
@@ -115,6 +131,7 @@ def validate_markdown_file(
     *,
     check_anchors: bool = True,
     package_root: Path | None = None,
+    heading_cache: dict[Path, set[str]] | None = None,
 ) -> list[str]:
     errors: list[str] = []
     text = source_file.read_text(encoding="utf-8")
@@ -142,7 +159,7 @@ def validate_markdown_file(
 
         if check_anchors and anchor:
             slug = anchor[1:]
-            if slug not in heading_slugs(target):
+            if slug not in heading_slugs(target, cache=heading_cache):
                 errors.append(
                     f"{source_file}: dangling anchor {link!r} in {target}",
                 )
@@ -165,6 +182,7 @@ def validate_tree(
         if not renderer.is_file():
             errors.append(f"{renderer}: required safe-output renderer is missing")
     exclude_roots = [(root / rel).resolve() for rel in (exclude or [])]
+    heading_cache: dict[Path, set[str]] = {}
     for md_file in sorted(root.rglob("*.md")):
         if not md_file.is_file():
             continue
@@ -176,6 +194,7 @@ def validate_tree(
                 md_file,
                 check_anchors=check_anchors,
                 package_root=package_root,
+                heading_cache=heading_cache,
             ),
         )
     return errors
@@ -196,10 +215,13 @@ def validate_files(
     tree walk to keep the two from contradicting each other.
     """
     errors: list[str] = []
+    heading_cache: dict[Path, set[str]] = {}
     for md_file in files:
         if not md_file.is_file():
             continue
-        errors.extend(validate_markdown_file(md_file, check_anchors=check_anchors))
+        errors.extend(
+            validate_markdown_file(md_file, check_anchors=check_anchors, heading_cache=heading_cache),
+        )
     return errors
 
 

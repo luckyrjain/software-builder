@@ -44,16 +44,6 @@ system-design:
   output_contract:
     produces:
     - system_design_spec
-    produce_fields:
-      system_design_spec:
-      - title
-      - readiness
-      - assessment_target
-      - normalized_decision
-      - findings
-      - conditions
-      - required_actions
-      - evidence_refs
   dependencies: []
   degraded_behavior:
     missing_capability: host.report.write

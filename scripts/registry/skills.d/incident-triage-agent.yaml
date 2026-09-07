@@ -54,15 +54,6 @@ incident-triage-agent:
     produces:
     - rca_report
     - ownership_lookup
-    produce_fields:
-      rca_report:
-      - assessment_metadata
-      - root_cause
-      - confidence
-      ownership_lookup:
-      - query
-      - squad
-      - confidence
   dependencies:
   - incident-rca
   - squad-map

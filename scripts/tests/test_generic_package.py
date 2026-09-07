@@ -104,6 +104,13 @@ def test_generic_package_refuses_ci_sensitive_and_self_including_paths(tmp_path:
     with pytest.raises(ValueError, match="potentially sensitive"):
         _is_safe_file(tmp_path, mixed_case_env)
 
+    # ssh-keygen's default output filenames carry no suffix, so they must be listed by exact
+    # name -- the .pem/.key/.p12/.pfx suffix check alone would never catch them.
+    ssh_key = tmp_path / "id_ed25519"
+    ssh_key.write_text("-----BEGIN OPENSSH PRIVATE KEY-----\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="potentially sensitive"):
+        _is_safe_file(tmp_path, ssh_key)
+
     mixed_case_changelog = tmp_path / "Changelog.MD"
     mixed_case_changelog.write_text("history\n", encoding="utf-8")
     assert _is_safe_file(tmp_path, mixed_case_changelog) is False

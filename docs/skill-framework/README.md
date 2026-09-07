@@ -9,17 +9,19 @@ Normative conventions for **pr-review**, **pr-gatekeeper**, **incident-rca**, **
 **architecture-review**, **system-design**, **api-design-review**, **database-review**,
 **security-review**, **performance-review**, **capacity-planner**, **observability-review**,
 **deployment-risk-review**, **dependency-upgrade-review**, **tech-debt-assessor**,
-**resilience-review**, and **implementation-planner**.
+**resilience-review**, **implementation-planner**, **module-design**, and **codebase-architecture-review**.
 **change-impact-analyzer** is also framework-compliant and follows the bounded impact pipeline.
 **production-readiness-review** is a read-only orchestrator that aggregates trusted CI, code-review,
 build-provenance, SCM-policy, change-impact, deployment-risk, and applicable specialist-review evidence
 into one fail-closed verdict for one exact PR/MR/release candidate.
 
 `test-writer` is a thin router (like `who-owns-x-bot`/`release-readiness-checker`) that classifies a
-test-writing request by level and dispatches to exactly one of `unit-test-creator`,
-`integration-test-creator`, `contract-test-creator`, `e2e-test-creator`, or `api-test-creator` — it has no detection or
-generation logic of its own; see [shared/test-creation-principles.md](shared/test-creation-principles.md)
-for what the five dispatch targets share.
+test-writing request by level and dispatches to one or more of `unit-test-creator`,
+`integration-test-creator`, `contract-test-creator`, `e2e-test-creator`, and `api-test-creator` as the
+request requires (a single explicitly named level still routes to just that one specialist) — it has
+no detection or generation logic of its own; see
+[shared/test-creation-principles.md](shared/test-creation-principles.md) for what the five dispatch
+targets share.
 Design spec: [2025-06-30-unified-skill-framework-design.md](../superpowers/specs/2025-06-30-unified-skill-framework-design.md).
 
 `who-owns-x-bot`, `pr-gatekeeper`, `incident-triage-agent`, and `backlog-runner` are each in

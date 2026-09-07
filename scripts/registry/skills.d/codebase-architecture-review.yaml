@@ -27,15 +27,6 @@ codebase-architecture-review:
   output_contract:
     produces:
     - codebase_architecture_report
-    produce_fields:
-      codebase_architecture_report:
-      - title
-      - scope
-      - analysis_budget
-      - evidence_summary
-      - candidates
-      - top_recommendation
-      - limitations
   dependencies: []
   degraded_behavior:
     missing_capability: host.repository.read

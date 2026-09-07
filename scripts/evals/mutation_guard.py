@@ -21,8 +21,8 @@ from pathlib import Path
 from typing import Any
 
 from scripts.evals.golden import GoldenCase, field_matches_pattern, golden_case_index, resolve_path, run_golden_case
-from scripts.evals.types import EvalResult
-from scripts.yaml_safety import load_unique_yaml_file, require_mapping
+from scripts.evals.types import EvalResult, load_eval_contract, load_mutation_anchors
+from scripts.yaml_safety import require_mapping
 
 
 def _set_path(data: dict[str, Any], dotted_path: str, value: Any) -> None:
@@ -43,17 +43,19 @@ def _set_path(data: dict[str, Any], dotted_path: str, value: Any) -> None:
 def run_guardrail_mutation_checks(
     root: Path,
     golden_cases: list[GoldenCase],
+    *,
+    contract: dict[str, Any] | None = None,
 ) -> list[EvalResult]:
-    eval_contract = require_mapping(
-        load_unique_yaml_file(root / "scripts" / "registry" / "eval_contracts.yaml"),
-        "eval contracts",
-    )
-    adversarial = require_mapping(eval_contract.get("adversarial_classes"), "adversarial_classes")
-    anchor_doc = require_mapping(
-        load_unique_yaml_file(root / "scripts" / "registry" / "mutation_anchors.yaml"),
-        "mutation anchors",
-    )
-    anchors = require_mapping(anchor_doc.get("anchors"), "mutation anchors.anchors")
+    """`contract` is eval_contracts.yaml, already loaded -- pass it when the caller has
+    already read it (as `__main__.run_all` does) so this doesn't parse the file again;
+    falls back to loading it when called on its own. `mutation_anchors.yaml` is always
+    loaded here via the shared `load_mutation_anchors`, which also fixes this function's
+    previous gap: it used to skip mutation_anchors.yaml's schema_version check entirely.
+    """
+    if contract is None:
+        contract = load_eval_contract(root)
+    adversarial = require_mapping(contract.get("adversarial_classes"), "adversarial_classes")
+    anchors = load_mutation_anchors(root)
     golden_by_ref = golden_case_index(golden_cases)
 
     output: list[EvalResult] = []

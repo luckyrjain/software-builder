@@ -27,25 +27,6 @@ module-design:
   output_contract:
     produces:
     - module_design_spec
-    produce_fields:
-      module_design_spec:
-      - title
-      - module_scope
-      - responsibility
-      - callers
-      - contract_surface
-      - invariants
-      - dependency_direction
-      - seams
-      - adapters
-      - errors
-      - state_model
-      - concurrency_expectations
-      - performance_sensitive_behavior
-      - test_surface
-      - migration_plan
-      - alternatives_rejected
-      - unresolved_questions
   dependencies: []
   degraded_behavior:
     missing_capability: host.repository.read

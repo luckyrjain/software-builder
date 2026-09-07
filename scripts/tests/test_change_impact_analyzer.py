@@ -5,6 +5,7 @@ from scripts.evals.dispatcher import dispatch_prompt
 from scripts.registry.artifact_contracts import validate_artifact_result
 from scripts.registry.load import load_registry
 from scripts.registry.canonical_manifest import load_canonical_manifest
+from scripts.registry.composition_contracts import default_produce_fields, load_contracts
 from scripts.yaml_safety import load_unique_frontmatter
 from scripts.change_impact import (
     _diff_paths,
@@ -126,12 +127,14 @@ def test_change_impact_skill_declares_read_only_capabilities_and_contract() -> N
             },
         ],
     }
-    assert skill["output_contract"] == {
-        "produces": ["change_impact_report"],
-        "produce_fields": {
-            "change_impact_report": composition_fields(),
-        },
-    }
+    # No explicit produce_fields override in the fragment: it would duplicate
+    # artifact_schemas.change_impact_report.fields below, so it is omitted.
+    assert skill["output_contract"] == {"produces": ["change_impact_report"]}
+    _, artifact_schemas, _, composition = load_contracts(ROOT / "skills.yaml")
+    assert (
+        default_produce_fields(composition["change-impact-analyzer"], "change_impact_report", artifact_schemas)
+        == composition_fields()
+    )
 
 
 def composition_fields() -> list[str]:

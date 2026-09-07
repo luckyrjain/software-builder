@@ -46,18 +46,6 @@ prd-architect:
   output_contract:
     produces:
     - prd_report
-    produce_fields:
-      prd_report:
-      - title
-      - build_readiness
-      - depth
-      - response_mode
-      - assessment_target
-      - normalized_decision
-      - findings
-      - conditions
-      - required_actions
-      - evidence_refs
   dependencies: []
   version_source: skill_frontmatter_legacy_numeric
   degraded_behavior:

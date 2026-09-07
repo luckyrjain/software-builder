@@ -703,3 +703,88 @@ def test_release_workflow_runs_contract_and_bundle_verification_before_upload() 
     upload_at = workflow.index("Upload release assets")
     assert contract_at < upload_at
     assert bundle_at < upload_at
+
+
+# --- CLI entrypoints (main()) -----------------------------------------------
+#
+# release.yml (the actual production seam) invokes these three scripts as
+# `python3 scripts/X.py ...`, not their internal functions -- until now, only
+# verify_release_tag.main was covered at that seam (test_release_workflow.py); these
+# fill the same gap for the other three release-pipeline scripts, covering argv
+# parsing, the exception-to-exit-code mapping, and stdout/stderr shape.
+
+
+def test_package_release_main_reports_ok_and_writes_checksums(tmp_path: Path, capsys) -> None:
+    from scripts.package_release import main as package_release_main
+
+    root, _ = _minimal_repo(tmp_path)
+    output = tmp_path / "out"
+
+    exit_code = package_release_main(["--repo-root", str(root), "--output-dir", str(output)])
+
+    assert exit_code == 0
+    captured = capsys.readouterr()
+    assert captured.out.count("ok: ") == 3
+    archives = list(output.glob("*.tar.gz"))
+    assert len(archives) == 1
+    assert (output / f"{archives[0].name[:-len('.tar.gz')]}.sha256").is_file()
+    assert (output / f"{archives[0].name[:-len('.tar.gz')]}.files.sha256").is_file()
+
+
+def test_package_release_main_reports_error_on_failure(tmp_path: Path, capsys) -> None:
+    from scripts.package_release import main as package_release_main
+
+    # No _minimal_repo() setup at all: package_release() fails closed reading VERSION,
+    # which main() must convert to a clean `error: ...` line and exit 1, not a raw traceback.
+    output = tmp_path / "out"
+
+    exit_code = package_release_main(["--repo-root", str(tmp_path), "--output-dir", str(output)])
+
+    assert exit_code == 1
+    assert capsys.readouterr().err.startswith("error: ")
+
+
+def test_release_contract_main_reports_ok(tmp_path: Path, capsys) -> None:
+    from scripts.release_contract import main as release_contract_main
+
+    root, _ = _minimal_repo(tmp_path)
+
+    exit_code = release_contract_main(["--repo-root", str(root)])
+
+    assert exit_code == 0
+    assert capsys.readouterr().out == "ok: release contract validates\n"
+
+
+def test_release_contract_main_reports_error_without_a_contract(tmp_path: Path, capsys) -> None:
+    from scripts.release_contract import main as release_contract_main
+
+    exit_code = release_contract_main(["--repo-root", str(tmp_path)])
+
+    assert exit_code == 1
+    assert "error: " in capsys.readouterr().err
+
+
+def test_verify_release_bundle_main_reports_ok(tmp_path: Path, capsys) -> None:
+    from scripts.verify_release_bundle import main as verify_release_bundle_main
+
+    root, _ = _minimal_repo(tmp_path)
+    output = tmp_path / "out"
+    output.mkdir()
+    archive, _ = package_release(root, output)
+
+    exit_code = verify_release_bundle_main([str(archive), "--repo-root", str(root)])
+
+    assert exit_code == 0
+    assert capsys.readouterr().out == f"ok: {archive} verified\n"
+
+
+def test_verify_release_bundle_main_reports_error_on_missing_archive(tmp_path: Path, capsys) -> None:
+    from scripts.verify_release_bundle import main as verify_release_bundle_main
+
+    # A path that does not exist: verify_release_bundle() does not itself convert every
+    # filesystem failure into an error string (see main()'s own comment), so this exercises
+    # main()'s OSError-to-exit-1 fallback specifically, not just its normal error-list path.
+    exit_code = verify_release_bundle_main([str(tmp_path / "does-not-exist.tar.gz")])
+
+    assert exit_code == 1
+    assert capsys.readouterr().err.startswith("error: ")

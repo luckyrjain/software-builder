@@ -25,9 +25,15 @@ from typing import Any
 from scripts.evals.dispatcher import dispatch_prompt
 from scripts.evals.golden import GoldenCase, field_matches_pattern, golden_case_index
 from scripts.evals.scenario_harness import DIMENSIONS
-from scripts.evals.types import EvalResult, eval_result, load_eval_contract, missing_and_failing
+from scripts.evals.types import (
+    EvalResult,
+    eval_result,
+    load_eval_contract,
+    load_mutation_anchors,
+    missing_and_failing,
+)
 from scripts.registry.schema import Registry
-from scripts.yaml_safety import load_unique_yaml_file, require_mapping
+from scripts.yaml_safety import require_mapping
 
 BATCH3_SKILL = "batch3"
 REQUIRED_DIMENSIONS = DIMENSIONS
@@ -232,13 +238,10 @@ def _mutation_anchor_matrix(
     golden_cases: Iterable[GoldenCase],
 ) -> EvalResult:
     adversarial = require_mapping(contract.get("adversarial_classes"), "adversarial_classes")
-    anchor_doc = require_mapping(
-        load_unique_yaml_file(root / "scripts" / "registry" / "mutation_anchors.yaml"),
-        "mutation anchors",
-    )
-    if anchor_doc.get("schema_version") != 1:
-        return _result("mutation-anchor-matrix", ["mutation_anchors.schema_version must be 1"])
-    anchors = require_mapping(anchor_doc.get("anchors"), "mutation anchors.anchors")
+    try:
+        anchors = load_mutation_anchors(root)
+    except (OSError, ValueError) as exc:
+        return _result("mutation-anchor-matrix", [str(exc)])
     messages: list[str] = []
     if set(anchors) != set(adversarial):
         messages.append(

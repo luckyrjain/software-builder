@@ -24,6 +24,7 @@ from reference_utils import (
     framework_relative_path,
     is_ignored_package_path,
     is_local_markdown_link,
+    reject_sensitive_files,
     reject_symlinks,
     rewrite_framework_links,
     sha256_file,
@@ -119,6 +120,7 @@ def vendor_readme_superpowers_specs(repo_root: Path, package_root: Path) -> None
 def vendor_framework_tree(repo_root: Path, package_root: Path) -> list[str]:
     framework_src = repo_root / "docs" / "skill-framework"
     reject_symlinks(framework_src, "vendored framework tree")
+    reject_sensitive_files(framework_src, "vendored framework tree")
     framework_dest = package_root / "docs" / "skill-framework"
     if framework_dest.exists():
         shutil.rmtree(framework_dest)
@@ -261,6 +263,7 @@ def package_skill(
         raise FileNotFoundError(f"skill not found at {skill_md}")
 
     reject_symlinks(skill_src, f"skill source tree ({skill})")
+    reject_sensitive_files(skill_src, f"skill source tree ({skill})")
 
     if dest.exists():
         shutil.rmtree(dest)
@@ -271,8 +274,9 @@ def package_skill(
     # a .git checkout, and an *extracted release bundle*, which carries RELEASE-MANIFEST.json
     # and no .git at all. An index-based selector here would package zero files in the second
     # flow, breaking the primary end-user install path. Containment is enforced instead by
-    # reject_symlinks() above plus is_ignored_package_path() via copytree_ignore(), which is
-    # the same exclusion decision `--verify` re-applies to the installed tree.
+    # reject_symlinks()/reject_sensitive_files() above plus is_ignored_package_path() via
+    # copytree_ignore(), which is the same exclusion decision `--verify` re-applies to the
+    # installed tree.
     shutil.copytree(
         skill_src,
         dest,

@@ -372,16 +372,6 @@ skills:
     - api_design_review_report
     consumes:
     - assessment_context
-    produce_fields:
-      api_design_review_report:
-      - title
-      - verdict
-      - assessment_target
-      - normalized_decision
-      - findings
-      - conditions
-      - required_actions
-      - evidence_refs
     consume_fields:
       assessment_context:
       - assessment_target
@@ -395,11 +385,6 @@ skills:
     - test_suite
     consumes:
     - implementation_task
-    produce_fields:
-      test_suite:
-      - tests
-      - framework
-      - target_path
     consume_fields:
       implementation_task:
       - task_id
@@ -422,16 +407,6 @@ skills:
     consumes:
     - system_design_spec
     - prd_report
-    produce_fields:
-      architecture_review_report:
-      - title
-      - decision
-      - assessment_target
-      - normalized_decision
-      - findings
-      - conditions
-      - required_actions
-      - evidence_refs
     consume_fields:
       system_design_spec:
       - title
@@ -459,16 +434,6 @@ skills:
     - capacity_plan
     consumes:
     - assessment_context
-    produce_fields:
-      capacity_plan:
-      - title
-      - headroom
-      - assessment_target
-      - normalized_decision
-      - findings
-      - conditions
-      - required_actions
-      - evidence_refs
     consume_fields:
       assessment_context:
       - assessment_target
@@ -483,25 +448,6 @@ skills:
     consumes:
     - mr_context
     - assessment_context
-    produce_fields:
-      change_impact_report:
-      - title
-      - assessment_target
-      - coverage_status
-      - material_unknowns
-      - impacted_repositories
-      - criticality
-      - change_classes
-      - impacted_services
-      - impacted_contracts
-      - impacted_data
-      - impacted_dependencies
-      - impacted_owners
-      - required_tests
-      - operational_impacts
-      - review_triggers
-      - unknowns
-      - evidence_refs
     consume_fields:
       mr_context:
       - project
@@ -518,26 +464,12 @@ skills:
     produces:
     - codebase_architecture_report
     consumes: []
-    produce_fields:
-      codebase_architecture_report:
-      - title
-      - scope
-      - analysis_budget
-      - evidence_summary
-      - candidates
-      - top_recommendation
-      - limitations
     write_authority: read-only
   contract-test-creator:
     produces:
     - test_suite
     consumes:
     - implementation_task
-    produce_fields:
-      test_suite:
-      - tests
-      - framework
-      - target_path
     consume_fields:
       implementation_task:
       - task_id
@@ -558,27 +490,12 @@ skills:
     produces:
     - cost_sweep_rollup
     consumes: []
-    produce_fields:
-      cost_sweep_rollup:
-      - items
-      - generated_at
-      - source_revision
     write_authority: read-only
   database-review:
     produces:
     - database_review_report
     consumes:
     - assessment_context
-    produce_fields:
-      database_review_report:
-      - title
-      - verdict
-      - assessment_target
-      - normalized_decision
-      - findings
-      - conditions
-      - required_actions
-      - evidence_refs
     consume_fields:
       assessment_context:
       - assessment_target
@@ -592,16 +509,6 @@ skills:
     - dependency_upgrade_report
     consumes:
     - assessment_context
-    produce_fields:
-      dependency_upgrade_report:
-      - title
-      - verdict
-      - assessment_target
-      - normalized_decision
-      - findings
-      - conditions
-      - required_actions
-      - evidence_refs
     consume_fields:
       assessment_context:
       - assessment_target
@@ -615,17 +522,6 @@ skills:
     - deployment_risk_report
     consumes:
     - assessment_context
-    produce_fields:
-      deployment_risk_report:
-      - title
-      - risk
-      - deployment_confidence
-      - assessment_target
-      - normalized_decision
-      - findings
-      - conditions
-      - required_actions
-      - evidence_refs
     consume_fields:
       assessment_context:
       - assessment_target
@@ -645,11 +541,6 @@ skills:
     - test_suite
     consumes:
     - implementation_task
-    produce_fields:
-      test_suite:
-      - tests
-      - framework
-      - target_path
     consume_fields:
       implementation_task:
       - task_id
@@ -681,21 +572,6 @@ skills:
     - observability_review_report
     - resilience_review_report
     - dependency_upgrade_report
-    produce_fields:
-      implementation_plan:
-      - plan_set_id
-      - plan_id
-      - title
-      - readiness
-      - assessment_target
-      - target_repo
-      - external_dependencies
-      - source_refs
-      - tasks
-      - execution_waves
-      - sequencing_constraints
-      - verification_gates
-      - traceability
     consume_fields:
       system_design_spec:
       - title
@@ -808,15 +684,6 @@ skills:
     - ownership_lookup
     consumes:
     - mr_context
-    produce_fields:
-      rca_report:
-      - assessment_metadata
-      - root_cause
-      - confidence
-      ownership_lookup:
-      - query
-      - squad
-      - confidence
     consume_fields:
       mr_context:
       - project
@@ -827,11 +694,6 @@ skills:
     - test_suite
     consumes:
     - implementation_task
-    produce_fields:
-      test_suite:
-      - tests
-      - framework
-      - target_path
     consume_fields:
       implementation_task:
       - task_id
@@ -881,35 +743,11 @@ skills:
     produces:
     - migration_status_rollup
     consumes: []
-    produce_fields:
-      migration_status_rollup:
-      - items
-      - generated_at
-      - source_revision
     write_authority: read-only
   module-design:
     produces:
     - module_design_spec
     consumes: []
-    produce_fields:
-      module_design_spec:
-      - title
-      - module_scope
-      - responsibility
-      - callers
-      - contract_surface
-      - invariants
-      - dependency_direction
-      - seams
-      - adapters
-      - errors
-      - state_model
-      - concurrency_expectations
-      - performance_sensitive_behavior
-      - test_surface
-      - migration_plan
-      - alternatives_rejected
-      - unresolved_questions
     write_authority: read-only
   mysql-to-postgres-sql:
     produces:
@@ -928,16 +766,6 @@ skills:
     - observability_review_report
     consumes:
     - assessment_context
-    produce_fields:
-      observability_review_report:
-      - title
-      - coverage
-      - assessment_target
-      - normalized_decision
-      - findings
-      - conditions
-      - required_actions
-      - evidence_refs
     consume_fields:
       assessment_context:
       - assessment_target
@@ -951,16 +779,6 @@ skills:
     - performance_review_report
     consumes:
     - assessment_context
-    produce_fields:
-      performance_review_report:
-      - title
-      - verdict
-      - assessment_target
-      - normalized_decision
-      - findings
-      - conditions
-      - required_actions
-      - evidence_refs
     consume_fields:
       assessment_context:
       - assessment_target
@@ -974,19 +792,6 @@ skills:
     - mr_review_report
     consumes:
     - mr_context
-    produce_fields:
-      mr_review_report:
-      - review_metadata
-      - posted
-      - head_sha
-      - posting_mode
-      - integrated_revision
-      - assessment_target
-      - normalized_decision
-      - findings
-      - conditions
-      - required_actions
-      - evidence_refs
     consume_fields:
       mr_context:
       - project
@@ -998,19 +803,6 @@ skills:
     - mr_review_report
     consumes:
     - mr_context
-    produce_fields:
-      mr_review_report:
-      - review_metadata
-      - posted
-      - head_sha
-      - posting_mode
-      - integrated_revision
-      - assessment_target
-      - normalized_decision
-      - findings
-      - conditions
-      - required_actions
-      - evidence_refs
     consume_fields:
       mr_context:
       - project
@@ -1022,18 +814,6 @@ skills:
     - prd_report
     consumes:
     - implementation_task
-    produce_fields:
-      prd_report:
-      - title
-      - build_readiness
-      - depth
-      - response_mode
-      - assessment_target
-      - normalized_decision
-      - findings
-      - conditions
-      - required_actions
-      - evidence_refs
     consume_fields:
       implementation_task:
       - task_id
@@ -1057,21 +837,6 @@ skills:
     - performance_review_report
     - capacity_plan
     - dependency_upgrade_report
-    produce_fields:
-      production_readiness_report:
-      - title
-      - assessment_target
-      - source_revision
-      - build_provenance_ref
-      - criticality
-      - verdict
-      - dimension_statuses
-      - operational_evidence
-      - blockers
-      - conditions
-      - waivers
-      - required_actions
-      - evidence_refs
     consume_fields:
       assessment_context:
       - assessment_target
@@ -1193,11 +958,6 @@ skills:
     - k8s_rightsizing_report
     - rca_report
     - production_readiness_report
-    produce_fields:
-      digest_report:
-      - sections
-      - generated_at
-      - source_revisions
     consume_fields:
       production_readiness_report:
       - assessment_target
@@ -1239,16 +999,6 @@ skills:
     - resilience_review_report
     consumes:
     - assessment_context
-    produce_fields:
-      resilience_review_report:
-      - title
-      - verdict
-      - assessment_target
-      - normalized_decision
-      - findings
-      - conditions
-      - required_actions
-      - evidence_refs
     consume_fields:
       assessment_context:
       - assessment_target
@@ -1262,16 +1012,6 @@ skills:
     - security_review_report
     consumes:
     - assessment_context
-    produce_fields:
-      security_review_report:
-      - title
-      - verdict
-      - assessment_target
-      - normalized_decision
-      - findings
-      - conditions
-      - required_actions
-      - evidence_refs
     consume_fields:
       assessment_context:
       - assessment_target
@@ -1293,16 +1033,6 @@ skills:
     consumes:
     - prd_report
     - architecture_review_report
-    produce_fields:
-      system_design_spec:
-      - title
-      - readiness
-      - assessment_target
-      - normalized_decision
-      - findings
-      - conditions
-      - required_actions
-      - evidence_refs
     consume_fields:
       prd_report:
       - title
@@ -1323,22 +1053,12 @@ skills:
     produces:
     - tech_debt_assessment
     consumes: []
-    produce_fields:
-      tech_debt_assessment:
-      - title
-      - items
     write_authority: read-only
   test-writer:
     produces:
     - test_orchestration_result
     consumes:
     - implementation_task
-    produce_fields:
-      test_orchestration_result:
-      - test_plan
-      - orchestration_status
-      - unfinished_levels
-      - level_reports
     consume_fields:
       implementation_task:
       - task_id
@@ -1360,11 +1080,6 @@ skills:
     - test_suite
     consumes:
     - implementation_task
-    produce_fields:
-      test_suite:
-      - tests
-      - framework
-      - target_path
     consume_fields:
       implementation_task:
       - task_id
@@ -1387,11 +1102,6 @@ skills:
     consumes:
     - migration_status_rollup
     - cost_sweep_rollup
-    produce_fields:
-      digest_report:
-      - sections
-      - generated_at
-      - source_revisions
     consume_fields:
       migration_status_rollup:
       - items

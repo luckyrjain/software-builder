@@ -413,3 +413,32 @@ def test_capability_collection_is_scoped_to_capabilities_subtree() -> None:
     for entry in skills.values():
         names.update(_collect_capability_names(entry.get("capabilities")))
     assert names == {"datadog.query_metrics", "gitlab.get_merge_request"}
+
+
+def test_registered_skills_sees_an_unmerged_skills_d_fragment(tmp_path: Path) -> None:
+    # Regression test: _registered_skills() used to read skills.yaml directly
+    # (scripts.yaml_safety.load_unique_yaml_file), bypassing schema.load_registry_raw --
+    # the one choke point that merges scripts/registry/skills.d/*.yaml fragments in before
+    # the next `make generate` writes them back to skills.yaml's own skills: mapping. A
+    # skill that exists only as a new, not-yet-merged fragment was invisible to this
+    # module's checks (e.g. validate_policy's CODEOWNERS/deprecation coverage) even though
+    # `python3 -m scripts.registry validate` already sees it correctly.
+    from scripts.operational_upkeep import _registered_skills
+
+    (tmp_path / "skills.yaml").write_text(
+        "schema_version: 1\nskills:\n  stale-inline-skill:\n    path: stale-inline-skill\n",
+        encoding="utf-8",
+    )
+    fragments_dir = tmp_path / "scripts" / "registry" / "skills.d"
+    fragments_dir.mkdir(parents=True)
+    (fragments_dir / "fragment-only-skill.yaml").write_text(
+        "fragment-only-skill:\n  path: fragment-only-skill\n",
+        encoding="utf-8",
+    )
+
+    skills = _registered_skills(tmp_path)
+
+    # The fragment directory's presence means skills.d/ is now the source of truth for
+    # `skills:` (see schema.load_registry_raw), so the stale inline entry is gone and the
+    # fragment-only skill is visible -- exactly load_registry_raw's own documented contract.
+    assert set(skills) == {"fragment-only-skill"}

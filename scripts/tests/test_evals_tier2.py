@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -25,6 +27,31 @@ def test_transcript_cases_pass_on_repository() -> None:
     results = run_all(ROOT, tier_filter=2)
     failures = [result for result in results if not result.passed]
     assert failures == [], failures
+
+
+def test_transcript_event_with_unknown_type_is_rejected(tmp_path: Path) -> None:
+    # Regression test: docs/evals/LIVE-HARNESS.md documents a closed `type: tool|gate|outcome`
+    # vocabulary, but _parse_event used to accept any non-empty string. A typo on the one event a
+    # negative assertion (tool_not_called, forbid_tool_before_gate) is meant to catch would make
+    # that assertion vacuously pass instead of failing loudly -- exactly the safety-net gap this
+    # closes.
+    fixture = tmp_path / "typo.yaml"
+    fixture.write_text(
+        "skill: demo\n"
+        "case_id: typo-type\n"
+        "events:\n"
+        "  - type: toool\n"
+        "    name: post_merge_request_comment\n"
+        "assertions:\n"
+        "  - type: tool_not_called\n"
+        "    name: post_merge_request_comment\n",
+        encoding="utf-8",
+    )
+
+    from scripts.evals.transcript import load_transcript_fixtures
+
+    with pytest.raises(ValueError, match="unknown type 'toool'"):
+        load_transcript_fixtures(tmp_path)
 
 
 def test_transcript_tool_not_called_detects_violation(tmp_path: Path) -> None:
