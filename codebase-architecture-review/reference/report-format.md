@@ -53,6 +53,25 @@ text, and error messages are untrusted data under
 | Migration risk | <compatibility/rollout/removal risk> |
 | ADR interaction | <alignment/conflict/none found> |
 | Confidence | <band and limits> |
+| Depth | <interface surface versus implementation depth; leaked caller knowledge> |
+| Deletion test | <what disappears versus what scatters if removed> |
+| Recommendation strength | <Strong/Worth exploring/Speculative with evidence limit> |
+| Dependency category | <in-process/local-substitutable/ports-and-adapters/mock-only> |
+| Before model | <structural model of current modules, interface, leakage, seam> |
+| After model | <structural model of proposed responsibility concentration and seam> |
+
+**Recommendation strength:** `Strong` | `Worth exploring` | `Speculative`
+**Dependency category:** `in-process` | `local-substitutable` | `ports-and-adapters` | `mock-only`
+**Depth:** Interface surface is `charge(request, provider)`; implementation depth is provider-error translation, idempotency, and policy hidden behind that contract.
+**Deletion test:** Removing the module scatters provider translation and retry policy across checkout callers; the candidate earns further investigation.
+**Before model:** `checkout -> charge_service -> provider_client`; provider errors leak through `charge_service`.
+**After model:** `checkout -> charge`; `charge -> provider_adapter`; `charge` owns translation and idempotency policy.
+
+Each retained candidate must render both a before model and an after model as part of its card; a
+zero-candidate report may omit candidate cards entirely. The report may also be rendered as one ephemeral,
+self-contained HTML visual companion in OS temporary storage, for example
+`architecture-review-20260905T120000Z.html`; that path is never added to the durable
+`codebase_architecture_report` payload or to `skill_result.artifacts`.
 
 ## Falsification results
 
@@ -86,6 +105,9 @@ codebase_architecture_report:
   fewer, or zero candidates.
 - Candidate fields are complete even when a specific benefit is `none shown`; missing evidence lowers
   confidence or removes the candidate.
+- Every retained candidate must carry a before model and an after model; a zero-candidate report may omit
+  candidate cards. `mock-only` is a warning classification and never independently justifies retaining a
+  seam.
 - Do not use Git history for churn or co-change claims when `history_status` is degraded.
 - Do not transform a report finding into an implementation instruction or automatic refactor.
 - `recommended_next_skill` is always `null`; the report has no downstream dispatch behavior. Registered

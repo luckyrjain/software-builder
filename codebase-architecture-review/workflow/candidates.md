@@ -32,6 +32,15 @@ to falsify; otherwise do not create it.
 | Migration risk | Compatibility, rollout, and removal risks |
 | ADR interaction | Relevant ADR alignment, conflict, or `none found` |
 | Confidence | Evidence-backed confidence with stated limits |
+| Depth | Current interface surface versus implementation depth; identify leaked caller knowledge |
+| Deletion test | What disappears versus what scatters if the module/abstraction is removed |
+| Recommendation strength | Exactly `Strong`, `Worth exploring`, or `Speculative` with evidence limit |
+| Dependency category | Exactly `in-process`, `local-substitutable`, `ports-and-adapters`, or `mock-only` |
+| Before model | Structural model of current modules, interface, leakage, and seam |
+| After model | Structural model of proposed responsibility concentration and seam |
+
+`mock-only` cannot support retaining a seam by itself: a dependency category of `mock-only` is a warning
+classification, never evidence that a seam should be created or kept.
 
 Return 3–7 candidates only when supported. Fewer candidates, including zero, are valid outcomes. Never
 rank a speculative candidate above a well-supported absence of a candidate, and never perform a refactor.

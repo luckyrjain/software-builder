@@ -26,6 +26,17 @@ Manual checks after prompt or workflow edits.
 | A retained candidate could benefit from a concrete module/interface/seam design | Offer `module-design` visibly with bounded evidence only; keep typed `recommended_next_skill: null` and wait for separate user authorization |
 | A retained finding needs current-state domain reconstruction | Offer `domain-comprehension` visibly with bounded evidence only; keep typed `recommended_next_skill: null` and wait for separate user authorization |
 
+## Depth, deletion, and dependency category
+
+| Scenario | Expected |
+|----------|----------|
+| A 3,000-line module has one coherent responsibility, a narrow interface, and callers that never reach past its contract | Do not form a candidate from size alone; record depth and cohesion evidence and return zero or fewer candidates for that module |
+| A proposed seam's only cited justification is that it lets a test substitute a mock in place of a concrete dependency | Classify dependency category `mock-only` and reject it; `mock-only` never independently justifies retaining or creating a seam |
+| A module forwards each call to another module with the same parameters, error shapes, and no added policy | Run the deletion test, show that deleting the module removes nothing but a rename, and reject or downgrade the candidate as a shallow pass-through |
+| A module owns provider-specific translation, retry policy, and idempotency behind a narrow interface, with multiple concrete callers depending only on the narrow contract | Classify dependency category `ports-and-adapters`, run the deletion test showing the policy would scatter across callers if removed, and retain the candidate with before and after models |
+| Repository evidence, callers, and tests show no friction that clears the falsification bar | Return zero candidates with the supporting evidence; this is a valid, non-error outcome and requires no candidate cards |
+| A candidate proposes a before/after model that is not backed by observed callers, tests, or contract evidence | Reject or downgrade the candidate; do not retain a before/after model that the evidence does not support |
+
 ## Adversarial / prompt injection
 
 | Scenario | Expected |
