@@ -330,12 +330,16 @@ def test_codebase_design_skills_have_canonical_read_only_artifact_contracts() ->
         assert manifest["skills"][skill_id]["permissions"] == {
             "repository": "read", "external_actions": "none", "unattended": False, "merge": False,
         }
-        assert manifest["skills"][skill_id]["output_contract"] == {
-            "produces": [artifact], "produce_fields": {artifact: contract["fields"]},
-        }
+        # The fragment declares only `produces`: an explicit `produce_fields` would be a
+        # byte-for-byte duplicate of `artifact_schemas[artifact].fields` below, so it is
+        # omitted -- the same pattern every other producing skill's fragment follows.
+        # `composition_contracts._default_produce_fields` falls back to the artifact schema
+        # at validation time (exercised directly via `artifact_schemas` below); the raw
+        # `Contract.produce_fields` stays empty when nothing overrides the schema.
+        assert manifest["skills"][skill_id]["output_contract"] == {"produces": [artifact]}
         assert composition[skill_id].produces == [artifact]
         assert composition[skill_id].consumes == []
-        assert composition[skill_id].produce_fields == {artifact: contract["fields"]}
+        assert composition[skill_id].produce_fields == {}
         assert artifact in artifact_types
         assert artifact_schemas[artifact] == contract["fields"]
         assert platform["artifact_runtime"]["artifact_schema_versions"][artifact] == 1

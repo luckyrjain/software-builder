@@ -34,17 +34,6 @@ deployment-risk-review:
   output_contract:
     produces:
     - deployment_risk_report
-    produce_fields:
-      deployment_risk_report:
-      - title
-      - risk
-      - deployment_confidence
-      - assessment_target
-      - normalized_decision
-      - findings
-      - conditions
-      - required_actions
-      - evidence_refs
   dependencies: []
   degraded_behavior:
     missing_capability: host.report.write

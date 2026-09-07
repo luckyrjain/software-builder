@@ -37,11 +37,6 @@ cost-optimization-sprint-planner:
   output_contract:
     produces:
     - cost_sweep_rollup
-    produce_fields:
-      cost_sweep_rollup:
-      - items
-      - generated_at
-      - source_revision
   dependencies:
   - k8s-overprovisioning-datadog
   - squad-map

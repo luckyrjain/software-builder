@@ -57,11 +57,6 @@ weekly-squad-digest:
   output_contract:
     produces:
     - digest_report
-    produce_fields:
-      digest_report:
-      - sections
-      - generated_at
-      - source_revisions
   dependencies:
   - migration-program-manager
   - cost-optimization-sprint-planner

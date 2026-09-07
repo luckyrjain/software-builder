@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from scripts.registry.canonical_manifest import is_semver, load_canonical_manifest
-from scripts.registry.composition_contracts import load_contracts
+from scripts.registry.composition_contracts import default_produce_fields, load_contracts
 from scripts.registry.envelope_contract import (
     COMPLETION_STATUSES,
     CONFIDENCE_VALUES,
@@ -375,10 +375,7 @@ def validate_artifact_result(
             if isinstance(envelope.get("status"), str) and envelope.get("status") in {"BLOCKED", "FAILED", "ESCALATED"} and not envelope.get("blockers"):
                 errors.append(f"error: {artifact_type}: non-success results must declare blockers")
             if producer is not None and envelope.get("skill") == producer_skill:
-                required_payload_fields = producer.produce_fields.get(
-                    artifact_type,
-                    artifact_schemas[artifact_type],
-                )
+                required_payload_fields = default_produce_fields(producer, artifact_type, artifact_schemas)
                 claimed_artifacts = envelope.get("artifacts")
                 if isinstance(claimed_artifacts, list):
                     unproduced = sorted(set(claimed_artifacts) - set(producer.produces))

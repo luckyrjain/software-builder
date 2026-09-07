@@ -121,11 +121,6 @@ release-readiness-checker:
   output_contract:
     produces:
     - digest_report
-    produce_fields:
-      digest_report:
-      - sections
-      - generated_at
-      - source_revisions
   dependencies:
   - pr-review
   - k8s-overprovisioning-datadog

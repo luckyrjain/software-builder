@@ -60,12 +60,6 @@ test-writer:
   output_contract:
     produces:
     - test_orchestration_result
-    produce_fields:
-      test_orchestration_result:
-      - test_plan
-      - orchestration_status
-      - unfinished_levels
-      - level_reports
   dependencies:
   - unit-test-creator
   - integration-test-creator

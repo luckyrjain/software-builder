@@ -126,6 +126,11 @@ validate-agent-skills:
 validate-hosts:
 	@python3 -m scripts.registry validate-hosts
 
+# Not a lint-static prerequisite: crosscheck.validate_registry (run by validate-registry,
+# already a lint-static prerequisite) calls this same validate_capabilities_present check
+# against the same skills.yaml path, so running it again here would just repeat the same
+# work and print the same "missing capabilities block" errors twice. Kept as a standalone,
+# independently-runnable target for anyone who wants just this one check.
 backfill-capabilities-check:
 	@python3 -m scripts.registry backfill-capabilities --check
 
@@ -206,7 +211,7 @@ lint: lint-static lint-suites
 # across skills via `make -jN` and, only for the dominant scripts/tests/ suite, within
 # it via pytest-xdist (see PYTEST_XDIST_FLAG above). `make lint` still runs both groups
 # locally, in this order.
-lint-static: lint-platform-files validate-registry validate-agent-skills validate-hosts backfill-capabilities-check generate-check validate-evals validate-operational-upkeep lint-framework lint-incident-triage-agent lint-who-owns-x-bot lint-new-hire-guide lint-release-readiness-checker lint-cost-optimization-sprint-planner lint-backlog-runner lint-test-writer lint-prd-architect lint-architecture-review lint-system-design lint-api-design-review lint-database-review lint-security-review lint-performance-review lint-capacity-planner lint-observability-review lint-deployment-risk-review lint-dependency-upgrade-review lint-tech-debt-assessor lint-module-design lint-codebase-architecture-review lint-requirements-lock lint-python lint-actions-pinning lint-actions-security verify-install verify-install-all validate-review-contracts lint-scripts-shellcheck
+lint-static: lint-platform-files validate-registry validate-agent-skills validate-hosts generate-check validate-evals validate-operational-upkeep lint-framework lint-incident-triage-agent lint-who-owns-x-bot lint-new-hire-guide lint-release-readiness-checker lint-cost-optimization-sprint-planner lint-backlog-runner lint-test-writer lint-prd-architect lint-architecture-review lint-system-design lint-api-design-review lint-database-review lint-security-review lint-performance-review lint-capacity-planner lint-observability-review lint-deployment-risk-review lint-dependency-upgrade-review lint-tech-debt-assessor lint-module-design lint-codebase-architecture-review lint-requirements-lock lint-python lint-actions-pinning lint-actions-security verify-install verify-install-all validate-review-contracts lint-scripts-shellcheck
 
 lint-scripts-shellcheck:
 	@for f in scripts/*.sh; do \
