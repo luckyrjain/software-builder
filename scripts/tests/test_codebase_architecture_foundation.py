@@ -453,10 +453,23 @@ def test_architecture_report_requires_matt_visual_candidate_fields() -> None:
 
 
 def test_module_design_evaluates_depth_and_deletion_test() -> None:
-    text = (ROOT / "module-design/workflow/design.md").read_text()
-    assert "interface surface" in text
-    assert "deletion test" in text
-    assert "implementation depth" in text
+    design_text = (ROOT / "module-design/workflow/design.md").read_text()
+    assert "interface surface" in design_text
+    assert "deletion test" in design_text
+    assert "implementation depth" in design_text
+
+    report_format_text = (ROOT / "module-design/reference/report-format.md").read_text()
+    assert "## Depth assessment" in report_format_text
+    assert "Interface surface" in report_format_text
+    assert "Implementation depth" in report_format_text
+    assert "Caller knowledge currently leaked" in report_format_text
+    assert "Deletion test" in report_format_text
+
+    pressure_text = (ROOT / "module-design/reference/pressure-tests.md").read_text()
+    assert "dependency injection" in pressure_text
+    assert "pass-through" in pressure_text
+    assert "private helpers" in pressure_text
+    assert "depth, locality, test surface, and abstraction cost" in pressure_text
 
 
 def test_visual_report_is_ephemeral_and_safe() -> None:
