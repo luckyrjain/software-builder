@@ -553,6 +553,54 @@ def test_cmd_generate_populates_docs_readme_routing_table_when_escalation_matrix
     assert cmd_generate(tmp_path, check_only=True) == 0
 
 
+def test_cmd_generate_does_not_corrupt_prior_output_on_write_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Regression test for the bug scripts/atomic_write.py was extracted to fix
+    # (see its module docstring): _write_outputs used to write generated files
+    # directly with Path.write_text, so a failure partway through a multi-file
+    # `make generate` run could leave one of the generated files truncated. The
+    # existing package_release.py-side regression test
+    # (test_package_release_does_not_corrupt_prior_archive_on_build_failure)
+    # covers atomic_write's other call site; this covers the one the module was
+    # actually written for.
+    _write_minimal_registry_fixture(tmp_path)
+    (tmp_path / "docs" / "README.md").write_text(
+        "intro\n<!-- skill-doc-links:start -->\n<!-- skill-doc-links:end -->\n",
+        encoding="utf-8",
+    )
+    contracts_path = _write_minimal_composition_contracts(tmp_path)
+    monkeypatch.setattr("scripts.registry.composition_contracts.CONTRACTS_PATH", contracts_path)
+    monkeypatch.setattr("scripts.registry.cli.ROOT", tmp_path)
+
+    from scripts.registry import cli as cli_module
+
+    # A successful run first, so docs/README.md has real, current generated content --
+    # the content a failed second run must not disturb.
+    assert cli_module.cmd_generate(tmp_path, check_only=False) == 0
+    good_docs_readme = (tmp_path / "docs" / "README.md").read_text(encoding="utf-8")
+    assert "solo" in good_docs_readme
+
+    real_atomic_write_text = cli_module.atomic_write_text
+
+    def _fail_for_docs_readme(path: Path, content: str) -> None:
+        if path.name == "README.md" and path.parent.name == "docs":
+            # Simulates a write that never lands (disk full, process killed) --
+            # the real function is never called, so nothing at `path` changes.
+            raise OSError("simulated disk-full mid-write")
+        real_atomic_write_text(path, content)
+
+    monkeypatch.setattr(cli_module, "atomic_write_text", _fail_for_docs_readme)
+
+    with pytest.raises(OSError, match="simulated disk-full mid-write"):
+        cli_module.cmd_generate(tmp_path, check_only=False)
+
+    # docs/README.md must survive the failed run byte-for-byte -- not truncated,
+    # not partially overwritten -- exactly what atomic_write.py's temp-file-then-
+    # os.replace() pattern guarantees.
+    assert (tmp_path / "docs" / "README.md").read_text(encoding="utf-8") == good_docs_readme
+
+
 def test_validate_returns_tooling_exit_code_for_bad_yaml(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     (tmp_path / "skills.yaml").write_text("schema_version: [", encoding="utf-8")
     monkeypatch.setattr("scripts.registry.cli.ROOT", tmp_path)
