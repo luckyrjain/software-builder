@@ -125,6 +125,25 @@ def classify_install_destination(dest: Path, *, skill_id: str) -> str:
 IGNORED_DIR_NAMES = ("__pycache__", ".pytest_cache")
 IGNORED_FILE_PATTERNS = ("*.pyc", ".DS_Store", "*.swp", "*~")
 
+# Credential-shaped file names/suffixes that must never end up in a package, packaged
+# regardless of source: shared by generic_package.py (which raises on one inline, mid-walk,
+# while building the deterministic multi-skill bundle from Git's tracked-file index) and
+# reject_sensitive_files() below (a pre-pass over an arbitrary working tree, used by
+# package_skill.py's single-skill local install path, which -- unlike generic_package.py --
+# is not limited to git-tracked files and so cannot rely on "not committed" as a backstop).
+SENSITIVE_NAMES = frozenset({".env", ".netrc", "credentials.json", "secrets.yaml", "secrets.yml"})
+SENSITIVE_SUFFIXES = frozenset({".pem", ".key", ".p12", ".pfx"})
+
+
+def is_sensitive_path(name: str) -> bool:
+    """True if a bare filename (lowercased by the caller-facing wrappers) looks credential-shaped."""
+    lowered = name.lower()
+    return (
+        lowered in SENSITIVE_NAMES
+        or lowered.startswith(".env.")
+        or Path(lowered).suffix in SENSITIVE_SUFFIXES
+    )
+
 
 def is_ignored_package_path(rel_path: str) -> bool:
     """True if rel_path (posix-style, relative to a package/install root) is
@@ -190,6 +209,30 @@ def reject_symlinks(root: Path, description: str) -> None:
     if symlinks:
         raise ValueError(
             f"{description} contains symlink(s), which are not allowed: {', '.join(symlinks)}",
+        )
+
+
+def reject_sensitive_files(root: Path, description: str) -> None:
+    """Raise ValueError if any credential-shaped file (see SENSITIVE_NAMES/SENSITIVE_SUFFIXES
+    above) exists anywhere under root.
+
+    package_skill.py copies root's tree with shutil.copytree over the *working* tree, not
+    Git's tracked-file index (see its own docstring for why) -- an untracked, even
+    gitignored, `.env`/`credentials.json`/`*.pem` sitting in a skill directory would
+    otherwise be copied verbatim into every local install. generic_package.py's multi-skill
+    bundle is already git-tracked-only and separately refuses the same file shapes inline
+    while it walks; this is the equivalent up-front check for a copytree-based caller that
+    has no such backstop.
+    """
+    hits = sorted(
+        path.relative_to(root).as_posix()
+        for path in root.rglob("*")
+        if path.is_file() and not path.is_symlink() and is_sensitive_path(path.name)
+    )
+    if hits:
+        raise ValueError(
+            f"{description} contains potentially sensitive file(s), which are not allowed: "
+            f"{', '.join(hits)}",
         )
 
 

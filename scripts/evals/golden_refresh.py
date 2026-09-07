@@ -36,14 +36,15 @@ from scripts.evals.golden import load_golden_fixtures, run_golden_case
 
 
 def _make_yaml() -> YAML:
-    # Round-trip loader/dumper (matches scripts/registry/capability_catalog.py's
-    # convention) so a fixture's `# CAVEAT: ...` comments survive a refresh instead of
-    # being silently dropped, which plain yaml.safe_load/safe_dump would do.
+    # Round-trip loader/dumper -- the only ruamel round-trip user left in this repository
+    # (capability_catalog.yaml is now generated, not hand-edited, so nothing else needs one)
+    # -- so a fixture's `# CAVEAT: ...` comments survive a refresh instead of being silently
+    # dropped, which plain yaml.safe_load/safe_dump would do.
     rt_yaml = YAML(typ="rt")
     rt_yaml.preserve_quotes = True
     rt_yaml.width = 100000
     # golden fixtures indent sequence dashes two spaces under their key (`assertions:\n  - type: ...`),
-    # unlike skills.yaml's flush-left convention that scripts/registry/capability_catalog.py matches.
+    # matching this package's own evals/golden/**/*.yaml hand-authored style.
     rt_yaml.indent(mapping=2, sequence=4, offset=2)
     return rt_yaml
 

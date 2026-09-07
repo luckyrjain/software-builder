@@ -252,6 +252,21 @@ def test_package_skill_rejects_dangling_symlink_in_skill_source(isolated_repo: P
         package_skill(skill="unit-test-creator", repo_root=isolated_repo, dest=dest, host="test")
 
 
+def test_package_skill_rejects_untracked_credential_file_in_skill_source(
+    isolated_repo: Path, tmp_path: Path,
+) -> None:
+    # package_skill() copies the working tree, not Git's index (see its own docstring), so
+    # an untracked (even gitignored) credential-shaped file must still be caught -- "it was
+    # never committed" is not a backstop here the way it is for generic_package.py.
+    (isolated_repo / "unit-test-creator" / ".env").write_text("TOKEN=example\n", encoding="utf-8")
+
+    dest = tmp_path / "installed" / "unit-test-creator"
+    with pytest.raises(ValueError, match="potentially sensitive"):
+        package_skill(skill="unit-test-creator", repo_root=isolated_repo, dest=dest, host="test")
+
+    assert not dest.exists()
+
+
 def test_package_skill_rejects_symlink_pointing_inside_repo(isolated_repo: Path, tmp_path: Path) -> None:
     # A symlink that resolves to somewhere *inside* the repo is still a
     # symlink -- it can be swapped to point elsewhere later (TOCTOU) and it
