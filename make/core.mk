@@ -275,7 +275,7 @@ lint-pr-gatekeeper:
 	fi
 	@echo "  ok (framework refs + idempotency tests)"
 	@echo "lint-pr-gatekeeper: ask-point drift check (pr-review workflow vs auto-post-policy.md)"
-	@python3 pr-gatekeeper/scripts/check-ask-point-drift.py || \
+	@python3 scripts/check_pr_review_ask_point_drift.py || \
 		{ echo "error: pr-review ask-point drift detected — see pr-gatekeeper/reference/auto-post-policy.md" >&2; exit 1; }
 
 lint-k8s-skill:

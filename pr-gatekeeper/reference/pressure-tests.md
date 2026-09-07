@@ -3,7 +3,7 @@
 Manual checks after any edit to this skill's `workflow/*.md`, `reference/auto-post-policy.md`, or after
 any edit to `pr-review/workflow/*.md` (pr-gatekeeper drives pr-review unattended — a new pr-review
 ask-point that this skill doesn't answer deterministically hangs a webhook run forever). Run
-`python3 pr-gatekeeper/scripts/check-ask-point-drift.py` first (see
+`python3 scripts/check_pr_review_ask_point_drift.py` first (see
 [auto-post-policy.md](auto-post-policy.md)) — it catches gross drift mechanically; the rows below are
 for judgment calls the script can't make.
 
