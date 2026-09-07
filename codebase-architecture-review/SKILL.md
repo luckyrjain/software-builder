@@ -79,6 +79,9 @@ a time per [reference/lazy-load-index.md](reference/lazy-load-index.md).
 - Falsify every candidate before retaining it. Reject or downgrade candidates contradicted by tests, callers,
   ownership, compatibility constraints, ADRs, or counterevidence.
 - Do not turn a review finding into a design or implementation task. The report is the sole output.
+- Evaluate module depth and interface surface; never infer either from file size alone.
+- Apply the deletion test to every retained candidate and record the result.
+- Classify recommendation strength as `Strong`, `Worth exploring`, or `Speculative`; never retain a speculative candidate without stating the evidence limit.
 
 ## Cross-skill boundary
 

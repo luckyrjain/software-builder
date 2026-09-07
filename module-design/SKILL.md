@@ -74,6 +74,9 @@ Phase index: [reference/phase-index.md](reference/phase-index.md). Load one refe
 - When interface uncertainty exists, present **two materially different designs** with evidence, costs,
   affected callers, and a recommendation; do not make cosmetic variants look like alternatives.
 - Do not infer source writes or implementation work from a design. The report is the sole output.
+- Compare interface surface with implementation depth and caller knowledge.
+- Apply the deletion test before recommending a new module or seam.
+- Keep production callers and tests on the same meaningful interface.
 
 ## Cross-skill escalation
 

@@ -26,7 +26,8 @@ explicit unresolved question. Never silently omit a check.
    isolate a lower-level detail; do not introduce an interface merely to make mocking possible.
 4. **Seams and adapters** — retain or add a seam only for an observed variation, integration boundary, or
    production-observable test need. An adapter must translate or isolate a real contract; reject
-   mock-only and pass-through abstractions.
+   mock-only and pass-through abstractions. Evaluate the implementation depth and interface surface of
+   proposed seams; apply the deletion test to determine whether the module earns its abstraction cost.
 5. **Errors, state, and concurrency** — specify error taxonomy/ownership, state transitions, concurrency
    assumptions, idempotency/ordering where relevant, and recovery behavior. Say `not applicable` only
    with evidence.
