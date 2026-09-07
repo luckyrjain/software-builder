@@ -2913,3 +2913,9 @@ _Pre-merge WIP on `feat/squad-map-skill` (internal v1.0–v1.5) is consolidated 
   trust classification, and the external `assessment_context` handoff carrier.
 - Registry-derived skill/eval coverage counts no longer rely on hard-coded totals.
 - Documented scanner-safe adversarial fixture rules; secret-shaped negative fixtures remain runtime-generated.
+- `codebase-architecture-review` and `module-design` candidates now carry evidence-gated module-depth and
+  deletion-test analysis (recommendation strength, dependency category, before/after models);
+  `codebase-architecture-review` may additionally render an ephemeral, host-generated HTML companion in OS
+  temporary storage, never written into the repository or added to `skill_result.artifacts`.
+  `codebase_architecture_report`/`module_design_spec` schema versions and both skills' read-only,
+  report-only authority are unchanged.

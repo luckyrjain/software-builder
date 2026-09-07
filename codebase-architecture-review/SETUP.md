@@ -28,6 +28,19 @@ codebase-architecture-review/
   reference/               # Phase index, report format, smoke/pressure tests
 ```
 
+## Visual HTML report (optional, host-rendered)
+
+The report may also be rendered as one ephemeral, self-contained HTML companion, written by the host into
+OS temporary storage (for example `architecture-review-20260905T120000Z.html`) — never into the
+repository. This companion is not a durable artifact: it is never added to `codebase_architecture_report`
+or to `skill_result.artifacts`, and it carries no information the Markdown report does not already state.
+
+Rendering it needs outbound network access to two pinned CDNs at render time — Tailwind
+(`cdn.tailwindcss.com`) and Mermaid ESM (`cdn.jsdelivr.net/npm/mermaid@11`). If either CDN is unreachable,
+or the host has no browser to open the file in, the HTML still shows the Markdown report and fenced diagram
+source; this is expected degraded behavior, not a failure, and it never blocks the canonical Markdown
+report. See [reference/html-report.md](reference/html-report.md) for the full contract.
+
 ## Framework links
 
 - [skill-framework README](../docs/skill-framework/README.md)

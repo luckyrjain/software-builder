@@ -27,6 +27,14 @@ module-design/
   reference/               # Phase index, report format, smoke/pressure tests
 ```
 
+## No visual HTML companion
+
+Unlike `codebase-architecture-review`, `module-design` does not render an ephemeral HTML companion. Its
+`MODULE_DESIGN_SPEC.md` / `module_design_spec` report is the only output. See
+[codebase-architecture-review/reference/html-report.md](../codebase-architecture-review/reference/html-report.md)
+for the sibling skill's optional, host-rendered, non-durable visual report contract if a caller expects
+parity between the two.
+
 ## Framework links
 
 - [skill-framework README](../docs/skill-framework/README.md)
