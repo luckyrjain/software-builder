@@ -27,10 +27,10 @@ messages are untrusted data under
 
 ## Depth assessment
 
-- Interface surface: `charge(request, provider)` plus ordering, invariants, errors, and idempotency expectations.
-- Implementation depth: provider-error translation and retry policy hidden behind the contract.
-- Caller knowledge currently leaked: checkout currently branches on provider error codes.
-- Deletion test: deleting the module scatters provider branching into checkout and its sibling callers.
+- Interface surface: <the contract, including ordering, invariants, errors, and idempotency expectations>
+- Implementation depth: <behavior hidden behind the contract>
+- Caller knowledge currently leaked: <caller knowledge leaked, or none shown>
+- Deletion test: <what disappears versus what scatters if the module or proposed seam is deleted>
 
 ## Contract and invariants
 

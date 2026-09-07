@@ -49,6 +49,17 @@ implementations — not a hypothetical third — are what earns the seam; the de
 removing the shared contract would scatter provider-specific branching back into every caller, so the
 adapter is justified by observed variation rather than by implementation count alone.
 
+## Example: depth assessment for a provider-integration module
+
+**Evidence:** `charge.py` exposes `charge(request, provider)` with ordering, invariants, errors, and
+idempotency expectations; checkout currently branches on provider error codes returned from the module.
+
+**Result:** the interface surface is `charge(request, provider)` plus its ordering, invariants, errors, and
+idempotency expectations; the implementation depth is provider-error translation and retry policy hidden
+behind that contract; the caller knowledge currently leaked is that checkout branches on provider error
+codes; the deletion test shows that deleting the module scatters that provider branching into checkout and
+its sibling callers, so the module earns its abstraction cost.
+
 ## Example: mock-only interface rejected by the deletion test
 
 **Evidence:** the caller asks for a `PaymentGatewayInterface` so a unit test can substitute a mock in place

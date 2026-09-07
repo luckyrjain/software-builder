@@ -12,6 +12,8 @@ description: >
   reference/report-format.md's candidate card fields.
 recorded_output:
   artifact: codebase_architecture_report
+  artifacts:
+    - codebase_architecture_report
   repository_write_action: none
   automatic_refactor: false
   scope:
@@ -70,6 +72,16 @@ assertions:
   - type: field_equals
     path: recommended_next_skill
     value: null
+  # The ephemeral visual HTML companion (reference/html-report.md) is never a durable
+  # artifact: it must never appear in skill_result.artifacts, only in the returned
+  # temporary path text. Mirrors the forbid_pattern idiom in golden-report.yaml's
+  # diagram_label_rendered assertions.
+  - type: field_equals
+    path: artifacts
+    value: [codebase_architecture_report]
+  - type: forbid_pattern
+    path: artifacts
+    pattern: \.html
   # Matt-parity visual/candidate-depth report fields (Task 6): report content per
   # codebase-architecture-review/workflow/candidates.md and reference/report-format.md's
   # candidate card fields, not a codebase_architecture_report schema widening.

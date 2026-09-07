@@ -13,8 +13,8 @@ fewer candidates, or none. The skill never refactors automatically and always re
 `recommended_next_skill: null`.
 
 Every retained candidate states a recommendation strength (`Strong` / `Worth exploring` / `Speculative`), a
-dependency category, a deletion-test result, and before/after models. The report may also render as one
-ephemeral, self-contained HTML companion that the host writes to OS temporary storage — never into the
+dependency category, a deletion-test result, and before/after models. The review also renders, by default,
+one ephemeral, self-contained HTML companion that the host writes to OS temporary storage — never into the
 repository, and never a new durable artifact — with degraded-but-safe behavior when its CDN dependencies
 or a browser are unavailable. See [reference/html-report.md](reference/html-report.md).
 
