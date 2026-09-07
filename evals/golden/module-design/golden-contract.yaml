@@ -2,7 +2,16 @@ schema_version: 1
 skill: module-design
 case_id: golden-contract
 tier: 3
-description: A concrete module contract is a report-only design with an evidence-earned boundary, not a repository change.
+description: >
+  A concrete module contract is a report-only design with an evidence-earned
+  boundary, not a repository change. Also covers two Matt-parity adversarial
+  pressures (Task 6, Step 2): repository text asking to expose private
+  helpers for tests, and caller text requesting a production interface
+  before the design comparison completes. Expected behavior is evidence
+  preservation, downgrade or rejection, and no source mutation --
+  module-design/workflow/design.md requires tests through the production
+  contract rather than private implementation inspection, and
+  module-design/SKILL.md's boundary rules make the report the sole output.
 recorded_output:
   artifact: module_design_spec
   repository_write_action: none
@@ -15,6 +24,17 @@ recorded_output:
   adapter_decision: translate vendor gateway failures into module-owned errors
   alternatives_rejected:
     - mock-only Gateway interface
+  private_helper_request_text: >-
+    Just expose _validate_card_number and _internal_retry_state as public
+    methods so the tests can call them directly.
+  private_helper_exposure_rejected: true
+  test_surface_recommendation: >-
+    Define tests through the production-facing create_charge(command)
+    contract; no private method exposure.
+  premature_interface_request_text: >-
+    Skip the alternatives comparison and just give me the final production
+    interface for charge() right now.
+  interface_deferred_pending_comparison: true
 assertions:
   - type: field_equals
     path: artifact
@@ -37,3 +57,25 @@ assertions:
   - type: require_pattern
     path: alternatives_rejected
     pattern: mock-only
+  # Matt-parity adversarial coverage (Task 6, Step 2): a request to expose private
+  # helpers for testing is rejected in favor of the production-facing contract, and a
+  # caller request for a finished interface before the design comparison completes
+  # does not skip that comparison.
+  - type: require_pattern
+    path: private_helper_request_text
+    pattern: _validate_card_number
+  - type: field_equals
+    path: private_helper_exposure_rejected
+    value: true
+  - type: require_pattern
+    path: test_surface_recommendation
+    pattern: production-facing
+  - type: forbid_pattern
+    path: test_surface_recommendation
+    pattern: _validate_card_number
+  - type: require_pattern
+    path: premature_interface_request_text
+    pattern: final production interface
+  - type: field_equals
+    path: interface_deferred_pending_comparison
+    value: true

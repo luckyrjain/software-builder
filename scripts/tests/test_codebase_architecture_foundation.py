@@ -378,6 +378,14 @@ def test_codebase_design_eval_admission_has_required_ids_and_dimension_coverage(
         ("codebase-architecture-review", "golden-report"),
         ("codebase-architecture-review", "golden-injection"),
     } <= tier3_ids
+    assert {
+        ("codebase-architecture-review", "deepening-quality"),
+        ("module-design", "deep-module-quality"),
+    } <= tier2_ids
+    assert {
+        ("codebase-architecture-review", "deepening-report"),
+        ("module-design", "deep-module-contract"),
+    } <= tier3_ids
 
     required_skills = {"module-design", "codebase-architecture-review"}
     for dimension in ("positive", "negative", "ambiguous", "adversarial", "degraded"):

@@ -3,14 +3,13 @@ skill: codebase-architecture-review
 case_id: deepening-report
 tier: 3
 description: >
-  A bounded src/orders review as current main actually renders it: read-only,
-  no automatic refactor, zero retained candidates. This is the RED baseline
-  for Matt-parity report depth (docs/superpowers/specs/2026-09-05-matt-architecture-parity-bridge.md,
-  R1-R5/R7-R9): the existing-shape assertions stay green against this
-  recorded output, but the recommendation_strength/dependency_category/before_model/after_model/deletion_test
-  assertions fail because current main's report format has none of those
-  fields. Tasks 2-6 add them to report-format.md and report.md; this fixture
-  is not modified to make them pass.
+  A bounded src/orders review under Matt-parity report depth
+  (docs/superpowers/specs/2026-09-05-matt-architecture-parity-bridge.md,
+  R1-R5/R7-R9): read-only, no automatic refactor, one retained candidate
+  falsified and carried through with a recommendation strength, dependency
+  category, before model, after model, and deletion test per
+  codebase-architecture-review/workflow/candidates.md and
+  reference/report-format.md's candidate card fields.
 recorded_output:
   artifact: codebase_architecture_report
   repository_write_action: none
@@ -27,10 +26,33 @@ recorded_output:
     status: available
     commits: 42
     days: 90
-  candidates: []
-  candidate_count: 0
+  candidates:
+    - id: CAR-1
+      recommendation_strength: Strong
+      dependency_category: ports-and-adapters
+      before_model: >-
+        orders -> order_service -> fulfillment_client; fulfillment errors
+        leak through order_service
+      after_model: >-
+        orders -> fulfillment; fulfillment -> fulfillment_adapter;
+        fulfillment owns translation and idempotency policy
+      deletion_test: >-
+        Removing the module scatters fulfillment-provider translation and
+        retry policy across order callers.
+  candidate_count: 1
   top_recommendation:
-    status: none
+    id: CAR-1
+    recommendation_strength: Strong
+    dependency_category: ports-and-adapters
+    before_model: >-
+      orders -> order_service -> fulfillment_client; fulfillment errors
+      leak through order_service
+    after_model: >-
+      orders -> fulfillment; fulfillment -> fulfillment_adapter;
+      fulfillment owns translation and idempotency policy
+    deletion_test: >-
+      Removing the module scatters fulfillment-provider translation and
+      retry policy across order callers.
   recommended_next_skill: null
 assertions:
   - type: field_equals
@@ -44,11 +66,13 @@ assertions:
     value: false
   - type: field_equals
     path: candidate_count
-    value: 0
+    value: 1
   - type: field_equals
     path: recommended_next_skill
     value: null
-  # RED: Matt-parity visual/candidate-depth report fields absent from current main's report format.
+  # Matt-parity visual/candidate-depth report fields (Task 6): report content per
+  # codebase-architecture-review/workflow/candidates.md and reference/report-format.md's
+  # candidate card fields, not a codebase_architecture_report schema widening.
   - type: field_equals
     path: top_recommendation.recommendation_strength
     value: Strong

@@ -3,18 +3,14 @@ skill: codebase-architecture-review
 case_id: deepening-quality
 tier: 2
 description: >
-  A faithful current-main transcript for a bounded src/orders hotspot review.
-  Current main reads the repository and history, falsifies the sole candidate
-  down to zero_candidates_valid, writes a text-only report, and completes --
-  it never retains a candidate, never writes a visual before/after model, and
-  never labels a recommendation's strength. This is the RED baseline for
+  A faithful transcript for a bounded src/orders hotspot review under
   Matt-parity judgment quality (docs/superpowers/specs/2026-09-05-matt-architecture-parity-bridge.md,
-  R1-R5/R7-R9): the read-only and no-automatic-refactor assertions below stay
-  green against this transcript, but the three quality assertions fail
-  because current main's behavior genuinely lacks a retained candidate, a
-  visual_report_write event, and a recommendation_strength: Strong event.
-  Tasks 2-6 make the skill produce those events; this fixture is not modified
-  to make them pass.
+  R1-R5/R7-R9): the skill reads the repository and history, proposes one
+  candidate with an evidence-backed depth assessment, falsifies it and
+  retains it with before/after models, writes the ephemeral visual
+  companion, writes the text report, and completes. It never writes the
+  repository, applies a refactor, or invokes a downstream skill
+  automatically.
 events:
   - type: tool
     name: repository_read
@@ -26,9 +22,24 @@ events:
       available: true
       commits: 42
       days: 90
+  - type: tool
+    name: candidate
+    id: CAR-1
+    recommendation_strength: Strong
+    dependency_category: ports-and-adapters
+    deletion_test: Removing the module scatters provider translation into checkout callers.
   - type: gate
     name: candidate_falsification
-    decision: zero_candidates_valid
+    decision: retained_with_before_after_models
+  - type: tool
+    name: candidate
+    id: CAR-1
+    status: retained
+    before_model: orders -> order_service -> fulfillment_client; fulfillment errors leak through order_service
+    after_model: orders -> fulfillment; fulfillment -> fulfillment_adapter; fulfillment owns translation and idempotency policy
+  - type: tool
+    name: visual_report_write
+    artifact: architecture_review_html
   - type: tool
     name: report_write
     args:
@@ -42,9 +53,6 @@ assertions:
     name: repository_read
   - type: tool_called
     name: history_read
-  - type: gate_decision
-    name: candidate_falsification
-    decision: zero_candidates_valid
   - type: tool_args_match
     name: report_write
     args:
@@ -57,14 +65,25 @@ assertions:
     name: invoke_downstream_skill
   - type: outcome_status
     status: complete
-  # RED: Matt-parity judgment-quality assertions. current main has no candidate_retained
-  # event, no visual_report_write event, and no recommendation_strength field -- all three
-  # fail on this faithful current-main transcript until Tasks 2-6 land.
+  # Matt-parity judgment-quality assertions (Task 6): the skill proposes a candidate,
+  # falsifies it, retains it with before/after models, writes the visual companion,
+  # and labels the recommendation's strength.
   - type: event_order
-    events: [repository_read, history_read, candidate_retained, report_write, outcome]
-  - type: tool_called
-    name: visual_report_write
+    events: [repository_read, history_read, candidate, gate, candidate, visual_report_write, report_write, outcome]
+  - type: gate_decision
+    name: candidate_falsification
+    decision: retained_with_before_after_models
   - type: event_data_equals
-    event: report_write
+    event: candidate
     path: recommendation_strength
     value: Strong
+  - type: event_data_equals
+    event: candidate
+    path: deletion_test
+    value: Removing the module scatters provider translation into checkout callers.
+  - type: tool_called
+    name: visual_report_write
+  - type: tool_not_called
+    name: repository_write
+  - type: tool_not_called
+    name: apply_refactor

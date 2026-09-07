@@ -3,16 +3,13 @@ skill: module-design
 case_id: deep-module-quality
 tier: 2
 description: >
-  A faithful current-main transcript for src/payments/charge.py: repository
-  read, the contract-evidence gate, a module_design_spec report write, and a
-  complete outcome. This is the RED baseline for Matt-parity design-quality
-  (docs/superpowers/specs/2026-09-05-matt-architecture-parity-bridge.md,
-  R1-R5/R7-R9): the read-only assertions below stay green against this
-  transcript, but the design_comparison assertion fails because current main
-  never emits a design_comparison event contrasting a deep, policy-owning
-  module (with a concrete provider adapter seam) against a thin pass-through
-  wrapper (with caller-owned policy). Tasks 2-6 make the skill produce that
-  event; this fixture is not modified to make it pass.
+  A faithful transcript for src/payments/charge.py under Matt-parity design
+  quality (docs/superpowers/specs/2026-09-05-matt-architecture-parity-bridge.md,
+  R1-R5/R7-R9): repository read, the contract-evidence gate, a
+  design_comparison event contrasting a deep policy-owning module against a
+  thin pass-through wrapper, a module_design_spec report write, and a
+  complete outcome. It never writes the repository or invokes a downstream
+  skill automatically.
 events:
   - type: tool
     name: repository_read
@@ -21,6 +18,26 @@ events:
   - type: gate
     name: contract_evidence
     decision: sufficient_for_report
+  - type: tool
+    name: design_comparison
+    deep_design:
+      name: deep_policy_module
+      provider_seam: concrete_adapter
+      description: >-
+        single create_charge(command) entry point owns provider-error
+        translation, idempotency, and retry policy
+    pass_through_design:
+      name: pass_through_wrapper
+      provider_seam: mock-only
+      description: >-
+        wrapper forwards calls directly to the provider client; callers
+        still own error translation and retry policy
+    test_surface: public_interface_only
+    deletion_test: >-
+      Deleting the pass-through wrapper changes nothing callers observe;
+      deleting the deep policy module scatters provider translation and
+      retry policy back into checkout callers.
+    rejected_seam: mock-only
   - type: tool
     name: report_write
     args:
@@ -42,10 +59,34 @@ assertions:
     name: invoke_downstream_skill
   - type: outcome_status
     status: complete
-  # RED: Matt-parity design-comparison quality assertion. current main never emits a
-  # design_comparison event, so this fails on this faithful current-main transcript
-  # until Tasks 2-6 land.
+  # Matt-parity design-comparison quality assertions (Task 6): the skill compares a
+  # deep, policy-owning module (concrete provider adapter seam) against a thin
+  # pass-through wrapper (mock-only, caller-owned policy), states a public-interface
+  # test surface and a deletion-test result, and rejects the mock-only seam.
   - type: event_data_equals
     event: design_comparison
     path: deep_design.provider_seam
     value: concrete_adapter
+  - type: event_data_equals
+    event: design_comparison
+    path: deep_design.name
+    value: deep_policy_module
+  - type: event_data_equals
+    event: design_comparison
+    path: pass_through_design.name
+    value: pass_through_wrapper
+  - type: event_data_equals
+    event: design_comparison
+    path: test_surface
+    value: public_interface_only
+  - type: event_data_equals
+    event: design_comparison
+    path: deletion_test
+    value: >-
+      Deleting the pass-through wrapper changes nothing callers observe;
+      deleting the deep policy module scatters provider translation and
+      retry policy back into checkout callers.
+  - type: event_data_equals
+    event: design_comparison
+    path: rejected_seam
+    value: mock-only
