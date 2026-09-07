@@ -782,11 +782,6 @@ lint-change-impact-analyzer:
 	@python3 -m pytest scripts/tests/test_change_impact_analyzer.py -q
 	@echo "  ok"
 
-lint: lint-change-impact-analyzer
-lint: lint-resilience-review
-
-lint: lint-implementation-planner
-
 lint-implementation-planner:
 	@python3 scripts/lint_skills.py --skill implementation-planner
 	@python3 -m py_compile scripts/implementation_plan.py
@@ -798,8 +793,6 @@ lint-resilience-review:
 	@python3 -m py_compile scripts/resilience_review.py
 	@python3 -m pytest scripts/tests/test_resilience_review.py -q
 	@echo "  ok"
-
-lint: lint-production-readiness-review
 
 lint-production-readiness-review:
 	@python3 scripts/lint_skills.py --skill production-readiness-review
