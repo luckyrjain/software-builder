@@ -376,7 +376,16 @@ def test_checked_in_host_registry_validates() -> None:
     registry = parse_host_registry(ROOT / "agent-hosts.yaml")
 
     assert sorted(registry.hosts) == ["claude", "cursor", "github-copilot", "kiro"]
-    assert all(host.verification == "UNVERIFIED" for host in registry.hosts.values())
+    # claude carries a real RUNTIME evidence entry (an actual install + discovery + read-back
+    # exercised from inside a live Claude Code session against this repository) and is VERIFIED;
+    # every other host here has no RUNTIME evidence yet and stays UNVERIFIED (spec Section 26 --
+    # `verification: VERIFIED` requires RUNTIME evidence, checked by host_registry.py itself).
+    assert registry.hosts["claude"].verification == "VERIFIED"
+    assert all(
+        host.verification == "UNVERIFIED"
+        for host_id, host in registry.hosts.items()
+        if host_id != "claude"
+    )
     assert all(host.maintainer_support == "BEST_EFFORT" for host in registry.hosts.values())
 
 
