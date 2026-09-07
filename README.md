@@ -5,9 +5,11 @@
 ![Skills](https://img.shields.io/badge/skills-40-blue)
 <!-- skills-count:end -->
 
-Portable, evidence-driven agent skills for software delivery: code review, incident response,
+Host-agnostic, evidence-driven agent skills for software delivery: code review, incident response,
 architecture discovery, Kubernetes optimization, migrations, release readiness, and autonomous
-implementation with independent review.
+implementation with independent review. Skill definitions install the same way across hosts; each
+host's actual verification status is tracked separately and in the open — see
+[Verification status](#verification-status).
 
 `software-builder` is a **skills and workflow library**, not another agent runtime or SDK. It gives
 Cursor, Claude Code, ChatGPT/Codex, Kiro, GitHub Copilot, and other repository-capable agents shared
@@ -71,7 +73,10 @@ hook. The exact CI environment uses Python 3.12; see [`.github/workflows/lint.ym
 
 ## 3-minute quickstart
 
-Install one MCP-free multi-agent workflow first:
+Install one MCP-free multi-agent workflow first — "MCP-free" means no external MCP server
+(GitLab, Datadog, Slack, ...) is required; the host's own repository read/write, CI status, and
+PR-write capabilities are still host capabilities the [compatibility matrix](docs/agent-compatibility.md)
+tracks separately and may show as `BLOCKED`/`DEGRADED` until independently verified for your host:
 
 ```bash
 git clone https://github.com/luckyrjain/software-builder.git
