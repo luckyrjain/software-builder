@@ -56,8 +56,9 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
   `host_contracts.yaml` shape check had drifted from `host_adapter.validate_host_adapter_interface`
   (missing the `hosts.<id>.adapter` non-empty check) -- now delegates to it directly.
   `composition_runtime.py`'s private id-coverage check now uses the shared `id_diff.report_id_coverage`.
-  32 skill fragments' `produce_fields` declarations, byte-for-byte duplicates of
-  `artifact_schemas`, were removed; `composition_contracts.default_produce_fields` (promoted from
+  31 skill fragments' `produce_fields` declarations, byte-for-byte duplicates of
+  `artifact_schemas`, were removed (and the generated `composition_contracts.yaml` projection
+  regenerated to match); `composition_contracts.default_produce_fields` (promoted from
   a private helper) is now the one place "declared override, else schema" is computed, reused by
   `manifest.py`'s runtime manifest and `artifact_contracts.py`'s payload validation -- which also
   fixed a latent bug the refactor's own holistic review caught: a registered skill that isn't an
@@ -91,7 +92,9 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 - Added a `docs/OPERATIONS.md` runbook entry for the `SYMLINK`/`UNOWNED`/`CORRUPT_OWNERSHIP`
   install-destination states `install.sh` already refuses to touch automatically (previously
   undocumented, unlike the parallel "stale install lock" entry), a `validate_references.py`
-  per-call heading-slug cache (full-repo `--source-tree .` run: ~0.9s -> ~0.47s), 6 new tests for
+  per-call heading-slug cache (meaningfully cuts redundant re-reads of popular shared docs on a
+  full-repo `--source-tree .` run, though the exact speedup varies with the checkout's size and
+  link density), 6 new tests for
   `package_release.py`/`release_contract.py`/`verify_release_bundle.py`'s CLI entrypoints (only
   `verify_release_tag.py`'s was previously tested at that seam), and a regression test for the bug
   `scripts/atomic_write.py` was extracted to fix (`make generate`'s multi-file write path).
