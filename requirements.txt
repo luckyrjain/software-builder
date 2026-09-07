@@ -10,6 +10,6 @@ packaging>=26.3
 PyYAML>=6.0.3
 ruamel.yaml>=0.19.1
 sqlglot>=30.17.0
-zizmor>=1.29.0
+zizmor>=1.30.0
 ruff>=0.15.8
 
