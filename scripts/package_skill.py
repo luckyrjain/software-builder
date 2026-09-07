@@ -120,6 +120,7 @@ def vendor_readme_superpowers_specs(repo_root: Path, package_root: Path) -> None
 def vendor_framework_tree(repo_root: Path, package_root: Path) -> list[str]:
     framework_src = repo_root / "docs" / "skill-framework"
     reject_symlinks(framework_src, "vendored framework tree")
+    reject_sensitive_files(framework_src, "vendored framework tree")
     framework_dest = package_root / "docs" / "skill-framework"
     if framework_dest.exists():
         shutil.rmtree(framework_dest)

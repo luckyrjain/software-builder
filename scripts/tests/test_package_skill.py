@@ -292,6 +292,26 @@ def test_package_skill_rejects_symlink_in_vendored_framework_tree(isolated_repo:
         package_skill(skill="unit-test-creator", repo_root=isolated_repo, dest=dest, host="test")
 
 
+def test_package_skill_rejects_untracked_credential_file_in_vendored_framework_tree(
+    isolated_repo: Path, tmp_path: Path,
+) -> None:
+    # Regression test: vendor_framework_tree() called reject_symlinks() on docs/skill-framework/
+    # but not reject_sensitive_files() -- unlike package_skill()'s own skill-tree copy, which
+    # calls both. docs/skill-framework/ is vendored into nearly every skill install (whenever a
+    # skill loads shared runtime or links the framework), so an untracked credential file left
+    # there had a wider blast radius than the skill-tree case this guard was originally added for.
+    (isolated_repo / "docs" / "skill-framework" / ".env").write_text(
+        "TOKEN=example\n", encoding="utf-8",
+    )
+
+    dest = tmp_path / "installed" / "unit-test-creator"
+    # Unlike the skill-tree sensitive-file case, dest already exists here (the skill's own
+    # tree copies before framework vendoring runs) -- matches the sibling symlink-in-framework
+    # test above, which asserts only the raised error, not dest's existence.
+    with pytest.raises(ValueError, match="potentially sensitive"):
+        package_skill(skill="unit-test-creator", repo_root=isolated_repo, dest=dest, host="test")
+
+
 def test_copytree_ignore_handles_symlinked_subdirectory(tmp_path: Path) -> None:
     # copytree_ignore() used to .resolve() both `root` and the `directory`
     # shutil passes into ignore() -- fine for a plain tree, but

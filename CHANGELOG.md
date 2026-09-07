@@ -43,6 +43,59 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 
 ## Platform
 
+### Third architecture review pass: registry dedup, security guard gap, doc drift, ops runbook (2026-09-07)
+
+- **`package_skill.py` had no sensitive-file guard, unlike `generic_package.py`.** Unlike
+  `generic_package.py` (which only ever sources from `git ls-files`), `package_skill.py` copies
+  the *working* tree, so an untracked -- even gitignored -- credential-shaped file
+  (`.env`, `credentials.json`, `*.pem`, ...) sitting in a skill directory, or in the vendored
+  `docs/skill-framework/` tree, would previously be copied verbatim into every local install.
+  Added `reference_utils.reject_sensitive_files()` (mirroring the existing `reject_symlinks()`
+  shape) and wired it into both of `package_skill.py`'s copy paths.
+- **Registry validation single-sourced further.** `p1_validation.py`'s hand-rolled
+  `host_contracts.yaml` shape check had drifted from `host_adapter.validate_host_adapter_interface`
+  (missing the `hosts.<id>.adapter` non-empty check) -- now delegates to it directly.
+  `composition_runtime.py`'s private id-coverage check now uses the shared `id_diff.report_id_coverage`.
+  32 skill fragments' `produce_fields` declarations, byte-for-byte duplicates of
+  `artifact_schemas`, were removed; `composition_contracts.default_produce_fields` (promoted from
+  a private helper) is now the one place "declared override, else schema" is computed, reused by
+  `manifest.py`'s runtime manifest and `artifact_contracts.py`'s payload validation -- which also
+  fixed a latent bug the refactor's own holistic review caught: a registered skill that isn't an
+  actual producer of the artifact being validated no longer gets a spurious "payload contains
+  undeclared fields" error piled on top of the real "not a producer" one.
+- **Evals/lint dedup.** `mutation_anchors.yaml` was parsed independently three times with three
+  drifted schema checks (one had stopped checking `schema_version` entirely) -- now one loader.
+  Tier-1 fixture loading and `_global.yaml` template expansion, previously hand-copied into
+  `contract_lint.py` and `scripts/eval_tier_health.py` to dodge an import cycle into the CLI
+  entrypoint, moved to a new leaf module, `scripts/evals/fixtures.py`. `lint_skills.py`'s
+  workflow-frontmatter check switched from a hand-rolled regex scan (which could disagree with
+  every other reader on a fence line with trailing whitespace) to the same hardened YAML-parsed
+  loader those other readers already use.
+- **A real data-loss bug fixed in `migration-program-manager`'s SQUAD_MAP.md parser**: a table
+  separator-row check treated any row where every cell was *either* empty *or* dash/colon-shaped
+  as a separator (`set("") <= {"-", ":"}` is vacuously true), silently dropping a genuine data row
+  with one blank cell alongside a dash-shaped one instead of parsing it.
+- **`pr-gatekeeper/scripts/check-ask-point-drift.py` moved to `scripts/check_pr_review_ask_point_drift.py`.**
+  It is a repo-internal consistency guard between `pr-review`'s and `pr-gatekeeper`'s own source
+  trees, but `scripts/` under a skill directory is packaged verbatim into every install of that
+  skill, and `pr-review/workflow/` does not exist in a standalone `pr-gatekeeper` install -- the
+  shipped copy could never run correctly there.
+- **Documentation truth fixes**: ADR 0001 and ADR 0005 both claimed `skills.yaml` still lacked its
+  "generated -- do not edit" banner (it landed same-day, before either amendment was written);
+  `docs/skill-framework/README.md`'s framework-compliant skill roster was missing `module-design`
+  and `codebase-architecture-review`; `five-concept-separation-audit.md` claimed "all 23 skills" /
+  repo-wide coverage when the repository has 40 skills and the matrix audits 19 -- retitled to
+  state actual coverage rather than implying an unaudited skill was checked and found clean.
+  Removed `.superpowers/sdd/`, eight stale, self-disclaiming agent-driven-development task
+  reports committed at repo root with zero references anywhere, and gitignored the directory.
+- Added a `docs/OPERATIONS.md` runbook entry for the `SYMLINK`/`UNOWNED`/`CORRUPT_OWNERSHIP`
+  install-destination states `install.sh` already refuses to touch automatically (previously
+  undocumented, unlike the parallel "stale install lock" entry), a `validate_references.py`
+  per-call heading-slug cache (full-repo `--source-tree .` run: ~0.9s -> ~0.47s), 6 new tests for
+  `package_release.py`/`release_contract.py`/`verify_release_bundle.py`'s CLI entrypoints (only
+  `verify_release_tag.py`'s was previously tested at that seam), and a regression test for the bug
+  `scripts/atomic_write.py` was extracted to fix (`make generate`'s multi-file write path).
+
 ### Release tooling: no regex from data, no tar extraction sink (2026-09-04)
 
 Closes the two Snyk Code findings the architecture review left as accepted risk, by removing the

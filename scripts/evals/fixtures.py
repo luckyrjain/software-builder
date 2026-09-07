@@ -73,11 +73,13 @@ def load_global_template_cases(
     degraded_host_cases' `backlog-runner/global-happy` resolves only through this path, not
     through any file actually named for that skill.
 
-    A template contributes a case only when its `assertions` field is a non-empty-shaped
-    list (matches `load_fixtures`' own validity rule): a template with a malformed or missing
-    `assertions` list is skipped, not run and not counted, so a caller that only wants case
-    identity (contract_lint's ref set) sees exactly the cases a caller that runs them
-    (`run_all`) or counts them (`eval_tier_health`) would.
+    A template contributes a case only when its `assertions` field is shaped as a list --
+    deliberately looser than `load_fixtures`' own validity rule, which additionally requires
+    the list to be non-empty: this mirrors the pre-extraction behavior in `__main__.run_all`
+    exactly, so a caller that only wants case identity (contract_lint's ref set) sees exactly
+    the cases a caller that runs them (`run_all`) or counts them (`eval_tier_health`) would --
+    including the edge case of a template whose `assertions` is present but empty (`[]`),
+    which is accepted here (and always has been) and would vacuously pass if run.
     """
     global_fixture = global_template_fixture_path(root)
     if not global_fixture.is_file():

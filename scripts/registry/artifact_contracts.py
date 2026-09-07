@@ -374,7 +374,16 @@ def validate_artifact_result(
                 errors.append(f"error: {artifact_type}: SUCCESS results must not contain blockers")
             if isinstance(envelope.get("status"), str) and envelope.get("status") in {"BLOCKED", "FAILED", "ESCALATED"} and not envelope.get("blockers"):
                 errors.append(f"error: {artifact_type}: non-success results must declare blockers")
-            if producer is not None and envelope.get("skill") == producer_skill:
+            # Also gated on artifact_type being one of the producer's declared artifacts: when
+            # it isn't, the "result.skill is not a producer" error above already names the
+            # defect, and default_produce_fields() legitimately returns [] for an artifact the
+            # producer doesn't declare -- without this gate, every real payload field would be
+            # spuriously reported as "undeclared" on top of that error instead of being skipped.
+            if (
+                producer is not None
+                and envelope.get("skill") == producer_skill
+                and artifact_type in producer.produces
+            ):
                 required_payload_fields = default_produce_fields(producer, artifact_type, artifact_schemas)
                 claimed_artifacts = envelope.get("artifacts")
                 if isinstance(claimed_artifacts, list):
