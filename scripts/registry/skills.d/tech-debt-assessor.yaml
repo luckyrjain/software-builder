@@ -26,10 +26,6 @@ tech-debt-assessor:
   output_contract:
     produces:
     - tech_debt_assessment
-    produce_fields:
-      tech_debt_assessment:
-      - title
-      - items
   dependencies: []
   degraded_behavior:
     missing_capability: host.report.write

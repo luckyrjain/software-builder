@@ -44,11 +44,6 @@ migration-program-manager:
   output_contract:
     produces:
     - migration_status_rollup
-    produce_fields:
-      migration_status_rollup:
-      - items
-      - generated_at
-      - source_revision
   dependencies:
   - mysql-to-postgres-sql
   - squad-map

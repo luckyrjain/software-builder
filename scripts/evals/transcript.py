@@ -11,6 +11,13 @@ from scripts.yaml_safety import load_unique_yaml_file
 
 TRANSCRIPTS_DIR_NAME = "transcripts"
 
+# The closed event-type vocabulary docs/evals/LIVE-HARNESS.md documents ("type: tool|gate|outcome
+# is identical whether a human wrote it or the harness captured it live"). _parse_event enforces
+# it: every negative assertion (tool_not_called, forbid_tool_before_gate) works by filtering
+# events to a type and asserting absence, so a typo'd type on the one event a negative assertion
+# is meant to catch would otherwise make that assertion vacuously pass instead of failing loudly.
+EVENT_TYPES = frozenset({"tool", "gate", "outcome"})
+
 
 @dataclass(frozen=True)
 class TranscriptEvent:
@@ -33,6 +40,11 @@ def _parse_event(raw: dict[str, Any]) -> TranscriptEvent:
     event_type = str(raw.get("type", ""))
     if not event_type:
         raise ValueError("transcript event missing type")
+    if event_type not in EVENT_TYPES:
+        raise ValueError(
+            f"transcript event has unknown type {event_type!r}; must be one of "
+            f"{', '.join(sorted(EVENT_TYPES))}",
+        )
     data = {key: value for key, value in raw.items() if key != "type"}
     return TranscriptEvent(event_type=event_type, data=data)
 

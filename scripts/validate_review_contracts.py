@@ -11,36 +11,22 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import importlib.util
 import sys
 from pathlib import Path
-from types import ModuleType
 
 _ROOT = Path(__file__).resolve().parents[1]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
+from scripts import shared_runtime as _shared_runtime_bootstrap  # noqa: E402
 from scripts.yaml_safety import YAML_SAFETY_ERRORS, load_unique_yaml_file  # noqa: E402
 
-_SHARED_RUNTIME = _ROOT / "docs/skill-framework/shared/review_contract_runtime.py"
-
-
-def _load_shared_runtime() -> ModuleType:
-    """Load the vendored runtime from this checkout's own fixed path.
-
-    Loaded by path rather than imported: the runtime lives under docs/ precisely so it can be
-    copied verbatim into installed packages, which must not depend on this repository's
-    `scripts.*` import graph.
-    """
-    spec = importlib.util.spec_from_file_location("shared_review_contract_runtime", _SHARED_RUNTIME)
-    if spec is None or spec.loader is None:
-        raise RuntimeError(f"unable to load shared review runtime: {_SHARED_RUNTIME}")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-shared_runtime = _load_shared_runtime()
+# The vendored runtime this repository's own scripts must exercise too (see module docstring).
+# Named `shared_runtime` here, not `_shared_runtime_bootstrap` above (that's the loader helper
+# used once to fetch it) -- everything below reads this module's own validators/constants.
+shared_runtime = _shared_runtime_bootstrap.load(
+    "review_contract_runtime", alias="shared_review_contract_runtime", description="shared review runtime",
+)
 
 validate_change_identity = shared_runtime.validate_change_identity
 validate_review_evidence = shared_runtime.validate_review_evidence

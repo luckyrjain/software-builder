@@ -52,8 +52,13 @@ changed and one gate command was never spelled correctly.
   `contracts:`, and `profiles:`. Only the `skills:` mapping is a generated projection, so the list of
   projections above (`composition_contracts.yaml`, `composition_runtime.yaml`) is incomplete
   rather than wrong.
-- **The merge gate is `make generate-check`**, not `make generate --check`. No such flag exists; the
-  literal command in the Decision section fails. `make generate-check` is part of `lint-static` and
+- **The merge gate is `make generate-check`**, not `make generate --check`. The `--check` flag does
+  exist at the `scripts.registry generate` CLI level (`scripts/registry/cli.py`'s `generate`
+  subcommand), but Make treats an unrecognized trailing argument after a target name as one of its
+  own options and silently drops it rather than passing it through to the recipe — so the literal
+  command in the Decision section does not fail; it silently runs plain `generate` (no check) and
+  reports success without having checked anything. `make generate-check` is the real target,
+  wired to run `scripts.registry generate --check` correctly; it is part of `lint-static` and
   fails when any generated output — including the merged `skills:` mapping — drifts from what its
   sources would produce.
 
@@ -63,6 +68,6 @@ detection that decides which contract layers a checkout has are recorded in
 and its deliberate divergence from `scripts/registry/host_contracts.yaml` are recorded in
 [ADR 0006](0006-host-registry-and-evidence-model.md).
 
-`skills.yaml` still carries no "generated — do not edit" banner, so the file does not tell a reader its
-own authoring rule; adding one to the merged output is tracked as follow-up work against
-`manifest_merge.py`.
+`skills.yaml` now carries a "GENERATED in part" banner at its top and a narrower "GENERATED ... do
+not edit the `skills:` mapping" banner directly above that mapping (`manifest_merge.py`, shipped in
+the same PR that authored this amendment) — the follow-up this paragraph used to track is done.

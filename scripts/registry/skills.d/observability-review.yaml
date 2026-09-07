@@ -34,16 +34,6 @@ observability-review:
   output_contract:
     produces:
     - observability_review_report
-    produce_fields:
-      observability_review_report:
-      - title
-      - coverage
-      - assessment_target
-      - normalized_decision
-      - findings
-      - conditions
-      - required_actions
-      - evidence_refs
   dependencies: []
   degraded_behavior:
     missing_capability: host.report.write

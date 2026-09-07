@@ -15,11 +15,11 @@ warn ... unless the user confirms") but share too little vocabulary with this fi
 is the specific failure mode that leaves a future gate unanswered and hangs an unattended run:
 
 ```
-python3 pr-gatekeeper/scripts/check-ask-point-drift.py
+python3 scripts/check_pr_review_ask_point_drift.py
 ```
 
 It is a lexical-overlap heuristic, not a semantic one — see the script's own docstring
-(`pr-gatekeeper/scripts/check-ask-point-drift.py`) for exactly what it does and does not catch. Also
+(`scripts/check_pr_review_ask_point_drift.py`) for exactly what it does and does not catch. Also
 wired into `make lint-pr-gatekeeper`, which runs it on every lint pass.
 
 ## The protocol — every pr-review ask-point gets one deterministic answer, never a hang

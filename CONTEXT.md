@@ -53,7 +53,7 @@ Performs the full analysis or action itself — e.g. `pr-review`, `incident-rca`
 _Avoid_: Leaf, core skill — as a *shape* name. `leaf` is a legitimate registry `type:` value; see Composition topology below.
 
 **Router skill**:
-Classifies an underspecified request and dispatches to exactly one specialist without performing that specialist's work — e.g. `test-writer` routes to one of five test-creation skills. A router adds no detection or generation logic of its own.
+Classifies an underspecified request and dispatches to the specialist(s) it identifies without performing that work itself — e.g. `test-writer` classifies a request into one or more complementary test levels and dispatches to that subset of its five test-creation skills (a request naming a single level still routes to just that one). A router adds no detection or generation logic of its own.
 
 _Avoid_: Gateway, proxy, dispatcher
 
@@ -90,9 +90,13 @@ the type axis answering its own question rather than a mislabel:
 - **`weekly-squad-digest`** — an *aggregator* by shape (it combines `migration-program-manager`'s and `cost-optimization-sprint-planner`'s existing rollup JSON without re-running either), typed `trigger`. It runs only on a schedule and carries `disable-model-invocation: true`, so the trigger policy is the thing it owns; the two sibling aggregators, which are ambiently invocable, are typed `orchestrator`.
 - **`loop-task-implementer`** — a *specialist* by shape (it performs the implementation work itself), typed `orchestrator`. It dispatches Builder and Reviewer sub-agents and is bound by the recursion guard, which is exactly what the composition axis means by orchestrator.
 
-`trigger` is not a synonym for `disable-model-invocation: true`: `new-hire-guide` and `who-owns-x-bot`
-are both automation-only and are typed `orchestrator` and `router` respectively, because the type axis
-asks what a skill does with its children, not only how it is entered.
+`trigger` is not a synonym for `disable-model-invocation: true`, in both directions: `who-owns-x-bot`
+is automation-only yet typed `router`, not `trigger`, because delegating the whole lookup to one child
+skill is what the composition axis means by router regardless of entry mode; `new-hire-guide` is the
+opposite case — ambiently invocable (no `disable-model-invocation`, a human is always present for the
+flow) yet typed `orchestrator`, because it invokes and synthesizes across more than one child skill,
+which is what the composition axis means by orchestrator regardless of entry mode. The type axis asks
+what a skill does with its children, not how it is entered.
 
 Both axes are legitimate vocabulary; when a document could mean either, name the axis (`shape: wrapper`, `type: router`). Note that `orchestrator` also names a **multi-agent role** below — the role is a seat inside one skill's own run, the type is a position in the cross-skill graph.
 
@@ -270,7 +274,7 @@ How skills invoke or escalate to each other. Invocation is typed: wrappers pass 
 _Avoid_: Pipeline, chain (implies sequential-only; composition includes escalation and optional handoffs)
 
 **Escalation**:
-An optional handoff from one skill to another after partial work — e.g. pr-review → incident-rca when a deploy regression is suspected. Distinct from mandatory subroutines (domain-comprehension always invokes squad-map at Session 0b).
+An optional handoff from one skill to another after partial work — e.g. pr-review → incident-rca when a deploy regression is suspected. Distinct from a mandatory subroutine, where the *algorithm* is never reimplemented locally even when the *step* itself is conditional — e.g. domain-comprehension's Session 0b (squad enrichment) is itself optional (skipped when GitLab/Datadog are unavailable and CODEOWNERS is used instead, or when an unchanged census makes it unnecessary), but whenever it does run via GitLab/Datadog signals, it delegates the mapping to squad-map rather than duplicating its algorithm.
 
 _Avoid_: Referral, delegate (delegate implies the first skill stops owning the outcome)
 

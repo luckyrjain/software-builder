@@ -8,6 +8,7 @@ from typing import Any
 from scripts.yaml_safety import load_unique_yaml_file, require_mapping
 
 EVAL_CONTRACT_RELATIVE = Path("scripts") / "registry" / "eval_contracts.yaml"
+MUTATION_ANCHORS_RELATIVE = Path("scripts") / "registry" / "mutation_anchors.yaml"
 
 
 @dataclass(frozen=True)
@@ -41,6 +42,27 @@ def load_eval_contract(root: Path) -> dict[str, Any]:
     parses it once, and falls back to this loader when invoked on its own.
     """
     return require_mapping(load_unique_yaml_file(eval_contract_path(root)), "eval contracts")
+
+
+def mutation_anchors_path(root: Path) -> Path:
+    return root / MUTATION_ANCHORS_RELATIVE
+
+
+def load_mutation_anchors(root: Path) -> dict[str, Any]:
+    """Read and validate mutation_anchors.yaml, returning its `anchors` mapping.
+
+    Three readers (contract_lint, eval_coverage_contract's mutation-anchor matrix,
+    mutation_guard's guardrail runner) each used to parse this file with their own
+    copy of the `schema_version == 1` + `anchors is a mapping` check -- one of the
+    three (mutation_guard) had drifted enough to skip the schema_version check
+    entirely. Sharing the check here closes that gap for all three at once, the
+    same way `load_eval_contract` already does for eval_contracts.yaml.
+    """
+    path = mutation_anchors_path(root)
+    doc = require_mapping(load_unique_yaml_file(path), str(path))
+    if doc.get("schema_version") != 1:
+        raise ValueError(f"{path}: schema_version must be 1")
+    return require_mapping(doc.get("anchors"), f"{path}: anchors")
 
 
 def missing_and_failing(

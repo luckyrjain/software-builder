@@ -413,6 +413,21 @@ def test_result_requires_trusted_producer_identity() -> None:
     assert any("does not match trusted producer" in error for error in _validate(result, producer_skill="pr-gatekeeper"))
 
 
+def test_registered_non_producer_does_not_spuriously_flag_payload_fields() -> None:
+    # Regression test: when result.skill matches the trusted producer_skill and is a registered
+    # skill, but is not a declared producer of THIS artifact_type, the payload-field-membership
+    # check used to run anyway with an empty required-fields list (default_produce_fields()
+    # legitimately returns [] for an artifact the skill doesn't produce) -- spuriously reporting
+    # every real payload field as "undeclared" on top of the already-correct "is not a producer"
+    # error. pr-review is real and registered but does not produce rca_report.
+    result = _valid_result()
+
+    errors = _validate(result, artifact_type="rca_report", producer_skill="pr-review")
+
+    assert any("result.skill is not a producer" in error for error in errors)
+    assert not any("payload contains undeclared fields" in error for error in errors)
+
+
 def test_result_rejects_provenance_freshness_and_authority_drift() -> None:
     result = _valid_result()
     result["freshness"]["source_revision"] = "b" * 40

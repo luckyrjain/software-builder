@@ -1,16 +1,10 @@
-"""Tests for pr-gatekeeper/scripts/check-ask-point-drift.py."""
+"""Tests for scripts/check_pr_review_ask_point_drift.py."""
 
 from __future__ import annotations
 
-import importlib.util
 from pathlib import Path
 
-
-SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "check-ask-point-drift.py"
-SPEC = importlib.util.spec_from_file_location("check_ask_point_drift", SCRIPT)
-assert SPEC and SPEC.loader
-DRIFT_CHECK = importlib.util.module_from_spec(SPEC)
-SPEC.loader.exec_module(DRIFT_CHECK)
+from scripts import check_pr_review_ask_point_drift as DRIFT_CHECK
 
 
 def test_unrelated_preceding_section_does_not_dilute_covered_gate(

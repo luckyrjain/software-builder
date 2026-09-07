@@ -31,6 +31,37 @@ validates it, moves any existing install aside to a same-filesystem backup, and 
 the final move fails. A leftover `.<skill>.staging.*` or `.<skill>.backup.*` directory next to the lock
 is safe to delete once no install is running.
 
+## Install destination blocked: unowned, symlinked, or corrupt
+
+**Symptom:** `error: refusing to replace/remove <dest>: install manifest is missing, unreadable, or
+names a different skill`, `error: refusing to replace/remove unowned directory at <dest> (not
+installed by software-builder)`, or `error: refusing to replace/remove symlink at <dest>`.
+
+Before touching an install destination, `scripts/install.sh` classifies it
+(`scripts/reference_utils.py`'s `classify_install_destination`) into exactly one of five states, and
+only one is safe to overwrite or remove automatically:
+
+| State | Meaning |
+|-------|---------|
+| `ABSENT` | Nothing there — install proceeds. |
+| `SOFTWARE_BUILDER_OWNED` | A `.software-builder-manifest.json` at `<dest>` names this exact skill — install/uninstall proceeds. |
+| `SYMLINK` | `<dest>` is itself a symlink. Never followed or replaced automatically — a symlink could point anywhere, including outside the intended install tree. |
+| `UNOWNED` | `<dest>` exists (a real directory, or a file) but carries no manifest naming this skill — could be a manual copy, an install from a different tool, or unrelated content that happens to share the path. |
+| `CORRUPT_OWNERSHIP` | `<dest>/.software-builder-manifest.json` exists but is unreadable, malformed, or names a *different* skill than the one being installed/uninstalled. |
+
+There is deliberately no `--force` flag for any of these three blocking states — see
+[docs/history/2026-08-31-universal-agent-compatibility-architecture-review.md](history/2026-08-31-universal-agent-compatibility-architecture-review.md)
+for why an explicit adoption workflow was deferred rather than added speculatively. To recover:
+
+1. Inspect `<dest>` yourself before touching it — confirm it is not something else important. For
+   `CORRUPT_OWNERSHIP`, `cat <dest>/.software-builder-manifest.json` usually shows which skill (or
+   how malformed a manifest) is actually there.
+2. Once you have confirmed it is safe to discard: `rm -rf <dest>` (or, for the `SYMLINK` case, `rm
+   <dest>` to remove just the link, never `rm -rf` through it) — then re-run the install/uninstall.
+3. If you intended to *adopt* an existing, unmanaged directory as a software-builder install rather
+   than discard it, there is no supported path for that today; back its contents up, remove it per
+   step 2, and let a fresh install create a correctly-manifested one instead of hand-writing a manifest.
+
 ## Host evidence refresh
 
 `agent-hosts.yaml` records what has been independently verified about each host — `verification`,

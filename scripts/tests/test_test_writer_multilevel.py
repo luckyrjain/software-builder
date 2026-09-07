@@ -236,12 +236,9 @@ def test_registry_declares_a_distinct_orchestration_result_contract():
     ]
     test_writer = contracts["skills"]["test-writer"]
     assert test_writer["produces"] == ["test_orchestration_result"]
-    assert test_writer["produce_fields"]["test_orchestration_result"] == [
-        "test_plan",
-        "orchestration_status",
-        "unfinished_levels",
-        "level_reports",
-    ]
+    # No explicit produce_fields override here: it would duplicate artifact_schemas above,
+    # so consumers derive it from the schema instead (composition_contracts.default_produce_fields).
+    assert "produce_fields" not in test_writer
     assert "test-writer" not in runtime["artifact_ownership"]["test_suite"]["owners"]
     assert runtime["artifact_ownership"]["test_orchestration_result"] == {
         "mode": "canonical",

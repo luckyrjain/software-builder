@@ -33,16 +33,6 @@ performance-review:
   output_contract:
     produces:
     - performance_review_report
-    produce_fields:
-      performance_review_report:
-      - title
-      - verdict
-      - assessment_target
-      - normalized_decision
-      - findings
-      - conditions
-      - required_actions
-      - evidence_refs
   dependencies: []
   degraded_behavior:
     missing_capability: host.report.write

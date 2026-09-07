@@ -137,21 +137,6 @@ implementation-planner:
   output_contract:
     produces:
     - implementation_plan
-    produce_fields:
-      implementation_plan:
-      - plan_set_id
-      - plan_id
-      - title
-      - readiness
-      - assessment_target
-      - target_repo
-      - external_dependencies
-      - source_refs
-      - tasks
-      - execution_waves
-      - sequencing_constraints
-      - verification_gates
-      - traceability
   dependencies: []
   degraded_behavior:
     missing_capability: host.repository.read

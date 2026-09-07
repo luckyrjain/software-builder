@@ -3,12 +3,12 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from scripts.registry.host_adapter import CAPABILITIES as HOST_CAPABILITIES
+from scripts.registry.host_adapter import HOSTS
 from scripts.registry.p1_validation import (
     EVAL_DIMENSIONS,
     EXECUTION_FIELDS,
     HANDOFF_FIELDS,
-    HOSTS,
-    HOST_CAPABILITIES,
     RESULT_FIELDS,
     STATE_VALUES,
     validate_p1_contracts,

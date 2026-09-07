@@ -9,6 +9,7 @@ import tarfile
 from pathlib import Path
 
 from scripts.git_paths import tracked_relative_paths
+from scripts.reference_utils import is_sensitive_path
 from scripts.registry.schema import parse_registry
 from scripts.test_creator_catalog import TEST_CREATOR_SKILL_SET
 
@@ -25,8 +26,6 @@ EXCLUDED_PARTS = {
 }
 EXCLUDED_SUFFIXES = {".pyc", ".pyo"}
 NON_RUNTIME_NAMES = {"changelog.md"}
-SENSITIVE_NAMES = {".env", ".netrc", "credentials.json", "secrets.yaml", "secrets.yml"}
-SENSITIVE_SUFFIXES = {".pem", ".key", ".p12", ".pfx"}
 MARKDOWN_LINK_RE = re.compile(
     r"\]\(([a-zA-Z0-9_./~-]+\.md)(?:#([a-zA-Z0-9_-]+))?\)",
 )
@@ -73,8 +72,7 @@ def _is_safe_file(root: Path, path: Path) -> bool:
         return False
     if path.name.lower() in NON_RUNTIME_NAMES or path.suffix in EXCLUDED_SUFFIXES:
         return False
-    name = path.name.lower()
-    if name in SENSITIVE_NAMES or name.startswith(".env.") or path.suffix.lower() in SENSITIVE_SUFFIXES:
+    if is_sensitive_path(path.name):
         raise ValueError(f"generic package refuses potentially sensitive file: {rel}")
     if path.is_symlink():
         raise ValueError(f"generic package refuses symlink: {rel}")

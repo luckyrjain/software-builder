@@ -5,6 +5,7 @@ from pathlib import Path
 from scripts.registry.canonical_manifest import load_contract_section
 from scripts.registry.composition_contracts import load_contracts
 from scripts.registry.envelope_contract import SKILL_TYPES
+from scripts.registry.id_diff import report_id_coverage
 from scripts.registry.models import Registry
 from scripts.registry.paths import ROOT, SKILLS_YAML_PATH as CANONICAL_RUNTIME_PATH
 from scripts.yaml_safety import YAML_SAFETY_ERRORS, load_unique_yaml_file
@@ -24,19 +25,6 @@ def _exact_string_set(value: object) -> set[str] | None:
     if len(value) != len(set(value)):
         return None
     return set(value)
-
-
-def _report_id_coverage(
-    actual_ids: set[str], expected_ids: set[str], *, missing_label: str, extra_label: str
-) -> list[str]:
-    errors: list[str] = []
-    missing = sorted(expected_ids - actual_ids)
-    extra = sorted(actual_ids - expected_ids)
-    if missing:
-        errors.append(f"error: {missing_label}: {', '.join(missing)}")
-    if extra:
-        errors.append(f"error: {extra_label}: {', '.join(extra)}")
-    return errors
 
 
 def load_composition_runtime(path: Path | None = None) -> dict[str, object]:
@@ -100,11 +88,11 @@ def validate_composition_runtime(
         return [f"error: {resolved}: skill_types must be a mapping"]
     typed_ids = {str(key) for key in skill_types}
     errors.extend(
-        _report_id_coverage(
+        report_id_coverage(
             typed_ids,
             skill_ids,
-            missing_label="composition runtime missing skill types",
-            extra_label="composition runtime unknown skill types",
+            missing_label="error: composition runtime missing skill types",
+            dangling_label="error: composition runtime unknown skill types",
         )
     )
     for skill_id, skill_type in skill_types.items():
@@ -174,11 +162,11 @@ def validate_composition_runtime(
         ownership = {}
     ownership_ids = {str(key) for key in ownership}
     errors.extend(
-        _report_id_coverage(
+        report_id_coverage(
             ownership_ids,
             artifact_types,
-            missing_label="artifact ownership missing types",
-            extra_label="artifact ownership unknown types",
+            missing_label="error: artifact ownership missing types",
+            dangling_label="error: artifact ownership unknown types",
         )
     )
 

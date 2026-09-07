@@ -38,11 +38,6 @@ unit-test-creator:
   output_contract:
     produces:
     - test_suite
-    produce_fields:
-      test_suite:
-      - tests
-      - framework
-      - target_path
   dependencies: []
   version_source: skill_frontmatter_legacy_numeric
   composition:

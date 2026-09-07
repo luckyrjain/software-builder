@@ -12,10 +12,7 @@ from scripts.registry.envelope_contract import (
     RESULT_FIELDS,
     STATE_VALUES,
 )
-from scripts.registry.host_adapter import CAPABILITIES as HOST_CAPABILITIES
-from scripts.registry.host_adapter import HOSTS
-from scripts.registry.host_adapter import SUPPORT as SUPPORT_VALUES
-from scripts.registry.host_adapter import host_contracts_path
+from scripts.registry.host_adapter import validate_host_adapter_interface
 from scripts.registry.models import Registry
 from scripts.registry.schema import parse_registry
 from scripts.yaml_safety import YAML_SAFETY_ERRORS, load_unique_frontmatter, load_unique_yaml_file, require_mapping
@@ -123,19 +120,13 @@ def validate_p1_contracts(root: Path) -> list[str]:
         errors.extend(_validate_permissions(registry, platform))
         errors.extend(validate_artifact_contracts(root))
 
-        hosts = require_mapping(load_unique_yaml_file(host_contracts_path(root)), "host contracts")
-        _require_v1(hosts, "host contracts")
-        if _strings(hosts.get("capability_families"), "host capability families") != HOST_CAPABILITIES:
-            errors.append("error: P1 host capability families drift")
-        if _strings(hosts.get("allowed_support"), "host support values") != SUPPORT_VALUES:
-            errors.append("error: P1 host support values drift")
-        host_map = require_mapping(hosts.get("hosts"), "hosts")
-        if set(host_map) != HOSTS:
-            errors.append("error: P1 host coverage drift")
-        for host_id, config in host_map.items():
-            support = require_mapping(require_mapping(config, host_id).get("support"), f"{host_id}.support")
-            if set(support) != HOST_CAPABILITIES or set(map(str, support.values())) - SUPPORT_VALUES:
-                errors.append(f"error: P1 host capability profile drift: {host_id}")
+        # host_contracts.yaml's shape (schema_version, capability_families, allowed_support,
+        # host coverage, and each host's adapter/support block) is validated by
+        # host_adapter.validate_host_adapter_interface -- delegate to it rather than
+        # re-checking the same file with a second, independently-maintained set of rules.
+        # The two had already drifted: this block never checked that hosts.<id>.adapter is
+        # a non-empty string, a check validate_host_adapter_interface does have.
+        errors.extend(validate_host_adapter_interface(root))
 
         evals = require_mapping(load_unique_yaml_file(root / "scripts/registry/eval_contracts.yaml"), "eval contracts")
         _require_v1(evals, "eval contracts")

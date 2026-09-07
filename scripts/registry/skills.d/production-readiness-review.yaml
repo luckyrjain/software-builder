@@ -266,21 +266,6 @@ production-readiness-review:
   output_contract:
     produces:
     - production_readiness_report
-    produce_fields:
-      production_readiness_report:
-      - title
-      - assessment_target
-      - source_revision
-      - build_provenance_ref
-      - criticality
-      - verdict
-      - dimension_statuses
-      - operational_evidence
-      - blockers
-      - conditions
-      - waivers
-      - required_actions
-      - evidence_refs
   dependencies:
   - pr-review
   - change-impact-analyzer

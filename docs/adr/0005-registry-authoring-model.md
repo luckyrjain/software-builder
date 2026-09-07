@@ -61,7 +61,8 @@ The contract is that **no consumer ever sees `extends` or `profiles`**. Every re
 whether it goes through `parse_registry` or reads the raw mapping — sees the same fully-inlined shape
 the registry had before profiles existed. Nothing writes back into `skills.yaml` any more, so there is
 no longer a writer that has to preserve the unresolved `extends:` form on disk. Today one profile
-(`read-only-leaf-review`) is inherited by 15 skills.
+(`read-only-leaf-review`) is inherited by 17 skills (see Consequences below for how that count has
+moved since this ADR was first written).
 
 The one place this still matters: side-file projections read fragments *before* profile resolution, so
 a skill that inherited its `capabilities:` block from a profile would be absent from the generated
@@ -87,14 +88,14 @@ memoized: it recomputes a handful of `Path.is_file()` checks per call and does n
 - **Positive:** Adding a skill touches one new file instead of a shared 4,400-line mapping; two
   skill-adding branches no longer conflict in the registry.
 - **Positive:** Shared platform metadata is stated once. The `read-only-leaf-review` profile collapsed
-  seven byte-identical fields repeated across 15 skills into one block.
+  seven byte-identical fields repeated across skills into one block — inherited by 17 skills as of
+  this writing (module-design and codebase-architecture-review joined the original 15 in a later
+  commit; the count is a point-in-time fact, not a contract, and will keep moving as skills are added).
 - **Positive:** "Is this layer active here?" has one implementation, so a new layer is added in one place.
 - **Negative:** `skills.yaml` is now partly generated and partly hand-authored, and the file itself does
-  not say which parts are which. Until the merged output carries a banner, a reader must consult
-  `CONTRIBUTING.md` or this ADR to know that the `skills:` mapping is not an authoring surface.
+  not say which parts are which; `manifest_merge.py`'s two "GENERATED" banners (top of file, and
+  directly above the `skills:` mapping) narrow that to which specific keys are generated. A reader
+  still needs `CONTRIBUTING.md` or this ADR for the *why*.
 - **Negative:** A fragment no longer shows a skill's complete effective registry entry when it uses
   `extends:`; the effective entry is the profile deep-merged with the fragment. Read the profile too, or
   read the merged `skills.yaml`.
-- **Follow-ups:** Emit a `GENERATED — do not edit the skills: mapping` banner from
-  `manifest_merge.py` so `skills.yaml` states its own authoring rule, keeping it inside the generated
-  region so `make generate-check` stays idempotent.
