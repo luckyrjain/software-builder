@@ -10,7 +10,7 @@ from scripts.registry.manifest import (
     build_manifest,
     validate_manifest,
 )
-from scripts.registry.schema import parse_registry
+from scripts.registry.schema import clear_registry_cache, parse_registry
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -178,6 +178,91 @@ def test_manifest_rejects_missing_skill_version() -> None:
 
 def test_repository_platform_manifest_validates() -> None:
     assert validate_manifest(ROOT) == []
+
+
+def test_validate_manifest_reports_new_fragment_missing_from_composition_contracts_cleanly() -> None:
+    """Regression: a skill that exists only as a fresh scripts/registry/skills.d/<id>.yaml
+    fragment (i.e. `make generate` has never run since it was added -- exactly CONTRIBUTING.md's
+    documented "add a fragment, then run make generate" first step for a brand-new skill) is
+    already visible to load_registry_raw's fragment merge, but skills.yaml's own literal
+    `contracts.composition.skills` section -- which `load_contracts` reads verbatim, not
+    fragment-aware -- doesn't have an entry for it yet. `_build_manifest` used to index straight
+    into that mapping (`composition[skill_id]`), so this state crashed `make generate` with an
+    uncaught KeyError and a raw traceback instead of the clean, listed validation error every
+    other structural gap for a new skill produces (see validate_composition_runtime's identically
+    worded "composition contracts missing skills" message for the runtime-side equivalent of this
+    same gap). validate_manifest must report it the same way: a clean error string, not a crash.
+
+    Exercised directly against ROOT (same pattern as test_repository_platform_manifest_validates
+    above) rather than an isolated tmp_path copy: validate_canonical_manifest also checks that
+    every registered skill's real SKILL.md/reference files exist on disk and that every declared
+    host is in agent-hosts.yaml, so a faithful isolated fixture would need to mirror the entire
+    checked-in skill tree, not just skills.yaml -- far more than this regression needs. The
+    fragment this test adds is read-only from validate_manifest's perspective (it never writes
+    skills.yaml) and is always removed in `finally`, registry-cache-cleared on both sides, so no
+    other test observes it."""
+    fragment_path = (
+        ROOT / "scripts" / "registry" / "skills.d" / "orphan-test-skill.yaml"
+    )
+    skill_dir = ROOT / "orphan-test-skill"
+    skill_md_path = skill_dir / "SKILL.md"
+    assert not fragment_path.exists(), "unexpected leftover fixture from a prior run"
+    assert not skill_dir.exists(), "unexpected leftover fixture from a prior run"
+    skill_dir.mkdir()
+    # validate_canonical_manifest checks the entrypoint file exists and its frontmatter `name:`
+    # matches the skill id *before* _build_manifest ever reaches the composition-contracts check
+    # this test targets -- without a real entrypoint, validate_manifest raises on that earlier,
+    # unrelated gap instead and this test would never exercise the fixed code path.
+    skill_md_path.write_text(
+        "---\nname: orphan-test-skill\ndescription: Regression fixture only.\n---\n\n"
+        "# Orphan Test Skill\n",
+        encoding="utf-8",
+    )
+    fragment_path.write_text(
+        """
+orphan-test-skill:
+  path: orphan-test-skill
+  category: analysis
+  extends: read-only-leaf-review
+  install:
+    requires: []
+  composition:
+    escalation_targets: []
+    consumes: []
+  capabilities:
+    required: []
+    optional: []
+  lint:
+    skill_md_max_lines: 180
+    target: orphan-test-skill
+  version: 1.0.0
+  type: leaf
+  permissions:
+    repository: read
+    external_actions: read
+    unattended: false
+    merge: false
+  output_contract:
+    produces: []
+    produce_fields: {}
+  dependencies: []
+""",
+        encoding="utf-8",
+    )
+    clear_registry_cache()
+    try:
+        errors = validate_manifest(ROOT)
+    finally:
+        fragment_path.unlink()
+        skill_md_path.unlink()
+        skill_dir.rmdir()
+        clear_registry_cache()
+
+    assert errors, "a fragment missing from composition contracts must be reported, not silently pass"
+    assert any(
+        "composition contracts missing skills" in error and "orphan-test-skill" in error
+        for error in errors
+    ), errors
 
 
 def test_skill_versions_does_not_hide_malformed_canonical_contracts(tmp_path: Path) -> None:
