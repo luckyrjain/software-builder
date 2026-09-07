@@ -10,7 +10,7 @@ How domain language is split across this repository. Platform concepts describe 
 ## Relationships
 
 - **Platform → Target system analysis**: Specialist and composer skills (`domain-comprehension`, `squad-map`, `prd-architect`, `migration-program-manager`, …) run *on* a target workspace and emit artifacts defined in the target context. The platform context defines *how* those skills run; the target context defines *what they mean* about customer systems.
-- **Target system analysis → Platform**: `domain-comprehension` always invokes `squad-map` at Session 0b (mandatory subroutine, not optional escalation). Squad assignments from `SQUAD_MAP.md` feed bounded-context cards and downstream platform skills (release-readiness, org rollups).
+- **Target system analysis → Platform**: `domain-comprehension` delegates squad mapping to `squad-map` at Session 0b rather than reimplementing its algorithm (mandatory subroutine for *how* the mapping happens, not optional escalation) — Session 0b itself is conditional (skipped when GitLab/Datadog signals are unavailable, in favor of a CODEOWNERS fallback, or when an unchanged census makes it unnecessary). Squad assignments from `SQUAD_MAP.md` feed bounded-context cards and downstream platform skills (release-readiness, org rollups).
 - **Shared confidence bands**: HIGH / MEDIUM / LOW / UNKNOWN apply in both contexts but measure different things — platform skills use them for findings; target analysis uses them for section- and document-level evidence strength.
 - **Separated decision concepts** (evidence completeness, review verdict, repository readiness, external-action authorization, final repository action) are defined in the platform context and apply wherever a skill emits a verdict or takes an external action.
 

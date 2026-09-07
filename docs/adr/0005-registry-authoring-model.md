@@ -61,7 +61,8 @@ The contract is that **no consumer ever sees `extends` or `profiles`**. Every re
 whether it goes through `parse_registry` or reads the raw mapping — sees the same fully-inlined shape
 the registry had before profiles existed. Nothing writes back into `skills.yaml` any more, so there is
 no longer a writer that has to preserve the unresolved `extends:` form on disk. Today one profile
-(`read-only-leaf-review`) is inherited by 15 skills.
+(`read-only-leaf-review`) is inherited by 17 skills (see Consequences below for how that count has
+moved since this ADR was first written).
 
 The one place this still matters: side-file projections read fragments *before* profile resolution, so
 a skill that inherited its `capabilities:` block from a profile would be absent from the generated

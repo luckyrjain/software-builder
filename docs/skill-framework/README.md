@@ -16,10 +16,12 @@ build-provenance, SCM-policy, change-impact, deployment-risk, and applicable spe
 into one fail-closed verdict for one exact PR/MR/release candidate.
 
 `test-writer` is a thin router (like `who-owns-x-bot`/`release-readiness-checker`) that classifies a
-test-writing request by level and dispatches to exactly one of `unit-test-creator`,
-`integration-test-creator`, `contract-test-creator`, `e2e-test-creator`, or `api-test-creator` — it has no detection or
-generation logic of its own; see [shared/test-creation-principles.md](shared/test-creation-principles.md)
-for what the five dispatch targets share.
+test-writing request by level and dispatches to one or more of `unit-test-creator`,
+`integration-test-creator`, `contract-test-creator`, `e2e-test-creator`, and `api-test-creator` as the
+request requires (a single explicitly named level still routes to just that one specialist) — it has
+no detection or generation logic of its own; see
+[shared/test-creation-principles.md](shared/test-creation-principles.md) for what the five dispatch
+targets share.
 Design spec: [2025-06-30-unified-skill-framework-design.md](../superpowers/specs/2025-06-30-unified-skill-framework-design.md).
 
 `who-owns-x-bot`, `pr-gatekeeper`, `incident-triage-agent`, and `backlog-runner` are each in

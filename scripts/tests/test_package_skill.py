@@ -267,6 +267,19 @@ def test_package_skill_rejects_untracked_credential_file_in_skill_source(
     assert not dest.exists()
 
 
+def test_package_skill_rejects_ssh_private_key_in_skill_source(isolated_repo: Path, tmp_path: Path) -> None:
+    # ssh-keygen's default output filenames (id_rsa, id_ed25519, ...) carry no suffix, so the
+    # .pem/.key/.p12/.pfx suffix check alone never catches them -- SENSITIVE_NAMES lists them
+    # by exact name instead.
+    (isolated_repo / "unit-test-creator" / "id_rsa").write_text("-----BEGIN OPENSSH PRIVATE KEY-----\n", encoding="utf-8")
+
+    dest = tmp_path / "installed" / "unit-test-creator"
+    with pytest.raises(ValueError, match="potentially sensitive"):
+        package_skill(skill="unit-test-creator", repo_root=isolated_repo, dest=dest, host="test")
+
+    assert not dest.exists()
+
+
 def test_package_skill_rejects_symlink_pointing_inside_repo(isolated_repo: Path, tmp_path: Path) -> None:
     # A symlink that resolves to somewhere *inside* the repo is still a
     # symlink -- it can be swapped to point elsewhere later (TOCTOU) and it

@@ -85,8 +85,9 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
   "generated -- do not edit" banner (it landed same-day, before either amendment was written);
   `docs/skill-framework/README.md`'s framework-compliant skill roster was missing `module-design`
   and `codebase-architecture-review`; `five-concept-separation-audit.md` claimed "all 23 skills" /
-  repo-wide coverage when the repository has 40 skills and the matrix audits 19 -- retitled to
-  state actual coverage rather than implying an unaudited skill was checked and found clean.
+  repo-wide coverage when the repository has 40 skills and the matrix audits 23 of them (not
+  repo-wide, and coincidentally the same number as the original "23 skills" framing) -- retitled
+  to state actual coverage rather than implying an unaudited skill was checked and found clean.
   Removed `.superpowers/sdd/`, eight stale, self-disclaiming agent-driven-development task
   reports committed at repo root with zero references anywhere, and gitignored the directory.
 - Added a `docs/OPERATIONS.md` runbook entry for the `SYMLINK`/`UNOWNED`/`CORRUPT_OWNERSHIP`

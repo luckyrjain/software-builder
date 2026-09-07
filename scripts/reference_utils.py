@@ -131,7 +131,12 @@ IGNORED_FILE_PATTERNS = ("*.pyc", ".DS_Store", "*.swp", "*~")
 # reject_sensitive_files() below (a pre-pass over an arbitrary working tree, used by
 # package_skill.py's single-skill local install path, which -- unlike generic_package.py --
 # is not limited to git-tracked files and so cannot rely on "not committed" as a backstop).
-SENSITIVE_NAMES = frozenset({".env", ".netrc", "credentials.json", "secrets.yaml", "secrets.yml"})
+SENSITIVE_NAMES = frozenset({
+    ".env", ".netrc", "credentials.json", "secrets.yaml", "secrets.yml",
+    # ssh-keygen's own default output filenames -- these carry no suffix by design, so the
+    # SENSITIVE_SUFFIXES check below (.pem/.key/.p12/.pfx) never catches them.
+    "id_rsa", "id_dsa", "id_ecdsa", "id_ed25519", "id_ecdsa_sk", "id_ed25519_sk",
+})
 SENSITIVE_SUFFIXES = frozenset({".pem", ".key", ".p12", ".pfx"})
 
 

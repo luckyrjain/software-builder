@@ -213,13 +213,19 @@ lint: lint-static lint-suites
 # locally, in this order.
 lint-static: lint-platform-files validate-registry validate-agent-skills validate-hosts generate-check validate-evals validate-operational-upkeep lint-framework lint-incident-triage-agent lint-who-owns-x-bot lint-new-hire-guide lint-release-readiness-checker lint-cost-optimization-sprint-planner lint-backlog-runner lint-test-writer lint-prd-architect lint-architecture-review lint-system-design lint-api-design-review lint-database-review lint-security-review lint-performance-review lint-capacity-planner lint-observability-review lint-deployment-risk-review lint-dependency-upgrade-review lint-tech-debt-assessor lint-module-design lint-codebase-architecture-review lint-requirements-lock lint-python lint-actions-pinning lint-actions-security verify-install verify-install-all validate-review-contracts lint-scripts-shellcheck
 
+# koalaman/shellcheck-alpine below is pinned by digest, not the mutable :stable tag -- a Docker
+# tag can be silently repointed after review the same way a mutable git ref can, which is exactly
+# the risk lint-actions-pinning enforces for every uses: reference in this repo's workflows; a
+# `docker run` image reference isn't a uses: field, so that check can't cover these 4 sites (see
+# secret-scan.yml's zricethezav/gitleaks@sha256:... for the same pattern applied to a uses: field).
+# Digest resolved from the :stable tag's manifest on 2026-09-07; update all 4 sites together.
 lint-scripts-shellcheck:
 	@for f in scripts/*.sh; do \
 		echo "shellcheck $$f"; \
 		if command -v shellcheck >/dev/null 2>&1; then \
 			shellcheck "$$f"; \
 		elif command -v docker >/dev/null 2>&1; then \
-			docker run --rm -v "$(CURDIR):/mnt" -w /mnt koalaman/shellcheck-alpine:stable shellcheck "$$f"; \
+			docker run --rm -v "$(CURDIR):/mnt" -w /mnt koalaman/shellcheck-alpine@sha256:c82fe42504fbc9fc68f15d36638e5ee2324ebb8b94e96a3c4e395bf361c49183 shellcheck "$$f"; \
 		else \
 			echo "error: install shellcheck or docker" >&2; \
 			exit 1; \
@@ -443,7 +449,7 @@ lint-domain-comprehension-scripts:
 		shellcheck domain-comprehension/tests/fixtures/check-content/prepare.sh \
 			domain-comprehension/tests/run_pressure_tests.sh; \
 	elif command -v docker >/dev/null 2>&1; then \
-		docker run --rm -v "$(CURDIR):/mnt" -w /mnt koalaman/shellcheck-alpine:stable \
+		docker run --rm -v "$(CURDIR):/mnt" -w /mnt koalaman/shellcheck-alpine@sha256:c82fe42504fbc9fc68f15d36638e5ee2324ebb8b94e96a3c4e395bf361c49183 \
 			shellcheck domain-comprehension/tests/fixtures/check-content/prepare.sh \
 			domain-comprehension/tests/run_pressure_tests.sh; \
 	fi; \
@@ -571,7 +577,7 @@ lint-mysql-to-postgres-sql:
 	@if command -v shellcheck >/dev/null 2>&1; then \
 		shellcheck -x -P SCRIPTDIR mysql-to-postgres-sql/scripts/scan-mysql-dialect.sh mysql-to-postgres-sql/scripts/scan-report.sh mysql-to-postgres-sql/scripts/mysql-dialect-patterns.sh mysql-to-postgres-sql/tests/run_pressure_tests.sh; \
 	elif command -v docker >/dev/null 2>&1; then \
-		docker run --rm -v "$(CURDIR):/mnt" -w /mnt koalaman/shellcheck-alpine:stable \
+		docker run --rm -v "$(CURDIR):/mnt" -w /mnt koalaman/shellcheck-alpine@sha256:c82fe42504fbc9fc68f15d36638e5ee2324ebb8b94e96a3c4e395bf361c49183 \
 			shellcheck -x -P SCRIPTDIR mysql-to-postgres-sql/scripts/scan-mysql-dialect.sh mysql-to-postgres-sql/scripts/scan-report.sh mysql-to-postgres-sql/scripts/mysql-dialect-patterns.sh mysql-to-postgres-sql/tests/run_pressure_tests.sh; \
 	else \
 		echo "error: install shellcheck or docker" >&2; exit 1; \
@@ -636,7 +642,7 @@ lint-$(1):
 	@if command -v shellcheck >/dev/null 2>&1; then \
 		shellcheck -x -P SCRIPTDIR $(1)/scripts/*.sh; \
 	elif command -v docker >/dev/null 2>&1; then \
-		docker run --rm -v "$(CURDIR):/mnt" -w /mnt koalaman/shellcheck-alpine:stable \
+		docker run --rm -v "$(CURDIR):/mnt" -w /mnt koalaman/shellcheck-alpine@sha256:c82fe42504fbc9fc68f15d36638e5ee2324ebb8b94e96a3c4e395bf361c49183 \
 			shellcheck -x -P SCRIPTDIR $(1)/scripts/*.sh; \
 	else \
 		echo "error: install shellcheck or docker" >&2; exit 1; \
