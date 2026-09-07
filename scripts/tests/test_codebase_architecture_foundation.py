@@ -457,3 +457,13 @@ def test_module_design_evaluates_depth_and_deletion_test() -> None:
     assert "interface surface" in text
     assert "deletion test" in text
     assert "implementation depth" in text
+
+
+def test_visual_report_is_ephemeral_and_safe() -> None:
+    text = (ROOT / "codebase-architecture-review/reference/html-report.md").read_text()
+    assert "architecture-review-20260905T120000Z.html" in text
+    assert "cdn.tailwindcss.com" in text
+    assert "mermaid@11" in text
+    assert "securityLevel: \"strict\"" in text
+    assert "Write no HTML into the repository" in text
+    assert "Do not add the path to `skill_result.artifacts`" in text

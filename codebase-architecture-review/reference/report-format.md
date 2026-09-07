@@ -71,7 +71,8 @@ Each retained candidate must render both a before model and an after model as pa
 zero-candidate report may omit candidate cards entirely. The report may also be rendered as one ephemeral,
 self-contained HTML visual companion in OS temporary storage, for example
 `architecture-review-20260905T120000Z.html`; that path is never added to the durable
-`codebase_architecture_report` payload or to `skill_result.artifacts`.
+`codebase_architecture_report` payload or to `skill_result.artifacts`. See
+[reference/html-report.md](html-report.md) for the full HTML companion contract.
 
 ## Falsification results
 
