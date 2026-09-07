@@ -33,3 +33,9 @@ build/
 # (architecture-review/workflow/report.md), so running it against this repository would otherwise
 # overwrite a committed file. Dated historical runs live in docs/history/ instead.
 /ARCHITECTURE_REVIEW_REPORT.md
+
+# Agent-driven-development scratch/task-report output (e.g. the superpowers skill's SDD
+# convention). Working-tree scratch space, not a deliverable -- a prior pass (PR #201)
+# accidentally committed one run's reports (removed as stale/unreferenced in a later pass);
+# this keeps a future run's reports from being recommitted the same way.
+/.superpowers/

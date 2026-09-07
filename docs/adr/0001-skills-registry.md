@@ -63,6 +63,6 @@ detection that decides which contract layers a checkout has are recorded in
 and its deliberate divergence from `scripts/registry/host_contracts.yaml` are recorded in
 [ADR 0006](0006-host-registry-and-evidence-model.md).
 
-`skills.yaml` still carries no "generated — do not edit" banner, so the file does not tell a reader its
-own authoring rule; adding one to the merged output is tracked as follow-up work against
-`manifest_merge.py`.
+`skills.yaml` now carries a "GENERATED in part" banner at its top and a narrower "GENERATED ... do
+not edit the `skills:` mapping" banner directly above that mapping (`manifest_merge.py`, shipped in
+the same PR that authored this amendment) — the follow-up this paragraph used to track is done.
