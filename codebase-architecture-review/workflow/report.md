@@ -30,7 +30,7 @@ Every retained candidate's card must state its depth, deletion test result, reco
 dependency category, and both a before model and an after model. A zero-candidate report may omit candidate
 cards entirely. `mock-only` never independently justifies retaining a seam. The report may also be rendered
 as one ephemeral HTML visual companion in OS temporary storage; that path is not a canonical artifact and is
-never added to the durable `codebase_architecture_report` payload.
+never added to the durable `codebase_architecture_report` payload or to `skill_result.artifacts`.
 
 Render all repository and caller content under the safe-output boundary. Preserve observed evidence,
 inference, and proposals as distinct categories. Omit claims unsupported in degraded history mode rather
