@@ -23,11 +23,17 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from scripts.evals.fixtures import load_fixtures, load_global_template_cases
 from scripts.evals.golden import GoldenCase, golden_case_index, load_golden_fixtures, resolve_path
 from scripts.evals.transcript import load_transcript_fixtures
-from scripts.evals.types import eval_contract_path, load_eval_contract
+from scripts.evals.types import (
+    eval_contract_path,
+    load_eval_contract,
+    load_mutation_anchors,
+    mutation_anchors_path,
+)
 from scripts.registry.schema import parse_registry
-from scripts.yaml_safety import YAML_SAFETY_ERRORS, load_unique_yaml_file, require_mapping
+from scripts.yaml_safety import YAML_SAFETY_ERRORS
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -56,67 +62,40 @@ def _check_case_refs(
 
 
 def _fixture_case_refs(fixtures_dir: Path) -> tuple[set[str], list[str]]:
-    """Scan Tier-1 fixtures (evals/fixtures/**/*.yaml) for their "skill/case_id" refs.
-
-    Reimplements just the ref-extraction half of __main__.load_fixtures rather
-    than importing it: __main__.py is the CLI entrypoint, and wiring this
-    linter into a --skill-filtered eval run (a later step) would make that an
-    import cycle. The two independently enforce "skill and case_id are
-    required" the same way; if that check ever needs to change, this module's
-    copy has to change with it, which is a one-line coupling worth accepting
-    to avoid the cycle.
+    """Scan Tier-1 fixtures (evals/fixtures/**/*.yaml) for their "skill/case_id" refs,
+    via the same loader `__main__.run_all` uses to actually run them (`fixtures.load_fixtures`).
     """
-    refs: set[str] = set()
-    errors: list[str] = []
     if not fixtures_dir.is_dir():
-        return refs, errors
-    for path in sorted(fixtures_dir.rglob("*.yaml")):
-        if path.name.startswith("_"):
-            continue
-        try:
-            raw = load_unique_yaml_file(path)
-        except (OSError, ValueError, *YAML_SAFETY_ERRORS) as exc:
-            errors.append(f"{path}: {exc}")
-            continue
-        if not isinstance(raw, dict):
-            errors.append(f"{path}: fixture root must be a mapping")
-            continue
-        skill = str(raw.get("skill", ""))
-        case_id = str(raw.get("case_id", ""))
-        if not skill or not case_id:
-            errors.append(f"{path}: skill and case_id are required")
-            continue
-        refs.add(f"{skill}/{case_id}")
-    return refs, errors
+        return set(), []
+    try:
+        cases = load_fixtures(fixtures_dir)
+    except (OSError, ValueError, *YAML_SAFETY_ERRORS) as exc:
+        return set(), [str(exc)]
+    return {f"{case.skill}/{case.case_id}" for case in cases}, []
 
 
 def _global_template_refs(root: Path) -> tuple[set[str], list[str]]:
     """Every registered skill gets a synthetic "{skill}/global-happy" and
-    "{skill}/global-adversarial" ref when evals/fixtures/_global.yaml defines
-    those templates (see __main__.run_all) -- e.g. degraded_host_cases'
-    backlog-runner/global-happy resolves only through this path, not through
-    any file actually named for that skill.
+    "{skill}/global-adversarial" ref when evals/fixtures/_global.yaml defines those
+    templates -- e.g. degraded_host_cases' backlog-runner/global-happy resolves only
+    through this path, not through any file actually named for that skill. Via the same
+    `fixtures.load_global_template_cases` __main__.run_all runs these through, so a
+    template this linter counts as a known ref is guaranteed to be a case that actually runs.
     """
-    refs: set[str] = set()
-    errors: list[str] = []
-    global_fixture = root / "evals" / "fixtures" / "_global.yaml"
-    if not global_fixture.is_file():
-        return refs, errors
-    try:
-        raw = load_unique_yaml_file(global_fixture)
-    except (OSError, ValueError, *YAML_SAFETY_ERRORS) as exc:
-        return refs, [f"{global_fixture}: {exc}"]
-    if not isinstance(raw, dict):
-        return refs, [f"{global_fixture}: must be a mapping"]
+    # No skills.yaml read at all when there's no _global.yaml to expand -- a synthetic
+    # fixture repo that only exercises fixtures/transcripts/golden refs need not carry
+    # a registry, matching what run_all itself would do (skip the block entirely).
+    if not (root / "evals" / "fixtures" / "_global.yaml").is_file():
+        return set(), []
     try:
         registry = parse_registry(root / "skills.yaml")
     except (OSError, ValueError, *YAML_SAFETY_ERRORS) as exc:
-        return refs, [f"{root / 'skills.yaml'}: {exc}"]
-    for template_name in ("happy", "adversarial"):
-        if isinstance(raw.get(template_name), dict):
-            for skill_id in registry.skills:
-                refs.add(f"{skill_id}/global-{template_name}")
-    return refs, errors
+        return set(), [f"{root / 'skills.yaml'}: {exc}"]
+    try:
+        cases = load_global_template_cases(root, registry)
+    except (OSError, ValueError, *YAML_SAFETY_ERRORS) as exc:
+        return set(), [f"{root / 'evals' / 'fixtures' / '_global.yaml'}: {exc}"]
+    return {f"{case.skill}/{case.case_id}" for case in cases}, []
 
 
 def _known_case_refs(root: Path, golden_cases: list[GoldenCase]) -> tuple[set[str], list[str]]:
@@ -257,19 +236,11 @@ def _lint_mutation_anchors(
     golden_by_ref: dict[str, GoldenCase],
 ) -> list[str]:
     errors: list[str] = []
-    anchors_path = root / "scripts" / "registry" / "mutation_anchors.yaml"
+    anchors_path = mutation_anchors_path(root)
     try:
-        anchor_doc = require_mapping(load_unique_yaml_file(anchors_path), str(anchors_path))
+        anchors = load_mutation_anchors(root)
     except (OSError, ValueError, *YAML_SAFETY_ERRORS) as exc:
-        return [f"{anchors_path}: {exc}"]
-
-    if anchor_doc.get("schema_version") != 1:
-        errors.append(f"{anchors_path}: schema_version must be 1")
-
-    try:
-        anchors = require_mapping(anchor_doc.get("anchors"), "anchors")
-    except ValueError as exc:
-        return [f"{anchors_path}: {exc}"]
+        return [str(exc)]
 
     adversarial = contract.get("adversarial_classes")
     adversarial_keys = set(adversarial) if isinstance(adversarial, dict) else set()

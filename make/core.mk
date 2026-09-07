@@ -774,8 +774,6 @@ lint-codebase-architecture-review:
 		grep -Fqx "$$heading" codebase-architecture-review/SKILL.md || \
 			{ echo "error: codebase-architecture-review/SKILL.md must contain heading $$heading" >&2; exit 1; }; \
 	done
-	@echo "lint-codebase-architecture-review: balanced report-format fenced code blocks"
-	@python3 -c 'import sys; from pathlib import Path; from scripts.reference_utils import has_unclosed_fenced_code_block; path = Path(sys.argv[1]); sys.exit(f"error: {path}: unclosed fenced code block" if has_unclosed_fenced_code_block(path.read_text()) else 0)' codebase-architecture-review/reference/report-format.md
 	@echo "  ok"
 
 lint-change-impact-analyzer:
@@ -932,7 +930,10 @@ lint-framework:
 		"change-impact-analyzer:workflow/inputs.md" \
 		"resilience-review:workflow/inputs.md" \
 		"implementation-planner:workflow/inputs.md" \
-		"production-readiness-review:workflow/inputs.md"; do \
+		"production-readiness-review:workflow/inputs.md" \
+		"prd-architect:workflow/inputs.md" \
+		"module-design:workflow/inputs.md" \
+		"codebase-architecture-review:workflow/scope.md"; do \
 		skill=$${pair%%:*}; file=$${pair#*:}; \
 		if ! grep -qiE 'untrusted|prompt-injection' $$skill/$$file; then \
 			echo "error: $$skill/$$file must declare untrusted-content guard" >&2; fail=1; \

@@ -7,14 +7,13 @@ unbounded dependency-graph crawl.
 
 from __future__ import annotations
 
-import importlib.util
 import re
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from types import ModuleType
 from typing import Any
 
+from scripts import shared_runtime
 from scripts.registry.artifact_trust import classify_assessment_context_trust
 from scripts.registry.assessment_target import normalize_repo_identity
 from scripts.registry.result_envelope import build_result_envelope
@@ -35,23 +34,9 @@ CHANGE_CLASSES = (
 
 _ROOT = Path(__file__).resolve().parents[1]
 
-
-def _load_unified_diff() -> ModuleType:
-    """The shared unified-diff grammar, loaded from this checkout's own framework tree.
-
-    Loaded by path rather than imported: it lives under docs/ so it can be vendored verbatim into
-    installed skill packages, which must not depend on this repository's `scripts.*` import graph.
-    """
-    path = _ROOT / "docs/skill-framework/shared/unified_diff.py"
-    spec = importlib.util.spec_from_file_location("shared_unified_diff", path)
-    if spec is None or spec.loader is None:
-        raise RuntimeError(f"unable to load shared unified-diff grammar: {path}")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-_unified_diff = _load_unified_diff()
+_unified_diff = shared_runtime.load(
+    "unified_diff", alias="shared_unified_diff", description="shared unified-diff grammar",
+)
 
 # This analyser reads a change description, not a whole PR patch, so it caps diff records well
 # below the shared default; and it prefers -- rather than requires -- an identical split for an

@@ -3,15 +3,16 @@
 
 from __future__ import annotations
 
-import importlib.util
 import sys
 from pathlib import Path
-from types import ModuleType
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
+
+from scripts import shared_runtime
+from scripts.registry.validation_primitives import run_validator_cli
 
 try:
     import yaml
@@ -22,22 +23,9 @@ except ImportError:  # pragma: no cover - exercised when PyYAML missing
     load_unique_yaml_file = None  # type: ignore[assignment]
 
 
-def _load_confidence_bands() -> ModuleType:
-    """The shared band vocabulary, loaded from this checkout's own framework tree.
-
-    Loaded by path rather than imported: it lives under docs/ so it can be vendored verbatim into
-    installed skill packages, which must not depend on this repository's `scripts.*` import graph.
-    """
-    path = ROOT / "docs/skill-framework/shared/confidence_bands.py"
-    spec = importlib.util.spec_from_file_location("shared_confidence_bands", path)
-    if spec is None or spec.loader is None:
-        raise RuntimeError(f"unable to load shared confidence bands: {path}")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-_confidence_bands = _load_confidence_bands()
+_confidence_bands = shared_runtime.load(
+    "confidence_bands", alias="shared_confidence_bands", description="shared confidence bands",
+)
 
 ROOT_KEYS = frozenset({"review_metadata", "assessment_metadata"})
 
@@ -298,29 +286,20 @@ def load_yaml(path: Path) -> tuple[Any | None, str | None]:
     return data, None
 
 
+_DEFAULT_EXAMPLE_PATHS = (
+    "docs/skill-framework/shared/examples/review-metadata.example.yaml",
+    "docs/skill-framework/shared/examples/assessment-metadata-rca.example.yaml",
+    "docs/skill-framework/shared/examples/assessment-metadata-k8s.example.yaml",
+)
+
+
 def main(argv: list[str] | None = None) -> int:
-    paths = (argv if argv is not None else sys.argv[1:]) or [
-        "docs/skill-framework/shared/examples/review-metadata.example.yaml",
-        "docs/skill-framework/shared/examples/assessment-metadata-rca.example.yaml",
-        "docs/skill-framework/shared/examples/assessment-metadata-k8s.example.yaml",
-    ]
-    exit_code = 0
-    for path_str in paths:
-        path = Path(path_str)
-        data, load_error = load_yaml(path)
-        if load_error:
-            print(f"{path}: {load_error}", file=sys.stderr)
-            exit_code = 1
-            continue
-        errors = validate_footer_document(data)
-        if errors:
-            exit_code = 1
-            print(f"{path}: validation failed", file=sys.stderr)
-            for err in errors:
-                print(f"  - {err}", file=sys.stderr)
-        else:
-            print(f"{path}: ok")
-    return exit_code
+    return run_validator_cli(
+        argv,
+        load=load_yaml,
+        validate=validate_footer_document,
+        default_paths=_DEFAULT_EXAMPLE_PATHS,
+    )
 
 
 if __name__ == "__main__":

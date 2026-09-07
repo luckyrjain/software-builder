@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from scripts.evals.__main__ import load_fixtures
+from scripts.evals.fixtures import load_fixtures, load_global_template_cases
 from scripts.evals.golden import GoldenCase, load_golden_fixtures
 from scripts.evals.transcript import load_transcript_fixtures
 from scripts.registry.schema import parse_registry
@@ -30,20 +30,10 @@ def build_eval_tier_health(root: Path = ROOT) -> dict[str, Any]:
     for case in load_fixtures(root / "evals" / "fixtures"):
         counts[case.tier] += 1
 
-    global_fixture = root / "evals" / "fixtures" / "_global.yaml"
-    if global_fixture.is_file():
-        global_raw = load_unique_yaml_file(global_fixture)
-        if isinstance(global_raw, dict):
-            for name in ("happy", "adversarial"):
-                template = global_raw.get(name)
-                if not isinstance(template, dict):
-                    continue
-                # Mirror scripts.evals.__main__.run_all()'s validity check so this
-                # report can't claim coverage the real eval runner wouldn't execute.
-                assertions = template.get("assertions", [])
-                if not isinstance(assertions, list):
-                    continue
-                counts[int(template.get("tier", 1))] += len(registry.skills)
+    # Counts through the same fixtures.load_global_template_cases scripts.evals.__main__.run_all
+    # runs these through, so this report can't claim coverage the real eval runner wouldn't execute.
+    for case in load_global_template_cases(root, registry):
+        counts[case.tier] += 1
 
     for case in load_transcript_fixtures(root / "evals" / "transcripts"):
         counts[case.tier] += 1

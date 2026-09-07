@@ -32,6 +32,7 @@ if str(ROOT) not in sys.path:
 
 from scripts.registry.schema import load_registry_raw  # noqa: E402
 from scripts.validate_references import validate_files  # noqa: E402
+from scripts.yaml_safety import YAML_SAFETY_ERRORS, load_unique_frontmatter  # noqa: E402
 
 WORKFLOW_FRONTMATTER_KEYS = ("workflow_version", "phase", "produces", "consumes")
 
@@ -374,21 +375,6 @@ def _check_skill_md_length(skill_dir: Path, skill_id: str, max_lines: int) -> li
     return []
 
 
-def _frontmatter(text: str) -> str:
-    """The block between the first and second `---` fence, as awk saw it."""
-    body: list[str] = []
-    seen = 0
-    for line in text.splitlines():
-        if line == "---":
-            seen += 1
-            continue
-        if seen == 1:
-            body.append(line)
-        elif seen >= 2:
-            break
-    return "\n".join(body)
-
-
 def _check_workflow_frontmatter(skill_dir: Path, skill_id: str) -> list[str]:
     # The five skills that ship a workflow-contract.yaml have these same four
     # keys checked route-by-route by scripts/validate_workflow_contracts.py,
@@ -400,13 +386,18 @@ def _check_workflow_frontmatter(skill_dir: Path, skill_id: str) -> list[str]:
         return []
     errors: list[str] = []
     for md_file in sorted(workflow.glob("*.md")):
-        text = _read(md_file)
-        if text is None:
-            errors.append(f"error: {skill_id}: cannot read {md_file.as_posix()}")
+        # YAML-parsed, via the same load_unique_frontmatter every other reader of workflow
+        # frontmatter uses (scripts.evals's workflow_frontmatter_all assertion,
+        # scripts/validate_workflow_contracts.py) -- a prior regex/text-scan here disagreed
+        # with those on a fence line with trailing whitespace or a key present as plain text
+        # but not as real YAML.
+        try:
+            frontmatter = load_unique_frontmatter(md_file)
+        except (OSError, ValueError, *YAML_SAFETY_ERRORS) as exc:
+            errors.append(f"error: {skill_id}: {md_file.as_posix()}: {exc}")
             continue
-        frontmatter = _frontmatter(text)
         for key in WORKFLOW_FRONTMATTER_KEYS:
-            if not re.search(rf"^{re.escape(key)}:", frontmatter, re.MULTILINE):
+            if key not in frontmatter:
                 errors.append(
                     f"error: {skill_id}: {md_file.as_posix()} is missing {key} frontmatter "
                     "(workflow/*.md must declare "
