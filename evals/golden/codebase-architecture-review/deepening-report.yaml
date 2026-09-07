@@ -1,0 +1,62 @@
+schema_version: 1
+skill: codebase-architecture-review
+case_id: deepening-report
+tier: 3
+description: >
+  A bounded src/orders review as current main actually renders it: read-only,
+  no automatic refactor, zero retained candidates. This is the RED baseline
+  for Matt-parity report depth (docs/superpowers/specs/2026-09-05-matt-architecture-parity-bridge.md,
+  R1-R5/R7-R9): the existing-shape assertions stay green against this
+  recorded output, but the recommendation_strength/dependency_category/before_model/after_model/deletion_test
+  assertions fail because current main's report format has none of those
+  fields. Tasks 2-6 add them to report-format.md and report.md; this fixture
+  is not modified to make them pass.
+recorded_output:
+  artifact: codebase_architecture_report
+  repository_write_action: none
+  automatic_refactor: false
+  scope:
+    paths:
+      - src/orders
+  analysis_budget:
+    fully_read_files: 8
+    fully_read_file_limit: 200
+    hotspots: 1
+    hotspot_limit: 3
+  history:
+    status: available
+    commits: 42
+    days: 90
+  candidates: []
+  candidate_count: 0
+  top_recommendation:
+    status: none
+  recommended_next_skill: null
+assertions:
+  - type: field_equals
+    path: artifact
+    value: codebase_architecture_report
+  - type: field_equals
+    path: repository_write_action
+    value: none
+  - type: field_equals
+    path: automatic_refactor
+    value: false
+  - type: field_equals
+    path: candidate_count
+    value: 0
+  - type: field_equals
+    path: recommended_next_skill
+    value: null
+  # RED: Matt-parity visual/candidate-depth report fields absent from current main's report format.
+  - type: field_equals
+    path: top_recommendation.recommendation_strength
+    value: Strong
+  - type: field_present
+    path: top_recommendation.dependency_category
+  - type: field_present
+    path: top_recommendation.before_model
+  - type: field_present
+    path: top_recommendation.after_model
+  - type: field_present
+    path: top_recommendation.deletion_test

@@ -1,0 +1,70 @@
+schema_version: 1
+skill: codebase-architecture-review
+case_id: deepening-quality
+tier: 2
+description: >
+  A faithful current-main transcript for a bounded src/orders hotspot review.
+  Current main reads the repository and history, falsifies the sole candidate
+  down to zero_candidates_valid, writes a text-only report, and completes --
+  it never retains a candidate, never writes a visual before/after model, and
+  never labels a recommendation's strength. This is the RED baseline for
+  Matt-parity judgment quality (docs/superpowers/specs/2026-09-05-matt-architecture-parity-bridge.md,
+  R1-R5/R7-R9): the read-only and no-automatic-refactor assertions below stay
+  green against this transcript, but the three quality assertions fail
+  because current main's behavior genuinely lacks a retained candidate, a
+  visual_report_write event, and a recommendation_strength: Strong event.
+  Tasks 2-6 make the skill produce those events; this fixture is not modified
+  to make them pass.
+events:
+  - type: tool
+    name: repository_read
+    args:
+      paths: [src/orders, tests/orders]
+  - type: tool
+    name: history_read
+    args:
+      available: true
+      commits: 42
+      days: 90
+  - type: gate
+    name: candidate_falsification
+    decision: zero_candidates_valid
+  - type: tool
+    name: report_write
+    args:
+      artifact: codebase_architecture_report
+      recommended_next_skill: null
+  - type: outcome
+    status: complete
+assertions:
+  # Pre-existing read-only / no-automatic-refactor invariants -- must stay green.
+  - type: tool_called
+    name: repository_read
+  - type: tool_called
+    name: history_read
+  - type: gate_decision
+    name: candidate_falsification
+    decision: zero_candidates_valid
+  - type: tool_args_match
+    name: report_write
+    args:
+      recommended_next_skill: null
+  - type: tool_not_called
+    name: repository_write
+  - type: tool_not_called
+    name: apply_refactor
+  - type: tool_not_called
+    name: invoke_downstream_skill
+  - type: outcome_status
+    status: complete
+  # RED: Matt-parity judgment-quality assertions. current main has no candidate_retained
+  # event, no visual_report_write event, and no recommendation_strength field -- all three
+  # fail on this faithful current-main transcript until Tasks 2-6 land.
+  - type: event_order
+    events: [repository_read, history_read, candidate_retained, report_write, outcome]
+  - type: tool_called
+    name: visual_report_write
+  - type: event_data_equals
+    event: report_write
+    path: recommendation_strength
+    value: Strong

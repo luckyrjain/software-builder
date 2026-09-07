@@ -424,3 +424,36 @@ def test_foundation_generation_projects_skills_and_shared_doctrine(tmp_path: Pat
         "software-builder/codebase-architecture-review/SKILL.md",
         "software-builder/docs/skill-framework/shared/codebase-design-principles.md",
     } <= members
+
+
+def test_matt_depth_and_deletion_doctrine_is_explicit() -> None:
+    text = (ROOT / "docs/skill-framework/shared/codebase-design-principles.md").read_text()
+    for heading in (
+        "## Module depth",
+        "## Interface surface",
+        "## Deletion test",
+        "## Real versus hypothetical seams",
+    ):
+        assert heading in text
+    assert "shallow pass-through" in text
+    assert "deep module" in text
+
+
+def test_architecture_report_requires_matt_visual_candidate_fields() -> None:
+    text = (ROOT / "codebase-architecture-review/reference/report-format.md").read_text()
+    for phrase in (
+        "Recommendation strength",
+        "Dependency category",
+        "Before model",
+        "After model",
+        "Deletion test",
+        "architecture-review-20260905T120000Z.html",
+    ):
+        assert phrase in text
+
+
+def test_module_design_evaluates_depth_and_deletion_test() -> None:
+    text = (ROOT / "module-design/workflow/design.md").read_text()
+    assert "interface surface" in text
+    assert "deletion test" in text
+    assert "implementation depth" in text
