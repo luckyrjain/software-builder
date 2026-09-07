@@ -122,6 +122,6 @@ def test_tier_filter_excludes_opposite_tier() -> None:
     tier2 = run_all(ROOT, tier_filter=2)
     tier1_ids = {result.case_id for result in tier1}
     tier2_ids = {result.case_id for result in tier2}
-    assert len(tier2_ids) == 8
+    assert len(tier2_ids) == 10
     assert "duplicate-webhook-short-circuit" in tier2_ids
     assert "duplicate-webhook-short-circuit" not in tier1_ids
