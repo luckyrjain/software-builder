@@ -9,12 +9,12 @@ what is declared in `agent-hosts.yaml`, verified by whatever evidence is actuall
 ## Hosts
 
 ### claude
-- **Verification:** UNVERIFIED
+- **Verification:** VERIFIED
 - **Maintainer support:** BEST_EFFORT
 - **Isolation:** UNKNOWN
 - **Discovery surfaces:** LOCAL \(claude-project, claude-user\)
-- **Capabilities:** host.filesystem.read=UNKNOWN, host.repository.read_write=UNKNOWN
-- **Evidence:** none recorded
+- **Capabilities:** host.filesystem.read=AVAILABLE, host.repository.read_write=AVAILABLE
+- **Evidence:** RUNTIME: Ran \`bash scripts/install.sh --agent claude-project --target-dir \<scratch-repo\> squad-map\` from inside a live Claude Code session operating on this repository; confirmed the skill landed at \`\<scratch-repo\>/.claude/skills/squad-map/SKILL.md\` \(claude-project discovery target\) and re-read it back through the same session's filesystem access -- Claude Code is itself the host being verified, so this session's own read/write of the repository under test is the runtime observation. Isolation \(subagents/worktrees\) was not exercised by this run and stays UNKNOWN.
 
 ### cursor
 - **Verification:** UNVERIFIED
@@ -51,28 +51,28 @@ concrete missing capability (`BLOCKED`) always takes precedence, matching
 | Host | Skill | Status | Missing capability |
 |------|-------|--------|---------------------|
 | claude | api-design-review | BLOCKED | host.report.write |
-| claude | api-test-creator | BLOCKED | host.repository.read_write |
+| claude | api-test-creator | DEGRADED | — |
 | claude | architecture-review | BLOCKED | host.report.write |
 | claude | backlog-runner | BLOCKED | scheduler.cron.trigger, host.issue_tracker.read |
 | claude | capacity-planner | BLOCKED | host.report.write |
 | claude | change-impact-analyzer | BLOCKED | host.report.write |
 | claude | codebase-architecture-review | BLOCKED | host.report.write, host.repository.read |
-| claude | contract-test-creator | BLOCKED | host.repository.read_write |
-| claude | cost-optimization-sprint-planner | BLOCKED | host.filesystem.read |
+| claude | contract-test-creator | DEGRADED | — |
+| claude | cost-optimization-sprint-planner | DEGRADED | — |
 | claude | database-review | BLOCKED | host.report.write |
 | claude | dependency-upgrade-review | BLOCKED | host.report.write |
 | claude | deployment-risk-review | BLOCKED | host.report.write |
 | claude | domain-comprehension | BLOCKED | host.repository.read |
-| claude | e2e-test-creator | BLOCKED | host.repository.read_write |
+| claude | e2e-test-creator | DEGRADED | — |
 | claude | implementation-planner | BLOCKED | host.report.write, host.repository.read |
 | claude | incident-rca | BLOCKED | telemetry.logs.query |
 | claude | incident-triage-agent | BLOCKED | pager.webhook.receive |
-| claude | integration-test-creator | BLOCKED | host.repository.read_write |
+| claude | integration-test-creator | DEGRADED | — |
 | claude | k8s-overprovisioning-datadog | BLOCKED | kubernetes.metrics.history |
-| claude | loop-task-implementer | BLOCKED | host.repository.read_write, host.role.isolation, host.ci.status, host.pull_request.write |
-| claude | migration-program-manager | BLOCKED | host.filesystem.read |
+| claude | loop-task-implementer | BLOCKED | host.role.isolation, host.ci.status, host.pull_request.write |
+| claude | migration-program-manager | DEGRADED | — |
 | claude | module-design | BLOCKED | host.report.write, host.repository.read |
-| claude | mysql-to-postgres-sql | BLOCKED | host.repository.read_write |
+| claude | mysql-to-postgres-sql | DEGRADED | — |
 | claude | new-hire-guide | BLOCKED | host.repository.read |
 | claude | observability-review | BLOCKED | host.report.write |
 | claude | performance-review | BLOCKED | host.report.write |
@@ -87,7 +87,7 @@ concrete missing capability (`BLOCKED`) always takes precedence, matching
 | claude | system-design | BLOCKED | host.report.write |
 | claude | tech-debt-assessor | BLOCKED | host.report.write |
 | claude | test-writer | BLOCKED | host.repository.read |
-| claude | unit-test-creator | BLOCKED | host.repository.read_write |
+| claude | unit-test-creator | DEGRADED | — |
 | claude | weekly-squad-digest | BLOCKED | scheduler.cron.trigger |
 | claude | who-owns-x-bot | BLOCKED | slack.slash_command.receive |
 | cursor | api-design-review | BLOCKED | host.report.write |

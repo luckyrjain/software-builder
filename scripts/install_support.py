@@ -146,10 +146,29 @@ def cmd_classify_destination(dest: Path, skill_id: str) -> int:
     return 0
 
 
+def _resolve_target_dir(target_dir: Path | None) -> tuple[Path | None, str | None]:
+    """Canonicalize an operator-supplied `--target-dir` before any path is built from it:
+    `Path.resolve()` collapses a relative value or one containing `..` segments to one concrete
+    absolute path before `resolve_target_path` joins a target's `{project_root}/...` template
+    onto it, so a traversal segment can't make the eventual install destination point somewhere
+    other than what the resolved path plainly shows. `target_dir` need not exist yet -- install.sh
+    creates the project's skills directory itself (existing golden tests install into a
+    not-yet-created project root) -- so this only normalizes the path, it does not require it.
+    `resolve()` never raises for a missing path (`strict=False` is the default), so this always
+    succeeds; `target_dir=None` (global/user install) passes through unchanged."""
+    if target_dir is None:
+        return None, None
+    return target_dir.resolve(), None
+
+
 def cmd_resolve_targets(root: Path, agent: str, *, home: Path, target_dir: Path | None) -> int:
     """Print `<dest_root>\\t<host_label>` per line for install.sh's install/uninstall loops to
     consume, resolved from agent-hosts.yaml plus install_resolver.SELECTORS rather than from
     Bash's own hard-coded destination and label logic."""
+    target_dir, target_dir_error = _resolve_target_dir(target_dir)
+    if target_dir_error is not None:
+        print(f"error: {target_dir_error}", file=sys.stderr)
+        return 1
     try:
         host_registry = parse_host_registry(root / "agent-hosts.yaml")
     except HostRegistryParseError as exc:
@@ -175,6 +194,10 @@ def cmd_check_shadow(
     shadowing path if not NONE) for install.sh to build an accurate completion message from
     instead of unconditionally claiming the new install is what the host will run (Candidate 8).
     """
+    target_dir, target_dir_error = _resolve_target_dir(target_dir)
+    if target_dir_error is not None:
+        print(f"error: {target_dir_error}", file=sys.stderr)
+        return 1
     try:
         host_registry = parse_host_registry(root / "agent-hosts.yaml")
     except HostRegistryParseError as exc:

@@ -109,13 +109,23 @@ hosts:
             mode: NATIVE
             precedence: 20
     capabilities:
-      host.filesystem.read: UNKNOWN
-      host.repository.read_write: UNKNOWN
+      host.filesystem.read: AVAILABLE
+      host.repository.read_write: AVAILABLE
     isolation:
       mode: UNKNOWN
     constraints: []
-    verification: UNVERIFIED
-    evidence: []
+    verification: VERIFIED
+    evidence:
+      - kind: RUNTIME
+        reference: >-
+          Ran `bash scripts/install.sh --agent claude-project --target-dir <scratch-repo>
+          squad-map` from inside a live Claude Code session operating on this repository;
+          confirmed the skill landed at `<scratch-repo>/.claude/skills/squad-map/SKILL.md`
+          (claude-project discovery target) and re-read it back through the same session's
+          filesystem access -- Claude Code is itself the host being verified, so this session's
+          own read/write of the repository under test is the runtime observation. Isolation
+          (subagents/worktrees) was not exercised by this run and stays UNKNOWN.
+        observed_at: "2026-09-07"
     maintainer_support: BEST_EFFORT
 
   # verification stays UNVERIFIED and capabilities stay UNKNOWN, matching every other host here:

@@ -114,6 +114,17 @@ def _build_manifest(root: Path) -> tuple[dict[str, Any], dict[str, Any]]:
     skills: dict[str, Any] = {}
     for skill_id, entry in registry.skills.items():
         raw = require_mapping(canonical_skills.get(skill_id), f"skills.{skill_id}")
+        if skill_id not in composition:
+            # A brand-new skill's scripts/registry/skills.d/<id>.yaml fragment is picked up here
+            # (via `registry`/`canonical`, both fragment-aware) before `make generate` has
+            # projected its `composition:` block into skills.yaml's own `contracts:` section --
+            # `load_contracts` above reads that literal, not-yet-regenerated section, so it can
+            # genuinely lack an entry for a skill that otherwise fully exists. Report that as a
+            # normal validation error (same wording validate_composition_runtime already uses for
+            # the equivalent runtime-side gap) instead of letting a bare KeyError crash the whole
+            # `make generate` invocation with a traceback -- see validate_manifest's caller, which
+            # is set up to catch ValueError/YAML_SAFETY_ERRORS cleanly, not KeyError.
+            raise ValueError(f"composition contracts missing skills: {skill_id}")
         artifact = composition[skill_id]
         skill = dict(raw)
         skill["name"] = skill_id

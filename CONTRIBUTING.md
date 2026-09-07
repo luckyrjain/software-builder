@@ -46,9 +46,15 @@ Please read and follow our [Code of Conduct](CODE_OF_CONDUCT.md).
   aligned with the `setup_freshness:` block in that skill's `scripts/registry/skills.d/<skill-id>.yaml`
   fragment (`scripts/registry/setup_freshness.yaml` is the generated projection of those blocks).
   `make lint-framework` enforces this.
-- **Registering a new skill in `skills.yaml`:** add a fragment file at
-  `scripts/registry/skills.d/<skill-id>.yaml` containing only that skill's own entry (keyed by its skill
-  id) instead of hand-editing the `skills:` mapping in root `skills.yaml` directly. Then run
+- **Registering a new skill in `skills.yaml`:** `python3 scripts/new_skill.py <skill-id>` scaffolds the
+  mechanical boilerplate — `SKILL.md`, `SETUP.md`, `examples.md`, `reference/smoke-test.md`,
+  `reference/pressure-tests.md`, and a starter `scripts/registry/skills.d/<skill-id>.yaml` fragment, each
+  with `<!-- TODO -->` markers pointing at the exact convention doc for the real content it does not (and
+  should not) invent for you: examples, golden fixtures, and pressure-test rows need actual domain
+  knowledge of what the skill does. Run it, fill in the TODOs, then continue below. (Hand-authoring the
+  fragment at `scripts/registry/skills.d/<skill-id>.yaml` directly works too — the scaffold just saves
+  the boilerplate typing.) In both cases, add only that skill's own entry (keyed by its skill id) —
+  never hand-edit the `skills:` mapping in root `skills.yaml` directly. Then run
   `make generate` to merge every fragment back into `skills.yaml`'s `skills:` mapping (the same
   generated-from-canonical-source pattern used for the Cursor/Kiro adapters). `make generate-check`
   (part of `lint-static`) fails if `skills.yaml` drifts from what its fragments would produce, which
@@ -70,6 +76,19 @@ Please read and follow our [Code of Conduct](CODE_OF_CONDUCT.md).
   vocabulary, is still hand-authored.) The rest of `skills.yaml` (`schema_version`, `manifest_kind`, the
   non-derived parts of `contracts:`, `profiles:`) is still hand-edited directly in that file — but
   `contracts:` is re-rendered wholesale by `make generate`, so it cannot carry YAML comments.
+- **A genuinely new skill (not an edit to an existing one) needs a few hand-authored entries `make
+  generate`/`make lint` will not write for you** — running `make generate` after adding the fragment
+  lists exactly which ones are still missing, as plain error strings, so treat that output as your
+  checklist rather than guessing up front: a row in
+  [docs/skill-framework/shared/skill-routing.md](docs/skill-framework/shared/skill-routing.md), an
+  escalation row in
+  [docs/skill-framework/shared/cross-skill-escalation.md](docs/skill-framework/shared/cross-skill-escalation.md)
+  if the skill hands off to or from another skill, an entry in
+  [docs/REPOSITORY.md](docs/REPOSITORY.md)'s `## Layout` tree, and a `lint-<skill-id>` target in
+  `make/core.mk` (copy a similarly-scoped existing skill's target as a starting point — every skill's
+  lint target is hand-authored on purpose, since what "correct output" means differs per skill).
+  `make generate` will not run `_write_outputs` at all while any of these are missing — that's
+  intentional, not a bug to work around.
 - **GitHub topics/description:** maintainers with repo admin access run
   `bash scripts/apply_repo_metadata.sh` (canonical values in `.github/repo-metadata.yaml`).
 - **Tier-3 golden fixtures:** refresh recorded outputs per
