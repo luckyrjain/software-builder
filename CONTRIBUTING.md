@@ -3,7 +3,7 @@
 Thanks for considering a contribution. This repository is a library of portable agent **skills** —
 Markdown workflow/instruction definitions, not application code — so most contributions are edits to a
 skill's `SKILL.md`, `workflow/*.md`, or `reference/*.md`, plus the occasional helper script under
-`*/scripts/`.
+`skills/*/scripts/`.
 
 Please read and follow our [Code of Conduct](CODE_OF_CONDUCT.md).
 

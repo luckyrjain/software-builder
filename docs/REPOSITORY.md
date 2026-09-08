@@ -21,47 +21,48 @@ software-builder/
 │   └── pre-commit            # shellcheck on staged scripts/*.sh
 ├── .cursor/rules/             # Per-skill Cursor discovery rules (in-repo, no install needed)
 ├── .kiro/steering/            # Per-skill Kiro discovery files (in-repo, no install needed)
-├── pr-review/                 # GitHub/GHES PR or GitLab MR review skill
-├── pr-gatekeeper/             # Push-webhook-triggered pr-review auto-run wrapper
-├── incident-rca/              # Post-incident RCA skill
-├── incident-triage-agent/     # Paging-webhook-triggered incident-rca + squad-map composition
-├── k8s-overprovisioning-datadog/  # K8s rightsizing / DORA skill
-├── domain-comprehension/      # Evidence-backed domain/architecture mapping skill
-├── squad-map/                 # Repo-to-squad ownership mapping skill
-├── who-owns-x-bot/            # Single-shot Slack-bot-facing "who owns X" wrapper around squad-map
-├── new-hire-guide/            # Personalized onboarding tour wrapper around domain-comprehension + squad-map
-├── release-readiness-checker/ # Release go/no-go report wrapper around pr-review + k8s-overprovisioning-datadog + incident-rca
-├── migration-program-manager/ # Org-wide MIGRATION_STATUS.yaml rollup, read-only aggregator (has real Python scripts)
-├── cost-optimization-sprint-planner/ # Org-wide cost/waste sweep wrapper around k8s-overprovisioning-datadog
-├── mysql-to-postgres-sql/     # MySQL → PostgreSQL native SQL migration skill
-├── loop-task-implementer/     # Autonomous multi-task implement/review/PR loop skill
-├── backlog-runner/            # Scheduled queue-management wrapper around loop-task-implementer
-├── weekly-squad-digest/       # Scheduled digest combining migration-program-manager's + cost-optimization-sprint-planner's rollups
-├── test-writer/               # Thin router: classifies a level-unspecified test-writing request and dispatches
-├── unit-test-creator/         # Isolated, mocked, function/class-level test generation
-├── integration-test-creator/  # Tests the real seam to one real adjacent dependency (never mocked)
-├── contract-test-creator/     # Consumer-driven contract tests (Pact-style)
-├── e2e-test-creator/          # Full user-journey browser tests (Playwright/Cypress/Selenium)
-├── api-test-creator/          # Black-box Postman/Newman request/response tests against a real API
-├── change-impact-analyzer/    # Bounded impact analysis for designs and exact PR/MR heads
-├── prd-architect/             # Idea validation + implementation-ready PRDs with Build Readiness gating
-├── implementation-planner/    # Dependency-ordered implementation plan feeding loop-task-implementer
-├── production-readiness-review/ # Read-only rollup verdict for one exact PR/MR/release candidate
-├── architecture-review/       # Architecture decision, risks, scale limits, failure modes, alternatives
-├── codebase-architecture-review/ # Bounded, evidence-backed review of an existing codebase's architecture friction
-├── engineering-decision-discovery/ # Interactive, evidence-backed challenge that surfaces and resolves unsettled engineering decisions
-├── module-design/              # Evidence-backed design for one concrete module's contract, seams, dependencies, tests
-├── system-design/             # Implementation-level design: components, APIs, data model, rollout
-├── api-design-review/         # REST/GraphQL/gRPC/async-event design review
-├── database-review/           # Schema, indexing, locking, transactions, migrations, query plans
-├── security-review/           # AuthN/authZ, secrets, injection, SSRF, tenant isolation, crypto review
-├── performance-review/        # Algorithmic complexity, DB behavior, cache, memory, concurrency review
-├── capacity-planner/          # Historical demand -> RPS/CPU/memory/DB/queue/storage/replica forecast
-├── observability-review/      # Metrics, logs, tracing, dashboards, alerts, SLO coverage review
-├── deployment-risk-review/    # Blast radius, migration risk, rollback complexity, traffic risk review
-├── resilience-review/         # Timeout budgets, retries, circuit breaking, backpressure, recovery review
-├── dependency-upgrade-review/ # Breaking changes, CVEs, API diffs, transitive dependency rollout risk
-└── tech-debt-assessor/        # Ranks debt by business impact x engineering drag x risk / effort
+└── skills/                    # Every skill directory lives here
+    ├── pr-review/                 # GitHub/GHES PR or GitLab MR review skill
+    ├── pr-gatekeeper/             # Push-webhook-triggered pr-review auto-run wrapper
+    ├── incident-rca/              # Post-incident RCA skill
+    ├── incident-triage-agent/     # Paging-webhook-triggered incident-rca + squad-map composition
+    ├── k8s-overprovisioning-datadog/  # K8s rightsizing / DORA skill
+    ├── domain-comprehension/      # Evidence-backed domain/architecture mapping skill
+    ├── squad-map/                 # Repo-to-squad ownership mapping skill
+    ├── who-owns-x-bot/            # Single-shot Slack-bot-facing "who owns X" wrapper around squad-map
+    ├── new-hire-guide/            # Personalized onboarding tour wrapper around domain-comprehension + squad-map
+    ├── release-readiness-checker/ # Release go/no-go report wrapper around pr-review + k8s-overprovisioning-datadog + incident-rca
+    ├── migration-program-manager/ # Org-wide MIGRATION_STATUS.yaml rollup, read-only aggregator (has real Python scripts)
+    ├── cost-optimization-sprint-planner/ # Org-wide cost/waste sweep wrapper around k8s-overprovisioning-datadog
+    ├── mysql-to-postgres-sql/     # MySQL → PostgreSQL native SQL migration skill
+    ├── loop-task-implementer/     # Autonomous multi-task implement/review/PR loop skill
+    ├── backlog-runner/            # Scheduled queue-management wrapper around loop-task-implementer
+    ├── weekly-squad-digest/       # Scheduled digest combining migration-program-manager's + cost-optimization-sprint-planner's rollups
+    ├── test-writer/               # Thin router: classifies a level-unspecified test-writing request and dispatches
+    ├── unit-test-creator/         # Isolated, mocked, function/class-level test generation
+    ├── integration-test-creator/  # Tests the real seam to one real adjacent dependency (never mocked)
+    ├── contract-test-creator/     # Consumer-driven contract tests (Pact-style)
+    ├── e2e-test-creator/          # Full user-journey browser tests (Playwright/Cypress/Selenium)
+    ├── api-test-creator/          # Black-box Postman/Newman request/response tests against a real API
+    ├── change-impact-analyzer/    # Bounded impact analysis for designs and exact PR/MR heads
+    ├── prd-architect/             # Idea validation + implementation-ready PRDs with Build Readiness gating
+    ├── implementation-planner/    # Dependency-ordered implementation plan feeding loop-task-implementer
+    ├── production-readiness-review/ # Read-only rollup verdict for one exact PR/MR/release candidate
+    ├── architecture-review/       # Architecture decision, risks, scale limits, failure modes, alternatives
+    ├── codebase-architecture-review/ # Bounded, evidence-backed review of an existing codebase's architecture friction
+    ├── engineering-decision-discovery/ # Interactive, evidence-backed challenge that surfaces and resolves unsettled engineering decisions
+    ├── module-design/              # Evidence-backed design for one concrete module's contract, seams, dependencies, tests
+    ├── system-design/             # Implementation-level design: components, APIs, data model, rollout
+    ├── api-design-review/         # REST/GraphQL/gRPC/async-event design review
+    ├── database-review/           # Schema, indexing, locking, transactions, migrations, query plans
+    ├── security-review/           # AuthN/authZ, secrets, injection, SSRF, tenant isolation, crypto review
+    ├── performance-review/        # Algorithmic complexity, DB behavior, cache, memory, concurrency review
+    ├── capacity-planner/          # Historical demand -> RPS/CPU/memory/DB/queue/storage/replica forecast
+    ├── observability-review/      # Metrics, logs, tracing, dashboards, alerts, SLO coverage review
+    ├── deployment-risk-review/    # Blast radius, migration risk, rollback complexity, traffic risk review
+    ├── resilience-review/         # Timeout budgets, retries, circuit breaking, backpressure, recovery review
+    ├── dependency-upgrade-review/ # Breaking changes, CVEs, API diffs, transitive dependency rollout risk
+    └── tech-debt-assessor/        # Ranks debt by business impact x engineering drag x risk / effort
 ```
 
 Each skill directory follows the same pattern:
@@ -128,7 +129,7 @@ detail in reference files). Use each skill's `README.md` for a plain-language ov
 ```bash
 git clone https://github.com/luckyrjain/software-builder.git
 cd software-builder
-make install          # all skills with a SKILL.md at repo root level
+make install          # all skills with a SKILL.md under skills/
 make install-pr-review
 make install-pr-gatekeeper
 make install-k8s-overprovisioning
@@ -184,7 +185,7 @@ bash scripts/install.sh api-test-creator
 bash scripts/install.sh test-writer
 ```
 
-With no arguments, `install.sh` discovers every `*/SKILL.md` under the repo root and installs each —
+With no arguments, `install.sh` discovers every `*/SKILL.md` under `skills/` and installs each —
 adding a new skill directory needs no script change to be picked up.
 
 ## Registry discovery
@@ -219,29 +220,29 @@ and [docs/skill-framework/shared/claude-code-setup.md](skill-framework/shared/cl
 | Target | What it does |
 |--------|--------------|
 | `make install` | Run `scripts/install.sh` for all skills |
-| `make install-pr-review` | Install only `pr-review/` |
-| `make install-pr-gatekeeper` | Install only `pr-gatekeeper/` (also runs `install-pr-review`) |
-| `make install-k8s-overprovisioning` | Install only `k8s-overprovisioning-datadog/` |
-| `make install-incident-rca` | Install only `incident-rca/` (also runs `install-incident-rca-deps`) |
-| `make install-incident-triage-agent` | Install only `incident-triage-agent/` (also runs `install-incident-rca` and `install-squad-map`) |
-| `make install-domain-comprehension` | Install only `domain-comprehension/` (also runs `install-squad-map`) |
-| `make install-squad-map` | Install only `squad-map/` |
-| `make install-who-owns-x-bot` | Install only `who-owns-x-bot/` (also runs `install-squad-map`) |
-| `make install-new-hire-guide` | Install only `new-hire-guide/` (also runs `install-domain-comprehension` and `install-squad-map`) |
-| `make install-release-readiness-checker` | Install only `release-readiness-checker/` (also runs `install-pr-review`, `install-k8s-overprovisioning`, and `install-incident-rca`) |
-| `make install-migration-program-manager` | Install only `migration-program-manager/` (also runs `install-mysql-to-postgres-sql` and `install-squad-map`) |
-| `make install-cost-optimization-sprint-planner` | Install only `cost-optimization-sprint-planner/` (also runs `install-k8s-overprovisioning` and `install-squad-map`) |
-| `make install-mysql-to-postgres-sql` | Install only `mysql-to-postgres-sql/` |
-| `make install-loop-task-implementer` | Install only `loop-task-implementer/` |
-| `make install-backlog-runner` | Install only `backlog-runner/` (also runs `install-loop-task-implementer`) |
-| `make install-weekly-squad-digest` | Install only `weekly-squad-digest/` (also runs `install-migration-program-manager` and `install-cost-optimization-sprint-planner`) |
-| `make install-unit-test-creator` | Install only `unit-test-creator/` |
-| `make install-integration-test-creator` | Install only `integration-test-creator/` |
-| `make install-contract-test-creator` | Install only `contract-test-creator/` |
-| `make install-e2e-test-creator` | Install only `e2e-test-creator/` |
-| `make install-api-test-creator` | Install only `api-test-creator/` |
-| `make install-change-impact-analyzer` | Install only `change-impact-analyzer/` |
-| `make install-test-writer` | Install only `test-writer/` (also runs all five `install-*-test-creator` targets above — the router is useless without them) |
+| `make install-pr-review` | Install only `skills/pr-review/` |
+| `make install-pr-gatekeeper` | Install only `skills/pr-gatekeeper/` (also runs `install-pr-review`) |
+| `make install-k8s-overprovisioning` | Install only `skills/k8s-overprovisioning-datadog/` |
+| `make install-incident-rca` | Install only `skills/incident-rca/` (also runs `install-incident-rca-deps`) |
+| `make install-incident-triage-agent` | Install only `skills/incident-triage-agent/` (also runs `install-incident-rca` and `install-squad-map`) |
+| `make install-domain-comprehension` | Install only `skills/domain-comprehension/` (also runs `install-squad-map`) |
+| `make install-squad-map` | Install only `skills/squad-map/` |
+| `make install-who-owns-x-bot` | Install only `skills/who-owns-x-bot/` (also runs `install-squad-map`) |
+| `make install-new-hire-guide` | Install only `skills/new-hire-guide/` (also runs `install-domain-comprehension` and `install-squad-map`) |
+| `make install-release-readiness-checker` | Install only `skills/release-readiness-checker/` (also runs `install-pr-review`, `install-k8s-overprovisioning`, and `install-incident-rca`) |
+| `make install-migration-program-manager` | Install only `skills/migration-program-manager/` (also runs `install-mysql-to-postgres-sql` and `install-squad-map`) |
+| `make install-cost-optimization-sprint-planner` | Install only `skills/cost-optimization-sprint-planner/` (also runs `install-k8s-overprovisioning` and `install-squad-map`) |
+| `make install-mysql-to-postgres-sql` | Install only `skills/mysql-to-postgres-sql/` |
+| `make install-loop-task-implementer` | Install only `skills/loop-task-implementer/` |
+| `make install-backlog-runner` | Install only `skills/backlog-runner/` (also runs `install-loop-task-implementer`) |
+| `make install-weekly-squad-digest` | Install only `skills/weekly-squad-digest/` (also runs `install-migration-program-manager` and `install-cost-optimization-sprint-planner`) |
+| `make install-unit-test-creator` | Install only `skills/unit-test-creator/` |
+| `make install-integration-test-creator` | Install only `skills/integration-test-creator/` |
+| `make install-contract-test-creator` | Install only `skills/contract-test-creator/` |
+| `make install-e2e-test-creator` | Install only `skills/e2e-test-creator/` |
+| `make install-api-test-creator` | Install only `skills/api-test-creator/` |
+| `make install-change-impact-analyzer` | Install only `skills/change-impact-analyzer/` |
+| `make install-test-writer` | Install only `skills/test-writer/` (also runs all five `install-*-test-creator` targets above — the router is useless without them) |
 | `make install-claude` | Run `scripts/install.sh --agent claude-user` for all skills |
 | `make install-claude-<skill>` | Install only `<skill>/` for Claude Code (`pr-review`, `pr-gatekeeper`, `k8s-overprovisioning`, `incident-rca`, `incident-triage-agent`, `domain-comprehension`, `squad-map`, `who-owns-x-bot`, `new-hire-guide`, `release-readiness-checker`, `migration-program-manager`, `cost-optimization-sprint-planner`, `mysql-to-postgres-sql`, `loop-task-implementer`, `backlog-runner`, `weekly-squad-digest`, `unit-test-creator`, `integration-test-creator`, `contract-test-creator`, `e2e-test-creator`, `api-test-creator`, `test-writer`, `change-impact-analyzer`) |
 | `make lint` | Run all lint targets below + shellcheck on `scripts/*.sh` |
@@ -258,7 +259,7 @@ and [docs/skill-framework/shared/claude-code-setup.md](skill-framework/shared/cl
 | `make lint-migration-program-manager` | migration-program-manager `SKILL.md` ≤ 180 lines; `disable-model-invocation` **not** set; workflow frontmatter; dangling anchors; required reference files; aggregator pytest |
 | `make lint-cost-optimization-sprint-planner` | cost-optimization-sprint-planner `SKILL.md` ≤ 180 lines; `disable-model-invocation` **not** set; workflow frontmatter; dangling anchors; required reference files |
 | `make lint-mysql-to-postgres-sql` | mysql `SKILL.md` ≤ 180 lines; workflow frontmatter; required references; scan fixtures + pressure harness; AST-backed secondary checker (`.sql` files, see [ast-vs-regex-scan.md](../skills/mysql-to-postgres-sql/reference/ast-vs-regex-scan.md)); shellcheck on scan scripts |
-| `make lint-loop-task-implementer` | loop-task-implementer `SKILL.md` ≤ 180 lines; workflow frontmatter; dangling anchors; required files (`SETUP.md`, `README.md`, `examples.md`, `report-template.md`, `reference/*`); `py_compile` + `pytest loop-task-implementer/tests/` for the lifecycle validator |
+| `make lint-loop-task-implementer` | loop-task-implementer `SKILL.md` ≤ 180 lines; workflow frontmatter; dangling anchors; required files (`SETUP.md`, `README.md`, `examples.md`, `report-template.md`, `reference/*`); `py_compile` + `pytest skills/loop-task-implementer/tests/` for the lifecycle validator |
 | `make lint-backlog-runner` | backlog-runner `SKILL.md` ≤ 180 lines; `disable-model-invocation: true` set; workflow frontmatter; dangling anchors; required reference files |
 | `make lint-weekly-squad-digest` | weekly-squad-digest `SKILL.md` ≤ 180 lines; `disable-model-invocation: true` set; workflow frontmatter; dangling anchors; required reference files |
 | `make lint-unit-test-creator` | unit-test-creator `SKILL.md` ≤ 180 lines; workflow frontmatter; required references; detection-script pytest suite; shellcheck on `scripts/*.sh` |
@@ -274,13 +275,13 @@ and [docs/skill-framework/shared/claude-code-setup.md](skill-framework/shared/cl
 
 ### lint-incident-rca
 
-`incident-rca/SKILL.md` must stay at or under **180 lines**. Each file under `workflow/` must declare
+`skills/incident-rca/SKILL.md` must stay at or under **180 lines**. Each file under `workflow/` must declare
 `workflow_version`, `produces`, and `consumes` in YAML frontmatter. Validates `reference/evidence.example.json`
-parses as JSON and checks markdown anchor links under `incident-rca/` (including `workflow/`).
+parses as JSON and checks markdown anchor links under `skills/incident-rca/` (including `workflow/`).
 
 ### lint-incident-triage-agent
 
-`incident-triage-agent/SKILL.md` must stay at or under **180 lines** and must set
+`skills/incident-triage-agent/SKILL.md` must stay at or under **180 lines** and must set
 `disable-model-invocation: true` (it is a paging-webhook-only automation entry point, not an
 ambient-chat skill — unlike incident-rca or squad-map). Each file under `workflow/` must declare
 `workflow_version`, `phase`, `produces`, and `consumes` in YAML frontmatter. Checks markdown anchor links
@@ -291,13 +292,13 @@ to answer their gates unattended.
 
 ### lint-pr-review
 
-Requires **pytest** (`python3 -m pip install pytest`). `pr-review/SKILL.md` must stay at or under **180
+Requires **pytest** (`python3 -m pip install pytest`). `skills/pr-review/SKILL.md` must stay at or under **180
 lines**. Each file under `workflow/` must declare `workflow_version`, `produces`, and `consumes` in YAML
-frontmatter. Tests live in `pr-review/tests/` and cover GitHub RIGHT-side anchors and GitLab diff position mapping.
+frontmatter. Tests live in `skills/pr-review/tests/` and cover GitHub RIGHT-side anchors and GitLab diff position mapping.
 
 ### lint-pr-gatekeeper
 
-`pr-gatekeeper/SKILL.md` must stay at or under **180 lines** and must set
+`skills/pr-gatekeeper/SKILL.md` must stay at or under **180 lines** and must set
 `disable-model-invocation: true` (it is a webhook-only automation entry point, not an ambient-chat skill
 — unlike pr-review). Each file under `workflow/` must declare `workflow_version`, `phase`, `produces`,
 and `consumes` in YAML frontmatter. Checks markdown anchor links and required `reference/` files
@@ -306,17 +307,17 @@ this skill has no review logic of its own beyond deciding whether pr-review's Ph
 
 ### lint-k8s-skill
 
-Enforces a thin orchestrator: `k8s-overprovisioning-datadog/SKILL.md` must stay at or under **150 lines**.
+Enforces a thin orchestrator: `skills/k8s-overprovisioning-datadog/SKILL.md` must stay at or under **150 lines**.
 Each file under `workflow/` must declare `workflow_version`, `produces`, and `consumes` in YAML frontmatter.
 Also validates internal markdown link anchors and ensures the memory sizing section in `thresholds.md` does not positively assert p95 (memory uses a peak proxy, not p95).
 
 ### lint-domain-comprehension
 
-Requires **pytest** (`python3 -m pip install pytest`). `domain-comprehension/SKILL.md` must stay at or under **180 lines**. Each file under `workflow/` must declare `workflow_version`, `produces`, and `consumes` in YAML frontmatter. Validates `templates/manifest.yaml` parses and the manifest validator (`scripts/validate_manifest_yaml.py`) runs successfully via pytest in `tests/test_validate_manifest.py`. Checks markdown anchor links under `domain-comprehension/` (including `workflow/` and `reference/`).
+Requires **pytest** (`python3 -m pip install pytest`). `skills/domain-comprehension/SKILL.md` must stay at or under **180 lines**. Each file under `workflow/` must declare `workflow_version`, `produces`, and `consumes` in YAML frontmatter. Validates `templates/manifest.yaml` parses and the manifest validator (`scripts/validate_manifest_yaml.py`) runs successfully via pytest in `tests/test_validate_manifest.py`. Checks markdown anchor links under `skills/domain-comprehension/` (including `workflow/` and `reference/`).
 
 ### lint-who-owns-x-bot
 
-`who-owns-x-bot/SKILL.md` must stay at or under **180 lines** and must set
+`skills/who-owns-x-bot/SKILL.md` must stay at or under **180 lines** and must set
 `disable-model-invocation: true` (it is an automation entry point, not an ambient-chat skill — unlike
 squad-map). Each file under `workflow/` must declare `workflow_version`, `phase`, `produces`, and
 `consumes` in YAML frontmatter. Checks markdown anchor links and required `reference/` files
@@ -325,7 +326,7 @@ skill has no logic of its own beyond delegating to squad-map and formatting the 
 
 ### lint-new-hire-guide
 
-`new-hire-guide/SKILL.md` must stay at or under **180 lines** and must **not** set
+`skills/new-hire-guide/SKILL.md` must stay at or under **180 lines** and must **not** set
 `disable-model-invocation` — unlike who-owns-x-bot/pr-gatekeeper/incident-triage-agent/backlog-runner, a
 human is always present for this flow, so ambient chat invocation is intended. Each file under
 `workflow/` must declare `workflow_version`, `phase`, `produces`, and `consumes` in YAML frontmatter.
@@ -335,7 +336,7 @@ composing domain-comprehension and squad-map and curating the result.
 
 ### lint-release-readiness-checker
 
-`release-readiness-checker/SKILL.md` must stay at or under **180 lines** and must **not** set
+`skills/release-readiness-checker/SKILL.md` must stay at or under **180 lines** and must **not** set
 `disable-model-invocation` — a human is present for this flow, but the fan-out over potentially many MRs
 and services still needs one scripted gate answer (incident-rca's Phase 1 checkpoint), documented in
 `reference/gate-policy.md` rather than in the lint target itself. Each file under `workflow/` must declare
@@ -346,20 +347,20 @@ review/rightsizing/incident-investigation logic of its own beyond the MR-range r
 
 ### lint-migration-program-manager
 
-`migration-program-manager/SKILL.md` must stay at or under **180 lines** and must **not** set
+`skills/migration-program-manager/SKILL.md` must stay at or under **180 lines** and must **not** set
 `disable-model-invocation` — unlike who-owns-x-bot/pr-gatekeeper/incident-triage-agent/backlog-runner, this
 is a pure read-only aggregator over mysql-to-postgres-sql's and squad-map's already-produced files; it never
 invokes either skill live, so there's no wrapped-skill gate to police and no reason to disable ambient
 invocation. Each file under `workflow/` must declare `workflow_version`, `phase`, `produces`, and `consumes`
 in YAML frontmatter. Checks markdown anchor links and required `reference/` files (`phase-index.md`,
 `lazy-load-index.md`, `report-format.md`, `smoke-test.md`) plus `scripts/aggregate_migration_status.py`'s
-existence. Runs `python3 -m pytest migration-program-manager/tests/ -q`
+existence. Runs `python3 -m pytest skills/migration-program-manager/tests/ -q`
 (`tests/test_aggregate_migration_status.py` covers the `SQUAD_MAP.md` parser, the squad join,
 status derivation, and staleness tracking) if pytest is installed.
 
 ### lint-cost-optimization-sprint-planner
 
-`cost-optimization-sprint-planner/SKILL.md` must stay at or under **180 lines** and must **not** set
+`skills/cost-optimization-sprint-planner/SKILL.md` must stay at or under **180 lines** and must **not** set
 `disable-model-invocation` — a human is present for this flow, but the fan-out over potentially many
 deployments still needs a gate-policy file (every live k8s-overprovisioning-datadog gate answered with
 its own documented fallback, cost-rate resolved once sweep-wide) and a sweep-policy file (session-level
@@ -372,7 +373,7 @@ beyond the pre-filter query pass, the sweep loop, and the aggregation.
 
 ### lint-mysql-to-postgres-sql
 
-Requires **ripgrep** (`rg`) with PCRE2 on the host running lint. `mysql-to-postgres-sql/SKILL.md` must stay at or under **180 lines**. Each file under `workflow/` must declare `workflow_version` frontmatter. Runs scan gate fixtures (`tests/fixtures/mysql-dialect/`), the pressure-test harness (`tests/run_pressure_tests.sh`), dangling anchor checks, and shellcheck on `scripts/scan-mysql-dialect.sh` and `scripts/scan-report.sh`.
+Requires **ripgrep** (`rg`) with PCRE2 on the host running lint. `skills/mysql-to-postgres-sql/SKILL.md` must stay at or under **180 lines**. Each file under `workflow/` must declare `workflow_version` frontmatter. Runs scan gate fixtures (`tests/fixtures/mysql-dialect/`), the pressure-test harness (`tests/run_pressure_tests.sh`), dangling anchor checks, and shellcheck on `scripts/scan-mysql-dialect.sh` and `scripts/scan-report.sh`.
 
 ### lint-unit-test-creator / lint-integration-test-creator / lint-contract-test-creator / lint-e2e-test-creator / lint-api-test-creator
 
@@ -388,7 +389,7 @@ detection-script fixtures.
 
 ### lint-test-writer
 
-`test-writer/SKILL.md` must stay at or under **180 lines**. Each file under `workflow/` must declare
+`skills/test-writer/SKILL.md` must stay at or under **180 lines**. Each file under `workflow/` must declare
 `workflow_version`/`phase`/`produces`/`consumes` frontmatter. Checks all required `reference/` files
 exist (`skill-contract`, `phase-index`, `lazy-load-index`, `level-classification`, `smoke-test`,
 `pressure-tests`), confirms **no** `scripts/` or `tests/` directory exists (this skill is a router with

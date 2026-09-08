@@ -151,7 +151,7 @@ Each skill directory has three entry points:
 | **ChatGPT / Codex** | Copy selected skills to the runtime's supported directory, commonly `~/.agents/skills/` | Separate tasks or fresh agent sessions; worktrees where available | Use repository connectors for remote state and local Git for implementation when available. |
 | **GitHub Copilot** | Copy skills to `.github/skills/` (project) or `~/.copilot/skills/` (personal); `.claude/skills/` and `~/.agents/skills/` also work per GitHub's docs | Separate tasks or fresh agent sessions | Discovery is documented, not yet independently verified — see [docs/agent-compatibility.md](docs/agent-compatibility.md). |
 | **Kiro** | Open this repository and use `.kiro/steering/<skill>.md` | Kiro specs plus separate role contexts | No installer copy is required for in-repo use. |
-| **Generic repository agent** | Point the agent directly at `<skill>/SKILL.md` | Host-dependent; otherwise use the documented sequential fallback | State the active role and provide only that role's input package. |
+| **Generic repository agent** | Point the agent directly at `skills/<skill>/SKILL.md` | Host-dependent; otherwise use the documented sequential fallback | State the active role and provide only that role's input package. |
 
 The canonical cross-harness guidance, including the neutral handoff envelope, is in
 [skills/loop-task-implementer/reference/platform-adapters.md](skills/loop-task-implementer/reference/platform-adapters.md).
@@ -181,7 +181,7 @@ bash scripts/install.sh --agent cursor
 bash scripts/install.sh --agent claude-user
 ```
 
-The default installer discovers every root-level `*/SKILL.md`, copies full skill directories to both
+The default installer discovers every `skills/*/SKILL.md`, copies full skill directories to both
 `~/.cursor/skills/` and `~/.claude/skills/`, and replaces an existing installation of the same skill.
 Review [scripts/README.md](scripts/README.md) before using a custom target or automating installation.
 

@@ -43,6 +43,21 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 
 ## Platform
 
+### Move all skill directories into skills/ (2026-09-08)
+
+- **Every skill directory now lives under `skills/`** instead of at the repository root (`pr-review/`
+  is now `skills/pr-review/`, and likewise for all 41 skills) -- the repository root was getting
+  crowded as the skill count grew, and mixing skill directories with platform infrastructure
+  (`scripts/`, `docs/`, `make/`) made the two harder to tell apart at a glance.
+- **Consumer-visible: the plugin manifests changed.** `.claude-plugin/plugin.json` and
+  `.codex-plugin/plugin.json` now declare `"skills": "./skills"` instead of `"./"`. Anyone installing
+  this repository as a Claude Code or Codex plugin picks up the new path automatically on next
+  install/update; nothing to change on the consuming side beyond re-installing.
+- The registry (`skills.yaml`'s per-skill `path:` field), the installer, generated projections and
+  adapters, and every mechanically-rewritable Markdown link were cut over in lockstep so the repository
+  stayed green at every intermediate commit -- see `docs/REPOSITORY.md`'s corrected `## Layout` tree for
+  the new structure. No skill's own behavior, contract, or install destination changed.
+
 ### Third architecture review pass: registry dedup, security guard gap, doc drift, ops runbook (2026-09-07)
 
 - **`package_skill.py` had no sensitive-file guard, unlike `generic_package.py`.** Unlike

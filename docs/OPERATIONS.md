@@ -122,7 +122,7 @@ check pass — fix the source and regenerate.
 (`kubesense-mcp`) with the npm `skills` CLI. A version tag constrains which release npm is asked for,
 not which bytes npm returns, so the script downloads the CLI tarball with `npm pack` — which writes a
 file and runs no install scripts — checks its sha512 against `skillsCliIntegrity` in
-`incident-rca/skills-lock.json`, and only then executes it via `npx --package=<verified tarball>`.
+`skills/incident-rca/skills-lock.json`, and only then executes it via `npx --package=<verified tarball>`.
 
 A mismatch means the bytes for the pinned version are not the bytes that were pinned. Do not bypass it.
 Either the pin is stale (someone bumped `skillsCliVersion` without its digest) or the published package
@@ -131,7 +131,7 @@ changed — investigate before re-pinning.
 To move to CLI version `V`, in one commit:
 
 1. `npm view "skills@V" dist.integrity`
-2. In `incident-rca/skills-lock.json`, set `skillsCliVersion` to `V` and `skillsCliIntegrity` to the
+2. In `skills/incident-rca/skills-lock.json`, set `skillsCliVersion` to `V` and `skillsCliIntegrity` to the
    exact `sha512-...` string from step 1. Both fields move together; a version without its matching
    digest fails closed.
 3. Re-run `bash scripts/install-incident-rca-deps.sh`.
