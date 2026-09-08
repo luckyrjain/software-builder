@@ -483,7 +483,7 @@ def test_module_design_evaluates_depth_and_deletion_test() -> None:
 def test_visual_report_is_ephemeral_and_safe() -> None:
     text = (ROOT / "codebase-architecture-review/reference/html-report.md").read_text()
     assert "architecture-review-20260905T120000Z.html" in text
-    assert "https://cdn.tailwindcss.com" in text
+    assert "https://cdn.tailwindcss.com" in text  # lgtm[py/incomplete-url-substring-sanitization] -- static doc-content assertion, not a URL trust decision
     assert "mermaid@11" in text
     assert "securityLevel: \"strict\"" in text
     assert "Write no HTML into the repository" in text
