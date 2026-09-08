@@ -8,7 +8,7 @@ changing pr-review's rules**. It only ever supplies inputs pr-review's own docs 
 synthetic bypass.
 
 **Drift check:** this enumeration is hand-written prose, checked against pr-review's own workflow files
-only when a human remembers to re-read both side by side. After **any** edit to `pr-review/workflow/*.md`
+only when a human remembers to re-read both side by side. After **any** edit to `skills/pr-review/workflow/*.md`
 or to this file, run the mechanical drift check below — it flags pr-review paragraphs that look
 ask-point-shaped (contain phrasing like "wait for the user", "ask-question", "HARD STOP", "stop and
 warn ... unless the user confirms") but share too little vocabulary with this file's enumeration, which

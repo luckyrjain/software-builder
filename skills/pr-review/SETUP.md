@@ -227,7 +227,7 @@ the same JSON snippets from § 3 below, placed in `.mcp.json` / via `claude mcp 
 ### Kiro / in-repo discovery
 
 Working directly in this repo (not via an installed copy)? `.cursor/rules/pr-review.mdc` and
-`.kiro/steering/pr-review.md` point Cursor/Kiro at `pr-review/SKILL.md` without an install step.
+`.kiro/steering/pr-review.md` point Cursor/Kiro at `skills/pr-review/SKILL.md` without an install step.
 
 ## 3. Configure MCP servers (`.cursor/mcp.json`)
 
@@ -453,7 +453,7 @@ Phase 0 announces posting mode and workspace scope. Warnings when:
 ## Notes
 
 - **Contributors:** after changing `scripts/diff-to-positions.py`, run `make lint-pr-review` from the
-  repo root (`py_compile` + `pytest pr-review/tests/`). Install pytest with `python3 -m pip install pytest`.
+  repo root (`py_compile` + `pytest skills/pr-review/tests/`). Install pytest with `python3 -m pip install pytest`.
 - Never auto-approves the MR in GitLab.
 - Secrets flagged Critical; value never echoed.
 - Re-runs detect `<!-- cursor-pr-review -->` and review only new commits.

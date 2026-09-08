@@ -3,7 +3,7 @@
 Run these against a subagent (or self-check) when editing the skill. Each targets a guardrail that is
 easy to regress.
 
-**Scripted eval (required):** `make lint-pr-review` runs `pr-review/tests/test_pr_review_policy_guards.py` —
+**Scripted eval (required):** `make lint-pr-review` runs `skills/pr-review/tests/test_pr_review_policy_guards.py` —
 deterministic checks for recommendation matrix, confidence caps, provider routing, and finding gates.
 Add a pytest case when adding a new policy row here.
 

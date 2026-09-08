@@ -33,7 +33,7 @@ No restart needed — a new Claude Code session picks it up. See
 ### Kiro / in-repo discovery
 
 Working directly in this repo? `.cursor/rules/observability-review.mdc` and
-`.kiro/steering/observability-review.md` point Cursor/Kiro at `observability-review/SKILL.md` without an
+`.kiro/steering/observability-review.md` point Cursor/Kiro at `skills/observability-review/SKILL.md` without an
 install step.
 
 ## Prerequisites

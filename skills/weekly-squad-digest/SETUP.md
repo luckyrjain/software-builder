@@ -42,7 +42,7 @@ No restart needed. See [claude-code-setup.md](../../docs/skill-framework/shared/
 ### Kiro / in-repo discovery
 
 Working directly in this repo? `.cursor/rules/weekly-squad-digest.mdc` and
-`.kiro/steering/weekly-squad-digest.md` point Cursor/Kiro at `weekly-squad-digest/SKILL.md` without an
+`.kiro/steering/weekly-squad-digest.md` point Cursor/Kiro at `skills/weekly-squad-digest/SKILL.md` without an
 install step.
 
 ## Prerequisites

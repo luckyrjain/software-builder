@@ -45,7 +45,7 @@ No restart needed. See [claude-code-setup.md](../../docs/skill-framework/shared/
 
 Working directly in this repo? `.cursor/rules/cost-optimization-sprint-planner.mdc` and
 `.kiro/steering/cost-optimization-sprint-planner.md` point Cursor/Kiro at
-`cost-optimization-sprint-planner/SKILL.md` without an install step.
+`skills/cost-optimization-sprint-planner/SKILL.md` without an install step.
 
 ## Prerequisites
 

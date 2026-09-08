@@ -103,7 +103,7 @@ When working directly inside this repo, Cursor and Kiro can discover the skill f
 - `.cursor/rules/loop-task-implementer.mdc`
 - `.kiro/steering/loop-task-implementer.md`
 
-Both point at `loop-task-implementer/SKILL.md`. See
+Both point at `skills/loop-task-implementer/SKILL.md`. See
 [reference/platform-adapters.md](reference/platform-adapters.md) for Codex and generic fallback.
 
 ## 4. Use it

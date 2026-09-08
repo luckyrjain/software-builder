@@ -42,7 +42,7 @@ No restart needed. See [claude-code-setup.md](../../docs/skill-framework/shared/
 ### Kiro / in-repo discovery
 
 Working directly in this repo? `.cursor/rules/backlog-runner.mdc` and `.kiro/steering/backlog-runner.md`
-point Cursor/Kiro at `backlog-runner/SKILL.md` without an install step.
+point Cursor/Kiro at `skills/backlog-runner/SKILL.md` without an install step.
 
 ## Prerequisites
 

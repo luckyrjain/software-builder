@@ -34,7 +34,7 @@ No restart needed — a new Claude Code session picks it up. See
 ### Kiro / in-repo discovery
 
 Working directly in this repo? `.cursor/rules/contract-test-creator.mdc` and
-`.kiro/steering/contract-test-creator.md` point Cursor/Kiro at `contract-test-creator/SKILL.md` without an
+`.kiro/steering/contract-test-creator.md` point Cursor/Kiro at `skills/contract-test-creator/SKILL.md` without an
 install step.
 
 ## Prerequisites
@@ -69,8 +69,8 @@ invocation time — see [workflow/inputs.md](workflow/inputs.md).
 After install, run the invocation in [reference/smoke-test.md](reference/smoke-test.md).
 
 ```bash
-bash contract-test-creator/scripts/detect-pact-tooling.sh contract-test-creator/tests/fixtures/pact-detect/python-provider-local
-python3 -m pytest contract-test-creator/tests/test_detect_pact_tooling.py -q
+bash skills/contract-test-creator/scripts/detect-pact-tooling.sh skills/contract-test-creator/tests/fixtures/pact-detect/python-provider-local
+python3 -m pytest skills/contract-test-creator/tests/test_detect_pact_tooling.py -q
 ```
 
 ## Troubleshooting

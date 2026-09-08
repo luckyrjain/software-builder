@@ -33,7 +33,7 @@ No restart needed — a new Claude Code session picks it up. See
 ### Kiro / in-repo discovery
 
 Working directly in this repo? `.cursor/rules/api-design-review.mdc` and
-`.kiro/steering/api-design-review.md` point Cursor/Kiro at `api-design-review/SKILL.md` without an
+`.kiro/steering/api-design-review.md` point Cursor/Kiro at `skills/api-design-review/SKILL.md` without an
 install step.
 
 ## Prerequisites

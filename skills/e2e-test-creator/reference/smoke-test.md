@@ -8,7 +8,7 @@ Conventions: [smoke-test-conventions](../../../docs/skill-framework/shared/smoke
 
 Any small repo with browser e2e tooling already configured and at least one route/page a journey can be
 named against — or use the detection fixtures this skill ships:
-`e2e-test-creator/tests/fixtures/e2e-detect/playwright-repo`.
+`skills/e2e-test-creator/tests/fixtures/e2e-detect/playwright-repo`.
 
 ## Invocation
 
@@ -35,8 +35,8 @@ reachable instance, expect `NEEDS_BROWSER_ENV` instead of `UNVERIFIED` per
 ## Script self-test
 
 ```bash
-bash e2e-test-creator/scripts/detect-e2e-tooling.sh e2e-test-creator/tests/fixtures/e2e-detect/playwright-repo
-python3 -m pytest e2e-test-creator/tests/test_detect_e2e_tooling.py -q
+bash skills/e2e-test-creator/scripts/detect-e2e-tooling.sh skills/e2e-test-creator/tests/fixtures/e2e-detect/playwright-repo
+python3 -m pytest skills/e2e-test-creator/tests/test_detect_e2e_tooling.py -q
 ```
 
 Also via `make lint-e2e-test-creator`.

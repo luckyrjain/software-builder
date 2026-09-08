@@ -154,7 +154,7 @@ Build `review_evidence` per `../../docs/skill-framework/shared/review-evidence.y
 
 ### Machine validation before the Phase 2→3 gate
 
-Use `pr-review/scripts/validate_review_coverage.py` as the executable source of truth. Validate final
+Use `skills/pr-review/scripts/validate_review_coverage.py` as the executable source of truth. Validate final
 `inspection_plan` and `review_evidence` with `validate_review_coverage(...)`, passing current `change_identity`,
 current requirements reference when one exists, and `conflict_resolution_occurred=True` whenever merge/rebase
 conflict resolution occurred after the stored review evidence was produced. Conflict resolution always invalidates

@@ -71,4 +71,4 @@ Mirror the Ranked hypotheses table; the validator recomputes the arithmetic from
 | CG-07 | `conclusion.primary` is `"none"` unless some hypothesis band is HIGH; when set it names an existing HIGH hypothesis (see §Insufficient evidence — no best-guess primary) |
 | CG-08 | `ruled_out` consistent with the 0.5 × primary rule |
 
-Run: `python3 incident-rca/scripts/validate_causal_graph.py <graph.yaml> <evidence.json>`
+Run: `python3 skills/incident-rca/scripts/validate_causal_graph.py <graph.yaml> <evidence.json>`

@@ -25,7 +25,7 @@ consumes:
 Phase 3 must not re-evaluate `head_sha`.
 
 Before any posting decision, require the successful machine validation performed by
-`phase-2-evidence.md` using `pr-review/scripts/validate_review_coverage.py`. Then perform a fresh read-only provider/Git
+`phase-2-evidence.md` using `skills/pr-review/scripts/validate_review_coverage.py`. Then perform a fresh read-only provider/Git
 snapshot and rebuild the **current full `change_identity`** using the same canonical procedure as Phase 1→2 coverage:
 current base/head/merge-base SHAs, normalized effective-patch fingerprint, changed/generated paths, dependency
 changes, and config changes. Do not reuse the Phase 1 identity as the value labelled current. If the required

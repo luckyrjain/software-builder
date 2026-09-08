@@ -3,7 +3,7 @@
 Run when editing `SKILL.md`, `workflow/`, `reference/`, or `scripts/`. Targets guardrails that regress
 easily.
 
-**Automated:** `python3 -m pytest contract-test-creator/tests/test_detect_pact_tooling.py -q` (also via
+**Automated:** `python3 -m pytest skills/contract-test-creator/tests/test_detect_pact_tooling.py -q` (also via
 `make lint-contract-test-creator`).
 
 | # | Scenario | Expected behavior |

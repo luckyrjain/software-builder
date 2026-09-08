@@ -127,7 +127,7 @@ finding — not a `CLEAN` verdict with a footnote. Prefer escalating for a genui
 
 For an agent without skill discovery:
 
-1. Provide `loop-task-implementer/SKILL.md`.
+1. Provide `skills/loop-task-implementer/SKILL.md`.
 2. State the active role.
 3. Provide only that role’s prompt.
 4. Provide the task and objective evidence.

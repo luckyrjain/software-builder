@@ -34,7 +34,7 @@ No restart needed — a new Claude Code session picks it up. See
 ### Kiro / in-repo discovery
 
 Working directly in this repo? `.cursor/rules/e2e-test-creator.mdc` and
-`.kiro/steering/e2e-test-creator.md` point Cursor/Kiro at `e2e-test-creator/SKILL.md` without an install
+`.kiro/steering/e2e-test-creator.md` point Cursor/Kiro at `skills/e2e-test-creator/SKILL.md` without an install
 step.
 
 ## Prerequisites
@@ -69,8 +69,8 @@ No config file. Every input (`target`, `repo_root`, `run_tests`, …) is passed 
 After install, run the invocation in [reference/smoke-test.md](reference/smoke-test.md).
 
 ```bash
-bash e2e-test-creator/scripts/detect-e2e-tooling.sh e2e-test-creator/tests/fixtures/e2e-detect/playwright-repo
-python3 -m pytest e2e-test-creator/tests/test_detect_e2e_tooling.py -q
+bash skills/e2e-test-creator/scripts/detect-e2e-tooling.sh skills/e2e-test-creator/tests/fixtures/e2e-detect/playwright-repo
+python3 -m pytest skills/e2e-test-creator/tests/test_detect_e2e_tooling.py -q
 ```
 
 ## Troubleshooting

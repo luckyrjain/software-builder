@@ -17,7 +17,7 @@ message. No new ownership logic here — see § Non-goals in the
 ## Steps
 
 1. **who-owns-x-bot itself must be installed alongside squad-map** — if squad-map is not installed at
-   all (no `squad-map/SKILL.md` reachable), this is a setup error, not a lookup outcome: return
+   all (no `skills/squad-map/SKILL.md` reachable), this is a setup error, not a lookup outcome: return
    **Unknown** with the note "squad-map not installed" per
    [reference/slack-format.md](../reference/slack-format.md) § Unknown, and stop — do not attempt any of
    the steps below. (`make install-who-owns-x-bot` always installs squad-map alongside it, so this should

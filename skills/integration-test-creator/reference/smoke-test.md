@@ -34,8 +34,8 @@ target repo with Docker reachable, omit `run_tests` and let it run against the r
 ## Script self-test
 
 ```bash
-bash integration-test-creator/scripts/detect-integration-setup.sh integration-test-creator/tests/fixtures/integration-detect/testcontainers-python
-python3 -m pytest integration-test-creator/tests/test_detect_integration_setup.py -q
+bash skills/integration-test-creator/scripts/detect-integration-setup.sh skills/integration-test-creator/tests/fixtures/integration-detect/testcontainers-python
+python3 -m pytest skills/integration-test-creator/tests/test_detect_integration_setup.py -q
 ```
 
 Also via `make lint-integration-test-creator`.

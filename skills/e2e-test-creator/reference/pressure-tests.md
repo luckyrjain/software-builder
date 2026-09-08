@@ -3,7 +3,7 @@
 Run when editing `SKILL.md`, `workflow/`, `reference/`, or `scripts/`. Targets guardrails that regress
 easily.
 
-**Automated:** `python3 -m pytest e2e-test-creator/tests/test_detect_e2e_tooling.py -q` (also via
+**Automated:** `python3 -m pytest skills/e2e-test-creator/tests/test_detect_e2e_tooling.py -q` (also via
 `make lint-e2e-test-creator`).
 
 | # | Scenario | Expected behavior |

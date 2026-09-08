@@ -33,7 +33,7 @@ No restart needed — a new Claude Code session picks it up. See
 ### Kiro / in-repo discovery
 
 Working directly in this repo? `.cursor/rules/security-review.mdc` and
-`.kiro/steering/security-review.md` point Cursor/Kiro at `security-review/SKILL.md` without an
+`.kiro/steering/security-review.md` point Cursor/Kiro at `skills/security-review/SKILL.md` without an
 install step.
 
 ## Prerequisites

@@ -40,7 +40,7 @@ No restart needed. See [claude-code-setup.md](../../docs/skill-framework/shared/
 ### Kiro / in-repo discovery
 
 Working directly in this repo? `.cursor/rules/pr-gatekeeper.mdc` and `.kiro/steering/pr-gatekeeper.md`
-point Cursor/Kiro at `pr-gatekeeper/SKILL.md` without an install step.
+point Cursor/Kiro at `skills/pr-gatekeeper/SKILL.md` without an install step.
 
 ## Prerequisites
 

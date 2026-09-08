@@ -91,7 +91,7 @@ long `name=` in onset slice), hunt query text on the top caller `workload`:
 2. **SPL fallback** if MCP body fails:
 
 ```bash
-python3 incident-rca/scripts/kubesense_logs.py <caller-workload> \
+python3 skills/incident-rca/scripts/kubesense_logs.py <caller-workload> \
   --cluster <cluster> --namespace <namespace> \
   --from <onset_from> --to <onset_to> \
   --limit 20 --evidence

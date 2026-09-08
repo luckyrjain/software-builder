@@ -51,7 +51,7 @@ No restart needed — a new Claude Code session picks it up. See
 
 Working directly in this repo? `.cursor/rules/release-readiness-checker.mdc` and
 `.kiro/steering/release-readiness-checker.md` point Cursor/Kiro at
-`release-readiness-checker/SKILL.md` without an install step.
+`skills/release-readiness-checker/SKILL.md` without an install step.
 
 ## Prerequisites
 

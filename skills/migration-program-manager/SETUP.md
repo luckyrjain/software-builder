@@ -45,7 +45,7 @@ No restart needed. See [claude-code-setup.md](../../docs/skill-framework/shared/
 
 Working directly in this repo? `.cursor/rules/migration-program-manager.mdc` and
 `.kiro/steering/migration-program-manager.md` point Cursor/Kiro at
-`migration-program-manager/SKILL.md` without an install step.
+`skills/migration-program-manager/SKILL.md` without an install step.
 
 ## Prerequisites
 
@@ -76,7 +76,7 @@ persistent location if you want staleness tracking to survive across sessions/ma
 ## Smoke test
 
 After install, run the invocation in [reference/smoke-test.md](reference/smoke-test.md), and separately
-verify the script's own test suite: `python3 -m pytest migration-program-manager/tests/ -v`.
+verify the script's own test suite: `python3 -m pytest skills/migration-program-manager/tests/ -v`.
 
 ## Troubleshooting
 

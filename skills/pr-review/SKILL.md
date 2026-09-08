@@ -79,7 +79,7 @@ inspected, pass any new candidate through the same finding pipeline, and regener
 Then run `workflow/phase-2-evidence.md` to finalize the plan, populate
 `review_evidence.inspected_surfaces`, record every unavailable surface in
 `review_evidence.unable_to_inspect` with `{surface, reason, mandatory}`, and execute
-`pr-review/scripts/validate_review_coverage.py`. The Phase 2→3 gate consumes this validated state and must not
+`skills/pr-review/scripts/validate_review_coverage.py`. The Phase 2→3 gate consumes this validated state and must not
 claim a complete review when any triggered surface is unavailable or pending.
 
 Report sections: [report-template.md](report-template.md).

@@ -47,7 +47,7 @@ the `datadog` Claude Code plugin and run its `ddsetup` skill instead of the Curs
 Working directly in this repo (not via an installed copy)?
 `.cursor/rules/k8s-overprovisioning-datadog.mdc` and
 `.kiro/steering/k8s-overprovisioning-datadog.md` point Cursor/Kiro at
-`k8s-overprovisioning-datadog/SKILL.md` without an install step.
+`skills/k8s-overprovisioning-datadog/SKILL.md` without an install step.
 
 ## 2. Enable a Kubernetes MCP (preferred)
 

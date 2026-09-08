@@ -8,7 +8,7 @@ the full report available for follow-up.
 
 **Page:** <alert_title/symptom> (PagerDuty alert <alert_id>)
 **Window investigated:** <from_time> – <to_time> UTC
-**Owning team:** <squad> (<confidence>) — or **UNKNOWN** (see Gaps) — [squad-map/reference/squad-mapping.md](../../squad-map/reference/squad-mapping.md)
+**Owning team:** <squad> (<confidence>) — or **UNKNOWN** (see Gaps) — [skills/squad-map/reference/squad-mapping.md](../../squad-map/reference/squad-mapping.md)
 
 ## Likely cause
 

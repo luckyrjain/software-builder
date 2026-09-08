@@ -34,8 +34,8 @@ real target repo with Pact tooling already configured, omit `run_tests` and let 
 ## Script self-test
 
 ```bash
-bash contract-test-creator/scripts/detect-pact-tooling.sh contract-test-creator/tests/fixtures/pact-detect/python-provider-local
-python3 -m pytest contract-test-creator/tests/test_detect_pact_tooling.py -q
+bash skills/contract-test-creator/scripts/detect-pact-tooling.sh skills/contract-test-creator/tests/fixtures/pact-detect/python-provider-local
+python3 -m pytest skills/contract-test-creator/tests/test_detect_pact_tooling.py -q
 ```
 
 Also via `make lint-contract-test-creator`.

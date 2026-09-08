@@ -6,14 +6,14 @@ Run after `make install-mysql-to-postgres-sql`, Cursor restart, and **after any 
 
 Use scan fixtures (no org-specific paths required):
 
-`mysql-to-postgres-sql/tests/fixtures/mysql-dialect/hits/` (must fail) and `clean/` (must pass).
+`skills/mysql-to-postgres-sql/tests/fixtures/mysql-dialect/hits/` (must fail) and `clean/` (must pass).
 
 Optional: any service directory with native SQL on your machine. Domain packs (see
 [domain-packs/README.md](domain-packs/README.md)) list org-specific paths when loaded.
 
 ## Invocation
 
-> Scan `mysql-to-postgres-sql/tests/fixtures/mysql-dialect/hits` for MySQL-only SQL before PG cutover.
+> Scan `skills/mysql-to-postgres-sql/tests/fixtures/mysql-dialect/hits` for MySQL-only SQL before PG cutover.
 
 ## A correct minimal output contains
 
@@ -27,7 +27,7 @@ Optional: any service directory with native SQL on your machine. Domain packs (s
 ## Expected first output (healthy)
 
 ```
-Scanning for MySQL-only SQL under: mysql-to-postgres-sql/tests/fixtures/mysql-dialect/hits
+Scanning for MySQL-only SQL under: skills/mysql-to-postgres-sql/tests/fixtures/mysql-dialect/hits
 ```
 
 Followed by FAIL with `TIMESTAMPDIFF` / `DATE_ADD` lines, or OK if path is clean. The scan matches
@@ -56,7 +56,7 @@ make lint-mysql-to-postgres-sql
 Pressure harness only:
 
 ```bash
-bash mysql-to-postgres-sql/tests/run_pressure_tests.sh
+bash skills/mysql-to-postgres-sql/tests/run_pressure_tests.sh
 ```
 
 From skill directory:

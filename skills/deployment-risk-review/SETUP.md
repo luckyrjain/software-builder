@@ -34,7 +34,7 @@ No restart needed — a new Claude Code session picks it up. See
 
 Working directly in this repo? `.cursor/rules/deployment-risk-review.mdc` and
 `.kiro/steering/deployment-risk-review.md` point Cursor/Kiro at
-`deployment-risk-review/SKILL.md` without an install step.
+`skills/deployment-risk-review/SKILL.md` without an install step.
 
 ## Prerequisites
 

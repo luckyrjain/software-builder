@@ -47,7 +47,7 @@ Do not guess field names — discovery-first per the official skill.
 | `get-trace-or-log-fields` | **Required before first log/trace query** — discover field names |
 | `analyze-logs` | Error count by workload/level; log coverage fallback when Datadog empty |
 | `search-logs` | Raw log samples (max 10 rows) — include `body` in `fields` for message text |
-| `incident-rca/scripts/kubesense_logs.py` | **Fallback** — SPL REST when MCP `body` fetch fails |
+| `skills/incident-rca/scripts/kubesense_logs.py` | **Fallback** — SPL REST when MCP `body` fetch fails |
 | `analyze-traces` | p95 latency by workload/service |
 | `search-traces` | Failed trace samples; endpoint attribution |
 | `analyze-metrics` | Pod restarts, CPU throttle |

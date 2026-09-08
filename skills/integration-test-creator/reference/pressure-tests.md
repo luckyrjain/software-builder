@@ -3,7 +3,7 @@
 Run when editing `SKILL.md`, `workflow/`, `reference/`, or `scripts/`. Targets guardrails that regress
 easily.
 
-**Automated:** `python3 -m pytest integration-test-creator/tests/test_detect_integration_setup.py -q`
+**Automated:** `python3 -m pytest skills/integration-test-creator/tests/test_detect_integration_setup.py -q`
 (also via `make lint-integration-test-creator`).
 
 | # | Scenario | Expected behavior |

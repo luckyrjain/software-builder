@@ -4,7 +4,7 @@ Write this before calling the correlator CLI (Phase 4). Full example: [evidence.
 [evidence.example.opensearch-query-governance.json](evidence.example.opensearch-query-governance.json).
 
 Numeric thresholds and confidence cutoffs: [thresholds.md](thresholds.md). Validate bundles with
-`python3 incident-rca/scripts/validate_evidence_json.py <path>`.
+`python3 skills/incident-rca/scripts/validate_evidence_json.py <path>`.
 
 > **Schema versioning:** `schema_version` in the evidence JSON (currently **4**) tracks correlator input
 > shape — independent of **`skill_version`** in `SKILL.md` frontmatter (skill doc releases). Increment

@@ -41,7 +41,7 @@ No restart needed. See [claude-code-setup.md](../../docs/skill-framework/shared/
 ### Kiro / in-repo discovery
 
 Working directly in this repo? `.cursor/rules/incident-triage-agent.mdc` and
-`.kiro/steering/incident-triage-agent.md` point Cursor/Kiro at `incident-triage-agent/SKILL.md` without
+`.kiro/steering/incident-triage-agent.md` point Cursor/Kiro at `skills/incident-triage-agent/SKILL.md` without
 an install step.
 
 ## Prerequisites

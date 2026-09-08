@@ -35,7 +35,7 @@ No restart needed — a new Claude Code session picks it up. See
 
 Working directly in this repo? `.cursor/rules/integration-test-creator.mdc` and
 `.kiro/steering/integration-test-creator.md` point Cursor/Kiro at
-`integration-test-creator/SKILL.md` without an install step.
+`skills/integration-test-creator/SKILL.md` without an install step.
 
 ## Prerequisites
 
@@ -69,8 +69,8 @@ No config file. Every input (`target`, `repo_root`, `run_tests`, …) is passed 
 After install, run the invocation in [reference/smoke-test.md](reference/smoke-test.md).
 
 ```bash
-bash integration-test-creator/scripts/detect-integration-setup.sh integration-test-creator/tests/fixtures/integration-detect/testcontainers-python
-python3 -m pytest integration-test-creator/tests/test_detect_integration_setup.py -q
+bash skills/integration-test-creator/scripts/detect-integration-setup.sh skills/integration-test-creator/tests/fixtures/integration-detect/testcontainers-python
+python3 -m pytest skills/integration-test-creator/tests/test_detect_integration_setup.py -q
 ```
 
 ## Troubleshooting

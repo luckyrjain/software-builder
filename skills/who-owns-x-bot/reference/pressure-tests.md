@@ -11,7 +11,7 @@ who-owns-x-bot's own layer (delegation, classification, formatting) on top of wh
 |----------|----------|
 | `query` names a repo that doesn't exist in GitLab/Datadog, nor any row in an existing `SQUAD_MAP.md` | **Unknown** shape with `fallback_contact` from SETUP.md config — never a guessed squad ([slack-format.md § Unknown](slack-format.md)) |
 | squad-map returns LOW confidence (e.g. CODEOWNERS fallback engaged, both MCP ❌) | **Unknown** shape — LOW confidence is folded into Unknown, never surfaced as Resolved ([lookup.md](../workflow/lookup.md) Step 4) |
-| squad-map not installed at all (no `squad-map/SKILL.md` reachable) | **Unknown** shape, note "squad-map not installed", and Lookup stops at Step 1 — Steps 2–5 never attempted ([lookup.md](../workflow/lookup.md) Step 1) |
+| squad-map not installed at all (no `skills/squad-map/SKILL.md` reachable) | **Unknown** shape, note "squad-map not installed", and Lookup stops at Step 1 — Steps 2–5 never attempted ([lookup.md](../workflow/lookup.md) Step 1) |
 | squad-map's own config resolution HARD STOPs (missing `squad_path_segment`, no config file) | **Unknown** shape, note ownership config missing — never block the single-shot reply on an interactive answer nobody can give ([lookup.md](../workflow/lookup.md) Step 3) |
 | `query` substring-matches 3+ rows in an existing `SQUAD_MAP.md` | **Ambiguous** shape, up to 3 candidates listed, never silently picks one ([slack-format.md § Ambiguous](slack-format.md)) |
 

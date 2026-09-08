@@ -33,7 +33,7 @@ No restart needed — a new Claude Code session picks it up. See
 ### Kiro / in-repo discovery
 
 Working directly in this repo? `.cursor/rules/performance-review.mdc` and
-`.kiro/steering/performance-review.md` point Cursor/Kiro at `performance-review/SKILL.md` without an
+`.kiro/steering/performance-review.md` point Cursor/Kiro at `skills/performance-review/SKILL.md` without an
 install step.
 
 ## Prerequisites

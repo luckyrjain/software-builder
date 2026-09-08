@@ -44,7 +44,7 @@ No restart needed — a new Claude Code session picks it up. See
 ### Kiro / in-repo discovery
 
 Working directly in this repo? `.cursor/rules/who-owns-x-bot.mdc` and
-`.kiro/steering/who-owns-x-bot.md` point Cursor/Kiro at `who-owns-x-bot/SKILL.md` without an install
+`.kiro/steering/who-owns-x-bot.md` point Cursor/Kiro at `skills/who-owns-x-bot/SKILL.md` without an install
 step.
 
 ## Prerequisites

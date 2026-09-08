@@ -34,7 +34,7 @@ No restart needed — a new Claude Code session picks it up. See
 ### Kiro / in-repo discovery
 
 Working directly in this repo? `.cursor/rules/unit-test-creator.mdc` and
-`.kiro/steering/unit-test-creator.md` point Cursor/Kiro at `unit-test-creator/SKILL.md` without an
+`.kiro/steering/unit-test-creator.md` point Cursor/Kiro at `skills/unit-test-creator/SKILL.md` without an
 install step.
 
 ## Prerequisites
@@ -68,8 +68,8 @@ No config file. Every input (`target`, `repo_root`, `run_tests`, …) is passed 
 After install, run the invocation in [reference/smoke-test.md](reference/smoke-test.md).
 
 ```bash
-bash unit-test-creator/scripts/detect-test-framework.sh unit-test-creator/tests/fixtures/test-framework-detect/python-pytest
-python3 -m pytest unit-test-creator/tests/test_detect_test_framework.py -q
+bash skills/unit-test-creator/scripts/detect-test-framework.sh skills/unit-test-creator/tests/fixtures/test-framework-detect/python-pytest
+python3 -m pytest skills/unit-test-creator/tests/test_detect_test_framework.py -q
 ```
 
 ## Troubleshooting

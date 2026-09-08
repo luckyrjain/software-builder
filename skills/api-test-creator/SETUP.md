@@ -34,7 +34,7 @@ No restart needed — a new Claude Code session picks it up. See
 ### Kiro / in-repo discovery
 
 Working directly in this repo? `.cursor/rules/api-test-creator.mdc` and
-`.kiro/steering/api-test-creator.md` point Cursor/Kiro at `api-test-creator/SKILL.md` without an install
+`.kiro/steering/api-test-creator.md` point Cursor/Kiro at `skills/api-test-creator/SKILL.md` without an install
 step.
 
 ## Prerequisites
@@ -69,8 +69,8 @@ No config file. Every input (`target`, `repo_root`, `run_tests`, …) is passed 
 After install, run the invocation in [reference/smoke-test.md](reference/smoke-test.md).
 
 ```bash
-bash api-test-creator/scripts/detect-postman-tooling.sh api-test-creator/tests/fixtures/postman-detect/single-collection
-python3 -m pytest api-test-creator/tests/test_detect_postman_tooling.py -q
+bash skills/api-test-creator/scripts/detect-postman-tooling.sh skills/api-test-creator/tests/fixtures/postman-detect/single-collection
+python3 -m pytest skills/api-test-creator/tests/test_detect_postman_tooling.py -q
 ```
 
 ## Troubleshooting

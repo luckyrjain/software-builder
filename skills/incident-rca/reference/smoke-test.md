@@ -59,7 +59,7 @@ From repo root:
 make lint-incident-rca
 make install-incident-rca-deps   # verify kubesense-mcp skill installs
 test -f ~/.cursor/skills/kubesense-mcp/SKILL.md || test -f .agents/skills/kubesense-mcp/SKILL.md
-python3 incident-rca/scripts/kubesense_logs.py --help   # SPL fallback; requires KUBESENSE_API_KEY for live fetch
+python3 skills/incident-rca/scripts/kubesense_logs.py --help   # SPL fallback; requires KUBESENSE_API_KEY for live fetch
 ```
 
 Validates `evidence.example.json`, schema validator, kubesense_logs tests, and pytest suite.

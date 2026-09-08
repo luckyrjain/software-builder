@@ -45,7 +45,7 @@ differences (this skill's optional GitLab/Datadog enrichments use the same serve
 ### Kiro / in-repo discovery
 
 Working directly in this repo (not via an installed copy)? `.cursor/rules/domain-comprehension.mdc`
-and `.kiro/steering/domain-comprehension.md` point Cursor/Kiro at `domain-comprehension/SKILL.md`
+and `.kiro/steering/domain-comprehension.md` point Cursor/Kiro at `skills/domain-comprehension/SKILL.md`
 without an install step.
 
 ## Prerequisites
@@ -124,5 +124,5 @@ Optional pre-fill from [reference/domain-packs/](reference/domain-packs/README.m
 | No squad data | Enable GitLab + Datadog MCP; run Session 0b — [squad-map/SETUP.md](../squad-map/SETUP.md) |
 | Datadog 403 / missing tools | **ddsetup** / **ddconfig**; skip P2b runtime validation |
 | KubeSense unavailable | Treat as ❌; P2b continues on Datadog alone if available, else skip |
-| `manifest.yaml` validation fails | `python3 domain-comprehension/scripts/validate_manifest_yaml.py manifest.yaml --workspace-root <root>` |
+| `manifest.yaml` validation fails | `python3 skills/domain-comprehension/scripts/validate_manifest_yaml.py manifest.yaml --workspace-root <root>` |
 | `schema_version` must be 2 | Copy new fields from `templates/manifest.yaml` (`evidence_summary`, `overall_confidence`, new artifacts) |

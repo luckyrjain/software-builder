@@ -32,8 +32,8 @@ for a real target repo with a reachable API, omit `run_tests` and let it run.)
 ## Script self-test
 
 ```bash
-bash api-test-creator/scripts/detect-postman-tooling.sh api-test-creator/tests/fixtures/postman-detect/single-collection
-python3 -m pytest api-test-creator/tests/test_detect_postman_tooling.py -q
+bash skills/api-test-creator/scripts/detect-postman-tooling.sh skills/api-test-creator/tests/fixtures/postman-detect/single-collection
+python3 -m pytest skills/api-test-creator/tests/test_detect_postman_tooling.py -q
 ```
 
 Also via `make lint-api-test-creator`.

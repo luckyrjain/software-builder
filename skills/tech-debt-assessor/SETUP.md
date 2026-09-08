@@ -33,7 +33,7 @@ No restart needed — a new Claude Code session picks it up. See
 ### Kiro / in-repo discovery
 
 Working directly in this repo? `.cursor/rules/tech-debt-assessor.mdc` and
-`.kiro/steering/tech-debt-assessor.md` point Cursor/Kiro at `tech-debt-assessor/SKILL.md` without an
+`.kiro/steering/tech-debt-assessor.md` point Cursor/Kiro at `skills/tech-debt-assessor/SKILL.md` without an
 install step.
 
 ## Prerequisites

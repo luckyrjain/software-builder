@@ -81,7 +81,7 @@ Cursor Datadog plugin. Full mapping: [claude-code-setup.md](../../docs/skill-fra
 ### Kiro / in-repo discovery
 
 Working directly in this repo (not via an installed copy)? `.cursor/rules/incident-rca.mdc` and
-`.kiro/steering/incident-rca.md` point Cursor/Kiro at `incident-rca/SKILL.md` without an install step.
+`.kiro/steering/incident-rca.md` point Cursor/Kiro at `skills/incident-rca/SKILL.md` without an install step.
 
 ## Minimum viable setup
 
@@ -118,7 +118,7 @@ Configure in **Cursor Settings → MCP**. All are read-only for RCA.
 
 **KubeSense log bodies (acme):** read the official **`kubesense-mcp`** skill first. Use MCP
 `search-logs` with `body` in `fields` (15–30 min windows). If MCP body fetch fails after one retry,
-run `python3 incident-rca/scripts/kubesense_logs.py <workload>` (or `make kubesense-errors`). See
+run `python3 skills/incident-rca/scripts/kubesense_logs.py <workload>` (or `make kubesense-errors`). See
 [dependencies.md](dependencies.md) and [reference/kubesense-spl.md](reference/kubesense-spl.md).
 
 At least **one observability source** (Datadog or KubeSense) is required.

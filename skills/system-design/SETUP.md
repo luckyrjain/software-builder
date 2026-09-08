@@ -33,7 +33,7 @@ No restart needed — a new Claude Code session picks it up. See
 ### Kiro / in-repo discovery
 
 Working directly in this repo? `.cursor/rules/system-design.mdc` and `.kiro/steering/system-design.md`
-point Cursor/Kiro at `system-design/SKILL.md` without an install step.
+point Cursor/Kiro at `skills/system-design/SKILL.md` without an install step.
 
 ## Prerequisites
 

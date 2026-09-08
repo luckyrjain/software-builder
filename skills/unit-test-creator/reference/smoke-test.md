@@ -7,11 +7,11 @@ Conventions: [smoke-test-conventions](../../../docs/skill-framework/shared/smoke
 ## Fixture
 
 Any small repo with an established test framework and at least one recently changed, untested function
-— or use this repo itself: `mysql-to-postgres-sql/scripts/scan-report.sh` has no dedicated test file.
+— or use this repo itself: `skills/mysql-to-postgres-sql/scripts/scan-report.sh` has no dedicated test file.
 
 ## Invocation
 
-> `target: {mode: backfill, scope: ["mysql-to-postgres-sql/scripts/scan-report.sh"]}`,
+> `target: {mode: backfill, scope: ["skills/mysql-to-postgres-sql/scripts/scan-report.sh"]}`,
 > `repo_root: <software-builder clone>`, `run_tests: false`
 
 (`run_tests: false` here because the fixture script isn't itself a unit under a test framework this repo
@@ -33,8 +33,8 @@ runs — for a real target repo with pytest/Jest/etc. already configured, omit `
 ## Script self-test
 
 ```bash
-bash unit-test-creator/scripts/detect-test-framework.sh unit-test-creator/tests/fixtures/test-framework-detect/python-pytest
-python3 -m pytest unit-test-creator/tests/test_detect_test_framework.py -q
+bash skills/unit-test-creator/scripts/detect-test-framework.sh skills/unit-test-creator/tests/fixtures/test-framework-detect/python-pytest
+python3 -m pytest skills/unit-test-creator/tests/test_detect_test_framework.py -q
 ```
 
 Also via `make lint-unit-test-creator`.

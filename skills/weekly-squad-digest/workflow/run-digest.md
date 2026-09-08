@@ -49,7 +49,7 @@ This skill's decision:
 4. **Cross-reference a `service` that appears in both rollups under different squads.** After both
    rollups are grouped, use `scripts/digest_grouping.py` (`find_cross_rollup_service_pairs`) with
    **normalized service tokens** (case- and separator-insensitive — same rules as
-   `squad-map/scripts/squad_mapping.py::normalize_repo_token`) to detect pairs that exact-string
+   `skills/squad-map/scripts/squad_mapping.py::normalize_repo_token`) to detect pairs that exact-string
    equality would miss. For each pair with differing `squad`, add a Notes pointer on each side ("also in
    Cost optimization under `<squad>`" / "also in Migration status under `<squad>`"), per
    [reference/report-format.md](../reference/report-format.md)'s rule. This is a real, expected case since

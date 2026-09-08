@@ -3,7 +3,7 @@
 Run when editing `SKILL.md`, `workflow/`, `reference/`, or `scripts/`. Targets guardrails that regress
 easily.
 
-**Automated:** `python3 -m pytest api-test-creator/tests/test_detect_postman_tooling.py -q` (also via
+**Automated:** `python3 -m pytest skills/api-test-creator/tests/test_detect_postman_tooling.py -q` (also via
 `make lint-api-test-creator`).
 
 | # | Scenario | Expected behavior |

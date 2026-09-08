@@ -45,7 +45,7 @@ optional post-cutover Datadog check.
 
 Working directly in this repo (not via an installed copy)? `.cursor/rules/mysql-to-postgres-sql.mdc`
 and `.kiro/steering/mysql-to-postgres-sql.md` point Cursor/Kiro at
-`mysql-to-postgres-sql/SKILL.md` without an install step.
+`skills/mysql-to-postgres-sql/SKILL.md` without an install step.
 
 ## Prerequisites
 

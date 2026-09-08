@@ -34,7 +34,7 @@ No restart needed — a new Claude Code session picks it up. See
 
 Working directly in this repo? `.cursor/rules/dependency-upgrade-review.mdc` and
 `.kiro/steering/dependency-upgrade-review.md` point Cursor/Kiro at
-`dependency-upgrade-review/SKILL.md` without an install step.
+`skills/dependency-upgrade-review/SKILL.md` without an install step.
 
 ## Prerequisites
 

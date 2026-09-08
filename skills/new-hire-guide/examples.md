@@ -142,7 +142,7 @@ for Jane's tour last month, just pick up from there" — same `workspace_root: .
    [workflow/run-tour.md](workflow/run-tour.md) § 3, "domain-comprehension resolves its own mode per its
    own `RESUME`/`DELTA` rules, same as any direct invocation — this skill neither forces nor blocks that."
    No repo's `HEAD` SHA changed since that manifest, so domain-comprehension's own `DELTA` procedure
-   (`domain-comprehension/workflow/inputs.md` § Delivery mode — "Re-run phases for repos whose HEAD SHA
+   (`skills/domain-comprehension/workflow/inputs.md` § Delivery mode — "Re-run phases for repos whose HEAD SHA
    changed since last manifest") finds nothing to re-run and reuses `EXEC_SUMMARY.md` as-is
 5. Run tour § 4 — curates that reused, still-unscoped `EXEC_SUMMARY.md` down to `collections-service` and
    `dunning-scheduler`, exactly as step 4 would curate a freshly generated one — the curation step doesn't

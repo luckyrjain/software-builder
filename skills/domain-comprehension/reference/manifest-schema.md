@@ -187,10 +187,10 @@ understand status, and deep-dive status.
 ## Validation
 
 ```bash
-python3 domain-comprehension/scripts/validate_manifest_yaml.py manifest.yaml \
+python3 skills/domain-comprehension/scripts/validate_manifest_yaml.py manifest.yaml \
   --workspace-root /path/to/workspace --strict --check-content
 
-python3 domain-comprehension/scripts/validate_prd.py \
+python3 skills/domain-comprehension/scripts/validate_prd.py \
   /path/to/workspace/<artifact_root>/PRD.md
 ```
 

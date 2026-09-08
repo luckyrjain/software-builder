@@ -3,7 +3,7 @@
 **The one piece of new logic in this skill.** Everything else is incident-rca's and squad-map's own. This
 file enumerates, exhaustively, every point either skill stops and waits for a human reply — and gives
 each one a deterministic answer, so a webhook-triggered run never hangs. Written exhaustive from the
-start: `pr-gatekeeper/reference/auto-post-policy.md` needed three review rounds to reach full gate
+start: `skills/pr-gatekeeper/reference/auto-post-policy.md` needed three review rounds to reach full gate
 coverage for a single wrapped skill; this file covers **two** wrapped skills and is built directly on
 that lesson — enumerate every gate up front, in both skills' actual documented text, not just the
 obvious ones.
@@ -46,7 +46,7 @@ Source: [incident-rca/workflow/inputs.md](../../incident-rca/workflow/inputs.md)
 
 | Gate | Avoidable by construction? | This skill's answer |
 |------|------------------------------|------------------------|
-| squad-map not installed at all (no `squad-map/SKILL.md` reachable) | No — genuine setup error | Proceed with owning team **UNKNOWN**, note "squad-map not installed" in the doc's Gaps — mirrors [who-owns-x-bot/workflow/lookup.md](../../who-owns-x-bot/workflow/lookup.md) Step 1's identical handling. `make install-incident-triage-agent` always installs squad-map alongside it, so this should only happen from a broken manual install |
+| squad-map not installed at all (no `skills/squad-map/SKILL.md` reachable) | No — genuine setup error | Proceed with owning team **UNKNOWN**, note "squad-map not installed" in the doc's Gaps — mirrors [who-owns-x-bot/workflow/lookup.md](../../who-owns-x-bot/workflow/lookup.md) Step 1's identical handling. `make install-incident-triage-agent` always installs squad-map alongside it, so this should only happen from a broken manual install |
 | `squad_path_segment` HARD STOP (no config file, GitLab available) — [squad-map/workflow/inputs.md](../../squad-map/workflow/inputs.md) | No — genuine setup/config gap unless pre-provisioned | Proceed with owning team **UNKNOWN**, noted as a gap in the doc — mirrors [who-owns-x-bot/workflow/lookup.md](../../who-owns-x-bot/workflow/lookup.md) Step 3's identical handling of this same squad-map gate. Never block the triage doc or postmortem on ownership resolution — a page needs a triage doc *now* even if ownership can't be resolved yet |
 
 Pre-provisioning `squad-map-config.yaml` (or `domain-config.yaml`) at the configured `workspace_root`

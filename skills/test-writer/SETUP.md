@@ -36,7 +36,7 @@ No restart needed — a new Claude Code session picks it up. See
 ### Kiro / in-repo discovery
 
 Working directly in this repo? `.cursor/rules/test-writer.mdc` and `.kiro/steering/test-writer.md` point
-Cursor/Kiro at `test-writer/SKILL.md` without an install step.
+Cursor/Kiro at `skills/test-writer/SKILL.md` without an install step.
 
 ## Prerequisites
 

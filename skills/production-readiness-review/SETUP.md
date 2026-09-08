@@ -50,7 +50,7 @@ No restart needed — a new Claude Code session picks it up. See the shared
 
 Working directly in this repo? `.cursor/rules/production-readiness-review.mdc` and
 `.kiro/steering/production-readiness-review.md` point Cursor/Kiro at
-`production-readiness-review/SKILL.md` without an install step.
+`skills/production-readiness-review/SKILL.md` without an install step.
 
 ## Prerequisites
 

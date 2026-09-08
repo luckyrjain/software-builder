@@ -3,7 +3,7 @@
 Run when editing `SKILL.md`, `workflow/`, `reference/`, or `scripts/`. Targets guardrails that regress
 easily.
 
-**Automated:** `python3 -m pytest unit-test-creator/tests/test_detect_test_framework.py -q` (also via
+**Automated:** `python3 -m pytest skills/unit-test-creator/tests/test_detect_test_framework.py -q` (also via
 `make lint-unit-test-creator`).
 
 | # | Scenario | Expected behavior |

@@ -33,7 +33,7 @@ No restart needed — a new Claude Code session picks it up. See
 ### Kiro / in-repo discovery
 
 Working directly in this repo? `.cursor/rules/database-review.mdc` and
-`.kiro/steering/database-review.md` point Cursor/Kiro at `database-review/SKILL.md` without an install
+`.kiro/steering/database-review.md` point Cursor/Kiro at `skills/database-review/SKILL.md` without an install
 step.
 
 ## Prerequisites

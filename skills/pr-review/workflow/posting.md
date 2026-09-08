@@ -123,7 +123,7 @@ Skip confirmation only when user said "review and post" **and** mode is `full` o
 `false`). An incomplete review always confirms — the same as a draft PR/MR — even on "review and post",
 and even for an unattended caller scripted to always answer "review and post" (e.g. pr-gatekeeper with
 `auto_post_authorized: true`): that automation's own deterministic reply to a Phase 3 prompt is always
-"Hold — don't post" (`pr-gatekeeper/reference/auto-post-policy.md`), so forcing this confirmation to
+"Hold — don't post" (`skills/pr-gatekeeper/reference/auto-post-policy.md`), so forcing this confirmation to
 render is what keeps an incomplete review from being silently auto-posted as a finished, clean review.
 For `general-only`, always confirm after the warning.
 

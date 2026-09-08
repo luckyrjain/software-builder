@@ -145,7 +145,7 @@ After ranking (CLI or manual), write the machine-checkable causal graph per
 
 ```bash
 scratchpad="${CURSOR_SCRATCHPAD:-${TMPDIR:-/tmp}}"
-python3 incident-rca/scripts/validate_causal_graph.py \
+python3 skills/incident-rca/scripts/validate_causal_graph.py \
   "$scratchpad/rca_causal_graph.yaml" \
   "$scratchpad/rca_evidence.json"
 ```
