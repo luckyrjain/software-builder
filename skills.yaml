@@ -95,6 +95,7 @@ contracts:
       - resilience_review_report
       - implementation_plan
       - production_readiness_report
+      - engineering_decision_record
       artifact_schema_versions:
         mr_review_report: 2
         rca_report: 1
@@ -125,6 +126,7 @@ contracts:
         resilience_review_report: 1
         implementation_plan: 1
         production_readiness_report: 1
+        engineering_decision_record: 1
       state_semantics:
         mr_review_report: current_state
         rca_report: current_state
@@ -155,6 +157,7 @@ contracts:
         resilience_review_report: proposed_state
         implementation_plan: proposed_state
         production_readiness_report: current_state
+        engineering_decision_record: desired_state
       allowed_state_semantics:
         prd_report:
         - proposed_state
@@ -199,6 +202,8 @@ contracts:
         - proposed_state
         production_readiness_report:
         - current_state
+        engineering_decision_record:
+        - desired_state
       payload_types:
         rca_report:
           assessment_metadata: mapping
@@ -437,6 +442,16 @@ contracts:
           waivers: list
           required_actions: list
           evidence_refs: list
+        engineering_decision_record:
+          title: string
+          decision_scope: mapping
+          decision_tree: list
+          frontier: list
+          recommendations: list
+          resolved_decisions: list
+          unresolved_decisions: list
+          alternatives_rejected: list
+          limitations: list
       required_sections:
         skill_result:
           required_fields:
@@ -611,6 +626,11 @@ contracts:
         external_actions: read
         unattended: false
         merge: false
+      engineering-decision-discovery:
+        repository: read
+        external_actions: none
+        unattended: false
+        merge: false
       implementation-planner:
         repository: read
         external_actions: none
@@ -756,6 +776,7 @@ contracts:
       deployment-risk-review: leaf
       domain-comprehension: orchestrator
       e2e-test-creator: leaf
+      engineering-decision-discovery: leaf
       implementation-planner: leaf
       incident-rca: leaf
       incident-triage-agent: trigger
@@ -799,6 +820,7 @@ contracts:
       deployment-risk-review: leaf
       domain-comprehension: orchestrator
       e2e-test-creator: leaf
+      engineering-decision-discovery: leaf
       implementation-planner: leaf
       incident-rca: leaf
       incident-triage-agent: trigger
@@ -1060,6 +1082,11 @@ contracts:
         mode: canonical
         owners:
         - production-readiness-review
+      engineering_decision_record:
+        mode: canonical
+        owners:
+        - engineering-decision-discovery
+        delegates: []
   composition:
     artifact_types:
     - mr_context
@@ -1094,6 +1121,7 @@ contracts:
     - resilience_review_report
     - implementation_plan
     - production_readiness_report
+    - engineering_decision_record
     artifact_schemas:
       mr_context:
         fields:
@@ -1393,6 +1421,17 @@ contracts:
         - waivers
         - required_actions
         - evidence_refs
+      engineering_decision_record:
+        fields:
+        - title
+        - decision_scope
+        - decision_tree
+        - frontier
+        - recommendations
+        - resolved_decisions
+        - unresolved_decisions
+        - alternatives_rejected
+        - limitations
     creator_parity:
       skills:
       - unit-test-creator
@@ -1619,6 +1658,22 @@ contracts:
           - output_dir
           - specialist_inputs
         write_authority: repository-write
+      engineering-decision-discovery:
+        produces:
+        - engineering_decision_record
+        consumes: []
+        produce_fields:
+          engineering_decision_record:
+          - title
+          - decision_scope
+          - decision_tree
+          - frontier
+          - recommendations
+          - resolved_decisions
+          - unresolved_decisions
+          - alternatives_rejected
+          - limitations
+        write_authority: read-only
       implementation-planner:
         produces:
         - implementation_plan
@@ -3002,6 +3057,60 @@ skills:
     routing:
       patterns:
       - \b(e2e|end[- ]to[- ]end)\b.*\b(tests?|testing)\b
+  engineering-decision-discovery:
+    path: engineering-decision-discovery
+    category: architecture
+    extends: read-only-leaf-review
+    install:
+      requires: []
+    composition:
+      invokes: []
+      escalation_targets:
+      - module-design
+      - architecture-review
+    capabilities:
+      required:
+      - host.report.write
+      - host.repository.read
+      optional: []
+    lint:
+      skill_md_max_lines: 180
+      target: engineering-decision-discovery
+    version: 1.0.0
+    type: leaf
+    permissions:
+      repository: read
+      external_actions: none
+      unattended: false
+      merge: false
+    output_contract:
+      produces:
+      - engineering_decision_record
+      produce_fields:
+        engineering_decision_record:
+        - title
+        - decision_scope
+        - decision_tree
+        - frontier
+        - recommendations
+        - resolved_decisions
+        - unresolved_decisions
+        - alternatives_rejected
+        - limitations
+    dependencies: []
+    degraded_behavior:
+      missing_capability: host.repository.read
+      available_capabilities:
+      - host.report.write
+      behavior: BLOCKED
+    setup_freshness:
+      external_services: None — reads repository and caller-provided context only
+    routing:
+      patterns:
+      - \b(grill me|challenge my plan|stress[- ]test this|question my assumptions|help
+        me decide|what decisions are missing|interrogate this architecture)\b
+      exclude_patterns:
+      - \b(PR|MR|pull request|merge request)\s*[#!]?\d+\b
   implementation-planner:
     path: implementation-planner
     category: automation

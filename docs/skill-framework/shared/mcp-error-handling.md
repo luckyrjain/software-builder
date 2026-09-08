@@ -76,6 +76,7 @@ column.
 | `deployment-risk-review` | `host.report.write` | — | BLOCKED | — |
 | `domain-comprehension` | `host.repository.read` | — | BLOCKED | — |
 | `e2e-test-creator` | `host.repository.read_write` | — | BLOCKED | — |
+| `engineering-decision-discovery` | `host.repository.read` | — | BLOCKED | `host.report.write` |
 | `implementation-planner` | `host.repository.read` | — | BLOCKED | `host.report.write` |
 | `incident-rca` | `telemetry.logs.query` | — | BLOCKED | — |
 | `incident-triage-agent` | `pager.webhook.receive` | — | BLOCKED | — |

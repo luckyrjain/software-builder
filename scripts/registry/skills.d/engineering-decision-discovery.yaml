@@ -1,0 +1,53 @@
+engineering-decision-discovery:
+  path: engineering-decision-discovery
+  category: architecture
+  extends: read-only-leaf-review
+  install:
+    requires: []
+  composition:
+    invokes: []
+    escalation_targets:
+    - module-design
+    - architecture-review
+  capabilities:
+    required:
+    - host.report.write
+    - host.repository.read
+    optional: []
+  lint:
+    skill_md_max_lines: 180
+    target: engineering-decision-discovery
+  version: 1.0.0
+  type: leaf
+  permissions:
+    repository: read
+    external_actions: none
+    unattended: false
+    merge: false
+  output_contract:
+    produces:
+    - engineering_decision_record
+    produce_fields:
+      engineering_decision_record:
+      - title
+      - decision_scope
+      - decision_tree
+      - frontier
+      - recommendations
+      - resolved_decisions
+      - unresolved_decisions
+      - alternatives_rejected
+      - limitations
+  dependencies: []
+  degraded_behavior:
+    missing_capability: host.repository.read
+    available_capabilities:
+    - host.report.write
+    behavior: BLOCKED
+  setup_freshness:
+    external_services: None — reads repository and caller-provided context only
+  routing:
+    patterns:
+    - \b(grill me|challenge my plan|stress[- ]test this|question my assumptions|help me decide|what decisions are missing|interrogate this architecture)\b
+    exclude_patterns:
+    - \b(PR|MR|pull request|merge request)\s*[#!]?\d+\b

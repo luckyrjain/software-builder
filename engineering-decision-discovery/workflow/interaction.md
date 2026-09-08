@@ -59,7 +59,7 @@ Run this loop once per round until the frontier is empty or the user explicitly 
 ## `human_available: false` or mid-session unattended pressure
 
 If `interaction_policy.human_available` is `false`, or the run becomes `unattended: true` mid-session
-(see [workflow/inputs.md § interaction_policy defaults](inputs.md#interaction_policy-defaults-and-consequences)),
+(see [workflow/inputs.md § interaction_policy defaults](inputs.md#interactionpolicy-defaults-and-consequences)),
 do not run step 4 at all: compute the frontier, produce the recommendation for each node, and stop there.
 A non-empty frontier at that point is `BLOCKED` (unattended) or a `PARTIAL` report with the frontier
 stated as unresolved (no human turn, but not formally unattended composition) — never a fabricated answer

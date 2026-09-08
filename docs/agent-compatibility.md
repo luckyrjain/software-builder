@@ -64,6 +64,7 @@ concrete missing capability (`BLOCKED`) always takes precedence, matching
 | claude | deployment-risk-review | BLOCKED | host.report.write |
 | claude | domain-comprehension | BLOCKED | host.repository.read |
 | claude | e2e-test-creator | DEGRADED | — |
+| claude | engineering-decision-discovery | BLOCKED | host.report.write, host.repository.read |
 | claude | implementation-planner | BLOCKED | host.report.write, host.repository.read |
 | claude | incident-rca | BLOCKED | telemetry.logs.query |
 | claude | incident-triage-agent | BLOCKED | pager.webhook.receive |
@@ -104,6 +105,7 @@ concrete missing capability (`BLOCKED`) always takes precedence, matching
 | cursor | deployment-risk-review | BLOCKED | host.report.write |
 | cursor | domain-comprehension | BLOCKED | host.repository.read |
 | cursor | e2e-test-creator | BLOCKED | host.repository.read_write |
+| cursor | engineering-decision-discovery | BLOCKED | host.report.write, host.repository.read |
 | cursor | implementation-planner | BLOCKED | host.report.write, host.repository.read |
 | cursor | incident-rca | BLOCKED | telemetry.logs.query |
 | cursor | incident-triage-agent | BLOCKED | pager.webhook.receive |
@@ -144,6 +146,7 @@ concrete missing capability (`BLOCKED`) always takes precedence, matching
 | github-copilot | deployment-risk-review | BLOCKED | host.report.write |
 | github-copilot | domain-comprehension | BLOCKED | host.repository.read |
 | github-copilot | e2e-test-creator | BLOCKED | host.repository.read_write |
+| github-copilot | engineering-decision-discovery | BLOCKED | host.report.write, host.repository.read |
 | github-copilot | implementation-planner | BLOCKED | host.report.write, host.repository.read |
 | github-copilot | incident-rca | BLOCKED | telemetry.logs.query |
 | github-copilot | incident-triage-agent | BLOCKED | pager.webhook.receive |
@@ -184,6 +187,7 @@ concrete missing capability (`BLOCKED`) always takes precedence, matching
 | kiro | deployment-risk-review | BLOCKED | host.report.write |
 | kiro | domain-comprehension | BLOCKED | host.repository.read |
 | kiro | e2e-test-creator | BLOCKED | host.repository.read_write |
+| kiro | engineering-decision-discovery | BLOCKED | host.report.write, host.repository.read |
 | kiro | implementation-planner | BLOCKED | host.report.write, host.repository.read |
 | kiro | incident-rca | BLOCKED | telemetry.logs.query |
 | kiro | incident-triage-agent | BLOCKED | pager.webhook.receive |

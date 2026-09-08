@@ -28,6 +28,7 @@ body:
         - deployment-risk-review
         - domain-comprehension
         - e2e-test-creator
+        - engineering-decision-discovery
         - implementation-planner
         - incident-rca
         - incident-triage-agent

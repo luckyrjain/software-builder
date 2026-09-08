@@ -46,6 +46,7 @@ Each skill is a self-contained directory copied to `~/.cursor/skills/<name>/` on
 | **deployment-risk-review** | [deployment-risk-review/README.md](../deployment-risk-review/README.md) | [deployment-risk-review/SKILL.md](../deployment-risk-review/SKILL.md) | [deployment-risk-review/SETUP.md](../deployment-risk-review/SETUP.md) |
 | **domain-comprehension** | [domain-comprehension/README.md](../domain-comprehension/README.md) | [domain-comprehension/SKILL.md](../domain-comprehension/SKILL.md) | [domain-comprehension/SETUP.md](../domain-comprehension/SETUP.md) |
 | **e2e-test-creator** | [e2e-test-creator/README.md](../e2e-test-creator/README.md) | [e2e-test-creator/SKILL.md](../e2e-test-creator/SKILL.md) | [e2e-test-creator/SETUP.md](../e2e-test-creator/SETUP.md) |
+| **engineering-decision-discovery** | [engineering-decision-discovery/README.md](../engineering-decision-discovery/README.md) | [engineering-decision-discovery/SKILL.md](../engineering-decision-discovery/SKILL.md) | [engineering-decision-discovery/SETUP.md](../engineering-decision-discovery/SETUP.md) |
 | **implementation-planner** | [implementation-planner/README.md](../implementation-planner/README.md) | [implementation-planner/SKILL.md](../implementation-planner/SKILL.md) | [implementation-planner/SETUP.md](../implementation-planner/SETUP.md) |
 | **incident-rca** | [incident-rca/README.md](../incident-rca/README.md) | [incident-rca/SKILL.md](../incident-rca/SKILL.md) | [incident-rca/SETUP.md](../incident-rca/SETUP.md) |
 | **incident-triage-agent** | [incident-triage-agent/README.md](../incident-triage-agent/README.md) | [incident-triage-agent/SKILL.md](../incident-triage-agent/SKILL.md) | [incident-triage-agent/SETUP.md](../incident-triage-agent/SETUP.md) |
@@ -155,8 +156,11 @@ Skills reference each other when a finding belongs in another workflow:
 | architecture-review | The PRD itself has gaps, not the architecture | prd-architect |
 | codebase-architecture-review | A selected existing-code candidate needs one concrete module/interface/seam design | module-design |
 | codebase-architecture-review | A retained existing-code finding needs current-state domain reconstruction | domain-comprehension |
+| codebase-architecture-review | A selected candidate has unresolved engineering decisions before module/interface design begins | engineering-decision-discovery |
 | module-design | Scope expansion from one module now spans multiple components, APIs, events, or data flows | system-design |
 | module-design | Scope expansion from one module requires an architecture-wide correctness, risk, or scale decision | architecture-review |
+| engineering-decision-discovery | Resolved decisions describe one module's contract, seam, or interface | module-design |
+| engineering-decision-discovery | The frontier itself needs an architecture-wide risk/scale/trade-off verdict, not a decision interview | architecture-review |
 | system-design | System design defines an API surface needing contract review | api-design-review |
 | system-design | System design defines a data model needing schema review | database-review |
 | system-design | System design ready, needs an observability plan review | observability-review |

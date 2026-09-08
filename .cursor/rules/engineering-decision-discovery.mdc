@@ -1,0 +1,9 @@
+---
+description: Use when engineering decisions remain unresolved and need an interactive, evidence-backed challenge before design or implementation. Keywords: grill me, challenge my plan, stress-test this decision, question my assumptions, help me decide, what decisions are missing, interrogate this architecture. Not for reconstructing current domain behavior, reviewing a proposed architecture, or implementing an already-settled task.
+alwaysApply: false
+---
+
+<!-- GENERATED from skills.yaml + SKILL.md — do not edit; run make generate -->
+
+Invoke the engineering-decision-discovery skill. Read `engineering-decision-discovery/SKILL.md` and follow it.
+Phase index: `engineering-decision-discovery/reference/phase-index.md` when present under the skill directory.

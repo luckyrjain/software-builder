@@ -49,6 +49,7 @@ software-builder/
 ├── production-readiness-review/ # Read-only rollup verdict for one exact PR/MR/release candidate
 ├── architecture-review/       # Architecture decision, risks, scale limits, failure modes, alternatives
 ├── codebase-architecture-review/ # Bounded, evidence-backed review of an existing codebase's architecture friction
+├── engineering-decision-discovery/ # Interactive, evidence-backed challenge that surfaces and resolves unsettled engineering decisions
 ├── module-design/              # Evidence-backed design for one concrete module's contract, seams, dependencies, tests
 ├── system-design/             # Implementation-level design: components, APIs, data model, rollout
 ├── api-design-review/         # REST/GraphQL/gRPC/async-event design review
@@ -82,6 +83,7 @@ Each skill directory follows the same pattern:
 | `deployment-risk-review` | review | ambient | — | `make lint-deployment-risk-review` |
 | `domain-comprehension` | architecture | ambient | squad-map | `make lint-domain-comprehension` |
 | `e2e-test-creator` | testing | ambient | — | `make lint-e2e-test-creator` |
+| `engineering-decision-discovery` | architecture | ambient | — | `make lint-engineering-decision-discovery` |
 | `implementation-planner` | automation | ambient | — | `make lint-implementation-planner` |
 | `incident-rca` | incident | ambient | — | `make lint-incident-rca` |
 | `incident-triage-agent` | incident | automation-only | incident-rca, squad-map | `make lint-incident-triage-agent` |

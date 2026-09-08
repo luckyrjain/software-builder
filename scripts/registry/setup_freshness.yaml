@@ -42,6 +42,8 @@ skills:
     external_services: GitLab MCP (optional), Datadog MCP (optional)
   e2e-test-creator:
     external_services: Browser driver + reachable app URL (local/CI)
+  engineering-decision-discovery:
+    external_services: None — reads repository and caller-provided context only
   implementation-planner:
     external_services: None — reads supplied design/review artifacts and optional
       repository evidence only

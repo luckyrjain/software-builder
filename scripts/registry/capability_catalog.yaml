@@ -107,6 +107,11 @@ skills:
         ship them UNVERIFIED
       host.test_runner.execute: tests are written but left UNVERIFIED; run-until-green
         iteration cannot happen locally
+  engineering-decision-discovery:
+    required:
+    - host.report.write
+    - host.repository.read
+    optional: []
   implementation-planner:
     required:
     - host.report.write
