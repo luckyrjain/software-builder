@@ -74,6 +74,50 @@ def test_a_source_checkout_must_prove_itself_with_repository_markers(loader, tmp
     assert loader.shared_runtime_path(skill, "thing") == source
 
 
+def test_a_source_checkout_is_found_by_walking_up_past_an_extra_nesting_level(
+    loader, tmp_path: Path
+) -> None:
+    """Once skills move to skills/<name>/, `skill_root.parent` (here `skills/`) no longer IS repo
+    root -- the walk-up must climb past it to find the ancestor that actually proves itself with
+    SOURCE_CHECKOUT_MARKERS, simulating the post-migration `<repo>/skills/some-skill` layout."""
+    repo_root = tmp_path
+    skill = repo_root / "skills" / "some-skill"
+    skill.mkdir(parents=True)
+    source = repo_root / "docs/skill-framework/shared/thing.py"
+    source.parent.mkdir(parents=True)
+    source.write_text("VALUE = 3\n", encoding="utf-8")
+
+    # The immediate parent (`skills/`) does not itself hold the markers -- proving this case
+    # actually needs the walk-up, not just a layout where a single parent hop would still work.
+    assert not (skill.parent / "skills.yaml").is_file()
+
+    (repo_root / "skills.yaml").write_text("schema_version: 1\n", encoding="utf-8")
+    (repo_root / "scripts").mkdir()
+    (repo_root / "scripts/package_skill.py").write_text("# marker\n", encoding="utf-8")
+
+    assert loader.shared_runtime_path(skill, "thing") == source
+    assert loader.load_shared_runtime(skill, "thing").VALUE == 3
+
+
+def test_a_source_checkout_is_still_refused_when_no_ancestor_proves_itself(
+    loader, tmp_path: Path
+) -> None:
+    """Nesting a skill several levels deep with no ancestor ever proving itself via
+    SOURCE_CHECKOUT_MARKERS must still fail with the same error the single-parent-hop code raised
+    -- the walk-up only changes what can succeed, never weakens the refusal."""
+    skill = tmp_path / "some-skill"
+    skill.mkdir()
+    # A source file exists at the immediate parent, but no ancestor ever gets the markers, so the
+    # walk-up must exhaust its bound and still refuse -- proving unproven directories are never
+    # trusted regardless of how many levels are searched.
+    source = tmp_path / "docs/skill-framework/shared/thing.py"
+    source.parent.mkdir(parents=True)
+    source.write_text("VALUE = 4\n", encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match="verified source-checkout runtime"):
+        loader.shared_runtime_path(skill, "thing")
+
+
 def test_module_names_are_names_not_paths(loader, tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="invalid shared runtime module name"):
         loader.shared_runtime_path(tmp_path, "../../etc/passwd")
