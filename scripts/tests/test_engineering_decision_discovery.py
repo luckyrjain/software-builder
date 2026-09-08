@@ -47,6 +47,33 @@ def test_decision_discovery_has_a_dedicated_owner(prompt: str) -> None:
     assert result.owner == "engineering-decision-discovery"
 
 
+def test_challenge_proposed_architecture_still_routes_to_architecture_review() -> None:
+    """Task 4 review, Finding 4: the brief's Step 4 names "challenge this proposed
+    architecture" as a collision check -- it must still route to architecture-review,
+    not get stolen by engineering-decision-discovery's own "challenge my plan" trigger.
+    evals/negative/cases.yaml carries the same prompt as its one permitted
+    engineering-decision-discovery row (the negative dimension allows exactly one
+    scenario per skill); this test is the same check run directly against the
+    dispatcher as committed evidence, independent of the cases.yaml scenario harness."""
+    result = _dispatch("Challenge this proposed architecture before we start building.")
+    assert result.status == "selected", result
+    assert result.owner == "architecture-review"
+    assert "engineering-decision-discovery" not in result.candidates
+
+
+def test_concrete_module_design_still_routes_to_module_design() -> None:
+    """Task 4 review, Finding 4: the brief's Step 4 names "a concrete module design" as
+    the second collision check -- it must still route to module-design, not get stolen
+    by engineering-decision-discovery. evals/negative/cases.yaml already has one
+    permitted row per skill (module-design's own row covers a different collision), so
+    this check is committed here as a direct dispatcher assertion instead of a second
+    cases.yaml row for the same skill."""
+    result = _dispatch("Design the concrete module boundary for the new charge module.")
+    assert result.status == "selected", result
+    assert result.owner == "module-design"
+    assert "engineering-decision-discovery" not in result.candidates
+
+
 def test_decision_discovery_skill_is_not_yet_registered() -> None:
     """Documents the RED reason every other test in this module fails on: there is
     no `engineering-decision-discovery` entry in skills.yaml yet (Task 3 adds it)."""
@@ -80,6 +107,34 @@ def test_decision_record_golden_fixture_is_admitted_and_passes() -> None:
     by_case_id = {result.case_id: result for result in results}
     assert "decision-record" in by_case_id, by_case_id
     result = by_case_id["decision-record"]
+    assert result.passed, result.messages
+
+
+def test_independent_frontier_transcript_fixture_is_admitted_and_passes() -> None:
+    """Task 4 review, Finding 1:
+    evals/transcripts/engineering-decision-discovery/independent-frontier.yaml covers
+    reference/pressure-tests.md's "Two independent nodes are both askable | Both appear
+    on the same frontier round" row -- two nodes with no dependency on each other
+    (D1, D4) are computed onto one frontier round and both get a recommendation before
+    the round ends. decision-frontier.yaml's own D2/D3 pairing only tests the different
+    "shared prerequisite resolves, dependents join the next round together" case."""
+    results = run_all(ROOT, skill_filter="engineering-decision-discovery")
+    by_case_id = {result.case_id: result for result in results}
+    assert "independent-frontier" in by_case_id, by_case_id
+    result = by_case_id["independent-frontier"]
+    assert result.passed, result.messages
+
+
+def test_decision_record_complete_golden_fixture_is_admitted_and_passes() -> None:
+    """Task 4 review, Finding 2:
+    evals/golden/engineering-decision-discovery/decision-record-complete.yaml is the
+    "complete resolved decision record" scenario named by the plan's Step 3 -- every
+    node resolved, frontier and unresolved_decisions both empty, status SUCCESS --
+    distinct from decision-record.yaml's still-partial snapshot."""
+    results = run_all(ROOT, skill_filter="engineering-decision-discovery")
+    by_case_id = {result.case_id: result for result in results}
+    assert "decision-record-complete" in by_case_id, by_case_id
+    result = by_case_id["decision-record-complete"]
     assert result.passed, result.messages
 
 

@@ -19,6 +19,7 @@ def test_transcript_fixtures_load() -> None:
     assert ("loop-task-implementer", "builder-ci-not-authoritative") in case_ids
     assert ("module-design", "contract-boundary") in case_ids
     assert ("codebase-architecture-review", "no-automatic-refactor") in case_ids
+    assert ("engineering-decision-discovery", "independent-frontier") in case_ids
 
 
 def test_transcript_cases_pass_on_repository() -> None:
@@ -122,6 +123,6 @@ def test_tier_filter_excludes_opposite_tier() -> None:
     tier2 = run_all(ROOT, tier_filter=2)
     tier1_ids = {result.case_id for result in tier1}
     tier2_ids = {result.case_id for result in tier2}
-    assert len(tier2_ids) == 12
+    assert len(tier2_ids) == 13
     assert "duplicate-webhook-short-circuit" in tier2_ids
     assert "duplicate-webhook-short-circuit" not in tier1_ids

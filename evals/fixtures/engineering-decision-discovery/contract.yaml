@@ -15,9 +15,17 @@ assertions:
   - type: skill_md_contains
     pattern: "grill\\s+me"
   - type: skill_md_contains
+    pattern: challenge my plan
+  - type: skill_md_contains
     pattern: stress-test this decision
   - type: skill_md_contains
+    pattern: question my assumptions
+  - type: skill_md_contains
+    pattern: help me decide
+  - type: skill_md_contains
     pattern: what decisions are missing
+  - type: skill_md_contains
+    pattern: interrogate this architecture
   - type: skill_md_contains
     pattern: ENGINEERING_DECISION_RECORD\.md
   - type: skill_md_contains
