@@ -1,0 +1,67 @@
+schema_version: 1
+skill: module-design
+case_id: deep-module-contract
+tier: 3
+description: >
+  A module contract for src/payments/charge.py under Matt-parity design
+  depth (docs/superpowers/specs/2026-09-05-matt-architecture-parity-bridge.md,
+  R1-R5/R7-R9): report-only, evidence-bounded contract surface, plus the
+  Depth assessment section (interface surface, implementation depth, and
+  deletion test per module-design/reference/report-format.md) and a design
+  comparison naming both the deep, policy-owning design and the rejected
+  pass-through design. These stay report content, not new module_design_spec
+  fields -- module-design/workflow/report.md is explicit that the Depth
+  assessment "stays a report section, not a new module_design_spec field."
+recorded_output:
+  artifact: module_design_spec
+  repository_write_action: none
+  automatic_downstream_invocation: false
+  module_scope: src/payments/charge.py
+  evidence_status: bounded
+  contract_surface:
+    - create_charge(command)
+    - charge_status(charge_id)
+  adapter_decision: translate vendor gateway failures into module-owned errors
+  alternatives_rejected:
+    - mock-only Gateway interface
+  interface_surface: >-
+    create_charge(command) plus ordering, invariants, errors, and
+    idempotency expectations
+  implementation_depth: provider-error translation and retry policy hidden behind the contract
+  deletion_test: >-
+    Deleting the module scatters provider-error branching and retry policy
+    into checkout and its sibling callers.
+  design_comparison:
+    deep_design: deep_policy_module
+    pass_through_design: pass_through_wrapper
+    recommendation: deep_policy_module
+assertions:
+  - type: field_equals
+    path: artifact
+    value: module_design_spec
+  - type: field_equals
+    path: repository_write_action
+    value: none
+  - type: field_equals
+    path: evidence_status
+    value: bounded
+  - type: require_pattern
+    path: adapter_decision
+    pattern: module-owned errors
+  # Matt-parity depth/deletion/design-comparison fields (Task 6): report content per
+  # module-design/reference/report-format.md's Depth assessment section, not a
+  # module_design_spec schema widening.
+  - type: field_present
+    path: interface_surface
+  - type: field_present
+    path: deletion_test
+  - type: field_present
+    path: implementation_depth
+  - type: field_present
+    path: design_comparison
+  - type: field_equals
+    path: design_comparison.deep_design
+    value: deep_policy_module
+  - type: field_equals
+    path: design_comparison.pass_through_design
+    value: pass_through_wrapper

@@ -84,6 +84,26 @@ modules, and explicit boundaries so a reader can trace a request without reconst
 hidden conventions. It **MUST NOT** be improved by scattering a single responsibility
 across layers without an observed need.
 
+## Module depth
+
+A deep module hides substantial behavior behind a smaller meaningful interface. A shallow pass-through exposes nearly the same knowledge callers need to perform the behavior themselves. Depth is judged from contract surface, caller knowledge, and behavioral leverage; file size and class count are not depth measures.
+
+## Interface surface
+
+Interface surface includes operations, parameters, ordering, invariants, errors, configuration, performance expectations, and state assumptions. A short type signature can still have a wide contract surface when callers must understand incidental sequencing or representation.
+
+## Deletion test
+
+Ask what happens if the proposed module or abstraction is deleted. If the behavior and complexity disappear, the module was likely an unnecessary pass-through. If the complexity spreads into multiple callers or duplicates policy, the module may be earning its abstraction cost. The result is evidence for a decision, not an automatic refactor mandate.
+
+## Real versus hypothetical seams
+
+A seam earns its cost when an observed variation, integration boundary, or production-observable test need exists. One hypothetical implementation is not enough for a generic adapter. Count concrete variations when available, and document the exception when a single external integration boundary is itself the reason for isolation.
+
+## Interface as test surface
+
+Production callers and tests should cross the same meaningful interface. Tests may substitute a real external dependency at an earned seam, but they must not expose private helpers or create a mock-only seam.
+
 ## Evidence threshold
 
 A static smell alone, such as file size, dependency counts, duplication reports, or

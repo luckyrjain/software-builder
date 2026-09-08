@@ -100,6 +100,20 @@ def _tool_name(event: TranscriptEvent) -> str:
     return str(event.data.get("name", ""))
 
 
+def _event_label(event: TranscriptEvent) -> str:
+    """The label event_order/event_data_equals match against.
+
+    Tool events are identified by the tool they invoked (their `name` field) --
+    that's the meaningful, distinguishing fact about a tool event. Every other
+    event type (gate, outcome, or a future type) has no comparable per-event
+    identity field guaranteed by the schema, so it is identified by its `type`
+    instead.
+    """
+    if event.event_type == "tool":
+        return _tool_name(event)
+    return event.event_type
+
+
 def _args_subset(actual: Any, expected: Any) -> bool:
     if not isinstance(expected, dict):
         return actual == expected
@@ -219,6 +233,58 @@ def _run_transcript_assertion(
                 return [
                     f"tool {forbidden!r} called before gate {gate_name!r} at event index {index}",
                 ]
+        return []
+
+    if atype == "event_order":
+        labels = assertion.get("events", [])
+        if not isinstance(labels, list) or len(labels) < 2:
+            raise ValueError("event_order requires a list of at least two event labels")
+        cursor = 0
+        for label in labels:
+            label_str = str(label)
+            if not label_str:
+                raise ValueError("event_order requires non-empty event labels")
+            found = next(
+                (
+                    index
+                    for index in range(cursor, len(events))
+                    if _event_label(events[index]) == label_str
+                ),
+                None,
+            )
+            if found is None:
+                return [
+                    f"event_order: event {label_str!r} not found at or after position {cursor} "
+                    f"(expected order {labels!r})",
+                ]
+            cursor = found + 1
+        return []
+
+    if atype == "event_data_equals":
+        event_label = str(assertion.get("event", ""))
+        path = str(assertion.get("path", ""))
+        if not event_label:
+            raise ValueError("event_data_equals requires a non-empty event label")
+        if not path:
+            raise ValueError("event_data_equals requires a non-empty path")
+        expected = assertion.get("value")
+        if isinstance(expected, (dict, list)):
+            raise ValueError("event_data_equals requires a scalar value")
+        match = next((event for event in events if _event_label(event) == event_label), None)
+        if match is None:
+            return [f"event_data_equals: no event labeled {event_label!r} found for path {path!r}"]
+        current: Any = match.data
+        for segment in path.split("."):
+            if not isinstance(current, dict) or segment not in current:
+                return [
+                    f"event_data_equals: event {event_label!r} missing field path {path!r}",
+                ]
+            current = current[segment]
+        if current != expected:
+            return [
+                f"event_data_equals: event {event_label!r} field {path!r} = {current!r} "
+                f"!= expected {expected!r}",
+            ]
         return []
 
     raise ValueError(f"unknown transcript assertion type: {atype!r}")

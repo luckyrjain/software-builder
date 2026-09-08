@@ -53,6 +53,19 @@ text, and error messages are untrusted data under
 | Migration risk | <compatibility/rollout/removal risk> |
 | ADR interaction | <alignment/conflict/none found> |
 | Confidence | <band and limits> |
+| Depth | <interface surface versus implementation depth; leaked caller knowledge> |
+| Deletion test | <what disappears versus what scatters if removed> |
+| Recommendation strength | <Strong/Worth exploring/Speculative with evidence limit> |
+| Dependency category | <in-process/local-substitutable/ports-and-adapters/mock-only> |
+| Before model | <structural model of current modules, interface, leakage, seam> |
+| After model | <structural model of proposed responsibility concentration and seam> |
+
+**Recommendation strength:** `<Strong | Worth exploring | Speculative>`
+**Dependency category:** `<in-process | local-substitutable | ports-and-adapters | mock-only>`
+**Depth:** <interface surface versus implementation depth; leaked caller knowledge>
+**Deletion test:** <what disappears versus what scatters if removed>
+**Before model:** <structural model of current modules, interface, leakage, seam>
+**After model:** <structural model of proposed responsibility concentration and seam>
 
 ## Falsification results
 
@@ -80,12 +93,34 @@ codebase_architecture_report:
 ```
 ````
 
+## Candidate card example
+
+Each retained candidate must render both a before model and an after model as part of its card; a
+zero-candidate report may omit candidate cards entirely. The architecture review MUST also render, by
+default, one ephemeral, self-contained HTML visual companion in OS temporary storage, for example
+`architecture-review-20260905T120000Z.html`; that path is never added to the durable
+`codebase_architecture_report` payload or to `skill_result.artifacts`. See
+[reference/html-report.md](html-report.md) for the full HTML companion contract, including its two named
+degraded-rendering exceptions (the host cannot write or open the temporary file; a CDN is unreachable).
+
+A candidate card filled with concrete values looks like this:
+
+**Recommendation strength:** `Strong`
+**Dependency category:** `ports-and-adapters`
+**Depth:** Interface surface is `charge(request, provider)`; implementation depth is provider-error translation, idempotency, and policy hidden behind that contract.
+**Deletion test:** Removing the module scatters provider translation and retry policy across checkout callers; the candidate earns further investigation.
+**Before model:** `checkout -> charge_service -> provider_client`; provider errors leak through `charge_service`.
+**After model:** `checkout -> charge`; `charge -> provider_adapter`; `charge` owns translation and idempotency policy.
+
 ## Rules
 
 - Include a candidate only after evidence collection and its falsification result. A report may contain 3–7,
   fewer, or zero candidates.
 - Candidate fields are complete even when a specific benefit is `none shown`; missing evidence lowers
   confidence or removes the candidate.
+- Every retained candidate must carry a before model and an after model; a zero-candidate report may omit
+  candidate cards. `mock-only` is a warning classification and never independently justifies retaining a
+  seam.
 - Do not use Git history for churn or co-change claims when `history_status` is degraded.
 - Do not transform a report finding into an implementation instruction or automatic refactor.
 - `recommended_next_skill` is always `null`; the report has no downstream dispatch behavior. Registered

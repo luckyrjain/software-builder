@@ -15,6 +15,13 @@ Normative conventions for **pr-review**, **pr-gatekeeper**, **incident-rca**, **
 build-provenance, SCM-policy, change-impact, deployment-risk, and applicable specialist-review evidence
 into one fail-closed verdict for one exact PR/MR/release candidate.
 
+**codebase-architecture-review** may additionally render its report as one ephemeral, host-generated HTML
+companion in OS temporary storage — never written into the repository, never added to
+`skill_result.artifacts`, and never a new durable or canonical artifact alongside
+`codebase_architecture_report`. This is a per-skill rendering option documented in that skill's own
+[reference/html-report.md](../../codebase-architecture-review/reference/html-report.md), not a new shared
+framework file; `module-design` has no equivalent companion.
+
 `test-writer` is a thin router (like `who-owns-x-bot`/`release-readiness-checker`) that classifies a
 test-writing request by level and dispatches to one or more of `unit-test-creator`,
 `integration-test-creator`, `contract-test-creator`, `e2e-test-creator`, and `api-test-creator` as the

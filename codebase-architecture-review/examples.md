@@ -20,19 +20,40 @@ repository state or refactor automatically.
 | "Design the seam for `src/payments/charge.py`." | Wrong scope — use `module-design` for a concrete module design |
 | "Review this proposed event architecture before it is built." | Wrong scope — use `architecture-review` for a proposed architecture decision |
 
-## Example: retained candidate
+## Example: retained candidate, before/after models, ephemeral HTML path
 
 **Evidence:** three callers translate the same vendor exceptions, contract tests already assert a domain
 error, and two independently changed paths expose the vendor field names.
 
-**Result:** retain a candidate only after checking that a module-owned translation boundary would simplify
-callers without adding a mock-only interface or violating an ADR. State the migration and abstraction cost;
-do not apply it.
+**Result:** retain the candidate only after checking that a module-owned translation boundary would
+simplify callers without adding a mock-only interface or violating an ADR; classify it `ports-and-adapters`
+and run the deletion test, which shows provider translation and retry policy would scatter into callers if
+removed. The candidate card carries both a before model (`checkout -> charge_service -> provider_client`;
+provider errors leak through `charge_service`) and an after model (`checkout -> charge`; `charge ->
+provider_adapter`; `charge` owns translation and idempotency policy) — a retained candidate is incomplete
+without both. The same evidence may also render as one card in the ephemeral, self-contained HTML companion
+the host writes to OS temporary storage (for example
+`/tmp/architecture-review-20260905T120000Z.html`); that path is never added to
+`codebase_architecture_report` or `skill_result.artifacts`, and it does not change the migration or
+abstraction cost stated in the Markdown report.
 
-## Example: no candidate
+## Example: cohesive large module, zero candidates
 
-**Evidence:** a large file has one owner, cohesive callers, stable contract tests, and no repeated
-coordinated change or failed seam.
+**Evidence:** a 3,000-line module has one owner, a narrow interface, cohesive callers that never reach past
+its contract, stable contract tests, and no repeated coordinated change or failed seam in history.
 
-**Result:** record the investigation and return zero candidates. File size alone is not architecture
-friction.
+**Result:** treat the size as an investigation prompt, not proof of friction. Record the depth and cohesion
+evidence and return zero candidates — a deep module with a narrow interface is not architecture friction
+merely because the file is large.
+
+## Example: shallow pass-through becomes `Worth exploring`
+
+**Evidence:** a module forwards each call to another module with the same parameters and error shapes and
+adds no policy of its own; two independently changed call sites each reimplement the same retry logic around
+the pass-through.
+
+**Result:** the deletion test shows that removing the module by itself is only a rename, but the
+falsification pass also surfaces the duplicated caller policy as real, corroborated friction. Classify the
+candidate `Worth exploring` rather than `Strong`, and state the evidence limit explicitly: no single
+boundary has yet concentrated the duplicated retry policy, so the recommendation is bounded by that gap
+rather than a confirmed abstraction.

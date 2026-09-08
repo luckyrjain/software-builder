@@ -36,3 +36,37 @@ evidence does not establish whether that difference is durable.
 **Result:** compare a narrow query contract against separate module-owned projections as two materially
 different designs. State caller impact, dependency direction, test surface, migration cost, and the missing
 future-change evidence as an unresolved question; do not invent a shared pass-through interface.
+
+## Example: adapter seam earned by two concrete implementations
+
+**Evidence:** `notification.py` sends through both an email provider and an SMS provider today, and callers
+already branch on which channel to use; each provider has its own authentication, payload shape, and retry
+behavior.
+
+**Result:** define a `NotificationChannel` contract owned by the notification module, with one adapter per
+provider translating request/response/error shapes to the shared contract. Two concrete, currently-used
+implementations — not a hypothetical third — are what earns the seam; the deletion test confirms that
+removing the shared contract would scatter provider-specific branching back into every caller, so the
+adapter is justified by observed variation rather than by implementation count alone.
+
+## Example: depth assessment for a provider-integration module
+
+**Evidence:** `charge.py` exposes `charge(request, provider)` with ordering, invariants, errors, and
+idempotency expectations; checkout currently branches on provider error codes returned from the module.
+
+**Result:** the interface surface is `charge(request, provider)` plus its ordering, invariants, errors, and
+idempotency expectations; the implementation depth is provider-error translation and retry policy hidden
+behind that contract; the caller knowledge currently leaked is that checkout branches on provider error
+codes; the deletion test shows that deleting the module scatters that provider branching into checkout and
+its sibling callers, so the module earns its abstraction cost.
+
+## Example: mock-only interface rejected by the deletion test
+
+**Evidence:** the caller asks for a `PaymentGatewayInterface` so a unit test can substitute a mock in place
+of the concrete `PaymentGateway` class; no second implementation, integration boundary, or observed
+variation exists anywhere in the repository.
+
+**Result:** apply the deletion test: deleting the proposed interface removes nothing but the ability to
+mock the class in a test, since no policy or translation would scatter to callers. Reject the interface as
+a `mock-only` dependency, keep the concrete `PaymentGateway` as the production-facing test surface, and
+require tests to cross the same interface production callers use rather than a private mocking seam.

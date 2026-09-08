@@ -220,3 +220,31 @@ def test_find_oversized_descriptions_respects_skill_and_tier_filters() -> None:
     assert len(
         find_oversized_descriptions([case_a, case_b, case_c], skill_filter="skill-a", tier_filter=3),
     ) == 1
+
+
+def test_transcript_event_order_accepts_subsequence() -> None:
+    from scripts.evals.transcript import TranscriptEvent, _run_transcript_assertion
+
+    events = [TranscriptEvent("tool", {"name": "repository_read"}), TranscriptEvent("gate", {"name": "evidence"}), TranscriptEvent("outcome", {"status": "complete"})]
+    assert _run_transcript_assertion(events, {"type": "event_order", "events": ["repository_read", "gate", "outcome"]}) == []
+
+
+def test_transcript_event_order_rejects_out_of_order_event() -> None:
+    from scripts.evals.transcript import TranscriptEvent, _run_transcript_assertion
+
+    events = [TranscriptEvent("gate", {"name": "evidence"}), TranscriptEvent("tool", {"name": "repository_read"})]
+    assert _run_transcript_assertion(events, {"type": "event_order", "events": ["repository_read", "gate"]})
+
+
+def test_transcript_event_data_equals_accepts_nested_value() -> None:
+    from scripts.evals.transcript import TranscriptEvent, _run_transcript_assertion
+
+    events = [TranscriptEvent("candidate", {"design": {"depth": "deep"}})]
+    assert _run_transcript_assertion(events, {"type": "event_data_equals", "event": "candidate", "path": "design.depth", "value": "deep"}) == []
+
+
+def test_transcript_event_data_equals_rejects_missing_field() -> None:
+    from scripts.evals.transcript import TranscriptEvent, _run_transcript_assertion
+
+    events = [TranscriptEvent("candidate", {"design": {"depth": "shallow"}})]
+    assert _run_transcript_assertion(events, {"type": "event_data_equals", "event": "candidate", "path": "design.depth", "value": "deep"})

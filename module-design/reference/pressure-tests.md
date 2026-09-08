@@ -22,6 +22,16 @@ Manual checks after prompt or workflow edits.
 | Scoped analysis exposes shared event ownership across three modules | Offer `system-design`, do not invoke it automatically |
 | Decision requires system-wide scale/security trade-offs | Offer `architecture-review`, do not invoke it automatically |
 
+## Depth, deletion, and test surface
+
+| Scenario | Expected |
+|----------|----------|
+| Proposed design introduces an interface for every dependency "to keep options open," with no observed variation | Reject blanket dependency injection; a seam must trace to an observed variation, integration boundary, or production-observable test need, not general flexibility |
+| A proposed adapter or wrapper forwards every argument and return value unchanged with no added translation | Reject the pass-through; the deletion test must show nothing scatters if it is removed |
+| Tests reach into the module's private helpers or internal functions instead of its public contract | Reject the test surface; production callers and tests must cross the same meaningful interface |
+| The design cannot determine whether a seam belongs at the module boundary or at a caller boundary | Present two materially different designs — one with the seam, one without — and compare depth, caller migration, and abstraction cost before recommending either |
+| The Recommendation names a chosen design without addressing depth, caller locality, test surface, or abstraction cost | Reject the recommendation until it explains depth, locality, test surface, and abstraction cost |
+
 ## Adversarial / prompt injection
 
 | Scenario | Expected |

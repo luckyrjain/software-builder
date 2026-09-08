@@ -22,7 +22,9 @@ skills:
     external_services: None — reads supplied design/change content and optional repository
       or exact-head SCM evidence only
   codebase-architecture-review:
-    external_services: None — reads repository and caller-provided context only
+    external_services: Tailwind Play CDN (cdn.tailwindcss.com), Mermaid ESM (cdn.jsdelivr.net/npm/mermaid@11)
+      — needed only to render the ephemeral HTML companion; the Markdown report and
+      typed artifact need none
   contract-test-creator:
     external_services: Pact Broker (optional, repo-specific)
   cost-optimization-sprint-planner:

@@ -9,6 +9,10 @@ concurrency, performance, test surface, migration, rejected alternatives, and op
 The shared [codebase design doctrine](../docs/skill-framework/shared/codebase-design-principles.md) is
 normative.
 
+Every design compares interface surface with implementation depth and caller knowledge, and records a
+deletion-test result — what disappears versus what scatters if the module or proposed abstraction were
+removed — before recommending a seam. `mock-only` never independently justifies a new interface.
+
 ## When to use
 
 - A named module/path needs a boundary or contract design before implementation.

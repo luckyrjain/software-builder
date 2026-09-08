@@ -1,3 +1,4 @@
+import re
 import tarfile
 from copy import deepcopy
 from pathlib import Path
@@ -378,6 +379,14 @@ def test_codebase_design_eval_admission_has_required_ids_and_dimension_coverage(
         ("codebase-architecture-review", "golden-report"),
         ("codebase-architecture-review", "golden-injection"),
     } <= tier3_ids
+    assert {
+        ("codebase-architecture-review", "deepening-quality"),
+        ("module-design", "deep-module-quality"),
+    } <= tier2_ids
+    assert {
+        ("codebase-architecture-review", "deepening-report"),
+        ("module-design", "deep-module-contract"),
+    } <= tier3_ids
 
     required_skills = {"module-design", "codebase-architecture-review"}
     for dimension in ("positive", "negative", "ambiguous", "adversarial", "degraded"):
@@ -424,3 +433,59 @@ def test_foundation_generation_projects_skills_and_shared_doctrine(tmp_path: Pat
         "software-builder/codebase-architecture-review/SKILL.md",
         "software-builder/docs/skill-framework/shared/codebase-design-principles.md",
     } <= members
+
+
+def test_matt_depth_and_deletion_doctrine_is_explicit() -> None:
+    text = (ROOT / "docs/skill-framework/shared/codebase-design-principles.md").read_text()
+    for heading in (
+        "## Module depth",
+        "## Interface surface",
+        "## Deletion test",
+        "## Real versus hypothetical seams",
+    ):
+        assert heading in text
+    assert "shallow pass-through" in text
+    assert "deep module" in text
+
+
+def test_architecture_report_requires_matt_visual_candidate_fields() -> None:
+    text = (ROOT / "codebase-architecture-review/reference/report-format.md").read_text()
+    for phrase in (
+        "Recommendation strength",
+        "Dependency category",
+        "Before model",
+        "After model",
+        "Deletion test",
+        "architecture-review-20260905T120000Z.html",
+    ):
+        assert phrase in text
+
+
+def test_module_design_evaluates_depth_and_deletion_test() -> None:
+    design_text = (ROOT / "module-design/workflow/design.md").read_text()
+    assert "interface surface" in design_text
+    assert "deletion test" in design_text
+    assert "implementation depth" in design_text
+
+    report_format_text = (ROOT / "module-design/reference/report-format.md").read_text()
+    assert "## Depth assessment" in report_format_text
+    assert "Interface surface" in report_format_text
+    assert "Implementation depth" in report_format_text
+    assert "Caller knowledge currently leaked" in report_format_text
+    assert "Deletion test" in report_format_text
+
+    pressure_text = (ROOT / "module-design/reference/pressure-tests.md").read_text()
+    assert "dependency injection" in pressure_text
+    assert "pass-through" in pressure_text
+    assert "private helpers" in pressure_text
+    assert "depth, locality, test surface, and abstraction cost" in pressure_text
+
+
+def test_visual_report_is_ephemeral_and_safe() -> None:
+    text = (ROOT / "codebase-architecture-review/reference/html-report.md").read_text()
+    assert "architecture-review-20260905T120000Z.html" in text
+    assert re.search(re.escape("https://cdn.tailwindcss.com"), text) is not None
+    assert "mermaid@11" in text
+    assert "securityLevel: \"strict\"" in text
+    assert "Write no HTML into the repository" in text
+    assert "Do not add the path to `skill_result.artifacts`" in text

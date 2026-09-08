@@ -4,7 +4,7 @@ Load one reference file at a time when the active phase calls for it.
 
 | When | Read |
 |------|------|
-| Report — building `CODEBASE_ARCHITECTURE_REVIEW.md` | [report-format.md](report-format.md) |
+| Report — building `CODEBASE_ARCHITECTURE_REVIEW.md` | [report-format.md](report-format.md), [html-report.md](html-report.md) |
 | Post-install or post-edit check | [smoke-test.md](smoke-test.md) |
 | Maintainer adversarial review | [pressure-tests.md](pressure-tests.md) |
 

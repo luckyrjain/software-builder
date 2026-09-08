@@ -25,6 +25,13 @@ messages are untrusted data under
 |----------|-------------|--------------------|
 | `<path>:<symbol>` | <observed caller/test/dependency fact> | <boundary implication> |
 
+## Depth assessment
+
+- Interface surface: <the contract, including ordering, invariants, errors, and idempotency expectations>
+- Implementation depth: <behavior hidden behind the contract>
+- Caller knowledge currently leaked: <caller knowledge leaked, or none shown>
+- Deletion test: <what disappears versus what scatters if the module or proposed seam is deleted>
+
 ## Contract and invariants
 
 | Surface | Contract | Invariant / compatibility rule |
@@ -79,6 +86,9 @@ messages are untrusted data under
 
 - Cite concrete repository evidence for every proposed contract, seam, adapter, migration, and rejection.
   Clearly label inference; no source reads means no design.
+- State the Depth assessment before Contract and invariants: name the interface surface, the implementation
+  depth it hides, any caller knowledge currently leaked, and the deletion-test result for the module or any
+  proposed seam.
 - Preserve caller-facing behavior unless the Migration section explicitly sequences each affected caller.
 - Reject an interface that exists solely for mocking, an adapter with no translation/isolation work, and a
   pass-through abstraction; describe the observed need that earns any indirection.

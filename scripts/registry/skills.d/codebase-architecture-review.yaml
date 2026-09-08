@@ -34,7 +34,9 @@ codebase-architecture-review:
     - host.report.write
     behavior: BLOCKED
   setup_freshness:
-    external_services: None — reads repository and caller-provided context only
+    external_services: Tailwind Play CDN (cdn.tailwindcss.com), Mermaid ESM
+      (cdn.jsdelivr.net/npm/mermaid@11) — needed only to render the ephemeral HTML
+      companion; the Markdown report and typed artifact need none
   routing:
     patterns:
     - \b(existing codebase architecture|codebase architecture friction|architecture friction|refactoring opportunit(?:y|ies)|change locality)\b
