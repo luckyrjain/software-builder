@@ -150,7 +150,7 @@ def _generate_makefile_roster(ctx: GenerateContext) -> dict[Path, str]:
 
 
 def _generate_shared_runtime_bootstrap(ctx: GenerateContext) -> dict[Path, str]:
-    return generate_shared_runtime_bootstrap(ctx.root)
+    return generate_shared_runtime_bootstrap(ctx.root, ctx.registry)
 
 
 def _generate_issue_templates(ctx: GenerateContext) -> dict[Path, str]:

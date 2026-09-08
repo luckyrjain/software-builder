@@ -38,7 +38,13 @@ def _shared_runtime_loader() -> ModuleType:
     elif (SKILL_ROOT / _INSTALL_MANIFEST).is_file():
         raise RuntimeError(f"unable to load packaged {_RUNTIME_DESCRIPTION} loader: {beside}")
     else:
-        path = SKILL_ROOT.parent / "docs/skill-framework/shared/shared_runtime_loader.py"
+        _relative_loader = "docs/skill-framework/shared/shared_runtime_loader.py"
+        path = SKILL_ROOT.parent / _relative_loader
+        for ancestor in (SKILL_ROOT, *SKILL_ROOT.parents)[:6]:
+            candidate = ancestor / _relative_loader
+            if candidate.is_file():
+                path = candidate
+                break
     if not path.is_file():
         raise RuntimeError(f"unable to load packaged {_RUNTIME_DESCRIPTION} loader: {path}")
     spec = importlib.util.spec_from_file_location("software_builder_shared_runtime_loader", path)

@@ -24,6 +24,8 @@ from __future__ import annotations
 from pathlib import Path
 
 from scripts.registry.generate_docs import update_marker_block
+from scripts.registry.models import Registry
+from scripts.registry.paths import skill_dir
 
 BOOTSTRAP_START = (
     "# GENERATED shared-runtime-bootstrap:start -- do not edit; run `make generate`. "
@@ -31,16 +33,19 @@ BOOTSTRAP_START = (
 )
 BOOTSTRAP_END = "# GENERATED shared-runtime-bootstrap:end"
 
-# Relative to the repository root. Order is alphabetical by path; it has no effect on output.
-TARGET_FILES: tuple[str, ...] = (
-    "incident-rca/scripts/incident_rca_policy_guards.py",
-    "incident-rca/scripts/kubesense_logs.py",
-    "loop-task-implementer/scripts/validate_loop_lifecycle.py",
-    "pr-review/scripts/diff-to-positions.py",
-    "pr-review/scripts/github-comment-positions.py",
-    "pr-review/scripts/pr_review_policy_guards.py",
-    "pr-review/scripts/validate_review_coverage.py",
-    "prd-architect/scripts/prd_safe_output.py",
+# (skill_id, path relative to that skill's own directory). The skill's directory is resolved
+# through skill_dir() -- the registry's `path:` field -- rather than assumed to be `root /
+# skill_id`, so this stays correct once skills move under skills/<name>. Order is alphabetical
+# by (skill_id, path); it has no effect on output.
+TARGET_FILES: tuple[tuple[str, str], ...] = (
+    ("incident-rca", "scripts/incident_rca_policy_guards.py"),
+    ("incident-rca", "scripts/kubesense_logs.py"),
+    ("loop-task-implementer", "scripts/validate_loop_lifecycle.py"),
+    ("pr-review", "scripts/diff-to-positions.py"),
+    ("pr-review", "scripts/github-comment-positions.py"),
+    ("pr-review", "scripts/pr_review_policy_guards.py"),
+    ("pr-review", "scripts/validate_review_coverage.py"),
+    ("prd-architect", "scripts/prd_safe_output.py"),
 )
 
 _BOOTSTRAP_BODY = '''SKILL_ROOT = Path(__file__).resolve().parents[1]
@@ -63,7 +68,13 @@ def _shared_runtime_loader() -> ModuleType:
     elif (SKILL_ROOT / _INSTALL_MANIFEST).is_file():
         raise RuntimeError(f"unable to load packaged {_RUNTIME_DESCRIPTION} loader: {beside}")
     else:
-        path = SKILL_ROOT.parent / "docs/skill-framework/shared/shared_runtime_loader.py"
+        _relative_loader = "docs/skill-framework/shared/shared_runtime_loader.py"
+        path = SKILL_ROOT.parent / _relative_loader
+        for ancestor in (SKILL_ROOT, *SKILL_ROOT.parents)[:6]:
+            candidate = ancestor / _relative_loader
+            if candidate.is_file():
+                path = candidate
+                break
     if not path.is_file():
         raise RuntimeError(f"unable to load packaged {_RUNTIME_DESCRIPTION} loader: {path}")
     spec = importlib.util.spec_from_file_location("software_builder_shared_runtime_loader", path)
@@ -80,10 +91,10 @@ def render_shared_runtime_bootstrap_block() -> str:
     return f"\n{_BOOTSTRAP_BODY}\n"
 
 
-def generate_shared_runtime_bootstrap(root: Path) -> dict[Path, str]:
+def generate_shared_runtime_bootstrap(root: Path, registry: Registry) -> dict[Path, str]:
     outputs: dict[Path, str] = {}
-    for rel in TARGET_FILES:
-        path = root / rel
+    for skill_id, rel in TARGET_FILES:
+        path = skill_dir(root, registry, skill_id) / rel
         if not path.is_file():
             continue
         text = path.read_text(encoding="utf-8")
