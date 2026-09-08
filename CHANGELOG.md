@@ -53,6 +53,10 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
   `.codex-plugin/plugin.json` now declare `"skills": "./skills"` instead of `"./"`. Anyone installing
   this repository as a Claude Code or Codex plugin picks up the new path automatically on next
   install/update; nothing to change on the consuming side beyond re-installing.
+- **Consumer-visible: the release bundle's internal archive layout changed too.** `make package-release`'s
+  tarball now nests each skill under `skills/` inside the archive (e.g.
+  `software-builder/skills/pr-review/SKILL.md`) instead of at the archive root. Anyone extracting the
+  archive and reading paths directly (rather than through `skills.yaml`) should expect the new nesting.
 - The registry (`skills.yaml`'s per-skill `path:` field), the installer, generated projections and
   adapters, and every mechanically-rewritable Markdown link were cut over in lockstep so the repository
   stayed green at every intermediate commit -- see `docs/REPOSITORY.md`'s corrected `## Layout` tree for
@@ -2273,6 +2277,8 @@ single-pass review-and-fix had already landed.
 - Design spec: [docs/superpowers/specs/2026-08-05-who-owns-x-bot-design.md](docs/superpowers/specs/2026-08-05-who-owns-x-bot-design.md).
 - Wired into `make install-who-owns-x-bot` / `make lint-who-owns-x-bot`, root README, docs/README,
   docs/REPOSITORY, skill-routing.md, phase-glossary.md.
+
+<!-- validate-references: entries below this line predate the skills/ migration and are frozen (their links are exempt from link-checking; do not add new content below this line -- see scripts/validate_references.py) -->
 
 ## Repository
 

@@ -34,10 +34,11 @@
 # so `make lint` still works in a bare pytest environment -- xdist's -n flag would
 # otherwise error as unrecognized.
 #
-# Deliberately NOT reused for the smaller per-skill suites (pr-review/tests/,
-# k8s-overprovisioning-datadog/tests/, incident-rca/tests/, squad-map/tests/,
-# migration-program-manager/tests/): those targets already run concurrently with each
-# other and with this one under `make -j` (lint-suites), so each also spawning its own
+# Deliberately NOT reused for the smaller per-skill suites (skills/pr-review/tests/,
+# skills/k8s-overprovisioning-datadog/tests/, skills/incident-rca/tests/,
+# skills/squad-map/tests/, skills/migration-program-manager/tests/): those targets
+# already run concurrently with each other and with this one under `make -j`
+# (lint-suites), so each also spawning its own
 # `-n auto` (= nproc) worker pool oversubscribes CI runners by up to 6x and was the
 # source of sporadic broken-pipe/flaky failures in the dangling-link checker after
 # lint-suites moved to `make -j`. Those suites are small enough that make-level
@@ -986,7 +987,7 @@ lint-framework:
 		docs/skill-framework/shared/examples/assessment-metadata-k8s.example.yaml \
 		$(SKILLS_DIR)/pr-review/tests/fixtures/phase5-review-metadata.yaml || exit 1
 	@echo "lint-framework: source-tree reference validation (anchors + local links, cross-cutting docs)"
-	@python3 scripts/validate_references.py --source-tree . --exclude docs/superpowers --exclude .claude/worktrees --exclude CHANGELOG.md || exit 1
+	@python3 scripts/validate_references.py --source-tree . --exclude docs/superpowers --exclude .claude/worktrees || exit 1
 	@echo "lint-framework: ok"
 
 # Split out from lint-framework: this is the repo's dominant test cost (the shared

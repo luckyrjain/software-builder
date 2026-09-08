@@ -30,6 +30,32 @@ from scripts.reference_utils import (  # noqa: E402
 
 _SLUG_SPACE_RUN_RE = re.compile(r" +")
 
+# A file carrying this exact line, once, stops link-checking for everything *below* it --
+# not the whole file. Exists for actively-maintained files (CHANGELOG.md, currently the
+# only user) whose frozen historical tail links at paths that predate a repo-wide move and
+# will never resolve again, but whose new entries (added above the frozen tail, per this
+# repo's newest-first convention) must stay fully checked forever. A whole-file `--exclude`
+# would silently lose that coverage for every future edit; this marker exempts only the
+# frozen span, so a link-check regression in a *new* entry still fails closed. Deliberately
+# a plain string match (not a regex) -- a marker is meant to be pasted once, verbatim.
+FROZEN_LINKS_MARKER = (
+    "<!-- validate-references: entries below this line predate the skills/ migration and "
+    "are frozen (their links are exempt from link-checking; do not add new content below "
+    "this line -- see scripts/validate_references.py) -->"
+)
+
+
+def _links_checked_text(text: str) -> str:
+    """`text`, truncated at `FROZEN_LINKS_MARKER` if present.
+
+    Only affects which portion of the file link-extraction scans -- has no bearing on the
+    unclosed-fenced-code-block check, which still runs over the whole file.
+    """
+    marker_index = text.find(FROZEN_LINKS_MARKER)
+    if marker_index == -1:
+        return text
+    return text[:marker_index]
+
 
 def github_style_slug(heading: str) -> str:
     # Keep letters/digits/space/hyphen, collapse runs of whitespace to one
@@ -141,7 +167,7 @@ def validate_markdown_file(
             "that's never closed before EOF — check for a stray or unmatched ``` "
             "elsewhere in the file)",
         )
-    for link in extract_markdown_links(text):
+    for link in extract_markdown_links(_links_checked_text(text)):
         if not is_local_markdown_link(link):
             continue
 
