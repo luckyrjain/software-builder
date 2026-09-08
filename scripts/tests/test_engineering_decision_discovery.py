@@ -1,11 +1,16 @@
-"""RED baseline for the engineering-decision-discovery skill (Child Plan B, Task 1).
+"""RED baseline for the engineering-decision-discovery skill (Child Plan B, Task 1),
+plus Task 2's package-level assertions.
 
-None of the routing, skill package, registry/artifact contract, or eval
-admission this module exercises exists yet -- Tasks 2-4 of
-docs/superpowers/plans/2026-09-05-engineering-decision-discovery-bridge.md
-build them. Every test in this module is expected to fail until then; the
-exact failure messages recorded at this commit live in
+The routing/registry/eval-admission tests below (Task 1) stay RED until Task 3
+wires the skill into skills.yaml -- registry wiring is explicitly out of
+scope for Task 2. Every test in the original RED baseline is expected to
+fail until then; the exact failure messages recorded at that commit live in
 docs/superpowers/specs/2026-09-05-engineering-decision-discovery-red-baseline.md.
+
+The `TestSkillPackageContract` tests below were added by Task 2. They check
+the skill package's own text and workflow invariants directly against the
+files on disk -- not through the registry or dispatcher -- so they do not
+depend on Task 3's registry wiring and are expected to pass now.
 """
 
 from __future__ import annotations
@@ -114,3 +119,124 @@ def test_unattended_execution_blocks_on_unresolved_frontier() -> None:
     registry = load_registry(ROOT)
     result = admit_case(case, run_transcript_case, seen=set(), registry=registry)
     assert result.passed, result.messages
+
+
+class TestSkillPackageContract:
+    """Task 2 package-level assertions: skill text and workflow invariants,
+    checked directly against engineering-decision-discovery/ on disk. These do
+    not go through load_registry()/dispatch_prompt(), so they do not depend on
+    Task 3's registry wiring and are expected to pass now."""
+
+    SKILL_DIR = ROOT / "engineering-decision-discovery"
+
+    EXPECTED_ROUTING_FRONTMATTER = (
+        "---\n"
+        "name: engineering-decision-discovery\n"
+        "description: >-\n"
+        "  Use when engineering decisions remain unresolved and need an interactive,\n"
+        "  evidence-backed challenge before design or implementation. Keywords: grill\n"
+        "  me, challenge my plan, stress-test this decision, question my assumptions,\n"
+        "  help me decide, what decisions are missing, interrogate this architecture.\n"
+        "  Not for reconstructing current domain behavior, reviewing a proposed\n"
+        "  architecture, or implementing an already-settled task.\n"
+        "---"
+    )
+
+    REQUIRED_FILES = [
+        "SKILL.md",
+        "README.md",
+        "SETUP.md",
+        "CHANGELOG.md",
+        "examples.md",
+        "workflow/inputs.md",
+        "workflow/tree.md",
+        "workflow/frontier.md",
+        "workflow/interaction.md",
+        "workflow/report.md",
+        "reference/phase-index.md",
+        "reference/lazy-load-index.md",
+        "reference/pressure-tests.md",
+        "reference/report-format.md",
+        "reference/smoke-test.md",
+    ]
+
+    def test_package_files_exist(self) -> None:
+        for rel_path in self.REQUIRED_FILES:
+            assert (self.SKILL_DIR / rel_path).is_file(), rel_path
+
+    def test_skill_md_uses_the_exact_routing_frontmatter(self) -> None:
+        text = (self.SKILL_DIR / "SKILL.md").read_text()
+        assert text.startswith(self.EXPECTED_ROUTING_FRONTMATTER)
+
+    def test_skill_md_states_facts_vs_decisions_ownership(self) -> None:
+        text = (self.SKILL_DIR / "SKILL.md").read_text()
+        assert "belong" in text.lower()
+        assert "decisions belong to the user" in text.lower()
+        assert "recommendation" in text.lower()
+
+    def test_inputs_workflow_requires_bounded_decision_scope(self) -> None:
+        text = (self.SKILL_DIR / "workflow" / "inputs.md").read_text()
+        assert "decision_scope" in text
+        assert "BLOCKED" in text
+        assert "interaction_policy" in text
+        assert "human_available" in text
+        assert "unattended" in text
+        # Missing repository evidence is a gap, not a request for the user to
+        # fetch facts the host can already read.
+        assert "gap" in text.lower()
+
+    def test_tree_workflow_defines_the_node_schema(self) -> None:
+        text = (self.SKILL_DIR / "workflow" / "tree.md").read_text()
+        for required_field in (
+            "id:",
+            "question:",
+            "depends_on:",
+            "options:",
+            "status:",
+            "selected_option:",
+            "evidence_refs:",
+        ):
+            assert required_field in text, required_field
+        assert "unresolved" in text and "resolved" in text and "not_applicable" in text
+
+    def test_frontier_workflow_defines_the_dependency_gate(self) -> None:
+        text = (self.SKILL_DIR / "workflow" / "frontier.md").read_text()
+        assert "depends_on" in text
+        assert "frontier" in text.lower()
+        assert "BLOCKED" in text
+        assert "unattended" in text.lower()
+
+    def test_interaction_workflow_states_ownership_rules(self) -> None:
+        text = (self.SKILL_DIR / "workflow" / "interaction.md").read_text()
+        lowered = text.lower()
+        assert "recommend" in lowered
+        assert "a recommendation is never a decision" in lowered
+        assert "record the decision and recompute" in lowered or "record" in lowered
+        assert "explicitly deferred" in lowered
+
+    def test_report_workflow_forbids_source_and_adr_writes(self) -> None:
+        text = (self.SKILL_DIR / "workflow" / "report.md").read_text()
+        assert "ENGINEERING_DECISION_RECORD.md" in text
+        assert "engineering_decision_record" in text
+        assert "ADR" in text
+        assert "do not write" in text.lower() or "never write" in text.lower()
+
+    def test_report_format_documents_the_nine_artifact_fields(self) -> None:
+        text = (self.SKILL_DIR / "reference" / "report-format.md").read_text()
+        for field in (
+            "title",
+            "decision_scope",
+            "decision_tree",
+            "frontier",
+            "recommendations",
+            "resolved_decisions",
+            "unresolved_decisions",
+            "alternatives_rejected",
+            "limitations",
+        ):
+            assert field in text, field
+
+    def test_smoke_test_documents_blocked_on_missing_scope(self) -> None:
+        text = (self.SKILL_DIR / "reference" / "smoke-test.md").read_text()
+        assert "BLOCKED" in text
+        assert "decision_scope" in text
