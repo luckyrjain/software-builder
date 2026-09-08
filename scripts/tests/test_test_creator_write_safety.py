@@ -85,7 +85,7 @@ def _run_creator_guard(creator: str, repo: Path, planned_file: str) -> dict[str,
     completed = subprocess.run(
         [
             sys.executable,
-            str(ROOT / creator / "scripts" / "test_creator_write_guard.py"),
+            str(ROOT / "skills" / creator / "scripts" / "test_creator_write_guard.py"),
             "--repo-root",
             str(repo),
             "--planned-file",
@@ -411,7 +411,7 @@ def test_generic_bundle_contains_a_runnable_guard_for_each_creator(tmp_path: Pat
     for creator in CREATOR_ROOTS:
         repo = _git_repo(tmp_path / "fixtures" / creator)
         result = _run_creator_guard_from_root(
-            packaged_root / creator / "scripts" / "test_creator_write_guard.py",
+            packaged_root / "skills" / creator / "scripts" / "test_creator_write_guard.py",
             repo,
             "tests/generated/example_test.py",
         )
@@ -421,7 +421,7 @@ def test_generic_bundle_contains_a_runnable_guard_for_each_creator(tmp_path: Pat
 
 @pytest.mark.parametrize("creator", CREATOR_ROOTS)
 def test_creator_guard_adapters_are_safe_to_import(creator: str) -> None:
-    adapter = ROOT / creator / "scripts" / "test_creator_write_guard.py"
+    adapter = ROOT / "skills" / creator / "scripts" / "test_creator_write_guard.py"
     completed = subprocess.run(
         [
             sys.executable,
@@ -454,14 +454,14 @@ def _run_creator_guard_from_root(script: Path, repo: Path, planned_file: str) ->
 def test_creator_workflows_reference_one_canonical_guard_and_report_contract() -> None:
     for creator in CREATOR_ROOTS:
         for phase in ("workflow/generate-tests.md", "workflow/report.md"):
-            text = (ROOT / creator / phase).read_text(encoding="utf-8")
+            text = (ROOT / "skills" / creator / phase).read_text(encoding="utf-8")
             assert SHARED_GUARD_DOC in text, f"{creator}/{phase} drifted from shared guard"
 
 
 def test_all_creator_phases_reference_the_canonical_common_workflow() -> None:
     for creator in CREATOR_ROOTS:
         for phase in COMMON_PHASES:
-            text = (ROOT / creator / phase).read_text(encoding="utf-8")
+            text = (ROOT / "skills" / creator / phase).read_text(encoding="utf-8")
             assert "test-creator-common-workflow.md" in text, f"{creator}/{phase} drifted from common behavior"
 
 
@@ -495,8 +495,8 @@ def test_composition_contract_declares_creator_parity_requirements() -> None:
 
 
 def test_router_handoff_preserves_common_inputs_and_child_authority() -> None:
-    inputs = (ROOT / "test-writer" / "workflow" / "inputs.md").read_text(encoding="utf-8")
-    delegate = (ROOT / "test-writer" / "workflow" / "delegate.md").read_text(encoding="utf-8")
+    inputs = (ROOT / "skills/test-writer" / "workflow" / "inputs.md").read_text(encoding="utf-8")
+    delegate = (ROOT / "skills/test-writer" / "workflow" / "delegate.md").read_text(encoding="utf-8")
     for field in (
         "test_framework_hint",
         "run_tests",
@@ -511,10 +511,10 @@ def test_router_handoff_preserves_common_inputs_and_child_authority() -> None:
     assert "must not rewrite a child `BLOCKED`, `FAILED`, or `ESCALATED` result" in delegate
     assert "complete" in delegate
     assert "`skill_result` envelope" in delegate
-    aggregate = (ROOT / "test-writer" / "workflow" / "aggregate.md").read_text(encoding="utf-8")
+    aggregate = (ROOT / "skills/test-writer" / "workflow" / "aggregate.md").read_text(encoding="utf-8")
     assert "Dispatched entries must also carry `skill_result`" in aggregate
     assert "Do not add a router-level write or interactive gate" in (
-        ROOT / "test-writer" / "SKILL.md"
+        ROOT / "skills/test-writer" / "SKILL.md"
     ).read_text(encoding="utf-8")
 
 

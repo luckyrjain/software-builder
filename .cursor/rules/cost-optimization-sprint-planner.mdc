@@ -5,5 +5,5 @@ alwaysApply: false
 
 <!-- GENERATED from skills.yaml + SKILL.md — do not edit; run make generate -->
 
-Invoke the cost-optimization-sprint-planner skill. Read `cost-optimization-sprint-planner/SKILL.md` and follow it.
-Phase index: `cost-optimization-sprint-planner/reference/phase-index.md` when present under the skill directory.
+Invoke the cost-optimization-sprint-planner skill. Read `skills/cost-optimization-sprint-planner/SKILL.md` and follow it.
+Phase index: `skills/cost-optimization-sprint-planner/reference/phase-index.md` when present under the skill directory.

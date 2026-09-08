@@ -1,5 +1,5 @@
 module-design:
-  path: module-design
+  path: skills/module-design
   category: architecture
   extends: read-only-leaf-review
   install:

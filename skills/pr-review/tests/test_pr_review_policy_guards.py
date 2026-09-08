@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 
 from pr_review_policy_guards import (  # noqa: E402
     apply_confidence_cap,
@@ -370,19 +370,19 @@ class TestProviderWriteSafety:
 
 class TestProviderDocumentationContracts:
     def test_phase_zero_matches_gitlab_servers_by_parsed_exact_authority(self):
-        phase_zero = (ROOT / "pr-review/workflow/phase-0.md").read_text(encoding="utf-8")
+        phase_zero = (ROOT / "skills/pr-review/workflow/phase-0.md").read_text(encoding="utf-8")
         assert "parse each\n   configured `gitlab_api_url`" in phase_zero.lower()
         assert "exact normalized authority equality" in phase_zero
         assert "substring" in phase_zero
         assert "ambiguous" in phase_zero
-        inputs = (ROOT / "pr-review/workflow/inputs.md").read_text(encoding="utf-8")
-        adapters = (ROOT / "pr-review/reference/provider-adapters.md").read_text(encoding="utf-8")
+        inputs = (ROOT / "skills/pr-review/workflow/inputs.md").read_text(encoding="utf-8")
+        adapters = (ROOT / "skills/pr-review/reference/provider-adapters.md").read_text(encoding="utf-8")
         assert "provider, host, authority, repository_path" in inputs
         assert "authority: github.com:443" in adapters
 
     def test_phase_zero_requires_a_complete_provider_read_pair_before_degrading_posting(self):
-        phase_zero = (ROOT / "pr-review/workflow/phase-0.md").read_text(encoding="utf-8")
-        capabilities = (ROOT / "pr-review/reference/mcp-capabilities.md").read_text(encoding="utf-8")
+        phase_zero = (ROOT / "skills/pr-review/workflow/phase-0.md").read_text(encoding="utf-8")
+        capabilities = (ROOT / "skills/pr-review/reference/mcp-capabilities.md").read_text(encoding="utf-8")
         combined = phase_zero + capabilities
         assert "metadata-only" in combined
         assert "diff-only" in combined
@@ -392,10 +392,10 @@ class TestProviderDocumentationContracts:
         assert "writes never compensate for a missing read" in combined
 
     def test_non_default_port_ghes_disables_all_cli_reads_without_host_only_fallback(self):
-        setup = (ROOT / "pr-review/SETUP.md").read_text(encoding="utf-8")
-        adapters = (ROOT / "pr-review/reference/provider-adapters.md").read_text(encoding="utf-8")
-        phase_zero = (ROOT / "pr-review/workflow/phase-0.md").read_text(encoding="utf-8")
-        phase_one = (ROOT / "pr-review/workflow/phase-1.md").read_text(encoding="utf-8")
+        setup = (ROOT / "skills/pr-review/SETUP.md").read_text(encoding="utf-8")
+        adapters = (ROOT / "skills/pr-review/reference/provider-adapters.md").read_text(encoding="utf-8")
+        phase_zero = (ROOT / "skills/pr-review/workflow/phase-0.md").read_text(encoding="utf-8")
+        phase_one = (ROOT / "skills/pr-review/workflow/phase-1.md").read_text(encoding="utf-8")
 
         for document in (setup, adapters, phase_zero, phase_one):
             assert "non-default port" in document
@@ -418,9 +418,9 @@ class TestProviderDocumentationContracts:
         assert "zero cross-authority calls" in phase_one
 
     def test_http_github_urls_are_rejected_before_any_cli_or_app_routing(self):
-        setup = (ROOT / "pr-review/SETUP.md").read_text(encoding="utf-8")
-        adapters = (ROOT / "pr-review/reference/provider-adapters.md").read_text(encoding="utf-8")
-        phase_zero = (ROOT / "pr-review/workflow/phase-0.md").read_text(encoding="utf-8")
+        setup = (ROOT / "skills/pr-review/SETUP.md").read_text(encoding="utf-8")
+        adapters = (ROOT / "skills/pr-review/reference/provider-adapters.md").read_text(encoding="utf-8")
+        phase_zero = (ROOT / "skills/pr-review/workflow/phase-0.md").read_text(encoding="utf-8")
 
         for document in (setup, adapters, phase_zero):
             assert "HTTP GitHub" in document
@@ -429,11 +429,11 @@ class TestProviderDocumentationContracts:
         assert "GitLab HTTP" in adapters
 
     def test_provider_head_mismatch_is_zero_write_for_every_mode(self):
-        posting = (ROOT / "pr-review/workflow/posting.md").read_text(encoding="utf-8")
-        gitlab_inline = (ROOT / "pr-review/reference/gitlab-inline-comments.md").read_text(
+        posting = (ROOT / "skills/pr-review/workflow/posting.md").read_text(encoding="utf-8")
+        gitlab_inline = (ROOT / "skills/pr-review/reference/gitlab-inline-comments.md").read_text(
             encoding="utf-8",
         )
-        adapters = (ROOT / "pr-review/reference/provider-adapters.md").read_text(encoding="utf-8")
+        adapters = (ROOT / "skills/pr-review/reference/provider-adapters.md").read_text(encoding="utf-8")
         combined = posting + gitlab_inline + adapters
         assert "`REVISION_MISMATCH`" in combined
         assert "`full`, `summary-only`, `general-only`, and draft" in combined
@@ -443,8 +443,8 @@ class TestProviderDocumentationContracts:
         assert "summary-only posting" not in stale_section
 
     def test_github_ambiguous_write_failure_uses_readback_not_blind_retry(self):
-        phase_zero = (ROOT / "pr-review/workflow/phase-0.md").read_text(encoding="utf-8")
-        github_inline = (ROOT / "pr-review/reference/github-inline-comments.md").read_text(
+        phase_zero = (ROOT / "skills/pr-review/workflow/phase-0.md").read_text(encoding="utf-8")
+        github_inline = (ROOT / "skills/pr-review/reference/github-inline-comments.md").read_text(
             encoding="utf-8",
         )
         combined = phase_zero + github_inline
@@ -455,12 +455,12 @@ class TestProviderDocumentationContracts:
         assert "no duplicate POST" in " ".join(combined.split())
 
     def test_summary_vocabulary_is_providerized_in_all_review_modes(self):
-        templates = (ROOT / "pr-review/reference/comment-templates.md").read_text(encoding="utf-8")
-        incremental = (ROOT / "pr-review/reference/incremental-rerun.md").read_text(encoding="utf-8")
-        modes = (ROOT / "pr-review/reference/review-modes.md").read_text(encoding="utf-8")
-        examples = (ROOT / "pr-review/examples.md").read_text(encoding="utf-8")
-        metrics = (ROOT / "pr-review/reference/review-metrics.md").read_text(encoding="utf-8")
-        not_raised = (ROOT / "pr-review/reference/not-raised.md").read_text(encoding="utf-8")
+        templates = (ROOT / "skills/pr-review/reference/comment-templates.md").read_text(encoding="utf-8")
+        incremental = (ROOT / "skills/pr-review/reference/incremental-rerun.md").read_text(encoding="utf-8")
+        modes = (ROOT / "skills/pr-review/reference/review-modes.md").read_text(encoding="utf-8")
+        examples = (ROOT / "skills/pr-review/examples.md").read_text(encoding="utf-8")
+        metrics = (ROOT / "skills/pr-review/reference/review-metrics.md").read_text(encoding="utf-8")
+        not_raised = (ROOT / "skills/pr-review/reference/not-raised.md").read_text(encoding="utf-8")
         combined = templates + incremental + modes + examples + metrics + not_raised
         assert "not MR defects" not in combined
         assert "not PR defects" not in combined
@@ -472,14 +472,14 @@ class TestProviderDocumentationContracts:
         assert 'GitLab uses\n*"MR is merged' in modes
 
     def test_github_cli_discovery_has_bound_and_truncation_stop(self):
-        inputs = (ROOT / "pr-review/workflow/inputs.md").read_text(encoding="utf-8")
+        inputs = (ROOT / "skills/pr-review/workflow/inputs.md").read_text(encoding="utf-8")
         assert "--limit 1000" in inputs
         assert "exactly 1000" in inputs
         assert "stop and report discovery truncation" in inputs
 
     def test_summary_templates_parameterize_review_target_label(self):
-        templates = (ROOT / "pr-review/reference/comment-templates.md").read_text(encoding="utf-8")
-        posting = (ROOT / "pr-review/workflow/posting.md").read_text(encoding="utf-8")
+        templates = (ROOT / "skills/pr-review/reference/comment-templates.md").read_text(encoding="utf-8")
+        posting = (ROOT / "skills/pr-review/workflow/posting.md").read_text(encoding="utf-8")
         assert "GitHub: `PR #<number>`" in templates
         assert "GitLab: `MR !<iid>`" in templates
         assert "Code Review — !<iid>" not in templates
@@ -487,7 +487,7 @@ class TestProviderDocumentationContracts:
         assert "Post this review to !<iid>?" not in posting
 
     def test_setup_has_independent_github_and_gitlab_paths(self):
-        setup = (ROOT / "pr-review/SETUP.md").read_text(encoding="utf-8")
+        setup = (ROOT / "skills/pr-review/SETUP.md").read_text(encoding="utf-8")
         github = setup.split("### GitHub quickstart", 1)[1].split("### GitLab quickstart", 1)[0]
         assert "Create a GitLab PAT" not in github
         assert "mcp-gitlab" not in github
@@ -513,11 +513,11 @@ class TestProviderDocumentationContracts:
         assert "pr-review | GitLab (read; write for posting)" not in repository
 
     def test_github_posting_requires_complete_paginated_comment_readback(self):
-        phase_zero = (ROOT / "pr-review/workflow/phase-0.md").read_text(encoding="utf-8")
-        capabilities = (ROOT / "pr-review/reference/mcp-capabilities.md").read_text(
+        phase_zero = (ROOT / "skills/pr-review/workflow/phase-0.md").read_text(encoding="utf-8")
+        capabilities = (ROOT / "skills/pr-review/reference/mcp-capabilities.md").read_text(
             encoding="utf-8",
         )
-        posting = (ROOT / "pr-review/workflow/posting.md").read_text(encoding="utf-8")
+        posting = (ROOT / "skills/pr-review/workflow/posting.md").read_text(encoding="utf-8")
         combined = phase_zero + capabilities + posting
         assert "every posting-enabled profile" in combined.lower()
         assert "paginated complete review-comment readback" in combined
@@ -526,9 +526,9 @@ class TestProviderDocumentationContracts:
         assert "chat-only" in combined
 
     def test_gitlab_contract_uses_conservative_no_retry_without_readback(self):
-        phase_zero = (ROOT / "pr-review/workflow/phase-0.md").read_text(encoding="utf-8")
-        posting = (ROOT / "pr-review/workflow/posting.md").read_text(encoding="utf-8")
-        capabilities = (ROOT / "pr-review/reference/mcp-capabilities.md").read_text(
+        phase_zero = (ROOT / "skills/pr-review/workflow/phase-0.md").read_text(encoding="utf-8")
+        posting = (ROOT / "skills/pr-review/workflow/posting.md").read_text(encoding="utf-8")
+        capabilities = (ROOT / "skills/pr-review/reference/mcp-capabilities.md").read_text(
             encoding="utf-8",
         )
         combined = " ".join((phase_zero + posting + capabilities).split())
@@ -538,13 +538,13 @@ class TestProviderDocumentationContracts:
         assert "stop all remaining provider writes" in combined
 
     def test_setup_noninteractive_posting_requires_complete_review(self):
-        setup = (ROOT / "pr-review/SETUP.md").read_text(encoding="utf-8")
+        setup = (ROOT / "skills/pr-review/SETUP.md").read_text(encoding="utf-8")
         section = setup.split("**`review and post …`**", 1)[1].split("Phase 0 announces", 1)[0]
         assert "`review_metrics.review_complete` is not `false`" in section
 
     def test_lifecycle_and_cancellation_messages_branch_on_provider_noun(self):
-        modes = (ROOT / "pr-review/reference/review-modes.md").read_text(encoding="utf-8")
-        phase_five = (ROOT / "pr-review/workflow/phase-5.md").read_text(encoding="utf-8")
+        modes = (ROOT / "skills/pr-review/reference/review-modes.md").read_text(encoding="utf-8")
+        phase_five = (ROOT / "skills/pr-review/workflow/phase-5.md").read_text(encoding="utf-8")
 
         assert 'GitHub: *"PR already merged or closed.' in modes
         assert 'GitLab: *"MR already merged or closed.' in modes
@@ -558,8 +558,8 @@ class TestProviderDocumentationContracts:
         assert "No GitLab writes" not in cancelled
 
     def test_github_lifecycle_is_normalized_before_typed_sha_gate(self):
-        phase_one = (ROOT / "pr-review/workflow/phase-1.md").read_text(encoding="utf-8")
-        modes = (ROOT / "pr-review/reference/review-modes.md").read_text(encoding="utf-8")
+        phase_one = (ROOT / "skills/pr-review/workflow/phase-1.md").read_text(encoding="utf-8")
+        modes = (ROOT / "skills/pr-review/reference/review-modes.md").read_text(encoding="utf-8")
 
         assert "GitHub `merged: true` → `merged`" in phase_one
         assert "GitHub raw `state: open` → `open`" in phase_one

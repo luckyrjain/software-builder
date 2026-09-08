@@ -906,9 +906,9 @@ def test_bootstrap_registry_validates_on_real_repo() -> None:
 def test_render_cursor_rule_thin_wrapper() -> None:
     from scripts.registry.generate_cursor import render_cursor_rule
 
-    text = render_cursor_rule("squad-map", "Map repos to squads.", "rule")
+    text = render_cursor_rule("squad-map", "skills/squad-map", "Map repos to squads.", "rule")
     assert "GENERATED from skills.yaml" in text
-    assert "squad-map/SKILL.md" in text
+    assert "skills/squad-map/SKILL.md" in text
     assert "mock" not in text.lower()
     assert "alwaysApply: false" in text
     assert text.count("\n") < 15
@@ -917,9 +917,9 @@ def test_render_cursor_rule_thin_wrapper() -> None:
 def test_render_kiro_steering_thin_wrapper() -> None:
     from scripts.registry.generate_kiro import render_kiro_steering
 
-    text = render_kiro_steering("squad-map", "manual")
+    text = render_kiro_steering("squad-map", "skills/squad-map", "manual")
     assert "GENERATED from skills.yaml" in text
-    assert "squad-map/SKILL.md" in text
+    assert "skills/squad-map/SKILL.md" in text
     assert "inclusion: manual" in text
 
 

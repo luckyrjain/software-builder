@@ -1,5 +1,5 @@
 performance-review:
-  path: performance-review
+  path: skills/performance-review
   category: review
   extends: read-only-leaf-review
   install:

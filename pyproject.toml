@@ -22,5 +22,19 @@ requires-python = ">=3.12"
 # suites are repository-conformance checks whose .pytest_cache would be a
 # tracked-tree side effect of running lint. Declared once here so every
 # invocation from the repository root gets it, recipes and ad-hoc runs alike.
-addopts = "-p no:cacheprovider"
+#
+# --ignore-glob for scripts/test_creator_write_guard.py: the five *-test-creator
+# skills each vendor an identically-named source-tree adapter at
+# <skill>/scripts/test_creator_write_guard.py (a CLI guard script, not a pytest
+# suite -- it just happens to match pytest's test_*.py discovery glob by naming
+# coincidence with the "test creator" skills, not by intent). make/core.mk's
+# per-skill recipes only ever point pytest at each skill's tests/ directory, so
+# this never collided there; it surfaces only when a single pytest invocation
+# walks multiple *-test-creator skills at once -- e.g. `python3 -m pytest
+# skills -q`, the natural whole-suite command now that skills/ is one common
+# root -- where pytest's import cache raises "import file mismatch" on the
+# second same-named module. Ignoring the glob is scoped tightly enough that it
+# cannot hide a real test: no test module anywhere in this repository is named
+# test_creator_write_guard.py.
+addopts = "-p no:cacheprovider --ignore-glob=*/scripts/test_creator_write_guard.py"
 testpaths = ["scripts/tests"]

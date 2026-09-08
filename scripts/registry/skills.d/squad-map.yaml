@@ -1,5 +1,5 @@
 squad-map:
-  path: squad-map
+  path: skills/squad-map
   category: architecture
   invocation: ambient
   hosts:

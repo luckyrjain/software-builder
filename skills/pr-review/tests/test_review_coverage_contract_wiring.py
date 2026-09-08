@@ -3,7 +3,7 @@ from pathlib import Path
 import yaml
 
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 
 
 def _text(path: str) -> str:
@@ -15,7 +15,7 @@ def _yaml(path: str):
 
 
 def test_pr_review_has_machine_inspection_contract_for_every_surface():
-    contract = _yaml("pr-review/reference/review-coverage-contract.yaml")
+    contract = _yaml("skills/pr-review/reference/review-coverage-contract.yaml")
     assert contract["schema_version"] == 1
     assert contract["consumer"] == "pr-review"
     assert contract["shared_contracts"]["change_identity"].endswith("change-identity.yaml")
@@ -56,7 +56,7 @@ def test_pr_review_has_machine_inspection_contract_for_every_surface():
 
 
 def test_portable_review_mode_mapping_does_not_leak_lifecycle_modes():
-    contract = _yaml("pr-review/reference/review-coverage-contract.yaml")
+    contract = _yaml("skills/pr-review/reference/review-coverage-contract.yaml")
     mapping = contract["review_evidence"]["portable_review_mode_mapping"]
     assert mapping["exhaustive_when"] == "user_requested_exhaustive_or_full_pass"
     assert "retrospective" in mapping["normal_when"]
@@ -67,7 +67,7 @@ def test_portable_review_mode_mapping_does_not_leak_lifecycle_modes():
 
 
 def test_phase_index_wires_explicit_coverage_review_and_evidence_phases():
-    phase_index = _text("pr-review/reference/phase-index.md")
+    phase_index = _text("skills/pr-review/reference/phase-index.md")
     for token in (
         "phase-1-2-coverage.md",
         "phase-2-coverage-review.md",
@@ -84,7 +84,7 @@ def test_phase_index_wires_explicit_coverage_review_and_evidence_phases():
 
 
 def test_coverage_execution_builds_identity_and_runs_systematic_review():
-    execution = _text("pr-review/reference/review-coverage-execution.md")
+    execution = _text("skills/pr-review/reference/review-coverage-execution.md")
     for token in (
         "phase 1→2 coverage",
         "coverage review",
@@ -105,7 +105,7 @@ def test_coverage_execution_builds_identity_and_runs_systematic_review():
 
 
 def test_coverage_execution_emits_shared_review_evidence_and_classifies_findings():
-    execution = _text("pr-review/reference/review-coverage-execution.md")
+    execution = _text("skills/pr-review/reference/review-coverage-execution.md")
     for token in (
         "phase 2 evidence",
         "review_evidence",
@@ -126,7 +126,7 @@ def test_coverage_execution_emits_shared_review_evidence_and_classifies_findings
 
 
 def test_workflow_contract_sequences_machine_state_phases():
-    workflow = _yaml("pr-review/workflow-contract.yaml")
+    workflow = _yaml("skills/pr-review/workflow-contract.yaml")
     for route in ("posting", "chat_only"):
         phases = workflow["routes"][route]["phases"]
         assert phases.index("1") < phases.index("1-2-coverage") < phases.index("2")
@@ -135,9 +135,9 @@ def test_workflow_contract_sequences_machine_state_phases():
 
 
 def test_explicit_phase_contracts_produce_and_consume_machine_state():
-    coverage = _text("pr-review/workflow/phase-1-2-coverage.md")
-    coverage_review = _text("pr-review/workflow/phase-2-coverage-review.md")
-    evidence = _text("pr-review/workflow/phase-2-evidence.md")
+    coverage = _text("skills/pr-review/workflow/phase-1-2-coverage.md")
+    coverage_review = _text("skills/pr-review/workflow/phase-2-coverage-review.md")
+    evidence = _text("skills/pr-review/workflow/phase-2-evidence.md")
 
     for token in ("change_identity: object", "inspection_plan: object", "initial_unable_to_inspect: list"):
         assert token in coverage
@@ -166,7 +166,7 @@ def test_explicit_phase_contracts_produce_and_consume_machine_state():
 
 
 def test_phase2_to_3_gate_fails_closed_on_invalid_or_incomplete_evidence():
-    gate = _text("pr-review/workflow/phase-2-3-gate.md")
+    gate = _text("skills/pr-review/workflow/phase-2-3-gate.md")
     for token in (
         "review_evidence",
         "change_identity",
@@ -179,7 +179,7 @@ def test_phase2_to_3_gate_fails_closed_on_invalid_or_incomplete_evidence():
 
 
 def test_skill_definition_of_done_requires_complete_or_annotated_inspection():
-    skill = _text("pr-review/SKILL.md")
+    skill = _text("skills/pr-review/SKILL.md")
     assert "review-coverage-contract.yaml" in skill
     assert "review-evidence.yaml" in skill
     assert "change-identity.yaml" in skill

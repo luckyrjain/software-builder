@@ -1,5 +1,5 @@
 mysql-to-postgres-sql:
-  path: mysql-to-postgres-sql
+  path: skills/mysql-to-postgres-sql
   category: migration
   invocation: ambient
   hosts:

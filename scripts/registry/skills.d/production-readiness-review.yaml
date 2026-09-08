@@ -1,5 +1,5 @@
 production-readiness-review:
-  path: production-readiness-review
+  path: skills/production-readiness-review
   category: release
   extends: read-only-leaf-review
   install:

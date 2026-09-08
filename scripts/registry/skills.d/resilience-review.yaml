@@ -1,5 +1,5 @@
 resilience-review:
-  path: resilience-review
+  path: skills/resilience-review
   category: review
   extends: read-only-leaf-review
   install:

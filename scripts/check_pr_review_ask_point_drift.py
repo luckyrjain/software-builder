@@ -216,7 +216,7 @@ def main() -> int:
         f for f in PR_REVIEW_WORKFLOW_DIR.glob("*.md") if f.name not in EXCLUDED_FILES
     )
     if not workflow_files:
-        print("error: no pr-review/workflow/*.md files found to scan", file=sys.stderr)
+        print("error: no skills/pr-review/workflow/*.md files found to scan", file=sys.stderr)
         return 1
 
     flagged: list[tuple[str, int, str, float]] = []
@@ -249,9 +249,9 @@ def main() -> int:
 
     if flagged:
         print(
-            f"\nerror: {len(flagged)} ask-point-shaped paragraph(s) in pr-review/workflow/*.md "
+            f"\nerror: {len(flagged)} ask-point-shaped paragraph(s) in skills/pr-review/workflow/*.md "
             f"have < {OVERLAP_THRESHOLD:.0%} word overlap with "
-            f"pr-gatekeeper/reference/auto-post-policy.md — possible undocumented ask-point drift.\n",
+            f"skills/pr-gatekeeper/reference/auto-post-policy.md — possible undocumented ask-point drift.\n",
             file=sys.stderr,
         )
         for path, line_no, para, overlap in flagged:

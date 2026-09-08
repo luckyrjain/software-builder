@@ -5,5 +5,5 @@ alwaysApply: false
 
 <!-- GENERATED from skills.yaml + SKILL.md — do not edit; run make generate -->
 
-Invoke the security-review skill. Read `security-review/SKILL.md` and follow it.
-Phase index: `security-review/reference/phase-index.md` when present under the skill directory.
+Invoke the security-review skill. Read `skills/security-review/SKILL.md` and follow it.
+Phase index: `skills/security-review/reference/phase-index.md` when present under the skill directory.

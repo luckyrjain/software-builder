@@ -20,13 +20,13 @@ _SAFE_LOAD_CALL = re.compile(r"\byaml\.safe_load\s*\(")
 # Repo-relative path -> why a bare safe_load is correct there.
 ALLOWED: dict[str, str] = {
     "scripts/yaml_safety.py": "the hardened loader itself",
-    "migration-program-manager/scripts/aggregate_migration_status.py": (
+    "skills/migration-program-manager/scripts/aggregate_migration_status.py": (
         "fallback when neither a vendored nor a repository yaml_safety is present -- the same "
         "bare-environment tolerance this script already has for a missing PyYAML"
     ),
-    "domain-comprehension/scripts/validate_manifest_yaml.py": "same bare-environment fallback",
-    "k8s-overprovisioning-datadog/scripts/validate_decision_graph.py": "same bare-environment fallback",
-    "incident-rca/scripts/validate_causal_graph.py": "same bare-environment fallback",
+    "skills/domain-comprehension/scripts/validate_manifest_yaml.py": "same bare-environment fallback",
+    "skills/k8s-overprovisioning-datadog/scripts/validate_decision_graph.py": "same bare-environment fallback",
+    "skills/incident-rca/scripts/validate_causal_graph.py": "same bare-environment fallback",
 }
 
 _SKIPPED_DIRS = {".git", ".venv", "__pycache__", ".pytest_cache", ".ruff_cache", "node_modules"}

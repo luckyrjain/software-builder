@@ -1,5 +1,5 @@
 deployment-risk-review:
-  path: deployment-risk-review
+  path: skills/deployment-risk-review
   category: review
   extends: read-only-leaf-review
   install:

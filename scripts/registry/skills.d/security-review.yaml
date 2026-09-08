@@ -1,5 +1,5 @@
 security-review:
-  path: security-review
+  path: skills/security-review
   category: review
   extends: read-only-leaf-review
   install:

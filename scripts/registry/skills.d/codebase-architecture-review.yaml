@@ -1,5 +1,5 @@
 codebase-architecture-review:
-  path: codebase-architecture-review
+  path: skills/codebase-architecture-review
   category: architecture
   extends: read-only-leaf-review
   install:

@@ -3,7 +3,7 @@ from pathlib import Path
 import yaml
 
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 
 
 def _load(path: str):
@@ -11,8 +11,8 @@ def _load(path: str):
 
 
 def test_domain_and_prd_share_source_revision_shape():
-    domain = _load("domain-comprehension/reference/domain-model-contract.yaml")
-    prd = _load("prd-architect/reference/current-state-evidence-contract.yaml")
+    domain = _load("skills/domain-comprehension/reference/domain-model-contract.yaml")
+    prd = _load("skills/prd-architect/reference/current-state-evidence-contract.yaml")
 
     producer = domain["source_revision"]
     consumer = prd["current_state_evidence"]["source_revision"]
@@ -29,8 +29,8 @@ def test_domain_and_prd_share_source_revision_shape():
 
 
 def test_domain_and_prd_share_prd_freshness_values():
-    domain = _load("domain-comprehension/reference/domain-model-contract.yaml")
-    prd = _load("prd-architect/reference/current-state-evidence-contract.yaml")
+    domain = _load("skills/domain-comprehension/reference/domain-model-contract.yaml")
+    prd = _load("skills/prd-architect/reference/current-state-evidence-contract.yaml")
 
     producer = domain["compatibility"]["prd_freshness"]
     consumer = prd["current_state_evidence"]["prd_freshness"]
@@ -43,7 +43,7 @@ def test_domain_and_prd_share_prd_freshness_values():
 
 
 def test_prd_consumer_rejects_stale_domain_prd_as_current_state():
-    prd = _load("prd-architect/reference/current-state-evidence-contract.yaml")
+    prd = _load("skills/prd-architect/reference/current-state-evidence-contract.yaml")
     current = prd["current_state_evidence"]
     freshness = current["prd_freshness"]
     assert freshness["source"] == "domain_comprehension_manifest_prd_artifact_status"
@@ -61,5 +61,5 @@ def test_all_machine_templates_use_multi_repo_source_revision():
         "DEPENDENCY_GRAPH.yaml",
         "CAPABILITY_TRACEABILITY.yaml",
     ):
-        document = _load(f"domain-comprehension/templates/{name}")
+        document = _load(f"skills/domain-comprehension/templates/{name}")
         assert document["source_revision"] == {"repos": []}

@@ -5,5 +5,5 @@ alwaysApply: false
 
 <!-- GENERATED from skills.yaml + SKILL.md — do not edit; run make generate -->
 
-Invoke the change-impact-analyzer skill. Read `change-impact-analyzer/SKILL.md` and follow it.
-Phase index: `change-impact-analyzer/reference/phase-index.md` when present under the skill directory.
+Invoke the change-impact-analyzer skill. Read `skills/change-impact-analyzer/SKILL.md` and follow it.
+Phase index: `skills/change-impact-analyzer/reference/phase-index.md` when present under the skill directory.

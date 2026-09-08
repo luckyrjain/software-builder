@@ -2,7 +2,7 @@ from pathlib import Path
 import importlib.util
 
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 SURFACES = (
     "cross_file_impact",
     "hidden_consumers",
@@ -14,7 +14,7 @@ SURFACES = (
 
 
 def _load_validator():
-    path = ROOT / "pr-review/scripts/validate_review_coverage.py"
+    path = ROOT / "skills/pr-review/scripts/validate_review_coverage.py"
     spec = importlib.util.spec_from_file_location("validate_review_coverage", path)
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)

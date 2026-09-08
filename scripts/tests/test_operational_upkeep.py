@@ -100,10 +100,10 @@ def test_operational_policy_validates_repository() -> None:
 
 def test_file_roles_separate_runtime_reference_and_maintainer_surfaces() -> None:
     policy = load_policy(ROOT / "scripts" / "operational_upkeep.yaml")
-    assert classify_file_role("pr-review/SKILL.md", policy) == "runtime"
-    assert classify_file_role("pr-review/workflow/inputs.md", policy) == "runtime"
-    assert classify_file_role("pr-review/reference/smoke-test.md", policy) == "reference"
-    assert classify_file_role("pr-review/README.md", policy) == "reference"
+    assert classify_file_role("skills/pr-review/SKILL.md", policy) == "runtime"
+    assert classify_file_role("skills/pr-review/workflow/inputs.md", policy) == "runtime"
+    assert classify_file_role("skills/pr-review/reference/smoke-test.md", policy) == "reference"
+    assert classify_file_role("skills/pr-review/README.md", policy) == "reference"
     assert classify_file_role("scripts/registry/eval_contracts.yaml", policy) == "maintainer"
     assert classify_file_role("scripts/README.md", policy) == "maintainer"
     assert classify_file_role("make/README.md", policy) == "maintainer"
@@ -124,7 +124,7 @@ def test_bare_pattern_does_not_match_as_unanchored_substring() -> None:
 
 
 def test_leading_slash_pattern_requires_path_segment_boundary() -> None:
-    assert _matches("pr-review/tests/foo.py", "/tests/") is True
+    assert _matches("skills/pr-review/tests/foo.py", "/tests/") is True
     assert _matches("scripts/tests/foo.py", "/tests/") is True
     assert _matches("tests/root_level.py", "/tests/") is True
     assert _matches("contests/README.md", "/tests/") is False
@@ -333,7 +333,7 @@ def test_prompt_diff_risk_uses_highest_matching_class() -> None:
     risk, matched = classify_diff(
         [
             "README.md",
-            "pr-review/workflow/phase-5.md",
+            "skills/pr-review/workflow/phase-5.md",
             "scripts/registry/capability_catalog.yaml",
             "docs/skill-framework/shared/skill-routing.md",
         ],
@@ -381,13 +381,13 @@ def test_high_risk_prompt_diff_requires_test_or_eval_evidence() -> None:
 def test_per_skill_tests_directory_satisfies_high_risk_evidence_gate() -> None:
     policy = load_policy(ROOT / "scripts" / "operational_upkeep.yaml")
     risk, errors = validate_diff_risk(
-        ["pr-review/SKILL.md", "pr-review/tests/test_diff_to_positions.py"],
+        ["skills/pr-review/SKILL.md", "skills/pr-review/tests/test_diff_to_positions.py"],
         policy,
     )
     assert risk == "behavioral"
     assert errors == []
 
-    risk, errors = validate_diff_risk(["pr-review/SKILL.md"], policy)
+    risk, errors = validate_diff_risk(["skills/pr-review/SKILL.md"], policy)
     assert risk == "behavioral"
     assert errors and "requires changed eval/test evidence" in errors[0]
 

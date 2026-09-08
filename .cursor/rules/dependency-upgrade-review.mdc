@@ -5,5 +5,5 @@ alwaysApply: false
 
 <!-- GENERATED from skills.yaml + SKILL.md — do not edit; run make generate -->
 
-Invoke the dependency-upgrade-review skill. Read `dependency-upgrade-review/SKILL.md` and follow it.
-Phase index: `dependency-upgrade-review/reference/phase-index.md` when present under the skill directory.
+Invoke the dependency-upgrade-review skill. Read `skills/dependency-upgrade-review/SKILL.md` and follow it.
+Phase index: `skills/dependency-upgrade-review/reference/phase-index.md` when present under the skill directory.

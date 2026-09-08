@@ -42,7 +42,7 @@ def _init_fixture_repo(repo: Path) -> None:
 @pytest.fixture
 def isolated_repo(tmp_path: Path) -> Path:
     repo = tmp_path / "software-builder"
-    shutil.copytree(ROOT / "unit-test-creator", repo / "unit-test-creator")
+    shutil.copytree(ROOT / "skills/unit-test-creator", repo / "unit-test-creator")
     (repo / "scripts").mkdir(parents=True)
     shutil.copy2(ROOT / "scripts" / "test_creator_write_guard.py", repo / "scripts" / "test_creator_write_guard.py")
     shutil.copy2(ROOT / "scripts" / "git_paths.py", repo / "scripts" / "git_paths.py")
@@ -376,7 +376,7 @@ def test_package_and_verify_agree_on_ignored_source_files(isolated_repo: Path, t
 
 def test_prd_architect_package_contains_executable_safe_output_renderer(tmp_path: Path) -> None:
     repo = tmp_path / "software-builder"
-    shutil.copytree(ROOT / "prd-architect", repo / "prd-architect")
+    shutil.copytree(ROOT / "skills/prd-architect", repo / "prd-architect")
     shutil.copytree(ROOT / "docs" / "skill-framework", repo / "docs" / "skill-framework")
     _init_fixture_repo(repo)
     dest = tmp_path / "installed" / "prd-architect"

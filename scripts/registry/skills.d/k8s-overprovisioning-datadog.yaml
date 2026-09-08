@@ -1,5 +1,5 @@
 k8s-overprovisioning-datadog:
-  path: k8s-overprovisioning-datadog
+  path: skills/k8s-overprovisioning-datadog
   category: platform
   invocation: ambient
   hosts:

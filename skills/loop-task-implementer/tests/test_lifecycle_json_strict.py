@@ -6,8 +6,8 @@ import sys
 from pathlib import Path
 
 
-ROOT = Path(__file__).resolve().parents[2]
-SCRIPT = ROOT / "loop-task-implementer/scripts/validate_loop_lifecycle.py"
+ROOT = Path(__file__).resolve().parents[3]
+SCRIPT = ROOT / "skills/loop-task-implementer/scripts/validate_loop_lifecycle.py"
 
 
 def _run(raw: str, tmp_path: Path) -> subprocess.CompletedProcess[str]:

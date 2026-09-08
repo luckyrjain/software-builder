@@ -2,7 +2,7 @@ import re
 from pathlib import Path
 
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
 def read(relative_path: str) -> str:
@@ -53,9 +53,9 @@ def test_shared_k8s_phase_contract_starts_with_discovery_then_resolution():
 
 def test_living_k8s_pipeline_references_include_source_discovery():
     paths = (
-        "k8s-overprovisioning-datadog/reference/decision-graph-schema.md",
-        "k8s-overprovisioning-datadog/workflow/report.md",
-        "k8s-overprovisioning-datadog/examples.md",
+        "skills/k8s-overprovisioning-datadog/reference/decision-graph-schema.md",
+        "skills/k8s-overprovisioning-datadog/workflow/report.md",
+        "skills/k8s-overprovisioning-datadog/examples.md",
     )
 
     for path in paths:
@@ -64,7 +64,7 @@ def test_living_k8s_pipeline_references_include_source_discovery():
 
 
 def test_handoff_and_smoke_docs_enter_through_capability_discovery():
-    handoff = section("incident-rca/workflow/phase-5.md", "## K8s handoff block")
+    handoff = section("skills/incident-rca/workflow/phase-5.md", "## K8s handoff block")
     smoke = read("docs/skill-framework/shared/smoke-test-conventions.md")
     k8s_smoke_row = table_row(smoke, "k8s-overprovisioning-datadog")
 
@@ -93,9 +93,9 @@ def test_active_routing_spec_and_plan_assign_inventory_to_discover_sources():
 
 
 def test_wrappers_inherit_kubernetes_first_prerequisites():
-    release_setup = read("release-readiness-checker/SETUP.md")
-    cost_setup = read("cost-optimization-sprint-planner/SETUP.md")
-    cost_readme = read("cost-optimization-sprint-planner/README.md")
+    release_setup = read("skills/release-readiness-checker/SETUP.md")
+    cost_setup = read("skills/cost-optimization-sprint-planner/SETUP.md")
+    cost_readme = read("skills/cost-optimization-sprint-planner/README.md")
 
     release_k8s_row = table_row(release_setup, "k8s-overprovisioning-datadog installed")
     cost_k8s_row = table_row(cost_setup, "k8s-overprovisioning-datadog installed")
@@ -110,10 +110,10 @@ def test_wrappers_inherit_kubernetes_first_prerequisites():
 
 
 def test_cost_sweep_distinguishes_source_scoped_and_direct_datadog_auth_failures():
-    sweep_policy = read("cost-optimization-sprint-planner/reference/sweep-policy.md")
-    gate_policy = read("cost-optimization-sprint-planner/reference/gate-policy.md")
-    examples = read("cost-optimization-sprint-planner/examples.md")
-    smoke_test = read("cost-optimization-sprint-planner/reference/smoke-test.md")
+    sweep_policy = read("skills/cost-optimization-sprint-planner/reference/sweep-policy.md")
+    gate_policy = read("skills/cost-optimization-sprint-planner/reference/gate-policy.md")
+    examples = read("skills/cost-optimization-sprint-planner/examples.md")
+    smoke_test = read("skills/cost-optimization-sprint-planner/reference/smoke-test.md")
 
     explicit_row = table_row(gate_policy, "explicit-deployment assessment")
     prefilter_row = table_row(gate_policy, "namespace pre-filter candidate discovery")
@@ -133,7 +133,7 @@ def test_cost_sweep_distinguishes_source_scoped_and_direct_datadog_auth_failures
 
 
 def test_cost_wrapper_defers_actionable_recommendations_without_verified_delivery_path():
-    gate_policy = read("cost-optimization-sprint-planner/reference/gate-policy.md")
+    gate_policy = read("skills/cost-optimization-sprint-planner/reference/gate-policy.md")
     manifest_row = next(
         line for line in gate_policy.splitlines() if line.startswith("| Manifest lookup")
     )
@@ -144,9 +144,9 @@ def test_cost_wrapper_defers_actionable_recommendations_without_verified_deliver
 
 
 def test_release_wrapper_preserves_source_scoped_degraded_assessments():
-    gate_policy = read("release-readiness-checker/reference/gate-policy.md")
-    run_check = read("release-readiness-checker/workflow/run-check.md")
-    smoke_test = read("release-readiness-checker/reference/smoke-test.md")
+    gate_policy = read("skills/release-readiness-checker/reference/gate-policy.md")
+    run_check = read("skills/release-readiness-checker/workflow/run-check.md")
+    smoke_test = read("skills/release-readiness-checker/reference/smoke-test.md")
 
     fallback_row = table_row(gate_policy, "One Kubernetes MCP or Datadog source")
     run_section = markdown_section(run_check, "## 3. Rightsizing verdict per service")

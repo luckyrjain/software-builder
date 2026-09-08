@@ -105,10 +105,11 @@ def _copy_manifest_fixture(tmp_path: Path) -> Path:
     # default and every skill's real 4-host declaration looks like an unknown host, drowning out
     # whatever specific drift error each test below means to exercise.
     shutil.copy2(ROOT / "agent-hosts.yaml", tmp_path / "agent-hosts.yaml")
-    for skill_id in load_canonical_manifest(ROOT)["skills"]:
-        skill_dir = tmp_path / skill_id
-        skill_dir.mkdir()
-        shutil.copy2(ROOT / skill_id / "SKILL.md", skill_dir / "SKILL.md")
+    for skill_id, skill in load_canonical_manifest(ROOT)["skills"].items():
+        rel_path = skill.get("path", skill_id)
+        skill_dir = tmp_path / rel_path
+        skill_dir.mkdir(parents=True)
+        shutil.copy2(ROOT / rel_path / "SKILL.md", skill_dir / "SKILL.md")
     return tmp_path
 
 
@@ -176,8 +177,8 @@ def test_canonical_manifest_normalizes_quoted_schema_version(tmp_path: Path):
 
 
 def test_skill_frontmatter_contains_discovery_metadata_only():
-    for skill_id in load_canonical_manifest(ROOT)["skills"]:
-        frontmatter = load_unique_frontmatter(ROOT / skill_id / "SKILL.md")
+    for skill_id, skill in load_canonical_manifest(ROOT)["skills"].items():
+        frontmatter = load_unique_frontmatter(ROOT / skill.get("path", skill_id) / "SKILL.md")
         assert "skill_version" not in frontmatter
         assert "platform_contract" not in frontmatter
 

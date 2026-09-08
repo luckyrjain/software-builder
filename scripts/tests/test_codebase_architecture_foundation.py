@@ -225,7 +225,7 @@ def test_shared_codebase_design_doctrine_is_normative_and_complete() -> None:
 
 
 def test_module_design_contract_is_read_only_and_contains_required_boundaries() -> None:
-    text = (ROOT / "module-design/SKILL.md").read_text()
+    text = (ROOT / "skills/module-design/SKILL.md").read_text()
     assert "name: module-design" in text
     assert "Keywords:" in text
     assert "module-design" in text
@@ -241,7 +241,7 @@ def test_module_design_contract_is_read_only_and_contains_required_boundaries() 
 
 
 def test_codebase_architecture_review_contract_is_evidence_gated_and_read_only() -> None:
-    text = (ROOT / "codebase-architecture-review/SKILL.md").read_text()
+    text = (ROOT / "skills/codebase-architecture-review/SKILL.md").read_text()
     assert "name: codebase-architecture-review" in text
     assert "Keywords:" in text
     assert "read-only" in text
@@ -259,8 +259,8 @@ def test_codebase_architecture_review_contract_is_evidence_gated_and_read_only()
 
 
 def test_codebase_architecture_handoffs_are_offers_not_typed_dispatch() -> None:
-    skill_text = (ROOT / "codebase-architecture-review/SKILL.md").read_text()
-    report_text = (ROOT / "codebase-architecture-review/workflow/report.md").read_text()
+    skill_text = (ROOT / "skills/codebase-architecture-review/SKILL.md").read_text()
+    report_text = (ROOT / "skills/codebase-architecture-review/workflow/report.md").read_text()
     matrix_text = (ROOT / "docs/skill-framework/shared/cross-skill-escalation.md").read_text()
 
     assert "recommended_next_skill: null" in skill_text
@@ -429,8 +429,8 @@ def test_foundation_generation_projects_skills_and_shared_doctrine(tmp_path: Pat
         members = set(archive.getnames())
 
     assert {
-        "software-builder/module-design/SKILL.md",
-        "software-builder/codebase-architecture-review/SKILL.md",
+        "software-builder/skills/module-design/SKILL.md",
+        "software-builder/skills/codebase-architecture-review/SKILL.md",
         "software-builder/docs/skill-framework/shared/codebase-design-principles.md",
     } <= members
 
@@ -449,7 +449,7 @@ def test_matt_depth_and_deletion_doctrine_is_explicit() -> None:
 
 
 def test_architecture_report_requires_matt_visual_candidate_fields() -> None:
-    text = (ROOT / "codebase-architecture-review/reference/report-format.md").read_text()
+    text = (ROOT / "skills/codebase-architecture-review/reference/report-format.md").read_text()
     for phrase in (
         "Recommendation strength",
         "Dependency category",
@@ -462,19 +462,19 @@ def test_architecture_report_requires_matt_visual_candidate_fields() -> None:
 
 
 def test_module_design_evaluates_depth_and_deletion_test() -> None:
-    design_text = (ROOT / "module-design/workflow/design.md").read_text()
+    design_text = (ROOT / "skills/module-design/workflow/design.md").read_text()
     assert "interface surface" in design_text
     assert "deletion test" in design_text
     assert "implementation depth" in design_text
 
-    report_format_text = (ROOT / "module-design/reference/report-format.md").read_text()
+    report_format_text = (ROOT / "skills/module-design/reference/report-format.md").read_text()
     assert "## Depth assessment" in report_format_text
     assert "Interface surface" in report_format_text
     assert "Implementation depth" in report_format_text
     assert "Caller knowledge currently leaked" in report_format_text
     assert "Deletion test" in report_format_text
 
-    pressure_text = (ROOT / "module-design/reference/pressure-tests.md").read_text()
+    pressure_text = (ROOT / "skills/module-design/reference/pressure-tests.md").read_text()
     assert "dependency injection" in pressure_text
     assert "pass-through" in pressure_text
     assert "private helpers" in pressure_text
@@ -482,7 +482,7 @@ def test_module_design_evaluates_depth_and_deletion_test() -> None:
 
 
 def test_visual_report_is_ephemeral_and_safe() -> None:
-    text = (ROOT / "codebase-architecture-review/reference/html-report.md").read_text()
+    text = (ROOT / "skills/codebase-architecture-review/reference/html-report.md").read_text()
     assert "architecture-review-20260905T120000Z.html" in text
     assert re.search(re.escape("https://cdn.tailwindcss.com"), text) is not None
     assert "mermaid@11" in text

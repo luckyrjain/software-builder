@@ -14,8 +14,9 @@ cp -a "${REPO_ROOT}/skills.yaml" "${TMP_REPO}/skills.yaml"
 # install.sh's destination resolution reads agent-hosts.yaml as skills.yaml's sibling
 # (scripts/registry/install_resolver.py).
 cp -a "${REPO_ROOT}/agent-hosts.yaml" "${TMP_REPO}/agent-hosts.yaml"
-cp -a "${REPO_ROOT}/unit-test-creator" "${TMP_REPO}/unit-test-creator"
-cp -a "${REPO_ROOT}/weekly-squad-digest" "${TMP_REPO}/weekly-squad-digest"
+mkdir -p "${TMP_REPO}/skills"
+cp -a "${REPO_ROOT}/skills/unit-test-creator" "${TMP_REPO}/skills/unit-test-creator"
+cp -a "${REPO_ROOT}/skills/weekly-squad-digest" "${TMP_REPO}/skills/weekly-squad-digest"
 mkdir -p "${TMP_REPO}/docs"
 cp -a "${REPO_ROOT}/docs/skill-framework" "${TMP_REPO}/docs/skill-framework"
 if [[ -d "${REPO_ROOT}/docs/superpowers" ]]; then

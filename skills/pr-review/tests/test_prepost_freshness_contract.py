@@ -1,11 +1,11 @@
 from pathlib import Path
 
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 
 
 def test_phase2_to_3_rebuilds_full_identity_before_posting():
-    raw = (ROOT / "pr-review/workflow/phase-2-3-gate.md").read_text(encoding="utf-8")
+    raw = (ROOT / "skills/pr-review/workflow/phase-2-3-gate.md").read_text(encoding="utf-8")
     text = " ".join(raw.split())
     for token in (
         "fresh read-only provider/Git snapshot",

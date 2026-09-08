@@ -3,8 +3,8 @@ from pathlib import Path
 import yaml
 
 
-ROOT = Path(__file__).resolve().parents[2]
-SKILL = ROOT / "loop-task-implementer"
+ROOT = Path(__file__).resolve().parents[3]
+SKILL = ROOT / "skills/loop-task-implementer"
 
 
 def test_loop_task_declares_shared_lifecycle_contract():

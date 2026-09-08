@@ -5,5 +5,5 @@ alwaysApply: false
 
 <!-- GENERATED from skills.yaml + SKILL.md — do not edit; run make generate -->
 
-Invoke the performance-review skill. Read `performance-review/SKILL.md` and follow it.
-Phase index: `performance-review/reference/phase-index.md` when present under the skill directory.
+Invoke the performance-review skill. Read `skills/performance-review/SKILL.md` and follow it.
+Phase index: `skills/performance-review/reference/phase-index.md` when present under the skill directory.

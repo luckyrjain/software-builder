@@ -1,7 +1,7 @@
 from pathlib import Path
 
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 
 
 def _text(path: str) -> str:
@@ -9,7 +9,7 @@ def _text(path: str) -> str:
 
 
 def test_prd_inputs_ingest_domain_manifest_freshness_status():
-    text = _text("prd-architect/workflow/inputs.md")
+    text = _text("skills/prd-architect/workflow/inputs.md")
     for token in (
         "producer manifest PRD artifact freshness status",
         "`ok` — eligible as current-state PRD evidence",
@@ -21,7 +21,7 @@ def test_prd_inputs_ingest_domain_manifest_freshness_status():
 
 
 def test_prd_gate_blocks_stale_or_unverified_domain_prd():
-    text = _text("prd-architect/workflow/gate.md")
+    text = _text("skills/prd-architect/workflow/gate.md")
     for token in (
         "producer-manifest PRD freshness is `ok`",
         "every accepted machine artifact is `ok`",
@@ -32,7 +32,7 @@ def test_prd_gate_blocks_stale_or_unverified_domain_prd():
 
 
 def test_machine_domain_model_forbids_independently_reverified_escape():
-    text = _text("domain-comprehension/reference/machine-domain-model.md")
+    text = _text("skills/domain-comprehension/reference/machine-domain-model.md")
     assert "independently re-verified" not in text
     assert "no ad-hoc independently verified escape" in text
     assert "integrity check against source revisions/machine artifacts passes" in text

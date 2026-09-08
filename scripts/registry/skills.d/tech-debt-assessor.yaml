@@ -1,5 +1,5 @@
 tech-debt-assessor:
-  path: tech-debt-assessor
+  path: skills/tech-debt-assessor
   category: platform
   extends: read-only-leaf-review
   install:

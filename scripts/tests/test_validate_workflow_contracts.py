@@ -21,7 +21,7 @@ FIXTURES = Path(__file__).parent / "fixtures" / "workflow-contracts"
 ROOT = Path(__file__).resolve().parents[2]
 
 _RENDERER_SPEC = importlib.util.spec_from_file_location(
-    "prd_safe_output", ROOT / "prd-architect" / "scripts" / "prd_safe_output.py"
+    "prd_safe_output", ROOT / "skills/prd-architect" / "scripts" / "prd_safe_output.py"
 )
 assert _RENDERER_SPEC and _RENDERER_SPEC.loader
 _RENDERER = importlib.util.module_from_spec(_RENDERER_SPEC)
@@ -253,9 +253,9 @@ def test_rejects_duplicate_nested_typed_frontmatter_field() -> None:
 
 
 def test_prd_architect_review_routes_cover_all_declared_selector_states() -> None:
-    assert validate_skill_contract(ROOT / "prd-architect") == []
+    assert validate_skill_contract(ROOT / "skills/prd-architect") == []
 
-    contract = yaml.safe_load((ROOT / "prd-architect" / "workflow-contract.yaml").read_text())
+    contract = yaml.safe_load((ROOT / "skills/prd-architect" / "workflow-contract.yaml").read_text())
     assert contract["selector_domains"]["premise_verdict"] == [
         "Strong",
         "Reasonable but unvalidated",

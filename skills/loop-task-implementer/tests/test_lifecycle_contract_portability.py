@@ -7,12 +7,12 @@ import yaml
 from scripts.package_skill import package_skill
 
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 CONTRACT = Path("reference/review-lifecycle-contract.yaml")
 
 
 def test_shared_contract_paths_resolve_from_source_repository_root():
-    data = yaml.safe_load((ROOT / "loop-task-implementer" / CONTRACT).read_text(encoding="utf-8"))
+    data = yaml.safe_load((ROOT / "skills/loop-task-implementer" / CONTRACT).read_text(encoding="utf-8"))
     assert data["shared_contract_path_base"] == "package_or_repository_root"
     # Contract paths are logical root-relative paths; source execution resolves
     # them against the repository root, not the reference/ directory.

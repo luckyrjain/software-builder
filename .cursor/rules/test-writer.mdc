@@ -5,5 +5,5 @@ alwaysApply: false
 
 <!-- GENERATED from skills.yaml + SKILL.md — do not edit; run make generate -->
 
-Invoke the test-writer skill. Read `test-writer/SKILL.md` and follow it.
-Phase index: `test-writer/reference/phase-index.md` when present under the skill directory.
+Invoke the test-writer skill. Read `skills/test-writer/SKILL.md` and follow it.
+Phase index: `skills/test-writer/reference/phase-index.md` when present under the skill directory.

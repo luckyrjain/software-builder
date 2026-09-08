@@ -5,5 +5,5 @@ alwaysApply: false
 
 <!-- GENERATED from skills.yaml + SKILL.md — do not edit; run make generate -->
 
-Invoke the architecture-review skill. Read `architecture-review/SKILL.md` and follow it.
-Phase index: `architecture-review/reference/phase-index.md` when present under the skill directory.
+Invoke the architecture-review skill. Read `skills/architecture-review/SKILL.md` and follow it.
+Phase index: `skills/architecture-review/reference/phase-index.md` when present under the skill directory.

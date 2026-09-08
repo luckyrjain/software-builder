@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from scripts.registry.capability_catalog import validate_capabilities_present
 from scripts.registry.composition import validate_composition_graph
@@ -27,6 +27,24 @@ _SKILL_ID_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 _GENERATED_MARKER = "GENERATED from skills.yaml"
 
 
+def _skills_root(root: Path, registry: Registry) -> Path:
+    """The directory that actually holds skill directories, derived from every
+    registry entry's `path:` parent -- not assumed to be the repo root.
+
+    All 41 skills currently share one parent (`skills`), so this resolves to a
+    single subdirectory in the real repository. Falls back to `root` itself if
+    entries disagree on their parent (e.g. an empty or synthetic test registry),
+    matching the pre-migration behavior of scanning the repo root directly.
+    """
+    if not registry.skills:
+        return root
+    parents = {PurePosixPath(entry.path).parent for entry in registry.skills.values()}
+    if len(parents) != 1:
+        return root
+    (only,) = parents
+    return root if only == PurePosixPath(".") else root / only
+
+
 def _skill_directories(root: Path) -> set[str]:
     return {
         path.parent.name
@@ -39,9 +57,9 @@ def _validate_skill_path(root: Path, skill_id: str, entry_path: str) -> list[str
     errors: list[str] = []
     if not _SKILL_ID_RE.match(skill_id):
         errors.append(f"error: {skill_id}: skill id must be lowercase kebab-case (no leading/trailing/double hyphens)")
-    if entry_path != skill_id:
+    if PurePosixPath(entry_path).name != skill_id:
         errors.append(
-            f"error: {skill_id}: path {entry_path!r} must match skill id (no aliases in v1)",
+            f"error: {skill_id}: path {entry_path!r} must end in the skill id (no aliases in v1)",
         )
     resolved_skill_md = (root / entry_path / "SKILL.md").resolve()
     root_resolved = root.resolve()
@@ -88,7 +106,7 @@ def find_stale_generated_adapters(root: Path, registry: Registry) -> list[Path]:
 def _validate_skill_directory_sync(root: Path, registry: Registry) -> list[str]:
     """Every SKILL.md directory must have a registry entry and vice versa."""
     errors: list[str] = []
-    skill_dirs = _skill_directories(root)
+    skill_dirs = _skill_directories(_skills_root(root, registry))
     registry_ids = set(registry.skills.keys())
     for orphan in sorted(skill_dirs - registry_ids):
         errors.append(f"error: {orphan}: directory has SKILL.md but no registry entry")
@@ -176,7 +194,7 @@ def _validate_skill_frontmatter_shape(root: Path, registry: Registry) -> list[st
                 errors.append(
                     f"error: {skill_id}: description missing 'Keywords:' — every other skill's "
                     f"SKILL.md frontmatter description states its routing keywords as "
-                    f"'Keywords: term, term, ...' (see e.g. pr-review/SKILL.md); add the same here",
+                    f"'Keywords: term, term, ...' (see e.g. skills/pr-review/SKILL.md); add the same here",
                 )
 
         errors.extend(

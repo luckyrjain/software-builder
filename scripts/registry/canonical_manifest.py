@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 import yaml
@@ -199,7 +199,7 @@ def validate_canonical_manifest(root: Path = ROOT) -> list[str]:
             except ValueError:
                 errors.append(f"error: {skill_id}: path escapes repository root")
                 continue
-            if skill.get("path", skill_id) != skill_id:
+            if PurePosixPath(str(skill.get("path", skill_id))).name != skill_id:
                 errors.append(f"error: {skill_id}: path must match skill id")
             entrypoint = entrypoint_dir / "SKILL.md"
             if not entrypoint.is_file():

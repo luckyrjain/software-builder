@@ -1,5 +1,5 @@
 change-impact-analyzer:
-  path: change-impact-analyzer
+  path: skills/change-impact-analyzer
   category: analysis
   extends: read-only-leaf-review
   install:

@@ -1,5 +1,5 @@
 cost-optimization-sprint-planner:
-  path: cost-optimization-sprint-planner
+  path: skills/cost-optimization-sprint-planner
   category: platform
   invocation: ambient
   hosts:

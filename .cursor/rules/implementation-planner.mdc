@@ -5,5 +5,5 @@ alwaysApply: false
 
 <!-- GENERATED from skills.yaml + SKILL.md — do not edit; run make generate -->
 
-Invoke the implementation-planner skill. Read `implementation-planner/SKILL.md` and follow it.
-Phase index: `implementation-planner/reference/phase-index.md` when present under the skill directory.
+Invoke the implementation-planner skill. Read `skills/implementation-planner/SKILL.md` and follow it.
+Phase index: `skills/implementation-planner/reference/phase-index.md` when present under the skill directory.

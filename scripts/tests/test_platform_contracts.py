@@ -84,7 +84,7 @@ def test_host_packages_point_at_canonical_skill_tree() -> None:
     codex = json.loads((ROOT / ".codex-plugin/plugin.json").read_text(encoding="utf-8"))
     assert claude["name"] == "software-builder"
     assert codex["name"] == "software-builder"
-    assert codex["skills"] == "./"
+    assert codex["skills"] == "./skills"
 
     skill_ids = set(parse_registry(ROOT / "skills.yaml").skills)
     assert {path.stem for path in (ROOT / ".cursor/rules").glob("*.mdc")} == skill_ids

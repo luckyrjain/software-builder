@@ -5,5 +5,5 @@ alwaysApply: false
 
 <!-- GENERATED from skills.yaml + SKILL.md — do not edit; run make generate -->
 
-Invoke the unit-test-creator skill. Read `unit-test-creator/SKILL.md` and follow it.
-Phase index: `unit-test-creator/reference/phase-index.md` when present under the skill directory.
+Invoke the unit-test-creator skill. Read `skills/unit-test-creator/SKILL.md` and follow it.
+Phase index: `skills/unit-test-creator/reference/phase-index.md` when present under the skill directory.

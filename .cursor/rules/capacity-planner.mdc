@@ -5,5 +5,5 @@ alwaysApply: false
 
 <!-- GENERATED from skills.yaml + SKILL.md — do not edit; run make generate -->
 
-Invoke the capacity-planner skill. Read `capacity-planner/SKILL.md` and follow it.
-Phase index: `capacity-planner/reference/phase-index.md` when present under the skill directory.
+Invoke the capacity-planner skill. Read `skills/capacity-planner/SKILL.md` and follow it.
+Phase index: `skills/capacity-planner/reference/phase-index.md` when present under the skill directory.

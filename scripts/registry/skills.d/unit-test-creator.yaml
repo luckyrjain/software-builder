@@ -1,5 +1,5 @@
 unit-test-creator:
-  path: unit-test-creator
+  path: skills/unit-test-creator
   category: testing
   invocation: ambient
   hosts:

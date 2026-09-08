@@ -5,7 +5,7 @@ from pathlib import Path
 
 import yaml
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 FIXTURE = Path(__file__).resolve().parent / "fixtures" / "phase5-review-metadata.yaml"
 
 sys.path.insert(0, str(ROOT / "scripts"))

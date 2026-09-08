@@ -1,5 +1,5 @@
 migration-program-manager:
-  path: migration-program-manager
+  path: skills/migration-program-manager
   category: migration
   invocation: ambient
   hosts:

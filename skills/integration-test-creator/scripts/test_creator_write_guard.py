@@ -5,7 +5,7 @@ from pathlib import Path
 import runpy
 
 
-CANONICAL = Path(__file__).resolve().parents[2] / "scripts" / "test_creator_write_guard.py"
+CANONICAL = Path(__file__).resolve().parents[3] / "scripts" / "test_creator_write_guard.py"
 
 
 def main() -> None:

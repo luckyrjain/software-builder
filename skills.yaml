@@ -2251,7 +2251,7 @@ profiles:
 # GENERATED from scripts/registry/skills.d/*.yaml — do not edit the skills: mapping; run make generate
 skills:
   api-design-review:
-    path: api-design-review
+    path: skills/api-design-review
     category: review
     extends: read-only-leaf-review
     install:
@@ -2299,7 +2299,7 @@ skills:
       patterns:
       - \b(API design review|API contract review|API versioning review)\b
   api-test-creator:
-    path: api-test-creator
+    path: skills/api-test-creator
     category: testing
     invocation: ambient
     hosts:
@@ -2372,7 +2372,7 @@ skills:
       patterns:
       - \b(API|HTTP|REST)\b.*\b(tests?|testing suite)\b
   architecture-review:
-    path: architecture-review
+    path: skills/architecture-review
     category: review
     extends: read-only-leaf-review
     install:
@@ -2431,7 +2431,7 @@ skills:
         review)\b
       - \bproposed architecture\b
   backlog-runner:
-    path: backlog-runner
+    path: skills/backlog-runner
     category: automation
     invocation: automation-only
     hosts:
@@ -2487,7 +2487,7 @@ skills:
       patterns:
       - \b(backlog|tickets?)\b.*\b(overnight|scheduled|nightly|queue runner)\b
   capacity-planner:
-    path: capacity-planner
+    path: skills/capacity-planner
     category: platform
     extends: read-only-leaf-review
     install:
@@ -2532,7 +2532,7 @@ skills:
       patterns:
       - \b(capacity plan(?:ning)?|capacity forecast|scaling requirements)\b
   change-impact-analyzer:
-    path: change-impact-analyzer
+    path: skills/change-impact-analyzer
     category: analysis
     extends: read-only-leaf-review
     install:
@@ -2597,7 +2597,7 @@ skills:
       - \b(review|regression|correctness|blast radius|rollback risk|deployment risk|release
         risk)\b
   codebase-architecture-review:
-    path: codebase-architecture-review
+    path: skills/codebase-architecture-review
     category: architecture
     extends: read-only-leaf-review
     install:
@@ -2642,7 +2642,7 @@ skills:
       exclude_patterns:
       - \b(PR|MR|pull request|merge request)\s*[#!]?\d+\b
   contract-test-creator:
-    path: contract-test-creator
+    path: skills/contract-test-creator
     category: testing
     invocation: ambient
     hosts:
@@ -2711,7 +2711,7 @@ skills:
       patterns:
       - \b(contract tests?|consumer[- ]driven contract|pact tests?)\b
   cost-optimization-sprint-planner:
-    path: cost-optimization-sprint-planner
+    path: skills/cost-optimization-sprint-planner
     category: platform
     invocation: ambient
     hosts:
@@ -2765,7 +2765,7 @@ skills:
       patterns:
       - \b(cost optimization|cost reduction)\b.*\b(sprint|backlog|prioriti[sz]|plan)\b
   database-review:
-    path: database-review
+    path: skills/database-review
     category: review
     extends: read-only-leaf-review
     install:
@@ -2813,7 +2813,7 @@ skills:
       patterns:
       - \b(database review|schema review|migration review|query plan review)\b
   dependency-upgrade-review:
-    path: dependency-upgrade-review
+    path: skills/dependency-upgrade-review
     category: review
     extends: read-only-leaf-review
     install:
@@ -2859,7 +2859,7 @@ skills:
       patterns:
       - \b(dependency upgrade review|version bump review|CVE review)\b
   deployment-risk-review:
-    path: deployment-risk-review
+    path: skills/deployment-risk-review
     category: review
     extends: read-only-leaf-review
     install:
@@ -2906,7 +2906,7 @@ skills:
       patterns:
       - \b(deployment risk|release risk|blast radius)\b
   domain-comprehension:
-    path: domain-comprehension
+    path: skills/domain-comprehension
     category: architecture
     invocation: ambient
     hosts:
@@ -2974,7 +2974,7 @@ skills:
       - \barchitecture\b.*\bbounded contexts?\b
       - \bunderstand\b.*\bcurrent domain\b
   e2e-test-creator:
-    path: e2e-test-creator
+    path: skills/e2e-test-creator
     category: testing
     invocation: ambient
     hosts:
@@ -3047,7 +3047,7 @@ skills:
       patterns:
       - \b(e2e|end[- ]to[- ]end)\b.*\b(tests?|testing)\b
   engineering-decision-discovery:
-    path: engineering-decision-discovery
+    path: skills/engineering-decision-discovery
     category: architecture
     extends: read-only-leaf-review
     install:
@@ -3091,7 +3091,7 @@ skills:
       exclude_patterns:
       - \b(PR|MR|pull request|merge request)\s*[#!]?\d+\b
   implementation-planner:
-    path: implementation-planner
+    path: skills/implementation-planner
     category: automation
     extends: read-only-leaf-review
     install:
@@ -3243,7 +3243,7 @@ skills:
       - \b(implementation plan|implementation planning|implementation task DAG|task
         decomposition|dependency[- ]aware plan|execution waves)\b
   incident-rca:
-    path: incident-rca
+    path: skills/incident-rca
     category: incident
     invocation: ambient
     hosts:
@@ -3307,7 +3307,7 @@ skills:
       - \b(RCA|root cause|postmortem|production incident|incident investigation)\b
       - \b(5xx|error|latency)\b.*\b(spike|incident|production)\b
   incident-triage-agent:
-    path: incident-triage-agent
+    path: skills/incident-triage-agent
     category: incident
     invocation: automation-only
     hosts:
@@ -3378,7 +3378,7 @@ skills:
       - \b(pager|page|alert webhook|incident webhook)\b.*\b(triage|automation|route|owner)\b
       - \btriage\b.*\b(pager|page|alert webhook|incident webhook)\b
   integration-test-creator:
-    path: integration-test-creator
+    path: skills/integration-test-creator
     category: testing
     invocation: ambient
     hosts:
@@ -3451,7 +3451,7 @@ skills:
       patterns:
       - \b(integration tests?|integration-test)\b
   k8s-overprovisioning-datadog:
-    path: k8s-overprovisioning-datadog
+    path: skills/k8s-overprovisioning-datadog
     category: platform
     invocation: ambient
     hosts:
@@ -3526,7 +3526,7 @@ skills:
       - \b(overprovision\w*|right-?siz\w*)\b.*\b(k8s|kubernetes|pod|deployment|CPU|memory)\b
       - \boverprovisioned\b.*\bCPU\b.*\bmemory\b
   loop-task-implementer:
-    path: loop-task-implementer
+    path: skills/loop-task-implementer
     category: automation
     invocation: ambient
     hosts:
@@ -3604,7 +3604,7 @@ skills:
       - \bimplement\b.*\b(task|ticket|change)\b.*\b(review|fix|until|loop)\b
       - \brepeat\b.*\b(review|fix)\b.*\b(0 issues|zero issues)\b
   migration-program-manager:
-    path: migration-program-manager
+    path: skills/migration-program-manager
     category: migration
     invocation: ambient
     hosts:
@@ -3664,7 +3664,7 @@ skills:
       - \b(migration program|migration portfolio|migration status rollup|migration
         program status)\b
   module-design:
-    path: module-design
+    path: skills/module-design
     category: architecture
     extends: read-only-leaf-review
     install:
@@ -3711,7 +3711,7 @@ skills:
       - \b(security|performance|database|observability|dependency upgrade|deployment
         risk) review\b
   mysql-to-postgres-sql:
-    path: mysql-to-postgres-sql
+    path: skills/mysql-to-postgres-sql
     category: migration
     invocation: ambient
     hosts:
@@ -3767,7 +3767,7 @@ skills:
       - \b(MySQL|mysql)\b.*\b(Postgres|PostgreSQL|postgresql)\b
       - \bmigrate\b.*\bSQL dialect\b
   new-hire-guide:
-    path: new-hire-guide
+    path: skills/new-hire-guide
     category: architecture
     invocation: ambient
     hosts:
@@ -3825,7 +3825,7 @@ skills:
       patterns:
       - \b(new hire|onboarding)\b.*\b(guide|tour|first week|service map)\b
   observability-review:
-    path: observability-review
+    path: skills/observability-review
     category: review
     extends: read-only-leaf-review
     install:
@@ -3872,7 +3872,7 @@ skills:
       patterns:
       - \b(observability review|SLO review|alert coverage|tracing coverage)\b
   performance-review:
-    path: performance-review
+    path: skills/performance-review
     category: review
     extends: read-only-leaf-review
     install:
@@ -3917,7 +3917,7 @@ skills:
       patterns:
       - \b(performance review|N\+1|slow query review|concurrency review)\b
   pr-gatekeeper:
-    path: pr-gatekeeper
+    path: skills/pr-gatekeeper
     category: review
     invocation: automation-only
     hosts:
@@ -3984,7 +3984,7 @@ skills:
       - \b(PR|MR|pull request|merge request)\b.*\b(webhook|gatekeeper|automation gate|opened
         event)\b
   pr-review:
-    path: pr-review
+    path: skills/pr-review
     category: review
     invocation: ambient
     hosts:
@@ -4079,7 +4079,7 @@ skills:
       - \b(production ready|production readiness|ready to release|ready to deploy|ready
         to ship)\b
   prd-architect:
-    path: prd-architect
+    path: skills/prd-architect
     category: product
     invocation: ambient
     hosts:
@@ -4142,7 +4142,7 @@ skills:
       - \bready PRD\b.*\bimplementation design\b
       - \bready PRD\b.*\bsystem design\b
   production-readiness-review:
-    path: production-readiness-review
+    path: skills/production-readiness-review
     category: release
     extends: read-only-leaf-review
     install:
@@ -4452,7 +4452,7 @@ skills:
       - \bship (this|that) (pr|mr|pull request|merge request|change)\b
       - \bgo[- /]?no[- ]?go for (this|one) (change|pr|mr|pull request|merge request)\b
   release-readiness-checker:
-    path: release-readiness-checker
+    path: skills/release-readiness-checker
     category: release
     invocation: ambient
     hosts:
@@ -4603,7 +4603,7 @@ skills:
       - \bgo[- /]?no[- ]?go for (this|one) (change|pr|mr|pull request|merge request)\b
       - \bgo[- /]?no[- ]?go\b.*\bdeployment risk\b
   resilience-review:
-    path: resilience-review
+    path: skills/resilience-review
     category: review
     extends: read-only-leaf-review
     install:
@@ -4657,7 +4657,7 @@ skills:
       - \b(incident|outage|postmortem|root cause|RCA)\b
       - \b(capacity|headroom|forecast|sizing)\b
   security-review:
-    path: security-review
+    path: skills/security-review
     category: review
     extends: read-only-leaf-review
     install:
@@ -4703,7 +4703,7 @@ skills:
       patterns:
       - \b(security review|authN|authZ|SSRF|tenant isolation review|cryptography review)\b
   squad-map:
-    path: squad-map
+    path: skills/squad-map
     category: architecture
     invocation: ambient
     hosts:
@@ -4763,7 +4763,7 @@ skills:
       patterns:
       - \b(squad map|ownership map|CODEOWNERS|service ownership map)\b
   system-design:
-    path: system-design
+    path: skills/system-design
     category: architecture
     extends: read-only-leaf-review
     install:
@@ -4823,7 +4823,7 @@ skills:
       exclude_patterns:
       - \bwhat\b.*\bservices?\b.*\b(touch|affected|impact)\b
   tech-debt-assessor:
-    path: tech-debt-assessor
+    path: skills/tech-debt-assessor
     category: platform
     extends: read-only-leaf-review
     install:
@@ -4862,7 +4862,7 @@ skills:
       patterns:
       - \b(tech(?:nical)? debt (?:assess|priorit|rank)|debt backlog)\b
   test-writer:
-    path: test-writer
+    path: skills/test-writer
     category: product
     invocation: ambient
     hosts:
@@ -4959,7 +4959,7 @@ skills:
       - \b(write|generate|add)\b\s+(tests?|test coverage)\b(?!.*\b(unit|integration|contract|e2e|end[-
         ]to[- ]end|API|HTTP|REST)\b)
   unit-test-creator:
-    path: unit-test-creator
+    path: skills/unit-test-creator
     category: testing
     invocation: ambient
     hosts:
@@ -5028,7 +5028,7 @@ skills:
       patterns:
       - \b(unit tests?|unit-test)\b
   weekly-squad-digest:
-    path: weekly-squad-digest
+    path: skills/weekly-squad-digest
     category: migration
     invocation: automation-only
     hosts:
@@ -5100,7 +5100,7 @@ skills:
       patterns:
       - \bweekly\b.*\b(squad|team)\b.*\b(digest|summary|rollup)\b
   who-owns-x-bot:
-    path: who-owns-x-bot
+    path: skills/who-owns-x-bot
     category: architecture
     invocation: automation-only
     hosts:

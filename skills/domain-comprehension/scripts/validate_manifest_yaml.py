@@ -22,7 +22,7 @@ if str(_SCRIPT_DIR) not in sys.path:
 # -- proved by its manifest -- may only ever load the copy vendored beside this script, never a
 # path in the shared skills root that another tool could have written.
 if not (_SCRIPT_DIR.parent / ".software-builder-manifest.json").is_file():
-    _REPO_ROOT = _SCRIPT_DIR.parents[1]
+    _REPO_ROOT = _SCRIPT_DIR.parents[2]
     if (_REPO_ROOT / "skills.yaml").is_file() and str(_REPO_ROOT) not in sys.path:
         sys.path.append(str(_REPO_ROOT))
 

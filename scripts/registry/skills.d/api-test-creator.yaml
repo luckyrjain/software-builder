@@ -1,5 +1,5 @@
 api-test-creator:
-  path: api-test-creator
+  path: skills/api-test-creator
   category: testing
   invocation: ambient
   hosts:

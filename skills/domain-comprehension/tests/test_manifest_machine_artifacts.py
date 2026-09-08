@@ -3,12 +3,12 @@ from pathlib import Path
 import yaml
 
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 
 
 def test_manifest_tracks_required_machine_artifacts():
     manifest = yaml.safe_load(
-        (ROOT / "domain-comprehension/templates/manifest.yaml").read_text(encoding="utf-8")
+        (ROOT / "skills/domain-comprehension/templates/manifest.yaml").read_text(encoding="utf-8")
     )
     by_id = {item["id"]: item for item in manifest["artifacts"]}
     expected = {

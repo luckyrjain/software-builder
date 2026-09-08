@@ -1,5 +1,5 @@
 engineering-decision-discovery:
-  path: engineering-decision-discovery
+  path: skills/engineering-decision-discovery
   category: architecture
   extends: read-only-leaf-review
   install:

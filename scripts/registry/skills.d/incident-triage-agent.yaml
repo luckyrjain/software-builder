@@ -1,5 +1,5 @@
 incident-triage-agent:
-  path: incident-triage-agent
+  path: skills/incident-triage-agent
   category: incident
   invocation: automation-only
   hosts:

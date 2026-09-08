@@ -1,5 +1,5 @@
 architecture-review:
-  path: architecture-review
+  path: skills/architecture-review
   category: review
   extends: read-only-leaf-review
   install:

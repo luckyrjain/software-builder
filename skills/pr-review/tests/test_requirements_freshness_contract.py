@@ -1,11 +1,11 @@
 from pathlib import Path
 
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 
 
 def test_phase2_to_3_reloads_authoritative_requirements_before_posting():
-    text = (ROOT / "pr-review/workflow/phase-2-3-gate.md").read_text(encoding="utf-8")
+    text = (ROOT / "skills/pr-review/workflow/phase-2-3-gate.md").read_text(encoding="utf-8")
     for token in (
         "same authoritative requirements source",
         "Do not reuse the Phase 1/2 requirements object",

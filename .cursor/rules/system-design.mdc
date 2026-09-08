@@ -5,5 +5,5 @@ alwaysApply: false
 
 <!-- GENERATED from skills.yaml + SKILL.md — do not edit; run make generate -->
 
-Invoke the system-design skill. Read `system-design/SKILL.md` and follow it.
-Phase index: `system-design/reference/phase-index.md` when present under the skill directory.
+Invoke the system-design skill. Read `skills/system-design/SKILL.md` and follow it.
+Phase index: `skills/system-design/reference/phase-index.md` when present under the skill directory.

@@ -1,5 +1,5 @@
 who-owns-x-bot:
-  path: who-owns-x-bot
+  path: skills/who-owns-x-bot
   category: architecture
   invocation: automation-only
   hosts:

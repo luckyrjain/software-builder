@@ -61,8 +61,8 @@ def test_caps_only_ever_lower_confidence(bands, proposed, kwargs, expected) -> N
 def test_both_skill_adapters_agree_with_the_shared_rule(bands) -> None:
     """pr-review publishes lowercase bands and incident-rca UPPERCASE ones; the case lives at
     each edge, and the rule behind them is this module."""
-    pr_review = _load(ROOT / "pr-review/scripts/pr_review_policy_guards.py", "prr_guards")
-    incident = _load(ROOT / "incident-rca/scripts/incident_rca_policy_guards.py", "rca_guards")
+    pr_review = _load(ROOT / "skills/pr-review/scripts/pr_review_policy_guards.py", "prr_guards")
+    incident = _load(ROOT / "skills/incident-rca/scripts/incident_rca_policy_guards.py", "rca_guards")
 
     for proposed in ("high", "medium", "low"):
         for kwargs in ({}, {"single_source": True}, {"assumed_only": True}):

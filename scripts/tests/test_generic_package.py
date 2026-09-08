@@ -65,7 +65,7 @@ def test_generic_package_rejects_untracked_markdown_targets_and_bad_anchors(tmp_
 
 
 def test_generic_package_strips_only_non_runtime_changelog_links() -> None:
-    source = ROOT / "release-readiness-checker" / "reference" / "gate-policy.md"
+    source = ROOT / "skills/release-readiness-checker" / "reference" / "gate-policy.md"
     packaged = _packaged_bytes(ROOT, source).decode("utf-8")
     assert "[CHANGELOG.md](../CHANGELOG.md)" not in packaged
     assert "CHANGELOG.md" in packaged
@@ -198,5 +198,15 @@ def test_generic_package_excludes_non_runtime_paths(generic_package: _BuiltGener
 
 
 def test_generic_package_markdown_links_resolve(generic_package: _BuiltGenericPackage) -> None:
-    markdown_files = sorted(generic_package.packaged_root.rglob("*.md"))
+    # docs/superpowers/ is frozen historical record, excluded from strict link checking
+    # the same way scripts/validate_references.py excludes it and generic_package.py's
+    # own packaging-time reachability walk does (_is_frozen_history) -- a pre-migration
+    # spec whose relative links pointed at a skill that has since moved is expected
+    # prior art, not a defect in the packaged runtime content.
+    frozen = generic_package.packaged_root / "docs" / "superpowers"
+    markdown_files = sorted(
+        path
+        for path in generic_package.packaged_root.rglob("*.md")
+        if frozen not in path.parents
+    )
     assert validate_files(markdown_files) == []

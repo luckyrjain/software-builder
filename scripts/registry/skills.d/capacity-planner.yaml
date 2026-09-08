@@ -1,5 +1,5 @@
 capacity-planner:
-  path: capacity-planner
+  path: skills/capacity-planner
   category: platform
   extends: read-only-leaf-review
   install:

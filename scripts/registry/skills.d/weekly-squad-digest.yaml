@@ -1,5 +1,5 @@
 weekly-squad-digest:
-  path: weekly-squad-digest
+  path: skills/weekly-squad-digest
   category: migration
   invocation: automation-only
   hosts:

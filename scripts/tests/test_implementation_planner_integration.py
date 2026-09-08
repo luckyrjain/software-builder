@@ -70,8 +70,8 @@ def test_implementation_plan_v1_contract_fields() -> None:
 
 
 def test_planner_skill_package_declares_read_only_contract() -> None:
-    frontmatter = load_unique_frontmatter(ROOT / "implementation-planner" / "SKILL.md")
-    skill_text = (ROOT / "implementation-planner" / "SKILL.md").read_text(encoding="utf-8")
+    frontmatter = load_unique_frontmatter(ROOT / "skills/implementation-planner" / "SKILL.md")
+    skill_text = (ROOT / "skills/implementation-planner" / "SKILL.md").read_text(encoding="utf-8")
     assert frontmatter["name"] == "implementation-planner"
     for required_text in (
         "host.report.write",

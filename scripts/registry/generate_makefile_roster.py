@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from scripts.registry.models import Registry, SkillEntry
 
@@ -98,11 +98,12 @@ _GENERATED_HEADER = (
     "# untrusted-content-guard pair table, $$skill/... loop joins) can all resolve\n"
     "# through one variable instead of assuming skills sit at the repo root. It is\n"
     "# generated rather than hand-set for the same reason ALL_SKILLS is: a single\n"
-    "# real move of the skill directories (skills.yaml's `path` fields) should not\n"
-    "# require also hand-editing every call site in make/core.mk -- only this\n"
-    "# generator's value needs to change. Currently \".\" (skills still live at the\n"
-    "# repo root); a future migration step will change this generator to emit\n"
-    "# \"skills\" once skill directories actually move under skills/.\n"
+    "# real move of the skill directories (skills.yaml's `path` fields) requires no\n"
+    "# hand-edit of any call site in make/core.mk -- this generator derives the\n"
+    "# value from every registry entry's `path:` field's parent directory, so it\n"
+    "# tracks skills.yaml automatically (falling back to \".\" if entries disagree\n"
+    "# on their parent, e.g. a test fixture registry that doesn't model a real\n"
+    "# single-directory move).\n"
 )
 
 
@@ -111,6 +112,23 @@ def _ordered_skills(registry: Registry) -> tuple[str, ...]:
     ordered = [skill for skill in ALL_SKILLS_ORDER if skill in registry_skills]
     extra = sorted(registry_skills - set(ALL_SKILLS_ORDER))
     return tuple(ordered + extra)
+
+
+def _skills_dir(registry: Registry) -> str:
+    """Derive SKILLS_DIR from every registry entry's `path:` parent directory.
+
+    All 41 skills currently share one parent (`.` before this migration, `skills`
+    after), so this always resolves to a single value in the real repository. Falls
+    back to `.` if entries disagree (e.g. an empty or synthetic test registry) or
+    there are no skills at all, matching the historical default.
+    """
+    if not registry.skills:
+        return "."
+    parents = {PurePosixPath(entry.path).parent.as_posix() for entry in registry.skills.values()}
+    if len(parents) != 1:
+        return "."
+    (only,) = parents
+    return "." if only in ("", ".") else only
 
 
 def install_target(skill_id: str, *, host_prefix: str = "") -> str:
@@ -159,7 +177,7 @@ def render_makefile_roster(registry: Registry) -> str:
         _GENERATED_HEADER
         + "\n"
         + f"ALL_SKILLS := {skills}\n"
-        + "SKILLS_DIR := .\n"
+        + f"SKILLS_DIR := {_skills_dir(registry)}\n"
         + "\n"
         + render_install_targets(registry)
     )

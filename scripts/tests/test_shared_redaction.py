@@ -35,12 +35,12 @@ def redaction():
 
 @pytest.fixture(scope="module")
 def kubesense():
-    return _load(ROOT / "incident-rca/scripts/kubesense_logs.py", "kubesense_logs_under_test")
+    return _load(ROOT / "skills/incident-rca/scripts/kubesense_logs.py", "kubesense_logs_under_test")
 
 
 @pytest.fixture(scope="module")
 def prd():
-    return _load(ROOT / "prd-architect/scripts/prd_safe_output.py", "prd_safe_output_under_test")
+    return _load(ROOT / "skills/prd-architect/scripts/prd_safe_output.py", "prd_safe_output_under_test")
 
 
 def _by_name(patterns) -> dict[str, object]:

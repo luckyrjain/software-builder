@@ -5,5 +5,5 @@ alwaysApply: false
 
 <!-- GENERATED from skills.yaml + SKILL.md — do not edit; run make generate -->
 
-Invoke the mysql-to-postgres-sql skill. Read `mysql-to-postgres-sql/SKILL.md` and follow it.
-Phase index: `mysql-to-postgres-sql/reference/phase-index.md` when present under the skill directory.
+Invoke the mysql-to-postgres-sql skill. Read `skills/mysql-to-postgres-sql/SKILL.md` and follow it.
+Phase index: `skills/mysql-to-postgres-sql/reference/phase-index.md` when present under the skill directory.

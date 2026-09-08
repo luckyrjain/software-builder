@@ -5,5 +5,5 @@ alwaysApply: false
 
 <!-- GENERATED from skills.yaml + SKILL.md — do not edit; run make generate -->
 
-Invoke the tech-debt-assessor skill. Read `tech-debt-assessor/SKILL.md` and follow it.
-Phase index: `tech-debt-assessor/reference/phase-index.md` when present under the skill directory.
+Invoke the tech-debt-assessor skill. Read `skills/tech-debt-assessor/SKILL.md` and follow it.
+Phase index: `skills/tech-debt-assessor/reference/phase-index.md` when present under the skill directory.

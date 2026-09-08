@@ -5,5 +5,5 @@ alwaysApply: false
 
 <!-- GENERATED from skills.yaml + SKILL.md — do not edit; run make generate -->
 
-Invoke the codebase-architecture-review skill. Read `codebase-architecture-review/SKILL.md` and follow it.
-Phase index: `codebase-architecture-review/reference/phase-index.md` when present under the skill directory.
+Invoke the codebase-architecture-review skill. Read `skills/codebase-architecture-review/SKILL.md` and follow it.
+Phase index: `skills/codebase-architecture-review/reference/phase-index.md` when present under the skill directory.

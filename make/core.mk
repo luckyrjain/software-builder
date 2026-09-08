@@ -256,7 +256,7 @@ lint-pr-review-scripts:
 lint-pr-review-skill:
 	@python3 scripts/lint_skills.py --skill pr-review
 	@echo "lint-pr-review-skill: route-aware workflow contract (workflow_version, phase, produces, consumes checked here too)"
-	@python3 -m scripts.validate_workflow_contracts pr-review
+	@python3 -m scripts.validate_workflow_contracts $(SKILLS_DIR)/pr-review
 	@grep -q 'smoke-test' $(SKILLS_DIR)/pr-review/SKILL.md || \
 		{ echo "error: pr-review SKILL.md must link to reference/smoke-test.md" >&2; exit 1; }
 	@grep -q 'Merge gate' $(SKILLS_DIR)/pr-review/workflow/phase-5.md || \
@@ -287,7 +287,7 @@ lint-pr-gatekeeper:
 lint-k8s-skill:
 	@python3 scripts/lint_skills.py --skill k8s-overprovisioning-datadog
 	@echo "lint-k8s-skill: route-aware workflow contract (workflow_version, phase, produces, consumes checked here too)"
-	@python3 -m scripts.validate_workflow_contracts k8s-overprovisioning-datadog
+	@python3 -m scripts.validate_workflow_contracts $(SKILLS_DIR)/k8s-overprovisioning-datadog
 	@echo "lint-k8s-skill: p95 not positively asserted in memory-sizing section"
 	@sec=$$(awk '/^## Memory request utilization/{f=1;next} /^## /{f=0} f' $(SKILLS_DIR)/k8s-overprovisioning-datadog/thresholds.md); \
 	bad=$$(printf '%s\n' "$$sec" | grep -in 'p95' | grep -ivE 'not|never' || true); \
@@ -359,7 +359,7 @@ lint-k8s: lint-k8s-skill
 lint-incident-rca:
 	@python3 scripts/lint_skills.py --skill incident-rca
 	@echo "lint-incident-rca: route-aware workflow contract (workflow_version, phase, produces, consumes checked here too)"
-	@python3 -m scripts.validate_workflow_contracts incident-rca
+	@python3 -m scripts.validate_workflow_contracts $(SKILLS_DIR)/incident-rca
 	@echo "lint-incident-rca: evidence.example.json parses as JSON"
 	@cache="$(CURDIR)/.pycache-lint-rca"; \
 	export PYTHONDONTWRITEBYTECODE=1 PYTHONPYCACHEPREFIX="$$cache"; \
@@ -413,7 +413,7 @@ lint-incident-rca:
 lint-incident-triage-agent:
 	@python3 scripts/lint_skills.py --skill incident-triage-agent
 	@echo "lint-incident-triage-agent: route-aware workflow contract (workflow_version, phase, produces, consumes checked here too)"
-	@python3 -m scripts.validate_workflow_contracts incident-triage-agent
+	@python3 -m scripts.validate_workflow_contracts $(SKILLS_DIR)/incident-triage-agent
 
 lint-domain-comprehension: lint-domain-comprehension-skill lint-domain-comprehension-scripts
 
@@ -713,7 +713,7 @@ lint-test-writer:
 lint-prd-architect:
 	@python3 scripts/lint_skills.py --skill prd-architect
 	@echo "lint-prd-architect: route-aware workflow contract (workflow_version, phase, produces, consumes checked here too)"
-	@python3 -m scripts.validate_workflow_contracts prd-architect
+	@python3 -m scripts.validate_workflow_contracts $(SKILLS_DIR)/prd-architect
 	@test -f $(SKILLS_DIR)/prd-architect/report-template.md || \
 		{ echo "error: missing $(SKILLS_DIR)/prd-architect/report-template.md" >&2; exit 1; }
 	@test -f $(SKILLS_DIR)/prd-architect/prd-architect.eval.md || \
@@ -986,7 +986,7 @@ lint-framework:
 		docs/skill-framework/shared/examples/assessment-metadata-k8s.example.yaml \
 		$(SKILLS_DIR)/pr-review/tests/fixtures/phase5-review-metadata.yaml || exit 1
 	@echo "lint-framework: source-tree reference validation (anchors + local links, cross-cutting docs)"
-	@python3 scripts/validate_references.py --source-tree . --exclude docs/superpowers --exclude .claude/worktrees || exit 1
+	@python3 scripts/validate_references.py --source-tree . --exclude docs/superpowers --exclude .claude/worktrees --exclude CHANGELOG.md || exit 1
 	@echo "lint-framework: ok"
 
 # Split out from lint-framework: this is the repo's dominant test cost (the shared
