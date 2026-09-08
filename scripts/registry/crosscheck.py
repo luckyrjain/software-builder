@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from collections import Counter
 from pathlib import Path, PurePosixPath
 
 from scripts.registry.capability_catalog import validate_capabilities_present
@@ -119,6 +120,40 @@ def _validate_skill_paths(root: Path, registry: Registry) -> list[str]:
     errors: list[str] = []
     for skill_id, entry in registry.skills.items():
         errors.extend(_validate_skill_path(root, skill_id, entry.path))
+    return errors
+
+
+def _validate_skill_paths_share_one_parent(registry: Registry) -> list[str]:
+    """Every registered skill's path must sit under the same parent directory.
+
+    `_validate_skill_directory_sync` derives `_skills_root()` by majority vote across
+    every entry's `path:` parent (falling back to `root` on a tie/disagreement) -- so a
+    single skill scaffolded at the wrong location (e.g. `scripts/new_skill.py` regressing
+    to a bare `path: <id>` instead of `path: skills/<id>`) doesn't get its own error.
+    Instead every *other*, correctly-placed skill silently fails to resolve against the
+    now-wrong `_skills_root()`, producing N misleading "registry entry has no SKILL.md
+    directory" errors that never name the actual offender. Checking parent-consistency
+    directly here, before that happens, reports exactly the one (or few) entries that
+    disagree with the rest of the registry -- not everyone else.
+    """
+    if len(registry.skills) < 2:
+        return []
+    parents_by_skill = {
+        skill_id: PurePosixPath(entry.path).parent for skill_id, entry in registry.skills.items()
+    }
+    distinct_parents = set(parents_by_skill.values())
+    if len(distinct_parents) <= 1:
+        return []
+    majority_parent, _ = Counter(parents_by_skill.values()).most_common(1)[0]
+    errors: list[str] = []
+    for skill_id in sorted(parents_by_skill):
+        parent = parents_by_skill[skill_id]
+        if parent != majority_parent:
+            errors.append(
+                f"error: {skill_id}: path {registry.skills[skill_id].path!r} has parent "
+                f"{parent.as_posix()!r}, inconsistent with the rest of the registry "
+                f"(every other skill's path parent is {majority_parent.as_posix()!r})",
+            )
     return errors
 
 
@@ -247,6 +282,7 @@ def validate_registry(root: Path) -> list[str]:
     errors: list[str] = []
     errors.extend(_validate_skill_directory_sync(root, registry))
     errors.extend(_validate_skill_paths(root, registry))
+    errors.extend(_validate_skill_paths_share_one_parent(registry))
     errors.extend(_validate_install_graph(registry))
     errors.extend(_validate_invoke_skill_references(registry))
     errors.extend(validate_composition_graph(registry))
