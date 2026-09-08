@@ -4,7 +4,7 @@
 set -euo pipefail
 
 SKILL_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-REPO_ROOT="$(cd "$SKILL_ROOT/.." && pwd)"
+REPO_ROOT="$(cd "$SKILL_ROOT/../.." && pwd)"
 SCAN="$SKILL_ROOT/scripts/scan-mysql-dialect.sh"
 FAIL=0
 

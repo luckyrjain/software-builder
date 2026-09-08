@@ -4,7 +4,7 @@
 set -euo pipefail
 
 SKILL_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-REPO_ROOT="$(cd "$SKILL_ROOT/.." && pwd)"
+REPO_ROOT="$(cd "$SKILL_ROOT/../.." && pwd)"
 FIXTURE="$SKILL_ROOT/tests/fixtures/check-content"
 VALIDATOR="$SKILL_ROOT/scripts/validate_manifest_yaml.py"
 FAIL=0
