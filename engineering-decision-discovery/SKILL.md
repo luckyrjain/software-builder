@@ -115,12 +115,11 @@ Routing: [skill-routing.md](../docs/skill-framework/shared/skill-routing.md). Fu
 | Finding (this skill) | Next skill |
 |-----------------------|------------|
 | Resolved decisions describe one module's contract, seam, or interface | **module-design** |
-| Resolved decisions span multiple modules, components, or implementation sequencing | **system-design** |
 | The frontier itself needs an architecture-wide risk/scale/trade-off verdict, not a decision interview | **architecture-review** |
 | A retained `codebase-architecture-review` candidate or `architecture-review` recommendation arrives as `selected_candidate` | Consume it as evidence for the tree; never re-run that skill's own analysis |
 
 Offer a handoff only when its trigger is met; never invoke it automatically. `recommended_next_skill` in
-the typed result names only a triggered offer, or `null`.
+the typed result names only a triggered offer, or `null`. No other escalation is in scope.
 
 ## Framework
 

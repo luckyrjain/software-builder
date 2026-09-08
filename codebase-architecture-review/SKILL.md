@@ -94,7 +94,9 @@ Routing: [skill-routing.md](../docs/skill-framework/shared/skill-routing.md).
 
 The shared matrix is normative: [cross-skill-escalation.md](../docs/skill-framework/shared/cross-skill-escalation.md).
 Its `module-design` and `domain-comprehension` entries are optional, human-visible handoff offers requiring
-a separate user-authorized invocation. They do not change this report's fixed `recommended_next_skill: null`;
+a separate user-authorized invocation. It also lists an `engineering-decision-discovery` entry, offered the
+same way, for grilling and resolving a retained candidate's unresolved engineering decisions before
+module/interface design begins. They do not change this report's fixed `recommended_next_skill: null`;
 this skill never invokes or registers another skill.
 
 ## Framework

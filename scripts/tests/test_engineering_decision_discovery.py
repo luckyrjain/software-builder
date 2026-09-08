@@ -1,16 +1,17 @@
-"""RED baseline for the engineering-decision-discovery skill (Child Plan B, Task 1),
-plus Task 2's package-level assertions.
+"""Registry/routing/eval-admission tests for the engineering-decision-discovery
+skill (Child Plan B, Task 1), plus Task 2's package-level assertions.
 
-The routing/registry/eval-admission tests below (Task 1) stay RED until Task 3
-wires the skill into skills.yaml -- registry wiring is explicitly out of
-scope for Task 2. Every test in the original RED baseline is expected to
-fail until then; the exact failure messages recorded at that commit live in
+The routing/registry/eval-admission tests below started as a RED baseline in
+Task 1 and stayed RED until Task 3 wired the skill into skills.yaml --
+registry wiring was explicitly out of scope for Task 2. Task 3 has since
+registered the skill, so every test in the original RED baseline now passes;
+the exact failure messages recorded at the RED-baseline commit live in
 docs/superpowers/specs/2026-09-05-engineering-decision-discovery-red-baseline.md.
 
 The `TestSkillPackageContract` tests below were added by Task 2. They check
 the skill package's own text and workflow invariants directly against the
-files on disk -- not through the registry or dispatcher -- so they do not
-depend on Task 3's registry wiring and are expected to pass now.
+files on disk -- not through the registry or dispatcher -- so they never
+depended on Task 3's registry wiring and have passed since Task 2.
 """
 
 from __future__ import annotations
@@ -74,9 +75,9 @@ def test_concrete_module_design_still_routes_to_module_design() -> None:
     assert "engineering-decision-discovery" not in result.candidates
 
 
-def test_decision_discovery_skill_is_not_yet_registered() -> None:
-    """Documents the RED reason every other test in this module fails on: there is
-    no `engineering-decision-discovery` entry in skills.yaml yet (Task 3 adds it)."""
+def test_decision_discovery_skill_is_registered() -> None:
+    """Documents the registration every other test in this module depends on: Task 3
+    added an `engineering-decision-discovery` entry to skills.yaml."""
     registry = load_registry(ROOT)
     assert "engineering-decision-discovery" in registry.skills
 
@@ -250,7 +251,7 @@ class TestSkillPackageContract:
         lowered = text.lower()
         assert "recommend" in lowered
         assert "a recommendation is never a decision" in lowered
-        assert "record the decision and recompute" in lowered or "record" in lowered
+        assert "record the decision and recompute" in lowered
         assert "explicitly deferred" in lowered
 
     def test_report_workflow_forbids_source_and_adr_writes(self) -> None:

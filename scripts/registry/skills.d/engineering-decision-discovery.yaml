@@ -27,17 +27,6 @@ engineering-decision-discovery:
   output_contract:
     produces:
     - engineering_decision_record
-    produce_fields:
-      engineering_decision_record:
-      - title
-      - decision_scope
-      - decision_tree
-      - frontier
-      - recommendations
-      - resolved_decisions
-      - unresolved_decisions
-      - alternatives_rejected
-      - limitations
   dependencies: []
   degraded_behavior:
     missing_capability: host.repository.read
@@ -48,6 +37,6 @@ engineering-decision-discovery:
     external_services: None — reads repository and caller-provided context only
   routing:
     patterns:
-    - \b(grill me|challenge my plan|stress[- ]test this|question my assumptions|help me decide|what decisions are missing|interrogate this architecture)\b
+    - \b(grill me|challenge my plan|stress[- ]test this( [\w-]+)? decision|question my assumptions|help me decide|what decisions are missing|interrogate this architecture)\b
     exclude_patterns:
     - \b(PR|MR|pull request|merge request)\s*[#!]?\d+\b

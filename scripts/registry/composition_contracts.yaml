@@ -573,17 +573,6 @@ skills:
     produces:
     - engineering_decision_record
     consumes: []
-    produce_fields:
-      engineering_decision_record:
-      - title
-      - decision_scope
-      - decision_tree
-      - frontier
-      - recommendations
-      - resolved_decisions
-      - unresolved_decisions
-      - alternatives_rejected
-      - limitations
     write_authority: read-only
   implementation-planner:
     produces:
