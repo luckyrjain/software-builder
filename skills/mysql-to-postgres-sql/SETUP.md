@@ -10,7 +10,7 @@
 | **Review cadence** | Quarterly — or when pinned MCP package versions change |
 | **External services** | None (local scan scripts and domain packs) |
 
-See [setup-freshness.md](../docs/skill-framework/shared/setup-freshness.md) for the shared contract.
+See [setup-freshness.md](../../docs/skill-framework/shared/setup-freshness.md) for the shared contract.
 ## Ambient discovery is intended
 
 This skill deliberately does **not** set `disable-model-invocation` in its frontmatter, so the agent
@@ -38,7 +38,7 @@ make install-claude-mysql-to-postgres-sql
 ```
 
 No restart needed — a new Claude Code session picks it up. This skill has no required MCP servers;
-see [claude-code-setup.md](../docs/skill-framework/shared/claude-code-setup.md) if you wire the
+see [claude-code-setup.md](../../docs/skill-framework/shared/claude-code-setup.md) if you wire the
 optional post-cutover Datadog check.
 
 ### Kiro / in-repo discovery
@@ -59,8 +59,8 @@ No MCP required — code scan + rewrite only. Optional **Datadog MCP** for post-
 
 ## Framework links
 
-- [skill-framework README](../docs/skill-framework/README.md)
-- [cross-skill-escalation](../docs/skill-framework/shared/cross-skill-escalation.md)
+- [skill-framework README](../../docs/skill-framework/README.md)
+- [cross-skill-escalation](../../docs/skill-framework/shared/cross-skill-escalation.md)
 
 ## Smoke test
 

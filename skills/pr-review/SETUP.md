@@ -10,7 +10,7 @@
 | **Review cadence** | Quarterly — or when pinned MCP package versions change |
 | **External services** | GitLab MCP or GitHub App/MCP or gh, Jira MCP (optional) |
 
-See [setup-freshness.md](../docs/skill-framework/shared/setup-freshness.md) for the shared contract.
+See [setup-freshness.md](../../docs/skill-framework/shared/setup-freshness.md) for the shared contract.
 A Cursor Agent Skill that reviews a GitHub pull request or GitLab merge request and posts severity-labelled
 comments when the connected provider capability supports posting. Uses provider MCP/App tools (or `gh`
 read fallback for GitHub) for code and
@@ -20,7 +20,7 @@ context.
 ## Quickstart
 
 Install the skill first for either provider: clone `software-builder` (root
-[README.md § Install](../README.md#install)), run `make install-pr-review`, and restart Cursor.
+[README.md § Install](../../README.md#install)), run `make install-pr-review`, and restart Cursor.
 
 ### GitHub quickstart
 
@@ -209,7 +209,7 @@ The `mcp.json` snippet in § 3 already uses `"${GITLAB_PERSONAL_ACCESS_TOKEN}"` 
 ## 2. Install the skill
 
 Already cloned `software-builder`? Run `make install-pr-review` (or `bash scripts/install.sh pr-review`) from
-the repo root — see the root [README.md § Install](../README.md#install) for the full clone/install
+the repo root — see the root [README.md § Install](../../README.md#install) for the full clone/install
 steps and single-skill install targets, which apply the same way here.
 
 Restart Cursor so skills and MCP servers reload.
@@ -222,7 +222,7 @@ Restart Cursor so skills and MCP servers reload.
 the same JSON snippets from § 3 below, placed in `.mcp.json` / via `claude mcp add-json` instead of
 `~/.cursor/mcp.json` — the GitLab plugin / Duo MCP path in § 3 is Cursor-GUI-only, so use the
 `@zereight/mcp-gitlab` inline-posting entry instead. Full mapping:
-[claude-code-setup.md](../docs/skill-framework/shared/claude-code-setup.md).
+[claude-code-setup.md](../../docs/skill-framework/shared/claude-code-setup.md).
 
 ### Kiro / in-repo discovery
 
@@ -462,10 +462,10 @@ Phase 0 announces posting mode and workspace scope. Warnings when:
 
 ## Framework conventions
 
-- Index: [docs/skill-framework/README.md](../docs/skill-framework/README.md)
-- Confidence: [confidence-bands](../docs/skill-framework/shared/confidence-bands.md)
-- Escalation: [cross-skill-escalation](../docs/skill-framework/shared/cross-skill-escalation.md)
-- Smoke tests: [smoke-test-conventions](../docs/skill-framework/shared/smoke-test-conventions.md)
-- Examples: [examples-conventions](../docs/skill-framework/shared/examples-conventions.md)
-- Phases: [phase-glossary](../docs/skill-framework/shared/phase-glossary.md)
-- Post-actions: [post-action-templates](../docs/skill-framework/shared/post-action-templates.md)
+- Index: [docs/skill-framework/README.md](../../docs/skill-framework/README.md)
+- Confidence: [confidence-bands](../../docs/skill-framework/shared/confidence-bands.md)
+- Escalation: [cross-skill-escalation](../../docs/skill-framework/shared/cross-skill-escalation.md)
+- Smoke tests: [smoke-test-conventions](../../docs/skill-framework/shared/smoke-test-conventions.md)
+- Examples: [examples-conventions](../../docs/skill-framework/shared/examples-conventions.md)
+- Phases: [phase-glossary](../../docs/skill-framework/shared/phase-glossary.md)
+- Post-actions: [post-action-templates](../../docs/skill-framework/shared/post-action-templates.md)

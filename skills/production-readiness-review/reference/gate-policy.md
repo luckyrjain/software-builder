@@ -47,7 +47,7 @@ confirmation gate), it instead returns `BLOCKED` to this skill — never a rende
 reviewing this skill's own output would have to answer out of context. Treat a `BLOCKED` return as that
 dimension's outcome: `UNKNOWN`, with the block reason preserved in `evidence_refs`. This is an
 escalation the report surfaces (a required action naming which specialist to run directly, per
-[cross-skill-escalation.md](../../docs/skill-framework/shared/cross-skill-escalation.md)), not a
+[cross-skill-escalation.md](../../../docs/skill-framework/shared/cross-skill-escalation.md)), not a
 gate this skill silently answers on the child's behalf.
 
 ## Verdict precedence

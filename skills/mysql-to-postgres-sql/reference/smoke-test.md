@@ -73,7 +73,7 @@ bash tests/run_pressure_tests.sh
 |---------|--------------|
 | Scan exits 0 unexpectedly | `rg` missing — script errors, not clean |
 | Agent skips scan | skill-contract §2 — re-run gate |
-| Wrong skill invoked | Check [skill-routing.md](../../docs/skill-framework/shared/skill-routing.md) |
+| Wrong skill invoked | Check [skill-routing.md](../../../docs/skill-framework/shared/skill-routing.md) |
 | Broken rewrites | Load function-translations + migration-edge-cases |
 
 Maintainer pressure scenarios: [pressure-tests.md](pressure-tests.md).

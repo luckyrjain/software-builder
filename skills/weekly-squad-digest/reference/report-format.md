@@ -8,12 +8,12 @@
 under `<other squad>`") come from a raw `org_rollup_item` inside one of the two rollup JSON files — each
 producing skill (migration-program-manager, cost-optimization-sprint-planner) escapes these same values
 for *its own* Markdown report, but
-[org-rollup-schema.md](../../docs/skill-framework/shared/org-rollup-schema.md) itself defines no
+[org-rollup-schema.md](../../../docs/skill-framework/shared/org-rollup-schema.md) itself defines no
 escaping — the JSON rollup file carries the raw value, so this skill's own render of that value into
 `WEEKLY_SQUAD_DIGEST.md` is its own responsibility, not inherited from either producer. Separately, both
 rollup file paths (`<migration_rollup_path>`, `<cost_rollup_path>`) come from the caller-supplied
 `rollup_manifest` input itself, not from any `org_rollup_item` — a distinct untrusted-input vector per
-[prompt-injection.md](../../docs/skill-framework/shared/prompt-injection.md) (see
+[prompt-injection.md](../../../docs/skill-framework/shared/prompt-injection.md) (see
 [SKILL.md](../SKILL.md)'s own "Untrusted content" note). Both groups need the identical treatment below,
 for different reasons — an escaping fix to `org-rollup-schema.md` would only ever cover `service`/
 `squad`, never the rollup paths.
@@ -30,7 +30,7 @@ for different reasons — an escaping fix to `org-rollup-schema.md` would only e
 2. **Then**, since all four are short, identifier-shaped values (a service name, a squad name, a file
    path), wrap the (already-escaped) value in an inline code span, first **removing** any backtick
    already in it
-   ([safe-output.md § Rule 4](../../docs/skill-framework/shared/safe-output.md#rule-4-markdown-chat-escaping)) —
+   ([safe-output.md § Rule 4](../../../docs/skill-framework/shared/safe-output.md#rule-4-markdown-chat-escaping)) —
    a backslash before the backtick does not work, since CommonMark code-span delimiters are matched
    before backslash escapes are resolved.
 
@@ -108,7 +108,7 @@ status line for every run.>
 - **The same `service` appearing in both rollups under different squads is cross-referenced, never
   silently presented as two unrelated rows** — `migration_program_rollup.json` and
   `cost_optimization_sprint_rollup.json` resolve `squad` via different join mechanisms (see
-  [org-rollup-schema.md § 3](../../docs/skill-framework/shared/org-rollup-schema.md#3-join-key-squad-map-is-the-only-authoritative-source))
+  [org-rollup-schema.md § 3](../../../docs/skill-framework/shared/org-rollup-schema.md#3-join-key-squad-map-is-the-only-authoritative-source))
   and can legitimately disagree — a real case, not hypothetical. Each row's own sub-section table gets a
   Notes pointer to the other section/squad; this skill never reconciles which squad is "right," since
   neither rollup's own join is this skill's to override. Match via `scripts/digest_grouping.py`

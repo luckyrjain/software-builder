@@ -9,7 +9,7 @@ Human-readable guide to everything in the **software-builder** repository. Agent
 |----------|------------|
 | [../CONTEXT.md](../CONTEXT.md) | Domain glossary — platform vocabulary (skills, hosts, composition, evidence) |
 | [../CONTEXT-MAP.md](../CONTEXT-MAP.md) | Platform vs target-system context map |
-| [../domain-comprehension/CONTEXT.md](../domain-comprehension/CONTEXT.md) | Target-system vocabulary (bounded contexts, as-built PRD, squads) |
+| [../skills/domain-comprehension/CONTEXT.md](../skills/domain-comprehension/CONTEXT.md) | Target-system vocabulary (bounded contexts, as-built PRD, squads) |
 | [../README.md](../README.md) | Install, invoke, and quick usage for all skills |
 | [REPOSITORY.md](REPOSITORY.md) | Repo layout, `Makefile`, `scripts/`, lint targets, git hooks |
 | [OPERATIONS.md](OPERATIONS.md) | Operator runbook — stale install lock, host-evidence refresh, `VERSION` bump trigger, generated-roster recovery |
@@ -32,47 +32,47 @@ Each skill is a self-contained directory copied to `~/.cursor/skills/<name>/` on
 <!-- skill-doc-links:start -->
 | Skill | Human overview | Agent entry | Setup |
 |-------|----------------|-------------|-------|
-| **api-design-review** | [api-design-review/README.md](../api-design-review/README.md) | [api-design-review/SKILL.md](../api-design-review/SKILL.md) | [api-design-review/SETUP.md](../api-design-review/SETUP.md) |
-| **api-test-creator** | [api-test-creator/README.md](../api-test-creator/README.md) | [api-test-creator/SKILL.md](../api-test-creator/SKILL.md) | [api-test-creator/SETUP.md](../api-test-creator/SETUP.md) |
-| **architecture-review** | [architecture-review/README.md](../architecture-review/README.md) | [architecture-review/SKILL.md](../architecture-review/SKILL.md) | [architecture-review/SETUP.md](../architecture-review/SETUP.md) |
-| **backlog-runner** | [backlog-runner/README.md](../backlog-runner/README.md) | [backlog-runner/SKILL.md](../backlog-runner/SKILL.md) | [backlog-runner/SETUP.md](../backlog-runner/SETUP.md) |
-| **capacity-planner** | [capacity-planner/README.md](../capacity-planner/README.md) | [capacity-planner/SKILL.md](../capacity-planner/SKILL.md) | [capacity-planner/SETUP.md](../capacity-planner/SETUP.md) |
-| **change-impact-analyzer** | [change-impact-analyzer/README.md](../change-impact-analyzer/README.md) | [change-impact-analyzer/SKILL.md](../change-impact-analyzer/SKILL.md) | [change-impact-analyzer/SETUP.md](../change-impact-analyzer/SETUP.md) |
-| **codebase-architecture-review** | [codebase-architecture-review/README.md](../codebase-architecture-review/README.md) | [codebase-architecture-review/SKILL.md](../codebase-architecture-review/SKILL.md) | [codebase-architecture-review/SETUP.md](../codebase-architecture-review/SETUP.md) |
-| **contract-test-creator** | [contract-test-creator/README.md](../contract-test-creator/README.md) | [contract-test-creator/SKILL.md](../contract-test-creator/SKILL.md) | [contract-test-creator/SETUP.md](../contract-test-creator/SETUP.md) |
-| **cost-optimization-sprint-planner** | [cost-optimization-sprint-planner/README.md](../cost-optimization-sprint-planner/README.md) | [cost-optimization-sprint-planner/SKILL.md](../cost-optimization-sprint-planner/SKILL.md) | [cost-optimization-sprint-planner/SETUP.md](../cost-optimization-sprint-planner/SETUP.md) |
-| **database-review** | [database-review/README.md](../database-review/README.md) | [database-review/SKILL.md](../database-review/SKILL.md) | [database-review/SETUP.md](../database-review/SETUP.md) |
-| **dependency-upgrade-review** | [dependency-upgrade-review/README.md](../dependency-upgrade-review/README.md) | [dependency-upgrade-review/SKILL.md](../dependency-upgrade-review/SKILL.md) | [dependency-upgrade-review/SETUP.md](../dependency-upgrade-review/SETUP.md) |
-| **deployment-risk-review** | [deployment-risk-review/README.md](../deployment-risk-review/README.md) | [deployment-risk-review/SKILL.md](../deployment-risk-review/SKILL.md) | [deployment-risk-review/SETUP.md](../deployment-risk-review/SETUP.md) |
-| **domain-comprehension** | [domain-comprehension/README.md](../domain-comprehension/README.md) | [domain-comprehension/SKILL.md](../domain-comprehension/SKILL.md) | [domain-comprehension/SETUP.md](../domain-comprehension/SETUP.md) |
-| **e2e-test-creator** | [e2e-test-creator/README.md](../e2e-test-creator/README.md) | [e2e-test-creator/SKILL.md](../e2e-test-creator/SKILL.md) | [e2e-test-creator/SETUP.md](../e2e-test-creator/SETUP.md) |
-| **engineering-decision-discovery** | [engineering-decision-discovery/README.md](../engineering-decision-discovery/README.md) | [engineering-decision-discovery/SKILL.md](../engineering-decision-discovery/SKILL.md) | [engineering-decision-discovery/SETUP.md](../engineering-decision-discovery/SETUP.md) |
-| **implementation-planner** | [implementation-planner/README.md](../implementation-planner/README.md) | [implementation-planner/SKILL.md](../implementation-planner/SKILL.md) | [implementation-planner/SETUP.md](../implementation-planner/SETUP.md) |
-| **incident-rca** | [incident-rca/README.md](../incident-rca/README.md) | [incident-rca/SKILL.md](../incident-rca/SKILL.md) | [incident-rca/SETUP.md](../incident-rca/SETUP.md) |
-| **incident-triage-agent** | [incident-triage-agent/README.md](../incident-triage-agent/README.md) | [incident-triage-agent/SKILL.md](../incident-triage-agent/SKILL.md) | [incident-triage-agent/SETUP.md](../incident-triage-agent/SETUP.md) |
-| **integration-test-creator** | [integration-test-creator/README.md](../integration-test-creator/README.md) | [integration-test-creator/SKILL.md](../integration-test-creator/SKILL.md) | [integration-test-creator/SETUP.md](../integration-test-creator/SETUP.md) |
-| **k8s-overprovisioning-datadog** | [k8s-overprovisioning-datadog/README.md](../k8s-overprovisioning-datadog/README.md) | [k8s-overprovisioning-datadog/SKILL.md](../k8s-overprovisioning-datadog/SKILL.md) | [k8s-overprovisioning-datadog/SETUP.md](../k8s-overprovisioning-datadog/SETUP.md) |
-| **loop-task-implementer** | [loop-task-implementer/README.md](../loop-task-implementer/README.md) | [loop-task-implementer/SKILL.md](../loop-task-implementer/SKILL.md) | [loop-task-implementer/SETUP.md](../loop-task-implementer/SETUP.md) |
-| **migration-program-manager** | [migration-program-manager/README.md](../migration-program-manager/README.md) | [migration-program-manager/SKILL.md](../migration-program-manager/SKILL.md) | [migration-program-manager/SETUP.md](../migration-program-manager/SETUP.md) |
-| **module-design** | [module-design/README.md](../module-design/README.md) | [module-design/SKILL.md](../module-design/SKILL.md) | [module-design/SETUP.md](../module-design/SETUP.md) |
-| **mysql-to-postgres-sql** | [mysql-to-postgres-sql/README.md](../mysql-to-postgres-sql/README.md) | [mysql-to-postgres-sql/SKILL.md](../mysql-to-postgres-sql/SKILL.md) | [mysql-to-postgres-sql/SETUP.md](../mysql-to-postgres-sql/SETUP.md) |
-| **new-hire-guide** | [new-hire-guide/README.md](../new-hire-guide/README.md) | [new-hire-guide/SKILL.md](../new-hire-guide/SKILL.md) | [new-hire-guide/SETUP.md](../new-hire-guide/SETUP.md) |
-| **observability-review** | [observability-review/README.md](../observability-review/README.md) | [observability-review/SKILL.md](../observability-review/SKILL.md) | [observability-review/SETUP.md](../observability-review/SETUP.md) |
-| **performance-review** | [performance-review/README.md](../performance-review/README.md) | [performance-review/SKILL.md](../performance-review/SKILL.md) | [performance-review/SETUP.md](../performance-review/SETUP.md) |
-| **pr-gatekeeper** | [pr-gatekeeper/README.md](../pr-gatekeeper/README.md) | [pr-gatekeeper/SKILL.md](../pr-gatekeeper/SKILL.md) | [pr-gatekeeper/SETUP.md](../pr-gatekeeper/SETUP.md) |
-| **pr-review** | [pr-review/README.md](../pr-review/README.md) | [pr-review/SKILL.md](../pr-review/SKILL.md) | [pr-review/SETUP.md](../pr-review/SETUP.md) |
-| **prd-architect** | [prd-architect/README.md](../prd-architect/README.md) | [prd-architect/SKILL.md](../prd-architect/SKILL.md) | [prd-architect/SETUP.md](../prd-architect/SETUP.md) |
-| **production-readiness-review** | [production-readiness-review/README.md](../production-readiness-review/README.md) | [production-readiness-review/SKILL.md](../production-readiness-review/SKILL.md) | [production-readiness-review/SETUP.md](../production-readiness-review/SETUP.md) |
-| **release-readiness-checker** | [release-readiness-checker/README.md](../release-readiness-checker/README.md) | [release-readiness-checker/SKILL.md](../release-readiness-checker/SKILL.md) | [release-readiness-checker/SETUP.md](../release-readiness-checker/SETUP.md) |
-| **resilience-review** | [resilience-review/README.md](../resilience-review/README.md) | [resilience-review/SKILL.md](../resilience-review/SKILL.md) | [resilience-review/SETUP.md](../resilience-review/SETUP.md) |
-| **security-review** | [security-review/README.md](../security-review/README.md) | [security-review/SKILL.md](../security-review/SKILL.md) | [security-review/SETUP.md](../security-review/SETUP.md) |
-| **squad-map** | [squad-map/README.md](../squad-map/README.md) | [squad-map/SKILL.md](../squad-map/SKILL.md) | [squad-map/SETUP.md](../squad-map/SETUP.md) |
-| **system-design** | [system-design/README.md](../system-design/README.md) | [system-design/SKILL.md](../system-design/SKILL.md) | [system-design/SETUP.md](../system-design/SETUP.md) |
-| **tech-debt-assessor** | [tech-debt-assessor/README.md](../tech-debt-assessor/README.md) | [tech-debt-assessor/SKILL.md](../tech-debt-assessor/SKILL.md) | [tech-debt-assessor/SETUP.md](../tech-debt-assessor/SETUP.md) |
-| **test-writer** | [test-writer/README.md](../test-writer/README.md) | [test-writer/SKILL.md](../test-writer/SKILL.md) | [test-writer/SETUP.md](../test-writer/SETUP.md) |
-| **unit-test-creator** | [unit-test-creator/README.md](../unit-test-creator/README.md) | [unit-test-creator/SKILL.md](../unit-test-creator/SKILL.md) | [unit-test-creator/SETUP.md](../unit-test-creator/SETUP.md) |
-| **weekly-squad-digest** | [weekly-squad-digest/README.md](../weekly-squad-digest/README.md) | [weekly-squad-digest/SKILL.md](../weekly-squad-digest/SKILL.md) | [weekly-squad-digest/SETUP.md](../weekly-squad-digest/SETUP.md) |
-| **who-owns-x-bot** | [who-owns-x-bot/README.md](../who-owns-x-bot/README.md) | [who-owns-x-bot/SKILL.md](../who-owns-x-bot/SKILL.md) | [who-owns-x-bot/SETUP.md](../who-owns-x-bot/SETUP.md) |
+| **api-design-review** | [api-design-review/README.md](../skills/api-design-review/README.md) | [api-design-review/SKILL.md](../skills/api-design-review/SKILL.md) | [api-design-review/SETUP.md](../skills/api-design-review/SETUP.md) |
+| **api-test-creator** | [api-test-creator/README.md](../skills/api-test-creator/README.md) | [api-test-creator/SKILL.md](../skills/api-test-creator/SKILL.md) | [api-test-creator/SETUP.md](../skills/api-test-creator/SETUP.md) |
+| **architecture-review** | [architecture-review/README.md](../skills/architecture-review/README.md) | [architecture-review/SKILL.md](../skills/architecture-review/SKILL.md) | [architecture-review/SETUP.md](../skills/architecture-review/SETUP.md) |
+| **backlog-runner** | [backlog-runner/README.md](../skills/backlog-runner/README.md) | [backlog-runner/SKILL.md](../skills/backlog-runner/SKILL.md) | [backlog-runner/SETUP.md](../skills/backlog-runner/SETUP.md) |
+| **capacity-planner** | [capacity-planner/README.md](../skills/capacity-planner/README.md) | [capacity-planner/SKILL.md](../skills/capacity-planner/SKILL.md) | [capacity-planner/SETUP.md](../skills/capacity-planner/SETUP.md) |
+| **change-impact-analyzer** | [change-impact-analyzer/README.md](../skills/change-impact-analyzer/README.md) | [change-impact-analyzer/SKILL.md](../skills/change-impact-analyzer/SKILL.md) | [change-impact-analyzer/SETUP.md](../skills/change-impact-analyzer/SETUP.md) |
+| **codebase-architecture-review** | [codebase-architecture-review/README.md](../skills/codebase-architecture-review/README.md) | [codebase-architecture-review/SKILL.md](../skills/codebase-architecture-review/SKILL.md) | [codebase-architecture-review/SETUP.md](../skills/codebase-architecture-review/SETUP.md) |
+| **contract-test-creator** | [contract-test-creator/README.md](../skills/contract-test-creator/README.md) | [contract-test-creator/SKILL.md](../skills/contract-test-creator/SKILL.md) | [contract-test-creator/SETUP.md](../skills/contract-test-creator/SETUP.md) |
+| **cost-optimization-sprint-planner** | [cost-optimization-sprint-planner/README.md](../skills/cost-optimization-sprint-planner/README.md) | [cost-optimization-sprint-planner/SKILL.md](../skills/cost-optimization-sprint-planner/SKILL.md) | [cost-optimization-sprint-planner/SETUP.md](../skills/cost-optimization-sprint-planner/SETUP.md) |
+| **database-review** | [database-review/README.md](../skills/database-review/README.md) | [database-review/SKILL.md](../skills/database-review/SKILL.md) | [database-review/SETUP.md](../skills/database-review/SETUP.md) |
+| **dependency-upgrade-review** | [dependency-upgrade-review/README.md](../skills/dependency-upgrade-review/README.md) | [dependency-upgrade-review/SKILL.md](../skills/dependency-upgrade-review/SKILL.md) | [dependency-upgrade-review/SETUP.md](../skills/dependency-upgrade-review/SETUP.md) |
+| **deployment-risk-review** | [deployment-risk-review/README.md](../skills/deployment-risk-review/README.md) | [deployment-risk-review/SKILL.md](../skills/deployment-risk-review/SKILL.md) | [deployment-risk-review/SETUP.md](../skills/deployment-risk-review/SETUP.md) |
+| **domain-comprehension** | [domain-comprehension/README.md](../skills/domain-comprehension/README.md) | [domain-comprehension/SKILL.md](../skills/domain-comprehension/SKILL.md) | [domain-comprehension/SETUP.md](../skills/domain-comprehension/SETUP.md) |
+| **e2e-test-creator** | [e2e-test-creator/README.md](../skills/e2e-test-creator/README.md) | [e2e-test-creator/SKILL.md](../skills/e2e-test-creator/SKILL.md) | [e2e-test-creator/SETUP.md](../skills/e2e-test-creator/SETUP.md) |
+| **engineering-decision-discovery** | [engineering-decision-discovery/README.md](../skills/engineering-decision-discovery/README.md) | [engineering-decision-discovery/SKILL.md](../skills/engineering-decision-discovery/SKILL.md) | [engineering-decision-discovery/SETUP.md](../skills/engineering-decision-discovery/SETUP.md) |
+| **implementation-planner** | [implementation-planner/README.md](../skills/implementation-planner/README.md) | [implementation-planner/SKILL.md](../skills/implementation-planner/SKILL.md) | [implementation-planner/SETUP.md](../skills/implementation-planner/SETUP.md) |
+| **incident-rca** | [incident-rca/README.md](../skills/incident-rca/README.md) | [incident-rca/SKILL.md](../skills/incident-rca/SKILL.md) | [incident-rca/SETUP.md](../skills/incident-rca/SETUP.md) |
+| **incident-triage-agent** | [incident-triage-agent/README.md](../skills/incident-triage-agent/README.md) | [incident-triage-agent/SKILL.md](../skills/incident-triage-agent/SKILL.md) | [incident-triage-agent/SETUP.md](../skills/incident-triage-agent/SETUP.md) |
+| **integration-test-creator** | [integration-test-creator/README.md](../skills/integration-test-creator/README.md) | [integration-test-creator/SKILL.md](../skills/integration-test-creator/SKILL.md) | [integration-test-creator/SETUP.md](../skills/integration-test-creator/SETUP.md) |
+| **k8s-overprovisioning-datadog** | [k8s-overprovisioning-datadog/README.md](../skills/k8s-overprovisioning-datadog/README.md) | [k8s-overprovisioning-datadog/SKILL.md](../skills/k8s-overprovisioning-datadog/SKILL.md) | [k8s-overprovisioning-datadog/SETUP.md](../skills/k8s-overprovisioning-datadog/SETUP.md) |
+| **loop-task-implementer** | [loop-task-implementer/README.md](../skills/loop-task-implementer/README.md) | [loop-task-implementer/SKILL.md](../skills/loop-task-implementer/SKILL.md) | [loop-task-implementer/SETUP.md](../skills/loop-task-implementer/SETUP.md) |
+| **migration-program-manager** | [migration-program-manager/README.md](../skills/migration-program-manager/README.md) | [migration-program-manager/SKILL.md](../skills/migration-program-manager/SKILL.md) | [migration-program-manager/SETUP.md](../skills/migration-program-manager/SETUP.md) |
+| **module-design** | [module-design/README.md](../skills/module-design/README.md) | [module-design/SKILL.md](../skills/module-design/SKILL.md) | [module-design/SETUP.md](../skills/module-design/SETUP.md) |
+| **mysql-to-postgres-sql** | [mysql-to-postgres-sql/README.md](../skills/mysql-to-postgres-sql/README.md) | [mysql-to-postgres-sql/SKILL.md](../skills/mysql-to-postgres-sql/SKILL.md) | [mysql-to-postgres-sql/SETUP.md](../skills/mysql-to-postgres-sql/SETUP.md) |
+| **new-hire-guide** | [new-hire-guide/README.md](../skills/new-hire-guide/README.md) | [new-hire-guide/SKILL.md](../skills/new-hire-guide/SKILL.md) | [new-hire-guide/SETUP.md](../skills/new-hire-guide/SETUP.md) |
+| **observability-review** | [observability-review/README.md](../skills/observability-review/README.md) | [observability-review/SKILL.md](../skills/observability-review/SKILL.md) | [observability-review/SETUP.md](../skills/observability-review/SETUP.md) |
+| **performance-review** | [performance-review/README.md](../skills/performance-review/README.md) | [performance-review/SKILL.md](../skills/performance-review/SKILL.md) | [performance-review/SETUP.md](../skills/performance-review/SETUP.md) |
+| **pr-gatekeeper** | [pr-gatekeeper/README.md](../skills/pr-gatekeeper/README.md) | [pr-gatekeeper/SKILL.md](../skills/pr-gatekeeper/SKILL.md) | [pr-gatekeeper/SETUP.md](../skills/pr-gatekeeper/SETUP.md) |
+| **pr-review** | [pr-review/README.md](../skills/pr-review/README.md) | [pr-review/SKILL.md](../skills/pr-review/SKILL.md) | [pr-review/SETUP.md](../skills/pr-review/SETUP.md) |
+| **prd-architect** | [prd-architect/README.md](../skills/prd-architect/README.md) | [prd-architect/SKILL.md](../skills/prd-architect/SKILL.md) | [prd-architect/SETUP.md](../skills/prd-architect/SETUP.md) |
+| **production-readiness-review** | [production-readiness-review/README.md](../skills/production-readiness-review/README.md) | [production-readiness-review/SKILL.md](../skills/production-readiness-review/SKILL.md) | [production-readiness-review/SETUP.md](../skills/production-readiness-review/SETUP.md) |
+| **release-readiness-checker** | [release-readiness-checker/README.md](../skills/release-readiness-checker/README.md) | [release-readiness-checker/SKILL.md](../skills/release-readiness-checker/SKILL.md) | [release-readiness-checker/SETUP.md](../skills/release-readiness-checker/SETUP.md) |
+| **resilience-review** | [resilience-review/README.md](../skills/resilience-review/README.md) | [resilience-review/SKILL.md](../skills/resilience-review/SKILL.md) | [resilience-review/SETUP.md](../skills/resilience-review/SETUP.md) |
+| **security-review** | [security-review/README.md](../skills/security-review/README.md) | [security-review/SKILL.md](../skills/security-review/SKILL.md) | [security-review/SETUP.md](../skills/security-review/SETUP.md) |
+| **squad-map** | [squad-map/README.md](../skills/squad-map/README.md) | [squad-map/SKILL.md](../skills/squad-map/SKILL.md) | [squad-map/SETUP.md](../skills/squad-map/SETUP.md) |
+| **system-design** | [system-design/README.md](../skills/system-design/README.md) | [system-design/SKILL.md](../skills/system-design/SKILL.md) | [system-design/SETUP.md](../skills/system-design/SETUP.md) |
+| **tech-debt-assessor** | [tech-debt-assessor/README.md](../skills/tech-debt-assessor/README.md) | [tech-debt-assessor/SKILL.md](../skills/tech-debt-assessor/SKILL.md) | [tech-debt-assessor/SETUP.md](../skills/tech-debt-assessor/SETUP.md) |
+| **test-writer** | [test-writer/README.md](../skills/test-writer/README.md) | [test-writer/SKILL.md](../skills/test-writer/SKILL.md) | [test-writer/SETUP.md](../skills/test-writer/SETUP.md) |
+| **unit-test-creator** | [unit-test-creator/README.md](../skills/unit-test-creator/README.md) | [unit-test-creator/SKILL.md](../skills/unit-test-creator/SKILL.md) | [unit-test-creator/SETUP.md](../skills/unit-test-creator/SETUP.md) |
+| **weekly-squad-digest** | [weekly-squad-digest/README.md](../skills/weekly-squad-digest/README.md) | [weekly-squad-digest/SKILL.md](../skills/weekly-squad-digest/SKILL.md) | [weekly-squad-digest/SETUP.md](../skills/weekly-squad-digest/SETUP.md) |
+| **who-owns-x-bot** | [who-owns-x-bot/README.md](../skills/who-owns-x-bot/README.md) | [who-owns-x-bot/SKILL.md](../skills/who-owns-x-bot/SKILL.md) | [who-owns-x-bot/SETUP.md](../skills/who-owns-x-bot/SETUP.md) |
 <!-- skill-doc-links:end -->
 
 A one-line "invoke / does" summary of every skill is in root [README.md § Skills](../README.md#skills) —
@@ -100,7 +100,7 @@ Skills reference each other when a finding belongs in another workflow:
 | incident-rca | Incident + unclear service owner | squad-map |
 | who-owns-x-bot | Caller wants the full mapping table, not one Slack answer | squad-map |
 | who-owns-x-bot | Caller wants bounded contexts / domain map, not just ownership | domain-comprehension |
-| who-owns-x-bot | `query` names a service mid-incident (surfaced as a suffix line appended to the single reply — a single-shot Slack reply cannot itself switch skills; exact trigger keywords and template: [who-owns-x-bot/reference/slack-format.md § Escalation suffix](../who-owns-x-bot/reference/slack-format.md#escalation-suffix-mid-incident-query)) | incident-rca |
+| who-owns-x-bot | `query` names a service mid-incident (surfaced as a suffix line appended to the single reply — a single-shot Slack reply cannot itself switch skills; exact trigger keywords and template: [who-owns-x-bot/reference/slack-format.md § Escalation suffix](../skills/who-owns-x-bot/reference/slack-format.md#escalation-suffix-mid-incident-query)) | incident-rca |
 | new-hire-guide | Caller wants a one-off ownership lookup, not a tour | squad-map |
 | new-hire-guide | Caller wants the full org-wide domain map, not scoped to one person | domain-comprehension |
 | release-readiness-checker | Caller wants one MR reviewed, not a release-wide sweep | pr-review |
@@ -249,7 +249,7 @@ These are planning artifacts; the live behavior is defined in each skill's own `
 | `reference/query-playbook.md` | Per-source Datadog/KubeSense/GitLab/Jenkins/Jira query recipes |
 | `reference/mcp-capabilities.md` | Connected-server detection, degraded modes |
 | `reference/manual-scoring.md` | Hypothesis weights when the optional correlator CLI is absent |
-| `reference/evidence.example.json` | Canonical evidence bundle shape (`schema_version: 4`; see [evidence-schema.md](../incident-rca/reference/evidence-schema.md)) |
+| `reference/evidence.example.json` | Canonical evidence bundle shape (`schema_version: 4`; see [evidence-schema.md](../skills/incident-rca/reference/evidence-schema.md)) |
 | `report-template.md` | Output sections and quality checklist |
 | `reference/smoke-test.md` | Post-install validation steps |
 

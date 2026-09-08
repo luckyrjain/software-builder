@@ -7,7 +7,7 @@ All notable changes to the cost-optimization-sprint-planner skill. Per-file `wor
 
 ### Added
 - Initial skill release — org-wide sweep wrapper around k8s-overprovisioning-datadog, implementing
-  [org-rollup-schema.md](../docs/skill-framework/shared/org-rollup-schema.md)'s `k8s_waste` adapter
+  [org-rollup-schema.md](../../docs/skill-framework/shared/org-rollup-schema.md)'s `k8s_waste` adapter
   (already fully specified in Phase 4, before this skill existed)
 - `workflow/inputs.md` — `sweep_scope` (explicit deployment list or namespace pre-filter config) +
   `cost_rate` (no default — an operational policy decision) + `max_deployments_per_run`/`deadline`/
@@ -35,7 +35,7 @@ All notable changes to the cost-optimization-sprint-planner skill. Per-file `wor
   like release-readiness-checker
 - Shared framework compliance (confidence-bands, cross-skill-escalation, prompt-injection, skill-routing,
   phase-glossary)
-- Design spec: [docs/superpowers/specs/2026-08-05-cost-optimization-sprint-planner-design.md](../docs/superpowers/specs/2026-08-05-cost-optimization-sprint-planner-design.md)
+- Design spec: [docs/superpowers/specs/2026-08-05-cost-optimization-sprint-planner-design.md](../../docs/superpowers/specs/2026-08-05-cost-optimization-sprint-planner-design.md)
   — corrects two claims in the roadmap item's own wording that didn't match the actual code (the
   loop-task-implementer modeling claim above, and Phase 0b's namespace ranking not actually being
   documented as a standalone report-only mode) before designing against them

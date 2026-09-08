@@ -30,7 +30,7 @@ projection for compatibility and inspection.
 were extended onto it directly rather than inventing a parallel schema, since it was already
 consumed by ten skills and needed exactly this field set (see this PR's diff: `review_mode`,
 `audit_type`, and `expected_head_sha` were already real fields
-[release-readiness-checker/workflow/run-check.md](../../../release-readiness-checker/workflow/run-check.md)
+[release-readiness-checker/workflow/run-check.md](../../../skills/release-readiness-checker/workflow/run-check.md)
 passes to pr-review — the schema just hadn't caught up to what was already true in practice).
 
 ## ResultEnvelope — what comes back

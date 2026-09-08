@@ -15,7 +15,7 @@ consumes:
 
 # Detect conventions
 
-Follow the canonical [test-creator common workflow](../../docs/skill-framework/shared/test-creator-common-workflow.md)
+Follow the canonical [test-creator common workflow](../../../docs/skill-framework/shared/test-creator-common-workflow.md)
 for shared detection behavior; the rules below are integration-level detection deltas.
 
 Run [scripts/detect-integration-setup.sh](../scripts/detect-integration-setup.sh) against `repo_root`

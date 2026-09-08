@@ -61,7 +61,7 @@ The canonical `test_orchestration_result` contains an ordered `test_plan`, one p
 names each non-`COMPLETE` or missing planned level in `test_plan` order. In the canonical runtime envelope,
 `COMPLETE` maps to `SUCCESS`; the other statuses remain unchanged. Specialist reports remain authoritative
 for their own test surface. Shared report rules:
-[test-creation-principles.md §4](../docs/skill-framework/shared/test-creation-principles.md#4-reporting-format-shared-skeleton).
+[test-creation-principles.md §4](../../docs/skill-framework/shared/test-creation-principles.md#4-reporting-format-shared-skeleton).
 
 ## Install
 

@@ -1,6 +1,6 @@
 # Jira comment template (RCA complete)
 
-Shared normative patterns: [post-action-templates.md](../../docs/skill-framework/shared/post-action-templates.md) §1.
+Shared normative patterns: [post-action-templates.md](../../../docs/skill-framework/shared/post-action-templates.md) §1.
 
 **Read-only:** offer this text for the user to paste. Do not auto-post unless the user explicitly requests and write tools are available.
 

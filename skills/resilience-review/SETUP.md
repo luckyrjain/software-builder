@@ -9,7 +9,7 @@
 | **Review cadence** | Quarterly — or when resilience, runtime, or host capability contracts change |
 | **External services** | None — reads supplied resilience content and optional repository or runtime/config evidence only |
 
-See [setup-freshness.md](../docs/skill-framework/shared/setup-freshness.md) for the shared contract.
+See [setup-freshness.md](../../docs/skill-framework/shared/setup-freshness.md) for the shared contract.
 
 ## Prerequisites
 
@@ -33,7 +33,7 @@ A Software Builder checkout implements this normalization as `review_resilience`
 it, apply the same rule: reject a current-state PASS whose evidence carries no runtime-owned trust
 attestation, and record a control as UNKNOWN rather than PASS when its source environment is absent.
 
-Read the shared [skill framework](../docs/skill-framework/README.md) before packaging or changing the
+Read the shared [skill framework](../../docs/skill-framework/README.md) before packaging or changing the
 skill.
 
 Run [reference/smoke-test.md](reference/smoke-test.md) after setup or runtime changes.

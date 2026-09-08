@@ -71,7 +71,7 @@ as a **paste-ready block rendered into this skill's own doc** instead — mirror
 
 | Offer | Source | This skill's answer |
 |-------|--------|------------------------|
-| Post-RCA actions Jira/Slack paste | [incident-rca/report-template.md § Post-RCA actions](../../incident-rca/report-template.md) | Decline the live post; include the paste-ready Jira comment / Slack brief text (per [post-action-templates.md](../../docs/skill-framework/shared/post-action-templates.md) §1, §4) as a block in the doc |
+| Post-RCA actions Jira/Slack paste | [incident-rca/report-template.md § Post-RCA actions](../../incident-rca/report-template.md) | Decline the live post; include the paste-ready Jira comment / Slack brief text (per [post-action-templates.md](../../../docs/skill-framework/shared/post-action-templates.md) §1, §4) as a block in the doc |
 | Confluence/wiki export paste | incident-rca's report-template.md § Confluence/wiki export mapping | Decline the live post; include the export-ready text as a block in the doc |
 
 ## Per-mode window construction

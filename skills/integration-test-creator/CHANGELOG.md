@@ -81,7 +81,7 @@ All notable changes to the integration-test-creator skill. Per-file `workflow_ve
   available, runs generated tests, distinguishes a test bug (fix and retry, capped at 3 attempts) from a
   probable production bug (never patched — surfaced as a finding instead).
 - `workflow/report.md` — `INTEGRATION_TEST_REPORT.md` rendering rules per the shared skeleton in
-  [test-creation-principles.md §4](../docs/skill-framework/shared/test-creation-principles.md#4-reporting-format-shared-skeleton),
+  [test-creation-principles.md §4](../../docs/skill-framework/shared/test-creation-principles.md#4-reporting-format-shared-skeleton),
   plus the level-specific `NEEDS_INTEGRATION_ENV` status.
 - `scripts/detect-integration-setup.sh` + `scripts/integration-markers.sh` — two-dimension detection:
   base test runner (pytest, unittest, Jest, Vitest, Mocha, Go `testing`, JUnit 4/5, RSpec, Minitest,
@@ -91,7 +91,7 @@ All notable changes to the integration-test-creator skill. Per-file `workflow_ve
   `tests/fixtures/integration-detect/`.
 - `reference/{skill-contract,phase-index,lazy-load-index,gate-policy,test-quality-deltas,
   framework-detection,report-format,smoke-test,pressure-tests}.md` — the level-specific deltas link the
-  new shared [test-creation-principles.md](../docs/skill-framework/shared/test-creation-principles.md)
+  new shared [test-creation-principles.md](../../docs/skill-framework/shared/test-creation-principles.md)
   rather than restating its rules.
 - Shared framework compliance (prompt-injection, skill-routing, cross-skill-escalation, examples
   conventions, smoke-test conventions).

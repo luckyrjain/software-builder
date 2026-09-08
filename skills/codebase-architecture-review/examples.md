@@ -1,6 +1,6 @@
 # Examples — codebase-architecture-review
 
-Conventions: [examples-conventions](../docs/skill-framework/shared/examples-conventions.md).
+Conventions: [examples-conventions](../../docs/skill-framework/shared/examples-conventions.md).
 
 ## Invocation
 

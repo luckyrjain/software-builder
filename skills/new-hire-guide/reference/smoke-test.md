@@ -5,7 +5,7 @@ two repos to the same squad at HIGH or MEDIUM confidence (see
 [squad-map/reference/smoke-test.md](../../squad-map/reference/smoke-test.md) to set that up first if
 needed), and domain-comprehension has run at least `QUICK` once on that workspace.
 
-Conventions: [smoke-test-conventions](../../docs/skill-framework/shared/smoke-test-conventions.md)
+Conventions: [smoke-test-conventions](../../../docs/skill-framework/shared/smoke-test-conventions.md)
 
 ## Invocation
 

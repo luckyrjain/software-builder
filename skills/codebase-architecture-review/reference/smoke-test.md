@@ -4,7 +4,7 @@ Run after install or any substantive edit. Use a real, bounded existing subsyste
 at least one caller, one test or observable behavior, and an ADR or configuration/dependency declaration
 when available. The skill remains read-only: inspect and emit a report; do not modify the fixture repository.
 
-Conventions: [smoke-test-conventions](../../docs/skill-framework/shared/smoke-test-conventions.md).
+Conventions: [smoke-test-conventions](../../../docs/skill-framework/shared/smoke-test-conventions.md).
 
 ## Invocation
 

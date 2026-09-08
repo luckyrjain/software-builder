@@ -1,6 +1,6 @@
 # Examples — invocation patterns
 
-Conventions: [examples-conventions](../docs/skill-framework/shared/examples-conventions.md).
+Conventions: [examples-conventions](../../docs/skill-framework/shared/examples-conventions.md).
 Full report structure: [report-template.md](report-template.md).
 
 ## Skill routing keywords
@@ -29,7 +29,7 @@ live rollback → out of scope.
 | 6 | "What caused the 5xx spike?" | Symptom-only; service discovery |
 | 7 | "RCA with correlator CLI missing" | manual-scoring degraded path |
 | 8 | "Review MR !482 for security" | **Wrong skill** → pr-review |
-| 9 | "Post RCA to Confluence / Slack summary for #incidents" | Phase 5 report → offer wiki paste or Slack brief on user confirm | [post-action-templates §4](../docs/skill-framework/shared/post-action-templates.md#4-slack-incident-channel-brief) |
+| 9 | "Post RCA to Confluence / Slack summary for #incidents" | Phase 5 report → offer wiki paste or Slack brief on user confirm | [post-action-templates §4](../../docs/skill-framework/shared/post-action-templates.md#4-slack-incident-channel-brief) |
 
 ---
 

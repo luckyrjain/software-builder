@@ -10,7 +10,7 @@
 | **Review cadence** | Quarterly — or when pinned MCP package versions change |
 | **External services** | squad-map, domain-comprehension |
 
-See [setup-freshness.md](../docs/skill-framework/shared/setup-freshness.md) for the shared contract.
+See [setup-freshness.md](../../docs/skill-framework/shared/setup-freshness.md) for the shared contract.
 ## Ambient discovery is intended
 
 This skill deliberately does **not** set `disable-model-invocation` in its frontmatter — the agent can
@@ -42,7 +42,7 @@ make install-claude-new-hire-guide
 ```
 
 No restart needed — a new Claude Code session picks it up. See
-[claude-code-setup.md](../docs/skill-framework/shared/claude-code-setup.md).
+[claude-code-setup.md](../../docs/skill-framework/shared/claude-code-setup.md).
 
 ### Kiro / in-repo discovery
 
@@ -68,9 +68,9 @@ per each skill's own `SETUP.md`, nothing new to configure here.
 
 ## Framework links
 
-- [skill-framework README](../docs/skill-framework/README.md)
-- [confidence-bands](../docs/skill-framework/shared/confidence-bands.md)
-- [cross-skill-escalation](../docs/skill-framework/shared/cross-skill-escalation.md)
+- [skill-framework README](../../docs/skill-framework/README.md)
+- [confidence-bands](../../docs/skill-framework/shared/confidence-bands.md)
+- [cross-skill-escalation](../../docs/skill-framework/shared/cross-skill-escalation.md)
 
 ## Smoke test
 

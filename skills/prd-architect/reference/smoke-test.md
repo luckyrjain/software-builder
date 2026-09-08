@@ -2,7 +2,7 @@
 
 Run after install and after any edit to `SKILL.md`, `workflow/`, `reference/`, or `report-template.md`.
 
-Conventions: [smoke-test-conventions](../../docs/skill-framework/shared/smoke-test-conventions.md)
+Conventions: [smoke-test-conventions](../../../docs/skill-framework/shared/smoke-test-conventions.md)
 
 ## Invocation
 

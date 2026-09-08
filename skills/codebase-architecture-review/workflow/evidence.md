@@ -30,6 +30,6 @@ History may indicate repeated coordinated changes, but never proves a design fla
 do not claim churn, co-change, ownership movement, or trend evidence. Corroborate any history signal with
 current code, callers, tests, or an ADR before treating it as candidate evidence.
 
-Use the shared [codebase-design-principles.md](../../docs/skill-framework/shared/codebase-design-principles.md)
+Use the shared [codebase-design-principles.md](../../../docs/skill-framework/shared/codebase-design-principles.md)
 to evaluate contract surface, locality, behavioral leverage, seams, cohesion, coupling, dependency direction,
 test surface, abstraction cost, and navigability. No observation alone creates a candidate.

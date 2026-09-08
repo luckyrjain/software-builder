@@ -4,7 +4,7 @@ Run after install or any edit to this skill. Use a short PRD/proposal and a desi
 together describe a real (even if small) architectural decision — enough content to exercise every
 required check, not just a one-line stub.
 
-Conventions: [smoke-test-conventions](../../docs/skill-framework/shared/smoke-test-conventions.md).
+Conventions: [smoke-test-conventions](../../../docs/skill-framework/shared/smoke-test-conventions.md).
 
 ## Invocation
 

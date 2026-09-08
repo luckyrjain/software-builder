@@ -10,7 +10,7 @@
 | **Review cadence** | Quarterly — or when pinned MCP package versions change |
 | **External services** | GitLab MCP, Kubernetes MCP, Datadog MCP (via composed skills); optional SCM history/policy and build-provenance host evidence for v2 conditional production-readiness invocation |
 
-See [setup-freshness.md](../docs/skill-framework/shared/setup-freshness.md) for the shared contract.
+See [setup-freshness.md](../../docs/skill-framework/shared/setup-freshness.md) for the shared contract.
 ## Ambient discovery is intended
 
 This skill deliberately does **not** set `disable-model-invocation` — the agent can auto-apply it when
@@ -45,7 +45,7 @@ make install-claude-release-readiness-checker
 ```
 
 No restart needed — a new Claude Code session picks it up. See
-[claude-code-setup.md](../docs/skill-framework/shared/claude-code-setup.md).
+[claude-code-setup.md](../../docs/skill-framework/shared/claude-code-setup.md).
 
 ### Kiro / in-repo discovery
 
@@ -81,9 +81,9 @@ one page holds must not silently return only the first page.
 
 ## Framework links
 
-- [skill-framework README](../docs/skill-framework/README.md)
-- [confidence-bands](../docs/skill-framework/shared/confidence-bands.md)
-- [cross-skill-escalation](../docs/skill-framework/shared/cross-skill-escalation.md)
+- [skill-framework README](../../docs/skill-framework/README.md)
+- [confidence-bands](../../docs/skill-framework/shared/confidence-bands.md)
+- [cross-skill-escalation](../../docs/skill-framework/shared/cross-skill-escalation.md)
 
 ## Smoke test
 

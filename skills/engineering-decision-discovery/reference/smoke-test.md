@@ -6,7 +6,7 @@ repository context, at least one dependent decision, and at least one independen
 remains read-only and interactive: inspect evidence, interview the user, and emit a report; never modify
 the fixture repository or write an ADR.
 
-Conventions: [smoke-test-conventions](../../docs/skill-framework/shared/smoke-test-conventions.md).
+Conventions: [smoke-test-conventions](../../../docs/skill-framework/shared/smoke-test-conventions.md).
 
 ## Invocation
 

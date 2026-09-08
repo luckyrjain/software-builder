@@ -7,7 +7,7 @@ All notable changes to the migration-program-manager skill. Per-file `workflow_v
 
 ### Added
 - Initial skill release — pure read-only aggregator over mysql-to-postgres-sql's `MIGRATION_STATUS.yaml`
-  and squad-map's `SQUAD_MAP.md`, implementing [org-rollup-schema.md](../docs/skill-framework/shared/org-rollup-schema.md)'s
+  and squad-map's `SQUAD_MAP.md`, implementing [org-rollup-schema.md](../../docs/skill-framework/shared/org-rollup-schema.md)'s
   `pg_migration_gate` adapter
 - `workflow/inputs.md` — `program_manifest` (list of workspaces) + `staleness_threshold_days` (no default
   — an operational policy decision) + `state_path` parsing, HARD STOP on missing required fields
@@ -26,7 +26,7 @@ All notable changes to the migration-program-manager skill. Per-file `workflow_v
 - No `disable-model-invocation`, no gate-policy file — nothing to gate when nothing is invoked live
 - Shared framework compliance (confidence-bands, cross-skill-escalation, prompt-injection, skill-routing,
   phase-glossary)
-- Design spec: [docs/superpowers/specs/2026-08-05-migration-program-manager-design.md](../docs/superpowers/specs/2026-08-05-migration-program-manager-design.md)
+- Design spec: [docs/superpowers/specs/2026-08-05-migration-program-manager-design.md](../../docs/superpowers/specs/2026-08-05-migration-program-manager-design.md)
 
 ### Fixed (round-1 review, same day)
 - **`join_squad` used the wrong squad-map tiebreak on a Conflicts-adjacent row.** It preferred `GitLab

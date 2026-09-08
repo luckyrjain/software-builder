@@ -1,9 +1,9 @@
 # Assessment metadata footer (domain-comprehension)
 
 Machine-readable YAML emitted at P5 closeout. Normative shared shape:
-[review-metadata-schema.md](../../docs/skill-framework/shared/review-metadata-schema.md) §8.3.
+[review-metadata-schema.md](../../../docs/skill-framework/shared/review-metadata-schema.md) §8.3.
 
-Confidence bands: [confidence-bands.md](../../docs/skill-framework/shared/confidence-bands.md) §2.1 ·
+Confidence bands: [confidence-bands.md](../../../docs/skill-framework/shared/confidence-bands.md) §2.1 ·
 rubric: [confidence-rubric.md](confidence-rubric.md).
 
 ## When to emit

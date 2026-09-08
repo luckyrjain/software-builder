@@ -5,7 +5,7 @@ executive summary renders and the user confirms.
 
 **Prerequisites:** `jira_write_available: true` from Phase 0; linked ticket from Phase 1 step 6.
 
-**Shared template:** [post-action-templates.md](../../docs/skill-framework/shared/post-action-templates.md) §2.
+**Shared template:** [post-action-templates.md](../../../docs/skill-framework/shared/post-action-templates.md) §2.
 
 ## Workflow
 

@@ -53,7 +53,7 @@ The report states, in the fixed structure `reference/report-format.md` defines:
 - Every node that was asked carries a recommendation and rationale in `recommendations`, whether or not
   it ended up resolved.
 - Cite evidence provenance and a confidence band
-  ([confidence-bands.md](../../docs/skill-framework/shared/confidence-bands.md)) for every recommendation
+  ([confidence-bands.md](../../../docs/skill-framework/shared/confidence-bands.md)) for every recommendation
   and for the evidence backing every node; a recommendation with no cited evidence states `UNKNOWN`
   confidence rather than an unsupported band.
 - Never write source, tests, configuration, the repository, or an ADR from this workflow. The Markdown

@@ -8,7 +8,7 @@ production-readiness-review.
 **This table is optional escalations only — not mandatory subroutine calls.** One row below is not
 optional: domain-comprehension's Session 0b *always* invokes squad-map as a required phase (produces
 `SQUAD_MAP.md`, consumed by later phases), not a suggestion the agent may skip — see
-[phase-index.md](../../../domain-comprehension/reference/phase-index.md). It's listed here anyway,
+[phase-index.md](../../../skills/domain-comprehension/reference/phase-index.md). It's listed here anyway,
 marked **(subroutine, not optional)**, because it's still a real cross-skill call other skills should
 know about — don't treat it as a "you may want to" row the way every other row in this table is.
 
@@ -27,18 +27,18 @@ dispatch, and `codebase-architecture-review`'s `composition.invokes` does not ga
 | K8s/infra perf regression in MR | pr-review → k8s | Deployment + env + resource diff | "Assess rightsizing for `{deployment}` in `{env}` — MR !{iid} reduced resources" |
 | Resource-down MR merged + outage | pr-review → k8s + incident-rca | MR + post-merge window | "RCA `{service}` {window}; then k8s assessment for `{deployment}`" |
 | Deploy regression confirmed | incident-rca → pr-review | Causative MR URL/IID + window | "Review MR !{iid} for deploy regression tied to `{service}` outage {window}" |
-| Infra capacity (OOM/throttle/crashloop) | incident-rca → k8s | [report-template.md#k8s-skill-handoff](../../../incident-rca/report-template.md#k8s-skill-handoff-infra-capacity-confirmed) block | "Assess rightsizing for `{service}` in `{env}` — OOMKilled during {window}" |
+| Infra capacity (OOM/throttle/crashloop) | incident-rca → k8s | [report-template.md#k8s-skill-handoff](../../../skills/incident-rca/report-template.md#k8s-skill-handoff-infra-capacity-confirmed) block | "Assess rightsizing for `{service}` in `{env}` — OOMKilled during {window}" |
 | Kafka consumer lag | incident-rca → k8s | Service + consumer group + lag metrics | "Assess `{deployment}` replicas vs partitions — consumer lag spike {window}" |
 | OOM / crashloop on assessed deployment | k8s → incident-rca | Time window + OBS evidence | "RCA for `{service}` {window} — OOMKilled pods on `{deployment}`" |
 | Manifest drift + active incident | k8s → incident-rca | Drift summary + deploy timeline | "RCA `{service}` {window} — manifest drift detected during assessment" |
 | Spike + recent deploy | k8s → pr-review | Suspect MR from deploy event | "Review MR !{iid} — deploy preceded utilization spike on `{deployment}`" |
 | Squad ownership only (no domain map) | domain-comprehension → squad-map | In-scope repo census + `domain-config.yaml` ownership | "Map squads for repos in `{workspace}` — org prefix `{org}`, segment `{n}`" |
-| **Session 0b (subroutine, not optional)** — every domain-comprehension run | domain-comprehension → squad-map | Workspace root + repo census | Not user-facing — Session 0b invokes squad-map directly per [session-0b.md](../../../domain-comprehension/workflow/session-0b.md) |
+| **Session 0b (subroutine, not optional)** — every domain-comprehension run | domain-comprehension → squad-map | Workspace root + repo census | Not user-facing — Session 0b invokes squad-map directly per [session-0b.md](../../../skills/domain-comprehension/workflow/session-0b.md) |
 | Full domain map after squad map | squad-map → domain-comprehension | `SQUAD_MAP.md` + workspace root | "Map bounded contexts and data ownership for `{domain}` — full domain comprehension" |
 | Incident + unclear service owner | incident-rca → squad-map | Service name + window | "Who owns `{service}`? — need squad for RCA follow-up" |
 | Caller wants the full mapping table, not one Slack answer | who-owns-x-bot → squad-map | `workspace_root` | "Map squads for repos in `{workspace}` — org prefix `{org}`, segment `{n}`" |
 | Caller wants bounded contexts / domain map, not just ownership | who-owns-x-bot → domain-comprehension | `query` (repo/service name) | "Map bounded contexts and data ownership for `{domain}` — full domain comprehension" |
-| `query` names a service mid-incident (surfaced as a suffix line appended to the single reply — a single-shot Slack reply cannot itself switch skills; exact trigger keywords and template: [who-owns-x-bot/reference/slack-format.md § Escalation suffix](../../../who-owns-x-bot/reference/slack-format.md#escalation-suffix-mid-incident-query)) | who-owns-x-bot → incident-rca | Service name from `query` | "RCA for `{service}` — is there an active incident?" |
+| `query` names a service mid-incident (surfaced as a suffix line appended to the single reply — a single-shot Slack reply cannot itself switch skills; exact trigger keywords and template: [who-owns-x-bot/reference/slack-format.md § Escalation suffix](../../../skills/who-owns-x-bot/reference/slack-format.md#escalation-suffix-mid-incident-query)) | who-owns-x-bot → incident-rca | Service name from `query` | "RCA for `{service}` — is there an active incident?" |
 | Caller wants a one-off ownership lookup, not a tour | new-hire-guide → squad-map | `workspace_root` | "Who owns `{repo}`?" |
 | Caller wants the full org-wide domain map, not scoped to one person | new-hire-guide → domain-comprehension | `workspace_root` | "Map bounded contexts and data ownership for `{domain}` — full domain comprehension" |
 | Caller wants one MR reviewed, not a release-wide sweep | release-readiness-checker → pr-review | MR !IID + project | "Review MR !{iid} for `{project}`" |

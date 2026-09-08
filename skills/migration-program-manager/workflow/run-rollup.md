@@ -35,7 +35,7 @@ load/compute/save so concurrent runs cannot corrupt staleness state. Writes use 
    `squad: UNKNOWN`, `squad_confidence: UNKNOWN`, noted in the report; **never invokes squad-map itself**
    to fill the gap (see [SKILL.md](../SKILL.md) § Why no gate policy).
 3. Joins each `services[]` row into an `org_rollup_item` per
-   [org-rollup-schema.md § 4](../../docs/skill-framework/shared/org-rollup-schema.md#4-adapters-per-source-skill) —
+   [org-rollup-schema.md § 4](../../../docs/skill-framework/shared/org-rollup-schema.md#4-adapters-per-source-skill) —
    match `path` against `SQUAD_MAP.md`'s `Repo` column first, falling back to `name`.
 4. Loads the prior run's state from `state_path` (absent on first run — treat as empty, every service
    starts at staleness 0, not an error). Computes each service's `gate_signature`

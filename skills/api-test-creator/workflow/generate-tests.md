@@ -11,19 +11,19 @@ consumes:
 
 # Generate tests
 
-Follow the shared [test-creator common workflow](../../docs/skill-framework/shared/test-creator-common-workflow.md)
-and run the [test-creator write-safety contract](../../docs/skill-framework/shared/test-creator-write-safety.md)
+Follow the shared [test-creator common workflow](../../../docs/skill-framework/shared/test-creator-common-workflow.md)
+and run the [test-creator write-safety contract](../../../docs/skill-framework/shared/test-creator-write-safety.md)
 before any collection, environment, report, or coverage-state write. The API-specific rules below are deltas only.
 
 For every `NEW` item in `target_list`, write requests that satisfy
 [reference/test-quality-deltas.md](../reference/test-quality-deltas.md) (on top of the shared
-[test-quality rules](../../docs/skill-framework/shared/test-creation-principles.md#2-test-quality-rules))
+[test-quality rules](../../../docs/skill-framework/shared/test-creation-principles.md#2-test-quality-rules))
 in full — this phase does not restate those checklists, it enforces them.
 
 ## 1. Derive the request/response shape from real, observed usage only
 
 This is this skill's specific instance of the shared test-first-evidence principle
-([test-creation-principles.md §1](../../docs/skill-framework/shared/test-creation-principles.md#1-test-first-evidence)).
+([test-creation-principles.md §1](../../../docs/skill-framework/shared/test-creation-principles.md#1-test-first-evidence)).
 A request's method/path/headers/body and its expected response (status code, schema/fields, headers) must
 trace to one of:
 

@@ -3,7 +3,7 @@
 The full checklist (asserts on real behavior, one behavior per test, deterministic, isolated,
 descriptive name, matches the repo's own convention, reuses existing fixtures) is shared across all four
 `*-test-creator` skills — see
-[test-creation-principles.md §2](../../docs/skill-framework/shared/test-creation-principles.md#2-test-quality-rules).
+[test-creation-principles.md §2](../../../docs/skill-framework/shared/test-creation-principles.md#2-test-quality-rules).
 This file states only what's **different** for a full-browser end-to-end test on top of that checklist.
 
 ## Required, on top of the shared checklist

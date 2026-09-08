@@ -15,5 +15,5 @@ Load reference files **only when the active phase needs them**. Do not preload t
 
 Shared framework (link only — do not duplicate):
 
-- [prompt-injection.md](../../docs/skill-framework/shared/prompt-injection.md)
-- [skill-routing.md](../../docs/skill-framework/shared/skill-routing.md)
+- [prompt-injection.md](../../../docs/skill-framework/shared/prompt-injection.md)
+- [skill-routing.md](../../../docs/skill-framework/shared/skill-routing.md)

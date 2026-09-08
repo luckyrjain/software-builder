@@ -20,7 +20,7 @@ into one fail-closed verdict for one exact PR/MR/release candidate.
 companion in OS temporary storage — never written into the repository, never added to
 `skill_result.artifacts`, and never a new durable or canonical artifact alongside
 `codebase_architecture_report`. This is a per-skill rendering option documented in that skill's own
-[reference/html-report.md](../../codebase-architecture-review/reference/html-report.md), not a new shared
+[reference/html-report.md](../../skills/codebase-architecture-review/reference/html-report.md), not a new shared
 framework file; `module-design` has no equivalent companion.
 
 `test-writer` is a thin router (like `who-owns-x-bot`/`release-readiness-checker`) that classifies a

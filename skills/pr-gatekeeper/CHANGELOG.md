@@ -19,4 +19,4 @@ frontmatter should match the version of the latest entry below that names that f
 - `workflow/inputs.md` — webhook event filtering (push-only, open-MR-only, `head_sha` dedupe short-circuit)
 - `disable-model-invocation: true` — does not compete with pr-review's ambient chat invocation
 - Shared framework compliance (confidence-bands, cross-skill-escalation, prompt-injection, skill-routing)
-- Design spec: [docs/superpowers/specs/2026-08-05-pr-gatekeeper-design.md](../docs/superpowers/specs/2026-08-05-pr-gatekeeper-design.md)
+- Design spec: [docs/superpowers/specs/2026-08-05-pr-gatekeeper-design.md](../../docs/superpowers/specs/2026-08-05-pr-gatekeeper-design.md)

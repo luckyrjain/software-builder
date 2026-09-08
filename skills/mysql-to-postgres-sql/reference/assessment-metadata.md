@@ -1,10 +1,10 @@
 # Assessment metadata footer (mysql-to-postgres-sql)
 
 Machine-readable YAML emitted at per-service migrate closeout. Normative shared shape:
-[review-metadata-schema.md](../../docs/skill-framework/shared/review-metadata-schema.md) §8.5.
+[review-metadata-schema.md](../../../docs/skill-framework/shared/review-metadata-schema.md) §8.5.
 
 **Risk tier vs confidence:** P0/P1/P2 are `migration_risk_tier` only — see
-[confidence-bands.md](../../docs/skill-framework/shared/confidence-bands.md) §2.2.
+[confidence-bands.md](../../../docs/skill-framework/shared/confidence-bands.md) §2.2.
 
 ## When to emit
 

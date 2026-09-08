@@ -1,9 +1,9 @@
 # Assessment metadata footer (squad-map)
 
 Machine-readable YAML emitted at Phase 1 closeout. Normative shared shape:
-[review-metadata-schema.md](../../docs/skill-framework/shared/review-metadata-schema.md) §8.4.
+[review-metadata-schema.md](../../../docs/skill-framework/shared/review-metadata-schema.md) §8.4.
 
-Owner confidence bands: [confidence-bands.md](../../docs/skill-framework/shared/confidence-bands.md) §2.3 ·
+Owner confidence bands: [confidence-bands.md](../../../docs/skill-framework/shared/confidence-bands.md) §2.3 ·
 reconciliation: [squad-mapping.md](squad-mapping.md).
 
 ## When to emit

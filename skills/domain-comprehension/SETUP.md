@@ -10,7 +10,7 @@
 | **Review cadence** | Quarterly — or when pinned MCP package versions change |
 | **External services** | GitLab MCP (optional), Datadog MCP (optional) |
 
-See [setup-freshness.md](../docs/skill-framework/shared/setup-freshness.md) for the shared contract.
+See [setup-freshness.md](../../docs/skill-framework/shared/setup-freshness.md) for the shared contract.
 ## Ambient discovery is intended
 
 This skill deliberately does **not** set `disable-model-invocation` in its frontmatter, so the agent
@@ -39,7 +39,7 @@ make install-claude-domain-comprehension
 ```
 
 No restart needed — a new Claude Code session picks it up. See
-[claude-code-setup.md](../docs/skill-framework/shared/claude-code-setup.md) for MCP config location
+[claude-code-setup.md](../../docs/skill-framework/shared/claude-code-setup.md) for MCP config location
 differences (this skill's optional GitLab/Datadog enrichments use the same server entries).
 
 ### Kiro / in-repo discovery
@@ -96,10 +96,10 @@ Datadog/KubeSense is available, skipped only if both are missing.
 
 ## Framework links
 
-- [skill-framework README](../docs/skill-framework/README.md)
-- [confidence-bands](../docs/skill-framework/shared/confidence-bands.md)
-- [cross-skill-escalation](../docs/skill-framework/shared/cross-skill-escalation.md)
-- [phase-glossary](../docs/skill-framework/shared/phase-glossary.md)
+- [skill-framework README](../../docs/skill-framework/README.md)
+- [confidence-bands](../../docs/skill-framework/shared/confidence-bands.md)
+- [cross-skill-escalation](../../docs/skill-framework/shared/cross-skill-escalation.md)
+- [phase-glossary](../../docs/skill-framework/shared/phase-glossary.md)
 
 ## Smoke test
 

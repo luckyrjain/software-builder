@@ -1,6 +1,6 @@
 # Confidence formula (deterministic)
 
-Categorical bands (normative): [confidence-bands.md](../../docs/skill-framework/shared/confidence-bands.md)
+Categorical bands (normative): [confidence-bands.md](../../../docs/skill-framework/shared/confidence-bands.md)
 
 After computing `ASSESSMENT_CONFIDENCE` / `RECOMMENDATION_CONFIDENCE`, map to HIGH / MEDIUM / LOW /
 UNKNOWN using the **0.85 / 0.65 / 0.40** thresholds in the shared doc. Human Report displays band

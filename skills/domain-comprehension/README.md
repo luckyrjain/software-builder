@@ -86,4 +86,4 @@ Restart Cursor after install.
 
 ## Framework
 
-Uses shared [skill-framework](../docs/skill-framework/README.md) confidence bands and cross-skill escalation.
+Uses shared [skill-framework](../../docs/skill-framework/README.md) confidence bands and cross-skill escalation.

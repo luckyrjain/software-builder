@@ -169,13 +169,13 @@ review_metadata:
 ```
 
 Normative field definitions and examples:
-[review-metadata-schema.md](../../docs/skill-framework/shared/review-metadata-schema.md).
+[review-metadata-schema.md](../../../docs/skill-framework/shared/review-metadata-schema.md).
 
 ## Review-level confidence
 
 Overall executive-summary **Confidence** is derived from coverage, evidence depth, and review
 completeness — not a simple max of per-finding confidence. Normative bands:
-[confidence-bands.md](../../docs/skill-framework/shared/confidence-bands.md).
+[confidence-bands.md](../../../docs/skill-framework/shared/confidence-bands.md).
 
 | Overall band | Derivation rule |
 |--------------|-----------------|

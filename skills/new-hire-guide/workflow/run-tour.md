@@ -62,7 +62,7 @@ orientation, not a multi-session engagement) — **exactly as a direct invocatio
 **Do not narrow domain-comprehension's own census to the matched repos, even though `seed_repos` exists
 for exactly this kind of purpose.** This was the original design and was reverted: `seed_repos` narrows
 Session 0's own repo census, and domain-comprehension's Session 0b squad-map enrichment is a **mandatory,
-non-optional subroutine** (see [cross-skill-escalation.md](../../docs/skill-framework/shared/cross-skill-escalation.md)
+non-optional subroutine** (see [cross-skill-escalation.md](../../../docs/skill-framework/shared/cross-skill-escalation.md)
 § 1 — "Session 0b (subroutine, not optional)") that passes that narrowed census straight to squad-map as
 its own `repos` input, per squad-map's documented [Embedded invocation (domain-comprehension)](../../squad-map/workflow/inputs.md#embedded-invocation-domain-comprehension)
 contract. squad-map's own idempotency rule ([phase-1.md](../../squad-map/workflow/phase-1.md) §

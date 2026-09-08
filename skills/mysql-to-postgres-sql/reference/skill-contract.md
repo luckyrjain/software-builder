@@ -14,4 +14,4 @@ Load immediately after [SKILL.md](../SKILL.md). These rules override convenience
 8. **Deliverable** — Emit [SERVICE_PG_MIGRATION.md](../templates/SERVICE_PG_MIGRATION.md) for multi-file migrations; chat summary suffices for scan-only audits.
 9. **Complete means gated** — Never report "migration complete" while scan returns hits or manual-audit items are unchecked.
 
-Routing: [skill-routing.md](../../docs/skill-framework/shared/skill-routing.md).
+Routing: [skill-routing.md](../../../docs/skill-framework/shared/skill-routing.md).

@@ -2,14 +2,14 @@
 
 Load immediately after [SKILL.md](../SKILL.md). These rules override convenience shortcuts. Shared
 rules across the whole test-creator family live in
-[test-creation-principles.md](../../docs/skill-framework/shared/test-creation-principles.md) — this file
+[test-creation-principles.md](../../../docs/skill-framework/shared/test-creation-principles.md) — this file
 states only what's different for **unit** scope; it does not restate the shared rules.
 
 ## Contract
 
 1. **Scope** — write or modify test files only. Refactor limits (when a testability refactor is allowed
    at all) are shared, see
-   [test-creation-principles.md §3](../../docs/skill-framework/shared/test-creation-principles.md#3-refactor-limits).
+   [test-creation-principles.md §3](../../../docs/skill-framework/shared/test-creation-principles.md#3-refactor-limits).
 2. **Isolation is the whole point** — every external dependency (network, real database, filesystem I/O
    unless the filesystem itself is the unit under test, wall-clock time, randomness) must be mocked or
    stubbed. A target that cannot be isolated with an existing mocking convention in the repo is out of
@@ -20,7 +20,7 @@ states only what's different for **unit** scope; it does not restate the shared 
    first. Never introduce a second test framework alongside one the repo already uses, and never invent a
    framework for a repo with none, without asking.
 4. **Real assertions only, shared quality bar** — every test must satisfy the shared checklist in
-   [test-creation-principles.md §2](../../docs/skill-framework/shared/test-creation-principles.md#2-test-quality-rules)
+   [test-creation-principles.md §2](../../../docs/skill-framework/shared/test-creation-principles.md#2-test-quality-rules)
    plus the unit-specific deltas in [test-quality-deltas.md](test-quality-deltas.md).
 5. **Gate, don't guess** — HARD STOP / ask per [reference/gate-policy.md](gate-policy.md) rather than
    guessing a framework, fabricating a mock for infra that isn't reachable, or inventing test data that
@@ -33,10 +33,10 @@ states only what's different for **unit** scope; it does not restate the shared 
    green without flagging it in `UNIT_TEST_REPORT.md`.
 9. **Never patch production code to force a test green** — a failure that traces to production code is a
    finding to report and hand off, per
-   [test-creation-principles.md §5](../../docs/skill-framework/shared/test-creation-principles.md#5-escalation-on-a-surfaced-production-bug).
+   [test-creation-principles.md §5](../../../docs/skill-framework/shared/test-creation-principles.md#5-escalation-on-a-surfaced-production-bug).
 10. **Deliverable** — emit [UNIT_TEST_REPORT.md](report-format.md) every run, even for a single-file
     backfill with one target.
 11. **Lazy-load** — only the reference file(s) named for the current phase in
     [lazy-load-index.md](lazy-load-index.md); do not bulk-read all of `reference/`.
 
-Routing: [skill-routing.md](../../docs/skill-framework/shared/skill-routing.md).
+Routing: [skill-routing.md](../../../docs/skill-framework/shared/skill-routing.md).

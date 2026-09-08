@@ -670,7 +670,7 @@ Evidence coverage: [reference/evidence-coverage.md](reference/evidence-coverage.
 - [ ] **Risks** opens with `Overall:` + tiered table
 - [ ] **Conclusion** present as last narrative section before appendix / optional exports
 - [ ] **`assessment_metadata`** only in Appendix — machine metadata (chat/file), not Confluence/Jira narrative ([assessment-metadata.md](reference/assessment-metadata.md))
-- [ ] Report body has no agent mode instructions (`Type ACT`, `PLAN/ACT`, posting confirmations) — those belong in chat only ([post-action-templates.md](../docs/skill-framework/shared/post-action-templates.md))
+- [ ] Report body has no agent mode instructions (`Type ACT`, `PLAN/ACT`, posting confirmations) — those belong in chat only ([post-action-templates.md](../../docs/skill-framework/shared/post-action-templates.md))
 
 ## Human-report rules
 
@@ -681,13 +681,13 @@ Evidence coverage: [reference/evidence-coverage.md](reference/evidence-coverage.
 5. **Recovery MTTR** — recovery timeline when mitigation applied.
 6. **Lessons learned** — leadership table distinct from P0/P1/P2 tasks.
 7. **Conclusion** — last narrative section before appendix.
-8. **No agent instructions in report body** — post-actions in chat per [post-action-templates.md](../docs/skill-framework/shared/post-action-templates.md).
+8. **No agent instructions in report body** — post-actions in chat per [post-action-templates.md](../../docs/skill-framework/shared/post-action-templates.md).
 9. **Machine metadata** — `assessment_metadata` in Appendix only for human exports.
 
 ## Safe rendered-output boundary
 
 The rendered RCA report is real CommonMark/GFM Markdown, and
-[safe-output.md](../docs/skill-framework/shared/safe-output.md)'s Rule 4 techniques apply to it directly.
+[safe-output.md](../../docs/skill-framework/shared/safe-output.md)'s Rule 4 techniques apply to it directly.
 [Log redaction](reference/log-redaction.md) already covers Rule 5 (secrets) for every quoted log line,
 ticket body, and pasted snippet — this section covers the separate concern of Markdown-structure
 injection from that same untrusted content (Jira body, pasted logs, Slack threads, ticket narratives —
@@ -721,7 +721,7 @@ enumerated below:
   column. A fenced code block already isolates its content from surrounding Markdown structure (no `#`/
   `>`/`|` interpretation inside a fence), so the only residual risk is an embedded ` ``` ` sequence
   closing the fence early — structurally escape any raw triple-backtick run inside a node label before
-  writing it, per [safe-output.md](../docs/skill-framework/shared/safe-output.md) Rule 4's own
+  writing it, per [safe-output.md](../../docs/skill-framework/shared/safe-output.md) Rule 4's own
   fence-escaping guidance.
 - **Everything else in this template** — status enums (`Observed`/`Correlated`/`Inferred`/`Assumed`,
   confidence bands, hypothesis IDs), computed values (scores, percentages, timestamps, durations), and

@@ -20,7 +20,7 @@ frontmatter should match the version of the latest entry below that names that f
   per-item staleness, renders
 - **Corrects a claim made in two other places before designing against it**: the roadmap item's own
   wording ("squad-map — routing to the right channel") and
-  [org-rollup-aggregation-layer-design.md](../docs/superpowers/specs/2026-08-05-org-rollup-aggregation-layer-design.md)
+  [org-rollup-aggregation-layer-design.md](../../docs/superpowers/specs/2026-08-05-org-rollup-aggregation-layer-design.md)
   (which stated as settled fact that squad-map has "its own routing convention" this skill would reuse)
   both imply a squad→channel delivery mechanism that doesn't exist anywhere in squad-map's actual schema
   (`SQUAD_MAP.md` has two ownership *name* columns, no channel/contact/webhook field) or in either cited
@@ -37,8 +37,8 @@ frontmatter should match the version of the latest entry below that names that f
 - No scripts of its own — pure markdown-workflow, like cost-optimization-sprint-planner
 - Shared framework compliance (confidence-bands, cross-skill-escalation, prompt-injection, skill-routing,
   phase-glossary)
-- Design spec: [docs/superpowers/specs/2026-08-05-weekly-squad-digest-design.md](../docs/superpowers/specs/2026-08-05-weekly-squad-digest-design.md)
-  — this is the last item (#11) of the [team-facing agents roadmap](../docs/superpowers/plans/2026-08-05-team-facing-agents-roadmap.md)
+- Design spec: [docs/superpowers/specs/2026-08-05-weekly-squad-digest-design.md](../../docs/superpowers/specs/2026-08-05-weekly-squad-digest-design.md)
+  — this is the last item (#11) of the [team-facing agents roadmap](../../docs/superpowers/plans/2026-08-05-team-facing-agents-roadmap.md)
 
 ### Fixed (round-1 review, same day)
 - **`squad_confidence`'s "Notes callout" rule contradicted the report's own normative Structure
@@ -79,7 +79,7 @@ staleness, confidence, and cross-rollup conflicts did not.
   `reference/report-format.md` now all say explicitly "present means the key exists, regardless of
   value — `staleness_days: 0` still counts and must still be used."
 - **Cross-rollup `service` matching had no normalization rule**, despite the very precedent cited to
-  justify it — [org-rollup-schema.md § 3](../docs/skill-framework/shared/org-rollup-schema.md#3-join-key-squad-map-is-the-only-authoritative-source)
+  justify it — [org-rollup-schema.md § 3](../../docs/skill-framework/shared/org-rollup-schema.md#3-join-key-squad-map-is-the-only-authoritative-source)
   — explicitly documenting that service identifiers don't reliably match verbatim across systems. Fixed:
   `workflow/run-digest.md` § 2 step 4 and `reference/report-format.md` now state the match is
   exact-string only, best-effort, with a genuinely differing identifier string a known, accepted

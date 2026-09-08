@@ -1,6 +1,6 @@
 # Smoke test
 
-Conventions: [smoke-test-conventions.md](../../docs/skill-framework/shared/smoke-test-conventions.md).
+Conventions: [smoke-test-conventions.md](../../../docs/skill-framework/shared/smoke-test-conventions.md).
 
 ## Invocation string
 

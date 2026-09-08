@@ -14,7 +14,7 @@ consumes:
 # Design — derive one module boundary from evidence
 
 Evaluate the scoped module against the shared
-[codebase-design-principles.md](../../docs/skill-framework/shared/codebase-design-principles.md). For each
+[codebase-design-principles.md](../../../docs/skill-framework/shared/codebase-design-principles.md). For each
 item below, cite repository evidence, mark the reasoning as inference where appropriate, or create an
 explicit unresolved question. Never silently omit a check.
 

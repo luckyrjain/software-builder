@@ -1,6 +1,6 @@
 # Examples — invocation patterns
 
-Conventions: [examples-conventions](../docs/skill-framework/shared/examples-conventions.md).
+Conventions: [examples-conventions](../../docs/skill-framework/shared/examples-conventions.md).
 
 ## Invocation table
 
@@ -147,4 +147,4 @@ After P3b flags hardcoded credentials in `api-disbursement`:
 - Ask: "Review MR !{iid} for credential exposure in api-disbursement"
 ```
 
-See [cross-skill-escalation.md](../docs/skill-framework/shared/cross-skill-escalation.md).
+See [cross-skill-escalation.md](../../docs/skill-framework/shared/cross-skill-escalation.md).

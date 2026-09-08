@@ -10,7 +10,7 @@
 | **Review cadence** | Quarterly — or when pinned MCP package versions change |
 | **External services** | Kubernetes MCP, Datadog MCP |
 
-See [setup-freshness.md](../docs/skill-framework/shared/setup-freshness.md) for the shared contract.
+See [setup-freshness.md](../../docs/skill-framework/shared/setup-freshness.md) for the shared contract.
 This skill discovers Kubernetes and observability MCP tools by capability. It prefers Kubernetes MCP
 for live cluster truth and uses Datadog as a per-capability fallback and for unique historical and
 operational telemetry. A git provider MCP is an optional configuration fallback.
@@ -40,7 +40,7 @@ editors). For Claude Code **only**: `make install-claude-k8s-overprovisioning`. 
 the `datadog` Claude Code plugin and run its `ddsetup` skill instead of the Cursor Datadog plugin
 (§ 3). GitLab/GitHub MCP (§ 6): same JSON entries, via `claude mcp add-json` instead of
 `~/.cursor/mcp.json`. Full mapping:
-[claude-code-setup.md](../docs/skill-framework/shared/claude-code-setup.md).
+[claude-code-setup.md](../../docs/skill-framework/shared/claude-code-setup.md).
 
 ### Kiro / in-repo discovery
 
@@ -192,10 +192,10 @@ values manually — only the automated drift / VPA / PDB / ResourceQuota lookups
 
 ## Framework conventions
 
-- Index: [docs/skill-framework/README.md](../docs/skill-framework/README.md)
-- Confidence: [confidence-bands](../docs/skill-framework/shared/confidence-bands.md)
-- Escalation: [cross-skill-escalation](../docs/skill-framework/shared/cross-skill-escalation.md)
-- Smoke tests: [smoke-test-conventions](../docs/skill-framework/shared/smoke-test-conventions.md)
-- Examples: [examples-conventions](../docs/skill-framework/shared/examples-conventions.md)
-- Phases: [phase-glossary](../docs/skill-framework/shared/phase-glossary.md)
-- Post-actions: [post-action-templates](../docs/skill-framework/shared/post-action-templates.md)
+- Index: [docs/skill-framework/README.md](../../docs/skill-framework/README.md)
+- Confidence: [confidence-bands](../../docs/skill-framework/shared/confidence-bands.md)
+- Escalation: [cross-skill-escalation](../../docs/skill-framework/shared/cross-skill-escalation.md)
+- Smoke tests: [smoke-test-conventions](../../docs/skill-framework/shared/smoke-test-conventions.md)
+- Examples: [examples-conventions](../../docs/skill-framework/shared/examples-conventions.md)
+- Phases: [phase-glossary](../../docs/skill-framework/shared/phase-glossary.md)
+- Post-actions: [post-action-templates](../../docs/skill-framework/shared/post-action-templates.md)

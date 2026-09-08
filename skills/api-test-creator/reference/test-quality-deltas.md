@@ -1,7 +1,7 @@
 # Test quality deltas — API tests
 
 Every rule in the shared
-[test-creation-principles.md §2](../../docs/skill-framework/shared/test-creation-principles.md#2-test-quality-rules)
+[test-creation-principles.md §2](../../../docs/skill-framework/shared/test-creation-principles.md#2-test-quality-rules)
 applies unchanged. This file adds only what's different for a black-box Postman/Newman API test — load this
 before [workflow/generate-tests.md](../workflow/generate-tests.md); it does not restate the shared
 checklist.

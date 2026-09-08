@@ -9,7 +9,7 @@
 | **Review cadence** | Quarterly — or when lifecycle/shared review contracts change |
 | **External services** | Git provider/API, CI provider (both repo-specific; no fixed MCP) |
 
-See [setup-freshness.md](../docs/skill-framework/shared/setup-freshness.md) for the shared contract.
+See [setup-freshness.md](../../docs/skill-framework/shared/setup-freshness.md) for the shared contract.
 Platform-neutral autonomous task-implementation skill: isolated build → adjudicated independent review →
 portable review evidence → lifecycle validation → pull-request/completion action. No Datadog/GitLab/Jira MCP
 is required — see [reference/mcp-capabilities.md](reference/mcp-capabilities.md).
@@ -133,12 +133,12 @@ circuit breakers.
 ## Framework
 
 This skill follows the shared framework conventions:
-[docs/skill-framework/README.md](../docs/skill-framework/README.md) ·
-[cross-skill-escalation](../docs/skill-framework/shared/cross-skill-escalation.md) ·
-[smoke-test-conventions](../docs/skill-framework/shared/smoke-test-conventions.md) ·
-[examples-conventions](../docs/skill-framework/shared/examples-conventions.md) ·
-[post-action-templates](../docs/skill-framework/shared/post-action-templates.md) ·
-[claude-code-setup](../docs/skill-framework/shared/claude-code-setup.md).
+[docs/skill-framework/README.md](../../docs/skill-framework/README.md) ·
+[cross-skill-escalation](../../docs/skill-framework/shared/cross-skill-escalation.md) ·
+[smoke-test-conventions](../../docs/skill-framework/shared/smoke-test-conventions.md) ·
+[examples-conventions](../../docs/skill-framework/shared/examples-conventions.md) ·
+[post-action-templates](../../docs/skill-framework/shared/post-action-templates.md) ·
+[claude-code-setup](../../docs/skill-framework/shared/claude-code-setup.md).
 
 ## Smoke test
 

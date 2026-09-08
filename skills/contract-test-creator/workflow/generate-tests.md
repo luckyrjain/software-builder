@@ -11,13 +11,13 @@ consumes:
 
 # Generate tests
 
-Follow the shared [test-creator common workflow](../../docs/skill-framework/shared/test-creator-common-workflow.md)
-and run the [test-creator write-safety contract](../../docs/skill-framework/shared/test-creator-write-safety.md)
+Follow the shared [test-creator common workflow](../../../docs/skill-framework/shared/test-creator-common-workflow.md)
+and run the [test-creator write-safety contract](../../../docs/skill-framework/shared/test-creator-write-safety.md)
 before any test, pact, report, or coverage-state write. The contract-specific rules below are deltas only.
 
 For every `NEW` item in `target_list`, write tests that satisfy
 [reference/test-quality-deltas.md](../reference/test-quality-deltas.md) (on top of the shared
-[test-quality rules](../../docs/skill-framework/shared/test-creation-principles.md#2-test-quality-rules))
+[test-quality rules](../../../docs/skill-framework/shared/test-creation-principles.md#2-test-quality-rules))
 in full — this phase does not restate those checklists, it enforces them. Consumer and provider
 generation are **different code paths**; §1/§2 below are not interchangeable steps.
 
@@ -51,7 +51,7 @@ For each interaction (or for the provider as a whole, when backfilling verificat
 ## 3. Derive the interaction shape from real, observed usage only
 
 This is this skill's specific instance of the shared test-first-evidence principle
-([test-creation-principles.md §1](../../docs/skill-framework/shared/test-creation-principles.md#1-test-first-evidence)).
+([test-creation-principles.md §1](../../../docs/skill-framework/shared/test-creation-principles.md#1-test-first-evidence)).
 An interaction's request matcher and expected response shape must trace to one of:
 
 - The consumer's actual request-building code (a real call site with real headers/body/params).

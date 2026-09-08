@@ -1,6 +1,6 @@
 # Examples — invocation patterns
 
-Conventions: [examples-conventions](../docs/skill-framework/shared/examples-conventions.md).
+Conventions: [examples-conventions](../../docs/skill-framework/shared/examples-conventions.md).
 
 ## Invocation table
 
@@ -63,7 +63,7 @@ top_n_deployments_per_namespace: 5}}`, `cost_rate: {...}`
 
 **Agent:** Run sweep § 1 runs the namespace/deployment waste-ranking queries directly against Datadog MCP
 (never a delegated k8s-overprovisioning-datadog invocation — that mode isn't documented as standalone,
-see the [design spec](../docs/superpowers/specs/2026-08-05-cost-optimization-sprint-planner-design.md)),
+see the [design spec](../../docs/superpowers/specs/2026-08-05-cost-optimization-sprint-planner-design.md)),
 producing at most 15 candidate deployments, then loops the sweep over exactly that list.
 
 ---

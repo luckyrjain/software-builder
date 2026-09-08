@@ -66,7 +66,7 @@ The executable handoff guard is:
 
 `execution_context` is the required exception to unchanged pass-through. Before each child dispatch,
 apply the inherited recursion protection in
-[runtime-contract.md §8](../../docs/skill-framework/shared/runtime-contract.md#8-recursion-protection).
+[runtime-contract.md §8](../../../docs/skill-framework/shared/runtime-contract.md#8-recursion-protection).
 If the handoff guard rejects the child, do not dispatch it. Record that planned level with
 `dispatch_status: BLOCKED` and `blocked_reason: recursion_guard_rejected`, while preserving the guard's
 human-readable reason in the enclosing canonical result blockers. Do not invent a specialist `report` for

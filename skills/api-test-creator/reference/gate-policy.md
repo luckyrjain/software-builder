@@ -30,7 +30,7 @@ reference — do not fall back to "diff against the last commit."
 ## 5. Target has no real observed endpoint to derive its shape from
 
 This skill's instance of the shared test-first-evidence principle
-([test-creation-principles.md §1](../../docs/skill-framework/shared/test-creation-principles.md#1-test-first-evidence)).
+([test-creation-principles.md §1](../../../docs/skill-framework/shared/test-creation-principles.md#1-test-first-evidence)).
 When neither the actual route-handler source, an OpenAPI/Swagger spec, nor `API_CATALOG.md` (corroborating
 only) gives a real request/response shape for a target, do not invent a plausible-looking payload. Tag
 `NEEDS_OBSERVED_ENDPOINT` with a one-line reason instead (see
@@ -43,7 +43,7 @@ A caller asking to "just invent a reasonable response shape" does not change the
 Running the collection requires a real, reachable running API instance — locally started, staging, or a
 preview deployment. Without one, an assertion on "what the response would look like" would have to be
 guessed, which is exactly the fabrication
-[test-creation-principles.md §1](../../docs/skill-framework/shared/test-creation-principles.md#1-test-first-evidence)
+[test-creation-principles.md §1](../../../docs/skill-framework/shared/test-creation-principles.md#1-test-first-evidence)
 forbids. Tag every affected target `NEEDS_API_ENV` (see
 [verify-and-iterate.md §1](../workflow/verify-and-iterate.md#1-no-reachable-api-instance-check-before-running-anything))
 and name what would resolve it — never fabricate what a response would have been.
@@ -58,7 +58,7 @@ that just hides the break from every real caller of the endpoint. Tag `WRITTEN_F
 request and assertion exactly as they are, and surface it in the report per
 [report.md §3](../workflow/report.md#3-surface-production-bug-findings-plainly) for a human or
 **loop-task-implementer**/**pr-review** to act on. Full non-negotiable:
-[test-creation-principles.md §5](../../docs/skill-framework/shared/test-creation-principles.md#5-escalation-on-a-surfaced-production-bug).
+[test-creation-principles.md §5](../../../docs/skill-framework/shared/test-creation-principles.md#5-escalation-on-a-surfaced-production-bug).
 
 ## 8. `max_files_per_run` reached
 

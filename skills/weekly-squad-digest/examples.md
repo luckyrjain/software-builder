@@ -1,6 +1,6 @@
 # Examples — invocation patterns
 
-Conventions: [examples-conventions](../docs/skill-framework/shared/examples-conventions.md).
+Conventions: [examples-conventions](../../docs/skill-framework/shared/examples-conventions.md).
 
 ## Invocation table
 
@@ -82,7 +82,7 @@ never blocked on the missing cost rollup.
 **Caller:** Both rollups supplied; `api-legacy-ledger` appears in `migration_program_rollup.json` with
 `squad: payments` and in `cost_optimization_sprint_rollup.json` with `squad: collections` — a real,
 expected case, since the two rollups resolve `squad` via different join mechanisms (see
-[org-rollup-schema.md § 3](../docs/skill-framework/shared/org-rollup-schema.md#3-join-key-squad-map-is-the-only-authoritative-source)).
+[org-rollup-schema.md § 3](../../docs/skill-framework/shared/org-rollup-schema.md#3-join-key-squad-map-is-the-only-authoritative-source)).
 The migration item also carries `staleness_days: 21`, past the 14-day default `staleness_warning_days` —
 so its row exercises **both** the staleness flag and the cross-rollup pointer at once, joined with `; `.
 

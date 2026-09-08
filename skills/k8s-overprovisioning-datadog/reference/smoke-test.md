@@ -1,10 +1,10 @@
 # Smoke test
 
-Conventions: [smoke-test-conventions](../../docs/skill-framework/shared/smoke-test-conventions.md)
+Conventions: [smoke-test-conventions](../../../docs/skill-framework/shared/smoke-test-conventions.md)
 
 Re-run after **any** skill edit (not only install).
 
-Conventions: [smoke-test-conventions](../../docs/skill-framework/shared/smoke-test-conventions.md)
+Conventions: [smoke-test-conventions](../../../docs/skill-framework/shared/smoke-test-conventions.md)
 
 ## Invocation
 

@@ -194,4 +194,4 @@ When Phase 1 step 3 finds a prior `review_metadata` YAML footer, extract fields 
 
 **First review on MR:** omit `history`; set `precision.prior_*` and `regression_*` to zero.
 
-Normative schema: [review-metadata-schema.md](../../docs/skill-framework/shared/review-metadata-schema.md).
+Normative schema: [review-metadata-schema.md](../../../docs/skill-framework/shared/review-metadata-schema.md).

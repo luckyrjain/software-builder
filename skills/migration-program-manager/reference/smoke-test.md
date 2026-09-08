@@ -4,7 +4,7 @@ Run after install or any edit to this skill. Use ≥2 workspaces, each with a `M
 [mysql-to-postgres-sql/reference/smoke-test.md](../../mysql-to-postgres-sql/reference/smoke-test.md) to
 set one up), at least one with a `SQUAD_MAP.md` and one without (to exercise both join paths).
 
-Conventions: [smoke-test-conventions](../../docs/skill-framework/shared/smoke-test-conventions.md)
+Conventions: [smoke-test-conventions](../../../docs/skill-framework/shared/smoke-test-conventions.md)
 
 ## Invocation
 

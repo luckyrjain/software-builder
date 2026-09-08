@@ -6,7 +6,7 @@ confirm those first), a `release_manifest` with 2 entries, at least one repo wit
 `since` marker, and at least one service with a recent observability error/infra signal (Datadog or the
 configured incident-rca alternative) to exercise the Phase 1 "stop here" path, not just the clean path.
 
-Conventions: [smoke-test-conventions](../../docs/skill-framework/shared/smoke-test-conventions.md)
+Conventions: [smoke-test-conventions](../../../docs/skill-framework/shared/smoke-test-conventions.md)
 
 ## Invocation
 

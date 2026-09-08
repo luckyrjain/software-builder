@@ -1,7 +1,7 @@
 # Repository health dimensions
 
 Normative rubric for `repository_health.dimensions` in the Phase 5 `review_metadata` YAML footer.
-Shared schema: [review-metadata-schema.md](../../docs/skill-framework/shared/review-metadata-schema.md) §6.
+Shared schema: [review-metadata-schema.md](../../../docs/skill-framework/shared/review-metadata-schema.md) §6.
 
 ## When to score
 

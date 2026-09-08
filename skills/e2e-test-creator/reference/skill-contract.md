@@ -4,7 +4,7 @@ Load immediately after [SKILL.md](../SKILL.md). These rules override convenience
 
 Shared rules common to all four `*-test-creator` skills — test-first evidence, test-quality rules,
 refactor limits, and the shared report skeleton — live in
-[test-creation-principles.md](../../docs/skill-framework/shared/test-creation-principles.md) and are
+[test-creation-principles.md](../../../docs/skill-framework/shared/test-creation-principles.md) and are
 **not restated here**. This file states only what's different for full-browser end-to-end tests.
 
 ## e2e-specific deltas
@@ -45,4 +45,4 @@ refactor limits, and the shared report skeleton — live in
 - Lazy-load — only the reference file(s) named for the current phase in
   [lazy-load-index.md](lazy-load-index.md); do not bulk-read all of `reference/`.
 
-Routing: [skill-routing.md](../../docs/skill-framework/shared/skill-routing.md).
+Routing: [skill-routing.md](../../../docs/skill-framework/shared/skill-routing.md).

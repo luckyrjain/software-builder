@@ -11,12 +11,12 @@ consumes:
 
 # Generate tests
 
-Follow the shared [test-creator common workflow](../../docs/skill-framework/shared/test-creator-common-workflow.md)
-and run the [test-creator write-safety contract](../../docs/skill-framework/shared/test-creator-write-safety.md)
+Follow the shared [test-creator common workflow](../../../docs/skill-framework/shared/test-creator-common-workflow.md)
+and run the [test-creator write-safety contract](../../../docs/skill-framework/shared/test-creator-write-safety.md)
 before any spec, report, or coverage-state write. The E2E-specific rules below are deltas only.
 
 For every `NEW` journey in `target_list`, write a test that satisfies the shared
-[test-creation-principles.md §2](../../docs/skill-framework/shared/test-creation-principles.md#2-test-quality-rules)
+[test-creation-principles.md §2](../../../docs/skill-framework/shared/test-creation-principles.md#2-test-quality-rules)
 checklist plus this skill's own deltas in
 [reference/test-quality-deltas.md](../reference/test-quality-deltas.md) — this phase does not restate
 either, it enforces them.
@@ -25,7 +25,7 @@ either, it enforces them.
 
 A meaningful e2e assertion has to be grounded in what the app actually renders — its visible text, its
 ARIA roles, its URL after navigation. Writing one against a guess of what the UI "probably" shows is
-exactly the fabrication [test-creation-principles.md §1](../../docs/skill-framework/shared/test-creation-principles.md#1-test-first-evidence)
+exactly the fabrication [test-creation-principles.md §1](../../../docs/skill-framework/shared/test-creation-principles.md#1-test-first-evidence)
 forbids. Before generating steps/assertions for any journey, confirm this session can actually reach a
 running instance of the app (locally started, a staging URL, or a preview deployment). If none is
 reachable, do not proceed — tag every remaining `NEW` journey `NEEDS_BROWSER_ENV` and stop this phase for

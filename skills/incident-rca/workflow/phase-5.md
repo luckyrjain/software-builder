@@ -68,7 +68,7 @@ Markdown-structure injection (Rule 4).
 
 The rendered RCA report (file or chat paste of full sections) MUST NOT include agent mode instructions
 (`Type ACT`, `PLAN/ACT`, MCP setup steps, posting confirmations). Those belong in **chat only** after
-the report — see [post-action-templates.md](../../docs/skill-framework/shared/post-action-templates.md).
+the report — see [post-action-templates.md](../../../docs/skill-framework/shared/post-action-templates.md).
 
 Required narrative sections from [report-template.md](../report-template.md) (mandatory order):
 
@@ -159,7 +159,7 @@ When the user requests *"stop here"*, *"give me what you have"*, or a phase chec
 - Never claim a root cause as fact when confidence is `LOW` or `UNKNOWN`.
 - Emit **`assessment_metadata` YAML footer** — v2 platform analytics blocks (`history`, `precision`,
   `investigation_quality`). Normative spec: [reference/assessment-metadata.md](../reference/assessment-metadata.md);
-  shared schema: [review-metadata-schema.md](../../docs/skill-framework/shared/review-metadata-schema.md) §8.1.
+  shared schema: [review-metadata-schema.md](../../../docs/skill-framework/shared/review-metadata-schema.md) §8.1.
 
 ## `assessment_metadata` footer (platform analytics)
 

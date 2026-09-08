@@ -92,7 +92,7 @@ Do **not** present partial or unable output as a complete review.
 
 When the findings table exceeds **~15 rows** or dimension scores benefit from layout, offer opening a
 [canvas](~/.cursor/skills-cursor/canvas/SKILL.md) for severity distribution and score comparison.
-See [post-action-templates.md](../docs/skill-framework/shared/post-action-templates.md) §6.
+See [post-action-templates.md](../../docs/skill-framework/shared/post-action-templates.md) §6.
 
 ## Post-actions
 

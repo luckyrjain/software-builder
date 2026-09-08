@@ -4,7 +4,7 @@ Run after install **and** after any edit to this skill (SKILL.md, workflow/*.md,
 reference/state-schema.yaml, or `scripts/validate_loop_lifecycle.py`). Use a small repo with at least one
 open, well-scoped task and repository write access.
 
-Conventions: [smoke-test-conventions](../../docs/skill-framework/shared/smoke-test-conventions.md)
+Conventions: [smoke-test-conventions](../../../docs/skill-framework/shared/smoke-test-conventions.md)
 
 ## Invocation
 

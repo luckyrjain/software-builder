@@ -203,7 +203,7 @@ repository_health:
 | `automation` | int \| null | 10 = hooks + anchor lint + pressure tests; 7 = partial; 4 = manual-only |
 | `observability` | int \| null | 10 = APM + dashboards + SLOs; 7 = partial; **null** when not applicable |
 
-Normative rubric: [pr-review/reference/repository-health.md](../../../pr-review/reference/repository-health.md).
+Normative rubric: [pr-review/reference/repository-health.md](../../../skills/pr-review/reference/repository-health.md).
 Prose mirror (optional): `Repository maturity (informational)` line in Phase 5 Engineering improvements.
 
 **Phase 2 minimum (no repo context):** `{ schema_version: 2 }` — same as Phase 1 stub with bumped version.
@@ -293,7 +293,7 @@ names and types where applicable; only the top-level key and skill-specific core
 
 ### 8.1 incident-rca field mapping
 
-Detail: [incident-rca/reference/assessment-metadata.md](../../../incident-rca/reference/assessment-metadata.md).
+Detail: [incident-rca/reference/assessment-metadata.md](../../../skills/incident-rca/reference/assessment-metadata.md).
 
 ```yaml
 assessment_metadata:
@@ -333,7 +333,7 @@ assessment_metadata:
 
 ### 8.2 k8s-overprovisioning field mapping
 
-Detail: [k8s-overprovisioning-datadog/workflow/report.md](../../../k8s-overprovisioning-datadog/workflow/report.md)
+Detail: [k8s-overprovisioning-datadog/workflow/report.md](../../../skills/k8s-overprovisioning-datadog/workflow/report.md)
 §Assessment metadata footer.
 
 ```yaml
@@ -373,7 +373,7 @@ assessment_metadata:
 
 ### 8.3 domain-comprehension field mapping
 
-Detail: [domain-comprehension/reference/assessment-metadata.md](../../../domain-comprehension/reference/assessment-metadata.md).
+Detail: [domain-comprehension/reference/assessment-metadata.md](../../../skills/domain-comprehension/reference/assessment-metadata.md).
 
 ```yaml
 assessment_metadata:
@@ -418,7 +418,7 @@ Omit `history` on first engagement with no prior footer. `overall_confidence` MU
 
 ### 8.4 squad-map field mapping
 
-Detail: [squad-map/reference/assessment-metadata.md](../../../squad-map/reference/assessment-metadata.md).
+Detail: [squad-map/reference/assessment-metadata.md](../../../skills/squad-map/reference/assessment-metadata.md).
 
 ```yaml
 assessment_metadata:
@@ -457,7 +457,7 @@ assessment_metadata:
 
 ### 8.5 mysql-to-postgres-sql field mapping
 
-Detail: [mysql-to-postgres-sql/reference/assessment-metadata.md](../../../mysql-to-postgres-sql/reference/assessment-metadata.md).
+Detail: [mysql-to-postgres-sql/reference/assessment-metadata.md](../../../skills/mysql-to-postgres-sql/reference/assessment-metadata.md).
 
 ```yaml
 assessment_metadata:

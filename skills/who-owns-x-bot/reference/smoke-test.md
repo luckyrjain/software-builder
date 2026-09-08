@@ -4,7 +4,7 @@ Run after install or any edit to this skill. Use a workspace where squad-map alr
 one repo at HIGH or MEDIUM confidence (see [squad-map/reference/smoke-test.md](../../squad-map/reference/smoke-test.md)
 to set that up first if needed).
 
-Conventions: [smoke-test-conventions](../../docs/skill-framework/shared/smoke-test-conventions.md)
+Conventions: [smoke-test-conventions](../../../docs/skill-framework/shared/smoke-test-conventions.md)
 
 ## Invocation
 

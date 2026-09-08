@@ -6,7 +6,7 @@ frontmatter should match the version of the latest entry below that names that f
 ## [1.0.0] — 2026-08-05
 
 ### Added
-- Initial skill release — item #7 of the [team-facing agents roadmap](../docs/superpowers/plans/2026-08-05-team-facing-agents-roadmap.md):
+- Initial skill release — item #7 of the [team-facing agents roadmap](../../docs/superpowers/plans/2026-08-05-team-facing-agents-roadmap.md):
   a scheduled queue-management wrapper around loop-task-implementer, pulling N tickets from a
   Jira/GitHub Issues query and working through them overnight in dependency order
 - `reference/queue-policy.md` — session-level state (extends, never modifies, loop-task-implementer's
@@ -24,4 +24,4 @@ frontmatter should match the version of the latest entry below that names that f
 - Shared framework compliance (cross-skill-escalation, prompt-injection, skill-routing);
   `confidence-bands.md`/`phase-glossary.md` don't apply, inheriting loop-task-implementer's own
   documented exemption
-- Design spec: [docs/superpowers/specs/2026-08-05-backlog-runner-design.md](../docs/superpowers/specs/2026-08-05-backlog-runner-design.md)
+- Design spec: [docs/superpowers/specs/2026-08-05-backlog-runner-design.md](../../docs/superpowers/specs/2026-08-05-backlog-runner-design.md)

@@ -1,7 +1,7 @@
 # Assessment metadata footer (incident-rca)
 
 Machine-readable YAML emitted at Phase 5 closeout. Normative shared blocks:
-[review-metadata-schema.md](../../docs/skill-framework/shared/review-metadata-schema.md) §8.1.
+[review-metadata-schema.md](../../../docs/skill-framework/shared/review-metadata-schema.md) §8.1.
 
 ## When to emit
 

@@ -1,6 +1,6 @@
 # Examples — module-design
 
-Conventions: [examples-conventions](../docs/skill-framework/shared/examples-conventions.md).
+Conventions: [examples-conventions](../../docs/skill-framework/shared/examples-conventions.md).
 
 ## Invocation
 

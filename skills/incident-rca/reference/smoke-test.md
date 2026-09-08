@@ -4,7 +4,7 @@ Run this on a **known incident** (a window where you already know roughly what h
 skill and its MCP tools work end to end. **Also run it after any edit to this skill** to catch
 regressions, not just after install.
 
-Conventions: [smoke-test-conventions](../../docs/skill-framework/shared/smoke-test-conventions.md)
+Conventions: [smoke-test-conventions](../../../docs/skill-framework/shared/smoke-test-conventions.md)
 
 ## Invocation
 

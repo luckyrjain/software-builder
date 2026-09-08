@@ -13,7 +13,7 @@ consumes:
 
 # Detect conventions
 
-Follow the canonical [test-creator common workflow](../../docs/skill-framework/shared/test-creator-common-workflow.md)
+Follow the canonical [test-creator common workflow](../../../docs/skill-framework/shared/test-creator-common-workflow.md)
 for shared detection behavior; the rules below are unit-level detection deltas.
 
 Run [scripts/detect-test-framework.sh](../scripts/detect-test-framework.sh) against `repo_root` before

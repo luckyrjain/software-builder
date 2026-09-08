@@ -34,7 +34,7 @@ No jargon; readable by an EM who did not read every inline comment.
 | **Review cost** | See **Review cost metrics** subsection — files reviewed, commits in MR, estimated effort (minutes), coverage % |
 | **Risk** | **Production risk** overall (Low / Medium / High). If Production risk omitted, derive from highest open finding Overall |
 | **Evidence** | **Required** checklist of observed facts — checkmarks, concrete counts (`N/N` files, commands run, truncation status). Merges the former Verification checklist. See **Evidence** subsection below. |
-| **Confidence** | **High** / **Medium** / **Low** — one interpretation line immediately after **Evidence** (not a separate "Confidence reason" section). Separate from per-finding confidence in the findings table. Never emit a bare label without justification. Per-finding and overall confidence bands: [confidence-bands.md](../../docs/skill-framework/shared/confidence-bands.md). Derivation rules: [review-metrics.md](review-metrics.md) §Review-level confidence. |
+| **Confidence** | **High** / **Medium** / **Low** — one interpretation line immediately after **Evidence** (not a separate "Confidence reason" section). Separate from per-finding confidence in the findings table. Never emit a bare label without justification. Per-finding and overall confidence bands: [confidence-bands.md](../../../docs/skill-framework/shared/confidence-bands.md). Derivation rules: [review-metrics.md](review-metrics.md) §Review-level confidence. |
 | **Inference** | **Optional on first review; required on incremental re-reviews.** 2–4 bullets max — judgment derived from evidence (regressions, scope category, merge risk). Separate block **after** Evidence; label `### Inference` or `## Inference`. |
 | **Gate matrix** | **Code blockers** (findings + business impact) → **Decision gates** → **Technical blockers** → **Process blockers** → **Recommendation** — see §Gate matrix |
 | **Recommendation reason** | **Required** on every review. One prose block **after** gate tables explaining *why* the verdict was reached. Use the `**Reason:**` label (see template). On 🔴 Request changes, cite blocking items briefly. |
@@ -507,4 +507,4 @@ Mechanical MR brief form — use **Blocking Issues: None** and **Reason:** (not 
 Use **—** for scores N/A on mechanical MRs.
 
 **Canvas:** when findings exceed ~15 rows, offer [canvas](~/.cursor/skills-cursor/canvas/SKILL.md) for
-severity distribution — [post-action-templates.md](../../docs/skill-framework/shared/post-action-templates.md) §6.
+severity distribution — [post-action-templates.md](../../../docs/skill-framework/shared/post-action-templates.md) §6.

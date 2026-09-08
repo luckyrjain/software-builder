@@ -93,7 +93,7 @@ frontmatter should match the version of the latest entry below that names that f
 - `reference/{skill-contract,phase-index,lazy-load-index,gate-policy,test-quality-deltas,
   framework-detection,report-format,smoke-test,pressure-tests}.md`. `skill-contract.md` and
   `test-quality-deltas.md` link to the new shared
-  [test-creation-principles.md](../docs/skill-framework/shared/test-creation-principles.md) for rules
+  [test-creation-principles.md](../../docs/skill-framework/shared/test-creation-principles.md) for rules
   common to all four `*-test-creator` skills, stating only this skill's own deltas.
 - Shared framework compliance (prompt-injection, skill-routing, cross-skill-escalation, examples
   conventions, smoke-test conventions).

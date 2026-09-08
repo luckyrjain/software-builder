@@ -60,7 +60,7 @@ requires a GitLab MCP and a GitLab target never requires GitHub access.
 Provider writes use the provider-specific recovery rule below, not the automatic read retry.
 
 **Normative — stated once here:** Phase 0 probes and Phase 1 reads follow the shared 1-retry policy —
-[mcp-error-handling.md](../../docs/skill-framework/shared/mcp-error-handling.md) §3. `timeout`,
+[mcp-error-handling.md](../../../docs/skill-framework/shared/mcp-error-handling.md) §3. `timeout`,
 `rate_limited`, and `server_error` responses get **one retry** (5s delay for `timeout`/`server_error`,
 30s for `rate_limited`); if the retry also fails, mark that tool unavailable for this session and fall
 through to the degraded path — the Prerequisites messages above for GitLab/Jira, or the fallback column

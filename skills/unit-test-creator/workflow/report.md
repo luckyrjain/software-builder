@@ -11,15 +11,15 @@ consumes:
 
 # Report
 
-Apply the shared [test-creator common workflow](../../docs/skill-framework/shared/test-creator-common-workflow.md)
-and [write-safety contract](../../docs/skill-framework/shared/test-creator-write-safety.md) before writing
+Apply the shared [test-creator common workflow](../../../docs/skill-framework/shared/test-creator-common-workflow.md)
+and [write-safety contract](../../../docs/skill-framework/shared/test-creator-write-safety.md) before writing
 the report or optional coverage state. Preserve the raw guard result in the canonical `skill_result`;
 keep the rendered report aligned to its report-format contract and
-[safe-output.md](../../docs/skill-framework/shared/safe-output.md). Do not paste `status_snapshot` or `reason` verbatim into Markdown.
+[safe-output.md](../../../docs/skill-framework/shared/safe-output.md). Do not paste `status_snapshot` or `reason` verbatim into Markdown.
 
 Render `UNIT_TEST_REPORT.md` at `output_dir` per
 [reference/report-format.md](../reference/report-format.md), which follows the shared skeleton in
-[test-creation-principles.md §4](../../docs/skill-framework/shared/test-creation-principles.md#4-reporting-format-shared-skeleton).
+[test-creation-principles.md §4](../../../docs/skill-framework/shared/test-creation-principles.md#4-reporting-format-shared-skeleton).
 
 ## 1. Always produced
 
@@ -50,7 +50,7 @@ the real dependency. This is a normal, expected outcome for some targets, not a 
 ## 5. Write incremental backfill state (optional, backfill mode only)
 
 For a backfill run, upsert `UNIT_TEST_COVERAGE_STATE.yaml` at `output_dir` per
-[test-creation-principles.md §6](../../docs/skill-framework/shared/test-creation-principles.md#6-incremental-backfill-state-optional):
+[test-creation-principles.md §6](../../../docs/skill-framework/shared/test-creation-principles.md#6-incremental-backfill-state-optional):
 one entry per target this run actually attempted (status + `content_hash` + `test_file`). Add to
 `pending_backlog`: every newly `SKIPPED_MAX_FILES` target, and every attempted target whose final status
 is anything other than `WRITTEN_PASSING` — an unresolved target (`NEEDS_HUMAN`,

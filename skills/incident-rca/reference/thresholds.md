@@ -1,6 +1,6 @@
 # Confidence and signal thresholds
 
-Numeric cutoffs for incident-rca. Categorical bands (HIGH / MEDIUM / LOW / UNKNOWN): [confidence-bands.md](../../docs/skill-framework/shared/confidence-bands.md).
+Numeric cutoffs for incident-rca. Categorical bands (HIGH / MEDIUM / LOW / UNKNOWN): [confidence-bands.md](../../../docs/skill-framework/shared/confidence-bands.md).
 
 Manual scoring weights: [manual-scoring.md](manual-scoring.md). Guardrails: [evidence-schema.md](evidence-schema.md).
 

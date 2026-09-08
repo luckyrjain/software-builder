@@ -40,12 +40,12 @@ Per [reference/sweep-policy.md § 3–4](../reference/sweep-policy.md#3-invoking
    (`INSUFFICIENT_METRICS`/`AMBIGUOUS_UNRESOLVED`/`AUTH_FAILURE` — no file to move).
 
    **Sanitize the deployment name before it becomes part of a path (P1 fix)** — `sweep_scope.deployments`
-   is untrusted content per [prompt-injection.md](../../docs/skill-framework/shared/prompt-injection.md)
+   is untrusted content per [prompt-injection.md](../../../docs/skill-framework/shared/prompt-injection.md)
    (a caller- or tracker-supplied string, not something this skill authored). Apply
-   [safe-output.md § Rule 1](../../docs/skill-framework/shared/safe-output.md#rule-1-safe-slugs-untrusted-string-filename-component)
+   [safe-output.md § Rule 1](../../../docs/skill-framework/shared/safe-output.md#rule-1-safe-slugs-untrusted-string-filename-component)
    to produce `<safe-deployment-slug>`: keep only `[A-Za-z0-9._-]`, replace everything else with `_`, cap
    at 128 characters. Then apply
-   [§ Rule 2](../../docs/skill-framework/shared/safe-output.md#rule-2-path-containment) — resolve the
+   [§ Rule 2](../../../docs/skill-framework/shared/safe-output.md#rule-2-path-containment) — resolve the
    final `<output_dir>/decision-graph-<safe-deployment-slug>.json` path and verify it is still inside
    `output_dir` (from [workflow/inputs.md](inputs.md)) before writing; reject and record a sweep gap
    instead of writing outside it. Perform the move via a direct file-rename operation, never a shell
@@ -74,10 +74,10 @@ this sweep — resolved once here, supplied to every invocation in step 2, never
 
 ## 3. Join each `decision_graph` into an `org_rollup_item`
 
-Per [org-rollup-schema.md § 4](../../docs/skill-framework/shared/org-rollup-schema.md#4-adapters-per-source-skill)'s
+Per [org-rollup-schema.md § 4](../../../docs/skill-framework/shared/org-rollup-schema.md#4-adapters-per-source-skill)'s
 `k8s_waste` adapter — `service` from the graph's `metadata` block, `status`/`priority` from
 `recommendations[]`, `value` preferring `appendix.cost` when present (never guaranteed — see
-[design spec § Non-goals](../../docs/superpowers/specs/2026-08-05-cost-optimization-sprint-planner-design.md#non-goals-explicitly-out-of-scope)),
+[design spec § Non-goals](../../../docs/superpowers/specs/2026-08-05-cost-optimization-sprint-planner-design.md#non-goals-explicitly-out-of-scope)),
 falling back to `cost-estimation.md`'s formulas applied against `observations`/`recommendations` directly
 when `appendix.cost` is absent.
 

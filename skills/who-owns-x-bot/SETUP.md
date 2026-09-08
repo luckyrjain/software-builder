@@ -10,7 +10,7 @@
 | **Review cadence** | Quarterly — or when pinned MCP package versions change |
 | **External services** | squad-map (Slack handler is host infra) |
 
-See [setup-freshness.md](../docs/skill-framework/shared/setup-freshness.md) for the shared contract.
+See [setup-freshness.md](../../docs/skill-framework/shared/setup-freshness.md) for the shared contract.
 ## Ambient discovery is deliberately disabled
 
 Unlike squad-map, this skill sets `disable-model-invocation: true` — it does not auto-apply from a
@@ -39,7 +39,7 @@ make install-claude-who-owns-x-bot
 ```
 
 No restart needed — a new Claude Code session picks it up. See
-[claude-code-setup.md](../docs/skill-framework/shared/claude-code-setup.md).
+[claude-code-setup.md](../../docs/skill-framework/shared/claude-code-setup.md).
 
 ### Kiro / in-repo discovery
 
@@ -78,9 +78,9 @@ GitLab webhook receiver, which also lives outside this repo. The handler you bui
 
 ## Framework links
 
-- [skill-framework README](../docs/skill-framework/README.md)
-- [confidence-bands](../docs/skill-framework/shared/confidence-bands.md)
-- [cross-skill-escalation](../docs/skill-framework/shared/cross-skill-escalation.md)
+- [skill-framework README](../../docs/skill-framework/README.md)
+- [confidence-bands](../../docs/skill-framework/shared/confidence-bands.md)
+- [cross-skill-escalation](../../docs/skill-framework/shared/cross-skill-escalation.md)
 
 ## Smoke test
 

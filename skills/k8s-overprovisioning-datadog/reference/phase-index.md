@@ -1,6 +1,6 @@
 # Phase index
 
-Canonical names: [phase-glossary](../../docs/skill-framework/shared/phase-glossary.md#4-k8s-mapping)
+Canonical names: [phase-glossary](../../../docs/skill-framework/shared/phase-glossary.md#4-k8s-mapping)
 
 **One workflow file per phase** — never bulk-load workflow or reference files. Optional **COST** runs
 only when the cost gate is open ([validate.md](../workflow/validate.md#cost-gate)).

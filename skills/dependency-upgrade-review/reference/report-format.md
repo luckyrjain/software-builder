@@ -6,7 +6,7 @@
 
 `dependency_name`, `current_version`, `target_version`, `changelog_text` (supplied release-notes/changelog
 prose), and `manifest_excerpt` (supplied manifest/lockfile content) are all caller-supplied, untrusted data
-per [prompt-injection.md](../../docs/skill-framework/shared/prompt-injection.md) — `dependency_name`,
+per [prompt-injection.md](../../../docs/skill-framework/shared/prompt-injection.md) — `dependency_name`,
 `current_version`, and `target_version` are Required per [workflow/inputs.md](../workflow/inputs.md), not
 validated beyond presence, and are rendered directly into the report H1 and into CVE/API-differences table
 cells. This report quotes all five directly (the H1 and table cells render `dependency_name`,
@@ -17,11 +17,11 @@ transitive-dependency section cites manifest/lockfile lines) — every one of th
    triple-backtick fences in every one of them, always.**
 2. Wrap short identifier-shaped values (paths, names, refs) in an inline code span, first **removing**
    any backtick already in it
-   ([safe-output.md § Rule 4](../../docs/skill-framework/shared/safe-output.md#rule-4-markdown-chat-escaping)).
+   ([safe-output.md § Rule 4](../../../docs/skill-framework/shared/safe-output.md#rule-4-markdown-chat-escaping)).
 
 Free-text evidence quoted from `changelog_text` or `manifest_excerpt` (a changelog paragraph, a
 lockfile block) additionally needs
-[safe-output.md § Rule 5](../../docs/skill-framework/shared/safe-output.md#rule-5-pii-secret-redaction-in-rendered-output)
+[safe-output.md § Rule 5](../../../docs/skill-framework/shared/safe-output.md#rule-5-pii-secret-redaction-in-rendered-output)
 redaction before it is echoed into the report — a changelog or internal manifest excerpt can carry an
 embedded credential, internal hostname, or other secret that must not be reproduced verbatim.
 

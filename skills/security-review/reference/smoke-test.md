@@ -4,7 +4,7 @@ Run after install or any edit to this skill. Use a small, realistic snippet of c
 contains at least one deliberate, known finding (e.g. a hardcoded credential, or a raw SQL string
 built via concatenation) so the happy path is exercised against real evidence, not an empty diff.
 
-Conventions: [smoke-test-conventions](../../docs/skill-framework/shared/smoke-test-conventions.md)
+Conventions: [smoke-test-conventions](../../../docs/skill-framework/shared/smoke-test-conventions.md)
 
 ## Invocation
 

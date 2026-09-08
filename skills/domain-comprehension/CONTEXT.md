@@ -1,6 +1,6 @@
 # Target System Analysis
 
-Vocabulary for describing **customer systems** — the repositories, services, and business domains a skill analyzes inside a **target workspace**. This context is produced and consumed by domain-comprehension, squad-map, prd-architect, and org-wide rollup skills. It is not vocabulary for the Software Builder platform itself; see [../CONTEXT.md](../CONTEXT.md).
+Vocabulary for describing **customer systems** — the repositories, services, and business domains a skill analyzes inside a **target workspace**. This context is produced and consumed by domain-comprehension, squad-map, prd-architect, and org-wide rollup skills. It is not vocabulary for the Software Builder platform itself; see [../../CONTEXT.md](../../CONTEXT.md).
 
 ## Scope boundary
 

@@ -5,7 +5,7 @@ build-ready section) with enough detail to derive components, an API/event surfa
 a second, sparser input that omits load/capacity data to exercise the "Ready with open questions" path,
 not just the clean path.
 
-Conventions: [smoke-test-conventions](../../docs/skill-framework/shared/smoke-test-conventions.md)
+Conventions: [smoke-test-conventions](../../../docs/skill-framework/shared/smoke-test-conventions.md)
 
 ## Invocation
 

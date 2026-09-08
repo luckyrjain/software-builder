@@ -19,7 +19,7 @@ frontmatter should match the version of the latest entry below that names that f
 - No `disable-model-invocation` — ambiently invocable, unlike the four unattended/webhook wrappers
 - Shared framework compliance (confidence-bands, cross-skill-escalation, prompt-injection, skill-routing,
   phase-glossary)
-- Design spec: [docs/superpowers/specs/2026-08-05-new-hire-guide-design.md](../docs/superpowers/specs/2026-08-05-new-hire-guide-design.md)
+- Design spec: [docs/superpowers/specs/2026-08-05-new-hire-guide-design.md](../../docs/superpowers/specs/2026-08-05-new-hire-guide-design.md)
 
 ### Fixed (round-1 review, same day)
 - **Removed `domain-config.yaml scope.seed_repos` narrowing** — the original design scoped

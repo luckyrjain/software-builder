@@ -33,7 +33,7 @@ reference — do not fall back to "diff against the last commit."
 ## 5. Target has no real observed interaction to derive its shape from
 
 This skill's instance of the shared test-first-evidence principle
-([test-creation-principles.md §1](../../docs/skill-framework/shared/test-creation-principles.md#1-test-first-evidence)).
+([test-creation-principles.md §1](../../../docs/skill-framework/shared/test-creation-principles.md#1-test-first-evidence)).
 When neither an actual request-building call site, an existing API client method's real usage, nor an
 OpenAPI/GraphQL schema file exists for a target, do not invent a plausible-looking request/response shape.
 Tag `NEEDS_OBSERVED_INTERACTION` with a one-line reason instead
@@ -52,7 +52,7 @@ relies on it. Tag `WRITTEN_FAILING_PROD_BUG`, keep the pact file and the verific
 they are, and surface it in the report per
 [report.md §3](../workflow/report.md#3-surface-production-bug-findings-plainly) for a human or
 **loop-task-implementer**/**pr-review** to act on. Full non-negotiable:
-[test-creation-principles.md §5](../../docs/skill-framework/shared/test-creation-principles.md#5-escalation-on-a-surfaced-production-bug).
+[test-creation-principles.md §5](../../../docs/skill-framework/shared/test-creation-principles.md#5-escalation-on-a-surfaced-production-bug).
 
 ## 7. `max_files_per_run` reached
 

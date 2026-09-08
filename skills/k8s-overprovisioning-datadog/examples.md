@@ -1,6 +1,6 @@
 # Examples — v3.0 graph-first
 
-Conventions: [examples-conventions](../docs/skill-framework/shared/examples-conventions.md)
+Conventions: [examples-conventions](../../docs/skill-framework/shared/examples-conventions.md)
 
 Every assessment starts **DISCOVER_SOURCES → RESOLVE → COLLECT** before graph construction. Scenario
 steps may begin at COLLECT when source discovery and service resolution are not the behavior under test.
@@ -21,7 +21,7 @@ Examples: [decision-graph.example.yaml](reference/decision-graph.example.yaml) (
 | 6 | "`checkout-worker` CPU throttling — need more headroom?" | SCALE_UP path | throttle_high stop reason |
 | 7 | "Rightsize `unknown-svc`" (ambiguous tag) | resolve-service disambiguation | Service not found / multiple matches |
 | 8 | "RCA for checkout-api outage" | **Wrong skill** → incident-rca | Not a sizing request |
-| 9 | "Rightsize payment-consumer — open canvas for namespace ranking" | DISCOVER_SOURCES→RENDER full DORA → offer canvas for REC/cost table after report | [post-action-templates §6](../docs/skill-framework/shared/post-action-templates.md#6-canvas-hints) |
+| 9 | "Rightsize payment-consumer — open canvas for namespace ranking" | DISCOVER_SOURCES→RENDER full DORA → offer canvas for REC/cost table after report | [post-action-templates §6](../../docs/skill-framework/shared/post-action-templates.md#6-canvas-hints) |
 
 ## Pre-flight announcement (first output)
 
@@ -500,4 +500,4 @@ True stop-gates on change recs remain **State: BLOCKED** in the appendix.
 | Throttle / OOM | ALLOW (scale) | — | SCALE_UP |
 
 Assessment confidence 0.9 can coexist with `REC_REPLICA_REDUCE` confidence 0.3 — separate scores
-(appendix shows numerics; human report shows bands per [confidence-bands.md](../docs/skill-framework/shared/confidence-bands.md)).
+(appendix shows numerics; human report shows bands per [confidence-bands.md](../../docs/skill-framework/shared/confidence-bands.md)).

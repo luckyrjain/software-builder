@@ -1,7 +1,7 @@
 # Level classification
 
 Keyword heuristics used by [workflow/classify.md](../workflow/classify.md). Mirrors the canonical
-[test skill routing](../../docs/skill-framework/shared/skill-routing.md) while allowing several clearly
+[test skill routing](../../../docs/skill-framework/shared/skill-routing.md) while allowing several clearly
 complementary surfaces to coexist in one `test_plan`.
 
 ## Keyword table

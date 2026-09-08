@@ -10,7 +10,7 @@ consumes:
 
 # Verify & iterate
 
-Follow the canonical [test-creator common workflow](../../docs/skill-framework/shared/test-creator-common-workflow.md)
+Follow the canonical [test-creator common workflow](../../../docs/skill-framework/shared/test-creator-common-workflow.md)
 for shared verification and status behavior; the rules below are E2E-level verification deltas.
 
 ## 1. `run_tests: false` or no execution capability
@@ -39,7 +39,7 @@ For each failing journey, determine which side is wrong:
   button doesn't lead to a confirmation page, a form submits but the success state never renders). This is
   the gate in [gate-policy.md §6](../reference/gate-policy.md#6-verification-surfaces-a-probable-production-bug),
   same non-negotiable as the shared
-  [test-creation-principles.md §5](../../docs/skill-framework/shared/test-creation-principles.md#5-escalation-on-a-surfaced-production-bug):
+  [test-creation-principles.md §5](../../../docs/skill-framework/shared/test-creation-principles.md#5-escalation-on-a-surfaced-production-bug):
   **never** patch production code to force the test green, and never delete, weaken, or `.skip`/`.only`-
   around the assertion that caught it. Tag the journey `WRITTEN_FAILING_PROD_BUG`, keep the failing test
   exactly as written, and record the specific assertion/expected-vs-actual values for the report.

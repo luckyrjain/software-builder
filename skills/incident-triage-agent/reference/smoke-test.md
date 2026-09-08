@@ -3,7 +3,7 @@
 Run after install or any edit to this skill. Use a service incident-rca can investigate (≥1
 observability MCP configured) and a workspace where squad-map already resolves that service.
 
-Conventions: [smoke-test-conventions](../../docs/skill-framework/shared/smoke-test-conventions.md)
+Conventions: [smoke-test-conventions](../../../docs/skill-framework/shared/smoke-test-conventions.md)
 
 ## Invocation — Triage mode
 

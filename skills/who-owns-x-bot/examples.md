@@ -1,6 +1,6 @@
 # Examples — invocation patterns
 
-Conventions: [examples-conventions](../docs/skill-framework/shared/examples-conventions.md).
+Conventions: [examples-conventions](../../docs/skill-framework/shared/examples-conventions.md).
 
 ## Invocation table
 
@@ -104,4 +104,4 @@ literal text `<!channel>`, not a live mention):
 > Who owns api-disbursement?
 
 (Routes to **squad-map** directly — see
-[skill-routing.md](../docs/skill-framework/shared/skill-routing.md) rule 4.)
+[skill-routing.md](../../docs/skill-framework/shared/skill-routing.md) rule 4.)

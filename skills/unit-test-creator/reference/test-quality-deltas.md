@@ -2,7 +2,7 @@
 
 The full shared checklist (asserts on real behavior, one behavior per test, deterministic, isolated,
 descriptive name, matches repo convention, reuses fixtures) lives in
-[test-creation-principles.md §2](../../docs/skill-framework/shared/test-creation-principles.md#2-test-quality-rules)
+[test-creation-principles.md §2](../../../docs/skill-framework/shared/test-creation-principles.md#2-test-quality-rules)
 and applies here unchanged. This file adds only what's specific to **unit** scope on top of it — load
 this before [workflow/generate-tests.md](../workflow/generate-tests.md), it does not restate the shared
 rules.
@@ -26,4 +26,4 @@ rules.
 
 The shared "Forbidden everywhere" table (weakening assertions, `.skip`/`xfail` without a report line,
 guessed mock behavior, mock-only assertions) applies here too — see
-[test-creation-principles.md §2](../../docs/skill-framework/shared/test-creation-principles.md#2-test-quality-rules).
+[test-creation-principles.md §2](../../../docs/skill-framework/shared/test-creation-principles.md#2-test-quality-rules).

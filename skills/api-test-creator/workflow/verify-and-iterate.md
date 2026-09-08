@@ -10,7 +10,7 @@ consumes:
 
 # Verify & iterate
 
-Follow the canonical [test-creator common workflow](../../docs/skill-framework/shared/test-creator-common-workflow.md)
+Follow the canonical [test-creator common workflow](../../../docs/skill-framework/shared/test-creator-common-workflow.md)
 for shared verification and status behavior; the rules below are API-level verification deltas.
 
 ## 1. No reachable API instance — check before running anything

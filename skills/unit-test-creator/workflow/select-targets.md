@@ -10,7 +10,7 @@ consumes:
 
 # Select targets
 
-Follow the canonical [test-creator common workflow](../../docs/skill-framework/shared/test-creator-common-workflow.md)
+Follow the canonical [test-creator common workflow](../../../docs/skill-framework/shared/test-creator-common-workflow.md)
 for shared bounded-selection behavior; the rules below are unit-level selection deltas.
 
 Turn `target` into a concrete, bounded `target_list` of functions/classes to write unit tests for.
@@ -55,7 +55,7 @@ targets whose repo/context appears in its § Change risk table with a weak `Test
 `Runtime critical?`/`Fan-out` come first — this determines *which* targets survive the §5 cap when
 `target_list` is larger than `max_files_per_run`, not whether a target is included at all. Absent
 `RISK_MAP.md`, skip this step entirely — no prioritization, no note in the report. Full artifact table
-and precedence rules: [domain-comprehension-integration.md](../../docs/skill-framework/shared/domain-comprehension-integration.md).
+and precedence rules: [domain-comprehension-integration.md](../../../docs/skill-framework/shared/domain-comprehension-integration.md).
 
 ## 5. Apply incremental backfill state (optional)
 
@@ -69,7 +69,7 @@ entries and every non-`WRITTEN_PASSING` recorded target to the front of the list
 discovered this run, so a repeated backfill works through unresolved targets before starting fresh
 ground. Absent the state file, skip this step entirely — no filtering, no reordering, no note in the
 report. Full schema and precedence rules:
-[test-creation-principles.md §6](../../docs/skill-framework/shared/test-creation-principles.md#6-incremental-backfill-state-optional).
+[test-creation-principles.md §6](../../../docs/skill-framework/shared/test-creation-principles.md#6-incremental-backfill-state-optional).
 
 ## 6. Cap and report overflow
 

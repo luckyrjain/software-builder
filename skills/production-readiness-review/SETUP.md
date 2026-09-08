@@ -9,7 +9,7 @@
 | **Review cadence** | Quarterly — or when a composed child skill's own input contract changes |
 | **External services** | None — reads supplied candidate evidence and optional repository, SCM, CI, build-provenance, service-metadata, runtime-metrics, or dependency-advisory host evidence, and reuses/dispatches trusted child-skill invocations only |
 
-See [setup-freshness.md](../docs/skill-framework/shared/setup-freshness.md) for the shared contract.
+See [setup-freshness.md](../../docs/skill-framework/shared/setup-freshness.md) for the shared contract.
 
 ## Ambient discovery is intended
 
@@ -43,8 +43,8 @@ make install-claude-production-readiness-review
 ```
 
 No restart needed — a new Claude Code session picks it up. See the shared
-[skill-framework](../docs/skill-framework/README.md) conventions and
-[claude-code-setup.md](../docs/skill-framework/shared/claude-code-setup.md).
+[skill-framework](../../docs/skill-framework/README.md) conventions and
+[claude-code-setup.md](../../docs/skill-framework/shared/claude-code-setup.md).
 
 ### Kiro / in-repo discovery
 
@@ -80,9 +80,9 @@ when the deployable artifact differs from the reviewed source revision.
 
 ## Framework links
 
-- [skill-framework README](../docs/skill-framework/README.md)
-- [confidence-bands](../docs/skill-framework/shared/confidence-bands.md)
-- [cross-skill-escalation](../docs/skill-framework/shared/cross-skill-escalation.md)
+- [skill-framework README](../../docs/skill-framework/README.md)
+- [confidence-bands](../../docs/skill-framework/shared/confidence-bands.md)
+- [cross-skill-escalation](../../docs/skill-framework/shared/cross-skill-escalation.md)
 
 ## Smoke test
 

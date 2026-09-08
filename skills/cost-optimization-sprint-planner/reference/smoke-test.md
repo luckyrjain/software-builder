@@ -5,7 +5,7 @@ Run after install or any edit to this skill. Use a `sweep_scope.deployments` lis
 to confirm k8s-overprovisioning-datadog itself is configured first), at least one with a `SQUAD_MAP.md`
 `Datadog service` match and one without (to exercise both join paths), plus a `cost_rate`.
 
-Conventions: [smoke-test-conventions](../../docs/skill-framework/shared/smoke-test-conventions.md)
+Conventions: [smoke-test-conventions](../../../docs/skill-framework/shared/smoke-test-conventions.md)
 
 ## Invocation
 

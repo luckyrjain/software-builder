@@ -5,7 +5,7 @@ at least one clearly urgent (high business impact or operational risk), one clea
 (small, isolated, low drag), and one deliberately vague (thin description, no evidence) to exercise the
 Unknown path, not just the clean scoring path.
 
-Conventions: [smoke-test-conventions](../../docs/skill-framework/shared/smoke-test-conventions.md).
+Conventions: [smoke-test-conventions](../../../docs/skill-framework/shared/smoke-test-conventions.md).
 
 ## Invocation
 

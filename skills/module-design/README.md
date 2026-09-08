@@ -6,7 +6,7 @@ tests, dependency edges, configuration, and observed change pressure. It produce
 
 Use it to make a module's contract, invariants, dependency direction, seams, adapters, errors, state,
 concurrency, performance, test surface, migration, rejected alternatives, and open questions explicit.
-The shared [codebase design doctrine](../docs/skill-framework/shared/codebase-design-principles.md) is
+The shared [codebase design doctrine](../../docs/skill-framework/shared/codebase-design-principles.md) is
 normative.
 
 Every design compares interface surface with implementation depth and caller knowledge, and records a

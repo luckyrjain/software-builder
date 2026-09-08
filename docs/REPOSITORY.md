@@ -257,7 +257,7 @@ and [docs/skill-framework/shared/claude-code-setup.md](skill-framework/shared/cl
 | `make lint-release-readiness-checker` | release-readiness-checker `SKILL.md` ≤ 180 lines; `disable-model-invocation` **not** set; workflow frontmatter; dangling anchors; required reference files |
 | `make lint-migration-program-manager` | migration-program-manager `SKILL.md` ≤ 180 lines; `disable-model-invocation` **not** set; workflow frontmatter; dangling anchors; required reference files; aggregator pytest |
 | `make lint-cost-optimization-sprint-planner` | cost-optimization-sprint-planner `SKILL.md` ≤ 180 lines; `disable-model-invocation` **not** set; workflow frontmatter; dangling anchors; required reference files |
-| `make lint-mysql-to-postgres-sql` | mysql `SKILL.md` ≤ 180 lines; workflow frontmatter; required references; scan fixtures + pressure harness; AST-backed secondary checker (`.sql` files, see [ast-vs-regex-scan.md](../mysql-to-postgres-sql/reference/ast-vs-regex-scan.md)); shellcheck on scan scripts |
+| `make lint-mysql-to-postgres-sql` | mysql `SKILL.md` ≤ 180 lines; workflow frontmatter; required references; scan fixtures + pressure harness; AST-backed secondary checker (`.sql` files, see [ast-vs-regex-scan.md](../skills/mysql-to-postgres-sql/reference/ast-vs-regex-scan.md)); shellcheck on scan scripts |
 | `make lint-loop-task-implementer` | loop-task-implementer `SKILL.md` ≤ 180 lines; workflow frontmatter; dangling anchors; required files (`SETUP.md`, `README.md`, `examples.md`, `report-template.md`, `reference/*`); `py_compile` + `pytest loop-task-implementer/tests/` for the lifecycle validator |
 | `make lint-backlog-runner` | backlog-runner `SKILL.md` ≤ 180 lines; `disable-model-invocation: true` set; workflow frontmatter; dangling anchors; required reference files |
 | `make lint-weekly-squad-digest` | weekly-squad-digest `SKILL.md` ≤ 180 lines; `disable-model-invocation: true` set; workflow frontmatter; dangling anchors; required reference files |
@@ -523,7 +523,7 @@ These improve discoverability but cannot be changed from a PR:
 | migration-program-manager | None — no MCP calls at all, pure file aggregation | Requires mysql-to-postgres-sql (and ideally squad-map) already run in the target workspaces |
 | cost-optimization-sprint-planner | Datadog (for the namespace pre-filter) — otherwise delegates to k8s-overprovisioning-datadog's own | Requires k8s-overprovisioning-datadog installed and configured (and ideally squad-map) |
 | mysql-to-postgres-sql | None | Datadog (optional; post-cutover APM verification) |
-| loop-task-implementer | None — uses the host agent's own repo/git access, not an MCP server | See [loop-task-implementer/reference/mcp-capabilities.md](../loop-task-implementer/reference/mcp-capabilities.md) for host-capability requirements |
+| loop-task-implementer | None — uses the host agent's own repo/git access, not an MCP server | See [loop-task-implementer/reference/mcp-capabilities.md](../skills/loop-task-implementer/reference/mcp-capabilities.md) for host-capability requirements |
 | backlog-runner | Issue-tracker MCP (Jira or GitHub Issues) — required here, optional for loop-task-implementer itself | Requires loop-task-implementer installed and configured |
 | weekly-squad-digest | None — no MCP calls at all, pure file aggregation | Requires migration-program-manager and cost-optimization-sprint-planner each already run at least once |
 | test-writer | None — router only, dispatches to the skills below | Requires at least one of the four dispatch targets installed and configured |

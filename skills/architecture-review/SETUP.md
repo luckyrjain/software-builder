@@ -9,7 +9,7 @@
 | **Review cadence** | Quarterly — or when skill pipeline rules change |
 | **External services** | None — reads supplied PRD/design content and repository only |
 
-See [setup-freshness.md](../docs/skill-framework/shared/setup-freshness.md) for the shared contract.
+See [setup-freshness.md](../../docs/skill-framework/shared/setup-freshness.md) for the shared contract.
 
 ## Install
 
@@ -28,7 +28,7 @@ make install-claude-architecture-review
 ```
 
 No restart needed — a new Claude Code session picks it up. See
-[claude-code-setup.md](../docs/skill-framework/shared/claude-code-setup.md).
+[claude-code-setup.md](../../docs/skill-framework/shared/claude-code-setup.md).
 
 ### Kiro / in-repo discovery
 
@@ -58,10 +58,10 @@ architecture-review/
 
 ## Framework links
 
-- [skill-framework README](../docs/skill-framework/README.md)
-- [prompt-injection](../docs/skill-framework/shared/prompt-injection.md)
-- [skill-routing](../docs/skill-framework/shared/skill-routing.md)
-- [cross-skill-escalation](../docs/skill-framework/shared/cross-skill-escalation.md)
+- [skill-framework README](../../docs/skill-framework/README.md)
+- [prompt-injection](../../docs/skill-framework/shared/prompt-injection.md)
+- [skill-routing](../../docs/skill-framework/shared/skill-routing.md)
+- [cross-skill-escalation](../../docs/skill-framework/shared/cross-skill-escalation.md)
 
 ## Smoke test
 

@@ -9,7 +9,7 @@
 | **Review cadence** | Quarterly — or when review evidence rules change |
 | **External services** | Tailwind Play CDN (cdn.tailwindcss.com), Mermaid ESM (cdn.jsdelivr.net/npm/mermaid@11) — needed only to render the ephemeral HTML companion; the Markdown report and typed artifact need none |
 
-See [setup-freshness.md](../docs/skill-framework/shared/setup-freshness.md) for the shared contract.
+See [setup-freshness.md](../../docs/skill-framework/shared/setup-freshness.md) for the shared contract.
 
 ## Prerequisites
 
@@ -43,11 +43,11 @@ report. See [reference/html-report.md](reference/html-report.md) for the full co
 
 ## Framework links
 
-- [skill-framework README](../docs/skill-framework/README.md)
-- [codebase-design-principles](../docs/skill-framework/shared/codebase-design-principles.md)
-- [prompt-injection](../docs/skill-framework/shared/prompt-injection.md)
-- [safe-output](../docs/skill-framework/shared/safe-output.md)
-- [cross-skill-escalation](../docs/skill-framework/shared/cross-skill-escalation.md)
+- [skill-framework README](../../docs/skill-framework/README.md)
+- [codebase-design-principles](../../docs/skill-framework/shared/codebase-design-principles.md)
+- [prompt-injection](../../docs/skill-framework/shared/prompt-injection.md)
+- [safe-output](../../docs/skill-framework/shared/safe-output.md)
+- [cross-skill-escalation](../../docs/skill-framework/shared/cross-skill-escalation.md)
 
 ## Smoke test
 

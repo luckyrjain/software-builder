@@ -2,7 +2,7 @@
 
 Load immediately after [SKILL.md](../SKILL.md). These rules override convenience shortcuts. Shared rules
 for all four `*-test-creator` skills live in
-[test-creation-principles.md](../../docs/skill-framework/shared/test-creation-principles.md) — this file
+[test-creation-principles.md](../../../docs/skill-framework/shared/test-creation-principles.md) — this file
 states only what's different for consumer-driven contract testing.
 
 ## Contract
@@ -10,7 +10,7 @@ states only what's different for consumer-driven contract testing.
 1. **Scope** — write or modify test files (and the pact file(s) a consumer target produces) only. Never
    modify production/application code to make a failing test or verification pass; a failure that traces
    to production code is a finding to report and hand off, not something to silently patch
-   ([test-creation-principles.md §3](../../docs/skill-framework/shared/test-creation-principles.md#3-refactor-limits),
+   ([test-creation-principles.md §3](../../../docs/skill-framework/shared/test-creation-principles.md#3-refactor-limits),
    [gate-policy.md §6](gate-policy.md#6-verification-surfaces-a-probable-production-bug)).
 2. **`target.role` is required** — never guess `consumer` vs. `provider` from file location or naming.
    HARD STOP at Inputs if absent ([gate-policy.md §1](gate-policy.md#1-missing-or-malformed-target-reporoot-or-role)).
@@ -20,11 +20,11 @@ states only what's different for consumer-driven contract testing.
 4. **Never fabricate an interaction shape** — every request matcher and expected response must trace to
    real, observed usage (an actual call site, an existing client method, or an OpenAPI/GraphQL schema
    file already in the repo). No observed usage means `NEEDS_OBSERVED_INTERACTION`, never a guess
-   ([test-creation-principles.md §1](../../docs/skill-framework/shared/test-creation-principles.md#1-test-first-evidence),
+   ([test-creation-principles.md §1](../../../docs/skill-framework/shared/test-creation-principles.md#1-test-first-evidence),
    [gate-policy.md §5](gate-policy.md#5-target-has-no-real-observed-interaction-to-derive-its-shape-from)).
 5. **Real assertions only** — every test must satisfy
    [reference/test-quality-deltas.md](test-quality-deltas.md) on top of the shared
-   [test-quality rules](../../docs/skill-framework/shared/test-creation-principles.md#2-test-quality-rules);
+   [test-quality rules](../../../docs/skill-framework/shared/test-creation-principles.md#2-test-quality-rules);
    no tautological or always-pass tests.
 6. **Gate, don't guess** — HARD STOP / ask per [reference/gate-policy.md](gate-policy.md) rather than
    guessing a Pact library, inventing an interaction shape, or resolving `target.role` on its own.
@@ -45,4 +45,4 @@ states only what's different for consumer-driven contract testing.
     agreement is out of scope here; route to **integration-test-creator**
     ([SKILL.md § Cross-skill escalation](../SKILL.md#cross-skill-escalation)).
 
-Routing: [skill-routing.md](../../docs/skill-framework/shared/skill-routing.md).
+Routing: [skill-routing.md](../../../docs/skill-framework/shared/skill-routing.md).

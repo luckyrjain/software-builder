@@ -4,7 +4,7 @@ Run after install or any edit to this skill. Use a real or realistic change desc
 schema migration, a stated rollback plan, and a named affected service, so the happy path exercises
 all five analysis sections — not just the clean/no-migration case.
 
-Conventions: [smoke-test-conventions](../../docs/skill-framework/shared/smoke-test-conventions.md)
+Conventions: [smoke-test-conventions](../../../docs/skill-framework/shared/smoke-test-conventions.md)
 
 ## Invocation
 
@@ -28,7 +28,7 @@ weekday (peak).`
 4. **`deployment_confidence`** stated as its own field (`HIGH | MEDIUM | LOW | UNKNOWN`), distinct
    from the Risk verdict.
 5. **Confirmation/next-step** — a one-line pointer to
-   [cross-skill escalation](../../docs/skill-framework/shared/cross-skill-escalation.md) when a
+   [cross-skill escalation](../../../docs/skill-framework/shared/cross-skill-escalation.md) when a
    finding matches one of `SKILL.md` § Cross-skill escalation's rows.
 
 ## Degraded paths

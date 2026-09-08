@@ -141,6 +141,6 @@ misleads a reader into treating partial coverage as full coverage.
 A skill that constructs an output filename, path, or renders untrusted content into Markdown/chat links
 here from its `SKILL.md` § Guardrails (or its first output-construction phase) alongside its
 [prompt-injection.md](prompt-injection.md) link, and lists the specific untrusted fields it sanitizes —
-see [cost-optimization-sprint-planner/workflow/run-sweep.md § 2](../../../cost-optimization-sprint-planner/workflow/run-sweep.md)
+see [cost-optimization-sprint-planner/workflow/run-sweep.md § 2](../../../skills/cost-optimization-sprint-planner/workflow/run-sweep.md)
 for a worked example (sanitizing a tracker-derived deployment name before it becomes part of an artifact
 filename).

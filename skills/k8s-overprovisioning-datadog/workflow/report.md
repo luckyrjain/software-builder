@@ -37,7 +37,7 @@ Apply to the Human Report only. The graph and appendix keep full IDs.
 8. **Recommendations** — sort **concrete work before holds**; when observability and sizing both apply, list observability first (Instrument Kafka lag → Raise memory → Keep CPU → Keep replicas). Tier spec: [render/markdown.md](../render/markdown.md#recommendationssummary-sort-order). **Decision** (`Keep` / `Ready` / `Defer` / `Blocked`) and **Decision confidence** on separate lines — not `(Blocked, High confidence)`. `REC_*_KEEP` + graph `BLOCKED` → **Decision: Keep**, not Blocked. `REJECTED` recs → **Changes evaluated but not recommended** section only. Appendix LifecycleSummary **State** uses display labels (`KEEP` / `DEFER` / `CHANGE` / `NOT RECOMMENDED`) — [render/markdown.md](../render/markdown.md#appendix-recommendation-status); graph JSON keeps raw enum.
 9. **Risks** — open with `Overall:` one-sentence framing; then order bullets by operational impact: missing telemetry → partition skew → fixed HPA → batch behavior → cost.
 10. **Conclusion** — last Human Report section before appendix separator; 2–4 sentences, no automation CTAs.
-11. **No agent instructions** — Human Report MUST NOT include agent mode instructions (e.g. "Type ACT"), posting confirmations, or MCP setup steps. Post-render chat instructions live in `SKILL.md` and [post-action-templates.md](../../docs/skill-framework/shared/post-action-templates.md).
+11. **No agent instructions** — Human Report MUST NOT include agent mode instructions (e.g. "Type ACT"), posting confirmations, or MCP setup steps. Post-render chat instructions live in `SKILL.md` and [post-action-templates.md](../../../docs/skill-framework/shared/post-action-templates.md).
 12. **Uppercase budget** — target **< 20** uppercase tokens in the Human Report (verdict enums and severity OK; registry IDs not OK).
 
 Internal reasoning ([reason.md](reason.md)) and normalization ([evidence.md](evidence.md)) still use IDs — only **render** translates for humans.
@@ -98,7 +98,7 @@ Run the full checklist there after any skill edit.
 ## `assessment_metadata` footer (platform analytics)
 
 Emit a fenced ` ```yaml ` block after **Conclusion** in the Human Report (and in full DORA appendix when
-`full` mode). Normative spec: [review-metadata-schema.md](../../docs/skill-framework/shared/review-metadata-schema.md) §8.2.
+`full` mode). Normative spec: [review-metadata-schema.md](../../../docs/skill-framework/shared/review-metadata-schema.md) §8.2.
 
 | Block | When to emit |
 |-------|----------------|

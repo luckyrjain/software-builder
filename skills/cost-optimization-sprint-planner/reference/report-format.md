@@ -4,13 +4,13 @@
 
 **Untrusted identifiers render as inline code spans.** `<service>` and `<deployment>` below come from
 `sweep_scope.deployments`/`metadata.service` — untrusted content per
-[prompt-injection.md](../../docs/skill-framework/shared/prompt-injection.md). Before wrapping, **strip**
+[prompt-injection.md](../../../docs/skill-framework/shared/prompt-injection.md). Before wrapping, **strip**
 any backtick already present in the value — a backslash before the backtick does **not** work, since
 CommonMark code-span delimiters are matched before backslash escapes are resolved. Render every occurrence
 in this report wrapped in backticks (`` `<service>` ``), never as bare Markdown text — this neutralizes a
 service/deployment name containing table-breaking `|` characters or Markdown block syntax (a heading, a
 fenced code block) and signals to a human reader that the value is caller-supplied data, not skill prose.
-See [safe-output.md § Rule 4](../../docs/skill-framework/shared/safe-output.md#rule-4-markdown-chat-escaping).
+See [safe-output.md § Rule 4](../../../docs/skill-framework/shared/safe-output.md#rule-4-markdown-chat-escaping).
 
 ## `COST_OPTIMIZATION_SPRINT_REPORT.md` structure (order fixed)
 
@@ -62,7 +62,7 @@ table's Confidence column.>
 ## `cost_optimization_sprint_rollup.json` shape
 
 A flat JSON array of `org_rollup_item` objects (per
-[org-rollup-schema.md](../../docs/skill-framework/shared/org-rollup-schema.md)'s `k8s_waste` adapter),
+[org-rollup-schema.md](../../../docs/skill-framework/shared/org-rollup-schema.md)'s `k8s_waste` adapter),
 `metric_type: "k8s_waste"` for every entry. Written so
 [weekly-squad-digest](../../weekly-squad-digest/SKILL.md) can read this file directly instead of
 re-running the sweep.
@@ -87,7 +87,7 @@ re-running the sweep.
   JSON renderer only ever produces one hardcoded filename (`decision-graph.json`, requested but never
   renamed by the renderer itself); this skill's own workflow moves/renames that file to
   `decision-graph-<safe-deployment-slug>.json` (sanitized per
-  [safe-output.md § Rule 1](../../docs/skill-framework/shared/safe-output.md#rule-1-safe-slugs-untrusted-string-filename-component))
+  [safe-output.md § Rule 1](../../../docs/skill-framework/shared/safe-output.md#rule-1-safe-slugs-untrusted-string-filename-component))
   immediately after each invocation returns (see
   [workflow/run-sweep.md § 2](../workflow/run-sweep.md#2-loop-k8s-overprovisioning-datadog-once-per-candidate-sequentially)) —
   `evidence_ref` points at the result of that move, never an assumed path k8s-overprovisioning-datadog

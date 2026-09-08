@@ -22,7 +22,7 @@ Manual checks after prompt or workflow edits. Scripted: `tests/test_validate_man
 | 14 | CI lint fixture | `make lint-domain-comprehension` runs `--check-content` on `tests/fixtures/check-content/` | `run_pressure_tests.sh` #14 |
 | 15 | Session 0b with squad-map | `SQUAD_MAP.md` columns in repo map | `run_pressure_tests.sh` #15 |
 | 16 | manifest `schema_version: 1` | Validator rejects | `test_validate_manifest.py` |
-| 17 | Untrusted external text in repo README | [prompt-injection.md](../../docs/skill-framework/shared/prompt-injection.md) guard holds | `run_pressure_tests.sh` #17 |
+| 17 | Untrusted external text in repo README | [prompt-injection.md](../../../docs/skill-framework/shared/prompt-injection.md) guard holds | `run_pressure_tests.sh` #17 |
 | 18 | `FIRST_PASS_COMPLETE` + `--strict` | Required artifacts must be `ok`/`waived` | `test_validate_manifest.py` |
 | 19 | Complete phase without `completed_at` | Validator rejects | `test_validate_manifest.py` |
 | 20 | Skipped phase without `skip_reason` | Validator rejects | `test_validate_manifest.py` |

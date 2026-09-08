@@ -151,7 +151,7 @@ drop a completed review" rule.
 renders as a fenced code block (see the example in
 [examples.md § Held — general-only mode](../examples.md#scenario-held-general-only-mode)). Pasting the
 executive summary into that template embeds its text — untrusted MR/diff content per
-[prompt-injection.md](../../docs/skill-framework/shared/prompt-injection.md), already escaped/fenced
+[prompt-injection.md](../../../docs/skill-framework/shared/prompt-injection.md), already escaped/fenced
 *for pr-review's own chat-Markdown context* per
 [pr-review/workflow/phase-5.md § Safe rendered-output boundary](../../pr-review/workflow/phase-5.md#safe-rendered-output-boundary)
 — inside a *second*, outer code fence that pr-review's own escaping was never written to protect. A
@@ -160,7 +160,7 @@ rendered as a nested code block) contains a literal triple-backtick line; Common
 the first line matching the opening delimiter's backtick-run-or-longer, regardless of any "balance"
 within the content — so that inner fence line prematurely closes pr-gatekeeper's own outer template
 fence, spilling the remainder of the executive summary out as live, unfenced text. Per
-[safe-output.md § Rule 4](../../docs/skill-framework/shared/safe-output.md#rule-4-markdown-chat-escaping)'s
+[safe-output.md § Rule 4](../../../docs/skill-framework/shared/safe-output.md#rule-4-markdown-chat-escaping)'s
 delimiter-length technique (stated there for code spans, the same CommonMark rule applies to fences):
 before pasting, scan the executive summary text for the longest run of consecutive backticks and open
 the outer template fence with `max(3, longest_run + 1)` backticks — the template's own baseline of

@@ -47,7 +47,7 @@ frontier at the point the session must complete is a **BLOCKED** result: report 
 questions, options, and current recommendations — and stop. Never synthesize a decision, never pick the
 recommended option on the user's behalf, and never mark a node `resolved` without an explicit human
 answer, even under time or composition pressure. This is the same rule
-[runtime-contract.md § Stopping conditions](../../docs/skill-framework/shared/runtime-contract.md)
+[runtime-contract.md § Stopping conditions](../../../docs/skill-framework/shared/runtime-contract.md)
 expresses generically: a required input — here, a human decision — being unavailable is a `BLOCKED`
 condition, not a `FAILED` or invented `SUCCESS` one.
 

@@ -12,7 +12,7 @@ consumes:
 
 **Goal:** Get an ownership answer for `query` from squad-map and return exactly one Slack-formatted
 message. No new ownership logic here — see § Non-goals in the
-[design spec](../../docs/superpowers/specs/2026-08-05-who-owns-x-bot-design.md#non-goals-explicitly-out-of-scope-for-this-item).
+[design spec](../../../docs/superpowers/specs/2026-08-05-who-owns-x-bot-design.md#non-goals-explicitly-out-of-scope-for-this-item).
 
 ## Steps
 

@@ -5,7 +5,7 @@ decision frontier at a time. It is ambient, **interactive**, read-only, and repo
 `ENGINEERING_DECISION_RECORD.md` / `engineering_decision_record` without changing repository state and
 without writing an ADR.
 
-The shared [codebase design doctrine](../docs/skill-framework/shared/codebase-design-principles.md) is
+The shared [codebase design doctrine](../../docs/skill-framework/shared/codebase-design-principles.md) is
 normative. **Facts belong to the skill; decisions belong to the user.** The skill retrieves repository
 evidence and builds a decision tree; it never treats its own recommendation as the user's approval, and it
 never silently resolves a decision on their behalf.

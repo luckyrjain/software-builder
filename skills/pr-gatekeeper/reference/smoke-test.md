@@ -5,7 +5,7 @@ MCP configured for `full` or `summary-only` posting (see
 [pr-review/reference/smoke-test.md](../../pr-review/reference/smoke-test.md) to confirm pr-review itself
 works first).
 
-Conventions: [smoke-test-conventions](../../docs/skill-framework/shared/smoke-test-conventions.md)
+Conventions: [smoke-test-conventions](../../../docs/skill-framework/shared/smoke-test-conventions.md)
 
 ## Invocation
 

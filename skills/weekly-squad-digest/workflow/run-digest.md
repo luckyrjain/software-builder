@@ -19,7 +19,7 @@ For each path set in `rollup_manifest`:
   with whichever rollup is still readable** — never a HARD STOP for the whole run just because one
   rollup is absent.
 - File present → parse as a flat JSON array of `org_rollup_item` objects per
-  [org-rollup-schema.md](../../docs/skill-framework/shared/org-rollup-schema.md). **Never re-derive
+  [org-rollup-schema.md](../../../docs/skill-framework/shared/org-rollup-schema.md). **Never re-derive
   `squad`, `squad_confidence`, `status`, or `priority`** — read them exactly as the producing skill wrote
   them. Record a **source revision** fingerprint for the file (SHA-256 of raw bytes, first 12 hex chars)
   for the digest header per [reference/report-format.md](../reference/report-format.md).
@@ -29,7 +29,7 @@ case.
 
 ## 2. Group by squad, then by `metric_type`
 
-Per [org-rollup-schema.md § 5](../../docs/skill-framework/shared/org-rollup-schema.md#5-grouping-consuming-skills-own-their-own-ranking),
+Per [org-rollup-schema.md § 5](../../../docs/skill-framework/shared/org-rollup-schema.md#5-grouping-consuming-skills-own-their-own-ranking),
 this schema specifies grouping by squad only — ranking within a squad is each consumer's own decision.
 This skill's decision:
 
@@ -39,7 +39,7 @@ This skill's decision:
    status) and `k8s_waste` (Cost optimization). Their `value` shapes are structurally different (a gate
    status tuple vs. a dollar figure) and not directly comparable — this skill never invents a combined
    cross-metric score or a single merged ranking, per the
-   [design spec § Non-goals](../../docs/superpowers/specs/2026-08-05-weekly-squad-digest-design.md#non-goals-explicitly-out-of-scope).
+   [design spec § Non-goals](../../../docs/superpowers/specs/2026-08-05-weekly-squad-digest-design.md#non-goals-explicitly-out-of-scope).
 3. **Within each sub-section, keep that producing skill's own sort order** — migration:
    blocked → stalled (ranked by `staleness_days` descending — migration-program-manager's own secondary
    sort within the stalled bucket, per its
@@ -54,7 +54,7 @@ This skill's decision:
    Cost optimization under `<squad>`" / "also in Migration status under `<squad>`"), per
    [reference/report-format.md](../reference/report-format.md)'s rule. This is a real, expected case since
    the two rollups resolve `squad` via different join mechanisms
-   ([org-rollup-schema.md § 3](../../docs/skill-framework/shared/org-rollup-schema.md#3-join-key-squad-map-is-the-only-authoritative-source))
+   ([org-rollup-schema.md § 3](../../../docs/skill-framework/shared/org-rollup-schema.md#3-join-key-squad-map-is-the-only-authoritative-source))
    — never reconciled into one "correct" squad, never silently left uncross-referenced. **Also run exact-
    string equality** as a fallback when the script is unavailable. A same-service pair whose identifiers
    differ beyond normalization will not be detected — record that limitation honestly in Notes when

@@ -24,4 +24,4 @@ Load reference files on demand — do not read all up front.
 | Fleet status rollup | [templates/MIGRATION_STATUS.yaml](../templates/MIGRATION_STATUS.yaml) |
 | Calibration / invocation routing | [examples.md](../examples.md) (human calibration; not required live) |
 
-Cross-skill routing: [cross-skill-escalation.md](../../docs/skill-framework/shared/cross-skill-escalation.md).
+Cross-skill routing: [cross-skill-escalation.md](../../../docs/skill-framework/shared/cross-skill-escalation.md).

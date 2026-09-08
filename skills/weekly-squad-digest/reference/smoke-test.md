@@ -6,7 +6,7 @@ cost-optimization-sprint-planner's own smoke tests first to produce them — see
 `reference/smoke-test.md`), ideally with at least one squad appearing in both rollups and one appearing
 in only one, to exercise both paths.
 
-Conventions: [smoke-test-conventions](../../docs/skill-framework/shared/smoke-test-conventions.md)
+Conventions: [smoke-test-conventions](../../../docs/skill-framework/shared/smoke-test-conventions.md)
 
 ## Invocation
 

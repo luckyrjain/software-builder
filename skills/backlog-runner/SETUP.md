@@ -10,7 +10,7 @@
 | **Review cadence** | Quarterly — or when pinned MCP package versions change |
 | **External services** | Jira or GitHub Issues API, loop-task-implementer |
 
-See [setup-freshness.md](../docs/skill-framework/shared/setup-freshness.md) for the shared contract.
+See [setup-freshness.md](../../docs/skill-framework/shared/setup-freshness.md) for the shared contract.
 ## Ambient discovery is deliberately disabled
 
 Unlike loop-task-implementer, this skill sets `disable-model-invocation: true` — it does not auto-apply
@@ -37,7 +37,7 @@ cd software-builder
 make install-claude-backlog-runner
 ```
 
-No restart needed. See [claude-code-setup.md](../docs/skill-framework/shared/claude-code-setup.md).
+No restart needed. See [claude-code-setup.md](../../docs/skill-framework/shared/claude-code-setup.md).
 
 ### Kiro / in-repo discovery
 
@@ -85,8 +85,8 @@ trigger-driven skill in this repo. The handler you build:
 
 ## Framework links
 
-- [skill-framework README](../docs/skill-framework/README.md)
-- [cross-skill-escalation](../docs/skill-framework/shared/cross-skill-escalation.md)
+- [skill-framework README](../../docs/skill-framework/README.md)
+- [cross-skill-escalation](../../docs/skill-framework/shared/cross-skill-escalation.md)
 
 ## Smoke test
 

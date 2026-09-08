@@ -10,7 +10,7 @@ consumes:
 
 # Select targets
 
-Follow the canonical [test-creator common workflow](../../docs/skill-framework/shared/test-creator-common-workflow.md)
+Follow the canonical [test-creator common workflow](../../../docs/skill-framework/shared/test-creator-common-workflow.md)
 for shared bounded-selection behavior; the rules below are contract-level selection deltas.
 
 Turn `target` into a concrete, bounded `target_list` of interactions to write consumer or provider
@@ -60,7 +60,7 @@ evidence (never sole evidence —
 still requires a real observed interaction) for which service is the actual provider of an entity when
 resolving `role: provider` targets. Absent these files, skip this step. Full artifact table and
 precedence rules:
-[domain-comprehension-integration.md](../../docs/skill-framework/shared/domain-comprehension-integration.md).
+[domain-comprehension-integration.md](../../../docs/skill-framework/shared/domain-comprehension-integration.md).
 
 ## 5. Apply incremental backfill state (optional)
 
@@ -73,7 +73,7 @@ target whose hash has changed since `last_attempted` is treated as new outright,
 recorded status. Move `pending_backlog` entries and every non-`WRITTEN_PASSING` recorded target to the
 front of the list. Absent the state file, skip this step entirely — no filtering, no reordering, no note
 in the report. Full schema and precedence rules:
-[test-creation-principles.md §6](../../docs/skill-framework/shared/test-creation-principles.md#6-incremental-backfill-state-optional).
+[test-creation-principles.md §6](../../../docs/skill-framework/shared/test-creation-principles.md#6-incremental-backfill-state-optional).
 
 ## 6. Cap and report overflow
 

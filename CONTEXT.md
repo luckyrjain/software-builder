@@ -2,7 +2,7 @@
 
 A portable library of agent **skills** — structured workflows that teach repository-capable coding agents how to perform software-delivery work with evidence, role separation, and explicit gates. This is not an agent runtime; **hosts** (Cursor, Claude Code, Codex, Kiro, and similar) load skills and execute them.
 
-Implementation vocabulary (registry fields, YAML schemas, eval tiers) lives in [docs/skill-framework/shared/terminology-glossary.md](docs/skill-framework/shared/terminology-glossary.md). Target-system vocabulary (bounded contexts, as-built PRD) lives in [domain-comprehension/CONTEXT.md](domain-comprehension/CONTEXT.md). See [CONTEXT-MAP.md](CONTEXT-MAP.md) for how contexts relate.
+Implementation vocabulary (registry fields, YAML schemas, eval tiers) lives in [docs/skill-framework/shared/terminology-glossary.md](docs/skill-framework/shared/terminology-glossary.md). Target-system vocabulary (bounded contexts, as-built PRD) lives in [skills/domain-comprehension/CONTEXT.md](skills/domain-comprehension/CONTEXT.md). See [CONTEXT-MAP.md](CONTEXT-MAP.md) for how contexts relate.
 
 ## Platform boundary
 
@@ -201,7 +201,7 @@ Whether a directory at an install destination was created by this repository —
 Which skill may write a durable artifact. The rule is in `skills.yaml`'s `contracts.platform.artifact_ownership` — the canonical producer owns the write, consumers may derive, and no consumer may silently rewrite another skill's canonical artifact. Per-artifact `owners` and `mode` (`canonical` | `shared` | `external`) are declared in each skill's own composition entry.
 
 **Squad ownership**:
-Which team owns a repository, service, or bounded context in a *target workspace* — a finding skills produce about customer systems, defined in [domain-comprehension/CONTEXT.md](domain-comprehension/CONTEXT.md). Nothing to do with either sense above.
+Which team owns a repository, service, or bounded context in a *target workspace* — a finding skills produce about customer systems, defined in [skills/domain-comprehension/CONTEXT.md](skills/domain-comprehension/CONTEXT.md). Nothing to do with either sense above.
 
 ## Separated decision concepts
 

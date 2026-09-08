@@ -10,7 +10,7 @@
 | **Review cadence** | Quarterly — or when pinned MCP package versions change |
 | **External services** | PagerDuty/Opsgenie webhook (host infra), incident-rca MCPs, squad-map |
 
-See [setup-freshness.md](../docs/skill-framework/shared/setup-freshness.md) for the shared contract.
+See [setup-freshness.md](../../docs/skill-framework/shared/setup-freshness.md) for the shared contract.
 ## Ambient discovery is deliberately disabled
 
 Unlike incident-rca and squad-map, this skill sets `disable-model-invocation: true` — it does not
@@ -36,7 +36,7 @@ cd software-builder
 make install-claude-incident-triage-agent
 ```
 
-No restart needed. See [claude-code-setup.md](../docs/skill-framework/shared/claude-code-setup.md).
+No restart needed. See [claude-code-setup.md](../../docs/skill-framework/shared/claude-code-setup.md).
 
 ### Kiro / in-repo discovery
 
@@ -86,9 +86,9 @@ who-owns-x-bot's Slack handler and pr-gatekeeper's GitLab handler. The handler y
 
 ## Framework links
 
-- [skill-framework README](../docs/skill-framework/README.md)
-- [confidence-bands](../docs/skill-framework/shared/confidence-bands.md)
-- [cross-skill-escalation](../docs/skill-framework/shared/cross-skill-escalation.md)
+- [skill-framework README](../../docs/skill-framework/README.md)
+- [confidence-bands](../../docs/skill-framework/shared/confidence-bands.md)
+- [cross-skill-escalation](../../docs/skill-framework/shared/cross-skill-escalation.md)
 
 ## Smoke test
 

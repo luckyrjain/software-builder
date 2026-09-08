@@ -9,7 +9,7 @@
 | **Review cadence** | Quarterly — or when skill pipeline rules change |
 | **External services** | None — reads repository and caller-provided context only |
 
-See [setup-freshness.md](../docs/skill-framework/shared/setup-freshness.md) for the shared contract.
+See [setup-freshness.md](../../docs/skill-framework/shared/setup-freshness.md) for the shared contract.
 
 ## Prerequisites
 
@@ -37,11 +37,11 @@ parity between the two.
 
 ## Framework links
 
-- [skill-framework README](../docs/skill-framework/README.md)
-- [codebase-design-principles](../docs/skill-framework/shared/codebase-design-principles.md)
-- [prompt-injection](../docs/skill-framework/shared/prompt-injection.md)
-- [safe-output](../docs/skill-framework/shared/safe-output.md)
-- [cross-skill-escalation](../docs/skill-framework/shared/cross-skill-escalation.md)
+- [skill-framework README](../../docs/skill-framework/README.md)
+- [codebase-design-principles](../../docs/skill-framework/shared/codebase-design-principles.md)
+- [prompt-injection](../../docs/skill-framework/shared/prompt-injection.md)
+- [safe-output](../../docs/skill-framework/shared/safe-output.md)
+- [cross-skill-escalation](../../docs/skill-framework/shared/cross-skill-escalation.md)
 
 ## Smoke test
 

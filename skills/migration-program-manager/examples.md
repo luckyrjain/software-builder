@@ -1,6 +1,6 @@
 # Examples — invocation patterns
 
-Conventions: [examples-conventions](../docs/skill-framework/shared/examples-conventions.md).
+Conventions: [examples-conventions](../../docs/skill-framework/shared/examples-conventions.md).
 
 ## Invocation table
 
@@ -191,7 +191,7 @@ triggers a fresh squad-map run to fill it (see [SKILL.md](SKILL.md) § Why no ga
 3. Per [SKILL.md](SKILL.md) § Cross-skill escalation, a blocked service's migration MR needing review is
    an optional escalation to **pr-review** — this skill reuses mysql-to-postgres-sql's own handoff
    template for the same MR/service rather than inventing a second one (see
-   [cross-skill-escalation.md](../docs/skill-framework/shared/cross-skill-escalation.md) row "Migration MR
+   [cross-skill-escalation.md](../../docs/skill-framework/shared/cross-skill-escalation.md) row "Migration MR
    needs review"). It is offered after the report renders, not auto-invoked — this skill never calls
    another skill live (see [SKILL.md](SKILL.md) § Why no gate policy)
 

@@ -12,12 +12,12 @@ consumes:
 
 # Generate tests
 
-Follow the shared [test-creator common workflow](../../docs/skill-framework/shared/test-creator-common-workflow.md)
-and run the [test-creator write-safety contract](../../docs/skill-framework/shared/test-creator-write-safety.md)
+Follow the shared [test-creator common workflow](../../../docs/skill-framework/shared/test-creator-common-workflow.md)
+and run the [test-creator write-safety contract](../../../docs/skill-framework/shared/test-creator-write-safety.md)
 before any test file, report, or coverage-state write. The integration-specific rules below are deltas only.
 
 For every `NEW` item in `target_list`, write tests that satisfy the shared
-[test-creation-principles.md §2](../../docs/skill-framework/shared/test-creation-principles.md#2-test-quality-rules)
+[test-creation-principles.md §2](../../../docs/skill-framework/shared/test-creation-principles.md#2-test-quality-rules)
 in full, **plus** the integration-specific deltas in
 [reference/test-quality-deltas.md](../reference/test-quality-deltas.md) — this phase does not restate
 either, it enforces them.

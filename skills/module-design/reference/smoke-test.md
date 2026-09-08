@@ -4,7 +4,7 @@ Run after install or any substantive edit. Use a real, bounded module with a pat
 one test or observable behavior, and an adjacent dependency or error path. The skill remains read-only:
 inspect and emit a report; do not modify the fixture repository.
 
-Conventions: [smoke-test-conventions](../../docs/skill-framework/shared/smoke-test-conventions.md).
+Conventions: [smoke-test-conventions](../../../docs/skill-framework/shared/smoke-test-conventions.md).
 
 ## Invocation
 

@@ -3,7 +3,7 @@
 Every non-happy-path branch this skill can hit, in phase order. "Ask" means stop and wait for a human
 turn — a caller is always present for this flow, so ask rather than guess. The escalation-on-a-surfaced-
 production-bug rule (§6) is shared across all four `*-test-creator` skills — see
-[test-creation-principles.md §5](../../docs/skill-framework/shared/test-creation-principles.md#5-escalation-on-a-surfaced-production-bug)
+[test-creation-principles.md §5](../../../docs/skill-framework/shared/test-creation-principles.md#5-escalation-on-a-surfaced-production-bug)
 for the full text; this file states only the e2e-specific framing.
 
 ## 1. Missing or malformed `target` / `repo_root`
@@ -38,7 +38,7 @@ the last commit" or any other silent reinterpretation of `source`.
 A journey can only be written and run against a real, currently-reachable instance of the app — locally
 started, a staging URL, or a preview deployment. Without one, an assertion on "what the page shows" would
 have to be guessed, which is exactly the fabrication the shared
-[test-creation-principles.md §1](../../docs/skill-framework/shared/test-creation-principles.md#1-test-first-evidence)
+[test-creation-principles.md §1](../../../docs/skill-framework/shared/test-creation-principles.md#1-test-first-evidence)
 forbids. Tag every affected journey `NEEDS_BROWSER_ENV` (see
 [generate-tests.md §1](../workflow/generate-tests.md#1-no-reachable-app-instance-check-before-writing-a-single-assertion))
 and name what would resolve it — never fabricate what the UI would have shown.

@@ -26,7 +26,7 @@ incident-rca evidence mapping ([evidence-schema.md](reference/evidence-schema.md
 ## Optional escalation-target skills
 
 These are **not** loaded or consumed by incident-rca itself — they are handoff targets named in `SKILL.md`'s
-cross-skill escalation table and [cross-skill-escalation.md](../docs/skill-framework/shared/cross-skill-escalation.md).
+cross-skill escalation table and [cross-skill-escalation.md](../../docs/skill-framework/shared/cross-skill-escalation.md).
 incident-rca hands off a query/panel spec; installing and running the target skill is the responsibility
 of whoever picks up the handoff, not this skill's Phase 0 capability check.
 

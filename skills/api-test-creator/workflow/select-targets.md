@@ -10,7 +10,7 @@ consumes:
 
 # Select targets
 
-Follow the canonical [test-creator common workflow](../../docs/skill-framework/shared/test-creator-common-workflow.md)
+Follow the canonical [test-creator common workflow](../../../docs/skill-framework/shared/test-creator-common-workflow.md)
 for shared bounded-selection behavior; the rules below are API-level selection deltas.
 
 Turn `target` into a concrete, bounded `target_list` of **endpoints** (method + path) to write Postman
@@ -58,7 +58,7 @@ still requires the actual route-handler code or an OpenAPI/Swagger spec) for a r
 before Generate tests writes an assertion. If `RISK_MAP.md` also exists, treat a flagged critical/
 high-fan-out endpoint with weak test signal the same way. Absent these files, skip this step. Full artifact
 table and precedence rules:
-[domain-comprehension-integration.md](../../docs/skill-framework/shared/domain-comprehension-integration.md).
+[domain-comprehension-integration.md](../../../docs/skill-framework/shared/domain-comprehension-integration.md).
 
 ## 5. Apply incremental backfill state (optional)
 
@@ -70,7 +70,7 @@ status (`NEEDS_HUMAN`, `WRITTEN_FAILING_PROD_BUG`, `NEEDS_OBSERVED_ENDPOINT`, `N
 target whose hash has changed since `last_attempted` is treated as new outright, regardless of recorded
 status. Move `pending_backlog` entries and every non-`WRITTEN_PASSING` recorded target to the front of
 the list. Absent the state file, skip this step entirely. Full schema and precedence rules:
-[test-creation-principles.md §6](../../docs/skill-framework/shared/test-creation-principles.md#6-incremental-backfill-state-optional).
+[test-creation-principles.md §6](../../../docs/skill-framework/shared/test-creation-principles.md#6-incremental-backfill-state-optional).
 
 ## 6. Cap and report overflow
 

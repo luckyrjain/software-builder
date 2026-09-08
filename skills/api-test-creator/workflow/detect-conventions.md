@@ -13,7 +13,7 @@ consumes:
 
 # Detect conventions
 
-Follow the canonical [test-creator common workflow](../../docs/skill-framework/shared/test-creator-common-workflow.md)
+Follow the canonical [test-creator common workflow](../../../docs/skill-framework/shared/test-creator-common-workflow.md)
 for shared detection behavior; the rules below are API-level detection deltas.
 
 Run [scripts/detect-postman-tooling.sh](../scripts/detect-postman-tooling.sh) against `repo_root` (or the

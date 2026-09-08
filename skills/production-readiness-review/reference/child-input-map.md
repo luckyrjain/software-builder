@@ -29,7 +29,7 @@ never a guess, never a paraphrase of the PR/MR title/description standing in for
 (e.g. a description that says "adds an endpoint" does not satisfy `api_spec`; the actual contract text
 does). `assessment_context`'s own carrier fields (`assessment_target`, `inputs`, `input_provenance`,
 `evidence_refs`, `unresolved`) are populated per the invocation-envelope conventions in
-[invocation-envelope.md](../../docs/skill-framework/shared/invocation-envelope.md); the mandatory
+[invocation-envelope.md](../../../docs/skill-framework/shared/invocation-envelope.md); the mandatory
 fields above populate `assessment_context.inputs`.
 
 ## Composite mandatory inputs

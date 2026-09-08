@@ -5,7 +5,7 @@ library with a documented major-version migration guide) and a small manifest/lo
 least one transitive package, so both the changelog-backed checks and the transitive-dependency check
 exercise real evidence, not just the missing-input fallback.
 
-Conventions: [smoke-test-conventions](../../docs/skill-framework/shared/smoke-test-conventions.md).
+Conventions: [smoke-test-conventions](../../../docs/skill-framework/shared/smoke-test-conventions.md).
 
 ## Invocation
 

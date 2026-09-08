@@ -45,7 +45,7 @@ right next skill for that target — a real dependency needs a real integration 
 The most important gate in this skill. When a generated test fails and the code — not the test — is what
 looks wrong: never edit production code to force the test green, never delete or weaken the failing
 assertion, and never `.skip`/`xfail`/`@Disabled` it to hide the failure — see
-[test-creation-principles.md §5](../../docs/skill-framework/shared/test-creation-principles.md#5-escalation-on-a-surfaced-production-bug).
+[test-creation-principles.md §5](../../../docs/skill-framework/shared/test-creation-principles.md#5-escalation-on-a-surfaced-production-bug).
 Tag `WRITTEN_FAILING_PROD_BUG`, keep the test exactly as written, and surface it in the report per
 [report.md §3](../workflow/report.md#3-surface-production-bug-findings-plainly) for a human or
 **loop-task-implementer**/**pr-review** to act on. A caller asking "just make the suite green" after this

@@ -10,7 +10,7 @@
 | **Review cadence** | Quarterly — or when pinned MCP package versions change |
 | **External services** | GitLab MCP, Datadog MCP |
 
-See [setup-freshness.md](../docs/skill-framework/shared/setup-freshness.md) for the shared contract.
+See [setup-freshness.md](../../docs/skill-framework/shared/setup-freshness.md) for the shared contract.
 ## Ambient discovery is intended
 
 This skill deliberately does **not** set `disable-model-invocation` in its frontmatter, so the agent
@@ -38,7 +38,7 @@ make install-claude-squad-map
 ```
 
 No restart needed — a new Claude Code session picks it up. See
-[claude-code-setup.md](../docs/skill-framework/shared/claude-code-setup.md) for MCP config location
+[claude-code-setup.md](../../docs/skill-framework/shared/claude-code-setup.md) for MCP config location
 differences (GitLab/Datadog server entries are unchanged).
 
 ### Kiro / in-repo discovery
@@ -97,9 +97,9 @@ before writing a config file — the worked example there uses someone else's na
 
 ## Framework links
 
-- [skill-framework README](../docs/skill-framework/README.md)
-- [confidence-bands](../docs/skill-framework/shared/confidence-bands.md)
-- [cross-skill-escalation](../docs/skill-framework/shared/cross-skill-escalation.md)
+- [skill-framework README](../../docs/skill-framework/README.md)
+- [confidence-bands](../../docs/skill-framework/shared/confidence-bands.md)
+- [cross-skill-escalation](../../docs/skill-framework/shared/cross-skill-escalation.md)
 
 ## Smoke test
 

@@ -170,7 +170,7 @@ that never used packets.
 ## Post-action Jira paste
 
 Optional — on completion, offer the Jira summary paste (never post without explicit user confirmation) per
-[post-action-templates.md](../../docs/skill-framework/shared/post-action-templates.md) §3b.
+[post-action-templates.md](../../../docs/skill-framework/shared/post-action-templates.md) §3b.
 
 ## Definition of Done
 

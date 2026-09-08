@@ -9,8 +9,8 @@
 `<path>`") all come from `program_manifest`, from `MIGRATION_STATUS.yaml`'s own free-text fields, or —
 for `<squad name>` — from `SQUAD_MAP.md`'s own `GitLab squad`/`Datadog team` columns (external,
 org-configured metadata this skill never generates itself) — untrusted content per
-[prompt-injection.md](../../docs/skill-framework/shared/prompt-injection.md) and
-[safe-output.md](../../docs/skill-framework/shared/safe-output.md).
+[prompt-injection.md](../../../docs/skill-framework/shared/prompt-injection.md) and
+[safe-output.md](../../../docs/skill-framework/shared/safe-output.md).
 `scripts/aggregate_migration_status.py` only computes structured data and a stderr gap log — it never
 writes this Markdown file itself, so none of this sanitization happens there; it's this rendering step's
 own responsibility. **All six need the same first step, no exceptions:**
@@ -93,7 +93,7 @@ never silently merged into a named squad.>
 ## `migration_program_rollup.json` shape
 
 A flat JSON array of `org_rollup_item` objects (per
-[org-rollup-schema.md](../../docs/skill-framework/shared/org-rollup-schema.md)), each with an added
+[org-rollup-schema.md](../../../docs/skill-framework/shared/org-rollup-schema.md)), each with an added
 `staleness_days` field (this skill's own computed value, not part of the shared schema's base shape —
 schemas can be extended per-consumer as long as the base fields stay intact). Written so
 [weekly-squad-digest](../../weekly-squad-digest/SKILL.md) can read this file directly instead of

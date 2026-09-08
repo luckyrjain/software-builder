@@ -1,6 +1,6 @@
 # Examples — invocation patterns
 
-Conventions: [examples-conventions](../docs/skill-framework/shared/examples-conventions.md).
+Conventions: [examples-conventions](../../docs/skill-framework/shared/examples-conventions.md).
 
 ## Invocation table
 
@@ -12,7 +12,7 @@ Conventions: [examples-conventions](../docs/skill-framework/shared/examples-conv
 | 4 | "Give Jane the full deep-dive, not just quick orientation" | `delivery_mode: FULL` passed through to domain-comprehension unchanged |
 | 5 | domain-comprehension's Session 0 scope/budget checkpoint fires mid-run (not guaranteed under `QUICK` — see Run tour § 3) | Presented live to the user, unscripted — this skill has no gate-policy override (contrast with pr-gatekeeper/incident-triage-agent/backlog-runner) |
 | 6 | "Who owns the payments service?" | **Wrong skill** → squad-map directly |
-| 7 | "Help me onboard to the payments subsystem" (no person named) | **Wrong skill** → domain-comprehension directly — subsystem onboarding, not a new-hire tour (see [skill-routing.md](../docs/skill-framework/shared/skill-routing.md)) |
+| 7 | "Help me onboard to the payments subsystem" (no person named) | **Wrong skill** → domain-comprehension directly — subsystem onboarding, not a new-hire tour (see [skill-routing.md](../../docs/skill-framework/shared/skill-routing.md)) |
 | 8 | New hire's squad genuinely owns zero repos yet (user confirms after the zero-match ask) | `ONBOARDING_TOUR.md` § Notes records this plainly — § Your repos is never silently empty with no explanation |
 | 9 | "Onboard Priya, she's joining fraud-review" (one matched repo's GitLab squad disagrees with its Datadog team) | Run tour § 2 matches that repo via the **Datadog-team** column, not GitLab squad; § 4 surfaces the `SQUAD_MAP.md` § Conflicts row plainly in `ONBOARDING_TOUR.md` § Notes, not resolved either way |
 | 10 | "Onboard Marcus to collections — domain-comprehension already ran on this workspace last month" | `workspace_root` already has `manifest.yaml`; Run tour § 3 lets domain-comprehension resolve its own mode (`RESUME`/`DELTA`) exactly as a direct invocation would, still unscoped |
@@ -223,7 +223,7 @@ that existing file, not a fresh squad-map invocation, unless the caller also wan
 | fraud-review-service | acme/fraud/fraud-review-service | fraud-review | fraud-review-service | fraud-review | HIGH | GitLab get_project; Datadog search_datadog_services |
 ```
 
-Handoff block shape: [cross-skill-escalation.md](../docs/skill-framework/shared/cross-skill-escalation.md)
+Handoff block shape: [cross-skill-escalation.md](../../docs/skill-framework/shared/cross-skill-escalation.md)
 § 3, fields adapted to what this skill actually has (no service/env/window — a workspace and a repo name,
 same adaptation domain-comprehension's own examples.md makes for its pr-review handoff).
 

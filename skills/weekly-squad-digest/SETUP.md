@@ -10,7 +10,7 @@
 | **Review cadence** | Quarterly — or when pinned MCP package versions change |
 | **External services** | None (reads rollup JSON artifacts) |
 
-See [setup-freshness.md](../docs/skill-framework/shared/setup-freshness.md) for the shared contract.
+See [setup-freshness.md](../../docs/skill-framework/shared/setup-freshness.md) for the shared contract.
 ## Ambient discovery is deliberately disabled
 
 Like backlog-runner, this skill sets `disable-model-invocation: true` — it does not auto-apply from a
@@ -37,7 +37,7 @@ cd software-builder
 make install-claude-weekly-squad-digest
 ```
 
-No restart needed. See [claude-code-setup.md](../docs/skill-framework/shared/claude-code-setup.md).
+No restart needed. See [claude-code-setup.md](../../docs/skill-framework/shared/claude-code-setup.md).
 
 ### Kiro / in-repo discovery
 
@@ -71,7 +71,7 @@ every other trigger-driven skill in this repo. The handler you build:
    or post to Slack itself. If you want true per-squad channel delivery (e.g. `payments` squad's section
    posted to `#payments-eng`), your handler is where that squad→channel mapping has to live — no skill in
    this repo (including squad-map) has one today; see the
-   [design spec § Correcting two claims](../docs/superpowers/specs/2026-08-05-weekly-squad-digest-design.md#correcting-two-claims-before-designing-against-them)
+   [design spec § Correcting two claims](../../docs/superpowers/specs/2026-08-05-weekly-squad-digest-design.md#correcting-two-claims-before-designing-against-them)
    for why this skill doesn't assume one exists. A single combined post/document is the simpler, fully
    precedented option (same as backlog-runner's own morning summary).
 
@@ -85,9 +85,9 @@ every other trigger-driven skill in this repo. The handler you build:
 
 ## Framework links
 
-- [skill-framework README](../docs/skill-framework/README.md)
-- [confidence-bands](../docs/skill-framework/shared/confidence-bands.md)
-- [cross-skill-escalation](../docs/skill-framework/shared/cross-skill-escalation.md)
+- [skill-framework README](../../docs/skill-framework/README.md)
+- [confidence-bands](../../docs/skill-framework/shared/confidence-bands.md)
+- [cross-skill-escalation](../../docs/skill-framework/shared/cross-skill-escalation.md)
 
 ## Smoke test
 

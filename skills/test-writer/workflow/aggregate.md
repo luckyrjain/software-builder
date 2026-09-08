@@ -60,7 +60,7 @@ or pre-dispatch blocked reason regardless of the aggregate status.
 
 `orchestration_status` is internal bookkeeping and does not extend the universal status vocabulary.
 When emitting the canonical result envelope from
-[runtime-contract.md](../../docs/skill-framework/shared/runtime-contract.md):
+[runtime-contract.md](../../../docs/skill-framework/shared/runtime-contract.md):
 
 | `orchestration_status` | `skill_result.status` |
 |------------------------|-----------------------|

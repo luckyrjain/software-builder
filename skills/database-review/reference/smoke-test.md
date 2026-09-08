@@ -4,7 +4,7 @@ Run after install or any edit to this skill. Use a small representative migratio
 adds a nullable column plus an index) alongside its schema DDL and 1-2 representative queries so all eight
 analysis dimensions have something to evaluate, not just the trivial "no findings" path.
 
-Conventions: [smoke-test-conventions](../../docs/skill-framework/shared/smoke-test-conventions.md).
+Conventions: [smoke-test-conventions](../../../docs/skill-framework/shared/smoke-test-conventions.md).
 
 ## Invocation
 

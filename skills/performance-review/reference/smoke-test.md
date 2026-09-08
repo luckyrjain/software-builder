@@ -4,7 +4,7 @@ Run after install or any edit to this skill. Use a small real function or query 
 known performance issue (e.g. a loop issuing one query per iteration, an unbounded in-memory cache) so
 the smoke test exercises a non-clean path, not only a trivial `Pass`.
 
-Conventions: [smoke-test-conventions](../../docs/skill-framework/shared/smoke-test-conventions.md).
+Conventions: [smoke-test-conventions](../../../docs/skill-framework/shared/smoke-test-conventions.md).
 
 ## Invocation
 

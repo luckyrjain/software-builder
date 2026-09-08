@@ -7,7 +7,7 @@ run is stateless; this is the first skill in this repo that's ever run it more t
 is modeled directly on [backlog-runner/reference/queue-policy.md](../../backlog-runner/reference/queue-policy.md)
 — not loop-task-implementer's own orchestrator, which works exactly one task at a time and has no
 multi-item batch loop of its own (see the
-[design spec § Correcting the roadmap description](../../docs/superpowers/specs/2026-08-05-cost-optimization-sprint-planner-design.md#correcting-the-roadmap-description-before-designing-against-it)).
+[design spec § Correcting the roadmap description](../../../docs/superpowers/specs/2026-08-05-cost-optimization-sprint-planner-design.md#correcting-the-roadmap-description-before-designing-against-it)).
 
 ## 1. Session-level state (new — layered outside k8s-overprovisioning-datadog, which has none)
 

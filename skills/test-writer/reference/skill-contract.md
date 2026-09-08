@@ -42,5 +42,5 @@ Load immediately after [SKILL.md](../SKILL.md). These rules override convenience
     request, repository root, target, and optional specialist fields unchanged to each child. Missing
     fields block before dispatch rather than being inferred.
 
-Routing: [skill-routing.md](../../docs/skill-framework/shared/skill-routing.md). Shared principles:
-[test-creation-principles.md](../../docs/skill-framework/shared/test-creation-principles.md).
+Routing: [skill-routing.md](../../../docs/skill-framework/shared/skill-routing.md). Shared principles:
+[test-creation-principles.md](../../../docs/skill-framework/shared/test-creation-principles.md).

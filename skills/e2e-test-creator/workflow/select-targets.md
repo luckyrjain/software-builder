@@ -10,7 +10,7 @@ consumes:
 
 # Select targets
 
-Follow the canonical [test-creator common workflow](../../docs/skill-framework/shared/test-creator-common-workflow.md)
+Follow the canonical [test-creator common workflow](../../../docs/skill-framework/shared/test-creator-common-workflow.md)
 for shared bounded-selection behavior; the rules below are E2E-level selection deltas.
 
 Turn `target` into a concrete, bounded `target_list` of **journeys** to write tests for — not files. A
@@ -51,7 +51,7 @@ and § Failure points tables rather than inferring steps from the route alone �
 becomes a candidate edge-case assertion, not just the happy path. On no match, or when
 `BUSINESS_FLOWS.md` doesn't exist, proceed with the journey exactly as inferred (§1) or supplied (§2) —
 this step never blocks or renames a journey it can't match. Full artifact table and precedence rules:
-[domain-comprehension-integration.md](../../docs/skill-framework/shared/domain-comprehension-integration.md).
+[domain-comprehension-integration.md](../../../docs/skill-framework/shared/domain-comprehension-integration.md).
 
 ## 4. Exclusions (both modes)
 
@@ -70,7 +70,7 @@ resolved — never skip it on a hash match alone. A changed hash is treated as n
 recorded status. Move `pending_backlog` entries and every non-`WRITTEN_PASSING` recorded journey to the
 front of the list, ahead of anything newly discovered this run. Absent the state file, skip this step
 entirely. Full schema and precedence rules:
-[test-creation-principles.md §6](../../docs/skill-framework/shared/test-creation-principles.md#6-incremental-backfill-state-optional).
+[test-creation-principles.md §6](../../../docs/skill-framework/shared/test-creation-principles.md#6-incremental-backfill-state-optional).
 
 ## 6. Cap and report overflow
 

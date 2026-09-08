@@ -10,7 +10,7 @@
 | **Review cadence** | Quarterly — or when pinned MCP package versions change |
 | **External services** | Pact Broker (optional, repo-specific) |
 
-See [setup-freshness.md](../docs/skill-framework/shared/setup-freshness.md) for the shared contract.
+See [setup-freshness.md](../../docs/skill-framework/shared/setup-freshness.md) for the shared contract.
 ## Install
 
 ```bash
@@ -29,7 +29,7 @@ make install-claude-contract-test-creator
 ```
 
 No restart needed — a new Claude Code session picks it up. See
-[claude-code-setup.md](../docs/skill-framework/shared/claude-code-setup.md).
+[claude-code-setup.md](../../docs/skill-framework/shared/claude-code-setup.md).
 
 ### Kiro / in-repo discovery
 
@@ -58,11 +58,11 @@ invocation time — see [workflow/inputs.md](workflow/inputs.md).
 
 ## Framework links
 
-- [skill-framework README](../docs/skill-framework/README.md)
-- [test-creation-principles](../docs/skill-framework/shared/test-creation-principles.md)
-- [prompt-injection](../docs/skill-framework/shared/prompt-injection.md)
-- [skill-routing](../docs/skill-framework/shared/skill-routing.md)
-- [cross-skill-escalation](../docs/skill-framework/shared/cross-skill-escalation.md)
+- [skill-framework README](../../docs/skill-framework/README.md)
+- [test-creation-principles](../../docs/skill-framework/shared/test-creation-principles.md)
+- [prompt-injection](../../docs/skill-framework/shared/prompt-injection.md)
+- [skill-routing](../../docs/skill-framework/shared/skill-routing.md)
+- [cross-skill-escalation](../../docs/skill-framework/shared/cross-skill-escalation.md)
 
 ## Smoke test
 

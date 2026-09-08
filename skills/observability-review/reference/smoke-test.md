@@ -6,7 +6,7 @@ lines, tracing/span config for at least one critical-path hop, one dashboard def
 alert rule, and one SLO definition — so the smoke run exercises every section, not just the empty-input
 path.
 
-Conventions: [smoke-test-conventions](../../docs/skill-framework/shared/smoke-test-conventions.md).
+Conventions: [smoke-test-conventions](../../../docs/skill-framework/shared/smoke-test-conventions.md).
 
 ## Invocation
 

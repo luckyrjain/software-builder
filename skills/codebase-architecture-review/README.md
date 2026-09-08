@@ -4,7 +4,7 @@ Reviews a bounded existing codebase area for evidence-backed architecture fricti
 candidates. It is ambient, read-only, and report-only: it emits
 `CODEBASE_ARCHITECTURE_REVIEW.md` / `codebase_architecture_report` without changing repository state.
 
-The shared [codebase design doctrine](../docs/skill-framework/shared/codebase-design-principles.md) is
+The shared [codebase design doctrine](../../docs/skill-framework/shared/codebase-design-principles.md) is
 normative. The review caps itself at 200 fully read files, 3 hotspots, and—when available—200 commits over
 180 days. Missing Git history produces a degraded report that omits churn and co-change claims.
 

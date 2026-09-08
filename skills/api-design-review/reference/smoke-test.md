@@ -5,7 +5,7 @@ a handful of endpoints — enough to exercise all seven checks (at least one uns
 list endpoint, one error response) — and, when available, a prior version of the same spec to exercise the
 Compatibility diff rather than only the internal-consistency path.
 
-Conventions: [smoke-test-conventions](../../docs/skill-framework/shared/smoke-test-conventions.md).
+Conventions: [smoke-test-conventions](../../../docs/skill-framework/shared/smoke-test-conventions.md).
 
 ## Invocation
 

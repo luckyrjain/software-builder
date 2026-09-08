@@ -10,7 +10,7 @@
 | **Review cadence** | Quarterly — or when pinned MCP package versions change |
 | **External services** | None (router only — dispatches to test-creation skills) |
 
-See [setup-freshness.md](../docs/skill-framework/shared/setup-freshness.md) for the shared contract.
+See [setup-freshness.md](../../docs/skill-framework/shared/setup-freshness.md) for the shared contract.
 ## Install
 
 ```bash
@@ -31,7 +31,7 @@ make install-claude-test-writer
 ```
 
 No restart needed — a new Claude Code session picks it up. See
-[claude-code-setup.md](../docs/skill-framework/shared/claude-code-setup.md).
+[claude-code-setup.md](../../docs/skill-framework/shared/claude-code-setup.md).
 
 ### Kiro / in-repo discovery
 
@@ -58,12 +58,12 @@ dispatch according to the inherited runtime recursion contract; it is not copied
 
 ## Framework links
 
-- [skill-framework README](../docs/skill-framework/README.md)
-- [prompt-injection](../docs/skill-framework/shared/prompt-injection.md)
-- [skill-routing](../docs/skill-framework/shared/skill-routing.md)
-- [runtime-contract recursion protection](../docs/skill-framework/shared/runtime-contract.md#8-recursion-protection)
-- [cross-skill-escalation](../docs/skill-framework/shared/cross-skill-escalation.md)
-- [test-creation-principles](../docs/skill-framework/shared/test-creation-principles.md) — shared rules
+- [skill-framework README](../../docs/skill-framework/README.md)
+- [prompt-injection](../../docs/skill-framework/shared/prompt-injection.md)
+- [skill-routing](../../docs/skill-framework/shared/skill-routing.md)
+- [runtime-contract recursion protection](../../docs/skill-framework/shared/runtime-contract.md#8-recursion-protection)
+- [cross-skill-escalation](../../docs/skill-framework/shared/cross-skill-escalation.md)
+- [test-creation-principles](../../docs/skill-framework/shared/test-creation-principles.md) — shared rules
   the five dispatch targets honor
 
 ## Smoke test

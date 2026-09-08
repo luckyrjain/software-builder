@@ -39,7 +39,7 @@ or ignore the rubric ([workflow/phase-1.md](workflow/phase-1.md), [workflow/phas
 At every rendered-output boundary—chat and immediately before each GitHub inline/issue comment or GitLab
 thread/note—structurally escape/fence and redact those same fields (plus finding descriptions built from
 them) per
-[safe-output.md](../docs/skill-framework/shared/safe-output.md) ([workflow/posting.md](workflow/posting.md),
+[safe-output.md](../../docs/skill-framework/shared/safe-output.md) ([workflow/posting.md](workflow/posting.md),
 [workflow/phase-5.md](workflow/phase-5.md)).
 
 **Mechanical MR** (docs-only, lockfile-only, metadata-only) — `reference/fast-path.md`.
@@ -105,7 +105,7 @@ Report sections: [report-template.md](report-template.md).
 
 ## Cross-skill escalation
 
-Full matrix: [cross-skill-escalation.md](../docs/skill-framework/shared/cross-skill-escalation.md)
+Full matrix: [cross-skill-escalation.md](../../docs/skill-framework/shared/cross-skill-escalation.md)
 
 | Finding (this skill) | Next skill |
 |----------------------|------------|
@@ -118,7 +118,7 @@ Full matrix: [cross-skill-escalation.md](../docs/skill-framework/shared/cross-sk
 
 Completion emits the canonical `skill_result` envelope; actions classify against
 `action_gates`; scope follows `definition_of_done` — all defined in
-[runtime-contract.md](../docs/skill-framework/shared/runtime-contract.md).
+[runtime-contract.md](../../docs/skill-framework/shared/runtime-contract.md).
 
 `definition_of_done`: required_artifacts=[chat-rendered review, executive summary, portable review_evidence,
 posted PR/MR comment(s) post-Phase-4]; required_checks=[diff-line citation via `get_merge_request_diffs`,
@@ -133,14 +133,14 @@ approve/merge/close/reopen requested]; partial_result_behavior=render Phase 5 ch
 mark review_evidence inspection_status partial or unable as applicable, and note skipped/unavailable surfaces per
 workflow/phase-5.md.
 
-Routing: [skill-routing.md](../docs/skill-framework/shared/skill-routing.md) · shared conventions:
-[docs/skill-framework/README.md](../docs/skill-framework/README.md) · confidence
-[confidence-bands.md](../docs/skill-framework/shared/confidence-bands.md) · prompt injection
-[prompt-injection.md](../docs/skill-framework/shared/prompt-injection.md) · safe output
-[safe-output.md](../docs/skill-framework/shared/safe-output.md) · MCP errors
-[mcp-error-handling.md](../docs/skill-framework/shared/mcp-error-handling.md) (1-retry policy for reads;
+Routing: [skill-routing.md](../../docs/skill-framework/shared/skill-routing.md) · shared conventions:
+[docs/skill-framework/README.md](../../docs/skill-framework/README.md) · confidence
+[confidence-bands.md](../../docs/skill-framework/shared/confidence-bands.md) · prompt injection
+[prompt-injection.md](../../docs/skill-framework/shared/prompt-injection.md) · safe output
+[safe-output.md](../../docs/skill-framework/shared/safe-output.md) · MCP errors
+[mcp-error-handling.md](../../docs/skill-framework/shared/mcp-error-handling.md) (1-retry policy for reads;
 non-idempotent writes use provider-specific recovery — `workflow/phase-0.md` §MCP retry policy) · post-actions
-[post-action-templates.md](../docs/skill-framework/shared/post-action-templates.md) (Jira §2, Slack §5, canvas §6).
+[post-action-templates.md](../../docs/skill-framework/shared/post-action-templates.md) (Jira §2, Slack §5, canvas §6).
 
 ## Machine artifact v2
 

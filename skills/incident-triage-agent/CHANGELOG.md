@@ -24,7 +24,7 @@ frontmatter should match the version of the latest entry below that names that f
   1 structural escaping applies at that exact site (a raw newline/pipe in the substituted squad name
   would break the table row it's substituted into), on top of the existing backtick-strip-not-escape
   guidance for the pre-existing code span
-- **SKILL.md** — links [safe-output.md](../docs/skill-framework/shared/safe-output.md)
+- **SKILL.md** — links [safe-output.md](../../docs/skill-framework/shared/safe-output.md)
 - `evals/golden/incident-triage-agent/injection-inert-triage-doc.yaml` — golden fixture proving a
   spoofed "## Likely cause" heading injected via `alert_title` never becomes a second live section, and
   that `service`/`alert_id`/`severity`/squad-map's squad name all render backtick-stripped and
@@ -51,4 +51,4 @@ frontmatter should match the version of the latest entry below that names that f
 - `disable-model-invocation: true` — does not compete with incident-rca's or squad-map's ambient chat
   invocation
 - Shared framework compliance (confidence-bands, cross-skill-escalation, prompt-injection, skill-routing)
-- Design spec: [docs/superpowers/specs/2026-08-05-incident-triage-agent-design.md](../docs/superpowers/specs/2026-08-05-incident-triage-agent-design.md)
+- Design spec: [docs/superpowers/specs/2026-08-05-incident-triage-agent-design.md](../../docs/superpowers/specs/2026-08-05-incident-triage-agent-design.md)

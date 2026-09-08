@@ -11,7 +11,7 @@ consumes:
 
 # Verify & iterate
 
-Follow the canonical [test-creator common workflow](../../docs/skill-framework/shared/test-creator-common-workflow.md)
+Follow the canonical [test-creator common workflow](../../../docs/skill-framework/shared/test-creator-common-workflow.md)
 for shared verification and status behavior; the rules below are integration-level verification deltas.
 
 ## 1. `run_tests: false` or no execution capability
@@ -51,7 +51,7 @@ For each failing target, determine which side is wrong:
   than looping indefinitely.
 - **Production bug** (the code under test genuinely does not do what its own contract/docstring/existing
   callers imply against the real dependency) — this is the gate in shared
-  [test-creation-principles.md §5](../../docs/skill-framework/shared/test-creation-principles.md#5-escalation-on-a-surfaced-production-bug).
+  [test-creation-principles.md §5](../../../docs/skill-framework/shared/test-creation-principles.md#5-escalation-on-a-surfaced-production-bug).
   **Never** patch production code to force the test green, and never delete, weaken, or `.skip`/`xfail`
   the assertion that caught it. Tag the target `WRITTEN_FAILING_PROD_BUG`, keep the failing test exactly
   as written (it's correct — the code is what's wrong), and record the specific assertion/expected-vs-

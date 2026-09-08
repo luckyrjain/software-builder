@@ -14,4 +14,4 @@ frontmatter should match the version of the latest entry below that names that f
 - `reference/slack-format.md` — normative three-shape reply spec
 - `disable-model-invocation: true` — does not compete with squad-map's ambient chat invocation
 - Shared framework compliance (confidence-bands, cross-skill-escalation, prompt-injection, skill-routing)
-- Design spec: [docs/superpowers/specs/2026-08-05-who-owns-x-bot-design.md](../docs/superpowers/specs/2026-08-05-who-owns-x-bot-design.md)
+- Design spec: [docs/superpowers/specs/2026-08-05-who-owns-x-bot-design.md](../../docs/superpowers/specs/2026-08-05-who-owns-x-bot-design.md)

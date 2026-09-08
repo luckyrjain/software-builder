@@ -1,6 +1,6 @@
 # Confidence rubric (domain comprehension)
 
-**Extends** [confidence-bands.md](../../docs/skill-framework/shared/confidence-bands.md).
+**Extends** [confidence-bands.md](../../../docs/skill-framework/shared/confidence-bands.md).
 
 ## Principle
 

@@ -46,7 +46,7 @@ For each `release_manifest` entry:
 Every MR resolved in step 1 is **already merged** — that is the query condition (`state: merged`). Invoke
 **pr-review** per resolved MR with **explicit typed fields**, never a conversational exchange — this is
 this skill's `mr_context` InvocationEnvelope
-([invocation-envelope.md](../../docs/skill-framework/shared/invocation-envelope.md)):
+([invocation-envelope.md](../../../docs/skill-framework/shared/invocation-envelope.md)):
 
 - `merge_request_iid`, `project` — exact scope
 - `review_mode: retrospective`, `audit_type: retrospective` — interaction policy

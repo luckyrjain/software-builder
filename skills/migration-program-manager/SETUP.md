@@ -10,7 +10,7 @@
 | **Review cadence** | Quarterly — or when pinned MCP package versions change |
 | **External services** | None (reads MIGRATION_STATUS.yaml + SQUAD_MAP.md on disk) |
 
-See [setup-freshness.md](../docs/skill-framework/shared/setup-freshness.md) for the shared contract.
+See [setup-freshness.md](../../docs/skill-framework/shared/setup-freshness.md) for the shared contract.
 ## Ambient discovery is intended
 
 This skill deliberately does **not** set `disable-model-invocation` — the agent can auto-apply it when
@@ -39,7 +39,7 @@ cd software-builder
 make install-claude-migration-program-manager
 ```
 
-No restart needed. See [claude-code-setup.md](../docs/skill-framework/shared/claude-code-setup.md).
+No restart needed. See [claude-code-setup.md](../../docs/skill-framework/shared/claude-code-setup.md).
 
 ### Kiro / in-repo discovery
 
@@ -69,9 +69,9 @@ persistent location if you want staleness tracking to survive across sessions/ma
 
 ## Framework links
 
-- [skill-framework README](../docs/skill-framework/README.md)
-- [confidence-bands](../docs/skill-framework/shared/confidence-bands.md)
-- [cross-skill-escalation](../docs/skill-framework/shared/cross-skill-escalation.md)
+- [skill-framework README](../../docs/skill-framework/README.md)
+- [confidence-bands](../../docs/skill-framework/shared/confidence-bands.md)
+- [cross-skill-escalation](../../docs/skill-framework/shared/cross-skill-escalation.md)
 
 ## Smoke test
 
@@ -84,5 +84,5 @@ verify the script's own test suite: `python3 -m pytest migration-program-manager
 |---------|-----|
 | Every service shows staleness 0 every run | `state_path` isn't persisting between runs — check it points at a stable location, not a scratch/ephemeral path |
 | A workspace's services are all missing from the report | Check `MIGRATION_STATUS.yaml` actually exists at that `workspace_root` — see the Workspace gaps section of the report |
-| A service always joins as `squad: UNKNOWN` despite a real `SQUAD_MAP.md` | Check the service's `path` (preferred) or `name` in `MIGRATION_STATUS.yaml` matches `SQUAD_MAP.md`'s `Repo` column exactly — **this skill's own adapter** (`join_squad` in [scripts/aggregate_migration_status.py](scripts/aggregate_migration_status.py)) is exact-match only, no fuzzy matching or alias fallback. That's a property of this adapter, not the shared [org-rollup-schema.md](../docs/skill-framework/shared/org-rollup-schema.md) itself — its `k8s_waste` adapter (used by cost-optimization-sprint-planner) does fall back to squad-map's `ownership.datadog.service_aliases` config when a verbatim match fails (schema § 3). Fix the mismatch here by correcting the `Repo` cell or the service's `path`/`name`, not by expecting an alias to be consulted. |
+| A service always joins as `squad: UNKNOWN` despite a real `SQUAD_MAP.md` | Check the service's `path` (preferred) or `name` in `MIGRATION_STATUS.yaml` matches `SQUAD_MAP.md`'s `Repo` column exactly — **this skill's own adapter** (`join_squad` in [scripts/aggregate_migration_status.py](scripts/aggregate_migration_status.py)) is exact-match only, no fuzzy matching or alias fallback. That's a property of this adapter, not the shared [org-rollup-schema.md](../../docs/skill-framework/shared/org-rollup-schema.md) itself — its `k8s_waste` adapter (used by cost-optimization-sprint-planner) does fall back to squad-map's `ownership.datadog.service_aliases` config when a verbatim match fails (schema § 3). Fix the mismatch here by correcting the `Repo` cell or the service's `path`/`name`, not by expecting an alias to be consulted. |
 | `ModuleNotFoundError: No module named 'yaml'` | `python3 -m pip install pyyaml` |

@@ -4,7 +4,7 @@ Run after install or any edit to this skill. Use a `demand_data` series with at 
 usage numbers and a visible trend, a `forecast_horizon`, and a `current_baseline` (current replica count,
 resource sizing) so the happy path is exercised, not just the evidence-gap path.
 
-Conventions: [smoke-test-conventions](../../docs/skill-framework/shared/smoke-test-conventions.md).
+Conventions: [smoke-test-conventions](../../../docs/skill-framework/shared/smoke-test-conventions.md).
 
 ## Invocation
 

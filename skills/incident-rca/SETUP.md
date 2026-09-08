@@ -10,7 +10,7 @@
 | **Review cadence** | Quarterly — or when pinned MCP package versions change |
 | **External services** | Datadog MCP, Jira MCP, KubeSense CLI (optional) |
 
-See [setup-freshness.md](../docs/skill-framework/shared/setup-freshness.md) for the shared contract.
+See [setup-freshness.md](../../docs/skill-framework/shared/setup-freshness.md) for the shared contract.
 ## Ambient discovery is intended
 
 This skill deliberately does **not** set `disable-model-invocation` in its frontmatter, so the agent
@@ -76,7 +76,7 @@ make install-claude-incident-rca
 
 MCP servers (§ below): same JSON entries, via `.mcp.json` / `claude mcp add-json` instead of
 `~/.cursor/mcp.json`. Datadog: use the `datadog` Claude Code plugin's `ddsetup` skill instead of the
-Cursor Datadog plugin. Full mapping: [claude-code-setup.md](../docs/skill-framework/shared/claude-code-setup.md).
+Cursor Datadog plugin. Full mapping: [claude-code-setup.md](../../docs/skill-framework/shared/claude-code-setup.md).
 
 ### Kiro / in-repo discovery
 
@@ -217,13 +217,13 @@ The skill never triggers or updates builds.
 
 ## Framework conventions
 
-- Index: [docs/skill-framework/README.md](../docs/skill-framework/README.md)
-- Confidence: [confidence-bands](../docs/skill-framework/shared/confidence-bands.md)
-- Escalation: [cross-skill-escalation](../docs/skill-framework/shared/cross-skill-escalation.md)
-- Smoke tests: [smoke-test-conventions](../docs/skill-framework/shared/smoke-test-conventions.md)
-- Examples: [examples-conventions](../docs/skill-framework/shared/examples-conventions.md)
-- Phases: [phase-glossary](../docs/skill-framework/shared/phase-glossary.md)
-- Post-actions: [post-action-templates](../docs/skill-framework/shared/post-action-templates.md)
+- Index: [docs/skill-framework/README.md](../../docs/skill-framework/README.md)
+- Confidence: [confidence-bands](../../docs/skill-framework/shared/confidence-bands.md)
+- Escalation: [cross-skill-escalation](../../docs/skill-framework/shared/cross-skill-escalation.md)
+- Smoke tests: [smoke-test-conventions](../../docs/skill-framework/shared/smoke-test-conventions.md)
+- Examples: [examples-conventions](../../docs/skill-framework/shared/examples-conventions.md)
+- Phases: [phase-glossary](../../docs/skill-framework/shared/phase-glossary.md)
+- Post-actions: [post-action-templates](../../docs/skill-framework/shared/post-action-templates.md)
 
 ## Verify connectivity
 

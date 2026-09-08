@@ -11,12 +11,12 @@ consumes:
 
 # Generate tests
 
-Follow the shared [test-creator common workflow](../../docs/skill-framework/shared/test-creator-common-workflow.md)
-and run the [test-creator write-safety contract](../../docs/skill-framework/shared/test-creator-write-safety.md)
+Follow the shared [test-creator common workflow](../../../docs/skill-framework/shared/test-creator-common-workflow.md)
+and run the [test-creator write-safety contract](../../../docs/skill-framework/shared/test-creator-write-safety.md)
 before any test file, report, or coverage-state write. The unit-specific rules below are deltas only.
 
 For every `NEW` item in `target_list`, write tests that satisfy the shared quality rules in
-[test-creation-principles.md §2](../../docs/skill-framework/shared/test-creation-principles.md#2-test-quality-rules)
+[test-creation-principles.md §2](../../../docs/skill-framework/shared/test-creation-principles.md#2-test-quality-rules)
 plus the unit-specific deltas in
 [reference/test-quality-deltas.md](../reference/test-quality-deltas.md) in full — this phase does not
 restate either, it enforces them.
@@ -78,7 +78,7 @@ skill's scope, not to a fabricated unit-level mock.
 
 This phase writes and edits test files only. Refactor limits (when a pure testability refactor is even
 allowed) are shared, see
-[test-creation-principles.md §3](../../docs/skill-framework/shared/test-creation-principles.md#3-refactor-limits).
+[test-creation-principles.md §3](../../../docs/skill-framework/shared/test-creation-principles.md#3-refactor-limits).
 If writing a test surfaces what looks like a production bug, do not "fix" it inline to make the test
 pass — carry it forward to [verify-and-iterate.md](verify-and-iterate.md), which is where that finding
 gets surfaced rather than silently resolved.

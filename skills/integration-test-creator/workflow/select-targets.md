@@ -11,7 +11,7 @@ consumes:
 
 # Select targets
 
-Follow the canonical [test-creator common workflow](../../docs/skill-framework/shared/test-creator-common-workflow.md)
+Follow the canonical [test-creator common workflow](../../../docs/skill-framework/shared/test-creator-common-workflow.md)
 for shared bounded-selection behavior; the rules below are integration-level selection deltas.
 
 Turn `target` into a concrete, bounded `target_list` of seams (a component boundary against one real
@@ -63,7 +63,7 @@ determines survival order under §5's cap, not inclusion. If `<workspace_root>/D
 exists, use its authoritative-source-vs-replica/cache column as corroborating evidence for which side of
 a seam must stay real when Generate tests builds the test — never a substitute for what the code itself
 shows the seam actually is. Absent either file, skip this step. Full artifact table and precedence rules:
-[domain-comprehension-integration.md](../../docs/skill-framework/shared/domain-comprehension-integration.md).
+[domain-comprehension-integration.md](../../../docs/skill-framework/shared/domain-comprehension-integration.md).
 
 ## 5. Apply incremental backfill state (optional)
 
@@ -76,7 +76,7 @@ since `last_attempted` is treated as new outright, regardless of its recorded st
 `pending_backlog` entries and every non-`WRITTEN_PASSING` recorded target to the front of the list, ahead
 of anything newly discovered this run. Absent the state file, skip this step entirely — no filtering, no
 reordering, no note in the report. Full schema and precedence rules:
-[test-creation-principles.md §6](../../docs/skill-framework/shared/test-creation-principles.md#6-incremental-backfill-state-optional).
+[test-creation-principles.md §6](../../../docs/skill-framework/shared/test-creation-principles.md#6-incremental-backfill-state-optional).
 
 ## 6. Cap and report overflow
 

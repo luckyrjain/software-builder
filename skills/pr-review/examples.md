@@ -1,6 +1,6 @@
 # PR Review — Examples
 
-Conventions: [examples-conventions](../docs/skill-framework/shared/examples-conventions.md)
+Conventions: [examples-conventions](../../docs/skill-framework/shared/examples-conventions.md)
 
 ## Invocation
 
@@ -46,9 +46,9 @@ rightsizing — see [SKILL.md §When NOT to use](SKILL.md#when-not-to-use).
 | `review MR 482 as SRE` | !482 + **SRE persona** — §9/§17/rollback emphasis |
 | `security persona on !482` | **Security persona** — §2 deep pass |
 | `review !482 architecture focus` | !482 + §16 Architecture Lens forced (even without structural triggers) |
-| `MR !482 reduced CPU limits — assess rightsizing before merge` | pr-review Phase 2 flags underprovisioned resources → **Handoff → k8s** per [cross-skill-escalation.md](../docs/skill-framework/shared/cross-skill-escalation.md) |
+| `MR !482 reduced CPU limits — assess rightsizing before merge` | pr-review Phase 2 flags underprovisioned resources → **Handoff → k8s** per [cross-skill-escalation.md](../../docs/skill-framework/shared/cross-skill-escalation.md) |
 | `RCA for payment-api outage 14:00–16:00 UTC` | **Wrong skill** — route to incident-rca, not pr-review ([when NOT to use](SKILL.md)) |
-| `review !482 and notify #eng-reviews on Slack` | pr-review Phase 0→5; Phase 3 gate → post MR → Slack notify on user confirm | [post-action-templates §5](../docs/skill-framework/shared/post-action-templates.md#5-slack-pr-review-) |
+| `review !482 and notify #eng-reviews on Slack` | pr-review Phase 0→5; Phase 3 gate → post MR → Slack notify on user confirm | [post-action-templates §5](../../docs/skill-framework/shared/post-action-templates.md#5-slack-pr-review-) |
 
 ## Open MR list (GitLab repo, no target)
 

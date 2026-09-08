@@ -1,7 +1,7 @@
 # Test quality — integration-specific deltas
 
 The full checklist every test in this family must satisfy lives in
-[test-creation-principles.md §2](../../docs/skill-framework/shared/test-creation-principles.md#2-test-quality-rules)
+[test-creation-principles.md §2](../../../docs/skill-framework/shared/test-creation-principles.md#2-test-quality-rules)
 — load that before [workflow/generate-tests.md](../workflow/generate-tests.md). This file adds only what's
 different at the integration level; it does not repeat the shared checklist.
 

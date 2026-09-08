@@ -2,7 +2,7 @@
 
 Run after install or any edit to this skill. Use a small multi-repo workspace with GitLab MCP enabled.
 
-Conventions: [smoke-test-conventions](../../docs/skill-framework/shared/smoke-test-conventions.md)
+Conventions: [smoke-test-conventions](../../../docs/skill-framework/shared/smoke-test-conventions.md)
 
 ## Invocation
 

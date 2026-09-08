@@ -8,7 +8,7 @@ dependency on the other. **Run this smoke test across two separate invocations o
 exercise the cross-run dependency-satisfaction rule (queue-policy.md § 2 rule 4), which is this skill's
 one previously-broken piece of genuinely new logic.
 
-Conventions: [smoke-test-conventions](../../docs/skill-framework/shared/smoke-test-conventions.md)
+Conventions: [smoke-test-conventions](../../../docs/skill-framework/shared/smoke-test-conventions.md)
 
 ## Invocation
 

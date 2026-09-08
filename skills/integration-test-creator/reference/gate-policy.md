@@ -3,7 +3,7 @@
 Every non-happy-path branch this skill can hit, in phase order. "Ask" means stop and wait for a human
 turn — a caller is always present for this flow, so ask rather than guess. Escalation on a surfaced
 production bug is the shared rule in
-[test-creation-principles.md §5](../../docs/skill-framework/shared/test-creation-principles.md#5-escalation-on-a-surfaced-production-bug)
+[test-creation-principles.md §5](../../../docs/skill-framework/shared/test-creation-principles.md#5-escalation-on-a-surfaced-production-bug)
 — this file cites it rather than restating it.
 
 ## 1. Missing or malformed `target` / `repo_root`
@@ -52,7 +52,7 @@ assertion, and never `.skip`/`xfail`/`@Disabled` it to hide the failure. Tag `WR
 keep the test exactly as written, and surface it in the report per
 [report.md §3](../workflow/report.md#3-surface-production-bug-findings-plainly) for a human or
 **loop-task-implementer**/**pr-review** to act on. Full rule:
-[test-creation-principles.md §5](../../docs/skill-framework/shared/test-creation-principles.md#5-escalation-on-a-surfaced-production-bug).
+[test-creation-principles.md §5](../../../docs/skill-framework/shared/test-creation-principles.md#5-escalation-on-a-surfaced-production-bug).
 A caller asking "just make the suite green" after this gate has fired does not change the answer — see
 [pressure-tests.md](pressure-tests.md) row 6.
 

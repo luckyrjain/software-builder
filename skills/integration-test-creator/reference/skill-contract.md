@@ -4,7 +4,7 @@ Load immediately after [SKILL.md](../SKILL.md). These rules override convenience
 
 Shared rules for every skill in the test-creation family — test-first evidence, test-quality rules,
 refactor limits, the shared report skeleton, and the production-bug escalation — live in
-[test-creation-principles.md](../../docs/skill-framework/shared/test-creation-principles.md) and are
+[test-creation-principles.md](../../../docs/skill-framework/shared/test-creation-principles.md) and are
 **normative here by reference**, not restated. This file states only what's different for the
 integration level.
 
@@ -30,6 +30,6 @@ integration level.
 
 Everything else — real assertions only, gate-don't-guess, verify-before-claiming, no silent caps, never
 hide a failure, the `INTEGRATION_TEST_REPORT.md` deliverable every run — is exactly the shared contract
-in [test-creation-principles.md](../../docs/skill-framework/shared/test-creation-principles.md).
+in [test-creation-principles.md](../../../docs/skill-framework/shared/test-creation-principles.md).
 
-Routing: [skill-routing.md](../../docs/skill-framework/shared/skill-routing.md).
+Routing: [skill-routing.md](../../../docs/skill-framework/shared/skill-routing.md).

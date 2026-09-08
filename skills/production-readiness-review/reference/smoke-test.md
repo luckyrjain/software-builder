@@ -5,7 +5,7 @@ least one approval/policy signal, and a change shape that triggers at least one 
 (e.g. a schema migration or a public API change) — plus a second run against a change with no
 triggering surface, to exercise the all-`NOT_APPLICABLE`-specialists path too.
 
-Conventions: [smoke-test-conventions](../../docs/skill-framework/shared/smoke-test-conventions.md)
+Conventions: [smoke-test-conventions](../../../docs/skill-framework/shared/smoke-test-conventions.md)
 
 ## Invocation
 

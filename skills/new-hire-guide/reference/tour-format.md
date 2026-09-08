@@ -8,7 +8,7 @@ individual source repos — alongside links into domain-comprehension's workspac
 ## Safe rendered-output boundary
 
 `<new_hire.name>`, `<new_hire.squad>`, `<new_hire.role>`, and `<new_hire.start_date>` are caller-supplied
-data ([prompt-injection.md](../../docs/skill-framework/shared/prompt-injection.md)); `<repo>` and the
+data ([prompt-injection.md](../../../docs/skill-framework/shared/prompt-injection.md)); `<repo>` and the
 Squad contacts fields (GitLab namespace, Datadog team, Conflicts entries) come from `SQUAD_MAP.md`; the
 per-repo purpose line is cited from domain-comprehension's own census, itself built by reading repository
 content (READMEs, source) — none of these are skill-authored text. `<new_hire.name>` in particular is
@@ -23,7 +23,7 @@ rendering `ONBOARDING_TOUR.md`, for every one of these fields:
 2. **Then**, for the short, identifier-shaped fields — `<new_hire.name>`, `<new_hire.squad>`,
    `<new_hire.role>`, `<new_hire.start_date>`, `<repo>`, and the Squad contacts identifiers — also wrap
    the (already-escaped) value in an inline code span, first **removing** any backtick already in it
-   ([safe-output.md](../../docs/skill-framework/shared/safe-output.md) Rule 4). A backslash before the
+   ([safe-output.md](../../../docs/skill-framework/shared/safe-output.md) Rule 4). A backslash before the
    backtick does **not** work — CommonMark code-span delimiters are matched before backslash escapes are
    resolved. Strip the character entirely. The per-repo purpose line is not a short identifier — render
    it as a plain escaped/fenced excerpt instead of a code span.
