@@ -13,7 +13,8 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from scripts.registry.schema import RegistryParseError, registered_skill_ids  # noqa: E402
+from scripts.registry.paths import skill_dir  # noqa: E402
+from scripts.registry.schema import RegistryParseError, parse_registry  # noqa: E402
 from scripts.yaml_safety import YAML_SAFETY_ERRORS, load_unique_yaml_file  # noqa: E402
 
 _FRESHNESS_HEADING = "## Freshness"
@@ -67,10 +68,10 @@ def _insert_after_title(text: str, block: str) -> str:
 def ensure_setup_freshness(root: Path, *, write: bool) -> list[str]:
     defaults, skills_cfg = _load_config(root)
     try:
-        registry_ids = registered_skill_ids(root / "skills.yaml")
+        registry = parse_registry(root / "skills.yaml")
     except RegistryParseError as exc:
-        # registered_skill_ids() fully validates skills.yaml (not just "skills: is a mapping"),
-        # so an unrelated schema error elsewhere in the registry now surfaces here too. Without
+        # parse_registry() fully validates skills.yaml (not just "skills: is a mapping"), so
+        # an unrelated schema error elsewhere in the registry now surfaces here too. Without
         # this prefix, someone running this validator to debug a stale SETUP.md would see a
         # risk_class/hosts/etc. error with no indication their actual target (freshness) was
         # never reached.
@@ -78,6 +79,7 @@ def ensure_setup_freshness(root: Path, *, write: bool) -> list[str]:
             f"skills.yaml has schema errors unrelated to SETUP.md freshness — fix these first "
             f"(e.g. via `python3 -m scripts.registry validate`):\n  {exc}",
         ) from exc
+    registry_ids = set(registry.skills)
     config_ids = set(skills_cfg.keys())
     errors: list[str] = []
     for skill_id in sorted(registry_ids - config_ids):
@@ -101,7 +103,7 @@ def ensure_setup_freshness(root: Path, *, write: bool) -> list[str]:
         if not isinstance(cfg, dict):
             errors.append(f"error: setup_freshness skills.{skill_id} must be a mapping")
             continue
-        setup_path = root / skill_id / "SETUP.md"
+        setup_path = skill_dir(root, registry, skill_id) / "SETUP.md"
         if not setup_path.is_file():
             errors.append(f"error: {skill_id}: missing SETUP.md")
             continue

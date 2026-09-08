@@ -22,6 +22,7 @@ from scripts.registry.install_resolver import (
     install_selectors,
     resolve_install_destinations,
 )
+from scripts.registry.paths import skill_dir
 from scripts.registry.shadow_detector import SHADOW_NONE, detect_shadow
 from scripts.registry.schema import parse_registry
 from scripts.yaml_safety import YAML_SAFETY_ERRORS
@@ -46,6 +47,25 @@ def cmd_check(skill_id: str, root: Path) -> int:
         print(f"error: {skill_id!r} is not in skills.yaml", file=sys.stderr)
         return 1
     return _check_selector_coverage(root)
+
+
+def cmd_skill_dir(skill_id: str, root: Path) -> int:
+    """Print a registered skill's resolved *source* directory (the registry's `path:`
+    field, not the skill id itself) for install.sh's bash/registry bridge -- bash cannot
+    parse skills.yaml itself, so install_skill()/install-incident-rca-deps.sh shell out
+    to this instead of assuming a skill's source directory name equals its registry id.
+
+    This is the source-tree lookup only. The install *destination* (`dest_root/<skill>`)
+    and the registry key itself both stay flat regardless of `path:` -- see
+    validate_skill_name_format in install.sh, which still rejects a `/` in the skill
+    name it was given.
+    """
+    if skill_id not in set(registry_skill_ids(root)):
+        print(f"error: {skill_id!r} is not in skills.yaml", file=sys.stderr)
+        return 1
+    registry = parse_registry(root / "skills.yaml")
+    print(skill_dir(root, registry, skill_id))
+    return 0
 
 
 def cmd_list_selectors() -> int:
@@ -261,6 +281,12 @@ def main(argv: list[str] | None = None) -> int:
     check_parser.add_argument("skill_id")
     check_parser.add_argument("--repo-root", type=Path, default=ROOT)
 
+    skill_dir_parser = sub.add_parser(
+        "skill-dir", help="print a registered skill's resolved source directory"
+    )
+    skill_dir_parser.add_argument("skill_id")
+    skill_dir_parser.add_argument("--repo-root", type=Path, default=ROOT)
+
     sub.add_parser("list-selectors", help="print valid --agent selectors")
 
     verify_parser = sub.add_parser("verify", help="verify an installed skill package")
@@ -295,6 +321,8 @@ def main(argv: list[str] | None = None) -> int:
             return cmd_list(args.repo_root)
         if args.command == "check":
             return cmd_check(args.skill_id, args.repo_root)
+        if args.command == "skill-dir":
+            return cmd_skill_dir(args.skill_id, args.repo_root)
         if args.command == "list-selectors":
             return cmd_list_selectors()
         if args.command == "verify":

@@ -22,6 +22,7 @@ from scripts.evals.platform_contract import run_platform_contract_checks
 from scripts.evals.scenario_harness import run_per_skill_scenarios
 from scripts.evals.transcript import load_transcript_fixtures, run_transcript_case
 from scripts.evals.types import EvalResult, eval_contract_path, load_eval_contract
+from scripts.registry.paths import skill_dir as _resolve_skill_dir
 from scripts.registry.schema import Registry, parse_registry
 from scripts.registry.skill_frontmatter_schema import automation_only_guard_errors
 from scripts.yaml_safety import YAML_SAFETY_ERRORS, load_unique_frontmatter
@@ -32,7 +33,12 @@ WORKFLOW_REQUIRED_KEYS = ("workflow_version", "phase", "produces", "consumes")
 
 
 def _skill_dir(root: Path, skill_id: str) -> Path:
-    return root / skill_id
+    # parse_registry() is memoized per-root (scripts/registry/schema.py), so calling it
+    # here on every assertion -- rather than threading a Registry through run_case()/
+    # _run_assertion(), which already reload it ad hoc for a couple of assertion types
+    # (see "registry_invocation"/"automation_only_guard" below) -- costs one dict lookup
+    # per call, not a re-parse.
+    return _resolve_skill_dir(root, parse_registry(root / "skills.yaml"), skill_id)
 
 
 def _run_assertion(

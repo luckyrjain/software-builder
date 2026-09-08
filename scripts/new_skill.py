@@ -37,6 +37,11 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from scripts.registry.paths import skill_dir as _resolve_skill_dir  # noqa: E402
+from scripts.registry.schema import parse_registry  # noqa: E402
 
 SKILL_ID_RE = re.compile(r"^[a-z][a-z0-9]*(-[a-z0-9]+)*$")
 
@@ -234,7 +239,16 @@ def _registry_fragment(skill_id: str, description: str) -> str:
 
 
 def scaffold(skill_id: str, description: str, *, root: Path = ROOT) -> list[Path]:
-    skill_dir = root / skill_id
+    # skill_id has no registry entry yet at scaffold time -- this fragment's own
+    # `path: {skill_id}` line (see _registry_fragment above) is what *creates* that
+    # entry, so there is nothing for a registry lookup to find here. Routed through
+    # the shared resolver anyway (falls back to root / skill_id, identical to today)
+    # for consistency with every other skill-directory lookup in this repo, and so a
+    # skill_id that already has a stray/stale registry entry is caught by the
+    # `skill_dir.exists()` guard below using the *real* resolved directory, not a
+    # naive root / skill_id guess.
+    registry = parse_registry(root / "skills.yaml")
+    skill_dir = _resolve_skill_dir(root, registry, skill_id)
     fragment_path = root / "scripts" / "registry" / "skills.d" / f"{skill_id}.yaml"
     if skill_dir.exists():
         raise FileExistsError(f"{skill_dir.relative_to(root)} already exists")

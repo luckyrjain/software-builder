@@ -41,7 +41,9 @@ from scripts.evals.live_harness import (
     load_mock_tools,
     run_live_case,
 )
-from scripts.yaml_safety import load_unique_yaml_file
+from scripts.registry.paths import skill_dir as _resolve_skill_dir
+from scripts.registry.schema import parse_registry
+from scripts.yaml_safety import YAML_SAFETY_ERRORS, load_unique_yaml_file
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_MODEL = "claude-sonnet-5"
@@ -59,8 +61,23 @@ def load_live_case(path: Path) -> dict[str, Any]:
     return raw
 
 
+def _skill_source_dir(repo_root: Path, skill: str) -> Path:
+    """The skill's source directory, resolved through skills.yaml's `path:` field.
+
+    Falls back to `repo_root / skill` -- this function's entire behavior before it
+    became registry-aware -- when skills.yaml is missing or fails to parse, since
+    several tests here build a minimal skill tree (just a SKILL.md) with no skills.yaml
+    at all to exercise the harness, not registry resolution.
+    """
+    try:
+        registry = parse_registry(repo_root / "skills.yaml")
+    except (OSError, *YAML_SAFETY_ERRORS):
+        return repo_root / skill
+    return _resolve_skill_dir(repo_root, registry, skill)
+
+
 def build_system_prompt(repo_root: Path, skill: str, extra: str) -> str:
-    skill_md_path = repo_root / skill / "SKILL.md"
+    skill_md_path = _skill_source_dir(repo_root, skill) / "SKILL.md"
     if not skill_md_path.is_file():
         raise ValueError(f"no SKILL.md for skill {skill!r} under {repo_root}")
     skill_md = skill_md_path.read_text(encoding="utf-8")

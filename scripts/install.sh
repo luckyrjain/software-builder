@@ -198,6 +198,16 @@ registry_check_skill() {
   run_python "${REPO_ROOT}/scripts/install_support.py" check "${skill}" --repo-root "${REPO_ROOT}"
 }
 
+# Prints the skill's *source* directory as resolved from skills.yaml's `path:` field
+# (bash can't parse YAML itself) -- not necessarily "${REPO_ROOT}/${skill}", once a
+# skill's path diverges from its registry id. The install *destination* stays a flat
+# "${dest_root}/${skill}" regardless (see skill_dest below); only the source read path
+# is registry-driven.
+skill_source_dir() {
+  local skill="$1"
+  run_python "${REPO_ROOT}/scripts/install_support.py" skill-dir "${skill}" --repo-root "${REPO_ROOT}"
+}
+
 # Pure-Bash, no-subprocess format check, callable before anything that shells out to Python
 # (registry_check_skill, resolve_targets) so a malformed skill name is rejected as cheaply and
 # early as possible -- not just as defense in depth inside install_skill/uninstall_skill below,
@@ -292,7 +302,8 @@ install_skill() {
   # everything an `if` condition calls.
   registry_check_skill "${skill}" || return 1
 
-  local skill_src="${REPO_ROOT}/${skill}"
+  local skill_src
+  skill_src="$(skill_source_dir "${skill}")" || return 1
   local skill_dest="${dest_root}/${skill}"
 
   if [[ ! -f "${skill_src}/SKILL.md" ]]; then

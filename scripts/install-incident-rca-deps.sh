@@ -27,7 +27,17 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-LOCK_FILE="${REPO_ROOT}/incident-rca/skills-lock.json"
+
+run_python() {
+  PYTHONDONTWRITEBYTECODE=1 PYTHONPATH="${REPO_ROOT}" python3 "$@"
+}
+
+# incident-rca's source directory as resolved from skills.yaml's `path:` field, not
+# assumed to equal "${REPO_ROOT}/incident-rca" -- same bash/registry bridge
+# scripts/install.sh uses (bash can't parse YAML itself). See install_support.py's
+# skill-dir command.
+INCIDENT_RCA_DIR="$(run_python "${REPO_ROOT}/scripts/install_support.py" skill-dir incident-rca --repo-root "${REPO_ROOT}")"
+LOCK_FILE="${INCIDENT_RCA_DIR}/skills-lock.json"
 
 if [[ ! -f "${LOCK_FILE}" ]]; then
   echo "error: missing ${LOCK_FILE}" >&2

@@ -68,8 +68,25 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-PR_REVIEW_WORKFLOW_DIR = REPO_ROOT / "pr-review" / "workflow"
-AUTO_POST_POLICY = REPO_ROOT / "pr-gatekeeper" / "reference" / "auto-post-policy.md"
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from scripts.registry.paths import skill_dir as _resolve_skill_dir  # noqa: E402
+from scripts.registry.schema import parse_registry  # noqa: E402
+
+# Resolved through skills.yaml's `path:` field rather than assumed to be
+# REPO_ROOT / "pr-review" and REPO_ROOT / "pr-gatekeeper" -- once either skill's `path:`
+# changes (see the parent migration plan), this follows automatically. Computed once at
+# import time (not re-read on every run) since both PR_REVIEW_WORKFLOW_DIR and
+# AUTO_POST_POLICY are plain module-level Path values the test suite monkeypatches
+# directly (see scripts/tests/test_check_pr_review_ask_point_drift.py) -- main() must
+# keep reading these as module globals, not recompute them locally, or that
+# monkeypatching stops having any effect.
+_REGISTRY = parse_registry(REPO_ROOT / "skills.yaml")
+PR_REVIEW_WORKFLOW_DIR = _resolve_skill_dir(REPO_ROOT, _REGISTRY, "pr-review") / "workflow"
+AUTO_POST_POLICY = (
+    _resolve_skill_dir(REPO_ROOT, _REGISTRY, "pr-gatekeeper") / "reference" / "auto-post-policy.md"
+)
 
 # See KNOWN LIMITATIONS #3 above.
 EXCLUDED_FILES = {"inputs.md"}
