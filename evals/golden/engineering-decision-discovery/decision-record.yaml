@@ -1,0 +1,123 @@
+schema_version: 1
+skill: engineering-decision-discovery
+case_id: decision-record
+tier: 3
+# CAVEAT: D3's depends_on is empty (a genuine independent node, not a second
+# dependent of D1) so this fixture also covers reference/pressure-tests.md's
+# "Two independent nodes are both askable | Both appear on the same frontier
+# round" row -- see the decision_tree require_pattern/forbid_pattern
+# assertions below.
+description: >
+  A concrete engineering_decision_record separates the skill's recommendation
+  from the user's approval and records D1 as resolved by the user (not the
+  skill). D2 is a genuine dependent that was withheld until D1 resolved; D3
+  is a genuine independent node (empty depends_on) per workflow/tree.md's
+  dependency-edge rule -- already eligible on its own, simply not yet asked.
+  Both now sit on the same frontier round, leaving this an explicitly
+  partial, unresolved record; it never synthesizes a human decision or
+  writes a source file, test, config, registry entry, ADR, commit, push, PR,
+  or external post (docs/superpowers/plans/2026-09-05-engineering-decision-
+  discovery-bridge.md, Global Constraints; Task 1, Step 2). Admitted into
+  the eval suite by Task 4 of Child Plan B once engineering-decision-
+  discovery was registered in skills.yaml by Task 3.
+recorded_output:
+  artifact: engineering_decision_record
+  title: Charge module error-translation decision record
+  decision_scope:
+    candidate_id: ARCH-001
+    paths: [src/payments/charge.py, src/checkout/checkout.py]
+  decision_tree:
+    - id: D1
+      question: Should provider errors be translated at the charge module seam?
+      depends_on: []
+      status: resolved
+    - id: D2
+      question: Should the translated error type be shared with checkout?
+      depends_on: [D1]
+      status: unresolved
+    - id: D3
+      question: Should retries live inside the module or the caller?
+      depends_on: []
+      status: unresolved
+  frontier:
+    - D2
+    - D3
+  recommendations:
+    - decision: D1
+      recommendation: Translate provider errors at the module seam.
+      rationale: Keeps caller-facing errors module-owned per the contract surface.
+      approved: false
+    - decision: D2
+      recommendation: Share the translated error type with checkout via the existing contract module.
+      rationale: Checkout already imports the module's typed errors; a second parallel type would fork the contract.
+      approved: false
+    - decision: D3
+      recommendation: Keep retries inside the module, next to the translation it now owns.
+      rationale: The caller has no visibility into which provider errors are retryable.
+      approved: false
+  resolved_decisions:
+    - D1
+  unresolved_decisions:
+    - D2
+    - D3
+  alternatives_rejected:
+    - decision: D1
+      alternative: Let checkout translate raw provider errors itself.
+  limitations:
+    - >-
+      D2 was withheld until D1 resolved (a genuine prerequisite dependency);
+      D3 is independent of D1 ("depends_on" is empty) and was already
+      eligible on its own. Now that D1 is resolved by the user, D2 and D3
+      both sit on the same frontier round and remain unresolved pending the
+      user's decision -- this record is partial, not complete.
+  repository_write_action: none
+  adr_write_action: none
+  human_decision_synthesized: false
+assertions:
+  - type: field_equals
+    path: artifact
+    value: engineering_decision_record
+  - type: field_equals
+    path: repository_write_action
+    value: none
+  - type: forbid_field_value
+    path: repository_write_action
+    value: apply_patch
+  - type: field_equals
+    path: adr_write_action
+    value: none
+  - type: field_equals
+    path: human_decision_synthesized
+    value: false
+  - type: field_equals
+    path: frontier
+    value: [D2, D3]
+  - type: field_equals
+    path: unresolved_decisions
+    value: [D2, D3]
+  - type: field_equals
+    path: resolved_decisions
+    value: [D1]
+  - type: require_pattern
+    path: recommendations
+    pattern: Translate provider errors
+  - type: require_pattern
+    path: recommendations
+    pattern: Share the translated error type
+  - type: require_pattern
+    path: recommendations
+    pattern: Keep retries inside the module
+  - type: forbid_pattern
+    path: recommendations
+    pattern: "'approved': True"
+  # Finding 1 (Task 4 review): D3 is a genuine independent node (depends_on: []),
+  # not a second dependent of D1 -- proves the fixture actually covers
+  # reference/pressure-tests.md's "Two independent nodes are both askable" row,
+  # not just the "dependent withheld until prerequisite resolves" row D2 already
+  # covered.
+  - type: require_pattern
+    path: decision_tree
+    pattern: "'id': 'D3'.*'depends_on': \\[\\]"
+  - type: forbid_pattern
+    path: decision_tree
+    pattern: "'id': 'D3'.*'depends_on': \\['D1'\\]"

@@ -15,6 +15,7 @@ skill_types:
   deployment-risk-review: leaf
   domain-comprehension: orchestrator
   e2e-test-creator: leaf
+  engineering-decision-discovery: leaf
   implementation-planner: leaf
   incident-rca: leaf
   incident-triage-agent: trigger
@@ -276,3 +277,8 @@ artifact_ownership:
     mode: canonical
     owners:
     - production-readiness-review
+  engineering_decision_record:
+    mode: canonical
+    owners:
+    - engineering-decision-discovery
+    delegates: []

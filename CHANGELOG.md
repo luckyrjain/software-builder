@@ -2919,3 +2919,8 @@ _Pre-merge WIP on `feat/squad-map-skill` (internal v1.0–v1.5) is consolidated 
   temporary storage, never written into the repository or added to `skill_result.artifacts`.
   `codebase_architecture_report`/`module_design_spec` schema versions and both skills' read-only,
   report-only authority are unchanged.
+- Added `engineering-decision-discovery`, a read-only, ambient skill that runs an interactive,
+  evidence-backed decision-frontier interview (grill me / challenge my plan / stress-test this decision)
+  and emits a typed `engineering_decision_record` v1 artifact; it never writes source, tests, an ADR, or
+  synthesizes a human decision, and returns `BLOCKED` when a material decision remains unresolved in
+  unattended execution.

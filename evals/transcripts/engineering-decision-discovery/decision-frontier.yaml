@@ -1,0 +1,44 @@
+schema_version: 1
+skill: engineering-decision-discovery
+case_id: decision-frontier
+tier: 2
+description: >
+  The decision-discovery skill reads repository evidence before computing the
+  frontier, separates a recommendation from the human's approval of it, and
+  only exposes the next-wave decisions once a prerequisite-dependent decision
+  is resolved by the human -- not synthesized by the skill. It never writes
+  the repository or an ADR (docs/superpowers/plans/2026-09-05-engineering-
+  decision-discovery-bridge.md, Task 1, Step 2). Admitted into the eval suite
+  by Task 4 of Child Plan B once engineering-decision-discovery was
+  registered in skills.yaml by Task 3.
+events:
+  - type: tool
+    name: repository_read
+  - type: decision_frontier
+    decisions: [D1]
+  - type: recommendation
+    decision: D1
+    approved: false
+  - type: human_decision
+    decision: D1
+  - type: decision_frontier
+    decisions: [D2, D3]
+  - type: recommendation
+    decision: D2
+  - type: recommendation
+    decision: D3
+  - type: outcome
+    status: complete
+assertions:
+  - type: event_order
+    events: [repository_read, decision_frontier, recommendation, human_decision, decision_frontier]
+  - type: tool_not_called
+    name: repository_write
+  - type: tool_not_called
+    name: write_adr
+  - type: event_data_equals
+    event: recommendation
+    path: approved
+    value: false
+  - type: outcome_status
+    status: complete

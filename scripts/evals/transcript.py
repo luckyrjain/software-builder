@@ -16,7 +16,17 @@ TRANSCRIPTS_DIR_NAME = "transcripts"
 # it: every negative assertion (tool_not_called, forbid_tool_before_gate) works by filtering
 # events to a type and asserting absence, so a typo'd type on the one event a negative assertion
 # is meant to catch would otherwise make that assertion vacuously pass instead of failing loudly.
-EVENT_TYPES = frozenset({"tool", "gate", "outcome"})
+#
+# decision_frontier/recommendation/human_decision extend the vocabulary for
+# engineering-decision-discovery (docs/superpowers/plans/2026-09-05-engineering-decision-discovery-bridge.md,
+# Task 1): event_order/event_data_equals label non-tool events by their bare
+# `type` (see _event_label below), so distinguishing "the frontier was
+# recomputed" from "a recommendation was made" from "a human decided" from a
+# generic `gate` requires each to be its own event type, not a `gate` with a
+# distinguishing `name`.
+EVENT_TYPES = frozenset(
+    {"tool", "gate", "outcome", "decision_frontier", "recommendation", "human_decision"},
+)
 
 
 @dataclass(frozen=True)

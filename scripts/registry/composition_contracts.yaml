@@ -32,6 +32,7 @@ artifact_types:
 - resilience_review_report
 - implementation_plan
 - production_readiness_report
+- engineering_decision_record
 artifact_schemas:
   mr_context:
     fields:
@@ -331,6 +332,17 @@ artifact_schemas:
     - waivers
     - required_actions
     - evidence_refs
+  engineering_decision_record:
+    fields:
+    - title
+    - decision_scope
+    - decision_tree
+    - frontier
+    - recommendations
+    - resolved_decisions
+    - unresolved_decisions
+    - alternatives_rejected
+    - limitations
 creator_parity:
   skills:
   - unit-test-creator
@@ -557,6 +569,11 @@ skills:
       - output_dir
       - specialist_inputs
     write_authority: repository-write
+  engineering-decision-discovery:
+    produces:
+    - engineering_decision_record
+    consumes: []
+    write_authority: read-only
   implementation-planner:
     produces:
     - implementation_plan

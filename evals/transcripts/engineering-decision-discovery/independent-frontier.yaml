@@ -1,0 +1,38 @@
+schema_version: 1
+skill: engineering-decision-discovery
+case_id: independent-frontier
+tier: 2
+description: >-
+  Covers reference/pressure-tests.md's "Two independent nodes are both askable |
+  Both appear on the same frontier round" row and workflow/frontier.md's rule
+  ("Independent nodes (depends_on: []) are always eligible once unresolved, and
+  multiple independent nodes may share one frontier round -- ask them together
+  rather than one at a time"). D1 and D4 have no prerequisite relationship to
+  each other (each has depends_on: []); the frontier computes both into a single
+  round, and a recommendation is recorded for each before the round ends -- the
+  skill does not ask them one at a time across separate rounds. This is distinct
+  from decision-frontier.yaml (Task 1), which shows D2/D3 becoming askable
+  together only because their shared prerequisite D1 resolved, not because they
+  are independent of each other.
+events:
+  - type: tool
+    name: repository_read
+  - type: decision_frontier
+    decisions: [D1, D4]
+  - type: recommendation
+    decision: D1
+    approved: false
+  - type: recommendation
+    decision: D4
+    approved: false
+  - type: outcome
+    status: complete
+assertions:
+  - type: event_order
+    events: [repository_read, decision_frontier, recommendation, recommendation, outcome]
+  - type: tool_not_called
+    name: repository_write
+  - type: tool_not_called
+    name: write_adr
+  - type: outcome_status
+    status: complete

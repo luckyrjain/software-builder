@@ -1,6 +1,6 @@
 # Cross-skill escalation (shared)
 
-**Normative.** Symmetric escalation matrix for pr-review, pr-gatekeeper, incident-rca, incident-triage-agent, k8s-overprovisioning-datadog, domain-comprehension, squad-map, who-owns-x-bot, new-hire-guide, release-readiness-checker, mysql-to-postgres-sql, loop-task-implementer, backlog-runner, migration-program-manager, cost-optimization-sprint-planner, weekly-squad-digest, prd-architect, test-writer, unit-test-creator, integration-test-creator, contract-test-creator, e2e-test-creator, api-test-creator, architecture-review, system-design, module-design, codebase-architecture-review, api-design-review, database-review, security-review, performance-review, capacity-planner, observability-review, deployment-risk-review, dependency-upgrade-review, tech-debt-assessor, change-impact-analyzer, resilience-review, implementation-planner, and
+**Normative.** Symmetric escalation matrix for pr-review, pr-gatekeeper, incident-rca, incident-triage-agent, k8s-overprovisioning-datadog, domain-comprehension, squad-map, who-owns-x-bot, new-hire-guide, release-readiness-checker, mysql-to-postgres-sql, loop-task-implementer, backlog-runner, migration-program-manager, cost-optimization-sprint-planner, weekly-squad-digest, prd-architect, test-writer, unit-test-creator, integration-test-creator, contract-test-creator, e2e-test-creator, api-test-creator, architecture-review, system-design, module-design, codebase-architecture-review, engineering-decision-discovery, api-design-review, database-review, security-review, performance-review, capacity-planner, observability-review, deployment-risk-review, dependency-upgrade-review, tech-debt-assessor, change-impact-analyzer, resilience-review, implementation-planner, and
 production-readiness-review.
 
 **Consumers:** `SKILL.md` in each skill (link here; keep ≤10 skill-specific rows max).
@@ -15,7 +15,9 @@ know about — don't treat it as a "you may want to" row the way every other row
 All other rows are optional, human-visible handoff offers, not values emitted in a producing skill's typed
 result. A receiving skill is invoked only after a separate user-authorized request. In particular,
 `codebase-architecture-review` retains the `module-design` and `domain-comprehension` offers while its
-`codebase_architecture_report.recommended_next_skill` remains exactly `null`.
+`codebase_architecture_report.recommended_next_skill` remains exactly `null`; the same is true of its
+`engineering-decision-discovery` offer above — the handoff is a user-visible offer, never automatic
+dispatch, and `codebase-architecture-review`'s `composition.invokes` does not gain this edge.
 
 ## 1. Symmetric matrix (forward escalations)
 
@@ -92,8 +94,11 @@ result. A receiving skill is invoked only after a separate user-authorized reque
 | The PRD itself has gaps, not the architecture | architecture-review → prd-architect | PRD gap found during architecture review | "Revise the PRD for `{feature}` — architecture review found `{gap}`" |
 | A selected existing-code candidate needs one concrete module/interface/seam design | codebase-architecture-review → module-design | Candidate ID, bounded paths, evidence, and falsification result | "Design the module/interface/seam for candidate `{candidate_id}` in `{scope}` using the attached evidence" |
 | A retained existing-code finding needs current-state domain reconstruction | codebase-architecture-review → domain-comprehension | Candidate ID, bounded paths, evidence, and domain gap | "Map the current-state domain for `{scope}` using candidate `{candidate_id}` and the attached evidence" |
+| A selected candidate has unresolved engineering decisions before module/interface design begins | codebase-architecture-review → engineering-decision-discovery | `selected_candidate` (candidate ID, bounded scope, evidence refs, unresolved questions) | "Grill me on the unresolved decisions for candidate `{candidate_id}` in `{scope}` using the attached evidence" |
 | Scope expansion from one module now spans multiple components, APIs, events, or data flows | module-design → system-design | Module spec, affected components, and expanded implementation scope | "Create the implementation design for `{scope}`; the module boundary now spans `{components}`" |
 | Scope expansion from one module requires an architecture-wide correctness, risk, or scale decision | module-design → architecture-review | Module spec, alternatives, and architecture-wide trade-off | "Review the proposed architecture decision for `{scope}`; the module boundary now changes `{trade_off}`" |
+| Resolved decisions describe one module's contract, seam, or interface | engineering-decision-discovery → module-design | `engineering_decision_record` (resolved decisions + evidence refs) | "Design the module/interface/seam for `{scope}` using the resolved decision record" |
+| The frontier itself needs an architecture-wide risk/scale/trade-off verdict, not a decision interview | engineering-decision-discovery → architecture-review | `engineering_decision_record` (frontier + alternatives rejected) | "Review the proposed architecture decision for `{scope}` using the attached decision record" |
 | System design defines an API surface needing contract review | system-design → api-design-review | API surface from design spec | "Review the API design for `{feature}`" |
 | System design defines a data model needing schema review | system-design → database-review | Data model from design spec | "Review the database schema for `{feature}`" |
 | System design ready, needs an observability plan review | system-design → observability-review | Observability plan from design spec | "Review observability coverage for `{feature}`" |
@@ -146,8 +151,11 @@ Skill-specific rows in each `SKILL.md` MUST be a subset of this table plus local
 | domain-comprehension identifies implementation work loop-task-implementer should carry out | loop-task-implementer picks up the resulting task(s) | "Implement `{task_id}` per domain-comprehension findings for `{workspace}`" |
 | codebase-architecture-review selects one code-level candidate | module-design receives the candidate evidence and bounded scope | "Design the module/interface/seam for candidate `{candidate_id}` in `{scope}` using the attached evidence" |
 | codebase-architecture-review retains a finding needing current-state domain reconstruction | domain-comprehension receives the bounded evidence and domain gap | "Map the current-state domain for `{scope}` using candidate `{candidate_id}` and the attached evidence" |
+| codebase-architecture-review selects a candidate with unresolved engineering decisions | engineering-decision-discovery receives the `selected_candidate` evidence and unresolved questions | "Grill me on the unresolved decisions for candidate `{candidate_id}` in `{scope}` using the attached evidence" |
 | module-design expands beyond one module into components/APIs/events/data | system-design receives the expanded implementation scope | "Create the implementation design for `{scope}`; the module boundary now spans `{components}`" |
 | module-design expands into an architecture-wide correctness/risk/scale decision | architecture-review receives the alternatives and trade-off | "Review the proposed architecture decision for `{scope}`; the module boundary now changes `{trade_off}`" |
+| engineering-decision-discovery resolves decisions describing one module's contract, seam, or interface | module-design receives the resolved `engineering_decision_record` | "Design the module/interface/seam for `{scope}` using the resolved decision record" |
+| engineering-decision-discovery's frontier needs an architecture-wide risk/scale/trade-off verdict | architecture-review receives the `engineering_decision_record` frontier and rejected alternatives | "Review the proposed architecture decision for `{scope}` using the attached decision record" |
 
 ## 3. Handoff block (required fields)
 
@@ -194,6 +202,7 @@ When `MYSQL_TO_PG_SQL_REWRITES.md` exists in the workspace deliverable directory
 | Domain / subsystem map, bounded contexts, data ownership | domain-comprehension |
 | Current-state domain reconstruction | domain-comprehension |
 | Existing codebase architecture friction / refactoring candidates | codebase-architecture-review |
+| Grill me / stress-test this decision / unresolved engineering decisions before design or implementation | engineering-decision-discovery |
 | One code-level module / interface / seam / package / test surface | module-design |
 | Proposed architecture correctness | architecture-review |
 | System/component/API/event/data implementation design | system-design |

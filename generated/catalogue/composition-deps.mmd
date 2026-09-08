@@ -19,6 +19,8 @@ graph TD
   deployment-risk-review -.->|escalates| release-readiness-checker
   deployment-risk-review -.->|escalates| incident-triage-agent
   domain-comprehension -->|invokes| squad-map
+  engineering-decision-discovery -.->|escalates| module-design
+  engineering-decision-discovery -.->|escalates| architecture-review
   implementation-planner -.->|escalates| loop-task-implementer
   incident-rca -.->|escalates| pr-review
   incident-rca -.->|escalates| k8s-overprovisioning-datadog

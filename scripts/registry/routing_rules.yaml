@@ -62,6 +62,12 @@ routes:
   e2e-test-creator:
     patterns:
     - \b(e2e|end[- ]to[- ]end)\b.*\b(tests?|testing)\b
+  engineering-decision-discovery:
+    patterns:
+    - \b(grill me|challenge my plan|stress[- ]test this( [\w-]+)? decision|question
+      my assumptions|help me decide|what decisions are missing|interrogate this architecture)\b
+    exclude_patterns:
+    - \b(PR|MR|pull request|merge request)\s*[#!]?\d+\b
   implementation-planner:
     patterns:
     - \b(implementation plan|implementation planning|implementation task DAG|task
