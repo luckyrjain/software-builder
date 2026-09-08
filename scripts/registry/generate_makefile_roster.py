@@ -91,6 +91,18 @@ _GENERATED_HEADER = (
     "# guarantee: their prerequisite edges ARE each skill's `install.requires`,\n"
     "# read from the registry, so the Make graph cannot disagree with skills.yaml\n"
     "# about what a skill depends on. Adding a skill needs no make/core.mk edit.\n"
+    "#\n"
+    "# SKILLS_DIR is the single source of truth for where skill directories live\n"
+    "# relative to the repo root, so make/core.mk's ~200 hand-maintained\n"
+    "# `<skill>/...` path references (require_file/require_content calls, the\n"
+    "# untrusted-content-guard pair table, $$skill/... loop joins) can all resolve\n"
+    "# through one variable instead of assuming skills sit at the repo root. It is\n"
+    "# generated rather than hand-set for the same reason ALL_SKILLS is: a single\n"
+    "# real move of the skill directories (skills.yaml's `path` fields) should not\n"
+    "# require also hand-editing every call site in make/core.mk -- only this\n"
+    "# generator's value needs to change. Currently \".\" (skills still live at the\n"
+    "# repo root); a future migration step will change this generator to emit\n"
+    "# \"skills\" once skill directories actually move under skills/.\n"
 )
 
 
@@ -147,6 +159,7 @@ def render_makefile_roster(registry: Registry) -> str:
         _GENERATED_HEADER
         + "\n"
         + f"ALL_SKILLS := {skills}\n"
+        + "SKILLS_DIR := .\n"
         + "\n"
         + render_install_targets(registry)
     )
