@@ -1,0 +1,29 @@
+schema_version: 1
+skill: engineering-decision-discovery
+case_id: unattended-block
+tier: 2
+description: >
+  An unattended composition run (interaction_policy.unattended: true) must not synthesize a
+  human decision to clear a material, prerequisite-dependent decision -- it returns BLOCKED
+  with the frontier left explicit instead. No human_decision event is present in this
+  fixture at all, and the event_order assertion below requires decision_frontier to be found
+  -- in order, before the BLOCKED outcome -- so the frontier's presence is enforced by a
+  real, symmetric fixture-level assertion, not merely by an eyeballed raw events list (Task
+  1's carried-forward Minor on the in-memory version of this scenario in
+  scripts/tests/test_engineering_decision_discovery.py).
+events:
+  - type: tool
+    name: repository_read
+  - type: decision_frontier
+    decisions: [D1]
+  - type: outcome
+    status: BLOCKED
+assertions:
+  - type: tool_not_called
+    name: repository_write
+  - type: tool_not_called
+    name: write_adr
+  - type: outcome_status
+    status: BLOCKED
+  - type: event_order
+    events: [repository_read, decision_frontier, outcome]

@@ -1,0 +1,39 @@
+schema_version: 1
+skill: engineering-decision-discovery
+case_id: contract-ambient-read-only-interview
+tier: 1
+description: >
+  engineering-decision-discovery is ambient and read-only: it is triggered only by its exact
+  trigger phrases, emits ENGINEERING_DECISION_RECORD.md without ever writing source, the
+  repository, or an ADR, and an unattended run returns BLOCKED instead of synthesizing a
+  human decision for a material, unresolved frontier.
+assertions:
+  - type: registry_invocation
+    expected: ambient
+  - type: skill_md_contains
+    pattern: read-only
+  - type: skill_md_contains
+    pattern: "grill\\s+me"
+  - type: skill_md_contains
+    pattern: stress-test this decision
+  - type: skill_md_contains
+    pattern: what decisions are missing
+  - type: skill_md_contains
+    pattern: ENGINEERING_DECISION_RECORD\.md
+  - type: skill_md_contains
+    pattern: or an ADR, and it never commits
+  - type: path_contains
+    path: workflow/report.md
+    pattern: ENGINEERING_DECISION_RECORD\.md
+  - type: path_contains
+    path: workflow/report.md
+    pattern: never write
+  - type: path_contains
+    path: workflow/frontier.md
+    pattern: BLOCKED
+  - type: path_contains
+    path: reference/pressure-tests.md
+    pattern: "unattended: true.*BLOCKED"
+  - type: path_contains
+    path: reference/pressure-tests.md
+    pattern: Decline
