@@ -379,7 +379,7 @@ def validate_invariants(graph: dict[str, Any]) -> list[str]:
 
 def main(argv: list[str] | None = None) -> int:
     paths = (argv if argv is not None else sys.argv[1:]) or [
-        "k8s-overprovisioning-datadog/reference/decision-graph.example.yaml",
+        str(_SCRIPT_DIR.parent / "reference" / "decision-graph.example.yaml"),
     ]
     exit_code = 0
     for path_str in paths:

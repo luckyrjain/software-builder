@@ -185,8 +185,8 @@ bash scripts/install.sh api-test-creator
 bash scripts/install.sh test-writer
 ```
 
-With no arguments, `install.sh` discovers every `*/SKILL.md` under `skills/` and installs each —
-adding a new skill directory needs no script change to be picked up.
+With no arguments, `install.sh` installs every skill registered in `skills.yaml` — adding a new skill
+needs no `install.sh` change to be picked up, only a `skills.yaml` entry.
 
 ## Registry discovery
 

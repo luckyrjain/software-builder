@@ -9,6 +9,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+# This skill's own root, regardless of the caller's CWD or where the skill directory has
+# been moved/installed -- e.g. skills/incident-rca/scripts/validate_evidence_json.py ->
+# skills/incident-rca. Used only for the no-args default path below; every other path this
+# script touches is caller-supplied.
+_SKILL_ROOT = Path(__file__).resolve().parents[1]
+
 REQUIRED_TOP_LEVEL = (
     "schema_version",
     "window",
@@ -252,7 +258,7 @@ def validate_evidence(data: Any) -> list[str]:
 
 def main(argv: list[str] | None = None) -> int:
     paths = (argv if argv is not None else sys.argv[1:]) or [
-        "incident-rca/reference/evidence.example.json"
+        str(_SKILL_ROOT / "reference" / "evidence.example.json")
     ]
     exit_code = 0
     for path_str in paths:

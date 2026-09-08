@@ -181,8 +181,9 @@ bash scripts/install.sh --agent cursor
 bash scripts/install.sh --agent claude-user
 ```
 
-The default installer discovers every `skills/*/SKILL.md`, copies full skill directories to both
-`~/.cursor/skills/` and `~/.claude/skills/`, and replaces an existing installation of the same skill.
+The default installer installs every skill registered in `skills.yaml`, copies full skill directories
+to both `~/.cursor/skills/` and `~/.claude/skills/`, and replaces an existing installation of the same
+skill.
 Review [scripts/README.md](scripts/README.md) before using a custom target or automating installation.
 
 > Make target names usually follow `make install-<skill>`. The exception is
