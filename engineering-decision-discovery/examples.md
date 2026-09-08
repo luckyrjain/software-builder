@@ -22,16 +22,18 @@ repository state, writes an ADR, or implements anything itself.
 | 9 | "What does this checkout module actually do today?" | Wrong scope — use `domain-comprehension` to reconstruct current behavior; this skill decides, it does not document as-is behavior |
 | 10 | "Is this proposed event-driven architecture safe at our scale?" | Wrong scope — use `architecture-review` for a verdict on a proposed architecture's risk and trade-offs |
 | 11 | "Implement the design we already agreed on." | Wrong scope — use `loop-task-implementer` / `system-design`; this skill is for unresolved decisions, not settled ones |
+| 12 | "Great, everything's decided — write the ADR for this now." | Declines; ADR authorship is a separate, explicitly authorized action outside this skill — `adr_write_action` stays `none` |
 
-## Example: dependent decision waits for its prerequisite
+## Example: dependency tree gates D2 until D1 resolves, then the frontier recomputes
 
-**Scope:** "Should provider errors be translated at the charge module seam?" bounded to
-`src/payments/charge.py` and its checkout callers.
+**Scope:** `candidate_id: ARCH-001`, "Should provider errors be translated at the charge module seam?"
+bounded to `src/payments/charge.py` and its checkout callers.
 
-**Tree:** D1 — translate at the seam or leave it to callers (independent). D2 — which error taxonomy the
-translation uses, `depends_on: [D1]` (only matters if D1 selects translation).
+**Tree:** D1 — translate at the seam or leave it to callers (`depends_on: []`). D2 — should the
+translated error type be shared with checkout (`depends_on: [D1]`; only askable once D1 resolves). D3 —
+should retries live inside the module or the caller (`depends_on: []`, independent of both D1 and D2).
 
-**Round 1 (frontier = [D1] only):**
+**Round 1 (frontier = [D1] — D3 not yet reached, D2 correctly gated off this round):**
 
 ```
 Frontier this round: D1
@@ -42,8 +44,15 @@ D1: Should provider errors be translated at the charge module seam?
   Your decision?
 ```
 
-**Result:** the user picks option A. D1 becomes `resolved`; D2 is now eligible and appears on round 2's
-frontier — it was never asked in round 1 alongside its unresolved prerequisite.
+**Result:** the user selects the recommended option A. D1 becomes `resolved`, attributed to the user, not
+the skill — the report's `recommendations` entry for D1 still shows `approved: false`; selecting the
+recommendation is not the same field as approving it. The frontier is then recomputed from the current
+tree, not reused from round 1: D2 is now eligible because its only dependency resolved, and D3 — already
+independently eligible but not yet asked — joins it. Round 2's frontier is `[D2, D3]`, matching
+`evals/golden/engineering-decision-discovery/decision-record.yaml`'s snapshot at this exact point: D1
+`resolved`, D2 and D3 both `unresolved`, `resolved_decisions: [D1]`, `unresolved_decisions: [D2, D3]`. D2
+was never askable alongside its unresolved prerequisite; D3 was always independent of D1 and simply hadn't
+come up yet — two different reasons a node can be absent from a round, and the tree keeps them distinct.
 
 ## Example: user overrides the recommendation
 
@@ -69,24 +78,64 @@ next sprint."
 recommendation and rationale. The skill stops there — it does not keep re-asking, does not treat the
 deferral as approval of its own recommendations, and emits the report with both decisions honestly open.
 
-## Example: unattended composition, material frontier remains
+## Example: unresolved frontier in an unattended composition returns BLOCKED
 
 **Scope:** a release-pipeline invocation with `interaction_policy: {human_available: false,
-unattended: true}` and one dependent decision still unresolved after evidence review.
+unattended: true}` composing this skill after `codebase-architecture-review`, one material decision still
+unresolved after the skill reads the repository for evidence — matching
+`evals/transcripts/engineering-decision-discovery/unattended-block.yaml`'s event order: the skill reads
+the repository, computes the frontier, then reports the outcome, with no `human_decision` event anywhere
+in between — there is no human turn to wait for this run.
 
 **Result:**
 
 ```
 status: BLOCKED
-frontier_at_completion: [D2]
-D2: Which retry policy should the payment adapter use on a translated timeout?
+frontier_at_completion: [D1]
+D1: Which retry policy should the payment adapter use on a translated timeout?
   Recommended: A — exponential backoff with jitter, capped at 3 attempts
   Rationale: repo:src/payments/adapter.py already imports a backoff helper unused elsewhere; no idempotency
   guarantee is documented, so a longer cap risks duplicate charges. Confidence: LOW — idempotency behavior unconfirmed.
 ```
 
-No decision is synthesized to clear D2, and no source, configuration, or ADR is written — the pipeline
-sees `BLOCKED` and the exact frontier a human needs to resolve.
+No decision is synthesized to clear D1, and no source, configuration, or ADR is written. Composition time
+pressure does not change the rule: the skill never auto-picks its own recommended option to unblock a
+caller. The pipeline sees `BLOCKED` and the exact frontier — question, recommendation, rationale,
+confidence — a human needs to resolve before this composition can proceed.
+
+## Example: a repository fact is retrieved by the skill, not asked of the user
+
+**Scope:** the same `ARCH-001` charge-module tree from the dependency example above, building the
+recommendation for D2 ("Should the translated error type be shared with checkout?").
+
+**Result:** rather than asking the user "does checkout already import the charge module's error types?" —
+a fact the host can read for itself — the skill reads `src/checkout/checkout.py` directly and finds the
+existing import before the frontier is ever presented. That repository fact becomes D2's rationale
+verbatim: "Checkout already imports the module's typed errors; a second parallel type would fork the
+contract," exactly as recorded in
+`evals/golden/engineering-decision-discovery/decision-record-complete.yaml`. Per
+[workflow/inputs.md § Repository evidence](workflow/inputs.md): missing or unreadable evidence is recorded
+as a limitation or a lowered confidence band against the affected node — it is never turned into a
+question for the user. The frontier round the user actually sees carries only the genuine decision (which
+option to pick) plus the rationale already backed by that self-retrieved fact; it never carries a request
+for the user to go look the fact up.
+
+## Example: a requested ADR is correctly refused
+
+**Scope:** the `ARCH-001` charge-module tree, now fully resolved — D1, D2, and D3 all `resolved`, frontier
+empty, `status: SUCCESS`, matching
+`evals/golden/engineering-decision-discovery/decision-record-complete.yaml`.
+
+**Round:** the user says, "Great, everything's decided — go ahead and write the ADR for this now."
+
+**Result:** the skill declines. ADR authorship is a separate, explicitly authorized action outside this
+skill's boundary, not something a resolved decision record triggers automatically. The report still emits
+normally — `resolved_decisions: [D1, D2, D3]`, every recommendation and rationale intact, `frontier: []`
+— but `adr_write_action` stays `none` and no `write_adr` action is ever added to the payload. If the
+resolved decisions concern one module's boundary, the report may separately offer
+`recommended_next_skill: module-design` as a visible, human-authorized next step; that offer is a pointer
+the user chooses to follow, not the skill writing anything itself, and it never substitutes for the ADR
+the user actually asked for.
 
 ## Example: cross-skill handoff after resolution
 

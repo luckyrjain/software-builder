@@ -9,7 +9,8 @@ Normative conventions for **pr-review**, **pr-gatekeeper**, **incident-rca**, **
 **architecture-review**, **system-design**, **api-design-review**, **database-review**,
 **security-review**, **performance-review**, **capacity-planner**, **observability-review**,
 **deployment-risk-review**, **dependency-upgrade-review**, **tech-debt-assessor**,
-**resilience-review**, **implementation-planner**, **module-design**, and **codebase-architecture-review**.
+**resilience-review**, **implementation-planner**, **module-design**, **codebase-architecture-review**, and
+**engineering-decision-discovery**.
 **change-impact-analyzer** is also framework-compliant and follows the bounded impact pipeline.
 **production-readiness-review** is a read-only orchestrator that aggregates trusted CI, code-review,
 build-provenance, SCM-policy, change-impact, deployment-risk, and applicable specialist-review evidence
