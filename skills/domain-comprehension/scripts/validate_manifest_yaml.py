@@ -37,7 +37,6 @@ except ImportError:
         from scripts.yaml_safety import load_unique_yaml_file
     except ImportError:  # pragma: no cover - bare environment; falls back to plain safe_load
         load_unique_yaml_file = None  # type: ignore[assignment]
-# GENERATED yaml-safety-bootstrap:end
 
 
 def _parse_yaml_file(path: Path) -> Any:
@@ -45,6 +44,7 @@ def _parse_yaml_file(path: Path) -> Any:
     if load_unique_yaml_file is not None:
         return load_unique_yaml_file(path)
     return yaml.safe_load(path.read_text(encoding="utf-8"))
+# GENERATED yaml-safety-bootstrap:end
 
 
 SCHEMA_VERSION = 2

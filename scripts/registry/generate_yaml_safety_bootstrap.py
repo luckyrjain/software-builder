@@ -1,5 +1,6 @@
-"""One canonical copy of the yaml-safety bare-environment import shim, projected into every
-packaged skill script that parses target-workspace YAML with the hardened loader.
+"""One canonical copy of the yaml-safety bare-environment import shim and its matching
+`_parse_yaml_file` helper, projected into every packaged skill script that parses
+target-workspace YAML with the hardened loader.
 
 Each of these scripts parses YAML written by the *target workspace* rather than by this
 repository, so it wants `scripts/yaml_safety.py`'s duplicate-key rejection and size/nesting caps
@@ -7,13 +8,15 @@ repository, so it wants `scripts/yaml_safety.py`'s duplicate-key rejection and s
 copy of that module is importable (falling back to plain `yaml.safe_load`, tolerated the same way
 each of these scripts already tolerates a missing PyYAML). That resolution -- prefer a copy
 vendored beside the script, else the repository's own `scripts/yaml_safety.py` from a source
-checkout, else `None` -- had been hand-copied into four validator scripts across four skills,
-byte-for-byte identical: exactly the copy-drift risk `generate_shared_runtime_bootstrap.py`
-already removes for the sibling shared-runtime-loader bootstrap.
+checkout, else `None` -- and the one-line "use it if present, else fall back" helper that reads
+it, had both been hand-copied into four validator scripts across four skills, byte-for-byte
+identical: exactly the copy-drift risk `generate_shared_runtime_bootstrap.py` already removes
+for the sibling shared-runtime-loader bootstrap.
 
-Each target file keeps its own `try: import yaml` fallback and `_parse_yaml_file` helper
-immediately below the generated block (those differ script to script) -- only the import-shim
-itself, identical everywhere, is generated.
+Each target file keeps its own `try: import yaml` fallback immediately above the generated
+block (that differs script to script: some tolerate a missing PyYAML, this repo's own
+`scripts/yaml_safety.py` does not need to) -- only the import-shim and `_parse_yaml_file`,
+identical everywhere, are generated.
 """
 
 from __future__ import annotations
@@ -60,7 +63,14 @@ except ImportError:
     try:
         from scripts.yaml_safety import load_unique_yaml_file
     except ImportError:  # pragma: no cover - bare environment; falls back to plain safe_load
-        load_unique_yaml_file = None  # type: ignore[assignment]'''
+        load_unique_yaml_file = None  # type: ignore[assignment]
+
+
+def _parse_yaml_file(path: Path) -> Any:
+    """Parse `path`, preferring the hardened loader when it is available."""
+    if load_unique_yaml_file is not None:
+        return load_unique_yaml_file(path)
+    return yaml.safe_load(path.read_text(encoding="utf-8"))'''
 
 
 def render_yaml_safety_bootstrap_block() -> str:

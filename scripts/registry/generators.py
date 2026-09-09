@@ -312,9 +312,24 @@ GENERATORS: tuple[Generator, ...] = (
 
 
 def collect_outputs(root: Path) -> dict[Path, str]:
-    """Fold every registered generator into one path -> content mapping."""
+    """Fold every registered generator into one path -> content mapping.
+
+    Two generators claiming the same output path would otherwise silently last-write-win
+    (`dict.update`'s ordinary behavior) -- exactly the hazard `_generate_readme`'s own docstring
+    already reasons about for the one output it deliberately keeps single-owner (README.md's badge
+    and agent-compatibility section). This makes the same invariant hold for all of GENERATORS, not
+    just the one pair someone already thought to combine.
+    """
     ctx = build_generate_context(root)
     outputs: dict[Path, str] = {}
+    owners: dict[Path, str] = {}
     for generator in GENERATORS:
-        outputs.update(generator(ctx))
+        for path, content in generator(ctx).items():
+            owner = owners.get(path)
+            if owner is not None and owner != generator.__name__:
+                raise ValueError(
+                    f"generator collision: both {owner} and {generator.__name__} write {path}",
+                )
+            owners[path] = generator.__name__
+            outputs[path] = content
     return outputs
