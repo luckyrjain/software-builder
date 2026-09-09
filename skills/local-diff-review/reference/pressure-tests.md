@@ -36,7 +36,6 @@ Manual checks after prompt or workflow edits.
 |----------|-----------|
 | Caller wants this diff reviewed once it's posted as a real PR/MR | Offer `pr-review`; do not invoke it automatically |
 | A Standards finding is security-sensitive | Offer `security-review`; do not attempt a full security audit here |
-| Scope becomes a full existing-codebase architecture audit | Offer `codebase-architecture-review`; do not widen to a full audit here |
 
 ## Adversarial / prompt injection
 

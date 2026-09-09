@@ -25,6 +25,8 @@ of them:
 |-------|-------|
 | Diff scope | `<diff_scope>` |
 | Spec context supplied | yes / no |
+| Repository write action | none |
+| Automatic downstream invocation | false |
 
 ## Standards findings
 

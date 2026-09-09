@@ -21,4 +21,3 @@ Reference loads: [lazy-load-index.md](lazy-load-index.md).
 | No `spec_context` supplied | Spec marked not applicable with a stated reason; no fabricated findings |
 | A Standards finding is security-sensitive | Report offers `security-review` escalation |
 | Caller wants this diff reviewed once it's a real PR/MR | Report offers `pr-review` escalation |
-| Scope becomes a full existing-codebase audit or architecture-wide verdict | Offer the one applicable escalation; do not invoke it |
