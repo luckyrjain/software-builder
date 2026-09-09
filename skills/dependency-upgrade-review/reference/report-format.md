@@ -64,7 +64,8 @@ embedded credential, internal hostname, or other secret that must not be reprodu
 
 <One paragraph: can the upgrade be staged (canary/flag/phased rollout), is it reversible (downgrade
 path), and what's the blast radius if it isn't. Cite `manifest_excerpt`/`changelog_text` evidence per the
-boundary above where used.>
+boundary above where used. Scoped to the version bump itself -- staging/rollback/blast-radius for the
+broader change that adopts it is deployment-risk-review's full assessment, not a restatement here.>
 
 ## Notes
 

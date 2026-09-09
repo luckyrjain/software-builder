@@ -4,8 +4,9 @@ description: >-
   Use when a framework or library upgrade needs review: breaking changes, CVEs, API differences,
   transitive dependency impact, and rollout risk. Keywords: dependency upgrade, version bump review,
   CVE review, breaking change, transitive dependency. Not for a dedicated deep security audit
-  (security-review, which this skill escalates to for exploitable CVEs) or the MySQL-to-Postgres
-  migration itself (mysql-to-postgres-sql).
+  (security-review, which this skill escalates to for exploitable CVEs), the MySQL-to-Postgres
+  migration itself (mysql-to-postgres-sql), or a pre-deploy blast-radius/rollback assessment of the
+  resulting change once the version is picked (deployment-risk-review).
 ---
 
 # dependency-upgrade-review
@@ -30,6 +31,7 @@ Routing table: [skill-routing.md](../../docs/skill-framework/shared/skill-routin
 | "Review this dependency upgrade — breaking changes, CVEs, rollout risk" | A dedicated deep security audit of an exploitable CVE → **security-review** |
 | "What breaks if we upgrade `<framework>` `<v1>`→`<v2>`?" | The MySQL-to-Postgres migration itself → **mysql-to-postgres-sql** |
 | Transitive dependency conflict / new transitive CVE check for a planned bump | — |
+| This upgrade's own breaking-change/CVE/API-diff surface | Blast radius, rollback plan, or deploy-time risk of shipping the resulting change → **deployment-risk-review** |
 
 ## Deliverable
 
