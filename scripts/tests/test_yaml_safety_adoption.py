@@ -13,6 +13,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from scripts.git_paths import tracked_relative_paths
+
 ROOT = Path(__file__).resolve().parents[2]
 
 _SAFE_LOAD_CALL = re.compile(r"\byaml\.safe_load\s*\(")
@@ -29,19 +31,27 @@ ALLOWED: dict[str, str] = {
     "skills/incident-rca/scripts/validate_causal_graph.py": "same bare-environment fallback",
 }
 
-_SKIPPED_DIRS = {".git", ".venv", "__pycache__", ".pytest_cache", ".ruff_cache", "node_modules"}
-
-
 def _production_python_files() -> list[Path]:
+    """Tracked .py files only, so a local worktree or scratch directory never masquerades as production code.
+
+    An untracked directory under the repo root -- e.g. a `.claude/worktrees/<name>` checkout of an
+    older branch, which this repository's own worktree workflow creates -- previously showed up here
+    via a raw filesystem walk and could fail this check on code nobody here wrote and nothing here
+    reviews. Git's tracked-file list is the same "code-reviewed registry" boundary the module
+    docstring above describes.
+    """
+    tracked, error = tracked_relative_paths(ROOT)
+    if error:
+        raise RuntimeError(f"yaml-safety adoption check requires a Git worktree: {error}")
     files: list[Path] = []
-    for path in sorted(ROOT.rglob("*.py")):
-        rel = path.relative_to(ROOT)
-        if any(part in _SKIPPED_DIRS for part in rel.parts):
+    for rel in tracked:
+        if not rel.endswith(".py"):
             continue
-        if "tests" in rel.parts or path.name.startswith("test_"):
+        path = Path(rel)
+        if "tests" in path.parts or path.name.startswith("test_"):
             continue
-        files.append(path)
-    return files
+        files.append(ROOT / rel)
+    return sorted(files)
 
 
 def test_no_new_bare_yaml_safe_load_outside_the_allowlist() -> None:
