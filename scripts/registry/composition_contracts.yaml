@@ -8,7 +8,7 @@ artifact_types:
 - squad_map
 - ownership_lookup
 - migration_status_rollup
-- cost_sweep_rollup
+- cost_optimization_sprint_rollup
 - implementation_task
 - implementation_pr
 - digest_report
@@ -87,7 +87,7 @@ artifact_schemas:
     - items
     - generated_at
     - source_revision
-  cost_sweep_rollup:
+  cost_optimization_sprint_rollup:
     fields:
     - items
     - generated_at
@@ -514,7 +514,7 @@ skills:
     write_authority: repository-write
   cost-optimization-sprint-planner:
     produces:
-    - cost_sweep_rollup
+    - cost_optimization_sprint_rollup
     consumes: []
     write_authority: read-only
   database-review:
@@ -1137,13 +1137,13 @@ skills:
     - digest_report
     consumes:
     - migration_status_rollup
-    - cost_sweep_rollup
+    - cost_optimization_sprint_rollup
     consume_fields:
       migration_status_rollup:
       - items
       - generated_at
       - source_revision
-      cost_sweep_rollup:
+      cost_optimization_sprint_rollup:
       - items
       - generated_at
       - source_revision

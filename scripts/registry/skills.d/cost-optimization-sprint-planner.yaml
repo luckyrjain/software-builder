@@ -36,7 +36,7 @@ cost-optimization-sprint-planner:
     merge: false
   output_contract:
     produces:
-    - cost_sweep_rollup
+    - cost_optimization_sprint_rollup
   dependencies:
   - k8s-overprovisioning-datadog
   - squad-map
