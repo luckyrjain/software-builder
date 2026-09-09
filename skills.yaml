@@ -494,6 +494,7 @@ contracts:
           degraded_mode: boolean
           degraded_reason: string
           unresolved_questions: list
+          recommendation: string
           repository_write_action: string
           automatic_downstream_invocation: boolean
       required_sections:
@@ -1542,6 +1543,7 @@ contracts:
         - degraded_mode
         - degraded_reason
         - unresolved_questions
+        - recommendation
         - repository_write_action
         - automatic_downstream_invocation
     creator_parity:
@@ -4878,8 +4880,14 @@ skills:
     routing:
       patterns:
       - \bresearch\b.*\b(this|the)\b.*\bquestion\b
-      - \bfind out whether\b
-      - \binvestigate\b.*\bquestion\b
+      - \bfind out whether\b.*\b(cit(?:e|es|ed|ing|ations?)|sources?|best[- ]practices?|prior
+        art|state of the art|research|doc(?:s|umentation)?|guidance)\b
+      - \b(cit(?:e|es|ed|ing|ations?)|sources?|best[- ]practices?|prior art|state
+        of the art|research|doc(?:s|umentation)?|guidance)\b.*\bfind out whether\b
+      - \binvestigate\b.*\bquestion\b.*\b(cit(?:e|es|ed|ing|ations?)|sources?|best[-
+        ]practices?|prior art|state of the art|research|doc(?:s|umentation)?|guidance)\b
+      - \b(cit(?:e|es|ed|ing|ations?)|sources?|best[- ]practices?|prior art|state
+        of the art|research|doc(?:s|umentation)?|guidance)\b.*\binvestigate\b.*\bquestion\b
       - \bwhat does\b.*\bdocumentation\b.*\bsay\b
       exclude_patterns:
       - \b(current[- ]state domain|bounded contexts?|existing .* service)\b

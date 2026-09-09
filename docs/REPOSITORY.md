@@ -65,7 +65,7 @@ software-builder/
     ├── resilience-review/         # Timeout budgets, retries, circuit breaking, backpressure, recovery review
     ├── dependency-upgrade-review/ # Breaking changes, CVEs, API diffs, transitive dependency rollout risk
     ├── tech-debt-assessor/        # Ranks debt by business impact x engineering drag x risk / effort
-    └── research-brief/              # Cited research findings for a bounded question, repository and/or external sources
+    └── research-brief/            # Cited research findings for a bounded question, repository and/or external sources
 ```
 
 Each skill directory follows the same pattern:

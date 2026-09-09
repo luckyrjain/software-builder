@@ -11,4 +11,5 @@ Load one reference file at a time when the active phase calls for it.
 Framework: [codebase-design-principles.md](../../../docs/skill-framework/shared/codebase-design-principles.md)
 · [prompt-injection.md](../../../docs/skill-framework/shared/prompt-injection.md) ·
 [safe-output.md](../../../docs/skill-framework/shared/safe-output.md) ·
-[cross-skill-escalation.md](../../../docs/skill-framework/shared/cross-skill-escalation.md)
+[cross-skill-escalation.md](../../../docs/skill-framework/shared/cross-skill-escalation.md) ·
+[confidence-bands.md](../../../docs/skill-framework/shared/confidence-bands.md)

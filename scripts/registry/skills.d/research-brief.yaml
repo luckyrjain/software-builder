@@ -46,10 +46,24 @@ research-brief:
   setup_freshness:
     external_services: Web search/fetch (optional) — degrades to repository-only research when unavailable
   routing:
+    # "find out whether" and "investigate ... question" are this skill's documented
+    # keywords, but on their own they are topic-free English wrappers: any other
+    # skill's real trigger phrase can be restated inside one ("Find out whether PR
+    # #123 is production ready"), which made every such prompt ambiguous between
+    # that skill and this one. Both therefore require a co-occurring
+    # citation/sourcing anchor -- the same "generic verb + domain anchor" shape
+    # incident-rca and resilience-review already use -- so the wrapper alone no
+    # longer routes here. See scripts/tests/test_research_brief_routing.py.
+    #
+    # The anchor list is deliberately reference-material vocabulary only. `document`
+    # was tried and dropped: it collides with prd-architect ("product requirements
+    # document"), which is the same over-matching failure this comment exists about.
     patterns:
     - \bresearch\b.*\b(this|the)\b.*\bquestion\b
-    - \bfind out whether\b
-    - \binvestigate\b.*\bquestion\b
+    - \bfind out whether\b.*\b(cit(?:e|es|ed|ing|ations?)|sources?|best[- ]practices?|prior art|state of the art|research|doc(?:s|umentation)?|guidance)\b
+    - \b(cit(?:e|es|ed|ing|ations?)|sources?|best[- ]practices?|prior art|state of the art|research|doc(?:s|umentation)?|guidance)\b.*\bfind out whether\b
+    - \binvestigate\b.*\bquestion\b.*\b(cit(?:e|es|ed|ing|ations?)|sources?|best[- ]practices?|prior art|state of the art|research|doc(?:s|umentation)?|guidance)\b
+    - \b(cit(?:e|es|ed|ing|ations?)|sources?|best[- ]practices?|prior art|state of the art|research|doc(?:s|umentation)?|guidance)\b.*\binvestigate\b.*\bquestion\b
     - \bwhat does\b.*\bdocumentation\b.*\bsay\b
     exclude_patterns:
     - \b(current[- ]state domain|bounded contexts?|existing .* service)\b

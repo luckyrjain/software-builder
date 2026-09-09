@@ -18,8 +18,13 @@ recorded_output:
     - claim: "Whether fixed-window or sliding-window is considered best practice today"
       evidence_status: UNKNOWN
       source: none
+  unresolved_questions:
+    - question: "Is sliding-window now the documented recommendation?"
+      missing_evidence: "host.web.search unavailable — no external primary source reachable"
+      impact: "Cannot say whether the current approach is behind current guidance"
   degraded_mode: true
   degraded_reason: "host.web.search unavailable this session"
+  recommendation: "Re-run with host.web.search available before acting on the best-practice question."
 assertions:
   - type: field_equals
     path: artifact
@@ -33,15 +38,40 @@ assertions:
   - type: field_equals
     path: automatic_downstream_invocation
     value: false
+  # CAVEAT: `require_pattern` resolves `findings` to the whole list and matches the
+  # pattern against its stringified repr (scripts/evals/golden.py's resolve_path +
+  # _pattern_matches); it cannot address one list element, and adding list-indexing to
+  # resolve_path is deliberately out of scope. Bare "OBSERVED"/"UNKNOWN" substrings were
+  # therefore toothless: a brief that asserted BOTH claims as OBSERVED against fabricated
+  # URLs still went green, because the word "UNKNOWN" survived inside a claim's prose.
+  # These tie each status to that same finding's own source in the repr instead — the
+  # narrowest conjunction the harness can express. Still not airtight (the repr is
+  # key-order dependent and _pattern_matches is case-insensitive), just much harder to
+  # satisfy degenerately.
   - type: require_pattern
     path: findings
-    pattern: OBSERVED
+    pattern: "'evidence_status': 'OBSERVED', 'source': 'src/middleware/rate_limit\\.py:14'"
   - type: require_pattern
     path: findings
-    pattern: UNKNOWN
+    pattern: "'evidence_status': 'UNKNOWN', 'source': 'none'"
+  # report-format.md's core rule, stated negatively so it also fires on findings this
+  # fixture does not enumerate: no claim is asserted at a non-UNKNOWN status while
+  # carrying no source.
+  - type: forbid_pattern
+    path: findings
+    pattern: "'evidence_status': '(?:OBSERVED|INFERRED|CONFLICTED)', 'source': 'none'"
   - type: field_equals
     path: degraded_mode
     value: true
+  # Pairs with report-format.md's degraded_mode/degraded_reason invariant: a degraded run
+  # names the missing capability, so degraded_reason is never empty here. Dots escaped —
+  # unescaped they matched any character, so "hostXwebXsearch unavailable" passed too.
   - type: require_pattern
     path: degraded_reason
-    pattern: host.web.search unavailable
+    pattern: "host\\.web\\.search unavailable"
+  - type: require_pattern
+    path: recommendation
+    pattern: "host\\.web\\.search"
+  - type: require_pattern
+    path: unresolved_questions
+    pattern: "host\\.web\\.search unavailable"

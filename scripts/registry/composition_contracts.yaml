@@ -376,6 +376,7 @@ artifact_schemas:
     - degraded_mode
     - degraded_reason
     - unresolved_questions
+    - recommendation
     - repository_write_action
     - automatic_downstream_invocation
 creator_parity:

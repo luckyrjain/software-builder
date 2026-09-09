@@ -53,3 +53,12 @@ UNKNOWN as a result. Omit this section only when both capabilities were availabl
   vocabulary, not a bespoke confidence scale.
 - Degraded-mode absence of `host.web.search`/`host.web.fetch` is stated explicitly, never silently
   answered from unaided recollection.
+- `degraded_mode` and `degraded_reason` move together and are both always present in the typed
+  `research_brief`. `degraded_mode: true` requires a non-empty `degraded_reason` naming the missing
+  capability (`host.web.search`, `host.web.fetch`, or both); `degraded_mode: false` requires
+  `degraded_reason: ""` — never `null` and never omitted, because the schema types it `string` and a
+  payload must carry exactly the declared field set. The **Degraded-mode note** section above is the
+  document rendering of the same pair: present exactly when `degraded_mode` is `true`.
+- **Recommendation** is the document form of the typed `recommendation` field, and both are always
+  present under the same field-set rule. A brief with nothing to recommend says so; it does not drop
+  the section or the field.
