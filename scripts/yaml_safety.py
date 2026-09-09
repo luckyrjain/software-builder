@@ -196,3 +196,18 @@ def load_unique_frontmatter(path: Path) -> dict[str, Any]:
     if not isinstance(data, dict):
         raise ValueError(f"frontmatter must be a mapping: {path}")
     return data
+
+
+def is_valid_schema_version(value: Any, expected: int | frozenset[int] = 1) -> bool:
+    """True if ``value`` is an already-parsed ``schema_version`` matching ``expected``.
+
+    YAML's plain-scalar resolver parses ``true``/``yes``/``on`` as Python ``True`` (and the false
+    forms as ``False``), and ``bool`` is an ``int`` subclass where ``True == 1`` -- so an unguarded
+    ``value != 1`` silently accepts a boolean ``schema_version`` instead of rejecting the malformed
+    document. Pass a ``frozenset`` for ``expected`` when more than one version is still supported.
+    """
+    if isinstance(value, bool) or not isinstance(value, int):
+        return False
+    if isinstance(expected, int):
+        return value == expected
+    return value in expected

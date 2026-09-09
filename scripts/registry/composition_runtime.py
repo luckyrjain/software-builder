@@ -8,7 +8,7 @@ from scripts.registry.envelope_contract import SKILL_TYPES
 from scripts.registry.id_diff import report_id_coverage
 from scripts.registry.models import Registry
 from scripts.registry.paths import ROOT, SKILLS_YAML_PATH as CANONICAL_RUNTIME_PATH
-from scripts.yaml_safety import YAML_SAFETY_ERRORS, load_unique_yaml_file
+from scripts.yaml_safety import YAML_SAFETY_ERRORS, is_valid_schema_version, load_unique_yaml_file
 
 RUNTIME_PATH = Path(__file__).resolve().parent / "composition_runtime.yaml"
 _ALLOWED_OWNERSHIP_MODES = {"canonical", "shared", "external"}
@@ -41,7 +41,7 @@ def load_composition_runtime(path: Path | None = None) -> dict[str, object]:
         raw = load_unique_yaml_file(resolved)
     if not isinstance(raw, dict):
         raise ValueError(f"{resolved}: composition_runtime must be a mapping")
-    if raw.get("schema_version") != 1:
+    if not is_valid_schema_version(raw.get("schema_version")):
         raise ValueError(f"{resolved}: schema_version must be 1")
     return raw
 

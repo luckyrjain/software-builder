@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from scripts.yaml_safety import load_unique_yaml_file, require_mapping
+from scripts.yaml_safety import is_valid_schema_version, load_unique_yaml_file, require_mapping
 
 EVAL_CONTRACT_RELATIVE = Path("scripts") / "registry" / "eval_contracts.yaml"
 MUTATION_ANCHORS_RELATIVE = Path("scripts") / "registry" / "mutation_anchors.yaml"
@@ -60,7 +60,7 @@ def load_mutation_anchors(root: Path) -> dict[str, Any]:
     """
     path = mutation_anchors_path(root)
     doc = require_mapping(load_unique_yaml_file(path), str(path))
-    if doc.get("schema_version") != 1:
+    if not is_valid_schema_version(doc.get("schema_version")):
         raise ValueError(f"{path}: schema_version must be 1")
     return require_mapping(doc.get("anchors"), f"{path}: anchors")
 

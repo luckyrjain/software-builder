@@ -15,7 +15,7 @@ from scripts.registry.load import load_deprecated_skills
 from scripts.registry.routing_sync import validate_skill_routing_references
 from scripts.registry.schema import parse_registry
 from scripts.registry.skill_frontmatter_schema import automation_only_guard_errors
-from scripts.yaml_safety import load_unique_frontmatter, load_unique_yaml_file, require_mapping
+from scripts.yaml_safety import is_valid_schema_version, load_unique_frontmatter, load_unique_yaml_file, require_mapping
 
 # Flag actual host-specific execution branches while allowing neutral prose that
 # merely lists supported hosts or links to host setup guidance.
@@ -121,7 +121,7 @@ def validate_host_portability(root: Path) -> list[str]:
         contracts = require_mapping(load_unique_yaml_file(host_contracts_path(root)), "host contracts")
         host_map = require_mapping(contracts.get("hosts"), "hosts")
         expected = require_mapping(load_unique_yaml_file(root / "evals/host-parity/expected.yaml"), "host parity expected")
-        if expected.get("schema_version") != 1:
+        if not is_valid_schema_version(expected.get("schema_version")):
             errors.append("error: host parity expected schema_version must be 1")
         snapshots = require_mapping(expected.get("hosts"), "host parity expected hosts")
         if set(snapshots) != HOSTS:
