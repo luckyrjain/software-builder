@@ -8,14 +8,14 @@ from typing import Any
 from scripts.registry.host_adapter import (
     HOSTS,
     expected_surface,
-    host_contracts_path,
+    validate_host_adapter_identities,
     validate_host_adapter_interface,
 )
 from scripts.registry.load import load_deprecated_skills
 from scripts.registry.routing_sync import validate_skill_routing_references
 from scripts.registry.schema import parse_registry
 from scripts.registry.skill_frontmatter_schema import automation_only_guard_errors
-from scripts.yaml_safety import is_valid_schema_version, load_unique_frontmatter, load_unique_yaml_file, require_mapping
+from scripts.yaml_safety import load_unique_frontmatter, load_unique_yaml_file, require_mapping
 
 # Flag actual host-specific execution branches while allowing neutral prose that
 # merely lists supported hosts or links to host setup guidance.
@@ -107,8 +107,14 @@ def _runtime_host_branch_errors(skill_root: Path, skill_id: str) -> list[str]:
 
 
 def validate_host_portability(root: Path) -> list[str]:
-    """Validate items 30–34: adapter contract plus host packaging semantic parity."""
+    """Validate items 30–34: adapter contract plus host packaging semantic parity.
+
+    Adapter identity and host-parity schema_version/coverage are validate_host_adapter_identities's
+    check, not reimplemented here -- this function still needs the host-parity snapshot loaded (for
+    skill_surface below), but not the host_contracts.yaml side that check alone required.
+    """
     errors = validate_host_adapter_interface(root)
+    errors.extend(validate_host_adapter_identities(root))
     try:
         registry = parse_registry(root / "skills.yaml")
         skills = set(registry.skills)
@@ -118,20 +124,11 @@ def validate_host_portability(root: Path) -> list[str]:
         # must expect it missing rather than flag it as drift.
         deprecated_skills = load_deprecated_skills(root, registry)
         generated_surface_skills = skills - set(deprecated_skills)
-        contracts = require_mapping(load_unique_yaml_file(host_contracts_path(root)), "host contracts")
-        host_map = require_mapping(contracts.get("hosts"), "hosts")
         expected = require_mapping(load_unique_yaml_file(root / "evals/host-parity/expected.yaml"), "host parity expected")
-        if not is_valid_schema_version(expected.get("schema_version")):
-            errors.append("error: host parity expected schema_version must be 1")
         snapshots = require_mapping(expected.get("hosts"), "host parity expected hosts")
-        if set(snapshots) != HOSTS:
-            errors.append(f"error: host parity snapshot must cover exactly {sorted(HOSTS)}")
 
-        for host in sorted(HOSTS & set(host_map) & set(snapshots)):
-            actual = require_mapping(host_map[host], f"hosts.{host}")
+        for host in sorted(HOSTS & set(snapshots)):
             snapshot = require_mapping(snapshots[host], f"expected.hosts.{host}")
-            if actual.get("adapter") != snapshot.get("adapter"):
-                errors.append(f"error: {host}: adapter identity drift")
             surface = expected_surface(host)
             if snapshot.get("skill_surface") != surface:
                 errors.append(
