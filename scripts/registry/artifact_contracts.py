@@ -19,7 +19,7 @@ from scripts.registry.envelope_contract import (
 )
 from scripts.registry.machine_summary import COMMON_MACHINE_SUMMARY_FIELDS, validate_machine_summary
 from scripts.registry.semantic_document import validate_semantic_artifact_target
-from scripts.yaml_safety import YAML_SAFETY_ERRORS, require_mapping
+from scripts.yaml_safety import YAML_SAFETY_ERRORS, is_valid_schema_version, require_mapping
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -72,7 +72,7 @@ def _validate_catalog(
     artifact_schemas: dict[str, list[str]],
 ) -> list[str]:
     errors: list[str] = []
-    if artifact_runtime.get("schema_version") != 1:
+    if not is_valid_schema_version(artifact_runtime.get("schema_version")):
         errors.append("error: artifact runtime schema_version must be 1")
 
     external, error = _strings(

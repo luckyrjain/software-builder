@@ -19,7 +19,7 @@ if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
 from scripts import shared_runtime as _shared_runtime_bootstrap  # noqa: E402
-from scripts.yaml_safety import YAML_SAFETY_ERRORS, load_unique_yaml_file  # noqa: E402
+from scripts.yaml_safety import YAML_SAFETY_ERRORS, is_valid_schema_version, load_unique_yaml_file  # noqa: E402
 
 # The vendored runtime this repository's own scripts must exercise too (see module docstring).
 # Named `shared_runtime` here, not `_shared_runtime_bootstrap` above (that's the loader helper
@@ -92,10 +92,6 @@ def normalized_diff_fingerprint(canonical_effective_patch: str) -> str:
     return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
 
-def _valid_schema_version(value: object) -> bool:
-    return type(value) is int and value == 1
-
-
 def _required_fields_match(value: object, expected: frozenset[str] | set[str]) -> bool:
     return (
         isinstance(value, list)
@@ -121,14 +117,14 @@ def validate_contract_documents(root: Path = _ROOT) -> list[str]:
         if set(change) != _CHANGE_DOC_FIELDS:
             errors.append("change identity contract top-level fields drifted")
         identity_spec = change.get("change_identity")
-        if not _valid_schema_version(change.get("schema_version")) or not isinstance(identity_spec, dict):
+        if not is_valid_schema_version(change.get("schema_version")) or not isinstance(identity_spec, dict):
             errors.append("change identity contract must be schema_version 1 with change_identity object")
         else:
             if set(identity_spec) != _IDENTITY_SPEC_FIELDS:
                 errors.append("change identity contract spec fields drifted")
             if not _required_fields_match(identity_spec.get("required_fields"), _REQUIRED_IDENTITY):
                 errors.append("change identity contract required fields drifted")
-            if identity_spec.get("schema_version_value") != 1:
+            if not is_valid_schema_version(identity_spec.get("schema_version_value")):
                 errors.append("change identity contract payload schema version drifted")
             if identity_spec.get("closed_v1") is not True:
                 errors.append("change identity contract closed_v1 drifted")
@@ -155,14 +151,14 @@ def validate_contract_documents(root: Path = _ROOT) -> list[str]:
         if set(evidence) != _EVIDENCE_DOC_FIELDS:
             errors.append("review evidence contract top-level fields drifted")
         spec = evidence.get("review_evidence")
-        if not _valid_schema_version(evidence.get("schema_version")) or not isinstance(spec, dict):
+        if not is_valid_schema_version(evidence.get("schema_version")) or not isinstance(spec, dict):
             errors.append("review evidence contract must be schema_version 1 with review_evidence object")
         else:
             if set(spec) != _EVIDENCE_SPEC_FIELDS:
                 errors.append("review evidence contract spec fields drifted")
             if not _required_fields_match(spec.get("required_fields"), _REQUIRED_EVIDENCE):
                 errors.append("review evidence contract required fields drifted")
-            if spec.get("schema_version_value") != 1:
+            if not is_valid_schema_version(spec.get("schema_version_value")):
                 errors.append("review evidence contract payload schema version drifted")
             if spec.get("requirements_ref_type") != "object_or_null":
                 errors.append("review evidence contract requirements_ref_type drifted")

@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from scripts.registry.capability_catalog import load_catalog
-from scripts.yaml_safety import YAML_SAFETY_ERRORS, load_unique_yaml_file
+from scripts.yaml_safety import YAML_SAFETY_ERRORS, is_valid_schema_version, load_unique_yaml_file
 
 FAMILIES_PATH = Path(__file__).resolve().parent / "capability_families.yaml"
 CATALOG_PATH = Path(__file__).resolve().parent / "capability_catalog.yaml"
@@ -70,7 +70,7 @@ def load_capability_families(path: Path = FAMILIES_PATH) -> dict[str, list[str]]
     raw = load_unique_yaml_file(path)
     if not isinstance(raw, dict):
         raise ValueError(f"{path}: root must be a mapping")
-    if raw.get("schema_version") != 1:
+    if not is_valid_schema_version(raw.get("schema_version")):
         raise ValueError(f"{path}: schema_version must be 1")
     families = raw.get("families")
     if not isinstance(families, dict):
