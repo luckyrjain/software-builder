@@ -8,6 +8,7 @@ from typing import Any
 from scripts.registry.host_adapter import (
     HOSTS,
     expected_surface,
+    load_host_parity_expected,
     validate_host_adapter_identities,
     validate_host_adapter_interface,
 )
@@ -15,7 +16,7 @@ from scripts.registry.load import load_deprecated_skills
 from scripts.registry.routing_sync import validate_skill_routing_references
 from scripts.registry.schema import parse_registry
 from scripts.registry.skill_frontmatter_schema import automation_only_guard_errors
-from scripts.yaml_safety import load_unique_frontmatter, load_unique_yaml_file, require_mapping
+from scripts.yaml_safety import load_unique_frontmatter, require_mapping
 
 # Flag actual host-specific execution branches while allowing neutral prose that
 # merely lists supported hosts or links to host setup guidance.
@@ -124,16 +125,22 @@ def validate_host_portability(root: Path) -> list[str]:
         # must expect it missing rather than flag it as drift.
         deprecated_skills = load_deprecated_skills(root, registry)
         generated_surface_skills = skills - set(deprecated_skills)
-        expected = require_mapping(load_unique_yaml_file(root / "evals/host-parity/expected.yaml"), "host parity expected")
-        snapshots = require_mapping(expected.get("hosts"), "host parity expected hosts")
 
-        for host in sorted(HOSTS & set(snapshots)):
-            snapshot = require_mapping(snapshots[host], f"expected.hosts.{host}")
-            surface = expected_surface(host)
-            if snapshot.get("skill_surface") != surface:
-                errors.append(
-                    f"error: {host}: skill_surface must be {surface!r}, got {snapshot.get('skill_surface')!r}",
-                )
+        # A missing or malformed evals/host-parity/expected.yaml is already reported once by
+        # validate_host_adapter_identities above -- load_host_parity_expected is the same loader
+        # it uses, so a second attempt here can't raise a second, differently-worded error for the
+        # same root cause; it just skips the checks below that depend on the file's content.
+        expected, _load_errors = load_host_parity_expected(root)
+
+        if expected is not None:
+            snapshots = require_mapping(expected.get("hosts"), "host parity expected hosts")
+            for host in sorted(HOSTS & set(snapshots)):
+                snapshot = require_mapping(snapshots[host], f"expected.hosts.{host}")
+                surface = expected_surface(host)
+                if snapshot.get("skill_surface") != surface:
+                    errors.append(
+                        f"error: {host}: skill_surface must be {surface!r}, got {snapshot.get('skill_surface')!r}",
+                    )
 
         errors.extend(
             _generated_surface_errors(root, root / ".cursor/rules", ".mdc", generated_surface_skills, "Cursor"),
@@ -160,31 +167,32 @@ def validate_host_portability(root: Path) -> list[str]:
             for error in automation_only_guard_errors(entry.invocation, frontmatter):
                 errors.append(f"error: host invocation semantics {skill_id}: {error}")
 
-        if expected.get("invocation_source") != "skills.yaml":
-            errors.append("error: host parity invocation source drift")
-        routing_rel = expected.get("routing_source")
-        if routing_rel != "docs/skill-framework/shared/skill-routing.md":
-            errors.append("error: host parity routing source drift")
-        else:
-            routing_path = root / str(routing_rel)
-            if not routing_path.is_file():
-                errors.append("error: canonical routing source missing")
+        if expected is not None:
+            if expected.get("invocation_source") != "skills.yaml":
+                errors.append("error: host parity invocation source drift")
+            routing_rel = expected.get("routing_source")
+            if routing_rel != "docs/skill-framework/shared/skill-routing.md":
+                errors.append("error: host parity routing source drift")
             else:
-                errors.extend(validate_skill_routing_references(root, registry))
-                routing_text = routing_path.read_text(encoding="utf-8")
-                runtime_contracts = expected.get("runtime_contracts")
-                if not isinstance(runtime_contracts, list) or not runtime_contracts:
-                    errors.append("error: host parity runtime_contracts must be a non-empty list")
+                routing_path = root / str(routing_rel)
+                if not routing_path.is_file():
+                    errors.append("error: canonical routing source missing")
                 else:
-                    for doc in runtime_contracts:
-                        if not isinstance(doc, str) or not doc:
-                            errors.append("error: host parity runtime contract names must be non-empty strings")
-                            continue
-                        path = root / "docs/skill-framework/shared" / doc
-                        if not path.is_file():
-                            errors.append(f"error: missing canonical runtime contract {doc}")
-                        elif doc not in routing_text:
-                            errors.append(f"error: skill-routing.md does not inherit {doc}")
+                    errors.extend(validate_skill_routing_references(root, registry))
+                    routing_text = routing_path.read_text(encoding="utf-8")
+                    runtime_contracts = expected.get("runtime_contracts")
+                    if not isinstance(runtime_contracts, list) or not runtime_contracts:
+                        errors.append("error: host parity runtime_contracts must be a non-empty list")
+                    else:
+                        for doc in runtime_contracts:
+                            if not isinstance(doc, str) or not doc:
+                                errors.append("error: host parity runtime contract names must be non-empty strings")
+                                continue
+                            path = root / "docs/skill-framework/shared" / doc
+                            if not path.is_file():
+                                errors.append(f"error: missing canonical runtime contract {doc}")
+                            elif doc not in routing_text:
+                                errors.append(f"error: skill-routing.md does not inherit {doc}")
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         errors.append(f"error: host portability: {exc}")
     return errors

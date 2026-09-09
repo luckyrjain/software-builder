@@ -12,6 +12,8 @@ from pathlib import Path
 import pytest
 
 from scripts.registry import cli as registry_cli
+from scripts.registry import host_adapter as host_adapter_module
+from scripts.registry import host_portability as host_portability_module
 from scripts.registry.host_adapter import (
     HOSTS,
     capability_support,
@@ -100,6 +102,54 @@ def test_runtime_host_branch_detector_scans_workflow_and_reference_docs(tmp_path
 
 def test_host_packaging_semantics_validate() -> None:
     assert validate_host_portability(ROOT) == []
+
+
+def test_missing_host_parity_expected_reports_exactly_one_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """validate_host_portability() reads evals/host-parity/expected.yaml a second time (for
+    skill_surface/invocation_source/routing_source), after validate_host_adapter_identities()
+    already read and reported on the same file. Both go through the same
+    host_adapter.load_host_parity_expected -- a missing file must surface as exactly that one
+    "contract missing" error, not that error plus a second, differently worded one from a second,
+    independent read."""
+
+    def _fake_load(root: Path) -> tuple[None, list[str]]:
+        return None, ["error: host parity expected contract missing"]
+
+    monkeypatch.setattr(host_adapter_module, "load_host_parity_expected", _fake_load)
+    monkeypatch.setattr(host_portability_module, "load_host_parity_expected", _fake_load)
+
+    errors = validate_host_portability(ROOT)
+
+    missing_contract_errors = [e for e in errors if "host parity expected contract missing" in e]
+    assert missing_contract_errors == ["error: host parity expected contract missing"]
+    assert not any(e.startswith("error: host portability:") for e in errors)
+
+
+def test_load_host_parity_expected_reports_missing_file_once(tmp_path: Path) -> None:
+    expected, errors = host_adapter_module.load_host_parity_expected(tmp_path)
+    assert expected is None
+    assert errors == ["error: host parity expected contract missing"]
+
+
+def test_load_host_parity_expected_reports_malformed_file(tmp_path: Path) -> None:
+    parity_dir = tmp_path / "evals" / "host-parity"
+    parity_dir.mkdir(parents=True)
+    (parity_dir / "expected.yaml").write_text("- just\n- a\n- list\n", encoding="utf-8")
+
+    expected, errors = host_adapter_module.load_host_parity_expected(tmp_path)
+
+    assert expected is None
+    assert len(errors) == 1
+    assert errors[0].startswith("error: host parity expected:")
+
+
+def test_load_host_parity_expected_returns_real_contract() -> None:
+    expected, errors = host_adapter_module.load_host_parity_expected(ROOT)
+    assert errors == []
+    assert isinstance(expected, dict)
+    assert "hosts" in expected
 
 
 def test_host_manifests_fail_closed_on_non_object_json(tmp_path: Path) -> None:
