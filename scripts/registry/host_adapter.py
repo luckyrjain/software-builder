@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from scripts.yaml_safety import is_valid_schema_version, load_unique_yaml_file, require_mapping
 
@@ -115,15 +116,34 @@ def capability_support(root: Path, host: str, capability: str) -> str:
     return str(value)
 
 
-def validate_host_adapter_identities(root: Path) -> list[str]:
-    """Check adapter names against the checked-in host-parity contract."""
+def load_host_parity_expected(root: Path) -> tuple[dict[str, Any] | None, list[str]]:
+    """Load evals/host-parity/expected.yaml once, shape-checked.
+
+    Returns ``(None, [error])`` when the file is missing or malformed, else
+    ``(parsed_mapping, [])``. The single caller-facing error for either failure lets every caller
+    that also needs this file's content (validate_host_adapter_identities below,
+    host_portability.validate_host_portability) skip straight past the checks that depend on it
+    instead of attempting a second read that would raise a second, differently-worded error for
+    the same root cause.
+    """
     expected_path = root / "evals" / "host-parity" / "expected.yaml"
     if not expected_path.is_file():
-        return ["error: host parity expected contract missing"]
+        return None, ["error: host parity expected contract missing"]
+    try:
+        expected = require_mapping(load_unique_yaml_file(expected_path), "host parity expected")
+    except (OSError, TypeError, ValueError) as exc:
+        return None, [f"error: host parity expected: {exc}"]
+    return expected, []
+
+
+def validate_host_adapter_identities(root: Path) -> list[str]:
+    """Check adapter names against the checked-in host-parity contract."""
+    expected, load_errors = load_host_parity_expected(root)
+    if load_errors:
+        return load_errors
     try:
         contracts = _contracts(root)
         host_map = require_mapping(contracts.get("hosts"), "hosts")
-        expected = require_mapping(load_unique_yaml_file(expected_path), "host parity expected")
         snapshots = require_mapping(expected.get("hosts"), "host parity expected hosts")
         errors: list[str] = []
         if not is_valid_schema_version(expected.get("schema_version")):
