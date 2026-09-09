@@ -46,6 +46,5 @@ current authoritative requirements surface. A content-neutral base/merge-base ch
 conflict resolution, requirements drift, or inability to prove freshness invalidates prior review evidence. Phase 4
 then rechecks source head immediately before each write to stop races after the full pre-post gate.
 
-Tool routing: GitHub PR or GitLab MR → `/pr-review`; local diff (including security-only) → the host's
-local diff/code-review workflow (no registered skill owns local-only diff review). See
+Tool routing: GitHub PR or GitLab MR → `/pr-review`; local diff (including security-only) → **local-diff-review**. See
 [SETUP.md](../SETUP.md).

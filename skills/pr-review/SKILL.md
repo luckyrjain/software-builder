@@ -59,7 +59,7 @@ branch/current review, re-review, or list open reviews. `/pr-review` is equivale
 
 | Request | Use instead |
 |---------|-------------|
-| Local uncommitted diff only | Use the host's local diff/code-review workflow; no registered skill owns local-only diff review |
+| Local uncommitted diff only | **local-diff-review** |
 | Post-incident RCA / outage window | **incident-rca** |
 | K8s rightsizing / overprovisioning | **k8s-overprovisioning-datadog** |
 | Automated, unattended review on every push (webhook-triggered) | **pr-gatekeeper** |
