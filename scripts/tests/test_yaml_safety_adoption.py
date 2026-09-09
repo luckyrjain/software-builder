@@ -29,6 +29,11 @@ ALLOWED: dict[str, str] = {
     "skills/domain-comprehension/scripts/validate_manifest_yaml.py": "same bare-environment fallback",
     "skills/k8s-overprovisioning-datadog/scripts/validate_decision_graph.py": "same bare-environment fallback",
     "skills/incident-rca/scripts/validate_causal_graph.py": "same bare-environment fallback",
+    "scripts/registry/generate_yaml_safety_bootstrap.py": (
+        "the four skill scripts' own bare-environment fallback call appears verbatim inside this "
+        "generator's _BOOTSTRAP_BODY template string (projected into them by `make generate`) -- "
+        "text to be generated, not a bare safe_load this file itself executes"
+    ),
 }
 
 def _production_python_files() -> list[Path]:
