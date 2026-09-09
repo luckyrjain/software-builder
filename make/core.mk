@@ -1,4 +1,4 @@
-.PHONY: install install-incident-rca-deps install-claude lint lint-framework lint-pr-review lint-pr-gatekeeper lint-k8s-skill lint-k8s lint-incident-rca lint-incident-triage-agent lint-domain-comprehension lint-domain-modeling lint-squad-map lint-who-owns-x-bot lint-new-hire-guide lint-release-readiness-checker lint-migration-program-manager lint-cost-optimization-sprint-planner lint-mysql-to-postgres-sql lint-loop-task-implementer lint-backlog-runner lint-weekly-squad-digest lint-unit-test-creator lint-integration-test-creator lint-contract-test-creator lint-e2e-test-creator lint-api-test-creator lint-test-writer lint-architecture-review lint-system-design lint-api-design-review lint-database-review lint-security-review lint-performance-review lint-capacity-planner lint-observability-review lint-deployment-risk-review lint-dependency-upgrade-review lint-tech-debt-assessor lint-module-design lint-codebase-architecture-review lint-engineering-decision-discovery setup-hooks setup validate-registry validate-operational-upkeep generate generate-check verify-github-ruleset kubesense-errors
+.PHONY: install install-incident-rca-deps install-claude lint lint-framework lint-pr-review lint-pr-gatekeeper lint-k8s-skill lint-k8s lint-incident-rca lint-incident-triage-agent lint-domain-comprehension lint-domain-modeling lint-squad-map lint-who-owns-x-bot lint-new-hire-guide lint-release-readiness-checker lint-migration-program-manager lint-cost-optimization-sprint-planner lint-mysql-to-postgres-sql lint-loop-task-implementer lint-backlog-runner lint-weekly-squad-digest lint-unit-test-creator lint-integration-test-creator lint-contract-test-creator lint-e2e-test-creator lint-api-test-creator lint-test-writer lint-architecture-review lint-system-design lint-api-design-review lint-database-review lint-security-review lint-performance-review lint-capacity-planner lint-observability-review lint-deployment-risk-review lint-dependency-upgrade-review lint-tech-debt-assessor lint-module-design lint-codebase-architecture-review lint-engineering-decision-discovery lint-local-diff-review setup-hooks setup validate-registry validate-operational-upkeep generate generate-check verify-github-ruleset kubesense-errors
 .PHONY: lint-change-impact-analyzer
 .PHONY: lint-implementation-planner
 .PHONY: lint-resilience-review
@@ -212,7 +212,7 @@ lint: lint-static lint-suites
 # across skills via `make -jN` and, only for the dominant scripts/tests/ suite, within
 # it via pytest-xdist (see PYTEST_XDIST_FLAG above). `make lint` still runs both groups
 # locally, in this order.
-lint-static: lint-platform-files validate-registry validate-agent-skills validate-hosts generate-check validate-evals validate-operational-upkeep lint-framework lint-incident-triage-agent lint-who-owns-x-bot lint-new-hire-guide lint-release-readiness-checker lint-cost-optimization-sprint-planner lint-backlog-runner lint-test-writer lint-prd-architect lint-architecture-review lint-system-design lint-api-design-review lint-database-review lint-security-review lint-performance-review lint-capacity-planner lint-observability-review lint-deployment-risk-review lint-dependency-upgrade-review lint-tech-debt-assessor lint-module-design lint-domain-modeling lint-codebase-architecture-review lint-engineering-decision-discovery lint-requirements-lock lint-python lint-actions-pinning lint-actions-security verify-install verify-install-all validate-review-contracts lint-scripts-shellcheck
+lint-static: lint-platform-files validate-registry validate-agent-skills validate-hosts generate-check validate-evals validate-operational-upkeep lint-framework lint-incident-triage-agent lint-who-owns-x-bot lint-new-hire-guide lint-release-readiness-checker lint-cost-optimization-sprint-planner lint-backlog-runner lint-test-writer lint-prd-architect lint-architecture-review lint-system-design lint-api-design-review lint-database-review lint-security-review lint-performance-review lint-capacity-planner lint-observability-review lint-deployment-risk-review lint-dependency-upgrade-review lint-tech-debt-assessor lint-module-design lint-domain-modeling lint-codebase-architecture-review lint-engineering-decision-discovery lint-local-diff-review lint-requirements-lock lint-python lint-actions-pinning lint-actions-security verify-install verify-install-all validate-review-contracts lint-scripts-shellcheck
 
 # koalaman/shellcheck-alpine below is pinned by digest, not the mutable :stable tag -- a Docker
 # tag can be silently repointed after review the same way a mutable git ref can, which is exactly
@@ -830,6 +830,18 @@ lint-production-readiness-review:
 	@python3 scripts/lint_skills.py --skill production-readiness-review
 	@python3 -m py_compile scripts/production_readiness.py
 	@python3 -m pytest scripts/tests/test_production_readiness_contract.py -q
+	@echo "  ok"
+
+lint-local-diff-review:
+	@python3 scripts/lint_skills.py --skill local-diff-review
+	@echo "lint-local-diff-review: required SKILL.md headings"
+	@for heading in \
+		"## When to use / NOT to use" "## Deliverable" "## Required inputs" \
+		"## Prerequisites" "## Workflow" "## Boundary rules" \
+		"## Cross-skill escalation" "## Framework" "## Begin"; do \
+		grep -Fqx "$$heading" $(SKILLS_DIR)/local-diff-review/SKILL.md || \
+			{ echo "error: $(SKILLS_DIR)/local-diff-review/SKILL.md must contain heading $$heading" >&2; exit 1; }; \
+	done
 	@echo "  ok"
 
 lint-framework:

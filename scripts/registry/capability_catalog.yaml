@@ -180,6 +180,11 @@ skills:
         metrics and aggregation
       datadog.list_monitors: omit monitor cross-checks and reduce confidence where
         applicable
+  local-diff-review:
+    required:
+    - host.report.write
+    - host.repository.read
+    optional: []
   loop-task-implementer:
     required:
     - host.repository.read_write

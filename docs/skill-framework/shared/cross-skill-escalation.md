@@ -1,6 +1,6 @@
 # Cross-skill escalation (shared)
 
-**Normative.** Symmetric escalation matrix for pr-review, pr-gatekeeper, incident-rca, incident-triage-agent, k8s-overprovisioning-datadog, domain-comprehension, domain-modeling, squad-map, who-owns-x-bot, new-hire-guide, release-readiness-checker, mysql-to-postgres-sql, loop-task-implementer, backlog-runner, migration-program-manager, cost-optimization-sprint-planner, weekly-squad-digest, prd-architect, test-writer, unit-test-creator, integration-test-creator, contract-test-creator, e2e-test-creator, api-test-creator, architecture-review, system-design, module-design, codebase-architecture-review, engineering-decision-discovery, api-design-review, database-review, security-review, performance-review, capacity-planner, observability-review, deployment-risk-review, dependency-upgrade-review, tech-debt-assessor, change-impact-analyzer, resilience-review, implementation-planner, and
+**Normative.** Symmetric escalation matrix for pr-review, pr-gatekeeper, incident-rca, incident-triage-agent, k8s-overprovisioning-datadog, domain-comprehension, domain-modeling, squad-map, who-owns-x-bot, new-hire-guide, release-readiness-checker, mysql-to-postgres-sql, loop-task-implementer, backlog-runner, migration-program-manager, cost-optimization-sprint-planner, weekly-squad-digest, prd-architect, test-writer, unit-test-creator, integration-test-creator, contract-test-creator, e2e-test-creator, api-test-creator, architecture-review, system-design, module-design, codebase-architecture-review, engineering-decision-discovery, api-design-review, database-review, security-review, performance-review, capacity-planner, observability-review, deployment-risk-review, dependency-upgrade-review, tech-debt-assessor, change-impact-analyzer, resilience-review, implementation-planner, local-diff-review, and
 production-readiness-review.
 
 **Consumers:** `SKILL.md` in each skill (link here; keep ≤10 skill-specific rows max).
@@ -129,6 +129,8 @@ dispatch, and `codebase-architecture-review`'s `composition.invokes` does not ga
 | Caller wants one specific dimension deep-dived, not the aggregated readiness rollup | production-readiness-review → pr-review / change-impact-analyzer / deployment-risk-review / security-review / observability-review / resilience-review / api-design-review / database-review / performance-review / capacity-planner / dependency-upgrade-review | Candidate + flagged dimension | "{Dimension} review for `{candidate}` — flagged during production readiness review" |
 | Caller wants the multi-repo release go/no-go sweep, not one candidate's readiness | production-readiness-review → release-readiness-checker | Release manifest | "Is this release ready to ship?" |
 | Production readiness review needs exact-head PR/MR code-review evidence | production-readiness-review → pr-review | `mr_context` (no-post, chat-only result consumed) | "Review MR !{iid} for `{project}` — chat-only, no post" |
+| A Standards finding is security-sensitive | local-diff-review → security-review | `local_diff_review` (finding + evidence refs) | "Security review of `{finding}` flagged during local diff review" |
+| Caller wants this diff reviewed once it's posted as a real PR/MR | local-diff-review → pr-review | Diff scope + spec context | "Review MR !{iid} for `{project}`" |
 
 Skill-specific rows in each `SKILL.md` MUST be a subset of this table plus local deltas only.
 
@@ -166,6 +168,7 @@ Skill-specific rows in each `SKILL.md` MUST be a subset of this table plus local
 | domain-modeling crystallizes a decision describing one module's contract, seam, or interface | module-design receives the `domain_model_update` ADR draft and evidence refs | "Design the module/interface/seam for `{scope}` using the resolved decision record" |
 | domain-modeling crystallizes a decision needing an architecture-wide risk/scale/trade-off verdict | architecture-review receives the `domain_model_update` ADR draft and rejected alternatives | "Review the proposed architecture decision for `{scope}` using the attached decision record" |
 | domain-modeling finds contested alternatives blocking ADR readiness | engineering-decision-discovery receives the `domain_model_update` contested terms/alternatives and evidence refs | "Grill me on the unresolved decision for `{scope}` using the attached evidence" |
+| local-diff-review flags a security-sensitive Standards finding | security-review receives the finding and evidence | "Security review of `{finding}` flagged during local diff review" |
 
 ## 3. Handoff block (required fields)
 
@@ -234,6 +237,7 @@ When `MYSQL_TO_PG_SQL_REWRITES.md` exists in the workspace deliverable directory
 | Security-only deep review | security-review |
 | Cost/billing investigation across services | Canvas + appropriate skill; not auto-routed |
 | Is one exact PR/MR/release-candidate production ready / ready to release | production-readiness-review |
+| Local or uncommitted diff review, not a numbered PR/MR | local-diff-review |
 
 See each skill's **when NOT to use** table in `SKILL.md`.
 

@@ -19,6 +19,7 @@ artifact_types:
 - system_design_spec
 - module_design_spec
 - domain_model_update
+- local_diff_review
 - codebase_architecture_report
 - api_design_review_report
 - database_review_report
@@ -192,6 +193,15 @@ artifact_schemas:
     - adr_readiness
     - proposed_adr
     - unresolved_questions
+    - recommendation
+  local_diff_review:
+    fields:
+    - title
+    - diff_scope
+    - standards_findings
+    - spec_findings
+    - repository_write_action
+    - automatic_downstream_invocation
     - recommendation
   codebase_architecture_report:
     fields:
@@ -751,6 +761,11 @@ skills:
     - k8s_rightsizing_report
     consumes:
     - mr_context
+    write_authority: read-only
+  local-diff-review:
+    produces:
+    - local_diff_review
+    consumes: []
     write_authority: read-only
   loop-task-implementer:
     produces:

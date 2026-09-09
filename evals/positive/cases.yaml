@@ -27,6 +27,7 @@ cases:
   - {skill: test-writer, prompt: "Write tests for this change; the test level is not specified.", expected_status: selected, expected_owner: test-writer}
   - {skill: architecture-review, prompt: "Architecture review for the new payments platform before we start building.", expected_status: selected, expected_owner: architecture-review}
   - {skill: codebase-architecture-review, prompt: "Review this existing codebase architecture and find evidence-backed refactoring opportunities.", expected_status: selected, expected_owner: codebase-architecture-review}
+  - {skill: local-diff-review, prompt: "Review the changes since main on my current branch for convention violations.", expected_status: selected, expected_owner: local-diff-review}
   - {skill: module-design, prompt: "Design the contract and seam for this one code-level payment module.", expected_status: selected, expected_owner: module-design}
   - {skill: system-design, prompt: "Write the system design for the new payments platform's order service.", expected_status: selected, expected_owner: system-design}
   - {skill: api-design-review, prompt: "API design review for the new /orders endpoint before we build it.", expected_status: selected, expected_owner: api-design-review}

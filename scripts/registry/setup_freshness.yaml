@@ -58,6 +58,8 @@ skills:
     external_services: Docker / testcontainers (local)
   k8s-overprovisioning-datadog:
     external_services: Kubernetes MCP, Datadog MCP
+  local-diff-review:
+    external_services: None — reads repository and caller-provided context only
   loop-task-implementer:
     external_services: Git provider/API, CI provider (both repo-specific; no fixed
       MCP)
