@@ -180,6 +180,7 @@ def test_repository_platform_manifest_validates() -> None:
     assert validate_manifest(ROOT) == []
 
 
+@pytest.mark.mutates_repository_root
 def test_validate_manifest_reports_new_fragment_missing_from_composition_contracts_cleanly() -> None:
     """Regression: a skill that exists only as a fresh scripts/registry/skills.d/<id>.yaml
     fragment (i.e. `make generate` has never run since it was added -- exactly CONTRIBUTING.md's

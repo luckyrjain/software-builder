@@ -220,7 +220,11 @@ def parse_migration_status(workspace_root: str) -> tuple[list[dict[str, Any]], G
     schema_version = data.get("schema_version")
     if schema_version is None:
         return [], Gap(workspace_root, "MIGRATION_STATUS.yaml missing required field 'schema_version'"), []
-    if schema_version != MIGRATION_STATUS_SCHEMA_VERSION:
+    if (
+        isinstance(schema_version, bool)
+        or not isinstance(schema_version, int)
+        or schema_version != MIGRATION_STATUS_SCHEMA_VERSION
+    ):
         return [], Gap(
             workspace_root,
             f"MIGRATION_STATUS.yaml schema_version must be {MIGRATION_STATUS_SCHEMA_VERSION}, got {schema_version!r}",

@@ -18,7 +18,7 @@ from scripts.evals.dispatcher import RoutingRule, dispatch_with_rules, load_rout
 from scripts.evals.golden import GoldenCase, load_golden_fixtures, run_golden_case
 from scripts.evals.types import EvalResult
 from scripts.registry.schema import Registry
-from scripts.yaml_safety import load_unique_yaml_file, require_mapping
+from scripts.yaml_safety import is_valid_schema_version, load_unique_yaml_file, require_mapping
 
 DIMENSIONS = ("positive", "negative", "ambiguous", "adversarial", "degraded")
 
@@ -26,7 +26,7 @@ DIMENSIONS = ("positive", "negative", "ambiguous", "adversarial", "degraded")
 def _load_cases(root: Path, dimension: str, registry: Registry) -> list[dict[str, Any]]:
     path = root / "evals" / dimension / "cases.yaml"
     raw = require_mapping(load_unique_yaml_file(path), f"{dimension} scenarios")
-    if raw.get("schema_version") != 1:
+    if not is_valid_schema_version(raw.get("schema_version")):
         raise ValueError(f"{path}: schema_version must be 1")
     if raw.get("dimension") != dimension:
         raise ValueError(f"{path}: dimension must be {dimension!r}")
@@ -56,7 +56,7 @@ def _load_cases(root: Path, dimension: str, registry: Registry) -> list[dict[str
 def _load_degraded_policy(root: Path, registry: Registry) -> dict[str, dict[str, Any]]:
     path = root / "scripts" / "registry" / "degraded_behavior.yaml"
     raw = require_mapping(load_unique_yaml_file(path), "degraded behavior")
-    if raw.get("schema_version") != 1:
+    if not is_valid_schema_version(raw.get("schema_version")):
         raise ValueError("degraded_behavior.schema_version must be 1")
     skills_raw = require_mapping(raw.get("skills"), "degraded behavior.skills")
     registered = set(registry.skills)

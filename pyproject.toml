@@ -38,3 +38,8 @@ requires-python = ">=3.12"
 # test_creator_write_guard.py.
 addopts = "-p no:cacheprovider --ignore-glob=*/scripts/test_creator_write_guard.py"
 testpaths = ["scripts/tests"]
+markers = [
+    """mutates_repository_root: test briefly writes real files onto the actual repository root \
+(not a tmp_path fixture) and must not run concurrently with any other test; see \
+scripts/tests/conftest.py's _serialize_against_repository_root_mutation fixture.""",
+]

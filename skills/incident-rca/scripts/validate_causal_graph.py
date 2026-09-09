@@ -132,7 +132,8 @@ def _check_structure(graph: Any) -> list[str]:
     for key in REQUIRED_TOP_LEVEL:
         if key not in graph:
             errors.append(f"missing required field: {key}")
-    if graph.get("schema_version") != 1:
+    schema_version = graph.get("schema_version")
+    if isinstance(schema_version, bool) or not isinstance(schema_version, int) or schema_version != 1:
         errors.append("schema_version must be 1")
     if graph.get("trigger_status") not in ("identified", "unknown"):
         errors.append("trigger_status must be 'identified' or 'unknown'")
