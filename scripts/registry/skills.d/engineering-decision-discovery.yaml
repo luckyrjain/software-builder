@@ -8,6 +8,7 @@ engineering-decision-discovery:
     invokes: []
     escalation_targets:
     - module-design
+    - domain-modeling
     - architecture-review
   capabilities:
     required:

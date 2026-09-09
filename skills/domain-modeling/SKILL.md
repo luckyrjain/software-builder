@@ -99,6 +99,7 @@ Routing: [skill-routing.md](../../docs/skill-framework/shared/skill-routing.md).
 | Scope now spans reconstructing an entire unfamiliar domain from scratch, not one session's terms | **domain-comprehension** |
 | A crystallized decision describes one concrete module's contract, seam, or interface | **module-design** |
 | A crystallized decision needs an architecture-wide risk/scale/trade-off verdict | **architecture-review** |
+| Genuinely contested alternatives block ADR readiness and need an interactive interview before a decision crystallizes | **engineering-decision-discovery** |
 
 Offer any handoff only when triggered; never invoke it automatically. No other escalation is in scope.
 

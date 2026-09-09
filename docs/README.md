@@ -161,9 +161,11 @@ Skills reference each other when a finding belongs in another workflow:
 | module-design | Scope expansion from one module now spans multiple components, APIs, events, or data flows | system-design |
 | module-design | Scope expansion from one module requires an architecture-wide correctness, risk, or scale decision | architecture-review |
 | engineering-decision-discovery | Resolved decisions describe one module's contract, seam, or interface | module-design |
+| engineering-decision-discovery | Resolved decisions describe a domain-model term, glossary entry, or ADR-worthy naming decision, not a module contract | domain-modeling |
 | domain-modeling | Scope now spans reconstructing an entire unfamiliar domain from scratch, not one session's terms | domain-comprehension |
 | domain-modeling | A crystallized decision describes one concrete module's contract, seam, or interface | module-design |
 | domain-modeling | A crystallized decision needs an architecture-wide risk/scale/trade-off verdict | architecture-review |
+| domain-modeling | Genuinely contested alternatives block ADR readiness and need an interactive interview before a decision crystallizes | engineering-decision-discovery |
 | engineering-decision-discovery | The frontier itself needs an architecture-wide risk/scale/trade-off verdict, not a decision interview | architecture-review |
 | system-design | System design defines an API surface needing contract review | api-design-review |
 | system-design | System design defines a data model needing schema review | database-review |

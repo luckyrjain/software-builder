@@ -34,9 +34,12 @@ a check.
 5. **ADR readiness** — an ADR is warranted only when a real decision point exists: a choice was made, at
    least one alternative was rejected, and a consequence was stated. A term definition alone, or a
    restatement of existing uncontested code, does not warrant an ADR; record `adr_readiness: false` and
-   say why.
+   say why. If alternatives are genuinely contested but the session has not resolved which one wins,
+   that is an interview gap, not evidence to resolve unilaterally — offer `engineering-decision-discovery`
+   rather than guessing a decision to draft the ADR around.
 
 If the session evidence requires reconstructing an entire unfamiliar domain from scratch, offer
 `domain-comprehension`. If a crystallized decision describes one module's concrete contract or seam,
 offer `module-design`. If it needs an architecture-wide risk/scale/trade-off verdict, offer
-`architecture-review`. Do not invoke any of them automatically.
+`architecture-review`. If contested alternatives are blocking ADR readiness, offer
+`engineering-decision-discovery`. Do not invoke any of them automatically.
