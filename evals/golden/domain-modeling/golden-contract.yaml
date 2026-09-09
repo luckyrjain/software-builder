@@ -29,10 +29,10 @@ recorded_output:
   restated_behavior_adr_rejected: true
   adr_readiness: true
   proposed_adr:
-    title: Refunds return to original payment method only
+    title: LineItemCancellation refunds to the original payment method only
     status: Proposed
     rejected_alternatives:
-      - Store credit refund
+      - Store credit refund for a cancelled line item
 assertions:
   - type: field_equals
     path: artifact
@@ -72,4 +72,4 @@ assertions:
     value: true
   - type: require_pattern
     path: proposed_adr
-    pattern: Refunds return to original payment method only
+    pattern: LineItemCancellation refunds to the original payment method only

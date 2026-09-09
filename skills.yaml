@@ -3060,13 +3060,18 @@ skills:
       external_services: None — reads repository and caller-provided context only
     routing:
       patterns:
-      - \b(domain model|ubiquitous language|glossary)\b.*\b(term|terminology|CONTEXT\.md|ADR)\b
-      - \b(sharpen|pin down|challenge)\b.*\b(domain|terminology|glossary)\b.*\b(term|language)\b
+      - \bglossary\b.*\b(defin\w*|conflicts?)\b
+      - \bwe( just)? decided\b
+      - \bstress-test\b.*\b(term|domain)\b
+      - \b(sharpen|pin down|challenge)\b.*\b(domain|terminology|glossary)\b
+      - \byou'?re saying\b.*\bdo you mean\b
+      - \bCONTEXT\.md\b.*\bterm\b
       - \bpropose\b.*\bADR\b.*\bdecision\b
       exclude_patterns:
       - \b(bounded contexts?|current[- ]state domain|subsystem onboarding|multi-repo)\b
       - \b(module design|module boundary|seam design|adapter design|interface design)\b
       - \b(PR|MR|pull request|merge request)\b
+      - \bmap\b.*\b(the |our |this )?(entire |whole |full )?domain\b
   e2e-test-creator:
     path: skills/e2e-test-creator
     category: testing

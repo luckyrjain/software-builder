@@ -15,9 +15,9 @@ consumes:
 # Challenge — sharpen the domain model from session evidence
 
 Apply the shared [codebase-design-principles.md](../../../docs/skill-framework/shared/codebase-design-principles.md)
-AI-navigability doctrine to naming: bounded, intention-revealing terms over incidental or overloaded
-ones. For each item below, cite session or repository evidence, mark reasoning as inference where
-appropriate, or create an explicit unresolved question. Never silently skip a check.
+AI-navigability doctrine to naming. For each item below, cite session or repository evidence, mark
+reasoning as inference where appropriate, or create an explicit unresolved question. Never silently skip
+a check.
 
 1. **Challenge against the glossary** — if `existing_context` defines `domain_focus` and the session usage
    conflicts with it, name the conflict directly rather than silently picking a side. If no definition

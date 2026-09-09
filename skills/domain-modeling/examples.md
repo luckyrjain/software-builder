@@ -13,7 +13,7 @@ report-only: inspect the session and repository evidence, emit a proposal, and n
 |---|-----------------|---------------|-------|
 | 1 | "Your glossary defines 'cancellation' as an Order state, but I mean cancelling one line item." | Inputs → Challenge → Report with a named conflict and two proposed canonical terms | Happy path |
 | 2 | "We just decided: refunds always go through the original payment method, never store credit — because store credit created a reconciliation gap last quarter." | Challenge finds a real decision point; Report drafts an ADR | ADR path |
-| 3 | "What happens if a Customer cancels an Order that's already partially shipped?" | Challenge invents/records the edge-case scenario and its answer | Scenario path |
+| 3 | "Stress-test the Cancellation term with an edge case: what happens if a Customer cancels an Order that's already partially shipped?" | Challenge invents/records the edge-case scenario and its answer | Scenario path |
 | 4 | "You're saying 'account' — do you mean the Customer or the User?" | Challenge sharpens the fuzzy term into two canonical ones | Sharpening |
 | 5 | "Just edit CONTEXT.md to add this term, don't bother with a report." | Rejected — report-only; proposal emitted, no direct write | Boundary rule |
 | 6 | "Map our entire domain model, we have no CONTEXT.md yet." | Wrong scope — offer `domain-comprehension` | Wrong-skill row |
