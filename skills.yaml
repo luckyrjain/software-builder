@@ -3709,7 +3709,6 @@ skills:
       - \breview\b.*\b(this|my)\b.*\b(branch|uncommitted)\b.*\bchanges\b
       exclude_patterns:
       - \b(PR|MR|pull request|merge request)\s*[#!]?\d+\b
-      - \b(existing codebase architecture|architecture friction|refactoring opportunit(?:y|ies))\b
   loop-task-implementer:
     path: skills/loop-task-implementer
     category: automation
