@@ -12,6 +12,7 @@ try:
 except ImportError:  # pragma: no cover
     yaml = None  # type: ignore
 
+# GENERATED yaml-safety-bootstrap:start -- do not edit; run `make generate`. See scripts/registry/generate_yaml_safety_bootstrap.py
 _SCRIPT_DIR = Path(__file__).resolve().parent
 if str(_SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPT_DIR))
@@ -33,6 +34,7 @@ except ImportError:
         from scripts.yaml_safety import load_unique_yaml_file
     except ImportError:  # pragma: no cover - bare environment; falls back to plain safe_load
         load_unique_yaml_file = None  # type: ignore[assignment]
+# GENERATED yaml-safety-bootstrap:end
 
 
 def _parse_yaml_file(path: Path) -> Any:
