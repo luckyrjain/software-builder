@@ -102,6 +102,14 @@ routes:
     - \b(k8s|kubernetes|pod|deployment)\b.*\b(overprovision\w*|right-?siz\w*|requests?|limits?|CPU|memory)\b
     - \b(overprovision\w*|right-?siz\w*)\b.*\b(k8s|kubernetes|pod|deployment|CPU|memory)\b
     - \boverprovisioned\b.*\bCPU\b.*\bmemory\b
+  local-diff-review:
+    patterns:
+    - \breview\b.*\b(since|against)\b.*\b(commit|branch|tag|merge[- ]base)\b
+    - \blocal\b.*\bdiff\b.*\breview\b
+    - \breview\b.*\b(this|my)\b.*\b(branch|uncommitted)\b.*\bchanges\b
+    exclude_patterns:
+    - \b(PR|MR|pull request|merge request)\s*[#!]?\d+\b
+    - \b(existing codebase architecture|architecture friction|refactoring opportunit(?:y|ies))\b
   loop-task-implementer:
     patterns:
     - \bimplement\b.*\b(task|ticket|change)\b.*\b(review|fix|until|loop)\b

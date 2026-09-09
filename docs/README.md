@@ -53,6 +53,7 @@ Each skill is a self-contained directory copied to `~/.cursor/skills/<name>/` on
 | **incident-triage-agent** | [incident-triage-agent/README.md](../skills/incident-triage-agent/README.md) | [incident-triage-agent/SKILL.md](../skills/incident-triage-agent/SKILL.md) | [incident-triage-agent/SETUP.md](../skills/incident-triage-agent/SETUP.md) |
 | **integration-test-creator** | [integration-test-creator/README.md](../skills/integration-test-creator/README.md) | [integration-test-creator/SKILL.md](../skills/integration-test-creator/SKILL.md) | [integration-test-creator/SETUP.md](../skills/integration-test-creator/SETUP.md) |
 | **k8s-overprovisioning-datadog** | [k8s-overprovisioning-datadog/README.md](../skills/k8s-overprovisioning-datadog/README.md) | [k8s-overprovisioning-datadog/SKILL.md](../skills/k8s-overprovisioning-datadog/SKILL.md) | [k8s-overprovisioning-datadog/SETUP.md](../skills/k8s-overprovisioning-datadog/SETUP.md) |
+| **local-diff-review** | [local-diff-review/README.md](../skills/local-diff-review/README.md) | [local-diff-review/SKILL.md](../skills/local-diff-review/SKILL.md) | [local-diff-review/SETUP.md](../skills/local-diff-review/SETUP.md) |
 | **loop-task-implementer** | [loop-task-implementer/README.md](../skills/loop-task-implementer/README.md) | [loop-task-implementer/SKILL.md](../skills/loop-task-implementer/SKILL.md) | [loop-task-implementer/SETUP.md](../skills/loop-task-implementer/SETUP.md) |
 | **migration-program-manager** | [migration-program-manager/README.md](../skills/migration-program-manager/README.md) | [migration-program-manager/SKILL.md](../skills/migration-program-manager/SKILL.md) | [migration-program-manager/SETUP.md](../skills/migration-program-manager/SETUP.md) |
 | **module-design** | [module-design/README.md](../skills/module-design/README.md) | [module-design/SKILL.md](../skills/module-design/SKILL.md) | [module-design/SETUP.md](../skills/module-design/SETUP.md) |
@@ -192,6 +193,8 @@ Skills reference each other when a finding belongs in another workflow:
 | production-readiness-review | Caller wants one specific dimension deep-dived, not the aggregated readiness rollup | pr-review / change-impact-analyzer / deployment-risk-review / security-review / observability-review / resilience-review / api-design-review / database-review / performance-review / capacity-planner / dependency-upgrade-review |
 | production-readiness-review | Caller wants the multi-repo release go/no-go sweep, not one candidate's readiness | release-readiness-checker |
 | production-readiness-review | Production readiness review needs exact-head PR/MR code-review evidence | pr-review |
+| local-diff-review | A Standards finding is security-sensitive | security-review |
+| local-diff-review | Caller wants this diff reviewed once it's posted as a real PR/MR | pr-review |
 <!-- cross-skill-routing:end -->
 
 Full symmetric matrix (forward + reverse escalations):

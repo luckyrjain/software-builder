@@ -71,6 +71,7 @@ concrete missing capability (`BLOCKED`) always takes precedence, matching
 | claude | incident-triage-agent | BLOCKED | pager.webhook.receive |
 | claude | integration-test-creator | DEGRADED | — |
 | claude | k8s-overprovisioning-datadog | BLOCKED | kubernetes.metrics.history |
+| claude | local-diff-review | BLOCKED | host.report.write, host.repository.read |
 | claude | loop-task-implementer | BLOCKED | host.role.isolation, host.ci.status, host.pull_request.write |
 | claude | migration-program-manager | DEGRADED | — |
 | claude | module-design | BLOCKED | host.report.write, host.repository.read |
@@ -113,6 +114,7 @@ concrete missing capability (`BLOCKED`) always takes precedence, matching
 | cursor | incident-triage-agent | BLOCKED | pager.webhook.receive |
 | cursor | integration-test-creator | BLOCKED | host.repository.read_write |
 | cursor | k8s-overprovisioning-datadog | BLOCKED | kubernetes.metrics.history |
+| cursor | local-diff-review | BLOCKED | host.report.write, host.repository.read |
 | cursor | loop-task-implementer | BLOCKED | host.repository.read_write, host.role.isolation, host.ci.status, host.pull_request.write |
 | cursor | migration-program-manager | BLOCKED | host.filesystem.read |
 | cursor | module-design | BLOCKED | host.report.write, host.repository.read |
@@ -155,6 +157,7 @@ concrete missing capability (`BLOCKED`) always takes precedence, matching
 | github-copilot | incident-triage-agent | BLOCKED | pager.webhook.receive |
 | github-copilot | integration-test-creator | BLOCKED | host.repository.read_write |
 | github-copilot | k8s-overprovisioning-datadog | BLOCKED | kubernetes.metrics.history |
+| github-copilot | local-diff-review | BLOCKED | host.report.write, host.repository.read |
 | github-copilot | loop-task-implementer | BLOCKED | host.repository.read_write, host.role.isolation, host.ci.status, host.pull_request.write |
 | github-copilot | migration-program-manager | BLOCKED | host.filesystem.read |
 | github-copilot | module-design | BLOCKED | host.report.write, host.repository.read |
@@ -197,6 +200,7 @@ concrete missing capability (`BLOCKED`) always takes precedence, matching
 | kiro | incident-triage-agent | BLOCKED | pager.webhook.receive |
 | kiro | integration-test-creator | BLOCKED | host.repository.read_write |
 | kiro | k8s-overprovisioning-datadog | BLOCKED | kubernetes.metrics.history |
+| kiro | local-diff-review | BLOCKED | host.report.write, host.repository.read |
 | kiro | loop-task-implementer | BLOCKED | host.repository.read_write, host.role.isolation, host.ci.status, host.pull_request.write |
 | kiro | migration-program-manager | BLOCKED | host.filesystem.read |
 | kiro | module-design | BLOCKED | host.report.write, host.repository.read |

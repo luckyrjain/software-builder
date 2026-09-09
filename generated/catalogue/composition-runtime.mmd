@@ -20,6 +20,7 @@ graph TD
   incident-triage-agent["incident-triage-agent<br/>trigger"]
   integration-test-creator["integration-test-creator<br/>leaf"]
   k8s-overprovisioning-datadog["k8s-overprovisioning-datadog<br/>leaf"]
+  local-diff-review["local-diff-review<br/>leaf"]
   loop-task-implementer["loop-task-implementer<br/>orchestrator"]
   migration-program-manager["migration-program-manager<br/>orchestrator"]
   module-design["module-design<br/>leaf"]
@@ -84,6 +85,8 @@ graph TD
   incident-triage-agent -.->|escalates| squad-map
   k8s-overprovisioning-datadog -.->|escalates| incident-rca
   k8s-overprovisioning-datadog -.->|escalates| pr-review
+  local-diff-review -.->|escalates| pr-review
+  local-diff-review -.->|escalates| security-review
   migration-program-manager -->|requires| mysql-to-postgres-sql
   migration-program-manager -->|requires| squad-map
   migration-program-manager -.->|escalates| mysql-to-postgres-sql

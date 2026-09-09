@@ -83,6 +83,7 @@ column.
 | `incident-triage-agent` | `pager.webhook.receive` | — | BLOCKED | — |
 | `integration-test-creator` | `host.repository.read_write` | — | BLOCKED | — |
 | `k8s-overprovisioning-datadog` | **Kubernetes MCP ❌** `kubernetes.metrics.history` | observability.metrics.query | FALLBACK | `datadog.query_metrics` |
+| `local-diff-review` | `host.repository.read` | — | BLOCKED | `host.report.write` |
 | `loop-task-implementer` | `host.repository.read_write` | — | BLOCKED | — |
 | `migration-program-manager` | `host.filesystem.read` | — | BLOCKED | — |
 | `module-design` | `host.repository.read` | — | BLOCKED | `host.report.write` |

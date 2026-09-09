@@ -45,6 +45,7 @@ body:
         - incident-triage-agent
         - integration-test-creator
         - k8s-overprovisioning-datadog
+        - local-diff-review
         - loop-task-implementer
         - migration-program-manager
         - module-design

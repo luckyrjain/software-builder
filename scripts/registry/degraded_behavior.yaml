@@ -96,6 +96,11 @@ skills:
     available_capabilities:
     - datadog.query_metrics
     behavior: FALLBACK
+  local-diff-review:
+    missing_capability: host.repository.read
+    available_capabilities:
+    - host.report.write
+    behavior: BLOCKED
   loop-task-implementer:
     missing_capability: host.repository.read_write
     available_capabilities: []

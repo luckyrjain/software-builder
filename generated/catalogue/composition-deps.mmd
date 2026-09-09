@@ -36,6 +36,8 @@ graph TD
   incident-triage-agent -.->|escalates| squad-map
   k8s-overprovisioning-datadog -.->|escalates| incident-rca
   k8s-overprovisioning-datadog -.->|escalates| pr-review
+  local-diff-review -.->|escalates| security-review
+  local-diff-review -.->|escalates| pr-review
   migration-program-manager -.->|escalates| mysql-to-postgres-sql
   migration-program-manager -.->|escalates| squad-map
   migration-program-manager -.->|escalates| pr-review

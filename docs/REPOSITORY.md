@@ -50,6 +50,7 @@ software-builder/
     ├── production-readiness-review/ # Read-only rollup verdict for one exact PR/MR/release candidate
     ├── architecture-review/       # Architecture decision, risks, scale limits, failure modes, alternatives
     ├── codebase-architecture-review/ # Bounded, evidence-backed review of an existing codebase's architecture friction
+    ├── local-diff-review/          # Review changes since a fixed point (commit/branch/tag/merge-base), not a live PR/MR
     ├── engineering-decision-discovery/ # Interactive, evidence-backed challenge that surfaces and resolves unsettled engineering decisions
     ├── module-design/              # Evidence-backed design for one concrete module's contract, seams, dependencies, tests
     ├── domain-modeling/            # Sharpens terminology/decisions from the current session into a report-only CONTEXT.md/ADR proposal
@@ -92,6 +93,7 @@ Each skill directory follows the same pattern:
 | `incident-triage-agent` | incident | automation-only | incident-rca, squad-map | `make lint-incident-triage-agent` |
 | `integration-test-creator` | testing | ambient | — | `make lint-integration-test-creator` |
 | `k8s-overprovisioning-datadog` | platform | ambient | — | `make lint-k8s-skill` |
+| `local-diff-review` | review | ambient | — | `make lint-local-diff-review` |
 | `loop-task-implementer` | automation | ambient | — | `make lint-loop-task-implementer` |
 | `migration-program-manager` | migration | ambient | mysql-to-postgres-sql, squad-map | `make lint-migration-program-manager` |
 | `module-design` | architecture | ambient | — | `make lint-module-design` |
