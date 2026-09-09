@@ -22,6 +22,7 @@ body:
         - dependency-upgrade-review
         - deployment-risk-review
         - domain-comprehension
+        - domain-modeling
         - e2e-test-creator
         - engineering-decision-discovery
         - implementation-planner

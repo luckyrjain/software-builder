@@ -12,6 +12,7 @@ graph TD
   dependency-upgrade-review["dependency-upgrade-review<br/>leaf"]
   deployment-risk-review["deployment-risk-review<br/>leaf"]
   domain-comprehension["domain-comprehension<br/>orchestrator"]
+  domain-modeling["domain-modeling<br/>leaf"]
   e2e-test-creator["e2e-test-creator<br/>leaf"]
   engineering-decision-discovery["engineering-decision-discovery<br/>leaf"]
   implementation-planner["implementation-planner<br/>leaf"]
@@ -64,6 +65,9 @@ graph TD
   deployment-risk-review -.->|escalates| release-readiness-checker
   domain-comprehension -->|requires| squad-map
   domain-comprehension ==>|handoff| squad-map
+  domain-modeling -.->|escalates| architecture-review
+  domain-modeling -.->|escalates| domain-comprehension
+  domain-modeling -.->|escalates| module-design
   engineering-decision-discovery -.->|escalates| architecture-review
   engineering-decision-discovery -.->|escalates| module-design
   implementation-planner -.->|escalates| loop-task-implementer

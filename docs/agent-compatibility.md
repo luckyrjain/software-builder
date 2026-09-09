@@ -63,6 +63,7 @@ concrete missing capability (`BLOCKED`) always takes precedence, matching
 | claude | dependency-upgrade-review | BLOCKED | host.report.write |
 | claude | deployment-risk-review | BLOCKED | host.report.write |
 | claude | domain-comprehension | BLOCKED | host.repository.read |
+| claude | domain-modeling | BLOCKED | host.report.write, host.repository.read |
 | claude | e2e-test-creator | DEGRADED | — |
 | claude | engineering-decision-discovery | BLOCKED | host.report.write, host.repository.read |
 | claude | implementation-planner | BLOCKED | host.report.write, host.repository.read |
@@ -104,6 +105,7 @@ concrete missing capability (`BLOCKED`) always takes precedence, matching
 | cursor | dependency-upgrade-review | BLOCKED | host.report.write |
 | cursor | deployment-risk-review | BLOCKED | host.report.write |
 | cursor | domain-comprehension | BLOCKED | host.repository.read |
+| cursor | domain-modeling | BLOCKED | host.report.write, host.repository.read |
 | cursor | e2e-test-creator | BLOCKED | host.repository.read_write |
 | cursor | engineering-decision-discovery | BLOCKED | host.report.write, host.repository.read |
 | cursor | implementation-planner | BLOCKED | host.report.write, host.repository.read |
@@ -145,6 +147,7 @@ concrete missing capability (`BLOCKED`) always takes precedence, matching
 | github-copilot | dependency-upgrade-review | BLOCKED | host.report.write |
 | github-copilot | deployment-risk-review | BLOCKED | host.report.write |
 | github-copilot | domain-comprehension | BLOCKED | host.repository.read |
+| github-copilot | domain-modeling | BLOCKED | host.report.write, host.repository.read |
 | github-copilot | e2e-test-creator | BLOCKED | host.repository.read_write |
 | github-copilot | engineering-decision-discovery | BLOCKED | host.report.write, host.repository.read |
 | github-copilot | implementation-planner | BLOCKED | host.report.write, host.repository.read |
@@ -186,6 +189,7 @@ concrete missing capability (`BLOCKED`) always takes precedence, matching
 | kiro | dependency-upgrade-review | BLOCKED | host.report.write |
 | kiro | deployment-risk-review | BLOCKED | host.report.write |
 | kiro | domain-comprehension | BLOCKED | host.repository.read |
+| kiro | domain-modeling | BLOCKED | host.report.write, host.repository.read |
 | kiro | e2e-test-creator | BLOCKED | host.repository.read_write |
 | kiro | engineering-decision-discovery | BLOCKED | host.report.write, host.repository.read |
 | kiro | implementation-planner | BLOCKED | host.report.write, host.repository.read |

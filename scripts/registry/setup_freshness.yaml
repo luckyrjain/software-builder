@@ -40,6 +40,8 @@ skills:
       only
   domain-comprehension:
     external_services: GitLab MCP (optional), Datadog MCP (optional)
+  domain-modeling:
+    external_services: None — reads repository and caller-provided context only
   e2e-test-creator:
     external_services: Browser driver + reachable app URL (local/CI)
   engineering-decision-discovery:

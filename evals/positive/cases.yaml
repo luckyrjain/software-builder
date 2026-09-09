@@ -7,6 +7,7 @@ cases:
   - {skill: incident-rca, prompt: "Run an RCA for the production incident and identify the root cause.", expected_status: selected, expected_owner: incident-rca}
   - {skill: incident-triage-agent, prompt: "Triage this pager alert webhook and route the incident to the right owner.", expected_status: selected, expected_owner: incident-triage-agent}
   - {skill: domain-comprehension, prompt: "Understand the existing payments service and its current-state domain and bounded contexts.", expected_status: selected, expected_owner: domain-comprehension}
+  - {skill: domain-modeling, prompt: "Your glossary defines 'cancellation' as an Order state, but I mean cancelling one line item — sharpen the term.", expected_status: selected, expected_owner: domain-modeling}
   - {skill: squad-map, prompt: "Build a squad map and ownership map from CODEOWNERS and service metadata.", expected_status: selected, expected_owner: squad-map}
   - {skill: who-owns-x-bot, prompt: "Who owns the repayment service?", expected_status: selected, expected_owner: who-owns-x-bot}
   - {skill: new-hire-guide, prompt: "Create a new hire onboarding guide and service tour for this repository.", expected_status: selected, expected_owner: new-hire-guide}

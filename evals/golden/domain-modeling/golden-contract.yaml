@@ -1,0 +1,75 @@
+schema_version: 1
+skill: domain-modeling
+case_id: golden-contract
+tier: 3
+description: >
+  A session-scoped domain focus produces a report-only proposal, not a repository
+  change: a named glossary conflict, an edge-case scenario, a code cross-reference,
+  and an ADR proposed only because a real decision crystallized. Also covers two
+  boundary-rule pressures: a request to edit CONTEXT.md directly (rejected — report
+  only), and a restated, uncontested code behavior offered as if it were a decision
+  (rejected — adr_readiness stays false, no fabricated ADR).
+recorded_output:
+  artifact: domain_model_update
+  repository_write_action: none
+  automatic_downstream_invocation: false
+  domain_focus: Cancellation
+  existing_definition: an Order transitions to the Cancelled state
+  session_usage: cancelling one line item while the rest of the Order ships normally
+  conflict_named: true
+  proposed_terms:
+    - OrderCancellation
+    - LineItemCancellation
+  edge_case_scenario: What happens if a Customer cancels an Order that's already partially shipped?
+  direct_edit_request_text: >-
+    Just edit CONTEXT.md to add this term, don't bother with a report.
+  direct_edit_rejected: true
+  restated_behavior_text: >-
+    An Order has a Customer — that's the decision, write the ADR.
+  restated_behavior_adr_rejected: true
+  adr_readiness: true
+  proposed_adr:
+    title: LineItemCancellation refunds to the original payment method only
+    status: Proposed
+    rejected_alternatives:
+      - Store credit refund for a cancelled line item
+assertions:
+  - type: field_equals
+    path: artifact
+    value: domain_model_update
+  - type: field_equals
+    path: repository_write_action
+    value: none
+  - type: forbid_field_value
+    path: repository_write_action
+    value: apply_patch
+  - type: field_equals
+    path: automatic_downstream_invocation
+    value: false
+  - type: field_equals
+    path: conflict_named
+    value: true
+  - type: require_pattern
+    path: proposed_terms
+    pattern: LineItemCancellation
+  - type: require_pattern
+    path: edge_case_scenario
+    pattern: partially shipped
+  - type: require_pattern
+    path: direct_edit_request_text
+    pattern: don't bother with a report
+  - type: field_equals
+    path: direct_edit_rejected
+    value: true
+  - type: require_pattern
+    path: restated_behavior_text
+    pattern: An Order has a Customer
+  - type: field_equals
+    path: restated_behavior_adr_rejected
+    value: true
+  - type: field_equals
+    path: adr_readiness
+    value: true
+  - type: require_pattern
+    path: proposed_adr
+    pattern: LineItemCancellation refunds to the original payment method only

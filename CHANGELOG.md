@@ -43,6 +43,16 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 
 ## Platform
 
+### Add domain-modeling skill (2026-09-09)
+
+- Added a new framework-compliant, ambient, read-only skill: `domain-modeling` (challenges session
+  terminology against `CONTEXT.md`, sharpens fuzzy language, stress-tests domain relationships with
+  edge-case scenarios, cross-references code, and proposes a report-only `DOMAIN_MODEL_UPDATE.md` /
+  `domain_model_update` — including an ADR draft only when a real decision crystallized). Report-only
+  by design, unlike the plugin skill it ports the discipline from: it never writes `CONTEXT.md`,
+  `CONTEXT-MAP.md`, or `docs/adr/*.md` directly, matching every other architecture/design skill in this
+  repo. Distinguishes itself from `domain-comprehension`'s one-shot full-domain reconstruction.
+
 ### Fix schema_version bool-aliasing across the shared registry/eval validators (2026-09-09)
 
 - **A `schema_version: yes`/`true` document was silently accepted as valid.** Python's `bool` is an

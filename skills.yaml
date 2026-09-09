@@ -81,6 +81,7 @@ contracts:
       - architecture_review_report
       - system_design_spec
       - module_design_spec
+      - domain_model_update
       - codebase_architecture_report
       - api_design_review_report
       - database_review_report
@@ -112,6 +113,7 @@ contracts:
         architecture_review_report: 2
         system_design_spec: 2
         module_design_spec: 1
+        domain_model_update: 1
         codebase_architecture_report: 1
         api_design_review_report: 2
         database_review_report: 2
@@ -143,6 +145,7 @@ contracts:
         architecture_review_report: proposed_state
         system_design_spec: proposed_state
         module_design_spec: proposed_state
+        domain_model_update: proposed_state
         codebase_architecture_report: proposed_state
         api_design_review_report: current_state
         database_review_report: current_state
@@ -168,6 +171,8 @@ contracts:
         system_design_spec:
         - proposed_state
         module_design_spec:
+        - proposed_state
+        domain_model_update:
         - proposed_state
         codebase_architecture_report:
         - proposed_state
@@ -303,6 +308,18 @@ contracts:
           migration_plan: list
           alternatives_rejected: list
           unresolved_questions: list
+        domain_model_update:
+          title: string
+          domain_focus: string
+          scope_evidence: list
+          terminology_findings: list
+          scenario_findings: list
+          code_cross_reference: list
+          proposed_context_patch: string
+          adr_readiness: boolean
+          proposed_adr: mapping
+          unresolved_questions: list
+          recommendation: string
         codebase_architecture_report:
           title: string
           scope: mapping
@@ -621,6 +638,11 @@ contracts:
         external_actions: read
         unattended: false
         merge: false
+      domain-modeling:
+        repository: read
+        external_actions: none
+        unattended: false
+        merge: false
       e2e-test-creator:
         repository: write
         external_actions: read
@@ -775,6 +797,7 @@ contracts:
       dependency-upgrade-review: leaf
       deployment-risk-review: leaf
       domain-comprehension: orchestrator
+      domain-modeling: leaf
       e2e-test-creator: leaf
       engineering-decision-discovery: leaf
       implementation-planner: leaf
@@ -819,6 +842,7 @@ contracts:
       dependency-upgrade-review: leaf
       deployment-risk-review: leaf
       domain-comprehension: orchestrator
+      domain-modeling: leaf
       e2e-test-creator: leaf
       engineering-decision-discovery: leaf
       implementation-planner: leaf
@@ -1030,6 +1054,10 @@ contracts:
         mode: canonical
         owners:
         - module-design
+      domain_model_update:
+        mode: canonical
+        owners:
+        - domain-modeling
       codebase_architecture_report:
         mode: canonical
         owners:
@@ -1107,6 +1135,7 @@ contracts:
     - architecture_review_report
     - system_design_spec
     - module_design_spec
+    - domain_model_update
     - codebase_architecture_report
     - api_design_review_report
     - database_review_report
@@ -1268,6 +1297,19 @@ contracts:
         - migration_plan
         - alternatives_rejected
         - unresolved_questions
+      domain_model_update:
+        fields:
+        - title
+        - domain_focus
+        - scope_evidence
+        - terminology_findings
+        - scenario_findings
+        - code_cross_reference
+        - proposed_context_patch
+        - adr_readiness
+        - proposed_adr
+        - unresolved_questions
+        - recommendation
       codebase_architecture_report:
         fields:
         - title
@@ -1636,6 +1678,11 @@ contracts:
         - squad_map
         consumes:
         - mr_context
+        write_authority: read-only
+      domain-modeling:
+        produces:
+        - domain_model_update
+        consumes: []
         write_authority: read-only
       e2e-test-creator:
         produces:
@@ -2973,6 +3020,58 @@ skills:
         the existing .* service)\b
       - \barchitecture\b.*\bbounded contexts?\b
       - \bunderstand\b.*\bcurrent domain\b
+  domain-modeling:
+    path: skills/domain-modeling
+    category: architecture
+    extends: read-only-leaf-review
+    install:
+      requires: []
+    composition:
+      invokes: []
+      escalation_targets:
+      - domain-comprehension
+      - module-design
+      - architecture-review
+    capabilities:
+      required:
+      - host.report.write
+      - host.repository.read
+      optional: []
+    lint:
+      skill_md_max_lines: 180
+      target: domain-modeling
+    version: 1.0.0
+    type: leaf
+    permissions:
+      repository: read
+      external_actions: none
+      unattended: false
+      merge: false
+    output_contract:
+      produces:
+      - domain_model_update
+    dependencies: []
+    degraded_behavior:
+      missing_capability: host.repository.read
+      available_capabilities:
+      - host.report.write
+      behavior: BLOCKED
+    setup_freshness:
+      external_services: None — reads repository and caller-provided context only
+    routing:
+      patterns:
+      - \bglossary\b.*\b(defin\w*|conflicts?)\b
+      - \bwe( just)? decided\b.*\b(because|since|as|given that)\b
+      - \bstress-test\b.*\b(term|domain)\b
+      - \b(sharpen|pin down|challenge)\b.*\b(domain|terminology|glossary)\b
+      - \byou'?re saying\b.*\bdo you mean\b
+      - \bCONTEXT\.md\b.*\bterm\b
+      - \bpropose\b.*\bADR\b.*\bdecision\b
+      exclude_patterns:
+      - \b(bounded contexts?|current[- ]state domain|subsystem onboarding|multi-repo)\b
+      - \b(module design|module boundary|seam design|adapter design|interface design)\b
+      - \b(PR|MR|pull request|merge request)\b
+      - \bmap\b.*\b(the |our |this )?(entire |whole |full )?domain\b
   e2e-test-creator:
     path: skills/e2e-test-creator
     category: testing
