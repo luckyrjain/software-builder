@@ -498,6 +498,22 @@ class TestParseMigrationStatus:
         assert gap is not None
         assert "schema_version must be 1" in gap.reason
 
+    def test_boolean_schema_version_returns_gap(self, tmp_path):
+        # YAML's plain-scalar resolver parses `schema_version: yes`/`true` as Python True, and
+        # Python's bool is an int subclass where True == 1 -- an unguarded `!=` comparison would
+        # silently accept this malformed document instead of rejecting it.
+        ws = tmp_path / "ws"
+        ws.mkdir()
+        (ws / "MIGRATION_STATUS.yaml").write_text(
+            "schema_version: yes\nservices:\n  - name: svc-a\n    path: svc-a\n"
+            "    scan_gate: pass\n    shadow_compare: pass\n    config_cutover: done\n",
+            encoding="utf-8",
+        )
+        services, gap, warnings = parse_migration_status(str(ws))
+        assert services == []
+        assert gap is not None
+        assert "schema_version must be 1" in gap.reason
+
     def test_non_dict_service_entries_are_skipped_with_warning(self, tmp_path):
         ws = tmp_path / "ws"
         ws.mkdir()
