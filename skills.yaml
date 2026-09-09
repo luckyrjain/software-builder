@@ -82,6 +82,7 @@ contracts:
       - system_design_spec
       - module_design_spec
       - domain_model_update
+      - local_diff_review
       - bug_diagnosis_report
       - codebase_architecture_report
       - api_design_review_report
@@ -115,6 +116,7 @@ contracts:
         system_design_spec: 2
         module_design_spec: 1
         domain_model_update: 1
+        local_diff_review: 1
         bug_diagnosis_report: 1
         codebase_architecture_report: 1
         api_design_review_report: 2
@@ -148,6 +150,7 @@ contracts:
         system_design_spec: proposed_state
         module_design_spec: proposed_state
         domain_model_update: proposed_state
+        local_diff_review: proposed_state
         bug_diagnosis_report: proposed_state
         codebase_architecture_report: proposed_state
         api_design_review_report: current_state
@@ -176,6 +179,8 @@ contracts:
         module_design_spec:
         - proposed_state
         domain_model_update:
+        - proposed_state
+        local_diff_review:
         - proposed_state
         bug_diagnosis_report:
         - proposed_state
@@ -324,6 +329,14 @@ contracts:
           adr_readiness: boolean
           proposed_adr: mapping
           unresolved_questions: list
+          recommendation: string
+        local_diff_review:
+          title: string
+          diff_scope: string
+          standards_findings: list
+          spec_findings: list
+          repository_write_action: string
+          automatic_downstream_invocation: boolean
           recommendation: string
         bug_diagnosis_report:
           title: string
@@ -699,6 +712,11 @@ contracts:
         external_actions: read
         unattended: false
         merge: false
+      local-diff-review:
+        repository: read
+        external_actions: none
+        unattended: false
+        merge: false
       loop-task-implementer:
         repository: write
         external_actions: write
@@ -827,6 +845,7 @@ contracts:
       incident-triage-agent: trigger
       integration-test-creator: leaf
       k8s-overprovisioning-datadog: leaf
+      local-diff-review: leaf
       loop-task-implementer: orchestrator
       migration-program-manager: orchestrator
       module-design: leaf
@@ -873,6 +892,7 @@ contracts:
       incident-triage-agent: trigger
       integration-test-creator: leaf
       k8s-overprovisioning-datadog: leaf
+      local-diff-review: leaf
       loop-task-implementer: orchestrator
       migration-program-manager: orchestrator
       module-design: leaf
@@ -1081,6 +1101,10 @@ contracts:
         mode: canonical
         owners:
         - domain-modeling
+      local_diff_review:
+        mode: canonical
+        owners:
+        - local-diff-review
       bug_diagnosis_report:
         mode: canonical
         owners:
@@ -1163,6 +1187,7 @@ contracts:
     - system_design_spec
     - module_design_spec
     - domain_model_update
+    - local_diff_review
     - bug_diagnosis_report
     - codebase_architecture_report
     - api_design_review_report
@@ -1337,6 +1362,15 @@ contracts:
         - adr_readiness
         - proposed_adr
         - unresolved_questions
+        - recommendation
+      local_diff_review:
+        fields:
+        - title
+        - diff_scope
+        - standards_findings
+        - spec_findings
+        - repository_write_action
+        - automatic_downstream_invocation
         - recommendation
       bug_diagnosis_report:
         fields:
@@ -1913,6 +1947,11 @@ contracts:
         - k8s_rightsizing_report
         consumes:
         - mr_context
+        write_authority: read-only
+      local-diff-review:
+        produces:
+        - local_diff_review
+        consumes: []
         write_authority: read-only
       loop-task-implementer:
         produces:
@@ -3719,6 +3758,50 @@ skills:
       - \b(k8s|kubernetes|pod|deployment)\b.*\b(overprovision\w*|right-?siz\w*|requests?|limits?|CPU|memory)\b
       - \b(overprovision\w*|right-?siz\w*)\b.*\b(k8s|kubernetes|pod|deployment|CPU|memory)\b
       - \boverprovisioned\b.*\bCPU\b.*\bmemory\b
+  local-diff-review:
+    path: skills/local-diff-review
+    category: review
+    extends: read-only-leaf-review
+    install:
+      requires: []
+    composition:
+      invokes: []
+      escalation_targets:
+      - security-review
+      - pr-review
+    capabilities:
+      required:
+      - host.report.write
+      - host.repository.read
+      optional: []
+    lint:
+      skill_md_max_lines: 180
+      target: local-diff-review
+    version: 1.0.0
+    type: leaf
+    permissions:
+      repository: read
+      external_actions: none
+      unattended: false
+      merge: false
+    output_contract:
+      produces:
+      - local_diff_review
+    dependencies: []
+    degraded_behavior:
+      missing_capability: host.repository.read
+      available_capabilities:
+      - host.report.write
+      behavior: BLOCKED
+    setup_freshness:
+      external_services: None — reads repository and caller-provided context only
+    routing:
+      patterns:
+      - \breview\b.*\b(since|against)\b.*\b(commit|branch|tag|merge[- ]base)\b
+      - \blocal\b.*\bdiff\b.*\breview\b
+      - \breview\b.*\b(this|my)\b.*\b(branch|uncommitted)\b.*\bchanges\b
+      exclude_patterns:
+      - \b(PR|MR|pull request|merge request)\s*[#!]?\d+\b
   loop-task-implementer:
     path: skills/loop-task-implementer
     category: automation

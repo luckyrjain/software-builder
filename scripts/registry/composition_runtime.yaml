@@ -23,6 +23,7 @@ skill_types:
   incident-triage-agent: trigger
   integration-test-creator: leaf
   k8s-overprovisioning-datadog: leaf
+  local-diff-review: leaf
   loop-task-implementer: orchestrator
   migration-program-manager: orchestrator
   module-design: leaf
@@ -231,6 +232,10 @@ artifact_ownership:
     mode: canonical
     owners:
     - domain-modeling
+  local_diff_review:
+    mode: canonical
+    owners:
+    - local-diff-review
   bug_diagnosis_report:
     mode: canonical
     owners:
