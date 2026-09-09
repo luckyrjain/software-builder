@@ -79,10 +79,11 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# Neither network call below (npm pack, git fetch) had any retry -- a single transient
-# registry/GitHub hiccup aborted the whole script under set -e. The script is otherwise
-# safe to rerun (WORK_DIR is a fresh mktemp -d each time, cleaned by the trap above), so
-# a bounded retry with backoff turns "rerun the script by hand" into "usually just works."
+# None of the three network calls below (npm pack, git fetch, npx's own dependency
+# resolution) had any retry -- a single transient registry/GitHub hiccup aborted the whole
+# script under set -e. The script is otherwise safe to rerun (WORK_DIR is a fresh mktemp -d
+# each time, cleaned by the trap above), so a bounded retry with backoff turns "rerun the
+# script by hand" into "usually just works."
 retry() {
   local description="$1"
   shift
@@ -160,11 +161,18 @@ if [[ "${checked_out_sha}" != "${COMMIT_SHA}" ]]; then
   exit 1
 fi
 
-npx --yes --package="${CLI_TARBALL}" skills add "${SOURCE_DIR}" \
-  --skill kubesense-mcp \
-  -g \
-  -a cursor \
-  -y
+# `npx --package=<tarball>` still resolves and installs the verified CLI's own transitive npm
+# dependencies over the network before running it, so this is a third network call subject to
+# the same transient-hiccup risk the two above are retried for. Idempotent to retry: it always
+# installs from the same fixed SOURCE_DIR/CLI_TARBALL, so a rerun just repeats the same install.
+_npx_skills_add() {
+  npx --yes --package="${CLI_TARBALL}" skills add "${SOURCE_DIR}" \
+    --skill kubesense-mcp \
+    -g \
+    -a cursor \
+    -y
+}
+retry "npx skills add kubesense-mcp" _npx_skills_add
 
 installed_path=""
 for path in \
